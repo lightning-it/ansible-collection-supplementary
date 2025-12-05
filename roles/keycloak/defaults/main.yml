@@ -1,0 +1,28 @@
+---
+# Default variables for keycloak_platform_terraform role
+
+# Directory on the control host where Terraform will be executed
+keycloak_tf_workdir: "/srv/infra/keycloak"
+
+# Realms that should be managed by the terraform-keycloak-platform module.
+# You MUST override this in group_vars or host_vars.
+# Example:
+# keycloak_realms:
+#   - name: "tier0"
+#     display_name: "TIER0"
+keycloak_realms: []
+
+# Keycloak provider settings (MUST be overridden)
+# Example:
+# keycloak_url: "https://kc.example.int"
+# keycloak_client_id: "terraform"
+# keycloak_client_secret: "super-secret"
+# keycloak_master_realm: "master"
+keycloak_url: null
+keycloak_client_id: null
+keycloak_client_secret: null
+keycloak_master_realm: null
+
+# Terraform module source and version
+keycloak_module_source: "app.terraform.io/l-it/platform/keycloak"
+keycloak_module_version: "1.0.0"

@@ -1,0 +1,20 @@
+---
+repos:
+  - repo: local
+    hooks:
+      - id: yamllint-container
+        name: yamllint (creator-ee)
+        language: system
+        entry: bash scripts/ansible-devtools.sh yamllint
+        pass_filenames: true
+        files: \.(yml|yaml)$
+
+      - id: ansible-lint-container
+        name: ansible-lint (creator-ee)
+        language: system
+        entry: bash scripts/ansible-devtools.sh ansible-lint
+        pass_filenames: false
+        # Run ansible-lint only on roles + playbooks:
+        files: ^(roles/|playbooks/).*\.(yml|yaml)$
+        # ansible-lint strict mode:
+        args: ["-p"]

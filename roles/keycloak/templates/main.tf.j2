@@ -1,0 +1,32 @@
+terraform {
+  required_version = ">= 1.5.7, < 2.0.0"
+
+  required_providers {
+    keycloak = {
+      source  = "keycloak/keycloak"
+      version = "~> 5.5"
+    }
+  }
+}
+
+provider "keycloak" {
+  url           = "{{ keycloak_url }}"
+  client_id     = "{{ keycloak_client_id }}"
+  client_secret = "{{ keycloak_client_secret }}"
+  realm         = "{{ keycloak_master_realm }}"
+}
+
+module "keycloak_platform" {
+  source  = "{{ keycloak_module_source }}"
+  version = "{{ keycloak_module_version }}"
+
+  # Realms are provided by Ansible as a list of objects and rendered as JSON.
+  # This is compatible with the module's "realms" variable of type list(object(...)).
+  realms = {{ keycloak_realms | to_nice_json }}
+}
+
+# Optional: if you want to expose the module output
+output "realms" {
+  description = "Realms managed by the keycloak_platform module"
+  value       = module.keycloak_platform.realms
+}
