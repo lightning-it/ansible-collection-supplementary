@@ -2,19 +2,16 @@
 repos:
   - repo: local
     hooks:
-      - id: yamllint-container
-        name: yamllint (creator-ee)
+      - id: yamllint-ee
+        name: yamllint (wunder-devtools-ee)
         language: system
-        entry: bash scripts/ansible-devtools.sh yamllint
+        entry: bash scripts/wunder-devtools-ee.sh yamllint
         pass_filenames: true
         files: \.(yml|yaml)$
 
-      - id: ansible-lint-container
-        name: ansible-lint (creator-ee)
+      - id: ansible-lint-ee
+        name: ansible-lint (wunder-devtools-ee)
         language: system
-        entry: bash scripts/ansible-devtools.sh ansible-lint
+        entry: bash scripts/wunder-devtools-ee.sh ansible-lint -p
         pass_filenames: false
-        # Run ansible-lint only on roles + playbooks:
-        files: ^(roles/|playbooks/).*\.(yml|yaml)$
-        # ansible-lint strict mode:
-        args: ["-p"]
+        files: ^(roles/|playbooks/|tests/).*\.(yml|yaml)$

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="quay.io/ansible/creator-ee:latest"
+IMAGE="ghcr.io/lightning-it/container-wunder-devtools-ee:main"
 
 docker run --rm \
+  --entrypoint "" \
   -v "$PWD":/workspace \
   -w /workspace \
   "$IMAGE" "$@"

@@ -1,0 +1,17 @@
+all:
+  children:
+    keycloak:
+      hosts:
+        localhost:
+          ansible_connection: local
+
+          keycloak_url: "http://localhost:8080"
+          keycloak_master_realm: "master"
+          keycloak_client_id: "admin-cli"
+          keycloak_client_secret: ""
+
+          keycloak_realms:
+            - name: "tier0"
+              display_name: "TIER0"
+            - name: "tier1"
+              display_name: "TIER1"
