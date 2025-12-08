@@ -5,13 +5,23 @@
       - keycloak_realms is defined
       - keycloak_realms | length > 0
       - keycloak_url is not none
-      - keycloak_client_id is not none
-      - keycloak_client_secret is not none
       - keycloak_master_realm is not none
+      - keycloak_client_id is not none
+      - >
+          (
+            keycloak_client_secret is defined and
+            keycloak_client_secret not in [None, ""]
+          ) or (
+            keycloak_username is defined and
+            keycloak_password is defined and
+            keycloak_username not in [None, ""] and
+            keycloak_password not in [None, ""]
+          )
     fail_msg: >
-      Required variables are missing for keycloak_platform_terraform. Please set
-      keycloak_realms, keycloak_url, keycloak_client_id, keycloak_client_secret
-      and keycloak_master_realm.
+      Required variables are missing for keycloak_platform_terraform. Set
+      keycloak_realms, keycloak_url, keycloak_client_id, authentication details
+      (either client_secret or username/password), and keycloak_master_realm via
+      inventory/group_vars/host_vars or CI secrets; do not leave them empty.
     success_msg: >
       All required variables for keycloak_platform_terraform are set.
 
@@ -27,6 +37,16 @@
     state: directory
     mode: "0755"
 
+- name: Clear previous Terraform state in working directory
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ keycloak_tf_workdir }}/.terraform"
+    - "{{ keycloak_tf_workdir }}/terraform.tfstate"
+    - "{{ keycloak_tf_workdir }}/terraform.tfstate.backup"
+  when: keycloak_tf_clean_state | default(true)
+
 - name: Render Terraform main.tf for keycloak_platform module
   ansible.builtin.template:
     src: "main.tf.j2"
@@ -35,7 +55,7 @@
 
 - name: Initialize Terraform in working directory
   ansible.builtin.command:
-    cmd: terraform init -input=false
+    cmd: terraform init -input=false -upgrade
     chdir: "{{ keycloak_tf_workdir }}"
   register: tf_init
   changed_when: >

@@ -1,28 +1,52 @@
 ---
-# Default variables for keycloak_platform_terraform role
-
 # Directory on the control host where Terraform will be executed
-keycloak_tf_workdir: "/srv/infra/keycloak"
+keycloak_tf_workdir: "/workspace/infra/keycloak"
 
-# Realms that should be managed by the terraform-keycloak-platform module.
-# You MUST override this in group_vars or host_vars.
-# Example:
-# keycloak_realms:
-#   - name: "tier0"
-#     display_name: "TIER0"
+# Realms managed by the terraform-keycloak-platform module (override in vars)
 keycloak_realms: []
 
-# Keycloak provider settings (MUST be overridden)
-# Example:
-# keycloak_url: "https://kc.example.int"
-# keycloak_client_id: "terraform"
-# keycloak_client_secret: "super-secret"
-# keycloak_master_realm: "master"
-keycloak_url: null
-keycloak_client_id: null
-keycloak_client_secret: null
-keycloak_master_realm: null
+# Core Keycloak objects
+keycloak_clients: []
+keycloak_client_scopes: []
+keycloak_realm_roles: []
+keycloak_client_roles: []
+keycloak_role_bindings: []
+keycloak_groups: []
+keycloak_default_groups: []
+keycloak_users: []
+keycloak_service_accounts: []
+
+# Identity providers and federation
+keycloak_identity_providers: []
+keycloak_identity_provider_mappers: []
+keycloak_ldap_user_federations: []
+keycloak_kerberos_user_federations: []
+
+# Themes, localization, and hooks
+keycloak_theme_settings: []
+keycloak_localization_settings: []
+keycloak_custom_theme_hooks: []
+
+# Email and authentication policies
+keycloak_smtp_settings: []
+keycloak_password_policies: []
+keycloak_bruteforce_settings: []
+keycloak_auth_flow_settings: []
+keycloak_otp_settings: []
+keycloak_event_settings: []
+keycloak_session_settings: []
+keycloak_token_settings: []
+keycloak_event_listener_hooks: []
+
+# Keycloak provider settings (MUST be overridden in inventory/CI secrets)
+keycloak_url: ""
+keycloak_client_id: ""
+keycloak_client_secret: ""
+keycloak_username: ""
+keycloak_password: ""
+keycloak_master_realm: ""
 
 # Terraform module source and version
-keycloak_module_source: "app.terraform.io/l-it/platform/keycloak"
-keycloak_module_version: "1.0.0"
+# Set keycloak_module_version to null when using a local path
+keycloak_module_source: "lightning-it/instance/keycloak"
+keycloak_module_version: "1.1.0"

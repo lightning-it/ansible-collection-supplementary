@@ -12,17 +12,48 @@ terraform {
 provider "keycloak" {
   url           = "{{ keycloak_url }}"
   client_id     = "{{ keycloak_client_id }}"
-  client_secret = "{{ keycloak_client_secret }}"
   realm         = "{{ keycloak_master_realm }}"
+{% if keycloak_client_secret %}
+  client_secret = "{{ keycloak_client_secret }}"
+{% endif %}
+{% if keycloak_username and keycloak_password %}
+  username = "{{ keycloak_username }}"
+  password = "{{ keycloak_password }}"
+{% endif %}
 }
 
 module "keycloak_platform" {
   source  = "{{ keycloak_module_source }}"
+{% if keycloak_module_version %}
   version = "{{ keycloak_module_version }}"
+{% endif %}
 
-  # Realms are provided by Ansible as a list of objects and rendered as JSON.
-  # This is compatible with the module's "realms" variable of type list(object(...)).
-  realms = {{ keycloak_realms | to_nice_json }}
+  realms                       = {{ keycloak_realms | to_nice_json }}
+  clients                      = {{ keycloak_clients | to_nice_json }}
+  client_scopes                = {{ keycloak_client_scopes | to_nice_json }}
+  realm_roles                  = {{ keycloak_realm_roles | to_nice_json }}
+  client_roles                 = {{ keycloak_client_roles | to_nice_json }}
+  role_bindings                = {{ keycloak_role_bindings | to_nice_json }}
+  groups                       = {{ keycloak_groups | to_nice_json }}
+  default_groups               = {{ keycloak_default_groups | to_nice_json }}
+  users                        = {{ keycloak_users | to_nice_json }}
+  service_accounts             = {{ keycloak_service_accounts | to_nice_json }}
+  identity_providers           = {{ keycloak_identity_providers | to_nice_json }}
+  identity_provider_mappers    = {{ keycloak_identity_provider_mappers | to_nice_json }}
+  ldap_user_federations        = {{ keycloak_ldap_user_federations | to_nice_json }}
+  kerberos_user_federations    = {{ keycloak_kerberos_user_federations | to_nice_json }}
+  smtp_settings                = {{ keycloak_smtp_settings | to_nice_json }}
+  password_policies            = {{ keycloak_password_policies | to_nice_json }}
+  bruteforce_settings          = {{ keycloak_bruteforce_settings | to_nice_json }}
+  auth_flow_settings           = {{ keycloak_auth_flow_settings | to_nice_json }}
+  otp_settings                 = {{ keycloak_otp_settings | to_nice_json }}
+  theme_settings               = {{ keycloak_theme_settings | to_nice_json }}
+  localization_settings        = {{ keycloak_localization_settings | to_nice_json }}
+  event_settings               = {{ keycloak_event_settings | to_nice_json }}
+  session_settings             = {{ keycloak_session_settings | to_nice_json }}
+  token_settings               = {{ keycloak_token_settings | to_nice_json }}
+  custom_theme_hooks           = {{ keycloak_custom_theme_hooks | to_nice_json }}
+  event_listener_hooks         = {{ keycloak_event_listener_hooks | to_nice_json }}
 }
 
 # Optional: if you want to expose the module output

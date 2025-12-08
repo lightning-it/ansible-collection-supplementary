@@ -15,7 +15,7 @@ collection as an optional infrastructure service.
 - Renders a `main.tf` that:
   - configures the `keycloak` provider
   - calls the Terraform module:
-    - `app.terraform.io/l-it/platform/keycloak`
+    - `lightning-it/instance/keycloak` (or a local path override)
 - Runs `terraform init`
 - Runs `terraform apply` to create/update Keycloak realms
 
@@ -37,9 +37,11 @@ keycloak_realms: []
 # Keycloak provider settings (MUST be overridden)
 keycloak_url: null
 keycloak_client_id: null
-keycloak_client_secret: null
+keycloak_client_secret: null  # use for client credentials
+keycloak_username: null       # use with password grant (e.g., admin user)
+keycloak_password: null
 keycloak_master_realm: null
 
-# Terraform module source and version (can be overridden)
-keycloak_module_source: "app.terraform.io/l-it/platform/keycloak"
+# Terraform module source and version (can be overridden; omit version for local paths)
+keycloak_module_source: "lightning-it/instance/keycloak"
 keycloak_module_version: "1.0.0"

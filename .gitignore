@@ -1,0 +1,15 @@
+# Terraform artifacts (local test harness)
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+/infra/
+
+# OS/editor noise
+.DS_Store
+*.swp
+*.swo
+
+# Node tooling for semantic-release
+node_modules/
+npm-debug.log

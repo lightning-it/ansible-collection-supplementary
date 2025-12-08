@@ -1,0 +1,41 @@
+# yamllint disable rule:truthy
+---
+name: Collection CI
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Collection checks (Ansible ${{ matrix.ansible_version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        ansible_version: ["2.14", "2.15"]
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      # 1) Checkout the repository
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2) Run ansible-lint inside the wunder-devtools-ee container
+      #    ANSIBLE_EE_IMAGE selects the execution environment image
+      #    (per Ansible version)
+      - name: Ansible lint (via wunder-devtools-ee)
+        env:
+          ANSIBLE_EE_IMAGE: >-
+            ghcr.io/lightning-it/wunder-devtools-ee:ansible-
+            ${{ matrix.ansible_version }}
+        run: bash scripts/wunder-devtools-ee.sh ansible-lint

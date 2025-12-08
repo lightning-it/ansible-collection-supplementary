@@ -18,8 +18,8 @@ wait-keycloak:
 	done; \
 	echo " Keycloak is ready."
 
-check-keycloak: keycloak-up wait-keycloak
+check-keycloak: keycloak-down keycloak-up wait-keycloak
 	bash scripts/wunder-devtools-ee.sh ansible-playbook \
 	  -i $(KEYCLOAK_INVENTORY) \
 	  $(KEYCLOAK_CHECK_PLAYBOOK)
-	$(MAKE) keycloak-down
+#	$(MAKE) keycloak-down
