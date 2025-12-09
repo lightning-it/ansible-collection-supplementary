@@ -1,0 +1,103 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "dependencyDashboard": true,
+  "timezone": "UTC",
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "labels": [
+    "dependencies",
+    "renovate"
+  ],
+  "packageRules": [
+    {
+      "matchManagers": [
+        "npm"
+      ],
+      "groupName": "npm dependencies"
+    },
+    {
+      "matchManagers": [
+        "dockerfile",
+        "docker-compose"
+      ],
+      "groupName": "Docker images"
+    },
+    {
+      "matchManagers": [
+        "terraform",
+        "terragrunt"
+      ],
+      "groupName": "Terraform modules"
+    },
+    {
+      "groupName": "Ansible Python packages",
+      "matchManagers": [
+        "regex"
+      ],
+      "matchPackageNames": [
+        "ansible-core",
+        "ansible-lint"
+      ]
+    },
+    {
+      "groupName": "Ansible EE images",
+      "matchManagers": [
+        "regex"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/lightning-it/wunder-devtools-ee"
+      ]
+    }
+  ],
+  "regexManagers": [
+    {
+      "description": "ansible-core version pins in workflows",
+      "fileMatch": [
+        ".github/workflows/.*\\.ya?ml"
+      ],
+      "matchStrings": [
+        "ansible-core==(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"
+      ],
+      "datasourceTemplate": "pypi",
+      "packageNameTemplate": "ansible-core"
+    },
+    {
+      "description": "ansible-lint version pins in workflows",
+      "fileMatch": [
+        ".github/workflows/.*\\.ya?ml"
+      ],
+      "matchStrings": [
+        "ansible-lint~=?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"
+      ],
+      "datasourceTemplate": "pypi",
+      "packageNameTemplate": "ansible-lint"
+    },
+    {
+      "description": "Ansible EE images used in workflows and hooks",
+      "fileMatch": [
+        ".github/workflows/.*\\.ya?ml",
+        ".pre-commit-config\\.yaml"
+      ],
+      "matchStrings": [
+        "wunder-devtools-ee:ansible-(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "packageNameTemplate": "ghcr.io/lightning-it/wunder-devtools-ee"
+    },
+    {
+      "description": "Ansible matrix versions in workflows",
+      "fileMatch": [
+        ".github/workflows/.*\\.ya?ml"
+      ],
+      "matchStrings": [
+        "ansible_core_version:\\s*(?:#.*\\n)?(?:[\\s-\"'])*(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"
+      ],
+      "datasourceTemplate": "pypi",
+      "packageNameTemplate": "ansible-core"
+    }
+  ]
+}
