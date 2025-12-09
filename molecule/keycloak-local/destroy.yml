@@ -1,0 +1,12 @@
+---
+- name: Destroy
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Tear down Keycloak (docker compose)
+      ansible.builtin.command:
+        cmd: >-
+          docker compose -f
+          {{ playbook_dir }}/../../tests/keycloak/docker-compose.yml down -v
+      changed_when: false

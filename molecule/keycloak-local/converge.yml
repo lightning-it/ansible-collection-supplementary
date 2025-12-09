@@ -1,0 +1,56 @@
+---
+- name: Converge
+  hosts: localhost
+  gather_facts: false
+  vars:
+    keycloak_tf_workdir: "{{ molecule_ephemeral_directory }}/tf"
+    keycloak_tf_clean_state: false
+    keycloak_url: "http://localhost:8080"
+    keycloak_master_realm: "master"
+    keycloak_client_id: "admin-cli"
+    keycloak_username: "admin"
+    keycloak_password: "admin"
+    keycloak_realms:
+      - name: "demo01"
+        display_name: "DEMO01"
+    keycloak_clients:
+      - client_id: "app-frontend"
+        name: "App Frontend"
+        client_type: "public"
+        realm: "demo01"
+        redirect_uris: ["http://localhost:3000/*"]
+        web_origins: ["+"]
+        standard_flow_enabled: true
+        implicit_flow_enabled: false
+        direct_access_grants_enabled: true
+        default_scopes: ["profile", "email"]
+    keycloak_users:
+      - username: "alice"
+        realm: "demo01"
+        enabled: true
+        email: "alice@example.com"
+        first_name: "Alice"
+        last_name: "Admin"
+        initial_password:
+          value: "ChangeMe123!"
+          temporary: true
+
+  pre_tasks:
+    - name: Start Keycloak (docker compose)
+      ansible.builtin.command:
+        cmd: >-
+          docker compose -f
+          {{ playbook_dir }}/../../tests/keycloak/docker-compose.yml up -d
+      changed_when: false
+
+    - name: Wait for Keycloak to become ready
+      ansible.builtin.uri:
+        url: "http://localhost:9000/health/ready"
+        status_code: 200
+      register: kc_health
+      retries: 40
+      delay: 3
+      until: kc_health.status == 200
+
+  roles:
+    - role: keycloak

@@ -1,0 +1,32 @@
+---
+- name: Validate required variables for keycloak_platform_terraform
+  ansible.builtin.assert:
+    that:
+      - keycloak_realms is defined
+      - keycloak_realms | length > 0
+      - keycloak_url is not none
+      - keycloak_master_realm is not none
+      - keycloak_client_id is not none
+      - >
+          (
+            keycloak_client_secret is defined and
+            keycloak_client_secret not in [None, ""]
+          ) or (
+            keycloak_username is defined and
+            keycloak_password is defined and
+            keycloak_username not in [None, ""] and
+            keycloak_password not in [None, ""]
+          )
+    fail_msg: >
+      Required variables are missing for keycloak_platform_terraform. Set
+      keycloak_realms, keycloak_url, keycloak_client_id, authentication details
+      (either client_secret or username/password), and keycloak_master_realm via
+      inventory/group_vars/host_vars or CI secrets; do not leave them empty.
+    success_msg: >
+      All required variables for keycloak_platform_terraform are set.
+
+- name: Check if terraform is available on the control host
+  ansible.builtin.command: terraform version
+  register: tf_version
+  changed_when: false
+  failed_when: tf_version.rc != 0

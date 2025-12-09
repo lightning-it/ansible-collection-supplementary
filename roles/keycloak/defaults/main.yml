@@ -1,6 +1,7 @@
 ---
 # Directory on the control host where Terraform will be executed
 keycloak_tf_workdir: "/workspace/infra/keycloak"
+keycloak_tf_clean_state: false
 
 # Realms managed by the terraform-keycloak-platform module (override in vars)
 keycloak_realms: []

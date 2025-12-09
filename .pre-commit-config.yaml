@@ -19,6 +19,7 @@ repos:
           - "-c"
           - >
             ANSIBLE_EE_IMAGE=ghcr.io/lightning-it/wunder-devtools-ee:ansible-2.18.6
+            ANSIBLE_COLLECTIONS_PATHS=$(pwd)
             bash scripts/wunder-devtools-ee.sh ansible-lint "$@"
           - "--"
         pass_filenames: true
