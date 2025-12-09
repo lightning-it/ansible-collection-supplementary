@@ -2,6 +2,7 @@
 repos:
   - repo: local
     hooks:
+      # yamllint via wunder-devtools-ee container
       - id: yamllint-ee
         name: yamllint (wunder-devtools-ee)
         language: system
@@ -9,9 +10,13 @@ repos:
         pass_filenames: true
         files: \.(yml|yaml)$
 
-      - id: ansible-lint-ee
-        name: ansible-lint (wunder-devtools-ee)
+      # ansible-lint mit AAP latest EE
+      - id: ansible-lint-ee-aap-latest
+        name: ansible-lint (wunder-devtools-ee / AAP latest)
         language: system
-        entry: bash scripts/wunder-devtools-ee.sh ansible-lint -p
-        pass_filenames: false
-        files: ^(roles/|playbooks/|tests/).*\.(yml|yaml)$
+        env:
+          ANSIBLE_EE_IMAGE: >-
+            ghcr.io/lightning-it/wunder-devtools-ee:ansible-2.18.6
+        entry: bash scripts/wunder-devtools-ee.sh ansible-lint
+        pass_filenames: true
+        files: \.(yml|yaml)$
