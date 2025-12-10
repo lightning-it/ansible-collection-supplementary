@@ -10,3 +10,4 @@
 
 - name: Apply Terraform configuration for keycloak
   ansible.builtin.include_tasks: terraform_apply.yml
+  when: not keycloak_config_skip_apply

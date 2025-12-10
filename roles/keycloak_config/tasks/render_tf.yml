@@ -1,0 +1,6 @@
+---
+- name: Render Terraform main.tf
+  ansible.builtin.template:
+    src: "main.tf.j2"
+    dest: "{{ keycloak_config_tf_workdir }}/main.tf"
+    mode: "0644"

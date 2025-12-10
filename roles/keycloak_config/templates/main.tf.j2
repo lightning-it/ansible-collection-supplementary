@@ -1,0 +1,63 @@
+terraform {
+  required_version = ">= 1.5.7, < 2.0.0"
+
+  required_providers {
+    keycloak = {
+      source  = "keycloak/keycloak"
+      version = "~> 5.5"
+    }
+  }
+}
+
+provider "keycloak" {
+  url           = "{{ keycloak_config_url }}"
+  client_id     = "{{ keycloak_config_client_id }}"
+  realm         = "{{ keycloak_config_master_realm }}"
+{% if keycloak_config_client_secret %}
+  client_secret = "{{ keycloak_config_client_secret }}"
+{% endif %}
+{% if keycloak_config_username and keycloak_config_password %}
+  username = "{{ keycloak_config_username }}"
+  password = "{{ keycloak_config_password }}"
+{% endif %}
+}
+
+module "keycloak_instance" {
+  source  = "{{ keycloak_config_module_source }}"
+{% if keycloak_config_module_version %}
+  version = "{{ keycloak_config_module_version }}"
+{% endif %}
+
+  realms                       = {{ keycloak_config_realms | to_nice_json }}
+  clients                      = {{ keycloak_config_clients | to_nice_json }}
+  client_scopes                = {{ keycloak_config_client_scopes | to_nice_json }}
+  realm_roles                  = {{ keycloak_config_realm_roles | to_nice_json }}
+  client_roles                 = {{ keycloak_config_client_roles | to_nice_json }}
+  role_bindings                = {{ keycloak_config_role_bindings | to_nice_json }}
+  groups                       = {{ keycloak_config_groups | to_nice_json }}
+  default_groups               = {{ keycloak_config_default_groups | to_nice_json }}
+  users                        = {{ keycloak_config_users | to_nice_json }}
+  service_accounts             = {{ keycloak_config_service_accounts | to_nice_json }}
+  identity_providers           = {{ keycloak_config_identity_providers | to_nice_json }}
+  identity_provider_mappers    = {{ keycloak_config_identity_provider_mappers | to_nice_json }}
+  ldap_user_federations        = {{ keycloak_config_ldap_user_federations | to_nice_json }}
+  kerberos_user_federations    = {{ keycloak_config_kerberos_user_federations | to_nice_json }}
+  smtp_settings                = {{ keycloak_config_smtp_settings | to_nice_json }}
+  password_policies            = {{ keycloak_config_password_policies | to_nice_json }}
+  bruteforce_settings          = {{ keycloak_config_bruteforce_settings | to_nice_json }}
+  auth_flow_settings           = {{ keycloak_config_auth_flow_settings | to_nice_json }}
+  otp_settings                 = {{ keycloak_config_otp_settings | to_nice_json }}
+  theme_settings               = {{ keycloak_config_theme_settings | to_nice_json }}
+  localization_settings        = {{ keycloak_config_localization_settings | to_nice_json }}
+  event_settings               = {{ keycloak_config_event_settings | to_nice_json }}
+  session_settings             = {{ keycloak_config_session_settings | to_nice_json }}
+  token_settings               = {{ keycloak_config_token_settings | to_nice_json }}
+  custom_theme_hooks           = {{ keycloak_config_custom_theme_hooks | to_nice_json }}
+  event_listener_hooks         = {{ keycloak_config_event_listener_hooks | to_nice_json }}
+}
+
+# Optional: if you want to expose the module output
+output "realms" {
+  description = "Realms managed by the keycloak_instance module"
+  value       = module.keycloak_instance.realms
+}

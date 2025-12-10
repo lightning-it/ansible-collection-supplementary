@@ -4,4 +4,4 @@
   gather_facts: false
 
   roles:
-    - keycloak
+    - keycloak_config

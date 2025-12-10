@@ -1,7 +1,7 @@
 ---
 - name: Ensure Terraform working directory exists
   ansible.builtin.file:
-    path: "{{ keycloak_tf_workdir }}"
+    path: "{{ keycloak_config_tf_workdir }}"
     state: directory
     mode: "0755"
 
@@ -10,8 +10,8 @@
     path: "{{ item }}"
     state: absent
   loop:
-    - "{{ keycloak_tf_workdir }}/.terraform"
-    - "{{ keycloak_tf_workdir }}/terraform.tfstate"
-    - "{{ keycloak_tf_workdir }}/terraform.tfstate.backup"
-  when: keycloak_tf_clean_state
+    - "{{ keycloak_config_tf_workdir }}/.terraform"
+    - "{{ keycloak_config_tf_workdir }}/terraform.tfstate"
+    - "{{ keycloak_config_tf_workdir }}/terraform.tfstate.backup"
+  when: keycloak_config_tf_clean_state
   changed_when: false

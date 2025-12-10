@@ -3,21 +3,25 @@
   hosts: localhost
   gather_facts: false
   vars:
-    keycloak_tf_workdir: "{{ molecule_ephemeral_directory }}/tf"
-    keycloak_tf_clean_state: false
-    keycloak_host: >-
+    keycloak_config_tf_workdir: "{{ molecule_ephemeral_directory }}/tf"
+    keycloak_config_tf_clean_state: false
+    keycloak_config_host: >-
       {{ lookup('env', 'KEYCLOAK_HOST')
          | default('host.docker.internal', true) }}
-    keycloak_url: >-
-      http://{{ keycloak_host }}:8080
-    keycloak_master_realm: "master"
-    keycloak_client_id: "admin-cli"
-    keycloak_username: "admin"
-    keycloak_password: "admin"
-    keycloak_realms:
+    keycloak_config_url: >-
+      http://{{ keycloak_config_host }}:8080
+    keycloak_config_master_realm: "master"
+    keycloak_config_client_id: "admin-cli"
+    keycloak_config_username: "admin"
+    keycloak_config_password: "admin"
+    keycloak_config_client_secret: "dummy-secret"
+    keycloak_config_module_source: "lightning-it/instance/keycloak"
+    keycloak_config_module_version: "1.2.1"
+    keycloak_config_skip_apply: true
+    keycloak_config_realms:
       - name: "demo01"
         display_name: "DEMO01"
-    keycloak_clients:
+    keycloak_config_clients:
       - client_id: "app-frontend"
         name: "App Frontend"
         client_type: "public"
@@ -28,7 +32,7 @@
         implicit_flow_enabled: false
         direct_access_grants_enabled: true
         default_scopes: ["profile", "email"]
-    keycloak_users:
+    keycloak_config_users:
       - username: "alice"
         realm: "demo01"
         enabled: true
@@ -46,7 +50,7 @@
 
     - name: Wait for Keycloak to become ready
       ansible.builtin.uri:
-        url: "http://{{ keycloak_host }}:9000/health/ready"
+        url: "http://{{ keycloak_config_host }}:9000/health/ready"
         status_code: 200
       register: kc_health
       retries: 40
@@ -54,4 +58,4 @@
       until: kc_health.status == 200
 
   roles:
-    - role: keycloak
+    - role: keycloak_config

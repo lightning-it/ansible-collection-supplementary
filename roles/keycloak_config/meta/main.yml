@@ -1,6 +1,6 @@
 ---
 galaxy_info:
-  role_name: keycloak
+  role_name: keycloak_config
   author: lightning-it
   description: >
     Manage Keycloak realms and instance configuration via Terraform
