@@ -27,7 +27,7 @@ Terraform must be installed and available in `PATH` on the control host.
 | `keycloak_tf_clean_state` | bool, default `false` | Remove `.terraform` and state files before each run. |
 | `keycloak_realms` | list(object), default `[]` | Realms to manage (name, display_name, etc.). **Must be set.** |
 | `keycloak_module_source` | string, default `lightning-it/instance/keycloak` | Terraform module source. |
-| `keycloak_module_version` | string, default `1.1.0` | Terraform module version (set `null` for local path). |
+| `keycloak_module_version` | string, default `1.2.1` | Terraform module version (set `null` for local path). |
 | `keycloak_url` | string, default `""` | Keycloak base URL. |
 | `keycloak_client_id` | string, default `""` | Client ID for auth. |
 | `keycloak_client_secret` | string, default `""` | Client secret (when using client credentials). |

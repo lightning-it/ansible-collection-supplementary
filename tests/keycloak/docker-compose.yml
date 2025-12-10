@@ -2,10 +2,33 @@
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.4.7
-    command: start-dev
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        set -euo pipefail
+        /opt/keycloak/bin/kc.sh start-dev &
+        pid=$$!
+        trap "kill $$pid" TERM INT
+        until /opt/keycloak/bin/kcadm.sh config credentials \
+          --server http://localhost:8080 \
+          --realm master \
+          --user "$${KEYCLOAK_ADMIN:-admin}" \
+          --password "$${KEYCLOAK_ADMIN_PASSWORD:-admin}" >/dev/null 2>&1; do
+          sleep 2
+        done
+        /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=NONE
+        wait "$$pid"
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
+      # allow HTTP for dev/test callers (e.g. from inside tool containers)
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_SPI_LOGIN_PROTOCOL_OPENID_CONNECT_REQUIRE_HTTPS: "false"
+      KC_PROXY: "edge"
+      KC_HOSTNAME_URL: "http://host.docker.internal:8080"
+      KC_HOSTNAME_ADMIN_URL: "http://host.docker.internal:8080"
       # enable health endpoints
       KC_HEALTH_ENABLED: "true"
       # keep management interface enabled (default), health exposed there

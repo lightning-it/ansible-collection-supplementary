@@ -10,17 +10,59 @@ repos:
         pass_filenames: true
         files: \.(yml|yaml)$
 
-      # ansible-lint mit AAP latest EE
-      - id: ansible-lint-ee-aap-latest
-        name: ansible-lint (wunder-devtools-ee / AAP latest)
+      # ansible-lint im wunder-devtools-ee container
+      - id: ansible-lint-ee
+        name: ansible-lint (wunder-devtools-ee)
         language: system
         entry: bash
         args:
           - "-c"
-          - >
-            ANSIBLE_EE_IMAGE=ghcr.io/lightning-it/wunder-devtools-ee:ansible-2.18.6
-            ANSIBLE_COLLECTIONS_PATHS=$(pwd)
-            bash scripts/wunder-devtools-ee.sh ansible-lint "$@"
+          - |
+            ANSIBLE_COLLECTIONS_PATHS="$PWD" \
+              bash scripts/wunder-devtools-ee.sh \
+                ansible-lint "$@"
           - "--"
         pass_filenames: true
         files: \.(yml|yaml)$
+
+      # molecule scenario for keycloak-local (via wunder-devtools-ee)
+      - id: molecule-keycloak-local
+        name: molecule test (keycloak-local)
+        language: system
+        entry: bash
+        args:
+          - "-c"
+          - |
+            ANSIBLE_COLLECTIONS_PATHS="$PWD" \
+              ANSIBLE_ROLES_PATH="$PWD/roles" \
+              bash scripts/wunder-devtools-ee.sh \
+                molecule test -s keycloak-local
+          - "--"
+        pass_filenames: false
+      - id: molecule-rhel9-rdp
+        name: molecule rhel9-rdp (Vagrant)
+        language: system
+        stages: [manual]
+        entry: bash
+        args:
+          - "-c"
+          - |
+            set -euo pipefail
+
+            # 1) VM start
+            pushd vagrant/rhel9 >/dev/null
+            vagrant up
+            popd >/dev/null
+
+            # 2) Molecule (container)
+            ANSIBLE_COLLECTIONS_PATHS="$PWD" \
+            ANSIBLE_ROLES_PATH="$PWD/roles" \
+            bash scripts/wunder-devtools-ee.sh \
+              molecule test -s rhel9-rdp
+
+            # 3) VM destory
+            pushd vagrant/rhel9 >/dev/null
+            vagrant destroy -f
+            popd >/dev/null
+          - "--"
+        pass_filenames: false

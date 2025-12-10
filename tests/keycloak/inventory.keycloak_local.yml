@@ -15,7 +15,7 @@ all:
           keycloak_username: "admin"
           keycloak_password: "admin"
           keycloak_module_source: "lightning-it/instance/keycloak"
-          keycloak_module_version: "1.1.0"
+          keycloak_module_version: "1.2.1"
 
           keycloak_realms:
             - name: "demo01"

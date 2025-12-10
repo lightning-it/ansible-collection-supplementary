@@ -50,4 +50,4 @@ keycloak_master_realm: ""
 # Terraform module source and version
 # Set keycloak_module_version to null when using a local path
 keycloak_module_source: "lightning-it/instance/keycloak"
-keycloak_module_version: "1.1.0"
+keycloak_module_version: "1.2.1"

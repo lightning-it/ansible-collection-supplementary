@@ -3,12 +3,15 @@ dependency:
   name: galaxy
 
 driver:
-  name: delegated
+  name: default
   options:
     managed: false
 
 platforms:
   - name: localhost
+    address: localhost
+    connection_options:
+      ansible_connection: local
 
 provisioner:
   name: ansible
@@ -16,8 +19,15 @@ provisioner:
     yamllint .
     ansible-lint
   env:
-    ANSIBLE_COLLECTIONS_PATHS: >-
-      {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}
+    ANSIBLE_COLLECTIONS_PATHS: ../../
+    ANSIBLE_ROLES_PATH: ../../roles
+  config_options:
+    defaults:
+      roles_path: "../../roles"
+  inventory:
+    host_vars:
+      localhost:
+        ansible_connection: local
   playbooks:
     converge: converge.yml
     destroy: destroy.yml
