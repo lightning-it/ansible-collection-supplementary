@@ -19,7 +19,7 @@ provisioner:
     yamllint .
     ansible-lint
   env:
-    ANSIBLE_COLLECTIONS_PATHS: "../../ansible_collections"
+    ANSIBLE_COLLECTIONS_PATHS: "../../collections"
   inventory:
     host_vars:
       localhost:

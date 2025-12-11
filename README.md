@@ -28,8 +28,7 @@ Example playbook:
 
 - `galaxy.yml` defines the collection metadata (namespace `lightning_it`, name
   `supplementary`, license `GPL-2.0-only`).
-- Source tree includes a convenience mirror under
-  `ansible_collections/lightning_it/supplementary/` for local execution; the
-  canonical role sources live in `roles/`.
+- Canonical role sources live in `roles/`; build with `ansible-galaxy
+  collection build`.
 - Molecule scenario `keycloak-local` provisions a local Keycloak container and
   exercises the role with `keycloak_config_skip_apply` set for quick checks.
