@@ -6,13 +6,13 @@ set -euo pipefail
 
 rm -rf /tmp/wunder/.cache/ansible-compat \
        /tmp/wunder/collections \
-       /tmp/wunder/lightning_it-*.tar.gz
+       /tmp/wunder/lit-*.tar.gz
 
 ansible-galaxy collection build \
   --output-path /tmp/wunder \
   --force
 
 ansible-galaxy collection install \
-  /tmp/wunder/lightning_it-supplementary-*.tar.gz \
+  /tmp/wunder/lit-supplementary-*.tar.gz \
   -p /tmp/wunder/collections \
   --force

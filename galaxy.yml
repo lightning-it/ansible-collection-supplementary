@@ -1,5 +1,5 @@
 ---
-namespace: lightning_it
+namespace: lit
 name: supplementary
 version: 1.0.0
 readme: README.md

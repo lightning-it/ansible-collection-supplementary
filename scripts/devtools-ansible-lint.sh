@@ -12,11 +12,11 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   # Clean workspace and prepare collection
   rm -rf /tmp/wunder/.cache/ansible-compat \
          /tmp/wunder/collections \
-         /tmp/wunder/lightning_it-*.tar.gz
+         /tmp/wunder/lit-*.tar.gz
   /workspace/scripts/devtools-prepare-collection.sh
 
   # Switch into collection root and configure env
-  cd /tmp/wunder/collections/ansible_collections/lightning_it/supplementary
+  cd /tmp/wunder/collections/ansible_collections/lit/supplementary
 
   export ANSIBLE_CONFIG="/workspace/ansible.cfg"
   export ANSIBLE_COLLECTIONS_PATHS="/tmp/wunder/collections"

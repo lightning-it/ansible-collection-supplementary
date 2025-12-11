@@ -1,4 +1,4 @@
-# lightning_it.supplementary
+# lit.supplementary
 
 Supplementary Ansible collection for ModuLix / Lightning IT. Currently contains
 the `keycloak_config` role to configure existing Keycloak instances (realms,
@@ -21,12 +21,12 @@ Example playbook:
   connection: local
 
   roles:
-    - role: lightning_it.supplementary.keycloak_config
+    - role: lit.supplementary.keycloak_config
 ```
 
 ## Development
 
-- `galaxy.yml` defines the collection metadata (namespace `lightning_it`, name
+- `galaxy.yml` defines the collection metadata (namespace `lit`, name
   `supplementary`, license `GPL-2.0-only`).
 - Canonical role sources live in `roles/`; build with `ansible-galaxy
   collection build`.

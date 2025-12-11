@@ -95,7 +95,7 @@ Example playbook using the collection FQCN:
         client_type: "public"
         redirect_uris: ["http://localhost:3000/*"]
   roles:
-    - role: lightning_it.supplementary.keycloak_config
+    - role: lit.supplementary.keycloak_config
 ```
 
 ---

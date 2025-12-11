@@ -16,4 +16,4 @@
     keycloak_config_skip_apply: true
 
   roles:
-    - lightning_it.supplementary.keycloak_config
+    - lit.supplementary.keycloak_config
