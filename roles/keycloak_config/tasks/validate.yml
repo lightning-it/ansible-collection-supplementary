@@ -18,10 +18,10 @@
             keycloak_config_password not in [None, ""]
           )
     fail_msg: >
-      Required variables are missing for keycloak_config. Set the realms, URL,
-      client_id, authentication details (client_secret or username/password),
-      and keycloak_config_master_realm via inventory/group_vars/host_vars or
-      CI secrets; do not leave them empty.
+      Required variables are missing for keycloak_config. Provide realms, URL,
+      client_id, auth (client_secret or username/password), and
+      keycloak_config_master_realm via inventory/group_vars/host_vars or CI
+      secrets; do not leave them empty.
     success_msg: All required variables for keycloak_config are set.
 
 - name: Check if terraform is available on the control host

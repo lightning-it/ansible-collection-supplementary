@@ -4,4 +4,4 @@
   gather_facts: false
 
   roles:
-    - role: keycloak_config
+    - role: lightning_it.supplementary.keycloak_config

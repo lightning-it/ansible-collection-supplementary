@@ -58,4 +58,4 @@
       until: kc_health.status == 200
 
   roles:
-    - role: keycloak_config
+    - role: lightning_it.supplementary.keycloak_config

@@ -19,11 +19,7 @@ provisioner:
     yamllint .
     ansible-lint
   env:
-    ANSIBLE_COLLECTIONS_PATHS: ../../
-    ANSIBLE_ROLES_PATH: ../../roles
-  config_options:
-    defaults:
-      roles_path: "../../roles"
+    ANSIBLE_COLLECTIONS_PATHS: "../../ansible_collections"
   inventory:
     host_vars:
       localhost:

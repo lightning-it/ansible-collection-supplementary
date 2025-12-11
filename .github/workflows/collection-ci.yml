@@ -52,6 +52,8 @@ jobs:
 
       # 4) Run ansible-lint for the collection
       - name: Run ansible-lint
+        env:
+          ANSIBLE_COLLECTIONS_PATHS: "."
         run: ansible-lint
 
   molecule:
@@ -88,3 +90,44 @@ jobs:
         env:
           MOLECULE_NO_LOG: "false"
         run: molecule test -s keycloak-local
+
+  build-install:
+    name: Build & install collection
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+          terraform_version: 1.6.6
+
+      - name: Install ansible-core
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "ansible-core==2.16.11"
+
+      - name: Build collection
+        run: ansible-galaxy collection build
+
+      - name: Install built collection
+        run: |
+          ansible-galaxy collection install \
+            lightning_it-supplementary-*.tar.gz \
+            -p ./collections
+
+      - name: Run example playbook (FQCN)
+        env:
+          ANSIBLE_COLLECTIONS_PATHS: "./collections"
+        run: |
+          ansible-playbook \
+            -i localhost, \
+            playbooks/keycloak_config_example.yml

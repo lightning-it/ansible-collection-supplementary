@@ -13,3 +13,6 @@
 # Node tooling for semantic-release
 node_modules/
 npm-debug.log
+
+# Local collection installs from tests/hooks
+collections/

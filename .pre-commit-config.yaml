@@ -18,11 +18,29 @@ repos:
         args:
           - "-c"
           - |
-            ANSIBLE_COLLECTIONS_PATHS="$PWD" \
-              bash scripts/wunder-devtools-ee.sh \
-                ansible-lint "$@"
+            set -e
+            bash scripts/wunder-devtools-ee.sh bash -c '
+              set -e
+              rm -rf /tmp/wunder/.cache/ansible-compat \
+                /tmp/wunder/collections \
+                /tmp/wunder/lightning_it-*.tar.gz
+              ansible-galaxy collection build \
+                --output-path /tmp/wunder \
+                --force
+              ansible-galaxy collection install \
+                /tmp/wunder/lightning_it-supplementary-*.tar.gz \
+                -p /tmp/wunder/collections \
+                --force
+              cd /tmp/wunder/collections/ansible_collections
+              cd lightning_it/supplementary
+              export ANSIBLE_CONFIG=$PWD/ansible.cfg
+              export ANSIBLE_COLLECTIONS_PATHS=/tmp/wunder/collections
+              export ANSIBLE_LINT_OFFLINE=true
+              export ANSIBLE_LINT_SKIP_GALAXY_INSTALL=1
+              ansible-lint
+            '
           - "--"
-        pass_filenames: true
+        pass_filenames: false
         files: \.(yml|yaml)$
 
       # molecule scenario for keycloak-local (via wunder-devtools-ee)
@@ -33,10 +51,23 @@ repos:
         args:
           - "-c"
           - |
-            ANSIBLE_COLLECTIONS_PATHS="$PWD" \
-              ANSIBLE_ROLES_PATH="$PWD/roles" \
-              bash scripts/wunder-devtools-ee.sh \
-                molecule test -s keycloak-local
+            set -e
+            bash scripts/wunder-devtools-ee.sh bash -c '
+              set -e
+              rm -rf /tmp/wunder/.cache/ansible-compat \
+                /tmp/wunder/collections \
+                /tmp/wunder/lightning_it-*.tar.gz
+              ansible-galaxy collection build \
+                --output-path /tmp/wunder \
+                --force
+              ansible-galaxy collection install \
+                /tmp/wunder/lightning_it-supplementary-*.tar.gz \
+                -p /tmp/wunder/collections \
+                --force
+              export ANSIBLE_CONFIG=/workspace/ansible.cfg
+              export ANSIBLE_COLLECTIONS_PATHS=/tmp/wunder/collections
+              molecule test -s keycloak-local
+            '
           - "--"
         pass_filenames: false
       - id: molecule-rhel9-rdp
