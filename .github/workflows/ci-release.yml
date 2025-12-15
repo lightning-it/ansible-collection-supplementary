@@ -57,7 +57,7 @@ jobs:
       # 4) Run ansible-lint for the collection
       - name: Run ansible-lint
         env:
-          ANSIBLE_COLLECTIONS_PATHS: "."
+          ANSIBLE_COLLECTIONS_PATH: "."
         run: ansible-lint
 
   molecule:
@@ -131,7 +131,7 @@ jobs:
 
       - name: Run example playbook (FQCN)
         env:
-          ANSIBLE_COLLECTIONS_PATHS: "./collections"
+          ANSIBLE_COLLECTIONS_PATH: "./collections"
         run: |
           ansible-playbook \
             -i localhost, \
