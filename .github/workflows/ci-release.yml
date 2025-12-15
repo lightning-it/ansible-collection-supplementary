@@ -172,6 +172,13 @@ jobs:
         with:
           fetch-depth: 0  # semantic-release needs full history
 
+      # Configure git identity for changelog/commit tagging
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
       # Setup Node for semantic-release
       - name: Setup Node
         uses: actions/setup-node@v4
