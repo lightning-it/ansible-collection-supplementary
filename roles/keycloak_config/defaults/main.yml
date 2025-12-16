@@ -1,6 +1,8 @@
 ---
 # Directory on the control host where Terraform will be executed
-keycloak_config_tf_workdir: "/workspace/infra/keycloak"
+# Default Terraform working directory:
+keycloak_config_tf_workdir: "{{ lookup('env', 'KEYCLOAK_TF_WORKDIR')
+  | default(ansible_env.HOME ~ '/.keycloak-tf', true) }}"
 keycloak_config_tf_clean_state: false
 keycloak_config_skip_apply: false
 
