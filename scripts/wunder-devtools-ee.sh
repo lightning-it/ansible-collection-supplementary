@@ -26,6 +26,11 @@ if [ -S /var/run/docker.sock ]; then
   fi
 fi
 
+# On Linux runners, provide host.docker.internal → host-gateway
+if [ "$(uname -s)" = "Linux" ]; then
+  DOCKER_ARGS+=(--add-host=host.docker.internal:host-gateway)
+fi
+
 docker run --rm \
   --entrypoint "" \
   "${DOCKER_ARGS[@]}" \
