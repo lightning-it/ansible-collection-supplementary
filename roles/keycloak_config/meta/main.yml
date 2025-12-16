@@ -1,0 +1,24 @@
+---
+galaxy_info:
+  role_name: keycloak_config
+  author: Lightning IT
+  description: >
+    Configure an existing Keycloak instance (realms, clients, roles, users)
+    via Terraform and the terraform-keycloak-instance module.
+  license: GPL-2.0-only
+  min_ansible_version: "2.14.0"
+  platforms:
+    - name: EL
+      versions: ["9"]
+    - name: GenericLinux
+      versions: ["all"]
+  galaxy_tags:
+    - keycloak
+    - terraform
+    - sso
+    - identity
+    - idp
+    - realm
+    - authentication
+
+dependencies: []

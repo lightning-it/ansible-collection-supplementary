@@ -1,0 +1,69 @@
+---
+repos:
+  - repo: local
+    hooks:
+      # yamllint via wunder-devtools-ee container
+      - id: yamllint-ee
+        name: yamllint (wunder-devtools-ee)
+        language: system
+        entry: bash scripts/wunder-devtools-ee.sh yamllint
+        pass_filenames: true
+        files: \.(yml|yaml)$
+
+      # ansible-lint in wunder-devtools-ee (build+install collection, then lint)
+      - id: ansible-lint-ee
+        name: ansible-lint (wunder-devtools-ee)
+        language: system
+        entry: bash scripts/devtools-ansible-lint.sh
+        pass_filenames: false
+        files: \.(yml|yaml)$
+
+      # molecule scenario for keycloak-local (via wunder-devtools-ee)
+      - id: molecule-keycloak-local
+        name: molecule test (keycloak-local)
+        language: system
+        entry: bash scripts/devtools-molecule-keycloak-local.sh
+        pass_filenames: false
+
+      - id: molecule-rhel9-rdp
+        name: molecule rhel9-rdp (Vagrant)
+        language: system
+        stages: [manual]
+        entry: bash scripts/devtools-molecule-rhel9-rdp.sh
+        pass_filenames: false
+
+      # -------------------------------------------------------------------
+      # GitHub Actions workflow linting (actionlint)
+      # -------------------------------------------------------------------
+      - id: github-actions-lint
+        name: actionlint (GitHub Actions) via Docker
+        language: system
+        entry: >-
+          bash -lc 'docker run --rm -v "$PWD":/repo \
+            -w /repo docker.io/rhysd/actionlint:latest'
+        pass_filenames: false
+        files: ^\.github/workflows/.*\.ya?ml$
+
+      # -------------------------------------------------------------------
+      # Renovate config linting (renovate-config-validator)
+      # -------------------------------------------------------------------
+      - id: renovate-config-validate
+        name: renovate-config-validator
+        language: system
+        pass_filenames: false
+        files: ^renovate\.json$
+        entry: >
+          bash -lc 'docker run --rm
+          -v "$PWD":/repo -w /repo
+          renovate/renovate:latest
+          renovate-config-validator'
+
+      # -------------------------------------------------------------------
+      # ansible-collection smoke test (build + example playbook)
+      # -------------------------------------------------------------------
+      - id: collection-smoke
+        name: collection smoke test
+        language: system
+        entry: bash scripts/devtools-collection-smoke.sh
+        pass_filenames: false
+        files: ^(playbooks/|roles/|galaxy\.yml|runtime\.yml)

@@ -1,0 +1,27 @@
+---
+- name: Verify
+  hosts: localhost
+  gather_facts: false
+  vars:
+    keycloak_config_skip_apply: true
+
+  tasks:
+    - name: Read Terraform output for realms
+      ansible.builtin.command:
+        cmd: terraform output -json realms
+        chdir: "{{ molecule_ephemeral_directory }}/tf"
+      register: tf_output
+      changed_when: false
+      when: not keycloak_config_skip_apply | default(false)
+
+    - name: Parse Terraform realms output
+      ansible.builtin.set_fact:
+        realms_output: "{{ tf_output.stdout | from_json }}"
+      when: not keycloak_config_skip_apply | default(false)
+
+    - name: Assert realm demo01 exists
+      ansible.builtin.assert:
+        that:
+          - realms_output.demo01.realm == "demo01"
+        fail_msg: "Realm demo01 was not created as expected."
+      when: not keycloak_config_skip_apply | default(false)

@@ -1,0 +1,57 @@
+---
+# Directory on the control host where Terraform will be executed
+# Default Terraform working directory:
+keycloak_config_tf_workdir: >-
+  {{ lookup('env', 'KEYCLOAK_TF_WORKDIR')
+     | default(lookup('env', 'HOME') ~ '/.keycloak-tf', true) }}
+keycloak_config_tf_clean_state: false
+keycloak_config_skip_apply: false
+
+# Realms managed by the terraform-keycloak-platform module (override in vars)
+keycloak_config_realms: []
+
+# Core Keycloak objects
+keycloak_config_clients: []
+keycloak_config_client_scopes: []
+keycloak_config_realm_roles: []
+keycloak_config_client_roles: []
+keycloak_config_role_bindings: []
+keycloak_config_groups: []
+keycloak_config_default_groups: []
+keycloak_config_users: []
+keycloak_config_service_accounts: []
+
+# Identity providers and federation
+keycloak_config_identity_providers: []
+keycloak_config_identity_provider_mappers: []
+keycloak_config_ldap_user_federations: []
+keycloak_config_kerberos_user_federations: []
+
+# Themes, localization, and hooks
+keycloak_config_theme_settings: []
+keycloak_config_localization_settings: []
+keycloak_config_custom_theme_hooks: []
+
+# Email and authentication policies
+keycloak_config_smtp_settings: []
+keycloak_config_password_policies: []
+keycloak_config_bruteforce_settings: []
+keycloak_config_auth_flow_settings: []
+keycloak_config_otp_settings: []
+keycloak_config_event_settings: []
+keycloak_config_session_settings: []
+keycloak_config_token_settings: []
+keycloak_config_event_listener_hooks: []
+
+# Keycloak provider settings (MUST be overridden in inventory/CI secrets)
+keycloak_config_url: ""
+keycloak_config_client_id: ""
+keycloak_config_client_secret: ""
+keycloak_config_username: ""
+keycloak_config_password: ""
+keycloak_config_master_realm: ""
+
+# Terraform module source and version
+# Set keycloak_config_module_version to null when using a local path
+keycloak_config_module_source: "lightning-it/instance/keycloak"
+keycloak_config_module_version: "1.2.1"

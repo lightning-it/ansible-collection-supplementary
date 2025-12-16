@@ -1,0 +1,214 @@
+---
+all:
+  children:
+    keycloak:
+      hosts:
+        localhost:
+          ansible_connection: local
+
+          # From inside wunder-devtools-ee container we must reach the host's
+          # Keycloak instance
+          keycloak_url: "http://host.docker.internal:8080"
+          keycloak_master_realm: "master"
+          keycloak_client_id: "admin-cli"
+          keycloak_client_secret: null
+          keycloak_username: "admin"
+          keycloak_password: "admin"
+          keycloak_module_source: "lightning-it/instance/keycloak"
+          keycloak_module_version: "1.2.1"
+
+          keycloak_realms:
+            - name: "demo01"
+              display_name: "DEMO01"
+
+          keycloak_clients:
+            - client_id: "app-frontend"
+              name: "App Frontend"
+              client_type: "public"
+              realm: "demo01"
+              redirect_uris: ["http://localhost:3000/*"]
+              web_origins: ["+"]
+              standard_flow_enabled: true
+              implicit_flow_enabled: false
+              direct_access_grants_enabled: true
+              default_scopes: ["profile", "email", "custom-scope"]
+              optional_scopes: ["address"]
+            - client_id: "app-backend"
+              name: "App Backend"
+              client_type: "confidential"
+              realm: "demo01"
+              base_url: "http://localhost:4000"
+              redirect_uris: ["http://localhost:4000/callback"]
+              service_accounts_enabled: true
+
+          keycloak_client_scopes:
+            - name: "custom-scope"
+              description: "Custom user attributes"
+              realm: "demo01"
+              protocol: "openid-connect"
+              mappers:
+                - name: "department-claim"
+                  protocol: "openid-connect"
+                  protocol_mapper: "oidc-usermodel-attribute-mapper"
+                  config:
+                    "claim.name": "department"
+                    "userinfo.token.claim": "true"
+                    "jsonType.label": "String"
+                    "user.attribute": "department"
+
+          keycloak_realm_roles:
+            - name: "platform-admin"
+              description: "Realm admin role"
+              realm: "demo01"
+
+          keycloak_client_roles:
+            - client_id: "app-backend"
+              name: "service-reader"
+              description: "Read access to backend"
+              realm: "demo01"
+
+          keycloak_groups:
+            - name: "admins"
+              realm: "demo01"
+              attributes:
+                team: ["platform"]
+            - name: "users"
+              realm: "demo01"
+
+          keycloak_default_groups:
+            - realm: "demo01"
+              names: ["users"]
+
+          keycloak_users: []
+
+          keycloak_service_accounts:
+            - client_id: "app-backend"
+              realm: "demo01"
+              enabled: true
+              realm_roles: ["platform-admin"]
+              client_roles:
+                "app-backend": ["service-reader"]
+
+          keycloak_role_bindings: []
+
+          keycloak_identity_providers:
+            - name: "google"
+              alias: "google"
+              realm: "demo01"
+              provider_type: "oidc"
+              enabled: true
+              display_name: "Google"
+              trust_email: true
+              authorization_url: "https://accounts.google.com/o/oauth2/v2/auth"
+              token_url: "https://oauth2.googleapis.com/token"
+              userinfo_url: "https://openidconnect.googleapis.com/v1/userinfo"
+              client_id: "google-client-id"
+              client_secret: "google-client-secret"
+              issuer: "https://accounts.google.com"
+              default_scopes: ["openid", "email", "profile"]
+
+          keycloak_identity_provider_mappers: []
+
+          keycloak_ldap_user_federations:
+            - realm: "demo01"
+              name: "corp-ldap"
+              enabled: true
+              priority: 0
+              vendor: "AD"
+              connection_url: "ldap://ldap.example.com:389"
+              users_dn: "ou=Users,dc=example,dc=com"
+              bind_dn: "cn=bind-user,dc=example,dc=com"
+              bind_credential: "change-me"
+              username_ldap_attribute: "sAMAccountName"
+              rdn_ldap_attribute: "cn"
+              uuid_ldap_attribute: "objectGUID"
+              user_object_classes: ["person", "organizationalPerson", "user"]
+              import_enabled: true
+              sync_registrations: false
+              pagination: true
+              allow_kerberos_authentication: false
+
+          keycloak_kerberos_user_federations:
+            - realm: "demo01"
+              name: "corp-kerberos"
+              enabled: true
+              priority: 1
+              kerberos_realm: "EXAMPLE.COM"
+              server_principal: "HTTP/keycloak.example.com@EXAMPLE.COM"
+              key_tab: "/etc/keytabs/keycloak.keytab"
+              allow_password_auth: false
+              allow_kerberos_auth: true
+              update_profile_first_login: true
+
+          keycloak_smtp_settings:
+            - realm: "demo01"
+              host: "smtp.example.com"
+              port: 587
+              from: "no-reply@example.com"
+              auth: true
+              user: "smtp-user"
+              password: "smtp-pass"
+              starttls: true
+              from_display: "Example Platform"
+
+          keycloak_password_policies:
+            - realm: "demo01"
+              policies:
+                - "length(10)"
+                - "digits(1)"
+                - "lowerCase(1)"
+                - "upperCase(1)"
+
+          keycloak_bruteforce_settings:
+            - realm: "demo01"
+              enabled: true
+              permanent_lockout: false
+              max_login_failures: 5
+              wait_increment_seconds: 60
+              quick_login_check_milli: 1000
+              minimum_quick_login_wait_seconds: 60
+              max_failure_wait_seconds: 900
+              failure_reset_time_seconds: 3600
+
+          keycloak_auth_flow_settings:
+            - realm: "demo01"
+              login_with_email_allowed: true
+              remember_me: true
+              verify_email: true
+              registration_allowed: false
+              registration_email_as_username: false
+
+          keycloak_otp_settings:
+            - realm: "demo01"
+              otp_type: "totp"
+              otp_alg: "HmacSHA1"
+              otp_digits: 6
+              otp_period: 30
+              otp_look_ahead_window: 1
+
+          keycloak_theme_settings: []
+
+          keycloak_localization_settings: []
+
+          keycloak_event_settings:
+            - realm: "demo01"
+              events_enabled: true
+              events_expiration: 3600
+              events_listeners: ["jboss-logging"]
+              enabled_event_types: ["LOGIN", "LOGOUT", "REGISTER"]
+              admin_events_enabled: true
+              admin_events_details_enabled: true
+
+          keycloak_session_settings: []
+
+          keycloak_token_settings: []
+
+          keycloak_custom_theme_hooks:
+            - name: "custom-login-theme"
+              realm: "demo01"
+              source_path: "themes/custom-login-theme"
+
+          keycloak_event_listener_hooks:
+            - name: "custom-webhook"
+              realm: "demo01"
+              target_url: "https://hooks.example.com/keycloak"

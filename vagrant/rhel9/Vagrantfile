@@ -1,0 +1,28 @@
+Vagrant.configure("2") do |config|
+  # Basis-VM
+  config.vm.box = "generic/rhel9"
+  config.vm.hostname = "rhel9-test"
+
+  # SSH-Portforward: Host 2222 -> Guest 22
+  # Damit kann Molecule/Ansible per SSH auf die VM
+  config.vm.network "forwarded_port",
+    guest: 22,
+    host: 2222,
+    id: "ssh",
+    auto_correct: true
+
+  # RDP-Portforward: Host 33389 -> Guest 3389
+  # Damit kannst du vom Mac mit einem RDP-Client auf die RHEL-VM
+  config.vm.network "forwarded_port",
+    guest: 3389,
+    host: 33389,
+    id: "rdp",
+    auto_correct: true
+
+  # Provider-Config (Beispiel: VirtualBox)
+  config.vm.provider "virtualbox" do |vb|
+    vb.name   = "rhel9-rdp-test"
+    vb.memory = 4096
+    vb.cpus   = 2
+  end
+end

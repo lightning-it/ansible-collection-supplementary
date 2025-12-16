@@ -1,0 +1,13 @@
+---
+- name: Validate role variables
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Prepare Terraform working directory
+  ansible.builtin.include_tasks: prepare_tf_dir.yml
+
+- name: Render Terraform configuration
+  ansible.builtin.include_tasks: render_tf.yml
+
+- name: Apply Terraform configuration for keycloak
+  ansible.builtin.include_tasks: terraform_apply.yml
+  when: not keycloak_config_skip_apply

@@ -1,0 +1,19 @@
+---
+- name: Initialize Terraform in working directory
+  ansible.builtin.command:
+    cmd: terraform init -input=false -upgrade
+    chdir: "{{ keycloak_config_tf_workdir }}"
+  register: tf_init
+  changed_when: false
+  failed_when: tf_init.rc != 0
+
+- name: Apply Terraform configuration
+  ansible.builtin.command:
+    cmd: terraform apply -auto-approve -input=false
+    chdir: "{{ keycloak_config_tf_workdir }}"
+  register: tf_apply
+  changed_when: "'No changes.' not in tf_apply.stdout"
+
+- name: Show Terraform apply output
+  ansible.builtin.debug:
+    var: tf_apply.stdout_lines

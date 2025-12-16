@@ -1,0 +1,19 @@
+---
+- name: Configure Keycloak (example)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    keycloak_config_url: "http://localhost:8080"
+    keycloak_config_master_realm: "master"
+    keycloak_config_client_id: "admin-cli"
+    keycloak_config_username: "admin"
+    keycloak_config_password: "admin"
+    keycloak_config_realms:
+      - name: "demo01"
+        display_name: "DEMO01"
+    keycloak_config_skip_apply: true
+
+  roles:
+    - lit.supplementary.keycloak_config
