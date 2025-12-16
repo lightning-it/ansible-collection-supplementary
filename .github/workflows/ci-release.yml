@@ -126,9 +126,10 @@ jobs:
         env:
           ANSIBLE_COLLECTIONS_PATH: "./collections"
         run: |
-          ansible-playbook \
+            ansible-playbook \
             -i localhost, \
-            playbooks/keycloak_config_example.yml
+            playbooks/keycloak_config_example.yml \
+            -e keycloak_config_tf_workdir=/workspace/infra/keycloak
 
   # ---------------------------------------------------------------------------
   # Semantic Release
