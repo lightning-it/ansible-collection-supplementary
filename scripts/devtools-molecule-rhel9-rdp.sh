@@ -13,7 +13,7 @@ vagrant up
 popd >/dev/null
 
 # 2) Molecule (inside wunder-devtools-ee container)
-ANSIBLE_COLLECTIONS_PATH="$PWD" \
+ANSIBLE_COLLECTIONS_PATHS="$PWD" \
 ANSIBLE_ROLES_PATH="$PWD/roles" \
 bash scripts/wunder-devtools-ee.sh \
   molecule test -s rhel9-rdp

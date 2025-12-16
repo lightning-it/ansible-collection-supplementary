@@ -27,7 +27,7 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
 
   # 4) Configure env for Molecule
   export ANSIBLE_CONFIG="/workspace/ansible.cfg"
-  export ANSIBLE_COLLECTIONS_PATH="/tmp/wunder/collections"
+  export ANSIBLE_COLLECTIONS_PATHS="/tmp/wunder/collections"
 
   # 5) Run the keycloak-local Molecule scenario
   molecule test -s keycloak-local
