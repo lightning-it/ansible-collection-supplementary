@@ -4,8 +4,7 @@ name: supplementary
 version: 1.0.0
 readme: README.md
 description: >
-  Supplementary Ansible collection for ModuLix / Lightning IT
-  (e.g. Keycloak config).
+  Supplementary Ansible collection for ModuLix.
 repository: "https://github.com/lightning-it/ansible-collection-supplementary"
 authors:
   - "Lightning IT"
