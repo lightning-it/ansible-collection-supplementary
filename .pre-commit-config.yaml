@@ -57,3 +57,13 @@ repos:
           -v "$PWD":/repo -w /repo
           renovate/renovate:latest
           renovate-config-validator'
+
+      # -------------------------------------------------------------------
+      # ansible-collection smoke test (build + example playbook)
+      # -------------------------------------------------------------------
+      - id: collection-smoke
+        name: collection smoke test
+        language: system
+        entry: bash scripts/devtools-collection-smoke.sh
+        pass_filenames: false
+        files: ^(playbooks/|roles/|galaxy\.yml|runtime\.yml)
