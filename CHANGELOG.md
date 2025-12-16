@@ -11,4 +11,3 @@ All notable changes to this collection are documented in this file.
   - Groups, default groups and users
   - Identity providers (OIDC/SAML) and LDAP/Kerberos federation
   - Realm-wide policies (themes, SMTP, flows, sessions, tokens)
-  xs
