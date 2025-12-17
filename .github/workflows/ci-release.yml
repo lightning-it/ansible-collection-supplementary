@@ -171,6 +171,7 @@ jobs:
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.LITRELEASEBOT_TOKEN }}
+          GH_TOKEN: ${{ secrets.LITRELEASEBOT_TOKEN }}
         run: npx semantic-release
 
   release_dry_run:
