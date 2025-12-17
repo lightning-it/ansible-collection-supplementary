@@ -1,3 +1,10 @@
+## 1.0.0 (2025-12-17)
+
+* feat: Add Keycloak role and Terraform integration ([4d86a42](https://github.com/lightning-it/ansible-collection-supplementary/commit/4d86a42))
+* feat: Add Keycloak role and Terraform integration ([4994ce1](https://github.com/lightning-it/ansible-collection-supplementary/commit/4994ce1))
+* feat: Add Keycloak role and Terraform integration ([d8c3454](https://github.com/lightning-it/ansible-collection-supplementary/commit/d8c3454))
+* Initial commit ([4d8687b](https://github.com/lightning-it/ansible-collection-supplementary/commit/4d8687b))
+
 # Changelog
 
 All notable changes to this collection are documented in this file.
