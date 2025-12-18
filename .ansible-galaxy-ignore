@@ -1,9 +1,0 @@
-node_modules/
-infra/
-ansible_collections/
-vagrant/
-.git/
-.github/
-.molecule/
-*.tar.gz
-*.terraform*

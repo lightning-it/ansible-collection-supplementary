@@ -1,0 +1,89 @@
+# yamllint disable rule:truthy
+---
+name: Collection CI
+
+on:
+  # CI on pushes to main and version tags (v*)
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  # CI on all PRs
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # Common tool versions (override if needed)
+  PYTHON_VERSION: "3.11"
+  ANSIBLE_CORE_VERSION: "2.15.13"
+  ANSIBLE_LINT_VERSION: "6.22.2"
+  TERRAFORM_VERSION: "1.6.6"
+
+  # Example playbook that MUST exist in this repository.
+  EXAMPLE_PLAYBOOK: "playbooks/example.yml"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Collection CI
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint (ansible-lint via wunder-devtools-ee)
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1) Checkout the repository
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2) Run ansible-lint inside the wunder-devtools-ee container
+      - name: Run ansible-lint via devtools-ansible-lint.sh
+        env:
+          # These env vars make the script generic across collections
+          COLLECTION_NAMESPACE: "lit"
+          COLLECTION_NAME: "foundational"     # this repo
+          ANSIBLE_CORE_VERSION: ${{ env.ANSIBLE_CORE_VERSION }}
+          ANSIBLE_LINT_VERSION: ${{ env.ANSIBLE_LINT_VERSION }}
+        run: |
+          bash scripts/devtools-ansible-lint.sh
+
+  molecule:
+    name: Molecule (via devtools)
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Run Molecule via wunder-devtools-ee.
+      # scripts/devtools-molecule.sh is expected to:
+      #  - build the collection
+      #  - install it into a temp path
+      #  - run one or more molecule scenarios
+      - name: Run Molecule tests (via devtools)
+        env:
+          MOLECULE_NO_LOG: "false"
+        run: |
+          bash scripts/devtools-molecule.sh
+
+  build-install:
+    name: Build & install collection (via devtools smoke test)
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Run a full collection smoke test inside wunder-devtools-ee:
+      #  - build the collection
+      #  - install it into /tmp/wunder/collections
+      #  - run the example playbook
+      - name: Run collection smoke test via devtools-collection-smoke.sh
+        env:
+          COLLECTION_NAMESPACE: "lit"
+          COLLECTION_NAME: "foundational"
+          EXAMPLE_PLAYBOOK: ${{ env.EXAMPLE_PLAYBOOK }}
+        run: |
+          bash scripts/devtools-collection-smoke.sh

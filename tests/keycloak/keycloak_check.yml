@@ -1,7 +1,0 @@
----
-- name: Integration check - apply keycloak role against local container
-  hosts: keycloak
-  gather_facts: false
-
-  roles:
-    - role: lit.supplementary.keycloak_config

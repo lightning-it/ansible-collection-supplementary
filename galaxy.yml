@@ -4,7 +4,9 @@ name: supplementary
 version: 1.0.0
 readme: README.md
 description: >
-  Supplementary Ansible collection for ModuLix.
+  Supplementary Ansible collection for ModuLix, providing configuration
+  and integration roles for platform services and
+  Terraform-backed workflows.
 repository: "https://github.com/lightning-it/ansible-collection-supplementary"
 authors:
   - "Lightning IT"

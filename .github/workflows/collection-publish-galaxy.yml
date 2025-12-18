@@ -1,7 +1,9 @@
+# yamllint disable rule:truthy
 ---
 name: Publish collection to Galaxy
 
 on:
+  # Trigger when a GitHub Release is published (semantic-release will do this)
   release:
     types: [published]
 
@@ -15,28 +17,38 @@ jobs:
       contents: read
 
     steps:
+      # 1) Checkout the repository so we can build the collection from the tag
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          # We want the exact tag commit; depth is not critical here
           fetch-depth: 0
 
+      # 2) Setup Python runtime for ansible-core / ansible-galaxy
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      # 3) Install ansible-core (ansible-galaxy CLI comes with it)
       - name: Install ansible-core
         run: |
           python -m pip install --upgrade pip
           python -m pip install "ansible-core==2.15.13"
 
+      # 4) Build the collection artifact (tarball) from the current source tree
       - name: Build collection
-        run: ansible-galaxy collection build
+        run: ansible-galaxy collection build --force
 
+      # 5) Publish the built tarball to Ansible Galaxy
+      #    Uses ANSIBLE_GALAXY_API_KEY secret for authentication.
       - name: Publish collection to Ansible Galaxy
         env:
           ANSIBLE_GALAXY_API_KEY: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
         run: |
-          tarball=$(ls lit-supplementary-*.tar.gz)
+          # Find the collection tarball that was just built.
+          # In a single-collection repo this should match exactly one file.
+          tarball=$(ls ./*.tar.gz)
+          echo "Publishing collection tarball: $tarball"
           ansible-galaxy collection publish "$tarball" \
             --api-key "$ANSIBLE_GALAXY_API_KEY"
