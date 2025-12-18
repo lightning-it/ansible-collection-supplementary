@@ -35,16 +35,6 @@ repos:
         pass_filenames: false
 
       # -------------------------------------------------------------------
-      # Molecule tests heavy scenarios (via wunder-devtools-ee) (manual)
-      # -------------------------------------------------------------------
-      - id: molecule-rhel9-rdp
-        name: molecule rhel9-rdp (Vagrant)
-        language: system
-        stages: [manual]
-        entry: bash scripts/devtools-molecule-rhel9-rdp.sh
-        pass_filenames: false
-
-      # -------------------------------------------------------------------
       # GitHub Actions workflow linting (actionlint)
       # -------------------------------------------------------------------
       - id: github-actions-lint
