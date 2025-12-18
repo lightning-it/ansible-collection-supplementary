@@ -4,25 +4,21 @@ set -eo pipefail
 # 1) Namespace with default
 COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE:-lit}"
 
-# 2) Derive COLLECTION_NAME from repo name if not set
+# 2) Derive COLLECTION_NAME from galaxy.yml if not provided
 if [ -z "${COLLECTION_NAME:-}" ]; then
-  # Prefer GITHUB_REPOSITORY in CI (org/repo)
-  if [ -n "${GITHUB_REPOSITORY:-}" ]; then
-    repo_basename="${GITHUB_REPOSITORY##*/}"
-  else
-    # Fallback: current directory name
-    repo_basename="$(basename "$PWD")"
+  if [ -f galaxy.yml ]; then
+    COLLECTION_NAME="$(python3 - <<'PY'
+import yaml
+with open("galaxy.yml", "r") as f:
+    data = yaml.safe_load(f)
+print(data.get("name", ""))
+PY
+)"
   fi
-
-  case "$repo_basename" in
-    ansible-collection-*)
-      COLLECTION_NAME="${repo_basename#ansible-collection-}"
-      ;;
-    *)
-      echo "WARN: Could not infer COLLECTION_NAME from repo name '${repo_basename}', falling back to 'foundational'" >&2
-      COLLECTION_NAME="foundational"
-      ;;
-  esac
+  if [ -z "${COLLECTION_NAME:-}" ]; then
+    echo "ERROR: COLLECTION_NAME not set and galaxy.yml missing 'name'." >&2
+    exit 1
+  fi
 fi
 
 if [ -z "${ANSIBLE_CORE_VERSION:-}" ] || [ -z "${ANSIBLE_LINT_VERSION:-}" ]; then
