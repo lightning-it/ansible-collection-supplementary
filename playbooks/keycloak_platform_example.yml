@@ -1,7 +1,0 @@
----
-- name: Deploy Keycloak realms via terraform-keycloak-platform
-  hosts: keycloak
-  gather_facts: false
-
-  roles:
-    - lit.supplementary.keycloak_config

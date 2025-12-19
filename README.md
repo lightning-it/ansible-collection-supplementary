@@ -83,7 +83,7 @@ This will:
 3. run the example playbook:
 
    ```bash
-   ansible-playbook -i localhost, playbooks/keycloak_config_example.yml
+   ansible-playbook -i localhost, playbooks/example.yml
    ```
 
    using the installed collection via `ANSIBLE_COLLECTIONS_PATHS=/tmp/wunder/collections`.

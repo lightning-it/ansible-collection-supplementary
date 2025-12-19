@@ -41,11 +41,18 @@
         last_name: "Admin"
 
   pre_tasks:
+    - name: Check if test docker-compose file exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../../tests/keycloak/docker-compose.yml"
+      register: kc_compose
+
     - name: Start Keycloak (docker compose)
       ansible.builtin.command:
         cmd: >-
           docker compose -f
           {{ playbook_dir }}/../../tests/keycloak/docker-compose.yml up -d
+      when: kc_compose.stat.exists
+      failed_when: false
       changed_when: false
 
     - name: Wait for Keycloak to become ready
@@ -56,6 +63,7 @@
       retries: 40
       delay: 3
       until: kc_health.status == 200
+      when: kc_compose.stat.exists
 
   roles:
     - role: lit.supplementary.keycloak_config

@@ -9,4 +9,5 @@
         cmd: >-
           docker compose -f
           {{ playbook_dir }}/../../tests/keycloak/docker-compose.yml down -v
+      failed_when: false
       changed_when: false

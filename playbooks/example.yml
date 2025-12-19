@@ -1,0 +1,4 @@
+---
+# Curated collection-level example that pulls in per-role examples.
+- name: Run keycloak_config example
+  import_playbook: keycloak_config.yml

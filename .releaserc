@@ -1,31 +1,23 @@
 {
-  "branches": [
-    "main"
-  ],
+  "branches": ["main"],
   "preset": "conventionalcommits",
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
+    ["@semantic-release/changelog", { "changelogFile": "CHANGELOG.md" }],
     [
-      "@semantic-release/changelog",
+      "@semantic-release/exec",
       {
-        "changelogFile": "CHANGELOG.md"
-      }
-    ],
-    [
-      "@semantic-release/github",
-      {
-        "assets": []
+        "prepareCmd": "python scripts/bump_galaxy_version.py ${nextRelease.version}"
       }
     ],
     [
       "@semantic-release/git",
       {
-        "assets": [
-          "CHANGELOG.md"
-        ],
+        "assets": ["CHANGELOG.md", "galaxy.yml"],
         "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }
-    ]
+    ],
+    ["@semantic-release/github", { "assets": [] }]
   ]
 }
