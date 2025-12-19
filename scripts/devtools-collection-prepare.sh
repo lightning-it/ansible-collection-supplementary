@@ -6,29 +6,25 @@ set -euo pipefail
 #
 # Expected to run INSIDE the container with:
 #   - /workspace mounted as the collection repo
-#   - COLLECTION_NAMESPACE and COLLECTION_NAME optionally set
+#   - COLLECTION_NAMESPACE optionally set
 
 # 1) Namespace with default
 ns="${COLLECTION_NAMESPACE:-lit}"
 
-# 2) Derive collection name if not provided
-if [ -z "${COLLECTION_NAME:-}" ]; then
-  if [ -f /workspace/galaxy.yml ]; then
-    name="$(python3 - <<'PY'
+# 2) Derive collection name strictly from galaxy.yml
+if [ -f /workspace/galaxy.yml ]; then
+  name="$(python3 - <<'PY'
 import yaml
 with open("/workspace/galaxy.yml", "r") as f:
     data = yaml.safe_load(f)
 print(data.get("name", ""))
 PY
 )"
-  fi
+fi
 
-  if [ -z "${name:-}" ]; then
-    echo "ERROR: COLLECTION_NAME not set and galaxy.yml missing 'name'." >&2
-    exit 1
-  fi
-else
-  name="${COLLECTION_NAME}"
+if [ -z "${name:-}" ]; then
+  echo "ERROR: Failed to derive collection name from /workspace/galaxy.yml." >&2
+  exit 1
 fi
 
 echo "Preparing collection ${ns}.${name} inside wunder-devtools-ee..."

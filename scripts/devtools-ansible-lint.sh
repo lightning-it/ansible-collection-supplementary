@@ -4,21 +4,20 @@ set -eo pipefail
 # 1) Namespace with default
 COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE:-lit}"
 
-# 2) Derive COLLECTION_NAME from galaxy.yml if not provided
-if [ -z "${COLLECTION_NAME:-}" ]; then
-  if [ -f galaxy.yml ]; then
-    COLLECTION_NAME="$(python3 - <<'PY'
+# 2) Derive COLLECTION_NAME from galaxy.yml (authoritative)
+if [ -f galaxy.yml ]; then
+  COLLECTION_NAME="$(python3 - <<'PY'
 import yaml
 with open("galaxy.yml", "r") as f:
     data = yaml.safe_load(f)
 print(data.get("name", ""))
 PY
 )"
-  fi
-  if [ -z "${COLLECTION_NAME:-}" ]; then
-    echo "ERROR: COLLECTION_NAME not set and galaxy.yml missing 'name'." >&2
-    exit 1
-  fi
+fi
+
+if [ -z "${COLLECTION_NAME:-}" ]; then
+  echo "ERROR: Failed to derive COLLECTION_NAME from galaxy.yml." >&2
+  exit 1
 fi
 
 if [ -z "${ANSIBLE_CORE_VERSION:-}" ] || [ -z "${ANSIBLE_LINT_VERSION:-}" ]; then

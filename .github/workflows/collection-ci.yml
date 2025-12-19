@@ -19,6 +19,7 @@ env:
   ANSIBLE_CORE_VERSION: "2.15.13"
   ANSIBLE_LINT_VERSION: "6.22.2"
   TERRAFORM_VERSION: "1.6.6"
+  COLLECTION_NAMESPACE: lit
 
   # Example playbook that MUST exist in this repository.
   EXAMPLE_PLAYBOOK: "playbooks/example.yml"
@@ -40,8 +41,7 @@ jobs:
       - name: Run ansible-lint via devtools-ansible-lint.sh
         env:
           # These env vars make the script generic across collections
-          COLLECTION_NAMESPACE: "lit"
-          COLLECTION_NAME: "foundational"     # this repo
+          COLLECTION_NAMESPACE: ${{ env.COLLECTION_NAMESPACE }}
           ANSIBLE_CORE_VERSION: ${{ env.ANSIBLE_CORE_VERSION }}
           ANSIBLE_LINT_VERSION: ${{ env.ANSIBLE_LINT_VERSION }}
         run: |
@@ -82,8 +82,7 @@ jobs:
       #  - run the example playbook
       - name: Run collection smoke test via devtools-collection-smoke.sh
         env:
-          COLLECTION_NAMESPACE: "lit"
-          COLLECTION_NAME: "foundational"
+          COLLECTION_NAMESPACE: ${{ env.COLLECTION_NAMESPACE }}
           EXAMPLE_PLAYBOOK: ${{ env.EXAMPLE_PLAYBOOK }}
         run: |
           bash scripts/devtools-collection-smoke.sh
