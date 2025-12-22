@@ -5,11 +5,10 @@ version: 1.0.0
 readme: README.md
 description: >
   Supplementary Ansible collection for ModuLix, providing configuration
-  and integration roles for platform services and
-  Terraform-backed workflows.
-repository: "https://github.com/lightning-it/ansible-collection-supplementary"
+  and integration roles for platform services and Terraform-backed workflows.
+repository: https://github.com/lightning-it/ansible-collection-supplementary
 authors:
-  - "Lightning IT"
+  - Lightning IT
 license:
   - GPL-2.0-only
 tags:
