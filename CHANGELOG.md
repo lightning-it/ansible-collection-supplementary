@@ -1,3 +1,9 @@
+## 1.2.0 (2025-12-19)
+
+* feat: Add @semantic-release/exec dependency to package.json and package-lock.json (#7) ([da170fc](https://github.com/lightning-it/ansible-collection-supplementary/commit/da170fc)), closes [#7](https://github.com/lightning-it/ansible-collection-supplementary/issues/7)
+* feat: Add CI workflows for collection linting, testing, and publishing ([4beb108](https://github.com/lightning-it/ansible-collection-supplementary/commit/4beb108))
+* fix: Update script permissions for bump_galaxy_version.py (#6) ([f222380](https://github.com/lightning-it/ansible-collection-supplementary/commit/f222380)), closes [#6](https://github.com/lightning-it/ansible-collection-supplementary/issues/6)
+
 ## 1.1.0 (2025-12-17)
 
 * feat: Add workflow to publish collection to Ansible Galaxy (#4) ([32699a5](https://github.com/lightning-it/ansible-collection-supplementary/commit/32699a5)), closes [#4](https://github.com/lightning-it/ansible-collection-supplementary/issues/4)
