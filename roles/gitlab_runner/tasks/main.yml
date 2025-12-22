@@ -1,0 +1,14 @@
+---
+- name: Abort because role is experimental
+  ansible.builtin.fail:
+    msg: >-
+      lit.gitlab_runner remains a placeholder; set
+      gitlab_runner_experimental_acknowledge=true to run stub logic.
+  when: not gitlab_runner_experimental_acknowledge | bool
+
+- name: (Skeleton) Install GitLab Runner ({{ gitlab_runner_service_mode }})
+  ansible.builtin.debug:
+    msg: >-
+      Runner desc={{ gitlab_runner_description }}
+      exec={{ gitlab_runner_executor }} against {{ gitlab_runner_gitlab_url }}
+  when: gitlab_runner_experimental_acknowledge | bool

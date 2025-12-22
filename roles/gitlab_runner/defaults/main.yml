@@ -1,0 +1,8 @@
+---
+gitlab_runner_experimental_acknowledge: false
+
+gitlab_runner_service_mode: "systemd"    # systemd|podman
+gitlab_runner_gitlab_url: "https://gitlab.example.com/"
+gitlab_runner_registration_token: "REPLACE_ME"
+gitlab_runner_executor: "shell"          # shell|docker|kubernetes|custom
+gitlab_runner_description: "rhel-runner-1"

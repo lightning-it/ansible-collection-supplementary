@@ -49,8 +49,8 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
     exit 1
   fi
 
-  # 2) Switch into installed collection root
-  cd "$coll_root"
+  # 2) Run lint from the source tree so we respect repo-level config/excludes
+  cd /workspace
 
   # 3) Use versions passed from CI (with defaults)
   core_ver="${ANSIBLE_CORE_VERSION}"
@@ -64,7 +64,8 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   export ANSIBLE_COLLECTIONS_PATHS="/tmp/wunder/collections"
   export ANSIBLE_LINT_OFFLINE=true
   export ANSIBLE_LINT_SKIP_GALAXY_INSTALL=1
+  export ANSIBLE_LINT_CONFIG="/workspace/.ansible-lint"
 
-  echo "Running ansible-lint in ${coll_root}..."
+  echo "Running ansible-lint in /workspace..."
   ansible-lint
 '

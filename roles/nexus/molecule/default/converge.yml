@@ -1,0 +1,7 @@
+---
+- name: Converge nexus
+  hosts: all
+  gather_facts: true
+  connection: local
+  roles:
+    - role: lit.supplementary.nexus

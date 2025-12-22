@@ -1,0 +1,10 @@
+---
+vault_experimental_acknowledge: false
+
+vault_service_mode: "systemd"     # systemd|podman
+vault_version: "1.17.0"
+vault_data_dir: "/var/lib/vault"
+vault_config_path: "/etc/vault.d/vault.hcl"
+vault_api_addr: "https://0.0.0.0:8200"
+vault_storage: "raft"
+vault_tls_disable: "true"

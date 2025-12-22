@@ -1,0 +1,7 @@
+---
+nexus_experimental_acknowledge: false
+
+nexus_service_mode: "podman"      # systemd|podman
+nexus_version: "3.68.0"
+nexus_data_dir: "/var/lib/nexus-data"
+nexus_http_port: 8081

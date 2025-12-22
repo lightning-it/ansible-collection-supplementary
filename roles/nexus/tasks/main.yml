@@ -1,0 +1,14 @@
+---
+- name: Abort because role is experimental
+  ansible.builtin.fail:
+    msg: >-
+      lit.nexus remains a placeholder; set
+      nexus_experimental_acknowledge=true to run stub logic.
+  when: not nexus_experimental_acknowledge | bool
+
+- name: (Skeleton) Install & run Nexus ({{ nexus_service_mode }})
+  ansible.builtin.debug:
+    msg: >-
+      Nexus {{ nexus_version }} mode={{ nexus_service_mode }}
+      data={{ nexus_data_dir }} port={{ nexus_http_port }}
+  when: nexus_experimental_acknowledge | bool

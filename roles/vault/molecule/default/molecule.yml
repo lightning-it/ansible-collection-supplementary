@@ -1,0 +1,11 @@
+---
+driver:
+  name: docker
+platforms:
+  - name: control
+    image: python:3.11-slim
+    command: sleep infinity
+provisioner:
+  name: ansible
+verifier:
+  name: ansible
