@@ -1,3 +1,7 @@
+## 1.3.0 (2025-12-22)
+
+* feat: Add new roles (#8) ([75fe60e](https://github.com/lightning-it/ansible-collection-supplementary/commit/75fe60e)), closes [#8](https://github.com/lightning-it/ansible-collection-supplementary/issues/8)
+
 ## 1.2.0 (2025-12-19)
 
 * feat: Add @semantic-release/exec dependency to package.json and package-lock.json (#7) ([da170fc](https://github.com/lightning-it/ansible-collection-supplementary/commit/da170fc)), closes [#7](https://github.com/lightning-it/ansible-collection-supplementary/issues/7)
