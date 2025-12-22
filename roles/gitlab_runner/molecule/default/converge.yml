@@ -1,0 +1,7 @@
+---
+- name: Converge gitlab_runner
+  hosts: all
+  gather_facts: true
+  connection: local
+  roles:
+    - role: lit.supplementary.gitlab_runner

@@ -31,8 +31,10 @@ echo "Preparing collection ${ns}.${name} inside wunder-devtools-ee..."
 
 # 1) Clean previous build + install
 rm -rf /tmp/wunder/.cache/ansible-compat \
-       /tmp/wunder/collections \
-       /tmp/wunder/${ns}-${name}-*.tar.gz
+       /tmp/wunder/${ns}-${name}-*.tar.gz \
+       /tmp/wunder/collections
+rm -rf /tmp/wunder/collections/ansible_collections || true
+mkdir -p /tmp/wunder/collections
 
 # 2) Build collection from /workspace (mounted repo)
 cd /workspace
