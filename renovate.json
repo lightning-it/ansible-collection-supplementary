@@ -5,9 +5,7 @@
   ],
   "dependencyDashboard": true,
   "timezone": "UTC",
-  "schedule": [
-    "before 6am on monday"
-  ],
+  "schedule": [],
   "labels": [
     "dependencies",
     "renovate"

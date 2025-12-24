@@ -14,9 +14,7 @@ DOCKER_ARGS=(
   -v "$HOST_HOME_CACHE":"${CONTAINER_HOME}"
 )
 
-# Mount Docker socket (supports Docker Desktop/Colima path on macOS too)
 DOCKER_SOCKET=""
-# Prefer user Docker Desktop/Colima socket on macOS if present
 if [ -S "$HOME/.docker/run/docker.sock" ]; then
   DOCKER_SOCKET="$HOME/.docker/run/docker.sock"
 elif [ -S /var/run/docker.sock ]; then
@@ -29,7 +27,6 @@ elif [[ "${DOCKER_HOST:-}" == unix://* ]]; then
 fi
 
 if [ -n "$DOCKER_SOCKET" ]; then
-  # Resolve symlinks so Docker gets the real socket path (important on macOS)
   DOCKER_SOCKET_REAL="$DOCKER_SOCKET"
   if command -v python3 >/dev/null 2>&1; then
     DOCKER_SOCKET_REAL="$(
@@ -43,10 +40,6 @@ PY
   DOCKER_ARGS+=(-v "$DOCKER_SOCKET_REAL":/var/run/docker.sock)
   DOCKER_ARGS+=(-e DOCKER_HOST=unix:///var/run/docker.sock)
 
-  # Clear proxy-related env vars inside the container so that the Docker
-  # Python SDK and Molecule do not try to talk to the daemon via HTTP(S) proxy.
-  # If you really need proxies inside the container, you can remove or override
-  # these in the caller.
   DOCKER_ARGS+=(
     -e HTTP_PROXY=
     -e HTTPS_PROXY=
@@ -56,12 +49,6 @@ PY
     -e no_proxy=
   )
 
-  # By default, run as host UID to avoid permission issues with bind mounts.
-  # For SSH-heavy workflows (e.g. Vagrant + Molecule), this can be disabled by
-  # setting WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0 so that the container user (e.g. "wunder")
-  # is used instead (and has a valid /etc/passwd entry). If you need full root
-  # access to the Docker socket, set WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0 and the
-  # script will fall back to root inside the container.
   if [ "${WUNDER_DEVTOOLS_RUN_AS_HOST_UID:-0}" = "1" ]; then
     DOCKER_ARGS+=(--user "$(id -u):$(id -g)")
     DOCKER_ARGS+=(--group-add 0)
@@ -80,7 +67,6 @@ PY
   fi
 fi
 
-# On Linux runners, provide host.docker.internal → host-gateway
 if [ "$(uname -s)" = "Linux" ]; then
   DOCKER_ARGS+=(--add-host=host.docker.internal:host-gateway)
 fi
