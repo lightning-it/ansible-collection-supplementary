@@ -5,6 +5,9 @@
 .terraform.lock.hcl
 /infra/
 
+# Vagrant artifacts (all .vagrant directories)
+**/.vagrant/
+
 # OS/editor noise
 .DS_Store
 *.swp
@@ -16,4 +19,3 @@ npm-debug.log
 
 # Local collection installs from tests/hooks
 collections/
-vagrant/rhel9/.vagrant/rgloader/loader.rb

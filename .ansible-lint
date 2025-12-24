@@ -1,0 +1,5 @@
+---
+# Keep ansible-lint focused on the source tree, not packaged artifacts or
+# vendored dependencies that may be present under collections/.
+exclude_paths:
+  - collections/

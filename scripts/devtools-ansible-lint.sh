@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# 1) Namespace with default
 COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE:-lit}"
 
-# 2) Derive COLLECTION_NAME from galaxy.yml (authoritative)
 if [ -f galaxy.yml ]; then
   COLLECTION_NAME="$(python3 - <<'PY'
 import yaml
@@ -28,7 +26,6 @@ fi
 echo "Running ansible-lint for collection: ${COLLECTION_NAMESPACE}.${COLLECTION_NAME}"
 echo "Using ansible-core ${ANSIBLE_CORE_VERSION}, ansible-lint ${ANSIBLE_LINT_VERSION}"
 
-# 3) Run inside the wunder-devtools-ee container
 COLLECTION_NAMESPACE="$COLLECTION_NAMESPACE" \
 COLLECTION_NAME="$COLLECTION_NAME" \
 ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION}" \
@@ -40,7 +37,6 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   name="${COLLECTION_NAME}"
 
   echo "Building and installing collection ${ns}.${name}..."
-  # 1) Build + install collection into /tmp/wunder/collections
   /workspace/scripts/devtools-collection-prepare.sh
 
   coll_root="/tmp/wunder/collections/ansible_collections/${ns}/${name}"
@@ -49,10 +45,8 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
     exit 1
   fi
 
-  # 2) Run lint from the source tree so we respect repo-level config/excludes
   cd /workspace
 
-  # 3) Use versions passed from CI (with defaults)
   core_ver="${ANSIBLE_CORE_VERSION}"
   lint_ver="${ANSIBLE_LINT_VERSION}"
 
