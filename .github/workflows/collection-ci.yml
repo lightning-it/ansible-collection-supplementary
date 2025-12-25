@@ -35,7 +35,7 @@ jobs:
     steps:
       # 1) Checkout the repository
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # 2) Run ansible-lint inside the wunder-devtools-ee container
       - name: Run ansible-lint via devtools-ansible-lint.sh
@@ -54,7 +54,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Run Molecule via wunder-devtools-ee.
       # scripts/devtools-molecule.sh is expected to:
@@ -74,7 +74,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Run a full collection smoke test inside wunder-devtools-ee:
       #  - build the collection
