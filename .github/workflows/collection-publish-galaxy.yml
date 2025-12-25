@@ -19,7 +19,7 @@ jobs:
     steps:
       # 1) Checkout the repository so we can build the collection from the tag
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # We want the exact tag commit; depth is not critical here
           fetch-depth: 0
