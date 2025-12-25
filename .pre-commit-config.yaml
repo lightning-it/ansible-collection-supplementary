@@ -79,7 +79,7 @@ repos:
         entry: bash scripts/devtools-galaxy-verify.sh
         pass_filenames: false
         files: ^(roles/|galaxy\.yml)
-  # >>> BEGIN shared-assets pre-commit
+    # >>> BEGIN shared-assets pre-commit
   - repo: local
     hooks:
       # -------------------------------------------------------------------
