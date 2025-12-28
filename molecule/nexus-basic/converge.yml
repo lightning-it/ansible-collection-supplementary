@@ -1,0 +1,8 @@
+---
+- name: Converge nexus
+  hosts: localhost
+  gather_facts: false
+  vars:
+    nexus_experimental_acknowledge: true
+  roles:
+    - role: nexus

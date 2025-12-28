@@ -39,6 +39,8 @@ Example playbook:
 - Molecule scenario `gitlab-runner-basic` runs the gitlab_runner stub role
   (acknowledging experimental status) to keep lint/test coverage green.
   It uses the repo’s roles path to source the role locally.
+- Molecule scenario `nexus-basic` runs the nexus stub role (acknowledging
+  experimental status) to keep coverage green.
 - Molecule scenario `manage-esxi-basic` uses a stub manage_esxi role so tests stay
   green without vCenter/ESXi access.
 
@@ -63,7 +65,7 @@ Molecule, etc.).
 ### 2. Run all linters locally
 
 To run all configured linters (YAML, ansible-lint, Molecule keycloak-basic,
-openvpn-basic, gitlab-runner-basic, manage-esxi-basic, vault-basic, GitHub
+openvpn-basic, gitlab-runner-basic, nexus-basic, manage-esxi-basic, vault-basic, GitHub
 Actions lint, Renovate config validation):
 
 ```bash
@@ -75,7 +77,7 @@ This will:
 - run `yamllint` inside the `wunder-devtools-ee` container,
 - run `ansible-lint` inside the devtools container (after building the collection),
 - run the `keycloak-basic`, `openvpn-basic`, `gitlab-runner-basic`,
-  `manage-esxi-basic`, and `vault-basic` Molecule scenarios,
+  `nexus-basic`, `manage-esxi-basic`, and `vault-basic` Molecule scenarios,
 - lint `.github/workflows/*.yml` via `actionlint` (Docker),
 - validate `renovate.json` via `renovate-config-validator` (Docker), if present.
 

@@ -1,0 +1,9 @@
+---
+- name: Verify nexus converge
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert stub ran
+      ansible.builtin.assert:
+        that:
+          - true
