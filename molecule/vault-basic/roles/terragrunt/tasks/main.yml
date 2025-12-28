@@ -1,0 +1,4 @@
+---
+- name: Stub terragrunt role
+  ansible.builtin.debug:
+    msg: "Stub terragrunt role for Molecule tests"

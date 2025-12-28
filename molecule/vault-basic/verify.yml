@@ -1,0 +1,10 @@
+---
+- name: Verify vault converge
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert converge ran
+      ansible.builtin.assert:
+        that:
+          - cluster_id is defined
+          - vault_terraform_source is defined

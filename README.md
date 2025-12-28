@@ -30,8 +30,10 @@ Example playbook:
   `supplementary`, license `GPL-2.0-only`).
 - Canonical role sources live in `roles/`; build with `ansible-galaxy
   collection build`.
-- Molecule scenario `keycloak-local` provisions a local Keycloak container and
+- Molecule scenario `keycloak-basic` provisions a local Keycloak container and
   exercises the role with `keycloak_config_skip_apply` set for quick checks.
+- Molecule scenario `vault-basic` runs the vault role with a stub terragrunt role
+  to validate basics locally.
 
 ## Local checks
 
@@ -53,8 +55,8 @@ Molecule, etc.).
 
 ### 2. Run all linters locally
 
-To run all configured linters (YAML, ansible-lint, Molecule keycloak-local,
-GitHub Actions lint, Renovate config validation):
+To run all configured linters (YAML, ansible-lint, Molecule keycloak-basic and
+vault-basic, GitHub Actions lint, Renovate config validation):
 
 ```bash
 pre-commit run --all-files
@@ -64,7 +66,7 @@ This will:
 
 - run `yamllint` inside the `wunder-devtools-ee` container,
 - run `ansible-lint` inside the devtools container (after building the collection),
-- run the `keycloak-local` Molecule scenario,
+- run the `keycloak-basic` and `vault-basic` Molecule scenarios,
 - lint `.github/workflows/*.yml` via `actionlint` (Docker),
 - validate `renovate.json` via `renovate-config-validator` (Docker), if present.
 
