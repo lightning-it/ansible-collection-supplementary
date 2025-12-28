@@ -1,14 +1,10 @@
 ---
-- name: Abort because role is experimental
-  ansible.builtin.fail:
-    msg: >-
-      lit.vault remains a placeholder; set
-      vault_experimental_acknowledge=true to run stub logic.
-  when: not vault_experimental_acknowledge | bool
-
-- name: (Skeleton) Install & configure Vault ({{ vault_service_mode }})
-  ansible.builtin.debug:
-    msg: >-
-      Vault {{ vault_version }} mode={{ vault_service_mode }}
-      storage={{ vault_storage }} data={{ vault_data_dir }}
-  when: vault_experimental_acknowledge | bool
+- name: Run terragrunt to configure vault
+  vars:
+    terragrunt_template: "{{ vault_terragrunt_template }}"
+  ansible.builtin.include_role:
+    name: terragrunt
+  tags:
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply

@@ -1,7 +1,0 @@
----
-- name: Converge vault
-  hosts: all
-  gather_facts: true
-  connection: local
-  roles:
-    - role: lit.supplementary.vault

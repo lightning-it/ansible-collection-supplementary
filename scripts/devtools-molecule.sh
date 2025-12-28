@@ -118,7 +118,21 @@ PY
   for dep_path in "${dep_paths[@]}"; do
     if [ -d "$dep_path" ]; then
       echo "Removing stale dependency at $dep_path to allow a clean install..."
-      rm -rf "$dep_path" || true
+      chmod -R u+w "$dep_path" 2>/dev/null || true
+      rm -rf "$dep_path" 2>/dev/null || true
+      if [ -d "$dep_path" ]; then
+        python3 - "$dep_path" <<'PY'
+import shutil
+import sys
+import os
+
+paths = sys.argv[1:]
+for p in paths:
+    if os.path.exists(p):
+        shutil.rmtree(p, ignore_errors=True)
+PY
+        rm -rf "$dep_path" 2>/dev/null || true
+      fi
     fi
   done
 

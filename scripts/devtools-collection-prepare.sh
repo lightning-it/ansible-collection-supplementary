@@ -2,15 +2,15 @@
 set -euo pipefail
 
 # Build and install the collection inside the wunder-devtools-ee container.
-# Installs into /tmp/wunder/collections for use by other helper scripts.
+# Installs into a per-run collections dir to avoid stale state.
 
 ns="${COLLECTION_NAMESPACE:-lit}"
 
 if [ -f /workspace/galaxy.yml ]; then
   name="$(python3 - <<'PY'
 import yaml
-with open("/workspace/galaxy.yml", "r") as f:
-    data = yaml.safe_load(f)
+with open("/workspace/galaxy.yml", "r", encoding="utf-8") as f:
+    data = yaml.safe_load(f) or {}
 print(data.get("name", ""))
 PY
 )"
@@ -23,21 +23,34 @@ fi
 
 echo "Preparing collection ${ns}.${name} inside wunder-devtools-ee..."
 
-rm -rf /tmp/wunder/.cache/ansible-compat \
-       /tmp/wunder/${ns}-${name}-*.tar.gz \
-       /tmp/wunder/collections
-rm -rf /tmp/wunder/collections/ansible_collections || true
-mkdir -p /tmp/wunder/collections
+# -------------------------------------------------------------------
+# Stable HOME + per-run cache (prevents ansible-compat/ansible-lint races)
+# -------------------------------------------------------------------
+export HOME=/tmp/wunder
+mkdir -p "$HOME/.ansible/tmp"
+
+export XDG_CACHE_HOME="$(mktemp -d /tmp/wunder/xdg-cache.XXXXXX)"
+echo "XDG_CACHE_HOME=$XDG_CACHE_HOME"
+
+# -------------------------------------------------------------------
+# Per-run install target (avoids 'directory not empty' + stale deps)
+# -------------------------------------------------------------------
+COLLECTIONS_DIR="$(mktemp -d /tmp/wunder/collections.XXXXXX)"
+export ANSIBLE_COLLECTIONS_PATHS="${COLLECTIONS_DIR}:/usr/share/ansible/collections"
+export ANSIBLE_COLLECTIONS_PATH="${ANSIBLE_COLLECTIONS_PATHS}"
 
 cd /workspace
 
-ansible-galaxy collection build \
-  --output-path /tmp/wunder \
-  --force
+# Build collection artifact
+ansible-galaxy collection build --output-path /tmp/wunder --force
 
+# Install this collection into per-run dir
 ansible-galaxy collection install \
-  /tmp/wunder/${ns}-${name}-*.tar.gz \
-  -p /tmp/wunder/collections \
+  "/tmp/wunder/${ns}-${name}-"*.tar.gz \
+  -p "${COLLECTIONS_DIR}" \
   --force
 
-echo "Collection ${ns}.${name} installed in /tmp/wunder/collections."
+echo "Collection ${ns}.${name} installed in ${COLLECTIONS_DIR}"
+
+# Print the path so caller scripts can capture it if needed
+echo "${COLLECTIONS_DIR}"

@@ -1,10 +1,13 @@
 ---
-vault_experimental_acknowledge: false
-
-vault_service_mode: "systemd"     # systemd|podman
-vault_version: "1.17.0"
-vault_data_dir: "/var/lib/vault"
-vault_config_path: "/etc/vault.d/vault.hcl"
-vault_api_addr: "https://0.0.0.0:8200"
-vault_storage: "raft"
-vault_tls_disable: "true"
+vault_terraformstate_baseurl: >-
+  https://gitlab.com/api/v4/projects/70576743/terraform/state
+vault_url: ""
+vault_token: ""
+vault_terraform_source: ""
+vault_secret_stores: []
+vault_policies: []
+vault_approle_secrets: []
+vault_vault_pki_roots: []
+vault_vault_pki_intermediates: []
+vault_vault_pki_roles: []
+vault_terragrunt_template: ../vault/templates/vault.hcl.j2
