@@ -7,8 +7,8 @@ if [ -z "${COLLECTION_NAME:-}" ]; then
   if [ -f galaxy.yml ]; then
     COLLECTION_NAME="$(python3 - <<'PY'
 import yaml
-with open("galaxy.yml", "r") as f:
-    data = yaml.safe_load(f)
+with open("galaxy.yml", "r", encoding="utf-8") as f:
+    data = yaml.safe_load(f) or {}
 print(data.get("name", ""))
 PY
 )"
@@ -27,7 +27,7 @@ COLLECTION_NAMESPACE="$COLLECTION_NAMESPACE" \
 COLLECTION_NAME="$COLLECTION_NAME" \
 EXAMPLE_PLAYBOOK="$EXAMPLE_PLAYBOOK" \
 bash scripts/wunder-devtools-ee.sh bash -lc '
-  set -e
+  set -euo pipefail
 
   ns="${COLLECTION_NAMESPACE}"
   name="${COLLECTION_NAME}"
@@ -35,52 +35,57 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
 
   echo "Running collection smoke test for ${ns}.${name} with example playbook: ${example}"
 
-  dep_paths=()
+  # -------------------------------------------------------------------
+  # 1) Build + install this collection into a per-run collections dir
+  # -------------------------------------------------------------------
+  COLLECTIONS_DIR="$(/workspace/scripts/devtools-collection-prepare.sh | tail -n 1)"
+
+  if [ -z "${COLLECTIONS_DIR:-}" ] || [ ! -d "${COLLECTIONS_DIR}" ]; then
+    echo "ERROR: COLLECTIONS_DIR not found/invalid: ${COLLECTIONS_DIR:-<empty>}" >&2
+    exit 1
+  fi
+
+  export ANSIBLE_COLLECTIONS_PATHS="${COLLECTIONS_DIR}:/usr/share/ansible/collections"
+  export ANSIBLE_COLLECTIONS_PATH="${ANSIBLE_COLLECTIONS_PATHS}"
+
+  # -------------------------------------------------------------------
+  # 2) Install declared dependencies into the SAME per-run dir
+  # -------------------------------------------------------------------
   dep_fqcns=()
   if [ -f /workspace/galaxy.yml ]; then
-    while IFS= read -r line; do
-      dep_paths+=("${line%::*}")
-      dep_fqcns+=("${line##*::}")
+    while IFS= read -r fqcn; do
+      dep_fqcns+=("$fqcn")
     done < <(
-      python3 - <<'PY'
-import yaml, sys
+      python3 - <<'"PY"'
+import yaml, sys, os
 try:
     with open("/workspace/galaxy.yml", "r", encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
-    for fqcn in (data.get("dependencies") or {}).keys():
-        parts = fqcn.split(".")
-        if len(parts) == 2:
-            ns, coll = parts
-            print(f"/tmp/wunder/collections/ansible_collections/{ns}/{coll}::{fqcn}")
+    deps = data.get("dependencies") or {}
+    for fqcn in deps.keys():
+        print(fqcn)
 except Exception as exc:  # noqa: BLE001
     sys.stderr.write(f"WARN: failed to parse galaxy.yml dependencies: {exc}\n")
 PY
     )
   fi
 
-  for dep_path in "${dep_paths[@]}"; do
-    if [ -d "$dep_path" ]; then
-      echo "Removing stale dependency at $dep_path to allow a clean install..."
-      rm -rf "$dep_path" || true
-    fi
-  done
-
-  /workspace/scripts/devtools-collection-prepare.sh
-
   for dep_fqcn in "${dep_fqcns[@]}"; do
     if [ -n "$dep_fqcn" ]; then
-      echo "Installing dependency ${dep_fqcn} into /tmp/wunder/collections..."
-      ansible-galaxy collection install "$dep_fqcn" -p /tmp/wunder/collections --force
+      echo "Installing dependency ${dep_fqcn} into ${COLLECTIONS_DIR}..."
+      ansible-galaxy collection install "$dep_fqcn" -p "${COLLECTIONS_DIR}" --force
     fi
   done
 
-  export ANSIBLE_COLLECTIONS_PATHS=/tmp/wunder/collections
-
+  # -------------------------------------------------------------------
+  # 3) Configure Ansible (optional)
+  # -------------------------------------------------------------------
   if [ -f /workspace/ansible.cfg ]; then
     export ANSIBLE_CONFIG=/workspace/ansible.cfg
   fi
 
-  ansible-playbook \
-    -i localhost, \
-    "${example}"
+  # -------------------------------------------------------------------
+  # 4) Run example playbook
+  # -------------------------------------------------------------------
+  ansible-playbook -i localhost, "${example}"
 '

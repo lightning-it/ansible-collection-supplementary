@@ -57,7 +57,6 @@ if [ -n "${SCENARIO_FILTER}" ]; then
 fi
 
 # For Molecule (Docker + delegated etc.) we run as root inside the container
-# so that the Docker SDK sees a valid /etc/passwd entry and can reach the socket.
 export WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0
 
 WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0 \
@@ -83,92 +82,59 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   fi
 
   # -------------------------------------------------------------
-  # 1) Clean potentially stale dependency installs
-  #    so we can re-install galaxy.yml dependencies cleanly
+  # 1) Build + install this collection into a per-run collections dir
   # -------------------------------------------------------------
-  dep_paths=()
-  dep_fqcns=()
+  COLLECTIONS_DIR="$(/workspace/scripts/devtools-collection-prepare.sh | tail -n 1)"
 
+  if [ -z "${COLLECTIONS_DIR:-}" ] || [ ! -d "${COLLECTIONS_DIR}" ]; then
+    echo "ERROR: COLLECTIONS_DIR not found/invalid: ${COLLECTIONS_DIR:-<empty>}" >&2
+    exit 1
+  fi
+
+  export ANSIBLE_COLLECTIONS_PATHS="${COLLECTIONS_DIR}:/usr/share/ansible/collections"
+  export ANSIBLE_COLLECTIONS_PATH="${ANSIBLE_COLLECTIONS_PATHS}"
+
+  # -------------------------------------------------------------
+  # 2) Install declared dependencies into the SAME per-run dir
+  # -------------------------------------------------------------
+  dep_fqcns=()
   if [ -f /workspace/galaxy.yml ]; then
-    while IFS= read -r line; do
-      dep_paths+=("${line%::*}")
-      dep_fqcns+=("${line##*::}")
+    while IFS= read -r fqcn; do
+      dep_fqcns+=("$fqcn")
     done < <(
       python3 - <<'"PY"'
-import yaml, sys, os
-
-galaxy_path = "/workspace/galaxy.yml"
+import yaml, sys
 try:
-    if os.path.exists(galaxy_path):
-        with open(galaxy_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-        deps = data.get("dependencies") or {}
-        for fqcn in deps.keys():
-            parts = fqcn.split(".")
-            if len(parts) == 2:
-                ns, name = parts
-                path = f"/tmp/wunder/collections/ansible_collections/{ns}/{name}"
-                print(f"{path}::{fqcn}")
+    with open("/workspace/galaxy.yml", "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    deps = data.get("dependencies") or {}
+    for fqcn in deps.keys():
+        print(fqcn)
 except Exception as exc:  # noqa: BLE001
     sys.stderr.write(f"WARN: failed to parse galaxy.yml dependencies: {exc}\n")
 PY
     )
   fi
 
-  for dep_path in "${dep_paths[@]}"; do
-    if [ -d "$dep_path" ]; then
-      echo "Removing stale dependency at $dep_path to allow a clean install..."
-      chmod -R u+w "$dep_path" 2>/dev/null || true
-      rm -rf "$dep_path" 2>/dev/null || true
-      if [ -d "$dep_path" ]; then
-        python3 - "$dep_path" <<'PY'
-import shutil
-import sys
-import os
-
-paths = sys.argv[1:]
-for p in paths:
-    if os.path.exists(p):
-        shutil.rmtree(p, ignore_errors=True)
-PY
-        rm -rf "$dep_path" 2>/dev/null || true
-      fi
-    fi
-  done
-
-  # -------------------------------------------------------------
-  # 2) Build + install collection into /tmp/wunder/collections
-  # -------------------------------------------------------------
-  /workspace/scripts/devtools-collection-prepare.sh
-
-  # 2b) Install declared dependencies freshly (if any)
   for dep_fqcn in "${dep_fqcns[@]}"; do
     if [ -n "$dep_fqcn" ]; then
-      echo "Installing dependency ${dep_fqcn} into /tmp/wunder/collections..."
-      ansible-galaxy collection install \
-        "$dep_fqcn" \
-        -p /tmp/wunder/collections \
-        --force
+      echo "Installing dependency ${dep_fqcn} into ${COLLECTIONS_DIR}..."
+      ansible-galaxy collection install "$dep_fqcn" -p "${COLLECTIONS_DIR}" --force
     fi
   done
 
   # -------------------------------------------------------------
   # 3) Configure Ansible env for Molecule
   # -------------------------------------------------------------
-  export ANSIBLE_COLLECTIONS_PATHS=/tmp/wunder/collections
-
   if [ -f /workspace/ansible.cfg ]; then
     export ANSIBLE_CONFIG=/workspace/ansible.cfg
   fi
 
   export MOLECULE_NO_LOG="${MOLECULE_NO_LOG:-false}"
-  # Inside the container the Docker socket is mounted at /var/run/docker.sock
   export DOCKER_HOST="${DOCKER_HOST:-unix:///var/run/docker.sock}"
 
   # -------------------------------------------------------------
   # 4) Discover scenarios
-  #    - If SCENARIO_FILTER is set, run only that one
-  #    - Otherwise, run all non-*heavy scenarios
   # -------------------------------------------------------------
   scenarios=()
 
@@ -185,7 +151,7 @@ PY
         scen="${dir##*/}"
         case "$scen" in
           *_heavy)
-            echo "Skipping heavy scenario '${scen}' in devtools-molecule.sh (run manually via dedicated script)."
+            echo "Skipping heavy scenario '\''${scen}'\'' in devtools-molecule.sh (run manually via dedicated script)."
             ;;
           *)
             scenarios+=("$scen")
