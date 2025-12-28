@@ -1,0 +1,9 @@
+---
+- name: Converge openvpn
+  hosts: localhost
+  gather_facts: true
+  vars:
+    openvpn_server: false
+    openvpn_relay_client: false
+  roles:
+    - role: openvpn

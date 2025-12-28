@@ -1,0 +1,5 @@
+---
+- name: Destroy manage_esxi scenario
+  hosts: localhost
+  gather_facts: false
+  tasks: []

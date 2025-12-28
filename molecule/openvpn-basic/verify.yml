@@ -1,0 +1,9 @@
+---
+- name: Verify openvpn converge
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert openvpn vars present
+      ansible.builtin.assert:
+        that:
+          - openvpn_config_file is defined

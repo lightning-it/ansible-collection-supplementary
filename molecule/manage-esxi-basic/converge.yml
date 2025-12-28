@@ -1,0 +1,6 @@
+---
+- name: Converge manage_esxi
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - role: manage_esxi

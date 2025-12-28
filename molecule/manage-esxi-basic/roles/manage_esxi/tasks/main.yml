@@ -1,0 +1,4 @@
+---
+- name: Stub manage_esxi role
+  ansible.builtin.debug:
+    msg: "Stub manage_esxi role for Molecule tests"
