@@ -1,0 +1,16 @@
+---
+galaxy_info:
+  author: Lightning IT
+  company: Lightning IT
+  description: Manage OpenVPN server and client assets.
+  license: GPL-2.0-only
+  min_ansible_version: "2.15"
+  platforms:
+    - name: EL
+      versions: ["9"]
+  galaxy_tags:
+    - openvpn
+    - vpn
+    - networking
+
+dependencies: []

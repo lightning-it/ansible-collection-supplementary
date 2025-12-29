@@ -1,0 +1,70 @@
+---
+# - name: Manage local user on vCenter
+#   community.vmware.vmware_host_user_manager:
+#     hostname: "{{ mes_vcenter_hostname }}"
+#     username: "{{ mes_vcenter_username }}"
+#     password: "{{ mes_vcenter_password }}"
+#     validate_certs: "{{ mes_validate_certs }}"
+#     esxi_hostname: "{{ mes_esxi_hostname }}"
+#     user_name: "{{ item.value.user }}"
+#     user_description: "{{ item.value.description | d('') }}"
+#     user_password: "{{ item.value.password }}"
+#     state: "{{ item.value.state }}"
+#   with_dict: "{{ mes_default_users }}"
+#   register: _manage_user
+#   ignore_errors: true
+
+# Not running because vCenter cannot execute ansible code!
+# https://github.com/ansible-collections/community.vmware/issues/613
+# - name: Gather a domain user info of the vsphere.local domain
+#   community.vmware.vcenter_domain_user_group_info:
+#     hostname: "{{ mes_vcenter_hostname }}"
+#     username: "{{ mes_vcenter_username }}"
+#     password: "{{ mes_vcenter_password }}"
+#     validate_certs: "{{ mes_validate_certs }}"
+#     domain: vsphere.local
+#     search_string: "vsphere.local\\{{ item.value.user }}"
+#     exact_match: true
+#   with_dict: "{{ mes_default_users }}"
+#   register: _gather_domain_user_info
+#   delegate_to: localhost
+#   tags:
+#     - always
+#
+# # - name: debug
+# #   debug:
+# #     msg: >
+# #       domain_user_groups: {{ item.domain_user_groups }}
+# #       username: {{ item.item.value.user }}
+# #   with_items: "{{ _gather_domain_user_info.results }}"
+#
+# - name: Add the domain user of the vsphere.local domain if it doesn't exist
+#   command: >-
+#     /usr/lib/vmware-vmafd/bin/dir-cli user create
+#     --account "{{ item.item.value.user }}"
+#     --user-password "{{ item.item.value.password }}"
+#     --login "{{ mes_vcenter_username }}"
+#     --password "{{ mes_vcenter_password }}"
+#     --first-name "{{ item.item.value.first_name }}"
+#     --last-name "{{ item.item.value.last_name }}"
+#   changed_when: true
+#   with_items: "{{ _gather_domain_user_info.results }}"
+#   delegate_to: "{{ groups.vcenter[0]}}"
+#   when:
+#     - item.domain_user_groups | length == 0
+#   tags:
+#     - add_user
+#
+# - name: Delete the domain user of the vsphere.local domain if it exists
+#   command: >-
+#     /usr/lib/vmware-vmafd/bin/dir-cli user delete
+#     --account "{{ item.value.user }}"
+#     --login "{{ mes_vcenter_username }}"
+#     --password "{{ mes_vcenter_password }}"
+#   changed_when: true
+#   with_dict: "{{ mes_default_users }}"
+#   when:
+#     - gather_domain_user_info_result.domain_user_groups | length == 1
+#   tags:
+#     - delete_user
+#     - never

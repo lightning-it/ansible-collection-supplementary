@@ -1,0 +1,90 @@
+---
+- name: Create openvpn ovpn file directory
+  ansible.builtin.file:
+    path: "{{ openvpn_ovpn_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Copy openssl client extensions
+  ansible.builtin.copy:
+    src: openssl-client.ext
+    dest: "{{ openvpn_key_dir }}"
+    owner: root
+    group: root
+    mode: "0400"
+
+- name: Generate client key
+  ansible.builtin.command: >-
+    openssl req -nodes -newkey rsa:{{ openvpn_rsa_bits }}
+    -keyout {{ item }}.key -out {{ item }}.csr -days 3650
+    -subj /CN=OpenVPN-Client-{{ inventory_hostname[:24] }}-{{ item[:24] }}/
+  args:
+    chdir: "{{ openvpn_key_dir }}"
+    creates: "{{ item }}.key"
+  loop: "{{ openvpn_clients | default([]) }}"
+
+- name: Protect client keys
+  ansible.builtin.file:
+    path: "{{ openvpn_key_dir }}/{{ item }}.key"
+    mode: "0400"
+  loop: "{{ openvpn_clients | default([]) }}"
+
+- name: Sign client key
+  ansible.builtin.command: >-
+    openssl x509 -req -in {{ item }}.csr -out {{ item }}.crt
+    -CA ca.crt -CAkey ca-key.pem -sha256 -days 3650
+    -extfile openssl-client.ext
+  args:
+    chdir: "{{ openvpn_key_dir }}"
+    creates: "{{ item }}.crt"
+  loop: "{{ openvpn_clients | default([]) }}"
+
+- name: Register server ca key
+  ansible.builtin.slurp:
+    src: "{{ openvpn_key_dir }}/ca.crt"
+  register: ca_cert
+
+- name: Register tls-auth key
+  ansible.builtin.slurp:
+    src: "{{ openvpn_key_dir }}/ta.key"
+  register: tls_auth
+
+- name: Register client certs
+  ansible.builtin.slurp:
+    src: "{{ openvpn_key_dir }}/{{ item }}.crt"
+  loop: "{{ openvpn_clients | default([]) }}"
+  register: client_certs
+
+- name: Register client keys
+  ansible.builtin.slurp:
+    src: "{{ openvpn_key_dir }}/{{ item }}.key"
+  loop: "{{ openvpn_clients | default([]) }}"
+  register: client_keys
+
+- name: Generate client config
+  no_log: "{{ openvpn_client_config_no_log }}"
+  ansible.builtin.template:
+    src: client.ovpn.j2
+    dest: >-
+      {{ openvpn_ovpn_dir }}/{{ item.0.item }}-{{ inventory_hostname }}.ovpn
+    owner: root
+    group: root
+    mode: "0400"
+  loop: >-
+    {{
+      (client_certs.results | default([]))
+      | zip(client_keys.results | default([]))
+      | list
+    }}
+  loop_control:
+    label: "{{ item.0.item }}"
+
+- name: Fetch client config
+  ansible.builtin.fetch:
+    src: "{{ openvpn_ovpn_dir }}/{{ item }}-{{ inventory_hostname }}.ovpn"
+    dest: >-
+      {{ openvpn_fetch_client_configs_dir }}/{{ item }}/
+      {{ inventory_hostname }}{{ openvpn_fetch_client_configs_suffix }}.ovpn
+    flat: true
+  when: openvpn_fetch_client_configs
+  loop: "{{ openvpn_clients | default([]) }}"

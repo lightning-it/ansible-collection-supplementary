@@ -1,0 +1,27 @@
+---
+# - name: Preconfigure base ESXi
+#   include_tasks: preconfig.yml
+#
+# - name: Setup base ESXi
+#   include_tasks: base.yml
+
+# - name: Configure firewall
+#   include_tasks: firewall.yml
+
+- name: Manage users
+  ansible.builtin.include_tasks: users.yml
+
+# TODO:
+# - name: Mount VMFS datastores to ESXi
+#   community.vmware.vmware_host_datastore:
+#     hostname: "{{ mes_vcenter_hostname }}"
+#     username: "{{ mes_vcenter_username }}"
+#     password: "{{ mes_vcenter_password }}"
+#     validate_certs: "{{ mes_validate_certs }}"
+#     datastore_name: '{{ item.name }}'
+#     datastore_type: '{{ item.type }}'
+#     vmfs_device_name: 'naa.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
+#     vmfs_version: 6
+#     esxi_hostname: "{{ mes_esxi_hostname }}"
+#     state: present
+#   delegate_to: localhost

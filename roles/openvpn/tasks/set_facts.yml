@@ -1,0 +1,99 @@
+---
+- name: Map legacy variable names to openvpn_* equivalents
+  ansible.builtin.set_fact:
+    openvpn_clients: >-
+      {{ openvpn_clients | default(clients | default([]), true) }}
+    openvpn_firewalld_default_interface_zone: >-
+      {{
+        openvpn_firewalld_default_interface_zone
+        | default(
+            firewalld_default_interface_zone | default('public'),
+            true
+          )
+      }}
+    openvpn_iptables_service: >-
+      {{
+        openvpn_iptables_service
+        | default(iptables_service | default('iptables'), true)
+      }}
+    openvpn_manage_firewall_rules: >-
+      {{
+        openvpn_manage_firewall_rules
+        | default(manage_firewall_rules | default(true), true)
+      }}
+    openvpn_tls_auth_required: >-
+      {{
+        openvpn_tls_auth_required
+        | default(tls_auth_required | default(true), true)
+      }}
+    openvpn_relay_client_config_name: >-
+      {{
+        openvpn_relay_client_config_name
+        | default(relay_client_config_name | default(''), true)
+      }}
+    openvpn_epel_package_name: >-
+      {{
+        openvpn_epel_package_name
+        | default(
+            epel_package_name
+            | default(
+                'https://dl.fedoraproject.org/pub/epel/'
+                ~ 'epel-release-latest-8.noarch.rpm'
+              ),
+            true
+          )
+      }}
+    openvpn_openssl_package_name: >-
+      {{
+        openvpn_openssl_package_name
+        | default(openssl_package_name | default('openssl'), true)
+      }}
+    openvpn_auth_ldap_package: >-
+      {{
+        openvpn_auth_ldap_package
+        | default(openvpn_auth_ldap | default('openvpn-auth-ldap'), true)
+      }}
+
+- name: Check systemd existence as Docker Guest
+  ansible.builtin.stat:
+    path: /bin/systemctl
+  when:
+    - ansible_virtualization_role is defined
+    - ansible_virtualization_type == "docker"
+    - ansible_virtualization_role == "guest"
+  register: docker_stat_result
+
+- name: Set systemd openvpn service name
+  ansible.builtin.set_fact:
+    openvpn_service_name: "openvpn@{{ openvpn_config_file }}.service"
+  when:
+    - >
+      ansible_service_mgr == "systemd"
+      or (docker_stat_result.stat is defined and docker_stat_result.stat.exists)
+
+# Fedora and CentOS 8 separate OpenVPN into client and server
+- name: Set Fedora 27+ and CentOS 8 service name
+  ansible.builtin.set_fact:
+    openvpn_service_name: "openvpn-server@{{ openvpn_config_file }}.service"
+    openvpn_client_service_name: "openvpn-client@client.service"
+  when:
+    - >
+      ansible_distribution == "Fedora"
+      and ansible_distribution_version|int >= 27
+      or (
+        ansible_distribution in ["CentOS", "Rocky", "RedHat"]
+        and (ansible_distribution_version | int) >= 8
+      )
+
+- name: Set Fedora 27+ and CentOS 8 OpenVPN base path
+  ansible.builtin.set_fact:
+    openvpn_base_dir: "/etc/openvpn/server"
+    openvpn_base_client_dir: "/etc/openvpn/client"
+  when:
+    - >
+      ansible_distribution == "Fedora"
+      and ansible_distribution_version|int >= 27
+      or (
+        ansible_distribution in ["CentOS", "Rocky", "RedHat"]
+        and (ansible_distribution_version | int) >= 8
+      )

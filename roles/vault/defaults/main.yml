@@ -11,3 +11,4 @@ vault_vault_pki_roots: []
 vault_vault_pki_intermediates: []
 vault_vault_pki_roles: []
 vault_terragrunt_template: ../vault/templates/vault.hcl.j2
+vault_skip_terragrunt: false

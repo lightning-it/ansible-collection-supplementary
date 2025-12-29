@@ -1,10 +1,11 @@
 ---
 - name: Run terragrunt to configure vault
+  ansible.builtin.include_role:
+    name: lit.foundational.terragrunt
   vars:
     terragrunt_template: "{{ vault_terragrunt_template }}"
-  ansible.builtin.include_role:
-    name: terragrunt
   tags:
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
+  when: not vault_skip_terragrunt | bool

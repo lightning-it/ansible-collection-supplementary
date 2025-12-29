@@ -1,0 +1,53 @@
+---
+- name: Create log directory
+  ansible.builtin.file:
+    dest: "{{ openvpn_log_dir }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Copy openvpn logrotate config file
+  ansible.builtin.template:
+    src: openvpn_logrotate.conf.j2
+    dest: /etc/logrotate.d/openvpn-{{ openvpn_config_file }}.conf
+    owner: root
+    group: root
+    mode: "0400"
+  when: ansible_os_family != 'Solaris'
+
+- name: Create temporary directory
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: temp
+  register: tempdir_1
+
+- name: "Fetch OpenVPN client config from {{ openvpn_vpn_server }}"
+  ansible.builtin.fetch:
+    src: >-
+      {{ openvpn_base_dir }}/{{ openvpn_relay_client_config_name }}-
+      {{ openvpn_vpn_server }}.ovpn
+    dest: "{{ tempdir_1.path }}/"
+    flat: true
+  delegate_to: "{{ openvpn_vpn_server }}"
+
+- name: Upload OpenVPN client config
+  ansible.builtin.copy:
+    src: >-
+      {{ tempdir_1.path }}/{{ openvpn_relay_client_config_name }}-
+      {{ openvpn_vpn_server }}.ovpn
+    dest: "{{ openvpn_base_client_dir }}/client.conf"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Clean temporary client config
+  ansible.builtin.file:
+    path: "{{ tempdir_1.path }}"
+    state: absent
+  when: tempdir_1.path is defined
+
+- name: Setup openvpn auto-start & start
+  ansible.builtin.service:
+    name: "{{ openvpn_client_service_name }}"
+    enabled: true
+    state: started

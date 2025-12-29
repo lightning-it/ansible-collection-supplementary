@@ -1,0 +1,25 @@
+---
+- name: Uninstall OpenVPN
+  ansible.builtin.import_tasks: uninstall.yml
+  when: openvpn_uninstall
+
+- name: Install OpenVPN
+  ansible.builtin.import_tasks: install.yml
+  tags:
+    - install
+
+- name: Enable ipv4 forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+  failed_when: false
+
+- name: Detect firewall type
+  ansible.builtin.import_tasks: firewalld.yml
+  when:
+    - openvpn_manage_firewall_rules
+  tags:
+    - firewall
+
+- name: Configure OpenVPN relay client
+  ansible.builtin.import_tasks: configure_relay_client.yml

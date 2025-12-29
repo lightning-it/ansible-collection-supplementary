@@ -1,0 +1,21 @@
+---
+- name: Disable openvpn auto-start & start
+  ansible.builtin.service:
+    name: "{{ openvpn_service_name }}"
+    enabled: false
+    state: stopped
+
+- name: Wipe out config directory
+  ansible.builtin.file:
+    path: "{{ openvpn_base_dir }}"
+    state: absent
+
+- name: Remove openvpn logrotate config file
+  ansible.builtin.file:
+    path: /etc/logrotate.d/openvpn.conf
+    state: absent
+
+- name: Uninstall OpenVPN
+  ansible.builtin.package:
+    name: "{{ openvpn_package_name }}"
+    state: absent

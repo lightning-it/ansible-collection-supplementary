@@ -1,0 +1,8 @@
+---
+- name: Install openvpn-auth-ldap
+  ansible.builtin.package:
+    name: "{{ openvpn_auth_ldap_package }}"
+    state: present
+
+# TODO: add configuration steps for openvpn-auth-ldap.
+# Reference: https://kifarunix.com/configure-openvpn-ldap-based-authentication/

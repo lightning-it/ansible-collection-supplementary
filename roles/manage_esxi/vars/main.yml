@@ -1,0 +1,101 @@
+---
+# vCenter
+manage_esxi_vcenter_hostname: vcenter.core.corp.l-it.io
+manage_esxi_vcenter_username: administrator@vsphere.local
+manage_esxi_vcenter_password: TET&jekOB75e
+
+# ESXi hyp04
+manage_esxi_username: root
+manage_esxi_initial_password: install2023!
+manage_esxi_password: sqNULry4c!9fBve
+manage_esxi_hostname: hyp04.core.corp.l-it.io
+manage_esxi_hostname_ext: hyp04.core.cloud.l-it.io
+manage_esxi_validate_certs: false
+manage_esxi_domain_name: core.cloud.l-it.io
+manage_esxi_dns_servers:
+  - 10.10.30.3
+  - 185.12.64.2
+manage_esxi_search_domains:
+  - l-it.io
+  - core.cloud.l-it.io
+manage_esxi_datacenter_name: Bechtle
+manage_esxi_cluster_name: cluster01
+manage_esxi_license: 4F01H-0RK40-H80N9-A13NK-0Y2N0
+
+# ESXi general
+manage_esxi_options:
+  Config.HostAgent.log.level: verbose
+  Annotations.WelcomeMessage: >-
+    Lightning IT - VMware ESXi - {{ manage_esxi_hostname }}
+  Config.HostAgent.plugins.solo.enableMob: true
+  UserVars.SuppressShellWarning: 1
+
+manage_esxi_services:
+  TSM-SSH:
+    service_name: TSM-SSH
+    state: present
+    service_policy: "on"
+  TSM:
+    service_name: TSM
+    state: present
+    service_policy: "on"
+
+manage_esxi_portgroups:
+  Management Network EXT:
+    portgroup: Management Network EXT
+    switch: vSwitch0
+    vlan_id: 0
+  Management Network INT:
+    portgroup: Management Network INT
+    switch: vSwitch0
+    vlan_id: 4051
+  sn-public-ext:
+    portgroup: sn-public-ext
+    switch: vSwitch0
+    vlan_id: 4050
+  sn-core-int:
+    portgroup: sn-core-int
+    switch: vSwitch0
+    vlan_id: 4051
+  sn-dev-int:
+    portgroup: sn-dev-int
+    switch: vSwitch0
+    vlan_id: 4052
+  sn-test-int:
+    portgroup: sn-test-int
+    switch: vSwitch0
+    vlan_id: 4053
+  sn-prod-int:
+    portgroup: sn-prod-int
+    switch: vSwitch0
+    vlan_id: 4054
+
+manage_esxi_allowed_ip_address:
+  - 116.202.254.243
+  - 116.202.254.244
+  - 80.152.174.182
+  - 93.241.78.196
+
+manage_esxi_allowed_ip_network:
+  - 10.10.30.0/24
+  - 172.16.30.0/24
+
+manage_esxi_firewall_rules:
+  - name: sshServer
+    enabled: true
+    allowed_hosts:
+      all_ip: false
+      ip_address: "{{ manage_esxi_allowed_ip_address }}"
+      ip_network: "{{ manage_esxi_allowed_ip_network }}"
+  - name: vSphereClient
+    enabled: true
+    allowed_hosts:
+      all_ip: false
+      ip_address: "{{ manage_esxi_allowed_ip_address }}"
+      ip_network: "{{ manage_esxi_allowed_ip_network }}"
+  - name: webAccess
+    enabled: true
+    allowed_hosts:
+      all_ip: false
+      ip_address: "{{ manage_esxi_allowed_ip_address }}"
+      ip_network: "{{ manage_esxi_allowed_ip_network }}"
