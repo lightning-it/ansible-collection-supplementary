@@ -6,8 +6,8 @@ COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE:-lit}"
 if [ -f galaxy.yml ]; then
   COLLECTION_NAME="$(python3 - <<'PY'
 import yaml
-with open("galaxy.yml", "r") as f:
-    data = yaml.safe_load(f)
+with open("galaxy.yml", "r", encoding="utf-8") as f:
+    data = yaml.safe_load(f) or {}
 print(data.get("name", ""))
 PY
 )"
@@ -31,17 +31,26 @@ COLLECTION_NAME="$COLLECTION_NAME" \
 ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION}" \
 ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}" \
 bash scripts/wunder-devtools-ee.sh bash -lc '
-  set -e
+  set -euo pipefail
 
   ns="${COLLECTION_NAMESPACE}"
   name="${COLLECTION_NAME}"
 
   echo "Building and installing collection ${ns}.${name}..."
-  /workspace/scripts/devtools-collection-prepare.sh
 
-  coll_root="/tmp/wunder/collections/ansible_collections/${ns}/${name}"
+  # devtools-collection-prepare.sh prints the per-run collections dir on the last line
+  COLLECTIONS_DIR="$(/workspace/scripts/devtools-collection-prepare.sh | tail -n 1)"
+
+  if [ -z "${COLLECTIONS_DIR:-}" ] || [ ! -d "${COLLECTIONS_DIR}" ]; then
+    echo "ERROR: COLLECTIONS_DIR not found/invalid: ${COLLECTIONS_DIR:-<empty>}" >&2
+    exit 1
+  fi
+
+  coll_root="${COLLECTIONS_DIR}/ansible_collections/${ns}/${name}"
   if [ ! -d "$coll_root" ]; then
     echo "Collection root not found at $coll_root" >&2
+    echo "DEBUG: content of ${COLLECTIONS_DIR}/ansible_collections/${ns}:" >&2
+    ls -la "${COLLECTIONS_DIR}/ansible_collections/${ns}" 2>/dev/null || true
     exit 1
   fi
 
@@ -55,7 +64,9 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
     "ansible-lint==${lint_ver}"
 
   export ANSIBLE_CONFIG="/workspace/ansible.cfg"
-  export ANSIBLE_COLLECTIONS_PATHS="/tmp/wunder/collections"
+  export ANSIBLE_COLLECTIONS_PATHS="${COLLECTIONS_DIR}:/usr/share/ansible/collections"
+  export ANSIBLE_COLLECTIONS_PATH="${ANSIBLE_COLLECTIONS_PATHS}"
+
   export ANSIBLE_LINT_OFFLINE=true
   export ANSIBLE_LINT_SKIP_GALAXY_INSTALL=1
   export ANSIBLE_LINT_CONFIG="/workspace/.ansible-lint"
