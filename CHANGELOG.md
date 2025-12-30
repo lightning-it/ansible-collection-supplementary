@@ -1,3 +1,9 @@
+## [1.4.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.3.0...v1.4.0) (2025-12-30)
+
+### Features
+
+* new ansible roles ([#17](https://github.com/lightning-it/ansible-collection-supplementary/issues/17)) ([ed9cd84](https://github.com/lightning-it/ansible-collection-supplementary/commit/ed9cd842396983e37eba88ad6c4d0edd8dbc96e3))
+
 ## 1.3.0 (2025-12-22)
 
 * feat: Add new roles (#8) ([75fe60e](https://github.com/lightning-it/ansible-collection-supplementary/commit/75fe60e)), closes [#8](https://github.com/lightning-it/ansible-collection-supplementary/issues/8)
