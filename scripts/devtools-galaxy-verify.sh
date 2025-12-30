@@ -3,16 +3,14 @@
 # has meta/main.yml and a README.* present. Runs inside wunder-devtools-ee.
 set -eo pipefail
 
-# 1) Namespace with default
 COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE:-lit}"
 
-# 2) Derive COLLECTION_NAME from repo name if not set
 if [ -z "${COLLECTION_NAME:-}" ]; then
   if [ -f galaxy.yml ]; then
     COLLECTION_NAME="$(python3 - <<'PY'
 import yaml
-with open("galaxy.yml", "r") as f:
-    data = yaml.safe_load(f)
+with open("galaxy.yml", "r", encoding="utf-8") as f:
+    data = yaml.safe_load(f) or {}
 print(data.get("name", ""))
 PY
 )"
@@ -25,20 +23,25 @@ fi
 
 echo "Using collection: ${COLLECTION_NAMESPACE}.${COLLECTION_NAME}"
 
-# 3) Pass values into the container and run the checks
 COLLECTION_NAMESPACE="$COLLECTION_NAMESPACE" \
 COLLECTION_NAME="$COLLECTION_NAME" \
 bash scripts/wunder-devtools-ee.sh bash -lc '
-  set -e
+  set -euo pipefail
 
   ns="${COLLECTION_NAMESPACE}"
   name="${COLLECTION_NAME}"
 
   echo "Building and verifying collection ${ns}.${name}..."
 
-  /workspace/scripts/devtools-collection-prepare.sh
+  # devtools-collection-prepare.sh prints the per-run collections dir on the last line
+  COLLECTIONS_DIR="$(/workspace/scripts/devtools-collection-prepare.sh | tail -n 1)"
 
-  coll_root="/tmp/wunder/collections/ansible_collections/${ns}/${name}"
+  if [ -z "${COLLECTIONS_DIR:-}" ] || [ ! -d "${COLLECTIONS_DIR}" ]; then
+    echo "ERROR: COLLECTIONS_DIR not found/invalid: ${COLLECTIONS_DIR:-<empty>}" >&2
+    exit 1
+  fi
+
+  coll_root="${COLLECTIONS_DIR}/ansible_collections/${ns}/${name}"
   if [ ! -d "$coll_root" ]; then
     echo "Collection root not found at $coll_root" >&2
     exit 1
