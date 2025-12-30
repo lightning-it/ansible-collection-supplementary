@@ -1,18 +1,34 @@
-# Vault Role
+# vault
 
-Deploy HashiCorp Vault using the shared patterns defined in the
-`lit.foundation_services` collection. This role is a scaffold awaiting
-full implementation but already defines the variables and testing hooks.
+Role to configure Hashicorp Vault
+ 
+## Requirements
 
-## Usage Documentation
+No.
 
-All public variables and orchestration guidance live in the collection
-`README.md`. Update that file when introducing new role inputs.
+## Role Variables
 
-## Testing
+See defaults/main.yml
 
-Execute Molecule to verify behavioural changes:
+## Dependencies
 
-```bash
-molecule test -s default
+This role uses the role terragrunt to configure artifactory via terraform.
+
+## Example Playbook
 ```
+- name: "Setup Vault"
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - role: vault
+  tags:
+    - vault
+```
+
+## License
+
+BSD
+
+## Author Information
+
+Dirk Egert

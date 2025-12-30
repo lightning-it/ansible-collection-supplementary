@@ -1,0 +1,11 @@
+---
+- name: Set facts
+  ansible.builtin.import_tasks: set_facts.yml
+
+- name: Setup OpenVPN server
+  ansible.builtin.import_tasks: setup_server.yml
+  when: openvpn_server is defined and openvpn_server
+
+- name: Setup OpenVPN "Relay" client
+  ansible.builtin.import_tasks: setup_relay_client.yml
+  when: openvpn_relay_client is defined and openvpn_relay_client

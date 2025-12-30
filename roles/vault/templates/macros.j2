@@ -1,0 +1,54 @@
+{% macro format_hcl_value(val, indent=6) -%}
+{%- if val is string -%}
+"{{ val }}"
+{%- elif val is number or val is boolean -%}
+{{ val | to_json }}
+{%- elif val is mapping -%}
+{
+{%- for k, v in val.items() %}
+{{ "\n" + " " * indent }}{{ k }} = {{ format_hcl_value(v, indent + 2) }}
+{%- endfor %}
+{{ "\n" + " " * (indent - 2) }}}
+{%- elif val is sequence -%}
+[
+{%- for item in val %}
+{{ "\n" + " " * indent }}{{ format_hcl_value(item, indent + 2) }},
+{%- endfor %}
+{{ "\n" + " " * (indent - 2) }}]
+{%- else -%}
+{{ val | to_json }}
+{%- endif %}
+{%- endmacro %}
+
+{% macro render_block(name, items, key_name, required, optional, defaults={}, heredoc_fields=[]) -%}
+{% if items | length > 0 %}
+  {{ name }} = {
+{% for item in items %}
+    "{{ item[key_name] }}" = {
+{% for r in required %}
+{% set value = item[r] %}
+{% if r in heredoc_fields %}
+      {{ "%-24s" | format(r) }} = <<-EOF
+{{ value }}
+EOF
+{% else %}
+      {{ "%-24s" | format(r) }} = {{ format_hcl_value(value, 8) }}
+{% endif %}
+{% endfor %}
+{% for o in optional %}
+{% set value = item[o] if item[o] is defined else defaults.get(o) %}
+{% if value is not none %}
+{% if o in heredoc_fields %}
+      {{ "%-24s" | format(o) }} = <<-EOF
+{{ value }}
+EOF
+{% else %}
+      {{ "%-24s" | format(o) }} = {{ format_hcl_value(value, 8) }}
+{% endif %}
+{% endif %}
+{% endfor %}
+    }
+{% endfor %}
+  }
+{% endif %}
+{%- endmacro %}

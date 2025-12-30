@@ -1,0 +1,9 @@
+---
+- name: Converge vault
+  hosts: localhost
+  gather_facts: false
+  vars:
+    cluster_id: test-cluster
+    vault_terraform_source: "."
+  roles:
+    - role: vault

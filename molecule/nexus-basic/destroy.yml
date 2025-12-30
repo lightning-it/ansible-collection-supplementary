@@ -1,0 +1,5 @@
+---
+- name: Destroy nexus scenario
+  hosts: localhost
+  gather_facts: false
+  tasks: []

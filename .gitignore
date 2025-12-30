@@ -19,3 +19,4 @@ npm-debug.log
 
 # Local collection installs from tests/hooks
 collections/
+roles/ansible-navigator.log

@@ -1,0 +1,45 @@
+---
+- name: Uninstall OpenVPN
+  ansible.builtin.import_tasks: uninstall.yml
+  when: openvpn_uninstall
+
+- name: Install OpenVPN
+  ansible.builtin.import_tasks: install.yml
+  tags:
+    - install
+
+- name: Copy or Generate server keys
+  ansible.builtin.import_tasks: server_keys.yml
+
+- name: Enable ipv4 forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+  failed_when: false
+
+- name: Detect firewall type
+  ansible.builtin.import_tasks: firewalld.yml
+  when:
+    - openvpn_manage_firewall_rules
+  tags:
+    - firewall
+
+- name: Compare existing certs against 'clients' variable
+  ansible.builtin.import_tasks: cert_sync_detection.yml
+  when: openvpn_sync_certs
+  tags:
+    - sync_certs
+
+- name: Generate client configs
+  ansible.builtin.import_tasks: client_keys.yml
+  when: openvpn_clients | default([]) | length > 0
+
+- name: Generate revocation list and clean up
+  ansible.builtin.import_tasks: revocation.yml
+  when: >-
+    (openvpn_revoke_these_certs is defined)
+    or
+    (openvpn_sync_certs and cert_sync_certs_to_revoke.stdout_lines | length > 0)
+
+- name: Configure OpenVPN server
+  ansible.builtin.import_tasks: configure_server.yml

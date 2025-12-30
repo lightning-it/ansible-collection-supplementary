@@ -1,0 +1,35 @@
+---
+dependency:
+  name: galaxy
+
+driver:
+  name: default
+  options:
+    managed: false
+
+platforms:
+  - name: localhost
+    address: localhost
+    connection_options:
+      ansible_connection: local
+
+provisioner:
+  name: ansible
+  lint: |
+    yamllint .
+    ansible-lint
+  env:
+    ANSIBLE_COLLECTIONS_PATHS: "/tmp/wunder/collections:../../collections"
+    ANSIBLE_ROLES_PATH: "roles:../../roles"
+  inventory:
+    host_vars:
+      localhost:
+        ansible_connection: local
+        gitlab_runner_experimental_acknowledge: true
+  playbooks:
+    converge: converge.yml
+    destroy: destroy.yml
+    verify: verify.yml
+
+verifier:
+  name: ansible

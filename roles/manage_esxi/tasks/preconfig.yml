@@ -1,0 +1,73 @@
+---
+- name: Check if bootstrap is necessary?
+  community.vmware.vmware_about_info:
+    hostname: "{{ manage_esxi_hostname_ext }}"
+    username: "{{ manage_esxi_username }}"
+    password: "{{ manage_esxi_initial_password }}"
+    validate_certs: "{{ manage_esxi_validate_certs }}"
+  delegate_to: localhost
+  ignore_errors: true
+  register: esxi_login
+
+- name: Set bootstrap variable
+  ansible.builtin.set_fact:
+    need_bootstrap: true
+  when: esxi_login is not failed
+
+- name: Update the default root user password (direct connection to ESXi host)
+  community.vmware.vmware_host_user_manager:
+    hostname: "{{ manage_esxi_hostname_ext }}"
+    username: "{{ manage_esxi_username }}"
+    password: "{{ manage_esxi_initial_password }}"
+    validate_certs: "{{ manage_esxi_validate_certs }}"
+    esxi_hostname: "{{ manage_esxi_hostname }}"
+    user_name: "{{ manage_esxi_username }}"
+    user_description: "default root user"
+    user_password: "{{ manage_esxi_password }}"
+    override_user_password: true
+    state: present
+  when: need_bootstrap | default(false)
+
+- name: Configure DNS for ESXi host (direct connection to ESXi host)
+  community.vmware.vmware_host_dns:
+    hostname: "{{ manage_esxi_hostname_ext }}"
+    username: "{{ manage_esxi_username }}"
+    password: "{{ manage_esxi_password }}"
+    validate_certs: "{{ manage_esxi_validate_certs }}"
+    type: static
+    host_name: "{{ manage_esxi_hostname.split('.')[0] }}"
+    domain: "{{ manage_esxi_domain_name }}"
+    dns_servers: "{{ manage_esxi_dns_servers }}"
+    search_domains: "{{ manage_esxi_search_domains }}"
+  delegate_to: localhost
+
+- name: Add Management Network VM Portgroups
+  community.vmware.vmware_portgroup:
+    hostname: "{{ manage_esxi_hostname_ext }}"
+    username: "{{ manage_esxi_username }}"
+    password: "{{ manage_esxi_password }}"
+    validate_certs: "{{ manage_esxi_validate_certs }}"
+    hosts: "{{ manage_esxi_hostname_ext }}"
+    switch: "{{ item.value.switch }}"
+    portgroup: "{{ item.value.portgroup }}"
+    vlan_id: "{{ item.value.vlan_id }}"
+    state: present
+  with_dict: "{{ manage_esxi_portgroups }}"
+  delegate_to: localhost
+
+- name: Add Management vmkernel port (direct connection to ESXi host)
+  community.vmware.vmware_vmkernel:
+    hostname: "{{ manage_esxi_hostname_ext }}"
+    username: "{{ manage_esxi_username }}"
+    password: "{{ manage_esxi_password }}"
+    validate_certs: "{{ manage_esxi_validate_certs }}"
+    esxi_hostname: "{{ manage_esxi_hostname }}"
+    vswitch_name: vSwitch0
+    portgroup_name: Management Network INT
+    network:
+      type: 'static'
+      ip_address: 10.10.30.204
+      subnet_mask: 255.255.255.0
+    state: present
+    enable_mgmt: true
+  delegate_to: localhost
