@@ -1,19 +1,19 @@
 # keycloak_config role
 
 Configure an existing Keycloak instance (realms, clients, roles, users, IdPs,
-policies) via Terraform. Ansible supplies the data; Terraform applies it through
+policies) via Terragrunt (Terraform wrapper). Ansible supplies the data; Terraform applies it through
 the official Keycloak provider.
 
-Terraform must be installed and available in `PATH` on the control host.
+Terragrunt (and Terraform) must be installed and available in `PATH` on the control host when `keycloak_config_skip_apply=false`.
 
 ---
 
 ## What it does
 
-- Prepares a Terraform working directory on the control host.
-- Renders a `main.tf` that configures the Keycloak provider and calls
+- Prepares a Terragrunt working directory on the control host.
+- Renders a `terragrunt.hcl` that configures the Keycloak provider and points to
   `lightning-it/instance/keycloak` (or an override).
-- Runs `terraform init` and optionally `terraform apply` to create/update
+- Runs `terragrunt init` and optionally `terragrunt apply` to create/update
   Keycloak realms and related objects.
 
 ---

@@ -2,5 +2,7 @@
 - name: Converge manage_esxi
   hosts: localhost
   gather_facts: false
+  vars:
+    manage_esxi_stub_mode: true
   roles:
     - role: manage_esxi

@@ -24,8 +24,17 @@
       secrets; do not leave them empty.
     success_msg: All required variables for keycloak_config are set.
 
-- name: Check if terraform is available on the control host
+- name: >-
+    Check if terragrunt is available on the control host (only when applying)
+  ansible.builtin.command: terragrunt --version
+  register: tg_version
+  changed_when: false
+  failed_when: tg_version.rc != 0
+  when: not keycloak_config_skip_apply
+
+- name: Check if terraform is available on the control host (only when applying)
   ansible.builtin.command: terraform version
   register: tf_version
   changed_when: false
   failed_when: tf_version.rc != 0
+  when: not keycloak_config_skip_apply

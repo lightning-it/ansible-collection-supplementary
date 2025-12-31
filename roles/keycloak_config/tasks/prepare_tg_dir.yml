@@ -1,0 +1,20 @@
+---
+
+- name: Ensure Terragrunt working directory exists
+  ansible.builtin.file:
+    path: "{{ keycloak_config_tf_workdir }}"
+    state: directory
+    mode: "0755"
+
+- name: Clear previous Terraform/Terragrunt state in working directory
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ keycloak_config_tf_workdir }}/.terraform"
+    - "{{ keycloak_config_tf_workdir }}/.terragrunt-cache"
+    - "{{ keycloak_config_tf_workdir }}/.terraform.lock.hcl"
+    - "{{ keycloak_config_tf_workdir }}/terraform.tfstate"
+    - "{{ keycloak_config_tf_workdir }}/terraform.tfstate.backup"
+  when: keycloak_config_tf_clean_state
+  changed_when: false

@@ -1,0 +1,20 @@
+---
+
+- name: Terragrunt init in working directory
+  ansible.builtin.command:
+    cmd: terragrunt init --source-update
+    chdir: "{{ keycloak_config_tf_workdir }}"
+  register: tg_init
+  changed_when: false
+  failed_when: tg_init.rc != 0
+
+- name: Terragrunt apply configuration
+  ansible.builtin.command:
+    cmd: terragrunt apply -auto-approve -input=false
+    chdir: "{{ keycloak_config_tf_workdir }}"
+  register: tg_apply
+  changed_when: "'No changes.' not in tg_apply.stdout"
+
+- name: Show Terragrunt apply output
+  ansible.builtin.debug:
+    var: tg_apply.stdout_lines

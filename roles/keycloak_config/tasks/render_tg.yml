@@ -1,0 +1,7 @@
+---
+
+- name: Render Terragrunt terragrunt.hcl
+  ansible.builtin.template:
+    src: "terragrunt.hcl.j2"
+    dest: "{{ keycloak_config_tf_workdir }}/terragrunt.hcl"
+    mode: "0644"

@@ -1,6 +1,7 @@
 ---
-# Directory on the control host where Terraform will be executed
-# Default Terraform working directory:
+# Directory on the control host where Terragrunt will be executed
+# (Terragrunt calls Terraform)
+# Default Terragrunt working directory:
 keycloak_config_tf_workdir: >-
   {{ lookup('env', 'KEYCLOAK_TF_WORKDIR')
      | default(lookup('env', 'HOME') ~ '/.keycloak-tf', true) }}
