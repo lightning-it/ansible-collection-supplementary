@@ -25,7 +25,7 @@
   delegate_to: localhost
 
 - name: Manage multiple settings for ESXi host
-  vmware_host_config_manager:
+  community.vmware_host_config_manager:
     hostname: '{{ manage_esxi_vcenter_hostname }}'
     username: '{{ manage_esxi_vcenter_username }}'
     password: '{{ manage_esxi_vcenter_password }}'

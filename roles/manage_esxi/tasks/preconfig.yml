@@ -41,20 +41,6 @@
     search_domains: "{{ manage_esxi_search_domains }}"
   delegate_to: localhost
 
-- name: Add Management Network VM Portgroups
-  community.vmware.vmware_portgroup:
-    hostname: "{{ manage_esxi_hostname_ext }}"
-    username: "{{ manage_esxi_username }}"
-    password: "{{ manage_esxi_password }}"
-    validate_certs: "{{ manage_esxi_validate_certs }}"
-    hosts: "{{ manage_esxi_hostname_ext }}"
-    switch: "{{ item.value.switch }}"
-    portgroup: "{{ item.value.portgroup }}"
-    vlan_id: "{{ item.value.vlan_id }}"
-    state: present
-  with_dict: "{{ manage_esxi_portgroups }}"
-  delegate_to: localhost
-
 - name: Add Management vmkernel port (direct connection to ESXi host)
   community.vmware.vmware_vmkernel:
     hostname: "{{ manage_esxi_hostname_ext }}"

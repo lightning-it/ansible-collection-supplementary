@@ -1,0 +1,17 @@
+---
+- name: Ensure configured VM portgroups are present
+  community.vmware.vmware_portgroup:
+    hostname: "{{ manage_esxi_hostname_ext }}"
+    username: "{{ manage_esxi_username }}"
+    password: "{{ manage_esxi_password }}"
+    validate_certs: "{{ manage_esxi_validate_certs }}"
+    hosts: "{{ manage_esxi_hostname_ext }}"
+    switch: "{{ item.value.switch | default(item.switch) }}"
+    portgroup: "{{ item.value.portgroup | default(item.portgroup) }}"
+    vlan_id: "{{ item.value.vlan_id | default(item.vlan_id) | default(0) }}"
+    state: present
+  loop: "{{ manage_esxi_portgroups_effective | default([]) }}"
+  when:
+    - (item.value.portgroup | default(item.portgroup, true)) | length > 0
+    - (item.value.switch | default(item.switch, true)) | length > 0
+  delegate_to: localhost
