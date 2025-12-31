@@ -1,3 +1,9 @@
+## [1.4.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.4.0...v1.4.1) (2025-12-31)
+
+### Bug Fixes
+
+* update Ansible roles to use Terragrunt and enhance manage_esxi role configuration ([#21](https://github.com/lightning-it/ansible-collection-supplementary/issues/21)) ([f9df604](https://github.com/lightning-it/ansible-collection-supplementary/commit/f9df6040577c11aec7d18fb0f22afbd033ce3fcf))
+
 ## [1.4.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.3.0...v1.4.0) (2025-12-30)
 
 ### Features
