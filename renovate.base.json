@@ -1,0 +1,71 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":semanticCommitType(chore)",
+    ":semanticCommitScope(deps)"
+  ],
+  "labels": ["dependencies", "renovate"],
+  "timezone": "UTC",
+  "schedule": [],
+  "rebaseWhen": "conflicted",
+  "prConcurrentLimit": 5,
+
+  "packageRules": [
+    {
+      "groupName": "ansible-core (2.18.x only)",
+      "matchPackageNames": ["ansible-core"],
+      "allowedVersions": "/^2\\.18\\./"
+    },
+    {
+      "groupName": "Ansible tooling",
+      "matchPackageNames": ["ansible-core", "ansible-lint", "ansible-runner"]
+    }
+  ],
+
+  "regexManagers": [
+    {
+      "description": "ansible-core version in workflow env (ANSIBLE_CORE_VERSION)",
+      "fileMatch": [".github/workflows/.*\\.ya?ml"],
+      "matchStrings": [
+        "ANSIBLE_CORE_VERSION:\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
+      ],
+      "datasourceTemplate": "pypi",
+      "packageNameTemplate": "ansible-core",
+      "versioningTemplate": "pep440"
+    },
+    {
+      "description": "ansible-lint version in workflow env (ANSIBLE_LINT_VERSION)",
+      "fileMatch": [".github/workflows/.*\\.ya?ml"],
+      "matchStrings": [
+        "ANSIBLE_LINT_VERSION:\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
+      ],
+      "datasourceTemplate": "pypi",
+      "packageNameTemplate": "ansible-lint",
+      "versioningTemplate": "pep440"
+    },
+
+    {
+      "description": "ansible-core pins in workflows (pip style)",
+      "fileMatch": [".github/workflows/.*\\.ya?ml"],
+      "matchStrings": [
+        "ansible-core==(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"
+      ],
+      "datasourceTemplate": "pypi",
+      "packageNameTemplate": "ansible-core",
+      "versioningTemplate": "pep440"
+    },
+    {
+      "description": "ansible-lint pins in workflows (pip style)",
+      "fileMatch": [".github/workflows/.*\\.ya?ml"],
+      "matchStrings": [
+        "ansible-lint==(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"
+      ],
+      "datasourceTemplate": "pypi",
+      "packageNameTemplate": "ansible-lint",
+      "versioningTemplate": "pep440"
+    }
+  ]
+}
