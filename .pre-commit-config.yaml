@@ -1,6 +1,6 @@
 ---
 repos:
-      # >>> BEGIN shared-assets pre-commit
+        # >>> BEGIN shared-assets pre-commit
   - repo: local
     hooks:
       # -------------------------------------------------------------------
