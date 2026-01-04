@@ -1,3 +1,9 @@
+## [1.4.2](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.4.1...v1.4.2) (2026-01-04)
+
+### Bug Fixes
+
+* update environment variable name from ANSIBLE_COLLECTIONS_PATHS to ANSIBLE_COLLECTIONS_PATH ([#30](https://github.com/lightning-it/ansible-collection-supplementary/issues/30)) ([36d1104](https://github.com/lightning-it/ansible-collection-supplementary/commit/36d1104f25bf776e6715a07bb5230302794f1e29))
+
 ## [1.4.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.4.0...v1.4.1) (2025-12-31)
 
 ### Bug Fixes
