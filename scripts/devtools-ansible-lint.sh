@@ -64,8 +64,7 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
     "ansible-lint==${lint_ver}"
 
   export ANSIBLE_CONFIG="/workspace/ansible.cfg"
-  export ANSIBLE_COLLECTIONS_PATHS="${COLLECTIONS_DIR}:/usr/share/ansible/collections"
-  export ANSIBLE_COLLECTIONS_PATH="${ANSIBLE_COLLECTIONS_PATHS}"
+  export ANSIBLE_COLLECTIONS_PATH="${COLLECTIONS_DIR}:/usr/share/ansible/collections"
 
   export ANSIBLE_LINT_OFFLINE=true
   export ANSIBLE_LINT_SKIP_GALAXY_INSTALL=1

@@ -99,7 +99,7 @@ This will:
    ansible-playbook -i localhost, playbooks/example.yml
    ```
 
-   using the installed collection via `ANSIBLE_COLLECTIONS_PATHS=/tmp/wunder/collections`.
+   using the installed collection via `ANSIBLE_COLLECTIONS_PATH=/tmp/wunder/collections`.
 
 Use this smoke test whenever you want to verify that the collection is:
 
