@@ -91,8 +91,7 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
     exit 1
   fi
 
-  export ANSIBLE_COLLECTIONS_PATHS="${COLLECTIONS_DIR}:/usr/share/ansible/collections"
-  export ANSIBLE_COLLECTIONS_PATH="${ANSIBLE_COLLECTIONS_PATHS}"
+  export ANSIBLE_COLLECTIONS_PATH="${COLLECTIONS_DIR}:/usr/share/ansible/collections"
 
   # -------------------------------------------------------------
   # 2) Install declared dependencies into the SAME per-run dir
