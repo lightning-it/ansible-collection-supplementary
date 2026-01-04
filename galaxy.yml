@@ -1,6 +1,6 @@
 namespace: lit
 name: supplementary
-version: 1.4.2
+version: 1.4.3
 readme: README.md
 description: Supplementary Ansible collection for ModuLix, providing configuration
   and integration roles for platform services and Terraform-backed workflows.
