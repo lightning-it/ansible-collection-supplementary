@@ -19,7 +19,10 @@ provisioner:
     yamllint .
     ansible-lint
   env:
-    ANSIBLE_COLLECTIONS_PATH: "/tmp/wunder/collections:../../collections"
+    ANSIBLE_COLLECTIONS_PATHS: >-
+      {{ lookup('env','ANSIBLE_COLLECTIONS_PATH') }}:
+      {{ molecule_project_directory }}/collections-dev:
+      {{ molecule_project_directory }}/collections
     ANSIBLE_ROLES_PATH: "../../roles"
   inventory:
     host_vars:

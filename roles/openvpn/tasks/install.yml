@@ -9,10 +9,12 @@
     - ansible_distribution_major_version == "8"
 
 - name: Enable extra repos for RHEL 8
-  community.general.rhsm_repository:
-    name: >-
-      codeready-builder-for-rhel-8-{{ ansible_architecture }}-rpms
-    state: enabled
+  ansible.builtin.command: >-
+    subscription-manager repos
+    --enable=codeready-builder-for-rhel-8-{{ ansible_architecture }}-rpms
+  register: openvpn_enable_repo
+  changed_when: "'Enabled' in openvpn_enable_repo.stdout"
+  failed_when: openvpn_enable_repo.rc not in [0, 70]
   when:
     - ansible_distribution == "RedHat"
     - ansible_distribution_major_version == "8"
