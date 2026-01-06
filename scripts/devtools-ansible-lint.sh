@@ -18,10 +18,24 @@ if [ -z "${COLLECTION_NAME:-}" ]; then
   exit 1
 fi
 
-if [ -z "${ANSIBLE_CORE_VERSION:-}" ] || [ -z "${ANSIBLE_LINT_VERSION:-}" ]; then
-  echo "ERROR: ANSIBLE_CORE_VERSION and ANSIBLE_LINT_VERSION must be set." >&2
-  exit 1
-fi
+ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION:-$(python3 - <<'PY'
+import ansible
+try:
+    from ansible.release import __version__  # type: ignore
+except Exception:
+    __version__ = getattr(ansible, "__version__", "")
+print(__version__)
+PY
+)}"
+
+ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION:-$(python3 - <<'PY'
+try:
+    import ansiblelint  # type: ignore
+    print(getattr(ansiblelint, "__version__", ""))
+except Exception:
+    print("")
+PY
+)}"
 
 echo "Running ansible-lint for collection: ${COLLECTION_NAMESPACE}.${COLLECTION_NAME}"
 echo "Using ansible-core ${ANSIBLE_CORE_VERSION}, ansible-lint ${ANSIBLE_LINT_VERSION}"
@@ -55,13 +69,6 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   fi
 
   cd /workspace
-
-  core_ver="${ANSIBLE_CORE_VERSION}"
-  lint_ver="${ANSIBLE_LINT_VERSION}"
-
-  python3 -m pip install --upgrade \
-    "ansible-core==${core_ver}" \
-    "ansible-lint==${lint_ver}"
 
   export ANSIBLE_CONFIG="/workspace/ansible.cfg"
   export ANSIBLE_COLLECTIONS_PATH="${COLLECTIONS_DIR}:/usr/share/ansible/collections"
