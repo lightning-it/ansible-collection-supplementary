@@ -22,6 +22,7 @@ tags:
   - security
   - automation
 dependencies:
+  ansible.posix: "*"
   community.general: "*"
   community.vmware: "*"
 build_ignore:
