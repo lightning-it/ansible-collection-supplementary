@@ -11,6 +11,7 @@ authors:
   - Lightning IT
 license:
   - GPL-2.0-only
+  - GPL-2.0-only
 tags:
   - modulix
   - keycloak
@@ -18,11 +19,20 @@ tags:
   - security
   - automation
 dependencies:
-  community.general: '>=7.0.0'
-  ansible.posix: '>=1.5.0'
-  community.vmware: '>=3.0.0'
-  lit.foundational: '>=1.0.0'
+  ansible.posix: "*"
+  community.general: "*"
+  community.vmware: "*"
 build_ignore:
+  - node_modules
+  - vagrant
+  - .git
+  - .github
+  - .gitignore
+  - .molecule
+  - ansible_collections
+  - infra
+  - "*.terraform*"
+  - "*.tar.gz"
   - node_modules
   - vagrant
   - .git

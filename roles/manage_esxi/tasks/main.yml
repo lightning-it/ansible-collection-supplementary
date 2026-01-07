@@ -1,23 +1,41 @@
 ---
-
 - name: Skip manage_esxi in stub mode
   ansible.builtin.meta: end_play
   when: manage_esxi_stub_mode | bool
 
+- name: Normalize manage_esxi variables
+  ansible.builtin.include_tasks: normalize.yml
+  tags:
+    - manage_esxi
+    - manage_esxi_normalize
+    - manage_esxi_users
+
 - name: Preconfigure base ESXi
   ansible.builtin.include_tasks: preconfig.yml
+  tags:
+    - manage_esxi
+    - manage_esxi_preconfig
 
 - name: Configure portgroups
   ansible.builtin.include_tasks: portgroups.yml
+  tags:
+    - manage_esxi
+    - manage_esxi_portgroups
 
 - name: Setup base ESXi
   ansible.builtin.include_tasks: base.yml
+  tags:
+    - manage_esxi
+    - manage_esxi_base
 
 - name: Configure firewall
   ansible.builtin.include_tasks: firewall.yml
+  tags:
+    - manage_esxi
+    - manage_esxi_firewall
 
 - name: Manage users
   ansible.builtin.include_tasks: users.yml
-
-# TODO:
-# - name: Mount VMFS datastores to ESXi
+  tags:
+    - manage_esxi
+    - manage_esxi_users

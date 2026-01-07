@@ -1,0 +1,50 @@
+---
+- name: Normalize hostnames for ESXi direct connections
+  ansible.builtin.set_fact:
+    manage_esxi_hostname_ext: "{{ manage_esxi_hostname_ext | default(manage_esxi_hostname, true) }}"
+    manage_esxi_domain_name: "{{ manage_esxi_domain_name | default(manage_esxi_domainame | default('', true), true) }}"
+    manage_esxi_portgroups_effective: >-
+      {{
+        manage_esxi_portgroups_effective
+          | default(
+              (
+                manage_esxi_portgroups is mapping
+              )
+              | ternary(manage_esxi_portgroups | dict2items, manage_esxi_portgroups | default([]))
+            )
+      }}
+    manage_esxi_connection_hostname: "{{ manage_esxi_hostname_ext | default(manage_esxi_hostname, true) }}"
+  tags:
+    - always
+
+- name: Probe manage_esxi_hostname HTTPS reachability
+  ansible.builtin.uri:
+    url: "https://{{ manage_esxi_hostname }}"
+    method: HEAD
+    validate_certs: "{{ manage_esxi_validate_certs }}"
+    status_code:
+      - 200
+      - 301
+      - 302
+      - 401
+      - 403
+      - 404
+    return_content: false
+    timeout: 5
+  delegate_to: localhost
+  register: manage_esxi_hostname_probe
+  failed_when: false
+  when:
+    - manage_esxi_hostname is defined
+    - manage_esxi_hostname | length > 0
+  tags:
+    - always
+
+- name: Prefer manage_esxi_hostname when HTTPS reachable
+  ansible.builtin.set_fact:
+    manage_esxi_connection_hostname: "{{ manage_esxi_hostname }}"
+  when:
+    - manage_esxi_hostname_probe is defined
+    - manage_esxi_hostname_probe.status is defined
+  tags:
+    - always

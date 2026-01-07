@@ -12,20 +12,15 @@ repos:
         entry: bash scripts/wunder-devtools-ee.sh yamllint
         pass_filenames: true
         files: \.(yml|yaml)$
-
       # -------------------------------------------------------------------
       # ansible-lint (via wunder-devtools-ee)
       # -------------------------------------------------------------------
       - id: ansible-lint-ee
         name: ansible-lint (via wunder-devtools-ee)
         language: system
-        entry: >-
-          bash -lc "ANSIBLE_CORE_VERSION=2.15.13
-          ANSIBLE_LINT_VERSION=6.22.2
-          scripts/devtools-ansible-lint.sh"
+        entry: bash scripts/devtools-ansible-lint.sh
         pass_filenames: false
         files: \.(yml|yaml)$
-
       # -------------------------------------------------------------------
       # Molecule tests non-heavy scenarios (via wunder-devtools-ee)
       # -------------------------------------------------------------------
@@ -34,7 +29,6 @@ repos:
         language: system
         entry: bash scripts/devtools-molecule.sh
         pass_filenames: false
-
       # -------------------------------------------------------------------
       # GitHub Actions workflow linting (actionlint)
       # -------------------------------------------------------------------
@@ -46,7 +40,6 @@ repos:
           -w /repo docker.io/rhysd/actionlint:latest'
         pass_filenames: false
         files: ^\.github/workflows/.*\.ya?ml$
-
       # -------------------------------------------------------------------
       # Renovate config linting (renovate-config-validator)
       # -------------------------------------------------------------------
@@ -60,7 +53,6 @@ repos:
           -v "$PWD":/repo -w /repo
           renovate/renovate:latest
           renovate-config-validator'
-
       # -------------------------------------------------------------------
       # ansible-collection smoke test (via wunder-devtools-ee)
       # -------------------------------------------------------------------
@@ -70,7 +62,6 @@ repos:
         entry: bash scripts/devtools-collection-smoke.sh
         pass_filenames: false
         files: ^(playbooks/|roles/|galaxy\.yml|runtime\.yml)
-
       # -------------------------------------------------------------------
       # Galaxy-style role verification (via wunder-devtools-ee)
       # -------------------------------------------------------------------
@@ -80,4 +71,4 @@ repos:
         entry: bash scripts/devtools-galaxy-verify.sh
         pass_filenames: false
         files: ^(roles/|galaxy\.yml)
-  # <<< END shared-assets pre-commit
+# <<< END shared-assets pre-commit
