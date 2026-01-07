@@ -1,3 +1,9 @@
+## [1.5.2](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.5.1...v1.5.2) (2026-01-07)
+
+### Bug Fixes
+
+* ensure no_log is set for user management task in manage_esxi role ([#39](https://github.com/lightning-it/ansible-collection-supplementary/issues/39)) ([23f2980](https://github.com/lightning-it/ansible-collection-supplementary/commit/23f29803418c4dd36144ca5104ddf74f73214983))
+
 ## [1.5.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.5.0...v1.5.1) (2026-01-07)
 
 ### Bug Fixes
