@@ -1,3 +1,9 @@
+## [1.5.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.4.3...v1.5.0) (2026-01-07)
+
+### Features
+
+* enhance manage_esxi role with additional variables and tasks fo… ([#32](https://github.com/lightning-it/ansible-collection-supplementary/issues/32)) ([63e01be](https://github.com/lightning-it/ansible-collection-supplementary/commit/63e01be66b3dc94032e495e49e567635314924a7))
+
 ## [1.4.3](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.4.2...v1.4.3) (2026-01-04)
 
 ### Bug Fixes
