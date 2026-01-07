@@ -40,5 +40,6 @@
   when:
     - manage_esxi_default_users_effective is defined
     - manage_esxi_default_users_effective | length > 0
+  no_log: true
   tags:
     - manage_esxi_users
