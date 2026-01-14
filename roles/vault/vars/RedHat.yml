@@ -1,0 +1,7 @@
+---
+packages:
+  - podman
+  - python3
+  - python3-libselinux
+  - python3-pip
+  - jq

@@ -1,0 +1,24 @@
+---
+- name: Recreate vault pod
+  ansible.builtin.command: podman pod rm -f vault
+  register: rm_pod
+  failed_when: rm_pod.rc not in [0,125]
+  changed_when: "'deleted' in rm_pod.stdout"
+  ignore_errors: true
+
+- name: Run vault pod
+  ansible.builtin.command:
+    cmd: "podman kube play {{ vau_pod_manifest_path }}"
+  register: pod_start
+  changed_when: "'created' in pod_start.stdout or 'configured' in pod_start.stdout"
+
+- name: Reload vau_unseal_keys_encrypted vars
+  ansible.builtin.include_vars:
+    file: "{{ vau_init_path }}/vault-init.yml"
+
+- name: Write root_token to file
+  delegate_to: localhost
+  ansible.builtin.copy:
+    content: "{{ (vau_unseal_keys_encrypted | from_json).root_token }}"
+    dest: "~/.vault-token"
+    mode: "0600"

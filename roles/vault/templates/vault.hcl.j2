@@ -7,7 +7,7 @@ include {
 }
 
 terraform {
-  source = "{{ vault_terraform_source }}"
+  source = "{{ vau_terraform_source }}"
 }
 
 locals {
@@ -25,16 +25,16 @@ generate "backend" {
   contents  = <<EOF
 terraform {
   backend "local" {
-    path = "../../../../../../../tfstate/{{ cluster_id }}-terraform.tfstate"
+    path = "../../../../../../../tfstate/{{ inventory_hostname }}-terraform.tfstate"
   }
 }
 EOF
 }
 # terraform {
 #   backend "http" {
-#     address        = "{{ vault_terraformstate_baseurl }}/{{ cluster_id }}-vault"
-#     lock_address   = "{{ vault_terraformstate_baseurl }}/{{ cluster_id }}-vault/lock"
-#     unlock_address = "{{ vault_terraformstate_baseurl }}/{{ cluster_id }}-vault/lock"
+#     address        = "{{ vau_terraformstate_baseurl }}/{{ cluster_id }}-vault"
+#     lock_address   = "{{ vau_terraformstate_baseurl }}/{{ cluster_id }}-vault/lock"
+#     unlock_address = "{{ vau_terraformstate_baseurl }}/{{ cluster_id }}-vault/lock"
 #     lock_method    = "POST"
 #     unlock_method  = "DELETE"
 #   }
@@ -43,11 +43,11 @@ EOF
 # }
 
 inputs = {
-  vault_url = "{{ vault_url }}"
+  vault_url = "{{ vau_url }}"
 
 {{ macros.render_block(
   "secret_stores",
-  vault_secret_stores,
+  vau_secret_stores,
   "path",
   ["path"],
   ["description", "type", "options"],
@@ -59,7 +59,7 @@ inputs = {
 
 {{ macros.render_block(
   "policies",
-  vault_policies,
+  vau_policies,
   "name",
   ["name", "policy"],
   [],
@@ -69,7 +69,7 @@ inputs = {
 
 {{ macros.render_block(
   "approle_secrets",
-  vault_approle_secrets,
+  vau_approle_secrets,
   "role_name",
   ["role_name", "token_policy", "kv_mount", "credential_path"],
   ["token_ttl", "token_max_ttl"],
@@ -78,7 +78,7 @@ inputs = {
 
 {{ macros.render_block(
   "vault_pki_roots",
-  vault_vault_pki_roots,
+  vau_vault_pki_roots,
   "mount",
   ["mount", "common_name", "vault_server"],
   ["ttl", "key_type", "key_bits", "country", "locality", "province", "ou", "organization", "policy_name"],
@@ -87,7 +87,7 @@ inputs = {
 
 {{ macros.render_block(
   "vault_pki_intermediates",
-  vault_vault_pki_intermediates,
+  vau_vault_pki_intermediates,
   "mount",
   ["mount", "common_name", "signer_root_id", "vault_server"],
   ["ttl", "max_ttl", "key_type", "key_bits", "country", "locality", "province", "ou", "organization", "csr_auto_rebuild", "csr_expiry"],
@@ -96,7 +96,7 @@ inputs = {
 
 {{ macros.render_block(
   "vault_pki_roles",
-  vault_vault_pki_roles,
+  vau_vault_pki_roles,
   "name",
   ["name", "mount"],
   ["key_type", "key_bits", "allowed_domains", "allow_subdomains", "allow_ip_sans", "allow_bare_domains", "allow_glob_domains", "allow_localhost", "generate_lease", "ttl", "max_ttl"],

@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ vau_pod_name }}
+  labels:
+    app: vault
+spec:
+  containers:
+    - name: vault
+      image: {{ vau_image }}
+      args:
+        - "server"
+      ports:
+        - containerPort: {{ vau_port }}
+          hostPort: {{ vau_port }}
+          hostIP: {{ vau_host_ip }}
+      env:
+        - name: VAULT_ADDR
+          value: "https://0.0.0.0:{{ vau_port }}"
+      securityContext:
+        capabilities:
+          add:
+            - CAP_IPC_LOCK
+      volumeMounts:
+        - name: data
+          mountPath: /vault/data
+        - name: certs
+          mountPath: /vault/certs
+        - name: vault-config
+          mountPath: /vault/config
+  volumes:
+    - name: data
+      hostPath:
+        path: {{ vau_data_dir }}
+        type: Directory
+    - name: vault-config
+      hostPath:
+        path: "{{ vau_config_dir }}"
+        type: DirectoryOrCreate
+    - name: certs
+      hostPath:
+        path: {{ vau_cert_dir }}
+        type: Directory

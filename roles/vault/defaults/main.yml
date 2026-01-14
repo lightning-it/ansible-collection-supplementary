@@ -1,14 +1,51 @@
 ---
-vault_terraformstate_baseurl: >-
-  https://gitlab.com/api/v4/projects/70576743/terraform/state
-vault_url: ""
-vault_token: ""
-vault_terraform_source: ""
-vault_secret_stores: []
-vault_policies: []
-vault_approle_secrets: []
-vault_vault_pki_roots: []
-vault_vault_pki_intermediates: []
-vault_vault_pki_roles: []
-vault_terragrunt_template: ../vault/templates/vault.hcl.j2
-vault_skip_terragrunt: false
+# Vault Pod Basis
+vau_pod_name: vault
+vau_pod_manifest_path: /etc/podman/pods/vault.yml
+vau_data_dir: /srv/vault/data
+vau_cert_dir: /srv/vault/certs
+vau_config_dir: /srv/vault/config
+vau_image: docker.io/hashicorp/vault:1.21
+
+# Network
+vau_port: 8200
+vau_addr: "http://127.0.0.1:{{ vau_port }}"
+vau_host_ip: "{{ ansible_default_ipv4.address | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1')) }}"
+
+# Vault Hostname + PKI
+vau_vault_hostname: vault.local
+vau_vault_address: "{{ g_vault_addr }}"
+vau_vault_validate_certs: true
+vau_engine_mount_point: stage-2c
+vau_hashi_vault_auth_method: approle
+vau_vault_pki_path: "pki-inter-ec-2025/issue"
+vau_vault_pki_role: "limited_dns_2y"
+
+# Ansible Vault handling
+vau_ansible_vault_pw: ''
+vau_encrypt_init: true
+
+# Auto-Unseal (optional)
+vau_auto_unseal: false
+vau_auto_unseal_method: transit
+vau_auto_unseal_mount_path: transit/
+vau_auto_unseal_key_name: vault-unseal
+vau_auto_unseal_token: ""
+
+# Init & Unseal
+vau_init_path: "../../host_vars/{{ inventory_hostname }}"
+
+# Systemd
+vau_systemd_unit_name: "podman-kube@{{ vau_pod_manifest_path | basename | regex_replace('\\.yml$', '') }}.service"
+
+# Configure vault
+vau_terraformstate_baseurl: "https://gitlab.com/api/v4/projects/70576743/terraform/state"
+vau_url: ''
+vau_token: ''
+vau_terraform_source: ''
+vau_secret_stores: []
+vau_policies: []
+vau_approle_secrets: []
+vau_vault_pki_roots: []
+vau_vault_pki_intermediates: []
+vau_vault_pki_roles: []
