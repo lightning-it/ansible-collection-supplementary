@@ -2,7 +2,8 @@
 
 Supplementary Ansible collection for ModuLix / Lightning IT. Currently contains
 the `keycloak_config` role to configure existing Keycloak instances (realms,
-clients, roles, users, IdPs) via Terraform.
+clients, roles, users, IdPs) via Terraform and the `cloudflared` role to manage
+Cloudflare Tunnel connectors.
 
 ## Usage
 
@@ -36,6 +37,8 @@ Example playbook:
   to validate basics locally.
 - Molecule scenario `openvpn-basic` runs the openvpn role without standing up a
   server to validate role wiring and defaults.
+- Molecule scenario `cloudflared-basic` runs the cloudflared role with install
+  steps disabled to validate role wiring and defaults.
 - Molecule scenario `gitlab-runner-basic` runs the gitlab_runner stub role
   (acknowledging experimental status) to keep lint/test coverage green.
   It uses the repo’s roles path to source the role locally.
@@ -65,8 +68,8 @@ Molecule, etc.).
 ### 2. Run all linters locally
 
 To run all configured linters (YAML, ansible-lint, Molecule keycloak-basic,
-openvpn-basic, gitlab-runner-basic, nexus-basic, manage-esxi-basic, vault-basic, GitHub
-Actions lint, Renovate config validation):
+openvpn-basic, cloudflared-basic, gitlab-runner-basic, nexus-basic, manage-esxi-basic,
+vault-basic, GitHub Actions lint, Renovate config validation):
 
 ```bash
 pre-commit run --all-files
