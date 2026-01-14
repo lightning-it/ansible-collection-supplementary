@@ -1,0 +1,10 @@
+---
+- name: Verify cloudflared converge
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert cloudflared variables are present
+      ansible.builtin.assert:
+        that:
+          - cloudflared_tunnel_token is defined
+          - cloudflared_manage_service is defined

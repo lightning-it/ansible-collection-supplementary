@@ -1,0 +1,50 @@
+---
+- name: Assert tunnel token is provided
+  ansible.builtin.assert:
+    that:
+      - cloudflared_tunnel_token | length > 20
+    fail_msg: "Missing cloudflared_tunnel_token."
+
+- name: Install cloudflared repo (RHEL)
+  ansible.builtin.get_url:
+    url: "{{ cloudflared_repo_url }}"
+    dest: "{{ cloudflared_repo_path }}"
+    mode: "0644"
+  when:
+    - ansible_facts.os_family == "RedHat"
+    - cloudflared_manage_repo | bool
+
+- name: Install cloudflared package
+  ansible.builtin.dnf:
+    name: cloudflared
+    state: "{{ cloudflared_package_state }}"
+    update_cache: "{{ cloudflared_update_cache }}"
+  when:
+    - ansible_facts.os_family == "RedHat"
+    - cloudflared_install | bool
+
+- name: Check whether cloudflared service is already installed
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ cloudflared_service_name }}.service"
+  register: _cf_service_unit
+  when: cloudflared_manage_service | bool
+
+- name: Install cloudflared service for this tunnel (token)
+  ansible.builtin.command:
+    cmd: "cloudflared service install {{ cloudflared_tunnel_token }}"
+  register: _svc_install
+  changed_when: >-
+    'Installed' in (_svc_install.stdout | default('')) or
+    'installed' in (_svc_install.stderr | default(''))
+  no_log: "{{ cloudflared_no_log | bool }}"
+  when:
+    - cloudflared_manage_service | bool
+    - not _cf_service_unit.stat.exists
+
+- name: Ensure cloudflared service is enabled and started
+  ansible.builtin.systemd:
+    name: "{{ cloudflared_service_name }}"
+    enabled: true
+    state: started
+  register: _cf_systemd
+  when: cloudflared_manage_service | bool

@@ -1,0 +1,16 @@
+---
+cloudflared_tunnel_token: ""
+cloudflared_no_log: true
+
+cloudflared_repo_url: "https://pkg.cloudflare.com/cloudflared.repo"
+cloudflared_repo_path: "/etc/yum.repos.d/cloudflared.repo"
+
+cloudflared_manage_repo: true
+cloudflared_install: true
+cloudflared_manage_service: true
+
+cloudflared_package_state: present
+cloudflared_update_cache: true
+
+cloudflared_service_name: cloudflared
+cloudflared_show_status: false
