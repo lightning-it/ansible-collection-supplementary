@@ -1,5 +1,6 @@
+---
 name: Ansible Lint and Release
-on: # noqa yaml[truthy]
+"on":
   push:
     branches: [main, develop]
   pull_request:

@@ -7,10 +7,10 @@
     group: 100
     mode: '0755'
   loop:
-    - "{{ vau_data_dir }}"
-    - "{{ vau_cert_dir }}"
-    - "{{ vau_config_dir }}"
-    - "{{ vau_pod_manifest_path | dirname }}"
+    - "{{ vault_data_dir }}"
+    - "{{ vault_cert_dir }}"
+    - "{{ vault_config_dir }}"
+    - "{{ vault_pod_manifest_path | dirname }}"
   tags:
     - deployment
 
@@ -24,8 +24,8 @@
 - name: Apply SELinux context
   ansible.builtin.command: "chcon -Rt container_file_t {{ item }}"
   loop:
-    - "{{ vau_data_dir }}"
-    - "{{ vau_cert_dir }}"
+    - "{{ vault_data_dir }}"
+    - "{{ vault_cert_dir }}"
   register: selinux_cmd
   changed_when: selinux_cmd.rc == 0
   ignore_errors: true
@@ -36,7 +36,7 @@
 - name: Render Vault Pod manifest
   ansible.builtin.template:
     src: vault-pod.yml.j2
-    dest: "{{ vau_pod_manifest_path }}"
+    dest: "{{ vault_pod_manifest_path }}"
     mode: '0644'
   notify:
     - Recreate vault pod
@@ -47,7 +47,7 @@
 - name: Render Vault config
   ansible.builtin.template:
     src: vau-config.hcl.j2
-    dest: "{{ vau_config_dir }}/vault.hcl"
+    dest: "{{ vault_config_dir }}/vault.hcl"
     mode: '0644'
   notify:
     - Recreate vault pod

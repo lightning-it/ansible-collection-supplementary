@@ -1,7 +1,7 @@
 ---
 - name: Install required base packages
   ansible.builtin.package:
-    name: "{{ packages }}"
+    name: "{{ vault_packages }}"
     state: present
   tags:
     - install
@@ -18,5 +18,8 @@
     name: podman.socket
     enabled: true
     state: started
+  when:
+    - vault_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
   tags:
     - install

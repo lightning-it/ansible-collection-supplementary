@@ -34,12 +34,12 @@ ansible-vault encrypt_string
 Create host_vars/<YOUR VAULT SERVER>/02_vault.yml
 ```yaml
 ---
-vau_host_ip: 10.10.52.100
-vau_vault_hostname: vault01.degert-it.de
-g_vault_addr: "https://{{ vau_vault_hostname }}:8200"
-vau_url: "{{ g_vault_addr }}"
-vau_terraform_source: "git::ssh://gitea@dms.degert-it.de:2022/terraform/hashicorp_vault.git?ref=main"
-vau_secret_stores:
+vault_host_ip: 10.10.52.100
+vault_vault_hostname: vault01.degert-it.de
+g_vault_addr: "https://{{ vault_vault_hostname }}:8200"
+vault_url: "{{ g_vault_addr }}"
+vault_terraform_source: "git::ssh://gitea@dms.degert-it.de:2022/terraform/hashicorp_vault.git?ref=main"
+vault_secret_stores:
   - path: stage-2c
     description: "stage-2c Secrets"
   - path: pki-secrets
@@ -48,12 +48,12 @@ vau_secret_stores:
 
 ### Deploy vault
 ```bash
-ansible-navigator run playbooks/common/01_hashicorp_vault.yml -i inventory/ --m stdout -b --ask-vault-password -e vau_vault_validate_certs=false -e vau_hashi_vault_auth_method=token
+ansible-navigator run playbooks/common/01_hashicorp_vault.yml -i inventory/ --m stdout -b --ask-vault-password -e vault_vault_validate_certs=false -e vault_hashi_vault_auth_method=token
 ```
 
 ### Unseal vault
 ```bash
-ansible-navigator run playbooks/common/01_hashicorp_vault.yml -i inventory/ --m stdout -b --ask-vault-password -e vau_vault_validate_certs=false -e vau_hashi_vault_auth_method=token -t unseal
+ansible-navigator run playbooks/common/01_hashicorp_vault.yml -i inventory/ --m stdout -b --ask-vault-password -e vault_vault_validate_certs=false -e vault_hashi_vault_auth_method=token -t unseal
 ```
 
 ## License

@@ -5,21 +5,21 @@
     state: directory
     mode: '0755'
   loop:
-    - "{{ vau_data_dir }}"
-    - "{{ vau_cert_dir }}"
-    - "{{ vau_config_dir }}"
+    - "{{ vault_data_dir }}"
+    - "{{ vault_cert_dir }}"
+    - "{{ vault_config_dir }}"
   tags:
     - init
 
 - name: Try to read existing certificate from Vault
   delegate_to: localhost
   community.hashi_vault.vault_kv2_get:
-    url: "{{ vau_vault_address }}"
-    engine_mount_point: "{{ vau_engine_mount_point }}"
-    auth_method: "{{ vau_hashi_vault_auth_method }}"
+    url: "{{ vault_vault_address }}"
+    engine_mount_point: "{{ vault_engine_mount_point }}"
+    auth_method: "{{ vault_hashi_vault_auth_method }}"
     role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
     secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
-    validate_certs: "{{ vau_vault_validate_certs }}"
+    validate_certs: "{{ vault_vault_validate_certs }}"
     path: "{{ inventory_hostname }}/vault/certificate"
   register: existing_cert
   failed_when: false
@@ -32,13 +32,13 @@
   block:
     - name: Create private key (RSA, 4096 bits)
       community.crypto.openssl_privatekey:
-        path: "{{ vau_cert_dir }}/vault.key"
+        path: "{{ vault_cert_dir }}/vault.key"
       tags:
         - init
 
     - name: Create certificate signing request (CSR) for self-signed certificate
       community.crypto.openssl_csr_pipe:
-        privatekey_path: "{{ vau_cert_dir }}/vault.key"
+        privatekey_path: "{{ vault_cert_dir }}/vault.key"
         common_name: "{{ inventory_hostname }}"
         organization_name: Ansible, Inc.
         subject_alt_name:
@@ -52,8 +52,8 @@
 
     - name: Generate Vault server certificate signed by self-signed CA
       community.crypto.x509_certificate:
-        path: "{{ vau_cert_dir }}/vault.crt"
-        privatekey_path: "{{ vau_cert_dir }}/vault.key"
+        path: "{{ vault_cert_dir }}/vault.crt"
+        privatekey_path: "{{ vault_cert_dir }}/vault.key"
         csr_content: "{{ csr.csr }}"
         provider: selfsigned
       tags:
@@ -61,7 +61,7 @@
 
     - name: Set proper ownership and permissions for Vault private key
       ansible.builtin.file:
-        path: "{{ vau_cert_dir }}/vault.key"
+        path: "{{ vault_cert_dir }}/vault.key"
         mode: "0644"
       tags:
         - init

@@ -1,7 +1,7 @@
 ---
 - name: Wait until Vault API is reachable via HTTPS
   ansible.builtin.uri:
-    url: "https://{{ vau_host_ip }}:{{ vau_port }}/v1/sys/health"
+    url: "https://{{ vault_host_ip }}:{{ vault_port }}/v1/sys/health"
     method: GET
     validate_certs: false
   register: vault_health
@@ -16,19 +16,22 @@
 - name: Read init file
   delegate_to: localhost
   ansible.builtin.set_fact:
-    vau_init_data: "{{ vau_unseal_keys_encrypted | from_json }}"
+    vault_init_data: "{{ vault_unseal_keys_encrypted | from_json }}"
   tags:
     - unseal
 
 - name: Parse unseal keys
   ansible.builtin.set_fact:
-    vau_unseal_keys: "{{ vau_init_data.unseal_keys_b64 }}"
+    vault_unseal_keys: "{{ vault_init_data.unseal_keys_b64 }}"
   tags:
     - unseal
 
 - name: Check Vault initialization status
-  ansible.builtin.command: "podman exec vault-{{ vau_pod_name }} env VAULT_ADDR=https://127.0.0.1:8200 vault status -format=json -tls-skip-verify"
-  register: vau_status
+  ansible.builtin.command:
+    cmd: >-
+      podman exec vault-{{ vault_pod_name }} env VAULT_ADDR=https://127.0.0.1:8200
+      vault status -format=json -tls-skip-verify
+  register: vault_status
   failed_when: false
   changed_when: false
   tags:
@@ -36,26 +39,29 @@
 
 - name: Parse Vault status
   ansible.builtin.set_fact:
-    vau_sealed: >-
+    vault_sealed: >-
       {{
         (
-          (vau_status.stdout | default('') | length > 0)
-          and ((vau_status.stdout | from_json).sealed | default(false))
+          (vault_status.stdout | default('') | length > 0)
+          and ((vault_status.stdout | from_json).sealed | default(false))
         )
       }}
-  when: vau_status is defined
+  when: vault_status is defined
   tags:
     - unseal
 
 - name: Unseal Vault
-  loop: "{{ vau_unseal_keys }}"
-  ansible.builtin.command: "podman exec vault-{{ vau_pod_name }} env VAULT_ADDR=https://127.0.0.1:8200 vault operator unseal -tls-skip-verify {{ item }}"
+  loop: "{{ vault_unseal_keys }}"
+  ansible.builtin.command:
+    cmd: >-
+      podman exec vault-{{ vault_pod_name }} env VAULT_ADDR=https://127.0.0.1:8200
+      vault operator unseal -tls-skip-verify {{ item }}
   changed_when: true
-  register: vau_unseal_results
-  until: vau_unseal_results.rc == 0
+  register: vault_unseal_results
+  until: vault_unseal_results.rc == 0
   retries: 5
   delay: 2
-  when: vau_sealed | default(true)
+  when: vault_sealed | default(true)
   no_log: true
   tags:
     - unseal

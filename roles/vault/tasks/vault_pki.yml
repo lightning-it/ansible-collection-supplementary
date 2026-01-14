@@ -2,12 +2,12 @@
 - name: Try to read existing certificate from Vault
   delegate_to: localhost
   community.hashi_vault.vault_kv2_get:
-    url: "{{ vau_vault_address }}"
-    engine_mount_point: "{{ vau_engine_mount_point }}"
-    auth_method: "{{ vau_hashi_vault_auth_method }}"
+    url: "{{ vault_vault_address }}"
+    engine_mount_point: "{{ vault_engine_mount_point }}"
+    auth_method: "{{ vault_hashi_vault_auth_method }}"
     role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
     secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
-    validate_certs: "{{ vau_vault_validate_certs }}"
+    validate_certs: "{{ vault_vault_validate_certs }}"
     path: "{{ inventory_hostname }}/vault/certificate"
   register: existing_cert
   failed_when: false
@@ -33,7 +33,13 @@
 
 - name: Get certificate expiry if exists
   ansible.builtin.set_fact:
-    cert_expiry: "{{ (cert_info.not_after | regex_replace('Z$', '') | to_datetime('%Y%m%d%H%M%S')).strftime('%s') | int }}"
+    cert_expiry: >-
+      {{
+        (cert_info.not_after
+          | regex_replace('Z$', '')
+          | to_datetime('%Y%m%d%H%M%S'))
+        .strftime('%s') | int
+      }}
   when: existing_cert.data is defined
   delegate_to: localhost
   tags:
@@ -49,15 +55,15 @@
 
 - name: Request certificate from Vault PKI if missing
   community.hashi_vault.vault_write:
-    url: "{{ vau_vault_address }}"
-    auth_method: "{{ vau_hashi_vault_auth_method }}"
+    url: "{{ vault_vault_address }}"
+    auth_method: "{{ vault_hashi_vault_auth_method }}"
     role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
     secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
-    validate_certs: "{{ vau_vault_validate_certs }}"
-    path: "{{ vau_vault_pki_path }}/{{ vau_vault_pki_role }}"
+    validate_certs: "{{ vault_vault_validate_certs }}"
+    path: "{{ vault_vault_pki_path }}/{{ vault_vault_pki_role }}"
     data:
-      common_name: "{{ vau_vault_hostname }}"
-      alt_names: "localhost,{{ vau_vault_hostname }}"
+      common_name: "{{ vault_vault_hostname }}"
+      alt_names: "localhost,{{ vault_vault_hostname }}"
   register: vault_pki_cert
   delegate_to: localhost
   when: existing_cert.data is not defined
@@ -70,7 +76,7 @@
 
 - name: Ensure cert directories exist
   ansible.builtin.file:
-    path: "{{ vau_cert_dir }}"
+    path: "{{ vault_cert_dir }}"
     state: directory
     mode: '0755'
   tags:
@@ -89,12 +95,12 @@
 - name: Store newly generated certificate in Vault KV2
   delegate_to: localhost
   community.hashi_vault.vault_kv2_write:
-    url: "{{ vau_vault_address }}"
-    engine_mount_point: "{{ vau_engine_mount_point }}"
-    auth_method: "{{ vau_hashi_vault_auth_method }}"
+    url: "{{ vault_vault_address }}"
+    engine_mount_point: "{{ vault_engine_mount_point }}"
+    auth_method: "{{ vault_hashi_vault_auth_method }}"
     role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
     secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
-    validate_certs: "{{ vau_vault_validate_certs }}"
+    validate_certs: "{{ vault_vault_validate_certs }}"
     path: "{{ inventory_hostname }}/vault/certificate"
     data:
       certificate: "{{ vault_pki_cert.data.data.certificate }}"
@@ -116,17 +122,17 @@
     content: "{{ item.content }}"
     mode: "{{ item.mode }}"
   loop:
-    - dest: "{{ vau_cert_dir }}/vault.crt"
+    - dest: "{{ vault_cert_dir }}/vault.crt"
       content: >-
         {{ vault_pki_cert.data.data.certificate
            | default(existing_cert.data.data.certificate) }}
       mode: "0644"
-    - dest: "{{ vau_cert_dir }}/vault.key"
+    - dest: "{{ vault_cert_dir }}/vault.key"
       content: >-
         {{ vault_pki_cert.data.data.private_key
            | default(existing_cert.data.data.private_key) }}
       mode: "0644"
-    - dest: "{{ vau_cert_dir }}/ca.crt"
+    - dest: "{{ vault_cert_dir }}/ca.crt"
       content: >-
         {{ vault_pki_cert.data.data.issuing_ca
            | default(existing_cert.data.data.issuing_ca) }}

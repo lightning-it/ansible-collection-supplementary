@@ -1,6 +1,10 @@
+---
 - name: Check Vault initialization status
-  ansible.builtin.command: "podman exec vault-{{ vau_pod_name }} env VAULT_ADDR=https://127.0.0.1:8200 vault status -format=json -tls-skip-verify"
-  register: vau_status
+  ansible.builtin.command:
+    cmd: >-
+      podman exec vault-{{ vault_pod_name }} env VAULT_ADDR=https://127.0.0.1:8200
+      vault status -format=json -tls-skip-verify
+  register: vault_status
   failed_when: false
   changed_when: false
   tags:
@@ -8,42 +12,47 @@
 
 - name: Parse Vault status
   ansible.builtin.set_fact:
-    vau_initialized: >-
+    vault_initialized: >-
       {{
         (
-          (vau_status.stdout | default('') | length > 0)
-          and ((vau_status.stdout | from_json).initialized | default(false))
+          (vault_status.stdout | default('') | length > 0)
+          and ((vault_status.stdout | from_json).initialized | default(false))
         )
       }}
-  when: vau_status is defined
+  when: vault_status is defined
   tags:
     - init
 
 - name: Initialize Vault if not initialized
-  ansible.builtin.command: "podman exec vault-{{ vau_pod_name }} env VAULT_ADDR=https://127.0.0.1:8200 vault operator init -format=json -tls-skip-verify"
+  ansible.builtin.command:
+    cmd: >-
+      podman exec vault-{{ vault_pod_name }} env VAULT_ADDR=https://127.0.0.1:8200
+      vault operator init -format=json -tls-skip-verify
   changed_when: true
-  register: vau_init_result
-  when: not vau_initialized | default(false)
+  register: vault_init_result
+  when: not vault_initialized | default(false)
   no_log: true
   tags:
     - init
 
 - name: Store vault-init encrypted
-  when: not vau_initialized | default(false)
+  when: not vault_initialized | default(false)
   delegate_to: localhost
   tags:
     - init
   block:
     - name: Write vault password to a temporary file
       ansible.builtin.copy:
-        content: "{{ vau_ansible_vault_pw }}"
+        content: "{{ vault_ansible_vault_pw }}"
         dest: "{{ playbook_dir }}/vault_pw.txt"
         mode: "0600"
       no_log: true
 
     - name: Encrypt unseal keys JSON and save to variable
-      ansible.builtin.command: >
-        ansible-vault encrypt_string --vault-password-file {{ playbook_dir }}/vault_pw.txt '{{ vau_init_result.stdout }}' --name 'vau_unseal_keys_encrypted'
+      ansible.builtin.command:
+        cmd: >-
+          ansible-vault encrypt_string --vault-password-file {{ playbook_dir }}/vault_pw.txt
+          '{{ vault_init_result.stdout }}' --name 'vault_unseal_keys_encrypted'
       register: encrypted_unseal_keys_json
       changed_when: true
       no_log: true
@@ -55,17 +64,17 @@
 
     - name: Ensure host_vars directory exists
       ansible.builtin.file:
-        path: "{{ vau_init_path }}"
+        path: "{{ vault_init_path }}"
         state: directory
         mode: '0755'
 
     - name: Write Vault init file locally
       ansible.builtin.copy:
-        dest: "{{ vau_init_path }}/vault-init.yml"
+        dest: "{{ vault_init_path }}/vault-init.yml"
         content: "{{ encrypted_unseal_keys_json.stdout }}"
         mode: "0600"
       notify:
-        - Reload vau_unseal_keys_encrypted vars
+        - Reload vault_unseal_keys_encrypted vars
         - Write root_token to file
 
     - name: Flush handlers

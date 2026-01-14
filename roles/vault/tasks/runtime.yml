@@ -1,0 +1,84 @@
+---
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+  when: ansible_distribution in ['Debian', 'Ubuntu', 'RedHat', 'CentOS']
+
+- name: Ensure required packages are installed
+  ansible.builtin.include_tasks: install_packages.yml
+  tags:
+    - install
+
+- name: Map legacy unseal variable
+  ansible.builtin.set_fact:
+    vault_unseal_keys_encrypted: "{{ vault_unseal_keys_encrypted | default(vau_unseal_keys_encrypted, true) }}"
+  when:
+    - vault_unseal_keys_encrypted is not defined
+    - vau_unseal_keys_encrypted is defined
+  tags: always
+
+- name: Write root_token to file
+  delegate_to: localhost
+  ansible.builtin.copy:
+    content: "{{ (vault_unseal_keys_encrypted | from_json).root_token }}"
+    dest: "~/.vault-token"
+    mode: "0600"
+  no_log: true
+  tags:
+    - always
+  when: vault_unseal_keys_encrypted is defined
+
+- name: Bootstrap TLS
+  ansible.builtin.include_tasks: bootstrap_tls_vault.yml
+  tags:
+    - bootstrap
+
+- name: Deploy Vault Pod
+  ansible.builtin.include_tasks: deploy_pod.yml
+  tags:
+    - deployment
+
+- name: Install systemd unit for Vault Pod
+  ansible.builtin.include_tasks: systemd.yml
+  tags:
+    - systemd
+
+- name: Initialize Vault
+  ansible.builtin.include_tasks: init.yml
+  tags:
+    - init
+
+- name: Unseal Vault
+  ansible.builtin.include_tasks: unseal.yml
+  tags:
+    - unseal
+
+- name: Run terragrunt to configure vault
+  vars:  # noqa var-naming[no-role-prefix]
+    ter_terragrunt_template: ../vault/templates/vault.hcl.j2
+  ansible.builtin.include_role:
+    name: terragrunt
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Request Vault PKI certificate
+  ansible.builtin.include_tasks: vault_pki.yml
+  when: vault_pki_enabled | bool
+  tags:
+    - vault_pki
+
+- name: Unseal Vault
+  ansible.builtin.include_tasks: unseal.yml
+  tags:
+    - unseal
+
+- name: Remove temporary root_token
+  delegate_to: localhost
+  ansible.builtin.file:
+    path: "~/.vault-token"
+    state: absent
+  tags:
+    - always
+  when: vault_unseal_keys_encrypted is defined
