@@ -1,0 +1,61 @@
+---
+- name: Ensure data and cert directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: 100
+    group: 100
+    mode: '0755'
+  loop:
+    - "{{ vault_data_dir }}"
+    - "{{ vault_cert_dir }}"
+    - "{{ vault_config_dir }}"
+    - "{{ vault_pod_manifest_path | dirname }}"
+  tags:
+    - deployment
+
+- name: Detect SELinux status
+  ansible.builtin.command: getenforce
+  register: selinux_status
+  changed_when: false
+  failed_when: false
+  when: ansible_distribution in ['RedHat', 'CentOS']
+
+- name: Apply SELinux context
+  ansible.builtin.command: "chcon -Rt container_file_t {{ item }}"
+  loop:
+    - "{{ vault_data_dir }}"
+    - "{{ vault_cert_dir }}"
+  register: selinux_cmd
+  changed_when: selinux_cmd.rc == 0
+  ignore_errors: true
+  tags:
+    - deployment
+  when: ansible_distribution in ['RedHat', 'CentOS']
+
+- name: Render Vault Pod manifest
+  ansible.builtin.template:
+    src: vault-pod.yml.j2
+    dest: "{{ vault_pod_manifest_path }}"
+    mode: '0644'
+  notify:
+    - Recreate vault pod
+    - Run vault pod
+  tags:
+    - deployment
+
+- name: Render Vault config
+  ansible.builtin.template:
+    src: vau-config.hcl.j2
+    dest: "{{ vault_config_dir }}/vault.hcl"
+    mode: '0644'
+  notify:
+    - Recreate vault pod
+    - Run vault pod
+  tags:
+    - deployment
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - deployment
