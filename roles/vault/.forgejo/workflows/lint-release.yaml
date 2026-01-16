@@ -78,7 +78,7 @@ jobs:
           fi
 
       - name: Checkout code
-        uses: https://github.com/actions/checkout@v4
+        uses: https://github.com/actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ secrets.GITEA_TOKEN }}
