@@ -1,3 +1,9 @@
+## [1.7.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.6.1...v1.7.0) (2026-01-16)
+
+### Features
+
+* add cloudflared role for managing Cloudflare Tunnel connectors ([#42](https://github.com/lightning-it/ansible-collection-supplementary/issues/42)) ([f97e997](https://github.com/lightning-it/ansible-collection-supplementary/commit/f97e997ec6f3b878b386e0c9d8f37616dab49690))
+
 ## [1.6.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.6.0...v1.6.1) (2026-01-16)
 
 ### Bug Fixes
