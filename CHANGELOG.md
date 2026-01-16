@@ -1,3 +1,9 @@
+## [1.6.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.6.0...v1.6.1) (2026-01-16)
+
+### Bug Fixes
+
+* ansible role vault consolidation ([#40](https://github.com/lightning-it/ansible-collection-supplementary/issues/40)) ([5cea882](https://github.com/lightning-it/ansible-collection-supplementary/commit/5cea882f4488def73e38664a110afedcdb567b6e))
+
 ## [1.6.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.5.2...v1.6.0) (2026-01-14)
 
 ### Features
