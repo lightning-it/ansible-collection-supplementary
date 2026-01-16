@@ -1,14 +1,74 @@
 ---
+# Vault Pod Basis
+vault_pod_name: "{{ vau_pod_name | default('vault', true) }}"
+vault_pod_manifest_path: "{{ vau_pod_manifest_path | default('/etc/podman/pods/vault.yml', true) }}"
+vault_data_dir: "{{ vau_data_dir | default('/srv/vault/data', true) }}"
+vault_cert_dir: "{{ vau_cert_dir | default('/srv/vault/certs', true) }}"
+vault_config_dir: "{{ vau_config_dir | default('/srv/vault/config', true) }}"
+vault_image: "{{ vau_image | default('docker.io/hashicorp/vault:1.21', true) }}"
+
+# Network
+vault_port: "{{ vau_port | default(8200, true) }}"
+vault_addr: "{{ vau_addr | default('http://127.0.0.1:' ~ vault_port, true) }}"
+vault_host_ip: >-
+  {{
+    vau_host_ip
+      | default(
+          ansible_default_ipv4.address
+            | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1')),
+          true
+        )
+  }}
+
+# Vault Hostname + PKI
+vault_vault_hostname: "{{ vau_vault_hostname | default('vault.local', true) }}"
+vault_vault_address: "{{ vau_vault_address | default(g_vault_addr, true) }}"
+vault_vault_validate_certs: "{{ vau_vault_validate_certs | default(true, true) }}"
+vault_engine_mount_point: "{{ vau_engine_mount_point | default('stage-2c', true) }}"
+vault_hashi_vault_auth_method: "{{ vau_hashi_vault_auth_method | default('approle', true) }}"
+vault_vault_pki_path: "{{ vau_vault_pki_path | default('pki-inter-ec-2025/issue', true) }}"
+vault_vault_pki_role: "{{ vau_vault_pki_role | default('limited_dns_2y', true) }}"
+
+# Ansible Vault handling
+vault_ansible_vault_pw: "{{ vau_ansible_vault_pw | default('', true) }}"
+vault_encrypt_init: "{{ vau_encrypt_init | default(true, true) }}"
+
+# Auto-Unseal (optional)
+vault_auto_unseal: "{{ vau_auto_unseal | default(false, true) }}"
+vault_auto_unseal_method: "{{ vau_auto_unseal_method | default('transit', true) }}"
+vault_auto_unseal_mount_path: "{{ vau_auto_unseal_mount_path | default('transit/', true) }}"
+vault_auto_unseal_key_name: "{{ vau_auto_unseal_key_name | default('vault-unseal', true) }}"
+vault_auto_unseal_token: "{{ vau_auto_unseal_token | default('', true) }}"
+
+# Init & Unseal
+vault_init_path: "{{ vau_init_path | default('../../host_vars/' ~ inventory_hostname, true) }}"
+
+# Systemd
+vault_systemd_unit_name: >-
+  {{
+    vau_systemd_unit_name | default(
+      'podman-kube@'
+      ~ (vault_pod_manifest_path | basename | regex_replace('\\.yml$', ''))
+      ~ '.service',
+      true
+    )
+  }}
+vault_manage_systemd: true
+vault_skip_runtime: false
+vault_pki_enabled: true
+
+# Configure vault
 vault_terraformstate_baseurl: >-
-  https://gitlab.com/api/v4/projects/70576743/terraform/state
-vault_url: ""
-vault_token: ""
-vault_terraform_source: ""
-vault_secret_stores: []
-vault_policies: []
-vault_approle_secrets: []
-vault_vault_pki_roots: []
-vault_vault_pki_intermediates: []
-vault_vault_pki_roles: []
-vault_terragrunt_template: ../vault/templates/vault.hcl.j2
-vault_skip_terragrunt: false
+  {{
+    vau_terraformstate_baseurl
+      | default('https://gitlab.com/api/v4/projects/70576743/terraform/state', true)
+  }}
+vault_url: "{{ vau_url | default('', true) }}"
+vault_token: "{{ vau_token | default('', true) }}"
+vault_terraform_source: "{{ vau_terraform_source | default('', true) }}"
+vault_secret_stores: "{{ vau_secret_stores | default([], true) }}"
+vault_policies: "{{ vau_policies | default([], true) }}"
+vault_approle_secrets: "{{ vau_approle_secrets | default([], true) }}"
+vault_vault_pki_roots: "{{ vau_vault_pki_roots | default([], true) }}"
+vault_vault_pki_intermediates: "{{ vau_vault_pki_intermediates | default([], true) }}"
+vault_vault_pki_roles: "{{ vau_vault_pki_roles | default([], true) }}"

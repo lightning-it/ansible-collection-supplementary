@@ -1,0 +1,25 @@
+---
+- name: Install required base packages
+  ansible.builtin.package:
+    name: "{{ vault_packages }}"
+    state: present
+  tags:
+    - install
+
+- name: Install required Python dependencies for HashiCorp Vault
+  ansible.builtin.pip:
+    name:
+      - cryptography
+    executable: pip3
+  when: ansible_distribution in ['RedHat', 'CentOS']
+
+- name: Ensure podman socket and service are enabled
+  ansible.builtin.systemd:
+    name: podman.socket
+    enabled: true
+    state: started
+  when:
+    - vault_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+  tags:
+    - install

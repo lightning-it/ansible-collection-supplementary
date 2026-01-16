@@ -1,0 +1,32 @@
+---
+- name: Manage vault systemd unit
+  when:
+    - vault_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+  tags:
+    - systemd
+  block:
+    - name: Escape kube play manifest path
+      ansible.builtin.command:
+        cmd: "systemd-escape {{ vault_pod_manifest_path }}"
+      register: vault_systemd_name
+      changed_when: false
+
+    - name: Enable and start Podman kube systemd unit
+      ansible.builtin.systemd:
+        name: "podman-kube@{{ vault_systemd_name.stdout }}.service"
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Wait until Vault API is reachable via HTTPS
+      ansible.builtin.uri:
+        url: "https://{{ vault_host_ip }}:{{ vault_port }}/v1/sys/health"
+        method: GET
+        validate_certs: false
+      register: vault_health
+      until: vault_health.status in [200, 429, 472, 473, 501, 503]
+      retries: 30               # 30 Versuche
+      delay: 5                  # alle 5 Sekunden neu probieren
+      changed_when: false
+      failed_when: vault_health is failed and vault_health.status not in [200, 429, 472, 473, 501, 503]
