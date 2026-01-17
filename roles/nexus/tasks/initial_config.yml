@@ -1,0 +1,174 @@
+---
+- name: Read nexus admin password from Vault (if exists)
+  delegate_to: localhost
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ nex_vault_address }}"
+    engine_mount_point: "{{ nex_engine_mount_point }}"
+    auth_method: "{{ nex_hashi_vault_auth_method }}"
+    role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
+    secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
+    validate_certs: "{{ nex_vault_validate_certs }}"
+    path: "{{ ansible_hostname }}/nexus/admin"
+  register: vault_nexus_admin_password
+  failed_when: false
+  no_log: true
+  tags:
+    - sonatype_nexus_config
+    - config
+
+- name: Set fact
+  ansible.builtin.set_fact:
+    nex_nexus_target_admin_password: "{{ vault_nexus_admin_password.data.data.password }}"
+  when: vault_nexus_admin_password.data is defined and
+        vault_nexus_admin_password.data.data.password is defined
+  tags:
+    - sonatype_nexus_config
+
+- name: Set fact nex_nexus_target_admin_password
+  when: nex_nexus_target_admin_password is not defined
+  ansible.builtin.set_fact:
+    nex_nexus_target_admin_password: "{{ lookup('community.general.random_string', length=32) }}"
+  tags:
+    - sonatype_nexus_config
+
+- name: Write Nexus admin password to Vault
+  delegate_to: localhost
+  community.hashi_vault.vault_kv2_write:
+    url: "{{ nex_vault_address }}"
+    engine_mount_point: "{{ nex_engine_mount_point }}"
+    auth_method: "{{ nex_hashi_vault_auth_method }}"
+    role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
+    secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
+    validate_certs: "{{ nex_vault_validate_certs }}"
+    path: "{{ ansible_hostname }}/nexus/admin"
+    data:
+      password: "{{ nex_nexus_target_admin_password }}"
+  no_log: true
+  when: vault_nexus_admin_password.data is not defined or
+        vault_nexus_admin_password.data.data.password != nex_nexus_target_admin_password
+  tags:
+    - sonatype_nexus_config
+
+- name: Wait until Nexus API is ready
+  ansible.builtin.uri:
+    url: "https://{{ nex_nexus_hostname }}/service/rest/v1/status"
+    method: GET
+    validate_certs: "{{ nex_validate_certs }}"
+  register: result
+  until: result.status == 200
+  retries: 30
+  delay: 10
+  tags:
+    - sonatype_nexus_config
+
+- name: Check if initial admin password file exists
+  ansible.builtin.stat:
+    path: "{{ nex_nexus_data_dir }}/admin.password"
+  register: admin_pwd_file_stat
+  tags:
+    - sonatype_nexus_config
+
+- name: Get initial password
+  when: admin_pwd_file_stat.stat.exists
+  tags:
+    - sonatype_nexus_config
+  block:
+    - name: Read generated admin password
+      ansible.builtin.slurp:
+        src: "{{ nex_nexus_data_dir }}/admin.password"
+      register: admin_pwd_file
+      no_log: true
+
+    - name: Set fact
+      ansible.builtin.set_fact:
+        nex_nexus_initial_admin_password: "{{ admin_pwd_file['content'] | b64decode | trim }}"
+      no_log: true
+
+    - name: Set new admin password
+      ansible.builtin.uri:
+        url: "https://{{ nex_nexus_hostname }}/service/rest/v1/security/users/admin/change-password"
+        method: PUT
+        user: admin
+        password: "{{ nex_nexus_initial_admin_password }}"
+        body: "{{ nex_nexus_target_admin_password }}"
+        headers:
+          Content-Type: text/plain
+          accept: application/json
+        body_format: raw
+        force_basic_auth: true
+        validate_certs: "{{ nex_validate_certs }}"
+        status_code: 204
+      no_log: true
+
+- name: Set Anonmous access to {{ nex_nexus_disable_anonymous }}
+  ansible.builtin.uri:
+    url: "https://{{ nex_nexus_hostname }}/service/rest/v1/security/anonymous"
+    user: admin
+    password: "{{ nex_nexus_target_admin_password }}"
+    method: PUT
+    force_basic_auth: true
+    validate_certs: "{{ nex_validate_certs }}"
+    status_code: 200
+    body: |
+      {
+        "enabled": "{{ nex_nexus_disable_anonymous | string }}",
+        "userId": "anonymous",
+        "realmName": "NexusAuthorizingRealm"
+      }
+    body_format: json
+  no_log: true
+  tags:
+    - sonatype_nexus_config
+
+- name: Configure Nexus HTTP/HTTPS proxy via ExtDirect API
+  vars:
+    http_data:
+      httpEnabled: "{{ nex_http_proxy_enabled }}"
+      httpAuthEnabled: "{{ nex_http_proxy_auth_enabled }}"
+      httpHost: "{{ nex_http_proxy_host }}"
+      httpPort: "{{ nex_http_proxy_port }}"
+      httpAuthUsername: "{{ nex_http_proxy_auth_username }}"
+      httpAuthPassword: "{{ nex_http_proxy_auth_password }}"
+    https_data:
+      httpsEnabled: "{{ nex_https_proxy_enabled }}"
+      httpsAuthEnabled: "{{ nex_https_proxy_auth_enabled }}"
+      httpsHost: "{{ nex_https_proxy_host }}"
+      httpsPort: "{{ nex_https_proxy_port }}"
+      httpsAuthUsername: "{{ nex_https_proxy_auth_username }}"
+      httpsAuthPassword: "{{ nex_https_proxy_auth_password }}"
+  ansible.builtin.uri:
+    url: "https://{{ nex_nexus_hostname }}/service/extdirect"
+    method: POST
+    user: admin
+    password: "{{ nexus_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ nex_validate_certs }}"
+    headers:
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      action: coreui_HttpSettings
+      method: update
+      type: rpc
+      tid: 1
+      data:
+        - httpEnabled: "{{ nex_http_proxy_enabled }}"
+          httpAuthEnabled: "{{ nex_http_proxy_auth_enabled }}"
+          httpHost: "{{ nex_http_proxy_host }}"
+          httpPort: "{{ nex_http_proxy_port }}"
+          httpAuthUsername: "{{ nex_http_proxy_auth_username }}"
+          httpAuthPassword: "{{ nex_http_proxy_auth_password }}"
+          httpsEnabled: "{{ nex_https_proxy_enabled }}"
+          httpsAuthEnabled: "{{ nex_https_proxy_auth_enabled }}"
+          httpsHost: "{{ nex_https_proxy_host }}"
+          httpsPort: "{{ nex_https_proxy_port }}"
+          httpsAuthUsername: "{{ nex_https_proxy_auth_username }}"
+          httpsAuthPassword: "{{ nex_https_proxy_auth_password }}"
+          nonProxyHosts: []
+          timeout: null
+          retries: null
+    status_code: 200
+  register: nex_proxy_settings
+  no_log: true
+  tags:
+    - sonatype_nexus_config

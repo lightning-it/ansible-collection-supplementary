@@ -1,0 +1,47 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ nex_pod_name }}
+spec:
+  containers:
+  - name: nexus
+    image: {{ nex_nexus_image }}
+    ports:
+    - containerPort: 8081
+    volumeMounts:
+    - mountPath: /nexus-data
+      name: nexus-data
+      readOnly: false
+
+  - name: caddy
+    image: {{ nex_caddy_image }}
+    ports:
+    - containerPort: 443
+      hostPort: 443
+      hostIP: {{ nex_nexus_host_ip }}
+    volumeMounts:
+    - mountPath: /etc/caddy/Caddyfile
+      subPath: Caddyfile-ssl
+      name: caddy-config
+    - mountPath: /etc/caddy/certs
+      name: caddy-certs
+
+  volumes:
+  - name: nexus-data
+    hostPath:
+      path: {{ nex_nexus_data_dir }}
+      type: DirectoryOrCreate
+    selinuxRelabel: true
+
+  - name: caddy-config
+    hostPath:
+      path: {{ nex_caddy_config_dir }}
+      type: DirectoryOrCreate
+    selinuxRelabel: true
+
+  - name: caddy-certs
+    hostPath:
+      path: {{ nex_caddy_certs_dir }}
+      type: DirectoryOrCreate
+    selinuxRelabel: true

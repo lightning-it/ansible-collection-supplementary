@@ -1,0 +1,28 @@
+name: lint-release
+on: [push] # noqa yaml[truthy]
+jobs:
+  ansible_lint:
+    name: Ansible Lint
+    runs-on: ubuntu-latest
+    container:
+      image: gitea.degert-it.de/container/ansible-lint-runner:latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run ansible-lint
+        run: ansible-lint -v
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: ansible_lint
+    if:
+      contains('refs/heads/main', github.ref)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Semantic Release
+        uses: cycjimmy/semantic-release-action@v4
+        with:
+          extra_plugins: |
+            @saithodev/semantic-release-gitea
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
