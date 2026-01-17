@@ -1,14 +1,31 @@
 ---
-- name: Abort because role is experimental
-  ansible.builtin.fail:
-    msg: >-
-      lit.nexus remains a placeholder; set
-      nexus_experimental_acknowledge=true to run stub logic.
-  when: not nexus_experimental_acknowledge | bool
+- name: Ensure all needed vars are present
+  ansible.builtin.include_tasks: assert.yml
+  tags:
+    - always
 
-- name: (Skeleton) Install & run Nexus ({{ nexus_service_mode }})
-  ansible.builtin.debug:
-    msg: >-
-      Nexus {{ nexus_version }} mode={{ nexus_service_mode }}
-      data={{ nexus_data_dir }} port={{ nexus_http_port }}
-  when: nexus_experimental_acknowledge | bool
+- name: Ensure required packages are installed
+  ansible.builtin.include_tasks: install_packages.yml
+  tags:
+    - install
+
+- name: Include PKI certificate generation
+  ansible.builtin.include_tasks: vault_pki.yml
+  when: nex_use_vault_pki
+  tags:
+    - vault_pki
+
+- name: Deploy Nexus Pod
+  ansible.builtin.include_tasks: deploy_pod.yml
+  tags:
+    - deployment
+
+- name: Install systemd unit for Nexus Pod
+  ansible.builtin.include_tasks: systemd.yml
+  tags:
+    - systemd
+
+- name: Configuration via api
+  ansible.builtin.include_tasks: initial_config.yml
+  tags:
+    - sonatype_nexus_config

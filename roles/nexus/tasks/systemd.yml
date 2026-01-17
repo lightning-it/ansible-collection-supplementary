@@ -1,0 +1,25 @@
+---
+- name: Escape kube play manifest path
+  ansible.builtin.command:
+    cmd: "systemd-escape {{ nex_pod_manifest_path }}"
+  register: nexus_systemd_name
+  changed_when: false
+  tags:
+    - systemd
+
+- name: Enable and start Podman kube systemd unit
+  ansible.builtin.systemd:
+    name: "podman-kube@{{ nexus_systemd_name.stdout }}.service"
+    enabled: true
+    state: started
+    daemon_reload: true
+  ignore_errors: "{{ ansible_check_mode }}"
+  tags:
+    - systemd
+
+- name: Verify Nexus pod is running
+  ansible.builtin.command: podman pod ps --filter name={{ nex_pod_name }}
+  register: pod_status
+  changed_when: false
+  tags:
+    - systemd

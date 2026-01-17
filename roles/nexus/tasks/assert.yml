@@ -1,0 +1,7 @@
+---
+- name: assert | Test all variable are defined
+  ansible.builtin.assert:
+    that:
+      - nex_nexus_hostname | length > 0
+    quiet: true
+  tags: always

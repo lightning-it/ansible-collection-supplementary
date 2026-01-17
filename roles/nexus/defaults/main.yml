@@ -1,7 +1,49 @@
 ---
-nexus_experimental_acknowledge: false
+nex_nexus_hostname: ''
+nex_nexus_host_ip: "{{ ansible_default_ipv4.address | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1')) }}"
+nex_validate_certs: false
+nex_nexus_disable_anonymous: false
+nex_nexus_image: docker.io/sonatype/nexus3:latest
+nex_caddy_image: docker.io/caddy:2
 
-nexus_service_mode: "podman"      # systemd|podman
-nexus_version: "3.68.0"
-nexus_data_dir: "/var/lib/nexus-data"
-nexus_http_port: 8081
+nex_nexus_data_dir: /srv/nexus-data
+nex_caddy_config_dir: /srv/caddy/config
+nex_caddy_certs_dir: /srv/caddy/certs
+
+nex_pod_name: nexus
+nex_pod_manifest_path: /etc/podman/pods/nexus.yml
+
+nex_nexus_target_admin_username: admin
+nex_http_proxy_enabled: false
+nex_http_proxy_host: "proxy.mycompany.com"
+nex_http_proxy_port: 3128
+
+nex_http_proxy_auth_enabled: false
+nex_http_proxy_auth_username: ""
+nex_http_proxy_auth_password: ""
+
+nex_https_proxy_enabled: false
+nex_https_proxy_host: "proxy.mycompany.com"
+nex_https_proxy_port: 3128
+
+nex_https_proxy_auth_enabled: false
+nex_https_proxy_auth_username: ""
+nex_https_proxy_auth_password: ""
+
+# SSL
+nex_use_vault_pki: true
+nex_vault_address: "{{ g_vault_addr }}"
+nex_vault_auth_method: approle
+nex_vault_validate_certs: true
+nex_vault_pki_role: "limited_dns_2y"
+nex_vault_pki_path: "pki-inter-ec-2025/issue"
+nex_engine_mount_point: stage-2c
+
+# Systemd
+nex_systemd_unit_name: nexus-pod.service
+
+# Terragrunt
+nex_terraformstate_baseurl: ''
+nex_nexus_insecure: false
+nex_terraform_source: ''
+nex_nexus_repository_docker_proxy: []

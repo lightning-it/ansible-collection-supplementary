@@ -1,0 +1,27 @@
+---
+- name: Install required base packages
+  ansible.builtin.package:
+    name:
+      - podman
+      - python3
+      - python3-libselinux
+      - python3-pip
+      - jq
+    state: present
+  tags:
+    - install
+
+# - name: "Install required Python dependencies for HashiCorp Vault
+  # ansible.builtin.pip:
+    # name:
+      # - hvac
+      # - requests
+    # executable: pip3
+
+- name: Ensure podman socket and service are enabled
+  ansible.builtin.systemd:
+    name: podman.socket
+    enabled: true
+    state: started
+  tags:
+    - install
