@@ -1,3 +1,9 @@
+## [1.8.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.7.0...v1.8.0) (2026-01-17)
+
+### Features
+
+* add aap_deploy role with basic functionality and documentation ([#45](https://github.com/lightning-it/ansible-collection-supplementary/issues/45)) ([c627319](https://github.com/lightning-it/ansible-collection-supplementary/commit/c627319269791cb537588af88b5cc4f0299ee695))
+
 ## [1.7.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.6.1...v1.7.0) (2026-01-16)
 
 ### Features
