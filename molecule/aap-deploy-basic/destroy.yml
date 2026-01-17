@@ -1,0 +1,5 @@
+---
+- name: Destroy aap_deploy scenario
+  hosts: localhost
+  gather_facts: false
+  tasks: []
