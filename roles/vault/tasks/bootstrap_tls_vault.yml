@@ -1,13 +1,22 @@
 ---
-- name: Ensure directories exist for Vault certs and data
+- name: Ensure directories exist for Vault certs and config
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
     mode: '0755'
   loop:
-    - "{{ vault_data_dir }}"
     - "{{ vault_cert_dir }}"
     - "{{ vault_config_dir }}"
+  tags:
+    - init
+
+- name: Ensure Vault data directory exists
+  ansible.builtin.file:
+    path: "{{ vault_data_dir }}"
+    state: directory
+    owner: "{{ vault_run_as_user | default(100) }}"
+    group: "{{ vault_run_as_group | default(1000) }}"
+    mode: '0700'
   tags:
     - init
 
@@ -27,8 +36,30 @@
   tags:
     - vault_pki
 
+- name: Check for existing local bootstrap certs
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ vault_cert_dir }}/vault.key"
+    - "{{ vault_cert_dir }}/vault.crt"
+  register: vault_bootstrap_certs
+  tags:
+    - init
+
+- name: Set bootstrap cert presence flag
+  ansible.builtin.set_fact:
+    vault_bootstrap_cert_present: >-
+      {{
+        (vault_bootstrap_certs.results[0].stat.exists | default(false))
+        and (vault_bootstrap_certs.results[1].stat.exists | default(false))
+      }}
+  tags:
+    - init
+
 - name: Create tmp selfsigned certificate
-  when: existing_cert.data is not defined
+  when:
+    - existing_cert.data is not defined
+    - not vault_bootstrap_cert_present | bool
   block:
     - name: Create private key (RSA, 4096 bits)
       community.crypto.openssl_privatekey:

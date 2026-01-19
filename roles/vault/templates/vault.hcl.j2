@@ -25,7 +25,7 @@ generate "backend" {
   contents  = <<EOF
 terraform {
   backend "local" {
-    path = "../../../../../../../tfstate/{{ inventory_hostname }}-terraform.tfstate"
+    path = "{{ vault_terraform_state_path }}"
   }
 }
 EOF

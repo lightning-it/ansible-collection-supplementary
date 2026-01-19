@@ -19,13 +19,20 @@
 - name: Write root_token to file
   delegate_to: localhost
   ansible.builtin.copy:
-    content: "{{ (vault_unseal_keys_encrypted | from_json).root_token }}"
+    content: "{{ vault_unseal_payload.root_token }}"
     dest: "~/.vault-token"
     mode: "0600"
   no_log: true
   tags:
     - always
   when: vault_unseal_keys_encrypted is defined
+  vars:
+    vault_unseal_payload: >-
+      {{
+        vault_unseal_keys_encrypted
+        if vault_unseal_keys_encrypted is mapping
+        else (vault_unseal_keys_encrypted | string | from_json)
+      }}
 
 - name: Bootstrap TLS
   ansible.builtin.include_tasks: bootstrap_tls_vault.yml
@@ -52,16 +59,101 @@
   tags:
     - unseal
 
-- name: Run terragrunt to configure vault
-  vars:  # noqa var-naming[no-role-prefix]
-    ter_terragrunt_template: ../vault/templates/vault.hcl.j2
-  ansible.builtin.include_role:
-    name: terragrunt
+- name: Load init vars when missing (terragrunt)
+  delegate_to: localhost
+  ansible.builtin.include_vars:
+    file: "{{ vault_init_path }}/vault-init.yml"
+  when: vault_unseal_keys_encrypted is not defined
+  no_log: true
   tags:
     - config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
+
+- name: Ensure init data is available (terragrunt)
+  ansible.builtin.assert:
+    that:
+      - vault_unseal_keys_encrypted is defined
+    fail_msg: "vault_unseal_keys_encrypted is not defined; expected {{ vault_init_path }}/vault-init.yml"
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Parse init data for root token (terragrunt)
+  ansible.builtin.set_fact:
+    vault_init_data: "{{ vault_unseal_payload }}"
+  no_log: true
+  vars:
+    vault_unseal_payload: >-
+      {{
+        vault_unseal_keys_encrypted
+        if vault_unseal_keys_encrypted is mapping
+        else (vault_unseal_keys_encrypted | string | from_json)
+      }}
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Set root token for terragrunt
+  ansible.builtin.set_fact:
+    vault_root_token: "{{ vault_init_data.root_token }}"
+  no_log: true
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+
+- name: Ensure terragrunt state directory exists
+  ansible.builtin.file:
+    path: "{{ vault_terraform_state_path | dirname }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Set Vault terragrunt template path
+  ansible.builtin.set_fact:
+    vault_terragrunt_template_path: "{{ role_path }}/templates/vault.hcl.j2"
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Run terragrunt to configure vault
+  vars:  # noqa var-naming[no-role-prefix]
+    terragrunt_template: "{{ vault_terragrunt_template_path }}"
+    terragrunt_vault_token: "{{ vault_root_token }}"
+    terragrunt_vault_addr: "{{ vault_vault_address }}"
+    terragrunt_delegate_to: localhost
+  ansible.builtin.include_role:
+    name: lit.foundational.terragrunt
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Bootstrap AppRole credentials
+  ansible.builtin.include_tasks: bootstrap_approle.yml
+  when:
+    - vault_hashi_vault_auth_method == 'approle'
+    - vault_approle_bootstrap | bool
+    - (ansible_hashi_vault_role_id | default('') | length) == 0
+      or (ansible_hashi_vault_secret_id | default('') | length) == 0
+  tags:
+    - vault_pki
 
 - name: Request Vault PKI certificate
   ansible.builtin.include_tasks: vault_pki.yml
