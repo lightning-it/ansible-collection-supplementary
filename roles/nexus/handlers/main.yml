@@ -1,0 +1,14 @@
+---
+- name: Recreate nexus pod
+  ansible.builtin.command: podman pod rm -f nexus
+  register: rm_pod
+  failed_when: rm_pod.rc not in [0,125]
+  changed_when: "'deleted' in rm_pod.stdout"
+  ignore_errors: true
+  notify: Run nexus pod
+
+- name: Run nexus pod
+  ansible.builtin.command:
+    cmd: "podman kube play {{ nexus_pod_manifest_path }}"
+  register: pod_start
+  changed_when: "'created' in pod_start.stdout or 'configured' in pod_start.stdout"

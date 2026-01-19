@@ -16,3 +16,18 @@ Run the bundled Molecule scenario prior to publishing updates:
 ```bash
 molecule test -s default
 ```
+
+### Prerequisites
+#### VAULT login
+```bash
+VAULT_ADDR=https://vault01.example.com:8200 vault login
+```
+#### Deploy Nexus
+```bash
+VAULT_TOKEN=$(cat $HOME/.vault-token) ansible-navigator run playbooks/common/02_nexus.yml -i inventory/ --m stdout -e nexus_vault_auth_method=token -e nexus_vault_validate_certs=false
+```
+
+#### Deploy users (only initial Password can be set)
+```bash
+VAULT_TOKEN=$(cat $HOME/.vault-token) ansible-navigator run playbooks/common/02_nexus.yml -i inventory/ --m stdout -e nexus_vault_auth_method=token -e nexus_vault_validate_certs=false -t users
+```

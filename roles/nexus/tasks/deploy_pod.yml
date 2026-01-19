@@ -1,0 +1,59 @@
+---
+- name: Ensure directories exist for podman volumes
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: 200
+    group: 200
+    mode: '0755'
+  loop:
+    - "{{ nexus_nexus_data_dir }}"
+    - "{{ nexus_caddy_config_dir }}"
+    - "{{ nexus_caddy_certs_dir }}"
+    - "{{ nexus_pod_manifest_path | dirname }}"
+  tags:
+    - deployment
+
+- name: Detect SELinux status
+  ansible.builtin.command: getenforce
+  register: selinux_status
+  changed_when: false
+  failed_when: false
+  tags:
+    - deployment
+
+- name: Apply SELinux context for Nexus & Caddy data dirs
+  ansible.builtin.command: "chcon -Rt container_file_t {{ item }}"
+  loop:
+    - "{{ nexus_nexus_data_dir }}"
+    - "{{ nexus_caddy_config_dir }}"
+    - "{{ nexus_caddy_certs_dir }}"
+  when: selinux_status.stdout == "Enforcing" or selinux_status.stdout == "Permissive"
+  register: selinux_cmd
+  changed_when: selinux_cmd.rc == 0
+  ignore_errors: true
+  tags:
+    - deployment
+
+- name: Render Caddyfile
+  ansible.builtin.template:
+    src: Caddyfile-ssl.j2
+    dest: "{{ nexus_caddy_config_dir }}/Caddyfile-ssl"
+    mode: '0644'
+  notify: Recreate nexus pod
+  tags:
+    - deployment
+
+- name: Render Pod manifest
+  ansible.builtin.template:
+    src: nexus-pod.yml.j2
+    dest: "{{ nexus_pod_manifest_path }}"
+    mode: '0644'
+  notify: Recreate nexus pod
+  tags:
+    - deployment
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - deployment

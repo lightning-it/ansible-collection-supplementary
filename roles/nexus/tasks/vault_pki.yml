@@ -1,0 +1,139 @@
+---
+- name: Try to read existing certificate from Vault {{ nexus_engine_mount_point }}
+  delegate_to: localhost
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ nexus_vault_address }}"
+    engine_mount_point: "{{ nexus_engine_mount_point }}"
+    auth_method: "{{ nexus_vault_auth_method }}"
+    role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
+    secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
+    validate_certs: "{{ nexus_vault_validate_certs }}"
+    path: "{{ ansible_hostname }}/nexus/certificate"
+  register: existing_cert
+  failed_when: false
+  no_log: true
+  tags:
+    - vault_pki
+
+- name: Parse expiry of existing certificate
+  community.crypto.x509_certificate_info:
+    content: "{{ existing_cert.data.data.certificate }}"
+  register: cert_info
+  when: existing_cert.data is defined
+  delegate_to: localhost
+  tags:
+    - vault_pki
+
+- name: Set reference datetime (now + 30 days)
+  ansible.builtin.set_fact:
+    cert_check_time: "{{ (ansible_date_time.epoch | int) + (30 * 24 * 60 * 60) }}"
+  delegate_to: localhost
+  tags:
+    - vault_pki
+
+- name: Get certificate expiry if exists
+  ansible.builtin.set_fact:
+    cert_expiry: >-
+      {{
+        (cert_info.not_after | regex_replace('Z$', '') | to_datetime('%Y%m%d%H%M%S'))
+        .strftime('%s') | int
+      }}
+  when: existing_cert.data is defined
+  delegate_to: localhost
+  tags:
+    - vault_pki
+
+- name: Set default certificate expiry (current time)
+  ansible.builtin.set_fact:
+    cert_expiry: "{{ ansible_date_time.epoch | int }}"
+  when: existing_cert.data is not defined
+  delegate_to: localhost
+  tags:
+    - vault_pki
+
+- name: Request certificate from Vault PKI if not exists or expiring soon
+  community.hashi_vault.vault_write:
+    url: "{{ nexus_vault_address }}"
+    auth_method: "{{ nexus_vault_auth_method }}"
+    role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
+    secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
+    validate_certs: "{{ nexus_vault_validate_certs }}"
+    path: "{{ nexus_vault_pki_path }}/{{ nexus_vault_pki_role }}"
+    data:
+      common_name: "{{ nexus_nexus_hostname }}"
+      alt_names: "localhost,{{ nexus_nexus_hostname }}"
+  register: vault_pki_cert
+  delegate_to: localhost
+  when: existing_cert.data is not defined or
+    (cert_expiry | int) < (cert_check_time | int)
+  notify: Recreate nexus pod
+  tags:
+    - vault_pki
+
+- name: Parse expiry of newly generated certificate
+  community.crypto.x509_certificate_info:
+    content: "{{ vault_pki_cert.data.data.certificate }}"
+  register: new_cert_info
+  when: existing_cert.data is not defined or
+        (cert_expiry | int) < (cert_check_time | int)
+  ignore_errors: "{{ ansible_check_mode }}"
+  delegate_to: localhost
+  tags:
+    - vault_pki
+
+- name: Store newly generated certificate in Vault KV2
+  delegate_to: localhost
+  community.hashi_vault.vault_kv2_write:
+    url: "{{ nexus_vault_address }}"
+    engine_mount_point: "{{ nexus_engine_mount_point }}"
+    auth_method: "{{ nexus_vault_auth_method }}"
+    role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
+    secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
+    validate_certs: "{{ nexus_vault_validate_certs }}"
+    path: "{{ ansible_hostname }}/nexus/certificate"
+    data:
+      certificate: "{{ vault_pki_cert.data.data.certificate }}"
+      private_key: "{{ vault_pki_cert.data.data.private_key }}"
+      issuing_ca: "{{ vault_pki_cert.data.data.issuing_ca }}"
+      not_after: "{{ new_cert_info.not_after }}"
+  when: existing_cert.data is not defined or
+        (cert_expiry | int) < (cert_check_time | int)
+  ignore_errors: "{{ ansible_check_mode }}"
+  no_log: true
+  tags:
+    - vault_pki
+
+- name: Ensure cert directories exist
+  ansible.builtin.file:
+    path: "{{ nexus_caddy_certs_dir }}"
+    state: directory
+    mode: '0755'
+  tags:
+    - vault_pki
+
+- name: Write certificate
+  ansible.builtin.copy:
+    content: "{{ vault_pki_cert.data.data.certificate | default(existing_cert.data.data.certificate) }}"
+    dest: "{{ nexus_caddy_certs_dir }}/{{ nexus_nexus_hostname }}.pem"
+    mode: '0644'
+  ignore_errors: "{{ ansible_check_mode }}"
+  tags:
+    - vault_pki
+
+- name: Write private key
+  ansible.builtin.copy:
+    content: "{{ vault_pki_cert.data.data.private_key | default(existing_cert.data.data.private_key) }}"
+    dest: "{{ nexus_caddy_certs_dir }}/{{ nexus_nexus_hostname }}.key"
+    mode: '0600'
+  ignore_errors: "{{ ansible_check_mode }}"
+  tags:
+    - vault_pki
+
+- name: Write CA chain
+  ansible.builtin.copy:
+    content: "{{ vault_pki_cert.data.data.issuing_ca | default(existing_cert.data.data.issuing_ca) }}"
+    dest: "{{ nexus_caddy_certs_dir }}/ca.pem"
+    mode: '0644'
+  ignore_errors: "{{ ansible_check_mode }}"
+  tags:
+    - vault_pki

@@ -1,13 +1,11 @@
 ---
 galaxy_info:
-  role_name: nexus
-  author: Lightning IT
-  description: >
-    nexus role (RHEL foundation service skeleton). Experimental stub; requires
-    nexus_experimental_acknowledge=true to run placeholder tasks.
-  license: Apache-2.0
-  min_ansible_version: '2.14'
-  platforms:
-    - name: EL
-      versions: ['8', '9']
+  role_name: sonatype_nexus
+  namespace: default
+  author: Dirk Egert
+  description: Role to manage sonatype nexus Installation
+  company: Lightning IT
+  license: license (BSD, MIT)
+  min_ansible_version: '2.8'
+  galaxy_tags: []
 dependencies: []
