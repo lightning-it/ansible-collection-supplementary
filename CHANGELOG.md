@@ -1,3 +1,9 @@
+## [1.9.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.8.0...v1.9.0) (2026-01-19)
+
+### Features
+
+* new nexus role ([#44](https://github.com/lightning-it/ansible-collection-supplementary/issues/44)) ([4d408f1](https://github.com/lightning-it/ansible-collection-supplementary/commit/4d408f1897d598f56fb4938cd28f22f88aefac8a))
+
 ## [1.8.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.7.0...v1.8.0) (2026-01-17)
 
 ### Features
