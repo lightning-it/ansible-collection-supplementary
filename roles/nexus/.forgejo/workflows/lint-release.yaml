@@ -8,7 +8,7 @@ jobs:
     container:
       image: gitea.degert-it.de/container/ansible-lint-runner:latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Run ansible-lint
         run: ansible-lint -v
   release:
@@ -19,7 +19,7 @@ jobs:
       contains('refs/heads/main', github.ref)
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Semantic Release
         uses: cycjimmy/semantic-release-action@v4
         with:
