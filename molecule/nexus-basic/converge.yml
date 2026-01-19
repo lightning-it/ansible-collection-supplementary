@@ -4,5 +4,10 @@
   gather_facts: false
   vars:
     nexus_experimental_acknowledge: true
+    nexus_nexus_hostname: nexus.example.test
+    nexus_manage_podman_socket: false
+    nexus_use_vault_pki: false
+    nexus_manage_systemd: false
+    nexus_skip_initial_config: true
   roles:
     - role: nexus

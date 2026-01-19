@@ -7,10 +7,10 @@
     group: 200
     mode: '0755'
   loop:
-    - "{{ nex_nexus_data_dir }}"
-    - "{{ nex_caddy_config_dir }}"
-    - "{{ nex_caddy_certs_dir }}"
-    - "{{ nex_pod_manifest_path | dirname }}"
+    - "{{ nexus_nexus_data_dir }}"
+    - "{{ nexus_caddy_config_dir }}"
+    - "{{ nexus_caddy_certs_dir }}"
+    - "{{ nexus_pod_manifest_path | dirname }}"
   tags:
     - deployment
 
@@ -25,9 +25,9 @@
 - name: Apply SELinux context for Nexus & Caddy data dirs
   ansible.builtin.command: "chcon -Rt container_file_t {{ item }}"
   loop:
-    - "{{ nex_nexus_data_dir }}"
-    - "{{ nex_caddy_config_dir }}"
-    - "{{ nex_caddy_certs_dir }}"
+    - "{{ nexus_nexus_data_dir }}"
+    - "{{ nexus_caddy_config_dir }}"
+    - "{{ nexus_caddy_certs_dir }}"
   when: selinux_status.stdout == "Enforcing" or selinux_status.stdout == "Permissive"
   register: selinux_cmd
   changed_when: selinux_cmd.rc == 0
@@ -38,7 +38,7 @@
 - name: Render Caddyfile
   ansible.builtin.template:
     src: Caddyfile-ssl.j2
-    dest: "{{ nex_caddy_config_dir }}/Caddyfile-ssl"
+    dest: "{{ nexus_caddy_config_dir }}/Caddyfile-ssl"
     mode: '0644'
   notify: Recreate nexus pod
   tags:
@@ -47,7 +47,7 @@
 - name: Render Pod manifest
   ansible.builtin.template:
     src: nexus-pod.yml.j2
-    dest: "{{ nex_pod_manifest_path }}"
+    dest: "{{ nexus_pod_manifest_path }}"
     mode: '0644'
   notify: Recreate nexus pod
   tags:

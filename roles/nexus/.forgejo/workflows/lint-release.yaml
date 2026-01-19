@@ -1,5 +1,6 @@
+---
 name: lint-release
-on: [push] # noqa yaml[truthy]
+"on": [push]
 jobs:
   ansible_lint:
     name: Ansible Lint

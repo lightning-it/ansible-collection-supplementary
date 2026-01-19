@@ -11,7 +11,7 @@
 
 - name: Include PKI certificate generation
   ansible.builtin.include_tasks: vault_pki.yml
-  when: nex_use_vault_pki
+  when: nexus_use_vault_pki
   tags:
     - vault_pki
 
@@ -22,10 +22,12 @@
 
 - name: Install systemd unit for Nexus Pod
   ansible.builtin.include_tasks: systemd.yml
+  when: nexus_manage_systemd | bool
   tags:
     - systemd
 
 - name: Configuration via api
   ansible.builtin.include_tasks: initial_config.yml
+  when: not nexus_skip_initial_config | bool
   tags:
     - sonatype_nexus_config
