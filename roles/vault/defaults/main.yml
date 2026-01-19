@@ -6,6 +6,11 @@ vault_data_dir: "{{ vau_data_dir | default('/srv/vault/data', true) }}"
 vault_cert_dir: "{{ vau_cert_dir | default('/srv/vault/certs', true) }}"
 vault_config_dir: "{{ vau_config_dir | default('/srv/vault/config', true) }}"
 vault_image: "{{ vau_image | default('docker.io/hashicorp/vault:1.21', true) }}"
+vault_run_as_user: "{{ vau_run_as_user | default(100, true) }}"
+vault_run_as_group: "{{ vau_run_as_group | default(1000, true) }}"
+vault_run_as_non_root: "{{ vau_run_as_non_root | default(true, true) }}"
+vault_skip_setcap: "{{ vau_skip_setcap | default(true, true) }}"
+vault_add_ipc_lock_cap: "{{ vau_add_ipc_lock_cap | default(false, true) }}"
 
 # Network
 vault_port: "{{ vau_port | default(8200, true) }}"
@@ -24,6 +29,7 @@ vault_host_ip: >-
 vault_vault_hostname: "{{ vau_vault_hostname | default('vault.local', true) }}"
 vault_vault_address: "{{ vau_vault_address | default(g_vault_addr, true) }}"
 vault_vault_validate_certs: "{{ vau_vault_validate_certs | default(true, true) }}"
+vault_api_delegate_to: localhost
 vault_engine_mount_point: "{{ vau_engine_mount_point | default('stage-2c', true) }}"
 vault_hashi_vault_auth_method: "{{ vau_hashi_vault_auth_method | default('approle', true) }}"
 vault_vault_pki_path: "{{ vau_vault_pki_path | default('pki-inter-ec-2025/issue', true) }}"
@@ -66,9 +72,31 @@ vault_terraformstate_baseurl: >-
 vault_url: "{{ vau_url | default('', true) }}"
 vault_token: "{{ vau_token | default('', true) }}"
 vault_terraform_source: "{{ vau_terraform_source | default('', true) }}"
+vault_terraform_state_path: >-
+  {{
+    vau_terraform_state_path
+      | default('../../../../../../../tfstate/' ~ inventory_hostname ~ '-terraform.tfstate', true)
+  }}
 vault_secret_stores: "{{ vau_secret_stores | default([], true) }}"
 vault_policies: "{{ vau_policies | default([], true) }}"
 vault_approle_secrets: "{{ vau_approle_secrets | default([], true) }}"
+vault_approle_role_name: >-
+  {{
+    (vault_approle_secrets[0].role_name
+      if (vault_approle_secrets | length > 0
+          and vault_approle_secrets[0].role_name is defined)
+      else ('ansible-' ~ inventory_hostname))
+  }}
+vault_approle_policy_name: >-
+  {{
+    (vault_approle_secrets[0].token_policy
+      if (vault_approle_secrets | length > 0
+          and vault_approle_secrets[0].token_policy is defined)
+      else ('vault-pki-' ~ inventory_hostname))
+  }}
+vault_approle_token_ttl: ""
+vault_approle_token_max_ttl: ""
+vault_approle_bootstrap: true
 vault_vault_pki_roots: "{{ vau_vault_pki_roots | default([], true) }}"
 vault_vault_pki_intermediates: "{{ vau_vault_pki_intermediates | default([], true) }}"
 vault_vault_pki_roles: "{{ vau_vault_pki_roles | default([], true) }}"

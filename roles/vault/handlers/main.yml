@@ -19,6 +19,15 @@
 - name: Write root_token to file
   delegate_to: localhost
   ansible.builtin.copy:
-    content: "{{ (vault_unseal_keys_encrypted | from_json).root_token }}"
+    content: "{{ vault_unseal_payload.root_token }}"
     dest: "~/.vault-token"
     mode: "0600"
+  no_log: true
+  vars:
+    vault_unseal_payload: >-
+      {{
+        vault_unseal_keys_encrypted
+        if vault_unseal_keys_encrypted is mapping
+        else (vault_unseal_keys_encrypted | string | from_json)
+      }}
+  when: vault_unseal_keys_encrypted is defined

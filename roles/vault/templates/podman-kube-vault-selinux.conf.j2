@@ -1,0 +1,2 @@
+[Service]
+ExecStartPost=/bin/sh -c 'label="$(podman inspect {{ vault_container_name | default(vault_pod_name ~ "-vault") }} --format "{{ '{{.MountLabel}}' }}")"; if [ -n "$label" ]; then level="${label#*:*:*:}"; chcon -R -t container_file_t -l "$level" {{ vault_data_dir }} {{ vault_cert_dir }} {{ vault_config_dir }} || true; fi'

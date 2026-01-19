@@ -1,6 +1,6 @@
 ---
 - name: Try to read existing certificate from Vault
-  delegate_to: localhost
+  delegate_to: "{{ vault_api_delegate_to }}"
   community.hashi_vault.vault_kv2_get:
     url: "{{ vault_vault_address }}"
     engine_mount_point: "{{ vault_engine_mount_point }}"
@@ -20,14 +20,14 @@
     content: "{{ existing_cert.data.data.certificate }}"
   register: cert_info
   when: existing_cert.data is defined
-  delegate_to: localhost
+  delegate_to: "{{ vault_api_delegate_to }}"
   tags:
     - vault_pki
 
 - name: Set reference datetime (now + 30 days)
   ansible.builtin.set_fact:
     cert_check_time: "{{ (ansible_date_time.epoch | int) + (30 * 24 * 60 * 60) }}"
-  delegate_to: localhost
+  delegate_to: "{{ vault_api_delegate_to }}"
   tags:
     - vault_pki
 
@@ -41,7 +41,7 @@
         .strftime('%s') | int
       }}
   when: existing_cert.data is defined
-  delegate_to: localhost
+  delegate_to: "{{ vault_api_delegate_to }}"
   tags:
     - vault_pki
 
@@ -49,7 +49,7 @@
   ansible.builtin.set_fact:
     cert_expiry: "{{ ansible_date_time.epoch | int }}"
   when: existing_cert.data is not defined
-  delegate_to: localhost
+  delegate_to: "{{ vault_api_delegate_to }}"
   tags:
     - vault_pki
 
@@ -65,7 +65,7 @@
       common_name: "{{ vault_vault_hostname }}"
       alt_names: "localhost,{{ vault_vault_hostname }}"
   register: vault_pki_cert
-  delegate_to: localhost
+  delegate_to: "{{ vault_api_delegate_to }}"
   when: existing_cert.data is not defined
   no_log: true
   notify:
@@ -88,12 +88,12 @@
   register: new_cert_info
   when: existing_cert.data is not defined or
         (cert_expiry | int) < (cert_check_time | int)
-  delegate_to: localhost
+  delegate_to: "{{ vault_api_delegate_to }}"
   tags:
     - vault_pki
 
 - name: Store newly generated certificate in Vault KV2
-  delegate_to: localhost
+  delegate_to: "{{ vault_api_delegate_to }}"
   community.hashi_vault.vault_kv2_write:
     url: "{{ vault_vault_address }}"
     engine_mount_point: "{{ vault_engine_mount_point }}"

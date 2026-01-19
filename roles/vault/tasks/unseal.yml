@@ -13,16 +13,42 @@
   tags:
     - unseal
 
+- name: Load init vars when missing
+  delegate_to: localhost
+  ansible.builtin.include_vars:
+    file: "{{ vault_init_path }}/vault-init.yml"
+  when: vault_unseal_keys_encrypted is not defined
+  no_log: true
+  tags:
+    - unseal
+
+- name: Ensure init data is available
+  ansible.builtin.assert:
+    that:
+      - vault_unseal_keys_encrypted is defined
+    fail_msg: "vault_unseal_keys_encrypted is not defined; expected {{ vault_init_path }}/vault-init.yml"
+  tags:
+    - unseal
+
 - name: Read init file
   delegate_to: localhost
   ansible.builtin.set_fact:
-    vault_init_data: "{{ vault_unseal_keys_encrypted | from_json }}"
+    vault_init_data: "{{ vault_unseal_payload }}"
+  no_log: true
+  vars:
+    vault_unseal_payload: >-
+      {{
+        vault_unseal_keys_encrypted
+        if vault_unseal_keys_encrypted is mapping
+        else (vault_unseal_keys_encrypted | string | from_json)
+      }}
   tags:
     - unseal
 
 - name: Parse unseal keys
   ansible.builtin.set_fact:
     vault_unseal_keys: "{{ vault_init_data.unseal_keys_b64 }}"
+  no_log: true
   tags:
     - unseal
 

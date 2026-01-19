@@ -17,10 +17,19 @@ spec:
       env:
         - name: VAULT_ADDR
           value: "https://0.0.0.0:{{ vault_port }}"
+{% if vault_skip_setcap | bool %}
+        - name: SKIP_SETCAP
+          value: "1"
+{% endif %}
       securityContext:
+        runAsUser: {{ vault_run_as_user }}
+        runAsGroup: {{ vault_run_as_group }}
+        runAsNonRoot: {{ vault_run_as_non_root | bool | ternary('true', 'false') }}
+{% if vault_add_ipc_lock_cap | bool %}
         capabilities:
           add:
             - CAP_IPC_LOCK
+{% endif %}
       volumeMounts:
         - name: data
           mountPath: /vault/data
@@ -33,11 +42,14 @@ spec:
       hostPath:
         path: {{ vault_data_dir }}
         type: Directory
+      selinuxRelabel: true
     - name: vault-config
       hostPath:
         path: "{{ vault_config_dir }}"
         type: DirectoryOrCreate
+      selinuxRelabel: true
     - name: certs
       hostPath:
         path: {{ vault_cert_dir }}
         type: Directory
+      selinuxRelabel: true

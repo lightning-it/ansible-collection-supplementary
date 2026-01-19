@@ -27,8 +27,30 @@
   tags:
     - vault_pki
 
+- name: Check for existing local bootstrap certs
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ vault_cert_dir }}/vault.key"
+    - "{{ vault_cert_dir }}/vault.crt"
+  register: vault_bootstrap_certs
+  tags:
+    - init
+
+- name: Set bootstrap cert presence flag
+  ansible.builtin.set_fact:
+    vault_bootstrap_cert_present: >-
+      {{
+        (vault_bootstrap_certs.results[0].stat.exists | default(false))
+        and (vault_bootstrap_certs.results[1].stat.exists | default(false))
+      }}
+  tags:
+    - init
+
 - name: Create tmp selfsigned certificate
-  when: existing_cert.data is not defined
+  when:
+    - existing_cert.data is not defined
+    - not vault_bootstrap_cert_present | bool
   block:
     - name: Create private key (RSA, 4096 bits)
       community.crypto.openssl_privatekey:
