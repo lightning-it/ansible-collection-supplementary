@@ -1,3 +1,9 @@
+## [1.10.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.9.0...v1.10.0) (2026-01-19)
+
+### Features
+
+* new ansible role vault ([#47](https://github.com/lightning-it/ansible-collection-supplementary/issues/47)) ([43b25c4](https://github.com/lightning-it/ansible-collection-supplementary/commit/43b25c4bec8fbdf0eafb3dee7ca62cbffa6ae4cf))
+
 ## [1.9.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.8.0...v1.9.0) (2026-01-19)
 
 ### Features
