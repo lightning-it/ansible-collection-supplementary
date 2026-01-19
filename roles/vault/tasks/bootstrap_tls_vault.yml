@@ -1,13 +1,22 @@
 ---
-- name: Ensure directories exist for Vault certs and data
+- name: Ensure directories exist for Vault certs and config
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
     mode: '0755'
   loop:
-    - "{{ vault_data_dir }}"
     - "{{ vault_cert_dir }}"
     - "{{ vault_config_dir }}"
+  tags:
+    - init
+
+- name: Ensure Vault data directory exists
+  ansible.builtin.file:
+    path: "{{ vault_data_dir }}"
+    state: directory
+    owner: "{{ vault_run_as_user | default(100) }}"
+    group: "{{ vault_run_as_group | default(1000) }}"
+    mode: '0700'
   tags:
     - init
 
