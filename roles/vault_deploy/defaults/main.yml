@@ -1,0 +1,152 @@
+---
+# Vault Pod Basis
+vault_pod_name: "{{ vau_pod_name | default('vault', true) }}"
+vault_pod_manifest_path: "{{ vau_pod_manifest_path | default('/etc/podman/pods/vault.yml', true) }}"
+vault_data_dir: "{{ vau_data_dir | default('/srv/vault/data', true) }}"
+vault_host_data_dir: "{{ vau_host_data_dir | default(vault_data_dir, true) }}"
+vault_cert_dir: "{{ vau_cert_dir | default('/srv/vault/certs', true) }}"
+vault_config_dir: "{{ vau_config_dir | default('/srv/vault/config', true) }}"
+vault_image: "{{ vau_image | default('docker.io/hashicorp/vault:1.21', true) }}"
+vault_run_as_user: "{{ vau_run_as_user | default(100, true) }}"
+vault_run_as_group: "{{ vau_run_as_group | default(1000, true) }}"
+vault_run_as_non_root: "{{ vau_run_as_non_root | default(true, true) }}"
+vault_skip_setcap: "{{ vau_skip_setcap | default(true, true) }}"
+vault_add_ipc_lock_cap: "{{ vau_add_ipc_lock_cap | default(false, true) }}"
+vault_container_name: "{{ vau_container_name | default(vault_pod_name ~ '-vault', true) }}"
+vault_container_data_dir: "{{ vau_container_data_dir | default('/vault/data', true) }}"
+vault_expected_uid: "{{ vau_expected_uid | default(vault_run_as_user, true) }}"
+vault_expected_gid: "{{ vau_expected_gid | default(vault_run_as_group, true) }}"
+vault_expected_mode: "{{ vau_expected_mode | default('0700', true) }}"
+vault_selinux_relabel: "{{ vau_selinux_relabel | default(true, true) }}"
+
+# Network
+vault_port: "{{ vau_port | default(8200, true) }}"
+vault_addr: "{{ vau_addr | default('http://127.0.0.1:' ~ vault_port, true) }}"
+vault_api_scheme: "{{ vau_api_scheme | default('https', true) }}"
+vault_api_url: "{{ vault_api_scheme }}://{{ vault_host_ip }}:{{ vault_port }}"
+vault_health_url: "{{ vault_api_url }}/v1/sys/health"
+vault_host_ip: >-
+  {{
+    vau_host_ip
+      | default(
+          ansible_default_ipv4.address
+            | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1')),
+          true
+        )
+  }}
+
+# Vault Hostname + PKI
+vault_vault_hostname: "{{ vau_vault_hostname | default('vault.local', true) }}"
+vault_vault_address: "{{ vau_vault_address | default(g_vault_addr, true) }}"
+vault_vault_validate_certs: "{{ vau_vault_validate_certs | default(true, true) }}"
+vault_api_delegate_to: localhost
+vault_engine_mount_point: "{{ vau_engine_mount_point | default('stage-2c', true) }}"
+vault_hashi_vault_auth_method: "{{ vau_hashi_vault_auth_method | default('approle', true) }}"
+vault_vault_pki_path: "{{ vau_vault_pki_path | default('pki-inter-ec-2025/issue', true) }}"
+vault_vault_pki_role: "{{ vau_vault_pki_role | default('limited_dns_2y', true) }}"
+
+# Ansible Vault handling
+vault_ansible_vault_pw: "{{ vau_ansible_vault_pw | default('', true) }}"
+vault_encrypt_init: "{{ vau_encrypt_init | default(true, true) }}"
+
+# Auto-Unseal (optional)
+vault_auto_unseal: "{{ vau_auto_unseal | default(false, true) }}"
+vault_auto_unseal_method: "{{ vau_auto_unseal_method | default('transit', true) }}"
+vault_auto_unseal_mount_path: "{{ vau_auto_unseal_mount_path | default('transit/', true) }}"
+vault_auto_unseal_key_name: "{{ vau_auto_unseal_key_name | default('vault-unseal', true) }}"
+vault_auto_unseal_token: "{{ vau_auto_unseal_token | default('', true) }}"
+
+# Init & Unseal
+vault_project_root: "{{ lookup('env', 'PWD') | default('/runner/project', true) }}"
+vault_init_path: "{{ vau_init_path | default(vault_project_root ~ '/host_vars/' ~ inventory_hostname, true) }}"
+
+# Systemd
+vault_systemd_unit_name: >-
+  {{
+    vau_systemd_unit_name | default(
+      'podman-kube@'
+      ~ (vault_pod_manifest_path | basename | regex_replace('\\.yml$', ''))
+      ~ '.service',
+      true
+    )
+  }}
+vault_manage_systemd: true
+vault_skip_runtime: false
+vault_skip_deploy: false
+vault_skip_config: false
+vault_pki_enabled: true
+vault_wrapper_bootstrap: "{{ vau_wrapper_bootstrap | default(false, true) }}"
+vault_wrapper_config: "{{ vau_wrapper_config | default(false, true) }}"
+vault_wrapper_validate_pre: "{{ vau_wrapper_validate_pre | default(false, true) }}"
+vault_wrapper_validate_post: "{{ vau_wrapper_validate_post | default(false, true) }}"
+
+# Configure vault
+vault_terraformstate_baseurl: >-
+  {{
+    vau_terraformstate_baseurl
+      | default('https://gitlab.com/api/v4/projects/70576743/terraform/state', true)
+  }}
+vault_url: "{{ vau_url | default('', true) }}"
+vault_token: "{{ vau_token | default('', true) }}"
+vault_terraform_source: "{{ vau_terraform_source | default('', true) }}"
+vault_terraform_state_path: >-
+  {{
+    vau_terraform_state_path
+      | default('../../../../../../../tfstate/' ~ inventory_hostname ~ '-terraform.tfstate', true)
+  }}
+vault_secret_stores: "{{ vau_secret_stores | default([], true) }}"
+vault_policies: "{{ vau_policies | default([], true) }}"
+vault_approle_secrets: "{{ vau_approle_secrets | default([], true) }}"
+vault_approle_role_name: >-
+  {{
+    (vault_approle_secrets[0].role_name
+      if (vault_approle_secrets | length > 0
+          and vault_approle_secrets[0].role_name is defined)
+      else ('ansible-' ~ inventory_hostname))
+  }}
+vault_approle_policy_name: >-
+  {{
+    (vault_approle_secrets[0].token_policy
+      if (vault_approle_secrets | length > 0
+          and vault_approle_secrets[0].token_policy is defined)
+      else ('vault-pki-' ~ inventory_hostname))
+  }}
+vault_approle_token_ttl: ""
+vault_approle_token_max_ttl: ""
+vault_approle_bootstrap: true
+vault_approle_primary_role_name: "{{ vau_approle_primary_role_name | default('', true) }}"
+vault_vault_pki_roots: "{{ vau_vault_pki_roots | default([], true) }}"
+vault_vault_pki_intermediates: "{{ vau_vault_pki_intermediates | default([], true) }}"
+vault_vault_pki_roles: "{{ vau_vault_pki_roles | default([], true) }}"
+
+# Bootstrap
+vault_bootstrap_init: "{{ vau_bootstrap_init | default(false, true) }}"
+vault_bootstrap_key_shares: "{{ vau_bootstrap_key_shares | default(5, true) }}"
+vault_bootstrap_key_threshold: "{{ vau_bootstrap_key_threshold | default(3, true) }}"
+vault_bootstrap_write_init_output: "{{ vau_bootstrap_write_init_output | default(false, true) }}"
+vault_bootstrap_encrypt_init_output: "{{ vau_bootstrap_encrypt_init_output | default(vault_encrypt_init, true) }}"
+vault_bootstrap_init_output_path: >-
+  {{ vau_bootstrap_init_output_path
+     | default(vault_init_path ~ '/vault-init.yml', true) }}
+vault_bootstrap_use_init_file: "{{ vau_bootstrap_use_init_file | default(false, true) }}"
+vault_unseal_keys: "{{ vau_unseal_keys | default([], true) }}"
+
+# Config
+vault_write_root_token_file: "{{ vau_write_root_token_file | default(false, true) }}"
+vault_allow_token_from_init: "{{ vau_allow_token_from_init | default(true, true) }}"
+
+# Validate
+vault_validate_mode: "{{ vau_validate_mode | default('fail', true) }}"
+
+# Backup/Restore
+vault_backup_action: "{{ vau_backup_action | default('none', true) }}"
+vault_backup_dir: "{{ vau_backup_dir | default('/srv/vault/backups', true) }}"
+vault_backup_retention_keep_last: "{{ vau_backup_retention_keep_last | default(14, true) }}"
+vault_backup_stop_service_for_file_backend: "{{ vau_backup_stop_service_for_file_backend | default(true, true) }}"
+vault_restore_source: "{{ vau_restore_source | default('', true) }}"
+vault_restore_confirm: "{{ vau_restore_confirm | default('', true) }}"
+vault_backup_validate_after_restore: "{{ vau_backup_validate_after_restore | default(true, true) }}"
+
+# Ops
+vault_ops_action: "{{ vau_ops_action | default('none', true) }}"
+vault_ops_target_image: "{{ vau_ops_target_image | default('', true) }}"

@@ -1,0 +1,139 @@
+---
+- name: Check Vault initialization status
+  ansible.builtin.uri:
+    url: "{{ vault_api_url }}/v1/sys/init"
+    method: GET
+    validate_certs: "{{ vault_vault_validate_certs }}"
+  register: vault_init_status
+  changed_when: false
+  failed_when: vault_init_status.status not in [200]
+  tags:
+    - init
+    - bootstrap
+
+- name: Set Vault initialized flag
+  ansible.builtin.set_fact:
+    vault_initialized: "{{ vault_init_status.json.initialized | default(false) }}"
+  tags:
+    - init
+    - bootstrap
+
+- name: Fail when Vault is not initialized and bootstrap is disabled
+  ansible.builtin.fail:
+    msg: "Vault is not initialized; set vault_bootstrap_init=true to initialize."
+  when:
+    - not vault_initialized | bool
+    - not vault_bootstrap_init | bool
+  tags:
+    - init
+    - bootstrap
+
+- name: Initialize Vault
+  ansible.builtin.command: >-
+    podman exec {{ vault_container_name }}
+    env VAULT_ADDR=https://127.0.0.1:8200
+    vault operator init -format=json
+    -key-shares {{ vault_bootstrap_key_shares }}
+    -key-threshold {{ vault_bootstrap_key_threshold }}
+    -tls-skip-verify
+  register: vault_init_result
+  changed_when: true
+  no_log: true
+  when:
+    - not vault_initialized | bool
+    - vault_bootstrap_init | bool
+  tags:
+    - init
+    - bootstrap
+
+- name: Parse Vault init payload
+  ansible.builtin.set_fact:
+    vault_init_payload: "{{ vault_init_result.stdout | from_json }}"
+  no_log: true
+  when:
+    - vault_init_result is defined
+    - vault_init_result.stdout | default('') | length > 0
+  tags:
+    - init
+    - bootstrap
+
+- name: Ensure init output directory exists
+  ansible.builtin.file:
+    path: "{{ vault_bootstrap_init_output_path | dirname }}"
+    state: directory
+    mode: '0755'
+  when:
+    - vault_bootstrap_write_init_output | bool
+    - vault_init_payload is defined
+  tags:
+    - init
+    - bootstrap
+
+- name: Fail when vault_ansible_vault_pw is missing for encryption
+  ansible.builtin.fail:
+    msg: "vault_ansible_vault_pw is required to encrypt Vault init output."
+  when:
+    - vault_bootstrap_write_init_output | bool
+    - vault_bootstrap_encrypt_init_output | bool
+    - vault_ansible_vault_pw | default('') | length == 0
+  tags:
+    - init
+    - bootstrap
+
+- name: Write encrypted init output
+  when:
+    - vault_bootstrap_write_init_output | bool
+    - vault_bootstrap_encrypt_init_output | bool
+    - vault_init_payload is defined
+  no_log: true
+  tags:
+    - init
+    - bootstrap
+  block:
+    - name: Create temp vault password file
+      ansible.builtin.tempfile:
+        state: file
+        suffix: vault_pw
+      register: vault_pw_file
+
+    - name: Write vault password to temp file
+      ansible.builtin.copy:
+        content: "{{ vault_ansible_vault_pw }}"
+        dest: "{{ vault_pw_file.path }}"
+        mode: "0600"
+
+    - name: Encrypt init payload
+      ansible.builtin.command: >-
+        ansible-vault encrypt_string
+        --vault-password-file {{ vault_pw_file.path }}
+        '{{ vault_init_payload | to_json }}'
+        --name 'vault_unseal_keys_encrypted'
+      register: vault_encrypted_init
+      changed_when: true
+
+    - name: Remove temp vault password file
+      ansible.builtin.file:
+        path: "{{ vault_pw_file.path }}"
+        state: absent
+
+    - name: Write encrypted Vault init file locally
+      delegate_to: localhost
+      ansible.builtin.copy:
+        dest: "{{ vault_bootstrap_init_output_path }}"
+        content: "{{ vault_encrypted_init.stdout }}"
+        mode: "0600"
+
+- name: Write plain init output
+  delegate_to: localhost
+  ansible.builtin.copy:
+    dest: "{{ vault_bootstrap_init_output_path }}"
+    content: "{{ vault_init_payload | to_json }}"
+    mode: "0600"
+  no_log: true
+  when:
+    - vault_bootstrap_write_init_output | bool
+    - not vault_bootstrap_encrypt_init_output | bool
+    - vault_init_payload is defined
+  tags:
+    - init
+    - bootstrap

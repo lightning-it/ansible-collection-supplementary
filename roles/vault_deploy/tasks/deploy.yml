@@ -1,0 +1,94 @@
+---
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+  when: ansible_distribution in ['Debian', 'Ubuntu', 'RedHat', 'CentOS']
+
+- name: Map legacy unseal variable
+  ansible.builtin.set_fact:
+    vault_unseal_keys_encrypted: "{{ vault_unseal_keys_encrypted | default(vau_unseal_keys_encrypted, true) }}"
+  when:
+    - vault_unseal_keys_encrypted is not defined
+    - vau_unseal_keys_encrypted is defined
+  tags: always
+
+- name: Check for init file when Vault token is missing
+  ansible.builtin.stat:
+    path: "{{ vault_init_path }}/vault-init.yml"
+  register: vault_init_file
+  delegate_to: localhost
+  when:
+    - vault_allow_token_from_init | bool
+    - vault_unseal_keys_encrypted is not defined
+    - vault_token | default('', true) | trim | length == 0
+    - vault_root_token | default('', true) | trim | length == 0
+  tags: always
+
+- name: Load init vars when allowed and available
+  ansible.builtin.include_vars:
+    file: "{{ vault_init_path }}/vault-init.yml"
+  delegate_to: localhost
+  when:
+    - vault_allow_token_from_init | bool
+    - vault_unseal_keys_encrypted is not defined
+    - vault_token | default('', true) | trim | length == 0
+    - vault_root_token | default('', true) | trim | length == 0
+    - vault_init_file.stat.exists | default(false)
+  no_log: true
+  tags: always
+
+- name: Derive Vault token from init payload when missing
+  ansible.builtin.set_fact:
+    vault_root_token: "{{ vault_unseal_payload.root_token | default(vault_root_token | default('')) }}"
+    vault_token: "{{ vault_unseal_payload.root_token | default(vault_token | default('')) }}"
+  vars:
+    vault_unseal_payload: >-
+      {{
+        vault_unseal_keys_encrypted
+        if vault_unseal_keys_encrypted is mapping
+        else (vault_unseal_keys_encrypted | string | from_json)
+      }}
+  when:
+    - vault_unseal_keys_encrypted is defined
+    - vault_token | default('', true) | trim | length == 0
+    - vault_root_token | default('', true) | trim | length == 0
+  no_log: true
+  tags: always
+
+- name: Deploy Vault runtime
+  when: not vault_skip_runtime | bool
+  block:
+    - name: Ensure required packages are installed
+      ansible.builtin.include_tasks: install_packages.yml
+      tags:
+        - install
+
+    - name: Bootstrap TLS
+      ansible.builtin.include_tasks: bootstrap_tls_vault.yml
+      tags:
+        - bootstrap
+
+    - name: Deploy Vault Pod
+      ansible.builtin.include_tasks: deploy_pod.yml
+      tags:
+        - deployment
+
+    - name: Install systemd unit for Vault Pod
+      ansible.builtin.include_tasks: systemd.yml
+      tags:
+        - systemd
+
+    - name: Wait until Vault API is reachable via HTTPS (non-systemd)
+      ansible.builtin.uri:
+        url: "{{ vault_health_url }}"
+        method: GET
+        validate_certs: "{{ vault_vault_validate_certs }}"
+      register: vault_health
+      until: vault_health.status in [200, 429, 472, 473, 501, 503]
+      retries: 30
+      delay: 5
+      changed_when: false
+      failed_when: vault_health is failed and vault_health.status not in [200, 429, 472, 473, 501, 503]
+      when: not vault_manage_systemd | bool
+      tags:
+        - deployment
+        - api

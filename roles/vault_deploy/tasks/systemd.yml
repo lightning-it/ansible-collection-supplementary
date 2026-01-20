@@ -1,0 +1,51 @@
+---
+- name: Manage vault systemd unit
+  when:
+    - vault_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+  tags:
+    - systemd
+  block:
+    - name: Escape kube play manifest path
+      ansible.builtin.command:
+        cmd: "systemd-escape {{ vault_pod_manifest_path }}"
+      register: vault_systemd_name
+      changed_when: false
+
+    - name: Ensure podman-kube drop-in directory exists
+      ansible.builtin.file:
+        path: "/etc/systemd/system/podman-kube@{{ vault_systemd_name.stdout }}.service.d"
+        state: directory
+        mode: '0755'
+
+    - name: Install Vault SELinux relabel drop-in
+      ansible.builtin.template:
+        src: podman-kube-vault-selinux.conf.j2
+        dest: "/etc/systemd/system/podman-kube@{{ vault_systemd_name.stdout }}.service.d/selinux-relabel.conf"
+        mode: '0644'
+      register: vault_systemd_dropin
+      when: vault_selinux_relabel | bool
+
+    - name: Enable and start Podman kube systemd unit
+      ansible.builtin.systemd:
+        name: "podman-kube@{{ vault_systemd_name.stdout }}.service"
+        enabled: true
+        state: >-
+          {{
+            (vault_systemd_dropin is defined
+             and (vault_systemd_dropin.changed | default(false)))
+            | ternary('restarted', 'started')
+          }}
+        daemon_reload: true
+
+    - name: Wait until Vault API is reachable via HTTPS
+      ansible.builtin.uri:
+        url: "{{ vault_health_url }}"
+        method: GET
+        validate_certs: "{{ vault_vault_validate_certs }}"
+      register: vault_health
+      until: vault_health.status in [200, 429, 472, 473, 501, 503]
+      retries: 30               # 30 Versuche
+      delay: 5                  # alle 5 Sekunden neu probieren
+      changed_when: false
+      failed_when: vault_health is failed and vault_health.status not in [200, 429, 472, 473, 501, 503]
