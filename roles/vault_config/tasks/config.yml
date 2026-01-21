@@ -3,14 +3,6 @@
   ansible.builtin.include_tasks: assert_config.yml
   tags: always
 
-- name: Map legacy unseal variable
-  ansible.builtin.set_fact:
-    vault_unseal_keys_encrypted: "{{ vault_unseal_keys_encrypted | default(vau_unseal_keys_encrypted, true) }}"
-  when:
-    - vault_unseal_keys_encrypted is not defined
-    - vau_unseal_keys_encrypted is defined
-  tags: always
-
 - name: Check Vault seal status
   ansible.builtin.uri:
     url: "{{ vault_api_url }}/v1/sys/seal-status"
@@ -43,56 +35,6 @@
             else (lookup('env', 'VAULT_TOKEN') | default('', true) | trim)))
       }}
   no_log: true
-  tags:
-    - config
-    - terragrunt_validate
-    - terragrunt_plan
-    - terragrunt_apply
-
-- name: Check for init file when Vault token is missing
-  ansible.builtin.stat:
-    path: "{{ vault_init_path }}/vault-init.yml"
-  register: vault_init_file
-  delegate_to: localhost
-  when:
-    - vault_allow_token_from_init | bool
-    - vault_root_token | length == 0
-  tags:
-    - config
-    - terragrunt_validate
-    - terragrunt_plan
-    - terragrunt_apply
-
-- name: Load init vars when allowed and available
-  delegate_to: localhost
-  ansible.builtin.include_vars:
-    file: "{{ vault_init_path }}/vault-init.yml"
-  when:
-    - vault_allow_token_from_init | bool
-    - vault_root_token | length == 0
-    - vault_init_file.stat.exists | default(false)
-  no_log: true
-  tags:
-    - config
-    - terragrunt_validate
-    - terragrunt_plan
-    - terragrunt_apply
-
-- name: Parse init data for root token when allowed
-  ansible.builtin.set_fact:
-    vault_root_token: "{{ vault_unseal_payload.root_token | default(vault_root_token) }}"
-  no_log: true
-  vars:
-    vault_unseal_payload: >-
-      {{
-        vault_unseal_keys_encrypted
-        if vault_unseal_keys_encrypted is mapping
-        else (vault_unseal_keys_encrypted | string | from_json)
-      }}
-  when:
-    - vault_allow_token_from_init | bool
-    - vault_root_token | length == 0
-    - vault_unseal_keys_encrypted is defined
   tags:
     - config
     - terragrunt_validate

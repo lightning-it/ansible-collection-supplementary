@@ -3,57 +3,6 @@
   ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
   when: ansible_distribution in ['Debian', 'Ubuntu', 'RedHat', 'CentOS']
 
-- name: Map legacy unseal variable
-  ansible.builtin.set_fact:
-    vault_unseal_keys_encrypted: "{{ vault_unseal_keys_encrypted | default(vau_unseal_keys_encrypted, true) }}"
-  when:
-    - vault_unseal_keys_encrypted is not defined
-    - vau_unseal_keys_encrypted is defined
-  tags: always
-
-- name: Check for init file when Vault token is missing
-  ansible.builtin.stat:
-    path: "{{ vault_init_path }}/vault-init.yml"
-  register: vault_init_file
-  delegate_to: localhost
-  when:
-    - vault_allow_token_from_init | bool
-    - vault_unseal_keys_encrypted is not defined
-    - vault_token | default('', true) | trim | length == 0
-    - vault_root_token | default('', true) | trim | length == 0
-  tags: always
-
-- name: Load init vars when allowed and available
-  ansible.builtin.include_vars:
-    file: "{{ vault_init_path }}/vault-init.yml"
-  delegate_to: localhost
-  when:
-    - vault_allow_token_from_init | bool
-    - vault_unseal_keys_encrypted is not defined
-    - vault_token | default('', true) | trim | length == 0
-    - vault_root_token | default('', true) | trim | length == 0
-    - vault_init_file.stat.exists | default(false)
-  no_log: true
-  tags: always
-
-- name: Derive Vault token from init payload when missing
-  ansible.builtin.set_fact:
-    vault_root_token: "{{ vault_unseal_payload.root_token | default(vault_root_token | default('')) }}"
-    vault_token: "{{ vault_unseal_payload.root_token | default(vault_token | default('')) }}"
-  vars:
-    vault_unseal_payload: >-
-      {{
-        vault_unseal_keys_encrypted
-        if vault_unseal_keys_encrypted is mapping
-        else (vault_unseal_keys_encrypted | string | from_json)
-      }}
-  when:
-    - vault_unseal_keys_encrypted is defined
-    - vault_token | default('', true) | trim | length == 0
-    - vault_root_token | default('', true) | trim | length == 0
-  no_log: true
-  tags: always
-
 - name: Deploy Vault runtime
   when: not vault_skip_runtime | bool
   block:

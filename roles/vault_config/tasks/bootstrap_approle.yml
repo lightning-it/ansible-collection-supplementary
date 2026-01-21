@@ -1,28 +1,4 @@
 ---
-- name: Load init vars when missing
-  delegate_to: localhost
-  ansible.builtin.include_vars:
-    file: "{{ vault_init_path }}/vault-init.yml"
-  when: vault_unseal_keys_encrypted is not defined
-  no_log: true
-
-- name: Parse init data for root token
-  ansible.builtin.set_fact:
-    vault_init_data: "{{ vault_unseal_payload }}"
-  no_log: true
-  vars:
-    vault_unseal_payload: >-
-      {{
-        vault_unseal_keys_encrypted
-        if vault_unseal_keys_encrypted is mapping
-        else (vault_unseal_keys_encrypted | string | from_json)
-      }}
-
-- name: Set root token for bootstrapping
-  ansible.builtin.set_fact:
-    vault_root_token: "{{ vault_init_data.root_token }}"
-  no_log: true
-
 - name: Build default AppRole policy
   ansible.builtin.set_fact:
     vault_approle_default_policy: "{{ vault_approle_policy | default(_vault_approle_policy, true) }}"

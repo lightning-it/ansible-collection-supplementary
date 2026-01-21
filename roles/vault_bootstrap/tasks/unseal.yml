@@ -18,34 +18,14 @@
     - unseal
     - bootstrap
 
-- name: Load init vars for unseal keys when allowed
-  delegate_to: localhost
-  ansible.builtin.include_vars:
-    file: "{{ vault_bootstrap_init_output_path }}"
-  when:
-    - vault_sealed | bool
-    - vault_unseal_keys | default([]) | length == 0
-    - vault_bootstrap_use_init_file | bool
-  no_log: true
-  tags:
-    - unseal
-    - bootstrap
-
 - name: Parse unseal keys from init payload
   ansible.builtin.set_fact:
-    vault_unseal_keys: "{{ vault_unseal_payload.unseal_keys_b64 | default([]) }}"
+    vault_unseal_keys: "{{ vault_init_payload.unseal_keys_b64 | default([]) }}"
   no_log: true
-  vars:
-    vault_unseal_payload: >-
-      {{
-        vault_unseal_keys_encrypted
-        if vault_unseal_keys_encrypted is mapping
-        else (vault_unseal_keys_encrypted | string | from_json)
-      }}
   when:
     - vault_sealed | bool
     - vault_unseal_keys | default([]) | length == 0
-    - vault_unseal_keys_encrypted is defined
+    - vault_init_payload is defined
   tags:
     - unseal
     - bootstrap

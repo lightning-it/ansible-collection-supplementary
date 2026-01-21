@@ -67,10 +67,10 @@
     vault_container_name: "{{ vault_pod_name }}-vault"
   when: vault_pod_name is defined
 
-- name: Check SELinux context
-  ansible.builtin.command: "stat -c %C {{ item }}"
+- name: Check SELinux context for Vault mounts
+  ansible.builtin.stat:
+    path: "{{ item }}"
   loop:
-    - "{{ vault_host_data_dir | dirname }}"
     - "{{ vault_host_data_dir }}"
     - "{{ vault_cert_dir }}"
     - "{{ vault_config_dir }}"
@@ -86,9 +86,13 @@
     - selinux_status.stdout != 'Disabled'
 
 - name: Apply SELinux context
-  ansible.builtin.command: "chcon -Rt container_file_t {{ vault_host_data_dir }}"
+  ansible.builtin.command: >-
+    chcon -Rt container_file_t
+    {{ vault_host_data_dir }}
+    {{ vault_cert_dir }}
+    {{ vault_config_dir }}
   register: selinux_cmd
-  changed_when: selinux_cmd.rc == 0
+  changed_when: selinux_type_missing | bool
   notify:
     - Recreate vault pod
     - Run vault pod
@@ -101,14 +105,22 @@
     - selinux_status.stdout != 'Disabled'
     - selinux_contexts is defined
     - selinux_contexts.results is defined
-    - >
-      (selinux_contexts.results
-       | map(attribute='stdout')
-       | select('search', 'container_file_t')
-       | list
-       | length)
-      <
-      (selinux_contexts.results | length)
+    - selinux_type_missing | bool
+  vars:
+    selinux_contexts_defined: >-
+      {{
+        selinux_contexts.results
+        | selectattr('stat.selinux_context', 'defined')
+        | list
+      }}
+    selinux_type_missing: >-
+      {{
+        (selinux_contexts_defined
+         | rejectattr('stat.selinux_context', 'search', 'container_file_t')
+         | list
+         | length)
+        > 0
+      }}
 
 - name: Render Vault Pod manifest
   ansible.builtin.template:
@@ -147,48 +159,33 @@
   when:
     - vault_container_name is defined
 
-- name: Read Vault data dir ownership inside container
-  ansible.builtin.command: >-
-    podman exec --user 0 {{ vault_container_name }}
-    stat -c '%u:%g %a' {{ vault_container_data_dir }}
-  register: vault_data_stat
+- name: Read Podman rootless status
+  ansible.builtin.command: "podman info --format {{ '{{.Host.Security.Rootless}}' }}"
+  register: vault_podman_rootless
   changed_when: false
   failed_when: false
   tags:
     - deployment
   when:
-    - vault_container_running.stdout is defined
-    - vault_container_running.stdout | trim == 'true'
+    - vault_container_name is defined
 
-- name: Fix Vault data dir ownership inside container
-  ansible.builtin.command: >-
-    podman exec --user 0 {{ vault_container_name }} sh -c
-    'mkdir -p {{ vault_container_data_dir }}/core {{ vault_container_data_dir }}/sys
-    && chown -R {{ vault_run_as_user | default(100) }}:{{ vault_run_as_group | default(1000) }}
-    {{ vault_container_data_dir }}
-    && chmod 0700 {{ vault_container_data_dir }}
-    {{ vault_container_data_dir }}/core {{ vault_container_data_dir }}/sys'
-  register: vault_data_fix
-  changed_when: vault_data_fix.rc == 0
-  notify:
-    - Recreate vault pod
-    - Run vault pod
+- name: Read Vault data dir ownership on host
+  ansible.builtin.stat:
+    path: "{{ vault_host_data_dir }}"
+  register: vault_host_data_stat
+  changed_when: false
   tags:
     - deployment
-  when:
-    - vault_container_running.stdout is defined
-    - vault_container_running.stdout | trim == 'true'
-    - vault_data_stat.stdout is defined
-    - vault_data_stat.stdout | trim
-      != (vault_run_as_user | default(100) | string)
-         ~ ':' ~ (vault_run_as_group | default(1000) | string)
-         ~ ' 700'
 
 
 - name: Read Vault container uid map (inspect)
-  ansible.builtin.command: >-
-    podman inspect {{ vault_container_name }}
-    --format {{ '{{range .HostConfig.IDMappings.UidMap}}{{println .ContainerID .HostID .Size}}{{end}}' }}
+  ansible.builtin.command:
+    argv:
+      - podman
+      - inspect
+      - "{{ vault_container_name }}"
+      - --format
+      - "{% raw %}{{range .HostConfig.IDMappings.UidMap}}{{println .ContainerID .HostID .Size}}{{end}}{% endraw %}"
   register: vault_uid_map_inspect
   changed_when: false
   failed_when: false
@@ -198,9 +195,13 @@
     - vault_container_name is defined
 
 - name: Read Vault container gid map (inspect)
-  ansible.builtin.command: >-
-    podman inspect {{ vault_container_name }}
-    --format {{ '{{range .HostConfig.IDMappings.GidMap}}{{println .ContainerID .HostID .Size}}{{end}}' }}
+  ansible.builtin.command:
+    argv:
+      - podman
+      - inspect
+      - "{{ vault_container_name }}"
+      - --format
+      - "{% raw %}{{range .HostConfig.IDMappings.GidMap}}{{println .ContainerID .HostID .Size}}{{end}}{% endraw %}"
   register: vault_gid_map_inspect
   changed_when: false
   failed_when: false
