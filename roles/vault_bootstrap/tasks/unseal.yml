@@ -18,6 +18,18 @@
     - unseal
     - bootstrap
 
+- name: Map vault_init to unseal keys when provided
+  ansible.builtin.set_fact:
+    vault_unseal_keys: "{{ vault_init.unseal_keys_b64 | default([]) }}"
+  no_log: true
+  when:
+    - vault_unseal_keys | default([]) | length == 0
+    - vault_init is defined
+    - vault_init.unseal_keys_b64 | default([]) | length > 0
+  tags:
+    - unseal
+    - bootstrap
+
 - name: Parse unseal keys from init payload
   ansible.builtin.set_fact:
     vault_unseal_keys: "{{ vault_init_payload.unseal_keys_b64 | default([]) }}"

@@ -22,6 +22,22 @@
   tags:
     - config
 
+- name: Map vault_init root token when provided
+  ansible.builtin.set_fact:
+    vault_root_token: "{{ vault_init.root_token | default('', true) | trim }}"
+  no_log: true
+  when:
+    - vault_root_token | default('', true) | trim | length == 0
+    - vault_token | default('', true) | trim | length == 0
+    - root_token | default('', true) | trim | length == 0
+    - vault_init is defined
+    - vault_init.root_token | default('', true) | trim | length > 0
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
 - name: Set Vault token from vars or environment
   ansible.builtin.set_fact:
     vault_root_token: >-
