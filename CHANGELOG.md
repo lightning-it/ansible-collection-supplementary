@@ -1,3 +1,9 @@
+## [1.11.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.10.0...v1.11.0) (2026-01-22)
+
+### Features
+
+* ansible role vault refactored ([#48](https://github.com/lightning-it/ansible-collection-supplementary/issues/48)) ([102f515](https://github.com/lightning-it/ansible-collection-supplementary/commit/102f51539a1352999246e1e469da2aaaad25ecb3))
+
 ## [1.10.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.9.0...v1.10.0) (2026-01-19)
 
 ### Features
