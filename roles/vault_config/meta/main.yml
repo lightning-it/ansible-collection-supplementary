@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: Dirk Egert
+  description: Role to configure Vault (independent of platform)
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: '2.18'
+  role_name: vault_config
+  namespace: default
+  galaxy_tags: []
+dependencies: []

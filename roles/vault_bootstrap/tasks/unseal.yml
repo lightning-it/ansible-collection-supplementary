@@ -1,0 +1,70 @@
+---
+- name: Check Vault seal status
+  ansible.builtin.uri:
+    url: "{{ vault_api_url }}/v1/sys/seal-status"
+    method: GET
+    validate_certs: "{{ vault_vault_validate_certs }}"
+  register: vault_seal_status
+  changed_when: false
+  failed_when: vault_seal_status.status not in [200]
+  tags:
+    - unseal
+    - bootstrap
+
+- name: Set Vault sealed flag
+  ansible.builtin.set_fact:
+    vault_sealed: "{{ vault_seal_status.json.sealed | default(true) }}"
+  tags:
+    - unseal
+    - bootstrap
+
+- name: Map vault_init to unseal keys when provided
+  ansible.builtin.set_fact:
+    vault_unseal_keys: "{{ vault_init.unseal_keys_b64 | default([]) }}"
+  no_log: true
+  when:
+    - vault_unseal_keys | default([]) | length == 0
+    - vault_init is defined
+    - vault_init.unseal_keys_b64 | default([]) | length > 0
+  tags:
+    - unseal
+    - bootstrap
+
+- name: Parse unseal keys from init payload
+  ansible.builtin.set_fact:
+    vault_unseal_keys: "{{ vault_init_payload.unseal_keys_b64 | default([]) }}"
+  no_log: true
+  when:
+    - vault_sealed | bool
+    - vault_unseal_keys | default([]) | length == 0
+    - vault_init_payload is defined
+  tags:
+    - unseal
+    - bootstrap
+
+- name: Fail when Vault is sealed and no unseal keys were provided
+  ansible.builtin.fail:
+    msg: "Vault is sealed; provide vault_unseal_keys or unseal manually."
+  when:
+    - vault_sealed | bool
+    - vault_unseal_keys | default([]) | length == 0
+  tags:
+    - unseal
+    - bootstrap
+
+- name: Unseal Vault
+  ansible.builtin.command: >-
+    podman exec {{ vault_container_name }}
+    env VAULT_ADDR=https://127.0.0.1:8200
+    vault operator unseal -tls-skip-verify {{ item }}
+  register: vault_unseal_results
+  changed_when: true
+  until: vault_unseal_results.rc == 0
+  retries: 5
+  delay: 2
+  loop: "{{ vault_unseal_keys }}"
+  no_log: true
+  when: vault_sealed | bool
+  tags:
+    - unseal
+    - bootstrap

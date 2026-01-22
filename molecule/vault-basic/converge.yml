@@ -9,4 +9,4 @@
     vault_manage_systemd: false
     vault_skip_runtime: true
   roles:
-    - role: vault
+    - role: vault_deploy

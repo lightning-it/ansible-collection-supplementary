@@ -1,0 +1,146 @@
+---
+# Vault Pod Basis
+vault_pod_name: "vault"
+vault_pod_manifest_path: "/etc/podman/pods/vault.yml"
+vault_data_dir: "/srv/vault/data"
+vault_host_data_dir: "{{ vault_data_dir }}"
+vault_cert_dir: "/srv/vault/certs"
+vault_config_dir: "/srv/vault/config"
+vault_image: "docker.io/hashicorp/vault:1.21"
+vault_run_as_user: 100
+vault_run_as_group: 1000
+vault_run_as_non_root: true
+vault_skip_setcap: true
+vault_add_ipc_lock_cap: false
+vault_container_name: "{{ vault_pod_name }}-vault"
+vault_container_data_dir: "/vault/data"
+vault_expected_uid: "{{ vault_run_as_user }}"
+vault_expected_gid: "{{ vault_run_as_group }}"
+vault_expected_mode: "0700"
+vault_selinux_relabel: true
+
+# Network
+vault_port: 8200
+vault_addr: "http://127.0.0.1:{{ vault_port }}"
+vault_api_scheme: "https"
+vault_api_url: "{{ vault_api_scheme }}://{{ vault_host_ip }}:{{ vault_port }}"
+vault_health_url: "{{ vault_api_url }}/v1/sys/health"
+vault_host_ip: >-
+  {{
+    ansible_default_ipv4.address
+      | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
+  }}
+
+# Vault Hostname + PKI
+vault_vault_hostname: "vault.local"
+vault_vault_address: "{{ g_vault_addr | default('', true) }}"
+vault_vault_validate_certs: true
+vault_api_delegate_to: localhost
+vault_engine_mount_point: "stage-2c"
+vault_hashi_vault_auth_method: "approle"
+vault_vault_pki_path: "pki-inter-ec-2025/issue"
+vault_vault_pki_role: "limited_dns_2y"
+
+# Ansible Vault handling
+vault_ansible_vault_pw: ""
+
+# Auto-Unseal (optional)
+vault_auto_unseal: false
+vault_auto_unseal_method: "transit"
+vault_auto_unseal_mount_path: "transit/"
+vault_auto_unseal_key_name: "vault-unseal"
+vault_auto_unseal_token: ""
+
+# Init & Unseal
+vault_project_root: "{{ lookup('env', 'PWD') | default('/runner/project', true) }}"
+vault_inventory_root: >-
+  {{
+    (ansible_inventory_sources | default([]) | first | dirname)
+      if (ansible_inventory_sources | default([]) | length) > 0
+      else (
+        (inventory_file | dirname)
+          if inventory_file is defined and (inventory_file | length > 0)
+          else (
+            (inventory_dir | dirname)
+              if inventory_dir is defined
+                and (inventory_dir | basename) in ['inventory', 'inventory.yml', 'inventory.yaml']
+              else (inventory_dir | default(vault_project_root, true))
+          )
+      )
+  }}
+vault_bootstrap_persist_dir: "/srv/vault/bootstrap"
+vault_init_file_path: "{{ vault_bootstrap_persist_dir }}/init.json.vault"
+
+# Systemd
+vault_systemd_unit_name: >-
+  {{
+    'podman-kube@'
+    ~ (vault_pod_manifest_path | basename | regex_replace('\\.yml$', ''))
+    ~ '.service'
+  }}
+vault_manage_systemd: true
+vault_skip_runtime: false
+vault_skip_deploy: false
+vault_skip_config: false
+vault_pki_enabled: true
+vault_wrapper_bootstrap: false
+vault_wrapper_config: false
+vault_wrapper_validate_pre: false
+vault_wrapper_validate_post: false
+
+# Configure vault
+vault_terraformstate_baseurl: "https://gitlab.com/api/v4/projects/70576743/terraform/state"
+vault_url: ""
+vault_token: ""
+vault_terraform_source: ""
+vault_terraform_state_path: "../../../../../../../tfstate/{{ inventory_hostname }}-terraform.tfstate"
+vault_secret_stores: []
+vault_policies: []
+vault_approle_secrets: []
+vault_approle_role_name: >-
+  {{
+    (vault_approle_secrets[0].role_name
+      if (vault_approle_secrets | length > 0
+          and vault_approle_secrets[0].role_name is defined)
+      else ('ansible-' ~ inventory_hostname))
+  }}
+vault_approle_policy_name: >-
+  {{
+    (vault_approle_secrets[0].token_policy
+      if (vault_approle_secrets | length > 0
+          and vault_approle_secrets[0].token_policy is defined)
+      else ('vault-pki-' ~ inventory_hostname))
+  }}
+vault_approle_token_ttl: ""
+vault_approle_token_max_ttl: ""
+vault_approle_bootstrap: true
+vault_approle_primary_role_name: ""
+vault_vault_pki_roots: []
+vault_vault_pki_intermediates: []
+vault_vault_pki_roles: []
+
+# Bootstrap
+vault_bootstrap_init: false
+vault_bootstrap_auto_init: true
+vault_bootstrap_key_shares: 5
+vault_bootstrap_key_threshold: 3
+vault_bootstrap_write_init_output: true
+vault_unseal_keys: []
+
+# Config
+
+# Validate
+vault_validate_mode: "fail"
+
+# Backup/Restore
+vault_backup_action: "none"
+vault_backup_dir: "/srv/vault/backups"
+vault_backup_retention_keep_last: 14
+vault_backup_stop_service_for_file_backend: true
+vault_restore_source: ""
+vault_restore_confirm: ""
+vault_backup_validate_after_restore: true
+
+# Ops
+vault_ops_action: "none"
+vault_ops_target_image: ""

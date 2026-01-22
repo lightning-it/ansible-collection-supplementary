@@ -1,0 +1,95 @@
+---
+- name: Ensure required Vault vars are defined
+  ansible.builtin.import_role:
+    name: vault_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure vault_ops_action is valid
+  ansible.builtin.assert:
+    that:
+      - vault_ops_action in ['none', 'restart', 'status', 'upgrade']
+    fail_msg: "vault_ops_action must be one of: none, restart, status, upgrade."
+  tags: always
+
+- name: Restart Vault service
+  when: vault_ops_action == 'restart'
+  tags:
+    - ops
+    - restart
+  block:
+    - name: Restart Vault systemd unit
+      ansible.builtin.systemd:
+        name: "{{ vault_systemd_unit_name }}"
+        state: restarted
+      when: vault_manage_systemd | bool
+
+    - name: Restart Vault pod (non-systemd)
+      ansible.builtin.command: "podman pod restart {{ vault_pod_name }}"
+      register: vault_pod_restart
+      changed_when: vault_pod_restart.rc == 0
+      when: not vault_manage_systemd | bool
+
+    - name: Validate Vault after restart
+      ansible.builtin.include_role:
+        name: vault_validate
+
+- name: Report Vault status
+  when: vault_ops_action == 'status'
+  tags:
+    - ops
+    - status
+  block:
+    - name: Read Vault health status
+      ansible.builtin.uri:
+        url: "{{ vault_health_url }}"
+        method: GET
+        validate_certs: "{{ vault_vault_validate_certs }}"
+      register: vault_health
+      changed_when: false
+      failed_when: false
+
+    - name: Read Vault init status
+      ansible.builtin.uri:
+        url: "{{ vault_api_url }}/v1/sys/init"
+        method: GET
+        validate_certs: "{{ vault_vault_validate_certs }}"
+      register: vault_init_status
+      changed_when: false
+      failed_when: false
+
+    - name: Read Vault seal status
+      ansible.builtin.uri:
+        url: "{{ vault_api_url }}/v1/sys/seal-status"
+        method: GET
+        validate_certs: "{{ vault_vault_validate_certs }}"
+      register: vault_seal_status
+      changed_when: false
+      failed_when: false
+
+    - name: Report Vault API status
+      ansible.builtin.debug:
+        msg: >-
+          health={{ vault_health.status }},
+          init={{ vault_init_status.json.initialized | default('unknown') }},
+          sealed={{ vault_seal_status.json.sealed | default('unknown') }}
+
+- name: Upgrade Vault image
+  when: vault_ops_action == 'upgrade'
+  tags:
+    - ops
+    - upgrade
+  block:
+    - name: Require vault_ops_target_image
+      ansible.builtin.assert:
+        that:
+          - vault_ops_target_image | length > 0
+        fail_msg: "vault_ops_target_image must be set for upgrade."
+
+    - name: Set Vault image override
+      ansible.builtin.set_fact:
+        vault_image: "{{ vault_ops_target_image }}"
+
+    - name: Redeploy Vault with new image
+      ansible.builtin.include_role:
+        name: vault_deploy

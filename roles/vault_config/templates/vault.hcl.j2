@@ -1,0 +1,109 @@
+{% import "macros.j2" as macros %}
+
+# Automatically find the root terragrunt.hcl and inherit its
+# configuration
+include {
+  path = find_in_parent_folders("root.hcl")
+}
+
+terraform {
+  source = "{{ vault_terraform_source }}"
+}
+
+locals {
+  # Parse the file path we're in to read the env name: e.g., env
+  # will be "stag" in the stag folder, "test" in the test folder,
+  # etc.
+  parsed = regex(".*/environments/(?P<env>.*?)", get_terragrunt_dir())
+  env    = local.parsed.env
+}
+
+# Configure gitlab as a backend
+generate "backend" {
+  path      = "backend.tf"
+  if_exists = "overwrite"
+  contents  = <<EOF
+terraform {
+  backend "local" {
+    path = "{{ vault_terraform_state_path }}"
+  }
+}
+EOF
+}
+# terraform {
+#   backend "http" {
+#     address        = "{{ vault_terraformstate_baseurl }}/{{ cluster_id }}-vault"
+#     lock_address   = "{{ vault_terraformstate_baseurl }}/{{ cluster_id }}-vault/lock"
+#     unlock_address = "{{ vault_terraformstate_baseurl }}/{{ cluster_id }}-vault/lock"
+#     lock_method    = "POST"
+#     unlock_method  = "DELETE"
+#   }
+# }
+# EOF
+# }
+
+inputs = {
+  vault_url = "{{ vault_url }}"
+
+{{ macros.render_block(
+  "secret_stores",
+  vault_secret_stores,
+  "path",
+  ["path"],
+  ["description", "type", "options"],
+  {
+    "type": "kv",
+    "options": { "version": "2" }
+  }
+) }}
+
+{{ macros.render_block(
+  "policies",
+  vault_policies,
+  "name",
+  ["name", "policy"],
+  [],
+  {},
+  heredoc_fields=["policy"]
+) }}
+
+{{ macros.render_block(
+  "approle_secrets",
+  (vault_approle_secrets_render | default(vault_approle_secrets)),
+  "role_name",
+  ["role_name", "token_policy"],
+  ["kv_mount", "credential_path", "token_ttl", "token_max_ttl"],
+  {
+    "kv_mount": vault_engine_mount_point,
+    "credential_path": inventory_hostname ~ "/vault/approle"
+  },
+) }}
+
+{{ macros.render_block(
+  "vault_pki_roots",
+  vault_vault_pki_roots,
+  "mount",
+  ["mount", "common_name", "vault_server"],
+  ["ttl", "key_type", "key_bits", "country", "locality", "province", "ou", "organization", "policy_name"],
+  {},
+) }}
+
+{{ macros.render_block(
+  "vault_pki_intermediates",
+  vault_vault_pki_intermediates,
+  "mount",
+  ["mount", "common_name", "signer_root_id", "vault_server"],
+  ["ttl", "max_ttl", "key_type", "key_bits", "country", "locality", "province", "ou", "organization", "csr_auto_rebuild", "csr_expiry"],
+  {},
+) }}
+
+{{ macros.render_block(
+  "vault_pki_roles",
+  vault_vault_pki_roles,
+  "name",
+  ["name", "mount"],
+  ["key_type", "key_bits", "allowed_domains", "allow_subdomains", "allow_ip_sans", "allow_bare_domains", "allow_glob_domains", "allow_localhost", "generate_lease", "ttl", "max_ttl"],
+  {},
+) }}
+
+}

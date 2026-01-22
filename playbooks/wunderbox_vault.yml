@@ -1,0 +1,23 @@
+---
+- name: Vault
+  hosts: all
+  gather_facts: true
+  become: true
+  roles:
+    - role: lit.supplementary.vault_validate
+      tags:
+        - preflight
+        - validate
+    - role: lit.supplementary.vault_deploy
+      tags:
+        - deploy
+    - role: lit.supplementary.vault_validate
+      tags:
+        - postflight
+        - validate
+    - role: lit.supplementary.vault_bootstrap
+      tags:
+        - bootstrap
+    - role: lit.supplementary.vault_config
+      tags:
+        - configure

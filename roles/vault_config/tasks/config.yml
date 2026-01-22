@@ -1,0 +1,145 @@
+---
+- name: Ensure required Vault config vars are defined
+  ansible.builtin.include_tasks: assert_config.yml
+  tags: always
+
+- name: Check Vault seal status
+  ansible.builtin.uri:
+    url: "{{ vault_api_url }}/v1/sys/seal-status"
+    method: GET
+    validate_certs: "{{ vault_vault_validate_certs }}"
+  register: vault_seal_status
+  changed_when: false
+  failed_when: vault_seal_status.status not in [200]
+  tags:
+    - config
+    - api
+
+- name: Fail when Vault is sealed
+  ansible.builtin.fail:
+    msg: "Vault is sealed; run vault_bootstrap or unseal manually before configuring."
+  when: vault_seal_status.json.sealed | default(true)
+  tags:
+    - config
+
+- name: Map vault_init root token when provided
+  ansible.builtin.set_fact:
+    vault_root_token: "{{ vault_init.root_token | default('', true) | trim }}"
+  no_log: true
+  when:
+    - vault_root_token | default('', true) | trim | length == 0
+    - vault_token | default('', true) | trim | length == 0
+    - root_token | default('', true) | trim | length == 0
+    - vault_init is defined
+    - vault_init.root_token | default('', true) | trim | length > 0
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Set Vault token from vars or environment
+  ansible.builtin.set_fact:
+    vault_root_token: >-
+      {{
+        (vault_token | default('', true) | trim)
+        if (vault_token | default('', true) | trim | length > 0)
+        else ((vault_root_token | default('', true) | trim)
+          if (vault_root_token | default('', true) | trim | length > 0)
+          else ((root_token | default('', true) | trim)
+            if (root_token | default('', true) | trim | length > 0)
+            else (lookup('env', 'VAULT_TOKEN') | default('', true) | trim)))
+      }}
+  no_log: true
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Ensure Vault token is available
+  ansible.builtin.assert:
+    that:
+      - vault_root_token | length > 0
+    fail_msg: "vault_token (or VAULT_TOKEN) is required to configure Vault."
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Normalize AppRole secrets for terragrunt
+  ansible.builtin.set_fact:
+    vault_approle_secrets_render: "{{ (vault_approle_secrets_render | default([])) + [_entry] }}"
+  vars:
+    _token_policy: "{{ vault_approle_item.token_policy | default(vault_approle_policy_name, true) }}"
+    _entry: >-
+      {{
+        vault_approle_item
+        | combine({
+            'token_policy': (
+              _token_policy
+              if (_token_policy is sequence and _token_policy is not string)
+              else [_token_policy]
+            )
+          }, recursive=True)
+      }}
+  loop: "{{ vault_approle_secrets | default([], true) }}"
+  loop_control:
+    loop_var: vault_approle_item
+  when: vault_approle_secrets | default([], true) | length > 0
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Ensure terragrunt state directory exists
+  ansible.builtin.file:
+    path: "{{ vault_terraform_state_path | dirname }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Set Vault terragrunt template path
+  ansible.builtin.set_fact:
+    vault_terragrunt_template_path: "{{ role_path }}/templates/vault.hcl.j2"
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Run terragrunt to configure Vault
+  vars:  # noqa var-naming[no-role-prefix]
+    terragrunt_template: "{{ vault_terragrunt_template_path }}"
+    terragrunt_vault_token: "{{ vault_root_token }}"
+    terragrunt_vault_addr: "{{ vault_vault_address }}"
+    terragrunt_delegate_to: localhost
+  ansible.builtin.include_role:
+    name: lit.foundational.terragrunt
+  no_log: true
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Bootstrap AppRole credentials
+  ansible.builtin.include_tasks: bootstrap_approle.yml
+  when:
+    - vault_hashi_vault_auth_method == 'approle'
+    - vault_approle_bootstrap | bool
+  tags:
+    - vault_pki
+
+- name: Request Vault PKI certificate
+  ansible.builtin.include_tasks: vault_pki.yml
+  when: vault_pki_enabled | bool
+  tags:
+    - vault_pki

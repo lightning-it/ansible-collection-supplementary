@@ -1,0 +1,9 @@
+---
+- name: Ensure required Vault vars are defined
+  ansible.builtin.import_role:
+    name: vault_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Configure Vault (post-deploy)
+  ansible.builtin.include_tasks: config.yml
