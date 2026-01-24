@@ -4,6 +4,50 @@
   tags:
     - always
 
+- name: Resolve Vault AppRole credentials
+  ansible.builtin.set_fact:
+    nexus_vault_role_id: >-
+      {{
+        nexus_vault_role_id
+        if nexus_vault_role_id | length > 0
+        else
+          (vault_approle_credentials[nexus_vault_role_name].role_id
+            if (nexus_vault_role_name | length > 0
+                and vault_approle_credentials is defined
+                and vault_approle_credentials[nexus_vault_role_name] is defined)
+            else (ansible_hashi_vault_role_id | default('')))
+      }}
+    nexus_vault_secret_id: >-
+      {{
+        nexus_vault_secret_id
+        if nexus_vault_secret_id | length > 0
+        else
+          (vault_approle_credentials[nexus_vault_role_name].secret_id
+            if (nexus_vault_role_name | length > 0
+                and vault_approle_credentials is defined
+                and vault_approle_credentials[nexus_vault_role_name] is defined)
+            else (ansible_hashi_vault_secret_id | default('')))
+      }}
+  no_log: true
+  tags:
+    - always
+
+- name: Fail when Vault AppRole credentials are missing
+  ansible.builtin.assert:
+    that:
+      - nexus_vault_role_id | length > 0
+      - nexus_vault_secret_id | length > 0
+    fail_msg: >-
+      Vault AppRole credentials are required for Nexus when using AppRole auth.
+      Run the vault_content role to create them or set nexus_vault_role_id and
+      nexus_vault_secret_id (or vault_approle_credentials for
+      {{ nexus_vault_role_name }}).
+  when:
+    - nexus_vault_auth_method == 'approle'
+    - nexus_use_vault_pki | bool or not nexus_skip_initial_config | bool
+  tags:
+    - always
+
 - name: Ensure required packages are installed
   ansible.builtin.include_tasks: install_packages.yml
   tags:

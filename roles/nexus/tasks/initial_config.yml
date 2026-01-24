@@ -5,8 +5,8 @@
     url: "{{ nexus_vault_address }}"
     engine_mount_point: "{{ nexus_engine_mount_point }}"
     auth_method: "{{ nexus_vault_auth_method }}"
-    role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
-    secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
+    role_id: "{{ nexus_vault_role_id | default('') }}"
+    secret_id: "{{ nexus_vault_secret_id | default('') }}"
     validate_certs: "{{ nexus_vault_validate_certs }}"
     path: "{{ ansible_hostname }}/nexus/admin"
   register: vault_nexus_admin_password
@@ -37,8 +37,8 @@
     url: "{{ nexus_vault_address }}"
     engine_mount_point: "{{ nexus_engine_mount_point }}"
     auth_method: "{{ nexus_vault_auth_method }}"
-    role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
-    secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
+    role_id: "{{ nexus_vault_role_id | default('') }}"
+    secret_id: "{{ nexus_vault_secret_id | default('') }}"
     validate_certs: "{{ nexus_vault_validate_certs }}"
     path: "{{ ansible_hostname }}/nexus/admin"
     data:
