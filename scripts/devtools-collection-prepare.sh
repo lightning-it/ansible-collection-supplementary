@@ -33,6 +33,12 @@ mkdir -p "$HOME/.ansible/tmp"
 export ANSIBLE_LOCAL_TEMP="$HOME/.ansible/tmp"
 export ANSIBLE_REMOTE_TEMP="$HOME/.ansible/tmp"
 
+# Remove any stale copy so Molecule uses the freshly built collection.
+stale_collection_dir="$HOME/.ansible/collections/ansible_collections/${ns}/${name}"
+if [ -d "$stale_collection_dir" ]; then
+  rm -rf "$stale_collection_dir"
+fi
+
 # Per-run XDG cache (avoids ansible-compat/ansible-lint races)
 export XDG_CACHE_HOME="$(mktemp -d /tmp/wunder/xdg-cache.XXXXXX)"
 if [ "${DEBUG:-0}" = "1" ]; then
