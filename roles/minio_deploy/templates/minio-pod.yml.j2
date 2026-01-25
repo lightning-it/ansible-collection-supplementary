@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ minio_pod_name }}
+  labels:
+    app: {{ minio_pod_name }}
+spec:
+  containers:
+    - name: minio
+      image: {{ minio_image }}
+      command:
+        - minio
+      args:
+        - server
+        - {{ minio_container_data_dir }}
+        - --console-address
+        - :{{ minio_console_port }}
+{% if minio_extra_args is defined and minio_extra_args | length > 0 %}
+{% for arg in minio_extra_args %}
+        - {{ arg }}
+{% endfor %}
+{% endif %}
+      env:
+        - name: MINIO_ROOT_USER
+          value: "{{ minio_root_user_effective }}"
+        - name: MINIO_ROOT_PASSWORD
+          value: "{{ minio_root_password_effective }}"
+{% if minio_region | length > 0 %}
+        - name: MINIO_REGION
+          value: "{{ minio_region }}"
+{% endif %}
+{% if minio_server_url | length > 0 %}
+        - name: MINIO_SERVER_URL
+          value: "{{ minio_server_url }}"
+{% endif %}
+{% if minio_browser_redirect_url | length > 0 %}
+        - name: MINIO_BROWSER_REDIRECT_URL
+          value: "{{ minio_browser_redirect_url }}"
+{% endif %}
+{% if minio_env_extra is defined and minio_env_extra | length > 0 %}
+{% for key, value in minio_env_extra.items() %}
+        - name: {{ key }}
+          value: "{{ value }}"
+{% endfor %}
+{% endif %}
+      ports:
+        - containerPort: {{ minio_port }}
+          hostPort: {{ minio_port }}
+        - containerPort: {{ minio_console_port }}
+          hostPort: {{ minio_console_port }}
+      securityContext:
+        runAsUser: {{ minio_run_as_user }}
+        runAsGroup: {{ minio_run_as_group }}
+      volumeMounts:
+        - name: minio-data
+          mountPath: {{ minio_container_data_dir }}
+{% if minio_config_dir | default('') | length > 0 %}
+        - name: minio-config
+          mountPath: {{ minio_container_config_dir }}
+{% endif %}
+{% if minio_cert_dir | default('') | length > 0 %}
+        - name: minio-certs
+          mountPath: {{ minio_container_certs_dir }}
+{% endif %}
+  volumes:
+    - name: minio-data
+      hostPath:
+        path: {{ minio_host_data_dir }}
+        type: DirectoryOrCreate
+{% if minio_config_dir | default('') | length > 0 %}
+    - name: minio-config
+      hostPath:
+        path: {{ minio_config_dir }}
+        type: DirectoryOrCreate
+{% endif %}
+{% if minio_cert_dir | default('') | length > 0 %}
+    - name: minio-certs
+      hostPath:
+        path: {{ minio_cert_dir }}
+        type: DirectoryOrCreate
+{% endif %}

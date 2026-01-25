@@ -1,0 +1,13 @@
+---
+- name: Verify minio_deploy converge
+  hosts: localhost
+  gather_facts: false
+  vars:
+    minio_root_user: "minioadmin"
+    minio_root_password: "minioadmin"
+  tasks:
+    - name: Assert converge ran
+      ansible.builtin.assert:
+        that:
+          - minio_root_user is defined
+          - minio_root_password is defined

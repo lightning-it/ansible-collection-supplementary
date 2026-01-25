@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: minio_deploy
+  namespace: lit
+  author: Lightning IT
+  description: Deploy MinIO with Podman and optional systemd management.
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - modulix
+    - minio
+    - storage
+    - s3
+    - object
+    - automation
+
+dependencies: []

@@ -1,0 +1,11 @@
+---
+- name: Converge minio_validate
+  hosts: localhost
+  gather_facts: true
+  vars:
+    minio_root_user: "minioadmin"
+    minio_root_password: "minioadmin"
+    minio_skip_runtime: true
+    minio_skip_validate: true
+  roles:
+    - role: minio_validate

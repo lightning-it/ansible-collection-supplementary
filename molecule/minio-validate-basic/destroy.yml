@@ -1,0 +1,5 @@
+---
+- name: Destroy vault scenario
+  hosts: localhost
+  gather_facts: false
+  tasks: []

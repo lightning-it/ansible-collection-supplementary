@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: minio_config
+  namespace: lit
+  author: Lightning IT
+  description: Configure MinIO users and policies via mc.
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - modulix
+    - minio
+    - storage
+    - configuration
+    - automation
+
+dependencies: []
