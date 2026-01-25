@@ -1,3 +1,9 @@
+## [1.12.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.11.0...v1.12.0) (2026-01-25)
+
+### Features
+
+* ansible role nexus reactored ([#49](https://github.com/lightning-it/ansible-collection-supplementary/issues/49)) ([225b966](https://github.com/lightning-it/ansible-collection-supplementary/commit/225b966b747695b5e50960d55ef375690fc31c56))
+
 ## [1.11.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.10.0...v1.11.0) (2026-01-22)
 
 ### Features
