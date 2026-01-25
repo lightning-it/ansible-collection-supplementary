@@ -1,0 +1,6 @@
+---
+- name: Resolve MinIO endpoints
+  ansible.builtin.import_tasks: resolve_endpoints.yml
+
+- name: Resolve MinIO credentials
+  ansible.builtin.import_tasks: resolve_credentials.yml

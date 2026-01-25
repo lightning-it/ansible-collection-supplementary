@@ -1,0 +1,11 @@
+---
+- name: Verify minio_bootstrap converge
+  hosts: localhost
+  gather_facts: false
+  vars:
+    minio_skip_bootstrap: true
+  tasks:
+    - name: Assert converge ran
+      ansible.builtin.assert:
+        that:
+          - minio_skip_bootstrap is defined

@@ -1,0 +1,6 @@
+---
+- name: Ensure MinIO runtime packages are installed
+  ansible.builtin.package:
+    name: "{{ minio_packages }}"
+    state: present
+  when: minio_packages is defined

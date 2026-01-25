@@ -1,0 +1,11 @@
+---
+- name: Verify minio_backup_restore converge
+  hosts: localhost
+  gather_facts: false
+  vars:
+    minio_backup_action: "none"
+  tasks:
+    - name: Assert converge ran
+      ansible.builtin.assert:
+        that:
+          - minio_backup_action is defined

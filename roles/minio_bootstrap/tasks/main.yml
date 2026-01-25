@@ -1,0 +1,45 @@
+---
+- name: Ensure required MinIO vars are defined
+  ansible.builtin.import_role:
+    name: minio_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure bootstrap bucket list is valid
+  ansible.builtin.assert:
+    that:
+      - minio_bootstrap_buckets is sequence
+    fail_msg: "minio_bootstrap_buckets must be a list."
+  tags: always
+
+- name: Skip MinIO bootstrap when disabled
+  ansible.builtin.debug:
+    msg: "MinIO bootstrap skipped (minio_skip_bootstrap=true or no buckets requested)."
+  when:
+    - minio_skip_bootstrap | bool or minio_bootstrap_buckets | length == 0
+  tags: always
+
+- name: Configure MinIO mc alias
+  ansible.builtin.command: >-
+    {{ minio_mc_path }} alias set {{ minio_mc_alias }} {{ minio_api_url_effective }}
+    {{ minio_root_user_effective }} {{ minio_root_password_effective }}
+    {{ (minio_mc_insecure | bool) | ternary('--insecure', '') }}
+  register: minio_mc_alias_set
+  changed_when: false
+  no_log: true
+  when:
+    - not minio_skip_bootstrap | bool
+    - minio_bootstrap_buckets | length > 0
+  tags:
+    - bootstrap
+
+- name: Create MinIO buckets
+  ansible.builtin.command: "{{ minio_mc_path }} mb --ignore-existing {{ minio_mc_alias }}/{{ item }}"
+  register: minio_bucket_create
+  changed_when: "'created' in minio_bucket_create.stdout | default('')"
+  loop: "{{ minio_bootstrap_buckets }}"
+  when:
+    - not minio_skip_bootstrap | bool
+    - minio_bootstrap_buckets | length > 0
+  tags:
+    - bootstrap

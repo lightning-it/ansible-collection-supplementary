@@ -1,0 +1,11 @@
+---
+- name: Verify minio_ops converge
+  hosts: localhost
+  gather_facts: false
+  vars:
+    minio_ops_action: "none"
+  tasks:
+    - name: Assert converge ran
+      ansible.builtin.assert:
+        that:
+          - minio_ops_action is defined

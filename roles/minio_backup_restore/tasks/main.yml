@@ -1,0 +1,155 @@
+---
+- name: Ensure required MinIO vars are defined
+  ansible.builtin.import_role:
+    name: minio_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure minio_backup_action is valid
+  ansible.builtin.assert:
+    that:
+      - minio_backup_action in ['none', 'backup', 'restore']
+    fail_msg: "minio_backup_action must be one of: none, backup, restore."
+  tags: always
+
+- name: Ensure backup directory exists
+  ansible.builtin.file:
+    path: "{{ minio_backup_dir }}"
+    state: directory
+    mode: '0750'
+  when: minio_backup_action in ['backup', 'restore']
+  tags:
+    - backup
+    - restore
+
+- name: Stop MinIO service for backup/restore
+  when:
+    - minio_backup_stop_service | bool
+    - minio_backup_action in ['backup', 'restore']
+  tags:
+    - backup
+    - restore
+  block:
+    - name: Stop MinIO systemd unit
+      ansible.builtin.systemd:
+        name: "{{ minio_systemd_unit_name }}"
+        state: stopped
+      when: minio_manage_systemd | bool
+
+    - name: Stop MinIO pod (non-systemd)
+      ansible.builtin.command: "podman pod stop {{ minio_pod_name }}"
+      register: minio_pod_stop
+      changed_when: minio_pod_stop.rc == 0
+      failed_when: false
+      when: not minio_manage_systemd | bool
+
+- name: Create backup archive  # noqa command-instead-of-module
+  ansible.builtin.command: >-
+    tar -C {{ minio_host_data_dir | dirname }}
+    -czf {{ minio_backup_dir }}/minio-data-{{ ansible_date_time.iso8601_basic_short }}.tar.gz
+    {{ minio_host_data_dir | basename }}
+  register: minio_backup_archive
+  changed_when: minio_backup_archive.rc == 0
+  when: minio_backup_action == 'backup'
+  tags:
+    - backup
+
+- name: Prune old backups
+  when:
+    - minio_backup_action == 'backup'
+    - minio_backup_retention_keep_last | int > 0
+  tags:
+    - backup
+    - retention
+  block:
+    - name: Find backup files
+      ansible.builtin.find:
+        paths: "{{ minio_backup_dir }}"
+        patterns: "minio-data-*.tar.gz"
+        file_type: file
+      register: minio_backup_files
+
+    - name: Remove older backups
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: >-
+        {{
+          (minio_backup_files.files | sort(attribute='mtime') | reverse)
+          [minio_backup_retention_keep_last | int:]
+        }}
+      when: minio_backup_files.files | length > minio_backup_retention_keep_last | int
+
+- name: Validate restore input
+  ansible.builtin.assert:
+    that:
+      - minio_restore_confirm == 'YES_RESTORE'
+      - minio_restore_source | length > 0
+    fail_msg: "Set minio_restore_confirm=YES_RESTORE and minio_restore_source for restore."
+  when: minio_backup_action == 'restore'
+  tags:
+    - restore
+
+- name: Move existing data directory aside
+  ansible.builtin.command: >-
+    mv {{ minio_host_data_dir }}
+    {{ minio_host_data_dir }}.bak.{{ ansible_date_time.iso8601_basic_short }}
+  register: minio_data_move
+  changed_when: minio_data_move.rc == 0
+  failed_when: false
+  when: minio_backup_action == 'restore'
+  tags:
+    - restore
+
+- name: Restore backup archive  # noqa command-instead-of-module
+  ansible.builtin.command: >-
+    tar -C {{ minio_host_data_dir | dirname }}
+    -xzf {{ minio_restore_source }}
+  register: minio_restore_extract
+  changed_when: minio_restore_extract.rc == 0
+  when: minio_backup_action == 'restore'
+  tags:
+    - restore
+
+- name: Ensure MinIO data directory ownership and mode after restore
+  ansible.builtin.file:
+    path: "{{ minio_host_data_dir }}"
+    state: directory
+    owner: "{{ minio_expected_uid }}"
+    group: "{{ minio_expected_gid }}"
+    mode: "{{ minio_expected_mode }}"
+    recurse: true
+  when: minio_backup_action == 'restore'
+  tags:
+    - restore
+
+- name: Start MinIO service after backup/restore
+  when:
+    - minio_backup_action in ['backup', 'restore']
+    - minio_backup_stop_service | bool
+  tags:
+    - backup
+    - restore
+  block:
+    - name: Start MinIO systemd unit
+      ansible.builtin.systemd:
+        name: "{{ minio_systemd_unit_name }}"
+        state: started
+        enabled: true
+      when: minio_manage_systemd | bool
+
+    - name: Start MinIO pod (non-systemd)
+      ansible.builtin.command: "podman kube play {{ minio_pod_manifest_path }}"
+      register: minio_pod_start
+      changed_when: minio_pod_start.rc == 0
+      when: not minio_manage_systemd | bool
+
+- name: Validate MinIO after restore
+  ansible.builtin.include_role:
+    name: minio_validate
+  when:
+    - minio_backup_action == 'restore'
+    - minio_backup_validate_after_restore | bool
+  tags:
+    - restore
+    - validate
