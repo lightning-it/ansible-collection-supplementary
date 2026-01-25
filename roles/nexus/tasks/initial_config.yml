@@ -5,10 +5,10 @@
     url: "{{ nexus_vault_address }}"
     engine_mount_point: "{{ nexus_engine_mount_point }}"
     auth_method: "{{ nexus_vault_auth_method }}"
-    role_id: "{{ nexus_vault_role_id | default('') }}"
-    secret_id: "{{ nexus_vault_secret_id | default('') }}"
+    role_id: "{{ nexus_vault_kv_role_id | default('') }}"
+    secret_id: "{{ nexus_vault_kv_secret_id | default('') }}"
     validate_certs: "{{ nexus_vault_validate_certs }}"
-    path: "{{ ansible_hostname }}/nexus/admin"
+    path: "{{ inventory_hostname }}/nexus/admin"
   register: vault_nexus_admin_password
   failed_when: false
   no_log: true
@@ -37,10 +37,10 @@
     url: "{{ nexus_vault_address }}"
     engine_mount_point: "{{ nexus_engine_mount_point }}"
     auth_method: "{{ nexus_vault_auth_method }}"
-    role_id: "{{ nexus_vault_role_id | default('') }}"
-    secret_id: "{{ nexus_vault_secret_id | default('') }}"
+    role_id: "{{ nexus_vault_kv_role_id | default('') }}"
+    secret_id: "{{ nexus_vault_kv_secret_id | default('') }}"
     validate_certs: "{{ nexus_vault_validate_certs }}"
-    path: "{{ ansible_hostname }}/nexus/admin"
+    path: "{{ inventory_hostname }}/nexus/admin"
     data:
       password: "{{ nexus_nexus_target_admin_password }}"
   no_log: true
@@ -140,7 +140,7 @@
     url: "https://{{ nexus_nexus_hostname }}/service/extdirect"
     method: POST
     user: admin
-    password: "{{ nexus_admin_password }}"
+    password: "{{ nexus_nexus_target_admin_password }}"
     force_basic_auth: true
     validate_certs: "{{ nexus_validate_certs }}"
     headers:

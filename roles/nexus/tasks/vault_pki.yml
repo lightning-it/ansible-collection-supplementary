@@ -5,10 +5,10 @@
     url: "{{ nexus_vault_address }}"
     engine_mount_point: "{{ nexus_engine_mount_point }}"
     auth_method: "{{ nexus_vault_auth_method }}"
-    role_id: "{{ nexus_vault_role_id | default('') }}"
-    secret_id: "{{ nexus_vault_secret_id | default('') }}"
+    role_id: "{{ nexus_vault_kv_role_id | default('') }}"
+    secret_id: "{{ nexus_vault_kv_secret_id | default('') }}"
     validate_certs: "{{ nexus_vault_validate_certs }}"
-    path: "{{ ansible_hostname }}/nexus/certificate"
+    path: "{{ inventory_hostname }}/nexus/certificate"
   register: existing_cert
   failed_when: false
   no_log: true
@@ -55,8 +55,8 @@
   community.hashi_vault.vault_write:
     url: "{{ nexus_vault_address }}"
     auth_method: "{{ nexus_vault_auth_method }}"
-    role_id: "{{ nexus_vault_role_id | default('') }}"
-    secret_id: "{{ nexus_vault_secret_id | default('') }}"
+    role_id: "{{ nexus_vault_pki_role_id | default('') }}"
+    secret_id: "{{ nexus_vault_pki_secret_id | default('') }}"
     validate_certs: "{{ nexus_vault_validate_certs }}"
     path: "{{ nexus_vault_pki_path }}/{{ nexus_vault_pki_role }}"
     data:
@@ -87,10 +87,10 @@
     url: "{{ nexus_vault_address }}"
     engine_mount_point: "{{ nexus_engine_mount_point }}"
     auth_method: "{{ nexus_vault_auth_method }}"
-    role_id: "{{ nexus_vault_role_id | default('') }}"
-    secret_id: "{{ nexus_vault_secret_id | default('') }}"
+    role_id: "{{ nexus_vault_kv_role_id | default('') }}"
+    secret_id: "{{ nexus_vault_kv_secret_id | default('') }}"
     validate_certs: "{{ nexus_vault_validate_certs }}"
-    path: "{{ ansible_hostname }}/nexus/certificate"
+    path: "{{ inventory_hostname }}/nexus/certificate"
     data:
       certificate: "{{ vault_pki_cert.data.data.certificate }}"
       private_key: "{{ vault_pki_cert.data.data.private_key }}"
@@ -113,9 +113,12 @@
 
 - name: Write certificate
   ansible.builtin.copy:
-    content: "{{ vault_pki_cert.data.data.certificate | default(existing_cert.data.data.certificate) }}"
+    content: |
+      {{ (vault_pki_cert.data.data.certificate | default(existing_cert.data.data.certificate)) | trim }}
+      {{ (vault_pki_cert.data.data.issuing_ca | default(existing_cert.data.data.issuing_ca)) | trim }}
     dest: "{{ nexus_caddy_certs_dir }}/{{ nexus_nexus_hostname }}.pem"
     mode: '0644'
+  notify: Recreate nexus pod
   ignore_errors: "{{ ansible_check_mode }}"
   tags:
     - vault_pki
@@ -125,6 +128,7 @@
     content: "{{ vault_pki_cert.data.data.private_key | default(existing_cert.data.data.private_key) }}"
     dest: "{{ nexus_caddy_certs_dir }}/{{ nexus_nexus_hostname }}.key"
     mode: '0600'
+  notify: Recreate nexus pod
   ignore_errors: "{{ ansible_check_mode }}"
   tags:
     - vault_pki
@@ -132,8 +136,9 @@
 - name: Write CA chain
   ansible.builtin.copy:
     content: "{{ vault_pki_cert.data.data.issuing_ca | default(existing_cert.data.data.issuing_ca) }}"
-    dest: "{{ nexus_caddy_certs_dir }}/ca.pem"
+    dest: "{{ nexus_caddy_certs_dir }}/ca.crt"
     mode: '0644'
+  notify: Recreate nexus pod
   ignore_errors: "{{ ansible_check_mode }}"
   tags:
     - vault_pki

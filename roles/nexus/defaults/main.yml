@@ -42,6 +42,8 @@ nexus_vault_validate_certs: true
 nexus_vault_role_name: ''
 nexus_vault_role_id: ''
 nexus_vault_secret_id: ''
+nexus_vault_pki_approle_path: "{{ inventory_hostname }}/nexus/approle-pki"
+nexus_vault_kv_approle_path: "{{ inventory_hostname }}/nexus/approle-kv"
 nexus_vault_pki_role: "limited_dns_2y"
 nexus_vault_pki_path: "pki-inter-ec-2025/issue"
 nexus_engine_mount_point: stage-2c

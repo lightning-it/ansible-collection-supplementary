@@ -19,6 +19,7 @@ tags:
 dependencies:
   ansible.posix: '*'
   community.general: '*'
+  community.hashi_vault: '*'
   community.vmware: '*'
 build_ignore:
   - node_modules
