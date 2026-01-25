@@ -22,16 +22,28 @@
   tags:
     - deployment
 
-- name: Apply SELinux context for Nexus & Caddy data dirs
-  ansible.builtin.command: "chcon -Rt container_file_t {{ item }}"
+- name: Read SELinux context for Nexus & Caddy data dirs
+  ansible.builtin.command: "stat -c %C {{ item }}"
+  register: nexus_selinux_context
+  changed_when: false
+  failed_when: false
   loop:
     - "{{ nexus_nexus_data_dir }}"
     - "{{ nexus_caddy_config_dir }}"
     - "{{ nexus_caddy_certs_dir }}"
   when: selinux_status.stdout == "Enforcing" or selinux_status.stdout == "Permissive"
-  register: selinux_cmd
-  changed_when: selinux_cmd.rc == 0
-  ignore_errors: true
+  tags:
+    - deployment
+
+- name: Apply SELinux context for Nexus & Caddy data dirs
+  ansible.builtin.command: "chcon -Rt container_file_t {{ item.item }}"
+  register: nexus_selinux_relabel
+  changed_when: nexus_selinux_relabel.rc == 0
+  failed_when: false
+  loop: "{{ nexus_selinux_context.results }}"
+  when:
+    - selinux_status.stdout == "Enforcing" or selinux_status.stdout == "Permissive"
+    - item.stdout is not search("container_file_t")
   tags:
     - deployment
 
