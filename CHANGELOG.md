@@ -1,3 +1,9 @@
+## [1.13.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.12.0...v1.13.0) (2026-01-25)
+
+### Features
+
+* Add MinIO roles for bootstrap, configuration, deployment, operations, and validation ([#50](https://github.com/lightning-it/ansible-collection-supplementary/issues/50)) ([07aa415](https://github.com/lightning-it/ansible-collection-supplementary/commit/07aa415dce0842f68836300919812650c01d2df1))
+
 ## [1.12.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.11.0...v1.12.0) (2026-01-25)
 
 ### Features
