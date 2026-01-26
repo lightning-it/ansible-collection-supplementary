@@ -1,0 +1,112 @@
+---
+- name: Ensure CoreDNS host config directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default(coredns_deploy_run_as_user) }}"
+    group: "{{ item.group | default(coredns_deploy_run_as_group) }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ coredns_deploy_host_config_dir }}"
+      mode: '0755'
+    - path: "{{ coredns_deploy_pod_manifest_path | dirname }}"
+      owner: root
+      group: root
+      mode: '0755'
+  when: item.path | default('') | length > 0
+  tags:
+    - deployment
+
+- name: Detect SELinux status
+  ansible.builtin.command: getenforce
+  register: selinux_status
+  changed_when: false
+  failed_when: false
+  when:
+    - ansible_distribution in ['RedHat', 'CentOS']
+    - coredns_deploy_selinux_relabel | bool
+
+- name: Check SELinux context for CoreDNS mounts
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ coredns_deploy_host_config_dir }}"
+  register: coredns_deploy_selinux_contexts
+  changed_when: false
+  failed_when: false
+  tags:
+    - deployment
+  when:
+    - ansible_distribution in ['RedHat', 'CentOS']
+    - coredns_deploy_selinux_relabel | bool
+    - selinux_status.stdout is defined
+    - selinux_status.stdout != 'Disabled'
+    - item | length > 0
+
+- name: Apply SELinux context
+  ansible.builtin.command: >-
+    chcon -Rt container_file_t {{ coredns_deploy_selinux_relabel_targets | join(' ') }}
+  register: coredns_deploy_selinux_relabel_cmd
+  changed_when: coredns_deploy_selinux_type_missing | bool
+  notify:
+    - Recreate coredns pod
+    - Run coredns pod
+  tags:
+    - deployment
+  when:
+    - ansible_distribution in ['RedHat', 'CentOS']
+    - coredns_deploy_selinux_relabel | bool
+    - selinux_status.stdout is defined
+    - selinux_status.stdout != 'Disabled'
+    - coredns_deploy_selinux_contexts is defined
+    - coredns_deploy_selinux_contexts.results is defined
+    - coredns_deploy_selinux_relabel_targets | length > 0
+    - coredns_deploy_selinux_type_missing | bool
+  vars:
+    coredns_deploy_selinux_contexts_defined: >-
+      {{
+        coredns_deploy_selinux_contexts.results
+        | selectattr('stat.selinux_context', 'defined')
+        | list
+      }}
+    coredns_deploy_selinux_type_missing: >-
+      {{
+        (coredns_deploy_selinux_contexts_defined
+         | rejectattr('stat.selinux_context', 'search', 'container_file_t')
+         | list
+         | length)
+        > 0
+      }}
+    coredns_deploy_selinux_relabel_targets: >-
+      {{
+        [coredns_deploy_host_config_dir]
+        | reject('equalto', '')
+        | list
+      }}
+
+- name: Render CoreDNS Corefile
+  ansible.builtin.template:
+    src: Corefile.j2
+    dest: "{{ coredns_deploy_host_corefile_path }}"
+    owner: "{{ coredns_deploy_run_as_user }}"
+    group: "{{ coredns_deploy_run_as_group }}"
+    mode: '0644'
+  notify: Reload coredns
+  tags:
+    - config
+
+- name: Render CoreDNS Pod manifest
+  ansible.builtin.template:
+    src: coredns-pod.yml.j2
+    dest: "{{ coredns_deploy_pod_manifest_path }}"
+    mode: '0644'
+  notify:
+    - Recreate coredns pod
+    - Run coredns pod
+  tags:
+    - deployment
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - deployment

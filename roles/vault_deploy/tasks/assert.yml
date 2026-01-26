@@ -2,9 +2,9 @@
 - name: assert | Test basic variables are defined
   ansible.builtin.assert:
     that:
-      - vault_host_data_dir | length > 0
-      - vault_cert_dir | length > 0
-      - vault_config_dir | length > 0
-      - vault_pod_manifest_path | length > 0
+      - vault_deploy_host_data_dir | length > 0
+      - vault_deploy_cert_dir | length > 0
+      - vault_deploy_config_dir | length > 0
+      - vault_deploy_pod_manifest_path | length > 0
     quiet: true
   tags: always

@@ -20,15 +20,15 @@
   block:
     - name: Restart Vault systemd unit
       ansible.builtin.systemd:
-        name: "{{ vault_systemd_unit_name }}"
+        name: "{{ vault_deploy_systemd_unit_name }}"
         state: restarted
-      when: vault_manage_systemd | bool
+      when: vault_deploy_manage_systemd | bool
 
     - name: Restart Vault pod (non-systemd)
-      ansible.builtin.command: "podman pod restart {{ vault_pod_name }}"
-      register: vault_pod_restart
-      changed_when: vault_pod_restart.rc == 0
-      when: not vault_manage_systemd | bool
+      ansible.builtin.command: "podman pod restart {{ vault_deploy_pod_name }}"
+      register: vault_deploy_pod_restart
+      changed_when: vault_deploy_pod_restart.rc == 0
+      when: not vault_deploy_manage_systemd | bool
 
     - name: Validate Vault after restart
       ansible.builtin.include_role:
@@ -42,37 +42,37 @@
   block:
     - name: Read Vault health status
       ansible.builtin.uri:
-        url: "{{ vault_health_url }}"
+        url: "{{ vault_deploy_health_url }}"
         method: GET
-        validate_certs: "{{ vault_vault_validate_certs }}"
-      register: vault_health
+        validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+      register: vault_deploy_health
       changed_when: false
       failed_when: false
 
     - name: Read Vault init status
       ansible.builtin.uri:
-        url: "{{ vault_api_url }}/v1/sys/init"
+        url: "{{ vault_deploy_api_url }}/v1/sys/init"
         method: GET
-        validate_certs: "{{ vault_vault_validate_certs }}"
-      register: vault_init_status
+        validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+      register: vault_deploy_init_status
       changed_when: false
       failed_when: false
 
     - name: Read Vault seal status
       ansible.builtin.uri:
-        url: "{{ vault_api_url }}/v1/sys/seal-status"
+        url: "{{ vault_deploy_api_url }}/v1/sys/seal-status"
         method: GET
-        validate_certs: "{{ vault_vault_validate_certs }}"
-      register: vault_seal_status
+        validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+      register: vault_deploy_seal_status
       changed_when: false
       failed_when: false
 
     - name: Report Vault API status
       ansible.builtin.debug:
         msg: >-
-          health={{ vault_health.status }},
-          init={{ vault_init_status.json.initialized | default('unknown') }},
-          sealed={{ vault_seal_status.json.sealed | default('unknown') }}
+          health={{ vault_deploy_health.status }},
+          init={{ vault_deploy_init_status.json.initialized | default('unknown') }},
+          sealed={{ vault_deploy_seal_status.json.sealed | default('unknown') }}
 
 - name: Upgrade Vault image
   when: vault_ops_action == 'upgrade'
@@ -88,7 +88,7 @@
 
     - name: Set Vault image override
       ansible.builtin.set_fact:
-        vault_image: "{{ vault_ops_target_image }}"
+        vault_deploy_image: "{{ vault_ops_target_image }}"
 
     - name: Redeploy Vault with new image
       ansible.builtin.include_role:

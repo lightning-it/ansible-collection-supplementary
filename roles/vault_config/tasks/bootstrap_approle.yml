@@ -1,91 +1,95 @@
 ---
 - name: Build default AppRole policy
   ansible.builtin.set_fact:
-    vault_approle_default_policy: "{{ vault_approle_policy | default(_vault_approle_policy, true) }}"
+    vault_deploy_approle_default_policy: "{{ vault_deploy_approle_policy | default(_vault_approle_policy, true) }}"
   vars:
     _vault_approle_policy: |-
-      path "{{ vault_engine_mount_point }}/data/{{ inventory_hostname }}/vault/certificate" {
+      path "{{ vault_deploy_engine_mount_point }}/data/{{ inventory_hostname }}/vault/certificate" {
         capabilities = ["read", "create", "update"]
       }
-      path "{{ vault_engine_mount_point }}/metadata/{{ inventory_hostname }}/vault/certificate" {
+      path "{{ vault_deploy_engine_mount_point }}/metadata/{{ inventory_hostname }}/vault/certificate" {
         capabilities = ["read"]
       }
-      path "{{ vault_vault_pki_path }}/{{ vault_vault_pki_role }}" {
+      path "{{ vault_deploy_vault_pki_path }}/{{ vault_deploy_vault_pki_role }}" {
         capabilities = ["read", "create", "update"]
       }
 
 - name: Build default AppRole entry
   ansible.builtin.set_fact:
-    vault_approle_default_entry:
-      role_name: "{{ vault_approle_role_name }}"
-      token_policy: "{{ vault_approle_policy_name }}"
-      kv_mount: "{{ vault_engine_mount_point }}"
+    vault_deploy_approle_default_entry:
+      role_name: "{{ vault_deploy_approle_role_name }}"
+      token_policy: "{{ vault_deploy_approle_policy_name }}"
+      kv_mount: "{{ vault_deploy_engine_mount_point }}"
       credential_path: "{{ inventory_hostname }}/vault/approle"
-      token_ttl: "{{ vault_approle_token_ttl }}"
-      token_max_ttl: "{{ vault_approle_token_max_ttl }}"
-      policy: "{{ vault_approle_default_policy }}"
+      token_ttl: "{{ vault_deploy_approle_token_ttl }}"
+      token_max_ttl: "{{ vault_deploy_approle_token_max_ttl }}"
+      policy: "{{ vault_deploy_approle_default_policy }}"
 
 - name: Normalize AppRole entries
   ansible.builtin.set_fact:
-    vault_approle_entries: >-
+    vault_deploy_approle_entries: >-
       {{
-        vault_approle_secrets
-        if (vault_approle_secrets | length > 0)
-        else [vault_approle_default_entry]
+        vault_deploy_approle_secrets
+        if (vault_deploy_approle_secrets | length > 0)
+        else [vault_deploy_approle_default_entry]
       }}
 
 - name: Select primary AppRole name
   ansible.builtin.set_fact:
-    vault_approle_primary_role_name: >-
+    vault_deploy_approle_primary_role_name: >-
       {{
-        vault_approle_primary_role_name
-        if vault_approle_primary_role_name | length > 0
-        else (vault_approle_entries[0].role_name | default(vault_approle_role_name))
+        vault_deploy_approle_primary_role_name
+        if vault_deploy_approle_primary_role_name | length > 0
+        else (vault_deploy_approle_entries[0].role_name | default(vault_deploy_approle_role_name))
       }}
 
 - name: Read Vault auth methods
-  delegate_to: "{{ vault_api_delegate_to }}"
-  community.hashi_vault.vault_read:
-    url: "{{ vault_vault_address }}"
-    token: "{{ vault_root_token }}"
-    validate_certs: "{{ vault_vault_validate_certs }}"
+  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  community.hashi_vault.vault_deploy_read:
+    url: "{{ vault_deploy_vault_address }}"
+    token: "{{ vault_deploy_root_token }}"
+    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
     path: "sys/auth"
-  register: vault_auth_methods
+  register: vault_deploy_auth_methods
   no_log: true
 
 - name: Detect AppRole auth status
   ansible.builtin.set_fact:
-    vault_approle_enabled: "{{ 'approle/' in (vault_auth_methods.data | default({})) }}"
+    vault_deploy_approle_enabled: "{{ 'approle/' in (vault_deploy_auth_methods.data | default({})) }}"
 
 - name: Enable AppRole auth method when missing
-  delegate_to: "{{ vault_api_delegate_to }}"
-  community.hashi_vault.vault_write:
-    url: "{{ vault_vault_address }}"
-    token: "{{ vault_root_token }}"
-    validate_certs: "{{ vault_vault_validate_certs }}"
+  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  community.hashi_vault.vault_deploy_write:
+    url: "{{ vault_deploy_vault_address }}"
+    token: "{{ vault_deploy_root_token }}"
+    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
     path: "sys/auth/approle"
     data:
       type: "approle"
-  when: not vault_approle_enabled | bool
+  when: not vault_deploy_approle_enabled | bool
   no_log: true
 
 - name: Ensure AppRole entries
   ansible.builtin.include_tasks: bootstrap_approle_entry.yml
   vars:
-    vault_approle_entry: "{{ vault_approle_default_entry | combine(vault_approle_item, recursive=True) }}"
-    vault_approle_policy_names: >-
+    vault_deploy_approle_entry: >-
+      {{ vault_deploy_approle_default_entry
+         | combine(vault_deploy_approle_item, recursive=True) }}
+    vault_deploy_approle_policy_names: >-
       {{
-        [vault_approle_entry.token_policy]
-        if vault_approle_entry.token_policy is string
-        else vault_approle_entry.token_policy
+        [vault_deploy_approle_entry.token_policy]
+        if vault_deploy_approle_entry.token_policy is string
+        else vault_deploy_approle_entry.token_policy
       }}
-    vault_approle_policy_name: "{{ vault_approle_policy_names | first }}"
-    vault_approle_kv_mount: "{{ vault_approle_entry.kv_mount }}"
-    vault_approle_kv_path: "{{ vault_approle_entry.credential_path }}"
-    vault_approle_policy: "{{ vault_approle_entry.policy | default(vault_approle_default_policy, true) }}"
-  loop: "{{ vault_approle_entries }}"
+    vault_deploy_approle_policy_name: "{{ vault_deploy_approle_policy_names | first }}"
+    vault_deploy_approle_kv_mount: "{{ vault_deploy_approle_entry.kv_mount }}"
+    vault_deploy_approle_kv_path: "{{ vault_deploy_approle_entry.credential_path }}"
+    vault_deploy_approle_policy: >-
+      {{ vault_deploy_approle_entry.policy
+         | default(vault_deploy_approle_default_policy, true) }}
+  loop: "{{ vault_deploy_approle_entries }}"
   loop_control:
-    loop_var: vault_approle_item
+    loop_var: vault_deploy_approle_item
   no_log: true
 
 - name: Assert primary AppRole credentials resolved
@@ -95,4 +99,4 @@
       - ansible_hashi_vault_secret_id | default('') | length > 0
     fail_msg: >-
       Primary AppRole credentials could not be resolved; check role
-      {{ vault_approle_primary_role_name }} and the configured policies.
+      {{ vault_deploy_approle_primary_role_name }} and the configured policies.

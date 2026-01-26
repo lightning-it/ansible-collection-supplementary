@@ -7,23 +7,23 @@
 
 - name: Set validate mode
   ansible.builtin.set_fact:
-    minio_validate_strict: "{{ minio_validate_mode != 'report' }}"
+    minio_validate_strict: "{{ minio_deploy_validate_mode != 'report' }}"
   tags: always
 
 - name: Skip MinIO validation when disabled
   ansible.builtin.debug:
-    msg: "MinIO validation skipped (minio_skip_validate=true)."
-  when: minio_skip_validate | bool
+    msg: "MinIO validation skipped (minio_deploy_skip_validate=true)."
+  when: minio_deploy_skip_validate | bool
   tags: always
 
 - name: Validate MinIO runtime
-  when: not minio_skip_validate | bool
+  when: not minio_deploy_skip_validate | bool
   tags:
     - validate
   block:
     - name: Check MinIO container running state
-      ansible.builtin.command: "podman inspect {{ minio_container_name }} --format {{ '{{.State.Running}}' }}"
-      register: minio_container_running
+      ansible.builtin.command: "podman inspect {{ minio_deploy_container_name }} --format {{ '{{.State.Running}}' }}"
+      register: minio_deploy_container_running
       changed_when: false
       failed_when: false
       tags:
@@ -31,38 +31,40 @@
 
     - name: Fail when MinIO container is not running
       ansible.builtin.fail:
-        msg: "MinIO container {{ minio_container_name }} is not running."
+        msg: "MinIO container {{ minio_deploy_container_name }} is not running."
       when:
         - minio_validate_strict | bool
-        - minio_container_running.stdout | default('') | trim != 'true'
+        - minio_deploy_container_running.stdout | default('') | trim != 'true'
       tags:
         - runtime
 
     - name: Report MinIO container running state
       ansible.builtin.debug:
-        msg: "MinIO container running: {{ minio_container_running.stdout | default('unknown') | trim }}"
+        msg: "MinIO container running: {{ minio_deploy_container_running.stdout | default('unknown') | trim }}"
       when: not minio_validate_strict | bool
       tags:
         - runtime
 
     - name: Read MinIO data dir stats
       ansible.builtin.stat:
-        path: "{{ minio_host_data_dir }}"
-      register: minio_data_stat
+        path: "{{ minio_deploy_host_data_dir }}"
+      register: minio_deploy_data_stat
       tags:
         - storage
 
     - name: Validate MinIO data dir ownership and mode
       ansible.builtin.assert:
         that:
-          - minio_data_stat.stat.exists
-          - minio_data_stat.stat.uid == (minio_expected_uid | int)
-          - minio_data_stat.stat.gid == (minio_expected_gid | int)
-          - minio_data_stat.stat.mode == (minio_expected_mode | string)
+          - minio_deploy_data_stat.stat.exists
+          - minio_deploy_data_stat.stat.uid == (minio_deploy_expected_uid | int)
+          - minio_deploy_data_stat.stat.gid == (minio_deploy_expected_gid | int)
+          - minio_deploy_data_stat.stat.mode == (minio_deploy_expected_mode | string)
         fail_msg: >-
-          MinIO data dir {{ minio_host_data_dir }} expected {{ minio_expected_uid }}:{{ minio_expected_gid }}
-          mode {{ minio_expected_mode }}, got {{ minio_data_stat.stat.uid }}:{{ minio_data_stat.stat.gid }}
-          mode {{ minio_data_stat.stat.mode }}.
+          MinIO data dir {{ minio_deploy_host_data_dir }} expected
+          {{ minio_deploy_expected_uid }}:{{ minio_deploy_expected_gid }}
+          mode {{ minio_deploy_expected_mode }}, got
+          {{ minio_deploy_data_stat.stat.uid }}:{{ minio_deploy_data_stat.stat.gid }}
+          mode {{ minio_deploy_data_stat.stat.mode }}.
       when: minio_validate_strict | bool
       tags:
         - storage
@@ -70,18 +72,18 @@
     - name: Report MinIO data dir ownership and mode
       ansible.builtin.debug:
         msg: >-
-          MinIO data dir {{ minio_host_data_dir }}: uid={{ minio_data_stat.stat.uid }},
-          gid={{ minio_data_stat.stat.gid }}, mode={{ minio_data_stat.stat.mode }}
+          MinIO data dir {{ minio_deploy_host_data_dir }}: uid={{ minio_deploy_data_stat.stat.uid }},
+          gid={{ minio_deploy_data_stat.stat.gid }}, mode={{ minio_deploy_data_stat.stat.mode }}
       when: not minio_validate_strict | bool
       tags:
         - storage
 
     - name: Check MinIO health endpoint
       ansible.builtin.uri:
-        url: "{{ minio_health_url_effective }}"
+        url: "{{ minio_deploy_health_url_effective }}"
         method: GET
-        validate_certs: "{{ minio_validate_certs }}"
-      register: minio_health
+        validate_certs: "{{ minio_deploy_validate_certs }}"
+      register: minio_deploy_health
       changed_when: false
       failed_when: false
       tags:
@@ -90,8 +92,8 @@
     - name: Validate MinIO health response
       ansible.builtin.assert:
         that:
-          - minio_health.status == 200
-        fail_msg: "MinIO health check failed: status {{ minio_health.status }}."
+          - minio_deploy_health.status == 200
+        fail_msg: "MinIO health check failed: status {{ minio_deploy_health.status }}."
       when: minio_validate_strict | bool
       tags:
         - api

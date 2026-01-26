@@ -1,0 +1,5 @@
+---
+- name: Destroy nginx deploy scenario
+  hosts: localhost
+  gather_facts: false
+  tasks: []

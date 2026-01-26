@@ -1,38 +1,38 @@
 ---
 - name: Manage MinIO systemd unit
   when:
-    - minio_manage_systemd | bool
+    - minio_deploy_manage_systemd | bool
     - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
   tags:
     - systemd
   block:
     - name: Escape kube play manifest path
       ansible.builtin.command:
-        cmd: "systemd-escape {{ minio_pod_manifest_path }}"
-      register: minio_systemd_name
+        cmd: "systemd-escape {{ minio_deploy_pod_manifest_path }}"
+      register: minio_deploy_systemd_name
       changed_when: false
 
     - name: Ensure podman-kube drop-in directory exists
       ansible.builtin.file:
-        path: "/etc/systemd/system/podman-kube@{{ minio_systemd_name.stdout }}.service.d"
+        path: "/etc/systemd/system/podman-kube@{{ minio_deploy_systemd_name.stdout }}.service.d"
         state: directory
         mode: '0755'
 
     - name: Enable and start Podman kube systemd unit
       ansible.builtin.systemd:
-        name: "podman-kube@{{ minio_systemd_name.stdout }}.service"
+        name: "podman-kube@{{ minio_deploy_systemd_name.stdout }}.service"
         enabled: true
         state: started
         daemon_reload: true
 
     - name: Wait until MinIO health endpoint is reachable
       ansible.builtin.uri:
-        url: "{{ minio_health_url_effective }}"
+        url: "{{ minio_deploy_health_url_effective }}"
         method: GET
-        validate_certs: "{{ minio_validate_certs }}"
-      register: minio_health
-      until: minio_health.status == 200
+        validate_certs: "{{ minio_deploy_validate_certs }}"
+      register: minio_deploy_health
+      until: minio_deploy_health.status == 200
       retries: 30
       delay: 5
       changed_when: false
-      failed_when: minio_health is failed or minio_health.status != 200
+      failed_when: minio_deploy_health is failed or minio_deploy_health.status != 200

@@ -5,12 +5,12 @@
 
 - name: Deploy MinIO runtime
   when:
-    - not minio_skip_runtime | bool
-    - not minio_skip_deploy | bool
+    - not minio_deploy_skip_runtime | bool
+    - not minio_deploy_skip_deploy | bool
   block:
     - name: Ensure required packages are installed
       ansible.builtin.include_tasks: install_packages.yml
-      when: minio_install_packages | bool
+      when: minio_deploy_install_packages | bool
       tags:
         - install
 
@@ -21,22 +21,22 @@
 
     - name: Install systemd unit for MinIO Pod
       ansible.builtin.include_tasks: systemd.yml
-      when: minio_manage_systemd | bool
+      when: minio_deploy_manage_systemd | bool
       tags:
         - systemd
 
     - name: Wait until MinIO health endpoint is reachable (non-systemd)
       ansible.builtin.uri:
-        url: "{{ minio_health_url_effective }}"
+        url: "{{ minio_deploy_health_url_effective }}"
         method: GET
-        validate_certs: "{{ minio_validate_certs }}"
-      register: minio_health
-      until: minio_health.status == 200
+        validate_certs: "{{ minio_deploy_validate_certs }}"
+      register: minio_deploy_health
+      until: minio_deploy_health.status == 200
       retries: 30
       delay: 5
       changed_when: false
-      failed_when: minio_health is failed or minio_health.status != 200
-      when: not minio_manage_systemd | bool
+      failed_when: minio_deploy_health is failed or minio_deploy_health.status != 200
+      when: not minio_deploy_manage_systemd | bool
       tags:
         - deployment
         - api

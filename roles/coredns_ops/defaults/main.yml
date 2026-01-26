@@ -1,0 +1,3 @@
+---
+coredns_ops_action: "none"
+coredns_ops_target_image: ""

@@ -1,0 +1,9 @@
+---
+- name: Converge nginx_ops
+  hosts: localhost
+  gather_facts: true
+  vars:
+    nginx_deploy_skip_runtime: true
+    nginx_ops_action: "none"
+  roles:
+    - role: nginx_ops

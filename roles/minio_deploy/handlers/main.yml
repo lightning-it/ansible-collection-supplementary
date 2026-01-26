@@ -1,15 +1,15 @@
 ---
 - name: Recreate minio pod
-  ansible.builtin.command: "podman pod rm -f {{ minio_pod_name }}"
-  register: minio_pod_remove
-  failed_when: minio_pod_remove.rc not in [0, 125]
-  changed_when: "'deleted' in minio_pod_remove.stdout"
+  ansible.builtin.command: "podman pod rm -f {{ minio_deploy_pod_name }}"
+  register: minio_deploy_pod_remove
+  failed_when: minio_deploy_pod_remove.rc not in [0, 125]
+  changed_when: "'deleted' in minio_deploy_pod_remove.stdout"
   ignore_errors: true
-  when: not minio_skip_runtime | bool
+  when: not minio_deploy_skip_runtime | bool
 
 - name: Run minio pod
   ansible.builtin.command:
-    cmd: "podman kube play {{ minio_pod_manifest_path }}"
-  register: minio_pod_start
-  changed_when: "'created' in minio_pod_start.stdout or 'configured' in minio_pod_start.stdout"
-  when: not minio_skip_runtime | bool
+    cmd: "podman kube play {{ minio_deploy_pod_manifest_path }}"
+  register: minio_deploy_pod_start
+  changed_when: "'created' in minio_deploy_pod_start.stdout or 'configured' in minio_deploy_pod_start.stdout"
+  when: not minio_deploy_skip_runtime | bool

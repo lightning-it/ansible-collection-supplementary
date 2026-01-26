@@ -1,0 +1,4 @@
+---
+coredns_config_manage: true
+coredns_config_corefile: ""
+coredns_config_mode: '0644'

@@ -8,6 +8,6 @@
 
 - name: Run vault pod
   ansible.builtin.command:
-    cmd: "podman kube play {{ vault_pod_manifest_path }}"
+    cmd: "podman kube play {{ vault_deploy_pod_manifest_path }}"
   register: pod_start
   changed_when: "'created' in pod_start.stdout or 'configured' in pod_start.stdout"

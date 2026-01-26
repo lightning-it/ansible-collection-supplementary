@@ -11,8 +11,8 @@ None.
 See `roles/minio_deploy/defaults/main.yml`.
 
 Key variables:
-- `minio_validate_mode`: `fail` (default) or `report`.
-- `minio_skip_validate`
+- `minio_deploy_validate_mode`: `fail` (default) or `report`.
+- `minio_deploy_skip_validate`
 
 ## Example Playbook
 

@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ coredns_deploy_pod_name }}
+  labels:
+    app: coredns
+spec:
+  containers:
+    - name: coredns
+      image: {{ coredns_deploy_image }}
+      ports:
+        - containerPort: {{ coredns_deploy_dns_port }}
+          hostPort: {{ coredns_deploy_host_dns_port }}
+          hostIP: {{ coredns_deploy_host_ip }}
+          protocol: UDP
+        - containerPort: {{ coredns_deploy_dns_port }}
+          hostPort: {{ coredns_deploy_host_dns_port }}
+          hostIP: {{ coredns_deploy_host_ip }}
+          protocol: TCP
+        - containerPort: {{ coredns_deploy_health_port }}
+          hostPort: {{ coredns_deploy_host_health_port }}
+          hostIP: {{ coredns_deploy_host_ip }}
+          protocol: TCP
+      securityContext:
+        runAsUser: {{ coredns_deploy_run_as_user }}
+        runAsGroup: {{ coredns_deploy_run_as_group }}
+        runAsNonRoot: {{ coredns_deploy_run_as_non_root | bool | ternary('true', 'false') }}
+      volumeMounts:
+        - name: coredns-corefile
+          mountPath: {{ coredns_deploy_container_corefile_path }}
+          readOnly: true
+  volumes:
+    - name: coredns-corefile
+      hostPath:
+        path: {{ coredns_deploy_host_corefile_path }}
+        type: File
+      selinuxRelabel: true

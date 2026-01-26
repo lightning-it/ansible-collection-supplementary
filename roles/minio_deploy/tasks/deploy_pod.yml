@@ -3,17 +3,17 @@
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: directory
-    owner: "{{ item.owner | default(minio_run_as_user) }}"
-    group: "{{ item.group | default(minio_run_as_group) }}"
+    owner: "{{ item.owner | default(minio_deploy_run_as_user) }}"
+    group: "{{ item.group | default(minio_deploy_run_as_group) }}"
     mode: "{{ item.mode }}"
   loop:
-    - path: "{{ minio_host_data_dir }}"
+    - path: "{{ minio_deploy_host_data_dir }}"
       mode: '0750'
-    - path: "{{ minio_config_dir }}"
+    - path: "{{ minio_deploy_config_dir }}"
       mode: '0750'
-    - path: "{{ minio_cert_dir }}"
+    - path: "{{ minio_deploy_cert_dir }}"
       mode: '0750'
-    - path: "{{ minio_pod_manifest_path | dirname }}"
+    - path: "{{ minio_deploy_pod_manifest_path | dirname }}"
       owner: root
       group: root
       mode: '0755'
@@ -27,7 +27,7 @@
 - name: Render MinIO Pod manifest
   ansible.builtin.template:
     src: minio-pod.yml.j2
-    dest: "{{ minio_pod_manifest_path }}"
+    dest: "{{ minio_deploy_pod_manifest_path }}"
     mode: '0644'
   notify:
     - Recreate minio pod

@@ -8,7 +8,7 @@ None.
 
 ## Role Variables
 
-See `roles/minio_deploy/defaults/main.yml`.
+See `roles/minio_ops/defaults/main.yml` and `roles/minio_deploy/defaults/main.yml`.
 
 Key variables:
 - `minio_ops_action`: `restart`, `status`, `upgrade`, or `none`.

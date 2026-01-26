@@ -1,0 +1,166 @@
+---
+- name: Ensure Nginx host config directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default(nginx_deploy_run_as_user) }}"
+    group: "{{ item.group | default(nginx_deploy_run_as_group) }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ nginx_deploy_host_conf_dir }}"
+      mode: '0755'
+    - path: "{{ nginx_deploy_host_conf_d_dir }}"
+      mode: '0755'
+    - path: "{{ nginx_deploy_pod_manifest_path | dirname }}"
+      owner: root
+      group: root
+      mode: '0755'
+  when: item.path | default('') | length > 0
+  tags:
+    - deployment
+
+- name: Ensure Nginx web root exists
+  ansible.builtin.file:
+    path: "{{ nginx_deploy_host_root }}"
+    state: directory
+    owner: "{{ nginx_deploy_run_as_user }}"
+    group: "{{ nginx_deploy_run_as_group }}"
+    mode: '0755'
+  when: nginx_deploy_manage_default_site | bool
+  tags:
+    - deployment
+    - content
+
+- name: Ensure Nginx log directory exists
+  ansible.builtin.file:
+    path: "{{ nginx_deploy_host_log_dir }}"
+    state: directory
+    owner: "{{ nginx_deploy_run_as_user }}"
+    group: "{{ nginx_deploy_run_as_group }}"
+    mode: '0755'
+  when: nginx_deploy_host_log_dir | length > 0
+  tags:
+    - deployment
+
+- name: Detect SELinux status
+  ansible.builtin.command: getenforce
+  register: selinux_status
+  changed_when: false
+  failed_when: false
+  when:
+    - ansible_distribution in ['RedHat', 'CentOS']
+    - nginx_deploy_selinux_relabel | bool
+
+- name: Check SELinux context for Nginx mounts
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ nginx_deploy_host_conf_dir }}"
+    - "{{ nginx_deploy_host_root }}"
+    - "{{ nginx_deploy_host_log_dir }}"
+  register: nginx_deploy_selinux_contexts
+  changed_when: false
+  failed_when: false
+  tags:
+    - deployment
+  when:
+    - ansible_distribution in ['RedHat', 'CentOS']
+    - nginx_deploy_selinux_relabel | bool
+    - selinux_status.stdout is defined
+    - selinux_status.stdout != 'Disabled'
+    - item | length > 0
+
+- name: Apply SELinux context
+  ansible.builtin.command: >-
+    chcon -Rt container_file_t {{ nginx_deploy_selinux_relabel_targets | join(' ') }}
+  register: nginx_deploy_selinux_relabel_cmd
+  changed_when: nginx_deploy_selinux_type_missing | bool
+  notify:
+    - Recreate nginx pod
+    - Run nginx pod
+  tags:
+    - deployment
+  when:
+    - ansible_distribution in ['RedHat', 'CentOS']
+    - nginx_deploy_selinux_relabel | bool
+    - selinux_status.stdout is defined
+    - selinux_status.stdout != 'Disabled'
+    - nginx_deploy_selinux_contexts is defined
+    - nginx_deploy_selinux_contexts.results is defined
+    - nginx_deploy_selinux_relabel_targets | length > 0
+    - nginx_deploy_selinux_type_missing | bool
+  vars:
+    nginx_deploy_selinux_contexts_defined: >-
+      {{
+        nginx_deploy_selinux_contexts.results
+        | selectattr('stat.selinux_context', 'defined')
+        | list
+      }}
+    nginx_deploy_selinux_type_missing: >-
+      {{
+        (nginx_deploy_selinux_contexts_defined
+         | rejectattr('stat.selinux_context', 'search', 'container_file_t')
+         | list
+         | length)
+        > 0
+      }}
+    nginx_deploy_selinux_relabel_targets: >-
+      {{
+        [nginx_deploy_host_conf_dir, nginx_deploy_host_root, nginx_deploy_host_log_dir]
+        | reject('equalto', '')
+        | list
+      }}
+
+- name: Render Nginx main config
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: "{{ nginx_deploy_host_conf_file }}"
+    owner: "{{ nginx_deploy_run_as_user }}"
+    group: "{{ nginx_deploy_run_as_group }}"
+    mode: '0644'
+  notify: Reload nginx
+  tags:
+    - config
+
+- name: Render default server config
+  ansible.builtin.template:
+    src: default.conf.j2
+    dest: "{{ nginx_deploy_host_default_conf_path }}"
+    owner: "{{ nginx_deploy_run_as_user }}"
+    group: "{{ nginx_deploy_run_as_group }}"
+    mode: '0644'
+  when:
+    - nginx_deploy_manage_default_site | bool
+    - not nginx_deploy_skip_config | bool
+  notify: Reload nginx
+  tags:
+    - config
+
+- name: Install default index content
+  ansible.builtin.copy:
+    dest: "{{ nginx_deploy_host_root }}/index.html"
+    content: "{{ nginx_deploy_default_index_content }}"
+    owner: "{{ nginx_deploy_run_as_user }}"
+    group: "{{ nginx_deploy_run_as_group }}"
+    mode: '0644'
+  when:
+    - nginx_deploy_manage_default_site | bool
+    - not nginx_deploy_skip_config | bool
+  tags:
+    - content
+
+- name: Render Nginx Pod manifest
+  ansible.builtin.template:
+    src: nginx-pod.yml.j2
+    dest: "{{ nginx_deploy_pod_manifest_path }}"
+    mode: '0644'
+  notify:
+    - Recreate nginx pod
+    - Run nginx pod
+  tags:
+    - deployment
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - deployment

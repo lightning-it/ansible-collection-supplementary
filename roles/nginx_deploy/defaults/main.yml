@@ -1,0 +1,89 @@
+---
+# Podman runtime
+nginx_deploy_pod_name: "nginx"
+nginx_deploy_pod_manifest_path: "/etc/podman/pods/nginx.yml"
+nginx_deploy_image: "docker.io/library/nginx:stable"
+nginx_deploy_container_name: "{{ nginx_deploy_pod_name }}-nginx"
+nginx_deploy_run_as_user: 0
+nginx_deploy_run_as_group: 0
+nginx_deploy_run_as_non_root: false
+nginx_deploy_install_packages: true
+nginx_deploy_selinux_relabel: false
+
+# Host paths (mounted into container)
+nginx_deploy_host_conf_dir: "/srv/nginx/config"
+nginx_deploy_host_conf_file: "{{ nginx_deploy_host_conf_dir }}/nginx.conf"
+nginx_deploy_host_conf_d_dir: "{{ nginx_deploy_host_conf_dir }}/conf.d"
+nginx_deploy_host_default_conf_path: "{{ nginx_deploy_host_conf_d_dir }}/default.conf"
+nginx_deploy_host_root: "/srv/nginx/html"
+nginx_deploy_host_log_dir: "/srv/nginx/logs"
+
+# Container paths
+nginx_deploy_conf_dir: "/etc/nginx"
+nginx_deploy_conf_file: "{{ nginx_deploy_conf_dir }}/nginx.conf"
+nginx_deploy_conf_d_dir: "{{ nginx_deploy_conf_dir }}/conf.d"
+nginx_deploy_default_conf_path: "{{ nginx_deploy_conf_d_dir }}/default.conf"
+nginx_deploy_log_dir: "/var/log/nginx"
+nginx_deploy_pid_file: "/var/run/nginx.pid"
+nginx_deploy_root: "/usr/share/nginx/html"
+
+# User/group inside container
+nginx_deploy_user: "nginx"
+nginx_deploy_group: "nginx"
+
+# Core runtime tuning
+nginx_deploy_worker_processes: "auto"
+nginx_deploy_worker_connections: 1024
+nginx_deploy_keepalive_timeout: 65
+nginx_deploy_sendfile: true
+nginx_deploy_tcp_nopush: true
+nginx_deploy_tcp_nodelay: true
+nginx_deploy_types_hash_max_size: 2048
+nginx_deploy_server_tokens: "off"
+
+# Default site
+nginx_deploy_manage_default_site: true
+nginx_deploy_listen_port: 80
+nginx_deploy_host_port: "{{ nginx_deploy_listen_port }}"
+nginx_deploy_host_ip: >-
+  {{
+    ansible_default_ipv4.address
+      | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
+  }}
+nginx_deploy_server_name: "_"
+nginx_deploy_index_files:
+  - index.html
+  - index.htm
+nginx_deploy_default_index_content: |
+  <html>
+  <head><title>nginx</title></head>
+  <body><h1>nginx is running</h1></body>
+  </html>
+nginx_deploy_default_server_extra_directives: []
+nginx_deploy_http_extra_directives: []
+
+# Health check
+nginx_deploy_health_path: "/"
+nginx_deploy_health_url: ""
+nginx_deploy_health_url_effective: >-
+  {{
+    nginx_deploy_health_url
+    if (nginx_deploy_health_url | length > 0)
+    else ('http://' ~ nginx_deploy_host_ip ~ ':' ~ (nginx_deploy_host_port | string) ~ nginx_deploy_health_path)
+  }}
+nginx_deploy_validate_certs: true
+
+# Deployment control
+nginx_deploy_manage_service: true
+nginx_deploy_manage_systemd: "{{ nginx_deploy_manage_service }}"
+nginx_deploy_systemd_unit_name: >-
+  {{
+    'podman-kube@'
+    ~ (nginx_deploy_pod_manifest_path | basename | regex_replace('\\.yml$', ''))
+    ~ '.service'
+  }}
+nginx_deploy_config_test: true
+nginx_deploy_skip_runtime: false
+nginx_deploy_skip_deploy: false
+nginx_deploy_skip_config: false
+nginx_deploy_skip_validate: false

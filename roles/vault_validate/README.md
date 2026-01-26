@@ -11,7 +11,7 @@ None.
 See `roles/vault_deploy/defaults/main.yml`.
 
 Key variables:
-- `vault_validate_mode`: `fail` (default) or `report`.
+- `vault_deploy_validate_mode`: `fail` (default) or `report`.
 
 ## Example Playbook
 ```yaml

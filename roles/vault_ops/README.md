@@ -8,7 +8,7 @@ None.
 
 ## Role Variables
 
-See `roles/vault_deploy/defaults/main.yml`.
+See `roles/vault_ops/defaults/main.yml` and `roles/vault_deploy/defaults/main.yml`.
 
 Key variables:
 - `vault_ops_action`: `restart`, `status`, `upgrade`, or `none`.

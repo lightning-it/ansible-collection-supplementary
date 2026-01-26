@@ -11,9 +11,9 @@ None.
 See `roles/vault_deploy/defaults/main.yml`.
 
 Key variables:
-- `vault_bootstrap_init` (bool): allow init (default false).
-- `vault_unseal_keys` (list): provide unseal keys for automated unseal.
-- `vault_bootstrap_write_init_output` (bool): write init output to disk (default true).
+- `vault_deploy_bootstrap_init` (bool): allow init (default false).
+- `vault_deploy_unseal_keys` (list): provide unseal keys for automated unseal.
+- `vault_deploy_bootstrap_write_init_output` (bool): write init output to disk (default true).
 
 ## Example Playbook
 ```yaml

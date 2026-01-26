@@ -6,19 +6,19 @@
   ansible.builtin.fail:
     msg: >-
       Plain init JSON detected in {{ vault_foundational_init_file_path_effective }};
-      vault_ansible_vault_pw is required to re-encrypt.
+      vault_deploy_ansible_vault_pw is required to re-encrypt.
   when:
-    - not vault_init_file_is_vault | bool
-    - not vault_init_file_is_legacy | bool
-    - vault_init_file_is_json | bool
-    - vault_ansible_vault_pw | default('') | length == 0
+    - not vault_deploy_init_file_is_vault | bool
+    - not vault_deploy_init_file_is_legacy | bool
+    - vault_deploy_init_file_is_json | bool
+    - vault_deploy_ansible_vault_pw | default('') | length == 0
 
 - name: Re-encrypt raw init JSON on controller
   when:
-    - not vault_init_file_is_vault | bool
-    - not vault_init_file_is_legacy | bool
-    - vault_init_file_is_json | bool
-    - vault_ansible_vault_pw | default('') | length > 0
+    - not vault_deploy_init_file_is_vault | bool
+    - not vault_deploy_init_file_is_legacy | bool
+    - vault_deploy_init_file_is_json | bool
+    - vault_deploy_ansible_vault_pw | default('') | length > 0
   no_log: true
   block:
     - name: Create controller bootstrap temp dir
@@ -39,14 +39,14 @@
       delegate_to: localhost
       ansible.builtin.copy:
         dest: "{{ vault_foundational_tmp.path }}/init.json"
-        content: "{{ vault_init_file_content }}"
+        content: "{{ vault_deploy_init_file_content }}"
         mode: "0600"
 
     - name: Write vault password file to controller temp dir
       delegate_to: localhost
       ansible.builtin.copy:
-        dest: "{{ vault_foundational_tmp.path }}/.vault_pass"
-        content: "{{ vault_ansible_vault_pw }}"
+        dest: "{{ vault_foundational_tmp.path }}/.vault_deploy_pass"
+        content: "{{ vault_deploy_ansible_vault_pw }}"
         mode: "0600"
 
     - name: Encrypt raw init JSON on controller
@@ -57,7 +57,7 @@
       changed_when: true
       environment:
         ANSIBLE_CONFIG: "{{ vault_foundational_tmp.path }}/ansible.cfg"
-        ANSIBLE_VAULT_PASSWORD_FILE: "{{ vault_foundational_tmp.path }}/.vault_pass"
+        ANSIBLE_VAULT_PASSWORD_FILE: "{{ vault_foundational_tmp.path }}/.vault_deploy_pass"
 
     - name: Copy re-encrypted init file to target
       ansible.builtin.copy:

@@ -10,9 +10,9 @@ None.
 ## Role Variables
 
 Required for configuration:
-- `vault_url`
-- `vault_terraform_source`
-- `vault_token` (or `vault_root_token` / `root_token` / `VAULT_TOKEN`)
+- `vault_deploy_url`
+- `vault_deploy_terraform_source`
+- `vault_deploy_token` (or `VAULT_TOKEN`)
 
 See `roles/vault_deploy/defaults/main.yml` for shared variables.
 

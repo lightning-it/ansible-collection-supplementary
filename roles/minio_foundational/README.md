@@ -11,12 +11,12 @@ None.
 See `roles/minio_deploy/defaults/main.yml`.
 
 Key variables:
-- `minio_api_scheme`
-- `minio_host_ip`
-- `minio_port`
-- `minio_console_port`
-- `minio_root_user`
-- `minio_root_password`
+- `minio_deploy_api_scheme`
+- `minio_deploy_host_ip`
+- `minio_deploy_port`
+- `minio_deploy_console_port`
+- `minio_deploy_root_user`
+- `minio_deploy_root_password`
 
 ## Example Usage
 

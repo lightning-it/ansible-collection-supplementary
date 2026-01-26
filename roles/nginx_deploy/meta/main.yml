@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: nginx_deploy
+  namespace: lit
+  author: Lightning IT
+  description: Deploy Nginx as a Podman container with managed configuration.
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - modulix
+    - nginx
+    - web
+    - http
+    - rhel
+    - automation
+
+dependencies: []
