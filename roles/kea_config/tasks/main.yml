@@ -1,0 +1,50 @@
+---
+- name: Ensure required Kea vars are defined
+  ansible.builtin.import_role:
+    name: kea_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Resolve Kea config content
+  ansible.builtin.set_fact:
+    kea_deploy_config_effective: >-
+      {{
+        kea_config_content
+        if (kea_config_content | length > 0)
+        else kea_deploy_config
+      }}
+  tags: always
+
+- name: Skip Kea config when disabled
+  ansible.builtin.debug:
+    msg: "Kea config skipped (kea_deploy_skip_config=true or kea_config_manage=false)."
+  when:
+    - kea_deploy_skip_config | bool or not kea_config_manage | bool
+  tags: always
+
+- name: Ensure Kea config directory exists
+  ansible.builtin.file:
+    path: "{{ kea_deploy_host_config_dir }}"
+    state: directory
+    owner: "{{ kea_deploy_run_as_user }}"
+    group: "{{ kea_deploy_run_as_group }}"
+    mode: '0755'
+  when:
+    - not kea_deploy_skip_config | bool
+    - kea_config_manage | bool
+  tags:
+    - config
+
+- name: Render Kea DHCPv4 config
+  ansible.builtin.template:
+    src: kea-dhcp4.conf.j2
+    dest: "{{ kea_deploy_host_config_path }}"
+    owner: "{{ kea_deploy_run_as_user }}"
+    group: "{{ kea_deploy_run_as_group }}"
+    mode: "{{ kea_config_mode }}"
+  when:
+    - not kea_deploy_skip_config | bool
+    - kea_config_manage | bool
+  notify: Reload kea
+  tags:
+    - config

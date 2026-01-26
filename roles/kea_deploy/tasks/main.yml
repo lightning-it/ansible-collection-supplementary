@@ -1,0 +1,7 @@
+---
+- name: Ensure required Kea vars are defined
+  ansible.builtin.include_tasks: assert.yml
+  tags: always
+
+- name: Deploy Kea runtime
+  ansible.builtin.include_tasks: deploy.yml

@@ -1,0 +1,6 @@
+---
+- name: Ensure Kea runtime packages are installed
+  ansible.builtin.package:
+    name: "{{ kea_deploy_packages }}"
+    state: present
+  when: kea_deploy_packages is defined
