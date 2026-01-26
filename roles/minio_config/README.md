@@ -11,10 +11,10 @@ Configure MinIO users and policies using the `mc` client.
 See `roles/minio_deploy/defaults/main.yml`.
 
 Key variables:
-- `minio_config_users`
-- `minio_mc_path`
-- `minio_mc_alias`
-- `minio_mc_insecure`
+- `minio_deploy_config_users`
+- `minio_deploy_mc_path`
+- `minio_deploy_mc_alias`
+- `minio_deploy_mc_insecure`
 
 ## Example Playbook
 

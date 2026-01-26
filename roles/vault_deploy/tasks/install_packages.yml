@@ -1,7 +1,7 @@
 ---
 - name: Install required base packages
   ansible.builtin.package:
-    name: "{{ vault_packages }}"
+    name: "{{ vault_deploy_packages }}"
     state: present
   tags:
     - install
@@ -20,7 +20,7 @@
     enabled: true
     state: started
   when:
-    - vault_manage_systemd | bool
+    - vault_deploy_manage_systemd | bool
     - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
   tags:
     - install

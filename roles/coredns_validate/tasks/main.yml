@@ -1,0 +1,73 @@
+---
+- name: Ensure required CoreDNS vars are defined
+  ansible.builtin.import_role:
+    name: coredns_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Set validate mode
+  ansible.builtin.set_fact:
+    coredns_validate_strict: "{{ coredns_validate_mode != 'report' }}"
+  tags: always
+
+- name: Skip CoreDNS validation when disabled
+  ansible.builtin.debug:
+    msg: "CoreDNS validation skipped (coredns_deploy_skip_validate=true)."
+  when: coredns_deploy_skip_validate | bool
+  tags: always
+
+- name: Validate CoreDNS runtime
+  when: not coredns_deploy_skip_validate | bool
+  tags:
+    - validate
+  block:
+    - name: Check CoreDNS container running state
+      ansible.builtin.command: "podman inspect {{ coredns_deploy_container_name }} --format {{ '{{.State.Running}}' }}"
+      register: coredns_deploy_container_running
+      changed_when: false
+      failed_when: false
+
+    - name: Fail when CoreDNS container is not running
+      ansible.builtin.fail:
+        msg: "CoreDNS container {{ coredns_deploy_container_name }} is not running."
+      when:
+        - coredns_validate_strict | bool
+        - coredns_deploy_container_running.stdout | default('') | trim != 'true'
+
+    - name: Report CoreDNS container running state
+      ansible.builtin.debug:
+        msg: "CoreDNS container running: {{ coredns_deploy_container_running.stdout | default('unknown') | trim }}"
+      when: not coredns_validate_strict | bool
+
+    - name: Check CoreDNS Corefile presence on host
+      ansible.builtin.stat:
+        path: "{{ coredns_deploy_host_corefile_path }}"
+      register: coredns_deploy_corefile_stat
+
+    - name: Fail when CoreDNS Corefile is missing
+      ansible.builtin.fail:
+        msg: "CoreDNS Corefile {{ coredns_deploy_host_corefile_path }} is missing."
+      when:
+        - coredns_validate_strict | bool
+        - not coredns_deploy_corefile_stat.stat.exists
+
+    - name: Check CoreDNS health endpoint
+      ansible.builtin.uri:
+        url: "{{ coredns_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ coredns_deploy_validate_certs }}"
+      register: coredns_deploy_health
+      changed_when: false
+      failed_when: false
+      when:
+        - coredns_validate_check_http | bool
+        - not coredns_deploy_skip_runtime | bool
+
+    - name: Validate CoreDNS health response
+      ansible.builtin.assert:
+        that:
+          - coredns_deploy_health.status == 200
+        fail_msg: "CoreDNS health check failed: status {{ coredns_deploy_health.status }}."
+      when:
+        - coredns_validate_check_http | bool
+        - coredns_validate_strict | bool

@@ -5,43 +5,43 @@
     state: directory
     mode: '0755'
   loop:
-    - "{{ vault_cert_dir }}"
-    - "{{ vault_config_dir }}"
+    - "{{ vault_deploy_cert_dir }}"
+    - "{{ vault_deploy_config_dir }}"
   tags:
     - init
 
 - name: Try to read existing certificate from Vault
   delegate_to: localhost
-  community.hashi_vault.vault_kv2_get:
-    url: "{{ vault_vault_address }}"
-    engine_mount_point: "{{ vault_engine_mount_point }}"
-    auth_method: "{{ vault_hashi_vault_auth_method }}"
+  community.hashi_vault.vault_deploy_kv2_get:
+    url: "{{ vault_deploy_vault_address }}"
+    engine_mount_point: "{{ vault_deploy_engine_mount_point }}"
+    auth_method: "{{ vault_deploy_hashi_vault_auth_method }}"
     role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
     secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
-    validate_certs: "{{ vault_vault_validate_certs }}"
+    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
     path: "{{ inventory_hostname }}/vault/certificate"
   register: existing_cert
   failed_when: false
   no_log: true
   tags:
-    - vault_pki
+    - vault_deploy_pki
 
 - name: Check for existing local bootstrap certs
   ansible.builtin.stat:
     path: "{{ item }}"
   loop:
-    - "{{ vault_cert_dir }}/vault.key"
-    - "{{ vault_cert_dir }}/vault.crt"
-  register: vault_bootstrap_certs
+    - "{{ vault_deploy_cert_dir }}/vault.key"
+    - "{{ vault_deploy_cert_dir }}/vault.crt"
+  register: vault_deploy_bootstrap_certs
   tags:
     - init
 
 - name: Set bootstrap cert presence flag
   ansible.builtin.set_fact:
-    vault_bootstrap_cert_present: >-
+    vault_deploy_bootstrap_cert_present: >-
       {{
-        (vault_bootstrap_certs.results[0].stat.exists | default(false))
-        and (vault_bootstrap_certs.results[1].stat.exists | default(false))
+        (vault_deploy_bootstrap_certs.results[0].stat.exists | default(false))
+        and (vault_deploy_bootstrap_certs.results[1].stat.exists | default(false))
       }}
   tags:
     - init
@@ -49,17 +49,17 @@
 - name: Create tmp selfsigned certificate
   when:
     - existing_cert.data is not defined
-    - not vault_bootstrap_cert_present | bool
+    - not vault_deploy_bootstrap_cert_present | bool
   block:
     - name: Create private key (RSA, 4096 bits)
       community.crypto.openssl_privatekey:
-        path: "{{ vault_cert_dir }}/vault.key"
+        path: "{{ vault_deploy_cert_dir }}/vault.key"
       tags:
         - init
 
     - name: Create certificate signing request (CSR) for self-signed certificate
       community.crypto.openssl_csr_pipe:
-        privatekey_path: "{{ vault_cert_dir }}/vault.key"
+        privatekey_path: "{{ vault_deploy_cert_dir }}/vault.key"
         common_name: "{{ inventory_hostname }}"
         organization_name: Ansible, Inc.
         subject_alt_name:
@@ -73,8 +73,8 @@
 
     - name: Generate Vault server certificate signed by self-signed CA
       community.crypto.x509_certificate:
-        path: "{{ vault_cert_dir }}/vault.crt"
-        privatekey_path: "{{ vault_cert_dir }}/vault.key"
+        path: "{{ vault_deploy_cert_dir }}/vault.crt"
+        privatekey_path: "{{ vault_deploy_cert_dir }}/vault.key"
         csr_content: "{{ csr.csr }}"
         provider: selfsigned
       tags:
@@ -82,7 +82,7 @@
 
     - name: Set proper ownership and permissions for Vault private key
       ansible.builtin.file:
-        path: "{{ vault_cert_dir }}/vault.key"
+        path: "{{ vault_deploy_cert_dir }}/vault.key"
         mode: "0644"
       tags:
         - init

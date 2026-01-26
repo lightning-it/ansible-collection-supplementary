@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: nginx_validate
+  namespace: lit
+  author: Lightning IT
+  description: Validate Nginx runtime and configuration state in Podman.
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - modulix
+    - nginx
+    - web
+    - http
+    - validation
+    - automation
+
+dependencies: []

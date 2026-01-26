@@ -1,0 +1,6 @@
+---
+- name: Ensure Nginx runtime packages are installed
+  ansible.builtin.package:
+    name: "{{ nginx_deploy_packages }}"
+    state: present
+  when: nginx_deploy_packages is defined

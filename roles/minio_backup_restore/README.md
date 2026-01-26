@@ -11,11 +11,11 @@ None.
 See `roles/minio_deploy/defaults/main.yml`.
 
 Key variables:
-- `minio_backup_action`
-- `minio_backup_dir`
-- `minio_backup_retention_keep_last`
-- `minio_restore_source`
-- `minio_restore_confirm` (must be `YES_RESTORE`)
+- `minio_deploy_backup_action`
+- `minio_deploy_backup_dir`
+- `minio_deploy_backup_retention_keep_last`
+- `minio_deploy_restore_source`
+- `minio_deploy_restore_confirm` (must be `YES_RESTORE`)
 
 ## Example Playbook
 

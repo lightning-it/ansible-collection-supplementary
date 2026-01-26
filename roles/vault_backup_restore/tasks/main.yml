@@ -7,57 +7,57 @@
 
 - name: Ensure backup directory exists
   ansible.builtin.file:
-    path: "{{ vault_backup_dir }}"
+    path: "{{ vault_deploy_backup_dir }}"
     state: directory
     mode: '0750'
-  when: vault_backup_action in ['backup', 'restore']
+  when: vault_deploy_backup_action in ['backup', 'restore']
   tags:
     - backup
     - restore
 
 - name: Stop Vault service for file backend
   when:
-    - vault_backup_stop_service_for_file_backend | bool
-    - vault_backup_action in ['backup', 'restore']
+    - vault_deploy_backup_stop_service_for_file_backend | bool
+    - vault_deploy_backup_action in ['backup', 'restore']
   tags:
     - backup
     - restore
   block:
     - name: Stop Vault systemd unit
       ansible.builtin.systemd:
-        name: "{{ vault_systemd_unit_name }}"
+        name: "{{ vault_deploy_systemd_unit_name }}"
         state: stopped
-      when: vault_manage_systemd | bool
+      when: vault_deploy_manage_systemd | bool
 
     - name: Stop Vault pod (non-systemd)
-      ansible.builtin.command: "podman pod stop {{ vault_pod_name }}"
-      register: vault_pod_stop
-      changed_when: vault_pod_stop.rc == 0
+      ansible.builtin.command: "podman pod stop {{ vault_deploy_pod_name }}"
+      register: vault_deploy_pod_stop
+      changed_when: vault_deploy_pod_stop.rc == 0
       failed_when: false
-      when: not vault_manage_systemd | bool
+      when: not vault_deploy_manage_systemd | bool
 
 - name: Create backup archive  # noqa command-instead-of-module
   ansible.builtin.command: >-
-    tar -C {{ vault_host_data_dir | dirname }}
-    -czf {{ vault_backup_dir }}/vault-data-{{ ansible_date_time.iso8601_basic_short }}.tar.gz
-    {{ vault_host_data_dir | basename }}
+    tar -C {{ vault_deploy_host_data_dir | dirname }}
+    -czf {{ vault_deploy_backup_dir }}/vault-data-{{ ansible_date_time.iso8601_basic_short }}.tar.gz
+    {{ vault_deploy_host_data_dir | basename }}
   register: vault_backup_archive
   changed_when: vault_backup_archive.rc == 0
-  when: vault_backup_action == 'backup'
+  when: vault_deploy_backup_action == 'backup'
   tags:
     - backup
 
 - name: Prune old backups
   when:
-    - vault_backup_action == 'backup'
-    - vault_backup_retention_keep_last | int > 0
+    - vault_deploy_backup_action == 'backup'
+    - vault_deploy_backup_retention_keep_last | int > 0
   tags:
     - backup
     - retention
   block:
     - name: Find backup files
       ansible.builtin.find:
-        paths: "{{ vault_backup_dir }}"
+        paths: "{{ vault_deploy_backup_dir }}"
         patterns: "vault-data-*.tar.gz"
         file_type: file
       register: vault_backup_files
@@ -69,50 +69,50 @@
       loop: >-
         {{
           (vault_backup_files.files | sort(attribute='mtime') | reverse)
-          [vault_backup_retention_keep_last | int:]
+          [vault_deploy_backup_retention_keep_last | int:]
         }}
-      when: vault_backup_files.files | length > vault_backup_retention_keep_last | int
+      when: vault_backup_files.files | length > vault_deploy_backup_retention_keep_last | int
 
 - name: Validate restore input
   ansible.builtin.assert:
     that:
-      - vault_restore_confirm == 'YES_RESTORE'
-      - vault_restore_source | length > 0
-    fail_msg: "Set vault_restore_confirm=YES_RESTORE and vault_restore_source for restore."
-  when: vault_backup_action == 'restore'
+      - vault_deploy_restore_confirm == 'YES_RESTORE'
+      - vault_deploy_restore_source | length > 0
+    fail_msg: "Set vault_deploy_restore_confirm=YES_RESTORE and vault_deploy_restore_source for restore."
+  when: vault_deploy_backup_action == 'restore'
   tags:
     - restore
 
 - name: Move existing data directory aside
   ansible.builtin.command: >-
-    mv {{ vault_host_data_dir }}
-    {{ vault_host_data_dir }}.bak.{{ ansible_date_time.iso8601_basic_short }}
-  register: vault_data_move
-  changed_when: vault_data_move.rc == 0
+    mv {{ vault_deploy_host_data_dir }}
+    {{ vault_deploy_host_data_dir }}.bak.{{ ansible_date_time.iso8601_basic_short }}
+  register: vault_deploy_data_move
+  changed_when: vault_deploy_data_move.rc == 0
   failed_when: false
-  when: vault_backup_action == 'restore'
+  when: vault_deploy_backup_action == 'restore'
   tags:
     - restore
 
 - name: Restore backup archive  # noqa command-instead-of-module
   ansible.builtin.command: >-
-    tar -C {{ vault_host_data_dir | dirname }}
-    -xzf {{ vault_restore_source }}
-  register: vault_restore_extract
-  changed_when: vault_restore_extract.rc == 0
-  when: vault_backup_action == 'restore'
+    tar -C {{ vault_deploy_host_data_dir | dirname }}
+    -xzf {{ vault_deploy_restore_source }}
+  register: vault_deploy_restore_extract
+  changed_when: vault_deploy_restore_extract.rc == 0
+  when: vault_deploy_backup_action == 'restore'
   tags:
     - restore
 
 - name: Ensure Vault data directory ownership and mode after restore
   ansible.builtin.file:
-    path: "{{ vault_host_data_dir }}"
+    path: "{{ vault_deploy_host_data_dir }}"
     state: directory
-    owner: "{{ vault_expected_uid }}"
-    group: "{{ vault_expected_gid }}"
-    mode: "{{ vault_expected_mode }}"
+    owner: "{{ vault_deploy_expected_uid }}"
+    group: "{{ vault_deploy_expected_gid }}"
+    mode: "{{ vault_deploy_expected_mode }}"
     recurse: true
-  when: vault_backup_action == 'restore'
+  when: vault_deploy_backup_action == 'restore'
   tags:
     - restore
 
@@ -121,39 +121,39 @@
     name: vault_deploy
     tasks_from: selinux_relabel
   when:
-    - vault_backup_action == 'restore'
-    - vault_selinux_relabel | bool
+    - vault_deploy_backup_action == 'restore'
+    - vault_deploy_selinux_relabel | bool
   tags:
     - restore
     - selinux
 
 - name: Start Vault service after backup/restore
   when:
-    - vault_backup_action in ['backup', 'restore']
-    - vault_backup_stop_service_for_file_backend | bool
+    - vault_deploy_backup_action in ['backup', 'restore']
+    - vault_deploy_backup_stop_service_for_file_backend | bool
   tags:
     - backup
     - restore
   block:
     - name: Start Vault systemd unit
       ansible.builtin.systemd:
-        name: "{{ vault_systemd_unit_name }}"
+        name: "{{ vault_deploy_systemd_unit_name }}"
         state: started
         enabled: true
-      when: vault_manage_systemd | bool
+      when: vault_deploy_manage_systemd | bool
 
     - name: Start Vault pod (non-systemd)
-      ansible.builtin.command: "podman kube play {{ vault_pod_manifest_path }}"
-      register: vault_pod_start
-      changed_when: vault_pod_start.rc == 0
-      when: not vault_manage_systemd | bool
+      ansible.builtin.command: "podman kube play {{ vault_deploy_pod_manifest_path }}"
+      register: vault_deploy_pod_start
+      changed_when: vault_deploy_pod_start.rc == 0
+      when: not vault_deploy_manage_systemd | bool
 
 - name: Validate Vault after restore
   ansible.builtin.include_role:
     name: vault_validate
   when:
-    - vault_backup_action == 'restore'
-    - vault_backup_validate_after_restore | bool
+    - vault_deploy_backup_action == 'restore'
+    - vault_deploy_backup_validate_after_restore | bool
   tags:
     - restore
     - validate

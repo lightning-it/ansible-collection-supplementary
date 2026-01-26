@@ -7,4 +7,4 @@
       ansible.builtin.assert:
         that:
           - cluster_id is defined
-          - vault_terraform_source is defined
+          - vault_deploy_terraform_source is defined

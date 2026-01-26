@@ -20,15 +20,15 @@
   block:
     - name: Restart MinIO systemd unit
       ansible.builtin.systemd:
-        name: "{{ minio_systemd_unit_name }}"
+        name: "{{ minio_deploy_systemd_unit_name }}"
         state: restarted
-      when: minio_manage_systemd | bool
+      when: minio_deploy_manage_systemd | bool
 
     - name: Restart MinIO pod (non-systemd)
-      ansible.builtin.command: "podman pod restart {{ minio_pod_name }}"
-      register: minio_pod_restart
-      changed_when: minio_pod_restart.rc == 0
-      when: not minio_manage_systemd | bool
+      ansible.builtin.command: "podman pod restart {{ minio_deploy_pod_name }}"
+      register: minio_deploy_pod_restart
+      changed_when: minio_deploy_pod_restart.rc == 0
+      when: not minio_deploy_manage_systemd | bool
 
     - name: Validate MinIO after restart
       ansible.builtin.include_role:
@@ -42,16 +42,16 @@
   block:
     - name: Read MinIO health status
       ansible.builtin.uri:
-        url: "{{ minio_health_url_effective }}"
+        url: "{{ minio_deploy_health_url_effective }}"
         method: GET
-        validate_certs: "{{ minio_validate_certs }}"
-      register: minio_health
+        validate_certs: "{{ minio_deploy_validate_certs }}"
+      register: minio_deploy_health
       changed_when: false
       failed_when: false
 
     - name: Report MinIO API status
       ansible.builtin.debug:
-        msg: "health={{ minio_health.status }}"
+        msg: "health={{ minio_deploy_health.status }}"
 
 - name: Upgrade MinIO image
   when: minio_ops_action == 'upgrade'
@@ -67,7 +67,7 @@
 
     - name: Set MinIO image override
       ansible.builtin.set_fact:
-        minio_image: "{{ minio_ops_target_image }}"
+        minio_deploy_image: "{{ minio_ops_target_image }}"
 
     - name: Redeploy MinIO with new image
       ansible.builtin.include_role:

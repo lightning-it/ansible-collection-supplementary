@@ -1,0 +1,17 @@
+server {
+  listen {{ nginx_deploy_listen_port }};
+  server_name {{ nginx_deploy_server_name }};
+
+  root {{ nginx_deploy_root }};
+  index {{ nginx_deploy_index_files | join(' ') }};
+
+  location / {
+    try_files $uri $uri/ =404;
+  }
+
+{% if nginx_deploy_default_server_extra_directives is defined and nginx_deploy_default_server_extra_directives | length > 0 %}
+{% for directive in nginx_deploy_default_server_extra_directives %}
+  {{ directive }}
+{% endfor %}
+{% endif %}
+}

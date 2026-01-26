@@ -332,8 +332,8 @@ Many roles will eventually run “Vault-first”, but must also run **100% witho
 use_vault: false              # safe default: runs without Vault
 use_vault_mode: "explicit"    # optional: explicit|auto
 
-vault_addr: ""
-vault_token: ""
+vault_deploy_addr: ""
+vault_deploy_token: ""
 ```
 
 ```yaml
@@ -345,8 +345,8 @@ vault_token: ""
         (use_vault | bool) or
         (
           (use_vault_mode | default('explicit')) == 'auto'
-          and (vault_addr | default('') | length > 0)
-          and (vault_token | default('') | length > 0)
+          and (vault_deploy_addr | default('') | length > 0)
+          and (vault_deploy_token | default('') | length > 0)
         )
       }}
 ```
@@ -382,7 +382,7 @@ myrole_admin_password: "{{ lookup('env', 'MYROLE_ADMIN_PASSWORD') | default('', 
 Every role that supports Vault must document:
 
 - `use_vault` / `use_vault_mode`
-- required Vault connection vars (`vault_addr`, auth vars)
+- required Vault connection vars (`vault_deploy_addr`, auth vars)
 - required non-Vault vars (what must be set when Vault is off)
 
 ---

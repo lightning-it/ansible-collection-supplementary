@@ -3,14 +3,14 @@
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
-    owner: "{{ vault_run_as_user | default(100) }}"
-    group: "{{ vault_run_as_group | default(1000) }}"
+    owner: "{{ vault_deploy_run_as_user | default(100) }}"
+    group: "{{ vault_deploy_run_as_group | default(1000) }}"
     mode: '0755'
   loop:
-    - "{{ vault_host_data_dir | dirname }}"
-    - "{{ vault_cert_dir }}"
-    - "{{ vault_config_dir }}"
-    - "{{ vault_pod_manifest_path | dirname }}"
+    - "{{ vault_deploy_host_data_dir | dirname }}"
+    - "{{ vault_deploy_cert_dir }}"
+    - "{{ vault_deploy_config_dir }}"
+    - "{{ vault_deploy_pod_manifest_path | dirname }}"
   notify:
     - Recreate vault pod
     - Run vault pod
@@ -21,12 +21,12 @@
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
-    owner: "{{ vault_run_as_user | default(100) }}"
-    group: "{{ vault_run_as_group | default(1000) }}"
+    owner: "{{ vault_deploy_run_as_user | default(100) }}"
+    group: "{{ vault_deploy_run_as_group | default(1000) }}"
     mode: '0700'
   loop:
-    - "{{ vault_host_data_dir }}/core"
-    - "{{ vault_host_data_dir }}/sys"
+    - "{{ vault_deploy_host_data_dir }}/core"
+    - "{{ vault_deploy_host_data_dir }}/sys"
   notify:
     - Recreate vault pod
     - Run vault pod
@@ -35,20 +35,20 @@
 
 - name: Ensure Vault data directory permissions
   ansible.builtin.file:
-    path: "{{ vault_host_data_dir }}"
+    path: "{{ vault_deploy_host_data_dir }}"
     state: directory
-    owner: "{{ vault_run_as_user | default(100) }}"
-    group: "{{ vault_run_as_group | default(1000) }}"
+    owner: "{{ vault_deploy_run_as_user | default(100) }}"
+    group: "{{ vault_deploy_run_as_group | default(1000) }}"
     mode: '0700'
   tags:
     - deployment
 
 - name: Ensure Vault data directory ownership
   ansible.builtin.file:
-    path: "{{ vault_host_data_dir }}"
+    path: "{{ vault_deploy_host_data_dir }}"
     state: directory
-    owner: "{{ vault_run_as_user | default(100) }}"
-    group: "{{ vault_run_as_group | default(1000) }}"
+    owner: "{{ vault_deploy_run_as_user | default(100) }}"
+    group: "{{ vault_deploy_run_as_group | default(1000) }}"
     recurse: true
   tags:
     - deployment
@@ -60,20 +60,20 @@
   failed_when: false
   when:
     - ansible_distribution in ['RedHat', 'CentOS']
-    - vault_selinux_relabel | bool
+    - vault_deploy_selinux_relabel | bool
 
 - name: Set Vault container name
   ansible.builtin.set_fact:
-    vault_container_name: "{{ vault_pod_name }}-vault"
-  when: vault_pod_name is defined
+    vault_deploy_container_name: "{{ vault_deploy_pod_name }}-vault"
+  when: vault_deploy_pod_name is defined
 
 - name: Check SELinux context for Vault mounts
   ansible.builtin.stat:
     path: "{{ item }}"
   loop:
-    - "{{ vault_host_data_dir }}"
-    - "{{ vault_cert_dir }}"
-    - "{{ vault_config_dir }}"
+    - "{{ vault_deploy_host_data_dir }}"
+    - "{{ vault_deploy_cert_dir }}"
+    - "{{ vault_deploy_config_dir }}"
   register: selinux_contexts
   changed_when: false
   failed_when: false
@@ -81,16 +81,16 @@
     - deployment
   when:
     - ansible_distribution in ['RedHat', 'CentOS']
-    - vault_selinux_relabel | bool
+    - vault_deploy_selinux_relabel | bool
     - selinux_status.stdout is defined
     - selinux_status.stdout != 'Disabled'
 
 - name: Apply SELinux context
   ansible.builtin.command: >-
     chcon -Rt container_file_t
-    {{ vault_host_data_dir }}
-    {{ vault_cert_dir }}
-    {{ vault_config_dir }}
+    {{ vault_deploy_host_data_dir }}
+    {{ vault_deploy_cert_dir }}
+    {{ vault_deploy_config_dir }}
   register: selinux_cmd
   changed_when: selinux_type_missing | bool
   notify:
@@ -100,7 +100,7 @@
     - deployment
   when:
     - ansible_distribution in ['RedHat', 'CentOS']
-    - vault_selinux_relabel | bool
+    - vault_deploy_selinux_relabel | bool
     - selinux_status.stdout is defined
     - selinux_status.stdout != 'Disabled'
     - selinux_contexts is defined
@@ -125,7 +125,7 @@
 - name: Render Vault Pod manifest
   ansible.builtin.template:
     src: vault-pod.yml.j2
-    dest: "{{ vault_pod_manifest_path }}"
+    dest: "{{ vault_deploy_pod_manifest_path }}"
     mode: '0644'
   notify:
     - Recreate vault pod
@@ -136,7 +136,7 @@
 - name: Render Vault config
   ansible.builtin.template:
     src: vau-config.hcl.j2
-    dest: "{{ vault_config_dir }}/vault.hcl"
+    dest: "{{ vault_deploy_config_dir }}/vault.hcl"
     mode: '0644'
   notify:
     - Recreate vault pod
@@ -150,29 +150,29 @@
     - deployment
 
 - name: Read Vault container running state
-  ansible.builtin.command: "podman inspect {{ vault_container_name }} --format {{ '{{.State.Running}}' }}"
-  register: vault_container_running
+  ansible.builtin.command: "podman inspect {{ vault_deploy_container_name }} --format {{ '{{.State.Running}}' }}"
+  register: vault_deploy_container_running
   changed_when: false
   failed_when: false
   tags:
     - deployment
   when:
-    - vault_container_name is defined
+    - vault_deploy_container_name is defined
 
 - name: Read Podman rootless status
   ansible.builtin.command: "podman info --format {{ '{{.Host.Security.Rootless}}' }}"
-  register: vault_podman_rootless
+  register: vault_deploy_podman_rootless
   changed_when: false
   failed_when: false
   tags:
     - deployment
   when:
-    - vault_container_name is defined
+    - vault_deploy_container_name is defined
 
 - name: Read Vault data dir ownership on host
   ansible.builtin.stat:
-    path: "{{ vault_host_data_dir }}"
-  register: vault_host_data_stat
+    path: "{{ vault_deploy_host_data_dir }}"
+  register: vault_deploy_host_data_stat
   changed_when: false
   tags:
     - deployment
@@ -183,64 +183,64 @@
     argv:
       - podman
       - inspect
-      - "{{ vault_container_name }}"
+      - "{{ vault_deploy_container_name }}"
       - --format
       - "{% raw %}{{range .HostConfig.IDMappings.UidMap}}{{println .ContainerID .HostID .Size}}{{end}}{% endraw %}"
-  register: vault_uid_map_inspect
+  register: vault_deploy_uid_map_inspect
   changed_when: false
   failed_when: false
   tags:
     - deployment
   when:
-    - vault_container_name is defined
+    - vault_deploy_container_name is defined
 
 - name: Read Vault container gid map (inspect)
   ansible.builtin.command:
     argv:
       - podman
       - inspect
-      - "{{ vault_container_name }}"
+      - "{{ vault_deploy_container_name }}"
       - --format
       - "{% raw %}{{range .HostConfig.IDMappings.GidMap}}{{println .ContainerID .HostID .Size}}{{end}}{% endraw %}"
-  register: vault_gid_map_inspect
+  register: vault_deploy_gid_map_inspect
   changed_when: false
   failed_when: false
   tags:
     - deployment
   when:
-    - vault_container_name is defined
+    - vault_deploy_container_name is defined
 
 - name: Set Vault container uid/gid map lines (inspect)
   ansible.builtin.set_fact:
-    vault_uid_map_lines: "{{ vault_uid_map_inspect.stdout_lines | default([]) }}"
-    vault_gid_map_lines: "{{ vault_gid_map_inspect.stdout_lines | default([]) }}"
+    vault_deploy_uid_map_lines: "{{ vault_deploy_uid_map_inspect.stdout_lines | default([]) }}"
+    vault_deploy_gid_map_lines: "{{ vault_deploy_gid_map_inspect.stdout_lines | default([]) }}"
   tags:
     - deployment
   when:
-    - vault_uid_map_inspect is defined
-    - vault_gid_map_inspect is defined
-    - vault_uid_map_inspect.rc | default(1) == 0
-    - vault_gid_map_inspect.rc | default(1) == 0
-    - vault_uid_map_inspect.stdout_lines is defined
-    - vault_uid_map_inspect.stdout_lines | length > 0
-    - vault_gid_map_inspect.stdout_lines is defined
-    - vault_gid_map_inspect.stdout_lines | length > 0
+    - vault_deploy_uid_map_inspect is defined
+    - vault_deploy_gid_map_inspect is defined
+    - vault_deploy_uid_map_inspect.rc | default(1) == 0
+    - vault_deploy_gid_map_inspect.rc | default(1) == 0
+    - vault_deploy_uid_map_inspect.stdout_lines is defined
+    - vault_deploy_uid_map_inspect.stdout_lines | length > 0
+    - vault_deploy_gid_map_inspect.stdout_lines is defined
+    - vault_deploy_gid_map_inspect.stdout_lines | length > 0
 
 - name: Read Vault container PID
-  ansible.builtin.command: "podman inspect {{ vault_container_name }} --format {{ '{{.State.Pid}}' }}"
-  register: vault_container_pid
+  ansible.builtin.command: "podman inspect {{ vault_deploy_container_name }} --format {{ '{{.State.Pid}}' }}"
+  register: vault_deploy_container_pid
   changed_when: false
   failed_when: false
   tags:
     - deployment
   when:
-    - vault_container_name is defined
-    - (vault_uid_map_lines | default([]) | length == 0)
-      or (vault_gid_map_lines | default([]) | length == 0)
+    - vault_deploy_container_name is defined
+    - (vault_deploy_uid_map_lines | default([]) | length == 0)
+      or (vault_deploy_gid_map_lines | default([]) | length == 0)
 
 - name: Read Vault container uid/gid maps (proc)
-  ansible.builtin.command: "cat /proc/{{ vault_container_pid.stdout | trim }}/{{ item }}"
-  register: vault_container_id_maps
+  ansible.builtin.command: "cat /proc/{{ vault_deploy_container_pid.stdout | trim }}/{{ item }}"
+  register: vault_deploy_container_id_maps
   changed_when: false
   failed_when: false
   tags:
@@ -249,47 +249,47 @@
     - uid_map
     - gid_map
   when:
-    - vault_container_pid.stdout is defined
-    - vault_container_pid.stdout | trim | length > 0
-    - vault_container_pid.stdout | trim | int > 0
-    - (vault_uid_map_lines | default([]) | length == 0)
-      or (vault_gid_map_lines | default([]) | length == 0)
+    - vault_deploy_container_pid.stdout is defined
+    - vault_deploy_container_pid.stdout | trim | length > 0
+    - vault_deploy_container_pid.stdout | trim | int > 0
+    - (vault_deploy_uid_map_lines | default([]) | length == 0)
+      or (vault_deploy_gid_map_lines | default([]) | length == 0)
 
 - name: Set Vault container uid/gid map lines (proc)
   ansible.builtin.set_fact:
-    vault_uid_map_lines: >-
+    vault_deploy_uid_map_lines: >-
       {{
-        (vault_uid_map_lines | default([]) | length > 0)
+        (vault_deploy_uid_map_lines | default([]) | length > 0)
         | ternary(
-            vault_uid_map_lines,
-            vault_container_id_maps.results[0].stdout_lines | default([])
+            vault_deploy_uid_map_lines,
+            vault_deploy_container_id_maps.results[0].stdout_lines | default([])
           )
       }}
-    vault_gid_map_lines: >-
+    vault_deploy_gid_map_lines: >-
       {{
-        (vault_gid_map_lines | default([]) | length > 0)
+        (vault_deploy_gid_map_lines | default([]) | length > 0)
         | ternary(
-            vault_gid_map_lines,
-            vault_container_id_maps.results[1].stdout_lines | default([])
+            vault_deploy_gid_map_lines,
+            vault_deploy_container_id_maps.results[1].stdout_lines | default([])
           )
       }}
   tags:
     - deployment
   when:
-    - vault_container_id_maps is defined
-    - vault_container_id_maps.results is defined
-    - vault_container_id_maps.results | length == 2
-    - vault_container_id_maps.results[0].stdout_lines is defined
-    - vault_container_id_maps.results[1].stdout_lines is defined
-    - (vault_uid_map_lines | default([]) | length == 0)
-      or (vault_gid_map_lines | default([]) | length == 0)
+    - vault_deploy_container_id_maps is defined
+    - vault_deploy_container_id_maps.results is defined
+    - vault_deploy_container_id_maps.results | length == 2
+    - vault_deploy_container_id_maps.results[0].stdout_lines is defined
+    - vault_deploy_container_id_maps.results[1].stdout_lines is defined
+    - (vault_deploy_uid_map_lines | default([]) | length == 0)
+      or (vault_deploy_gid_map_lines | default([]) | length == 0)
 
 - name: Select Vault uid/gid map lines for run-as user/group
   ansible.builtin.set_fact:
-    vault_uid_map_line: >-
-      {% set target = vault_run_as_user | default(100) | int %}
+    vault_deploy_uid_map_line: >-
+      {% set target = vault_deploy_run_as_user | default(100) | int %}
       {% set ns = namespace(match='') %}
-      {% for line in vault_uid_map_lines %}
+      {% for line in vault_deploy_uid_map_lines %}
       {%   set parts = line.split() %}
       {%   if parts | length >= 3 %}
       {%     set start = parts[0] | int %}
@@ -300,10 +300,10 @@
       {%   endif %}
       {% endfor %}
       {{ ns.match }}
-    vault_gid_map_line: >-
-      {% set target = vault_run_as_group | default(1000) | int %}
+    vault_deploy_gid_map_line: >-
+      {% set target = vault_deploy_run_as_group | default(1000) | int %}
       {% set ns = namespace(match='') %}
-      {% for line in vault_gid_map_lines %}
+      {% for line in vault_deploy_gid_map_lines %}
       {%   set parts = line.split() %}
       {%   if parts | length >= 3 %}
       {%     set start = parts[0] | int %}
@@ -317,65 +317,75 @@
   tags:
     - deployment
   when:
-    - vault_uid_map_lines is defined
-    - vault_uid_map_lines | length > 0
-    - vault_gid_map_lines is defined
-    - vault_gid_map_lines | length > 0
+    - vault_deploy_uid_map_lines is defined
+    - vault_deploy_uid_map_lines | length > 0
+    - vault_deploy_gid_map_lines is defined
+    - vault_deploy_gid_map_lines | length > 0
 
 - name: Parse Vault container uid/gid map ranges (selected)
   ansible.builtin.set_fact:
-    vault_uid_map_parts: "{{ vault_uid_map_line.split() }}"
-    vault_gid_map_parts: "{{ vault_gid_map_line.split() }}"
+    vault_deploy_uid_map_parts: "{{ vault_deploy_uid_map_line.split() }}"
+    vault_deploy_gid_map_parts: "{{ vault_deploy_gid_map_line.split() }}"
   tags:
     - deployment
   when:
-    - vault_uid_map_parts is not defined
-    - vault_gid_map_parts is not defined
-    - vault_uid_map_line is defined
-    - vault_uid_map_line | trim | length > 0
-    - vault_gid_map_line is defined
-    - vault_gid_map_line | trim | length > 0
+    - vault_deploy_uid_map_parts is not defined
+    - vault_deploy_gid_map_parts is not defined
+    - vault_deploy_uid_map_line is defined
+    - vault_deploy_uid_map_line | trim | length > 0
+    - vault_deploy_gid_map_line is defined
+    - vault_deploy_gid_map_line | trim | length > 0
 
 - name: Calculate Vault host uid/gid from container map
   ansible.builtin.set_fact:
-    vault_host_uid: >-
+    vault_deploy_host_uid: >-
       {{
-        (vault_uid_map_parts[1] | int)
-        + ((vault_run_as_user | default(100) | int) - (vault_uid_map_parts[0] | int))
+        (vault_deploy_uid_map_parts[1] | int)
+        + ((vault_deploy_run_as_user | default(100) | int) - (vault_deploy_uid_map_parts[0] | int))
       }}
-    vault_host_gid: >-
+    vault_deploy_host_gid: >-
       {{
-        (vault_gid_map_parts[1] | int)
-        + ((vault_run_as_group | default(1000) | int) - (vault_gid_map_parts[0] | int))
+        (vault_deploy_gid_map_parts[1] | int)
+        + ((vault_deploy_run_as_group | default(1000) | int) - (vault_deploy_gid_map_parts[0] | int))
       }}
   tags:
     - deployment
   when:
-    - vault_uid_map_parts is defined
-    - vault_gid_map_parts is defined
-    - vault_uid_map_parts | length > 2
-    - vault_gid_map_parts | length > 2
-    - (vault_run_as_user | default(100) | int) >= (vault_uid_map_parts[0] | int)
-    - (vault_run_as_user | default(100) | int) < ((vault_uid_map_parts[0] | int) + (vault_uid_map_parts[2] | int))
-    - (vault_run_as_group | default(1000) | int) >= (vault_gid_map_parts[0] | int)
-    - (vault_run_as_group | default(1000) | int) < ((vault_gid_map_parts[0] | int) + (vault_gid_map_parts[2] | int))
+    - vault_deploy_uid_map_parts is defined
+    - vault_deploy_gid_map_parts is defined
+    - vault_deploy_uid_map_parts | length > 2
+    - vault_deploy_gid_map_parts | length > 2
+    - (vault_deploy_run_as_user | default(100) | int) >= (vault_deploy_uid_map_parts[0] | int)
+    - >-
+      (vault_deploy_run_as_user | default(100) | int)
+      < (
+        (vault_deploy_uid_map_parts[0] | int)
+        + (vault_deploy_uid_map_parts[2] | int)
+      )
+    - (vault_deploy_run_as_group | default(1000) | int) >= (vault_deploy_gid_map_parts[0] | int)
+    - >-
+      (vault_deploy_run_as_group | default(1000) | int)
+      < (
+        (vault_deploy_gid_map_parts[0] | int)
+        + (vault_deploy_gid_map_parts[2] | int)
+      )
 
 - name: Ensure Vault data dir ownership matches container mapping
   ansible.builtin.file:
-    path: "{{ vault_host_data_dir }}"
+    path: "{{ vault_deploy_host_data_dir }}"
     state: directory
-    owner: "{{ vault_host_uid }}"
-    group: "{{ vault_host_gid }}"
+    owner: "{{ vault_deploy_host_uid }}"
+    group: "{{ vault_deploy_host_gid }}"
     recurse: true
   tags:
     - deployment
   when:
-    - vault_host_uid is defined
-    - vault_host_gid is defined
+    - vault_deploy_host_uid is defined
+    - vault_deploy_host_gid is defined
 
 - name: Apply SELinux relabel for Vault data dir
   ansible.builtin.include_tasks: selinux_relabel.yml
-  when: vault_selinux_relabel | bool
+  when: vault_deploy_selinux_relabel | bool
   tags:
     - deployment
     - selinux

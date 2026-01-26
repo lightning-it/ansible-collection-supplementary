@@ -7,12 +7,12 @@
 
 - name: Set validate mode
   ansible.builtin.set_fact:
-    vault_validate_strict: "{{ vault_validate_mode != 'report' }}"
+    vault_validate_strict: "{{ vault_deploy_validate_mode != 'report' }}"
   tags: always
 
 - name: Check Vault container running state
-  ansible.builtin.command: "podman inspect {{ vault_container_name }} --format {{ '{{.State.Running}}' }}"
-  register: vault_container_running
+  ansible.builtin.command: "podman inspect {{ vault_deploy_container_name }} --format {{ '{{.State.Running}}' }}"
+  register: vault_deploy_container_running
   changed_when: false
   failed_when: false
   tags:
@@ -21,17 +21,17 @@
 
 - name: Fail when Vault container is not running
   ansible.builtin.fail:
-    msg: "Vault container {{ vault_container_name }} is not running."
+    msg: "Vault container {{ vault_deploy_container_name }} is not running."
   when:
     - vault_validate_strict | bool
-    - vault_container_running.stdout | default('') | trim != 'true'
+    - vault_deploy_container_running.stdout | default('') | trim != 'true'
   tags:
     - validate
     - runtime
 
 - name: Report Vault container running state
   ansible.builtin.debug:
-    msg: "Vault container running: {{ vault_container_running.stdout | default('unknown') | trim }}"
+    msg: "Vault container running: {{ vault_deploy_container_running.stdout | default('unknown') | trim }}"
   when: not vault_validate_strict | bool
   tags:
     - validate
@@ -39,8 +39,8 @@
 
 - name: Read Vault data dir stats
   ansible.builtin.stat:
-    path: "{{ vault_host_data_dir }}"
-  register: vault_data_stat
+    path: "{{ vault_deploy_host_data_dir }}"
+  register: vault_deploy_data_stat
   tags:
     - validate
     - storage
@@ -48,14 +48,16 @@
 - name: Validate Vault data dir ownership and mode
   ansible.builtin.assert:
     that:
-      - vault_data_stat.stat.exists
-      - vault_data_stat.stat.uid == (vault_expected_uid | int)
-      - vault_data_stat.stat.gid == (vault_expected_gid | int)
-      - vault_data_stat.stat.mode == (vault_expected_mode | string)
+      - vault_deploy_data_stat.stat.exists
+      - vault_deploy_data_stat.stat.uid == (vault_deploy_expected_uid | int)
+      - vault_deploy_data_stat.stat.gid == (vault_deploy_expected_gid | int)
+      - vault_deploy_data_stat.stat.mode == (vault_deploy_expected_mode | string)
     fail_msg: >-
-      Vault data dir {{ vault_host_data_dir }} expected {{ vault_expected_uid }}:{{ vault_expected_gid }}
-      mode {{ vault_expected_mode }}, got {{ vault_data_stat.stat.uid }}:{{ vault_data_stat.stat.gid }}
-      mode {{ vault_data_stat.stat.mode }}.
+      Vault data dir {{ vault_deploy_host_data_dir }} expected
+      {{ vault_deploy_expected_uid }}:{{ vault_deploy_expected_gid }}
+      mode {{ vault_deploy_expected_mode }}, got
+      {{ vault_deploy_data_stat.stat.uid }}:{{ vault_deploy_data_stat.stat.gid }}
+      mode {{ vault_deploy_data_stat.stat.mode }}.
   when: vault_validate_strict | bool
   tags:
     - validate
@@ -64,8 +66,8 @@
 - name: Report Vault data dir ownership and mode
   ansible.builtin.debug:
     msg: >-
-      Vault data dir {{ vault_host_data_dir }}: uid={{ vault_data_stat.stat.uid }},
-      gid={{ vault_data_stat.stat.gid }}, mode={{ vault_data_stat.stat.mode }}
+      Vault data dir {{ vault_deploy_host_data_dir }}: uid={{ vault_deploy_data_stat.stat.uid }},
+      gid={{ vault_deploy_data_stat.stat.gid }}, mode={{ vault_deploy_data_stat.stat.mode }}
   when: not vault_validate_strict | bool
   tags:
     - validate
@@ -73,7 +75,7 @@
 
 - name: Detect SELinux status
   ansible.builtin.command: getenforce
-  register: vault_selinux_status
+  register: vault_deploy_selinux_status
   changed_when: false
   failed_when: false
   when: ansible_distribution in ['RedHat', 'CentOS']
@@ -82,67 +84,67 @@
     - selinux
 
 - name: Read Vault container mount label
-  ansible.builtin.command: "podman inspect {{ vault_container_name }} --format {{ '{{.MountLabel}}' }}"
-  register: vault_mount_label
+  ansible.builtin.command: "podman inspect {{ vault_deploy_container_name }} --format {{ '{{.MountLabel}}' }}"
+  register: vault_deploy_mount_label
   changed_when: false
   failed_when: false
   when:
     - ansible_distribution in ['RedHat', 'CentOS']
-    - vault_selinux_status.stdout is defined
-    - vault_selinux_status.stdout != 'Disabled'
+    - vault_deploy_selinux_status.stdout is defined
+    - vault_deploy_selinux_status.stdout != 'Disabled'
   tags:
     - validate
     - selinux
 
 - name: Parse Vault container mount label
   ansible.builtin.set_fact:
-    vault_mount_label_parts: "{{ (vault_mount_label.stdout | trim).split(':') }}"
+    vault_deploy_mount_label_parts: "{{ (vault_deploy_mount_label.stdout | trim).split(':') }}"
   when:
-    - vault_mount_label.stdout | default('') | trim | length > 0
+    - vault_deploy_mount_label.stdout | default('') | trim | length > 0
   tags:
     - validate
     - selinux
 
 - name: Set Vault container mount label pieces
   ansible.builtin.set_fact:
-    vault_mount_label_type: "{{ vault_mount_label_parts[2] }}"
-    vault_mount_label_level: "{{ vault_mount_label_parts[3:] | join(':') }}"
+    vault_deploy_mount_label_type: "{{ vault_deploy_mount_label_parts[2] }}"
+    vault_deploy_mount_label_level: "{{ vault_deploy_mount_label_parts[3:] | join(':') }}"
   when:
-    - vault_mount_label_parts is defined
-    - vault_mount_label_parts | length > 3
+    - vault_deploy_mount_label_parts is defined
+    - vault_deploy_mount_label_parts | length > 3
   tags:
     - validate
     - selinux
 
 - name: Read current SELinux label for Vault data dir
-  ansible.builtin.command: "stat -c %C {{ vault_host_data_dir }}"
-  register: vault_mount_label_current
+  ansible.builtin.command: "stat -c %C {{ vault_deploy_host_data_dir }}"
+  register: vault_deploy_mount_label_current
   changed_when: false
   failed_when: false
   when:
     - ansible_distribution in ['RedHat', 'CentOS']
-    - vault_selinux_status.stdout is defined
-    - vault_selinux_status.stdout != 'Disabled'
+    - vault_deploy_selinux_status.stdout is defined
+    - vault_deploy_selinux_status.stdout != 'Disabled'
   tags:
     - validate
     - selinux
 
 - name: Parse current SELinux label
   ansible.builtin.set_fact:
-    vault_mount_label_current_parts: "{{ (vault_mount_label_current.stdout | trim).split(':') }}"
+    vault_deploy_mount_label_current_parts: "{{ (vault_deploy_mount_label_current.stdout | trim).split(':') }}"
   when:
-    - vault_mount_label_current.stdout | default('') | trim | length > 0
+    - vault_deploy_mount_label_current.stdout | default('') | trim | length > 0
   tags:
     - validate
     - selinux
 
 - name: Set current SELinux label pieces
   ansible.builtin.set_fact:
-    vault_mount_label_current_type: "{{ vault_mount_label_current_parts[2] }}"
-    vault_mount_label_current_level: "{{ vault_mount_label_current_parts[3:] | join(':') }}"
+    vault_deploy_mount_label_current_type: "{{ vault_deploy_mount_label_current_parts[2] }}"
+    vault_deploy_mount_label_current_level: "{{ vault_deploy_mount_label_current_parts[3:] | join(':') }}"
   when:
-    - vault_mount_label_current_parts is defined
-    - vault_mount_label_current_parts | length > 3
+    - vault_deploy_mount_label_current_parts is defined
+    - vault_deploy_mount_label_current_parts | length > 3
   tags:
     - validate
     - selinux
@@ -150,15 +152,15 @@
 - name: Fail when SELinux labels do not match container MCS
   ansible.builtin.fail:
     msg: >-
-      SELinux label mismatch: container={{ vault_mount_label_type }}:{{ vault_mount_label_level }},
-      host={{ vault_mount_label_current_type }}:{{ vault_mount_label_current_level }}.
+      SELinux label mismatch: container={{ vault_deploy_mount_label_type }}:{{ vault_deploy_mount_label_level }},
+      host={{ vault_deploy_mount_label_current_type }}:{{ vault_deploy_mount_label_current_level }}.
   when:
     - vault_validate_strict | bool
-    - vault_mount_label_level is defined
-    - vault_mount_label_current_level is defined
+    - vault_deploy_mount_label_level is defined
+    - vault_deploy_mount_label_current_level is defined
     - >
-      vault_mount_label_level != vault_mount_label_current_level
-      or vault_mount_label_type != vault_mount_label_current_type
+      vault_deploy_mount_label_level != vault_deploy_mount_label_current_level
+      or vault_deploy_mount_label_type != vault_deploy_mount_label_current_type
   tags:
     - validate
     - selinux
@@ -166,22 +168,22 @@
 - name: Report SELinux label status
   ansible.builtin.debug:
     msg: >-
-      SELinux label host={{ vault_mount_label_current_type }}:{{ vault_mount_label_current_level }},
-      container={{ vault_mount_label_type }}:{{ vault_mount_label_level }}
+      SELinux label host={{ vault_deploy_mount_label_current_type }}:{{ vault_deploy_mount_label_current_level }},
+      container={{ vault_deploy_mount_label_type }}:{{ vault_deploy_mount_label_level }}
   when:
     - not vault_validate_strict | bool
-    - vault_mount_label_level is defined
-    - vault_mount_label_current_level is defined
+    - vault_deploy_mount_label_level is defined
+    - vault_deploy_mount_label_current_level is defined
   tags:
     - validate
     - selinux
 
 - name: Check Vault health endpoint
   ansible.builtin.uri:
-    url: "{{ vault_health_url }}"
+    url: "{{ vault_deploy_health_url }}"
     method: GET
-    validate_certs: "{{ vault_vault_validate_certs }}"
-  register: vault_health
+    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+  register: vault_deploy_health
   changed_when: false
   failed_when: false
   tags:
@@ -191,8 +193,8 @@
 - name: Validate Vault health response
   ansible.builtin.assert:
     that:
-      - vault_health.status in [200, 429, 472, 473, 501, 503]
-    fail_msg: "Vault health check failed: status {{ vault_health.status }}."
+      - vault_deploy_health.status in [200, 429, 472, 473, 501, 503]
+    fail_msg: "Vault health check failed: status {{ vault_deploy_health.status }}."
   when: vault_validate_strict | bool
   tags:
     - validate
@@ -200,7 +202,7 @@
 
 - name: Report Vault health response
   ansible.builtin.debug:
-    msg: "Vault health status: {{ vault_health.status }}"
+    msg: "Vault health status: {{ vault_deploy_health.status }}"
   when: not vault_validate_strict | bool
   tags:
     - validate
@@ -208,10 +210,10 @@
 
 - name: Read Vault init status
   ansible.builtin.uri:
-    url: "{{ vault_api_url }}/v1/sys/init"
+    url: "{{ vault_deploy_api_url }}/v1/sys/init"
     method: GET
-    validate_certs: "{{ vault_vault_validate_certs }}"
-  register: vault_init_status
+    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+  register: vault_deploy_init_status
   changed_when: false
   failed_when: false
   tags:
@@ -220,10 +222,10 @@
 
 - name: Read Vault seal status
   ansible.builtin.uri:
-    url: "{{ vault_api_url }}/v1/sys/seal-status"
+    url: "{{ vault_deploy_api_url }}/v1/sys/seal-status"
     method: GET
-    validate_certs: "{{ vault_vault_validate_certs }}"
-  register: vault_seal_status
+    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+  register: vault_deploy_seal_status
   changed_when: false
   failed_when: false
   tags:
@@ -233,19 +235,19 @@
 - name: Report Vault init and seal status
   ansible.builtin.debug:
     msg: >-
-      init={{ vault_init_status.json.initialized | default('unknown') }},
-      sealed={{ vault_seal_status.json.sealed | default('unknown') }}
+      init={{ vault_deploy_init_status.json.initialized | default('unknown') }},
+      sealed={{ vault_deploy_seal_status.json.sealed | default('unknown') }}
   tags:
     - validate
     - api
 
 - name: Test Vault storage write access
   ansible.builtin.command: >-
-    podman exec --user {{ vault_run_as_user | default(100) }}
-    {{ vault_container_name }} sh -lc
-    'touch {{ vault_container_data_dir }}/core/_write_test
-    && rm -f {{ vault_container_data_dir }}/core/_write_test'
-  register: vault_storage_write
+    podman exec --user {{ vault_deploy_run_as_user | default(100) }}
+    {{ vault_deploy_container_name }} sh -lc
+    'touch {{ vault_deploy_container_data_dir }}/core/_write_test
+    && rm -f {{ vault_deploy_container_data_dir }}/core/_write_test'
+  register: vault_deploy_storage_write
   changed_when: false
   failed_when: false
   tags:
@@ -254,17 +256,17 @@
 
 - name: Fail when Vault storage write test fails
   ansible.builtin.fail:
-    msg: "Vault storage write test failed for {{ vault_container_data_dir }}/core."
+    msg: "Vault storage write test failed for {{ vault_deploy_container_data_dir }}/core."
   when:
     - vault_validate_strict | bool
-    - vault_storage_write.rc | default(1) != 0
+    - vault_deploy_storage_write.rc | default(1) != 0
   tags:
     - validate
     - storage
 
 - name: Report Vault storage write test result
   ansible.builtin.debug:
-    msg: "Vault storage write test rc={{ vault_storage_write.rc | default('unknown') }}"
+    msg: "Vault storage write test rc={{ vault_deploy_storage_write.rc | default('unknown') }}"
   when: not vault_validate_strict | bool
   tags:
     - validate

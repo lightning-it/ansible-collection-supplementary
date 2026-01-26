@@ -1,0 +1,11 @@
+---
+- name: Verify nginx_validate converge
+  hosts: localhost
+  gather_facts: false
+  vars:
+    nginx_deploy_skip_validate: true
+  tasks:
+    - name: Assert converge ran
+      ansible.builtin.assert:
+        that:
+          - nginx_deploy_skip_validate is defined

@@ -1,0 +1,84 @@
+---
+- name: Ensure required Nginx vars are defined
+  ansible.builtin.import_role:
+    name: nginx_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure vhost list is valid
+  ansible.builtin.assert:
+    that:
+      - nginx_config_vhosts is sequence
+    fail_msg: "nginx_config_vhosts must be a list."
+  tags: always
+
+- name: Skip Nginx config when disabled
+  ansible.builtin.debug:
+    msg: "Nginx config skipped (nginx_deploy_skip_config=true or no vhosts defined)."
+  when:
+    - nginx_deploy_skip_config | bool or nginx_config_vhosts | length == 0
+  tags: always
+
+- name: Ensure vhost directory exists
+  ansible.builtin.file:
+    path: "{{ nginx_config_conf_d_dir }}"
+    state: directory
+    owner: "{{ nginx_deploy_run_as_user }}"
+    group: "{{ nginx_deploy_run_as_group }}"
+    mode: '0755'
+  when:
+    - not nginx_deploy_skip_config | bool
+  tags:
+    - config
+
+- name: Remove default server config when requested
+  ansible.builtin.file:
+    path: "{{ nginx_deploy_host_default_conf_path }}"
+    state: absent
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_remove_default | bool
+  notify: Reload nginx
+  tags:
+    - config
+
+- name: Ensure vhost definitions have names
+  ansible.builtin.assert:
+    that:
+      - item.name is defined
+      - item.name | length > 0
+    fail_msg: "Each entry in nginx_config_vhosts must include a name."
+  loop: "{{ nginx_config_vhosts }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_vhosts | length > 0
+  tags:
+    - config
+
+- name: Render vhost configs
+  ansible.builtin.template:
+    src: vhost.conf.j2
+    dest: "{{ nginx_config_conf_d_dir }}/{{ item.name }}.conf"
+    owner: "{{ nginx_deploy_run_as_user }}"
+    group: "{{ nginx_deploy_run_as_group }}"
+    mode: "{{ nginx_config_vhost_mode }}"
+  loop: "{{ nginx_config_vhosts }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_vhosts | length > 0
+  notify: Reload nginx
+  tags:
+    - config
+
+- name: Validate Nginx configuration
+  ansible.builtin.command: >-
+    podman exec {{ nginx_deploy_container_name }} nginx -t -c {{ nginx_deploy_conf_file }}
+  register: nginx_config_test_result
+  changed_when: false
+  when:
+    - (nginx_config_test | default(nginx_deploy_config_test | default(true))) | bool
+    - not nginx_deploy_skip_runtime | bool
+    - not nginx_deploy_skip_config | bool
+  tags:
+    - config
+    - validate

@@ -1,38 +1,38 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: {{ vault_pod_name }}
+  name: {{ vault_deploy_pod_name }}
   labels:
     app: vault
 spec:
   containers:
     - name: vault
-      image: {{ vault_image }}
+      image: {{ vault_deploy_image }}
       args:
         - "server"
       ports:
-        - containerPort: {{ vault_port }}
-          hostPort: {{ vault_port }}
-          hostIP: {{ vault_host_ip }}
+        - containerPort: {{ vault_deploy_port }}
+          hostPort: {{ vault_deploy_port }}
+          hostIP: {{ vault_deploy_host_ip }}
       env:
         - name: VAULT_ADDR
-          value: "https://0.0.0.0:{{ vault_port }}"
-{% if vault_skip_setcap | bool %}
+          value: "https://0.0.0.0:{{ vault_deploy_port }}"
+{% if vault_deploy_skip_setcap | bool %}
         - name: SKIP_SETCAP
           value: "1"
 {% endif %}
       securityContext:
-        runAsUser: {{ vault_run_as_user }}
-        runAsGroup: {{ vault_run_as_group }}
-        runAsNonRoot: {{ vault_run_as_non_root | bool | ternary('true', 'false') }}
-{% if vault_add_ipc_lock_cap | bool %}
+        runAsUser: {{ vault_deploy_run_as_user }}
+        runAsGroup: {{ vault_deploy_run_as_group }}
+        runAsNonRoot: {{ vault_deploy_run_as_non_root | bool | ternary('true', 'false') }}
+{% if vault_deploy_add_ipc_lock_cap | bool %}
         capabilities:
           add:
             - CAP_IPC_LOCK
 {% endif %}
       volumeMounts:
         - name: data
-          mountPath: {{ vault_container_data_dir }}
+          mountPath: {{ vault_deploy_container_data_dir }}
         - name: certs
           mountPath: /vault/certs
         - name: vault-config
@@ -40,16 +40,16 @@ spec:
   volumes:
     - name: data
       hostPath:
-        path: {{ vault_host_data_dir }}
+        path: {{ vault_deploy_host_data_dir }}
         type: Directory
       selinuxRelabel: true
     - name: vault-config
       hostPath:
-        path: "{{ vault_config_dir }}"
+        path: "{{ vault_deploy_config_dir }}"
         type: DirectoryOrCreate
       selinuxRelabel: true
     - name: certs
       hostPath:
-        path: {{ vault_cert_dir }}
+        path: {{ vault_deploy_cert_dir }}
         type: Directory
       selinuxRelabel: true

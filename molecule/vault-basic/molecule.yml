@@ -29,8 +29,8 @@ provisioner:
       localhost:
         ansible_connection: local
         cluster_id: test-cluster
-        vault_terraform_source: "."
-        vault_skip_terragrunt: true
+        vault_deploy_terraform_source: "."
+        vault_deploy_skip_terragrunt: true
   playbooks:
     converge: converge.yml
     destroy: destroy.yml

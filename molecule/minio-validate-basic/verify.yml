@@ -3,9 +3,9 @@
   hosts: localhost
   gather_facts: false
   vars:
-    minio_skip_validate: true
+    minio_deploy_skip_validate: true
   tasks:
     - name: Assert converge ran
       ansible.builtin.assert:
         that:
-          - minio_skip_validate is defined
+          - minio_deploy_skip_validate is defined

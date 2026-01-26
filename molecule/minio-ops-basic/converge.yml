@@ -3,9 +3,9 @@
   hosts: localhost
   gather_facts: true
   vars:
-    minio_root_user: "minioadmin"
-    minio_root_password: "minioadmin"
-    minio_skip_runtime: true
+    minio_deploy_root_user: "minioadmin"
+    minio_deploy_root_password: "minioadmin"
+    minio_deploy_skip_runtime: true
     minio_ops_action: "none"
   roles:
     - role: minio_ops

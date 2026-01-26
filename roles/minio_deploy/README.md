@@ -11,12 +11,12 @@ None.
 See `roles/minio_deploy/defaults/main.yml`.
 
 Key variables:
-- `minio_root_user`
-- `minio_root_password`
-- `minio_image`
-- `minio_host_data_dir`
-- `minio_manage_systemd`
-- `minio_skip_runtime`
+- `minio_deploy_root_user`
+- `minio_deploy_root_password`
+- `minio_deploy_image`
+- `minio_deploy_host_data_dir`
+- `minio_deploy_manage_systemd`
+- `minio_deploy_skip_runtime`
 
 ## Example Playbook
 

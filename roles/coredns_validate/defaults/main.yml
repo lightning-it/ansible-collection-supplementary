@@ -1,0 +1,4 @@
+---
+coredns_validate_mode: "fail"
+coredns_validate_check_config: true
+coredns_validate_check_http: true

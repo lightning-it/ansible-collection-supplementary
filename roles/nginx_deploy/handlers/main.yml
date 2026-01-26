@@ -1,0 +1,22 @@
+---
+- name: Recreate nginx pod
+  ansible.builtin.command: "podman pod rm -f {{ nginx_deploy_pod_name }}"
+  register: nginx_deploy_pod_remove
+  failed_when: nginx_deploy_pod_remove.rc not in [0, 125]
+  changed_when: "'deleted' in nginx_deploy_pod_remove.stdout"
+  ignore_errors: true
+  when: not nginx_deploy_skip_runtime | bool
+
+- name: Run nginx pod
+  ansible.builtin.command:
+    cmd: "podman kube play {{ nginx_deploy_pod_manifest_path }}"
+  register: nginx_deploy_pod_start
+  changed_when: "'created' in nginx_deploy_pod_start.stdout or 'configured' in nginx_deploy_pod_start.stdout"
+  when: not nginx_deploy_skip_runtime | bool
+
+- name: Reload nginx
+  ansible.builtin.command: "podman exec {{ nginx_deploy_container_name }} nginx -s reload"
+  register: nginx_deploy_reload
+  changed_when: nginx_deploy_reload.rc == 0
+  failed_when: nginx_deploy_reload.rc != 0
+  when: not nginx_deploy_skip_runtime | bool

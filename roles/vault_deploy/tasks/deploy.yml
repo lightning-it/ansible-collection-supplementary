@@ -4,7 +4,7 @@
   when: ansible_distribution in ['Debian', 'Ubuntu', 'RedHat', 'CentOS']
 
 - name: Deploy Vault runtime
-  when: not vault_skip_runtime | bool
+  when: not vault_deploy_skip_runtime | bool
   block:
     - name: Ensure required packages are installed
       ansible.builtin.include_tasks: install_packages.yml
@@ -28,16 +28,16 @@
 
     - name: Wait until Vault API is reachable via HTTPS (non-systemd)
       ansible.builtin.uri:
-        url: "{{ vault_health_url }}"
+        url: "{{ vault_deploy_health_url }}"
         method: GET
-        validate_certs: "{{ vault_vault_validate_certs }}"
-      register: vault_health
-      until: vault_health.status in [200, 429, 472, 473, 501, 503]
+        validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+      register: vault_deploy_health
+      until: vault_deploy_health.status in [200, 429, 472, 473, 501, 503]
       retries: 30
       delay: 5
       changed_when: false
-      failed_when: vault_health is failed and vault_health.status not in [200, 429, 472, 473, 501, 503]
-      when: not vault_manage_systemd | bool
+      failed_when: vault_deploy_health is failed and vault_deploy_health.status not in [200, 429, 472, 473, 501, 503]
+      when: not vault_deploy_manage_systemd | bool
       tags:
         - deployment
         - api
