@@ -1,0 +1,77 @@
+---
+- name: Ensure required Kea vars are defined
+  ansible.builtin.import_role:
+    name: kea_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Set validate mode
+  ansible.builtin.set_fact:
+    kea_validate_strict: "{{ kea_validate_mode != 'report' }}"
+  tags: always
+
+- name: Skip Kea validation when disabled
+  ansible.builtin.debug:
+    msg: "Kea validation skipped (kea_deploy_skip_validate=true)."
+  when: kea_deploy_skip_validate | bool
+  tags: always
+
+- name: Validate Kea runtime
+  when: not kea_deploy_skip_validate | bool
+  tags:
+    - validate
+  block:
+    - name: Check Kea container running state
+      ansible.builtin.command: "podman inspect {{ kea_deploy_container_name }} --format {{ '{{.State.Running}}' }}"
+      register: kea_deploy_container_running
+      changed_when: false
+      failed_when: false
+
+    - name: Fail when Kea container is not running
+      ansible.builtin.fail:
+        msg: "Kea container {{ kea_deploy_container_name }} is not running."
+      when:
+        - kea_validate_strict | bool
+        - kea_deploy_container_running.stdout | default('') | trim != 'true'
+
+    - name: Report Kea container running state
+      ansible.builtin.debug:
+        msg: "Kea container running: {{ kea_deploy_container_running.stdout | default('unknown') | trim }}"
+      when: not kea_validate_strict | bool
+
+    - name: Check Kea config presence on host
+      ansible.builtin.stat:
+        path: "{{ kea_deploy_host_config_path }}"
+      register: kea_deploy_config_stat
+      when: kea_validate_check_config | bool
+
+    - name: Fail when Kea config is missing
+      ansible.builtin.fail:
+        msg: "Kea config {{ kea_deploy_host_config_path }} is missing."
+      when:
+        - kea_validate_strict | bool
+        - kea_validate_check_config | bool
+        - not kea_deploy_config_stat.stat.exists
+
+    - name: Check Kea health endpoint
+      ansible.builtin.uri:
+        url: "{{ kea_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ kea_deploy_validate_certs }}"
+      register: kea_deploy_health
+      changed_when: false
+      failed_when: false
+      when:
+        - kea_validate_check_http | bool
+        - not kea_deploy_skip_runtime | bool
+        - kea_deploy_health_url_effective | default('') | length > 0
+
+    - name: Validate Kea health response
+      ansible.builtin.assert:
+        that:
+          - kea_deploy_health.status == 200
+        fail_msg: "Kea health check failed: status {{ kea_deploy_health.status }}."
+      when:
+        - kea_validate_check_http | bool
+        - kea_validate_strict | bool
+        - kea_deploy_health_url_effective | default('') | length > 0

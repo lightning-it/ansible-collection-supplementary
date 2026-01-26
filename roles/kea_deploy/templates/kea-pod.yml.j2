@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ kea_deploy_pod_name }}
+  labels:
+    app: kea
+spec:
+  containers:
+    - name: kea
+      image: {{ kea_deploy_image }}
+      command:
+        - /usr/sbin/kea-dhcp4
+        - -c
+        - {{ kea_deploy_container_config_path }}
+      ports:
+        - containerPort: {{ kea_deploy_dhcp4_port }}
+          hostPort: {{ kea_deploy_host_dhcp4_port }}
+          hostIP: {{ kea_deploy_host_ip }}
+          protocol: UDP
+      securityContext:
+        runAsUser: {{ kea_deploy_run_as_user }}
+        runAsGroup: {{ kea_deploy_run_as_group }}
+        runAsNonRoot: {{ kea_deploy_run_as_non_root | bool | ternary('true', 'false') }}
+      volumeMounts:
+        - name: kea-config
+          mountPath: {{ kea_deploy_container_config_path }}
+          readOnly: true
+        - name: kea-data
+          mountPath: {{ kea_deploy_container_data_dir }}
+  volumes:
+    - name: kea-config
+      hostPath:
+        path: {{ kea_deploy_host_config_path }}
+        type: File
+      selinuxRelabel: true
+    - name: kea-data
+      hostPath:
+        path: {{ kea_deploy_host_data_dir }}
+        type: Directory
+      selinuxRelabel: true

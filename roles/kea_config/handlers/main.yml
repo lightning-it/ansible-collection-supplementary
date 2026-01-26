@@ -1,0 +1,7 @@
+---
+- name: Reload kea
+  ansible.builtin.command: "podman pod restart {{ kea_deploy_pod_name }}"
+  register: kea_deploy_reload
+  changed_when: kea_deploy_reload.rc == 0
+  failed_when: kea_deploy_reload.rc != 0
+  when: not kea_deploy_skip_runtime | bool

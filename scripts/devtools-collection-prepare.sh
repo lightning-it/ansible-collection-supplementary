@@ -63,8 +63,17 @@ if [ -z "${artifact:-}" ] || [ ! -f "$artifact" ]; then
   exit 1
 fi
 
+# Install dependency collections from git requirements (avoids Galaxy outages).
+requirements_file="/workspace/collections/requirements.yml"
+if [ -f "$requirements_file" ]; then
+  echo "Installing collection dependencies from ${requirements_file}..."
+  ansible-galaxy collection install -r "$requirements_file" -p "${COLLECTIONS_DIR}" --force --no-deps
+else
+  echo "WARN: ${requirements_file} not found; skipping dependency install."
+fi
+
 # Install this collection into per-run dir
-ansible-galaxy collection install "$artifact" -p "${COLLECTIONS_DIR}" --force
+ansible-galaxy collection install "$artifact" -p "${COLLECTIONS_DIR}" --force --no-deps
 
 echo "Collection ${ns}.${name} installed in ${COLLECTIONS_DIR}"
 

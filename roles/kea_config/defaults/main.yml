@@ -1,0 +1,4 @@
+---
+kea_config_manage: true
+kea_config_content: ""
+kea_config_mode: '0644'
