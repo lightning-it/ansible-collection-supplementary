@@ -8,7 +8,7 @@ galaxy_info:
   min_ansible_version: "2.18"
   platforms:
     - name: EL
-      versions: ["9", "10"]
+      versions: ["all"]
   galaxy_tags:
     - aap
     - automationcontroller

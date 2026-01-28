@@ -1,0 +1,6 @@
+---
+collections:
+  - name: ansible.posix
+  - name: community.general
+  - name: community.hashi_vault
+  - name: community.vmware

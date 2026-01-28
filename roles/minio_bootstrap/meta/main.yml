@@ -1,21 +1,21 @@
 ---
 galaxy_info:
-  role_name: cloudflared
+  role_name: minio_bootstrap
   namespace: lit
   author: René Osorio
+  description: Bootstrap MinIO buckets and publish tfstate backend facts.
   company: Lightning IT
-  description: Install and manage Cloudflare Tunnel (cloudflared) using a token.
   license: GPL-3.0-only
   min_ansible_version: "2.18"
   platforms:
     - name: EL
-      versions: ["all"]
+      versions:
+        - "9"
   galaxy_tags:
     - modulix
+    - minio
+    - storage
+    - bootstrap
     - automation
-    - cloudflare
-    - tunnel
-    - cloudflared
-    - networking
 
 dependencies: []

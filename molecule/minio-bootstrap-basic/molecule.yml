@@ -1,0 +1,37 @@
+---
+dependency:
+  name: galaxy
+
+driver:
+  name: default
+  options:
+    managed: false
+
+platforms:
+  - name: localhost
+    address: localhost
+    connection_options:
+      ansible_connection: local
+
+provisioner:
+  name: ansible
+  lint: |
+    yamllint .
+    ansible-lint
+  env:
+    ANSIBLE_COLLECTIONS_PATHS: >-
+      {{ lookup('env','ANSIBLE_COLLECTIONS_PATHS') | default(lookup('env','ANSIBLE_COLLECTIONS_PATH'), true) }}:
+      {{ molecule_project_directory }}/collections-dev:
+      {{ molecule_project_directory }}/collections
+    ANSIBLE_ROLES_PATH: "roles:../../roles"
+  inventory:
+    host_vars:
+      localhost:
+        ansible_connection: local
+  playbooks:
+    converge: converge.yml
+    destroy: destroy.yml
+    verify: verify.yml
+
+verifier:
+  name: ansible

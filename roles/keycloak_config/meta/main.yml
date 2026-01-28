@@ -9,7 +9,7 @@ galaxy_info:
   min_ansible_version: "2.14.0"
   platforms:
     - name: EL
-      versions: ["9"]
+      versions: ["all"]
     - name: GenericLinux
       versions: ["all"]
   galaxy_tags:
