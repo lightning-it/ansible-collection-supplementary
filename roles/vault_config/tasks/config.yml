@@ -157,21 +157,10 @@
     - terragrunt_plan
     - terragrunt_apply
 
-- name: Ensure terragrunt state directory exists
-  ansible.builtin.file:
-    path: "{{ vault_config_terraform_state_path | dirname }}"
-    state: directory
-    mode: '0755'
-  delegate_to: localhost
-  tags:
-    - config
-    - terragrunt_validate
-    - terragrunt_plan
-    - terragrunt_apply
-
 - name: Set Vault terragrunt template path
   ansible.builtin.set_fact:
     vault_config_terragrunt_template_path: "{{ role_path }}/templates/vault.hcl.j2"
+    cluster_id: "{{ inventory_hostname }}"
   tags:
     - config
     - terragrunt_validate

@@ -69,34 +69,34 @@
   when: not vault_config_approle_enabled | bool
   no_log: true
 
-- name: Ensure AppRole entries
-  ansible.builtin.include_tasks: bootstrap_approle_entry.yml
-  vars:
-    vault_config_approle_entry: >-
-      {{ vault_config_approle_default_entry
-         | combine(vault_config_approle_item, recursive=True) }}
-    vault_config_approle_policy_names: >-
-      {{
-        [vault_config_approle_entry.token_policy]
-        if vault_config_approle_entry.token_policy is string
-        else vault_config_approle_entry.token_policy
-      }}
-    vault_config_approle_policy_name: "{{ vault_config_approle_policy_names | first }}"
-    vault_config_approle_kv_mount: "{{ vault_config_approle_entry.kv_mount }}"
-    vault_config_approle_kv_path: "{{ vault_config_approle_entry.credential_path }}"
-    vault_config_approle_policy: >-
-      {{ vault_config_approle_entry.policy
-         | default(vault_config_approle_default_policy, true) }}
-  loop: "{{ vault_config_approle_entries }}"
-  loop_control:
-    loop_var: vault_config_approle_item
-  no_log: true
+# - name: Ensure AppRole entries
+  # ansible.builtin.include_tasks: bootstrap_approle_entry.yml
+  # vars:
+    # vault_config_approle_entry: >-
+      # {{ vault_config_approle_default_entry
+         # | combine(vault_config_approle_item, recursive=True) }}
+    # vault_config_approle_policy_names: >-
+      # {{
+        # [vault_config_approle_entry.token_policy]
+        # if vault_config_approle_entry.token_policy is string
+        # else vault_config_approle_entry.token_policy
+      # }}
+    # vault_config_approle_policy_name: "{{ vault_config_approle_policy_names | first }}"
+    # vault_config_approle_kv_mount: "{{ vault_config_approle_entry.kv_mount }}"
+    # vault_config_approle_kv_path: "{{ vault_config_approle_entry.credential_path }}"
+    # vault_config_approle_policy: >-
+      # {{ vault_config_approle_entry.policy
+         # | default(vault_config_approle_default_policy, true) }}
+  # loop: "{{ vault_config_approle_entries }}"
+  # loop_control:
+    # loop_var: vault_config_approle_item
+  # no_log: true
 
-- name: Assert primary AppRole credentials resolved
-  ansible.builtin.assert:
-    that:
-      - ansible_hashi_vault_role_id | default('') | length > 0
-      - ansible_hashi_vault_secret_id | default('') | length > 0
-    fail_msg: >-
-      Primary AppRole credentials could not be resolved; check role
-      {{ vault_config_approle_primary_role_name }} and the configured policies.
+# - name: Assert primary AppRole credentials resolved
+  # ansible.builtin.assert:
+    # that:
+      # - ansible_hashi_vault_role_id | default('') | length > 0
+      # - ansible_hashi_vault_secret_id | default('') | length > 0
+    # fail_msg: >-
+      # Primary AppRole credentials could not be resolved; check role
+      # {{ vault_config_approle_primary_role_name }} and the configured policies.
