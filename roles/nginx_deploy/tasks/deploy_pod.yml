@@ -122,6 +122,37 @@
   tags:
     - config
 
+- name: Read SELinux context for Nginx config file
+  ansible.builtin.command: "ls -Z {{ nginx_deploy_host_conf_file }}"
+  register: nginx_deploy_conf_context
+  changed_when: false
+  failed_when: false
+  tags:
+    - deployment
+  when:
+    - ansible_distribution in ['RedHat', 'CentOS']
+    - nginx_deploy_selinux_relabel | bool
+    - selinux_status.stdout is defined
+    - selinux_status.stdout != 'Disabled'
+
+- name: Apply SELinux context for Nginx config file
+  ansible.builtin.command: "chcon -t container_file_t {{ nginx_deploy_host_conf_file }}"
+  register: nginx_deploy_conf_relabel
+  changed_when: >-
+    nginx_deploy_conf_context.rc == 0
+    and ('container_file_t' not in nginx_deploy_conf_context.stdout)
+  failed_when: false
+  tags:
+    - deployment
+  when:
+    - ansible_distribution in ['RedHat', 'CentOS']
+    - nginx_deploy_selinux_relabel | bool
+    - selinux_status.stdout is defined
+    - selinux_status.stdout != 'Disabled'
+    - nginx_deploy_conf_context.rc == 0
+    - nginx_deploy_conf_context.stdout is defined
+    - "'container_file_t' not in nginx_deploy_conf_context.stdout"
+
 - name: Render default server config
   ansible.builtin.template:
     src: default.conf.j2
@@ -162,5 +193,71 @@
 
 - name: Flush handlers
   ansible.builtin.meta: flush_handlers
+  tags:
+    - deployment
+
+- name: Recreate nginx pod (kubeplay)
+  when:
+    - nginx_deploy_kubeplay_remove | default(false)
+    - not nginx_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay remove (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: remove
+        kubeplay_pod_name: "{{ nginx_deploy_pod_name }}"
+        kubeplay_app_name: nginx_remove
+  rescue:
+    - name: Ignore kubeplay remove failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay remove failure."
+
+- name: Run nginx pod (kubeplay)
+  when:
+    - nginx_deploy_kubeplay_run | default(false)
+    - not nginx_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay run (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: run
+        kubeplay_pod_name: "{{ nginx_deploy_pod_name }}"
+        kubeplay_pod_manifest_path: "{{ nginx_deploy_pod_manifest_path }}"
+        kubeplay_app_name: nginx_run
+  rescue:
+    - name: Ignore kubeplay run failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay run failure."
+
+- name: Check nginx container exists
+  ansible.builtin.command:
+    cmd: "podman inspect {{ nginx_deploy_container_name }}"
+  register: nginx_deploy_container_exists
+  changed_when: false
+  failed_when: false
+  when:
+    - nginx_reload_requested | default(false)
+    - not nginx_deploy_skip_runtime | bool
+  tags:
+    - deployment
+
+- name: Reload nginx
+  ansible.builtin.command: "podman exec {{ nginx_deploy_container_name }} nginx -s reload"
+  register: nginx_deploy_reload
+  changed_when: nginx_deploy_reload.rc == 0
+  failed_when: nginx_deploy_reload.rc != 0
+  when:
+    - nginx_reload_requested | default(false)
+    - not nginx_deploy_skip_runtime | bool
+    - nginx_deploy_container_exists is defined
+    - nginx_deploy_container_exists.rc == 0
   tags:
     - deployment

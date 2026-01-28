@@ -149,6 +149,47 @@
   tags:
     - deployment
 
+- name: Recreate vault pod (kubeplay)
+  when:
+    - vault_deploy_kubeplay_remove | default(false)
+    - not vault_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay remove (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: remove
+        kubeplay_pod_name: "{{ vault_deploy_pod_name }}"
+        kubeplay_app_name: vault_remove
+  rescue:
+    - name: Ignore kubeplay remove failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay remove failure."
+
+- name: Run vault pod (kubeplay)
+  when:
+    - vault_deploy_kubeplay_run | default(false)
+    - not vault_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay run (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: run
+        kubeplay_pod_name: "{{ vault_deploy_pod_name }}"
+        kubeplay_pod_manifest_path: "{{ vault_deploy_pod_manifest_path }}"
+        kubeplay_app_name: vault_run
+  rescue:
+    - name: Ignore kubeplay run failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay run failure."
+
 - name: Read Vault container running state
   ansible.builtin.command: "podman inspect {{ vault_deploy_container_name }} --format {{ '{{.State.Running}}' }}"
   register: vault_deploy_container_running
@@ -187,6 +228,7 @@
       - --format
       - "{% raw %}{{range .HostConfig.IDMappings.UidMap}}{{println .ContainerID .HostID .Size}}{{end}}{% endraw %}"
   register: vault_deploy_uid_map_inspect
+  become: false
   changed_when: false
   failed_when: false
   tags:
@@ -203,6 +245,7 @@
       - --format
       - "{% raw %}{{range .HostConfig.IDMappings.GidMap}}{{println .ContainerID .HostID .Size}}{{end}}{% endraw %}"
   register: vault_deploy_gid_map_inspect
+  become: false
   changed_when: false
   failed_when: false
   tags:
@@ -229,6 +272,7 @@
 - name: Read Vault container PID
   ansible.builtin.command: "podman inspect {{ vault_deploy_container_name }} --format {{ '{{.State.Pid}}' }}"
   register: vault_deploy_container_pid
+  become: false
   changed_when: false
   failed_when: false
   tags:
@@ -241,6 +285,7 @@
 - name: Read Vault container uid/gid maps (proc)
   ansible.builtin.command: "cat /proc/{{ vault_deploy_container_pid.stdout | trim }}/{{ item }}"
   register: vault_deploy_container_id_maps
+  become: false
   changed_when: false
   failed_when: false
   tags:

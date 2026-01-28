@@ -1,35 +1,69 @@
 ---
+- name: Select Vault auth for PKI
+  ansible.builtin.set_fact:
+    vault_config_auth_method: >-
+      {{
+        'approle'
+        if (vault_config_hashi_vault_auth_method == 'approle'
+            and (ansible_hashi_vault_role_id | default('', true) | trim | length > 0)
+            and (ansible_hashi_vault_secret_id | default('', true) | trim | length > 0))
+        else 'token'
+        if (vault_config_root_token | default('', true) | trim | length > 0)
+        else vault_config_hashi_vault_auth_method
+      }}
+    vault_config_role_id: "{{ ansible_hashi_vault_role_id | default(omit, true) }}"
+    vault_config_secret_id: "{{ ansible_hashi_vault_secret_id | default(omit, true) }}"
+    vault_config_token: "{{ vault_config_root_token | default(omit, true) }}"
+  tags:
+    - vault_config_pki
+
+- name: Ensure Vault auth is available for PKI
+  ansible.builtin.assert:
+    that:
+      - >-
+        (vault_config_auth_method == 'approle'
+         and (ansible_hashi_vault_role_id | default('', true) | trim | length > 0)
+         and (ansible_hashi_vault_secret_id | default('', true) | trim | length > 0))
+        or (vault_config_auth_method == 'token'
+            and (vault_config_root_token | default('', true) | trim | length > 0))
+    fail_msg: >-
+      Vault PKI requires approle credentials (ansible_hashi_vault_role_id/secret_id)
+      or a Vault token (vault_config_root_token/vault_config_token/VAULT_TOKEN).
+  tags:
+    - vault_config_pki
+
 - name: Try to read existing certificate from Vault
-  delegate_to: "{{ vault_deploy_api_delegate_to }}"
-  community.hashi_vault.vault_deploy_kv2_get:
-    url: "{{ vault_deploy_vault_address }}"
-    engine_mount_point: "{{ vault_deploy_engine_mount_point }}"
-    auth_method: "{{ vault_deploy_hashi_vault_auth_method }}"
-    role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
-    secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
-    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ vault_config_vault_address }}"
+    engine_mount_point: "{{ vault_config_engine_mount_point }}"
+    auth_method: "{{ vault_config_auth_method }}"
+    token: "{{ vault_config_token | default(omit, true) }}"
+    role_id: "{{ vault_config_role_id | default(omit, true) }}"
+    secret_id: "{{ vault_config_secret_id | default(omit, true) }}"
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
     path: "{{ inventory_hostname }}/vault/certificate"
   register: existing_cert
   failed_when: false
   no_log: true
   tags:
-    - vault_deploy_pki
+    - vault_config_pki
 
 - name: Parse expiry of existing certificate
   community.crypto.x509_certificate_info:
     content: "{{ existing_cert.data.data.certificate }}"
   register: cert_info
   when: existing_cert.data is defined
-  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  delegate_to: "{{ vault_config_api_delegate_to }}"
   tags:
-    - vault_deploy_pki
+    - vault_config_pki
 
 - name: Set reference datetime (now + 30 days)
   ansible.builtin.set_fact:
     cert_check_time: "{{ (ansible_date_time.epoch | int) + (30 * 24 * 60 * 60) }}"
-  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  delegate_to: "{{ vault_config_api_delegate_to }}"
   tags:
-    - vault_deploy_pki
+    - vault_config_pki
 
 - name: Get certificate expiry if exists
   ansible.builtin.set_fact:
@@ -41,71 +75,73 @@
         .strftime('%s') | int
       }}
   when: existing_cert.data is defined
-  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  delegate_to: "{{ vault_config_api_delegate_to }}"
   tags:
-    - vault_deploy_pki
+    - vault_config_pki
 
 - name: Set default certificate expiry (current time)
   ansible.builtin.set_fact:
     cert_expiry: "{{ ansible_date_time.epoch | int }}"
   when: existing_cert.data is not defined
-  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  delegate_to: "{{ vault_config_api_delegate_to }}"
   tags:
-    - vault_deploy_pki
+    - vault_config_pki
 
 - name: Request certificate from Vault PKI if missing
-  community.hashi_vault.vault_deploy_write:
-    url: "{{ vault_deploy_vault_address }}"
-    auth_method: "{{ vault_deploy_hashi_vault_auth_method }}"
-    role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
-    secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
-    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
-    path: "{{ vault_deploy_vault_pki_path }}/{{ vault_deploy_vault_pki_role }}"
+  community.hashi_vault.vault_write:
+    url: "{{ vault_config_vault_address }}"
+    auth_method: "{{ vault_config_auth_method }}"
+    token: "{{ vault_config_token | default(omit, true) }}"
+    role_id: "{{ vault_config_role_id | default(omit, true) }}"
+    secret_id: "{{ vault_config_secret_id | default(omit, true) }}"
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
+    path: "{{ vault_config_vault_pki_path }}/{{ vault_config_vault_pki_role }}"
     data:
-      common_name: "{{ vault_deploy_vault_hostname }}"
-      alt_names: "localhost,{{ vault_deploy_vault_hostname }}"
-  register: vault_deploy_pki_cert
-  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+      common_name: "{{ vault_config_vault_hostname }}"
+      alt_names: "localhost,{{ vault_config_vault_hostname }}"
+  register: vault_config_pki_cert
+  delegate_to: "{{ vault_config_api_delegate_to }}"
   when: existing_cert.data is not defined
   no_log: true
   notify:
     - Recreate vault pod
     - Run vault pod
   tags:
-    - vault_deploy_pki
+    - vault_config_pki
 
 - name: Ensure cert directories exist
   ansible.builtin.file:
-    path: "{{ vault_deploy_cert_dir }}"
+    path: "{{ vault_config_cert_dir }}"
     state: directory
     mode: '0755'
   tags:
-    - vault_deploy_pki
+    - vault_config_pki
 
 - name: Parse expiry of newly generated certificate
   community.crypto.x509_certificate_info:
-    content: "{{ vault_deploy_pki_cert.data.data.certificate }}"
+    content: "{{ vault_config_pki_cert.data.data.certificate }}"
   register: new_cert_info
   when: existing_cert.data is not defined or
         (cert_expiry | int) < (cert_check_time | int)
-  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  delegate_to: "{{ vault_config_api_delegate_to }}"
   tags:
-    - vault_deploy_pki
+    - vault_config_pki
 
 - name: Store newly generated certificate in Vault KV2
-  delegate_to: "{{ vault_deploy_api_delegate_to }}"
-  community.hashi_vault.vault_deploy_kv2_write:
-    url: "{{ vault_deploy_vault_address }}"
-    engine_mount_point: "{{ vault_deploy_engine_mount_point }}"
-    auth_method: "{{ vault_deploy_hashi_vault_auth_method }}"
-    role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
-    secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
-    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  community.hashi_vault.vault_kv2_write:
+    url: "{{ vault_config_vault_address }}"
+    engine_mount_point: "{{ vault_config_engine_mount_point }}"
+    auth_method: "{{ vault_config_auth_method }}"
+    token: "{{ vault_config_token | default(omit, true) }}"
+    role_id: "{{ vault_config_role_id | default(omit, true) }}"
+    secret_id: "{{ vault_config_secret_id | default(omit, true) }}"
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
     path: "{{ inventory_hostname }}/vault/certificate"
     data:
-      certificate: "{{ vault_deploy_pki_cert.data.data.certificate }}"
-      private_key: "{{ vault_deploy_pki_cert.data.data.private_key }}"
-      issuing_ca: "{{ vault_deploy_pki_cert.data.data.issuing_ca }}"
+      certificate: "{{ vault_config_pki_cert.data.data.certificate }}"
+      private_key: "{{ vault_config_pki_cert.data.data.private_key }}"
+      issuing_ca: "{{ vault_config_pki_cert.data.data.issuing_ca }}"
       not_after: "{{ new_cert_info.not_after }}"
   when: existing_cert.data is not defined or
         (cert_expiry | int) < (cert_check_time | int)
@@ -114,7 +150,7 @@
     - Recreate vault pod
     - Run vault pod
   tags:
-    - vault_deploy_pki
+    - vault_config_pki
 
 - name: Write certificate, key and CA chain
   ansible.builtin.copy:
@@ -122,19 +158,19 @@
     content: "{{ item.content }}"
     mode: "{{ item.mode }}"
   loop:
-    - dest: "{{ vault_deploy_cert_dir }}/vault.crt"
+    - dest: "{{ vault_config_cert_dir }}/vault.crt"
       content: >-
-        {{ vault_deploy_pki_cert.data.data.certificate
+        {{ vault_config_pki_cert.data.data.certificate
            | default(existing_cert.data.data.certificate) }}
       mode: "0644"
-    - dest: "{{ vault_deploy_cert_dir }}/vault.key"
+    - dest: "{{ vault_config_cert_dir }}/vault.key"
       content: >-
-        {{ vault_deploy_pki_cert.data.data.private_key
+        {{ vault_config_pki_cert.data.data.private_key
            | default(existing_cert.data.data.private_key) }}
       mode: "0644"
-    - dest: "{{ vault_deploy_cert_dir }}/ca.crt"
+    - dest: "{{ vault_config_cert_dir }}/ca.crt"
       content: >-
-        {{ vault_deploy_pki_cert.data.data.issuing_ca
+        {{ vault_config_pki_cert.data.data.issuing_ca
            | default(existing_cert.data.data.issuing_ca) }}
       mode: "0644"
   no_log: true
@@ -142,9 +178,50 @@
     - Recreate vault pod
     - Run vault pod
   tags:
-    - vault_deploy_pki
+    - vault_config_pki
 
 - name: Flush handlers
   ansible.builtin.meta: flush_handlers
   tags:
-    - vault_deploy_pki
+    - vault_config_pki
+
+- name: Recreate vault pod (kubeplay)
+  when:
+    - vault_config_kubeplay_remove | default(false)
+    - not (vault_config_skip_runtime | default(false)) | bool
+  tags:
+    - vault_config_pki
+  block:
+    - name: Run kubeplay remove (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: remove
+        kubeplay_pod_name: "{{ vault_config_pod_name }}"
+        kubeplay_app_name: vault_remove
+  rescue:
+    - name: Ignore kubeplay remove failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay remove failure."
+
+- name: Run vault pod (kubeplay)
+  when:
+    - vault_config_kubeplay_run | default(false)
+    - not (vault_config_skip_runtime | default(false)) | bool
+  tags:
+    - vault_config_pki
+  block:
+    - name: Run kubeplay run (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: run
+        kubeplay_pod_name: "{{ vault_config_pod_name }}"
+        kubeplay_pod_manifest_path: "{{ vault_config_pod_manifest_path }}"
+        kubeplay_app_name: vault_run
+  rescue:
+    - name: Ignore kubeplay run failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay run failure."

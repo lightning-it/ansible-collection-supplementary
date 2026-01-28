@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: minio_bootstrap
   namespace: lit
-  author: Lightning IT
+  author: René Osorio
   description: Bootstrap MinIO buckets using mc.
   company: Lightning IT
   license: GPL-3.0-only

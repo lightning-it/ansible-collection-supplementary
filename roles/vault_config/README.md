@@ -10,11 +10,21 @@ None.
 ## Role Variables
 
 Required for configuration:
-- `vault_deploy_url`
-- `vault_deploy_terraform_source`
-- `vault_deploy_token` (or `VAULT_TOKEN`)
+- `vault_config_url`
+- `vault_config_terraform_source`
 
-See `roles/vault_deploy/defaults/main.yml` for shared variables.
+Token handling (provide one):
+- `vault_config_token` (preferred)
+- `vault_admin_token`
+- `vault_token`
+- `vault_root_token`
+- `root_token`
+- `VAULT_TOKEN` (environment)
+
+Token resolution order:
+`vault_config_token` > `vault_admin_token` > `vault_token` > `vault_config_root_token` > `vault_root_token` > `root_token` > `VAULT_TOKEN`.
+
+See `roles/vault_config/defaults/main.yml` for shared variables.
 
 ## Example Playbook
 ```yaml

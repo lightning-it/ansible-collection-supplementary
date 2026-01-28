@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: minio_deploy
   namespace: lit
-  author: Lightning IT
+  author: René Osorio
   description: Deploy MinIO with Podman and optional systemd management.
   company: Lightning IT
   license: GPL-3.0-only

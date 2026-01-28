@@ -1,0 +1,4 @@
+---
+dhcp_config_manage: true
+dhcp_config_content: ""
+dhcp_config_mode: '0644'

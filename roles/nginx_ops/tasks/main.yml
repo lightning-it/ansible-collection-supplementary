@@ -25,9 +25,13 @@
       when: nginx_deploy_manage_systemd | bool
 
     - name: Restart Nginx pod (non-systemd)
-      ansible.builtin.command: "podman pod restart {{ nginx_deploy_pod_name }}"
-      register: nginx_deploy_pod_restart
-      changed_when: nginx_deploy_pod_restart.rc == 0
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: restart
+        kubeplay_pod_name: "{{ nginx_deploy_pod_name }}"
+        kubeplay_app_name: nginx_restart
       when: not nginx_deploy_manage_systemd | bool
 
     - name: Validate Nginx after restart

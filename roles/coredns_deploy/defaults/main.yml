@@ -8,7 +8,7 @@ coredns_deploy_run_as_user: 0
 coredns_deploy_run_as_group: 0
 coredns_deploy_run_as_non_root: false
 coredns_deploy_install_packages: true
-coredns_deploy_selinux_relabel: false
+coredns_deploy_selinux_relabel: true
 
 # Host paths (mounted into container)
 coredns_deploy_host_config_dir: "/srv/coredns/config"
@@ -47,7 +47,7 @@ coredns_deploy_validate_certs: true
 coredns_deploy_corefile: |
   .:{{ coredns_deploy_dns_port }} {
       errors
-      health :{{ coredns_deploy_health_port }}
+      health 0.0.0.0:{{ coredns_deploy_health_port }}
       log
       forward . /etc/resolv.conf
       cache 30

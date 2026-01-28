@@ -1,7 +1,7 @@
 ---
 galaxy_info:
   role_name: keycloak_config
-  author: Lightning IT
+  author: René Osorio
   description: >
     Configure an existing Keycloak instance (realms, clients, roles, users)
     via Terraform and the terraform-keycloak-instance module.

@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: nginx_validate
   namespace: lit
-  author: Lightning IT
+  author: René Osorio
   description: Validate Nginx runtime and configuration state in Podman.
   company: Lightning IT
   license: GPL-3.0-only

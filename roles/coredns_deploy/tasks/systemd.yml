@@ -18,11 +18,63 @@
         state: directory
         mode: '0755'
 
+    - name: Read CoreDNS health port listener
+      ansible.builtin.command: "ss -H -tln sport = :{{ coredns_deploy_host_health_port }}"
+      register: coredns_deploy_health_listener
+      changed_when: false
+      failed_when: false
+
+    - name: Read CoreDNS DNS port listener
+      ansible.builtin.command: "ss -H -tln sport = :{{ coredns_deploy_host_dns_port }}"
+      register: coredns_deploy_dns_listener
+      changed_when: false
+      failed_when: false
+
+    - name: Determine CoreDNS listener IPs
+      ansible.builtin.set_fact:
+        coredns_deploy_health_listener_ips: >-
+          {{
+            (
+              coredns_deploy_health_listener.stdout
+              | regex_findall('([0-9.]+):' ~ coredns_deploy_host_health_port)
+              | default([])
+            )
+          }}
+        coredns_deploy_dns_listener_ips: >-
+          {{
+            (
+              coredns_deploy_dns_listener.stdout
+              | regex_findall('([0-9.]+):' ~ coredns_deploy_host_dns_port)
+              | default([])
+            )
+          }}
+      changed_when: false
+
+    - name: Determine CoreDNS restart need
+      ansible.builtin.set_fact:
+        coredns_deploy_force_restart: >-
+          {{
+            (coredns_deploy_health_listener_ips | length == 0)
+            or (coredns_deploy_dns_listener_ips | length == 0)
+            or (coredns_deploy_host_ip not in coredns_deploy_health_listener_ips)
+            or (coredns_deploy_host_ip not in coredns_deploy_dns_listener_ips)
+          }}
+      changed_when: false
+
     - name: Enable and start Podman kube systemd unit
       ansible.builtin.systemd:
         name: "podman-kube@{{ coredns_deploy_systemd_name.stdout }}.service"
         enabled: true
-        state: started
+        state: >-
+          {{
+            'restarted'
+            if (
+              (coredns_deploy_pod_manifest is defined and coredns_deploy_pod_manifest.changed)
+              or (coredns_deploy_corefile is defined and coredns_deploy_corefile.changed)
+              or (coredns_deploy_force_restart | default(false))
+            )
+            else 'started'
+          }}
         daemon_reload: true
 
     - name: Wait until CoreDNS health endpoint is reachable

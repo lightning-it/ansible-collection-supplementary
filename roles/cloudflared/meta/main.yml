@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: cloudflared
   namespace: lit
-  author: Lightning IT
+  author: René Osorio
   company: Lightning IT
   description: Install and manage Cloudflare Tunnel (cloudflared) using a token.
   license: GPL-3.0-only

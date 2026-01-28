@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: coredns_validate
   namespace: lit
-  author: Lightning IT
+  author: René Osorio
   description: Validate CoreDNS Podman deployment health and configuration.
   company: Lightning IT
   license: GPL-3.0-only

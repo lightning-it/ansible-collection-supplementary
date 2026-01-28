@@ -105,19 +105,61 @@
     - init
     - bootstrap
 
+- name: Mark bootstrap init performed
+  ansible.builtin.set_fact:
+    vault_bootstrap_did_init: true
+  when:
+    - vault_deploy_init_result is defined
+    - vault_deploy_init_result.stdout | default('') | length > 0
+  tags:
+    - init
+    - bootstrap
+
 - name: Set Vault token facts from init payload
   ansible.builtin.set_fact:
-    vault_deploy_root_token: >-
-      {{ vault_deploy_init_payload.root_token
-         | default(vault_deploy_root_token | default('')) }}
+    # Always capture the init root token for the current run.
+    vault_deploy_root_token: "{{ vault_deploy_init_payload.root_token | default('', true) | trim }}"
+
+    # Convenience tokens for downstream roles/playbooks (only set if not already provided).
     vault_deploy_token: >-
-      {{ vault_deploy_init_payload.root_token
-         | default(vault_deploy_token | default('')) }}
+      {{
+        (vault_deploy_token | default('', true) | trim)
+        if (vault_deploy_token | default('', true) | trim | length > 0)
+        else (vault_deploy_init_payload.root_token | default('', true) | trim)
+      }}
+    vault_admin_token: >-
+      {{
+        (vault_admin_token | default('', true) | trim)
+        if (vault_admin_token | default('', true) | trim | length > 0)
+        else (vault_deploy_init_payload.root_token | default('', true) | trim)
+      }}
+    vault_token: >-
+      {{
+        (vault_token | default('', true) | trim)
+        if (vault_token | default('', true) | trim | length > 0)
+        else (vault_deploy_init_payload.root_token | default('', true) | trim)
+      }}
+    root_token: >-
+      {{
+        (root_token | default('', true) | trim)
+        if (root_token | default('', true) | trim | length > 0)
+        else (vault_deploy_init_payload.root_token | default('', true) | trim)
+      }}
   no_log: true
   when:
     - vault_deploy_init_payload is defined
-    - vault_deploy_root_token | default('', true) | trim | length == 0
-    - vault_deploy_token | default('', true) | trim | length == 0
+  tags:
+    - init
+    - bootstrap
+
+- name: Determine whether to write encrypted init file
+  ansible.builtin.set_fact:
+    vault_bootstrap_should_write_init_file: >-
+      {{
+        (vault_bootstrap_write_init_file_on_init | default(true) | bool)
+        and (vault_bootstrap_did_init | default(false) | bool)
+        and (not (vault_bootstrap_init_file.stat.exists | default(false)))
+      }}
   tags:
     - init
     - bootstrap
@@ -126,7 +168,7 @@
   ansible.builtin.fail:
     msg: "vault_deploy_ansible_vault_pw is required to encrypt Vault init output."
   when:
-    - vault_deploy_bootstrap_write_init_output | bool
+    - vault_bootstrap_should_write_init_file | bool
     - vault_deploy_ansible_vault_pw | default('') | length == 0
   tags:
     - init
@@ -134,9 +176,8 @@
 
 - name: Write encrypted init output
   when:
-    - vault_deploy_bootstrap_write_init_output | bool
+    - vault_bootstrap_should_write_init_file | bool
     - vault_deploy_init_payload is defined
-    - not vault_bootstrap_init_file.stat.exists | default(false)
   no_log: true
   tags:
     - init

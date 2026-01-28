@@ -1,7 +1,7 @@
 ---
 galaxy_info:
   role_name: aap_deploy
-  author: Lightning IT
+  author: René Osorio
   company: Lightning IT
   description: Deploy AAP on RHEL.
   license: GPL-3.0-only

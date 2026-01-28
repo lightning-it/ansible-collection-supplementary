@@ -5,10 +5,17 @@
     tasks_from: assert
   tags: always
 
+- name: Normalize Nginx vhost list
+  ansible.builtin.set_fact:
+    nginx_config_vhosts_effective: "{{ nginx_config_vhosts | default([], true) }}"
+  changed_when: false
+  tags: always
+
 - name: Ensure vhost list is valid
   ansible.builtin.assert:
     that:
-      - nginx_config_vhosts is sequence
+      - nginx_config_vhosts_effective is sequence
+      - nginx_config_vhosts_effective is not string
     fail_msg: "nginx_config_vhosts must be a list."
   tags: always
 
@@ -16,7 +23,7 @@
   ansible.builtin.debug:
     msg: "Nginx config skipped (nginx_deploy_skip_config=true or no vhosts defined)."
   when:
-    - nginx_deploy_skip_config | bool or nginx_config_vhosts | length == 0
+    - nginx_deploy_skip_config | bool or nginx_config_vhosts_effective | length == 0
   tags: always
 
 - name: Ensure vhost directory exists
@@ -48,10 +55,10 @@
       - item.name is defined
       - item.name | length > 0
     fail_msg: "Each entry in nginx_config_vhosts must include a name."
-  loop: "{{ nginx_config_vhosts }}"
+  loop: "{{ nginx_config_vhosts_effective }}"
   when:
     - not nginx_deploy_skip_config | bool
-    - nginx_config_vhosts | length > 0
+    - nginx_config_vhosts_effective | length > 0
   tags:
     - config
 
@@ -62,11 +69,58 @@
     owner: "{{ nginx_deploy_run_as_user }}"
     group: "{{ nginx_deploy_run_as_group }}"
     mode: "{{ nginx_config_vhost_mode }}"
-  loop: "{{ nginx_config_vhosts }}"
+  loop: "{{ nginx_config_vhosts_effective }}"
   when:
     - not nginx_deploy_skip_config | bool
-    - nginx_config_vhosts | length > 0
+    - nginx_config_vhosts_effective | length > 0
   notify: Reload nginx
+  tags:
+    - config
+
+- name: Detect SELinux status for Nginx config
+  ansible.builtin.command: getenforce
+  register: nginx_config_selinux_status
+  changed_when: false
+  failed_when: false
+  when:
+    - ansible_distribution in ['RedHat', 'CentOS']
+    - nginx_deploy_selinux_relabel | bool
+    - not nginx_deploy_skip_config | bool
+  tags:
+    - config
+
+- name: Read SELinux context for Nginx vhost files
+  ansible.builtin.command: "ls -Z {{ nginx_config_conf_d_dir }}/{{ item.name }}.conf"
+  register: nginx_config_vhost_context
+  changed_when: false
+  failed_when: false
+  loop: "{{ nginx_config_vhosts_effective }}"
+  when:
+    - ansible_distribution in ['RedHat', 'CentOS']
+    - nginx_deploy_selinux_relabel | bool
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_selinux_status is defined
+    - nginx_config_selinux_status.rc == 0
+    - nginx_config_selinux_status.stdout != 'Disabled'
+  tags:
+    - config
+
+- name: Apply SELinux context for Nginx vhost files
+  ansible.builtin.command: "chcon -t container_file_t {{ nginx_config_vhost_path }}"
+  register: nginx_config_vhost_relabel
+  changed_when: "'container_file_t' not in item.stdout"
+  failed_when: false
+  loop: "{{ nginx_config_vhost_context.results | default([]) }}"
+  when:
+    - ansible_distribution in ['RedHat', 'CentOS']
+    - nginx_deploy_selinux_relabel | bool
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_vhosts_effective | length > 0
+    - item.rc == 0
+    - item.stdout is defined
+    - "'container_file_t' not in item.stdout"
+  vars:
+    nginx_config_vhost_path: "{{ nginx_config_conf_d_dir }}/{{ item.item.name | default('') }}.conf"
   tags:
     - config
 
@@ -79,6 +133,37 @@
     - (nginx_config_test | default(nginx_deploy_config_test | default(true))) | bool
     - not nginx_deploy_skip_runtime | bool
     - not nginx_deploy_skip_config | bool
+    - nginx_config_vhosts_effective | length > 0
   tags:
     - config
     - validate
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - config
+
+- name: Check nginx container exists
+  ansible.builtin.command:
+    cmd: "podman inspect {{ nginx_deploy_container_name }}"
+  register: nginx_deploy_container_exists
+  changed_when: false
+  failed_when: false
+  when:
+    - nginx_reload_requested | default(false)
+    - not nginx_deploy_skip_runtime | bool
+  tags:
+    - config
+
+- name: Reload nginx
+  ansible.builtin.command: "podman exec {{ nginx_deploy_container_name }} nginx -s reload"
+  register: nginx_deploy_reload
+  changed_when: nginx_deploy_reload.rc == 0
+  failed_when: nginx_deploy_reload.rc != 0
+  when:
+    - nginx_reload_requested | default(false)
+    - not nginx_deploy_skip_runtime | bool
+    - nginx_deploy_container_exists is defined
+    - nginx_deploy_container_exists.rc == 0
+  tags:
+    - config

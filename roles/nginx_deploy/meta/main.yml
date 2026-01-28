@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: nginx_deploy
   namespace: lit
-  author: Lightning IT
+  author: René Osorio
   description: Deploy Nginx as a Podman container with managed configuration.
   company: Lightning IT
   license: GPL-3.0-only

@@ -39,3 +39,44 @@
   ansible.builtin.meta: flush_handlers
   tags:
     - deployment
+
+- name: Recreate minio pod (kubeplay)
+  when:
+    - minio_deploy_kubeplay_remove | default(false)
+    - not minio_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay remove (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: remove
+        kubeplay_pod_name: "{{ minio_deploy_pod_name }}"
+        kubeplay_app_name: minio_remove
+  rescue:
+    - name: Ignore kubeplay remove failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay remove failure."
+
+- name: Run minio pod (kubeplay)
+  when:
+    - minio_deploy_kubeplay_run | default(false)
+    - not minio_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay run (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: run
+        kubeplay_pod_name: "{{ minio_deploy_pod_name }}"
+        kubeplay_pod_manifest_path: "{{ minio_deploy_pod_manifest_path }}"
+        kubeplay_app_name: minio_run
+  rescue:
+    - name: Ignore kubeplay run failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay run failure."

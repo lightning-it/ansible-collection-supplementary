@@ -8,6 +8,9 @@ spec:
   containers:
     - name: coredns
       image: {{ coredns_deploy_image }}
+      args:
+        - -conf
+        - {{ coredns_deploy_container_corefile_path }}
       ports:
         - containerPort: {{ coredns_deploy_dns_port }}
           hostPort: {{ coredns_deploy_host_dns_port }}
