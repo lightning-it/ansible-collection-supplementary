@@ -26,6 +26,12 @@ Token resolution order:
 
 See `roles/vault_config/defaults/main.yml` for shared variables.
 
+Terraform state migration:
+- Local state is written under `/srv/vault/bootstrap`.
+- If MinIO tfstate backend facts are available, the role migrates local state to S3
+  and removes the local files; otherwise it appends `/srv/vault/bootstrap` to
+  `tfstate_pending_dirs` for later migration by `lit.foundational.minio_bootstrap`.
+
 ## Example Playbook
 ```yaml
 - name: Configure Vault
