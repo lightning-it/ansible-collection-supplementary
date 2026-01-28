@@ -28,6 +28,8 @@ Terraform state migration:
   (`tfstate_backend_ready`, `tfstate_s3_endpoint`, `tfstate_bucket`, and creds).
 - If `tfstate_pending_dirs` is set, it migrates any local tfstate files it finds
   in those directories and removes them only after successful migration.
+- Migration tasks are tagged `tfstate` and `tfstate_migrate` so operators can run
+  or skip them without changing the playbook.
 
 ## Example Playbook
 

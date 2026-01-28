@@ -31,6 +31,8 @@ Terraform state migration:
 - If MinIO tfstate backend facts are available, the role migrates local state to S3
   and removes the local files; otherwise it appends `/srv/vault/bootstrap` to
   `tfstate_pending_dirs` for later migration by `minio_bootstrap`.
+- Migration tasks are tagged `tfstate` and `tfstate_migrate` so operators can run
+  or skip them without changing the playbook.
 
 ## Example Playbook
 ```yaml

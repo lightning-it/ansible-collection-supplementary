@@ -208,6 +208,8 @@
   tags:
     - config
     - terragrunt_apply
+    - tfstate
+    - tfstate_migrate
 
 - name: Migrate Vault bootstrap tfstate when backend is ready
   when:
@@ -220,6 +222,8 @@
   tags:
     - config
     - terragrunt_apply
+    - tfstate
+    - tfstate_migrate
   block:
     - name: Migrate Vault bootstrap tfstate to S3 backend
       ansible.builtin.include_role:
@@ -230,8 +234,13 @@
         terraform_state_migrate_s3_bucket: "{{ tfstate_bucket }}"
         terraform_state_migrate_s3_access_key: "{{ tfstate_access_key }}"
         terraform_state_migrate_s3_secret_key: "{{ tfstate_secret_key }}"
+        terraform_state_migrate_s3_region: "{{ tfstate_region | default('', true) }}"
+        terraform_state_migrate_s3_key_prefix: "{{ tfstate_key_prefix | default('', true) }}"
       no_log: true
       delegate_to: localhost
+      tags:
+        - tfstate
+        - tfstate_migrate
 
     - name: Remove Vault bootstrap local tfstate files after migration
       ansible.builtin.file:
@@ -241,6 +250,9 @@
       loop_control:
         loop_var: vault_config_tfstate_file
       delegate_to: localhost
+      tags:
+        - tfstate
+        - tfstate_migrate
   rescue:
     - name: Record Vault bootstrap tfstate after failed migration
       ansible.builtin.set_fact:
@@ -249,6 +261,9 @@
             (tfstate_pending_dirs | default([]))
             | union([vault_config_terraform_state_dir])
           }}
+      tags:
+        - tfstate
+        - tfstate_migrate
 
 - name: Record Vault bootstrap tfstate for later migration
   ansible.builtin.set_fact:
@@ -269,6 +284,8 @@
   tags:
     - config
     - terragrunt_apply
+    - tfstate
+    - tfstate_migrate
 
 - name: Bootstrap AppRole credentials
   ansible.builtin.include_tasks: bootstrap_approle.yml

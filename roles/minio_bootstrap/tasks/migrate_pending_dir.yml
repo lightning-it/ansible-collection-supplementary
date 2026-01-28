@@ -5,6 +5,9 @@
   register: minio_bootstrap_pending_dir_stat
   changed_when: false
   delegate_to: localhost
+  tags:
+    - tfstate
+    - tfstate_migrate
 
 - name: Migrate tfstate files from pending directory
   when: minio_bootstrap_pending_dir_stat.stat.exists
@@ -21,6 +24,9 @@
       register: minio_bootstrap_pending_tfstate_files
       changed_when: false
       delegate_to: localhost
+      tags:
+        - tfstate
+        - tfstate_migrate
 
     - name: Migrate pending tfstate files to backend
       ansible.builtin.include_role:
@@ -31,9 +37,14 @@
         terraform_state_migrate_s3_bucket: "{{ tfstate_bucket }}"
         terraform_state_migrate_s3_access_key: "{{ tfstate_access_key }}"
         terraform_state_migrate_s3_secret_key: "{{ tfstate_secret_key }}"
+        terraform_state_migrate_s3_region: "{{ tfstate_region | default('', true) }}"
+        terraform_state_migrate_s3_key_prefix: "{{ tfstate_key_prefix | default('', true) }}"
       when: minio_bootstrap_pending_tfstate_files.matched | int > 0
       no_log: true
       delegate_to: localhost
+      tags:
+        - tfstate
+        - tfstate_migrate
 
     - name: Remove local tfstate files after migration
       ansible.builtin.file:
@@ -44,7 +55,13 @@
         loop_var: minio_bootstrap_tfstate_file
       when: minio_bootstrap_pending_tfstate_files.matched | int > 0
       delegate_to: localhost
+      tags:
+        - tfstate
+        - tfstate_migrate
   rescue:
     - name: Skip tfstate cleanup after failed migration
       ansible.builtin.debug:
         msg: "Skipping tfstate cleanup for {{ minio_bootstrap_pending_dir }} after migration failure."
+      tags:
+        - tfstate
+        - tfstate_migrate

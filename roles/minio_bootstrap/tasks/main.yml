@@ -81,3 +81,5 @@
     loop_var: minio_bootstrap_pending_dir
   tags:
     - bootstrap
+    - tfstate
+    - tfstate_migrate
