@@ -47,10 +47,8 @@
   delegate_to: "{{ vault_config_api_delegate_to }}"
   community.hashi_vault.vault_read:
     url: "{{ vault_config_vault_address }}"
-    auth_method: "{{ vault_config_auth_method }}"
-    token: "{{ vault_config_token | default(omit, true) }}"
-    role_id: "{{ vault_config_role_id | default(omit, true) }}"
-    secret_id: "{{ vault_config_secret_id | default(omit, true) }}"
+    auth_method: "token"
+    token: "{{ vault_config_token }}"
     validate_certs: "{{ vault_config_vault_validate_certs }}"
     path: "{{ vault_config_pki_role_path }}"
   register: vault_config_pki_role_read
@@ -93,12 +91,65 @@
   tags:
     - vault_config_pki
 
-- name: Parse expiry of existing certificate
+- name: Normalize existing certificate data
+  ansible.builtin.set_fact:
+    vault_config_existing_cert_data: >-
+      {{ (existing_cert.data | default({})).data | default({}) }}
+    vault_config_existing_cert_in_vault: >-
+      {{ (vault_config_existing_cert_data.certificate | default('', true) | length) > 0 }}
+  tags:
+    - vault_config_pki
+
+- name: Parse expiry of existing certificate (Vault KV)
   community.crypto.x509_certificate_info:
-    content: "{{ existing_cert.data.data.certificate }}"
+    content: "{{ vault_config_existing_cert_data.certificate }}"
   register: cert_info
-  when: existing_cert.data is defined
+  when: vault_config_existing_cert_in_vault | bool
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  tags:
+    - vault_config_pki
+
+- name: Check for existing local certificate
+  ansible.builtin.stat:
+    path: "{{ vault_config_cert_dir }}/vault.crt"
+  register: vault_config_local_cert_stat
+  tags:
+    - vault_config_pki
+
+- name: Read existing local certificate
+  ansible.builtin.slurp:
+    src: "{{ vault_config_cert_dir }}/vault.crt"
+  register: vault_config_local_cert_slurp
+  when:
+    - not vault_config_existing_cert_in_vault | bool
+    - vault_config_local_cert_stat.stat.exists | default(false) | bool
+  tags:
+    - vault_config_pki
+
+- name: Parse expiry of existing certificate (local)
+  community.crypto.x509_certificate_info:
+    content: "{{ vault_config_local_cert_slurp.content | b64decode }}"
+  register: local_cert_info
+  when: vault_config_local_cert_slurp is defined
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  tags:
+    - vault_config_pki
+
+- name: Select existing certificate info
+  ansible.builtin.set_fact:
+    vault_config_existing_cert_info: >-
+      {{
+        cert_info
+        if cert_info is defined
+        else local_cert_info
+        if local_cert_info is defined
+        else {}
+      }}
+    vault_config_existing_cert_present: >-
+      {{
+        (cert_info is defined)
+        or (local_cert_info is defined)
+      }}
   tags:
     - vault_config_pki
 
@@ -113,12 +164,12 @@
   ansible.builtin.set_fact:
     cert_expiry: >-
       {{
-        (cert_info.not_after
+        (vault_config_existing_cert_info.not_after
           | regex_replace('Z$', '')
           | to_datetime('%Y%m%d%H%M%S'))
         .strftime('%s') | int
       }}
-  when: existing_cert.data is defined
+  when: vault_config_existing_cert_info.not_after is defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
   tags:
     - vault_config_pki
@@ -126,7 +177,7 @@
 - name: Set default certificate expiry (current time)
   ansible.builtin.set_fact:
     cert_expiry: "{{ ansible_date_time.epoch | int }}"
-  when: existing_cert.data is not defined
+  when: vault_config_existing_cert_info.not_after is not defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
   tags:
     - vault_config_pki
@@ -146,8 +197,9 @@
   register: vault_config_pki_cert
   delegate_to: "{{ vault_config_api_delegate_to }}"
   when:
-    - existing_cert.data is not defined
     - vault_config_pki_role_exists | default(false) | bool
+    - not (vault_config_existing_cert_present | default(false) | bool)
+      or (cert_expiry | int) < (cert_check_time | int)
   no_log: "{{ vault_config_pki_no_log }}"
   notify:
     - Recreate vault pod
@@ -167,10 +219,7 @@
   community.crypto.x509_certificate_info:
     content: "{{ vault_config_pki_cert.data.data.certificate }}"
   register: new_cert_info
-  when:
-    - vault_config_pki_cert is defined
-    - existing_cert.data is not defined or
-      (cert_expiry | int) < (cert_check_time | int)
+  when: vault_config_pki_cert is defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
   tags:
     - vault_config_pki
@@ -191,10 +240,7 @@
       private_key: "{{ vault_config_pki_cert.data.data.private_key }}"
       issuing_ca: "{{ vault_config_pki_cert.data.data.issuing_ca }}"
       not_after: "{{ new_cert_info.not_after }}"
-  when:
-    - vault_config_pki_cert is defined
-    - existing_cert.data is not defined or
-      (cert_expiry | int) < (cert_check_time | int)
+  when: vault_config_pki_cert is defined
   no_log: "{{ vault_config_pki_no_log }}"
   notify:
     - Recreate vault pod
@@ -211,24 +257,25 @@
     - dest: "{{ vault_config_cert_dir }}/vault.crt"
       content: >-
         {{ vault_config_pki_cert.data.data.certificate
-           | default(existing_cert.data.data.certificate) }}
+           | default(vault_config_existing_cert_data.certificate) }}
       mode: "0644"
     - dest: "{{ vault_config_cert_dir }}/vault.key"
       content: >-
         {{ vault_config_pki_cert.data.data.private_key
-           | default(existing_cert.data.data.private_key) }}
+           | default(vault_config_existing_cert_data.private_key) }}
       mode: "0644"
     - dest: "{{ vault_config_cert_dir }}/ca.crt"
       content: >-
         {{ vault_config_pki_cert.data.data.issuing_ca
-           | default(existing_cert.data.data.issuing_ca) }}
+           | default(vault_config_existing_cert_data.issuing_ca) }}
       mode: "0644"
   no_log: "{{ vault_config_pki_no_log }}"
   notify:
     - Recreate vault pod
     - Run vault pod
   when:
-    - existing_cert.data is defined or vault_config_pki_cert is defined
+    - vault_config_existing_cert_in_vault | default(false) | bool
+      or vault_config_pki_cert is defined
   tags:
     - vault_config_pki
 

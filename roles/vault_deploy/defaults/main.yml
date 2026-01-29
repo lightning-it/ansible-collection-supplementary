@@ -40,8 +40,8 @@ vault_deploy_host_ip: >-
 vault_deploy_vault_hostname: "{{ vault_hostname | default(inventory_hostname, true) }}"
 vault_deploy_vault_address: >-
   {{
-    vault_url
-    | default(g_vault_addr | default('', true), true)
+    vault_address
+    | default(g_vault_address | default('', true), true)
   }}
 vault_deploy_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
 vault_deploy_api_delegate_to: "{{ vault_api_delegate_to | default('localhost') }}"
@@ -101,7 +101,7 @@ vault_deploy_wrapper_validate_post: false
 vault_deploy_terraformstate_baseurl: "https://gitlab.com/api/v4/projects/70576743/terraform/state"
 vault_deploy_url: >-
   {{
-    vault_url
+    vault_address
     | default(vault_deploy_vault_address | default('', true), true)
   }}
 vault_deploy_token: ""

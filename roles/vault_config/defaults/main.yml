@@ -1,5 +1,5 @@
 ---
-vault_config_url: "{{ vault_url }}"
+vault_config_url: "{{ vault_address }}"
 vault_config_terraform_source: "https://github.com/lightning-it/terraform-vault-instance"
 vault_config_terraform_state_dir: "/srv/vault/bootstrap"
 vault_config_terraform_state_path: "{{ vault_config_terraform_state_dir }}/terraform.tfstate"

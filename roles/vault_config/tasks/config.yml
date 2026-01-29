@@ -161,6 +161,7 @@
     state: directory
     mode: '0700'
   delegate_to: localhost
+  changed_when: false
   tags:
     - config
     - terragrunt_validate
@@ -227,6 +228,7 @@
     - vault_config_tfstate_files_remote.matched | int > 0
     - vault_config_tfstate_files_local.matched | int == 0
   no_log: true
+  changed_when: false
   tags:
     - config
     - terragrunt_validate
