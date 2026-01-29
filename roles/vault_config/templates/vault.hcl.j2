@@ -25,7 +25,7 @@ generate "backend" {
   contents  = <<EOF
 terraform {
   backend "local" {
-    path = "{{ vault_config_terraform_state_path }}"
+    path = "{{ vault_config_terraform_state_path_local }}"
   }
 }
 EOF

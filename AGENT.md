@@ -333,7 +333,7 @@ use_vault: false              # safe default: runs without Vault
 use_vault_mode: "explicit"    # optional: explicit|auto
 
 vault_deploy_addr: ""
-vault_deploy_token: ""
+vault_token: ""
 ```
 
 ```yaml
@@ -346,7 +346,7 @@ vault_deploy_token: ""
         (
           (use_vault_mode | default('explicit')) == 'auto'
           and (vault_deploy_addr | default('') | length > 0)
-          and (vault_deploy_token | default('') | length > 0)
+          and (vault_token | default('') | length > 0)
         )
       }}
 ```

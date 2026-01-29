@@ -8,12 +8,11 @@
             and (ansible_hashi_vault_role_id | default('', true) | trim | length > 0)
             and (ansible_hashi_vault_secret_id | default('', true) | trim | length > 0))
         else 'token'
-        if (vault_config_root_token | default('', true) | trim | length > 0)
+        if (vault_config_token | default('', true) | trim | length > 0)
         else vault_config_hashi_vault_auth_method
       }}
     vault_config_role_id: "{{ ansible_hashi_vault_role_id | default(omit, true) }}"
     vault_config_secret_id: "{{ ansible_hashi_vault_secret_id | default(omit, true) }}"
-    vault_config_token: "{{ vault_config_root_token | default(omit, true) }}"
   tags:
     - vault_config_pki
 
@@ -25,10 +24,55 @@
          and (ansible_hashi_vault_role_id | default('', true) | trim | length > 0)
          and (ansible_hashi_vault_secret_id | default('', true) | trim | length > 0))
         or (vault_config_auth_method == 'token'
-            and (vault_config_root_token | default('', true) | trim | length > 0))
+            and (vault_config_token | default('', true) | trim | length > 0))
     fail_msg: >-
       Vault PKI requires approle credentials (ansible_hashi_vault_role_id/secret_id)
-      or a Vault token (vault_config_root_token/vault_config_token/VAULT_TOKEN).
+      or a Vault token (vault_config_token).
+  tags:
+    - vault_config_pki
+
+- name: Derive Vault PKI mount and role paths
+  ansible.builtin.set_fact:
+    vault_config_pki_mount: >-
+      {{ (vault_config_vault_pki_path | default('', true) | trim).split('/')[0] }}
+    vault_config_pki_role_path: >-
+      {{
+        (vault_config_vault_pki_path | default('', true) | trim).split('/')[0]
+        ~ '/roles/' ~ vault_config_vault_pki_role
+      }}
+  tags:
+    - vault_config_pki
+
+- name: Check Vault PKI role exists
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  community.hashi_vault.vault_read:
+    url: "{{ vault_config_vault_address }}"
+    auth_method: "{{ vault_config_auth_method }}"
+    token: "{{ vault_config_token | default(omit, true) }}"
+    role_id: "{{ vault_config_role_id | default(omit, true) }}"
+    secret_id: "{{ vault_config_secret_id | default(omit, true) }}"
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
+    path: "{{ vault_config_pki_role_path }}"
+  register: vault_config_pki_role_read
+  failed_when: false
+  no_log: "{{ vault_config_pki_no_log }}"
+  tags:
+    - vault_config_pki
+
+- name: Set Vault PKI role presence flag
+  ansible.builtin.set_fact:
+    vault_config_pki_role_exists: "{{ vault_config_pki_role_read.data is defined }}"
+  tags:
+    - vault_config_pki
+
+- name: Fail when Vault PKI role is missing
+  ansible.builtin.assert:
+    that:
+      - vault_config_pki_role_exists | default(false) | bool
+    fail_msg: >-
+      Vault PKI role {{ vault_config_vault_pki_role }} not found under
+      {{ vault_config_pki_mount }}. Configure PKI mount/role before requesting
+      certificates.
   tags:
     - vault_config_pki
 
@@ -45,7 +89,7 @@
     path: "{{ inventory_hostname }}/vault/certificate"
   register: existing_cert
   failed_when: false
-  no_log: true
+  no_log: "{{ vault_config_pki_no_log }}"
   tags:
     - vault_config_pki
 
@@ -101,8 +145,10 @@
       alt_names: "localhost,{{ vault_config_vault_hostname }}"
   register: vault_config_pki_cert
   delegate_to: "{{ vault_config_api_delegate_to }}"
-  when: existing_cert.data is not defined
-  no_log: true
+  when:
+    - existing_cert.data is not defined
+    - vault_config_pki_role_exists | default(false) | bool
+  no_log: "{{ vault_config_pki_no_log }}"
   notify:
     - Recreate vault pod
     - Run vault pod
@@ -121,8 +167,10 @@
   community.crypto.x509_certificate_info:
     content: "{{ vault_config_pki_cert.data.data.certificate }}"
   register: new_cert_info
-  when: existing_cert.data is not defined or
-        (cert_expiry | int) < (cert_check_time | int)
+  when:
+    - vault_config_pki_cert is defined
+    - existing_cert.data is not defined or
+      (cert_expiry | int) < (cert_check_time | int)
   delegate_to: "{{ vault_config_api_delegate_to }}"
   tags:
     - vault_config_pki
@@ -143,9 +191,11 @@
       private_key: "{{ vault_config_pki_cert.data.data.private_key }}"
       issuing_ca: "{{ vault_config_pki_cert.data.data.issuing_ca }}"
       not_after: "{{ new_cert_info.not_after }}"
-  when: existing_cert.data is not defined or
-        (cert_expiry | int) < (cert_check_time | int)
-  no_log: true
+  when:
+    - vault_config_pki_cert is defined
+    - existing_cert.data is not defined or
+      (cert_expiry | int) < (cert_check_time | int)
+  no_log: "{{ vault_config_pki_no_log }}"
   notify:
     - Recreate vault pod
     - Run vault pod
@@ -173,10 +223,12 @@
         {{ vault_config_pki_cert.data.data.issuing_ca
            | default(existing_cert.data.data.issuing_ca) }}
       mode: "0644"
-  no_log: true
+  no_log: "{{ vault_config_pki_no_log }}"
   notify:
     - Recreate vault pod
     - Run vault pod
+  when:
+    - existing_cert.data is defined or vault_config_pki_cert is defined
   tags:
     - vault_config_pki
 

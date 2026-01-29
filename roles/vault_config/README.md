@@ -13,24 +13,22 @@ Required for configuration:
 - `vault_config_url`
 - `vault_config_terraform_source`
 
-Token handling (provide one):
-- `vault_config_token` (preferred)
-- `vault_admin_token`
-- `vault_token`
-- `vault_root_token`
-- `root_token`
-- `VAULT_TOKEN` (environment)
+Token handling:
+- `vault_config_token` (required)
 
-Token resolution order:
-`vault_config_token` > `vault_admin_token` > `vault_token` > `vault_config_root_token` > `vault_root_token` > `root_token` > `VAULT_TOKEN`.
+If `vault_config_token` is not set and `vault_config_init.root_token` is provided,
+the role will set `vault_config_token` from that init payload. When `vault_token`
+is provided, it is mapped into `vault_config_token` for this role.
 
 See `roles/vault_config/defaults/main.yml` for shared variables.
 
 Terraform state migration:
-- Local state is written under `/srv/vault/bootstrap`.
+- Terragrunt writes local state on the controller under `vault_config_terraform_state_dir_local`
+  (default `/tmp/vault/bootstrap`) and the tfstate files are copied to
+  `/srv/vault/bootstrap` on the target.
 - If MinIO tfstate backend facts are available, the role migrates local state to S3
-  and removes the local files; otherwise it appends `/srv/vault/bootstrap` to
-  `tfstate_pending_dirs` for later migration by `minio_bootstrap`.
+  and removes the local files; otherwise it appends the controller-local state
+  directory to `tfstate_pending_dirs` for later migration by `minio_bootstrap`.
 - Migration tasks are tagged `tfstate` and `tfstate_migrate` so operators can run
   or skip them without changing the playbook.
 

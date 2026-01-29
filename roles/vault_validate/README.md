@@ -1,6 +1,6 @@
 # vault_validate
 
-Validate Vault runtime, storage, and SELinux state without changing config.
+Validate Vault runtime and SELinux state without changing config.
 
 ## Requirements
 

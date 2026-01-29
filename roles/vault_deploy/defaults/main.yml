@@ -37,13 +37,13 @@ vault_deploy_host_ip: >-
   }}
 
 # Vault Hostname + PKI
-vault_deploy_vault_hostname: "{{ vault_vault_hostname | default(inventory_hostname, true) }}"
+vault_deploy_vault_hostname: "{{ vault_hostname | default(inventory_hostname, true) }}"
 vault_deploy_vault_address: >-
   {{
-    vault_vault_address
-    | default(vault_url | default(g_vault_addr | default('', true), true), true)
+    vault_url
+    | default(g_vault_addr | default('', true), true)
   }}
-vault_deploy_vault_validate_certs: "{{ vault_vault_validate_certs | default(true) }}"
+vault_deploy_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
 vault_deploy_api_delegate_to: "{{ vault_api_delegate_to | default('localhost') }}"
 vault_deploy_engine_mount_point: "{{ vault_engine_mount_point | default('stage-2c') }}"
 vault_deploy_hashi_vault_auth_method: "{{ vault_hashi_vault_auth_method | default('approle') }}"
@@ -78,7 +78,7 @@ vault_deploy_inventory_root: >-
       )
   }}
 vault_deploy_bootstrap_persist_dir: "/srv/vault/bootstrap"
-vault_deploy_init_file_path: "{{ vault_deploy_bootstrap_persist_dir }}/init.json.vault"
+vault_deploy_init_file_path: "{{ vault_deploy_bootstrap_persist_dir }}/vault-init.yml.vault"
 
 # Systemd
 vault_deploy_systemd_unit_name: >-
@@ -104,7 +104,7 @@ vault_deploy_url: >-
     vault_url
     | default(vault_deploy_vault_address | default('', true), true)
   }}
-vault_deploy_token: "{{ vault_token | default('') }}"
+vault_deploy_token: ""
 vault_deploy_terraform_source: "{{ vault_terraform_source | default('') }}"
 vault_deploy_terraform_state_path: >-
   {{
@@ -132,9 +132,9 @@ vault_deploy_approle_token_ttl: ""
 vault_deploy_approle_token_max_ttl: ""
 vault_deploy_approle_bootstrap: true
 vault_deploy_approle_primary_role_name: "{{ vault_approle_primary_role_name | default('') }}"
-vault_deploy_vault_pki_roots: "{{ vault_vault_pki_roots | default([]) }}"
-vault_deploy_vault_pki_intermediates: "{{ vault_vault_pki_intermediates | default([]) }}"
-vault_deploy_vault_pki_roles: "{{ vault_vault_pki_roles | default([]) }}"
+vault_deploy_vault_pki_roots: "{{ vault_pki_roots | default([]) }}"
+vault_deploy_vault_pki_intermediates: "{{ vault_pki_intermediates | default([]) }}"
+vault_deploy_vault_pki_roles: "{{ vault_pki_roles | default([]) }}"
 
 # Bootstrap
 vault_deploy_bootstrap_init: false

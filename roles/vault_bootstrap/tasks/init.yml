@@ -53,7 +53,7 @@
 
 - name: Check if encrypted init file already exists
   ansible.builtin.stat:
-    path: "{{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/init.json.vault') }}"
+    path: "{{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault') }}"
   register: vault_bootstrap_init_file
   changed_when: false
   tags:
@@ -67,7 +67,7 @@
   vars:
     vault_foundational_init_file_path: >-
       {{ vault_deploy_init_file_path
-         | default('/srv/vault/bootstrap/init.json.vault') }}
+         | default('/srv/vault/bootstrap/vault-init.yml.vault') }}
   when:
     - vault_deploy_bootstrap_write_init_output | bool
     - vault_bootstrap_init_file.stat.exists | default(false)
@@ -117,37 +117,41 @@
 
 - name: Set Vault token facts from init payload
   ansible.builtin.set_fact:
-    # Always capture the init root token for the current run.
-    vault_deploy_root_token: "{{ vault_deploy_init_payload.root_token | default('', true) | trim }}"
-
-    # Convenience tokens for downstream roles/playbooks (only set if not already provided).
-    vault_deploy_token: >-
+    vault_bootstrap_token: >-
       {{
-        (vault_deploy_token | default('', true) | trim)
-        if (vault_deploy_token | default('', true) | trim | length > 0)
-        else (vault_deploy_init_payload.root_token | default('', true) | trim)
-      }}
-    vault_admin_token: >-
-      {{
-        (vault_admin_token | default('', true) | trim)
-        if (vault_admin_token | default('', true) | trim | length > 0)
-        else (vault_deploy_init_payload.root_token | default('', true) | trim)
-      }}
-    vault_token: >-
-      {{
-        (vault_token | default('', true) | trim)
-        if (vault_token | default('', true) | trim | length > 0)
-        else (vault_deploy_init_payload.root_token | default('', true) | trim)
-      }}
-    root_token: >-
-      {{
-        (root_token | default('', true) | trim)
-        if (root_token | default('', true) | trim | length > 0)
+        (vault_bootstrap_token | default('', true) | trim)
+        if (vault_bootstrap_token | default('', true) | trim | length > 0)
         else (vault_deploy_init_payload.root_token | default('', true) | trim)
       }}
   no_log: true
   when:
     - vault_deploy_init_payload is defined
+  tags:
+    - init
+    - bootstrap
+
+- name: Map vault_token to vault_bootstrap_token
+  ansible.builtin.set_fact:
+    vault_bootstrap_token: >-
+      {{
+        (vault_bootstrap_token | default('', true) | trim)
+        if (vault_bootstrap_token | default('', true) | trim | length > 0)
+        else (vault_token | default('', true) | trim)
+      }}
+  no_log: true
+  tags:
+    - init
+    - bootstrap
+
+- name: Expose vault_bootstrap_token as vault_token for follow-on roles
+  ansible.builtin.set_fact:
+    vault_token: >-
+      {{
+        (vault_token | default('', true) | trim)
+        if (vault_token | default('', true) | trim | length > 0)
+        else (vault_bootstrap_token | default('', true) | trim)
+      }}
+  no_log: true
   tags:
     - init
     - bootstrap
@@ -197,11 +201,53 @@
         content: ""
         mode: "0600"
 
-    - name: Write init JSON to controller temp dir
+    - name: Write init YAML to controller temp dir
       delegate_to: localhost
       ansible.builtin.copy:
-        dest: "{{ vault_bootstrap_controller_tmp.path }}/init.json"
-        content: "{{ vault_deploy_init_result.stdout }}"
+        dest: "{{ vault_bootstrap_controller_tmp.path }}/vault-init.yml"
+        content: |-
+          # -----------------------------------------------------------------------------
+          # Vault init output (YAML version)
+          # IMPORTANT: Treat this file as HIGHLY SENSITIVE.
+          # - Never commit to git
+          # - Only store encrypted
+          # -----------------------------------------------------------------------------
+
+          vault_init:
+            unseal_keys_b64:
+          {% for key in (vault_deploy_init_payload.unseal_keys_b64 | default([])) %}
+              - "{{ key }}"
+          {% endfor %}
+
+            unseal_keys_hex:
+          {% for key in (vault_deploy_init_payload.unseal_keys_hex | default([])) %}
+              - "{{ key }}"
+          {% endfor %}
+
+            unseal_shares: {{ vault_deploy_init_payload.unseal_shares | default(0) }}
+            unseal_threshold: {{ vault_deploy_init_payload.unseal_threshold | default(0) }}
+
+          {% if (vault_deploy_init_payload.recovery_keys_b64 | default([])) | length > 0 %}
+            recovery_keys_b64:
+          {% for key in vault_deploy_init_payload.recovery_keys_b64 %}
+              - "{{ key }}"
+          {% endfor %}
+          {% else %}
+            recovery_keys_b64: []
+          {% endif %}
+
+          {% if (vault_deploy_init_payload.recovery_keys_hex | default([])) | length > 0 %}
+            recovery_keys_hex:
+          {% for key in vault_deploy_init_payload.recovery_keys_hex %}
+              - "{{ key }}"
+          {% endfor %}
+          {% else %}
+            recovery_keys_hex: []
+          {% endif %}
+            recovery_keys_shares: {{ vault_deploy_init_payload.recovery_keys_shares | default(0) }}
+            recovery_keys_threshold: {{ vault_deploy_init_payload.recovery_keys_threshold | default(0) }}
+
+            root_token: "{{ vault_deploy_init_payload.root_token | default('') }}"
         mode: "0600"
 
     - name: Create temporary vault password file (controller temp dir)
@@ -211,11 +257,11 @@
         content: "{{ vault_deploy_ansible_vault_pw }}"
         mode: "0600"
 
-    - name: Encrypt init JSON to persistent location (controller)
+    - name: Encrypt init YAML to persistent location (controller)
       delegate_to: localhost
       ansible.builtin.command: >-
-        ansible-vault encrypt {{ vault_bootstrap_controller_tmp.path }}/init.json
-        --output {{ vault_bootstrap_controller_tmp.path }}/init.json.vault
+        ansible-vault encrypt {{ vault_bootstrap_controller_tmp.path }}/vault-init.yml
+        --output {{ vault_bootstrap_controller_tmp.path }}/vault-init.yml.vault
       changed_when: true
       environment:
         ANSIBLE_CONFIG: "{{ vault_bootstrap_controller_tmp.path }}/ansible.cfg"
@@ -223,8 +269,8 @@
 
     - name: Copy encrypted init file to target
       ansible.builtin.copy:
-        src: "{{ vault_bootstrap_controller_tmp.path }}/init.json.vault"
-        dest: "{{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/init.json.vault') }}"
+        src: "{{ vault_bootstrap_controller_tmp.path }}/vault-init.yml.vault"
+        dest: "{{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault') }}"
         owner: root
         group: root
         mode: "0600"
@@ -233,7 +279,7 @@
 
     - name: Slurp encrypted init output on target
       ansible.builtin.slurp:
-        src: "{{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/init.json.vault') }}"
+        src: "{{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault') }}"
       register: vault_bootstrap_init_target_slurp
       changed_when: false
 

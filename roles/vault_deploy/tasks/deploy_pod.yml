@@ -25,8 +25,7 @@
     group: "{{ vault_deploy_run_as_group | default(1000) }}"
     mode: '0700'
   loop:
-    - "{{ vault_deploy_host_data_dir }}/core"
-    - "{{ vault_deploy_host_data_dir }}/sys"
+    - "{{ vault_deploy_host_data_dir }}"
   notify:
     - Recreate vault pod
     - Run vault pod

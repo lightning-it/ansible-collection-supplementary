@@ -31,6 +31,8 @@
     - name: Migrate pending tfstate files to backend
       ansible.builtin.include_role:
         name: lit.foundational.terraform_state_migrate
+        apply:
+          delegate_to: localhost
       vars:
         terraform_state_migrate_local_root: "{{ minio_bootstrap_pending_dir }}"
         terraform_state_migrate_s3_endpoint: "{{ tfstate_s3_endpoint }}"
@@ -41,7 +43,6 @@
         terraform_state_migrate_s3_key_prefix: "{{ tfstate_key_prefix | default('', true) }}"
       when: minio_bootstrap_pending_tfstate_files.matched | int > 0
       no_log: true
-      delegate_to: localhost
       tags:
         - tfstate
         - tfstate_migrate

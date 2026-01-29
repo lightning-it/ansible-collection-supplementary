@@ -47,7 +47,7 @@
   delegate_to: "{{ vault_config_api_delegate_to }}"
   community.hashi_vault.vault_read:
     url: "{{ vault_config_vault_address }}"
-    token: "{{ vault_config_root_token }}"
+    token: "{{ vault_config_token }}"
     validate_certs: "{{ vault_config_vault_validate_certs }}"
     path: "sys/auth"
   register: vault_config_auth_methods
@@ -61,7 +61,7 @@
   delegate_to: "{{ vault_config_api_delegate_to }}"
   community.hashi_vault.vault_write:
     url: "{{ vault_config_vault_address }}"
-    token: "{{ vault_config_root_token }}"
+    token: "{{ vault_config_token }}"
     validate_certs: "{{ vault_config_vault_validate_certs }}"
     path: "sys/auth/approle"
     data:

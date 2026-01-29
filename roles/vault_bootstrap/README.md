@@ -12,11 +12,8 @@ None.
 - On that first init run, an encrypted init file is **always** written to disk.
 - The init file is encrypted via `ansible-vault` on the controller; this requires `vault_ansible_vault_pw` (mapped to `vault_deploy_ansible_vault_pw`).
 
-On the init run, the role also exposes token facts for downstream roles/playbooks:
-- `vault_deploy_root_token` (always captured)
-- `vault_admin_token` (only set if not already provided)
-- `vault_token` (only set if not already provided)
-- `root_token` (only set if not already provided)
+On the init run, the role also exposes a token fact for downstream roles/playbooks:
+- `vault_bootstrap_token` (only set if not already provided; mapped from `vault_token` when set)
 
 ## Role Variables
 
