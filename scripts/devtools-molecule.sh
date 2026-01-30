@@ -94,8 +94,33 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   export ANSIBLE_COLLECTIONS_PATH="${COLLECTIONS_DIR}:/usr/share/ansible/collections"
 
   # -------------------------------------------------------------
-  # 2) Dependencies are installed by devtools-collection-prepare.sh
+  # 2) Install declared dependencies into the SAME per-run dir
   # -------------------------------------------------------------
+  dep_fqcns=()
+  if [ -f /workspace/galaxy.yml ]; then
+    while IFS= read -r fqcn; do
+      dep_fqcns+=("$fqcn")
+    done < <(
+      python3 - <<'"PY"'
+import yaml, sys
+try:
+    with open("/workspace/galaxy.yml", "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    deps = data.get("dependencies") or {}
+    for fqcn in deps.keys():
+        print(fqcn)
+except Exception as exc:  # noqa: BLE001
+    sys.stderr.write(f"WARN: failed to parse galaxy.yml dependencies: {exc}\n")
+PY
+    )
+  fi
+
+  for dep_fqcn in "${dep_fqcns[@]}"; do
+    if [ -n "$dep_fqcn" ]; then
+      echo "Installing dependency ${dep_fqcn} into ${COLLECTIONS_DIR}..."
+      ansible-galaxy collection install "$dep_fqcn" -p "${COLLECTIONS_DIR}" --force
+    fi
+  done
 
   # -------------------------------------------------------------
   # 3) Configure Ansible env for Molecule
