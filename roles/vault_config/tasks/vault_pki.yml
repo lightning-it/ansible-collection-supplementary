@@ -284,43 +284,7 @@
   tags:
     - vault_config_pki
 
-- name: Recreate vault pod (kubeplay)
-  when:
-    - vault_config_kubeplay_remove | default(false)
-    - not (vault_config_skip_runtime | default(false)) | bool
-  tags:
-    - vault_config_pki
-  block:
-    - name: Run kubeplay remove (best effort)
-      ansible.builtin.include_role:
-        name: lit.foundational.kubeplay
-      vars:
-        kubeplay_apps: []
-        kubeplay_action: remove
-        kubeplay_pod_name: "{{ vault_config_pod_name }}"
-        kubeplay_app_name: vault_remove
-  rescue:
-    - name: Ignore kubeplay remove failure
-      ansible.builtin.debug:
-        msg: "Skipping kubeplay remove failure."
-
-- name: Run vault pod (kubeplay)
-  when:
-    - vault_config_kubeplay_run | default(false)
-    - not (vault_config_skip_runtime | default(false)) | bool
-  tags:
-    - vault_config_pki
-  block:
-    - name: Run kubeplay run (best effort)
-      ansible.builtin.include_role:
-        name: lit.foundational.kubeplay
-      vars:
-        kubeplay_apps: []
-        kubeplay_action: run
-        kubeplay_pod_name: "{{ vault_config_pod_name }}"
-        kubeplay_pod_manifest_path: "{{ vault_config_pod_manifest_path }}"
-        kubeplay_app_name: vault_run
-  rescue:
-    - name: Ignore kubeplay run failure
-      ansible.builtin.debug:
-        msg: "Skipping kubeplay run failure."
+- name: Unseal Vault
+  ansible.builtin.include_role:
+    name: lit.supplementary.vault_bootstrap
+    tasks_from: unseal
