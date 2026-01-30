@@ -1,4 +1,0 @@
----
-- name: Run kubeplay action
-  ansible.builtin.include_role:
-    name: lit.foundational.kubeplay
