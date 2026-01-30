@@ -96,7 +96,7 @@
     vault_config_existing_cert_data: >-
       {{ (existing_cert.data | default({})).data | default({}) }}
     vault_config_existing_cert_in_vault: >-
-      {{ (vault_config_existing_cert_data.certificate | default('', true) | length) > 0 }}
+      {{ (existing_cert.data.data.certificate | default('', true) | length) > 0 }}
   tags:
     - vault_config_pki
 
@@ -130,7 +130,8 @@
   community.crypto.x509_certificate_info:
     content: "{{ vault_config_local_cert_slurp.content | b64decode }}"
   register: local_cert_info
-  when: vault_config_local_cert_slurp is defined
+  when:
+    - vault_config_local_cert_slurp.data is defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
   tags:
     - vault_config_pki
@@ -219,7 +220,7 @@
   community.crypto.x509_certificate_info:
     content: "{{ vault_config_pki_cert.data.data.certificate }}"
   register: new_cert_info
-  when: vault_config_pki_cert is defined
+  when: vault_config_pki_cert.data is defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
   tags:
     - vault_config_pki
@@ -240,7 +241,7 @@
       private_key: "{{ vault_config_pki_cert.data.data.private_key }}"
       issuing_ca: "{{ vault_config_pki_cert.data.data.issuing_ca }}"
       not_after: "{{ new_cert_info.not_after }}"
-  when: vault_config_pki_cert is defined
+  when: vault_config_pki_cert.data is defined
   no_log: "{{ vault_config_pki_no_log }}"
   notify:
     - Recreate vault pod
@@ -275,7 +276,7 @@
     - Run vault pod
   when:
     - vault_config_existing_cert_in_vault | default(false) | bool
-      or vault_config_pki_cert is defined
+      or vault_config_pki_cert.data is defined
   tags:
     - vault_config_pki
 
