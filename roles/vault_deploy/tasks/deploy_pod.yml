@@ -58,7 +58,7 @@
   changed_when: false
   failed_when: false
   when:
-    - ansible_distribution in ['RedHat', 'CentOS']
+    - ansible_os_family in ['RedHat', 'CentOS']
     - vault_deploy_selinux_relabel | bool
 
 - name: Set Vault container name
@@ -79,7 +79,7 @@
   tags:
     - deployment
   when:
-    - ansible_distribution in ['RedHat', 'CentOS']
+    - ansible_os_family in ['RedHat', 'CentOS']
     - vault_deploy_selinux_relabel | bool
     - selinux_status.stdout is defined
     - selinux_status.stdout != 'Disabled'
@@ -98,7 +98,7 @@
   tags:
     - deployment
   when:
-    - ansible_distribution in ['RedHat', 'CentOS']
+    - ansible_os_family in ['RedHat', 'CentOS']
     - vault_deploy_selinux_relabel | bool
     - selinux_status.stdout is defined
     - selinux_status.stdout != 'Disabled'

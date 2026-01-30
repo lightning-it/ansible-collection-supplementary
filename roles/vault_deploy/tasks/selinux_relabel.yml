@@ -4,7 +4,7 @@
   register: vault_deploy_selinux_status
   changed_when: false
   failed_when: false
-  when: ansible_distribution in ['RedHat', 'CentOS']
+  when: ansible_os_family in ['RedHat', 'CentOS']
   tags:
     - selinux
 
@@ -16,7 +16,7 @@
   tags:
     - selinux
   when:
-    - ansible_distribution in ['RedHat', 'CentOS']
+    - ansible_os_family in ['RedHat', 'CentOS']
     - vault_deploy_selinux_relabel | bool
     - vault_deploy_selinux_status.stdout is defined
     - vault_deploy_selinux_status.stdout != 'Disabled'
@@ -48,7 +48,7 @@
   tags:
     - selinux
   when:
-    - ansible_distribution in ['RedHat', 'CentOS']
+    - ansible_os_family in ['RedHat', 'CentOS']
     - vault_deploy_selinux_relabel | bool
     - vault_deploy_selinux_status.stdout is defined
     - vault_deploy_selinux_status.stdout != 'Disabled'
@@ -84,7 +84,7 @@
   tags:
     - selinux
   when:
-    - ansible_distribution in ['RedHat', 'CentOS']
+    - ansible_os_family in ['RedHat', 'CentOS']
     - vault_deploy_selinux_relabel | bool
     - vault_deploy_selinux_status.stdout is defined
     - vault_deploy_selinux_status.stdout != 'Disabled'
