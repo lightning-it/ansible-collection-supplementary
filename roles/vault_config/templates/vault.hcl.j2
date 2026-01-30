@@ -32,9 +32,9 @@ EOF
 }
 # terraform {
 #   backend "http" {
-#     address        = "{{ vault_config_terraformstate_baseurl }}/{{ cluster_id }}-vault"
-#     lock_address   = "{{ vault_config_terraformstate_baseurl }}/{{ cluster_id }}-vault/lock"
-#     unlock_address = "{{ vault_config_terraformstate_baseurl }}/{{ cluster_id }}-vault/lock"
+#     address        = "{{ vault_config_terraformstate_baseurl }}/{{ inventory_hostname }}-vault"
+#     lock_address   = "{{ vault_config_terraformstate_baseurl }}/{{ inventory_hostname }}-vault/lock"
+#     unlock_address = "{{ vault_config_terraformstate_baseurl }}/{{ inventory_hostname }}-vault/lock"
 #     lock_method    = "POST"
 #     unlock_method  = "DELETE"
 #   }

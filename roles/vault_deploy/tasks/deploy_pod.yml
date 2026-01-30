@@ -234,6 +234,13 @@
     - deployment
   when:
     - vault_deploy_container_name is defined
+    - ansible_os_family in ['RedHat', 'CentOS']
+    - vault_deploy_selinux_relabel | bool
+    - selinux_status.stdout is defined
+    - selinux_status.stdout != 'Disabled'
+    - selinux_contexts is defined
+    - selinux_contexts.results is defined
+    - selinux_type_missing | bool
 
 - name: Read Vault container gid map (inspect)
   ansible.builtin.command:
@@ -251,6 +258,13 @@
     - deployment
   when:
     - vault_deploy_container_name is defined
+    - ansible_os_family in ['RedHat', 'CentOS']
+    - vault_deploy_selinux_relabel | bool
+    - selinux_status.stdout is defined
+    - selinux_status.stdout != 'Disabled'
+    - selinux_contexts is defined
+    - selinux_contexts.results is defined
+    - selinux_type_missing | bool
 
 - name: Set Vault container uid/gid map lines (inspect)
   ansible.builtin.set_fact:
@@ -280,6 +294,13 @@
     - vault_deploy_container_name is defined
     - (vault_deploy_uid_map_lines | default([]) | length == 0)
       or (vault_deploy_gid_map_lines | default([]) | length == 0)
+    - ansible_os_family in ['RedHat', 'CentOS']
+    - vault_deploy_selinux_relabel | bool
+    - selinux_status.stdout is defined
+    - selinux_status.stdout != 'Disabled'
+    - selinux_contexts is defined
+    - selinux_contexts.results is defined
+    - selinux_type_missing | bool
 
 - name: Read Vault container uid/gid maps (proc)
   ansible.builtin.command: "cat /proc/{{ vault_deploy_container_pid.stdout | trim }}/{{ item }}"
