@@ -2,7 +2,7 @@
 set -eo pipefail
 
 # Run all non-*heavy Molecule scenarios for the current collection
-# inside the wunder-devtools-ee container.
+# inside the ee-wunder-devtools-ubi9 container.
 #
 # Usage:
 #   scripts/devtools-molecule.sh
@@ -75,7 +75,7 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
     echo "Limiting to scenario: ${scenario_filter}"
   fi
 
-  echo "DEBUG: docker info inside wunder-devtools-ee..."
+  echo "DEBUG: docker info inside ee-wunder-devtools-ubi9..."
   if ! docker info >/dev/null 2>&1; then
     echo "ERROR: docker info failed inside devtools container."
     exit 1

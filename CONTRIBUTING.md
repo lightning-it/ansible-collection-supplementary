@@ -97,7 +97,7 @@ Collections assume the following tooling:
 
 - **pre-commit** with shared hooks (YAML, ansible-lint, Molecule, actionlint,
   renovate-config-validator, etc.).
-- **wunder-devtools-ee** container as the canonical dev/CI environment:
+- **ee-wunder-devtools-ubi9** container as the canonical dev/CI environment:
   - Terraform, tflint, terraform-docs,
   - ansible-core, ansible-lint, Molecule,
   - semantic-release + Node toolchain.
