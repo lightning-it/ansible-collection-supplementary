@@ -1,22 +1,18 @@
 ---
 - name: Recreate coredns pod
-  ansible.builtin.command: "podman pod rm -f {{ coredns_deploy_pod_name }}"
-  register: coredns_deploy_pod_remove
-  failed_when: coredns_deploy_pod_remove.rc not in [0, 125]
-  changed_when: "'deleted' in coredns_deploy_pod_remove.stdout"
-  ignore_errors: true
+  ansible.builtin.set_fact:
+    coredns_deploy_kubeplay_remove: true
+  changed_when: false
   when: not coredns_deploy_skip_runtime | bool
 
 - name: Run coredns pod
-  ansible.builtin.command:
-    cmd: "podman kube play {{ coredns_deploy_pod_manifest_path }}"
-  register: coredns_deploy_pod_start
-  changed_when: "'created' in coredns_deploy_pod_start.stdout or 'configured' in coredns_deploy_pod_start.stdout"
+  ansible.builtin.set_fact:
+    coredns_deploy_kubeplay_run: true
+  changed_when: false
   when: not coredns_deploy_skip_runtime | bool
 
 - name: Reload coredns
-  ansible.builtin.command: "podman pod restart {{ coredns_deploy_pod_name }}"
-  register: coredns_deploy_reload
-  changed_when: coredns_deploy_reload.rc == 0
-  failed_when: coredns_deploy_reload.rc != 0
+  ansible.builtin.set_fact:
+    coredns_deploy_kubeplay_restart: true
+  changed_when: false
   when: not coredns_deploy_skip_runtime | bool

@@ -1,8 +1,8 @@
 ---
 galaxy_info:
-  author: Dirk Egert
   description: Role to deploy Vault on RHEL
   company: Lightning IT
+  author: Dirk Egert, René Osorio
   license: GPL-3.0-only
   min_ansible_version: '2.18'
   role_name: vault_deploy

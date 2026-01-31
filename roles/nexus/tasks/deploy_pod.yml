@@ -52,7 +52,9 @@
     src: Caddyfile-ssl.j2
     dest: "{{ nexus_caddy_config_dir }}/Caddyfile-ssl"
     mode: '0644'
-  notify: Recreate nexus pod
+  notify:
+    - Recreate nexus pod
+    - Run nexus pod
   tags:
     - deployment
 
@@ -61,7 +63,9 @@
     src: nexus-pod.yml.j2
     dest: "{{ nexus_pod_manifest_path }}"
     mode: '0644'
-  notify: Recreate nexus pod
+  notify:
+    - Recreate nexus pod
+    - Run nexus pod
   tags:
     - deployment
 
@@ -69,3 +73,42 @@
   ansible.builtin.meta: flush_handlers
   tags:
     - deployment
+
+- name: Recreate nexus pod (kubeplay)
+  when:
+    - nexus_kubeplay_remove | default(false)
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay remove (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: remove
+        kubeplay_pod_name: "{{ nexus_pod_name }}"
+        kubeplay_app_name: nexus_remove
+  rescue:
+    - name: Ignore kubeplay remove failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay remove failure."
+
+- name: Run nexus pod (kubeplay)
+  when:
+    - nexus_kubeplay_run | default(false)
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay run (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: run
+        kubeplay_pod_name: "{{ nexus_pod_name }}"
+        kubeplay_pod_manifest_path: "{{ nexus_pod_manifest_path }}"
+        kubeplay_app_name: nexus_run
+  rescue:
+    - name: Ignore kubeplay run failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay run failure."

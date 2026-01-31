@@ -1,0 +1,4 @@
+---
+# Always write an encrypted init file when this role performs the initial `vault operator init`.
+# Set to false only if you explicitly do NOT want to persist the init output (not recommended).
+vault_bootstrap_write_init_file_on_init: true

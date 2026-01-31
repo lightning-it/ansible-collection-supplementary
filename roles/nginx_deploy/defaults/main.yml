@@ -8,7 +8,7 @@ nginx_deploy_run_as_user: 0
 nginx_deploy_run_as_group: 0
 nginx_deploy_run_as_non_root: false
 nginx_deploy_install_packages: true
-nginx_deploy_selinux_relabel: false
+nginx_deploy_selinux_relabel: true
 
 # Host paths (mounted into container)
 nginx_deploy_host_conf_dir: "/srv/nginx/config"

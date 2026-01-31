@@ -1,3 +1,0 @@
----
-nginx_deploy_packages:
-  - podman

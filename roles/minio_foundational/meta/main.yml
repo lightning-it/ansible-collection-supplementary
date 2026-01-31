@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: minio_foundational
   namespace: lit
-  author: Lightning IT
+  author: René Osorio
   description: Shared helpers for MinIO endpoints and credentials.
   company: Lightning IT
   license: GPL-3.0-only

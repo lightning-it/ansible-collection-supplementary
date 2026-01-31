@@ -1,0 +1,26 @@
+---
+- name: Manage DHCP systemd unit
+  when:
+    - dhcp_deploy_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+  tags:
+    - systemd
+  block:
+    - name: Enable and start DHCP service
+      ansible.builtin.systemd:
+        name: "{{ dhcp_deploy_systemd_unit_name }}"
+        enabled: true
+        state: started
+
+    - name: Wait until DHCP health endpoint is reachable
+      ansible.builtin.uri:
+        url: "{{ dhcp_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ dhcp_deploy_validate_certs }}"
+      register: dhcp_deploy_health
+      until: dhcp_deploy_health.status == 200
+      retries: 30
+      delay: 5
+      changed_when: false
+      failed_when: dhcp_deploy_health is failed or dhcp_deploy_health.status != 200
+      when: dhcp_deploy_health_url_effective | default('') | length > 0

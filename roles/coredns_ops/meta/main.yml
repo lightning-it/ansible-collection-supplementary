@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: coredns_ops
   namespace: lit
-  author: Lightning IT
+  author: René Osorio
   description: Operate CoreDNS Podman deployment (restart, reload, status, upgrade).
   company: Lightning IT
   license: GPL-3.0-only

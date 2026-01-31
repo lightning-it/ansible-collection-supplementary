@@ -1,7 +1,7 @@
 ---
 galaxy_info:
   role_name: vault_foundational
-  author: lightning-it
+  author: Dirk Egert, René Osorio
   description: Shared Vault init-file handling tasks
   min_ansible_version: "2.15"
   license: MIT

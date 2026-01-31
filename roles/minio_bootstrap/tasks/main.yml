@@ -43,3 +43,43 @@
     - minio_deploy_bootstrap_buckets | length > 0
   tags:
     - bootstrap
+
+- name: Publish tfstate backend facts
+  ansible.builtin.set_fact:
+    tfstate_backend_ready: true
+    tfstate_s3_endpoint: >-
+      {{
+        minio_bootstrap_tfstate_endpoint
+          | default(minio_deploy_api_url_effective, true)
+      }}
+    tfstate_bucket: "{{ minio_bootstrap_tfstate_bucket }}"
+    tfstate_access_key: "{{ minio_bootstrap_tfstate_access_key }}"
+    tfstate_secret_key: "{{ minio_bootstrap_tfstate_secret_key }}"
+    tfstate_region: "{{ minio_bootstrap_tfstate_region | default(omit) }}"
+    tfstate_key_prefix: "{{ minio_bootstrap_tfstate_key_prefix | default(omit) }}"
+  no_log: true
+  when:
+    - not minio_deploy_skip_bootstrap | bool
+    - minio_bootstrap_tfstate_bucket | default('', true) | length > 0
+    - minio_bootstrap_tfstate_access_key | default('', true) | length > 0
+    - minio_bootstrap_tfstate_secret_key | default('', true) | length > 0
+  tags:
+    - bootstrap
+
+- name: Migrate pending tfstate directories
+  ansible.builtin.include_tasks: migrate_pending_dir.yml
+  when:
+    - tfstate_backend_ready | default(false) | bool
+    - tfstate_s3_endpoint | default('', true) | length > 0
+    - tfstate_bucket | default('', true) | length > 0
+    - tfstate_access_key | default('', true) | length > 0
+    - tfstate_secret_key | default('', true) | length > 0
+    - tfstate_pending_dirs is defined
+    - tfstate_pending_dirs | length > 0
+  loop: "{{ tfstate_pending_dirs }}"
+  loop_control:
+    loop_var: minio_bootstrap_pending_dir
+  tags:
+    - bootstrap
+    - tfstate
+    - tfstate_migrate

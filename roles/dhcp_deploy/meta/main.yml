@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: dhcp_deploy
+  namespace: lit
+  author: René Osorio
+  description: Deploy ISC DHCP (dhcpd) on the host using RPMs and managed config.
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - modulix
+    - dhcp
+    - dns
+    - networking
+    - rhel
+    - automation
+
+dependencies: []

@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: coredns_config
   namespace: lit
-  author: Lightning IT
+  author: René Osorio
   description: Manage CoreDNS Corefile configuration for the Podman deployment.
   company: Lightning IT
   license: GPL-3.0-only

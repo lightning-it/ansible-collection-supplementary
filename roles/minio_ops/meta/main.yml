@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: minio_ops
   namespace: lit
-  author: Lightning IT
+  author: René Osorio
   description: Day-2 operational actions for MinIO.
   company: Lightning IT
   license: GPL-3.0-only

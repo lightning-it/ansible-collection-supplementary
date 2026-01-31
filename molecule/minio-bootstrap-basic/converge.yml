@@ -7,6 +7,6 @@
     minio_deploy_root_password: "minioadmin"
     minio_deploy_skip_runtime: true
     minio_deploy_skip_bootstrap: true
-    minio_bootstrap_buckets: []
+    minio_deploy_bootstrap_buckets: []
   roles:
     - role: minio_bootstrap

@@ -1,0 +1,44 @@
+---
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+  when: ansible_os_family == 'RedHat'
+
+- name: Deploy DHCP runtime
+  when:
+    - not dhcp_deploy_skip_runtime | bool
+    - not dhcp_deploy_skip_deploy | bool
+  block:
+    - name: Ensure required packages are installed
+      ansible.builtin.include_tasks: install_packages.yml
+      when: dhcp_deploy_install_packages | bool
+      tags:
+        - install
+
+    - name: Deploy DHCP configuration
+      ansible.builtin.include_tasks: deploy_config.yml
+      tags:
+        - deployment
+
+    - name: Manage DHCP systemd unit
+      ansible.builtin.include_tasks: systemd.yml
+      when: dhcp_deploy_manage_systemd | bool
+      tags:
+        - systemd
+
+    - name: Wait until DHCP health endpoint is reachable (non-systemd)
+      ansible.builtin.uri:
+        url: "{{ dhcp_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ dhcp_deploy_validate_certs }}"
+      register: dhcp_deploy_health
+      until: dhcp_deploy_health.status == 200
+      retries: 30
+      delay: 5
+      changed_when: false
+      failed_when: dhcp_deploy_health is failed or dhcp_deploy_health.status != 200
+      when:
+        - not dhcp_deploy_manage_systemd | bool
+        - dhcp_deploy_health_url_effective | default('') | length > 0
+      tags:
+        - deployment
+        - api

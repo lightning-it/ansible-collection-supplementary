@@ -1,4 +1,15 @@
 ---
+- name: Map vault_token to vault_deploy_token
+  ansible.builtin.set_fact:
+    vault_deploy_token: >-
+      {{
+        (vault_deploy_token | default('', true) | trim)
+        if (vault_deploy_token | default('', true) | trim | length > 0)
+        else (vault_token | default('', true) | trim)
+      }}
+  no_log: true
+  tags: always
+
 - name: Ensure required Vault vars are defined
   ansible.builtin.include_tasks: assert.yml
   tags: always

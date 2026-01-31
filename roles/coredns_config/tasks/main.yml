@@ -48,3 +48,28 @@
   notify: Reload coredns
   tags:
     - config
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - config
+
+- name: Restart coredns pod (kubeplay)
+  when:
+    - coredns_config_kubeplay_restart | default(false)
+    - not coredns_deploy_skip_runtime | bool
+  tags:
+    - config
+  block:
+    - name: Run kubeplay restart (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: restart
+        kubeplay_pod_name: "{{ coredns_deploy_pod_name }}"
+        kubeplay_app_name: coredns_restart
+  rescue:
+    - name: Ignore kubeplay restart failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay restart failure."

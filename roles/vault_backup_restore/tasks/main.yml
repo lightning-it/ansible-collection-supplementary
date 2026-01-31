@@ -143,9 +143,14 @@
       when: vault_deploy_manage_systemd | bool
 
     - name: Start Vault pod (non-systemd)
-      ansible.builtin.command: "podman kube play {{ vault_deploy_pod_manifest_path }}"
-      register: vault_deploy_pod_start
-      changed_when: vault_deploy_pod_start.rc == 0
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: run
+        kubeplay_pod_name: "{{ vault_deploy_pod_name }}"
+        kubeplay_pod_manifest_path: "{{ vault_deploy_pod_manifest_path }}"
+        kubeplay_app_name: vault_run
       when: not vault_deploy_manage_systemd | bool
 
 - name: Validate Vault after restore

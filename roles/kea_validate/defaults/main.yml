@@ -1,4 +1,0 @@
----
-kea_validate_mode: "fail"
-kea_validate_check_config: true
-kea_validate_check_http: false

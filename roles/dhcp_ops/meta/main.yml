@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: dhcp_ops
+  namespace: lit
+  author: René Osorio
+  description: Operate DHCP host install (restart, reload, status, upgrade).
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - modulix
+    - dhcp
+    - dns
+    - networking
+    - rhel
+    - automation
+
+dependencies: []

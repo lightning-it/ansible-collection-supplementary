@@ -50,7 +50,7 @@ Example playbook:
 ## Local checks
 
 This repository uses **pre-commit** and a shared devtools container
-(`wunder-devtools-ee`) to keep linting and runtime tests consistent between
+(`ee-wunder-devtools-ubi9`) to keep linting and runtime tests consistent between
 local development and CI.
 
 ### 1. Install pre-commit
@@ -77,7 +77,7 @@ pre-commit run --all-files
 
 This will:
 
-- run `yamllint` inside the `wunder-devtools-ee` container,
+- run `yamllint` inside the `ee-wunder-devtools-ubi9` container,
 - run `ansible-lint` inside the devtools container (after building the collection),
 - run the `keycloak-basic`, `openvpn-basic`, `gitlab-runner-basic`,
   `nexus-basic`, `manage-esxi-basic`, and `vault-basic` Molecule scenarios,

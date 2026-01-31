@@ -4,7 +4,7 @@ Deploy CoreDNS as a Podman container, similar to the Vault deployment pattern.
 
 ## Requirements
 
-None.
+Requires the `lit.foundational.kubeplay` role for Podman kube play actions.
 
 ## Role Variables
 

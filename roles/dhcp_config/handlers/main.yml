@@ -1,0 +1,8 @@
+---
+- name: Reload dhcp
+  ansible.builtin.systemd:
+    name: "{{ dhcp_deploy_systemd_unit_name }}"
+    state: restarted
+  when:
+    - dhcp_deploy_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'

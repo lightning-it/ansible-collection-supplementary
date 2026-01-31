@@ -1,0 +1,115 @@
+---
+- name: Ensure required DHCP vars are defined
+  ansible.builtin.import_role:
+    name: dhcp_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure dhcp_ops_action is valid
+  ansible.builtin.assert:
+    that:
+      - dhcp_ops_action in ['none', 'restart', 'reload', 'status', 'upgrade']
+    fail_msg: "dhcp_ops_action must be one of: none, restart, reload, status, upgrade."
+  tags: always
+
+- name: Restart DHCP service
+  when: dhcp_ops_action == 'restart'
+  tags:
+    - ops
+    - restart
+  block:
+    - name: Restart DHCP systemd unit
+      ansible.builtin.systemd:
+        name: "{{ dhcp_deploy_systemd_unit_name }}"
+        state: restarted
+      when:
+        - dhcp_deploy_manage_systemd | bool
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+
+    - name: Validate DHCP after restart
+      ansible.builtin.include_role:
+        name: dhcp_validate
+
+- name: Reload DHCP service
+  when: dhcp_ops_action == 'reload'
+  tags:
+    - ops
+    - reload
+  block:
+    - name: Reload DHCP systemd unit
+      ansible.builtin.systemd:
+        name: "{{ dhcp_deploy_systemd_unit_name }}"
+        state: restarted
+      when:
+        - dhcp_deploy_manage_systemd | bool
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+
+- name: Report DHCP status
+  when: dhcp_ops_action == 'status'
+  tags:
+    - ops
+    - status
+  block:
+    - name: Read DHCP service facts
+      ansible.builtin.service_facts:
+      when:
+        - dhcp_deploy_manage_systemd | bool
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+
+    - name: Set DHCP service state from facts
+      ansible.builtin.set_fact:
+        dhcp_deploy_service_state: >-
+          {{ ansible_facts.services[dhcp_deploy_systemd_unit_name] | default({}) }}
+      when:
+        - dhcp_deploy_manage_systemd | bool
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+
+    - name: Read DHCP health status
+      ansible.builtin.uri:
+        url: "{{ dhcp_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ dhcp_deploy_validate_certs }}"
+      register: dhcp_deploy_health
+      changed_when: false
+      failed_when: false
+      when: dhcp_deploy_health_url_effective | default('') | length > 0
+
+    - name: Default DHCP health status when no URL configured
+      ansible.builtin.set_fact:
+        dhcp_deploy_health: {}
+      when: dhcp_deploy_health_url_effective | default('') | length == 0
+
+    - name: Default DHCP service state when not using systemd
+      ansible.builtin.set_fact:
+        dhcp_deploy_service_state: {}
+      when: dhcp_deploy_service_state is not defined
+
+    - name: Report DHCP service state
+      ansible.builtin.debug:
+        msg: >-
+          health={{ dhcp_deploy_health.status | default('unknown') }},
+          service={{ dhcp_deploy_service_state.state | default('unknown') }}
+
+- name: Upgrade DHCP packages
+  when: dhcp_ops_action == 'upgrade'
+  tags:
+    - ops
+    - upgrade
+  block:
+    - name: Upgrade DHCP packages
+      ansible.builtin.package:
+        name: "{{ dhcp_deploy_packages }}"
+        state: "{{ dhcp_ops_package_state }}"
+      when: dhcp_deploy_packages is defined
+
+    - name: Restart DHCP after upgrade
+      ansible.builtin.systemd:
+        name: "{{ dhcp_deploy_systemd_unit_name }}"
+        state: restarted
+      when:
+        - dhcp_deploy_manage_systemd | bool
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+
+    - name: Validate DHCP after upgrade
+      ansible.builtin.include_role:
+        name: dhcp_validate

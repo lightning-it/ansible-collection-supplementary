@@ -25,9 +25,13 @@
       when: vault_deploy_manage_systemd | bool
 
     - name: Restart Vault pod (non-systemd)
-      ansible.builtin.command: "podman pod restart {{ vault_deploy_pod_name }}"
-      register: vault_deploy_pod_restart
-      changed_when: vault_deploy_pod_restart.rc == 0
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: restart
+        kubeplay_pod_name: "{{ vault_deploy_pod_name }}"
+        kubeplay_app_name: vault_restart
       when: not vault_deploy_manage_systemd | bool
 
     - name: Validate Vault after restart

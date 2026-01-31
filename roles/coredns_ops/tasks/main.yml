@@ -25,9 +25,13 @@
       when: coredns_deploy_manage_systemd | bool
 
     - name: Restart CoreDNS pod (non-systemd)
-      ansible.builtin.command: "podman pod restart {{ coredns_deploy_pod_name }}"
-      register: coredns_deploy_pod_restart
-      changed_when: coredns_deploy_pod_restart.rc == 0
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: restart
+        kubeplay_pod_name: "{{ coredns_deploy_pod_name }}"
+        kubeplay_app_name: coredns_restart
       when: not coredns_deploy_manage_systemd | bool
 
     - name: Validate CoreDNS after restart
@@ -47,10 +51,13 @@
       when: coredns_deploy_manage_systemd | bool
 
     - name: Reload CoreDNS pod (non-systemd)
-      ansible.builtin.command: "podman pod restart {{ coredns_deploy_pod_name }}"
-      register: coredns_deploy_reload
-      changed_when: coredns_deploy_reload.rc == 0
-      failed_when: coredns_deploy_reload.rc != 0
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: restart
+        kubeplay_pod_name: "{{ coredns_deploy_pod_name }}"
+        kubeplay_app_name: coredns_reload
       when: not coredns_deploy_manage_systemd | bool
 
 - name: Report CoreDNS status

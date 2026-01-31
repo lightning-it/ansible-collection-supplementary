@@ -4,7 +4,7 @@
     vault_foundational_init_file_path_effective: >-
       {{
         vault_foundational_init_file_path
-          | default(vault_deploy_init_file_path | default('/srv/vault/bootstrap/init.json.vault'))
+          | default(vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault'))
       }}
   no_log: true
 
@@ -23,7 +23,11 @@
     vault_deploy_init_file_is_legacy: >-
       {{ vault_foundational_init_file_clean
          is search('vault_deploy_unseal_keys_encrypted:') }}
-    vault_deploy_init_file_is_json: "{{ vault_foundational_init_file_first_char == '{' }}"
+    vault_deploy_init_file_is_yaml: >-
+      {{
+        vault_foundational_init_file_clean
+          is search('(^|\\n)\\s*vault_init:')
+      }}
   vars:
     vault_foundational_init_file_decoded: >-
       {{ vault_foundational_init_file_slurp.content | b64decode | string }}

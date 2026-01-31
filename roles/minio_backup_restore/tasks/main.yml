@@ -139,9 +139,14 @@
       when: minio_deploy_manage_systemd | bool
 
     - name: Start MinIO pod (non-systemd)
-      ansible.builtin.command: "podman kube play {{ minio_deploy_pod_manifest_path }}"
-      register: minio_deploy_pod_start
-      changed_when: minio_deploy_pod_start.rc == 0
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: run
+        kubeplay_pod_name: "{{ minio_deploy_pod_name }}"
+        kubeplay_pod_manifest_path: "{{ minio_deploy_pod_manifest_path }}"
+        kubeplay_app_name: minio_run
       when: not minio_deploy_manage_systemd | bool
 
 - name: Validate MinIO after restore

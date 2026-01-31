@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: dhcp_config
+  namespace: lit
+  author: René Osorio
+  description: Manage DHCP configuration for the host install.
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - modulix
+    - dhcp
+    - dns
+    - networking
+    - rhel
+    - automation
+
+dependencies: []

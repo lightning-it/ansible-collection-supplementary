@@ -1,7 +1,7 @@
 ---
 galaxy_info:
   role_name: gitlab_runner
-  author: Lightning IT
+  author: René Osorio
   description: >
     gitlab_runner role (RHEL foundation service skeleton).
     Experimental stub; requires gitlab_runner_experimental_acknowledge=true to

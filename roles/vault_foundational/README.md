@@ -11,7 +11,7 @@ Shared helpers for Vault bootstrap metadata files.
 Key variables:
 - `vault_foundational_init_file_path` (string): override init file path.
 - `vault_deploy_init_file_path` (string): fallback init file path.
-- `vault_deploy_ansible_vault_pw` (string): vault password used for re-encrypting raw JSON.
+- `vault_deploy_ansible_vault_pw` (string): vault password used for re-encrypting raw init output.
 
 ## Example Usage
 
