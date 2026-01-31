@@ -29,7 +29,7 @@ jobs:
   # Collection CI
   # ---------------------------------------------------------------------------
   lint:
-    name: Lint (ansible-lint via wunder-devtools-ee)
+    name: Lint (ansible-lint via ee-wunder-devtools-ubi9)
     runs-on: ubuntu-latest
 
     steps:
@@ -37,7 +37,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # 2) Run ansible-lint inside the wunder-devtools-ee container
+      # 2) Run ansible-lint inside the ee-wunder-devtools-ubi9 container
       - name: Run ansible-lint via devtools-ansible-lint.sh
         env:
           # These env vars make the script generic across collections
@@ -56,7 +56,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # Run Molecule via wunder-devtools-ee.
+      # Run Molecule via ee-wunder-devtools-ubi9.
       # scripts/devtools-molecule.sh is expected to:
       #  - build the collection
       #  - install it into a temp path
@@ -76,7 +76,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # Run a full collection smoke test inside wunder-devtools-ee:
+      # Run a full collection smoke test inside ee-wunder-devtools-ubi9:
       #  - build the collection
       #  - install it into /tmp/wunder/collections
       #  - run the example playbook
