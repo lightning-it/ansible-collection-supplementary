@@ -9,6 +9,7 @@ coredns_deploy_run_as_group: 0
 coredns_deploy_run_as_non_root: false
 coredns_deploy_install_packages: true
 coredns_deploy_selinux_relabel: true
+coredns_deploy_use_host_network: false
 
 # Host paths (mounted into container)
 coredns_deploy_host_config_dir: "/srv/coredns/config"

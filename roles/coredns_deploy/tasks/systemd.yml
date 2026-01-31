@@ -17,6 +17,7 @@
         path: "/etc/systemd/system/podman-kube@{{ coredns_deploy_systemd_name.stdout }}.service.d"
         state: directory
         mode: '0755'
+      register: coredns_deploy_systemd_dropin
 
     - name: Read CoreDNS health port listener
       ansible.builtin.command: "ss -H -tln sport = :{{ coredns_deploy_host_health_port }}"
@@ -48,16 +49,40 @@
               | default([])
             )
           }}
+        coredns_deploy_health_listener_any: >-
+          {{
+            (coredns_deploy_health_listener.stdout
+             | regex_search('(^|\\s)(\\*|0\\.0\\.0\\.0|\\[::\\]):' ~ coredns_deploy_host_health_port))
+            is not none
+          }}
+        coredns_deploy_dns_listener_any: >-
+          {{
+            (coredns_deploy_dns_listener.stdout
+             | regex_search('(^|\\s)(\\*|0\\.0\\.0\\.0|\\[::\\]):' ~ coredns_deploy_host_dns_port))
+            is not none
+          }}
       changed_when: false
 
     - name: Determine CoreDNS restart need
       ansible.builtin.set_fact:
         coredns_deploy_force_restart: >-
           {{
-            (coredns_deploy_health_listener_ips | length == 0)
-            or (coredns_deploy_dns_listener_ips | length == 0)
-            or (coredns_deploy_host_ip not in coredns_deploy_health_listener_ips)
-            or (coredns_deploy_host_ip not in coredns_deploy_dns_listener_ips)
+            (
+              (coredns_deploy_health_listener_ips | length == 0)
+              and not (coredns_deploy_health_listener_any | default(false))
+            )
+            or (
+              (coredns_deploy_dns_listener_ips | length == 0)
+              and not (coredns_deploy_dns_listener_any | default(false))
+            )
+            or (
+              (coredns_deploy_host_ip not in coredns_deploy_health_listener_ips)
+              and not (coredns_deploy_health_listener_any | default(false))
+            )
+            or (
+              (coredns_deploy_host_ip not in coredns_deploy_dns_listener_ips)
+              and not (coredns_deploy_dns_listener_any | default(false))
+            )
           }}
       changed_when: false
 
@@ -75,7 +100,11 @@
             )
             else 'started'
           }}
-        daemon_reload: true
+        daemon_reload: >-
+          {{
+            (coredns_deploy_systemd_dropin is defined and coredns_deploy_systemd_dropin.changed)
+            or (coredns_deploy_pod_manifest is defined and coredns_deploy_pod_manifest.changed)
+          }}
 
     - name: Wait until CoreDNS health endpoint is reachable
       ansible.builtin.uri:

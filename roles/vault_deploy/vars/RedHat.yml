@@ -3,5 +3,6 @@ vault_deploy_packages:
   - podman
   - python3
   - python3-libselinux
+  - policycoreutils-python-utils
   - python3-pip
   - jq

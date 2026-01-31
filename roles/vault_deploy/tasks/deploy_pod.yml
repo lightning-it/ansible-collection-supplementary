@@ -1,5 +1,5 @@
 ---
-- name: Ensure data and cert directories exist
+- name: Ensure Vault data and cert directories exist
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
@@ -10,12 +10,19 @@
     - "{{ vault_deploy_host_data_dir | dirname }}"
     - "{{ vault_deploy_cert_dir }}"
     - "{{ vault_deploy_config_dir }}"
-    - "{{ vault_deploy_pod_manifest_path | dirname }}"
   notify:
     - Recreate vault pod
     - Run vault pod
-  tags:
-    - deployment
+  tags: [deployment]
+
+- name: Ensure Vault pod manifest directory exists
+  ansible.builtin.file:
+    path: "{{ vault_deploy_pod_manifest_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  tags: [deployment]
 
 - name: Ensure Vault data subdirectories exist
   ansible.builtin.file:
@@ -29,8 +36,7 @@
   notify:
     - Recreate vault pod
     - Run vault pod
-  tags:
-    - deployment
+  tags: [deployment]
 
 - name: Ensure Vault data directory permissions
   ansible.builtin.file:
@@ -39,8 +45,7 @@
     owner: "{{ vault_deploy_run_as_user | default(100) }}"
     group: "{{ vault_deploy_run_as_group | default(1000) }}"
     mode: '0700'
-  tags:
-    - deployment
+  tags: [deployment]
 
 - name: Ensure Vault data directory ownership
   ansible.builtin.file:
@@ -49,77 +54,75 @@
     owner: "{{ vault_deploy_run_as_user | default(100) }}"
     group: "{{ vault_deploy_run_as_group | default(1000) }}"
     recurse: true
-  tags:
-    - deployment
+  tags: [deployment]
 
-- name: Detect SELinux status
-  ansible.builtin.command: getenforce
-  register: selinux_status
-  changed_when: false
-  failed_when: false
-  when:
-    - ansible_os_family in ['RedHat', 'CentOS']
-    - vault_deploy_selinux_relabel | bool
+# -----------------------------------------------------------------------------
+# SELinux gating (works for RHEL *and* Ubuntu)
+# - Ubuntu usually has no SELinux -> ansible_selinux.status != enabled -> skip
+# -----------------------------------------------------------------------------
+- name: SELinux | Init flags (safe defaults)
+  ansible.builtin.set_fact:
+    vault_deploy_selinux_active: >-
+      {{
+        (ansible_selinux is defined)
+        and ((ansible_selinux.status | default('disabled')) == 'enabled')
+      }}
+    vault_deploy_selinux_type_missing: false
+    vault_deploy_selinux_missing_paths: []
+  tags: [deployment, selinux]
 
 - name: Set Vault container name
   ansible.builtin.set_fact:
     vault_deploy_container_name: "{{ vault_deploy_pod_name }}-vault"
   when: vault_deploy_pod_name is defined
 
-- name: Check SELinux context for Vault mounts
+- name: SELinux | Check context for Vault mounts
   ansible.builtin.stat:
     path: "{{ item }}"
   loop:
     - "{{ vault_deploy_host_data_dir }}"
     - "{{ vault_deploy_cert_dir }}"
     - "{{ vault_deploy_config_dir }}"
-  register: selinux_contexts
+  register: vault_deploy_selinux_contexts
   changed_when: false
   failed_when: false
-  tags:
-    - deployment
+  tags: [deployment, selinux]
   when:
-    - ansible_os_family in ['RedHat', 'CentOS']
     - vault_deploy_selinux_relabel | bool
-    - selinux_status.stdout is defined
-    - selinux_status.stdout != 'Disabled'
+    - vault_deploy_selinux_active | bool
 
-- name: Apply SELinux context
+- name: SELinux | Compute missing container_file_t labels
+  ansible.builtin.set_fact:
+    vault_deploy_selinux_missing_paths: >-
+      {{
+        (vault_deploy_selinux_contexts.results | default([]))
+        | selectattr('stat.selinux_context', 'defined')
+        | rejectattr('stat.selinux_context', 'search', 'container_file_t')
+        | map(attribute='item')
+        | list
+      }}
+    vault_deploy_selinux_type_missing: "{{ (vault_deploy_selinux_missing_paths | length) > 0 }}"
+  tags: [deployment, selinux]
+  when:
+    - vault_deploy_selinux_contexts is defined
+    - vault_deploy_selinux_contexts.results is defined
+
+- name: SELinux | Apply context (non-persistent chcon)
   ansible.builtin.command: >-
     chcon -Rt container_file_t
     {{ vault_deploy_host_data_dir }}
     {{ vault_deploy_cert_dir }}
     {{ vault_deploy_config_dir }}
   register: selinux_cmd
-  changed_when: selinux_type_missing | bool
+  changed_when: true
   notify:
     - Recreate vault pod
     - Run vault pod
-  tags:
-    - deployment
+  tags: [deployment, selinux]
   when:
-    - ansible_os_family in ['RedHat', 'CentOS']
     - vault_deploy_selinux_relabel | bool
-    - selinux_status.stdout is defined
-    - selinux_status.stdout != 'Disabled'
-    - selinux_contexts is defined
-    - selinux_contexts.results is defined
-    - selinux_type_missing | bool
-  vars:
-    selinux_contexts_defined: >-
-      {{
-        selinux_contexts.results
-        | selectattr('stat.selinux_context', 'defined')
-        | list
-      }}
-    selinux_type_missing: >-
-      {{
-        (selinux_contexts_defined
-         | rejectattr('stat.selinux_context', 'search', 'container_file_t')
-         | list
-         | length)
-        > 0
-      }}
+    - vault_deploy_selinux_active | bool
+    - vault_deploy_selinux_type_missing | default(false) | bool
 
 - name: Render Vault Pod manifest
   ansible.builtin.template:
@@ -129,8 +132,7 @@
   notify:
     - Recreate vault pod
     - Run vault pod
-  tags:
-    - deployment
+  tags: [deployment]
 
 - name: Render Vault config
   ansible.builtin.template:
@@ -140,21 +142,18 @@
   notify:
     - Recreate vault pod
     - Run vault pod
-  tags:
-    - deployment
+  tags: [deployment]
 
 - name: Flush handlers
   ansible.builtin.meta: flush_handlers
-  tags:
-    - deployment
+  tags: [deployment]
 
 - name: Read Vault container running state
   ansible.builtin.command: "podman inspect {{ vault_deploy_container_name }} --format {{ '{{.State.Running}}' }}"
   register: vault_deploy_container_running
   changed_when: false
   failed_when: false
-  tags:
-    - deployment
+  tags: [deployment]
   when:
     - vault_deploy_container_name is defined
 
@@ -163,8 +162,7 @@
   register: vault_deploy_podman_rootless
   changed_when: false
   failed_when: false
-  tags:
-    - deployment
+  tags: [deployment]
   when:
     - vault_deploy_container_name is defined
 
@@ -173,10 +171,11 @@
     path: "{{ vault_deploy_host_data_dir }}"
   register: vault_deploy_host_data_stat
   changed_when: false
-  tags:
-    - deployment
+  tags: [deployment]
 
-
+# -----------------------------------------------------------------------------
+# UID/GID map reads (kept as you had them, but fixed gating + var name)
+# -----------------------------------------------------------------------------
 - name: Read Vault container uid map (inspect)
   ansible.builtin.command:
     argv:
@@ -189,17 +188,12 @@
   become: false
   changed_when: false
   failed_when: false
-  tags:
-    - deployment
+  tags: [deployment]
   when:
     - vault_deploy_container_name is defined
-    - ansible_os_family in ['RedHat', 'CentOS']
     - vault_deploy_selinux_relabel | bool
-    - selinux_status.stdout is defined
-    - selinux_status.stdout != 'Disabled'
-    - selinux_contexts is defined
-    - selinux_contexts.results is defined
-    - selinux_type_missing | bool
+    - vault_deploy_selinux_active | bool
+    - vault_deploy_selinux_type_missing | default(false) | bool
 
 - name: Read Vault container gid map (inspect)
   ansible.builtin.command:
@@ -213,33 +207,25 @@
   become: false
   changed_when: false
   failed_when: false
-  tags:
-    - deployment
+  tags: [deployment]
   when:
     - vault_deploy_container_name is defined
-    - ansible_os_family in ['RedHat', 'CentOS']
     - vault_deploy_selinux_relabel | bool
-    - selinux_status.stdout is defined
-    - selinux_status.stdout != 'Disabled'
-    - selinux_contexts is defined
-    - selinux_contexts.results is defined
-    - selinux_type_missing | bool
+    - vault_deploy_selinux_active | bool
+    - vault_deploy_selinux_type_missing | default(false) | bool
 
 - name: Set Vault container uid/gid map lines (inspect)
   ansible.builtin.set_fact:
     vault_deploy_uid_map_lines: "{{ vault_deploy_uid_map_inspect.stdout_lines | default([]) }}"
     vault_deploy_gid_map_lines: "{{ vault_deploy_gid_map_inspect.stdout_lines | default([]) }}"
-  tags:
-    - deployment
+  tags: [deployment]
   when:
     - vault_deploy_uid_map_inspect is defined
     - vault_deploy_gid_map_inspect is defined
     - vault_deploy_uid_map_inspect.rc | default(1) == 0
     - vault_deploy_gid_map_inspect.rc | default(1) == 0
-    - vault_deploy_uid_map_inspect.stdout_lines is defined
-    - vault_deploy_uid_map_inspect.stdout_lines | length > 0
-    - vault_deploy_gid_map_inspect.stdout_lines is defined
-    - vault_deploy_gid_map_inspect.stdout_lines | length > 0
+    - vault_deploy_uid_map_inspect.stdout_lines | default([]) | length > 0
+    - vault_deploy_gid_map_inspect.stdout_lines | default([]) | length > 0
 
 - name: Read Vault container PID
   ansible.builtin.command: "podman inspect {{ vault_deploy_container_name }} --format {{ '{{.State.Pid}}' }}"
@@ -247,19 +233,14 @@
   become: false
   changed_when: false
   failed_when: false
-  tags:
-    - deployment
+  tags: [deployment]
   when:
     - vault_deploy_container_name is defined
     - (vault_deploy_uid_map_lines | default([]) | length == 0)
       or (vault_deploy_gid_map_lines | default([]) | length == 0)
-    - ansible_os_family in ['RedHat', 'CentOS']
     - vault_deploy_selinux_relabel | bool
-    - selinux_status.stdout is defined
-    - selinux_status.stdout != 'Disabled'
-    - selinux_contexts is defined
-    - selinux_contexts.results is defined
-    - selinux_type_missing | bool
+    - vault_deploy_selinux_active | bool
+    - vault_deploy_selinux_type_missing | default(false) | bool
 
 - name: Read Vault container uid/gid maps (proc)
   ansible.builtin.command: "cat /proc/{{ vault_deploy_container_pid.stdout | trim }}/{{ item }}"
@@ -267,8 +248,7 @@
   become: false
   changed_when: false
   failed_when: false
-  tags:
-    - deployment
+  tags: [deployment]
   loop:
     - uid_map
     - gid_map
@@ -297,14 +277,10 @@
             vault_deploy_container_id_maps.results[1].stdout_lines | default([])
           )
       }}
-  tags:
-    - deployment
+  tags: [deployment]
   when:
     - vault_deploy_container_id_maps is defined
-    - vault_deploy_container_id_maps.results is defined
-    - vault_deploy_container_id_maps.results | length == 2
-    - vault_deploy_container_id_maps.results[0].stdout_lines is defined
-    - vault_deploy_container_id_maps.results[1].stdout_lines is defined
+    - vault_deploy_container_id_maps.results | default([]) | length == 2
     - (vault_deploy_uid_map_lines | default([]) | length == 0)
       or (vault_deploy_gid_map_lines | default([]) | length == 0)
 
@@ -338,23 +314,17 @@
       {%   endif %}
       {% endfor %}
       {{ ns.match }}
-  tags:
-    - deployment
+  tags: [deployment]
   when:
-    - vault_deploy_uid_map_lines is defined
-    - vault_deploy_uid_map_lines | length > 0
-    - vault_deploy_gid_map_lines is defined
-    - vault_deploy_gid_map_lines | length > 0
+    - vault_deploy_uid_map_lines | default([]) | length > 0
+    - vault_deploy_gid_map_lines | default([]) | length > 0
 
 - name: Parse Vault container uid/gid map ranges (selected)
   ansible.builtin.set_fact:
     vault_deploy_uid_map_parts: "{{ vault_deploy_uid_map_line.split() }}"
     vault_deploy_gid_map_parts: "{{ vault_deploy_gid_map_line.split() }}"
-  tags:
-    - deployment
+  tags: [deployment]
   when:
-    - vault_deploy_uid_map_parts is not defined
-    - vault_deploy_gid_map_parts is not defined
     - vault_deploy_uid_map_line is defined
     - vault_deploy_uid_map_line | trim | length > 0
     - vault_deploy_gid_map_line is defined
@@ -372,8 +342,7 @@
         (vault_deploy_gid_map_parts[1] | int)
         + ((vault_deploy_run_as_group | default(1000) | int) - (vault_deploy_gid_map_parts[0] | int))
       }}
-  tags:
-    - deployment
+  tags: [deployment]
   when:
     - vault_deploy_uid_map_parts is defined
     - vault_deploy_gid_map_parts is defined
@@ -382,17 +351,13 @@
     - (vault_deploy_run_as_user | default(100) | int) >= (vault_deploy_uid_map_parts[0] | int)
     - >-
       (vault_deploy_run_as_user | default(100) | int)
-      < (
-        (vault_deploy_uid_map_parts[0] | int)
-        + (vault_deploy_uid_map_parts[2] | int)
-      )
+      < ((vault_deploy_uid_map_parts[0] | int)
+      + (vault_deploy_uid_map_parts[2] | int))
     - (vault_deploy_run_as_group | default(1000) | int) >= (vault_deploy_gid_map_parts[0] | int)
     - >-
       (vault_deploy_run_as_group | default(1000) | int)
-      < (
-        (vault_deploy_gid_map_parts[0] | int)
-        + (vault_deploy_gid_map_parts[2] | int)
-      )
+      < ((vault_deploy_gid_map_parts[0] | int)
+      + (vault_deploy_gid_map_parts[2] | int))
 
 - name: Ensure Vault data dir ownership matches container mapping
   ansible.builtin.file:
@@ -401,15 +366,14 @@
     owner: "{{ vault_deploy_host_uid }}"
     group: "{{ vault_deploy_host_gid }}"
     recurse: true
-  tags:
-    - deployment
+  tags: [deployment]
   when:
     - vault_deploy_host_uid is defined
     - vault_deploy_host_gid is defined
 
 - name: Apply SELinux relabel for Vault data dir
   ansible.builtin.include_tasks: selinux_relabel.yml
-  when: vault_deploy_selinux_relabel | bool
-  tags:
-    - deployment
-    - selinux
+  when:
+    - vault_deploy_selinux_relabel | bool
+    - vault_deploy_selinux_active | bool
+  tags: [deployment, selinux]

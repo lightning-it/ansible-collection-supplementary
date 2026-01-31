@@ -5,6 +5,9 @@ metadata:
   labels:
     app: coredns
 spec:
+{% if coredns_deploy_use_host_network | bool %}
+  hostNetwork: true
+{% endif %}
   containers:
     - name: coredns
       image: {{ coredns_deploy_image }}
@@ -13,16 +16,22 @@ spec:
         - {{ coredns_deploy_container_corefile_path }}
       ports:
         - containerPort: {{ coredns_deploy_dns_port }}
+{% if not (coredns_deploy_use_host_network | bool) %}
           hostPort: {{ coredns_deploy_host_dns_port }}
           hostIP: {{ coredns_deploy_host_ip }}
+{% endif %}
           protocol: UDP
         - containerPort: {{ coredns_deploy_dns_port }}
+{% if not (coredns_deploy_use_host_network | bool) %}
           hostPort: {{ coredns_deploy_host_dns_port }}
           hostIP: {{ coredns_deploy_host_ip }}
+{% endif %}
           protocol: TCP
         - containerPort: {{ coredns_deploy_health_port }}
+{% if not (coredns_deploy_use_host_network | bool) %}
           hostPort: {{ coredns_deploy_host_health_port }}
           hostIP: {{ coredns_deploy_host_ip }}
+{% endif %}
           protocol: TCP
       securityContext:
         runAsUser: {{ coredns_deploy_run_as_user }}
