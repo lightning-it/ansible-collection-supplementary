@@ -1,0 +1,189 @@
+---
+- name: Determine resolver interface
+  ansible.builtin.set_fact:
+    coredns_deploy_resolver_iface_effective: >-
+      {{
+        (
+          coredns_deploy_resolver_iface
+            | default('')
+            | trim
+        )
+        if (coredns_deploy_resolver_iface | default('') | trim | length > 0)
+        else
+        (
+          ansible_default_ipv4.interface
+            | default('')
+        )
+        if (ansible_default_ipv4.interface | default('') | trim | length > 0)
+        else
+        (
+          (ansible_facts.interfaces | default([]))
+          | reject('equalto', 'lo')
+          | list
+          | first
+          | default('')
+        )
+      }}
+  changed_when: false
+
+- name: Ensure nmcli is available
+  ansible.builtin.command: "command -v nmcli"
+  register: coredns_deploy_nmcli
+  changed_when: false
+  failed_when: coredns_deploy_nmcli.rc != 0
+
+- name: Read active connection name for resolver interface
+  ansible.builtin.command: >-
+    nmcli -g GENERAL.CONNECTION device show {{ coredns_deploy_resolver_iface_effective }}
+  register: coredns_deploy_nm_conn
+  changed_when: false
+  failed_when: false
+  when: coredns_deploy_resolver_connection | default('') | trim | length == 0
+
+- name: Read active connections list (name:device)
+  ansible.builtin.command: "nmcli -g NAME,DEVICE connection show --active"
+  register: coredns_deploy_nm_active
+  changed_when: false
+  failed_when: false
+  when:
+    - coredns_deploy_resolver_connection | default('') | trim | length == 0
+    - (coredns_deploy_nm_conn.stdout | default('') | trim | length) == 0
+    - coredns_deploy_resolver_iface_effective | trim | length > 0
+
+- name: Determine resolver connection name
+  ansible.builtin.set_fact:
+    coredns_deploy_resolver_connection_effective: >-
+      {{
+        (coredns_deploy_resolver_connection | default('') | trim)
+        if (coredns_deploy_resolver_connection | default('') | trim | length > 0)
+        else
+        (
+          (coredns_deploy_nm_conn.stdout | default('') | trim)
+          if (coredns_deploy_nm_conn.stdout | default('') | trim | length > 0)
+          else
+          (
+            (coredns_deploy_nm_active.stdout_lines | default([]))
+            | select('match', '.*:' ~ coredns_deploy_resolver_iface_effective ~ '$')
+            | map('regex_replace', ':(?:[^:]*)$', '')
+            | list
+            | first
+            | default('')
+          )
+        )
+      }}
+  changed_when: false
+
+- name: Fail when resolver connection is missing
+  ansible.builtin.fail:
+    msg: >-
+      Resolver connection is empty; NetworkManager may not manage
+      {{ coredns_deploy_resolver_iface_effective }}. Set
+      coredns_deploy_resolver_connection or disable
+      coredns_deploy_manage_resolver.
+  when: coredns_deploy_resolver_connection_effective | trim | length == 0
+
+- name: Read device name for resolver connection
+  ansible.builtin.command: >-
+    nmcli -g GENERAL.DEVICES connection show "{{ coredns_deploy_resolver_connection_effective }}"
+  register: coredns_deploy_nm_conn_device
+  changed_when: false
+  failed_when: false
+  when: coredns_deploy_resolver_iface_effective | trim | length == 0
+
+- name: Ensure resolver interface from connection (if missing)
+  ansible.builtin.set_fact:
+    coredns_deploy_resolver_iface_effective: >-
+      {{
+        coredns_deploy_resolver_iface_effective
+          if (coredns_deploy_resolver_iface_effective | default('') | trim | length > 0)
+          else (coredns_deploy_nm_conn_device.stdout | default('') | trim)
+      }}
+  changed_when: false
+  when: coredns_deploy_nm_conn_device is defined
+
+- name: Read current DNS list for resolver connection
+  ansible.builtin.command: >-
+    nmcli -g ipv4.dns connection show "{{ coredns_deploy_resolver_connection_effective }}"
+  register: coredns_deploy_nm_dns_list
+  changed_when: false
+  failed_when: false
+
+- name: Read current ignore-auto-dns setting for resolver connection
+  ansible.builtin.command: >-
+    nmcli -g ipv4.ignore-auto-dns connection show "{{ coredns_deploy_resolver_connection_effective }}"
+  register: coredns_deploy_nm_dns_ignore
+  changed_when: false
+  failed_when: false
+
+- name: Parse current DNS settings
+  ansible.builtin.set_fact:
+    coredns_deploy_current_dns_list: >-
+      {{
+        (coredns_deploy_nm_dns_list.stdout | default(''))
+        .split(',')
+        | map('trim')
+        | reject('equalto', '')
+        | list
+        | unique
+        | sort
+      }}
+    coredns_deploy_current_ignore_auto: >-
+      {{
+        (coredns_deploy_nm_dns_ignore.stdout | default(''))
+        | trim
+      }}
+    coredns_deploy_desired_dns_list: >-
+      {{
+        (coredns_deploy_resolver_servers | default([]))
+        | map('string')
+        | map('trim')
+        | reject('equalto', '')
+        | list
+        | unique
+        | sort
+      }}
+    coredns_deploy_desired_ignore_auto: >-
+      {{
+        coredns_deploy_resolver_ignore_auto_dns
+        | bool
+        | ternary('yes', 'no')
+      }}
+  changed_when: false
+
+- name: Configure DNS on resolver connection (only if needed)
+  ansible.builtin.command: >-
+    nmcli connection modify "{{ coredns_deploy_resolver_connection_effective }}"
+    ipv4.dns "{{ coredns_deploy_resolver_servers | join(' ') }}"
+    ipv4.ignore-auto-dns {{ coredns_deploy_resolver_ignore_auto_dns | bool | ternary('yes', 'no') }}
+  register: coredns_deploy_nm_dns_apply
+  changed_when: true
+  when:
+    - coredns_deploy_resolver_servers | length > 0
+    - >-
+      not (
+        (coredns_deploy_current_dns_list | default([]))
+        ==
+        (coredns_deploy_desired_dns_list | default([]))
+        and
+        (coredns_deploy_current_ignore_auto | lower | trim)
+        ==
+        (coredns_deploy_desired_ignore_auto | lower | trim)
+      )
+
+- name: Reapply connection to apply DNS (no bounce)
+  ansible.builtin.command: "nmcli device reapply {{ coredns_deploy_resolver_iface_effective }}"
+  changed_when: false
+  failed_when: false
+  when:
+    - coredns_deploy_nm_dns_apply is defined
+    - coredns_deploy_nm_dns_apply is changed
+    - coredns_deploy_resolver_iface_effective | trim | length > 0
+
+- name: Reapply connection to apply DNS (fallback)
+  ansible.builtin.command: "nmcli connection up {{ coredns_deploy_resolver_connection_effective }}"
+  changed_when: false
+  failed_when: false
+  when:
+    - coredns_deploy_nm_dns_apply is defined
+    - coredns_deploy_nm_dns_apply is changed
+    - coredns_deploy_resolver_iface_effective | trim | length == 0

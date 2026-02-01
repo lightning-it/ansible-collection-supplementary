@@ -2,8 +2,7 @@
 # Vault Pod Basis
 vault_deploy_pod_name: "vault"
 vault_deploy_pod_manifest_path: "/etc/podman/pods/vault.yml"
-vault_deploy_data_dir: "/srv/vault/data"
-vault_deploy_host_data_dir: "{{ vault_deploy_data_dir }}"
+vault_deploy_host_data_dir: "/srv/vault/data"
 vault_deploy_cert_dir: "/srv/vault/certs"
 vault_deploy_config_dir: "/srv/vault/config"
 vault_deploy_image: "docker.io/hashicorp/vault:1.21"

@@ -57,6 +57,13 @@ coredns_deploy_corefile: |
       loadbalance
   }
 
+# Resolver management on the host
+coredns_deploy_manage_resolver: true
+coredns_deploy_resolver_upstream_dns: "{{ dns_servers | default([]) }}"
+coredns_deploy_resolver_iface: ""
+coredns_deploy_resolver_connection: ""
+coredns_deploy_resolver_ignore_auto_dns: true
+
 # Deployment control
 coredns_deploy_manage_service: true
 coredns_deploy_manage_systemd: "{{ coredns_deploy_manage_service }}"

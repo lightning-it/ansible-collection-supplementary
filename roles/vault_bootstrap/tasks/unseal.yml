@@ -33,6 +33,17 @@
     - unseal
     - bootstrap
 
+- name: Map vault_init to vault_deploy_init when provided
+  ansible.builtin.set_fact:
+    vault_deploy_init: "{{ vault_init }}"
+  no_log: true
+  when:
+    - vault_deploy_init is not defined
+    - vault_init is defined
+  tags:
+    - unseal
+    - bootstrap
+
 - name: Map vault_deploy_init to unseal keys when provided
   ansible.builtin.set_fact:
     vault_deploy_unseal_keys: "{{ vault_deploy_init.unseal_keys_b64 | default([]) }}"

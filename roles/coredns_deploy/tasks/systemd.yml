@@ -25,9 +25,15 @@
       changed_when: false
       failed_when: false
 
-    - name: Read CoreDNS DNS port listener
+    - name: Read CoreDNS DNS port listener (TCP)
       ansible.builtin.command: "ss -H -tln sport = :{{ coredns_deploy_host_dns_port }}"
-      register: coredns_deploy_dns_listener
+      register: coredns_deploy_dns_listener_tcp
+      changed_when: false
+      failed_when: false
+
+    - name: Read CoreDNS DNS port listener (UDP)
+      ansible.builtin.command: "ss -H -uln sport = :{{ coredns_deploy_host_dns_port }}"
+      register: coredns_deploy_dns_listener_udp
       changed_when: false
       failed_when: false
 
@@ -44,10 +50,17 @@
         coredns_deploy_dns_listener_ips: >-
           {{
             (
-              coredns_deploy_dns_listener.stdout
+              (coredns_deploy_dns_listener_tcp.stdout | default(''))
               | regex_findall('([0-9.]+):' ~ coredns_deploy_host_dns_port)
               | default([])
             )
+            +
+            (
+              (coredns_deploy_dns_listener_udp.stdout | default(''))
+              | regex_findall('([0-9.]+):' ~ coredns_deploy_host_dns_port)
+              | default([])
+            )
+            | unique
           }}
         coredns_deploy_health_listener_any: >-
           {{
@@ -57,9 +70,15 @@
           }}
         coredns_deploy_dns_listener_any: >-
           {{
-            (coredns_deploy_dns_listener.stdout
-             | regex_search('(^|\\s)(\\*|0\\.0\\.0\\.0|\\[::\\]):' ~ coredns_deploy_host_dns_port))
-            is not none
+            (
+              (coredns_deploy_dns_listener_tcp.stdout | default(''))
+              | regex_search('(^|\\s)(\\*|0\\.0\\.0\\.0|\\[::\\]):' ~ coredns_deploy_host_dns_port)
+            ) is not none
+            or
+            (
+              (coredns_deploy_dns_listener_udp.stdout | default(''))
+              | regex_search('(^|\\s)(\\*|0\\.0\\.0\\.0|\\[::\\]):' ~ coredns_deploy_host_dns_port)
+            ) is not none
           }}
       changed_when: false
 
@@ -67,21 +86,24 @@
       ansible.builtin.set_fact:
         coredns_deploy_force_restart: >-
           {{
-            (
-              (coredns_deploy_health_listener_ips | length == 0)
-              and not (coredns_deploy_health_listener_any | default(false))
-            )
-            or (
-              (coredns_deploy_dns_listener_ips | length == 0)
-              and not (coredns_deploy_dns_listener_any | default(false))
-            )
-            or (
-              (coredns_deploy_host_ip not in coredns_deploy_health_listener_ips)
-              and not (coredns_deploy_health_listener_any | default(false))
-            )
-            or (
-              (coredns_deploy_host_ip not in coredns_deploy_dns_listener_ips)
-              and not (coredns_deploy_dns_listener_any | default(false))
+            (not (coredns_deploy_health_ok_pre | default(false) | bool))
+            and (
+              (
+                (coredns_deploy_health_listener_ips | length == 0)
+                and not (coredns_deploy_health_listener_any | default(false))
+              )
+              or (
+                (coredns_deploy_dns_listener_ips | length == 0)
+                and not (coredns_deploy_dns_listener_any | default(false))
+              )
+              or (
+                (coredns_deploy_host_ip not in coredns_deploy_health_listener_ips)
+                and not (coredns_deploy_health_listener_any | default(false))
+              )
+              or (
+                (coredns_deploy_host_ip not in coredns_deploy_dns_listener_ips)
+                and not (coredns_deploy_dns_listener_any | default(false))
+              )
             )
           }}
       changed_when: false
@@ -117,3 +139,9 @@
       delay: 5
       changed_when: false
       failed_when: coredns_deploy_health is failed or coredns_deploy_health.status != 200
+
+    - name: Record CoreDNS health status
+      ansible.builtin.set_fact:
+        coredns_deploy_health_status: "{{ coredns_deploy_health.status | default(0) | int }}"
+        coredns_deploy_health_ok: "{{ (coredns_deploy_health.status | default(0) | int) == 200 }}"
+      changed_when: false

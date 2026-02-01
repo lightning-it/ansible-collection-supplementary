@@ -375,5 +375,4 @@
   ansible.builtin.include_tasks: selinux_relabel.yml
   when:
     - vault_deploy_selinux_relabel | bool
-    - vault_deploy_selinux_active | bool
   tags: [deployment, selinux]
