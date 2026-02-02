@@ -30,13 +30,22 @@
       ansible.builtin.systemd:
         name: "podman-kube@{{ vault_deploy_systemd_name.stdout }}.service"
         enabled: true
-        state: >-
-          {{
-            (vault_deploy_systemd_dropin is defined
-             and (vault_deploy_systemd_dropin.changed | default(false)))
-            | ternary('restarted', 'started')
-          }}
+        state: started
+
+    - name: Reload systemd daemon when Vault drop-in changes
+      ansible.builtin.systemd:
         daemon_reload: true
+      when:
+        - vault_deploy_systemd_dropin is defined
+        - vault_deploy_systemd_dropin.changed | default(false)
+
+    - name: Restart Podman kube systemd unit when Vault drop-in changes
+      ansible.builtin.systemd:
+        name: "podman-kube@{{ vault_deploy_systemd_name.stdout }}.service"
+        state: restarted
+      when:
+        - vault_deploy_systemd_dropin is defined
+        - vault_deploy_systemd_dropin.changed | default(false)
 
     - name: Wait until Vault API is reachable via HTTPS
       ansible.builtin.uri:

@@ -20,7 +20,7 @@ provisioner:
     ansible-lint
   env:
     ANSIBLE_COLLECTIONS_PATHS: >-
-      {{ lookup('env','ANSIBLE_COLLECTIONS_PATH') }}:
+      {{ lookup('env','ANSIBLE_COLLECTIONS_PATHS') | default(lookup('env','ANSIBLE_COLLECTIONS_PATH'), true) }}:
       {{ molecule_project_directory }}/collections-dev:
       {{ molecule_project_directory }}/collections
     ANSIBLE_ROLES_PATH: "roles:../../roles"

@@ -4,21 +4,26 @@
   tags:
     - nexus
 
-- name: Resolve Vault token for Nexus AppRole lookup
+- name: Sync nexus_vault_token with vault_token
   ansible.builtin.set_fact:
-    nexus_vault_token: "{{ lookup('env', 'VAULT_TOKEN') | default('', true) | trim }}"
+    nexus_vault_token: >-
+      {{
+        (nexus_vault_token | default('', true) | trim)
+        if (nexus_vault_token | default('', true) | trim | length > 0)
+        else (vault_token | default('', true) | trim)
+      }}
   no_log: true
   when:
     - nexus_vault_auth_method == 'approle'
   tags:
     - nexus
 
-- name: Fail when VAULT_TOKEN is missing for AppRole lookup
+- name: Fail when nexus_vault_token is missing for AppRole lookup
   ansible.builtin.assert:
     that:
-      - nexus_vault_token | length > 0
+      - nexus_vault_token | default('', true) | trim | length > 0
     fail_msg: >-
-      VAULT_TOKEN is required in the execution environment to read
+      nexus_vault_token (synced from vault_token) is required to read
       {{ nexus_engine_mount_point }}/{{ inventory_hostname }}/nexus/approle.
   when:
     - nexus_vault_auth_method == 'approle'
@@ -39,7 +44,7 @@
   no_log: true
   when:
     - nexus_vault_auth_method == 'approle'
-    - nexus_vault_token | length > 0
+    - nexus_vault_token | default('', true) | trim | length > 0
     - nexus_use_vault_pki | bool
   tags:
     - nexus
@@ -57,7 +62,7 @@
   no_log: true
   when:
     - nexus_vault_auth_method == 'approle'
-    - nexus_vault_token | length > 0
+    - nexus_vault_token | default('', true) | trim | length > 0
     - nexus_use_vault_pki | bool
   tags:
     - nexus
@@ -92,7 +97,7 @@
       Vault AppRole credentials are required for Nexus when using AppRole auth.
       Ensure Vault KV {{ nexus_engine_mount_point }}/{{ nexus_vault_kv_approle_path }}
       and {{ nexus_engine_mount_point }}/{{ nexus_vault_pki_approle_path }} exist,
-      and VAULT_TOKEN has read access.
+      and vault_token has read access.
   when:
     - nexus_vault_auth_method == 'approle'
     - nexus_use_vault_pki | bool

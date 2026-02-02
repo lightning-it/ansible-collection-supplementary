@@ -1,0 +1,63 @@
+---
+- name: Ensure required DHCP vars are defined
+  ansible.builtin.import_role:
+    name: dhcp_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Resolve DHCP config content
+  ansible.builtin.set_fact:
+    dhcp_deploy_config_effective: >-
+      {{
+        dhcp_config_content
+        if (dhcp_config_content | length > 0)
+        else dhcp_deploy_config
+      }}
+  tags: always
+
+- name: Ensure DHCP config is provided when managed
+  ansible.builtin.assert:
+    that:
+      - dhcp_deploy_config_effective | length > 0
+    fail_msg: "dhcp_config_content or dhcp_deploy_config must be set when managing DHCP config."
+  when: dhcp_config_manage | bool
+  tags: always
+
+- name: Skip DHCP config when disabled
+  ansible.builtin.debug:
+    msg: "DHCP config skipped (dhcp_deploy_skip_config=true or dhcp_config_manage=false)."
+  when:
+    - dhcp_deploy_skip_config | bool or not dhcp_config_manage | bool
+  tags: always
+
+- name: Ensure DHCP config directory exists
+  ansible.builtin.file:
+    path: "{{ dhcp_deploy_host_config_dir }}"
+    state: directory
+    owner: "{{ dhcp_deploy_config_owner }}"
+    group: "{{ dhcp_deploy_config_group }}"
+    mode: '0755'
+  when:
+    - not dhcp_deploy_skip_config | bool
+    - dhcp_config_manage | bool
+  tags:
+    - config
+
+- name: Render DHCP config
+  ansible.builtin.template:
+    src: dhcpd.conf.j2
+    dest: "{{ dhcp_deploy_host_config_path }}"
+    owner: "{{ dhcp_deploy_config_owner }}"
+    group: "{{ dhcp_deploy_config_group }}"
+    mode: "{{ dhcp_config_mode }}"
+  when:
+    - not dhcp_deploy_skip_config | bool
+    - dhcp_config_manage | bool
+  notify: Reload dhcp
+  tags:
+    - config
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - config
