@@ -1,22 +1,7 @@
 ---
 namespace: lit
 name: supplementary
-version: 1.13.0
-readme: README.md
-description: Supplementary Ansible collection for ModuLix, providing configuration
-  and integration roles for platform services and Terraform-backed workflows.
-repository: https://github.com/lightning-it/ansible-collection-supplementary
-authors:
-  - Lightning IT
-license:
-  - GPL-3.0-only
-tags:
-  - modulix
-  - keycloak
-  - terraform
-  - security
-  - automation
-dependencies:
+version: 1.14.0
   ansible.posix: '*'
   community.general: '*'
   community.hashi_vault: '*'

@@ -1,3 +1,22 @@
+## [1.14.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.13.0...v1.14.0) (2026-02-02)
+
+### Features
+
+* add host network support and improve SELinux handling for Vault and CoreDNS deployments ([6e7fd14](https://github.com/lightning-it/ansible-collection-supplementary/commit/6e7fd14c4e95b92adac656b50bb2a95c17bf666f))
+* Add roles for managing Kea Podman deployment, including configuration, deployment, operations, and validation ([#54](https://github.com/lightning-it/ansible-collection-supplementary/issues/54)) ([372794e](https://github.com/lightning-it/ansible-collection-supplementary/commit/372794e4f53bb7c1fc701d41a7898bccca90a029))
+* enhance CoreDNS and Vault deployment with resolver management and health checks ([5cb64a6](https://github.com/lightning-it/ansible-collection-supplementary/commit/5cb64a6300a3a38601bee59cf052f534ceac41bf))
+* Implement MinIO bootstrap role with configuration, migration, and verification tasks ([43a6181](https://github.com/lightning-it/ansible-collection-supplementary/commit/43a618101dcfdbd619d1840e6777d12cce2b32c7))
+
+### Bug Fixes
+
+* always wait for API health ([8b9f035](https://github.com/lightning-it/ansible-collection-supplementary/commit/8b9f03568443d94ebb69790592c14dccd1baf102))
+* cleanup ([a1b6316](https://github.com/lightning-it/ansible-collection-supplementary/commit/a1b63162ac6086bc65bb65f3fb6a2efc5470ccd7))
+* do not run when selinux is disabled ([aebcb1b](https://github.com/lightning-it/ansible-collection-supplementary/commit/aebcb1b32e2ca0b5542f56b600b7881d4d7167c6))
+* fix certificate handling ([94216e8](https://github.com/lightning-it/ansible-collection-supplementary/commit/94216e81583727b6bfee7375ae5e7d13be949a55))
+* kubeplay is not working ([2f22f61](https://github.com/lightning-it/ansible-collection-supplementary/commit/2f22f61e5c78fbb2062c6870904fde4bbd267fcd))
+* remove lit.foundational.kubeplay calls ([a7238d8](https://github.com/lightning-it/ansible-collection-supplementary/commit/a7238d8233bd5c5f7b179edf3438a4135d75ba6e))
+* use ansible_os_family ([d394c31](https://github.com/lightning-it/ansible-collection-supplementary/commit/d394c31c84d12a64c9ab9453c6a3d1b616e3621e))
+
 ## [1.13.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.12.0...v1.13.0) (2026-01-25)
 
 ### Features
