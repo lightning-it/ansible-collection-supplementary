@@ -1,29 +1,32 @@
 ---
-- name: Determine resolver interface
-  ansible.builtin.set_fact:
-    coredns_deploy_resolver_iface_effective: >-
-      {{
-        (
-          coredns_deploy_resolver_iface
-            | default('')
-            | trim
-        )
-        if (coredns_deploy_resolver_iface | default('') | trim | length > 0)
-        else
-        (
-          ansible_default_ipv4.interface
-            | default('')
-        )
-        if (ansible_default_ipv4.interface | default('') | trim | length > 0)
-        else
-        (
-          (ansible_facts.interfaces | default([]))
-          | reject('equalto', 'lo')
-          | list
-          | first
-          | default('')
-        )
-      }}
+# -----------------------------------------------------------------------------
+# manage_resolver.yml
+#
+# Purpose:
+# - Manage the system resolver via NetworkManager (nmcli) by configuring:
+#   - ipv4.dns
+#   - ipv4.ignore-auto-dns
+#
+# Resolver modes:
+# - bootstrap     : local(CoreDNS) + upstream resolvers
+# - core_only     : local(CoreDNS) only
+# - upstream_only : upstream resolvers only
+#
+# Notes:
+# - Runtime DNS can differ from connection config (e.g., DHCP). For idempotency and persistence,
+#   we compare/apply against the *connection* settings (ipv4.dns / ipv4.ignore-auto-dns).
+# - Avoid selecting Podman/Aardvark DNS (podman1) as the resolver IP.
+# - Idempotency: normalize lists and booleans on both sides (NM often uses comma-separated DNS
+#   and yes/no for booleans; Ansible/Jinja can coerce true/True inconsistently).
+# -----------------------------------------------------------------------------
+
+- name: Assert resolver mode is valid
+  ansible.builtin.assert:
+    that:
+      - (coredns_deploy_resolver_mode | default('core_only') | lower) in ['bootstrap', 'core_only', 'upstream_only']
+    fail_msg: >-
+      Invalid coredns_deploy_resolver_mode={{ coredns_deploy_resolver_mode | default('') }}.
+      Use one of: bootstrap, core_only, upstream_only.
   changed_when: false
 
 - name: Ensure nmcli is available
@@ -32,158 +35,418 @@
   changed_when: false
   failed_when: coredns_deploy_nmcli.rc != 0
 
-- name: Read active connection name for resolver interface
-  ansible.builtin.command: >-
-    nmcli -g GENERAL.CONNECTION device show {{ coredns_deploy_resolver_iface_effective }}
-  register: coredns_deploy_nm_conn
+# -----------------------------------------------------------------------------
+# Determine effective resolver interface
+# -----------------------------------------------------------------------------
+- name: Determine resolver interface (var > default route > first non-lo)
+  ansible.builtin.set_fact:
+    coredns_deploy_resolver_iface_effective: >-
+      {{
+        (coredns_deploy_resolver_iface | default('') | trim)
+        or (ansible_default_ipv4.interface | default('') | trim)
+        or ((ansible_facts.interfaces | default([])) | reject('equalto','lo') | list | first | default(''))
+      }}
   changed_when: false
-  failed_when: false
-  when: coredns_deploy_resolver_connection | default('') | trim | length == 0
 
-- name: Read active connections list (name:device)
-  ansible.builtin.command: "nmcli -g NAME,DEVICE connection show --active"
-  register: coredns_deploy_nm_active
+- name: Fail when resolver interface is missing
+  ansible.builtin.fail:
+    msg: >-
+      Resolver interface could not be determined. Set coredns_deploy_resolver_iface.
+  when: coredns_deploy_resolver_iface_effective | trim == ''
+
+# -----------------------------------------------------------------------------
+# Determine effective NetworkManager connection identifier
+#
+# Preference order:
+# - user-provided coredns_deploy_resolver_connection (UUID or NAME)
+# - active connection UUID mapped to the device (stable; avoids duplicate NAME warnings)
+# - device GENERAL.CONNECTION (name; best effort fallback)
+# -----------------------------------------------------------------------------
+- name: Read active connections list (UUID:DEVICE) (best effort)
+  ansible.builtin.command:
+    argv: ["nmcli", "-t", "-f", "UUID,DEVICE", "connection", "show", "--active"]
+  register: coredns_deploy_nm_active_uuid
   changed_when: false
   failed_when: false
   when:
-    - coredns_deploy_resolver_connection | default('') | trim | length == 0
-    - (coredns_deploy_nm_conn.stdout | default('') | trim | length) == 0
-    - coredns_deploy_resolver_iface_effective | trim | length > 0
+    - coredns_deploy_manage_resolver | default(true) | bool
+    - coredns_deploy_resolver_connection | default('') | trim == ''
+    - coredns_deploy_resolver_iface_effective | trim != ''
 
-- name: Determine resolver connection name
+- name: Determine resolver connection UUID for the interface (best effort)
+  ansible.builtin.set_fact:
+    coredns_deploy_resolver_connection_uuid: >-
+      {{
+        (coredns_deploy_nm_active_uuid.stdout_lines | default([]))
+        | select('match', '^[^:]+:' ~ (coredns_deploy_resolver_iface_effective | trim) ~ '$')
+        | map('regex_replace', ':(?:[^:]*)$', '')
+        | list
+        | first
+        | default('')
+      }}
+  changed_when: false
+  when:
+    - coredns_deploy_manage_resolver | default(true) | bool
+    - coredns_deploy_resolver_connection | default('') | trim == ''
+    - coredns_deploy_nm_active_uuid is defined
+
+- name: Read active connection name for resolver interface (fallback; best effort)
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - -g
+      - GENERAL.CONNECTION
+      - device
+      - show
+      - "{{ coredns_deploy_resolver_iface_effective }}"
+  register: coredns_deploy_nm_conn_name
+  changed_when: false
+  failed_when: false
+  when:
+    - coredns_deploy_manage_resolver | default(true) | bool
+    - coredns_deploy_resolver_connection | default('') | trim == ''
+    - (coredns_deploy_resolver_connection_uuid | default('') | trim) == ''
+
+- name: Determine resolver connection id (var > active uuid > name)
   ansible.builtin.set_fact:
     coredns_deploy_resolver_connection_effective: >-
       {{
         (coredns_deploy_resolver_connection | default('') | trim)
-        if (coredns_deploy_resolver_connection | default('') | trim | length > 0)
-        else
-        (
-          (coredns_deploy_nm_conn.stdout | default('') | trim)
-          if (coredns_deploy_nm_conn.stdout | default('') | trim | length > 0)
-          else
-          (
-            (coredns_deploy_nm_active.stdout_lines | default([]))
-            | select('match', '.*:' ~ coredns_deploy_resolver_iface_effective ~ '$')
-            | map('regex_replace', ':(?:[^:]*)$', '')
-            | list
-            | first
-            | default('')
-          )
-        )
+        or (coredns_deploy_resolver_connection_uuid | default('') | trim)
+        or (coredns_deploy_nm_conn_name.stdout | default('') | trim)
+        or ''
       }}
   changed_when: false
 
-- name: Fail when resolver connection is missing
+- name: Fail when resolver connection is missing / unmanaged
   ansible.builtin.fail:
     msg: >-
       Resolver connection is empty; NetworkManager may not manage
-      {{ coredns_deploy_resolver_iface_effective }}. Set
-      coredns_deploy_resolver_connection or disable
-      coredns_deploy_manage_resolver.
-  when: coredns_deploy_resolver_connection_effective | trim | length == 0
+      {{ coredns_deploy_resolver_iface_effective }}. Set coredns_deploy_resolver_connection
+      or disable coredns_deploy_manage_resolver.
+  when:
+    - coredns_deploy_manage_resolver | default(true) | bool
+    - coredns_deploy_resolver_connection_effective | trim == ''
 
-- name: Read device name for resolver connection
-  ansible.builtin.command: >-
-    nmcli -g GENERAL.DEVICES connection show "{{ coredns_deploy_resolver_connection_effective }}"
-  register: coredns_deploy_nm_conn_device
-  changed_when: false
-  failed_when: false
-  when: coredns_deploy_resolver_iface_effective | trim | length == 0
-
-- name: Ensure resolver interface from connection (if missing)
+# -----------------------------------------------------------------------------
+# Determine local(CoreDNS) resolver IPs
+#
+# Priority:
+# 1) user override: coredns_deploy_resolver_local_ips (non-empty)
+# 2) resolver interface IPv4 (if not podman1)
+# 3) coredns_deploy_host_ip
+# 4) 127.0.0.1 (fallback)
+# -----------------------------------------------------------------------------
+- name: Read resolver interface IPv4 address (best effort)
   ansible.builtin.set_fact:
-    coredns_deploy_resolver_iface_effective: >-
-      {{
-        coredns_deploy_resolver_iface_effective
-          if (coredns_deploy_resolver_iface_effective | default('') | trim | length > 0)
-          else (coredns_deploy_nm_conn_device.stdout | default('') | trim)
-      }}
+    coredns_deploy_resolver_iface_ipv4: >-
+      {%- set iface = coredns_deploy_resolver_iface_effective | trim -%}
+      {%- set fact_key = 'ansible_' ~ iface -%}
+      {%- set addr = '' -%}
+      {%- if iface != '' and (ansible_facts[fact_key] is defined) -%}
+      {%-   set addr = ansible_facts[fact_key].ipv4.address | default('') | string | trim -%}
+      {%- endif -%}
+      {%- if addr == '' and (ansible_default_ipv4.interface | default('') | trim) == iface -%}
+      {%-   set addr = ansible_default_ipv4.address | default('') | string | trim -%}
+      {%- endif -%}
+      {{ addr }}
+    coredns_deploy_podman_iface_ipv4: >-
+      {%- set pkey = 'ansible_podman1' -%}
+      {%- if ansible_facts[pkey] is defined -%}
+      {{ ansible_facts[pkey].ipv4.address | default('') | string | trim }}
+      {%- else -%}
+      {{ '' }}
+      {%- endif -%}
   changed_when: false
-  when: coredns_deploy_nm_conn_device is defined
 
-- name: Read current DNS list for resolver connection
-  ansible.builtin.command: >-
-    nmcli -g ipv4.dns connection show "{{ coredns_deploy_resolver_connection_effective }}"
-  register: coredns_deploy_nm_dns_list
-  changed_when: false
-  failed_when: false
-
-- name: Read current ignore-auto-dns setting for resolver connection
-  ansible.builtin.command: >-
-    nmcli -g ipv4.ignore-auto-dns connection show "{{ coredns_deploy_resolver_connection_effective }}"
-  register: coredns_deploy_nm_dns_ignore
-  changed_when: false
-  failed_when: false
-
-- name: Parse current DNS settings
+- name: Normalize upstream resolver list and ignore-auto-dns (type-safe)
   ansible.builtin.set_fact:
-    coredns_deploy_current_dns_list: >-
-      {{
-        (coredns_deploy_nm_dns_list.stdout | default(''))
-        .split(',')
-        | map('trim')
-        | reject('equalto', '')
-        | list
-        | unique
-        | sort
-      }}
-    coredns_deploy_current_ignore_auto: >-
-      {{
-        (coredns_deploy_nm_dns_ignore.stdout | default(''))
-        | trim
-      }}
-    coredns_deploy_desired_dns_list: >-
+    coredns_deploy_upstream_dns_list: >-
       {{
         (coredns_deploy_resolver_servers | default([]))
         | map('string')
         | map('trim')
-        | reject('equalto', '')
+        | reject('equalto','')
         | list
         | unique
         | sort
       }}
-    coredns_deploy_desired_ignore_auto: >-
+    # Desired ignore-auto-dns as boolean (for comparisons)
+    coredns_deploy_desired_ignore_auto_bool: >-
       {{
         coredns_deploy_resolver_ignore_auto_dns
+        | default(true)
         | bool
+      }}
+    # Desired ignore-auto-dns as nmcli value (for applying)
+    coredns_deploy_desired_ignore_auto_nm: >-
+      {{
+        (coredns_deploy_resolver_ignore_auto_dns | default(true) | bool)
         | ternary('yes', 'no')
       }}
   changed_when: false
 
-- name: Configure DNS on resolver connection (only if needed)
-  ansible.builtin.command: >-
-    nmcli connection modify "{{ coredns_deploy_resolver_connection_effective }}"
-    ipv4.dns "{{ coredns_deploy_resolver_servers | join(' ') }}"
-    ipv4.ignore-auto-dns {{ coredns_deploy_resolver_ignore_auto_dns | bool | ternary('yes', 'no') }}
-  register: coredns_deploy_nm_dns_apply
-  changed_when: true
-  when:
-    - coredns_deploy_resolver_servers | length > 0
-    - >-
-      not (
-        (coredns_deploy_current_dns_list | default([]))
-        ==
-        (coredns_deploy_desired_dns_list | default([]))
-        and
-        (coredns_deploy_current_ignore_auto | lower | trim)
-        ==
-        (coredns_deploy_desired_ignore_auto | lower | trim)
-      )
+- name: Determine effective local(CoreDNS) resolver list
+  ansible.builtin.set_fact:
+    coredns_deploy_local_dns_list: >-
+      {%- set user_list =
+            (coredns_deploy_resolver_local_ips | default([]))
+            | map('string') | map('trim') | reject('equalto','') | list -%}
 
-- name: Reapply connection to apply DNS (no bounce)
-  ansible.builtin.command: "nmcli device reapply {{ coredns_deploy_resolver_iface_effective }}"
+      {%- set iface_ip = (coredns_deploy_resolver_iface_ipv4 | default('') | trim) -%}
+      {%- set podman_ip = (coredns_deploy_podman_iface_ipv4 | default('') | trim) -%}
+      {%- set host_ip  = (coredns_deploy_host_ip | default('') | string | trim) -%}
+
+      {%- set auto_candidates = [] -%}
+      {%- if iface_ip != '' and iface_ip != podman_ip -%}
+      {%-   set _ = auto_candidates.append(iface_ip) -%}
+      {%- endif -%}
+      {%- if (auto_candidates | length) == 0 and host_ip != '' and host_ip != podman_ip -%}
+      {%-   set _ = auto_candidates.append(host_ip) -%}
+      {%- endif -%}
+      {%- if (auto_candidates | length) == 0 -%}
+      {%-   set _ = auto_candidates.append('127.0.0.1') -%}
+      {%- endif -%}
+
+      {{
+        (
+          user_list if (user_list | length) > 0 else auto_candidates
+        )
+        | unique | sort
+      }}
+  changed_when: false
+
+# -----------------------------------------------------------------------------
+# Build desired DNS list for the selected mode
+# -----------------------------------------------------------------------------
+- name: Build desired DNS list from resolver mode
+  ansible.builtin.set_fact:
+    coredns_deploy_desired_dns_list: >-
+      {%- set mode = coredns_deploy_resolver_mode | default('core_only') | lower -%}
+      {%- if mode == 'core_only' -%}
+      {{ coredns_deploy_local_dns_list }}
+      {%- elif mode == 'upstream_only' -%}
+      {{ coredns_deploy_upstream_dns_list }}
+      {%- else -%}
+      {{ (coredns_deploy_local_dns_list + coredns_deploy_upstream_dns_list) | unique | sort }}
+      {%- endif -%}
+  changed_when: false
+
+- name: Fail when desired DNS list is empty (avoid no-op confusion)
+  ansible.builtin.fail:
+    msg: >-
+      Desired DNS list is empty for resolver_mode={{ coredns_deploy_resolver_mode | default('') }}.
+      Set coredns_deploy_resolver_servers (upstreams) and/or coredns_deploy_resolver_local_ips.
+  when:
+    - coredns_deploy_manage_resolver | default(true) | bool
+    - coredns_deploy_desired_dns_list | default([]) | length == 0
+
+# -----------------------------------------------------------------------------
+# Normalize desired settings into NetworkManager-compatible forms
+# - ipv4.dns is typically stored/printed as comma-separated values
+# - ipv4.ignore-auto-dns is typically yes/no
+# -----------------------------------------------------------------------------
+- name: Normalize desired resolver settings (for apply/compare) - normalized lists/booleans
+  ansible.builtin.set_fact:
+    coredns_deploy_desired_dns_norm: >-
+      {{
+        coredns_deploy_desired_dns_list
+        | map('string') | map('trim')
+        | reject('equalto','')
+        | unique | list | sort
+      }}
+    coredns_deploy_desired_ignore_auto_dns_bool: >-
+      {{ coredns_deploy_desired_ignore_auto_bool | bool }}
+  changed_when: false
+
+- name: Normalize desired resolver settings (for apply/compare) - nmcli formatted values
+  ansible.builtin.set_fact:
+    coredns_deploy_desired_dns_nm: "{{ coredns_deploy_desired_dns_norm | join(',') }}"
+    coredns_deploy_desired_ignore_auto_dns_nm: >-
+      {{
+        'yes'
+        if (coredns_deploy_desired_ignore_auto_dns_bool | bool)
+        else 'no'
+      }}
+  changed_when: false
+
+# -----------------------------------------------------------------------------
+# Read current connection config (used for idempotency gating)
+# -----------------------------------------------------------------------------
+- name: Read current connection DNS (ipv4.dns)
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - -g
+      - ipv4.dns
+      - connection
+      - show
+      - "{{ coredns_deploy_resolver_connection_effective }}"
+  register: coredns_deploy_nm_current_dns
+  changed_when: false
+  failed_when: false
+  when: coredns_deploy_manage_resolver | default(true) | bool
+
+- name: Read current connection ignore-auto-dns (ipv4.ignore-auto-dns)
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - -g
+      - ipv4.ignore-auto-dns
+      - connection
+      - show
+      - "{{ coredns_deploy_resolver_connection_effective }}"
+  register: coredns_deploy_nm_current_ignore
+  changed_when: false
+  failed_when: false
+  when: coredns_deploy_manage_resolver | default(true) | bool
+
+- name: Fail if current connection settings could not be read
+  ansible.builtin.fail:
+    msg: >-
+      Failed to read NetworkManager connection settings for
+      {{ coredns_deploy_resolver_connection_effective }} (device {{ coredns_deploy_resolver_iface_effective }}).
+      Either the connection id is wrong, or NM does not manage this interface.
+  when:
+    - coredns_deploy_manage_resolver | default(true) | bool
+    - (coredns_deploy_nm_current_dns is not defined) or (coredns_deploy_nm_current_ignore is not defined)
+    - (coredns_deploy_nm_current_dns.rc | default(1)) != 0 or (coredns_deploy_nm_current_ignore.rc | default(1)) != 0
+
+# -----------------------------------------------------------------------------
+# Normalize current settings and compute drift (single source of truth)
+# -----------------------------------------------------------------------------
+- name: Calculate resolver drift (connection config) - normalize current values
+  ansible.builtin.set_fact:
+    coredns_deploy_current_dns_norm: >-
+      {{
+        (
+          coredns_deploy_nm_current_dns.stdout
+          | default('')
+          | string
+          | trim
+        )
+        | split(',')
+        | map('trim')
+        | reject('equalto','')
+        | list
+        | sort
+      }}
+    coredns_deploy_current_ignore_auto_raw: >-
+      {{
+        coredns_deploy_nm_current_ignore.stdout
+        | default('')
+        | string
+        | trim
+      }}
+    coredns_deploy_current_ignore_auto_bool: >-
+      {{
+        (
+          coredns_deploy_nm_current_ignore.stdout
+          | default('')
+          | string
+          | trim
+          | lower
+        )
+        in ['yes', 'true', '1']
+      }}
+  changed_when: false
+
+- name: Calculate resolver drift (connection config) - compute drift
+  ansible.builtin.set_fact:
+    coredns_deploy_dns_change_needed: >-
+      {{
+        (coredns_deploy_current_dns_norm != coredns_deploy_desired_dns_norm)
+        or
+        (coredns_deploy_current_ignore_auto_bool != coredns_deploy_desired_ignore_auto_dns_bool)
+      }}
+  changed_when: false
+
+# -----------------------------------------------------------------------------
+# Optional: Read runtime DNS for debugging only (not used for gating)
+# -----------------------------------------------------------------------------
+- name: Read runtime DNS list for resolver interface (debug only)
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - -g
+      - IP4.DNS
+      - device
+      - show
+      - "{{ coredns_deploy_resolver_iface_effective }}"
+  register: coredns_deploy_nm_dns_runtime
+  changed_when: false
+  failed_when: false
+  when: coredns_deploy_debug | default(false) | bool
+
+- name: Debug resolver state (optional)
+  ansible.builtin.debug:
+    msg:
+      resolver_iface: "{{ coredns_deploy_resolver_iface_effective }}"
+      resolver_iface_ipv4: "{{ coredns_deploy_resolver_iface_ipv4 }}"
+      podman_iface_ipv4: "{{ coredns_deploy_podman_iface_ipv4 }}"
+      resolver_connection: "{{ coredns_deploy_resolver_connection_effective }}"
+      resolver_mode: "{{ coredns_deploy_resolver_mode | default('core_only') }}"
+      local_dns_list: "{{ coredns_deploy_local_dns_list }}"
+      upstream_dns_list: "{{ coredns_deploy_upstream_dns_list }}"
+      desired_dns_list: "{{ coredns_deploy_desired_dns_list }}"
+      desired_dns_nm: "{{ coredns_deploy_desired_dns_nm }}"
+      current_dns_norm: "{{ coredns_deploy_current_dns_norm }}"
+      current_ignore_auto_raw: "{{ coredns_deploy_current_ignore_auto_raw }}"
+      current_ignore_auto_bool: "{{ coredns_deploy_current_ignore_auto_bool }}"
+      desired_ignore_auto_bool: "{{ coredns_deploy_desired_ignore_auto_dns_bool }}"
+      desired_ignore_auto_nm: "{{ coredns_deploy_desired_ignore_auto_dns_nm }}"
+      dns_change_needed: "{{ coredns_deploy_dns_change_needed }}"
+      runtime_dns: "{{ coredns_deploy_nm_dns_runtime.stdout_lines | default([]) }}"
+  when: coredns_deploy_debug | default(false) | bool
+  changed_when: false
+
+# -----------------------------------------------------------------------------
+# Apply change (only if needed) and reapply (best effort)
+# -----------------------------------------------------------------------------
+- name: Configure DNS on resolver connection (only if needed)
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - connection
+      - modify
+      - "{{ coredns_deploy_resolver_connection_effective }}"
+      - ipv4.dns
+      - "{{ coredns_deploy_desired_dns_nm }}"
+      - ipv4.ignore-auto-dns
+      - "{{ coredns_deploy_desired_ignore_auto_dns_nm }}"
+  register: coredns_deploy_nm_dns_apply
+  changed_when: coredns_deploy_dns_change_needed | bool
+  when:
+    - coredns_deploy_manage_resolver | default(true) | bool
+    - coredns_deploy_dns_change_needed | bool
+
+- name: Reapply device settings to apply DNS (no bounce)
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - device
+      - reapply
+      - "{{ coredns_deploy_resolver_iface_effective }}"
+  register: coredns_deploy_nm_reapply_device
   changed_when: false
   failed_when: false
   when:
+    - coredns_deploy_manage_resolver | default(true) | bool
     - coredns_deploy_nm_dns_apply is defined
-    - coredns_deploy_nm_dns_apply is changed
-    - coredns_deploy_resolver_iface_effective | trim | length > 0
+    - coredns_deploy_nm_dns_apply.changed | default(false) | bool
 
 - name: Reapply connection to apply DNS (fallback)
-  ansible.builtin.command: "nmcli connection up {{ coredns_deploy_resolver_connection_effective }}"
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - connection
+      - up
+      - "{{ coredns_deploy_resolver_connection_effective }}"
+  register: coredns_deploy_nm_reapply_conn
   changed_when: false
   failed_when: false
   when:
+    - coredns_deploy_manage_resolver | default(true) | bool
     - coredns_deploy_nm_dns_apply is defined
-    - coredns_deploy_nm_dns_apply is changed
-    - coredns_deploy_resolver_iface_effective | trim | length == 0
+    - coredns_deploy_nm_dns_apply.changed | default(false) | bool
+    - coredns_deploy_resolver_iface_effective | trim == ''

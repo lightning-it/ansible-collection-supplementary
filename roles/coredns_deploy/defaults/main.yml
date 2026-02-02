@@ -21,11 +21,7 @@ coredns_deploy_container_corefile_path: "/Corefile"
 # DNS service
 coredns_deploy_dns_port: 53
 coredns_deploy_host_dns_port: "{{ coredns_deploy_dns_port }}"
-coredns_deploy_host_ip: >-
-  {{
-    ansible_default_ipv4.address
-      | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
-  }}
+coredns_deploy_host_ip: "{{ ansible_facts[coredns_deploy_resolver_iface].ipv4.address }}"
 
 # Health check
 coredns_deploy_health_port: 8080
@@ -59,10 +55,19 @@ coredns_deploy_corefile: |
 
 # Resolver management on the host
 coredns_deploy_manage_resolver: true
-coredns_deploy_resolver_upstream_dns: "{{ dns_servers | default([]) }}"
-coredns_deploy_resolver_iface: ""
-coredns_deploy_resolver_connection: ""
+coredns_deploy_resolver_mode: core_only         # bootstrap|core_only|upstream_only
 coredns_deploy_resolver_ignore_auto_dns: true
+
+# Local(CoreDNS) resolver IPs:
+# - Leave empty to auto-pick (resolver interface IPv4 -> coredns_deploy_host_ip -> 127.0.0.1)
+# - Or set explicitly in inventory if CoreDNS binds to a specific address
+coredns_deploy_resolver_local_ips: []
+
+# Upstreams for bootstrap/upstream_only
+coredns_deploy_resolver_servers: []
+
+coredns_deploy_debug: false
+
 
 # Deployment control
 coredns_deploy_manage_service: true

@@ -38,6 +38,7 @@
     - name: Set DNS to CoreDNS + upstream resolvers (bootstrap)
       ansible.builtin.include_tasks: manage_resolver.yml
       vars:
+        coredns_deploy_resolver_mode: bootstrap
         coredns_deploy_resolver_servers: >-
           {{
             [coredns_deploy_host_ip]
@@ -82,6 +83,7 @@
     - name: Switch DNS to CoreDNS only
       ansible.builtin.include_tasks: manage_resolver.yml
       vars:
+        coredns_deploy_resolver_mode: core_only
         coredns_deploy_resolver_servers: "{{ [coredns_deploy_host_ip] }}"
       when:
         - coredns_deploy_manage_resolver | bool
