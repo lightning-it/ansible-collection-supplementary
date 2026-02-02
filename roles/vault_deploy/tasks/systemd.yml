@@ -12,40 +12,11 @@
       register: vault_deploy_systemd_name
       changed_when: false
 
-    - name: Ensure podman-kube drop-in directory exists
-      ansible.builtin.file:
-        path: "/etc/systemd/system/podman-kube@{{ vault_deploy_systemd_name.stdout }}.service.d"
-        state: directory
-        mode: '0755'
-
-    - name: Install Vault SELinux relabel drop-in
-      ansible.builtin.template:
-        src: podman-kube-vault-selinux.conf.j2
-        dest: "/etc/systemd/system/podman-kube@{{ vault_deploy_systemd_name.stdout }}.service.d/selinux-relabel.conf"
-        mode: '0644'
-      register: vault_deploy_systemd_dropin
-      when: vault_deploy_selinux_relabel | bool
-
     - name: Enable and start Podman kube systemd unit
       ansible.builtin.systemd:
         name: "podman-kube@{{ vault_deploy_systemd_name.stdout }}.service"
         enabled: true
         state: started
-
-    - name: Reload systemd daemon when Vault drop-in changes
-      ansible.builtin.systemd:
-        daemon_reload: true
-      when:
-        - vault_deploy_systemd_dropin is defined
-        - vault_deploy_systemd_dropin.changed | default(false)
-
-    - name: Restart Podman kube systemd unit when Vault drop-in changes
-      ansible.builtin.systemd:
-        name: "podman-kube@{{ vault_deploy_systemd_name.stdout }}.service"
-        state: restarted
-      when:
-        - vault_deploy_systemd_dropin is defined
-        - vault_deploy_systemd_dropin.changed | default(false)
 
     - name: Wait until Vault API is reachable via HTTPS
       ansible.builtin.uri:

@@ -42,14 +42,11 @@ spec:
       hostPath:
         path: {{ vault_deploy_host_data_dir }}
         type: Directory
-      selinuxRelabel: true
     - name: vault-config
       hostPath:
         path: "{{ vault_deploy_config_dir }}"
         type: DirectoryOrCreate
-      selinuxRelabel: true
     - name: certs
       hostPath:
         path: {{ vault_deploy_cert_dir }}
         type: Directory
-      selinuxRelabel: true

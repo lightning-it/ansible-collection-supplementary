@@ -36,6 +36,19 @@ minio_deploy_validate_certs: true
 # Credentials and server settings
 minio_deploy_root_user: "{{ lookup('env', 'MINIO_ROOT_USER') | default('', true) }}"
 minio_deploy_root_password: "{{ lookup('env', 'MINIO_ROOT_PASSWORD') | default('', true) }}"
+minio_deploy_generate_root_credentials: true
+minio_deploy_generated_root_user_prefix: "minio"
+minio_deploy_generated_root_user_length: 6
+minio_deploy_generated_root_password_length: 32
+minio_deploy_store_root_credentials: true
+minio_deploy_vault_address: "{{ vault_address | default('') }}"
+minio_deploy_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') }}"
+minio_deploy_vault_kv_path: "{{ inventory_hostname }}/minio/root"
+minio_deploy_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
+minio_deploy_vault_token: "{{ vault_token | default('', true) }}"
+minio_deploy_vault_role_id: "{{ ansible_hashi_vault_role_id | default('', true) }}"
+minio_deploy_vault_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"
+minio_deploy_vault_read_before_generate: true
 minio_deploy_region: ""
 minio_deploy_server_url: ""
 minio_deploy_browser_redirect_url: ""

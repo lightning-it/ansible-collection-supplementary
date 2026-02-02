@@ -56,73 +56,10 @@
     recurse: true
   tags: [deployment]
 
-# -----------------------------------------------------------------------------
-# SELinux gating (works for RHEL *and* Ubuntu)
-# - Ubuntu usually has no SELinux -> ansible_selinux.status != enabled -> skip
-# -----------------------------------------------------------------------------
-- name: SELinux | Init flags (safe defaults)
-  ansible.builtin.set_fact:
-    vault_deploy_selinux_active: >-
-      {{
-        (ansible_selinux is defined)
-        and ((ansible_selinux.status | default('disabled')) == 'enabled')
-      }}
-    vault_deploy_selinux_type_missing: false
-    vault_deploy_selinux_missing_paths: []
-  tags: [deployment, selinux]
-
 - name: Set Vault container name
   ansible.builtin.set_fact:
     vault_deploy_container_name: "{{ vault_deploy_pod_name }}-vault"
   when: vault_deploy_pod_name is defined
-
-- name: SELinux | Check context for Vault mounts
-  ansible.builtin.stat:
-    path: "{{ item }}"
-  loop:
-    - "{{ vault_deploy_host_data_dir }}"
-    - "{{ vault_deploy_cert_dir }}"
-    - "{{ vault_deploy_config_dir }}"
-  register: vault_deploy_selinux_contexts
-  changed_when: false
-  failed_when: false
-  tags: [deployment, selinux]
-  when:
-    - vault_deploy_selinux_relabel | bool
-    - vault_deploy_selinux_active | bool
-
-- name: SELinux | Compute missing container_file_t labels
-  ansible.builtin.set_fact:
-    vault_deploy_selinux_missing_paths: >-
-      {{
-        (vault_deploy_selinux_contexts.results | default([]))
-        | selectattr('stat.selinux_context', 'defined')
-        | rejectattr('stat.selinux_context', 'search', 'container_file_t')
-        | map(attribute='item')
-        | list
-      }}
-    vault_deploy_selinux_type_missing: "{{ (vault_deploy_selinux_missing_paths | length) > 0 }}"
-  tags: [deployment, selinux]
-  when:
-    - vault_deploy_selinux_contexts is defined
-    - vault_deploy_selinux_contexts.results is defined
-
-- name: SELinux | Apply context (non-persistent chcon)
-  ansible.builtin.command: >-
-    chcon -Rt container_file_t
-    {{ vault_deploy_host_data_dir }}
-    {{ vault_deploy_cert_dir }}
-    {{ vault_deploy_config_dir }}
-  register: selinux_cmd
-  changed_when: true
-  notify:
-    - Recreate vault pod
-    - Run vault pod
-  tags: [deployment, selinux]
-  when:
-    - vault_deploy_selinux_relabel | bool
-    - vault_deploy_selinux_active | bool
-    - vault_deploy_selinux_type_missing | default(false) | bool
 
 - name: Render Vault Pod manifest
   ansible.builtin.template:
@@ -191,9 +128,6 @@
   tags: [deployment]
   when:
     - vault_deploy_container_name is defined
-    - vault_deploy_selinux_relabel | bool
-    - vault_deploy_selinux_active | bool
-    - vault_deploy_selinux_type_missing | default(false) | bool
 
 - name: Read Vault container gid map (inspect)
   ansible.builtin.command:
@@ -210,9 +144,6 @@
   tags: [deployment]
   when:
     - vault_deploy_container_name is defined
-    - vault_deploy_selinux_relabel | bool
-    - vault_deploy_selinux_active | bool
-    - vault_deploy_selinux_type_missing | default(false) | bool
 
 - name: Set Vault container uid/gid map lines (inspect)
   ansible.builtin.set_fact:
@@ -238,9 +169,6 @@
     - vault_deploy_container_name is defined
     - (vault_deploy_uid_map_lines | default([]) | length == 0)
       or (vault_deploy_gid_map_lines | default([]) | length == 0)
-    - vault_deploy_selinux_relabel | bool
-    - vault_deploy_selinux_active | bool
-    - vault_deploy_selinux_type_missing | default(false) | bool
 
 - name: Read Vault container uid/gid maps (proc)
   ansible.builtin.command: "cat /proc/{{ vault_deploy_container_pid.stdout | trim }}/{{ item }}"

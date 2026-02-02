@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 
+import re
 import sys
 from pathlib import Path
 
-try:
-    from ruamel.yaml import YAML
-except ImportError as exc:
-    raise SystemExit(
-        "ERROR: ruamel.yaml is required to preserve galaxy.yml formatting. "
-        "Install with: pip install ruamel.yaml"
-    ) from exc
+VERSION_RE = re.compile(
+    r"^(?P<indent>\s*)version\s*:\s*(?P<quote>['\"]?)(?P<value>[^'\"\n#]*)(?P=quote)(?P<comment>\s+#.*)?$"
+)
 
 
 def main() -> int:
@@ -20,19 +17,32 @@ def main() -> int:
     version = sys.argv[1]
     galaxy_path = Path("galaxy.yml")
 
-    yaml = YAML(typ="rt")
-    yaml.preserve_quotes = True
-    yaml.explicit_start = True
-    yaml.indent(mapping=2, sequence=4, offset=2)
+    try:
+        lines = galaxy_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    except FileNotFoundError:
+        print("ERROR: galaxy.yml not found in current directory.", file=sys.stderr)
+        return 1
 
-    with galaxy_path.open("r", encoding="utf-8") as handle:
-        data = yaml.load(handle) or {}
+    updated = False
+    for idx, line in enumerate(lines):
+        line_no_eol = line.rstrip("\r\n")
+        line_ending = line[len(line_no_eol):]
+        match = VERSION_RE.match(line_no_eol)
+        if not match:
+            continue
+        indent = match.group("indent")
+        quote = match.group("quote") or ""
+        comment = match.group("comment") or ""
+        lines[idx] = f"{indent}version: {quote}{version}{quote}{comment}{line_ending}"
+        updated = True
+        break
 
-    data["version"] = version
+    if not updated:
+        if lines and not lines[-1].endswith(("\n", "\r")):
+            lines[-1] = lines[-1] + "\n"
+        lines.append(f"version: {version}\n")
 
-    with galaxy_path.open("w", encoding="utf-8") as handle:
-        yaml.dump(data, handle)
-
+    galaxy_path.write_text("".join(lines), encoding="utf-8")
     print(f"Updated galaxy.yml to {version}")
     return 0
 
