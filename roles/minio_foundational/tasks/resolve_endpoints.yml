@@ -1,0 +1,40 @@
+---
+- name: Set MinIO endpoint defaults
+  ansible.builtin.set_fact:
+    minio_deploy_api_scheme_effective: "{{ minio_deploy_api_scheme | default('http') }}"
+    minio_deploy_port_effective: "{{ (minio_deploy_port | default(9000)) | int }}"
+    minio_deploy_console_port_effective: "{{ (minio_deploy_console_port | default(9001)) | int }}"
+    minio_deploy_host_ip_effective: >-
+      {{
+        minio_deploy_host_ip
+          | default(ansible_default_ipv4.address | default('127.0.0.1'))
+      }}
+
+- name: Set MinIO API and console URLs
+  ansible.builtin.set_fact:
+    minio_deploy_api_url_effective: >-
+      {{
+        minio_deploy_api_url
+          | default(
+            minio_deploy_api_scheme_effective ~ '://' ~
+            minio_deploy_host_ip_effective ~ ':' ~
+            minio_deploy_port_effective
+          )
+      }}
+    minio_deploy_console_url_effective: >-
+      {{
+        minio_deploy_console_url
+          | default(
+            minio_deploy_api_scheme_effective ~ '://' ~
+            minio_deploy_host_ip_effective ~ ':' ~
+            minio_deploy_console_port_effective
+          )
+      }}
+
+- name: Set MinIO health URL
+  ansible.builtin.set_fact:
+    minio_deploy_health_url_effective: >-
+      {{
+        minio_deploy_health_url
+          | default(minio_deploy_api_url_effective ~ '/minio/health/ready')
+      }}

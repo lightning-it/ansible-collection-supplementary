@@ -19,15 +19,18 @@ provisioner:
     yamllint .
     ansible-lint
   env:
-    ANSIBLE_COLLECTIONS_PATH: "/tmp/wunder/collections:../../collections"
+    ANSIBLE_COLLECTIONS_PATHS: >-
+      {{ lookup('env','ANSIBLE_COLLECTIONS_PATH') }}:
+      {{ molecule_project_directory }}/collections-dev:
+      {{ molecule_project_directory }}/collections
     ANSIBLE_ROLES_PATH: "roles:../../roles"
   inventory:
     host_vars:
       localhost:
         ansible_connection: local
         cluster_id: test-cluster
-        vault_terraform_source: "."
-        vault_skip_terragrunt: true
+        vault_deploy_terraform_source: "."
+        vault_deploy_skip_terragrunt: true
   playbooks:
     converge: converge.yml
     destroy: destroy.yml

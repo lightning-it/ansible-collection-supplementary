@@ -1,0 +1,16 @@
+---
+- name: Ensure core CoreDNS variables are set
+  ansible.builtin.assert:
+    that:
+      - coredns_deploy_pod_name | length > 0
+      - coredns_deploy_pod_manifest_path | length > 0
+      - coredns_deploy_image | length > 0
+      - coredns_deploy_container_name | length > 0
+      - coredns_deploy_host_corefile_path | length > 0
+      - coredns_deploy_container_corefile_path | length > 0
+      - coredns_deploy_dns_port | int > 0
+      - coredns_deploy_host_dns_port | int > 0
+      - coredns_deploy_health_port | int > 0
+      - coredns_deploy_host_health_port | int > 0
+    fail_msg: "CoreDNS core variables are missing or invalid."
+  tags: always

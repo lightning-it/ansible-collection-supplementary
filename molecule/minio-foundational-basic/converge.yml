@@ -1,0 +1,9 @@
+---
+- name: Converge minio_foundational
+  hosts: localhost
+  gather_facts: true
+  vars:
+    minio_deploy_root_user: "minioadmin"
+    minio_deploy_root_password: "minioadmin"
+  roles:
+    - role: minio_foundational

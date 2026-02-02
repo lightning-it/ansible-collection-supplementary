@@ -1,0 +1,200 @@
+---
+- name: Try to read existing certificate from Vault {{ nexus_engine_mount_point }}
+  delegate_to: localhost
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ nexus_vault_address }}"
+    engine_mount_point: "{{ nexus_engine_mount_point }}"
+    auth_method: "{{ nexus_vault_auth_method }}"
+    role_id: "{{ nexus_vault_kv_role_id | default('') }}"
+    secret_id: "{{ nexus_vault_kv_secret_id | default('') }}"
+    validate_certs: "{{ nexus_vault_validate_certs }}"
+    path: "{{ inventory_hostname }}/nexus/certificate"
+  register: existing_cert
+  failed_when: false
+  no_log: true
+  tags:
+    - vault_pki
+
+- name: Parse expiry of existing certificate
+  community.crypto.x509_certificate_info:
+    content: "{{ existing_cert.data.data.certificate }}"
+  register: cert_info
+  when: existing_cert.data is defined
+  delegate_to: localhost
+  tags:
+    - vault_pki
+
+- name: Set reference datetime (now + 30 days)
+  ansible.builtin.set_fact:
+    cert_check_time: "{{ (ansible_date_time.epoch | int) + (30 * 24 * 60 * 60) }}"
+  delegate_to: localhost
+  tags:
+    - vault_pki
+
+- name: Get certificate expiry if exists
+  ansible.builtin.set_fact:
+    cert_expiry: >-
+      {{
+        (cert_info.not_after | regex_replace('Z$', '') | to_datetime('%Y%m%d%H%M%S'))
+        .strftime('%s') | int
+      }}
+  when: existing_cert.data is defined
+  delegate_to: localhost
+  tags:
+    - vault_pki
+
+- name: Set default certificate expiry (current time)
+  ansible.builtin.set_fact:
+    cert_expiry: "{{ ansible_date_time.epoch | int }}"
+  when: existing_cert.data is not defined
+  delegate_to: localhost
+  tags:
+    - vault_pki
+
+- name: Request certificate from Vault PKI if not exists or expiring soon
+  community.hashi_vault.vault_write:
+    url: "{{ nexus_vault_address }}"
+    auth_method: "{{ nexus_vault_auth_method }}"
+    role_id: "{{ nexus_vault_pki_role_id | default('') }}"
+    secret_id: "{{ nexus_vault_pki_secret_id | default('') }}"
+    validate_certs: "{{ nexus_vault_validate_certs }}"
+    path: "{{ nexus_vault_pki_path }}/{{ nexus_vault_pki_role }}"
+    data:
+      common_name: "{{ nexus_nexus_hostname }}"
+      alt_names: "localhost,{{ nexus_nexus_hostname }}"
+  register: vault_pki_cert
+  delegate_to: localhost
+  when: existing_cert.data is not defined or
+    (cert_expiry | int) < (cert_check_time | int)
+  notify:
+    - Recreate nexus pod
+    - Run nexus pod
+  tags:
+    - vault_pki
+
+- name: Parse expiry of newly generated certificate
+  community.crypto.x509_certificate_info:
+    content: "{{ vault_pki_cert.data.data.certificate }}"
+  register: new_cert_info
+  when: existing_cert.data is not defined or
+        (cert_expiry | int) < (cert_check_time | int)
+  failed_when: not ansible_check_mode and (new_cert_info is failed)
+  delegate_to: localhost
+  tags:
+    - vault_pki
+
+- name: Store newly generated certificate in Vault KV2
+  delegate_to: localhost
+  community.hashi_vault.vault_kv2_write:
+    url: "{{ nexus_vault_address }}"
+    engine_mount_point: "{{ nexus_engine_mount_point }}"
+    auth_method: "{{ nexus_vault_auth_method }}"
+    role_id: "{{ nexus_vault_kv_role_id | default('') }}"
+    secret_id: "{{ nexus_vault_kv_secret_id | default('') }}"
+    validate_certs: "{{ nexus_vault_validate_certs }}"
+    path: "{{ inventory_hostname }}/nexus/certificate"
+    data:
+      certificate: "{{ vault_pki_cert.data.data.certificate }}"
+      private_key: "{{ vault_pki_cert.data.data.private_key }}"
+      issuing_ca: "{{ vault_pki_cert.data.data.issuing_ca }}"
+      not_after: "{{ new_cert_info.not_after }}"
+  register: nexus_vault_kv_write
+  when: existing_cert.data is not defined or
+        (cert_expiry | int) < (cert_check_time | int)
+  failed_when: not ansible_check_mode and (nexus_vault_kv_write is failed)
+  no_log: true
+  tags:
+    - vault_pki
+
+- name: Ensure cert directories exist
+  ansible.builtin.file:
+    path: "{{ nexus_caddy_certs_dir }}"
+    state: directory
+    mode: '0755'
+  tags:
+    - vault_pki
+
+- name: Write certificate
+  ansible.builtin.copy:
+    content: |
+      {{ (vault_pki_cert.data.data.certificate | default(existing_cert.data.data.certificate)) | trim }}
+      {{ (vault_pki_cert.data.data.issuing_ca | default(existing_cert.data.data.issuing_ca)) | trim }}
+    dest: "{{ nexus_caddy_certs_dir }}/{{ nexus_nexus_hostname }}.pem"
+    mode: '0644'
+  register: nexus_write_cert
+  notify:
+    - Recreate nexus pod
+    - Run nexus pod
+  failed_when: not ansible_check_mode and (nexus_write_cert is failed)
+  tags:
+    - vault_pki
+
+- name: Write private key
+  ansible.builtin.copy:
+    content: "{{ vault_pki_cert.data.data.private_key | default(existing_cert.data.data.private_key) }}"
+    dest: "{{ nexus_caddy_certs_dir }}/{{ nexus_nexus_hostname }}.key"
+    mode: '0600'
+  register: nexus_write_key
+  notify:
+    - Recreate nexus pod
+    - Run nexus pod
+  failed_when: not ansible_check_mode and (nexus_write_key is failed)
+  tags:
+    - vault_pki
+
+- name: Write CA chain
+  ansible.builtin.copy:
+    content: "{{ vault_pki_cert.data.data.issuing_ca | default(existing_cert.data.data.issuing_ca) }}"
+    dest: "{{ nexus_caddy_certs_dir }}/ca.crt"
+    mode: '0644'
+  register: nexus_write_ca
+  notify:
+    - Recreate nexus pod
+    - Run nexus pod
+  failed_when: not ansible_check_mode and (nexus_write_ca is failed)
+  tags:
+    - vault_pki
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - vault_pki
+
+- name: Recreate nexus pod (kubeplay)
+  when:
+    - nexus_kubeplay_remove | default(false)
+  tags:
+    - vault_pki
+  block:
+    - name: Run kubeplay remove (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: remove
+        kubeplay_pod_name: "{{ nexus_pod_name }}"
+        kubeplay_app_name: nexus_remove
+  rescue:
+    - name: Ignore kubeplay remove failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay remove failure."
+
+- name: Run nexus pod (kubeplay)
+  when:
+    - nexus_kubeplay_run | default(false)
+  tags:
+    - vault_pki
+  block:
+    - name: Run kubeplay run (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: run
+        kubeplay_pod_name: "{{ nexus_pod_name }}"
+        kubeplay_pod_manifest_path: "{{ nexus_pod_manifest_path }}"
+        kubeplay_app_name: nexus_run
+  rescue:
+    - name: Ignore kubeplay run failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay run failure."

@@ -1,0 +1,7 @@
+---
+minio_bootstrap_tfstate_bucket: "tfstate"
+minio_bootstrap_tfstate_endpoint: ""
+minio_bootstrap_tfstate_access_key: ""
+minio_bootstrap_tfstate_secret_key: ""
+minio_bootstrap_tfstate_region: ""
+minio_bootstrap_tfstate_key_prefix: ""

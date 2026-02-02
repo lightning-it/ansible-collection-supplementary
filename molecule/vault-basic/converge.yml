@@ -1,9 +1,12 @@
 ---
 - name: Converge vault
   hosts: localhost
-  gather_facts: false
+  gather_facts: true
   vars:
     cluster_id: test-cluster
-    vault_terraform_source: "."
+    vault_deploy_terraform_source: "."
+    vault_deploy_url: "https://vault.example.test:8200"
+    vault_deploy_manage_systemd: false
+    vault_deploy_skip_runtime: true
   roles:
-    - role: vault
+    - role: vault_deploy

@@ -1,0 +1,11 @@
+---
+- name: Converge aap_deploy
+  hosts: localhost
+  gather_facts: false
+  vars:
+    aap_deploy_instance_name: molecule-aap
+    aap_deploy_namespace: aap
+    aap_deploy_packages_rhel9: []
+    aap_deploy_packages_rhel10: []
+  roles:
+    - role: aap_deploy

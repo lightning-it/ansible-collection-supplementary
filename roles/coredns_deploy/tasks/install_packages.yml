@@ -1,0 +1,6 @@
+---
+- name: Ensure CoreDNS runtime packages are installed
+  ansible.builtin.package:
+    name: "{{ coredns_deploy_packages }}"
+    state: present
+  when: coredns_deploy_packages is defined

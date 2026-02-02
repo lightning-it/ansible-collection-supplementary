@@ -1,0 +1,78 @@
+---
+# MinIO Pod Basics
+minio_deploy_pod_name: "minio"
+minio_deploy_pod_manifest_path: "/etc/podman/pods/minio.yml"
+minio_deploy_data_dir: "/srv/minio/data"
+minio_deploy_host_data_dir: "{{ minio_deploy_data_dir }}"
+minio_deploy_config_dir: "/srv/minio/config"
+minio_deploy_cert_dir: "/srv/minio/certs"
+minio_deploy_image: "quay.io/minio/minio:latest"
+minio_deploy_run_as_user: 1000
+minio_deploy_run_as_group: 1000
+minio_deploy_container_name: "{{ minio_deploy_pod_name }}-minio"
+minio_deploy_container_data_dir: "/data"
+minio_deploy_container_config_dir: "/root/.minio"
+minio_deploy_container_certs_dir: "/root/.minio/certs"
+minio_deploy_expected_uid: "{{ minio_deploy_run_as_user }}"
+minio_deploy_expected_gid: "{{ minio_deploy_run_as_group }}"
+minio_deploy_expected_mode: "0700"
+minio_deploy_selinux_relabel: false
+minio_deploy_install_packages: true
+
+# Network
+minio_deploy_port: 9000
+minio_deploy_console_port: 9001
+minio_deploy_api_scheme: "http"
+minio_deploy_host_ip: >-
+  {{
+    ansible_default_ipv4.address
+      | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
+  }}
+minio_deploy_api_url: ""
+minio_deploy_console_url: ""
+minio_deploy_health_url: ""
+minio_deploy_validate_certs: true
+
+# Credentials and server settings
+minio_deploy_root_user: "{{ lookup('env', 'MINIO_ROOT_USER') | default('', true) }}"
+minio_deploy_root_password: "{{ lookup('env', 'MINIO_ROOT_PASSWORD') | default('', true) }}"
+minio_deploy_region: ""
+minio_deploy_server_url: ""
+minio_deploy_browser_redirect_url: ""
+minio_deploy_env_extra: {}
+minio_deploy_extra_args: []
+
+# Systemd
+minio_deploy_systemd_unit_name: >-
+  {{
+    'podman-kube@'
+    ~ (minio_deploy_pod_manifest_path | basename | regex_replace('\\.yml$', ''))
+    ~ '.service'
+  }}
+minio_deploy_manage_systemd: true
+minio_deploy_skip_runtime: false
+minio_deploy_skip_deploy: false
+minio_deploy_skip_bootstrap: false
+minio_deploy_skip_config: false
+minio_deploy_skip_validate: false
+
+# Bootstrap
+minio_deploy_bootstrap_buckets: []
+
+# Config
+minio_deploy_config_users: []
+minio_deploy_mc_path: "mc"
+minio_deploy_mc_alias: "minio"
+minio_deploy_mc_insecure: false
+
+# Backup/Restore
+minio_deploy_backup_action: "none"
+minio_deploy_backup_dir: "/srv/minio/backups"
+minio_deploy_backup_retention_keep_last: 14
+minio_deploy_backup_stop_service: true
+minio_deploy_restore_source: ""
+minio_deploy_restore_confirm: ""
+minio_deploy_backup_validate_after_restore: true
+
+# Validate
+minio_deploy_validate_mode: "fail"

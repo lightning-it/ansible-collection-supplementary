@@ -4,20 +4,20 @@ repos:
   - repo: local
     hooks:
       # -------------------------------------------------------------------
-      # yamllint (via wunder-devtools-ee)
+      # yamllint (via ee-wunder-devtools-ubi9)
       # -------------------------------------------------------------------
       - id: yamllint-ee
-        name: yamllint (via wunder-devtools-ee)
+        name: yamllint (via ee-wunder-devtools-ubi9)
         language: system
         entry: bash scripts/wunder-devtools-ee.sh yamllint
         pass_filenames: true
         files: \.(yml|yaml)$
 
       # -------------------------------------------------------------------
-      # ansible-lint (via wunder-devtools-ee)
+      # ansible-lint (via ee-wunder-devtools-ubi9)
       # -------------------------------------------------------------------
       - id: ansible-lint-ee
-        name: ansible-lint (via wunder-devtools-ee)
+        name: ansible-lint (via ee-wunder-devtools-ubi9)
         language: system
         entry: >-
           bash -lc "ANSIBLE_CORE_VERSION=2.15.13
@@ -27,10 +27,10 @@ repos:
         files: \.(yml|yaml)$
 
       # -------------------------------------------------------------------
-      # Molecule tests non-heavy scenarios (via wunder-devtools-ee)
+      # Molecule tests non-heavy scenarios (via ee-wunder-devtools-ubi9)
       # -------------------------------------------------------------------
       - id: molecule-light
-        name: molecule tests non-heavy scenarios (via wunder-devtools-ee)
+        name: molecule tests non-heavy scenarios (via ee-wunder-devtools-ubi9)
         language: system
         entry: bash scripts/devtools-molecule.sh
         pass_filenames: false
@@ -62,20 +62,20 @@ repos:
           renovate-config-validator'
 
       # -------------------------------------------------------------------
-      # ansible-collection smoke test (via wunder-devtools-ee)
+      # ansible-collection smoke test (via ee-wunder-devtools-ubi9)
       # -------------------------------------------------------------------
       - id: collection-smoke
-        name: ansible-collection smoke test (via wunder-devtools-ee)
+        name: ansible-collection smoke test (via ee-wunder-devtools-ubi9)
         language: system
         entry: bash scripts/devtools-collection-smoke.sh
         pass_filenames: false
         files: ^(playbooks/|roles/|galaxy\.yml|runtime\.yml)
 
       # -------------------------------------------------------------------
-      # Galaxy-style role verification (via wunder-devtools-ee)
+      # Galaxy-style role verification (via ee-wunder-devtools-ubi9)
       # -------------------------------------------------------------------
       - id: galaxy-verify
-        name: galaxy-style role verification (via wunder-devtools-ee)
+        name: galaxy-style role verification (via ee-wunder-devtools-ubi9)
         language: system
         entry: bash scripts/devtools-galaxy-verify.sh
         pass_filenames: false

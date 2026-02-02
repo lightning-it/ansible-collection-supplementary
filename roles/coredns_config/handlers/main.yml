@@ -1,0 +1,6 @@
+---
+- name: Reload coredns
+  ansible.builtin.set_fact:
+    coredns_config_kubeplay_restart: true
+  changed_when: false
+  when: not coredns_deploy_skip_runtime | bool

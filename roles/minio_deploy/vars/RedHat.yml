@@ -1,0 +1,3 @@
+---
+minio_deploy_packages:
+  - podman

@@ -1,0 +1,98 @@
+---
+- name: Ensure required Nginx vars are defined
+  ansible.builtin.import_role:
+    name: nginx_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure nginx_ops_action is valid
+  ansible.builtin.assert:
+    that:
+      - nginx_ops_action in ['none', 'restart', 'reload', 'status', 'upgrade']
+    fail_msg: "nginx_ops_action must be one of: none, restart, reload, status, upgrade."
+  tags: always
+
+- name: Restart Nginx service
+  when: nginx_ops_action == 'restart'
+  tags:
+    - ops
+    - restart
+  block:
+    - name: Restart Nginx systemd unit
+      ansible.builtin.systemd:
+        name: "{{ nginx_deploy_systemd_unit_name }}"
+        state: restarted
+      when: nginx_deploy_manage_systemd | bool
+
+    - name: Restart Nginx pod (non-systemd)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: restart
+        kubeplay_pod_name: "{{ nginx_deploy_pod_name }}"
+        kubeplay_app_name: nginx_restart
+      when: not nginx_deploy_manage_systemd | bool
+
+    - name: Validate Nginx after restart
+      ansible.builtin.include_role:
+        name: nginx_validate
+
+- name: Reload Nginx service
+  when: nginx_ops_action == 'reload'
+  tags:
+    - ops
+    - reload
+  block:
+    - name: Reload Nginx inside container
+      ansible.builtin.command: "podman exec {{ nginx_deploy_container_name }} nginx -s reload"
+      register: nginx_deploy_reload
+      changed_when: nginx_deploy_reload.rc == 0
+      failed_when: nginx_deploy_reload.rc != 0
+
+- name: Report Nginx status
+  when: nginx_ops_action == 'status'
+  tags:
+    - ops
+    - status
+  block:
+    - name: Read Nginx container running state
+      ansible.builtin.command: "podman inspect {{ nginx_deploy_container_name }} --format {{ '{{.State.Running}}' }}"
+      register: nginx_deploy_container_running
+      changed_when: false
+      failed_when: false
+
+    - name: Read Nginx health status
+      ansible.builtin.uri:
+        url: "{{ nginx_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ nginx_deploy_validate_certs }}"
+      register: nginx_deploy_health
+      changed_when: false
+      failed_when: false
+
+    - name: Report Nginx container state
+      ansible.builtin.debug:
+        msg: >-
+          health={{ nginx_deploy_health.status | default('unknown') }},
+          running={{ nginx_deploy_container_running.stdout | default('unknown') | trim }}
+
+- name: Upgrade Nginx image
+  when: nginx_ops_action == 'upgrade'
+  tags:
+    - ops
+    - upgrade
+  block:
+    - name: Require nginx_ops_target_image
+      ansible.builtin.assert:
+        that:
+          - nginx_ops_target_image | length > 0
+        fail_msg: "nginx_ops_target_image must be set for upgrade."
+
+    - name: Set Nginx image override
+      ansible.builtin.set_fact:
+        nginx_deploy_image: "{{ nginx_ops_target_image }}"
+
+    - name: Redeploy Nginx with new image
+      ansible.builtin.include_role:
+        name: nginx_deploy

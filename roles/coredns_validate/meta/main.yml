@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: coredns_validate
+  namespace: lit
+  author: René Osorio
+  description: Validate CoreDNS Podman deployment health and configuration.
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - modulix
+    - coredns
+    - dns
+    - networking
+    - rhel
+    - automation
+
+dependencies: []

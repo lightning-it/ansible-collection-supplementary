@@ -1,0 +1,6 @@
+---
+nginx_config_vhosts: []
+nginx_config_remove_default: false
+nginx_config_conf_d_dir: "{{ nginx_deploy_host_conf_d_dir }}"
+nginx_config_vhost_mode: '0644'
+nginx_config_test: "{{ nginx_deploy_config_test | default(true) }}"

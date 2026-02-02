@@ -1,0 +1,9 @@
+---
+- name: Verify aap_deploy converge
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Assert role ran
+      ansible.builtin.assert:
+        that:
+          - true

@@ -1,0 +1,212 @@
+---
+- name: Check KV mount presence
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
+  community.hashi_vault.vault_read:
+    url: "{{ vault_config_vault_address }}"
+    token: "{{ vault_config_token }}"
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
+    path: "sys/mounts/{{ vault_config_approle_kv_mount | regex_replace('/$', '') }}"
+  register: vault_config_approle_kv_mount_read
+  failed_when: false
+  no_log: true
+
+- name: Ensure KV v2 mount exists for AppRole credentials
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
+  community.hashi_vault.vault_write:
+    url: "{{ vault_config_vault_address }}"
+    token: "{{ vault_config_token }}"
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
+    path: "sys/mounts/{{ vault_config_approle_kv_mount | regex_replace('/$', '') }}"
+    data:
+      type: "kv"
+      options:
+        version: "2"
+  when: vault_config_approle_kv_mount_read.data is not defined
+
+- name: Ensure AppRole policy exists
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
+  community.hashi_vault.vault_write:
+    url: "{{ vault_config_vault_address }}"
+    token: "{{ vault_config_token }}"
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
+    path: "sys/policies/acl/{{ vault_config_approle_policy_name }}"
+    data:
+      policy: "{{ vault_config_approle_policy }}"
+  changed_when: false
+
+- name: Ensure AppRole exists
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
+  community.hashi_vault.vault_write:
+    url: "{{ vault_config_vault_address }}"
+    token: "{{ vault_config_token }}"
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
+    path: "auth/approle/role/{{ vault_config_approle_entry.role_name }}"
+    data:
+      token_policies: "{{ vault_config_approle_policy_names }}"
+      token_ttl: "{{ vault_config_approle_entry.token_ttl | default(omit, true) }}"
+      token_max_ttl: "{{ vault_config_approle_entry.token_max_ttl | default(omit, true) }}"
+  changed_when: false
+
+- name: Read AppRole role_id
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
+  community.hashi_vault.vault_read:
+    url: "{{ vault_config_vault_address }}"
+    token: "{{ vault_config_token }}"
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
+    path: "auth/approle/role/{{ vault_config_approle_entry.role_name }}/role-id"
+  register: vault_config_approle_role_id
+  no_log: true
+
+- name: Normalize AppRole role_id
+  ansible.builtin.set_fact:
+    vault_config_approle_read_role_id: >-
+      {{
+        (vault_config_approle_role_id.data.role_id
+          if (vault_config_approle_role_id.data is defined
+              and vault_config_approle_role_id.data.role_id is defined)
+          else
+            (vault_config_approle_role_id.data.data.role_id
+              if (vault_config_approle_role_id.data is defined
+                  and vault_config_approle_role_id.data.data is defined
+                  and vault_config_approle_role_id.data.data.role_id is defined)
+              else ''))
+      }}
+  no_log: true
+
+- name: Read stored AppRole credentials
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ vault_config_vault_address }}"
+    token: "{{ vault_config_token }}"
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
+    engine_mount_point: "{{ vault_config_approle_kv_mount }}"
+    path: "{{ vault_config_approle_kv_path }}"
+  register: vault_config_approle_kv
+  failed_when: false
+  no_log: true
+
+- name: Extract stored AppRole secret_id
+  ansible.builtin.set_fact:
+    vault_config_approle_kv_role_id: >-
+      {{
+        (vault_config_approle_kv.data.data.role_id | default(''))
+        if vault_config_approle_kv.data is defined
+        else ''
+      }}
+    vault_config_approle_kv_secret_id: >-
+      {{
+        (vault_config_approle_kv.data.data.secret_id | default(''))
+        if vault_config_approle_kv.data is defined
+        else ''
+      }}
+  no_log: true
+
+- name: Check whether stored AppRole credentials match current role_id
+  ansible.builtin.set_fact:
+    vault_config_approle_kv_matches: >-
+      {{
+        (vault_config_approle_kv_role_id | length > 0)
+        and (vault_config_approle_kv_role_id == vault_config_approle_read_role_id)
+        and (vault_config_approle_kv_secret_id | length > 0)
+      }}
+  no_log: true
+
+- name: Generate AppRole secret_id
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
+  community.hashi_vault.vault_write:
+    url: "{{ vault_config_vault_address }}"
+    token: "{{ vault_config_token }}"
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
+    path: "auth/approle/role/{{ vault_config_approle_entry.role_name }}/secret-id"
+  register: vault_config_approle_secret_id
+  no_log: true
+  when: not vault_config_approle_kv_matches
+
+- name: Normalize AppRole secret_id
+  ansible.builtin.set_fact:
+    vault_config_approle_new_secret_id: >-
+      {{
+        (vault_config_approle_secret_id.data.secret_id
+          if (vault_config_approle_secret_id is defined
+              and vault_config_approle_secret_id.data is defined
+              and vault_config_approle_secret_id.data.secret_id is defined)
+          else
+            (vault_config_approle_secret_id.data.data.secret_id
+              if (vault_config_approle_secret_id is defined
+                  and vault_config_approle_secret_id.data is defined
+                  and vault_config_approle_secret_id.data.data is defined
+                  and vault_config_approle_secret_id.data.data.secret_id is defined)
+              else ''))
+      }}
+  no_log: true
+
+- name: Resolve AppRole credentials
+  ansible.builtin.set_fact:
+    vault_config_approle_resolved_role_id: >-
+      {{
+        vault_config_approle_read_role_id
+        if not vault_config_approle_kv_matches
+        else vault_config_approle_kv_role_id
+      }}
+    vault_config_approle_resolved_secret_id: >-
+      {{
+        vault_config_approle_new_secret_id
+        if not vault_config_approle_kv_matches
+        else vault_config_approle_kv_secret_id
+      }}
+  no_log: true
+
+- name: Assert AppRole credentials resolved
+  ansible.builtin.assert:
+    that:
+      - vault_config_approle_resolved_role_id | length > 0
+      - vault_config_approle_resolved_secret_id | length > 0
+    fail_msg: >-
+      AppRole credentials could not be resolved from Vault; check AppRole
+      permissions and vault_config_token access to auth/approle/role/{{ vault_config_approle_entry.role_name }}.
+  no_log: true
+
+- name: Persist AppRole credentials
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
+  community.hashi_vault.vault_kv2_write:
+    url: "{{ vault_config_vault_address }}"
+    token: "{{ vault_config_token }}"
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
+    engine_mount_point: "{{ vault_config_approle_kv_mount }}"
+    path: "{{ vault_config_approle_kv_path }}"
+    data:
+      role_id: "{{ vault_config_approle_resolved_role_id }}"
+      secret_id: "{{ vault_config_approle_resolved_secret_id }}"
+  when:
+    - vault_config_approle_resolved_role_id | length > 0
+    - vault_config_approle_resolved_secret_id | length > 0
+    - not vault_config_approle_kv_matches
+  no_log: true
+
+- name: Record AppRole credentials
+  ansible.builtin.set_fact:
+    vault_config_approle_credentials: >-
+      {{
+        vault_config_approle_credentials | default({}) | combine({
+          vault_config_approle_entry.role_name: {
+            'role_id': vault_config_approle_resolved_role_id,
+            'secret_id': vault_config_approle_resolved_secret_id
+          }
+        }, recursive=True)
+      }}
+  no_log: true
+
+- name: Set AppRole credentials for current run
+  ansible.builtin.set_fact:
+    ansible_hashi_vault_role_id: "{{ vault_config_approle_resolved_role_id }}"
+    ansible_hashi_vault_secret_id: "{{ vault_config_approle_resolved_secret_id }}"
+  no_log: true
+  when: vault_config_approle_entry.role_name == vault_config_approle_primary_role_name

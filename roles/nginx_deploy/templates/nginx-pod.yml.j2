@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ nginx_deploy_pod_name }}
+  labels:
+    app: nginx
+spec:
+  containers:
+    - name: nginx
+      image: {{ nginx_deploy_image }}
+      ports:
+        - containerPort: {{ nginx_deploy_listen_port }}
+          hostPort: {{ nginx_deploy_host_port }}
+          hostIP: {{ nginx_deploy_host_ip }}
+      securityContext:
+        runAsUser: {{ nginx_deploy_run_as_user }}
+        runAsGroup: {{ nginx_deploy_run_as_group }}
+        runAsNonRoot: {{ nginx_deploy_run_as_non_root | bool | ternary('true', 'false') }}
+      volumeMounts:
+        - name: nginx-conf
+          mountPath: {{ nginx_deploy_conf_file }}
+          readOnly: true
+        - name: nginx-conf-d
+          mountPath: {{ nginx_deploy_conf_d_dir }}
+        - name: nginx-html
+          mountPath: {{ nginx_deploy_root }}
+{% if nginx_deploy_host_log_dir | length > 0 %}
+        - name: nginx-logs
+          mountPath: {{ nginx_deploy_log_dir }}
+{% endif %}
+  volumes:
+    - name: nginx-conf
+      hostPath:
+        path: {{ nginx_deploy_host_conf_file }}
+        type: File
+      selinuxRelabel: true
+    - name: nginx-conf-d
+      hostPath:
+        path: {{ nginx_deploy_host_conf_d_dir }}
+        type: DirectoryOrCreate
+      selinuxRelabel: true
+    - name: nginx-html
+      hostPath:
+        path: {{ nginx_deploy_host_root }}
+        type: DirectoryOrCreate
+      selinuxRelabel: true
+{% if nginx_deploy_host_log_dir | length > 0 %}
+    - name: nginx-logs
+      hostPath:
+        path: {{ nginx_deploy_host_log_dir }}
+        type: DirectoryOrCreate
+      selinuxRelabel: true
+{% endif %}

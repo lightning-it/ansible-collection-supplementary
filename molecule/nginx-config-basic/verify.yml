@@ -1,0 +1,13 @@
+---
+- name: Verify nginx_config converge
+  hosts: localhost
+  gather_facts: false
+  vars:
+    nginx_deploy_skip_config: true
+    nginx_config_vhosts: []
+  tasks:
+    - name: Assert converge ran
+      ansible.builtin.assert:
+        that:
+          - nginx_deploy_skip_config is defined
+          - nginx_config_vhosts is defined

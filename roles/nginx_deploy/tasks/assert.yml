@@ -1,0 +1,28 @@
+---
+- name: Ensure core Nginx variables are set
+  ansible.builtin.assert:
+    that:
+      - nginx_deploy_pod_name | length > 0
+      - nginx_deploy_pod_manifest_path | length > 0
+      - nginx_deploy_image | length > 0
+      - nginx_deploy_container_name | length > 0
+      - nginx_deploy_conf_file | length > 0
+      - nginx_deploy_conf_d_dir | length > 0
+      - nginx_deploy_host_conf_file | length > 0
+      - nginx_deploy_host_conf_d_dir | length > 0
+      - nginx_deploy_host_root | length > 0
+    fail_msg: "Nginx core variables are missing or invalid."
+  tags: always
+
+- name: Ensure default site variables are set when managed
+  ansible.builtin.assert:
+    that:
+      - nginx_deploy_root | length > 0
+      - nginx_deploy_host_root | length > 0
+      - nginx_deploy_listen_port | int > 0
+      - nginx_deploy_host_port | int > 0
+    fail_msg: "nginx_deploy_root and nginx_deploy_listen_port are required when managing the default site."
+  when:
+    - nginx_deploy_manage_default_site | bool
+    - not nginx_deploy_skip_config | bool
+  tags: always

@@ -2,7 +2,8 @@
 
 Supplementary Ansible collection for ModuLix / Lightning IT. Currently contains
 the `keycloak_config` role to configure existing Keycloak instances (realms,
-clients, roles, users, IdPs) via Terraform.
+clients, roles, users, IdPs) via Terraform and the `cloudflared` role to manage
+Cloudflare Tunnel connectors.
 
 ## Usage
 
@@ -36,6 +37,8 @@ Example playbook:
   to validate basics locally.
 - Molecule scenario `openvpn-basic` runs the openvpn role without standing up a
   server to validate role wiring and defaults.
+- Molecule scenario `cloudflared-basic` runs the cloudflared role with install
+  steps disabled to validate role wiring and defaults.
 - Molecule scenario `gitlab-runner-basic` runs the gitlab_runner stub role
   (acknowledging experimental status) to keep lint/test coverage green.
   It uses the repo’s roles path to source the role locally.
@@ -47,7 +50,7 @@ Example playbook:
 ## Local checks
 
 This repository uses **pre-commit** and a shared devtools container
-(`wunder-devtools-ee`) to keep linting and runtime tests consistent between
+(`ee-wunder-devtools-ubi9`) to keep linting and runtime tests consistent between
 local development and CI.
 
 ### 1. Install pre-commit
@@ -65,8 +68,8 @@ Molecule, etc.).
 ### 2. Run all linters locally
 
 To run all configured linters (YAML, ansible-lint, Molecule keycloak-basic,
-openvpn-basic, gitlab-runner-basic, nexus-basic, manage-esxi-basic, vault-basic, GitHub
-Actions lint, Renovate config validation):
+openvpn-basic, cloudflared-basic, gitlab-runner-basic, nexus-basic, manage-esxi-basic,
+vault-basic, GitHub Actions lint, Renovate config validation):
 
 ```bash
 pre-commit run --all-files
@@ -74,7 +77,7 @@ pre-commit run --all-files
 
 This will:
 
-- run `yamllint` inside the `wunder-devtools-ee` container,
+- run `yamllint` inside the `ee-wunder-devtools-ubi9` container,
 - run `ansible-lint` inside the devtools container (after building the collection),
 - run the `keycloak-basic`, `openvpn-basic`, `gitlab-runner-basic`,
   `nexus-basic`, `manage-esxi-basic`, and `vault-basic` Molecule scenarios,

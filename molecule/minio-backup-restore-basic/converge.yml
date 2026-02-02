@@ -1,0 +1,11 @@
+---
+- name: Converge minio_backup_restore
+  hosts: localhost
+  gather_facts: true
+  vars:
+    minio_deploy_root_user: "minioadmin"
+    minio_deploy_root_password: "minioadmin"
+    minio_deploy_skip_runtime: true
+    minio_deploy_backup_action: "none"
+  roles:
+    - role: minio_backup_restore

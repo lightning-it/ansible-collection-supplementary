@@ -1,0 +1,14 @@
+---
+# Enable/disable the role
+aap_deploy_enabled: true
+
+# Optional metadata for logging/debugging
+aap_deploy_instance_name: ""
+aap_deploy_namespace: ""
+
+# Package handling
+aap_deploy_packages_rhel9:
+  - aap-deploy
+aap_deploy_packages_rhel10:
+  - aap-deploy
+aap_deploy_package_state: present

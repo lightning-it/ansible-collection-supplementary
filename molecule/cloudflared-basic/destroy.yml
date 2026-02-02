@@ -1,0 +1,5 @@
+---
+- name: Destroy cloudflared
+  hosts: localhost
+  gather_facts: false
+  tasks: []

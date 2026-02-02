@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  description: Validate Vault runtime, storage, and SELinux state
+  company: Lightning IT
+  author: Dirk Egert, René Osorio
+  license: GPL-3.0-only
+  min_ansible_version: '2.18'
+  role_name: vault_validate
+  namespace: default
+  galaxy_tags: []
+dependencies: []

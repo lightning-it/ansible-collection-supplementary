@@ -1,0 +1,38 @@
+---
+- name: Set effective init file path
+  ansible.builtin.set_fact:
+    vault_foundational_init_file_path_effective: >-
+      {{
+        vault_foundational_init_file_path
+          | default(vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault'))
+      }}
+  no_log: true
+
+- name: Slurp init file
+  ansible.builtin.slurp:
+    src: "{{ vault_foundational_init_file_path_effective }}"
+  register: vault_foundational_init_file_slurp
+  changed_when: false
+  no_log: true
+
+- name: Set init file content facts
+  ansible.builtin.set_fact:
+    vault_deploy_init_file_content: "{{ vault_foundational_init_file_clean }}"
+    vault_deploy_init_file_first_char: "{{ vault_foundational_init_file_first_char }}"
+    vault_deploy_init_file_is_vault: "{{ vault_foundational_init_file_clean is match('^\\$ANSIBLE_VAULT;') }}"
+    vault_deploy_init_file_is_legacy: >-
+      {{ vault_foundational_init_file_clean
+         is search('vault_deploy_unseal_keys_encrypted:') }}
+    vault_deploy_init_file_is_yaml: >-
+      {{
+        vault_foundational_init_file_clean
+          is search('(^|\\n)\\s*vault_init:')
+      }}
+  vars:
+    vault_foundational_init_file_decoded: >-
+      {{ vault_foundational_init_file_slurp.content | b64decode | string }}
+    vault_foundational_init_file_clean: >-
+      {{ vault_foundational_init_file_decoded | regex_replace('^\\ufeff', '') }}
+    vault_foundational_init_file_first_char: >-
+      {{ vault_foundational_init_file_clean | trim | truncate(1, False, '') }}
+  no_log: true

@@ -1,0 +1,311 @@
+---
+- name: Wait until Vault API is reachable via HTTPS
+  ansible.builtin.uri:
+    url: "{{ vault_deploy_health_url }}"
+    method: GET
+    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+  register: vault_deploy_health
+  until: vault_deploy_health.status in [200, 429, 472, 473, 501, 503]
+  retries: 30
+  delay: 5
+  changed_when: false
+  failed_when: vault_deploy_health is failed and vault_deploy_health.status not in [200, 429, 472, 473, 501, 503]
+  tags:
+    - bootstrap
+    - api
+
+- name: Check Vault initialization status
+  ansible.builtin.uri:
+    url: "{{ vault_deploy_api_url }}/v1/sys/init"
+    method: GET
+    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+  register: vault_deploy_init_status
+  changed_when: false
+  failed_when: vault_deploy_init_status.status not in [200]
+  tags:
+    - init
+    - bootstrap
+
+- name: Set Vault initialized flag
+  ansible.builtin.set_fact:
+    vault_deploy_initialized: "{{ vault_deploy_init_status.json.initialized | default(false) }}"
+  tags:
+    - init
+    - bootstrap
+
+- name: Enable bootstrap init automatically for first run
+  ansible.builtin.set_fact:
+    vault_deploy_bootstrap_init: true
+  when:
+    - not vault_deploy_initialized | bool
+    - not vault_deploy_bootstrap_init | bool
+    - vault_deploy_bootstrap_auto_init | bool
+  tags:
+    - init
+    - bootstrap
+
+- name: Fail when Vault is not initialized and bootstrap is disabled
+  ansible.builtin.fail:
+    msg: "Vault is not initialized; set vault_deploy_bootstrap_init=true to initialize."
+  when:
+    - not vault_deploy_initialized | bool
+    - not vault_deploy_bootstrap_init | bool
+    - not vault_deploy_bootstrap_auto_init | bool
+  tags:
+    - init
+    - bootstrap
+
+- name: Ensure persistent bootstrap dir exists
+  ansible.builtin.file:
+    path: "{{ vault_deploy_bootstrap_persist_dir | default('/srv/vault/bootstrap') }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  tags:
+    - init
+    - bootstrap
+
+- name: Check if encrypted init file already exists
+  ansible.builtin.stat:
+    path: "{{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault') }}"
+  register: vault_bootstrap_init_file
+  changed_when: false
+  tags:
+    - init
+    - bootstrap
+
+- name: Normalize existing init file format
+  ansible.builtin.include_role:
+    name: lit.supplementary.vault_foundational
+    tasks_from: normalize_init_file
+  vars:
+    vault_foundational_init_file_path: >-
+      {{ vault_deploy_init_file_path
+         | default('/srv/vault/bootstrap/vault-init.yml.vault') }}
+  when:
+    - vault_deploy_bootstrap_write_init_output | bool
+    - vault_bootstrap_init_file.stat.exists | default(false)
+  tags:
+    - init
+    - bootstrap
+
+- name: Initialize Vault
+  ansible.builtin.command: >-
+    podman exec {{ vault_deploy_container_name }}
+    env VAULT_ADDR=https://127.0.0.1:8200
+    vault operator init -format=json
+    -key-shares {{ vault_deploy_bootstrap_key_shares }}
+    -key-threshold {{ vault_deploy_bootstrap_key_threshold }}
+    -tls-skip-verify
+  register: vault_deploy_init_result
+  changed_when: true
+  no_log: true
+  when:
+    - not vault_deploy_initialized | bool
+    - vault_deploy_bootstrap_init | bool
+    - not vault_bootstrap_init_file.stat.exists | default(false)
+  tags:
+    - init
+    - bootstrap
+
+- name: Parse Vault init payload
+  ansible.builtin.set_fact:
+    vault_deploy_init_payload: "{{ vault_deploy_init_result.stdout | from_json }}"
+  no_log: true
+  when:
+    - vault_deploy_init_result is defined
+    - vault_deploy_init_result.stdout | default('') | length > 0
+  tags:
+    - init
+    - bootstrap
+
+- name: Mark bootstrap init performed
+  ansible.builtin.set_fact:
+    vault_bootstrap_did_init: true
+  when:
+    - vault_deploy_init_result is defined
+    - vault_deploy_init_result.stdout | default('') | length > 0
+  tags:
+    - init
+    - bootstrap
+
+- name: Set Vault token facts from init payload
+  ansible.builtin.set_fact:
+    vault_bootstrap_token: >-
+      {{
+        (vault_bootstrap_token | default('', true) | trim)
+        if (vault_bootstrap_token | default('', true) | trim | length > 0)
+        else (vault_deploy_init_payload.root_token | default('', true) | trim)
+      }}
+  no_log: true
+  when:
+    - vault_deploy_init_payload is defined
+  tags:
+    - init
+    - bootstrap
+
+- name: Map vault_token to vault_bootstrap_token
+  ansible.builtin.set_fact:
+    vault_bootstrap_token: >-
+      {{
+        (vault_bootstrap_token | default('', true) | trim)
+        if (vault_bootstrap_token | default('', true) | trim | length > 0)
+        else (vault_token | default('', true) | trim)
+      }}
+  no_log: true
+  tags:
+    - init
+    - bootstrap
+
+- name: Expose vault_bootstrap_token as vault_token for follow-on roles
+  ansible.builtin.set_fact:
+    vault_token: >-
+      {{
+        (vault_token | default('', true) | trim)
+        if (vault_token | default('', true) | trim | length > 0)
+        else (vault_bootstrap_token | default('', true) | trim)
+      }}
+  no_log: true
+  tags:
+    - init
+    - bootstrap
+
+- name: Determine whether to write encrypted init file
+  ansible.builtin.set_fact:
+    vault_bootstrap_should_write_init_file: >-
+      {{
+        (vault_bootstrap_write_init_file_on_init | default(true) | bool)
+        and (vault_bootstrap_did_init | default(false) | bool)
+        and (not (vault_bootstrap_init_file.stat.exists | default(false)))
+      }}
+  tags:
+    - init
+    - bootstrap
+
+- name: Fail when vault_deploy_ansible_vault_pw is missing for encryption
+  ansible.builtin.fail:
+    msg: "vault_deploy_ansible_vault_pw is required to encrypt Vault init output."
+  when:
+    - vault_bootstrap_should_write_init_file | bool
+    - vault_deploy_ansible_vault_pw | default('') | length == 0
+  tags:
+    - init
+    - bootstrap
+
+- name: Write encrypted init output
+  when:
+    - vault_bootstrap_should_write_init_file | bool
+    - vault_deploy_init_payload is defined
+  no_log: true
+  tags:
+    - init
+    - bootstrap
+  block:
+    - name: Create controller bootstrap temp dir
+      delegate_to: localhost
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: vault-bootstrap-
+      register: vault_bootstrap_controller_tmp
+
+    - name: Create controller ansible config (empty)
+      delegate_to: localhost
+      ansible.builtin.copy:
+        dest: "{{ vault_bootstrap_controller_tmp.path }}/ansible.cfg"
+        content: ""
+        mode: "0600"
+
+    - name: Write init YAML to controller temp dir
+      delegate_to: localhost
+      ansible.builtin.copy:
+        dest: "{{ vault_bootstrap_controller_tmp.path }}/vault-init.yml"
+        content: |-
+          # -----------------------------------------------------------------------------
+          # Vault init output (YAML version)
+          # IMPORTANT: Treat this file as HIGHLY SENSITIVE.
+          # - Never commit to git
+          # - Only store encrypted
+          # -----------------------------------------------------------------------------
+
+          vault_init:
+            unseal_keys_b64:
+          {% for key in (vault_deploy_init_payload.unseal_keys_b64 | default([])) %}
+              - "{{ key }}"
+          {% endfor %}
+
+            unseal_keys_hex:
+          {% for key in (vault_deploy_init_payload.unseal_keys_hex | default([])) %}
+              - "{{ key }}"
+          {% endfor %}
+
+            unseal_shares: {{ vault_deploy_init_payload.unseal_shares | default(0) }}
+            unseal_threshold: {{ vault_deploy_init_payload.unseal_threshold | default(0) }}
+
+          {% if (vault_deploy_init_payload.recovery_keys_b64 | default([])) | length > 0 %}
+            recovery_keys_b64:
+          {% for key in vault_deploy_init_payload.recovery_keys_b64 %}
+              - "{{ key }}"
+          {% endfor %}
+          {% else %}
+            recovery_keys_b64: []
+          {% endif %}
+
+          {% if (vault_deploy_init_payload.recovery_keys_hex | default([])) | length > 0 %}
+            recovery_keys_hex:
+          {% for key in vault_deploy_init_payload.recovery_keys_hex %}
+              - "{{ key }}"
+          {% endfor %}
+          {% else %}
+            recovery_keys_hex: []
+          {% endif %}
+            recovery_keys_shares: {{ vault_deploy_init_payload.recovery_keys_shares | default(0) }}
+            recovery_keys_threshold: {{ vault_deploy_init_payload.recovery_keys_threshold | default(0) }}
+
+            root_token: "{{ vault_deploy_init_payload.root_token | default('') }}"
+        mode: "0600"
+
+    - name: Create temporary vault password file (controller temp dir)
+      delegate_to: localhost
+      ansible.builtin.copy:
+        dest: "{{ vault_bootstrap_controller_tmp.path }}/.vault_deploy_pass"
+        content: "{{ vault_deploy_ansible_vault_pw }}"
+        mode: "0600"
+
+    - name: Encrypt init YAML to persistent location (controller)
+      delegate_to: localhost
+      ansible.builtin.command: >-
+        ansible-vault encrypt {{ vault_bootstrap_controller_tmp.path }}/vault-init.yml
+        --output {{ vault_bootstrap_controller_tmp.path }}/vault-init.yml.vault
+      changed_when: true
+      environment:
+        ANSIBLE_CONFIG: "{{ vault_bootstrap_controller_tmp.path }}/ansible.cfg"
+        ANSIBLE_VAULT_PASSWORD_FILE: "{{ vault_bootstrap_controller_tmp.path }}/.vault_deploy_pass"
+
+    - name: Copy encrypted init file to target
+      ansible.builtin.copy:
+        src: "{{ vault_bootstrap_controller_tmp.path }}/vault-init.yml.vault"
+        dest: "{{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault') }}"
+        owner: root
+        group: root
+        mode: "0600"
+        force: true
+        decrypt: false
+
+    - name: Slurp encrypted init output on target
+      ansible.builtin.slurp:
+        src: "{{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault') }}"
+      register: vault_bootstrap_init_target_slurp
+      changed_when: false
+
+    - name: Assert encrypted init output header on target
+      ansible.builtin.assert:
+        that:
+          - (vault_bootstrap_init_target_slurp.content | b64decode | string | regex_replace('^\\ufeff', '') | trim)
+            is match('^\\$ANSIBLE_VAULT;')
+
+    - name: Cleanup controller temp dir
+      delegate_to: localhost
+      ansible.builtin.file:
+        path: "{{ vault_bootstrap_controller_tmp.path }}"
+        state: absent

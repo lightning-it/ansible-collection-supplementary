@@ -1,0 +1,12 @@
+---
+- name: Converge minio_bootstrap
+  hosts: localhost
+  gather_facts: true
+  vars:
+    minio_deploy_root_user: "minioadmin"
+    minio_deploy_root_password: "minioadmin"
+    minio_deploy_skip_runtime: true
+    minio_deploy_skip_bootstrap: true
+    minio_deploy_bootstrap_buckets: []
+  roles:
+    - role: minio_bootstrap

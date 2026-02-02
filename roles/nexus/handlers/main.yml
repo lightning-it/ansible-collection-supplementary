@@ -1,0 +1,10 @@
+---
+- name: Recreate nexus pod
+  ansible.builtin.set_fact:
+    nexus_kubeplay_remove: true
+  changed_when: false
+
+- name: Run nexus pod
+  ansible.builtin.set_fact:
+    nexus_kubeplay_run: true
+  changed_when: false

@@ -1,0 +1,3 @@
+---
+dhcp_deploy_packages:
+  - dhcp-server

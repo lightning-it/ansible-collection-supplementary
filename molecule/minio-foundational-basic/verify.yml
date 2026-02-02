@@ -1,0 +1,16 @@
+---
+- name: Verify minio_foundational converge
+  hosts: localhost
+  gather_facts: false
+  vars:
+    minio_deploy_root_user: "minioadmin"
+    minio_deploy_root_password: "minioadmin"
+    minio_deploy_host_ip: "127.0.0.1"
+  roles:
+    - role: minio_foundational
+  tasks:
+    - name: Assert converge ran
+      ansible.builtin.assert:
+        that:
+          - minio_deploy_api_url_effective is defined
+          - minio_deploy_root_user_effective is defined

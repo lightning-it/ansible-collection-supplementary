@@ -1,0 +1,7 @@
+---
+vault_deploy_packages:
+  - podman
+  - python3
+  - python3-cryptography
+  - python3-pip
+  - jq

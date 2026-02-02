@@ -1,0 +1,85 @@
+---
+- name: Ensure required Nginx vars are defined
+  ansible.builtin.import_role:
+    name: nginx_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Set validate mode
+  ansible.builtin.set_fact:
+    nginx_validate_strict: "{{ nginx_validate_mode != 'report' }}"
+  tags: always
+
+- name: Skip Nginx validation when disabled
+  ansible.builtin.debug:
+    msg: "Nginx validation skipped (nginx_deploy_skip_validate=true)."
+  when: nginx_deploy_skip_validate | bool
+  tags: always
+
+- name: Validate Nginx runtime
+  when: not nginx_deploy_skip_validate | bool
+  tags:
+    - validate
+  block:
+    - name: Check Nginx container running state
+      ansible.builtin.command: "podman inspect {{ nginx_deploy_container_name }} --format {{ '{{.State.Running}}' }}"
+      register: nginx_deploy_container_running
+      changed_when: false
+      failed_when: false
+
+    - name: Fail when Nginx container is not running
+      ansible.builtin.fail:
+        msg: "Nginx container {{ nginx_deploy_container_name }} is not running."
+      when:
+        - nginx_validate_strict | bool
+        - nginx_deploy_container_running.stdout | default('') | trim != 'true'
+
+    - name: Report Nginx container running state
+      ansible.builtin.debug:
+        msg: "Nginx container running: {{ nginx_deploy_container_running.stdout | default('unknown') | trim }}"
+      when: not nginx_validate_strict | bool
+
+    - name: Check Nginx config file presence on host
+      ansible.builtin.stat:
+        path: "{{ nginx_deploy_host_conf_file }}"
+      register: nginx_deploy_conf_stat
+
+    - name: Fail when Nginx config file is missing
+      ansible.builtin.fail:
+        msg: "Nginx config file {{ nginx_deploy_host_conf_file }} is missing."
+      when:
+        - nginx_validate_strict | bool
+        - not nginx_deploy_conf_stat.stat.exists
+
+    - name: Test Nginx configuration
+      ansible.builtin.command: >-
+        podman exec {{ nginx_deploy_container_name }} nginx -t -c {{ nginx_deploy_conf_file }}
+      register: nginx_config_test_result
+      changed_when: false
+      when:
+        - nginx_validate_check_config | bool
+        - not nginx_deploy_skip_runtime | bool
+      failed_when:
+        - nginx_validate_strict | bool
+        - nginx_config_test_result.rc != 0
+
+    - name: Check Nginx health endpoint
+      ansible.builtin.uri:
+        url: "{{ nginx_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ nginx_deploy_validate_certs }}"
+      register: nginx_deploy_health
+      changed_when: false
+      failed_when: false
+      when:
+        - nginx_validate_check_http | bool
+        - not nginx_deploy_skip_runtime | bool
+
+    - name: Validate Nginx health response
+      ansible.builtin.assert:
+        that:
+          - nginx_deploy_health.status == 200
+        fail_msg: "Nginx health check failed: status {{ nginx_deploy_health.status }}."
+      when:
+        - nginx_validate_check_http | bool
+        - nginx_validate_strict | bool

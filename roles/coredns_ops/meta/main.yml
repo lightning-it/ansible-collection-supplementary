@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: coredns_ops
+  namespace: lit
+  author: René Osorio
+  description: Operate CoreDNS Podman deployment (restart, reload, status, upgrade).
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - modulix
+    - coredns
+    - dns
+    - networking
+    - rhel
+    - automation
+
+dependencies: []

@@ -1,0 +1,53 @@
+---
+- name: Ensure DHCP config directory exists
+  ansible.builtin.file:
+    path: "{{ dhcp_deploy_host_config_dir }}"
+    state: directory
+    owner: "{{ dhcp_deploy_config_owner }}"
+    group: "{{ dhcp_deploy_config_group }}"
+    mode: '0755'
+  when:
+    - dhcp_deploy_host_config_dir | length > 0
+    - dhcp_deploy_manage_config | bool
+    - not dhcp_deploy_skip_config | bool
+  tags:
+    - deployment
+
+- name: Ensure DHCP data directory exists
+  ansible.builtin.file:
+    path: "{{ dhcp_deploy_host_data_dir }}"
+    state: directory
+    owner: "{{ dhcp_deploy_run_as_user }}"
+    group: "{{ dhcp_deploy_run_as_group }}"
+    mode: '0755'
+  when: dhcp_deploy_host_data_dir | length > 0
+  tags:
+    - deployment
+
+- name: Render DHCP config
+  ansible.builtin.template:
+    src: dhcpd.conf.j2
+    dest: "{{ dhcp_deploy_host_config_path }}"
+    owner: "{{ dhcp_deploy_config_owner }}"
+    group: "{{ dhcp_deploy_config_group }}"
+    mode: '0644'
+  when:
+    - dhcp_deploy_manage_config | bool
+    - not dhcp_deploy_skip_config | bool
+  notify: Restart dhcp
+  tags:
+    - config
+
+- name: Configure dhcpd interface binding
+  ansible.builtin.copy:
+    dest: "{{ dhcp_deploy_sysconfig_path }}"
+    content: "DHCPDARGS=\"{{ dhcp_deploy_interfaces | join(' ') }}\""
+    owner: "root"
+    group: "root"
+    mode: '0644'
+  when:
+    - dhcp_deploy_interfaces | default([]) | length > 0
+    - not dhcp_deploy_skip_config | bool
+  notify: Restart dhcp
+  tags:
+    - config

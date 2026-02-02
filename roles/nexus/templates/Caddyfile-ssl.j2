@@ -1,0 +1,5 @@
+{{ nexus_nexus_hostname }} {
+    encode gzip
+    reverse_proxy 127.0.0.1:8081
+    tls /etc/caddy/certs/{{ nexus_nexus_hostname }}.pem /etc/caddy/certs/{{ nexus_nexus_hostname }}.key
+}

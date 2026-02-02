@@ -1,0 +1,43 @@
+---
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+  when: ansible_os_family in ['Debian', 'Ubuntu', 'RedHat', 'CentOS']
+
+- name: Deploy Vault runtime
+  when: not vault_deploy_skip_runtime | bool
+  block:
+    - name: Ensure required packages are installed
+      ansible.builtin.include_tasks: install_packages.yml
+      tags:
+        - install
+
+    - name: Bootstrap TLS
+      ansible.builtin.include_tasks: bootstrap_tls_vault.yml
+      tags:
+        - bootstrap
+
+    - name: Deploy Vault Pod
+      ansible.builtin.include_tasks: deploy_pod.yml
+      tags:
+        - deployment
+
+    - name: Install systemd unit for Vault Pod
+      ansible.builtin.include_tasks: systemd.yml
+      tags:
+        - systemd
+
+    - name: Wait until Vault API is reachable via HTTPS (non-systemd)
+      ansible.builtin.uri:
+        url: "{{ vault_deploy_health_url }}"
+        method: GET
+        validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+      register: vault_deploy_health
+      until: vault_deploy_health.status in [200, 429, 472, 473, 501, 503]
+      retries: 30
+      delay: 5
+      changed_when: false
+      failed_when: vault_deploy_health is failed and vault_deploy_health.status not in [200, 429, 472, 473, 501, 503]
+      when: not vault_deploy_manage_systemd | bool
+      tags:
+        - deployment
+        - api

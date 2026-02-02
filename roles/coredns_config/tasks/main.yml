@@ -1,0 +1,75 @@
+---
+- name: Ensure required CoreDNS vars are defined
+  ansible.builtin.import_role:
+    name: coredns_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Resolve CoreDNS Corefile content
+  ansible.builtin.set_fact:
+    coredns_deploy_corefile_effective: >-
+      {{
+        coredns_config_corefile
+        if (coredns_config_corefile | length > 0)
+        else coredns_deploy_corefile
+      }}
+  tags: always
+
+- name: Skip CoreDNS config when disabled
+  ansible.builtin.debug:
+    msg: "CoreDNS config skipped (coredns_deploy_skip_config=true or coredns_config_manage=false)."
+  when:
+    - coredns_deploy_skip_config | bool or not coredns_config_manage | bool
+  tags: always
+
+- name: Ensure CoreDNS config directory exists
+  ansible.builtin.file:
+    path: "{{ coredns_deploy_host_config_dir }}"
+    state: directory
+    owner: "{{ coredns_deploy_run_as_user }}"
+    group: "{{ coredns_deploy_run_as_group }}"
+    mode: '0755'
+  when:
+    - not coredns_deploy_skip_config | bool
+    - coredns_config_manage | bool
+  tags:
+    - config
+
+- name: Render CoreDNS Corefile
+  ansible.builtin.template:
+    src: Corefile.j2
+    dest: "{{ coredns_deploy_host_corefile_path }}"
+    owner: "{{ coredns_deploy_run_as_user }}"
+    group: "{{ coredns_deploy_run_as_group }}"
+    mode: "{{ coredns_config_mode }}"
+  when:
+    - not coredns_deploy_skip_config | bool
+    - coredns_config_manage | bool
+  notify: Reload coredns
+  tags:
+    - config
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - config
+
+- name: Restart coredns pod (kubeplay)
+  when:
+    - coredns_config_kubeplay_restart | default(false)
+    - not coredns_deploy_skip_runtime | bool
+  tags:
+    - config
+  block:
+    - name: Run kubeplay restart (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: restart
+        kubeplay_pod_name: "{{ coredns_deploy_pod_name }}"
+        kubeplay_app_name: coredns_restart
+  rescue:
+    - name: Ignore kubeplay restart failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay restart failure."

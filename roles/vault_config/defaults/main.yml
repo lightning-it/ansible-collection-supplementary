@@ -1,0 +1,44 @@
+---
+vault_config_url: "{{ vault_address }}"
+vault_config_terraform_source: "https://github.com/lightning-it/terraform-vault-instance"
+vault_config_terraform_state_dir: "/srv/vault/bootstrap"
+vault_config_terraform_state_path: "{{ vault_config_terraform_state_dir }}/terraform.tfstate"
+vault_config_terraform_state_dir_local: "/tmp/vault/bootstrap"
+vault_config_terraform_state_path_local: "{{ vault_config_terraform_state_dir_local }}/terraform.tfstate"
+vault_config_terraformstate_baseurl: ""
+vault_config_token: ""
+
+vault_config_vault_address: "{{ vault_config_url }}"
+vault_config_api_url: "{{ vault_config_vault_address }}"
+vault_config_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
+vault_config_vault_hostname: "{{ inventory_hostname }}"
+vault_config_api_delegate_to: "localhost"
+
+vault_config_engine_mount_point: "stage-2c"
+vault_config_hashi_vault_auth_method: "approle"
+
+vault_config_secret_stores: []
+vault_config_policies: []
+
+vault_config_approle_secrets: []
+vault_config_approle_role_name: "ansible-{{ inventory_hostname }}"
+vault_config_approle_policy_name: "vault-pki-{{ inventory_hostname }}"
+vault_config_approle_token_ttl: ""
+vault_config_approle_token_max_ttl: ""
+vault_config_approle_bootstrap: true
+vault_config_approle_primary_role_name: ""
+
+vault_config_vault_pki_path: "pki-inter-ec-2025/issue"
+vault_config_vault_pki_role: "limited_dns_2y"
+vault_config_vault_pki_roots: "{{ vault_pki_roots | default([]) }}"
+vault_config_vault_pki_intermediates: "{{ vault_pki_intermediates | default([]) }}"
+vault_config_vault_pki_roles: "{{ vault_pki_roles | default([]) }}"
+vault_config_pki_roots: []
+vault_config_pki_intermediates: []
+vault_config_pki_enabled: true
+
+vault_config_cert_dir: "/srv/vault/certs"
+vault_config_pod_name: "vault"
+vault_config_pod_manifest_path: "/etc/podman/pods/vault.yml"
+vault_config_skip_runtime: false
+vault_config_pki_no_log: true

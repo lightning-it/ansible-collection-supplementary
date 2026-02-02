@@ -1,0 +1,4 @@
+---
+nginx_validate_mode: "fail"
+nginx_validate_check_config: true
+nginx_validate_check_http: true

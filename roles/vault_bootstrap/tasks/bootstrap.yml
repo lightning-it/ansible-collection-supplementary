@@ -1,0 +1,12 @@
+---
+- name: Initialize Vault
+  ansible.builtin.include_tasks: init.yml
+  tags:
+    - bootstrap
+    - init
+
+- name: Unseal Vault
+  ansible.builtin.include_tasks: unseal.yml
+  tags:
+    - bootstrap
+    - unseal

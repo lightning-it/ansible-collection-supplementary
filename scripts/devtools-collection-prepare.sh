@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build and install the collection inside the wunder-devtools-ee container.
+# Build and install the collection inside the ee-wunder-devtools-ubi9 container.
 # Installs into a per-run collections dir to avoid stale state.
 # Prints COLLECTIONS_DIR as the last line for callers.
 
@@ -25,13 +25,19 @@ if [ -z "${ns:-}" ] || [ -z "${name:-}" ]; then
   exit 1
 fi
 
-echo "Preparing collection ${ns}.${name} inside wunder-devtools-ee..."
+echo "Preparing collection ${ns}.${name} inside ee-wunder-devtools-ubi9..."
 
 # Stable HOME + stable ansible tmp (ansible-galaxy downloads)
 export HOME=/tmp/wunder
 mkdir -p "$HOME/.ansible/tmp"
 export ANSIBLE_LOCAL_TEMP="$HOME/.ansible/tmp"
 export ANSIBLE_REMOTE_TEMP="$HOME/.ansible/tmp"
+
+# Remove any stale copy so Molecule uses the freshly built collection.
+stale_collection_dir="$HOME/.ansible/collections/ansible_collections/${ns}/${name}"
+if [ -d "$stale_collection_dir" ]; then
+  rm -rf "$stale_collection_dir"
+fi
 
 # Per-run XDG cache (avoids ansible-compat/ansible-lint races)
 export XDG_CACHE_HOME="$(mktemp -d /tmp/wunder/xdg-cache.XXXXXX)"

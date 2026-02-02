@@ -1,0 +1,28 @@
+---
+- name: Resolve MinIO endpoints and credentials
+  ansible.builtin.import_role:
+    name: minio_foundational
+  tags: always
+
+- name: Ensure core MinIO variables are set
+  ansible.builtin.assert:
+    that:
+      - minio_deploy_pod_name | length > 0
+      - minio_deploy_pod_manifest_path | length > 0
+      - minio_deploy_host_data_dir | length > 0
+      - minio_deploy_container_data_dir | length > 0
+      - minio_deploy_image | length > 0
+      - minio_deploy_port | int > 0
+      - minio_deploy_console_port | int > 0
+    fail_msg: "MinIO core variables are missing or invalid."
+  tags: always
+
+- name: Ensure MinIO root credentials are provided
+  ansible.builtin.assert:
+    that:
+      - minio_deploy_root_user_effective | default('') | length > 0
+      - minio_deploy_root_password_effective | default('') | length > 0
+    fail_msg: "minio_deploy_root_user/minio_deploy_root_password must be set to deploy MinIO."
+  when: not minio_deploy_skip_runtime | bool
+  no_log: true
+  tags: always

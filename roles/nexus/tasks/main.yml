@@ -1,14 +1,133 @@
 ---
-- name: Abort because role is experimental
-  ansible.builtin.fail:
-    msg: >-
-      lit.nexus remains a placeholder; set
-      nexus_experimental_acknowledge=true to run stub logic.
-  when: not nexus_experimental_acknowledge | bool
+- name: Ensure all needed vars are present
+  ansible.builtin.include_tasks: assert.yml
+  tags:
+    - nexus
 
-- name: (Skeleton) Install & run Nexus ({{ nexus_service_mode }})
-  ansible.builtin.debug:
-    msg: >-
-      Nexus {{ nexus_version }} mode={{ nexus_service_mode }}
-      data={{ nexus_data_dir }} port={{ nexus_http_port }}
-  when: nexus_experimental_acknowledge | bool
+- name: Sync nexus_vault_token with vault_token
+  ansible.builtin.set_fact:
+    nexus_vault_token: >-
+      {{
+        (nexus_vault_token | default('', true) | trim)
+        if (nexus_vault_token | default('', true) | trim | length > 0)
+        else (vault_token | default('', true) | trim)
+      }}
+  no_log: true
+  when:
+    - nexus_vault_auth_method == 'approle'
+  tags:
+    - nexus
+
+- name: Fail when nexus_vault_token is missing for AppRole lookup
+  ansible.builtin.assert:
+    that:
+      - nexus_vault_token | default('', true) | trim | length > 0
+    fail_msg: >-
+      nexus_vault_token (synced from vault_token) is required to read
+      {{ nexus_engine_mount_point }}/{{ inventory_hostname }}/nexus/approle.
+  when:
+    - nexus_vault_auth_method == 'approle'
+    - nexus_use_vault_pki | bool or not nexus_skip_initial_config | bool
+  tags:
+    - nexus
+
+- name: Read Nexus KV AppRole credentials from Vault KV
+  delegate_to: localhost
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ nexus_vault_address }}"
+    token: "{{ nexus_vault_token }}"
+    validate_certs: "{{ nexus_vault_validate_certs }}"
+    engine_mount_point: "{{ nexus_engine_mount_point }}"
+    path: "{{ nexus_vault_kv_approle_path }}"
+  register: nexus_vault_kv_approle_kv
+  failed_when: false
+  no_log: true
+  when:
+    - nexus_vault_auth_method == 'approle'
+    - nexus_vault_token | default('', true) | trim | length > 0
+    - nexus_use_vault_pki | bool
+  tags:
+    - nexus
+
+- name: Read Nexus PKI AppRole credentials from Vault KV
+  delegate_to: localhost
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ nexus_vault_address }}"
+    token: "{{ nexus_vault_token }}"
+    validate_certs: "{{ nexus_vault_validate_certs }}"
+    engine_mount_point: "{{ nexus_engine_mount_point }}"
+    path: "{{ nexus_vault_pki_approle_path }}"
+  register: nexus_vault_pki_approle_kv
+  failed_when: false
+  no_log: true
+  when:
+    - nexus_vault_auth_method == 'approle'
+    - nexus_vault_token | default('', true) | trim | length > 0
+    - nexus_use_vault_pki | bool
+  tags:
+    - nexus
+
+- name: Set Nexus AppRole credentials from Vault KV
+  ansible.builtin.set_fact:
+    nexus_vault_kv_role_id: "{{ nexus_vault_kv_approle_kv.data.data.role_id | default('') }}"
+    nexus_vault_kv_secret_id: "{{ nexus_vault_kv_approle_kv.data.data.secret_id | default('') }}"
+    nexus_vault_pki_role_id: "{{ nexus_vault_pki_approle_kv.data.data.role_id | default('') }}"
+    nexus_vault_pki_secret_id: "{{ nexus_vault_pki_approle_kv.data.data.secret_id | default('') }}"
+  no_log: true
+  when:
+    - nexus_vault_auth_method == 'approle'
+    - nexus_use_vault_pki | bool
+    - nexus_vault_kv_approle_kv is defined
+    - nexus_vault_kv_approle_kv.data is defined
+    - nexus_vault_kv_approle_kv.data.data is defined
+    - nexus_vault_pki_approle_kv is defined
+    - nexus_vault_pki_approle_kv.data is defined
+    - nexus_vault_pki_approle_kv.data.data is defined
+  tags:
+    - nexus
+
+- name: Fail when Vault AppRole credentials are missing
+  ansible.builtin.assert:
+    that:
+      - nexus_vault_kv_role_id | default('') | length > 0
+      - nexus_vault_kv_secret_id | default('') | length > 0
+      - nexus_vault_pki_role_id | default('') | length > 0
+      - nexus_vault_pki_secret_id | default('') | length > 0
+    fail_msg: >-
+      Vault AppRole credentials are required for Nexus when using AppRole auth.
+      Ensure Vault KV {{ nexus_engine_mount_point }}/{{ nexus_vault_kv_approle_path }}
+      and {{ nexus_engine_mount_point }}/{{ nexus_vault_pki_approle_path }} exist,
+      and vault_token has read access.
+  when:
+    - nexus_vault_auth_method == 'approle'
+    - nexus_use_vault_pki | bool
+  tags:
+    - nexus
+
+- name: Ensure required packages are installed
+  ansible.builtin.include_tasks: install_packages.yml
+  tags:
+    - install
+
+- name: Include PKI certificate generation
+  ansible.builtin.include_tasks: vault_pki.yml
+  when: nexus_use_vault_pki
+  tags:
+    - vault_pki
+
+- name: Deploy Nexus Pod
+  ansible.builtin.include_tasks: deploy_pod.yml
+  tags:
+    - deployment
+
+- name: Install systemd unit for Nexus Pod
+  ansible.builtin.include_tasks: systemd.yml
+  when: nexus_manage_systemd | bool
+  tags:
+    - systemd
+
+- name: Configuration via api
+  ansible.builtin.include_tasks: initial_config.yml
+  when: not nexus_skip_initial_config | bool
+  tags:
+    - sonatype_nexus_config

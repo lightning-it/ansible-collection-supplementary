@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: cloudflared
+  namespace: lit
+  author: René Osorio
+  company: Lightning IT
+  description: Install and manage Cloudflare Tunnel (cloudflared) using a token.
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions: ["all"]
+  galaxy_tags:
+    - modulix
+    - automation
+    - cloudflare
+    - tunnel
+    - cloudflared
+    - networking
+
+dependencies: []

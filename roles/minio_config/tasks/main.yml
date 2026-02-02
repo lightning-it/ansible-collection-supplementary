@@ -1,0 +1,93 @@
+---
+- name: Ensure required MinIO vars are defined
+  ansible.builtin.import_role:
+    name: minio_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure config user list is valid
+  ansible.builtin.assert:
+    that:
+      - minio_deploy_config_users is sequence
+    fail_msg: "minio_deploy_config_users must be a list."
+  tags: always
+
+- name: Skip MinIO config when disabled
+  ansible.builtin.debug:
+    msg: "MinIO config skipped (minio_deploy_skip_config=true or no users requested)."
+  when:
+    - minio_deploy_skip_config | bool or minio_deploy_config_users | length == 0
+  tags: always
+
+- name: Configure MinIO mc alias
+  ansible.builtin.command: >-
+    {{ minio_deploy_mc_path }} alias set {{ minio_deploy_mc_alias }} {{ minio_deploy_api_url_effective }}
+    {{ minio_deploy_root_user_effective }} {{ minio_deploy_root_password_effective }}
+    {{ (minio_deploy_mc_insecure | bool) | ternary('--insecure', '') }}
+  register: minio_deploy_mc_alias_set
+  changed_when: false
+  no_log: true
+  when:
+    - not minio_deploy_skip_config | bool
+    - minio_deploy_config_users | length > 0
+  tags:
+    - config
+
+- name: Validate MinIO user entries
+  ansible.builtin.assert:
+    that:
+      - item.access_key | default('') | length > 0
+      - item.secret_key | default('') | length > 0
+    fail_msg: "Each minio_deploy_config_users entry must include access_key and secret_key."
+  loop: "{{ minio_deploy_config_users }}"
+  when:
+    - not minio_deploy_skip_config | bool
+    - minio_deploy_config_users | length > 0
+  tags:
+    - config
+
+- name: Check MinIO users
+  ansible.builtin.command: >-
+    {{ minio_deploy_mc_path }} admin user info
+    {{ minio_deploy_mc_alias }} {{ item.access_key }}
+  register: minio_deploy_user_info
+  failed_when: false
+  changed_when: false
+  loop: "{{ minio_deploy_config_users }}"
+  loop_control:
+    label: "{{ item.access_key }}"
+  when:
+    - not minio_deploy_skip_config | bool
+    - minio_deploy_config_users | length > 0
+  tags:
+    - config
+
+- name: Create MinIO users
+  ansible.builtin.command: >-
+    {{ minio_deploy_mc_path }} admin user add {{ minio_deploy_mc_alias }}
+    {{ item.item.access_key }} {{ item.item.secret_key }}
+  register: minio_deploy_user_add
+  changed_when: true
+  no_log: true
+  loop: "{{ minio_deploy_user_info.results | default([]) }}"
+  when:
+    - not minio_deploy_skip_config | bool
+    - minio_deploy_config_users | length > 0
+    - item.rc != 0
+  tags:
+    - config
+
+- name: Assign MinIO user policies
+  ansible.builtin.command: >-
+    {{ minio_deploy_mc_path }} admin policy set {{ minio_deploy_mc_alias }}
+    {{ item.item.policy }} user={{ item.item.access_key }}
+  register: minio_deploy_policy_set
+  changed_when: true
+  loop: "{{ minio_deploy_user_info.results | default([]) }}"
+  when:
+    - not minio_deploy_skip_config | bool
+    - minio_deploy_config_users | length > 0
+    - item.item.policy is defined
+    - item.item.policy | length > 0
+  tags:
+    - config

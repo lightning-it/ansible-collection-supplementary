@@ -1,9 +1,0 @@
----
-- name: assert | Test all variable are defined
-  ansible.builtin.assert:
-    that:
-      - vault_terraform_source is defined
-      - vault_terraform_source | length > 0
-      - cluster_id is defined
-    quiet: true
-  tags: always

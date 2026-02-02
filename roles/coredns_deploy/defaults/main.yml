@@ -1,0 +1,84 @@
+---
+# Podman runtime
+coredns_deploy_pod_name: "coredns"
+coredns_deploy_pod_manifest_path: "/etc/podman/pods/coredns.yml"
+coredns_deploy_image: "docker.io/coredns/coredns:1.11.1"
+coredns_deploy_container_name: "{{ coredns_deploy_pod_name }}-coredns"
+coredns_deploy_run_as_user: 0
+coredns_deploy_run_as_group: 0
+coredns_deploy_run_as_non_root: false
+coredns_deploy_install_packages: true
+coredns_deploy_selinux_relabel: true
+coredns_deploy_use_host_network: false
+
+# Host paths (mounted into container)
+coredns_deploy_host_config_dir: "/srv/coredns/config"
+coredns_deploy_host_corefile_path: "{{ coredns_deploy_host_config_dir }}/Corefile"
+
+# Container paths
+coredns_deploy_container_corefile_path: "/Corefile"
+
+# DNS service
+coredns_deploy_dns_port: 53
+coredns_deploy_host_dns_port: "{{ coredns_deploy_dns_port }}"
+coredns_deploy_host_ip: "{{ ansible_facts[coredns_deploy_resolver_iface].ipv4.address }}"
+
+# Health check
+coredns_deploy_health_port: 8080
+coredns_deploy_host_health_port: "{{ coredns_deploy_health_port }}"
+coredns_deploy_health_path: "/health"
+coredns_deploy_health_url: ""
+coredns_deploy_health_url_effective: >-
+  {{
+    coredns_deploy_health_url
+    if (coredns_deploy_health_url | length > 0)
+    else (
+      'http://' ~ coredns_deploy_host_ip ~ ':' ~
+      (coredns_deploy_host_health_port | string) ~
+      coredns_deploy_health_path
+    )
+  }}
+coredns_deploy_validate_certs: true
+
+# Corefile content
+coredns_deploy_corefile: |
+  .:{{ coredns_deploy_dns_port }} {
+      errors
+      health 0.0.0.0:{{ coredns_deploy_health_port }}
+      log
+      forward . /etc/resolv.conf
+      cache 30
+      loop
+      reload
+      loadbalance
+  }
+
+# Resolver management on the host
+coredns_deploy_manage_resolver: true
+coredns_deploy_resolver_mode: core_only         # bootstrap|core_only|upstream_only
+coredns_deploy_resolver_ignore_auto_dns: true
+
+# Local(CoreDNS) resolver IPs:
+# - Leave empty to auto-pick (resolver interface IPv4 -> coredns_deploy_host_ip -> 127.0.0.1)
+# - Or set explicitly in inventory if CoreDNS binds to a specific address
+coredns_deploy_resolver_local_ips: []
+
+# Upstreams for bootstrap/upstream_only
+coredns_deploy_resolver_servers: []
+
+coredns_deploy_debug: false
+
+
+# Deployment control
+coredns_deploy_manage_service: true
+coredns_deploy_manage_systemd: "{{ coredns_deploy_manage_service }}"
+coredns_deploy_systemd_unit_name: >-
+  {{
+    'podman-kube@'
+    ~ (coredns_deploy_pod_manifest_path | basename | regex_replace('\\.yml$', ''))
+    ~ '.service'
+  }}
+coredns_deploy_skip_runtime: false
+coredns_deploy_skip_deploy: false
+coredns_deploy_skip_config: false
+coredns_deploy_skip_validate: false

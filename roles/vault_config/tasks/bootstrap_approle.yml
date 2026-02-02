@@ -1,0 +1,102 @@
+---
+- name: Build default AppRole policy
+  ansible.builtin.set_fact:
+    vault_config_approle_default_policy: "{{ vault_config_approle_policy | default(_vault_approle_policy, true) }}"
+  vars:
+    _vault_approle_policy: |-
+      path "{{ vault_config_engine_mount_point }}/data/{{ inventory_hostname }}/vault/certificate" {
+        capabilities = ["read", "create", "update"]
+      }
+      path "{{ vault_config_engine_mount_point }}/metadata/{{ inventory_hostname }}/vault/certificate" {
+        capabilities = ["read"]
+      }
+      path "{{ vault_config_vault_pki_path }}/{{ vault_config_vault_pki_role }}" {
+        capabilities = ["read", "create", "update"]
+      }
+
+- name: Build default AppRole entry
+  ansible.builtin.set_fact:
+    vault_config_approle_default_entry:
+      role_name: "{{ vault_config_approle_role_name }}"
+      token_policy: "{{ vault_config_approle_policy_name }}"
+      kv_mount: "{{ vault_config_engine_mount_point }}"
+      credential_path: "{{ inventory_hostname }}/vault/approle"
+      token_ttl: "{{ vault_config_approle_token_ttl }}"
+      token_max_ttl: "{{ vault_config_approle_token_max_ttl }}"
+      policy: "{{ vault_config_approle_default_policy }}"
+
+- name: Normalize AppRole entries
+  ansible.builtin.set_fact:
+    vault_config_approle_entries: >-
+      {{
+        vault_config_approle_secrets
+        if (vault_config_approle_secrets | length > 0)
+        else [vault_config_approle_default_entry]
+      }}
+
+- name: Select primary AppRole name
+  ansible.builtin.set_fact:
+    vault_config_approle_primary_role_name: >-
+      {{
+        vault_config_approle_primary_role_name
+        if vault_config_approle_primary_role_name | length > 0
+        else (vault_config_approle_entries[0].role_name | default(vault_config_approle_role_name))
+      }}
+
+- name: Read Vault auth methods
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  community.hashi_vault.vault_read:
+    url: "{{ vault_config_vault_address }}"
+    token: "{{ vault_config_token }}"
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
+    path: "sys/auth"
+  register: vault_config_auth_methods
+  no_log: true
+
+- name: Detect AppRole auth status
+  ansible.builtin.set_fact:
+    vault_config_approle_enabled: "{{ 'approle/' in (vault_config_auth_methods.data | default({})) }}"
+
+- name: Enable AppRole auth method when missing
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  community.hashi_vault.vault_write:
+    url: "{{ vault_config_vault_address }}"
+    token: "{{ vault_config_token }}"
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
+    path: "sys/auth/approle"
+    data:
+      type: "approle"
+  when: not vault_config_approle_enabled | bool
+  no_log: true
+
+- name: Ensure AppRole entries
+  ansible.builtin.include_tasks: bootstrap_approle_entry.yml
+  vars:
+    vault_config_approle_entry: >-
+      {{ vault_config_approle_default_entry
+         | combine(vault_config_approle_item, recursive=True) }}
+    vault_config_approle_policy_names: >-
+      {{
+        [vault_config_approle_entry.token_policy]
+        if vault_config_approle_entry.token_policy is string
+        else vault_config_approle_entry.token_policy
+      }}
+    vault_config_approle_policy_name: "{{ vault_config_approle_policy_names | first }}"
+    vault_config_approle_kv_mount: "{{ vault_config_approle_entry.kv_mount }}"
+    vault_config_approle_kv_path: "{{ vault_config_approle_entry.credential_path }}"
+    vault_config_approle_policy: >-
+      {{ vault_config_approle_entry.policy
+         | default(vault_config_approle_default_policy, true) }}
+  loop: "{{ vault_config_approle_entries }}"
+  loop_control:
+    loop_var: vault_config_approle_item
+  no_log: true
+
+- name: Assert primary AppRole credentials resolved
+  ansible.builtin.assert:
+    that:
+      - ansible_hashi_vault_role_id | default('') | length > 0
+      - ansible_hashi_vault_secret_id | default('') | length > 0
+    fail_msg: >-
+      Primary AppRole credentials could not be resolved; check role
+      {{ vault_config_approle_primary_role_name }} and the configured policies.

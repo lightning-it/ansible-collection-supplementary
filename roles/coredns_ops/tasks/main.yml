@@ -1,0 +1,108 @@
+---
+- name: Ensure required CoreDNS vars are defined
+  ansible.builtin.import_role:
+    name: coredns_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure coredns_ops_action is valid
+  ansible.builtin.assert:
+    that:
+      - coredns_ops_action in ['none', 'restart', 'reload', 'status', 'upgrade']
+    fail_msg: "coredns_ops_action must be one of: none, restart, reload, status, upgrade."
+  tags: always
+
+- name: Restart CoreDNS service
+  when: coredns_ops_action == 'restart'
+  tags:
+    - ops
+    - restart
+  block:
+    - name: Restart CoreDNS systemd unit
+      ansible.builtin.systemd:
+        name: "{{ coredns_deploy_systemd_unit_name }}"
+        state: restarted
+      when: coredns_deploy_manage_systemd | bool
+
+    - name: Restart CoreDNS pod (non-systemd)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: restart
+        kubeplay_pod_name: "{{ coredns_deploy_pod_name }}"
+        kubeplay_app_name: coredns_restart
+      when: not coredns_deploy_manage_systemd | bool
+
+    - name: Validate CoreDNS after restart
+      ansible.builtin.include_role:
+        name: coredns_validate
+
+- name: Reload CoreDNS service
+  when: coredns_ops_action == 'reload'
+  tags:
+    - ops
+    - reload
+  block:
+    - name: Reload CoreDNS systemd unit
+      ansible.builtin.systemd:
+        name: "{{ coredns_deploy_systemd_unit_name }}"
+        state: restarted
+      when: coredns_deploy_manage_systemd | bool
+
+    - name: Reload CoreDNS pod (non-systemd)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: restart
+        kubeplay_pod_name: "{{ coredns_deploy_pod_name }}"
+        kubeplay_app_name: coredns_reload
+      when: not coredns_deploy_manage_systemd | bool
+
+- name: Report CoreDNS status
+  when: coredns_ops_action == 'status'
+  tags:
+    - ops
+    - status
+  block:
+    - name: Read CoreDNS container running state
+      ansible.builtin.command: "podman inspect {{ coredns_deploy_container_name }} --format {{ '{{.State.Running}}' }}"
+      register: coredns_deploy_container_running
+      changed_when: false
+      failed_when: false
+
+    - name: Read CoreDNS health status
+      ansible.builtin.uri:
+        url: "{{ coredns_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ coredns_deploy_validate_certs }}"
+      register: coredns_deploy_health
+      changed_when: false
+      failed_when: false
+
+    - name: Report CoreDNS container state
+      ansible.builtin.debug:
+        msg: >-
+          health={{ coredns_deploy_health.status | default('unknown') }},
+          running={{ coredns_deploy_container_running.stdout | default('unknown') | trim }}
+
+- name: Upgrade CoreDNS image
+  when: coredns_ops_action == 'upgrade'
+  tags:
+    - ops
+    - upgrade
+  block:
+    - name: Require coredns_ops_target_image
+      ansible.builtin.assert:
+        that:
+          - coredns_ops_target_image | length > 0
+        fail_msg: "coredns_ops_target_image must be set for upgrade."
+
+    - name: Set CoreDNS image override
+      ansible.builtin.set_fact:
+        coredns_deploy_image: "{{ coredns_ops_target_image }}"
+
+    - name: Redeploy CoreDNS with new image
+      ansible.builtin.include_role:
+        name: coredns_deploy

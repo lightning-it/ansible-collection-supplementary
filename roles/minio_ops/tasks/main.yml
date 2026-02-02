@@ -1,0 +1,78 @@
+---
+- name: Ensure required MinIO vars are defined
+  ansible.builtin.import_role:
+    name: minio_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure minio_ops_action is valid
+  ansible.builtin.assert:
+    that:
+      - minio_ops_action in ['none', 'restart', 'status', 'upgrade']
+    fail_msg: "minio_ops_action must be one of: none, restart, status, upgrade."
+  tags: always
+
+- name: Restart MinIO service
+  when: minio_ops_action == 'restart'
+  tags:
+    - ops
+    - restart
+  block:
+    - name: Restart MinIO systemd unit
+      ansible.builtin.systemd:
+        name: "{{ minio_deploy_systemd_unit_name }}"
+        state: restarted
+      when: minio_deploy_manage_systemd | bool
+
+    - name: Restart MinIO pod (non-systemd)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: restart
+        kubeplay_pod_name: "{{ minio_deploy_pod_name }}"
+        kubeplay_app_name: minio_restart
+      when: not minio_deploy_manage_systemd | bool
+
+    - name: Validate MinIO after restart
+      ansible.builtin.include_role:
+        name: minio_validate
+
+- name: Report MinIO status
+  when: minio_ops_action == 'status'
+  tags:
+    - ops
+    - status
+  block:
+    - name: Read MinIO health status
+      ansible.builtin.uri:
+        url: "{{ minio_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ minio_deploy_validate_certs }}"
+      register: minio_deploy_health
+      changed_when: false
+      failed_when: false
+
+    - name: Report MinIO API status
+      ansible.builtin.debug:
+        msg: "health={{ minio_deploy_health.status }}"
+
+- name: Upgrade MinIO image
+  when: minio_ops_action == 'upgrade'
+  tags:
+    - ops
+    - upgrade
+  block:
+    - name: Require minio_ops_target_image
+      ansible.builtin.assert:
+        that:
+          - minio_ops_target_image | length > 0
+        fail_msg: "minio_ops_target_image must be set for upgrade."
+
+    - name: Set MinIO image override
+      ansible.builtin.set_fact:
+        minio_deploy_image: "{{ minio_ops_target_image }}"
+
+    - name: Redeploy MinIO with new image
+      ansible.builtin.include_role:
+        name: minio_deploy

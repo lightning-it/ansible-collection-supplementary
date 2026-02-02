@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ minio_deploy_pod_name }}
+  labels:
+    app: {{ minio_deploy_pod_name }}
+spec:
+  containers:
+    - name: minio
+      image: {{ minio_deploy_image }}
+      command:
+        - minio
+      args:
+        - server
+        - {{ minio_deploy_container_data_dir }}
+        - --console-address
+        - :{{ minio_deploy_console_port }}
+{% if minio_deploy_extra_args is defined and minio_deploy_extra_args | length > 0 %}
+{% for arg in minio_deploy_extra_args %}
+        - {{ arg }}
+{% endfor %}
+{% endif %}
+      env:
+        - name: MINIO_ROOT_USER
+          value: "{{ minio_deploy_root_user_effective }}"
+        - name: MINIO_ROOT_PASSWORD
+          value: "{{ minio_deploy_root_password_effective }}"
+{% if minio_deploy_region | length > 0 %}
+        - name: MINIO_REGION
+          value: "{{ minio_deploy_region }}"
+{% endif %}
+{% if minio_deploy_server_url | length > 0 %}
+        - name: MINIO_SERVER_URL
+          value: "{{ minio_deploy_server_url }}"
+{% endif %}
+{% if minio_deploy_browser_redirect_url | length > 0 %}
+        - name: MINIO_BROWSER_REDIRECT_URL
+          value: "{{ minio_deploy_browser_redirect_url }}"
+{% endif %}
+{% if minio_deploy_env_extra is defined and minio_deploy_env_extra | length > 0 %}
+{% for key, value in minio_deploy_env_extra.items() %}
+        - name: {{ key }}
+          value: "{{ value }}"
+{% endfor %}
+{% endif %}
+      ports:
+        - containerPort: {{ minio_deploy_port }}
+          hostPort: {{ minio_deploy_port }}
+        - containerPort: {{ minio_deploy_console_port }}
+          hostPort: {{ minio_deploy_console_port }}
+      securityContext:
+        runAsUser: {{ minio_deploy_run_as_user }}
+        runAsGroup: {{ minio_deploy_run_as_group }}
+      volumeMounts:
+        - name: minio-data
+          mountPath: {{ minio_deploy_container_data_dir }}
+{% if minio_deploy_config_dir | default('') | length > 0 %}
+        - name: minio-config
+          mountPath: {{ minio_deploy_container_config_dir }}
+{% endif %}
+{% if minio_deploy_cert_dir | default('') | length > 0 %}
+        - name: minio-certs
+          mountPath: {{ minio_deploy_container_certs_dir }}
+{% endif %}
+  volumes:
+    - name: minio-data
+      hostPath:
+        path: {{ minio_deploy_host_data_dir }}
+        type: DirectoryOrCreate
+{% if minio_deploy_config_dir | default('') | length > 0 %}
+    - name: minio-config
+      hostPath:
+        path: {{ minio_deploy_config_dir }}
+        type: DirectoryOrCreate
+{% endif %}
+{% if minio_deploy_cert_dir | default('') | length > 0 %}
+    - name: minio-certs
+      hostPath:
+        path: {{ minio_deploy_cert_dir }}
+        type: DirectoryOrCreate
+{% endif %}

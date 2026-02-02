@@ -1,0 +1,8 @@
+---
+- name: Converge nginx_deploy
+  hosts: localhost
+  gather_facts: true
+  vars:
+    nginx_deploy_skip_runtime: true
+  roles:
+    - role: nginx_deploy

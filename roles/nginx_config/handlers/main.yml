@@ -1,0 +1,6 @@
+---
+- name: Reload nginx
+  ansible.builtin.set_fact:
+    nginx_reload_requested: true
+  changed_when: false
+  when: not nginx_deploy_skip_runtime | bool

@@ -1,0 +1,34 @@
+---
+- name: Skip aap_deploy when disabled
+  ansible.builtin.meta: end_play
+  when: not aap_deploy_enabled | bool
+
+- name: Ensure OS facts are available
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - min
+  when: ansible_distribution_major_version is not defined
+
+- name: Select package list (RHEL 9 default)
+  ansible.builtin.set_fact:
+    aap_deploy_target_major: >-
+      {{
+        '10'
+        if (ansible_distribution_major_version | default('9') | string) == '10'
+        else '9'
+      }}
+    aap_deploy_packages: >-
+      {{
+        aap_deploy_packages_rhel10
+        if (ansible_distribution_major_version | default('9') | string) == '10'
+        else aap_deploy_packages_rhel9
+      }}
+  changed_when: false
+
+- name: Install AAP package(s)
+  ansible.builtin.dnf:
+    name: "{{ aap_deploy_packages }}"
+    state: "{{ aap_deploy_package_state }}"
+  when:
+    - (aap_deploy_packages | default([]) | length) > 0

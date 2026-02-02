@@ -1,0 +1,9 @@
+---
+- name: Converge nginx_validate
+  hosts: localhost
+  gather_facts: true
+  vars:
+    nginx_deploy_skip_runtime: true
+    nginx_deploy_skip_validate: true
+  roles:
+    - role: nginx_validate

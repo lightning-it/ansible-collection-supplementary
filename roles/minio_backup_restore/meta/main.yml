@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: minio_backup_restore
+  namespace: lit
+  author: René Osorio
+  description: Backup and restore MinIO data on disk.
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - modulix
+    - minio
+    - storage
+    - backup
+    - restore
+    - automation
+
+dependencies: []
