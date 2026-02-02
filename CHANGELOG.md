@@ -1,3 +1,9 @@
+## [1.14.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.14.0...v1.14.1) (2026-02-02)
+
+### Bug Fixes
+
+* format galaxy.yml for consistency and readability ([#65](https://github.com/lightning-it/ansible-collection-supplementary/issues/65)) ([ab4a030](https://github.com/lightning-it/ansible-collection-supplementary/commit/ab4a030cfab48af7d3ea90ad14777cd8428031be))
+
 ## [1.14.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.13.0...v1.14.0) (2026-02-02)
 
 ### Features
