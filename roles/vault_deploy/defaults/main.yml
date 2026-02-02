@@ -2,8 +2,7 @@
 # Vault Pod Basis
 vault_deploy_pod_name: "vault"
 vault_deploy_pod_manifest_path: "/etc/podman/pods/vault.yml"
-vault_deploy_data_dir: "/srv/vault/data"
-vault_deploy_host_data_dir: "{{ vault_deploy_data_dir }}"
+vault_deploy_host_data_dir: "/srv/vault/data"
 vault_deploy_cert_dir: "/srv/vault/certs"
 vault_deploy_config_dir: "/srv/vault/config"
 vault_deploy_image: "docker.io/hashicorp/vault:1.21"
@@ -23,7 +22,12 @@ vault_deploy_selinux_relabel: true
 vault_deploy_port: 8200
 vault_deploy_addr: "http://127.0.0.1:{{ vault_deploy_port }}"
 vault_deploy_api_scheme: "https"
-vault_deploy_api_url: "{{ vault_deploy_api_scheme }}://{{ vault_deploy_host_ip }}:{{ vault_deploy_port }}"
+vault_deploy_api_url: >-
+  {{
+    vault_deploy_vault_address
+    if (vault_deploy_vault_address | default('') | length > 0)
+    else (vault_deploy_api_scheme ~ '://' ~ vault_deploy_host_ip ~ ':' ~ vault_deploy_port)
+  }}
 vault_deploy_health_url: "{{ vault_deploy_api_url }}/v1/sys/health"
 vault_deploy_host_ip: >-
   {{
@@ -32,17 +36,21 @@ vault_deploy_host_ip: >-
   }}
 
 # Vault Hostname + PKI
-vault_deploy_vault_hostname: "vault.local"
-vault_deploy_vault_address: "{{ g_vault_addr | default('', true) }}"
-vault_deploy_vault_validate_certs: true
-vault_deploy_api_delegate_to: localhost
-vault_deploy_engine_mount_point: "stage-2c"
-vault_deploy_hashi_vault_auth_method: "approle"
+vault_deploy_vault_hostname: "{{ vault_hostname | default(inventory_hostname, true) }}"
+vault_deploy_vault_address: >-
+  {{
+    vault_address
+    | default(g_vault_address | default('', true), true)
+  }}
+vault_deploy_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
+vault_deploy_api_delegate_to: "{{ vault_api_delegate_to | default('localhost') }}"
+vault_deploy_engine_mount_point: "{{ vault_engine_mount_point | default('stage-2c') }}"
+vault_deploy_hashi_vault_auth_method: "{{ vault_hashi_vault_auth_method | default('approle') }}"
 vault_deploy_vault_pki_path: "pki-inter-ec-2025/issue"
 vault_deploy_vault_pki_role: "limited_dns_2y"
 
 # Ansible Vault handling
-vault_deploy_ansible_vault_pw: ""
+vault_deploy_ansible_vault_pw: "{{ vault_ansible_vault_pw | default('') }}"
 
 # Auto-Unseal (optional)
 vault_deploy_auto_unseal: false
@@ -69,7 +77,7 @@ vault_deploy_inventory_root: >-
       )
   }}
 vault_deploy_bootstrap_persist_dir: "/srv/vault/bootstrap"
-vault_deploy_init_file_path: "{{ vault_deploy_bootstrap_persist_dir }}/init.json.vault"
+vault_deploy_init_file_path: "{{ vault_deploy_bootstrap_persist_dir }}/vault-init.yml.vault"
 
 # Systemd
 vault_deploy_systemd_unit_name: >-
@@ -90,13 +98,21 @@ vault_deploy_wrapper_validate_post: false
 
 # Configure vault
 vault_deploy_terraformstate_baseurl: "https://gitlab.com/api/v4/projects/70576743/terraform/state"
-vault_deploy_url: ""
+vault_deploy_url: >-
+  {{
+    vault_address
+    | default(vault_deploy_vault_address | default('', true), true)
+  }}
 vault_deploy_token: ""
-vault_deploy_terraform_source: ""
-vault_deploy_terraform_state_path: "../../../../../../../tfstate/{{ inventory_hostname }}-terraform.tfstate"
-vault_deploy_secret_stores: []
-vault_deploy_policies: []
-vault_deploy_approle_secrets: []
+vault_deploy_terraform_source: "{{ vault_terraform_source | default('') }}"
+vault_deploy_terraform_state_path: >-
+  {{
+    vault_terraform_state_path
+    | default('../../../../../../../tfstate/' ~ inventory_hostname ~ '-terraform.tfstate')
+  }}
+vault_deploy_secret_stores: "{{ vault_secret_stores | default([]) }}"
+vault_deploy_policies: "{{ vault_policies | default([]) }}"
+vault_deploy_approle_secrets: "{{ vault_approle_secrets | default([]) }}"
 vault_deploy_approle_role_name: >-
   {{
     (vault_deploy_approle_secrets[0].role_name
@@ -114,10 +130,10 @@ vault_deploy_approle_policy_name: >-
 vault_deploy_approle_token_ttl: ""
 vault_deploy_approle_token_max_ttl: ""
 vault_deploy_approle_bootstrap: true
-vault_deploy_approle_primary_role_name: ""
-vault_deploy_vault_pki_roots: []
-vault_deploy_vault_pki_intermediates: []
-vault_deploy_vault_pki_roles: []
+vault_deploy_approle_primary_role_name: "{{ vault_approle_primary_role_name | default('') }}"
+vault_deploy_vault_pki_roots: "{{ vault_pki_roots | default([]) }}"
+vault_deploy_vault_pki_intermediates: "{{ vault_pki_intermediates | default([]) }}"
+vault_deploy_vault_pki_roles: "{{ vault_pki_roles | default([]) }}"
 
 # Bootstrap
 vault_deploy_bootstrap_init: false

@@ -1,0 +1,35 @@
+---
+# Host install (RPM + systemd)
+dhcp_deploy_install_packages: true
+dhcp_deploy_run_as_user: "root"
+dhcp_deploy_run_as_group: "root"
+dhcp_deploy_config_owner: "{{ dhcp_deploy_run_as_user }}"
+dhcp_deploy_config_group: "{{ dhcp_deploy_run_as_group }}"
+
+# Host paths
+dhcp_deploy_host_config_dir: "/etc/dhcp"
+dhcp_deploy_host_config_path: "{{ dhcp_deploy_host_config_dir }}/dhcpd.conf"
+dhcp_deploy_host_data_dir: "/var/lib/dhcpd"
+dhcp_deploy_sysconfig_path: "/etc/sysconfig/dhcpd"
+dhcp_deploy_interfaces: []
+
+# DHCP service
+dhcp_deploy_service_name: "dhcpd"
+dhcp_deploy_manage_service: false
+dhcp_deploy_manage_systemd: "{{ dhcp_deploy_manage_service }}"
+dhcp_deploy_systemd_unit_name: "{{ dhcp_deploy_service_name }}"
+
+# Optional health check URL
+dhcp_deploy_health_url: ""
+dhcp_deploy_health_url_effective: "{{ dhcp_deploy_health_url }}"
+dhcp_deploy_validate_certs: true
+
+# DHCP config content
+dhcp_deploy_config: ""
+dhcp_deploy_manage_config: false
+
+# Deployment control
+dhcp_deploy_skip_runtime: false
+dhcp_deploy_skip_deploy: false
+dhcp_deploy_skip_config: false
+dhcp_deploy_skip_validate: false

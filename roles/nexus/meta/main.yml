@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: sonatype_nexus
   namespace: default
-  author: Dirk Egert
+  author: Dirk Egert, René Osorio
   description: Role to manage sonatype nexus Installation
   company: Lightning IT
   license: license (BSD, MIT)

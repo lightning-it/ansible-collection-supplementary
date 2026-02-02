@@ -12,7 +12,7 @@
       - cryptography
       - hvac
     executable: pip3
-  when: ansible_distribution in ['RedHat', 'CentOS']
+  when: ansible_os_family in ['RedHat', 'CentOS']
 
 - name: Ensure podman socket and service are enabled
   ansible.builtin.systemd:

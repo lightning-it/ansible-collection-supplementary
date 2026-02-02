@@ -1,7 +1,7 @@
 ---
 - name: Include OS-specific variables
   ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
-  when: ansible_os_family in ['Debian', 'RedHat']
+  when: ansible_os_family == 'RedHat'
 
 - name: Deploy CoreDNS runtime
   when:
@@ -14,10 +14,42 @@
       tags:
         - install
 
+    - name: Preflight CoreDNS health (best effort)
+      ansible.builtin.uri:
+        url: "{{ coredns_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ coredns_deploy_validate_certs }}"
+      register: coredns_deploy_health_pre
+      changed_when: false
+      failed_when: false
+      tags:
+        - api
+
+    - name: Record CoreDNS preflight health status
+      ansible.builtin.set_fact:
+        coredns_deploy_health_ok_pre: "{{ (coredns_deploy_health_pre.status | default(0) | int) == 200 }}"
+      changed_when: false
+
     - name: Deploy CoreDNS Pod
       ansible.builtin.include_tasks: deploy_pod.yml
       tags:
         - deployment
+
+    - name: Set DNS to CoreDNS + upstream resolvers (bootstrap)
+      ansible.builtin.include_tasks: manage_resolver.yml
+      vars:
+        coredns_deploy_resolver_mode: bootstrap
+        coredns_deploy_resolver_servers: >-
+          {{
+            [coredns_deploy_host_ip]
+            + (coredns_deploy_resolver_upstream_dns | default([]))
+            | unique
+          }}
+      when:
+        - coredns_deploy_manage_resolver | bool
+        - not (coredns_deploy_health_ok_pre | default(false) | bool)
+      tags:
+        - dns
 
     - name: Install systemd unit for CoreDNS Pod
       ansible.builtin.include_tasks: systemd.yml
@@ -40,3 +72,21 @@
       tags:
         - deployment
         - api
+
+    - name: Record CoreDNS health status (non-systemd)
+      ansible.builtin.set_fact:
+        coredns_deploy_health_status: "{{ coredns_deploy_health.status | default(0) | int }}"
+        coredns_deploy_health_ok: "{{ (coredns_deploy_health.status | default(0) | int) == 200 }}"
+      changed_when: false
+      when: not coredns_deploy_manage_systemd | bool
+
+    - name: Switch DNS to CoreDNS only
+      ansible.builtin.include_tasks: manage_resolver.yml
+      vars:
+        coredns_deploy_resolver_mode: core_only
+        coredns_deploy_resolver_servers: "{{ [coredns_deploy_host_ip] }}"
+      when:
+        - coredns_deploy_manage_resolver | bool
+        - coredns_deploy_health_ok | default(false) | bool
+      tags:
+        - dns

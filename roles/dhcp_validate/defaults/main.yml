@@ -1,0 +1,4 @@
+---
+dhcp_validate_mode: "fail"
+dhcp_validate_check_config: true
+dhcp_validate_check_http: false

@@ -1,0 +1,6 @@
+---
+- name: Ensure DHCP runtime packages are installed
+  ansible.builtin.package:
+    name: "{{ dhcp_deploy_packages }}"
+    state: present
+  when: dhcp_deploy_packages is defined

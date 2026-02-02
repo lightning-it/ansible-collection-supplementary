@@ -25,9 +25,13 @@
       when: minio_deploy_manage_systemd | bool
 
     - name: Restart MinIO pod (non-systemd)
-      ansible.builtin.command: "podman pod restart {{ minio_deploy_pod_name }}"
-      register: minio_deploy_pod_restart
-      changed_when: minio_deploy_pod_restart.rc == 0
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: restart
+        kubeplay_pod_name: "{{ minio_deploy_pod_name }}"
+        kubeplay_app_name: minio_restart
       when: not minio_deploy_manage_systemd | bool
 
     - name: Validate MinIO after restart

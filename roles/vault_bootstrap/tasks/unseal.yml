@@ -1,4 +1,19 @@
 ---
+- name: Wait until Vault API is reachable via HTTPS
+  ansible.builtin.uri:
+    url: "{{ vault_deploy_health_url }}"
+    method: GET
+    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+  register: vault_deploy_health
+  until: vault_deploy_health.status in [200, 429, 472, 473, 501, 503]
+  retries: 30
+  delay: 5
+  changed_when: false
+  failed_when: vault_deploy_health is failed and vault_deploy_health.status not in [200, 429, 472, 473, 501, 503]
+  tags:
+    - bootstrap
+    - api
+
 - name: Check Vault seal status
   ansible.builtin.uri:
     url: "{{ vault_deploy_api_url }}/v1/sys/seal-status"
@@ -14,6 +29,17 @@
 - name: Set Vault sealed flag
   ansible.builtin.set_fact:
     vault_deploy_sealed: "{{ vault_deploy_seal_status.json.sealed | default(true) }}"
+  tags:
+    - unseal
+    - bootstrap
+
+- name: Map vault_init to vault_deploy_init when provided
+  ansible.builtin.set_fact:
+    vault_deploy_init: "{{ vault_init }}"
+  no_log: true
+  when:
+    - vault_deploy_init is not defined
+    - vault_init is defined
   tags:
     - unseal
     - bootstrap

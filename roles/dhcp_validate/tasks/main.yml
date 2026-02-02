@@ -1,0 +1,88 @@
+---
+- name: Ensure required DHCP vars are defined
+  ansible.builtin.import_role:
+    name: dhcp_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Set validate mode
+  ansible.builtin.set_fact:
+    dhcp_validate_strict: "{{ dhcp_validate_mode != 'report' }}"
+  tags: always
+
+- name: Skip DHCP validation when disabled
+  ansible.builtin.debug:
+    msg: "DHCP validation skipped (dhcp_deploy_skip_validate=true)."
+  when: dhcp_deploy_skip_validate | bool
+  tags: always
+
+- name: Validate DHCP runtime
+  when: not dhcp_deploy_skip_validate | bool
+  tags:
+    - validate
+  block:
+    - name: Read DHCP service facts
+      ansible.builtin.service_facts:
+      when:
+        - dhcp_deploy_manage_systemd | bool
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+
+    - name: Set DHCP service state from facts
+      ansible.builtin.set_fact:
+        dhcp_deploy_service_state: >-
+          {{ ansible_facts.services[dhcp_deploy_systemd_unit_name] | default({}) }}
+      when:
+        - dhcp_deploy_manage_systemd | bool
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+
+    - name: Fail when DHCP service is not running
+      ansible.builtin.fail:
+        msg: "DHCP service {{ dhcp_deploy_systemd_unit_name }} is not running."
+      when:
+        - dhcp_validate_strict | bool
+        - dhcp_deploy_service_state is defined
+        - dhcp_deploy_service_state.state | default('') != 'running'
+
+    - name: Report DHCP service state
+      ansible.builtin.debug:
+        msg: "DHCP service state: {{ dhcp_deploy_service_state.state | default('unknown') }}"
+      when:
+        - not dhcp_validate_strict | bool
+        - dhcp_deploy_service_state is defined
+
+    - name: Check DHCP config presence on host
+      ansible.builtin.stat:
+        path: "{{ dhcp_deploy_host_config_path }}"
+      register: dhcp_deploy_config_stat
+      when: dhcp_validate_check_config | bool
+
+    - name: Fail when DHCP config is missing
+      ansible.builtin.fail:
+        msg: "DHCP config {{ dhcp_deploy_host_config_path }} is missing."
+      when:
+        - dhcp_validate_strict | bool
+        - dhcp_validate_check_config | bool
+        - not dhcp_deploy_config_stat.stat.exists
+
+    - name: Check DHCP health endpoint
+      ansible.builtin.uri:
+        url: "{{ dhcp_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ dhcp_deploy_validate_certs }}"
+      register: dhcp_deploy_health
+      changed_when: false
+      failed_when: false
+      when:
+        - dhcp_validate_check_http | bool
+        - not dhcp_deploy_skip_runtime | bool
+        - dhcp_deploy_health_url_effective | default('') | length > 0
+
+    - name: Validate DHCP health response
+      ansible.builtin.assert:
+        that:
+          - dhcp_deploy_health.status == 200
+        fail_msg: "DHCP health check failed: status {{ dhcp_deploy_health.status }}."
+      when:
+        - dhcp_validate_check_http | bool
+        - dhcp_validate_strict | bool
+        - dhcp_deploy_health_url_effective | default('') | length > 0
