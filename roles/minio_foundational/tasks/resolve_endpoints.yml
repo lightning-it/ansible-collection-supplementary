@@ -15,7 +15,8 @@
     minio_deploy_api_url_effective: >-
       {{
         minio_deploy_api_url
-          | default(
+          if (minio_deploy_api_url | default('') | length > 0)
+          else (
             minio_deploy_api_scheme_effective ~ '://' ~
             minio_deploy_host_ip_effective ~ ':' ~
             minio_deploy_port_effective
@@ -24,7 +25,8 @@
     minio_deploy_console_url_effective: >-
       {{
         minio_deploy_console_url
-          | default(
+          if (minio_deploy_console_url | default('') | length > 0)
+          else (
             minio_deploy_api_scheme_effective ~ '://' ~
             minio_deploy_host_ip_effective ~ ':' ~
             minio_deploy_console_port_effective
@@ -36,5 +38,6 @@
     minio_deploy_health_url_effective: >-
       {{
         minio_deploy_health_url
-          | default(minio_deploy_api_url_effective ~ '/minio/health/ready')
+          if (minio_deploy_health_url | default('') | length > 0)
+          else (minio_deploy_api_url_effective ~ '/minio/health/ready')
       }}

@@ -5,9 +5,38 @@
   failed_when: rm_pod.rc not in [0,125]
   changed_when: "'deleted' in rm_pod.stdout"
   ignore_errors: true
+  when:
+    - not vault_deploy_manage_systemd | bool
 
 - name: Run vault pod
   ansible.builtin.command:
     cmd: "podman kube play {{ vault_deploy_pod_manifest_path }}"
   register: pod_start
   changed_when: "'created' in pod_start.stdout or 'configured' in pod_start.stdout"
+  when:
+    - not vault_deploy_manage_systemd | bool
+
+- name: Escape kube play manifest path (systemd)
+  ansible.builtin.command:
+    cmd: "systemd-escape {{ vault_deploy_pod_manifest_path }}"
+  register: vault_deploy_systemd_name
+  changed_when: false
+  listen:
+    - Recreate vault pod
+    - Run vault pod
+  when:
+    - vault_deploy_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+
+- name: Restart Podman kube systemd unit
+  ansible.builtin.systemd:
+    name: "podman-kube@{{ vault_deploy_systemd_name.stdout }}.service"
+    enabled: true
+    state: restarted
+    daemon_reload: true
+  listen:
+    - Recreate vault pod
+    - Run vault pod
+  when:
+    - vault_deploy_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'

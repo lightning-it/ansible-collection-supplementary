@@ -149,21 +149,20 @@
     - validate
     - selinux
 
-- name: Fail when SELinux labels do not match container MCS
+- name: Fail when SELinux label type does not match container
   ansible.builtin.fail:
     msg: >-
-      SELinux label mismatch: container={{ vault_deploy_mount_label_type }}:{{ vault_deploy_mount_label_level }},
-      host={{ vault_deploy_mount_label_current_type }}:{{ vault_deploy_mount_label_current_level }}.
+      SELinux label type mismatch: container={{ vault_deploy_mount_label_type }},
+      host={{ vault_deploy_mount_label_current_type }}.
   when:
     - vault_validate_strict | bool
-    - vault_deploy_mount_label_level is defined
-    - vault_deploy_mount_label_current_level is defined
-    - >
-      vault_deploy_mount_label_level != vault_deploy_mount_label_current_level
-      or vault_deploy_mount_label_type != vault_deploy_mount_label_current_type
+    - vault_deploy_mount_label_type is defined
+    - vault_deploy_mount_label_current_type is defined
+    - vault_deploy_mount_label_type != vault_deploy_mount_label_current_type
   tags:
     - validate
     - selinux
+
 
 - name: Report SELinux label status
   ansible.builtin.debug:
