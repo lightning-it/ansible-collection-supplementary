@@ -81,6 +81,12 @@
     - Run vault pod
   tags: [deployment]
 
+- name: Apply SELinux relabel for Vault paths (pre-start)
+  ansible.builtin.include_tasks: selinux_relabel.yml
+  when:
+    - vault_deploy_selinux_relabel | bool
+  tags: [deployment, selinux]
+
 - name: Flush handlers
   ansible.builtin.meta: flush_handlers
   tags: [deployment]
@@ -298,9 +304,3 @@
   when:
     - vault_deploy_host_uid is defined
     - vault_deploy_host_gid is defined
-
-- name: Apply SELinux relabel for Vault data dir
-  ansible.builtin.include_tasks: selinux_relabel.yml
-  when:
-    - vault_deploy_selinux_relabel | bool
-  tags: [deployment, selinux]

@@ -22,48 +22,6 @@
   tags:
     - config
 
-- name: Map vault_init to vault_config_init when provided
-  ansible.builtin.set_fact:
-    vault_config_init: "{{ vault_init }}"
-  when:
-    - vault_config_init is not defined
-    - vault_init is defined
-  no_log: true
-  tags:
-    - config
-    - terragrunt_validate
-    - terragrunt_plan
-    - terragrunt_apply
-
-- name: Map vault_config_init root token when provided
-  ansible.builtin.set_fact:
-    vault_config_token: "{{ vault_config_init.root_token | default('', true) | trim }}"
-  no_log: true
-  when:
-    - vault_config_token | default('', true) | trim | length == 0
-    - vault_config_init is defined
-    - vault_config_init.root_token | default('', true) | trim | length > 0
-  tags:
-    - config
-    - terragrunt_validate
-    - terragrunt_plan
-    - terragrunt_apply
-
-- name: Map vault_token to vault_config_token
-  ansible.builtin.set_fact:
-    vault_config_token: >-
-      {{
-        (vault_config_token | default('', true) | trim)
-        if (vault_config_token | default('', true) | trim | length > 0)
-        else (vault_token | default('', true) | trim)
-      }}
-  no_log: true
-  tags:
-    - config
-    - terragrunt_validate
-    - terragrunt_plan
-    - terragrunt_apply
-
 - name: Ensure Vault token is available
   ansible.builtin.assert:
     that:
@@ -185,9 +143,8 @@
   ansible.builtin.find:
     paths: "{{ vault_config_terraform_state_dir }}"
     patterns:
-      - "*.tfstate"
-      - "*.tfstate.backup"
-      - "*.tfstate.*"
+      - "{{ vault_config_terraform_state_path_local | basename }}"
+      - "{{ (vault_config_terraform_state_path_local | basename) }}.*"
     recurse: false
     file_type: file
   register: vault_config_tfstate_files_remote
@@ -198,25 +155,31 @@
     - terragrunt_plan
     - terragrunt_apply
 
-- name: Find existing Vault bootstrap tfstate files on controller
-  ansible.builtin.find:
-    paths: "{{ vault_config_terraform_state_dir_local }}"
-    patterns:
-      - "*.tfstate"
-      - "*.tfstate.backup"
-      - "*.tfstate.*"
-    recurse: false
-    file_type: file
-  register: vault_config_tfstate_files_local
-  changed_when: false
+- name: Remove local Vault bootstrap tfstate before syncing from target (target is source-of-truth)
+  ansible.builtin.file:
+    path: "{{ vault_config_terraform_state_path_local }}"
+    state: absent
   delegate_to: localhost
+  changed_when: false
   tags:
     - config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
 
-- name: Copy target tfstate files to controller when local is empty
+- name: Remove local Vault bootstrap tfstate backup before syncing from target (best effort)
+  ansible.builtin.file:
+    path: "{{ vault_config_terraform_state_path_local }}.backup"
+    state: absent
+  delegate_to: localhost
+  changed_when: false
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Copy target tfstate files to controller (target is source-of-truth)
   ansible.builtin.fetch:
     src: "{{ vault_config_tfstate_file.path }}"
     dest: "{{ vault_config_terraform_state_dir_local }}/"
@@ -226,7 +189,6 @@
     loop_var: vault_config_tfstate_file
   when:
     - vault_config_tfstate_files_remote.matched | int > 0
-    - vault_config_tfstate_files_local.matched | int == 0
   no_log: true
   changed_when: false
   tags:
@@ -244,132 +206,142 @@
     - terragrunt_plan
     - terragrunt_apply
 
-- name: Run terragrunt to configure Vault
-  vars:  # noqa var-naming[no-role-prefix]
-    terragrunt_template: "{{ vault_config_terragrunt_template_path }}"
-    terragrunt_vault_token: "{{ vault_config_token }}"
-    terragrunt_vault_addr: "{{ vault_config_vault_address }}"
-    terragrunt_delegate_to: localhost
-  ansible.builtin.include_role:
-    name: lit.foundational.terragrunt
-  no_log: true
+- name: Build terragrunt import list for existing Vault mounts/auth backends (best effort)
+  ansible.builtin.set_fact:
+    vault_config_terragrunt_imports: "{{ _imports }}"
+  vars:
+    _imports: >-
+      {%- set imports = [] -%}
+      {%- if (vault_config_hashi_vault_auth_method | default('', true) | trim) == 'approle' -%}
+      {%- set _ = imports.append({'address': 'vault_auth_backend.approle', 'id': 'approle'}) -%}
+      {%- endif -%}
+      {%- for store in vault_config_secret_stores | default([], true) -%}
+      {%- set path = store.path | default('', true) | trim -%}
+      {%- if path | length > 0 -%}
+      {%- set _ = imports.append({'address': 'vault_mount.secret[\"' ~ path ~ '\"]', 'id': path}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- for root in vault_config_pki_roots | default([], true) -%}
+      {%- set mount = root.mount | default('', true) | trim -%}
+      {%- if mount | length > 0 -%}
+      {%- set _ = imports.append({'address': 'vault_mount.root[\"' ~ mount ~ '\"]', 'id': mount}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- for inter in vault_config_pki_intermediates | default([], true) -%}
+      {%- set mount = inter.mount | default('', true) | trim -%}
+      {%- if mount | length > 0 -%}
+      {%- set _ = imports.append({'address': 'vault_mount.inter[\"' ~ mount ~ '\"]', 'id': mount}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ imports }}
+  when: vault_config_terragrunt_imports is not defined
   tags:
     - config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
 
-- name: Find local Vault bootstrap tfstate files
-  ansible.builtin.find:
-    paths: "{{ vault_config_terraform_state_dir_local }}"
-    patterns:
-      - "*.tfstate"
-      - "*.tfstate.backup"
-      - "*.tfstate.*"
-    recurse: false
-    file_type: file
-  register: vault_config_tfstate_files
-  changed_when: false
-  delegate_to: localhost
+- name: Run terragrunt to configure Vault (persist tfstate back to target even on failure)
   tags:
     - config
+    - terragrunt_validate
+    - terragrunt_plan
     - terragrunt_apply
     - tfstate
-    - tfstate_migrate
-
-- name: Copy local Vault bootstrap tfstate files to target
-  ansible.builtin.copy:
-    src: "{{ vault_config_tfstate_file.path }}"
-    dest: "{{ vault_config_terraform_state_dir }}/{{ vault_config_tfstate_file.path | basename }}"
-    owner: root
-    group: root
-    mode: "0600"
-  loop: "{{ vault_config_tfstate_files.files }}"
-  loop_control:
-    loop_var: vault_config_tfstate_file
-  when: vault_config_tfstate_files.matched | int > 0
-  tags:
-    - config
-    - terragrunt_apply
-    - tfstate
-    - tfstate_migrate
-
-- name: Migrate Vault bootstrap tfstate when backend is ready
-  when:
-    - vault_config_tfstate_files.matched | int > 0
-    - tfstate_backend_ready | default(false) | bool
-    - tfstate_s3_endpoint | default('', true) | length > 0
-    - tfstate_bucket | default('', true) | length > 0
-    - tfstate_access_key | default('', true) | length > 0
-    - tfstate_secret_key | default('', true) | length > 0
-  tags:
-    - config
-    - terragrunt_apply
-    - tfstate
-    - tfstate_migrate
   block:
-    - name: Migrate Vault bootstrap tfstate to S3 backend
+    - name: Terragrunt apply (Vault config)
+      vars:  # noqa var-naming[no-role-prefix]
+        terragrunt_template: "{{ vault_config_terragrunt_template_path }}"
+        terragrunt_vault_token: "{{ vault_config_token }}"
+        terragrunt_vault_addr: "{{ vault_config_vault_address }}"
+        terragrunt_imports: "{{ vault_config_terragrunt_imports | default([], true) }}"
+        terragrunt_delegate_to: localhost
       ansible.builtin.include_role:
-        name: lit.foundational.terraform_state_migrate
-        apply:
-          delegate_to: localhost
-      vars:
-        terraform_state_migrate_local_root: "{{ vault_config_terraform_state_dir_local }}"
-        terraform_state_migrate_s3_endpoint: "{{ tfstate_s3_endpoint }}"
-        terraform_state_migrate_s3_bucket: "{{ tfstate_bucket }}"
-        terraform_state_migrate_s3_access_key: "{{ tfstate_access_key }}"
-        terraform_state_migrate_s3_secret_key: "{{ tfstate_secret_key }}"
-        terraform_state_migrate_s3_region: "{{ tfstate_region | default('', true) }}"
-        terraform_state_migrate_s3_key_prefix: "{{ tfstate_key_prefix | default('', true) }}"
+        name: lit.foundational.terragrunt
       no_log: true
-      tags:
-        - tfstate
-        - tfstate_migrate
 
-    - name: Remove Vault bootstrap local tfstate files after migration
+  rescue:
+    - name: Record terragrunt failure (tfstate will still be synced back to target)
+      ansible.builtin.set_fact:
+        vault_config_terragrunt_failed: true
+      changed_when: false
+
+  always:
+    - name: Find local Vault bootstrap tfstate files
+      ansible.builtin.find:
+        paths: "{{ vault_config_terraform_state_dir_local }}"
+        patterns:
+          - "{{ vault_config_terraform_state_path_local | basename }}"
+          - "{{ (vault_config_terraform_state_path_local | basename) }}.*"
+        recurse: false
+        file_type: file
+      register: vault_config_tfstate_files
+      changed_when: false
+      delegate_to: localhost
+
+    - name: Copy local Vault bootstrap tfstate files to target
+      ansible.builtin.copy:
+        src: "{{ vault_config_tfstate_file.path }}"
+        dest: "{{ vault_config_terraform_state_dir }}/{{ vault_config_tfstate_file.path | basename }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop: "{{ vault_config_tfstate_files.files }}"
+      loop_control:
+        loop_var: vault_config_tfstate_file
+      when: vault_config_tfstate_files.matched | int > 0
+
+    - name: Remove local Vault bootstrap tfstate files after successful sync (controller cache)
       ansible.builtin.file:
         path: "{{ vault_config_tfstate_file.path }}"
         state: absent
       loop: "{{ vault_config_tfstate_files.files }}"
       loop_control:
         loop_var: vault_config_tfstate_file
+      when:
+        - vault_config_tfstate_files.matched | int > 0
+        - not (vault_config_tfstate_keep_local | default(false) | bool)
+        - not (vault_config_terragrunt_failed | default(false) | bool)
       delegate_to: localhost
-      tags:
-        - tfstate
-        - tfstate_migrate
-  rescue:
-    - name: Record Vault bootstrap tfstate after failed migration
-      ansible.builtin.set_fact:
-        tfstate_pending_dirs: >-
-          {{
-            (tfstate_pending_dirs | default([]))
-            | union([vault_config_terraform_state_dir_local])
-          }}
-      tags:
-        - tfstate
-        - tfstate_migrate
+      changed_when: false
 
-- name: Record Vault bootstrap tfstate for later migration
-  ansible.builtin.set_fact:
-    tfstate_pending_dirs: >-
-      {{
-        (tfstate_pending_dirs | default([]))
-        | union([vault_config_terraform_state_dir_local])
-      }}
-  when:
-    - vault_config_tfstate_files.matched | int > 0
-    - not (
-        (tfstate_backend_ready | default(false) | bool)
-        and (tfstate_s3_endpoint | default('', true) | length > 0)
-        and (tfstate_bucket | default('', true) | length > 0)
-        and (tfstate_access_key | default('', true) | length > 0)
-        and (tfstate_secret_key | default('', true) | length > 0)
-      )
+    - name: Check if local Vault tfstate cache dir is empty (controller cache)
+      ansible.builtin.find:
+        paths: "{{ vault_config_terraform_state_dir_local }}"
+        recurse: false
+        file_type: any
+      register: vault_config_tfstate_dir_local_contents
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      when:
+        - not (vault_config_tfstate_keep_local | default(false) | bool)
+        - not (vault_config_terragrunt_failed | default(false) | bool)
+
+    - name: Remove local Vault tfstate cache dir when empty (controller cache)
+      ansible.builtin.file:
+        path: "{{ vault_config_terraform_state_dir_local }}"
+        state: absent
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      when:
+        - not (vault_config_tfstate_keep_local | default(false) | bool)
+        - not (vault_config_terragrunt_failed | default(false) | bool)
+        - vault_config_tfstate_dir_local_contents is defined
+        - (vault_config_tfstate_dir_local_contents.matched | default(0) | int) == 0
+        - vault_config_terraform_state_dir_local | default('', true) | trim | length > 1
+
+- name: Fail when terragrunt failed (tfstate has been synced back to target)
+  ansible.builtin.fail:
+    msg: >-
+      Terragrunt failed while configuring Vault. Local tfstate (if any) was synced back to
+      {{ vault_config_terraform_state_dir }}; re-run with the same inventory/vars.
+  when: vault_config_terragrunt_failed | default(false) | bool
   tags:
     - config
     - terragrunt_apply
     - tfstate
-    - tfstate_migrate
 
 - name: Bootstrap AppRole credentials
   ansible.builtin.include_tasks: bootstrap_approle.yml

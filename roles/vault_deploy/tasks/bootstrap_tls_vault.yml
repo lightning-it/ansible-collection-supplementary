@@ -10,19 +10,39 @@
   tags:
     - init
 
+- name: Check Vault health for cert lookup
+  delegate_to: localhost
+  ansible.builtin.uri:
+    url: "{{ vault_deploy_health_url }}"
+    method: GET
+    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+  register: vault_deploy_health_probe
+  failed_when: false
+  changed_when: false
+  tags:
+    - vault_deploy_pki
+
 - name: Try to read existing certificate from Vault
   delegate_to: localhost
   community.hashi_vault.vault_kv2_get:
     url: "{{ vault_deploy_vault_address }}"
     engine_mount_point: "{{ vault_deploy_engine_mount_point }}"
-    auth_method: "{{ vault_deploy_hashi_vault_auth_method }}"
-    role_id: "{{ ansible_hashi_vault_role_id | default('') }}"
-    secret_id: "{{ ansible_hashi_vault_secret_id | default('') }}"
+    # Use the bootstrap token only.
+    # Referencing AppRole vars here is unsafe because inventory often defines them via Vault lookups, which
+    # will explode during a first-time run when the AppRole credential secret does not exist yet.
+    auth_method: token
+    token: "{{ vault_deploy_token }}"
     validate_certs: "{{ vault_deploy_vault_validate_certs }}"
     path: "{{ inventory_hostname }}/vault/certificate"
   register: existing_cert
   failed_when: false
   no_log: true
+  when:
+    - vault_deploy_health_probe is defined
+    - vault_deploy_health_probe.status | default(0) in [200, 429, 472, 473]
+    # Only attempt KV lookups when Vault is already reachable.
+    # This avoids evaluating Vault-backed vars during first-time bootstrap.
+    - vault_deploy_token | default('', true) | trim | length > 0
   tags:
     - vault_deploy_pki
 
@@ -48,7 +68,7 @@
 
 - name: Create tmp selfsigned certificate
   when:
-    - existing_cert.data is not defined
+    - existing_cert is not defined or existing_cert.data is not defined
     - not vault_deploy_bootstrap_cert_present | bool
   block:
     - name: Create private key (RSA, 4096 bits)

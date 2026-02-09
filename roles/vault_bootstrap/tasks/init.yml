@@ -130,13 +130,30 @@
     - init
     - bootstrap
 
+- name: Expose Vault init payload as runtime facts (init run)
+  ansible.builtin.set_fact:
+    vault_init: "{{ vault_deploy_init_payload }}"
+    vault_deploy_init: "{{ vault_deploy_init_payload }}"
+    vault_deploy_unseal_keys: "{{ vault_deploy_init_payload.unseal_keys_b64 | default([]) }}"
+  no_log: true
+  when:
+    - vault_bootstrap_did_init | default(false) | bool
+    - vault_deploy_init_payload is defined
+  tags:
+    - init
+    - bootstrap
+
 - name: Set Vault token facts from init payload
   ansible.builtin.set_fact:
     vault_bootstrap_token: >-
       {{
-        (vault_bootstrap_token | default('', true) | trim)
-        if (vault_bootstrap_token | default('', true) | trim | length > 0)
-        else (vault_deploy_init_payload.root_token | default('', true) | trim)
+        (vault_deploy_init_payload.root_token | default('', true) | trim)
+        if (vault_bootstrap_did_init | default(false) | bool)
+        else (
+          (vault_bootstrap_token | default('', true) | trim)
+          if (vault_bootstrap_token | default('', true) | trim | length > 0)
+          else (vault_deploy_init_payload.root_token | default('', true) | trim)
+        )
       }}
   no_log: true
   when:
@@ -145,26 +162,20 @@
     - init
     - bootstrap
 
-- name: Map vault_token to vault_bootstrap_token
-  ansible.builtin.set_fact:
-    vault_bootstrap_token: >-
-      {{
-        (vault_bootstrap_token | default('', true) | trim)
-        if (vault_bootstrap_token | default('', true) | trim | length > 0)
-        else (vault_token | default('', true) | trim)
-      }}
-  no_log: true
-  tags:
-    - init
-    - bootstrap
-
 - name: Expose vault_bootstrap_token as vault_token for follow-on roles
   ansible.builtin.set_fact:
     vault_token: >-
       {{
-        (vault_token | default('', true) | trim)
-        if (vault_token | default('', true) | trim | length > 0)
-        else (vault_bootstrap_token | default('', true) | trim)
+        (vault_bootstrap_token | default('', true) | trim)
+        if (
+          (vault_bootstrap_did_init | default(false) | bool)
+          and (vault_bootstrap_token | default('', true) | trim | length > 0)
+        )
+        else (
+          (vault_token | default('', true) | trim)
+          if (vault_token | default('', true) | trim | length > 0)
+          else (vault_bootstrap_token | default('', true) | trim)
+        )
       }}
   no_log: true
   tags:

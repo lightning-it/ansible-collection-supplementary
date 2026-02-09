@@ -33,25 +33,124 @@
     - unseal
     - bootstrap
 
-- name: Map vault_init to vault_deploy_init when provided
-  ansible.builtin.set_fact:
-    vault_deploy_init: "{{ vault_init }}"
-  no_log: true
-  when:
-    - vault_deploy_init is not defined
-    - vault_init is defined
+- name: Check if encrypted init file already exists (for unseal key discovery)
+  ansible.builtin.stat:
+    path: "{{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault') }}"
+  register: vault_bootstrap_init_file
+  changed_when: false
   tags:
     - unseal
     - bootstrap
 
-- name: Map vault_deploy_init to unseal keys when provided
+- name: Load unseal keys from encrypted init file (controller)
+  when:
+    - vault_deploy_sealed | bool
+    - vault_deploy_unseal_keys | default([]) | length == 0
+    - vault_bootstrap_init_file.stat.exists | default(false)
+  no_log: true
+  tags:
+    - unseal
+    - bootstrap
+  block:
+    - name: Create controller bootstrap temp dir
+      delegate_to: localhost
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: vault-bootstrap-init-
+      register: vault_bootstrap_controller_tmp
+
+    - name: Fetch encrypted init file to controller temp dir
+      ansible.builtin.fetch:
+        src: "{{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault') }}"
+        dest: "{{ vault_bootstrap_controller_tmp.path }}/vault-init.yml.vault"
+        flat: true
+      become: true
+      failed_when: false
+
+    - name: Create controller ansible config (empty)
+      delegate_to: localhost
+      ansible.builtin.copy:
+        dest: "{{ vault_bootstrap_controller_tmp.path }}/ansible.cfg"
+        content: ""
+        mode: "0600"
+      when: vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+
+    - name: Create temporary vault password file (controller temp dir)
+      delegate_to: localhost
+      ansible.builtin.copy:
+        dest: "{{ vault_bootstrap_controller_tmp.path }}/.vault_deploy_pass"
+        content: "{{ vault_deploy_ansible_vault_pw }}"
+        mode: "0600"
+      when: vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+
+    - name: Decrypt init file (controller; explicit password)
+      delegate_to: localhost
+      ansible.builtin.command: >-
+        ansible-vault view {{ vault_bootstrap_controller_tmp.path }}/vault-init.yml.vault
+      register: vault_bootstrap_init_view
+      changed_when: false
+      failed_when: false
+      environment:
+        ANSIBLE_CONFIG: "{{ vault_bootstrap_controller_tmp.path }}/ansible.cfg"
+        ANSIBLE_VAULT_PASSWORD_FILE: "{{ vault_bootstrap_controller_tmp.path }}/.vault_deploy_pass"
+      when: vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+
+    - name: Decrypt init file (controller; default vault config)
+      delegate_to: localhost
+      ansible.builtin.command: >-
+        ansible-vault view {{ vault_bootstrap_controller_tmp.path }}/vault-init.yml.vault
+      register: vault_bootstrap_init_view
+      changed_when: false
+      failed_when: false
+      when: vault_deploy_ansible_vault_pw | default('', true) | trim | length == 0
+
+    - name: Parse init file and expose facts for follow-on tasks/roles
+      ansible.builtin.set_fact:
+        vault_bootstrap_init_file_payload: "{{ vault_bootstrap_init_view.stdout | from_yaml }}"
+      when:
+        - vault_bootstrap_init_view is defined
+        - vault_bootstrap_init_view.rc | default(1) == 0
+        - vault_bootstrap_init_view.stdout | default('') | trim | length > 0
+
+    - name: Set unseal keys and token from init file
+      ansible.builtin.set_fact:
+        vault_init: "{{ vault_bootstrap_init_file_payload.vault_init | default({}, true) }}"
+        vault_deploy_init: "{{ vault_bootstrap_init_file_payload.vault_init | default({}, true) }}"
+        vault_deploy_unseal_keys: >-
+          {{
+            (vault_bootstrap_init_file_payload.vault_init.unseal_keys_b64 | default([]))
+            if (vault_bootstrap_init_file_payload.vault_init.unseal_keys_b64 | default([]) | length > 0)
+            else (vault_bootstrap_init_file_payload.vault_init.unseal_keys_hex | default([]))
+          }}
+        vault_token: >-
+          {{
+            (vault_bootstrap_init_file_payload.vault_init.root_token | default('', true) | trim)
+            if (vault_bootstrap_init_file_payload.vault_init.root_token | default('', true) | trim | length > 0)
+            else (vault_token | default('', true) | trim)
+          }}
+      when:
+        - vault_bootstrap_init_file_payload is defined
+        - vault_bootstrap_init_file_payload.vault_init is defined
+        - >-
+          (
+            (vault_bootstrap_init_file_payload.vault_init.unseal_keys_b64 | default([]) | length > 0)
+            or (vault_bootstrap_init_file_payload.vault_init.unseal_keys_hex | default([]) | length > 0)
+          )
+
+    - name: Cleanup controller temp dir
+      delegate_to: localhost
+      ansible.builtin.file:
+        path: "{{ vault_bootstrap_controller_tmp.path }}"
+        state: absent
+
+- name: Prefer unseal keys from init payload (init run)
   ansible.builtin.set_fact:
-    vault_deploy_unseal_keys: "{{ vault_deploy_init.unseal_keys_b64 | default([]) }}"
+    vault_deploy_unseal_keys: "{{ vault_deploy_init_payload.unseal_keys_b64 | default([]) }}"
   no_log: true
   when:
-    - vault_deploy_unseal_keys | default([]) | length == 0
-    - vault_deploy_init is defined
-    - vault_deploy_init.unseal_keys_b64 | default([]) | length > 0
+    - vault_bootstrap_did_init | default(false) | bool
+    - vault_deploy_init_payload is defined
+    - vault_deploy_init_payload.unseal_keys_b64 | default([]) | length > 0
   tags:
     - unseal
     - bootstrap
@@ -91,6 +190,33 @@
   loop: "{{ vault_deploy_unseal_keys }}"
   no_log: true
   when: vault_deploy_sealed | bool
+  tags:
+    - unseal
+    - bootstrap
+
+- name: Re-check Vault seal status after unseal attempt
+  ansible.builtin.uri:
+    url: "{{ vault_deploy_api_url }}/v1/sys/seal-status"
+    method: GET
+    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+  register: vault_deploy_seal_status_after
+  changed_when: false
+  failed_when: vault_deploy_seal_status_after.status not in [200]
+  when: vault_deploy_sealed | bool
+  tags:
+    - unseal
+    - bootstrap
+
+- name: Fail when Vault is still sealed after unseal attempt
+  ansible.builtin.fail:
+    msg: >-
+      Vault is still sealed after unseal attempt. The configured unseal keys likely do not match the
+      current Vault instance. Ensure the correct init file exists at
+      {{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault') }}
+      (or provide vault_deploy_unseal_keys/vault_init).
+  when:
+    - vault_deploy_sealed | bool
+    - vault_deploy_seal_status_after.json.sealed | default(true) | bool
   tags:
     - unseal
     - bootstrap
