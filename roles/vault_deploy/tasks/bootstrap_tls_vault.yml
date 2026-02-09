@@ -71,15 +71,28 @@
     - existing_cert is not defined or existing_cert.data is not defined
     - not vault_deploy_bootstrap_cert_present | bool
   block:
-    - name: Create private key (RSA, 4096 bits)
-      community.crypto.openssl_privatekey:
-        path: "{{ vault_deploy_cert_dir }}/vault.key"
+    - name: Create controller temp dir for Vault TLS artifacts
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: vault-tls-
+      delegate_to: localhost
+      register: vault_deploy_tls_tmp
+      changed_when: false
+      no_log: true
       tags:
         - init
 
-    - name: Create certificate signing request (CSR) for self-signed certificate
+    - name: Create private key (RSA, 4096 bits) (controller)
+      community.crypto.openssl_privatekey:
+        path: "{{ vault_deploy_tls_tmp.path }}/vault.key"
+      delegate_to: localhost
+      no_log: true
+      tags:
+        - init
+
+    - name: Create certificate signing request (CSR) for self-signed certificate (controller)
       community.crypto.openssl_csr_pipe:
-        privatekey_path: "{{ vault_deploy_cert_dir }}/vault.key"
+        privatekey_path: "{{ vault_deploy_tls_tmp.path }}/vault.key"
         common_name: "{{ inventory_hostname }}"
         organization_name: Ansible, Inc.
         subject_alt_name:
@@ -88,21 +101,48 @@
           - "DNS:localhost"
           - "DNS:vault"
       register: csr
+      delegate_to: localhost
+      no_log: true
       tags:
         - init
 
-    - name: Generate Vault server certificate signed by self-signed CA
+    - name: Generate Vault server certificate signed by self-signed CA (controller)
       community.crypto.x509_certificate:
-        path: "{{ vault_deploy_cert_dir }}/vault.crt"
-        privatekey_path: "{{ vault_deploy_cert_dir }}/vault.key"
+        path: "{{ vault_deploy_tls_tmp.path }}/vault.crt"
+        privatekey_path: "{{ vault_deploy_tls_tmp.path }}/vault.key"
         csr_content: "{{ csr.csr }}"
         provider: selfsigned
+      delegate_to: localhost
+      no_log: true
       tags:
         - init
 
-    - name: Set proper ownership and permissions for Vault private key
+    - name: Copy generated Vault keypair to target
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: root
+        group: root
+        mode: "{{ item.mode }}"
+      loop:
+        - src: "{{ vault_deploy_tls_tmp.path }}/vault.key"
+          dest: "{{ vault_deploy_cert_dir }}/vault.key"
+          mode: "0644"
+        - src: "{{ vault_deploy_tls_tmp.path }}/vault.crt"
+          dest: "{{ vault_deploy_cert_dir }}/vault.crt"
+          mode: "0644"
+      loop_control:
+        label: "{{ item.dest }}"
+      no_log: true
+      tags:
+        - init
+
+    - name: Remove controller temp dir for Vault TLS artifacts
       ansible.builtin.file:
-        path: "{{ vault_deploy_cert_dir }}/vault.key"
-        mode: "0644"
+        path: "{{ vault_deploy_tls_tmp.path }}"
+        state: absent
+      delegate_to: localhost
+      changed_when: false
+      no_log: true
       tags:
         - init

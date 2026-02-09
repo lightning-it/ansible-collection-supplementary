@@ -301,7 +301,6 @@
       when:
         - vault_config_tfstate_files.matched | int > 0
         - not (vault_config_tfstate_keep_local | default(false) | bool)
-        - not (vault_config_terragrunt_failed | default(false) | bool)
       delegate_to: localhost
       changed_when: false
 
@@ -316,7 +315,6 @@
       changed_when: false
       when:
         - not (vault_config_tfstate_keep_local | default(false) | bool)
-        - not (vault_config_terragrunt_failed | default(false) | bool)
 
     - name: Remove local Vault tfstate cache dir when empty (controller cache)
       ansible.builtin.file:
@@ -327,7 +325,6 @@
       changed_when: false
       when:
         - not (vault_config_tfstate_keep_local | default(false) | bool)
-        - not (vault_config_terragrunt_failed | default(false) | bool)
         - vault_config_tfstate_dir_local_contents is defined
         - (vault_config_tfstate_dir_local_contents.matched | default(0) | int) == 0
         - vault_config_terraform_state_dir_local | default('', true) | trim | length > 1

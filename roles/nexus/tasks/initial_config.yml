@@ -21,6 +21,7 @@
     url: "https://{{ nexus_nexus_hostname }}/service/rest/v1/status"
     method: GET
     validate_certs: "{{ nexus_validate_certs }}"
+  delegate_to: localhost
   register: result
   until: result.status == 200
   retries: 30
@@ -72,23 +73,17 @@
     force_basic_auth: true
     validate_certs: "{{ nexus_validate_certs }}"
     status_code: 200
+  delegate_to: localhost
   register: nexus_admin_auth_check
   failed_when: false
   no_log: true
   tags:
     - sonatype_nexus_config
 
-- name: Fail when Nexus admin credentials are invalid
-  ansible.builtin.fail:
-    msg: >-
-      Nexus admin credentials rejected (HTTP {{ nexus_admin_auth_check.status | default('unknown') }}).
-      Update the Vault secret or set nexus_nexus_target_admin_password.
-  when: nexus_admin_auth_check.status | default(0) != 200
-  tags:
-    - sonatype_nexus_config
-
-- name: Get initial password
-  when: admin_pwd_file_stat.stat.exists
+- name: Bootstrap admin password on first boot (using initial password file)
+  when:
+    - nexus_admin_auth_check.status | default(0) != 200
+    - admin_pwd_file_stat.stat.exists
   tags:
     - sonatype_nexus_config
   block:
@@ -117,6 +112,7 @@
         force_basic_auth: true
         validate_certs: "{{ nexus_validate_certs }}"
         status_code: 204
+      delegate_to: localhost
       register: nexus_admin_password_change
       no_log: true
 
@@ -146,6 +142,35 @@
   tags:
     - sonatype_nexus_config
 
+- name: Re-validate Nexus admin credentials after bootstrap (best effort)
+  ansible.builtin.uri:
+    url: "https://{{ nexus_nexus_hostname }}/service/rest/v1/security/users/{{ nexus_nexus_target_admin_username }}"
+    method: GET
+    user: "{{ nexus_nexus_target_admin_username }}"
+    password: "{{ nexus_nexus_target_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ nexus_validate_certs }}"
+    status_code: 200
+  delegate_to: localhost
+  register: nexus_admin_auth_check_after
+  failed_when: false
+  no_log: true
+  tags:
+    - sonatype_nexus_config
+
+- name: Fail when Nexus admin credentials are invalid
+  ansible.builtin.fail:
+    msg: >-
+      Nexus admin credentials rejected (HTTP
+      {{
+        (nexus_admin_auth_check_after.status | default(nexus_admin_auth_check.status | default('unknown')))
+      }}).
+      If this is a first boot, ensure {{ nexus_nexus_data_dir }}/admin.password exists and is readable.
+      Otherwise update the Vault secret or set nexus_nexus_target_admin_password.
+  when: (nexus_admin_auth_check_after.status | default(nexus_admin_auth_check.status | default(0))) != 200
+  tags:
+    - sonatype_nexus_config
+
 - name: Set Anonymous access to {{ nexus_nexus_disable_anonymous }}
   vars:
     nexus_anonymous_enabled: "{{ (not nexus_nexus_disable_anonymous) | bool }}"
@@ -162,6 +187,7 @@
       userId: "anonymous"
       realmName: "NexusAuthorizingRealm"
     body_format: json
+  delegate_to: localhost
   no_log: true
   tags:
     - sonatype_nexus_config
@@ -214,6 +240,7 @@
           timeout: null
           retries: null
     status_code: 200
+  delegate_to: localhost
   register: nexus_proxy_settings
   no_log: true
   tags:
