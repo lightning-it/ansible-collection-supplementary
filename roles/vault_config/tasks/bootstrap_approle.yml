@@ -45,6 +45,7 @@
 
 - name: Read Vault auth methods
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   community.hashi_vault.vault_read:
     url: "{{ vault_config_vault_address }}"
     token: "{{ vault_config_token }}"
@@ -59,6 +60,7 @@
 
 - name: Enable AppRole auth method when missing
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   community.hashi_vault.vault_write:
     url: "{{ vault_config_vault_address }}"
     token: "{{ vault_config_token }}"

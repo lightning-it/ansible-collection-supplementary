@@ -45,6 +45,7 @@
 
 - name: Check Vault PKI role exists
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   community.hashi_vault.vault_read:
     url: "{{ vault_config_vault_address }}"
     auth_method: "token"
@@ -76,6 +77,7 @@
 
 - name: Try to read existing certificate from Vault
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   community.hashi_vault.vault_kv2_get:
     url: "{{ vault_config_vault_address }}"
     engine_mount_point: "{{ vault_config_engine_mount_point }}"
@@ -106,6 +108,7 @@
   register: cert_info
   when: vault_config_existing_cert_in_vault | bool
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   tags:
     - vault_config_pki
 
@@ -133,6 +136,7 @@
   when:
     - vault_config_local_cert_slurp.data is defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   tags:
     - vault_config_pki
 
@@ -158,6 +162,7 @@
   ansible.builtin.set_fact:
     cert_check_time: "{{ (ansible_date_time.epoch | int) + (30 * 24 * 60 * 60) }}"
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   tags:
     - vault_config_pki
 
@@ -172,6 +177,7 @@
       }}
   when: vault_config_existing_cert_info.not_after is defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   tags:
     - vault_config_pki
 
@@ -180,6 +186,7 @@
     cert_expiry: "{{ ansible_date_time.epoch | int }}"
   when: vault_config_existing_cert_info.not_after is not defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   tags:
     - vault_config_pki
 
@@ -197,6 +204,7 @@
       alt_names: "localhost,{{ vault_config_vault_hostname }}"
   register: vault_config_pki_cert
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   when:
     - vault_config_pki_role_exists | default(false) | bool
     - not (vault_config_existing_cert_present | default(false) | bool)
@@ -222,11 +230,13 @@
   register: new_cert_info
   when: vault_config_pki_cert.data is defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   tags:
     - vault_config_pki
 
 - name: Store newly generated certificate in Vault KV2
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   community.hashi_vault.vault_kv2_write:
     url: "{{ vault_config_vault_address }}"
     engine_mount_point: "{{ vault_config_engine_mount_point }}"

@@ -44,7 +44,8 @@ vault_config_vault_address: "{{ vault_config_url }}"
 vault_config_api_url: "{{ vault_config_vault_address }}"
 vault_config_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
 vault_config_vault_hostname: "{{ inventory_hostname }}"
-vault_config_api_delegate_to: "{{ vault_api_delegate_to | default('localhost') }}"
+# Run Vault API calls from the controller/EE by default.
+vault_config_api_delegate_to: localhost
 
 # Prefer inventory/global `vault_engine_mount_point` if provided, otherwise default for this role.
 vault_config_engine_mount_point: "{{ vault_engine_mount_point | default('stage-2c', true) }}"
