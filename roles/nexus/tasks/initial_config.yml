@@ -9,7 +9,7 @@
     secret_id: "{{ nexus_vault_kv_secret_id | default('') }}"
     validate_certs: "{{ nexus_vault_validate_certs }}"
     path: "{{ inventory_hostname }}/nexus/admin"
-  register: vault_nexus_admin_password
+  register: nexus_admin_password
   failed_when: false
   no_log: true
   tags:
@@ -38,40 +38,43 @@
 
 - name: Set target admin password from Vault
   ansible.builtin.set_fact:
-    nexus_nexus_target_admin_password: "{{ vault_nexus_admin_password.data.data.password }}"
-  when: nexus_nexus_target_admin_password is not defined and
-        vault_nexus_admin_password.data is defined and
-        vault_nexus_admin_password.data.data.password is defined
+    nexus_target_admin_password: "{{ nexus_admin_password.data.data.password }}"
+  when: nexus_target_admin_password is not defined and
+        nexus_admin_password.data is defined and
+        nexus_admin_password.data.data.password is defined
   no_log: true
   tags:
     - sonatype_nexus_config
 
 - name: Set target admin password on first boot
-  when: nexus_nexus_target_admin_password is not defined and
+  when: nexus_target_admin_password is not defined and
         admin_pwd_file_stat.stat.exists
   ansible.builtin.set_fact:
-    nexus_nexus_target_admin_password: "{{ lookup('community.general.random_string', length=32) }}"
+    nexus_target_admin_password: "{{ lookup('community.general.random_string', length=32) }}"
   no_log: true
   tags:
     - sonatype_nexus_config
 
 - name: Fail when Nexus admin password is unknown
-  when: nexus_nexus_target_admin_password is not defined
+  when: nexus_target_admin_password is not defined
   ansible.builtin.fail:
     msg: >-
       Nexus admin password not found in Vault and admin.password is missing.
-      Restore the Vault secret or set nexus_nexus_target_admin_password.
+      Restore the Vault secret or set nexus_target_admin_password.
   tags:
     - sonatype_nexus_config
 
 - name: Validate Nexus admin credentials
   ansible.builtin.uri:
-    url: "https://{{ nexus_nexus_hostname }}/service/rest/v1/security/users/{{ nexus_nexus_target_admin_username }}"
+    url: >-
+      https://{{ nexus_nexus_hostname }}/service/rest/v1/security/users?userId={{ nexus_nexus_target_admin_username }}
     method: GET
     user: "{{ nexus_nexus_target_admin_username }}"
-    password: "{{ nexus_nexus_target_admin_password }}"
+    password: "{{ nexus_target_admin_password }}"
     force_basic_auth: true
     validate_certs: "{{ nexus_validate_certs }}"
+    headers:
+      accept: application/json
     status_code: 200
   delegate_to: localhost
   register: nexus_admin_auth_check
@@ -104,7 +107,7 @@
         method: PUT
         user: "{{ nexus_nexus_target_admin_username }}"
         password: "{{ nexus_nexus_initial_admin_password }}"
-        body: "{{ nexus_nexus_target_admin_password }}"
+        body: "{{ nexus_target_admin_password }}"
         headers:
           Content-Type: text/plain
           accept: application/json
@@ -136,7 +139,7 @@
     validate_certs: "{{ nexus_vault_validate_certs }}"
     path: "{{ inventory_hostname }}/nexus/admin"
     data:
-      password: "{{ nexus_nexus_target_admin_password }}"
+      password: "{{ nexus_target_admin_password }}"
   no_log: true
   when: nexus_admin_password_changed | default(false)
   tags:
@@ -144,12 +147,15 @@
 
 - name: Re-validate Nexus admin credentials after bootstrap (best effort)
   ansible.builtin.uri:
-    url: "https://{{ nexus_nexus_hostname }}/service/rest/v1/security/users/{{ nexus_nexus_target_admin_username }}"
+    url: >-
+      https://{{ nexus_nexus_hostname }}/service/rest/v1/security/users?userId={{ nexus_nexus_target_admin_username }}
     method: GET
     user: "{{ nexus_nexus_target_admin_username }}"
-    password: "{{ nexus_nexus_target_admin_password }}"
+    password: "{{ nexus_target_admin_password }}"
     force_basic_auth: true
     validate_certs: "{{ nexus_validate_certs }}"
+    headers:
+      accept: application/json
     status_code: 200
   delegate_to: localhost
   register: nexus_admin_auth_check_after
@@ -166,7 +172,7 @@
         (nexus_admin_auth_check_after.status | default(nexus_admin_auth_check.status | default('unknown')))
       }}).
       If this is a first boot, ensure {{ nexus_nexus_data_dir }}/admin.password exists and is readable.
-      Otherwise update the Vault secret or set nexus_nexus_target_admin_password.
+      Otherwise update the Vault secret or set nexus_target_admin_password.
   when: (nexus_admin_auth_check_after.status | default(nexus_admin_auth_check.status | default(0))) != 200
   tags:
     - sonatype_nexus_config
@@ -177,7 +183,7 @@
   ansible.builtin.uri:
     url: "https://{{ nexus_nexus_hostname }}/service/rest/v1/security/anonymous"
     user: "{{ nexus_nexus_target_admin_username }}"
-    password: "{{ nexus_nexus_target_admin_password }}"
+    password: "{{ nexus_target_admin_password }}"
     method: PUT
     force_basic_auth: true
     validate_certs: "{{ nexus_validate_certs }}"
@@ -212,7 +218,7 @@
     url: "https://{{ nexus_nexus_hostname }}/service/extdirect"
     method: POST
     user: "{{ nexus_nexus_target_admin_username }}"
-    password: "{{ nexus_nexus_target_admin_password }}"
+    password: "{{ nexus_target_admin_password }}"
     force_basic_auth: true
     validate_certs: "{{ nexus_validate_certs }}"
     headers:

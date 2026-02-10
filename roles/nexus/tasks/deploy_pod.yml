@@ -10,7 +10,16 @@
     - "{{ nexus_nexus_data_dir }}"
     - "{{ nexus_caddy_config_dir }}"
     - "{{ nexus_caddy_certs_dir }}"
-    - "{{ nexus_pod_manifest_path | dirname }}"
+  tags:
+    - deployment
+
+- name: Ensure pod manifest directory exists
+  ansible.builtin.file:
+    path: "{{ nexus_pod_manifest_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
   tags:
     - deployment
 
