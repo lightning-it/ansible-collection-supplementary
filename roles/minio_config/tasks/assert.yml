@@ -1,0 +1,78 @@
+---
+- name: Ensure config user list input type is valid
+  ansible.builtin.assert:
+    that:
+      - minio_config_users_effective is sequence
+      - minio_config_users_effective is not string
+      - minio_config_users_effective is not mapping
+    fail_msg: >-
+      MinIO users input must be a list (YAML sequence) of user dicts.
+      Got type={{ minio_config_users_effective | type_debug }}.
+      Example:
+        minio_config_users:
+          - access_key: terraform
+            secret_key: "<secret>"
+            policy: readwrite
+  when:
+    - not minio_config_skip_config | bool
+    - minio_config_manage_any | bool
+  tags: always
+
+- name: Ensure normalized MinIO user list is valid
+  ansible.builtin.assert:
+    that:
+      - minio_config_users_effective is sequence
+      - minio_config_users_effective is not string
+      - >-
+        (minio_config_users_effective | select('mapping') | list | length)
+        == (minio_config_users_effective | length)
+      - >-
+        (minio_config_users_effective | selectattr('access_key') | list | length)
+        == (minio_config_users_effective | length)
+      - >-
+        (minio_config_users_effective | selectattr('secret_key') | list | length)
+        == (minio_config_users_effective | length)
+    fail_msg: >-
+      Each MinIO user must be a dict with non-empty access_key and secret_key.
+      Example:
+        minio_config_users:
+          - access_key: terraform
+            secret_key: "<secret>"
+            policy: readwrite
+  when:
+    - not minio_config_skip_config | bool
+    - minio_config_manage_any | bool
+    - minio_config_users_effective | length > 0
+  tags: always
+
+- name: Validate MinIO user fields
+  ansible.builtin.assert:
+    that:
+      - item.access_key | default('', true) | trim | length > 0
+      - item.secret_key | default('', true) | trim | length > 0
+    fail_msg: "Each MinIO user must include non-empty access_key and secret_key."
+  loop: "{{ minio_config_users_effective | default([], true) }}"
+  loop_control:
+    label: "{{ item.access_key | default('') }}"
+  no_log: true
+  when:
+    - not minio_config_skip_config | bool
+    - minio_config_manage_any | bool
+    - minio_config_users_effective | length > 0
+  tags: always
+
+- name: Ensure MinIO runtime values are set when config is enabled
+  ansible.builtin.assert:
+    that:
+      - minio_config_api_url_effective | default('', true) | trim | length > 0
+      - minio_config_root_user_effective | default('', true) | trim | length > 0
+      - minio_config_root_password_effective | default('', true) | trim | length > 0
+    fail_msg: >-
+      MinIO config requires API URL and root credentials. Set minio_config_api_url,
+      minio_config_root_user, minio_config_root_password or run minio_deploy earlier
+      in the same play.
+  no_log: true
+  when:
+    - not minio_config_skip_config | bool
+    - minio_config_manage_any | bool
+  tags: always

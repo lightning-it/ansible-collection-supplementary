@@ -1,0 +1,9 @@
+---
+- name: Ensure bootstrap bucket list is valid
+  ansible.builtin.assert:
+    that:
+      - minio_bootstrap_buckets is sequence
+      - minio_bootstrap_buckets is not string
+      - minio_bootstrap_buckets is not mapping
+    fail_msg: "minio_bootstrap_buckets must be a list."
+  tags: always

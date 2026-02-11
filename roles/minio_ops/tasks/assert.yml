@@ -1,0 +1,15 @@
+---
+- name: Ensure minio_ops_action is valid
+  ansible.builtin.assert:
+    that:
+      - minio_ops_action in ['none', 'restart', 'status', 'upgrade']
+    fail_msg: "minio_ops_action must be one of: none, restart, status, upgrade."
+  tags: always
+
+- name: Ensure minio_ops_target_image is provided for upgrade
+  ansible.builtin.assert:
+    that:
+      - minio_ops_target_image | default('', true) | trim | length > 0
+    fail_msg: "minio_ops_target_image must be set for upgrade."
+  when: minio_ops_action == 'upgrade'
+  tags: always

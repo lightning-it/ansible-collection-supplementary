@@ -1,6 +1,8 @@
 # minio_foundational
 
-Shared helper tasks for MinIO endpoint and credential normalization.
+Shared helper tasks for MinIO credential resolution (Vault read/generate/write).
+
+Effective endpoint variables are derived in `minio_deploy` defaults.
 
 ## Requirements
 

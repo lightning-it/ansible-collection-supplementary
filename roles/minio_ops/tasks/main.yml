@@ -1,15 +1,6 @@
 ---
-- name: Ensure required MinIO vars are defined
-  ansible.builtin.import_role:
-    name: minio_deploy
-    tasks_from: assert
-  tags: always
-
-- name: Ensure minio_ops_action is valid
-  ansible.builtin.assert:
-    that:
-      - minio_ops_action in ['none', 'restart', 'status', 'upgrade']
-    fail_msg: "minio_ops_action must be one of: none, restart, status, upgrade."
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
   tags: always
 
 - name: Restart MinIO service

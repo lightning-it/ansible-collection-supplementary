@@ -151,10 +151,11 @@
       {%- endif -%}
       {{ addr }}
     coredns_deploy_podman_iface_ipv4: >-
-      {%- set pkey = 'ansible_podman1' -%}
-      {%- if ansible_facts[pkey] is defined -%}
-      {{ ansible_facts[pkey].ipv4.address | default('') | string | trim }}{%- else -%}
-      {{ '''''' }}{%- endif -%}
+      {{
+        ansible_facts.get('ansible_podman1', {}).get('ipv4', {}).get('address', '')
+        | string
+        | trim
+      }}
   changed_when: false
 
 - name: Normalize upstream resolver list and ignore-auto-dns (type-safe)
@@ -220,11 +221,17 @@
 - name: Build desired DNS list from resolver mode
   ansible.builtin.set_fact:
     coredns_deploy_desired_dns_list: >-
-      {%- set mode = coredns_deploy_resolver_mode | default('core_only') | lower -%}
-      {%- if mode == 'core_only' -%}
-      {{ coredns_deploy_local_dns_list }}{%- elif mode == 'upstream_only' -%}
-      {{ coredns_deploy_upstream_dns_list }}{%- else -%}
-      {{ (coredns_deploy_local_dns_list + coredns_deploy_upstream_dns_list) | unique | sort }}{%- endif -%}
+      {{
+        coredns_deploy_local_dns_list
+        if (_mode == 'core_only')
+        else (
+          coredns_deploy_upstream_dns_list
+          if (_mode == 'upstream_only')
+          else ((coredns_deploy_local_dns_list + coredns_deploy_upstream_dns_list) | unique | sort)
+        )
+      }}
+  vars:
+    _mode: "{{ coredns_deploy_resolver_mode | default('core_only') | lower }}"
   changed_when: false
 
 - name: Fail when desired DNS list is empty (avoid no-op confusion)

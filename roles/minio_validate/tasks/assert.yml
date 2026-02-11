@@ -1,0 +1,11 @@
+---
+- name: Ensure MinIO validation variables are set
+  ansible.builtin.assert:
+    that:
+      - minio_validate_mode in ['fail', 'report']
+      - minio_validate_container_name | default('', true) | trim | length > 0
+      - minio_validate_health_url_effective | default('', true) | trim | length > 0
+    fail_msg: "MinIO validation variables are missing or invalid."
+  changed_when: false
+  when: not minio_validate_skip | bool
+  tags: always

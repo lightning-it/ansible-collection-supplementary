@@ -1,7 +1,16 @@
 ---
-minio_bootstrap_tfstate_bucket: "tfstate"
-minio_bootstrap_tfstate_endpoint: ""
-minio_bootstrap_tfstate_access_key: ""
-minio_bootstrap_tfstate_secret_key: ""
-minio_bootstrap_tfstate_region: ""
-minio_bootstrap_tfstate_key_prefix: ""
+minio_bootstrap_skip: "{{ minio_deploy_skip_bootstrap | default(false, true) | bool }}"
+minio_bootstrap_buckets: "{{ minio_deploy_bootstrap_buckets | default([], true) }}"
+minio_bootstrap_tfstate_bucket: "vault-bucket"
+minio_bootstrap_tfstate_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c', true) }}"
+minio_bootstrap_tfstate_vault_path: "{{ inventory_hostname }}/minio/vault-bucket"
+
+# Auto-detect local tfstate files on the target and migrate them to MinIO when present.
+# This allows running `-t minio` without also running `vault_config` to seed tfstate_pending_dirs.
+minio_bootstrap_tfstate_auto_detect: true
+minio_bootstrap_tfstate_auto_dirs:
+  - "/srv/vault/bootstrap"
+
+# Derived flags (avoid set_fact where possible)
+minio_bootstrap_manage_buckets: "{{ (minio_bootstrap_buckets | default([], true) | length) > 0 }}"
+minio_bootstrap_migrate_tfstate: "{{ (tfstate_pending_dirs | default([], true) | length) > 0 }}"

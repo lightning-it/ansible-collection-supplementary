@@ -1,0 +1,26 @@
+---
+- name: Ensure minio_backup_restore_action is valid
+  ansible.builtin.assert:
+    that:
+      - minio_backup_restore_action in ['none', 'backup', 'restore']
+    fail_msg: "minio_backup_restore_action must be one of: none, backup, restore."
+  tags: always
+
+- name: Ensure backup/restore variables are set when enabled
+  ansible.builtin.assert:
+    that:
+      - minio_backup_restore_backup_dir | default('', true) | trim | length > 0
+      - minio_backup_restore_host_data_dir | default('', true) | trim | length > 0
+    fail_msg: "minio_backup_restore_backup_dir and minio_backup_restore_host_data_dir must be set for backup/restore."
+  when: minio_backup_restore_action in ['backup', 'restore']
+  tags: always
+
+- name: Ensure restore input is confirmed
+  ansible.builtin.assert:
+    that:
+      - minio_backup_restore_restore_confirm == 'YES_RESTORE'
+      - minio_backup_restore_restore_source | default('', true) | trim | length > 0
+    fail_msg: >-
+      Set minio_backup_restore_restore_confirm=YES_RESTORE and minio_backup_restore_restore_source for restore.
+  when: minio_backup_restore_action == 'restore'
+  tags: always

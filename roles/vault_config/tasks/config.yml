@@ -139,6 +139,15 @@
     - terragrunt_plan
     - terragrunt_apply
 
+- name: Check if MinIO is deployed (manifest exists)
+  ansible.builtin.stat:
+    path: "/etc/podman/pods/minio.yml"
+  register: vault_config_minio_manifest
+  changed_when: false
+  tags:
+    - config
+    - tfstate
+
 - name: Find existing Vault bootstrap tfstate files on target
   ansible.builtin.find:
     paths: "{{ vault_config_terraform_state_dir }}"
@@ -154,6 +163,132 @@
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
+
+- name: Read MinIO tfstate backend credentials from Vault
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ vault_config_vault_address }}"
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
+    engine_mount_point: "{{ vault_config_tfstate_vault_kv_mount }}"
+    path: "{{ vault_config_tfstate_vault_path }}"
+    token: "{{ vault_config_token }}"
+  register: vault_config_tfstate_creds_read
+  failed_when: false
+  no_log: true
+  when: vault_config_minio_manifest.stat.exists | default(false) | bool
+  tags:
+    - config
+    - tfstate
+
+- name: Parse MinIO tfstate backend credentials
+  ansible.builtin.set_fact:
+    vault_config_tfstate_creds_present: >-
+      {{
+        (_creds.access_key | default('') | length > 0)
+        and (_creds.secret_key | default('') | length > 0)
+        and ((_creds.bucket | default(vault_config_tfstate_bucket_default, true) | trim) | length > 0)
+      }}
+  vars:
+    _creds: "{{ vault_config_tfstate_creds_read.data.data | default({}) }}"
+  changed_when: false
+  no_log: true
+  when: vault_config_minio_manifest.stat.exists | default(false) | bool
+  tags:
+    - config
+    - tfstate
+
+- name: Determine Vault tfstate backend (local bootstrap vs MinIO S3)
+  ansible.builtin.set_fact:
+    vault_config_tfstate_backend: >-
+      {{
+        's3'
+        if (vault_config_minio_manifest.stat.exists | default(false) | bool)
+           and (vault_config_tfstate_creds_present | default(false) | bool)
+           and ((vault_config_tfstate_files_remote.matched | default(0) | int) == 0)
+        else 'local'
+      }}
+  changed_when: false
+  tags:
+    - config
+    - tfstate
+
+- name: Mark Vault tfstate dir as pending migration (handled by minio_bootstrap)
+  ansible.builtin.set_fact:
+    tfstate_pending_dirs: >-
+      {{
+        ((tfstate_pending_dirs | default([])) + [vault_config_terraform_state_dir])
+        | unique
+        | list
+      }}
+  changed_when: false
+  when: vault_config_tfstate_backend == 'local'
+  tags:
+    - config
+    - tfstate
+    - tfstate_migrate
+
+- name: Resolve remote tfstate backend vars (MinIO S3)
+  ansible.builtin.set_fact:
+    vault_config_tfstate_s3_endpoint: >-
+      {{
+        vault_config_tfstate_s3_endpoint
+          | default(
+              _creds.endpoint
+                | default('http://' ~ (ansible_host | default(inventory_hostname)) ~ ':9000', true),
+              true
+            )
+      }}
+    vault_config_tfstate_bucket: >-
+      {{
+        vault_config_tfstate_bucket
+          | default(_creds.bucket | default(vault_config_tfstate_bucket_default, true), true)
+      }}
+    vault_config_tfstate_region: >-
+      {{
+        vault_config_tfstate_region
+          | default(_creds.region | default(vault_config_tfstate_region_default, true), true)
+      }}
+    vault_config_tfstate_key_prefix: >-
+      {{
+        vault_config_tfstate_key_prefix
+          | default(_creds.key_prefix | default(vault_config_tfstate_key_prefix_default, true), true)
+      }}
+    vault_config_tfstate_access_key: >-
+      {{
+        vault_config_tfstate_access_key
+          | default(_creds.access_key | default(''), true)
+      }}
+    vault_config_tfstate_secret_key: >-
+      {{
+        vault_config_tfstate_secret_key
+          | default(_creds.secret_key | default(''), true)
+      }}
+  vars:
+    _creds: "{{ vault_config_tfstate_creds_read.data.data | default({}) }}"
+  no_log: true
+  changed_when: false
+  when: vault_config_tfstate_backend == 's3'
+  tags:
+    - config
+    - tfstate
+
+- name: Assert remote tfstate backend vars are resolved
+  ansible.builtin.assert:
+    that:
+      - vault_config_tfstate_s3_endpoint | default('', true) | trim | length > 0
+      - vault_config_tfstate_bucket | default('', true) | trim | length > 0
+      - vault_config_tfstate_access_key | default('', true) | trim | length > 0
+      - vault_config_tfstate_secret_key | default('', true) | trim | length > 0
+    fail_msg: >-
+      Remote tfstate backend selected but credentials are missing. Ensure the Vault secret
+      {{ vault_config_tfstate_vault_kv_mount }}/data/{{ vault_config_tfstate_vault_path }}
+      exists and includes bucket/access_key/secret_key.
+  no_log: true
+  when: vault_config_tfstate_backend == 's3'
+  tags:
+    - config
+    - tfstate
 
 - name: Remove local Vault bootstrap tfstate before syncing from target (target is source-of-truth)
   ansible.builtin.file:
@@ -278,6 +413,7 @@
       register: vault_config_tfstate_files
       changed_when: false
       delegate_to: localhost
+      when: vault_config_tfstate_backend == 'local'
 
     - name: Copy local Vault bootstrap tfstate files to target
       ansible.builtin.copy:
@@ -286,21 +422,24 @@
         owner: root
         group: root
         mode: "0600"
-      loop: "{{ vault_config_tfstate_files.files }}"
+      loop: "{{ vault_config_tfstate_files.files | default([]) }}"
       loop_control:
         loop_var: vault_config_tfstate_file
-      when: vault_config_tfstate_files.matched | int > 0
+      when:
+        - vault_config_tfstate_backend == 'local'
+        - vault_config_tfstate_files.matched | default(0) | int > 0
 
     - name: Remove local Vault bootstrap tfstate files after successful sync (controller cache)
       ansible.builtin.file:
         path: "{{ vault_config_tfstate_file.path }}"
         state: absent
-      loop: "{{ vault_config_tfstate_files.files }}"
+      loop: "{{ vault_config_tfstate_files.files | default([]) }}"
       loop_control:
         loop_var: vault_config_tfstate_file
       when:
-        - vault_config_tfstate_files.matched | int > 0
+        - vault_config_tfstate_files.matched | default(0) | int > 0
         - not (vault_config_tfstate_keep_local | default(false) | bool)
+        - vault_config_tfstate_backend == 'local'
       delegate_to: localhost
       changed_when: false
 
@@ -315,6 +454,7 @@
       changed_when: false
       when:
         - not (vault_config_tfstate_keep_local | default(false) | bool)
+        - vault_config_tfstate_backend == 'local'
 
     - name: Remove local Vault tfstate cache dir when empty (controller cache)
       ansible.builtin.file:
@@ -325,6 +465,7 @@
       changed_when: false
       when:
         - not (vault_config_tfstate_keep_local | default(false) | bool)
+        - vault_config_tfstate_backend == 'local'
         - vault_config_tfstate_dir_local_contents is defined
         - (vault_config_tfstate_dir_local_contents.matched | default(0) | int) == 0
         - vault_config_terraform_state_dir_local | default('', true) | trim | length > 1

@@ -4,15 +4,14 @@
     path: "{{ minio_bootstrap_pending_dir }}"
   register: minio_bootstrap_pending_dir_stat
   changed_when: false
-  delegate_to: localhost
   tags:
     - tfstate
     - tfstate_migrate
 
 - name: Migrate tfstate files from pending directory
-  when: minio_bootstrap_pending_dir_stat.stat.exists
+  when: minio_bootstrap_pending_dir_stat.stat.exists | default(false) | bool
   block:
-    - name: Find local tfstate files in pending directory
+    - name: Find tfstate files in pending directory
       ansible.builtin.find:
         paths: "{{ minio_bootstrap_pending_dir }}"
         patterns:
@@ -23,31 +22,41 @@
         file_type: file
       register: minio_bootstrap_pending_tfstate_files
       changed_when: false
-      delegate_to: localhost
       tags:
         - tfstate
         - tfstate_migrate
 
-    - name: Migrate pending tfstate files to backend
-      ansible.builtin.include_role:
-        name: lit.foundational.terraform_state_migrate
-        apply:
-          delegate_to: localhost
+    - name: Upload pending tfstate files to tfstate bucket
+      ansible.builtin.command: >-
+        podman run --rm --network host --user 0:0 --entrypoint mc
+        -v {{ minio_deploy_mc_config_dir }}:{{ minio_deploy_mc_config_dir }}:Z
+        -v {{ minio_bootstrap_pending_dir }}:{{ minio_bootstrap_pending_dir }}:Z
+        {{ minio_deploy_mc_image }}
+        --config-dir {{ minio_deploy_mc_config_dir }}
+        cp
+        {{ (minio_deploy_mc_insecure | bool) | ternary('--insecure', '') }}
+        {{ minio_bootstrap_tfstate_file.path }}
+        {{ minio_deploy_mc_alias }}/{{ tfstate_bucket }}/{{ minio_bootstrap_tfstate_object_key }}
       vars:
-        terraform_state_migrate_local_root: "{{ minio_bootstrap_pending_dir }}"
-        terraform_state_migrate_s3_endpoint: "{{ tfstate_s3_endpoint }}"
-        terraform_state_migrate_s3_bucket: "{{ tfstate_bucket }}"
-        terraform_state_migrate_s3_access_key: "{{ tfstate_access_key }}"
-        terraform_state_migrate_s3_secret_key: "{{ tfstate_secret_key }}"
-        terraform_state_migrate_s3_region: "{{ tfstate_region | default('', true) }}"
-        terraform_state_migrate_s3_key_prefix: "{{ tfstate_key_prefix | default('', true) }}"
+        _prefix: >-
+          {{ (tfstate_key_prefix | default('', true) | trim)
+             | regex_replace('^/+', '')
+             | regex_replace('/+$', '') }}
+        minio_bootstrap_tfstate_object_key: >-
+          {{ (_prefix ~ '/' if (_prefix | length > 0) else '') ~ (minio_bootstrap_tfstate_file.path | basename) }}
+      register: minio_bootstrap_tfstate_upload
+      loop: "{{ minio_bootstrap_pending_tfstate_files.files }}"
+      loop_control:
+        loop_var: minio_bootstrap_tfstate_file
+        label: "{{ minio_bootstrap_tfstate_file.path | basename }}"
       when: minio_bootstrap_pending_tfstate_files.matched | int > 0
+      changed_when: true
       no_log: true
       tags:
         - tfstate
         - tfstate_migrate
 
-    - name: Remove local tfstate files after migration
+    - name: Remove tfstate files after migration
       ansible.builtin.file:
         path: "{{ minio_bootstrap_tfstate_file.path }}"
         state: absent
@@ -55,7 +64,6 @@
       loop_control:
         loop_var: minio_bootstrap_tfstate_file
       when: minio_bootstrap_pending_tfstate_files.matched | int > 0
-      delegate_to: localhost
       tags:
         - tfstate
         - tfstate_migrate

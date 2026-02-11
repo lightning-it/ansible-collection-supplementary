@@ -1,3 +1,4 @@
 ---
 vault_ops_action: "none"
 vault_ops_target_image: ""
+vault_ops_api_delegate_to: localhost

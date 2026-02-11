@@ -1,0 +1,7 @@
+---
+- name: No prechecks required for minio_foundational
+  ansible.builtin.assert:
+    that:
+      - true
+  changed_when: false
+  tags: always

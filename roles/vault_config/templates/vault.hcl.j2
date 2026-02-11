@@ -18,15 +18,36 @@ locals {
   env    = local.parsed.env
 }
 
-# Configure gitlab as a backend
+{%- set _prefix = (vault_config_tfstate_key_prefix | default('', true) | trim)
+  | regex_replace('^/+', '')
+  | regex_replace('/+$', '') -%}
+
+# Configure Terraform backend (local during bootstrap, MinIO S3 once available)
 generate "backend" {
   path      = "backend.tf"
   if_exists = "overwrite"
   contents  = <<EOF
 terraform {
+{% if (vault_config_tfstate_backend | default('local', true) | trim) == 's3' %}
+  backend "s3" {
+    bucket   = "{{ vault_config_tfstate_bucket }}"
+    key      = "{{ ((_prefix ~ '/' if (_prefix | length > 0) else '') ~ (vault_config_terraform_state_path_local | basename)) }}"
+    region   = "{{ vault_config_tfstate_region }}"
+    endpoint = "{{ vault_config_tfstate_s3_endpoint }}"
+
+    access_key = "{{ vault_config_tfstate_access_key }}"
+    secret_key = "{{ vault_config_tfstate_secret_key }}"
+
+    skip_credentials_validation = true
+    skip_metadata_api_check     = true
+    skip_requesting_account_id  = true
+    force_path_style            = true
+  }
+{% else %}
   backend "local" {
     path = "{{ vault_config_terraform_state_path_local }}"
   }
+{% endif %}
 }
 EOF
 }

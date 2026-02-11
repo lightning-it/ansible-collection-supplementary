@@ -1,1 +1,16 @@
 ---
+# Role-prefixed interface (preferred).
+# Backwards compatible: if callers set `minio_deploy_*` variables, these defaults will pick them up.
+
+minio_validate_skip: "{{ minio_deploy_skip_validate | default(false, true) }}"
+minio_validate_mode: "{{ minio_deploy_validate_mode | default('fail', true) }}"
+minio_validate_strict: "{{ minio_validate_mode != 'report' }}"
+
+minio_validate_container_name: "{{ minio_deploy_container_name | default('minio-minio', true) }}"
+minio_validate_host_data_dir: "{{ minio_deploy_host_data_dir | default('/srv/minio/data', true) }}"
+minio_validate_expected_uid: "{{ minio_deploy_expected_uid | default(1000, true) }}"
+minio_validate_expected_gid: "{{ minio_deploy_expected_gid | default(1000, true) }}"
+minio_validate_expected_mode: "{{ minio_deploy_expected_mode | default('0700', true) }}"
+minio_validate_validate_certs: "{{ minio_deploy_validate_certs | default(true, true) }}"
+minio_validate_health_url_effective: >-
+  {{ minio_deploy_health_url_effective | default('http://127.0.0.1:9000/minio/health/ready', true) }}

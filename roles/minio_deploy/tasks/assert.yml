@@ -1,9 +1,4 @@
 ---
-- name: Resolve MinIO endpoints and credentials
-  ansible.builtin.import_role:
-    name: minio_foundational
-  tags: always
-
 - name: Ensure core MinIO variables are set
   ansible.builtin.assert:
     that:
@@ -17,12 +12,33 @@
     fail_msg: "MinIO core variables are missing or invalid."
   tags: always
 
-- name: Ensure MinIO root credentials are provided
+- name: Ensure MinIO root credentials can be resolved (runtime)
   ansible.builtin.assert:
     that:
-      - minio_deploy_root_user_effective | default('') | length > 0
-      - minio_deploy_root_password_effective | default('') | length > 0
-    fail_msg: "minio_deploy_root_user/minio_deploy_root_password must be set to deploy MinIO."
+      - >-
+        (
+          (minio_deploy_root_user_effective | default('', true) | length > 0)
+          and
+          (minio_deploy_root_password_effective | default('', true) | length > 0)
+        )
+        or
+        (
+          (minio_deploy_generate_root_credentials | default(true) | bool)
+          and
+          (
+            not (minio_deploy_store_root_credentials | default(true) | bool)
+            or
+            (
+              (minio_deploy_vault_address | default('', true) | trim | length > 0)
+              and (minio_deploy_vault_auth_ok | default(false) | bool)
+            )
+          )
+        )
+    fail_msg: >-
+      MinIO root credentials cannot be resolved.
+      Provide MINIO_ROOT_USER/MINIO_ROOT_PASSWORD (or minio_deploy_root_user/minio_deploy_root_password),
+      or enable credential generation and disable Vault storage, or configure Vault auth
+      (vault_address + token/AppRole).
   when: not minio_deploy_skip_runtime | bool
   no_log: true
   tags: always

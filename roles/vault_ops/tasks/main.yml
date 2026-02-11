@@ -8,9 +8,16 @@
 - name: Ensure vault_ops_action is valid
   ansible.builtin.assert:
     that:
-      - vault_ops_action in ['none', 'restart', 'status', 'upgrade']
-    fail_msg: "vault_ops_action must be one of: none, restart, status, upgrade."
+      - vault_ops_action in ['none', 'restart', 'status', 'upgrade', 'unseal']
+    fail_msg: "vault_ops_action must be one of: none, restart, status, upgrade, unseal."
   tags: always
+
+- name: Unseal Vault
+  ansible.builtin.include_tasks: unseal.yml
+  when: vault_ops_action == 'unseal'
+  tags:
+    - ops
+    - unseal
 
 - name: Restart Vault service
   when: vault_ops_action == 'restart'
@@ -52,6 +59,8 @@
       register: vault_deploy_health
       changed_when: false
       failed_when: false
+      delegate_to: "{{ vault_ops_api_delegate_to }}"
+      become: false
 
     - name: Read Vault init status
       ansible.builtin.uri:
@@ -61,6 +70,8 @@
       register: vault_deploy_init_status
       changed_when: false
       failed_when: false
+      delegate_to: "{{ vault_ops_api_delegate_to }}"
+      become: false
 
     - name: Read Vault seal status
       ansible.builtin.uri:
@@ -70,6 +81,8 @@
       register: vault_deploy_seal_status
       changed_when: false
       failed_when: false
+      delegate_to: "{{ vault_ops_api_delegate_to }}"
+      become: false
 
     - name: Report Vault API status
       ansible.builtin.debug:

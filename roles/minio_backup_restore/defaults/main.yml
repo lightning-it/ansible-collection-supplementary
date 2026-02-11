@@ -1,1 +1,30 @@
 ---
+# Role-prefixed interface (preferred).
+# Backwards compatible: if callers set `minio_deploy_*` variables, these defaults will pick them up.
+
+# Backup/restore control
+minio_backup_restore_action: "{{ minio_deploy_backup_action | default('none', true) }}"
+minio_backup_restore_backup_dir: "{{ minio_deploy_backup_dir | default('/srv/minio/backups', true) }}"
+minio_backup_restore_retention_keep_last: "{{ minio_deploy_backup_retention_keep_last | default(14, true) }}"
+minio_backup_restore_stop_service: "{{ minio_deploy_backup_stop_service | default(true, true) }}"
+minio_backup_restore_restore_source: "{{ minio_deploy_restore_source | default('', true) }}"
+minio_backup_restore_restore_confirm: "{{ minio_deploy_restore_confirm | default('', true) }}"
+minio_backup_restore_validate_after_restore: "{{ minio_deploy_backup_validate_after_restore | default(true, true) }}"
+
+# Runtime wiring (matches minio_deploy defaults)
+minio_backup_restore_pod_name: "{{ minio_deploy_pod_name | default('minio', true) }}"
+minio_backup_restore_pod_manifest_path: >-
+  {{ minio_deploy_pod_manifest_path | default('/etc/podman/pods/minio.yml', true) }}
+minio_backup_restore_manage_systemd: "{{ minio_deploy_manage_systemd | default(true, true) }}"
+minio_backup_restore_systemd_unit_name: >-
+  {{
+    'podman-kube@'
+    ~ (minio_backup_restore_pod_manifest_path | basename | regex_replace('\\.yml$', ''))
+    ~ '.service'
+  }}
+
+# Storage defaults (matches minio_deploy defaults)
+minio_backup_restore_host_data_dir: "{{ minio_deploy_host_data_dir | default('/srv/minio/data', true) }}"
+minio_backup_restore_expected_uid: "{{ minio_deploy_expected_uid | default(1000, true) }}"
+minio_backup_restore_expected_gid: "{{ minio_deploy_expected_gid | default(1000, true) }}"
+minio_backup_restore_expected_mode: "{{ minio_deploy_expected_mode | default('0700', true) }}"

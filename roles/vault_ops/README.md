@@ -1,6 +1,6 @@
 # vault_ops
 
-Day-2 operational actions for Vault (restart, status, upgrade).
+Day-2 operational actions for Vault (restart, status, upgrade, unseal).
 
 ## Requirements
 
@@ -11,7 +11,7 @@ None.
 See `roles/vault_ops/defaults/main.yml` and `roles/vault_deploy/defaults/main.yml`.
 
 Key variables:
-- `vault_ops_action`: `restart`, `status`, `upgrade`, or `none`.
+- `vault_ops_action`: `restart`, `status`, `upgrade`, `unseal`, or `none`.
 - `vault_ops_target_image`: image to use for upgrade.
 
 ## Example Playbook
