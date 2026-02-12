@@ -6,14 +6,20 @@ Shared helpers for Vault bootstrap metadata files.
 
 - `ansible-vault` available on the controller when re-encryption is needed.
 
-## Role Variables
+## Variables
+
+See `roles/vault_foundational/defaults/main.yml`.
 
 Key variables:
 - `vault_foundational_init_file_path` (string): override init file path.
 - `vault_deploy_init_file_path` (string): fallback init file path.
 - `vault_deploy_ansible_vault_pw` (string): vault password used for re-encrypting raw init output.
 
-## Example Usage
+## Dependencies
+
+None.
+
+## Example Playbook
 
 ```yaml
 - name: Normalize Vault init file format
@@ -21,3 +27,11 @@ Key variables:
     name: lit.supplementary.vault_foundational
     tasks_from: normalize_init_file
 ```
+
+## License
+
+GPL-3.0-only
+
+## Author
+
+Lightning IT

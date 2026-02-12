@@ -3,6 +3,7 @@
   when:
     - vault_deploy_manage_systemd | bool
     - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+    - not ansible_check_mode
   tags:
     - systemd
   block:
@@ -25,7 +26,7 @@
         validate_certs: "{{ vault_deploy_vault_validate_certs }}"
       register: vault_deploy_health
       until: vault_deploy_health.status in [200, 429, 472, 473, 501, 503]
-      retries: 30               # 30 Versuche
-      delay: 5                  # alle 5 Sekunden neu probieren
+      retries: 30
+      delay: 5
       changed_when: false
       failed_when: vault_deploy_health is failed and vault_deploy_health.status not in [200, 429, 472, 473, 501, 503]

@@ -1,4 +1,5 @@
 ---
 nginx_validate_mode: "fail"
+nginx_validate_strict: "{{ nginx_validate_mode != 'report' }}"
 nginx_validate_check_config: true
 nginx_validate_check_http: true

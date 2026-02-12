@@ -74,6 +74,7 @@
     - coredns_deploy_selinux_contexts.results is defined
     - coredns_deploy_selinux_relabel_targets | length > 0
     - coredns_deploy_selinux_type_missing | bool
+    - not ansible_check_mode
   vars:
     coredns_deploy_selinux_contexts_defined: >-
       {{

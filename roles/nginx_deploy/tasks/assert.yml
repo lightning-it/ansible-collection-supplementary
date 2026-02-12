@@ -11,6 +11,13 @@
       - nginx_deploy_host_conf_file | length > 0
       - nginx_deploy_host_conf_d_dir | length > 0
       - nginx_deploy_host_root | length > 0
+      - nginx_deploy_health_url_effective | length > 0
+      - nginx_deploy_manage_systemd is boolean
+      - nginx_deploy_skip_runtime is boolean
+      - nginx_deploy_skip_config is boolean
+      - nginx_deploy_skip_deploy is boolean
+      - nginx_deploy_skip_validate is boolean
+      - nginx_deploy_validate_certs is boolean
     fail_msg: "Nginx core variables are missing or invalid."
   tags: always
 

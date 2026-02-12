@@ -8,7 +8,9 @@
     path: "{{ minio_backup_restore_backup_dir }}"
     state: directory
     mode: '0750'
-  when: minio_backup_restore_action in ['backup', 'restore']
+  when:
+    - minio_backup_restore_action in ['backup', 'restore']
+    - not ansible_check_mode
   tags:
     - backup
     - restore
@@ -17,6 +19,7 @@
   when:
     - minio_backup_restore_action in ['backup', 'restore']
     - minio_backup_restore_stop_service | bool
+    - not ansible_check_mode
   tags:
     - backup
     - restore
@@ -25,7 +28,9 @@
       ansible.builtin.systemd:
         name: "{{ minio_backup_restore_systemd_unit_name }}"
         state: stopped
-      when: minio_backup_restore_manage_systemd | bool
+      when:
+        - minio_backup_restore_manage_systemd | bool
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
 
     - name: Stop MinIO pod (non-systemd)
       ansible.builtin.command: "podman pod stop {{ minio_backup_restore_pod_name }}"
@@ -34,14 +39,15 @@
       failed_when: false
       when: not minio_backup_restore_manage_systemd | bool
 
-- name: Create backup archive  # noqa command-instead-of-module
-  ansible.builtin.command: >-
-    tar -C {{ minio_backup_restore_host_data_dir | dirname }}
-    -czf {{ minio_backup_restore_backup_dir }}/minio-data-{{ ansible_date_time.iso8601_basic_short }}.tar.gz
-    {{ minio_backup_restore_host_data_dir | basename }}
-  register: minio_backup_archive
-  changed_when: minio_backup_archive.rc == 0
-  when: minio_backup_restore_action == 'backup'
+- name: Create backup archive
+  community.general.archive:
+    path: "{{ minio_backup_restore_host_data_dir }}"
+    dest: "{{ minio_backup_restore_backup_dir }}/minio-data-{{ ansible_date_time.iso8601_basic_short }}.tar.gz"
+    format: gz
+    mode: "0600"
+  when:
+    - minio_backup_restore_action == 'backup'
+    - not ansible_check_mode
   tags:
     - backup
 
@@ -49,6 +55,7 @@
   when:
     - minio_backup_restore_action == 'backup'
     - minio_backup_restore_retention_keep_last | int > 0
+    - not ansible_check_mode
   tags:
     - backup
     - retention
@@ -77,18 +84,23 @@
     {{ minio_backup_restore_host_data_dir }}.bak.{{ ansible_date_time.iso8601_basic_short }}
   register: minio_backup_restore_data_move
   changed_when: minio_backup_restore_data_move.rc == 0
-  failed_when: false
-  when: minio_backup_restore_action == 'restore'
+  failed_when: minio_backup_restore_data_move.rc != 0
+  args:
+    removes: "{{ minio_backup_restore_host_data_dir }}"
+  when:
+    - minio_backup_restore_action == 'restore'
+    - not ansible_check_mode
   tags:
     - restore
 
-- name: Restore backup archive  # noqa command-instead-of-module
-  ansible.builtin.command: >-
-    tar -C {{ minio_backup_restore_host_data_dir | dirname }}
-    -xzf {{ minio_backup_restore_restore_source }}
-  register: minio_backup_restore_extract
-  changed_when: minio_backup_restore_extract.rc == 0
-  when: minio_backup_restore_action == 'restore'
+- name: Restore backup archive
+  ansible.builtin.unarchive:
+    src: "{{ minio_backup_restore_restore_source }}"
+    dest: "{{ minio_backup_restore_host_data_dir | dirname }}"
+    remote_src: true
+  when:
+    - minio_backup_restore_action == 'restore'
+    - not ansible_check_mode
   tags:
     - restore
 
@@ -100,7 +112,9 @@
     group: "{{ minio_backup_restore_expected_gid }}"
     mode: "{{ minio_backup_restore_expected_mode }}"
     recurse: true
-  when: minio_backup_restore_action == 'restore'
+  when:
+    - minio_backup_restore_action == 'restore'
+    - not ansible_check_mode
   tags:
     - restore
 
@@ -108,6 +122,7 @@
   when:
     - minio_backup_restore_action in ['backup', 'restore']
     - minio_backup_restore_stop_service | bool
+    - not ansible_check_mode
   tags:
     - backup
     - restore
@@ -117,7 +132,9 @@
         name: "{{ minio_backup_restore_systemd_unit_name }}"
         state: started
         enabled: true
-      when: minio_backup_restore_manage_systemd | bool
+      when:
+        - minio_backup_restore_manage_systemd | bool
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
 
     - name: Start MinIO pod (non-systemd)
       ansible.builtin.include_role:
@@ -136,6 +153,7 @@
   when:
     - minio_backup_restore_action == 'restore'
     - minio_backup_restore_validate_after_restore | bool
+    - not ansible_check_mode
   tags:
     - restore
     - validate

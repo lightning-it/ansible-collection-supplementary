@@ -29,14 +29,14 @@
     - name: Upload pending tfstate files to tfstate bucket
       ansible.builtin.command: >-
         podman run --rm --network host --user 0:0 --entrypoint mc
-        -v {{ minio_deploy_mc_config_dir }}:{{ minio_deploy_mc_config_dir }}:Z
+        -v {{ minio_bootstrap_mc_config_dir }}:{{ minio_bootstrap_mc_config_dir }}:Z
         -v {{ minio_bootstrap_pending_dir }}:{{ minio_bootstrap_pending_dir }}:Z
-        {{ minio_deploy_mc_image }}
-        --config-dir {{ minio_deploy_mc_config_dir }}
+        {{ minio_bootstrap_mc_image }}
+        --config-dir {{ minio_bootstrap_mc_config_dir }}
         cp
-        {{ (minio_deploy_mc_insecure | bool) | ternary('--insecure', '') }}
+        {{ (minio_bootstrap_mc_insecure | bool) | ternary('--insecure', '') }}
         {{ minio_bootstrap_tfstate_file.path }}
-        {{ minio_deploy_mc_alias }}/{{ tfstate_bucket }}/{{ minio_bootstrap_tfstate_object_key }}
+        {{ minio_bootstrap_mc_alias }}/{{ tfstate_bucket }}/{{ minio_bootstrap_tfstate_object_key }}
       vars:
         _prefix: >-
           {{ (tfstate_key_prefix | default('', true) | trim)
@@ -49,7 +49,9 @@
       loop_control:
         loop_var: minio_bootstrap_tfstate_file
         label: "{{ minio_bootstrap_tfstate_file.path | basename }}"
-      when: minio_bootstrap_pending_tfstate_files.matched | int > 0
+      when:
+        - minio_bootstrap_pending_tfstate_files.matched | int > 0
+        - not ansible_check_mode
       changed_when: true
       no_log: true
       tags:
@@ -63,7 +65,9 @@
       loop: "{{ minio_bootstrap_pending_tfstate_files.files }}"
       loop_control:
         loop_var: minio_bootstrap_tfstate_file
-      when: minio_bootstrap_pending_tfstate_files.matched | int > 0
+      when:
+        - minio_bootstrap_pending_tfstate_files.matched | int > 0
+        - not ansible_check_mode
       tags:
         - tfstate
         - tfstate_migrate

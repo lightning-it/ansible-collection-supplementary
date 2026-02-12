@@ -1,7 +1,10 @@
 ---
-- name: No prechecks required for minio_foundational
+- name: Ensure minio_foundational variables are valid
   ansible.builtin.assert:
     that:
-      - true
+      - minio_foundational_generate_root_credentials is boolean
+      - minio_foundational_store_root_credentials is boolean
+      - minio_foundational_vault_use_token is boolean
+      - minio_foundational_vault_auth_ok is boolean
   changed_when: false
   tags: always

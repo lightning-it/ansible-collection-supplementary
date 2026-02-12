@@ -1,0 +1,19 @@
+---
+- name: Import nginx_deploy prechecks
+  ansible.builtin.import_role:
+    name: nginx_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure nginx_config variables are valid
+  ansible.builtin.assert:
+    that:
+      - nginx_config_vhosts_effective is sequence
+      - nginx_config_vhosts_effective is not string
+      - nginx_config_remove_default is boolean
+      - nginx_config_conf_d_dir | default('', true) | trim | length > 0
+      - nginx_config_vhost_mode | default('', true) | trim | length > 0
+      - nginx_config_test is boolean
+    fail_msg: "nginx_config variables are missing or invalid."
+    quiet: true
+  tags: always

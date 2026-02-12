@@ -1,15 +1,6 @@
 ---
-- name: Ensure required Nginx vars are defined
-  ansible.builtin.import_role:
-    name: nginx_deploy
-    tasks_from: assert
-  tags: always
-
-- name: Ensure nginx_ops_action is valid
-  ansible.builtin.assert:
-    that:
-      - nginx_ops_action in ['none', 'restart', 'reload', 'status', 'upgrade']
-    fail_msg: "nginx_ops_action must be one of: none, restart, reload, status, upgrade."
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
   tags: always
 
 - name: Restart Nginx service
@@ -22,7 +13,9 @@
       ansible.builtin.systemd:
         name: "{{ nginx_deploy_systemd_unit_name }}"
         state: restarted
-      when: nginx_deploy_manage_systemd | bool
+      when:
+        - nginx_deploy_manage_systemd | bool
+        - not ansible_check_mode
 
     - name: Restart Nginx pod (non-systemd)
       ansible.builtin.include_role:
@@ -32,11 +25,14 @@
         kubeplay_action: restart
         kubeplay_pod_name: "{{ nginx_deploy_pod_name }}"
         kubeplay_app_name: nginx_restart
-      when: not nginx_deploy_manage_systemd | bool
+      when:
+        - not nginx_deploy_manage_systemd | bool
+        - not ansible_check_mode
 
     - name: Validate Nginx after restart
       ansible.builtin.include_role:
         name: nginx_validate
+      when: not ansible_check_mode
 
 - name: Reload Nginx service
   when: nginx_ops_action == 'reload'
@@ -49,6 +45,7 @@
       register: nginx_deploy_reload
       changed_when: nginx_deploy_reload.rc == 0
       failed_when: nginx_deploy_reload.rc != 0
+      when: not ansible_check_mode
 
 - name: Report Nginx status
   when: nginx_ops_action == 'status'
@@ -92,7 +89,9 @@
     - name: Set Nginx image override
       ansible.builtin.set_fact:
         nginx_deploy_image: "{{ nginx_ops_target_image }}"
+      changed_when: false
 
     - name: Redeploy Nginx with new image
       ansible.builtin.include_role:
         name: nginx_deploy
+      when: not ansible_check_mode

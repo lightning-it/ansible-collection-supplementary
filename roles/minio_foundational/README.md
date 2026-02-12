@@ -2,28 +2,43 @@
 
 Shared helper tasks for MinIO credential resolution (Vault read/generate/write).
 
-Effective endpoint variables are derived in `minio_deploy` defaults.
-
 ## Requirements
 
-None.
+- Vault variables are required only when Vault-backed credential flow is enabled.
 
-## Role Variables
+## Variables
 
-See `roles/minio_deploy/defaults/main.yml`.
+This role consumes the canonical MinIO deploy variables from
+`roles/minio_deploy/defaults/main.yml`.
 
-Key variables:
-- `minio_deploy_api_scheme`
-- `minio_deploy_host_ip`
-- `minio_deploy_port`
-- `minio_deploy_console_port`
+Key inputs:
 - `minio_deploy_root_user`
 - `minio_deploy_root_password`
+- `minio_deploy_generate_root_credentials`
+- `minio_deploy_store_root_credentials`
+- `minio_deploy_vault_address`
+- `minio_deploy_vault_kv_mount`
+- `minio_deploy_vault_kv_path`
+- `minio_deploy_vault_token` or AppRole credentials
 
-## Example Usage
+## Dependencies
+
+- None declared in metadata.
+
+## Example Playbook
 
 ```yaml
-- name: Resolve MinIO endpoints
-  ansible.builtin.include_role:
-    name: lit.supplementary.minio_foundational
+- name: Resolve MinIO credentials
+  hosts: minio_hosts
+  gather_facts: true
+  roles:
+    - role: lit.supplementary.minio_foundational
 ```
+
+## License
+
+GPL-3.0-only
+
+## Author
+
+Lightning IT

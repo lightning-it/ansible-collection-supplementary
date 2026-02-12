@@ -1,0 +1,20 @@
+---
+- name: Import coredns_deploy prechecks
+  ansible.builtin.import_role:
+    name: coredns_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure coredns_validate variables are valid
+  ansible.builtin.assert:
+    that:
+      - coredns_validate_mode in ['fail', 'report']
+      - coredns_validate_check_config is boolean
+      - coredns_validate_check_http is boolean
+      - coredns_deploy_skip_validate is boolean
+      - coredns_deploy_container_name | default('', true) | trim | length > 0
+      - coredns_deploy_host_corefile_path | default('', true) | trim | length > 0
+      - coredns_deploy_health_url_effective | default('', true) | trim | length > 0
+    fail_msg: "coredns_validate variables are missing or invalid."
+    quiet: true
+  tags: always

@@ -1,13 +1,6 @@
 ---
-- name: Ensure required Vault vars are defined
-  ansible.builtin.import_role:
-    name: vault_deploy
-    tasks_from: assert
-  tags: always
-
-- name: Set validate mode
-  ansible.builtin.set_fact:
-    vault_validate_strict: "{{ vault_deploy_validate_mode != 'report' }}"
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
   tags: always
 
 - name: Check Vault container running state
@@ -99,6 +92,7 @@
 - name: Parse Vault container mount label
   ansible.builtin.set_fact:
     vault_deploy_mount_label_parts: "{{ (vault_deploy_mount_label.stdout | trim).split(':') }}"
+  changed_when: false
   when:
     - vault_deploy_mount_label.stdout | default('') | trim | length > 0
   tags:
@@ -109,6 +103,7 @@
   ansible.builtin.set_fact:
     vault_deploy_mount_label_type: "{{ vault_deploy_mount_label_parts[2] }}"
     vault_deploy_mount_label_level: "{{ vault_deploy_mount_label_parts[3:] | join(':') }}"
+  changed_when: false
   when:
     - vault_deploy_mount_label_parts is defined
     - vault_deploy_mount_label_parts | length > 3
@@ -132,6 +127,7 @@
 - name: Parse current SELinux label
   ansible.builtin.set_fact:
     vault_deploy_mount_label_current_parts: "{{ (vault_deploy_mount_label_current.stdout | trim).split(':') }}"
+  changed_when: false
   when:
     - vault_deploy_mount_label_current.stdout | default('') | trim | length > 0
   tags:
@@ -142,6 +138,7 @@
   ansible.builtin.set_fact:
     vault_deploy_mount_label_current_type: "{{ vault_deploy_mount_label_current_parts[2] }}"
     vault_deploy_mount_label_current_level: "{{ vault_deploy_mount_label_current_parts[3:] | join(':') }}"
+  changed_when: false
   when:
     - vault_deploy_mount_label_current_parts is defined
     - vault_deploy_mount_label_current_parts | length > 3

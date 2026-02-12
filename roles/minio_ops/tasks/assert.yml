@@ -3,7 +3,37 @@
   ansible.builtin.assert:
     that:
       - minio_ops_action in ['none', 'restart', 'status', 'upgrade']
+      - minio_ops_manage_systemd is boolean
+      - minio_ops_validate_certs is boolean
     fail_msg: "minio_ops_action must be one of: none, restart, status, upgrade."
+  tags: always
+
+- name: Ensure restart variables are set for systemd mode
+  ansible.builtin.assert:
+    that:
+      - minio_ops_systemd_unit_name | default('', true) | trim | length > 0
+    fail_msg: "minio_ops_systemd_unit_name must be set when minio_ops_manage_systemd=true."
+  when:
+    - minio_ops_action == 'restart'
+    - minio_ops_manage_systemd | bool
+  tags: always
+
+- name: Ensure restart variables are set for pod mode
+  ansible.builtin.assert:
+    that:
+      - minio_ops_pod_name | default('', true) | trim | length > 0
+    fail_msg: "minio_ops_pod_name must be set when minio_ops_manage_systemd=false."
+  when:
+    - minio_ops_action == 'restart'
+    - not minio_ops_manage_systemd | bool
+  tags: always
+
+- name: Ensure status variables are set
+  ansible.builtin.assert:
+    that:
+      - minio_ops_health_url_effective | default('', true) | trim | length > 0
+    fail_msg: "minio_ops_health_url_effective must be set for status checks."
+  when: minio_ops_action == 'status'
   tags: always
 
 - name: Ensure minio_ops_target_image is provided for upgrade

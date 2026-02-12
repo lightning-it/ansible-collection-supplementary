@@ -6,7 +6,7 @@ Deploy CoreDNS as a Podman container, similar to the Vault deployment pattern.
 
 Requires the `lit.foundational.kubeplay` role for Podman kube play actions.
 
-## Role Variables
+## Variables
 
 See `roles/coredns_deploy/defaults/main.yml`.
 
@@ -19,6 +19,10 @@ Key variables:
 - `coredns_deploy_selinux_relabel`
 - `coredns_deploy_skip_runtime`
 
+## Dependencies
+
+- `lit.foundational.kubeplay`
+
 ## Example Playbook
 
 ```yaml
@@ -30,3 +34,11 @@ Key variables:
   tags:
     - coredns
 ```
+
+## License
+
+GPL-3.0-only
+
+## Author
+
+Lightning IT

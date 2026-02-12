@@ -56,11 +56,6 @@
     recurse: true
   tags: [deployment]
 
-- name: Set Vault container name
-  ansible.builtin.set_fact:
-    vault_deploy_container_name: "{{ vault_deploy_pod_name }}-vault"
-  when: vault_deploy_pod_name is defined
-
 - name: Render Vault Pod manifest
   ansible.builtin.template:
     src: vault-pod.yml.j2
@@ -155,6 +150,7 @@
   ansible.builtin.set_fact:
     vault_deploy_uid_map_lines: "{{ vault_deploy_uid_map_inspect.stdout_lines | default([]) }}"
     vault_deploy_gid_map_lines: "{{ vault_deploy_gid_map_inspect.stdout_lines | default([]) }}"
+  changed_when: false
   tags: [deployment]
   when:
     - vault_deploy_uid_map_inspect is defined
@@ -211,6 +207,7 @@
             vault_deploy_container_id_maps.results[1].stdout_lines | default([])
           )
       }}
+  changed_when: false
   tags: [deployment]
   when:
     - vault_deploy_container_id_maps is defined
@@ -248,6 +245,7 @@
       {%   endif %}
       {% endfor %}
       {{ ns.match }}
+  changed_when: false
   tags: [deployment]
   when:
     - vault_deploy_uid_map_lines | default([]) | length > 0
@@ -257,6 +255,7 @@
   ansible.builtin.set_fact:
     vault_deploy_uid_map_parts: "{{ vault_deploy_uid_map_line.split() }}"
     vault_deploy_gid_map_parts: "{{ vault_deploy_gid_map_line.split() }}"
+  changed_when: false
   tags: [deployment]
   when:
     - vault_deploy_uid_map_line is defined
@@ -276,6 +275,7 @@
         (vault_deploy_gid_map_parts[1] | int)
         + ((vault_deploy_run_as_group | default(1000) | int) - (vault_deploy_gid_map_parts[0] | int))
       }}
+  changed_when: false
   tags: [deployment]
   when:
     - vault_deploy_uid_map_parts is defined

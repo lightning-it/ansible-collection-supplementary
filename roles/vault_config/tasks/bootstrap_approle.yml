@@ -2,6 +2,7 @@
 - name: Build default AppRole policy
   ansible.builtin.set_fact:
     vault_config_approle_default_policy: "{{ vault_config_approle_policy | default(_vault_approle_policy, true) }}"
+  changed_when: false
   vars:
     _vault_approle_policy: |-
       path "{{ vault_config_engine_mount_point }}/data/{{ inventory_hostname }}/vault/certificate" {
@@ -24,6 +25,7 @@
       token_ttl: "{{ vault_config_approle_token_ttl }}"
       token_max_ttl: "{{ vault_config_approle_token_max_ttl }}"
       policy: "{{ vault_config_approle_default_policy }}"
+  changed_when: false
 
 - name: Normalize AppRole entries
   ansible.builtin.set_fact:
@@ -33,6 +35,7 @@
         if (vault_config_approle_secrets | length > 0)
         else [vault_config_approle_default_entry]
       }}
+  changed_when: false
 
 - name: Select primary AppRole name
   ansible.builtin.set_fact:
@@ -42,6 +45,7 @@
         if vault_config_approle_primary_role_name | length > 0
         else (vault_config_approle_entries[0].role_name | default(vault_config_approle_role_name))
       }}
+  changed_when: false
 
 - name: Read Vault auth methods
   delegate_to: "{{ vault_config_api_delegate_to }}"
@@ -57,6 +61,7 @@
 - name: Detect AppRole auth status
   ansible.builtin.set_fact:
     vault_config_approle_enabled: "{{ 'approle/' in (vault_config_auth_methods.data | default({})) }}"
+  changed_when: false
 
 - name: Enable AppRole auth method when missing
   delegate_to: "{{ vault_config_api_delegate_to }}"

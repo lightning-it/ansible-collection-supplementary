@@ -136,7 +136,53 @@ Required pattern:
   tags: always
 ```
 
-### 4.3 FQCN Modules
+### 4.3 Precheck Responsibility Boundaries (Critical)
+
+1. `assert.yml` for a role MUST validate that role's interface, not another role's internals.
+2. In `roles/<role>/tasks/assert.yml`, assertions SHOULD target `<role>_*` variables only.
+3. Non-deploy roles (`*_ops`, `*_validate`, `*_config`, `*_bootstrap`, `*_backup_restore`) MUST NOT
+   assert raw `*_deploy_*` variables directly.
+4. If a role needs values originating from another role, map them in `defaults/main.yml` into role-prefixed
+   runtime vars, then assert those mapped vars.
+5. `assert.yml` in one role MUST NOT import another role's `tasks/assert.yml` unless explicitly required by
+   repository design and documented in that role README.
+6. Action-based roles MUST use action-scoped assertions:
+   1. `*_action == 'none'`: validate only action enum and basic booleans.
+   2. `restart/reload`: validate service or pod identifiers.
+   3. `status`: validate health/status endpoint vars.
+   4. `upgrade`: validate target image/package inputs.
+
+Bad (cross-role coupling in role assert):
+
+```yaml
+- name: Ensure nginx_ops variables are valid
+  ansible.builtin.assert:
+    that:
+      - nginx_deploy_systemd_unit_name | length > 0
+      - nginx_deploy_pod_name | length > 0
+```
+
+Good (mapped in defaults, asserted in role namespace):
+
+```yaml
+# defaults/main.yml
+nginx_ops_systemd_unit_name: "{{ nginx_deploy_systemd_unit_name | default('', true) }}"
+nginx_ops_pod_name: "{{ nginx_deploy_pod_name | default('', true) }}"
+
+# tasks/assert.yml
+- name: Ensure restart variables are set for systemd mode
+  ansible.builtin.assert:
+    that:
+      - nginx_ops_systemd_unit_name | default('', true) | trim | length > 0
+  when:
+    - nginx_ops_action == 'restart'
+    - nginx_ops_manage_systemd | bool
+```
+
+7. Foundational/helper roles MUST only assert variables required for their own task scope. Do not enforce
+   endpoint/runtime vars in foundational prechecks if the role only resolves credentials.
+
+### 4.4 FQCN Modules
 
 1. Tasks MUST use FQCNs (`ansible.builtin.*` or collection FQCNs).
 2. Example:
@@ -261,3 +307,7 @@ Before finalizing, confirm all items below:
 3. Molecule light scenarios pass (`scripts/devtools-molecule.sh` or scoped equivalent).
 4. Documentation is updated for changed role interfaces.
 5. No CI, workflow, Renovate, or semantic-release config changes were made unless requested.
+6. Role prechecks are action-scoped and role-scoped:
+   1. no cross-role raw var assertions in `assert.yml`
+   2. no duplicate copy-paste assert blocks
+   3. required foreign inputs mapped in `defaults/main.yml` with role prefix

@@ -1,0 +1,19 @@
+---
+- name: Import coredns_deploy prechecks
+  ansible.builtin.import_role:
+    name: coredns_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure coredns_config variables are valid
+  ansible.builtin.assert:
+    that:
+      - coredns_config_manage is boolean
+      - coredns_config_corefile is string
+      - coredns_config_mode | default('', true) | trim | length > 0
+      - coredns_config_corefile_effective | default('', true) | trim | length > 0
+      - coredns_deploy_host_config_dir | default('', true) | trim | length > 0
+      - coredns_deploy_host_corefile_path | default('', true) | trim | length > 0
+    fail_msg: "coredns_config variables are missing or invalid."
+    quiet: true
+  tags: always

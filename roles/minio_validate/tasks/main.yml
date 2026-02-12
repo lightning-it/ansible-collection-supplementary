@@ -5,7 +5,7 @@
 
 - name: Skip MinIO validation when disabled
   ansible.builtin.debug:
-    msg: "MinIO validation skipped (minio_deploy_skip_validate=true)."
+    msg: "MinIO validation skipped (minio_validate_skip=true)."
   when: minio_validate_skip | bool
   tags: always
 

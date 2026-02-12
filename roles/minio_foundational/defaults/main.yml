@@ -1,1 +1,8 @@
 ---
+minio_foundational_api_url_effective: "{{ minio_deploy_api_url_effective | default('', true) }}"
+minio_foundational_health_url_effective: "{{ minio_deploy_health_url_effective | default('', true) }}"
+minio_foundational_generate_root_credentials: >-
+  {{ minio_deploy_generate_root_credentials | default(true, true) }}
+minio_foundational_store_root_credentials: "{{ minio_deploy_store_root_credentials | default(true, true) }}"
+minio_foundational_vault_use_token: "{{ minio_deploy_vault_use_token | default(false, true) }}"
+minio_foundational_vault_auth_ok: "{{ minio_deploy_vault_auth_ok | default(false, true) }}"

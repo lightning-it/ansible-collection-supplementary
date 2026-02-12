@@ -1,6 +1,10 @@
 ---
-- name: Ensure required Vault vars are defined
-  ansible.builtin.include_tasks: assert.yml
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Token preflight checks
+  ansible.builtin.include_tasks: preflight.yml
   tags: always
 
 - name: Deploy Vault on RHEL

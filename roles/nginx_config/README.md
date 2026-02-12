@@ -6,13 +6,17 @@ Manage Nginx virtual host configuration files for the Podman container deploymen
 
 None.
 
-## Role Variables
+## Variables
 
 See `roles/nginx_config/defaults/main.yml` and `roles/nginx_deploy/defaults/main.yml`.
 
 Key variables:
 - `nginx_config_vhosts`
 - `nginx_config_remove_default`
+
+## Dependencies
+
+None.
 
 ## Example Playbook
 
@@ -31,3 +35,11 @@ Key variables:
   tags:
     - nginx
 ```
+
+## License
+
+GPL-3.0-only
+
+## Author
+
+Lightning IT

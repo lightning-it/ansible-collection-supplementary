@@ -29,6 +29,7 @@
 - name: Set Vault initialized flag
   ansible.builtin.set_fact:
     vault_deploy_initialized: "{{ vault_deploy_init_status.json.initialized | default(false) }}"
+  changed_when: false
   tags:
     - init
     - bootstrap
@@ -36,6 +37,7 @@
 - name: Enable bootstrap init automatically for first run
   ansible.builtin.set_fact:
     vault_deploy_bootstrap_init: true
+  changed_when: false
   when:
     - not vault_deploy_initialized | bool
     - not vault_deploy_bootstrap_init | bool
@@ -112,6 +114,7 @@
 - name: Parse Vault init payload
   ansible.builtin.set_fact:
     vault_deploy_init_payload: "{{ vault_deploy_init_result.stdout | from_json }}"
+  changed_when: false
   no_log: true
   when:
     - vault_deploy_init_result is defined
@@ -123,6 +126,7 @@
 - name: Mark bootstrap init performed
   ansible.builtin.set_fact:
     vault_bootstrap_did_init: true
+  changed_when: false
   when:
     - vault_deploy_init_result is defined
     - vault_deploy_init_result.stdout | default('') | length > 0
@@ -135,6 +139,7 @@
     vault_init: "{{ vault_deploy_init_payload }}"
     vault_deploy_init: "{{ vault_deploy_init_payload }}"
     vault_deploy_unseal_keys: "{{ vault_deploy_init_payload.unseal_keys_b64 | default([]) }}"
+  changed_when: false
   no_log: true
   when:
     - vault_bootstrap_did_init | default(false) | bool
@@ -155,6 +160,7 @@
           else (vault_deploy_init_payload.root_token | default('', true) | trim)
         )
       }}
+  changed_when: false
   no_log: true
   when:
     - vault_deploy_init_payload is defined
@@ -177,6 +183,7 @@
           else (vault_bootstrap_token | default('', true) | trim)
         )
       }}
+  changed_when: false
   no_log: true
   tags:
     - init
@@ -190,6 +197,7 @@
         and (vault_bootstrap_did_init | default(false) | bool)
         and (not (vault_bootstrap_init_file.stat.exists | default(false)))
       }}
+  changed_when: false
   tags:
     - init
     - bootstrap

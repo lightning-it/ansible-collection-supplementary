@@ -1,3 +1,7 @@
 ---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
 - name: Configure Vault (post-deploy)
   ansible.builtin.include_tasks: config.yml

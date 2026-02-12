@@ -3,6 +3,11 @@
   ansible.builtin.assert:
     that:
       - minio_backup_restore_action in ['none', 'backup', 'restore']
+      - minio_backup_restore_stop_service is boolean
+      - minio_backup_restore_validate_after_restore is boolean
+      - minio_backup_restore_manage_systemd is boolean
+      - minio_backup_restore_systemd_unit_name | default('', true) | trim | length > 0
+      - minio_backup_restore_pod_name | default('', true) | trim | length > 0
     fail_msg: "minio_backup_restore_action must be one of: none, backup, restore."
   tags: always
 

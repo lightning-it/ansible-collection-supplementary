@@ -7,7 +7,7 @@ platform-agnostic and assumes Vault is already reachable.
 
 None.
 
-## Role Variables
+## Variables
 
 Required for configuration:
 - `vault_config_url`
@@ -32,7 +32,12 @@ Terraform state migration:
 - Migration tasks are tagged `tfstate` and `tfstate_migrate` so operators can run
   or skip them without changing the playbook.
 
+## Dependencies
+
+None.
+
 ## Example Playbook
+
 ```yaml
 - name: Configure Vault
   hosts: vault_hosts
@@ -42,3 +47,11 @@ Terraform state migration:
   tags:
     - vault
 ```
+
+## License
+
+GPL-3.0-only
+
+## Author
+
+Lightning IT

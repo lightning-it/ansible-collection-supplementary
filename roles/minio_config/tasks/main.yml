@@ -10,6 +10,15 @@
     - minio_config_skip_config | bool or not (minio_config_manage_any | bool)
   tags: always
 
+- name: Skip MinIO config runtime operations in check mode
+  ansible.builtin.debug:
+    msg: "MinIO config runtime operations skipped in check mode."
+  when:
+    - not minio_config_skip_config | bool
+    - minio_config_manage_any | bool
+    - ansible_check_mode
+  tags: always
+
 - name: Ensure MinIO mc config dir exists
   ansible.builtin.file:
     path: "{{ minio_config_mc_config_dir }}"
@@ -21,6 +30,7 @@
     - not minio_config_skip_config | bool
     - minio_config_manage_any | bool
     - minio_config_mc_config_dir | default('', true) | trim | length > 0
+    - not ansible_check_mode
   tags:
     - config
 
@@ -35,6 +45,7 @@
   when:
     - not minio_config_skip_config | bool
     - minio_config_manage_any | bool
+    - not ansible_check_mode
   tags:
     - config
 
@@ -42,6 +53,7 @@
   when:
     - not minio_config_skip_config | bool
     - minio_config_manage_vault_bucket | default(true) | bool
+    - not ansible_check_mode
   tags:
     - config
     - vault_bucket
@@ -60,24 +72,13 @@
           Ensure vault_token is set and vault_engine_mount_point is configured.
       no_log: true
 
-    - name: Check whether vault bucket exists
-      ansible.builtin.command: >-
-        {{ minio_config_mc_path }} stat
-        {{ (minio_config_mc_insecure | bool) | ternary('--insecure', '') }}
-        {{ minio_config_mc_alias }}/{{ minio_config_vault_bucket_name }}
-      register: minio_config_vault_bucket_stat
-      changed_when: false
-      failed_when: false
-
     - name: Ensure vault bucket exists
       ansible.builtin.command: >-
-        {{ minio_config_mc_path }} mb
+        {{ minio_config_mc_path }} mb --ignore-existing
         {{ (minio_config_mc_insecure | bool) | ternary('--insecure', '') }}
         {{ minio_config_mc_alias }}/{{ minio_config_vault_bucket_name }}
       register: minio_config_vault_bucket_create
-      changed_when: true
-      when:
-        - minio_config_vault_bucket_stat.rc != 0
+      changed_when: "'created' in (minio_config_vault_bucket_create.stdout | default('') | lower)"
 
     - name: Read vault bucket credentials from Vault (if exists)
       delegate_to: localhost
@@ -138,7 +139,8 @@
       register: minio_config_vault_bucket_creds_write
       changed_when: true
       no_log: true
-      when: not (minio_config_vault_bucket_creds_present | bool)
+      when:
+        - not (minio_config_vault_bucket_creds_present | bool)
 
     - name: Assert vault bucket credentials are resolved
       ansible.builtin.assert:
@@ -164,7 +166,8 @@
       register: minio_config_vault_bucket_user_add
       changed_when: true
       no_log: true
-      when: minio_config_vault_bucket_user_info.rc != 0
+      when:
+        - minio_config_vault_bucket_user_info.rc != 0
 
     - name: Assign MinIO vault bucket policy
       ansible.builtin.command: >-
@@ -186,6 +189,7 @@
   when:
     - not minio_config_skip_config | bool
     - minio_config_users_effective | default([], true) | length > 0
+    - not ansible_check_mode
   tags:
     - config
 
@@ -216,5 +220,6 @@
     - minio_config_users_effective | default([], true) | length > 0
     - item.item.policy is defined
     - item.item.policy | length > 0
+    - not ansible_check_mode
   tags:
     - config

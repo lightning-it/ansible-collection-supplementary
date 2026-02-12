@@ -1,8 +1,4 @@
 ---
-- name: Ensure required Vault config vars are defined
-  ansible.builtin.include_tasks: assert_config.yml
-  tags: always
-
 - name: Check Vault seal status
   ansible.builtin.uri:
     url: "{{ vault_config_api_url }}/v1/sys/seal-status"
@@ -36,6 +32,7 @@
 - name: Normalize AppRole secrets for terragrunt
   ansible.builtin.set_fact:
     vault_config_approle_secrets_render: "{{ (vault_config_approle_secrets_render | default([])) + [_entry] }}"
+  changed_when: false
   vars:
     _token_policy: "{{ vault_config_approle_item.token_policy | default(vault_config_approle_policy_name, true) }}"
     _entry: >-
@@ -65,6 +62,7 @@
     vault_config_vault_pki_intermediates: "{{ _vault_pki_intermediates }}"
     vault_config_pki_roots: "{{ _vault_pki_roots_compat }}"
     vault_config_pki_intermediates: "{{ _vault_pki_intermediates_compat }}"
+  changed_when: false
   vars:
     _default_server: >-
       {{
@@ -120,6 +118,7 @@
     mode: '0700'
   delegate_to: localhost
   changed_when: false
+  when: not ansible_check_mode
   tags:
     - config
     - terragrunt_validate
@@ -133,6 +132,7 @@
     mode: '0700'
     owner: root
     group: root
+  when: not ansible_check_mode
   tags:
     - config
     - terragrunt_validate
@@ -296,6 +296,7 @@
     state: absent
   delegate_to: localhost
   changed_when: false
+  when: not ansible_check_mode
   tags:
     - config
     - terragrunt_validate
@@ -308,6 +309,7 @@
     state: absent
   delegate_to: localhost
   changed_when: false
+  when: not ansible_check_mode
   tags:
     - config
     - terragrunt_validate
@@ -323,6 +325,7 @@
   loop_control:
     loop_var: vault_config_tfstate_file
   when:
+    - not ansible_check_mode
     - vault_config_tfstate_files_remote.matched | int > 0
   no_log: true
   changed_when: false
@@ -335,6 +338,7 @@
 - name: Set Vault terragrunt template path
   ansible.builtin.set_fact:
     vault_config_terragrunt_template_path: "{{ role_path }}/templates/vault.hcl.j2"
+  changed_when: false
   tags:
     - config
     - terragrunt_validate
@@ -344,6 +348,7 @@
 - name: Build terragrunt import list for existing Vault mounts/auth backends (best effort)
   ansible.builtin.set_fact:
     vault_config_terragrunt_imports: "{{ _imports }}"
+  changed_when: false
   vars:
     _imports: >-
       {%- set imports = [] -%}
@@ -377,6 +382,7 @@
     - terragrunt_apply
 
 - name: Run terragrunt to configure Vault (persist tfstate back to target even on failure)
+  when: not ansible_check_mode
   tags:
     - config
     - terragrunt_validate
@@ -385,15 +391,45 @@
     - tfstate
   block:
     - name: Terragrunt apply (Vault config)
-      vars:  # noqa var-naming[no-role-prefix]
-        terragrunt_template: "{{ vault_config_terragrunt_template_path }}"
-        terragrunt_vault_token: "{{ vault_config_token }}"
-        terragrunt_vault_addr: "{{ vault_config_vault_address }}"
-        terragrunt_imports: "{{ vault_config_terragrunt_imports | default([], true) }}"
-        terragrunt_delegate_to: localhost
-      ansible.builtin.include_role:
-        name: lit.foundational.terragrunt
       no_log: true
+      block:
+        - name: Create temporary terragrunt vars file
+          ansible.builtin.tempfile:
+            state: file
+            prefix: vault-config-terragrunt-
+          register: vault_config_terragrunt_vars_file
+          delegate_to: localhost
+          become: false
+
+        - name: Write terragrunt runtime vars
+          ansible.builtin.copy:
+            dest: "{{ vault_config_terragrunt_vars_file.path }}"
+            mode: "0600"
+            content: |-
+              terragrunt_template: "{{ vault_config_terragrunt_template_path }}"
+              terragrunt_vault_token: "{{ vault_config_token }}"
+              terragrunt_vault_addr: "{{ vault_config_vault_address }}"
+              terragrunt_imports: {{ vault_config_terragrunt_imports | default([], true) | to_json }}
+              terragrunt_delegate_to: "localhost"
+          delegate_to: localhost
+          become: false
+
+        - name: Load terragrunt runtime vars
+          ansible.builtin.include_vars:
+            file: "{{ vault_config_terragrunt_vars_file.path }}"
+
+        - name: Run terragrunt role
+          ansible.builtin.include_role:
+            name: lit.foundational.terragrunt
+
+      always:
+        - name: Cleanup temporary terragrunt vars file
+          ansible.builtin.file:
+            path: "{{ vault_config_terragrunt_vars_file.path }}"
+            state: absent
+          when: vault_config_terragrunt_vars_file is defined
+          delegate_to: localhost
+          become: false
 
   rescue:
     - name: Record terragrunt failure (tfstate will still be synced back to target)
@@ -486,11 +522,14 @@
   when:
     - vault_config_hashi_vault_auth_method == 'approle'
     - vault_config_approle_bootstrap | bool
+    - not ansible_check_mode
   tags:
     - vault_config_pki
 
 - name: Request Vault PKI certificate
   ansible.builtin.include_tasks: vault_pki.yml
-  when: vault_config_pki_enabled | bool
+  when:
+    - vault_config_pki_enabled | bool
+    - not ansible_check_mode
   tags:
     - vault_config_pki

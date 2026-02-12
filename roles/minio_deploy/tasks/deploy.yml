@@ -3,10 +3,20 @@
   ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
   when: ansible_os_family == 'RedHat'
 
+- name: Skip MinIO runtime deployment in check mode
+  ansible.builtin.debug:
+    msg: "MinIO runtime deployment skipped in check mode."
+  when:
+    - ansible_check_mode
+    - not minio_deploy_skip_runtime | bool
+    - not minio_deploy_skip_deploy | bool
+  tags: always
+
 - name: Deploy MinIO runtime
   when:
     - not minio_deploy_skip_runtime | bool
     - not minio_deploy_skip_deploy | bool
+    - not ansible_check_mode
   block:
     - name: Ensure required packages are installed
       ansible.builtin.include_tasks: install_packages.yml

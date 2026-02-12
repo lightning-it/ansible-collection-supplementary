@@ -6,6 +6,7 @@
   when:
     - dhcp_deploy_manage_systemd | bool
     - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+    - not ansible_check_mode
 
 - name: Reload dhcp
   ansible.builtin.systemd:
@@ -14,3 +15,4 @@
   when:
     - dhcp_deploy_manage_systemd | bool
     - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+    - not ansible_check_mode

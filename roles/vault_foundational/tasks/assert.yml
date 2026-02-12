@@ -1,0 +1,8 @@
+---
+- name: Ensure vault_foundational variables are valid
+  ansible.builtin.assert:
+    that:
+      - vault_foundational_init_file_path_effective | default('', true) | trim | length > 0
+    fail_msg: "vault_foundational_init_file_path_effective is missing or invalid."
+    quiet: true
+  tags: always

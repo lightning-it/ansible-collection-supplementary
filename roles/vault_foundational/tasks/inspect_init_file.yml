@@ -1,12 +1,7 @@
 ---
-- name: Set effective init file path
-  ansible.builtin.set_fact:
-    vault_foundational_init_file_path_effective: >-
-      {{
-        vault_foundational_init_file_path
-          | default(vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault'))
-      }}
-  no_log: true
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
 
 - name: Slurp init file
   ansible.builtin.slurp:
@@ -35,4 +30,5 @@
       {{ vault_foundational_init_file_decoded | regex_replace('^\\ufeff', '') }}
     vault_foundational_init_file_first_char: >-
       {{ vault_foundational_init_file_clean | trim | truncate(1, False, '') }}
+  changed_when: false
   no_log: true

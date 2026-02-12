@@ -421,6 +421,7 @@
   when:
     - coredns_deploy_manage_resolver | default(true) | bool
     - coredns_deploy_dns_change_needed | bool
+    - not ansible_check_mode
 
 - name: Reapply device settings to apply DNS (no bounce)
   ansible.builtin.command:
@@ -436,6 +437,7 @@
     - coredns_deploy_manage_resolver | default(true) | bool
     - coredns_deploy_nm_dns_apply is defined
     - coredns_deploy_nm_dns_apply.changed | default(false) | bool
+    - not ansible_check_mode
 
 - name: Reapply connection to apply DNS (fallback)
   ansible.builtin.command:
@@ -452,3 +454,4 @@
     - coredns_deploy_nm_dns_apply is defined
     - coredns_deploy_nm_dns_apply.changed | default(false) | bool
     - coredns_deploy_resolver_iface_effective | trim == ''
+    - not ansible_check_mode

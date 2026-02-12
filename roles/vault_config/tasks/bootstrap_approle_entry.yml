@@ -76,6 +76,7 @@
                   and vault_config_approle_role_id.data.data.role_id is defined)
               else ''))
       }}
+  changed_when: false
   no_log: true
 
 - name: Read stored AppRole credentials
@@ -105,6 +106,7 @@
         if vault_config_approle_kv.data is defined
         else ''
       }}
+  changed_when: false
   no_log: true
 
 - name: Check whether stored AppRole credentials match current role_id
@@ -115,6 +117,7 @@
         and (vault_config_approle_kv_role_id == vault_config_approle_read_role_id)
         and (vault_config_approle_kv_secret_id | length > 0)
       }}
+  changed_when: false
   no_log: true
 
 - name: Generate AppRole secret_id
@@ -145,6 +148,7 @@
                   and vault_config_approle_secret_id.data.data.secret_id is defined)
               else ''))
       }}
+  changed_when: false
   no_log: true
 
 - name: Resolve AppRole credentials
@@ -161,6 +165,7 @@
         if not vault_config_approle_kv_matches
         else vault_config_approle_kv_secret_id
       }}
+  changed_when: false
   no_log: true
 
 - name: Assert AppRole credentials resolved
@@ -202,11 +207,13 @@
           }
         }, recursive=True)
       }}
+  changed_when: false
   no_log: true
 
 - name: Set AppRole credentials for current run
   ansible.builtin.set_fact:
     ansible_hashi_vault_role_id: "{{ vault_config_approle_resolved_role_id }}"
     ansible_hashi_vault_secret_id: "{{ vault_config_approle_resolved_secret_id }}"
+  changed_when: false
   no_log: true
   when: vault_config_approle_entry.role_name == vault_config_approle_primary_role_name

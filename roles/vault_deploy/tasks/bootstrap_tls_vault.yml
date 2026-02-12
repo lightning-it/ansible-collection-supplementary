@@ -63,6 +63,7 @@
         (vault_deploy_bootstrap_certs.results[0].stat.exists | default(false))
         and (vault_deploy_bootstrap_certs.results[1].stat.exists | default(false))
       }}
+  changed_when: false
   tags:
     - init
 
@@ -70,6 +71,7 @@
   when:
     - existing_cert is not defined or existing_cert.data is not defined
     - not vault_deploy_bootstrap_cert_present | bool
+    - not ansible_check_mode
   block:
     - name: Create controller temp dir for Vault TLS artifacts
       ansible.builtin.tempfile:

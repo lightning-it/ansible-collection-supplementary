@@ -1,7 +1,4 @@
 ---
-# Role-prefixed interface (preferred).
-# Backwards compatible: if callers set `minio_deploy_*` variables, these defaults will pick them up.
-
 minio_validate_skip: "{{ minio_deploy_skip_validate | default(false, true) }}"
 minio_validate_mode: "{{ minio_deploy_validate_mode | default('fail', true) }}"
 minio_validate_strict: "{{ minio_validate_mode != 'report' }}"

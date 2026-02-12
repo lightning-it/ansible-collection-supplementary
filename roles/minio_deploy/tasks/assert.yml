@@ -9,6 +9,14 @@
       - minio_deploy_image | length > 0
       - minio_deploy_port | int > 0
       - minio_deploy_console_port | int > 0
+      - minio_deploy_install_packages is boolean
+      - minio_deploy_manage_systemd is boolean
+      - minio_deploy_skip_runtime is boolean
+      - minio_deploy_skip_deploy is boolean
+      - minio_deploy_skip_bootstrap is boolean
+      - minio_deploy_skip_config is boolean
+      - minio_deploy_skip_validate is boolean
+      - minio_deploy_validate_certs is boolean
     fail_msg: "MinIO core variables are missing or invalid."
   tags: always
 

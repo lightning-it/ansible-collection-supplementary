@@ -12,5 +12,13 @@
       - coredns_deploy_host_dns_port | int > 0
       - coredns_deploy_health_port | int > 0
       - coredns_deploy_host_health_port | int > 0
+      - coredns_deploy_manage_systemd is boolean
+      - coredns_deploy_skip_runtime is boolean
+      - coredns_deploy_skip_config is boolean
+      - coredns_deploy_skip_deploy is boolean
+      - coredns_deploy_skip_validate is boolean
+      - coredns_deploy_validate_certs is boolean
+      - coredns_deploy_manage_resolver is boolean
+      - coredns_deploy_health_url_effective | length > 0
     fail_msg: "CoreDNS core variables are missing or invalid."
   tags: always

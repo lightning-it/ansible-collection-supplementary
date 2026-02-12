@@ -1,29 +1,13 @@
 ---
-- name: Ensure required Nginx vars are defined
-  ansible.builtin.import_role:
-    name: nginx_deploy
-    tasks_from: assert
-  tags: always
-
-- name: Normalize Nginx vhost list
-  ansible.builtin.set_fact:
-    nginx_config_vhosts_effective: "{{ nginx_config_vhosts | default([], true) }}"
-  changed_when: false
-  tags: always
-
-- name: Ensure vhost list is valid
-  ansible.builtin.assert:
-    that:
-      - nginx_config_vhosts_effective is sequence
-      - nginx_config_vhosts_effective is not string
-    fail_msg: "nginx_config_vhosts must be a list."
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
   tags: always
 
 - name: Skip Nginx config when disabled
   ansible.builtin.debug:
-    msg: "Nginx config skipped (nginx_deploy_skip_config=true or no vhosts defined)."
+    msg: "Nginx config skipped (nginx_deploy_skip_config=true or no config changes requested)."
   when:
-    - nginx_deploy_skip_config | bool or nginx_config_vhosts_effective | length == 0
+    - nginx_deploy_skip_config | bool or not (nginx_config_manage_any | bool)
   tags: always
 
 - name: Ensure vhost directory exists
@@ -35,6 +19,7 @@
     mode: '0755'
   when:
     - not nginx_deploy_skip_config | bool
+    - nginx_config_manage_any | bool
   tags:
     - config
 
@@ -116,6 +101,7 @@
     - nginx_deploy_selinux_relabel | bool
     - not nginx_deploy_skip_config | bool
     - nginx_config_vhosts_effective | length > 0
+    - not ansible_check_mode
     - item.rc == 0
     - item.stdout is defined
     - "'container_file_t' not in item.stdout"
@@ -163,6 +149,7 @@
   when:
     - nginx_reload_requested | default(false)
     - not nginx_deploy_skip_runtime | bool
+    - not ansible_check_mode
     - nginx_deploy_container_exists is defined
     - nginx_deploy_container_exists.rc == 0
   tags:

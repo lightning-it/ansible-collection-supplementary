@@ -1,20 +1,13 @@
 ---
-- name: Ensure required Vault vars are defined
-  ansible.builtin.import_role:
-    name: vault_deploy
-    tasks_from: assert
-  tags: always
-
-- name: Ensure vault_ops_action is valid
-  ansible.builtin.assert:
-    that:
-      - vault_ops_action in ['none', 'restart', 'status', 'upgrade', 'unseal']
-    fail_msg: "vault_ops_action must be one of: none, restart, status, upgrade, unseal."
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
   tags: always
 
 - name: Unseal Vault
   ansible.builtin.include_tasks: unseal.yml
-  when: vault_ops_action == 'unseal'
+  when:
+    - vault_ops_action == 'unseal'
+    - not ansible_check_mode
   tags:
     - ops
     - unseal
@@ -29,7 +22,10 @@
       ansible.builtin.systemd:
         name: "{{ vault_deploy_systemd_unit_name }}"
         state: restarted
-      when: vault_deploy_manage_systemd | bool
+      when:
+        - vault_deploy_manage_systemd | bool
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+        - not ansible_check_mode
 
     - name: Restart Vault pod (non-systemd)
       ansible.builtin.include_role:
@@ -39,11 +35,14 @@
         kubeplay_action: restart
         kubeplay_pod_name: "{{ vault_deploy_pod_name }}"
         kubeplay_app_name: vault_restart
-      when: not vault_deploy_manage_systemd | bool
+      when:
+        - not vault_deploy_manage_systemd | bool
+        - not ansible_check_mode
 
     - name: Validate Vault after restart
       ansible.builtin.include_role:
         name: vault_validate
+      when: not ansible_check_mode
 
 - name: Report Vault status
   when: vault_ops_action == 'status'
@@ -106,7 +105,9 @@
     - name: Set Vault image override
       ansible.builtin.set_fact:
         vault_deploy_image: "{{ vault_ops_target_image }}"
+      changed_when: false
 
     - name: Redeploy Vault with new image
       ansible.builtin.include_role:
         name: vault_deploy
+      when: not ansible_check_mode

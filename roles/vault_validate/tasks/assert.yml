@@ -1,0 +1,19 @@
+---
+- name: Import Vault deploy prechecks
+  ansible.builtin.import_role:
+    name: vault_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure vault validate variables are valid
+  ansible.builtin.assert:
+    that:
+      - vault_deploy_validate_mode in ['fail', 'report']
+      - vault_deploy_container_name | default('', true) | trim | length > 0
+      - vault_deploy_host_data_dir | default('', true) | trim | length > 0
+      - vault_deploy_api_url | default('', true) | trim | length > 0
+      - vault_deploy_health_url | default('', true) | trim | length > 0
+      - vault_deploy_vault_validate_certs is boolean
+    fail_msg: "vault_validate variables are missing or invalid."
+    quiet: true
+  tags: always

@@ -6,7 +6,7 @@ Deploy Nginx as a Podman container, similar to the Vault deployment pattern.
 
 None.
 
-## Role Variables
+## Variables
 
 See `roles/nginx_deploy/defaults/main.yml`.
 
@@ -21,6 +21,10 @@ Key variables:
 - `nginx_deploy_selinux_relabel`
 - `nginx_deploy_skip_runtime`
 
+## Dependencies
+
+None.
+
 ## Example Playbook
 
 ```yaml
@@ -32,3 +36,11 @@ Key variables:
   tags:
     - nginx
 ```
+
+## License
+
+GPL-3.0-only
+
+## Author
+
+Lightning IT
