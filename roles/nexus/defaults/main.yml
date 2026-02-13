@@ -5,6 +5,9 @@ nexus_nexus_host_ip: >-
     ansible_default_ipv4.address
     | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
   }}
+nexus_expose_host_https: true
+nexus_caddy_container_port: 443
+nexus_caddy_host_port: 443
 nexus_validate_certs: false
 nexus_nexus_disable_anonymous: false
 nexus_nexus_image: docker.io/sonatype/nexus3:latest

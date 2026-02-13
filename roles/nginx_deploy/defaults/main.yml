@@ -45,11 +45,20 @@ nginx_deploy_server_tokens: "off"
 nginx_deploy_manage_default_site: true
 nginx_deploy_listen_port: 80
 nginx_deploy_host_port: "{{ nginx_deploy_listen_port }}"
+nginx_deploy_tls_listen_port: 443
+nginx_deploy_tls_host_port: "{{ nginx_deploy_tls_listen_port }}"
 nginx_deploy_host_ip: >-
   {{
     ansible_default_ipv4.address
       | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
   }}
+nginx_deploy_port_bindings:
+  - container_port: "{{ nginx_deploy_listen_port }}"
+    host_port: "{{ nginx_deploy_host_port }}"
+    host_ip: "{{ nginx_deploy_host_ip }}"
+  - container_port: "{{ nginx_deploy_tls_listen_port }}"
+    host_port: "{{ nginx_deploy_tls_host_port }}"
+    host_ip: "{{ nginx_deploy_host_ip }}"
 nginx_deploy_server_name: "_"
 nginx_deploy_index_files:
   - index.html

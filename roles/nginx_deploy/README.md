@@ -16,6 +16,8 @@ Key variables:
 - `nginx_deploy_host_conf_dir`
 - `nginx_deploy_host_root`
 - `nginx_deploy_listen_port`
+- `nginx_deploy_tls_listen_port`
+- `nginx_deploy_port_bindings`
 - `nginx_deploy_manage_default_site`
 - `nginx_deploy_manage_systemd`
 - `nginx_deploy_selinux_relabel`

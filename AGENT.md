@@ -202,6 +202,38 @@ nginx_ops_pod_name: "{{ nginx_deploy_pod_name | default('', true) }}"
 3. Do not use `set_fact` for values that can be computed in defaults.
 4. Runtime discovery from remote state, commands, APIs, or Vault MUST stay in tasks, not defaults.
 
+## 5.1 Public Reusability and Environment Neutrality
+
+1. Roles MUST be publicly reusable and environment-agnostic by default.
+2. Role code (`defaults/`, `tasks/`, `templates/`, `README.md`) MUST NOT hardcode environment-specific values.
+3. Environment-specific variables are NOT permitted in role defaults, including:
+   1. internal domains
+   2. inventory hostnames or FQDNs tied to one environment
+   3. environment-only URLs, tokens, or credentials
+4. Use neutral defaults and placeholders, then inject real values from inventory/group vars/playbooks.
+5. If a role needs an address/domain, expose a generic role variable and keep the default generic or empty.
+6. Environment specialization belongs in consumer inventory/playbooks, not reusable role defaults.
+
+Bad:
+
+```yaml
+myrole_server_name: "vault.prd.dmz.corp.l-it.io"
+myrole_api_url: "https://vault01.prd.dmz.corp.l-it.io:8200"
+```
+
+Good:
+
+```yaml
+myrole_server_name: "vault.example.com"
+myrole_api_url: ""
+myrole_api_url_effective: >-
+  {{
+    myrole_api_url
+    if (myrole_api_url | default('', true) | length > 0)
+    else ('https://' ~ myrole_server_name)
+  }}
+```
+
 ## 6. Idempotency and Check Mode
 
 1. Prefer idempotent modules over `shell`/`command`.

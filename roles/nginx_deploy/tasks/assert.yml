@@ -18,6 +18,8 @@
       - nginx_deploy_skip_deploy is boolean
       - nginx_deploy_skip_validate is boolean
       - nginx_deploy_validate_certs is boolean
+      - nginx_deploy_port_bindings is sequence
+      - nginx_deploy_port_bindings | length > 0
     fail_msg: "Nginx core variables are missing or invalid."
   tags: always
 
@@ -32,4 +34,16 @@
   when:
     - nginx_deploy_manage_default_site | bool
     - not nginx_deploy_skip_config | bool
+  tags: always
+
+- name: Ensure Nginx port binding definitions are valid
+  ansible.builtin.assert:
+    that:
+      - item.container_port is defined
+      - item.container_port | int > 0
+      - item.host_port is defined
+      - item.host_port | int > 0
+    fail_msg: "Each nginx_deploy_port_bindings entry must define container_port and host_port."
+    quiet: true
+  loop: "{{ nginx_deploy_port_bindings }}"
   tags: always
