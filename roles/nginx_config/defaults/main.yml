@@ -76,10 +76,12 @@ nginx_config_vault_cert_common_name: >-
 nginx_config_vault_cert_alt_names:
   - "localhost"
   - "{{ nginx_config_tls_common_name }}"
+nginx_config_vault_cert_alt_names_extra: []
 nginx_config_vault_cert_alt_names_effective: >-
   {{
     (
       (nginx_config_vault_cert_alt_names | default([], true))
+      + (nginx_config_vault_cert_alt_names_extra | default([], true))
       + (nginx_config_vault_cert_vhost_names | default([], true))
     )
     | unique

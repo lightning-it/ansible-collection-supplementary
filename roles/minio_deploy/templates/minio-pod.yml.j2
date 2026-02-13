@@ -37,6 +37,10 @@ spec:
         - name: MINIO_BROWSER_REDIRECT_URL
           value: "{{ minio_deploy_browser_redirect_url }}"
 {% endif %}
+{% if minio_deploy_domain | default('', true) | length > 0 %}
+        - name: MINIO_DOMAIN
+          value: "{{ minio_deploy_domain }}"
+{% endif %}
 {% if minio_deploy_env_extra is defined and minio_deploy_env_extra | length > 0 %}
 {% for key, value in minio_deploy_env_extra.items() %}
         - name: {{ key }}

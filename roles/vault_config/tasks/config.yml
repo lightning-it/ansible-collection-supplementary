@@ -400,6 +400,7 @@
           register: vault_config_terragrunt_vars_file
           delegate_to: localhost
           become: false
+          changed_when: false
 
         - name: Write terragrunt runtime vars
           ansible.builtin.copy:
@@ -413,6 +414,7 @@
               terragrunt_delegate_to: "localhost"
           delegate_to: localhost
           become: false
+          changed_when: false
 
         - name: Load terragrunt runtime vars
           ansible.builtin.include_vars:
@@ -430,6 +432,7 @@
           when: vault_config_terragrunt_vars_file is defined
           delegate_to: localhost
           become: false
+          changed_when: false
 
   rescue:
     - name: Record terragrunt failure (tfstate will still be synced back to target)

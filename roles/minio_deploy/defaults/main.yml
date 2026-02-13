@@ -88,6 +88,7 @@ minio_deploy_vault_read_before_generate: true
 minio_deploy_region: ""
 minio_deploy_server_url: ""
 minio_deploy_browser_redirect_url: ""
+minio_deploy_domain: ""
 minio_deploy_env_extra: {}
 minio_deploy_extra_args: []
 

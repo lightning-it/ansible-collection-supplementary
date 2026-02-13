@@ -38,6 +38,13 @@ minio_config_api_url_effective: >-
         )
       )
   }}
+minio_config_vault_bucket_endpoint: ""
+minio_config_vault_bucket_endpoint_effective: >-
+  {{
+    minio_config_vault_bucket_endpoint
+      if (minio_config_vault_bucket_endpoint | default('', true) | length > 0)
+      else minio_config_api_url_effective
+  }}
 
 minio_config_root_user: "{{ lookup('env', 'MINIO_ROOT_USER') | default('', true) }}"
 minio_config_root_password: "{{ lookup('env', 'MINIO_ROOT_PASSWORD') | default('', true) }}"
