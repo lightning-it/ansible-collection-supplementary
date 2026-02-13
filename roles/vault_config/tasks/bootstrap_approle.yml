@@ -15,11 +15,16 @@
         capabilities = ["read", "create", "update"]
       }
 
+- name: Record default AppRole policy name
+  ansible.builtin.set_fact:
+    vault_config_approle_default_policy_name: "{{ vault_config_approle_policy_name }}"
+  changed_when: false
+
 - name: Build default AppRole entry
   ansible.builtin.set_fact:
     vault_config_approle_default_entry:
       role_name: "{{ vault_config_approle_role_name }}"
-      token_policy: "{{ vault_config_approle_policy_name }}"
+      token_policy: "{{ vault_config_approle_default_policy_name }}"
       kv_mount: "{{ vault_config_engine_mount_point }}"
       credential_path: "{{ inventory_hostname }}/vault/approle"
       token_ttl: "{{ vault_config_approle_token_ttl }}"
@@ -56,6 +61,9 @@
     validate_certs: "{{ vault_config_vault_validate_certs }}"
     path: "sys/auth"
   register: vault_config_auth_methods
+  retries: "{{ vault_config_api_retries | int }}"
+  delay: "{{ vault_config_api_retry_delay | int }}"
+  until: vault_config_auth_methods is succeeded
   no_log: true
 
 - name: Detect AppRole auth status
@@ -73,6 +81,10 @@
     path: "sys/auth/approle"
     data:
       type: "approle"
+  register: vault_config_enable_approle_write
+  retries: "{{ vault_config_api_retries | int }}"
+  delay: "{{ vault_config_api_retry_delay | int }}"
+  until: vault_config_enable_approle_write is succeeded
   when: not vault_config_approle_enabled | bool
   no_log: true
 
@@ -88,12 +100,30 @@
         if vault_config_approle_entry.token_policy is string
         else vault_config_approle_entry.token_policy
       }}
-    vault_config_approle_policy_name: "{{ vault_config_approle_policy_names | first }}"
+    vault_config_approle_entry_policy_provided: >-
+      {{
+        (vault_config_approle_entry.policy is defined)
+        and (vault_config_approle_entry.policy | string | trim | length > 0)
+      }}
+    vault_config_approle_manage_policy: >-
+      {{
+        vault_config_approle_entry_policy_provided
+        or (vault_config_approle_default_policy_name in vault_config_approle_policy_names)
+      }}
+    vault_config_approle_policy_name: >-
+      {{
+        (vault_config_approle_policy_names | first)
+        if vault_config_approle_entry_policy_provided
+        else vault_config_approle_default_policy_name
+      }}
     vault_config_approle_kv_mount: "{{ vault_config_approle_entry.kv_mount }}"
     vault_config_approle_kv_path: "{{ vault_config_approle_entry.credential_path }}"
     vault_config_approle_policy: >-
-      {{ vault_config_approle_entry.policy
-         | default(vault_config_approle_default_policy, true) }}
+      {{
+        vault_config_approle_entry.policy
+        if vault_config_approle_entry_policy_provided
+        else vault_config_approle_default_policy
+      }}
   loop: "{{ vault_config_approle_entries }}"
   loop_control:
     loop_var: vault_config_approle_item

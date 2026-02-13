@@ -14,6 +14,9 @@ minio_bootstrap_mc_insecure: "{{ minio_deploy_mc_insecure | default(false, true)
 
 minio_bootstrap_api_url_effective: >-
   {{ minio_deploy_api_url_effective | default('http://127.0.0.1:9000', true) }}
+# Use a local endpoint for tfstate migration operations to avoid dependency on
+# public DNS/TLS reverse proxy readiness during bootstrap.
+minio_bootstrap_tfstate_migration_endpoint: "{{ minio_bootstrap_api_url_effective }}"
 minio_bootstrap_root_user_effective: "{{ minio_deploy_root_user_effective | default('', true) }}"
 minio_bootstrap_root_password_effective: "{{ minio_deploy_root_password_effective | default('', true) }}"
 

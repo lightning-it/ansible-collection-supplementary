@@ -50,6 +50,10 @@ vault_config_token: >-
 vault_config_vault_address: "{{ vault_config_url }}"
 vault_config_api_url: "{{ vault_config_vault_address }}"
 vault_config_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
+vault_config_api_retries: 5
+vault_config_api_retry_delay: 2
+# MinIO S3 backend TLS behavior for terraform/terragrunt state access via endpoint (e.g. api.minio... via nginx).
+vault_config_tfstate_s3_insecure: "{{ not (vault_config_vault_validate_certs | bool) }}"
 vault_config_vault_hostname: "{{ inventory_hostname }}"
 # Run Vault API calls from the controller/EE by default.
 vault_config_api_delegate_to: localhost

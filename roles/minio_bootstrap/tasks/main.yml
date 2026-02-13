@@ -215,7 +215,9 @@
 
 - name: Configure MinIO mc alias (tfstate)
   ansible.builtin.command: >-
-    {{ minio_bootstrap_mc_path }} alias set {{ minio_bootstrap_mc_alias }} {{ tfstate_s3_endpoint }}
+    {{ minio_bootstrap_mc_path }} alias set
+    {{ minio_bootstrap_mc_alias }}
+    {{ minio_bootstrap_tfstate_migration_endpoint }}
     {{ tfstate_access_key }} {{ tfstate_secret_key }}
     {{ (minio_bootstrap_mc_insecure | bool) | ternary('--insecure', '') }}
   register: minio_bootstrap_mc_alias_tfstate

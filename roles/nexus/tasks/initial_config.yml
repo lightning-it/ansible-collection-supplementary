@@ -16,12 +16,21 @@
     - sonatype_nexus_config
     - config
 
+- name: Build Nexus API headers
+  ansible.builtin.set_fact:
+    nexus_api_headers:
+      Host: "{{ nexus_api_host_header }}"
+  changed_when: false
+  tags:
+    - sonatype_nexus_config
+
 - name: Wait until Nexus API is ready
   ansible.builtin.uri:
-    url: "https://{{ nexus_nexus_hostname }}/service/rest/v1/status"
+    url: "{{ nexus_api_base_url }}/service/rest/v1/status"
     method: GET
     validate_certs: "{{ nexus_validate_certs }}"
-  delegate_to: localhost
+    headers: "{{ nexus_api_headers }}"
+  delegate_to: "{{ nexus_api_delegate_to }}"
   register: result
   until: result.status == 200
   retries: 30
@@ -67,16 +76,17 @@
 - name: Validate Nexus admin credentials
   ansible.builtin.uri:
     url: >-
-      https://{{ nexus_nexus_hostname }}/service/rest/v1/security/users?userId={{ nexus_nexus_target_admin_username }}
+      {{ nexus_api_base_url }}/service/rest/v1/security/users?userId={{ nexus_nexus_target_admin_username }}
     method: GET
     user: "{{ nexus_nexus_target_admin_username }}"
     password: "{{ nexus_target_admin_password }}"
     force_basic_auth: true
     validate_certs: "{{ nexus_validate_certs }}"
     headers:
+      Host: "{{ nexus_api_host_header }}"
       accept: application/json
     status_code: 200
-  delegate_to: localhost
+  delegate_to: "{{ nexus_api_delegate_to }}"
   register: nexus_admin_auth_check
   failed_when: false
   no_log: true
@@ -103,19 +113,20 @@
 
     - name: Set new admin password
       ansible.builtin.uri:
-        url: "https://{{ nexus_nexus_hostname }}/service/rest/v1/security/users/admin/change-password"
+        url: "{{ nexus_api_base_url }}/service/rest/v1/security/users/admin/change-password"
         method: PUT
         user: "{{ nexus_nexus_target_admin_username }}"
         password: "{{ nexus_nexus_initial_admin_password }}"
         body: "{{ nexus_target_admin_password }}"
         headers:
+          Host: "{{ nexus_api_host_header }}"
           Content-Type: text/plain
           accept: application/json
         body_format: raw
         force_basic_auth: true
         validate_certs: "{{ nexus_validate_certs }}"
         status_code: 204
-      delegate_to: localhost
+      delegate_to: "{{ nexus_api_delegate_to }}"
       register: nexus_admin_password_change
       no_log: true
 
@@ -148,16 +159,17 @@
 - name: Re-validate Nexus admin credentials after bootstrap (best effort)
   ansible.builtin.uri:
     url: >-
-      https://{{ nexus_nexus_hostname }}/service/rest/v1/security/users?userId={{ nexus_nexus_target_admin_username }}
+      {{ nexus_api_base_url }}/service/rest/v1/security/users?userId={{ nexus_nexus_target_admin_username }}
     method: GET
     user: "{{ nexus_nexus_target_admin_username }}"
     password: "{{ nexus_target_admin_password }}"
     force_basic_auth: true
     validate_certs: "{{ nexus_validate_certs }}"
     headers:
+      Host: "{{ nexus_api_host_header }}"
       accept: application/json
     status_code: 200
-  delegate_to: localhost
+  delegate_to: "{{ nexus_api_delegate_to }}"
   register: nexus_admin_auth_check_after
   failed_when: false
   no_log: true
@@ -181,7 +193,7 @@
   vars:
     nexus_anonymous_enabled: "{{ (not nexus_nexus_disable_anonymous) | bool }}"
   ansible.builtin.uri:
-    url: "https://{{ nexus_nexus_hostname }}/service/rest/v1/security/anonymous"
+    url: "{{ nexus_api_base_url }}/service/rest/v1/security/anonymous"
     user: "{{ nexus_nexus_target_admin_username }}"
     password: "{{ nexus_target_admin_password }}"
     method: PUT
@@ -193,7 +205,8 @@
       userId: "anonymous"
       realmName: "NexusAuthorizingRealm"
     body_format: json
-  delegate_to: localhost
+    headers: "{{ nexus_api_headers }}"
+  delegate_to: "{{ nexus_api_delegate_to }}"
   no_log: true
   tags:
     - sonatype_nexus_config
@@ -215,13 +228,14 @@
       httpsAuthUsername: "{{ nexus_https_proxy_auth_username }}"
       httpsAuthPassword: "{{ nexus_https_proxy_auth_password }}"
   ansible.builtin.uri:
-    url: "https://{{ nexus_nexus_hostname }}/service/extdirect"
+    url: "{{ nexus_api_base_url }}/service/extdirect"
     method: POST
     user: "{{ nexus_nexus_target_admin_username }}"
     password: "{{ nexus_target_admin_password }}"
     force_basic_auth: true
     validate_certs: "{{ nexus_validate_certs }}"
     headers:
+      Host: "{{ nexus_api_host_header }}"
       Content-Type: "application/json"
     body_format: json
     body:
@@ -246,7 +260,7 @@
           timeout: null
           retries: null
     status_code: 200
-  delegate_to: localhost
+  delegate_to: "{{ nexus_api_delegate_to }}"
   register: nexus_proxy_settings
   no_log: true
   tags:

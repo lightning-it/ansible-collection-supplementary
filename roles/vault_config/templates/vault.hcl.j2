@@ -42,6 +42,7 @@ terraform {
     skip_metadata_api_check     = true
     skip_requesting_account_id  = true
     force_path_style            = true
+    insecure                    = {{ (vault_config_tfstate_s3_insecure | default(false) | bool) | to_json }}
   }
 {% else %}
   backend "local" {

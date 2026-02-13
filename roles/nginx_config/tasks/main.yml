@@ -117,6 +117,43 @@
   tags:
     - config
 
+- name: Normalize stored TLS CA chain from Vault KV2
+  ansible.builtin.set_fact:
+    nginx_config_vault_cert_ca_chain_stored: >-
+      {{
+        (
+          nginx_config_vault_cert_data.ca_chain
+          if (
+            nginx_config_vault_cert_data.ca_chain is sequence
+            and nginx_config_vault_cert_data.ca_chain is not string
+          )
+          else (
+            [nginx_config_vault_cert_data.ca_chain | string]
+            if (
+              nginx_config_vault_cert_data.ca_chain is defined
+              and (nginx_config_vault_cert_data.ca_chain | string | trim | length > 0)
+            )
+            else (
+              [nginx_config_vault_cert_data.issuing_ca]
+              if (nginx_config_vault_cert_data.issuing_ca | default('', true) | trim | length > 0)
+              else []
+            )
+          )
+        )
+        | map('trim')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+  changed_when: false
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+  tags:
+    - config
+
 - name: Set Vault TLS certificate presence flag
   ansible.builtin.set_fact:
     nginx_config_vault_cert_present: >-
@@ -193,6 +230,8 @@
         (not (nginx_config_vault_cert_present | default(false) | bool))
         or
         (not (nginx_config_vault_cert_identity_match | default(false) | bool))
+        or
+        (nginx_config_vault_cert_data.ca_chain is not defined)
       }}
   changed_when: false
   no_log: "{{ nginx_config_tls_no_log }}"
@@ -345,6 +384,43 @@
   tags:
     - config
 
+- name: Normalize generated TLS CA chain from Vault PKI
+  ansible.builtin.set_fact:
+    nginx_config_vault_generated_ca_chain: >-
+      {{
+        (
+          nginx_config_vault_generated_cert_data.ca_chain
+          if (
+            nginx_config_vault_generated_cert_data.ca_chain is sequence
+            and nginx_config_vault_generated_cert_data.ca_chain is not string
+          )
+          else (
+            [nginx_config_vault_generated_cert_data.ca_chain | string]
+            if (
+              nginx_config_vault_generated_cert_data.ca_chain is defined
+              and (nginx_config_vault_generated_cert_data.ca_chain | string | trim | length > 0)
+            )
+            else (
+              [nginx_config_vault_generated_cert_data.issuing_ca]
+              if (nginx_config_vault_generated_cert_data.issuing_ca | default('', true) | trim | length > 0)
+              else []
+            )
+          )
+        )
+        | map('trim')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+  changed_when: false
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+  tags:
+    - config
+
 - name: Store generated TLS certificate in Vault KV2
   delegate_to: localhost
   become: false
@@ -375,7 +451,15 @@
     data:
       certificate: "{{ nginx_config_vault_generated_cert_data.certificate }}"
       private_key: "{{ nginx_config_vault_generated_cert_data.private_key }}"
-      issuing_ca: "{{ nginx_config_vault_generated_cert_data.issuing_ca | default('', true) }}"
+      issuing_ca: >-
+        {{
+          (
+            nginx_config_vault_generated_ca_chain | first
+          )
+          if (nginx_config_vault_generated_ca_chain | default([], true) | length > 0)
+          else (nginx_config_vault_generated_cert_data.issuing_ca | default('', true))
+        }}
+      ca_chain: "{{ nginx_config_vault_generated_ca_chain | default([], true) }}"
       common_name: "{{ nginx_config_vault_cert_common_name }}"
       alt_names: "{{ nginx_config_vault_cert_alt_names_effective }}"
       updated_at: "{{ ansible_date_time.iso8601 }}"
@@ -412,10 +496,18 @@
             true
           )
       }}
+    nginx_config_tls_ca_chain_content: >-
+      {{
+        nginx_config_vault_generated_ca_chain
+          | default(nginx_config_vault_cert_ca_chain_stored | default([], true), true)
+      }}
     nginx_config_tls_issuing_ca_content: >-
       {{
-        nginx_config_vault_generated_cert_data.issuing_ca
-          | default(nginx_config_vault_cert_data.issuing_ca | default('', true), true)
+        (
+          nginx_config_tls_ca_chain_content | first
+        )
+        if (nginx_config_tls_ca_chain_content | default([], true) | length > 0)
+        else ''
       }}
   changed_when: false
   no_log: "{{ nginx_config_tls_no_log }}"
@@ -447,9 +539,9 @@
     dest: "{{ nginx_config_tls_certificate_host_path }}"
     content: |
       {{ nginx_config_tls_certificate_content | trim }}
-      {% if nginx_config_tls_issuing_ca_content | default('', true) | trim | length > 0 %}
-      {{ nginx_config_tls_issuing_ca_content | trim }}
-      {% endif %}
+      {% for ca_cert in (nginx_config_tls_ca_chain_content | default([], true)) %}
+      {{ ca_cert | trim }}
+      {% endfor %}
     owner: "{{ nginx_deploy_run_as_user }}"
     group: "{{ nginx_deploy_run_as_group }}"
     mode: '0644'

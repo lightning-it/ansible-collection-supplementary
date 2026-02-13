@@ -29,6 +29,42 @@
     - terragrunt_plan
     - terragrunt_apply
 
+- name: Collect configured Vault secret store paths
+  ansible.builtin.set_fact:
+    vault_config_secret_store_paths: >-
+      {{
+        vault_config_secret_stores
+        | default([], true)
+        | selectattr('path', 'defined')
+        | map(attribute='path')
+        | map('trim')
+        | reject('equalto', '')
+        | list
+      }}
+  changed_when: false
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Align Vault engine mount with configured secret stores
+  ansible.builtin.set_fact:
+    vault_config_engine_mount_point: >-
+      {{
+        vault_config_engine_mount_point
+        if (vault_config_engine_mount_point in vault_config_secret_store_paths)
+        else (vault_config_secret_store_paths | first)
+      }}
+  changed_when: false
+  when:
+    - vault_config_secret_store_paths | default([], true) | length > 0
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
 - name: Normalize AppRole secrets for terragrunt
   ansible.builtin.set_fact:
     vault_config_approle_secrets_render: "{{ (vault_config_approle_secrets_render | default([])) + [_entry] }}"
