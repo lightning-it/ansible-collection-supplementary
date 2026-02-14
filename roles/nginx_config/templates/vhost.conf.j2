@@ -115,7 +115,7 @@ server {
 {% endfor %}
 {% elif item.upstream_url is defined and item.upstream_url | length > 0 %}
   location / {
-{% for directive in item.proxy_directives | default(nginx_config_proxy_default_directives) %}
+{% for directive in item.proxy_directives | default([]) %}
 {% set _directive = directive | trim %}
 {% if _directive | length > 0 %}
 {% set _needs_semicolon = not (

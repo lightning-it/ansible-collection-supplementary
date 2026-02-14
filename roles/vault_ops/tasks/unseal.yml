@@ -9,7 +9,7 @@
   retries: 30
   delay: 5
   changed_when: false
-  failed_when: vault_deploy_health is failed and vault_deploy_health.status | default(0) not in [200, 429, 472, 473, 501, 503]
+  failed_when: vault_deploy_health is failed and vault_deploy_health.status not in [200, 429, 472, 473, 501, 503]
   delegate_to: "{{ vault_ops_api_delegate_to }}"
   become: false
   tags:
@@ -24,7 +24,7 @@
     validate_certs: "{{ vault_deploy_vault_validate_certs }}"
   register: vault_deploy_seal_status
   changed_when: false
-  failed_when: vault_deploy_seal_status.status | default(0) not in [200]
+  failed_when: vault_deploy_seal_status.status not in [200]
   delegate_to: "{{ vault_ops_api_delegate_to }}"
   become: false
   tags:
@@ -216,7 +216,7 @@
     validate_certs: "{{ vault_deploy_vault_validate_certs }}"
   register: vault_deploy_seal_status_after
   changed_when: false
-  failed_when: vault_deploy_seal_status_after.status | default(0) not in [200]
+  failed_when: vault_deploy_seal_status_after.status not in [200]
   delegate_to: "{{ vault_ops_api_delegate_to }}"
   become: false
   when: vault_deploy_sealed | bool
