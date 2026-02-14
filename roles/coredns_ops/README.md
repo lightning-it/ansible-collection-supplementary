@@ -6,13 +6,17 @@ Operate CoreDNS Podman deployment (restart, reload, status, upgrade).
 
 None.
 
-## Role Variables
+## Variables
 
 See `roles/coredns_ops/defaults/main.yml` and `roles/coredns_deploy/defaults/main.yml`.
 
 Key variables:
 - `coredns_ops_action`
 - `coredns_ops_target_image`
+
+## Dependencies
+
+None.
 
 ## Example Playbook
 
@@ -26,3 +30,11 @@ Key variables:
   tags:
     - coredns
 ```
+
+## License
+
+GPL-3.0-only
+
+## Author
+
+Lightning IT

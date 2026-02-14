@@ -1,0 +1,2 @@
+---
+vault_validate_strict: "{{ vault_deploy_validate_mode != 'report' }}"

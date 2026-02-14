@@ -1,0 +1,9 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip vault_foundational role main entrypoint
+  ansible.builtin.debug:
+    msg: "vault_foundational exposes helper tasks via tasks_from."
+  changed_when: false

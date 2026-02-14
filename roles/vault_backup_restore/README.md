@@ -6,7 +6,7 @@ Backup and restore Vault storage on disk.
 
 None.
 
-## Role Variables
+## Variables
 
 See `roles/vault_deploy/defaults/main.yml`.
 
@@ -17,7 +17,12 @@ Key variables:
 - `vault_deploy_restore_source`
 - `vault_deploy_restore_confirm` (must be `YES_RESTORE`)
 
+## Dependencies
+
+None.
+
 ## Example Playbook
+
 ```yaml
 - name: Backup Vault
   hosts: vault_hosts
@@ -27,3 +32,11 @@ Key variables:
   tags:
     - backup
 ```
+
+## License
+
+GPL-3.0-only
+
+## Author
+
+Lightning IT

@@ -1,40 +1,55 @@
 ---
-- name: Set MinIO endpoint defaults
+- name: Resolve MinIO endpoint defaults (runtime)
   ansible.builtin.set_fact:
-    minio_deploy_api_scheme_effective: "{{ minio_deploy_api_scheme | default('http') }}"
-    minio_deploy_port_effective: "{{ (minio_deploy_port | default(9000)) | int }}"
-    minio_deploy_console_port_effective: "{{ (minio_deploy_console_port | default(9001)) | int }}"
+    minio_deploy_api_scheme_effective: "{{ minio_deploy_api_scheme | default('http', true) }}"
+    minio_deploy_port_effective: "{{ (minio_deploy_port | default(9000, true)) | int }}"
+    minio_deploy_console_port_effective: "{{ (minio_deploy_console_port | default(9001, true)) | int }}"
     minio_deploy_host_ip_effective: >-
       {{
         minio_deploy_host_ip
-          | default(ansible_default_ipv4.address | default('127.0.0.1'))
+          | default(ansible_default_ipv4.address | default('127.0.0.1', true), true)
       }}
-
-- name: Set MinIO API and console URLs
-  ansible.builtin.set_fact:
     minio_deploy_api_url_effective: >-
       {{
         minio_deploy_api_url
-          | default(
-            minio_deploy_api_scheme_effective ~ '://' ~
-            minio_deploy_host_ip_effective ~ ':' ~
-            minio_deploy_port_effective
+          if (minio_deploy_api_url | default('', true) | length > 0)
+          else (
+            (minio_deploy_api_scheme | default('http', true))
+            ~ '://'
+            ~ (minio_deploy_host_ip | default('127.0.0.1', true))
+            ~ ':'
+            ~ ((minio_deploy_port | default(9000, true)) | int)
           )
       }}
     minio_deploy_console_url_effective: >-
       {{
         minio_deploy_console_url
-          | default(
-            minio_deploy_api_scheme_effective ~ '://' ~
-            minio_deploy_host_ip_effective ~ ':' ~
-            minio_deploy_console_port_effective
+          if (minio_deploy_console_url | default('', true) | length > 0)
+          else (
+            (minio_deploy_api_scheme | default('http', true))
+            ~ '://'
+            ~ (minio_deploy_host_ip | default('127.0.0.1', true))
+            ~ ':'
+            ~ ((minio_deploy_console_port | default(9001, true)) | int)
           )
       }}
-
-- name: Set MinIO health URL
-  ansible.builtin.set_fact:
     minio_deploy_health_url_effective: >-
       {{
         minio_deploy_health_url
-          | default(minio_deploy_api_url_effective ~ '/minio/health/ready')
+          if (minio_deploy_health_url | default('', true) | length > 0)
+          else (
+            (
+              minio_deploy_api_url_effective
+                | default(
+                  (minio_deploy_api_scheme | default('http', true))
+                  ~ '://'
+                  ~ (minio_deploy_host_ip | default('127.0.0.1', true))
+                  ~ ':'
+                  ~ ((minio_deploy_port | default(9000, true)) | int),
+                  true
+                )
+            )
+            ~ '/minio/health/ready'
+          )
       }}
+  changed_when: false

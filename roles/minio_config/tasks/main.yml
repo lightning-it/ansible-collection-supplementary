@@ -1,93 +1,236 @@
 ---
-- name: Ensure required MinIO vars are defined
-  ansible.builtin.import_role:
-    name: minio_deploy
-    tasks_from: assert
-  tags: always
-
-- name: Ensure config user list is valid
-  ansible.builtin.assert:
-    that:
-      - minio_deploy_config_users is sequence
-    fail_msg: "minio_deploy_config_users must be a list."
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
   tags: always
 
 - name: Skip MinIO config when disabled
   ansible.builtin.debug:
-    msg: "MinIO config skipped (minio_deploy_skip_config=true or no users requested)."
+    msg: "MinIO config skipped (minio_config_skip_config=true or nothing requested)."
   when:
-    - minio_deploy_skip_config | bool or minio_deploy_config_users | length == 0
+    - minio_config_skip_config | bool or not (minio_config_manage_any | bool)
   tags: always
+
+- name: Skip MinIO config runtime operations in check mode
+  ansible.builtin.debug:
+    msg: "MinIO config runtime operations skipped in check mode."
+  when:
+    - not minio_config_skip_config | bool
+    - minio_config_manage_any | bool
+    - ansible_check_mode
+  tags: always
+
+- name: Ensure MinIO mc config dir exists
+  ansible.builtin.file:
+    path: "{{ minio_config_mc_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  when:
+    - not minio_config_skip_config | bool
+    - minio_config_manage_any | bool
+    - minio_config_mc_config_dir | default('', true) | trim | length > 0
+    - not ansible_check_mode
+  tags:
+    - config
 
 - name: Configure MinIO mc alias
   ansible.builtin.command: >-
-    {{ minio_deploy_mc_path }} alias set {{ minio_deploy_mc_alias }} {{ minio_deploy_api_url_effective }}
-    {{ minio_deploy_root_user_effective }} {{ minio_deploy_root_password_effective }}
-    {{ (minio_deploy_mc_insecure | bool) | ternary('--insecure', '') }}
-  register: minio_deploy_mc_alias_set
+    {{ minio_config_mc_path }} alias set {{ minio_config_mc_alias }} {{ minio_config_api_url_effective }}
+    {{ minio_config_root_user_effective }} {{ minio_config_root_password_effective }}
+    {{ (minio_config_mc_insecure | bool) | ternary('--insecure', '') }}
+  register: minio_config_mc_alias_set
   changed_when: false
   no_log: true
   when:
-    - not minio_deploy_skip_config | bool
-    - minio_deploy_config_users | length > 0
+    - not minio_config_skip_config | bool
+    - minio_config_manage_any | bool
+    - not ansible_check_mode
   tags:
     - config
 
-- name: Validate MinIO user entries
-  ansible.builtin.assert:
-    that:
-      - item.access_key | default('') | length > 0
-      - item.secret_key | default('') | length > 0
-    fail_msg: "Each minio_deploy_config_users entry must include access_key and secret_key."
-  loop: "{{ minio_deploy_config_users }}"
+- name: Manage vault bucket (tfstate)
   when:
-    - not minio_deploy_skip_config | bool
-    - minio_deploy_config_users | length > 0
+    - not minio_config_skip_config | bool
+    - minio_config_manage_vault_bucket | default(true) | bool
+    - not ansible_check_mode
   tags:
     - config
+    - vault_bucket
+  block:
+    - name: Assert Vault bucket variables are set
+      ansible.builtin.assert:
+        that:
+          - minio_config_vault_bucket_name | default('', true) | trim | length > 0
+          - minio_config_vault_bucket_policy | default('', true) | trim | length > 0
+          - minio_config_vault_kv_mount | default('', true) | trim | length > 0
+          - minio_config_vault_bucket_vault_path | default('', true) | trim | length > 0
+          - minio_config_vault_address | default('', true) | trim | length > 0
+          - minio_config_vault_token | default('', true) | trim | length > 0
+        fail_msg: >-
+          Vault bucket management requires Vault access (vault_address + vault_token) and a KV mount/path.
+          Ensure vault_token is set and vault_engine_mount_point is configured.
+      no_log: true
+
+    - name: Check whether vault bucket exists
+      ansible.builtin.command: >-
+        {{ minio_config_mc_path }} stat
+        {{ (minio_config_mc_insecure | bool) | ternary('--insecure', '') }}
+        {{ minio_config_mc_alias }}/{{ minio_config_vault_bucket_name }}
+      register: minio_config_vault_bucket_stat
+      changed_when: false
+      failed_when: false
+
+    - name: Ensure vault bucket exists
+      ansible.builtin.command: >-
+        {{ minio_config_mc_path }} mb --ignore-existing
+        {{ (minio_config_mc_insecure | bool) | ternary('--insecure', '') }}
+        {{ minio_config_mc_alias }}/{{ minio_config_vault_bucket_name }}
+      register: minio_config_vault_bucket_create
+      changed_when: true
+      when:
+        - minio_config_vault_bucket_stat.rc != 0
+
+    - name: Read vault bucket credentials from Vault (if exists)
+      delegate_to: localhost
+      become: false
+      community.hashi_vault.vault_kv2_get:
+        url: "{{ minio_config_vault_address }}"
+        validate_certs: "{{ minio_config_vault_validate_certs }}"
+        engine_mount_point: "{{ minio_config_vault_kv_mount }}"
+        path: "{{ minio_config_vault_bucket_vault_path }}"
+        token: "{{ minio_config_vault_token }}"
+      register: minio_config_vault_bucket_creds_read
+      failed_when: false
+      no_log: true
+
+    - name: Parse vault bucket credentials
+      ansible.builtin.set_fact:
+        minio_config_vault_bucket_access_key_effective: >-
+          {{ _creds.access_key | default('') }}
+        minio_config_vault_bucket_secret_key_effective: >-
+          {{ _creds.secret_key | default('') }}
+        minio_config_vault_bucket_creds_present: >-
+          {{
+            (_creds.access_key | default('') | length > 0)
+            and (_creds.secret_key | default('') | length > 0)
+          }}
+      vars:
+        _creds: "{{ minio_config_vault_bucket_creds_read.data.data | default({}) }}"
+      changed_when: false
+      no_log: true
+
+    - name: Generate vault bucket credentials when missing
+      ansible.builtin.set_fact:
+        minio_config_vault_bucket_access_key_effective: >-
+          {{ 'vault' ~ lookup('password', '/dev/null', length=16, chars='ascii_lowercase,digits') }}
+        minio_config_vault_bucket_secret_key_effective: >-
+          {{ lookup('password', '/dev/null', length=40, chars='ascii_letters,digits') }}
+      changed_when: false
+      no_log: true
+      when: not (minio_config_vault_bucket_creds_present | bool)
+
+    - name: Write vault bucket credentials to Vault KV2 (if missing)
+      delegate_to: localhost
+      become: false
+      community.hashi_vault.vault_kv2_write:
+        url: "{{ minio_config_vault_address }}"
+        validate_certs: "{{ minio_config_vault_validate_certs }}"
+        engine_mount_point: "{{ minio_config_vault_kv_mount }}"
+        path: "{{ minio_config_vault_bucket_vault_path }}"
+        token: "{{ minio_config_vault_token }}"
+        data:
+          bucket: "{{ minio_config_vault_bucket_name }}"
+          endpoint: "{{ minio_config_vault_bucket_endpoint_effective }}"
+          region: "{{ minio_config_vault_bucket_region }}"
+          key_prefix: "{{ minio_config_vault_bucket_key_prefix }}"
+          access_key: "{{ minio_config_vault_bucket_access_key_effective }}"
+          secret_key: "{{ minio_config_vault_bucket_secret_key_effective }}"
+          updated_at: "{{ ansible_date_time.iso8601 }}"
+      register: minio_config_vault_bucket_creds_write
+      changed_when: true
+      no_log: true
+      when:
+        - not (minio_config_vault_bucket_creds_present | bool)
+
+    - name: Assert vault bucket credentials are resolved
+      ansible.builtin.assert:
+        that:
+          - minio_config_vault_bucket_access_key_effective | default('', true) | trim | length > 0
+          - minio_config_vault_bucket_secret_key_effective | default('', true) | trim | length > 0
+        fail_msg: "Vault bucket credentials could not be resolved."
+      no_log: true
+
+    - name: Check MinIO vault bucket user
+      ansible.builtin.command: >-
+        {{ minio_config_mc_path }} admin user info
+        {{ minio_config_mc_alias }} {{ minio_config_vault_bucket_access_key_effective }}
+      register: minio_config_vault_bucket_user_info
+      failed_when: false
+      changed_when: false
+      no_log: true
+
+    - name: Create MinIO vault bucket user
+      ansible.builtin.command: >-
+        {{ minio_config_mc_path }} admin user add {{ minio_config_mc_alias }}
+        {{ minio_config_vault_bucket_access_key_effective }} {{ minio_config_vault_bucket_secret_key_effective }}
+      register: minio_config_vault_bucket_user_add
+      changed_when: true
+      no_log: true
+      when:
+        - minio_config_vault_bucket_user_info.rc != 0
+
+    - name: Assign MinIO vault bucket policy
+      ansible.builtin.command: >-
+        {{ minio_config_mc_path }} admin policy attach {{ minio_config_mc_alias }}
+        {{ minio_config_vault_bucket_policy }} --user {{ minio_config_vault_bucket_access_key_effective }}
+      register: minio_config_vault_bucket_policy_set
+      changed_when: false
 
 - name: Check MinIO users
   ansible.builtin.command: >-
-    {{ minio_deploy_mc_path }} admin user info
-    {{ minio_deploy_mc_alias }} {{ item.access_key }}
-  register: minio_deploy_user_info
+    {{ minio_config_mc_path }} admin user info
+    {{ minio_config_mc_alias }} {{ item.access_key }}
+  register: minio_config_user_info
   failed_when: false
   changed_when: false
-  loop: "{{ minio_deploy_config_users }}"
+  loop: "{{ minio_config_users_effective | default([], true) }}"
   loop_control:
     label: "{{ item.access_key }}"
   when:
-    - not minio_deploy_skip_config | bool
-    - minio_deploy_config_users | length > 0
+    - not minio_config_skip_config | bool
+    - minio_config_users_effective | default([], true) | length > 0
+    - not ansible_check_mode
   tags:
     - config
 
 - name: Create MinIO users
   ansible.builtin.command: >-
-    {{ minio_deploy_mc_path }} admin user add {{ minio_deploy_mc_alias }}
+    {{ minio_config_mc_path }} admin user add {{ minio_config_mc_alias }}
     {{ item.item.access_key }} {{ item.item.secret_key }}
-  register: minio_deploy_user_add
+  register: minio_config_user_add
   changed_when: true
   no_log: true
-  loop: "{{ minio_deploy_user_info.results | default([]) }}"
+  loop: "{{ minio_config_user_info.results | default([]) }}"
   when:
-    - not minio_deploy_skip_config | bool
-    - minio_deploy_config_users | length > 0
+    - not minio_config_skip_config | bool
+    - minio_config_users_effective | default([], true) | length > 0
     - item.rc != 0
   tags:
     - config
 
 - name: Assign MinIO user policies
   ansible.builtin.command: >-
-    {{ minio_deploy_mc_path }} admin policy set {{ minio_deploy_mc_alias }}
-    {{ item.item.policy }} user={{ item.item.access_key }}
-  register: minio_deploy_policy_set
-  changed_when: true
-  loop: "{{ minio_deploy_user_info.results | default([]) }}"
+    {{ minio_config_mc_path }} admin policy attach {{ minio_config_mc_alias }}
+    {{ item.item.policy }} --user {{ item.item.access_key }}
+  register: minio_config_policy_set
+  changed_when: false
+  loop: "{{ minio_config_user_info.results | default([]) }}"
   when:
-    - not minio_deploy_skip_config | bool
-    - minio_deploy_config_users | length > 0
+    - not minio_config_skip_config | bool
+    - minio_config_users_effective | default([], true) | length > 0
     - item.item.policy is defined
     - item.item.policy | length > 0
+    - not ansible_check_mode
   tags:
     - config

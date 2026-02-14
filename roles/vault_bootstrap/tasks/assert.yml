@@ -1,0 +1,22 @@
+---
+- name: Import Vault deploy prechecks
+  ansible.builtin.import_role:
+    name: vault_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure vault bootstrap variables are valid
+  ansible.builtin.assert:
+    that:
+      - vault_deploy_bootstrap_init is boolean
+      - vault_deploy_bootstrap_auto_init is boolean
+      - vault_deploy_bootstrap_write_init_output is boolean
+      - vault_deploy_bootstrap_key_shares | int > 0
+      - vault_deploy_bootstrap_key_threshold | int > 0
+      - vault_deploy_bootstrap_persist_dir | default('', true) | trim | length > 0
+      - vault_deploy_init_file_path | default('', true) | trim | length > 0
+      - vault_deploy_container_name | default('', true) | trim | length > 0
+      - vault_deploy_api_url | default('', true) | trim | length > 0
+    fail_msg: "vault_bootstrap variables are missing or invalid."
+    quiet: true
+  tags: always

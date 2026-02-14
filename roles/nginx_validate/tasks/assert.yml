@@ -1,0 +1,17 @@
+---
+- name: Import nginx_deploy prechecks
+  ansible.builtin.import_role:
+    name: nginx_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure nginx_validate variables are valid
+  ansible.builtin.assert:
+    that:
+      - nginx_validate_mode in ['fail', 'report']
+      - nginx_validate_check_config is boolean
+      - nginx_validate_check_http is boolean
+      - nginx_validate_strict is boolean
+    fail_msg: "nginx_validate variables are missing or invalid."
+    quiet: true
+  tags: always

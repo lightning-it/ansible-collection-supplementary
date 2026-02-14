@@ -1,6 +1,97 @@
 ---
 nginx_config_vhosts: []
+nginx_config_service_vhosts_enabled: false
+nginx_config_service_vhosts: []
+nginx_config_http_listen_port: 80
+nginx_config_tls_listen_port: 443
+nginx_config_tls_certificate: "{{ nginx_deploy_conf_d_dir }}/certs/tls.crt"
+nginx_config_tls_certificate_key: "{{ nginx_deploy_conf_d_dir }}/certs/tls.key"
+nginx_config_tls_certificate_host_path: "{{ nginx_config_conf_d_dir }}/certs/tls.crt"
+nginx_config_tls_certificate_key_host_path: "{{ nginx_config_conf_d_dir }}/certs/tls.key"
+nginx_config_tls_source: "vault"
+nginx_config_tls_self_signed_days: 825
+nginx_config_tls_common_name: "{{ ansible_fqdn | default(inventory_hostname, true) }}"
+nginx_config_tls_no_log: true
+nginx_config_vault_address: "{{ vault_address | default('') }}"
+nginx_config_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
+nginx_config_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') }}"
+nginx_config_vault_kv_path: "{{ inventory_hostname }}/nginx/certificate"
+nginx_config_vault_pki_path: "pki-inter-ec-2025/issue"
+nginx_config_vault_pki_role: "limited_dns_2y"
+nginx_config_vault_token: "{{ vault_token | default('', true) }}"
+nginx_config_vault_role_id: "{{ ansible_hashi_vault_role_id | default('', true) }}"
+nginx_config_vault_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"
+nginx_config_vault_auth_token: "{{ nginx_config_vault_token | default('', true) | trim }}"
+nginx_config_vault_auth_role_id: "{{ nginx_config_vault_role_id | default('', true) | trim }}"
+nginx_config_vault_auth_secret_id: "{{ nginx_config_vault_secret_id | default('', true) | trim }}"
+nginx_config_vault_use_token: "{{ (nginx_config_vault_auth_token | length) > 0 }}"
+nginx_config_vault_auth_ok: >-
+  {{
+    (nginx_config_vault_auth_token | length > 0)
+    or (
+      (nginx_config_vault_auth_role_id | length > 0)
+      and (nginx_config_vault_auth_secret_id | length > 0)
+    )
+  }}
+nginx_config_vault_auth_method: >-
+  {{ 'token' if (nginx_config_vault_use_token | bool) else 'approle' }}
+nginx_config_proxy_default_directives:
+  - "proxy_set_header Host $host"
+  - "proxy_set_header X-Real-IP $remote_addr"
+  - "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for"
+  - "proxy_set_header X-Forwarded-Proto https"
+  - "proxy_http_version 1.1"
+nginx_config_vhosts_effective: >-
+  {{
+    (nginx_config_vhosts | default([], true))
+    + (
+      (nginx_config_service_vhosts | default([], true))
+      if (nginx_config_service_vhosts_enabled | default(false, true) | bool)
+      else []
+    )
+  }}
+nginx_config_has_force_https_vhosts: >-
+  {{
+    (
+      nginx_config_vhosts_effective
+      | selectattr('force_https', 'defined')
+      | selectattr('force_https')
+      | list
+      | length
+    ) > 0
+  }}
+nginx_config_vault_cert_vhost_names: >-
+  {{
+    nginx_config_vhosts_effective
+    | selectattr('force_https', 'defined')
+    | selectattr('force_https')
+    | map(attribute='server_name')
+    | list
+  }}
+nginx_config_vault_cert_common_name: >-
+  {{
+    (nginx_config_vault_cert_vhost_names | first)
+    | default(nginx_config_tls_common_name, true)
+  }}
+nginx_config_vault_cert_alt_names:
+  - "localhost"
+  - "{{ nginx_config_tls_common_name }}"
+nginx_config_vault_cert_alt_names_extra: []
+nginx_config_vault_cert_alt_names_effective: >-
+  {{
+    (
+      (nginx_config_vault_cert_alt_names | default([], true))
+      + (nginx_config_vault_cert_alt_names_extra | default([], true))
+      + (nginx_config_vault_cert_vhost_names | default([], true))
+    )
+    | unique
+  }}
 nginx_config_remove_default: false
+nginx_config_manage_any: >-
+  {{
+    (nginx_config_vhosts_effective | length > 0)
+    or (nginx_config_remove_default | bool)
+  }}
 nginx_config_conf_d_dir: "{{ nginx_deploy_host_conf_d_dir }}"
 nginx_config_vhost_mode: '0644'
 nginx_config_test: "{{ nginx_deploy_config_test | default(true) }}"

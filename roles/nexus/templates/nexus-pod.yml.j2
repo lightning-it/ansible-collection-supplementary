@@ -17,9 +17,11 @@ spec:
   - name: caddy
     image: {{ nexus_caddy_image }}
     ports:
-    - containerPort: 443
-      hostPort: 443
+    - containerPort: {{ nexus_caddy_container_port }}
+{% if nexus_expose_host_https | bool %}
+      hostPort: {{ nexus_caddy_host_port }}
       hostIP: {{ nexus_nexus_host_ip }}
+{% endif %}
     volumeMounts:
     - mountPath: /etc/caddy/Caddyfile
       subPath: Caddyfile-ssl

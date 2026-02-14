@@ -3,5 +3,8 @@
   ansible.builtin.assert:
     that:
       - nexus_nexus_hostname | length > 0
+      - nexus_expose_host_https is boolean
+      - nexus_caddy_container_port | int > 0
+      - nexus_caddy_host_port | int > 0
     quiet: true
   tags: always

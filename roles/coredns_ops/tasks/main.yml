@@ -1,15 +1,6 @@
 ---
-- name: Ensure required CoreDNS vars are defined
-  ansible.builtin.import_role:
-    name: coredns_deploy
-    tasks_from: assert
-  tags: always
-
-- name: Ensure coredns_ops_action is valid
-  ansible.builtin.assert:
-    that:
-      - coredns_ops_action in ['none', 'restart', 'reload', 'status', 'upgrade']
-    fail_msg: "coredns_ops_action must be one of: none, restart, reload, status, upgrade."
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
   tags: always
 
 - name: Restart CoreDNS service
@@ -22,7 +13,9 @@
       ansible.builtin.systemd:
         name: "{{ coredns_deploy_systemd_unit_name }}"
         state: restarted
-      when: coredns_deploy_manage_systemd | bool
+      when:
+        - coredns_deploy_manage_systemd | bool
+        - not ansible_check_mode
 
     - name: Restart CoreDNS pod (non-systemd)
       ansible.builtin.include_role:
@@ -32,11 +25,14 @@
         kubeplay_action: restart
         kubeplay_pod_name: "{{ coredns_deploy_pod_name }}"
         kubeplay_app_name: coredns_restart
-      when: not coredns_deploy_manage_systemd | bool
+      when:
+        - not coredns_deploy_manage_systemd | bool
+        - not ansible_check_mode
 
     - name: Validate CoreDNS after restart
       ansible.builtin.include_role:
         name: coredns_validate
+      when: not ansible_check_mode
 
 - name: Reload CoreDNS service
   when: coredns_ops_action == 'reload'
@@ -48,7 +44,9 @@
       ansible.builtin.systemd:
         name: "{{ coredns_deploy_systemd_unit_name }}"
         state: restarted
-      when: coredns_deploy_manage_systemd | bool
+      when:
+        - coredns_deploy_manage_systemd | bool
+        - not ansible_check_mode
 
     - name: Reload CoreDNS pod (non-systemd)
       ansible.builtin.include_role:
@@ -58,7 +56,9 @@
         kubeplay_action: restart
         kubeplay_pod_name: "{{ coredns_deploy_pod_name }}"
         kubeplay_app_name: coredns_reload
-      when: not coredns_deploy_manage_systemd | bool
+      when:
+        - not coredns_deploy_manage_systemd | bool
+        - not ansible_check_mode
 
 - name: Report CoreDNS status
   when: coredns_ops_action == 'status'
@@ -102,7 +102,9 @@
     - name: Set CoreDNS image override
       ansible.builtin.set_fact:
         coredns_deploy_image: "{{ coredns_ops_target_image }}"
+      changed_when: false
 
     - name: Redeploy CoreDNS with new image
       ansible.builtin.include_role:
         name: coredns_deploy
+      when: not ansible_check_mode

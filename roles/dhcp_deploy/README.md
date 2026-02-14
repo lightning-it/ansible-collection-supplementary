@@ -6,7 +6,7 @@ Deploy ISC DHCP (dhcpd) on the host using RPMs and systemd (RHEL default repos).
 
 None.
 
-## Role Variables
+## Variables
 
 See `roles/dhcp_deploy/defaults/main.yml`.
 
@@ -19,6 +19,10 @@ Key variables:
 - `dhcp_deploy_manage_service`
 - `dhcp_deploy_manage_config`
 
+## Dependencies
+
+None.
+
 ## Example Playbook
 
 ```yaml
@@ -30,3 +34,11 @@ Key variables:
   tags:
     - dhcp
 ```
+
+## License
+
+GPL-3.0-only
+
+## Author
+
+Lightning IT

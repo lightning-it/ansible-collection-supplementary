@@ -1,3 +1,9 @@
 ---
 minio_ops_action: "none"
 minio_ops_target_image: ""
+minio_ops_manage_systemd: "{{ minio_deploy_manage_systemd | default(true, true) }}"
+minio_ops_systemd_unit_name: "{{ minio_deploy_systemd_unit_name | default('', true) }}"
+minio_ops_pod_name: "{{ minio_deploy_pod_name | default('minio', true) }}"
+minio_ops_health_url_effective: >-
+  {{ minio_deploy_health_url_effective | default('http://127.0.0.1:9000/minio/health/ready', true) }}
+minio_ops_validate_certs: "{{ minio_deploy_validate_certs | default(true, true) }}"

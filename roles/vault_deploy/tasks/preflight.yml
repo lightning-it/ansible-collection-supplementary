@@ -1,0 +1,92 @@
+---
+- name: Preflight | Check Vault health for token validation (best effort)
+  delegate_to: localhost
+  ansible.builtin.uri:
+    url: "{{ vault_deploy_health_url }}"
+    method: GET
+    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+  register: vault_deploy_token_health
+  failed_when: false
+  changed_when: false
+  when:
+    - vault_deploy_token | default('', true) | trim | length > 0
+  tags: always
+
+- name: Preflight | Check Vault token can login (lookup-self)
+  delegate_to: localhost
+  ansible.builtin.uri:
+    url: "{{ vault_deploy_api_url }}/v1/auth/token/lookup-self"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ vault_deploy_token }}"
+    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+    return_content: false
+  register: vault_deploy_token_lookup_self
+  failed_when: false
+  changed_when: false
+  no_log: true
+  when:
+    - vault_deploy_token | default('', true) | trim | length > 0
+    - vault_deploy_token_health is defined
+    - vault_deploy_token_health.status | default(0) in [200, 429, 472, 473]
+  tags: always
+
+- name: Assert | Vault token is usable (when Vault is reachable)
+  ansible.builtin.assert:
+    that:
+      - vault_deploy_token_lookup_self.status | default(0) == 200
+    fail_msg: >-
+      Vault token validation failed against {{ vault_deploy_api_url }}.
+      Status={{ vault_deploy_token_lookup_self.status | default('n/a') }}.
+      Provide a valid token (vault_token / vault_deploy_token) with permission to call auth/token/lookup-self.
+    quiet: true
+  when:
+    - vault_deploy_token | default('', true) | trim | length > 0
+    - vault_deploy_token_health is defined
+    - vault_deploy_token_health.status | default(0) in [200, 429, 472, 473]
+  tags: always
+
+- name: Preflight | Check token access to AppRole credential secret (best effort)
+  delegate_to: localhost
+  ansible.builtin.uri:
+    url: >-
+      {{
+        vault_deploy_api_url
+        ~ '/v1/'
+        ~ vault_deploy_engine_mount_point
+        ~ '/data/'
+        ~ inventory_hostname
+        ~ '/vault/approle'
+      }}
+    method: GET
+    headers:
+      X-Vault-Token: "{{ vault_deploy_token }}"
+    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+    return_content: false
+  register: vault_deploy_token_approle_secret_read
+  failed_when: false
+  changed_when: false
+  no_log: true
+  when:
+    - vault_deploy_token | default('', true) | trim | length > 0
+    - vault_deploy_token_health is defined
+    - vault_deploy_token_health.status | default(0) in [200, 429, 472, 473]
+    - vault_deploy_token_lookup_self.status | default(0) == 200
+  tags: always
+
+- name: Assert | Token is not forbidden to read AppRole credentials
+  ansible.builtin.assert:
+    that:
+      - vault_deploy_token_approle_secret_read.status | default(0) != 403
+    fail_msg: >-
+      Vault token is valid, but lacks permission to read
+      {{ vault_deploy_engine_mount_point }}/data/{{ inventory_hostname }}/vault/approle.
+      Provide a token with read access to that KV path (or remove/refresh stale vault_init/vault_token).
+    quiet: true
+  when:
+    - vault_deploy_token | default('', true) | trim | length > 0
+    - vault_deploy_token_health is defined
+    - vault_deploy_token_health.status | default(0) in [200, 429, 472, 473]
+    - vault_deploy_token_lookup_self.status | default(0) == 200
+    - vault_deploy_token_approle_secret_read is defined
+  tags: always

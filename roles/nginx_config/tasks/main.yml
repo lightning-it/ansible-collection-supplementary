@@ -1,29 +1,13 @@
 ---
-- name: Ensure required Nginx vars are defined
-  ansible.builtin.import_role:
-    name: nginx_deploy
-    tasks_from: assert
-  tags: always
-
-- name: Normalize Nginx vhost list
-  ansible.builtin.set_fact:
-    nginx_config_vhosts_effective: "{{ nginx_config_vhosts | default([], true) }}"
-  changed_when: false
-  tags: always
-
-- name: Ensure vhost list is valid
-  ansible.builtin.assert:
-    that:
-      - nginx_config_vhosts_effective is sequence
-      - nginx_config_vhosts_effective is not string
-    fail_msg: "nginx_config_vhosts must be a list."
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
   tags: always
 
 - name: Skip Nginx config when disabled
   ansible.builtin.debug:
-    msg: "Nginx config skipped (nginx_deploy_skip_config=true or no vhosts defined)."
+    msg: "Nginx config skipped (nginx_deploy_skip_config=true or no config changes requested)."
   when:
-    - nginx_deploy_skip_config | bool or nginx_config_vhosts_effective | length == 0
+    - nginx_deploy_skip_config | bool or not (nginx_config_manage_any | bool)
   tags: always
 
 - name: Ensure vhost directory exists
@@ -35,6 +19,7 @@
     mode: '0755'
   when:
     - not nginx_deploy_skip_config | bool
+    - nginx_config_manage_any | bool
   tags:
     - config
 
@@ -59,6 +44,590 @@
   when:
     - not nginx_deploy_skip_config | bool
     - nginx_config_vhosts_effective | length > 0
+  tags:
+    - config
+
+- name: Ensure TLS certificate directories exist for HTTPS vhosts
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ nginx_deploy_run_as_user }}"
+    group: "{{ nginx_deploy_run_as_group }}"
+    mode: '0755'
+  loop: >-
+    {{
+      [
+        (nginx_config_tls_certificate_host_path | dirname),
+        (nginx_config_tls_certificate_key_host_path | dirname)
+      ] | unique
+    }}
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+  tags:
+    - config
+
+- name: Read TLS certificate from Vault KV2
+  delegate_to: localhost
+  become: false
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ nginx_config_vault_address }}"
+    validate_certs: "{{ nginx_config_vault_validate_certs }}"
+    engine_mount_point: "{{ nginx_config_vault_kv_mount }}"
+    path: "{{ nginx_config_vault_kv_path }}"
+    auth_method: "{{ nginx_config_vault_auth_method }}"
+    token: >-
+      {{
+        (nginx_config_vault_auth_token | default(omit, true))
+        if (nginx_config_vault_use_token | bool)
+        else omit
+      }}
+    role_id: >-
+      {{
+        (nginx_config_vault_auth_role_id | default(omit, true))
+        if not (nginx_config_vault_use_token | bool)
+        else omit
+      }}
+    secret_id: >-
+      {{
+        (nginx_config_vault_auth_secret_id | default(omit, true))
+        if not (nginx_config_vault_use_token | bool)
+        else omit
+      }}
+  register: nginx_config_vault_cert_read
+  failed_when: false
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+  tags:
+    - config
+
+- name: Normalize TLS certificate data from Vault KV2
+  ansible.builtin.set_fact:
+    nginx_config_vault_cert_data: >-
+      {{ (nginx_config_vault_cert_read.data | default({})).data | default({}) }}
+  changed_when: false
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+  tags:
+    - config
+
+- name: Normalize stored TLS CA chain from Vault KV2
+  ansible.builtin.set_fact:
+    nginx_config_vault_cert_ca_chain_stored: >-
+      {{
+        (
+          nginx_config_vault_cert_data.ca_chain
+          if (
+            nginx_config_vault_cert_data.ca_chain is sequence
+            and nginx_config_vault_cert_data.ca_chain is not string
+          )
+          else (
+            [nginx_config_vault_cert_data.ca_chain | string]
+            if (
+              nginx_config_vault_cert_data.ca_chain is defined
+              and (nginx_config_vault_cert_data.ca_chain | string | trim | length > 0)
+            )
+            else (
+              [nginx_config_vault_cert_data.issuing_ca]
+              if (nginx_config_vault_cert_data.issuing_ca | default('', true) | trim | length > 0)
+              else []
+            )
+          )
+        )
+        | map('trim')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+  changed_when: false
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+  tags:
+    - config
+
+- name: Set Vault TLS certificate presence flag
+  ansible.builtin.set_fact:
+    nginx_config_vault_cert_present: >-
+      {{
+        (nginx_config_vault_cert_data.certificate | default('', true) | trim | length > 0)
+        and
+        (nginx_config_vault_cert_data.private_key | default('', true) | trim | length > 0)
+      }}
+  changed_when: false
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+  tags:
+    - config
+
+- name: Normalize Vault TLS certificate identity metadata
+  ansible.builtin.set_fact:
+    nginx_config_vault_cert_common_name_stored: >-
+      {{ nginx_config_vault_cert_data.common_name | default('', true) | trim }}
+    nginx_config_vault_cert_alt_names_stored: >-
+      {{
+        (
+          nginx_config_vault_cert_data.alt_names
+          if (
+            nginx_config_vault_cert_data.alt_names is sequence
+            and nginx_config_vault_cert_data.alt_names is not string
+          )
+          else (
+            nginx_config_vault_cert_data.alt_names | default('', true) | split(',')
+          )
+        )
+        | map('trim')
+        | reject('equalto', '')
+        | list
+      }}
+  changed_when: false
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+    - nginx_config_vault_cert_present | default(false) | bool
+  tags:
+    - config
+
+- name: Set Vault TLS certificate identity match flag
+  ansible.builtin.set_fact:
+    nginx_config_vault_cert_identity_match: >-
+      {{
+        (nginx_config_vault_cert_common_name_stored == nginx_config_vault_cert_common_name)
+        and
+        (
+          nginx_config_vault_cert_alt_names_effective
+          | difference(nginx_config_vault_cert_alt_names_stored)
+          | length
+        ) == 0
+      }}
+  changed_when: false
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+    - nginx_config_vault_cert_present | default(false) | bool
+  tags:
+    - config
+
+- name: Set Vault TLS certificate rotation requirement
+  ansible.builtin.set_fact:
+    nginx_config_vault_cert_needs_rotation: >-
+      {{
+        (not (nginx_config_vault_cert_present | default(false) | bool))
+        or
+        (not (nginx_config_vault_cert_identity_match | default(false) | bool))
+        or
+        (nginx_config_vault_cert_data.ca_chain is not defined)
+      }}
+  changed_when: false
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+  tags:
+    - config
+
+- name: Check whether local TLS certificate exists
+  ansible.builtin.stat:
+    path: "{{ nginx_config_tls_certificate_host_path }}"
+  register: nginx_config_local_tls_certificate_stat
+  changed_when: false
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+  tags:
+    - config
+
+- name: Check whether local TLS private key exists
+  ansible.builtin.stat:
+    path: "{{ nginx_config_tls_certificate_key_host_path }}"
+  register: nginx_config_local_tls_key_stat
+  changed_when: false
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+  tags:
+    - config
+
+- name: Set local TLS certificate presence flag
+  ansible.builtin.set_fact:
+    nginx_config_local_tls_present: >-
+      {{
+        (nginx_config_local_tls_certificate_stat.stat.exists | default(false))
+        and
+        (nginx_config_local_tls_key_stat.stat.exists | default(false))
+      }}
+  changed_when: false
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+  tags:
+    - config
+
+- name: Read local TLS certificate fallback
+  ansible.builtin.slurp:
+    src: "{{ nginx_config_tls_certificate_host_path }}"
+  register: nginx_config_local_tls_certificate_raw
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+    - not (nginx_config_vault_cert_present | default(false) | bool)
+    - nginx_config_local_tls_present | default(false) | bool
+  tags:
+    - config
+
+- name: Read local TLS private key fallback
+  ansible.builtin.slurp:
+    src: "{{ nginx_config_tls_certificate_key_host_path }}"
+  register: nginx_config_local_tls_key_raw
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+    - not (nginx_config_vault_cert_present | default(false) | bool)
+    - nginx_config_local_tls_present | default(false) | bool
+  tags:
+    - config
+
+- name: Set local TLS fallback content
+  ansible.builtin.set_fact:
+    nginx_config_local_tls_certificate_content: >-
+      {{ nginx_config_local_tls_certificate_raw.content | default('', true) | b64decode }}
+    nginx_config_local_tls_certificate_key_content: >-
+      {{ nginx_config_local_tls_key_raw.content | default('', true) | b64decode }}
+  changed_when: false
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+    - not (nginx_config_vault_cert_present | default(false) | bool)
+    - nginx_config_local_tls_present | default(false) | bool
+  tags:
+    - config
+
+- name: Request TLS certificate from Vault PKI when missing
+  delegate_to: localhost
+  become: false
+  community.hashi_vault.vault_write:
+    url: "{{ nginx_config_vault_address }}"
+    validate_certs: "{{ nginx_config_vault_validate_certs }}"
+    auth_method: "{{ nginx_config_vault_auth_method }}"
+    token: >-
+      {{
+        (nginx_config_vault_auth_token | default(omit, true))
+        if (nginx_config_vault_use_token | bool)
+        else omit
+      }}
+    role_id: >-
+      {{
+        (nginx_config_vault_auth_role_id | default(omit, true))
+        if not (nginx_config_vault_use_token | bool)
+        else omit
+      }}
+    secret_id: >-
+      {{
+        (nginx_config_vault_auth_secret_id | default(omit, true))
+        if not (nginx_config_vault_use_token | bool)
+        else omit
+      }}
+    path: "{{ nginx_config_vault_pki_path }}/{{ nginx_config_vault_pki_role }}"
+    data:
+      common_name: "{{ nginx_config_vault_cert_common_name }}"
+      alt_names: "{{ nginx_config_vault_cert_alt_names_effective | join(',') }}"
+  register: nginx_config_vault_pki_cert
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+    - nginx_config_vault_cert_needs_rotation | default(true) | bool
+    - not (
+        (not (nginx_config_vault_cert_present | default(false) | bool))
+        and (nginx_config_local_tls_present | default(false) | bool)
+      )
+    - not ansible_check_mode
+  tags:
+    - config
+
+- name: Normalize generated TLS certificate data from Vault PKI
+  ansible.builtin.set_fact:
+    nginx_config_vault_generated_cert_data: >-
+      {{ ((nginx_config_vault_pki_cert | default({})).data | default({})).data | default({}) }}
+  changed_when: false
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+  tags:
+    - config
+
+- name: Normalize generated TLS CA chain from Vault PKI
+  ansible.builtin.set_fact:
+    nginx_config_vault_generated_ca_chain: >-
+      {{
+        (
+          nginx_config_vault_generated_cert_data.ca_chain
+          if (
+            nginx_config_vault_generated_cert_data.ca_chain is sequence
+            and nginx_config_vault_generated_cert_data.ca_chain is not string
+          )
+          else (
+            [nginx_config_vault_generated_cert_data.ca_chain | string]
+            if (
+              nginx_config_vault_generated_cert_data.ca_chain is defined
+              and (nginx_config_vault_generated_cert_data.ca_chain | string | trim | length > 0)
+            )
+            else (
+              [nginx_config_vault_generated_cert_data.issuing_ca]
+              if (nginx_config_vault_generated_cert_data.issuing_ca | default('', true) | trim | length > 0)
+              else []
+            )
+          )
+        )
+        | map('trim')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+  changed_when: false
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+  tags:
+    - config
+
+- name: Store generated TLS certificate in Vault KV2
+  delegate_to: localhost
+  become: false
+  community.hashi_vault.vault_kv2_write:
+    url: "{{ nginx_config_vault_address }}"
+    validate_certs: "{{ nginx_config_vault_validate_certs }}"
+    engine_mount_point: "{{ nginx_config_vault_kv_mount }}"
+    path: "{{ nginx_config_vault_kv_path }}"
+    auth_method: "{{ nginx_config_vault_auth_method }}"
+    token: >-
+      {{
+        (nginx_config_vault_auth_token | default(omit, true))
+        if (nginx_config_vault_use_token | bool)
+        else omit
+      }}
+    role_id: >-
+      {{
+        (nginx_config_vault_auth_role_id | default(omit, true))
+        if not (nginx_config_vault_use_token | bool)
+        else omit
+      }}
+    secret_id: >-
+      {{
+        (nginx_config_vault_auth_secret_id | default(omit, true))
+        if not (nginx_config_vault_use_token | bool)
+        else omit
+      }}
+    data:
+      certificate: "{{ nginx_config_vault_generated_cert_data.certificate }}"
+      private_key: "{{ nginx_config_vault_generated_cert_data.private_key }}"
+      issuing_ca: >-
+        {{
+          (
+            nginx_config_vault_generated_ca_chain | first
+          )
+          if (nginx_config_vault_generated_ca_chain | default([], true) | length > 0)
+          else (nginx_config_vault_generated_cert_data.issuing_ca | default('', true))
+        }}
+      ca_chain: "{{ nginx_config_vault_generated_ca_chain | default([], true) }}"
+      common_name: "{{ nginx_config_vault_cert_common_name }}"
+      alt_names: "{{ nginx_config_vault_cert_alt_names_effective }}"
+      updated_at: "{{ ansible_date_time.iso8601 }}"
+  register: nginx_config_vault_cert_write
+  failed_when: not ansible_check_mode and (nginx_config_vault_cert_write is failed)
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+    - nginx_config_vault_generated_cert_data.certificate | default('', true) | trim | length > 0
+    - nginx_config_vault_generated_cert_data.private_key | default('', true) | trim | length > 0
+    - not ansible_check_mode
+  tags:
+    - config
+
+- name: Set resolved TLS material from Vault
+  ansible.builtin.set_fact:
+    nginx_config_tls_certificate_content: >-
+      {{
+        nginx_config_vault_generated_cert_data.certificate
+          | default(
+            nginx_config_vault_cert_data.certificate
+              | default(nginx_config_local_tls_certificate_content | default('', true), true),
+            true
+          )
+      }}
+    nginx_config_tls_certificate_key_content: >-
+      {{
+        nginx_config_vault_generated_cert_data.private_key
+          | default(
+            nginx_config_vault_cert_data.private_key
+              | default(nginx_config_local_tls_certificate_key_content | default('', true), true),
+            true
+          )
+      }}
+    nginx_config_tls_ca_chain_content: >-
+      {{
+        nginx_config_vault_generated_ca_chain
+          | default(nginx_config_vault_cert_ca_chain_stored | default([], true), true)
+      }}
+    nginx_config_tls_issuing_ca_content: >-
+      {{
+        (
+          nginx_config_tls_ca_chain_content | first
+        )
+        if (nginx_config_tls_ca_chain_content | default([], true) | length > 0)
+        else ''
+      }}
+  changed_when: false
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+  tags:
+    - config
+
+- name: Ensure resolved TLS material from Vault is present
+  ansible.builtin.assert:
+    that:
+      - nginx_config_tls_certificate_content | default('', true) | trim | length > 0
+      - nginx_config_tls_certificate_key_content | default('', true) | trim | length > 0
+    fail_msg: >-
+      Failed to resolve TLS certificate/key from Vault.
+      Ensure PKI role access and KV path permissions are configured.
+    quiet: true
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+  tags:
+    - config
+
+- name: Write TLS certificate from Vault
+  ansible.builtin.copy:
+    dest: "{{ nginx_config_tls_certificate_host_path }}"
+    content: |
+      {{ nginx_config_tls_certificate_content | trim }}
+      {% for ca_cert in (nginx_config_tls_ca_chain_content | default([], true)) %}
+      {{ ca_cert | trim }}
+      {% endfor %}
+    owner: "{{ nginx_deploy_run_as_user }}"
+    group: "{{ nginx_deploy_run_as_group }}"
+    mode: '0644'
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+    - not ansible_check_mode
+  notify: Reload nginx
+  tags:
+    - config
+
+- name: Write TLS private key from Vault
+  ansible.builtin.copy:
+    dest: "{{ nginx_config_tls_certificate_key_host_path }}"
+    content: "{{ nginx_config_tls_certificate_key_content }}"
+    owner: "{{ nginx_deploy_run_as_user }}"
+    group: "{{ nginx_deploy_run_as_group }}"
+    mode: '0600'
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+    - not ansible_check_mode
+  notify: Reload nginx
+  tags:
+    - config
+
+- name: Ensure openssl is available for self-signed TLS generation
+  ansible.builtin.command: openssl version
+  register: nginx_config_openssl_version
+  changed_when: false
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'selfsigned'
+  tags:
+    - config
+
+- name: Generate self-signed TLS certificate when missing
+  ansible.builtin.command: >-
+    openssl req -x509 -nodes -newkey rsa:2048
+    -keyout {{ nginx_config_tls_certificate_key_host_path }}
+    -out {{ nginx_config_tls_certificate_host_path }}
+    -days {{ nginx_config_tls_self_signed_days | int }}
+    -subj /CN={{ nginx_config_tls_common_name }}
+  args:
+    creates: "{{ nginx_config_tls_certificate_host_path }}"
+  register: nginx_config_tls_self_signed_create
+  changed_when: nginx_config_tls_self_signed_create.rc == 0
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'selfsigned'
+    - not ansible_check_mode
+  notify: Reload nginx
+  tags:
+    - config
+
+- name: Ensure self-signed TLS key file mode
+  ansible.builtin.file:
+    path: "{{ nginx_config_tls_certificate_key_host_path }}"
+    owner: "{{ nginx_deploy_run_as_user }}"
+    group: "{{ nginx_deploy_run_as_group }}"
+    mode: '0600'
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'selfsigned'
+    - not ansible_check_mode
+  tags:
+    - config
+
+- name: Ensure self-signed TLS certificate file mode
+  ansible.builtin.file:
+    path: "{{ nginx_config_tls_certificate_host_path }}"
+    owner: "{{ nginx_deploy_run_as_user }}"
+    group: "{{ nginx_deploy_run_as_group }}"
+    mode: '0644'
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'selfsigned'
+    - not ansible_check_mode
   tags:
     - config
 
@@ -89,6 +658,74 @@
   tags:
     - config
 
+- name: Read SELinux context for Nginx TLS paths
+  ansible.builtin.command: "ls -Zd {{ item }}"
+  register: nginx_config_tls_selinux_contexts
+  changed_when: false
+  failed_when: false
+  loop: >-
+    {{
+      [
+        (nginx_config_tls_certificate_host_path | dirname),
+        nginx_config_tls_certificate_host_path,
+        nginx_config_tls_certificate_key_host_path
+      ] | unique
+    }}
+  when:
+    - ansible_distribution in ['RedHat', 'CentOS']
+    - nginx_deploy_selinux_relabel | bool
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_selinux_status is defined
+    - nginx_config_selinux_status.rc == 0
+    - nginx_config_selinux_status.stdout != 'Disabled'
+  tags:
+    - config
+
+- name: Set TLS SELinux relabel flag
+  ansible.builtin.set_fact:
+    nginx_config_tls_needs_relabel: >-
+      {{
+        (
+          nginx_config_tls_selinux_contexts.results
+          | default([])
+          | selectattr('rc', 'equalto', 0)
+          | rejectattr('stdout', 'search', 'container_file_t')
+          | list
+          | length
+        ) > 0
+      }}
+  changed_when: false
+  when:
+    - ansible_distribution in ['RedHat', 'CentOS']
+    - nginx_deploy_selinux_relabel | bool
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_selinux_status is defined
+    - nginx_config_selinux_status.rc == 0
+    - nginx_config_selinux_status.stdout != 'Disabled'
+  tags:
+    - config
+
+- name: Apply SELinux context for Nginx TLS paths
+  ansible.builtin.command: >-
+    chcon -Rt container_file_t {{ nginx_config_tls_certificate_host_path | dirname }}
+  register: nginx_config_tls_relabel
+  changed_when: nginx_config_tls_needs_relabel | default(false) | bool
+  failed_when: false
+  when:
+    - ansible_distribution in ['RedHat', 'CentOS']
+    - nginx_deploy_selinux_relabel | bool
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_selinux_status is defined
+    - nginx_config_selinux_status.rc == 0
+    - nginx_config_selinux_status.stdout != 'Disabled'
+    - nginx_config_tls_needs_relabel | default(false) | bool
+    - not ansible_check_mode
+  tags:
+    - config
+
 - name: Read SELinux context for Nginx vhost files
   ansible.builtin.command: "ls -Z {{ nginx_config_conf_d_dir }}/{{ item.name }}.conf"
   register: nginx_config_vhost_context
@@ -116,6 +753,7 @@
     - nginx_deploy_selinux_relabel | bool
     - not nginx_deploy_skip_config | bool
     - nginx_config_vhosts_effective | length > 0
+    - not ansible_check_mode
     - item.rc == 0
     - item.stdout is defined
     - "'container_file_t' not in item.stdout"
@@ -163,6 +801,7 @@
   when:
     - nginx_reload_requested | default(false)
     - not nginx_deploy_skip_runtime | bool
+    - not ansible_check_mode
     - nginx_deploy_container_exists is defined
     - nginx_deploy_container_exists.rc == 0
   tags:

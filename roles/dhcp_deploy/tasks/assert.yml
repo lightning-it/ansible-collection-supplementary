@@ -8,5 +8,15 @@
       - dhcp_deploy_host_config_path | length > 0
       - dhcp_deploy_host_data_dir | length > 0
       - dhcp_deploy_sysconfig_path | length > 0
+      - dhcp_deploy_manage_systemd is boolean
+      - dhcp_deploy_manage_service is boolean
+      - dhcp_deploy_manage_config is boolean
+      - dhcp_deploy_install_packages is boolean
+      - dhcp_deploy_skip_runtime is boolean
+      - dhcp_deploy_skip_deploy is boolean
+      - dhcp_deploy_skip_config is boolean
+      - dhcp_deploy_skip_validate is boolean
+      - dhcp_deploy_validate_certs is boolean
+      - dhcp_deploy_health_url_effective is string
     fail_msg: "DHCP core variables are missing or invalid."
   tags: always

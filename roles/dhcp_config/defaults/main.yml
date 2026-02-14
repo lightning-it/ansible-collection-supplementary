@@ -1,4 +1,10 @@
 ---
 dhcp_config_manage: true
 dhcp_config_content: ""
+dhcp_config_content_effective: >-
+  {{
+    dhcp_config_content
+    if (dhcp_config_content | length > 0)
+    else dhcp_deploy_config
+  }}
 dhcp_config_mode: '0644'

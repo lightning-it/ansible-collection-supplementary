@@ -3,9 +3,9 @@
   hosts: localhost
   gather_facts: false
   vars:
-    minio_deploy_skip_bootstrap: true
+    minio_bootstrap_skip: true
   tasks:
     - name: Assert converge ran
       ansible.builtin.assert:
         that:
-          - minio_deploy_skip_bootstrap is defined
+          - minio_bootstrap_skip is defined

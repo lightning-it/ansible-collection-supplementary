@@ -1,0 +1,20 @@
+---
+- name: Import Vault deploy prechecks
+  ansible.builtin.import_role:
+    name: vault_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure vault ops variables are valid
+  ansible.builtin.assert:
+    that:
+      - vault_ops_action in ['none', 'restart', 'status', 'upgrade', 'unseal']
+      - vault_ops_api_delegate_to | default('', true) | trim | length > 0
+      - vault_deploy_api_url | default('', true) | trim | length > 0
+      - vault_deploy_health_url | default('', true) | trim | length > 0
+      - vault_deploy_systemd_unit_name | default('', true) | trim | length > 0
+      - vault_deploy_pod_name | default('', true) | trim | length > 0
+      - vault_deploy_manage_systemd is boolean
+    fail_msg: "vault_ops variables are missing or invalid."
+    quiet: true
+  tags: always

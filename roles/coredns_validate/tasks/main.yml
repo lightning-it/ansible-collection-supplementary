@@ -1,13 +1,6 @@
 ---
-- name: Ensure required CoreDNS vars are defined
-  ansible.builtin.import_role:
-    name: coredns_deploy
-    tasks_from: assert
-  tags: always
-
-- name: Set validate mode
-  ansible.builtin.set_fact:
-    coredns_validate_strict: "{{ coredns_validate_mode != 'report' }}"
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
   tags: always
 
 - name: Skip CoreDNS validation when disabled

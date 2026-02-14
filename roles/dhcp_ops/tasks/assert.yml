@@ -1,0 +1,16 @@
+---
+- name: Import dhcp_deploy prechecks
+  ansible.builtin.import_role:
+    name: dhcp_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure dhcp_ops variables are valid
+  ansible.builtin.assert:
+    that:
+      - dhcp_ops_action in ['none', 'restart', 'reload', 'status', 'upgrade']
+      - dhcp_ops_package_state is string
+      - dhcp_deploy_systemd_unit_name | default('', true) | trim | length > 0
+    fail_msg: "dhcp_ops variables are missing or invalid."
+    quiet: true
+  tags: always

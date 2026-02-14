@@ -1,0 +1,16 @@
+---
+- name: Ensure bootstrap bucket list is valid
+  ansible.builtin.assert:
+    that:
+      - minio_bootstrap_skip is boolean
+      - minio_bootstrap_manage_buckets is boolean
+      - minio_bootstrap_migrate_tfstate is boolean
+      - minio_bootstrap_tfstate_auto_detect is boolean
+      - minio_bootstrap_buckets is sequence
+      - minio_bootstrap_buckets is not string
+      - minio_bootstrap_buckets is not mapping
+      - minio_bootstrap_mc_path | default('', true) | trim | length > 0
+      - minio_bootstrap_mc_alias | default('', true) | trim | length > 0
+      - minio_bootstrap_api_url_effective | default('', true) | trim | length > 0
+    fail_msg: "minio_bootstrap_buckets must be a list."
+  tags: always

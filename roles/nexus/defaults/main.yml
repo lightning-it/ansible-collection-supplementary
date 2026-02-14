@@ -5,14 +5,21 @@ nexus_nexus_host_ip: >-
     ansible_default_ipv4.address
     | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
   }}
+nexus_expose_host_https: true
+nexus_caddy_container_port: 443
+nexus_caddy_host_port: 443
 nexus_validate_certs: false
+nexus_api_base_url: "https://127.0.0.1"
+nexus_api_host_header: "{{ nexus_nexus_hostname }}"
+nexus_api_delegate_to: "{{ inventory_hostname }}"
 nexus_nexus_disable_anonymous: false
 nexus_nexus_image: docker.io/sonatype/nexus3:latest
 nexus_caddy_image: docker.io/caddy:2
 
-nexus_nexus_data_dir: /srv/nexus-data
-nexus_caddy_config_dir: /srv/caddy/config
-nexus_caddy_certs_dir: /srv/caddy/certs
+# Host path bind-mounted into the Nexus container at /nexus-data.
+nexus_nexus_data_dir: /srv/nexus
+nexus_caddy_config_dir: /srv/nexus/caddy/config
+nexus_caddy_certs_dir: /srv/nexus/caddy/certs
 
 nexus_pod_name: nexus
 nexus_pod_manifest_path: /etc/podman/pods/nexus.yml

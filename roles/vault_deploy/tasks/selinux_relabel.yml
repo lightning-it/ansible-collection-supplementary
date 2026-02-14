@@ -1,103 +1,28 @@
 ---
-- name: Detect SELinux status
-  ansible.builtin.command: getenforce
-  register: vault_deploy_selinux_status
-  changed_when: false
-  failed_when: false
-  when: ansible_os_family in ['RedHat', 'CentOS']
-  tags:
-    - selinux
-
-- name: Read Vault container mount label
-  ansible.builtin.command: "podman inspect {{ vault_deploy_container_name }} --format {{ '{{.MountLabel}}' }}"
-  register: vault_deploy_mount_label
-  changed_when: false
-  failed_when: false
-  tags:
-    - selinux
+- name: Apply SELinux context for Vault paths
   when:
-    - ansible_os_family in ['RedHat', 'CentOS']
     - vault_deploy_selinux_relabel | bool
-    - vault_deploy_selinux_status.stdout is defined
-    - vault_deploy_selinux_status.stdout != 'Disabled'
+    - ansible_selinux is defined
+    - (ansible_selinux.status | default('disabled')) == 'enabled'
+  block:
+    - name: Persist SELinux fcontext for Vault data/certs/config
+      community.general.sefcontext:
+        target: "{{ item }}"
+        setype: "container_file_t"
+        state: present
+      loop:
+        - "{{ vault_deploy_host_data_dir }}(/.*)?"
+        - "{{ vault_deploy_cert_dir }}(/.*)?"
+        - "{{ vault_deploy_config_dir }}(/.*)?"
+      tags:
+        - selinux
 
-- name: Parse Vault container mount label
-  ansible.builtin.set_fact:
-    vault_deploy_mount_label_parts: "{{ (vault_deploy_mount_label.stdout | trim).split(':') }}"
-  tags:
-    - selinux
-  when:
-    - vault_deploy_mount_label.stdout is defined
-    - vault_deploy_mount_label.stdout | trim | length > 0
-
-- name: Set Vault container mount label pieces
-  ansible.builtin.set_fact:
-    vault_deploy_mount_label_type: "{{ vault_deploy_mount_label_parts[2] }}"
-    vault_deploy_mount_label_level: "{{ vault_deploy_mount_label_parts[3:] | join(':') }}"
-  tags:
-    - selinux
-  when:
-    - vault_deploy_mount_label_parts is defined
-    - vault_deploy_mount_label_parts | length > 3
-
-- name: Apply Vault mount label to data/certs/config dirs
-  ansible.builtin.command: >-
-    chcon -R -t {{ vault_deploy_mount_label_type }}
-    -l {{ vault_deploy_mount_label_level }}
-    {{ vault_deploy_host_data_dir }}
-    {{ vault_deploy_cert_dir }}
-    {{ vault_deploy_config_dir }}
-  register: vault_deploy_mount_label_apply
-  changed_when: false
-  tags:
-    - selinux
-  when:
-    - ansible_os_family in ['RedHat', 'CentOS']
-    - vault_deploy_selinux_relabel | bool
-    - vault_deploy_selinux_status.stdout is defined
-    - vault_deploy_selinux_status.stdout != 'Disabled'
-    - vault_deploy_mount_label_type is defined
-    - vault_deploy_mount_label_level is defined
-    - vault_deploy_mount_label_level | length > 0
-
-- name: Persist SELinux fcontext for Vault data/certs/config
-  community.general.sefcontext:
-    target: "{{ item }}"
-    setype: "{{ vault_deploy_mount_label_type }}"
-    state: present
-  loop:
-    - "{{ vault_deploy_host_data_dir }}(/.*)?"
-    - "{{ vault_deploy_cert_dir }}(/.*)?"
-    - "{{ vault_deploy_config_dir }}(/.*)?"
-  register: vault_deploy_sefcontext
-  tags:
-    - selinux
-  when:
-    - ansible_os_family in ['RedHat', 'CentOS']
-    - vault_deploy_selinux_relabel | bool
-    - vault_deploy_selinux_status.stdout is defined
-    - vault_deploy_selinux_status.stdout != 'Disabled'
-    - vault_deploy_mount_label_type is defined
-    - vault_deploy_mount_label_level is defined
-    - vault_deploy_mount_label_level | length > 0
-
-- name: Restore SELinux context for Vault data/certs/config
-  ansible.builtin.command: >-
-    restorecon -Rv
-    {{ vault_deploy_host_data_dir }}
-    {{ vault_deploy_cert_dir }}
-    {{ vault_deploy_config_dir }}
-  register: vault_deploy_restorecon
-  changed_when: >-
-    vault_deploy_sefcontext is defined
-    and (vault_deploy_sefcontext.results | default([]) | selectattr('changed') | list | length) > 0
-  tags:
-    - selinux
-  when:
-    - ansible_os_family in ['RedHat', 'CentOS']
-    - vault_deploy_selinux_relabel | bool
-    - vault_deploy_selinux_status.stdout is defined
-    - vault_deploy_selinux_status.stdout != 'Disabled'
-    - vault_deploy_mount_label_type is defined
-    - vault_deploy_mount_label_level is defined
-    - vault_deploy_mount_label_level | length > 0
+    - name: Restore SELinux context for Vault data/certs/config
+      ansible.builtin.command: >-
+        restorecon -Rv
+        {{ vault_deploy_host_data_dir }}
+        {{ vault_deploy_cert_dir }}
+        {{ vault_deploy_config_dir }}
+      changed_when: false
+      tags:
+        - selinux

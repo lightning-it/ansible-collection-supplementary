@@ -1,13 +1,6 @@
 ---
-- name: Ensure required Nginx vars are defined
-  ansible.builtin.import_role:
-    name: nginx_deploy
-    tasks_from: assert
-  tags: always
-
-- name: Set validate mode
-  ansible.builtin.set_fact:
-    nginx_validate_strict: "{{ nginx_validate_mode != 'report' }}"
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
   tags: always
 
 - name: Skip Nginx validation when disabled

@@ -1,0 +1,21 @@
+---
+- name: Import Vault deploy prechecks
+  ansible.builtin.import_role:
+    name: vault_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure vault backup/restore variables are valid
+  ansible.builtin.assert:
+    that:
+      - vault_deploy_backup_action in ['none', 'backup', 'restore']
+      - vault_deploy_backup_dir | default('', true) | trim | length > 0
+      - vault_deploy_host_data_dir | default('', true) | trim | length > 0
+      - vault_deploy_systemd_unit_name | default('', true) | trim | length > 0
+      - vault_deploy_pod_name | default('', true) | trim | length > 0
+      - vault_deploy_manage_systemd is boolean
+      - vault_deploy_backup_stop_service_for_file_backend is boolean
+      - vault_deploy_backup_validate_after_restore is boolean
+    fail_msg: "vault_backup_restore variables are missing or invalid."
+    quiet: true
+  tags: always

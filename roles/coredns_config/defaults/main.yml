@@ -1,4 +1,10 @@
 ---
 coredns_config_manage: true
 coredns_config_corefile: ""
+coredns_config_corefile_effective: >-
+  {{
+    coredns_config_corefile
+    if (coredns_config_corefile | length > 0)
+    else coredns_deploy_corefile
+  }}
 coredns_config_mode: '0644'

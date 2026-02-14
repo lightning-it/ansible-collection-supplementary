@@ -1,15 +1,6 @@
 ---
-- name: Ensure required MinIO vars are defined
-  ansible.builtin.import_role:
-    name: minio_deploy
-    tasks_from: assert
-  tags: always
-
-- name: Ensure minio_ops_action is valid
-  ansible.builtin.assert:
-    that:
-      - minio_ops_action in ['none', 'restart', 'status', 'upgrade']
-    fail_msg: "minio_ops_action must be one of: none, restart, status, upgrade."
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
   tags: always
 
 - name: Restart MinIO service
@@ -20,9 +11,12 @@
   block:
     - name: Restart MinIO systemd unit
       ansible.builtin.systemd:
-        name: "{{ minio_deploy_systemd_unit_name }}"
+        name: "{{ minio_ops_systemd_unit_name }}"
         state: restarted
-      when: minio_deploy_manage_systemd | bool
+      when:
+        - minio_ops_manage_systemd | bool
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+        - not ansible_check_mode
 
     - name: Restart MinIO pod (non-systemd)
       ansible.builtin.include_role:
@@ -30,13 +24,16 @@
       vars:
         kubeplay_apps: []
         kubeplay_action: restart
-        kubeplay_pod_name: "{{ minio_deploy_pod_name }}"
+        kubeplay_pod_name: "{{ minio_ops_pod_name }}"
         kubeplay_app_name: minio_restart
-      when: not minio_deploy_manage_systemd | bool
+      when:
+        - not minio_ops_manage_systemd | bool
+        - not ansible_check_mode
 
     - name: Validate MinIO after restart
       ansible.builtin.include_role:
         name: minio_validate
+      when: not ansible_check_mode
 
 - name: Report MinIO status
   when: minio_ops_action == 'status'
@@ -46,16 +43,16 @@
   block:
     - name: Read MinIO health status
       ansible.builtin.uri:
-        url: "{{ minio_deploy_health_url_effective }}"
+        url: "{{ minio_ops_health_url_effective }}"
         method: GET
-        validate_certs: "{{ minio_deploy_validate_certs }}"
-      register: minio_deploy_health
+        validate_certs: "{{ minio_ops_validate_certs }}"
+      register: minio_ops_health
       changed_when: false
       failed_when: false
 
     - name: Report MinIO API status
       ansible.builtin.debug:
-        msg: "health={{ minio_deploy_health.status }}"
+        msg: "health={{ minio_ops_health.status }}"
 
 - name: Upgrade MinIO image
   when: minio_ops_action == 'upgrade'
@@ -72,7 +69,9 @@
     - name: Set MinIO image override
       ansible.builtin.set_fact:
         minio_deploy_image: "{{ minio_ops_target_image }}"
+      changed_when: false
 
     - name: Redeploy MinIO with new image
       ansible.builtin.include_role:
         name: minio_deploy
+      when: not ansible_check_mode

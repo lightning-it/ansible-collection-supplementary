@@ -1,0 +1,18 @@
+---
+- name: Import nginx_deploy prechecks
+  ansible.builtin.import_role:
+    name: nginx_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure nginx_ops variables are valid
+  ansible.builtin.assert:
+    that:
+      - nginx_ops_action in ['none', 'restart', 'reload', 'status', 'upgrade']
+      - nginx_ops_target_image is string
+      - nginx_deploy_systemd_unit_name | default('', true) | trim | length > 0
+      - nginx_deploy_pod_name | default('', true) | trim | length > 0
+      - nginx_deploy_container_name | default('', true) | trim | length > 0
+    fail_msg: "nginx_ops variables are missing or invalid."
+    quiet: true
+  tags: always

@@ -1,0 +1,20 @@
+---
+- name: Import dhcp_deploy prechecks
+  ansible.builtin.import_role:
+    name: dhcp_deploy
+    tasks_from: assert
+  tags: always
+
+- name: Ensure dhcp_validate variables are valid
+  ansible.builtin.assert:
+    that:
+      - dhcp_validate_mode in ['fail', 'report']
+      - dhcp_validate_check_config is boolean
+      - dhcp_validate_check_http is boolean
+      - dhcp_deploy_skip_validate is boolean
+      - dhcp_deploy_health_url_effective is string
+      - dhcp_deploy_host_config_path | default('', true) | trim | length > 0
+      - dhcp_deploy_systemd_unit_name | default('', true) | trim | length > 0
+    fail_msg: "dhcp_validate variables are missing or invalid."
+    quiet: true
+  tags: always

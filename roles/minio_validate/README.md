@@ -1,18 +1,30 @@
 # minio_validate
 
-Validate MinIO runtime and storage state without changing config.
+Validate MinIO runtime, storage ownership, and health endpoint state.
 
 ## Requirements
 
-None.
+- MinIO runtime already deployed.
+- `podman` available for container status inspection.
 
-## Role Variables
+## Variables
 
-See `roles/minio_deploy/defaults/main.yml`.
+See `roles/minio_validate/defaults/main.yml`.
 
 Key variables:
-- `minio_deploy_validate_mode`: `fail` (default) or `report`.
-- `minio_deploy_skip_validate`
+- `minio_validate_skip`
+- `minio_validate_mode` (`fail` or `report`)
+- `minio_validate_container_name`
+- `minio_validate_host_data_dir`
+- `minio_validate_expected_uid`
+- `minio_validate_expected_gid`
+- `minio_validate_expected_mode`
+- `minio_validate_health_url_effective`
+- `minio_validate_validate_certs`
+
+## Dependencies
+
+- None declared in metadata.
 
 ## Example Playbook
 
@@ -21,7 +33,13 @@ Key variables:
   hosts: minio_hosts
   gather_facts: true
   roles:
-    - role: minio_validate
-  tags:
-    - validate
+    - role: lit.supplementary.minio_validate
 ```
+
+## License
+
+GPL-3.0-only
+
+## Author
+
+Lightning IT

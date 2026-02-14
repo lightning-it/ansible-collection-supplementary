@@ -1,26 +1,6 @@
 ---
-- name: Ensure required DHCP vars are defined
-  ansible.builtin.import_role:
-    name: dhcp_deploy
-    tasks_from: assert
-  tags: always
-
-- name: Resolve DHCP config content
-  ansible.builtin.set_fact:
-    dhcp_deploy_config_effective: >-
-      {{
-        dhcp_config_content
-        if (dhcp_config_content | length > 0)
-        else dhcp_deploy_config
-      }}
-  tags: always
-
-- name: Ensure DHCP config is provided when managed
-  ansible.builtin.assert:
-    that:
-      - dhcp_deploy_config_effective | length > 0
-    fail_msg: "dhcp_config_content or dhcp_deploy_config must be set when managing DHCP config."
-  when: dhcp_config_manage | bool
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
   tags: always
 
 - name: Skip DHCP config when disabled

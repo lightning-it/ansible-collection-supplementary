@@ -10,7 +10,16 @@
     - "{{ nexus_nexus_data_dir }}"
     - "{{ nexus_caddy_config_dir }}"
     - "{{ nexus_caddy_certs_dir }}"
-    - "{{ nexus_pod_manifest_path | dirname }}"
+  tags:
+    - deployment
+
+- name: Ensure pod manifest directory exists
+  ansible.builtin.file:
+    path: "{{ nexus_pod_manifest_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
   tags:
     - deployment
 
@@ -44,6 +53,53 @@
   when:
     - selinux_status.stdout == "Enforcing" or selinux_status.stdout == "Permissive"
     - item.stdout is not search("container_file_t")
+  tags:
+    - deployment
+
+- name: Read Nexus Caddy container port bindings
+  ansible.builtin.command:
+    argv:
+      - podman
+      - ps
+      - --filter
+      - name=^nexus-caddy$
+      - --format
+      - "{{ '{{.Names}} {{.Ports}}' }}"
+  register: nexus_caddy_ps
+  changed_when: false
+  failed_when: false
+  tags:
+    - deployment
+
+- name: Evaluate Nexus HTTPS host port binding state
+  ansible.builtin.set_fact:
+    nexus_caddy_host_port_bound: >-
+      {{
+        (nexus_caddy_ps.stdout | default(''))
+        is search(':' ~ (nexus_caddy_host_port | string) ~ '->' ~ (nexus_caddy_container_port | string) ~ '/tcp')
+      }}
+  changed_when: false
+  tags:
+    - deployment
+
+- name: Evaluate Nexus HTTPS host port binding mismatch
+  ansible.builtin.set_fact:
+    nexus_caddy_https_binding_mismatch: >-
+      {{
+        (nexus_expose_host_https | bool and not (nexus_caddy_host_port_bound | bool))
+        or
+        (not (nexus_expose_host_https | bool) and (nexus_caddy_host_port_bound | bool))
+      }}
+  changed_when: false
+  tags:
+    - deployment
+
+- name: Request Nexus pod recreation when HTTPS host port mapping is out of sync
+  ansible.builtin.set_fact:
+    nexus_kubeplay_remove: true
+    nexus_kubeplay_run: true
+  when: nexus_caddy_https_binding_mismatch | bool
+  changed_when: false
   tags:
     - deployment
 

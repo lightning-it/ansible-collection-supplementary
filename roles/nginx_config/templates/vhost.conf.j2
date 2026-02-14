@@ -1,13 +1,33 @@
-server {
-  listen {{ item.listen_port | default(nginx_deploy_listen_port) }};
-  server_name {{ item.server_name | default('_') }};
+{% set _force_https = item.force_https | default(false) | bool %}
+{% set _server_name = item.server_name | default('_') %}
 
-  root {{ item.root | default(nginx_deploy_root) }};
-  index {{ (item.index_files | default(nginx_deploy_index_files)) | join(' ') }};
+{% if _force_https %}
+server {
+  listen {{ item.redirect_listen_port | default(nginx_config_http_listen_port) }};
+  server_name {{ _server_name }};
+
+  return 301 https://$host$request_uri;
+}
+
+server {
+  listen {{ item.listen_tls_port | default(nginx_config_tls_listen_port) }} ssl;
+  server_name {{ _server_name }};
+
+  ssl_certificate {{ item.tls_certificate | default(nginx_config_tls_certificate) }};
+  ssl_certificate_key {{ item.tls_certificate_key | default(nginx_config_tls_certificate_key) }};
 
 {% if item.extra_directives is defined and item.extra_directives | length > 0 %}
 {% for directive in item.extra_directives %}
-  {{ directive }}
+{% set _directive = directive | trim %}
+{% if _directive | length > 0 %}
+{% set _needs_semicolon = not (
+  _directive.endswith(';')
+  or _directive.endswith('{')
+  or _directive.endswith('}')
+  or _directive.startswith('#')
+) %}
+  {{ _directive }}{{ ';' if _needs_semicolon else '' }}
+{% endif %}
 {% endfor %}
 {% endif %}
 
@@ -15,9 +35,100 @@ server {
 {% for location in item.locations %}
   location {{ location.path | default('/') }} {
 {% for directive in location.directives | default([]) %}
-    {{ directive }}
+{% set _directive = directive | trim %}
+{% if _directive | length > 0 %}
+{% set _needs_semicolon = not (
+  _directive.endswith(';')
+  or _directive.endswith('{')
+  or _directive.endswith('}')
+  or _directive.startswith('#')
+) %}
+    {{ _directive }}{{ ';' if _needs_semicolon else '' }}
+{% endif %}
 {% endfor %}
   }
 {% endfor %}
+{% elif item.upstream_url is defined and item.upstream_url | length > 0 %}
+  location / {
+{% for directive in item.proxy_directives | default(nginx_config_proxy_default_directives) %}
+{% set _directive = directive | trim %}
+{% if _directive | length > 0 %}
+{% set _needs_semicolon = not (
+  _directive.endswith(';')
+  or _directive.endswith('{')
+  or _directive.endswith('}')
+  or _directive.startswith('#')
+) %}
+    {{ _directive }}{{ ';' if _needs_semicolon else '' }}
+{% endif %}
+{% endfor %}
+    proxy_pass {{ item.upstream_url }};
+  }
+{% else %}
+  root {{ item.root | default(nginx_deploy_root) }};
+  index {{ (item.index_files | default(nginx_deploy_index_files)) | join(' ') }};
+
+  location / {
+    try_files $uri $uri/ =404;
+  }
 {% endif %}
 }
+{% else %}
+server {
+  listen {{ item.listen_port | default(nginx_deploy_listen_port) }};
+  server_name {{ _server_name }};
+
+  root {{ item.root | default(nginx_deploy_root) }};
+  index {{ (item.index_files | default(nginx_deploy_index_files)) | join(' ') }};
+
+{% if item.extra_directives is defined and item.extra_directives | length > 0 %}
+{% for directive in item.extra_directives %}
+{% set _directive = directive | trim %}
+{% if _directive | length > 0 %}
+{% set _needs_semicolon = not (
+  _directive.endswith(';')
+  or _directive.endswith('{')
+  or _directive.endswith('}')
+  or _directive.startswith('#')
+) %}
+  {{ _directive }}{{ ';' if _needs_semicolon else '' }}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if item.locations is defined and item.locations | length > 0 %}
+{% for location in item.locations %}
+  location {{ location.path | default('/') }} {
+{% for directive in location.directives | default([]) %}
+{% set _directive = directive | trim %}
+{% if _directive | length > 0 %}
+{% set _needs_semicolon = not (
+  _directive.endswith(';')
+  or _directive.endswith('{')
+  or _directive.endswith('}')
+  or _directive.startswith('#')
+) %}
+    {{ _directive }}{{ ';' if _needs_semicolon else '' }}
+{% endif %}
+{% endfor %}
+  }
+{% endfor %}
+{% elif item.upstream_url is defined and item.upstream_url | length > 0 %}
+  location / {
+{% for directive in item.proxy_directives | default([]) %}
+{% set _directive = directive | trim %}
+{% if _directive | length > 0 %}
+{% set _needs_semicolon = not (
+  _directive.endswith(';')
+  or _directive.endswith('{')
+  or _directive.endswith('}')
+  or _directive.startswith('#')
+) %}
+    {{ _directive }}{{ ';' if _needs_semicolon else '' }}
+{% endif %}
+{% endfor %}
+    proxy_pass {{ item.upstream_url }};
+  }
+{% endif %}
+}
+{% endif %}

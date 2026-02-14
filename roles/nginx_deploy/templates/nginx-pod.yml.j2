@@ -9,9 +9,11 @@ spec:
     - name: nginx
       image: {{ nginx_deploy_image }}
       ports:
-        - containerPort: {{ nginx_deploy_listen_port }}
-          hostPort: {{ nginx_deploy_host_port }}
-          hostIP: {{ nginx_deploy_host_ip }}
+{% for binding in nginx_deploy_port_bindings %}
+        - containerPort: {{ binding.container_port }}
+          hostPort: {{ binding.host_port }}
+          hostIP: {{ binding.host_ip | default(nginx_deploy_host_ip) }}
+{% endfor %}
       securityContext:
         runAsUser: {{ nginx_deploy_run_as_user }}
         runAsGroup: {{ nginx_deploy_run_as_group }}

@@ -33,14 +33,97 @@ minio_deploy_console_url: ""
 minio_deploy_health_url: ""
 minio_deploy_validate_certs: true
 
+# Effective endpoints (derived)
+minio_deploy_api_scheme_effective: "{{ minio_deploy_api_scheme | default('http', true) }}"
+minio_deploy_port_effective: "{{ (minio_deploy_port | default(9000, true)) | int }}"
+minio_deploy_console_port_effective: "{{ (minio_deploy_console_port | default(9001, true)) | int }}"
+minio_deploy_host_ip_effective: >-
+  {{
+    minio_deploy_host_ip
+      | default(ansible_default_ipv4.address | default('127.0.0.1'))
+  }}
+minio_deploy_api_url_effective: >-
+  {{
+    minio_deploy_api_url
+      if (minio_deploy_api_url | default('', true) | length > 0)
+      else (
+        minio_deploy_api_scheme_effective ~ '://' ~
+        minio_deploy_host_ip_effective ~ ':' ~
+        minio_deploy_port_effective
+      )
+  }}
+minio_deploy_console_url_effective: >-
+  {{
+    minio_deploy_console_url
+      if (minio_deploy_console_url | default('', true) | length > 0)
+      else (
+        minio_deploy_api_scheme_effective ~ '://' ~
+        minio_deploy_host_ip_effective ~ ':' ~
+        minio_deploy_console_port_effective
+      )
+  }}
+minio_deploy_health_url_effective: >-
+  {{
+    minio_deploy_health_url
+      if (minio_deploy_health_url | default('', true) | length > 0)
+      else (minio_deploy_api_url_effective ~ '/minio/health/ready')
+  }}
+
 # Credentials and server settings
 minio_deploy_root_user: "{{ lookup('env', 'MINIO_ROOT_USER') | default('', true) }}"
 minio_deploy_root_password: "{{ lookup('env', 'MINIO_ROOT_PASSWORD') | default('', true) }}"
+minio_deploy_generate_root_credentials: true
+minio_deploy_generated_root_user_prefix: "minio"
+minio_deploy_generated_root_user_length: 6
+minio_deploy_generated_root_password_length: 32
+minio_deploy_store_root_credentials: true
+minio_deploy_vault_address: "{{ vault_address | default('') }}"
+minio_deploy_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') }}"
+minio_deploy_vault_kv_path: "{{ inventory_hostname }}/minio/root"
+minio_deploy_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
+minio_deploy_vault_token: "{{ vault_token | default('', true) }}"
+minio_deploy_vault_role_id: "{{ ansible_hashi_vault_role_id | default('', true) }}"
+minio_deploy_vault_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"
+minio_deploy_vault_read_before_generate: true
 minio_deploy_region: ""
 minio_deploy_server_url: ""
 minio_deploy_browser_redirect_url: ""
+minio_deploy_domain: ""
 minio_deploy_env_extra: {}
 minio_deploy_extra_args: []
+
+# Effective root credentials (derived; may be overridden by minio_foundational)
+minio_deploy_root_user_effective: >-
+  {{
+    minio_deploy_root_user
+      | default(lookup('env', 'MINIO_ROOT_USER') | default('', true), true)
+  }}
+minio_deploy_root_password_effective: >-
+  {{
+    minio_deploy_root_password
+      | default(lookup('env', 'MINIO_ROOT_PASSWORD') | default('', true), true)
+  }}
+minio_deploy_root_credentials_source: >-
+  {{
+    'provided'
+    if (minio_deploy_root_user_effective | default('', true) | length > 0)
+       and (minio_deploy_root_password_effective | default('', true) | length > 0)
+    else ''
+  }}
+
+# Vault auth helper vars (derived)
+minio_deploy_vault_auth_token: "{{ minio_deploy_vault_token | default('', true) | trim }}"
+minio_deploy_vault_auth_role_id: "{{ minio_deploy_vault_role_id | default('', true) | trim }}"
+minio_deploy_vault_auth_secret_id: "{{ minio_deploy_vault_secret_id | default('', true) | trim }}"
+minio_deploy_vault_use_token: "{{ (minio_deploy_vault_auth_token | length) > 0 }}"
+minio_deploy_vault_auth_ok: >-
+  {{
+    (minio_deploy_vault_auth_token | length > 0)
+    or (
+      (minio_deploy_vault_auth_role_id | length > 0)
+      and (minio_deploy_vault_auth_secret_id | length > 0)
+    )
+  }}
 
 # Systemd
 minio_deploy_systemd_unit_name: >-
@@ -61,7 +144,13 @@ minio_deploy_bootstrap_buckets: []
 
 # Config
 minio_deploy_config_users: []
-minio_deploy_mc_path: "mc"
+minio_deploy_mc_image: "quay.io/minio/mc:latest"
+minio_deploy_mc_config_dir: "/root/.mc"
+minio_deploy_mc_path: >-
+  podman run --rm --network host --user 0:0 --entrypoint mc
+  -v {{ minio_deploy_mc_config_dir }}:{{ minio_deploy_mc_config_dir }}:Z
+  {{ minio_deploy_mc_image }}
+  --config-dir {{ minio_deploy_mc_config_dir }}
 minio_deploy_mc_alias: "minio"
 minio_deploy_mc_insecure: false
 

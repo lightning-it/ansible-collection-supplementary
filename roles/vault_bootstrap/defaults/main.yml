@@ -2,3 +2,12 @@
 # Always write an encrypted init file when this role performs the initial `vault operator init`.
 # Set to false only if you explicitly do NOT want to persist the init output (not recommended).
 vault_bootstrap_write_init_file_on_init: true
+
+# Token used by bootstrap/config steps when a Vault token is needed.
+# Prefer the init/root token when present; otherwise fall back to vault_token.
+vault_bootstrap_token: >-
+  {{
+    ((vault_init | default({})).root_token | default('', true) | trim)
+    if (((vault_init | default({})).root_token | default('', true) | trim) | length > 0)
+    else (vault_token | default('', true) | trim)
+  }}

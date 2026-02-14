@@ -13,6 +13,7 @@
       }}
     vault_config_role_id: "{{ ansible_hashi_vault_role_id | default(omit, true) }}"
     vault_config_secret_id: "{{ ansible_hashi_vault_secret_id | default(omit, true) }}"
+  changed_when: false
   tags:
     - vault_config_pki
 
@@ -40,11 +41,13 @@
         (vault_config_vault_pki_path | default('', true) | trim).split('/')[0]
         ~ '/roles/' ~ vault_config_vault_pki_role
       }}
+  changed_when: false
   tags:
     - vault_config_pki
 
 - name: Check Vault PKI role exists
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   community.hashi_vault.vault_read:
     url: "{{ vault_config_vault_address }}"
     auth_method: "token"
@@ -60,6 +63,7 @@
 - name: Set Vault PKI role presence flag
   ansible.builtin.set_fact:
     vault_config_pki_role_exists: "{{ vault_config_pki_role_read.data is defined }}"
+  changed_when: false
   tags:
     - vault_config_pki
 
@@ -76,6 +80,7 @@
 
 - name: Try to read existing certificate from Vault
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   community.hashi_vault.vault_kv2_get:
     url: "{{ vault_config_vault_address }}"
     engine_mount_point: "{{ vault_config_engine_mount_point }}"
@@ -97,6 +102,7 @@
       {{ (existing_cert.data | default({})).data | default({}) }}
     vault_config_existing_cert_in_vault: >-
       {{ (existing_cert.data.data.certificate | default('', true) | length) > 0 }}
+  changed_when: false
   tags:
     - vault_config_pki
 
@@ -106,6 +112,7 @@
   register: cert_info
   when: vault_config_existing_cert_in_vault | bool
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   tags:
     - vault_config_pki
 
@@ -133,6 +140,7 @@
   when:
     - vault_config_local_cert_slurp.data is defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   tags:
     - vault_config_pki
 
@@ -151,13 +159,16 @@
         (cert_info is defined)
         or (local_cert_info is defined)
       }}
+  changed_when: false
   tags:
     - vault_config_pki
 
 - name: Set reference datetime (now + 30 days)
   ansible.builtin.set_fact:
     cert_check_time: "{{ (ansible_date_time.epoch | int) + (30 * 24 * 60 * 60) }}"
+  changed_when: false
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   tags:
     - vault_config_pki
 
@@ -170,16 +181,20 @@
           | to_datetime('%Y%m%d%H%M%S'))
         .strftime('%s') | int
       }}
+  changed_when: false
   when: vault_config_existing_cert_info.not_after is defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   tags:
     - vault_config_pki
 
 - name: Set default certificate expiry (current time)
   ansible.builtin.set_fact:
     cert_expiry: "{{ ansible_date_time.epoch | int }}"
+  changed_when: false
   when: vault_config_existing_cert_info.not_after is not defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   tags:
     - vault_config_pki
 
@@ -197,6 +212,7 @@
       alt_names: "localhost,{{ vault_config_vault_hostname }}"
   register: vault_config_pki_cert
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   when:
     - vault_config_pki_role_exists | default(false) | bool
     - not (vault_config_existing_cert_present | default(false) | bool)
@@ -222,11 +238,13 @@
   register: new_cert_info
   when: vault_config_pki_cert.data is defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   tags:
     - vault_config_pki
 
 - name: Store newly generated certificate in Vault KV2
   delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   community.hashi_vault.vault_kv2_write:
     url: "{{ vault_config_vault_address }}"
     engine_mount_point: "{{ vault_config_engine_mount_point }}"

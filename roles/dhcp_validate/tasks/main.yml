@@ -1,13 +1,6 @@
 ---
-- name: Ensure required DHCP vars are defined
-  ansible.builtin.import_role:
-    name: dhcp_deploy
-    tasks_from: assert
-  tags: always
-
-- name: Set validate mode
-  ansible.builtin.set_fact:
-    dhcp_validate_strict: "{{ dhcp_validate_mode != 'report' }}"
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
   tags: always
 
 - name: Skip DHCP validation when disabled
@@ -31,6 +24,7 @@
       ansible.builtin.set_fact:
         dhcp_deploy_service_state: >-
           {{ ansible_facts.services[dhcp_deploy_systemd_unit_name] | default({}) }}
+      changed_when: false
       when:
         - dhcp_deploy_manage_systemd | bool
         - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'

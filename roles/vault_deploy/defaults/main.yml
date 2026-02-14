@@ -44,7 +44,8 @@ vault_deploy_vault_address: >-
   }}
 vault_deploy_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
 vault_deploy_api_delegate_to: "{{ vault_api_delegate_to | default('localhost') }}"
-vault_deploy_engine_mount_point: "{{ vault_engine_mount_point | default('stage-2c') }}"
+# Prefer inventory/global `vault_engine_mount_point` if provided, otherwise default for this role.
+vault_deploy_engine_mount_point: "{{ vault_engine_mount_point | default('stage-2c', true) }}"
 vault_deploy_hashi_vault_auth_method: "{{ vault_hashi_vault_auth_method | default('approle') }}"
 vault_deploy_vault_pki_path: "pki-inter-ec-2025/issue"
 vault_deploy_vault_pki_role: "limited_dns_2y"
@@ -103,7 +104,12 @@ vault_deploy_url: >-
     vault_address
     | default(vault_deploy_vault_address | default('', true), true)
   }}
-vault_deploy_token: ""
+vault_deploy_token: >-
+  {{
+    (vault_token | default('', true) | trim)
+    if (vault_token | default('', true) | trim | length > 0)
+    else ((vault_init | default({})).root_token | default('', true) | trim)
+  }}
 vault_deploy_terraform_source: "{{ vault_terraform_source | default('') }}"
 vault_deploy_terraform_state_path: >-
   {{
@@ -141,7 +147,13 @@ vault_deploy_bootstrap_auto_init: true
 vault_deploy_bootstrap_key_shares: 5
 vault_deploy_bootstrap_key_threshold: 3
 vault_deploy_bootstrap_write_init_output: true
-vault_deploy_unseal_keys: []
+vault_deploy_init: "{{ vault_init | default({}, true) }}"
+vault_deploy_unseal_keys: >-
+  {{
+    (vault_deploy_init.unseal_keys_b64 | default([]))
+    if (vault_deploy_init.unseal_keys_b64 | default([]) | length > 0)
+    else (vault_deploy_init.unseal_keys_hex | default([]))
+  }}
 
 # Config
 

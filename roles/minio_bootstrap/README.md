@@ -1,44 +1,48 @@
 # minio_bootstrap
 
-Bootstrap MinIO buckets using the `mc` client.
+Bootstrap MinIO buckets and optionally migrate Terraform state files to S3-compatible storage.
 
 ## Requirements
 
-- `mc` available on the controller or target (based on your connection mode).
-- `minio_deploy` available for endpoint/credential resolution.
+- Target host with Podman available (default `mc` execution path runs a container).
+- MinIO API reachable with root credentials.
+- Vault credentials when tfstate migration is enabled.
 
-## Role Variables
+## Variables
 
-See `lit.supplementary.minio_deploy` defaults for shared MinIO variables.
+See `roles/minio_bootstrap/defaults/main.yml`.
 
 Key variables:
-- `minio_deploy_bootstrap_buckets`
-- `minio_deploy_mc_path`
-- `minio_deploy_mc_alias`
-- `minio_deploy_mc_insecure`
+- `minio_bootstrap_skip`
+- `minio_bootstrap_buckets`
+- `minio_bootstrap_mc_path`
+- `minio_bootstrap_mc_alias`
+- `minio_bootstrap_mc_insecure`
+- `minio_bootstrap_tfstate_auto_detect`
+- `minio_bootstrap_tfstate_auto_dirs`
 - `minio_bootstrap_tfstate_bucket`
-- `minio_bootstrap_tfstate_access_key`
-- `minio_bootstrap_tfstate_secret_key`
-- `minio_bootstrap_tfstate_endpoint`
-- `minio_bootstrap_tfstate_region`
-- `minio_bootstrap_tfstate_key_prefix`
+- `minio_bootstrap_tfstate_vault_kv_mount`
+- `minio_bootstrap_tfstate_vault_path`
 
-Terraform state migration:
-- When tfstate credentials are provided, the role publishes backend facts
-  (`tfstate_backend_ready`, `tfstate_s3_endpoint`, `tfstate_bucket`, and creds).
-- If `tfstate_pending_dirs` is set, it migrates any local tfstate files it finds
-  in those directories and removes them only after successful migration.
-- Migration tasks are tagged `tfstate` and `tfstate_migrate` so operators can run
-  or skip them without changing the playbook.
+## Dependencies
+
+- None declared in metadata.
+- This role imports `lit.supplementary.minio_foundational` when bucket management is enabled.
 
 ## Example Playbook
 
 ```yaml
-- name: Create MinIO buckets
+- name: Bootstrap MinIO buckets
   hosts: minio_hosts
   gather_facts: true
   roles:
-    - role: minio_bootstrap
-  tags:
-    - bootstrap
+    - role: lit.supplementary.minio_bootstrap
 ```
+
+## License
+
+GPL-3.0-only
+
+## Author
+
+Lightning IT

@@ -1,1 +1,84 @@
 ---
+minio_config_manage_vault_bucket: true
+minio_config_vault_bucket_name: "vault-bucket"
+minio_config_vault_bucket_policy: "readwrite"
+minio_config_vault_bucket_region: "us-east-1"
+minio_config_vault_bucket_key_prefix: ""
+
+minio_config_skip_config: false
+minio_config_users: []
+minio_config_users_effective: "{{ minio_config_users | default([], true) }}"
+
+minio_config_port: 9000
+minio_config_api_scheme: "http"
+minio_config_host_ip: >-
+  {{
+    ansible_default_ipv4.address
+      | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
+  }}
+minio_config_api_url: ""
+minio_config_api_scheme_effective: "{{ minio_config_api_scheme | default('http', true) }}"
+minio_config_port_effective: "{{ (minio_config_port | default(9000, true)) | int }}"
+minio_config_host_ip_effective: >-
+  {{
+    minio_config_host_ip
+      | default(ansible_default_ipv4.address | default('127.0.0.1'))
+  }}
+minio_config_api_url_effective: >-
+  {{
+    minio_config_api_url
+      if (minio_config_api_url | default('', true) | length > 0)
+      else (
+        minio_deploy_api_url_effective
+        if (minio_deploy_api_url_effective | default('', true) | length > 0)
+        else (
+          minio_config_api_scheme_effective ~ '://' ~
+          minio_config_host_ip_effective ~ ':' ~
+          (minio_config_port_effective | string)
+        )
+      )
+  }}
+minio_config_vault_bucket_endpoint: ""
+minio_config_vault_bucket_endpoint_effective: >-
+  {{
+    minio_config_vault_bucket_endpoint
+      if (minio_config_vault_bucket_endpoint | default('', true) | length > 0)
+      else minio_config_api_url_effective
+  }}
+
+minio_config_root_user: "{{ lookup('env', 'MINIO_ROOT_USER') | default('', true) }}"
+minio_config_root_password: "{{ lookup('env', 'MINIO_ROOT_PASSWORD') | default('', true) }}"
+minio_config_root_user_effective: >-
+  {{
+    minio_config_root_user
+      if (minio_config_root_user | default('', true) | length > 0)
+      else (minio_deploy_root_user_effective | default('', true))
+  }}
+minio_config_root_password_effective: >-
+  {{
+    minio_config_root_password
+      if (minio_config_root_password | default('', true) | length > 0)
+      else (minio_deploy_root_password_effective | default('', true))
+  }}
+
+minio_config_vault_address: "{{ vault_address | default('') }}"
+minio_config_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c', true) }}"
+minio_config_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
+minio_config_vault_token: "{{ vault_token | default('', true) }}"
+
+minio_config_mc_image: "quay.io/minio/mc:latest"
+minio_config_mc_config_dir: "/root/.mc"
+minio_config_mc_path: >-
+  podman run --rm --network host --user 0:0 --entrypoint mc
+  -v {{ minio_config_mc_config_dir }}:{{ minio_config_mc_config_dir }}:Z
+  {{ minio_config_mc_image }}
+  --config-dir {{ minio_config_mc_config_dir }}
+minio_config_mc_alias: "minio"
+minio_config_mc_insecure: false
+
+minio_config_vault_bucket_vault_path: "{{ inventory_hostname }}/minio/vault-bucket"
+minio_config_manage_any: >-
+  {{
+    (minio_config_manage_vault_bucket | default(true) | bool)
+    or (minio_config_users_effective | length > 0)
+  }}

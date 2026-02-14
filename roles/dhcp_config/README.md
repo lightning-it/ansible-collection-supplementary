@@ -6,7 +6,7 @@ Manage DHCP configuration for the host install.
 
 None.
 
-## Role Variables
+## Variables
 
 See `roles/dhcp_config/defaults/main.yml` and `roles/dhcp_deploy/defaults/main.yml`.
 
@@ -14,6 +14,10 @@ Key variables:
 - `dhcp_config_content`
 - `dhcp_deploy_host_config_path`
 - `dhcp_deploy_skip_config`
+
+## Dependencies
+
+None.
 
 ## Example Playbook
 
@@ -26,3 +30,11 @@ Key variables:
   tags:
     - dhcp
 ```
+
+## License
+
+GPL-3.0-only
+
+## Author
+
+Lightning IT

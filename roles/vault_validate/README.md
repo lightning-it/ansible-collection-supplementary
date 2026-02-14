@@ -6,14 +6,19 @@ Validate Vault runtime and SELinux state without changing config.
 
 None.
 
-## Role Variables
+## Variables
 
 See `roles/vault_deploy/defaults/main.yml`.
 
 Key variables:
 - `vault_deploy_validate_mode`: `fail` (default) or `report`.
 
+## Dependencies
+
+None.
+
 ## Example Playbook
+
 ```yaml
 - name: Validate Vault
   hosts: vault_hosts
@@ -23,3 +28,11 @@ Key variables:
   tags:
     - validate
 ```
+
+## License
+
+GPL-3.0-only
+
+## Author
+
+Lightning IT

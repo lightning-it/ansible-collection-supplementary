@@ -4,5 +4,4 @@ vault_deploy_packages:
   - python3
   - python3-libselinux
   - policycoreutils-python-utils
-  - python3-pip
   - jq

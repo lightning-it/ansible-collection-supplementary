@@ -6,13 +6,17 @@ Day-2 operational actions for Nginx (restart, reload, status, upgrade) for the P
 
 None.
 
-## Role Variables
+## Variables
 
 See `roles/nginx_ops/defaults/main.yml` and `roles/nginx_deploy/defaults/main.yml`.
 
 Key variables:
 - `nginx_ops_action`: `restart`, `reload`, `status`, `upgrade`, or `none`.
 - `nginx_ops_target_image`: container image for upgrade.
+
+## Dependencies
+
+None.
 
 ## Example Playbook
 
@@ -27,3 +31,11 @@ Key variables:
   tags:
     - ops
 ```
+
+## License
+
+GPL-3.0-only
+
+## Author
+
+Lightning IT
