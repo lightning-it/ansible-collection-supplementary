@@ -1,3 +1,9 @@
+## [1.14.4](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.14.3...v1.14.4) (2026-02-14)
+
+### Bug Fixes
+
+* update Vault keypair ownership and permissions for runtime user ([#73](https://github.com/lightning-it/ansible-collection-supplementary/issues/73)) ([d2f72c4](https://github.com/lightning-it/ansible-collection-supplementary/commit/d2f72c46ef8804d8548a1a32065e41596b6a6a8e))
+
 ## [1.14.3](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.14.2...v1.14.3) (2026-02-14)
 
 ### Bug Fixes
