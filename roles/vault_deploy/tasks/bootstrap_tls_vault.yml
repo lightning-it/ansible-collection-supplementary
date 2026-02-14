@@ -129,7 +129,7 @@
       loop:
         - src: "{{ vault_deploy_tls_tmp.path }}/vault.key"
           dest: "{{ vault_deploy_cert_dir }}/vault.key"
-          mode: "0644"
+          mode: "0600"
         - src: "{{ vault_deploy_tls_tmp.path }}/vault.crt"
           dest: "{{ vault_deploy_cert_dir }}/vault.crt"
           mode: "0644"
