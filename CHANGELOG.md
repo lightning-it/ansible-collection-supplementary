@@ -1,3 +1,9 @@
+## [1.14.3](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.14.2...v1.14.3) (2026-02-14)
+
+### Bug Fixes
+
+* tighten Vault private key permissions to 0600 ([#70](https://github.com/lightning-it/ansible-collection-supplementary/issues/70)) ([220779f](https://github.com/lightning-it/ansible-collection-supplementary/commit/220779fd4203ea1d3929c5bf3e8dafa17768bcf3))
+
 ## [1.14.2](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.14.1...v1.14.2) (2026-02-14)
 
 ### Bug Fixes
