@@ -192,13 +192,21 @@
     - ops
     - unseal
 
+- name: Set TLS skip flag for unseal command
+  ansible.builtin.set_fact:
+    vault_deploy_unseal_tls_flag: >-
+      {{ '' if (vault_deploy_vault_validate_certs | default(true) | bool) else '-tls-skip-verify' }}
+  changed_when: false
+  when: vault_deploy_sealed | bool
+  tags:
+    - ops
+    - unseal
+
 - name: Unseal Vault
   ansible.builtin.command: >-
     podman exec {{ vault_deploy_container_name }}
     env VAULT_ADDR=https://127.0.0.1:8200
-    vault operator unseal
-    {% if not (vault_deploy_vault_validate_certs | default(true) | bool) %}-tls-skip-verify{% endif %}
-    {{ item }}
+    vault operator unseal {{ vault_deploy_unseal_tls_flag }} {{ item }}
   register: vault_deploy_unseal_results
   changed_when: true
   until: vault_deploy_unseal_results.rc == 0
