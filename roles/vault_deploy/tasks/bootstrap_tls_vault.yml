@@ -123,8 +123,8 @@
       ansible.builtin.copy:
         src: "{{ item.src }}"
         dest: "{{ item.dest }}"
-        owner: root
-        group: root
+        owner: "{{ vault_deploy_run_as_user | default(100) }}"
+        group: "{{ vault_deploy_run_as_group | default(1000) }}"
         mode: "{{ item.mode }}"
       loop:
         - src: "{{ vault_deploy_tls_tmp.path }}/vault.key"
@@ -139,12 +139,40 @@
       tags:
         - init
 
-    - name: Remove controller temp dir for Vault TLS artifacts
-      ansible.builtin.file:
-        path: "{{ vault_deploy_tls_tmp.path }}"
-        state: absent
-      delegate_to: localhost
-      changed_when: false
-      no_log: true
-      tags:
-        - init
+- name: Read local Vault keypair file state
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ vault_deploy_cert_dir }}/vault.key"
+    - "{{ vault_deploy_cert_dir }}/vault.crt"
+  register: vault_deploy_tls_files
+  tags:
+    - init
+
+- name: Ensure Vault keypair ownership and mode for runtime user
+  ansible.builtin.file:
+    path: "{{ item.stat.path }}"
+    state: file
+    owner: "{{ vault_deploy_run_as_user | default(100) }}"
+    group: "{{ vault_deploy_run_as_group | default(1000) }}"
+    mode: "{{ '0600' if (item.stat.path | basename) == 'vault.key' else '0644' }}"
+  loop: "{{ vault_deploy_tls_files.results | default([]) }}"
+  loop_control:
+    label: "{{ item.stat.path | default('') }}"
+  when: item.stat.exists | default(false)
+  tags:
+    - init
+
+- name: Remove controller temp dir for Vault TLS artifacts
+  ansible.builtin.file:
+    path: "{{ vault_deploy_tls_tmp.path }}"
+    state: absent
+  delegate_to: localhost
+  changed_when: false
+  no_log: true
+  when:
+    - vault_deploy_tls_tmp is defined
+    - vault_deploy_tls_tmp.path is defined
+    - vault_deploy_tls_tmp.path | length > 0
+  tags:
+    - init
