@@ -29,6 +29,102 @@
     - terragrunt_plan
     - terragrunt_apply
 
+- name: Validate Vault token via lookup-self (preflight)
+  ansible.builtin.uri:
+    url: "{{ vault_config_api_url }}/v1/auth/token/lookup-self"
+    method: GET
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
+    headers:
+      X-Vault-Token: "{{ vault_config_token }}"
+  register: vault_config_token_lookup
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
+  no_log: true
+  tags:
+    - config
+    - api
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Refresh Vault token from vault_token or vault_init root token when lookup fails
+  ansible.builtin.set_fact:
+    vault_config_token: >-
+      {{
+        (vault_token | default('', true) | trim)
+        if ((vault_token | default('', true) | trim) | length > 0)
+        else (vault_init.root_token | default('', true) | trim)
+      }}
+    vault_token: >-
+      {{
+        (vault_token | default('', true) | trim)
+        if ((vault_token | default('', true) | trim) | length > 0)
+        else (vault_init.root_token | default('', true) | trim)
+      }}
+  changed_when: false
+  no_log: true
+  when:
+    - vault_config_token_lookup.status | default(0) | int != 200
+    - >-
+      (
+        (vault_token | default('', true) | trim | length > 0)
+        or
+        (vault_init.root_token | default('', true) | trim | length > 0)
+      )
+  tags:
+    - config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Re-validate Vault token via lookup-self after refresh
+  ansible.builtin.uri:
+    url: "{{ vault_config_api_url }}/v1/auth/token/lookup-self"
+    method: GET
+    validate_certs: "{{ vault_config_vault_validate_certs }}"
+    headers:
+      X-Vault-Token: "{{ vault_config_token }}"
+  register: vault_config_token_lookup_after_refresh
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
+  no_log: true
+  when:
+    - vault_config_token_lookup.status | default(0) | int != 200
+  tags:
+    - config
+    - api
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Fail when Vault token is invalid for configured endpoint
+  ansible.builtin.fail:
+    msg: >-
+      vault_config_token is invalid for {{ vault_config_api_url }} (lookup-self status
+      {{ _vault_config_token_lookup_status }}). This usually means stale Vault token data or
+      endpoint mismatch (DNS pointing to another Vault instance). Ensure vault_token or
+      vault_init.root_token belongs to this Vault instance.
+  vars:
+    _vault_config_token_lookup_status: >-
+      {{
+        (
+          vault_config_token_lookup_after_refresh.status
+            | default(vault_config_token_lookup.status | default(0))
+        ) | int
+      }}
+  when:
+    - _vault_config_token_lookup_status | int != 200
+  tags:
+    - config
+    - api
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
 - name: Collect configured Vault secret store paths
   ansible.builtin.set_fact:
     vault_config_secret_store_paths: >-
@@ -445,6 +541,7 @@
               terragrunt_template: "{{ vault_config_terragrunt_template_path }}"
               terragrunt_vault_token: "{{ vault_config_token }}"
               terragrunt_vault_addr: "{{ vault_config_vault_address }}"
+              terragrunt_vault_validate_certs: {{ vault_config_vault_validate_certs | bool | to_json }}
               terragrunt_imports: {{ vault_config_terragrunt_imports | default([], true) | to_json }}
               terragrunt_delegate_to: "localhost"
           delegate_to: localhost

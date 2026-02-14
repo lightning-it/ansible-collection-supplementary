@@ -106,7 +106,6 @@
   when:
     - not vault_deploy_initialized | bool
     - vault_deploy_bootstrap_init | bool
-    - not vault_bootstrap_init_file.stat.exists | default(false)
   tags:
     - init
     - bootstrap
@@ -195,7 +194,6 @@
       {{
         (vault_bootstrap_write_init_file_on_init | default(true) | bool)
         and (vault_bootstrap_did_init | default(false) | bool)
-        and (not (vault_bootstrap_init_file.stat.exists | default(false)))
       }}
   changed_when: false
   tags:
