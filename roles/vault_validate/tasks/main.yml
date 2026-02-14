@@ -102,6 +102,7 @@
 - name: Set Vault container mount label pieces
   ansible.builtin.set_fact:
     vault_deploy_mount_label_type: "{{ vault_deploy_mount_label_parts[2] }}"
+    vault_deploy_mount_label_level: "{{ vault_deploy_mount_label_parts[3:] | join(':') }}"
   changed_when: false
   when:
     - vault_deploy_mount_label_parts is defined
@@ -136,6 +137,7 @@
 - name: Set current SELinux label pieces
   ansible.builtin.set_fact:
     vault_deploy_mount_label_current_type: "{{ vault_deploy_mount_label_current_parts[2] }}"
+    vault_deploy_mount_label_current_level: "{{ vault_deploy_mount_label_current_parts[3:] | join(':') }}"
   changed_when: false
   when:
     - vault_deploy_mount_label_current_parts is defined
