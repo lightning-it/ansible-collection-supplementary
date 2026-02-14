@@ -1,3 +1,9 @@
+## [1.14.2](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.14.1...v1.14.2) (2026-02-14)
+
+### Bug Fixes
+
+* enhance MinIO and Vault integration with improved credentia… ([#64](https://github.com/lightning-it/ansible-collection-supplementary/issues/64)) ([b12babc](https://github.com/lightning-it/ansible-collection-supplementary/commit/b12babcd4ab65bfeb91bbc3427af8e85c395ec80))
+
 ## [1.14.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.14.0...v1.14.1) (2026-02-02)
 
 ### Bug Fixes

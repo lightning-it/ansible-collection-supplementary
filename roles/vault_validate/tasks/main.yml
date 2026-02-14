@@ -106,7 +106,7 @@
   changed_when: false
   when:
     - vault_deploy_mount_label_parts is defined
-    - vault_deploy_mount_label_parts | length > 3
+    - vault_deploy_mount_label_parts | length > 2
   tags:
     - validate
     - selinux
@@ -141,7 +141,7 @@
   changed_when: false
   when:
     - vault_deploy_mount_label_current_parts is defined
-    - vault_deploy_mount_label_current_parts | length > 3
+    - vault_deploy_mount_label_current_parts | length > 2
   tags:
     - validate
     - selinux
@@ -164,12 +164,12 @@
 - name: Report SELinux label status
   ansible.builtin.debug:
     msg: >-
-      SELinux label host={{ vault_deploy_mount_label_current_type }}:{{ vault_deploy_mount_label_current_level }},
-      container={{ vault_deploy_mount_label_type }}:{{ vault_deploy_mount_label_level }}
+      SELinux label type host={{ vault_deploy_mount_label_current_type }},
+      container={{ vault_deploy_mount_label_type }}
   when:
     - not vault_validate_strict | bool
-    - vault_deploy_mount_label_level is defined
-    - vault_deploy_mount_label_current_level is defined
+    - vault_deploy_mount_label_type is defined
+    - vault_deploy_mount_label_current_type is defined
   tags:
     - validate
     - selinux
