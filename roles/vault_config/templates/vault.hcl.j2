@@ -114,8 +114,8 @@ inputs = {
   "vault_pki_intermediates",
   vault_config_pki_intermediates,
   "mount",
-  ["mount", "common_name", "signer_root_id", "vault_server"],
-  ["ttl", "max_ttl", "key_type", "key_bits", "country", "locality", "province", "ou", "organization", "csr_auto_rebuild", "csr_expiry"],
+  ["mount", "common_name", "vault_server"],
+  ["ttl", "max_ttl", "key_type", "key_bits", "country", "locality", "province", "ou", "organization", "csr_auto_rebuild", "csr_expiry", "signer_root_id", "sign_method", "external_cert_secret", "external_cert_ready", "store_csr"],
   {},
 ) }}
 
