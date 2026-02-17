@@ -1,0 +1,18 @@
+---
+- name: Ensure aap_deploy variables are valid
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_enabled is boolean
+      - aap_deploy_instance_name is string
+      - aap_deploy_namespace is string
+      - aap_deploy_packages_rhel9 is sequence
+      - aap_deploy_packages_rhel9 is not string
+      - aap_deploy_packages_rhel10 is sequence
+      - aap_deploy_packages_rhel10 is not string
+      - aap_deploy_package_state is string
+      - aap_deploy_package_state in ['present', 'latest', 'absent']
+      - aap_deploy_packages_effective is sequence
+      - aap_deploy_packages_effective is not string
+    fail_msg: "aap_deploy variables are missing or invalid."
+    quiet: true
+  tags: always

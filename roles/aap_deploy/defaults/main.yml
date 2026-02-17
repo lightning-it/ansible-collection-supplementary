@@ -12,3 +12,17 @@ aap_deploy_packages_rhel9:
 aap_deploy_packages_rhel10:
   - aap-deploy
 aap_deploy_package_state: present
+
+# Derived runtime values
+aap_deploy_target_major: >-
+  {{
+    '10'
+    if (ansible_distribution_major_version | default('9') | string) == '10'
+    else '9'
+  }}
+aap_deploy_packages_effective: >-
+  {{
+    aap_deploy_packages_rhel10
+    if aap_deploy_target_major == '10'
+    else aap_deploy_packages_rhel9
+  }}

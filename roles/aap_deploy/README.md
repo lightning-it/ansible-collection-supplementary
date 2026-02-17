@@ -1,30 +1,45 @@
-# lit.supplementary.aap_deploy
+# aap_deploy
 
-Role for AAP deployment flows on RHEL 9/10.
+Install AAP deployment package(s) for supported RHEL 9/10 hosts.
 
 ## Requirements
 
 None.
 
-## Role Variables
+## Variables
 
-- `aap_deploy_enabled` (bool, default: `true`): enable or disable the role.
-- `aap_deploy_instance_name` (string, default: empty): label for logging.
-- `aap_deploy_namespace` (string, default: empty): namespace label for logging.
-- `aap_deploy_packages_rhel9` (list, default: `["aap-deploy"]`): packages to
-  install on RHEL 9.
-- `aap_deploy_packages_rhel10` (list, default: `["aap-deploy"]`): packages to
-  install on RHEL 10.
-- `aap_deploy_package_state` (string, default: `present`): package state.
+See `roles/aap_deploy/defaults/main.yml`.
+
+Key variables:
+- `aap_deploy_enabled`
+- `aap_deploy_packages_rhel9`
+- `aap_deploy_packages_rhel10`
+- `aap_deploy_package_state`
+
+Derived variables:
+- `aap_deploy_target_major`
+- `aap_deploy_packages_effective`
+
+## Dependencies
+
+None.
 
 ## Example Playbook
 
 ```yaml
-- hosts: localhost
-  gather_facts: false
+- name: Deploy AAP packages
+  hosts: aap_nodes
+  gather_facts: true
   roles:
     - role: lit.supplementary.aap_deploy
       vars:
-        aap_deploy_instance_name: demo-aap
-        aap_deploy_namespace: aap
+        aap_deploy_package_state: present
 ```
+
+## License
+
+GPL-3.0-only
+
+## Author
+
+Lightning IT
