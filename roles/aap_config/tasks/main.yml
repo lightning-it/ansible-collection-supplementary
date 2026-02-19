@@ -1,0 +1,60 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Load shared AAP context
+  ansible.builtin.import_role:
+    name: aap
+  tags: always
+
+- name: Skip AAP config when disabled
+  ansible.builtin.debug:
+    msg: "AAP config skipped (aap_config_enabled=false or aap_config_manage=false)."
+  when:
+    - not aap_config_enabled | bool or not aap_config_manage | bool
+  changed_when: false
+  tags: always
+
+- name: Ensure AAP config directory exists
+  ansible.builtin.file:
+    path: "{{ aap_config_file_path | dirname }}"
+    state: directory
+    owner: "{{ aap_config_owner }}"
+    group: "{{ aap_config_group }}"
+    mode: '0755'
+  when:
+    - aap_config_enabled | bool
+    - aap_config_manage | bool
+  tags:
+    - config
+
+- name: Render AAP config file
+  ansible.builtin.copy:
+    dest: "{{ aap_config_file_path }}"
+    content: "{{ aap_config_content_effective }}"
+    owner: "{{ aap_config_owner }}"
+    group: "{{ aap_config_group }}"
+    mode: "{{ aap_config_mode }}"
+  register: aap_config_file_result
+  when:
+    - aap_config_enabled | bool
+    - aap_config_manage | bool
+  tags:
+    - config
+
+- name: Restart AAP service after config change
+  ansible.builtin.systemd:
+    name: "{{ aap_config_systemd_unit_name }}"
+    state: restarted
+  when:
+    - aap_config_enabled | bool
+    - aap_config_manage | bool
+    - aap_config_restart_on_change | bool
+    - aap_config_manage_systemd | bool
+    - aap_config_file_result is changed
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+    - not ansible_check_mode
+  tags:
+    - config
+    - restart

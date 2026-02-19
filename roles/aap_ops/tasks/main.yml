@@ -1,0 +1,111 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Load shared AAP context
+  ansible.builtin.import_role:
+    name: aap
+  tags: always
+
+- name: Skip AAP ops when disabled
+  ansible.builtin.debug:
+    msg: "AAP ops skipped (aap_ops_enabled=false or aap_ops_action=none)."
+  changed_when: false
+  when:
+    - not aap_ops_enabled | bool or aap_ops_action == 'none'
+  tags: always
+
+- name: Restart AAP service
+  when:
+    - aap_ops_enabled | bool
+    - aap_ops_action == 'restart'
+  tags:
+    - ops
+    - restart
+  block:
+    - name: Restart AAP systemd unit
+      ansible.builtin.systemd:
+        name: "{{ aap_ops_systemd_unit_name }}"
+        state: restarted
+      when:
+        - aap_ops_manage_systemd | bool
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+        - not ansible_check_mode
+
+- name: Report AAP status
+  when:
+    - aap_ops_enabled | bool
+    - aap_ops_action == 'status'
+  tags:
+    - ops
+    - status
+  block:
+    - name: Read AAP service facts
+      ansible.builtin.service_facts:
+      when:
+        - aap_ops_manage_systemd | bool
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+
+    - name: Set AAP service state from facts
+      ansible.builtin.set_fact:
+        aap_ops_service_state: >-
+          {{ ansible_facts.services[aap_ops_systemd_unit_name] | default({}) }}
+      changed_when: false
+      when:
+        - aap_ops_manage_systemd | bool
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+
+    - name: Read AAP health status
+      ansible.builtin.uri:
+        url: "{{ aap_ops_health_url }}"
+        method: GET
+        validate_certs: "{{ aap_ops_validate_certs }}"
+      register: aap_ops_health
+      changed_when: false
+      failed_when: false
+      when: aap_ops_health_url | default('', true) | length > 0
+
+    - name: Default AAP health status when no URL configured
+      ansible.builtin.set_fact:
+        aap_ops_health: {}
+      changed_when: false
+      when: aap_ops_health_url | default('', true) | length == 0
+
+    - name: Default AAP service state when not using systemd
+      ansible.builtin.set_fact:
+        aap_ops_service_state: {}
+      changed_when: false
+      when: aap_ops_service_state is not defined
+
+    - name: Report AAP service state
+      ansible.builtin.debug:
+        msg: >-
+          health={{ aap_ops_health.status | default('unknown') }},
+          service={{ aap_ops_service_state.state | default('unknown') }}
+
+- name: Upgrade AAP packages
+  when:
+    - aap_ops_enabled | bool
+    - aap_ops_action == 'upgrade'
+  tags:
+    - ops
+    - upgrade
+  block:
+    - name: Upgrade AAP package set
+      ansible.builtin.dnf:
+        name: "{{ aap_ops_packages_effective }}"
+        state: "{{ aap_ops_package_state }}"
+      when:
+        - aap_ops_packages_effective | default([], true) | length > 0
+        - not ansible_check_mode
+
+    - name: Restart AAP service after upgrade
+      ansible.builtin.systemd:
+        name: "{{ aap_ops_systemd_unit_name }}"
+        state: restarted
+      when:
+        - aap_ops_manage_systemd | bool
+        - aap_ops_package_state != 'absent'
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+        - not ansible_check_mode

@@ -1,0 +1,37 @@
+---
+# Shared role switch
+aap_enabled: "{{ aap_deploy_enabled | default(true, true) }}"
+
+# Supported platform matrix
+aap_supported_majors:
+  - "9"
+  - "10"
+
+# Shared package selection (keeps compatibility with aap_deploy inputs)
+aap_packages_rhel9: "{{ aap_deploy_packages_rhel9 | default(['aap-deploy'], true) }}"
+aap_packages_rhel10: "{{ aap_deploy_packages_rhel10 | default(['aap-deploy'], true) }}"
+aap_package_state: "{{ aap_deploy_package_state | default('present', true) }}"
+
+# Derived package/runtime values
+aap_target_major: >-
+  {{
+    (ansible_distribution_major_version | default('9') | string)
+    if (ansible_distribution_major_version | default('9') | string) in aap_supported_majors
+    else '9'
+  }}
+aap_packages_effective: >-
+  {{
+    aap_packages_rhel10
+    if aap_target_major == '10'
+    else aap_packages_rhel9
+  }}
+
+# Shared service/runtime defaults
+aap_manage_systemd: true
+aap_systemd_unit_name: "automation-controller.service"
+aap_health_url: ""
+aap_validate_certs: true
+
+# Shared config defaults
+aap_config_dir_default: "/etc/ansible-automation-platform"
+aap_config_file_path_default: "{{ aap_config_dir_default }}/aap-config.yml"

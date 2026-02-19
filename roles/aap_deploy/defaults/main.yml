@@ -1,28 +1,157 @@
 ---
-# Enable/disable the role
 aap_deploy_enabled: true
 
-# Optional metadata for logging/debugging
-aap_deploy_instance_name: ""
-aap_deploy_namespace: ""
+# Installation mode
+# This role supports disconnected bundle installs only.
+aap_deploy_install_type: bundle
 
-# Package handling
-aap_deploy_packages_rhel9:
-  - aap-deploy
-aap_deploy_packages_rhel10:
-  - aap-deploy
-aap_deploy_package_state: present
+# Topology inventory template selector
+aap_deploy_topology: growth
 
-# Derived runtime values
-aap_deploy_target_major: >-
+# Dedicated non-root install user (rootless podman model)
+aap_deploy_install_user: aap
+aap_deploy_install_user_create: true
+aap_deploy_install_user_home: "/home/{{ aap_deploy_install_user }}"
+aap_deploy_install_user_shell: /bin/bash
+aap_deploy_install_user_groups: []
+aap_deploy_install_user_passwordless_sudo: true
+
+# Installation paths
+aap_deploy_install_dir: /opt/aap
+aap_deploy_setup_dir: "{{ aap_deploy_install_dir }}/setup"
+aap_deploy_inventory_filename: inventory
+aap_deploy_inventory_path: "{{ aap_deploy_setup_dir }}/{{ aap_deploy_inventory_filename }}"
+
+# Setup archive source
+# Path to the setup bundle archive (.tar.gz).
+# The role checks both:
+# - managed node path (for pre-staged bundles), and
+# - control node paths inside the Ansible project mount (/runner/project/<file>
+#   and /runner/project/.artifacts/<file>).
+aap_deploy_setup_archive_src: ""
+aap_deploy_setup_archive_checksum: ""
+aap_deploy_force_unpack: false
+aap_deploy_setup_archive_filename: >-
   {{
-    '10'
-    if (ansible_distribution_major_version | default('9') | string) == '10'
-    else '9'
+    (aap_deploy_setup_archive_src | basename)
+    if (aap_deploy_setup_archive_src | default('', true) | trim | length > 0)
+    else 'aap-containerized-setup.tar.gz'
   }}
-aap_deploy_packages_effective: >-
+aap_deploy_setup_archive_path: "{{ aap_deploy_install_dir }}/{{ aap_deploy_setup_archive_filename }}"
+aap_deploy_local_bundle_archive_path: "/runner/project/.artifacts/{{ aap_deploy_setup_archive_filename }}"
+aap_deploy_local_bundle_project_archive_path: "/runner/project/{{ aap_deploy_setup_archive_filename }}"
+
+# Installer passwords (required)
+aap_deploy_gateway_admin_password: "{{ common_password_install | default('', true) }}"
+aap_deploy_controller_admin_password: "{{ common_password_install | default('', true) }}"
+aap_deploy_hub_admin_password: "{{ common_password_install | default('', true) }}"
+aap_deploy_eda_admin_password: "{{ common_password_install | default('', true) }}"
+aap_deploy_postgresql_admin_password: "{{ common_password_install | default('', true) }}"
+
+# Bundle install location (required when aap_deploy_install_type=bundle)
+aap_deploy_bundle_dir: ""
+
+# Redis configuration for containerized installer inventory.
+# cluster mode requires a [redis] group with at least 6 nodes.
+aap_deploy_redis_mode: standalone
+aap_deploy_redis_hosts: []
+
+# Growth topology hosts (single host per group, ansible_connection=local in template)
+aap_deploy_growth_gateway_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_growth_controller_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_growth_hub_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_growth_eda_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_growth_postgresql_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
+
+# Enterprise topology hosts (lists)
+aap_deploy_enterprise_gateway_hosts:
+  - "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_enterprise_controller_hosts:
+  - "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_enterprise_hub_hosts:
+  - "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_enterprise_eda_hosts:
+  - "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_enterprise_postgresql_hosts:
+  - "{{ ansible_fqdn | default(inventory_hostname) }}"
+
+# PostgreSQL connection inputs for service components.
+# Defaults target the managed database host from selected topology.
+aap_deploy_postgresql_host_default: >-
   {{
-    aap_deploy_packages_rhel10
-    if aap_deploy_target_major == '10'
-    else aap_deploy_packages_rhel9
+    aap_deploy_growth_postgresql_host
+    if aap_deploy_topology == 'growth'
+    else (aap_deploy_enterprise_postgresql_hosts | first)
   }}
+aap_deploy_postgresql_admin_username: postgres
+
+aap_deploy_gateway_pg_host: ""
+aap_deploy_controller_pg_host: ""
+aap_deploy_hub_pg_host: ""
+aap_deploy_eda_pg_host: ""
+aap_deploy_gateway_pg_password: ""
+aap_deploy_controller_pg_password: ""
+aap_deploy_hub_pg_password: ""
+aap_deploy_eda_pg_password: ""
+
+aap_deploy_gateway_pg_host_effective: >-
+  {{ aap_deploy_gateway_pg_host | default(aap_deploy_postgresql_host_default, true) }}
+aap_deploy_controller_pg_host_effective: >-
+  {{ aap_deploy_controller_pg_host | default(aap_deploy_postgresql_host_default, true) }}
+aap_deploy_hub_pg_host_effective: >-
+  {{ aap_deploy_hub_pg_host | default(aap_deploy_postgresql_host_default, true) }}
+aap_deploy_eda_pg_host_effective: >-
+  {{ aap_deploy_eda_pg_host | default(aap_deploy_postgresql_host_default, true) }}
+
+aap_deploy_gateway_pg_password_effective: >-
+  {{ aap_deploy_gateway_pg_password | default(aap_deploy_postgresql_admin_password, true) }}
+aap_deploy_controller_pg_password_effective: >-
+  {{ aap_deploy_controller_pg_password | default(aap_deploy_postgresql_admin_password, true) }}
+aap_deploy_hub_pg_password_effective: >-
+  {{ aap_deploy_hub_pg_password | default(aap_deploy_postgresql_admin_password, true) }}
+aap_deploy_eda_pg_password_effective: >-
+  {{ aap_deploy_eda_pg_password | default(aap_deploy_postgresql_admin_password, true) }}
+
+# Host preparation
+aap_deploy_repo_arch: >-
+  {{
+    'aarch64'
+    if (ansible_architecture | default('x86_64')) in ['aarch64', 'arm64']
+    else 'x86_64'
+  }}
+aap_deploy_required_repos:
+  - "rhel-{{ ansible_distribution_major_version | default('9') }}-for-{{ aap_deploy_repo_arch }}-baseos-rpms"
+  - "rhel-{{ ansible_distribution_major_version | default('9') }}-for-{{ aap_deploy_repo_arch }}-appstream-rpms"
+aap_deploy_required_packages:
+  - ansible-core
+  - podman
+
+# Workflow controls (useful for testing)
+aap_deploy_manage_host_prep: true
+aap_deploy_manage_download_unpack: true
+aap_deploy_run_installer: true
+aap_deploy_run_verify: true
+aap_deploy_enforce_min_mem_check: true
+aap_deploy_min_mem_mb: 15000
+aap_deploy_inventory_template: >-
+  {{ 'inventory-growth.j2' if aap_deploy_topology == 'growth' else 'inventory-enterprise.j2' }}
+
+# Installer idempotency guard
+aap_deploy_skip_if_installed: true
+aap_deploy_installed_marker_path: "{{ aap_deploy_install_dir }}/.aap_containerized_installed"
+
+# Post-install verification
+aap_deploy_verify_gateway_https: false
+aap_deploy_gateway_verify_host: >-
+  {{
+    aap_deploy_growth_gateway_host
+    if aap_deploy_topology == 'growth'
+    else (aap_deploy_enterprise_gateway_hosts | first)
+  }}
+aap_deploy_gateway_verify_validate_certs: true
+aap_deploy_gateway_verify_status_codes:
+  - 200
+  - 301
+  - 302
+  - 401
+  - 403

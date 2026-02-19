@@ -1,18 +1,213 @@
 ---
-- name: Ensure aap_deploy variables are valid
+- name: Ensure minimum facts are available
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - min
+  when:
+    - ansible_distribution is not defined
+    - aap_deploy_enabled | bool
+
+- name: Validate aap_deploy role switches and mode
   ansible.builtin.assert:
     that:
       - aap_deploy_enabled is boolean
-      - aap_deploy_instance_name is string
-      - aap_deploy_namespace is string
-      - aap_deploy_packages_rhel9 is sequence
-      - aap_deploy_packages_rhel9 is not string
-      - aap_deploy_packages_rhel10 is sequence
-      - aap_deploy_packages_rhel10 is not string
-      - aap_deploy_package_state is string
-      - aap_deploy_package_state in ['present', 'latest', 'absent']
-      - aap_deploy_packages_effective is sequence
-      - aap_deploy_packages_effective is not string
-    fail_msg: "aap_deploy variables are missing or invalid."
+      - aap_deploy_install_type == 'bundle'
+      - aap_deploy_topology in ['growth', 'enterprise']
+      - aap_deploy_manage_host_prep is boolean
+      - aap_deploy_manage_download_unpack is boolean
+      - aap_deploy_run_installer is boolean
+      - aap_deploy_run_verify is boolean
+      - aap_deploy_enforce_min_mem_check is boolean
+      - aap_deploy_skip_if_installed is boolean
+      - aap_deploy_install_user_create is boolean
+      - aap_deploy_install_user_passwordless_sudo is boolean
+      - aap_deploy_force_unpack is boolean
+      - aap_deploy_verify_gateway_https is boolean
+      - aap_deploy_install_user | trim | length > 0
+      - aap_deploy_install_user != 'root'
+      - aap_deploy_install_dir | trim | length > 0
+      - aap_deploy_install_dir.startswith('/')
+      - aap_deploy_setup_dir | trim | length > 0
+      - aap_deploy_setup_dir.startswith('/')
+      - aap_deploy_inventory_path | trim | length > 0
+      - aap_deploy_inventory_path.startswith('/')
+      - aap_deploy_required_repos is sequence
+      - aap_deploy_required_repos is not string
+      - aap_deploy_required_packages is sequence
+      - aap_deploy_required_packages is not string
+      - aap_deploy_min_mem_mb | int > 0
+      - aap_deploy_redis_mode in ['cluster', 'standalone']
+      - aap_deploy_redis_hosts is sequence
+      - aap_deploy_redis_hosts is not string
+      - aap_deploy_postgresql_admin_username | default('', true) | trim | length > 0
+      - aap_deploy_gateway_verify_status_codes is sequence
+      - aap_deploy_gateway_verify_status_codes is not string
+    fail_msg: >-
+      Invalid base configuration for lit.supplementary.aap_deploy.
+      This role supports disconnected bundle mode only
+      (aap_deploy_install_type=bundle), with absolute install paths and a non-root install user.
     quiet: true
+  when: aap_deploy_enabled | bool
+  tags: always
+
+- name: Validate required installer passwords
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_gateway_admin_password | default('', true) | trim | length > 0
+      - aap_deploy_controller_admin_password | default('', true) | trim | length > 0
+      - aap_deploy_hub_admin_password | default('', true) | trim | length > 0
+      - aap_deploy_eda_admin_password | default('', true) | trim | length > 0
+      - aap_deploy_postgresql_admin_password | default('', true) | trim | length > 0
+      - aap_deploy_gateway_pg_password_effective | default('', true) | trim | length > 0
+      - aap_deploy_controller_pg_password_effective | default('', true) | trim | length > 0
+      - aap_deploy_hub_pg_password_effective | default('', true) | trim | length > 0
+      - aap_deploy_eda_pg_password_effective | default('', true) | trim | length > 0
+    fail_msg: >-
+      Missing required installer passwords.
+      Provide gateway/controller/hub/eda/postgresql admin passwords and component pg passwords in role variables.
+      Defaults can come from common_password_install when defined in inventory.
+    quiet: true
+  when: aap_deploy_enabled | bool
+  no_log: true
+  tags: always
+
+- name: Validate bundle install settings
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_bundle_dir | default('', true) | trim | length > 0
+      - (aap_deploy_bundle_dir | regex_search('/bundle')) is not none
+    fail_msg: >-
+      aap_deploy_install_type=bundle requires aap_deploy_bundle_dir to point to a path
+      that contains the bundle/ directory for the setup archive.
+    quiet: true
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_install_type == 'bundle'
+  tags: always
+
+- name: Validate redis host settings for cluster mode
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_redis_hosts | length >= 6
+    fail_msg: >-
+      redis cluster mode requires at least 6 hosts in aap_deploy_redis_hosts.
+      For growth/single-node deployments use aap_deploy_redis_mode=standalone.
+    quiet: true
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_redis_mode == 'cluster'
+  tags: always
+
+- name: Validate component PostgreSQL host settings
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_gateway_pg_host_effective | default('', true) | trim | length > 0
+      - aap_deploy_controller_pg_host_effective | default('', true) | trim | length > 0
+      - aap_deploy_hub_pg_host_effective | default('', true) | trim | length > 0
+      - aap_deploy_eda_pg_host_effective | default('', true) | trim | length > 0
+    fail_msg: >-
+      Missing PostgreSQL hosts for one or more components.
+      Set aap_deploy_*_pg_host variables or ensure topology postgresql host values are defined.
+    quiet: true
+  when: aap_deploy_enabled | bool
+  tags: always
+
+- name: Validate setup archive source when archive management is enabled
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_setup_archive_src | default('', true) | trim | length > 0
+      - aap_deploy_setup_archive_src.startswith('/')
+      - (aap_deploy_setup_archive_src | regex_search('^https?://')) is none
+    fail_msg: >-
+      aap_deploy_setup_archive_src is required when aap_deploy_manage_download_unpack=true.
+      Disconnected mode requires an absolute local bundle archive path (no URL).
+    quiet: true
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_manage_download_unpack | bool
+  tags: always
+
+- name: Validate growth topology host settings
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_growth_gateway_host | default('', true) | trim | length > 0
+      - aap_deploy_growth_controller_host | default('', true) | trim | length > 0
+      - aap_deploy_growth_hub_host | default('', true) | trim | length > 0
+      - aap_deploy_growth_eda_host | default('', true) | trim | length > 0
+      - aap_deploy_growth_postgresql_host | default('', true) | trim | length > 0
+    fail_msg: >-
+      Growth topology requires one host value for gateway/controller/hub/eda/postgresql.
+    quiet: true
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_topology == 'growth'
+  tags: always
+
+- name: Validate enterprise topology host settings
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_enterprise_gateway_hosts is sequence
+      - aap_deploy_enterprise_gateway_hosts is not string
+      - aap_deploy_enterprise_gateway_hosts | length > 0
+      - aap_deploy_enterprise_controller_hosts is sequence
+      - aap_deploy_enterprise_controller_hosts is not string
+      - aap_deploy_enterprise_controller_hosts | length > 0
+      - aap_deploy_enterprise_hub_hosts is sequence
+      - aap_deploy_enterprise_hub_hosts is not string
+      - aap_deploy_enterprise_hub_hosts | length > 0
+      - aap_deploy_enterprise_eda_hosts is sequence
+      - aap_deploy_enterprise_eda_hosts is not string
+      - aap_deploy_enterprise_eda_hosts | length > 0
+      - aap_deploy_enterprise_postgresql_hosts is sequence
+      - aap_deploy_enterprise_postgresql_hosts is not string
+      - aap_deploy_enterprise_postgresql_hosts | length > 0
+    fail_msg: >-
+      Enterprise topology requires non-empty host lists for gateway/controller/hub/eda/postgresql.
+    quiet: true
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_topology == 'enterprise'
+  tags: always
+
+- name: Validate platform for host preparation
+  ansible.builtin.assert:
+    that:
+      - (ansible_os_family | default('')) == 'RedHat'
+    fail_msg: >-
+      Host preparation expects RHEL-compatible systems.
+      Set aap_deploy_manage_host_prep=false if this role is only being used to render inventory.
+    quiet: true
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_manage_host_prep | bool
+  tags: always
+
+- name: Ensure memory facts are available for installer RAM precheck
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - hardware
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_run_installer | bool
+    - aap_deploy_enforce_min_mem_check | bool
+    - ansible_memtotal_mb is not defined
+  tags: always
+
+- name: Validate host RAM for containerized installer
+  ansible.builtin.assert:
+    that:
+      - ansible_memtotal_mb | int >= aap_deploy_min_mem_mb | int
+    fail_msg: >-
+      Host memory is insufficient for containerized AAP installation.
+      Required: {{ aap_deploy_min_mem_mb }}MB.
+      Detected: {{ ansible_memtotal_mb | default('unknown') }}MB.
+      Increase host RAM, choose a larger instance/VM, or set aap_deploy_run_installer=false
+      when only preparing/rendering installer assets.
+    quiet: true
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_run_installer | bool
+    - aap_deploy_enforce_min_mem_check | bool
   tags: always

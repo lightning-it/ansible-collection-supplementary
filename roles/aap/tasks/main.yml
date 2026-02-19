@@ -1,0 +1,30 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Ensure OS facts are available
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - min
+  when:
+    - aap_enabled | bool
+    - ansible_distribution_major_version is not defined
+
+- name: Ensure supported RHEL major version
+  ansible.builtin.assert:
+    that:
+      - (ansible_distribution_major_version | string) in aap_supported_majors
+    fail_msg: >-
+      Unsupported ansible_distribution_major_version='{{ ansible_distribution_major_version | string }}'.
+      This role supports RHEL {{ aap_supported_majors | join('/') }}.
+    quiet: true
+  when: aap_enabled | bool
+
+- name: Skip aap role when disabled
+  ansible.builtin.debug:
+    msg: "AAP shared context skipped (aap_enabled=false)."
+  changed_when: false
+  when: not aap_enabled | bool
+  tags: always

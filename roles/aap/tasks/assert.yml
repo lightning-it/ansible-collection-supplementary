@@ -1,0 +1,25 @@
+---
+- name: Ensure aap variables are valid
+  ansible.builtin.assert:
+    that:
+      - aap_enabled is boolean
+      - aap_supported_majors is sequence
+      - aap_supported_majors is not string
+      - aap_target_major is string
+      - aap_target_major in aap_supported_majors
+      - aap_packages_rhel9 is sequence
+      - aap_packages_rhel9 is not string
+      - aap_packages_rhel10 is sequence
+      - aap_packages_rhel10 is not string
+      - aap_packages_effective is sequence
+      - aap_packages_effective is not string
+      - aap_package_state in ['present', 'latest', 'absent']
+      - aap_manage_systemd is boolean
+      - (not (aap_manage_systemd | bool)) or (aap_systemd_unit_name | default('', true) | trim | length > 0)
+      - aap_health_url is string
+      - aap_validate_certs is boolean
+      - aap_config_dir_default | default('', true) | trim | length > 0
+      - aap_config_file_path_default | default('', true) | trim | length > 0
+    fail_msg: "aap variables are missing or invalid."
+    quiet: true
+  tags: always

@@ -1,0 +1,10 @@
+---
+aap_ops_enabled: "{{ aap_enabled | default(true, true) }}"
+aap_ops_action: "none"
+aap_ops_package_state: "latest"
+
+aap_ops_manage_systemd: "{{ aap_manage_systemd | default(true, true) }}"
+aap_ops_systemd_unit_name: "{{ aap_systemd_unit_name | default('automation-controller.service', true) }}"
+aap_ops_packages_effective: "{{ aap_packages_effective | default([], true) }}"
+aap_ops_health_url: "{{ aap_health_url | default('', true) }}"
+aap_ops_validate_certs: "{{ aap_validate_certs | default(true, true) }}"

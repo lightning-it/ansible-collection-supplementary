@@ -1,0 +1,29 @@
+---
+aap_config_enabled: "{{ aap_enabled | default(true, true) }}"
+aap_config_manage: true
+
+aap_config_file_path: >-
+  {{
+    aap_config_file_path_default
+    | default('/etc/ansible-automation-platform/aap-config.yml', true)
+  }}
+aap_config_owner: "root"
+aap_config_group: "root"
+aap_config_mode: '0640'
+
+aap_config_content: ""
+aap_config_values: {}
+aap_config_content_effective: >-
+  {{
+    ((aap_config_content | trim) ~ '\n')
+    if (aap_config_content | default('', true) | trim | length > 0)
+    else (
+      (aap_config_values | default({}, true) | to_nice_yaml(indent=2, sort_keys=False))
+      if (aap_config_values | default({}, true) | length) > 0
+      else ''
+    )
+  }}
+
+aap_config_manage_systemd: "{{ aap_manage_systemd | default(true, true) }}"
+aap_config_systemd_unit_name: "{{ aap_systemd_unit_name | default('automation-controller.service', true) }}"
+aap_config_restart_on_change: false

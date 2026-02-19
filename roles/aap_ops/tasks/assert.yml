@@ -1,0 +1,20 @@
+---
+- name: Ensure aap_ops variables are valid
+  ansible.builtin.assert:
+    that:
+      - aap_ops_enabled is boolean
+      - aap_ops_action in ['none', 'restart', 'status', 'upgrade']
+      - aap_ops_package_state in ['present', 'latest', 'absent']
+      - aap_ops_manage_systemd is boolean
+      - aap_ops_packages_effective is sequence
+      - aap_ops_packages_effective is not string
+      - aap_ops_health_url is string
+      - aap_ops_validate_certs is boolean
+      - >-
+        (aap_ops_action not in ['restart', 'status']) or (not (aap_ops_manage_systemd | bool))
+        or (aap_ops_systemd_unit_name | default('', true) | trim | length > 0)
+      - >-
+        (aap_ops_action != 'upgrade') or (aap_ops_packages_effective | default([], true) | length > 0)
+    fail_msg: "aap_ops variables are missing or invalid."
+    quiet: true
+  tags: always

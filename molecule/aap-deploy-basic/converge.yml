@@ -1,11 +1,77 @@
 ---
-- name: Converge aap_deploy
+- name: Converge aap_deploy template rendering
   hosts: localhost
-  gather_facts: false
-  vars:
-    aap_deploy_instance_name: molecule-aap
-    aap_deploy_namespace: aap
-    aap_deploy_packages_rhel9: []
-    aap_deploy_packages_rhel10: []
-  roles:
-    - role: aap_deploy
+  gather_facts: true
+  tasks:
+    - name: Ensure growth setup directory exists
+      ansible.builtin.file:
+        path: /tmp/molecule-aap-deploy-growth/setup
+        state: directory
+        mode: '0755'
+
+    - name: Ensure enterprise setup directory exists
+      ansible.builtin.file:
+        path: /tmp/molecule-aap-deploy-enterprise/setup
+        state: directory
+        mode: '0755'
+
+    - name: Render growth bundle inventory
+      ansible.builtin.include_role:
+        name: aap_deploy
+      vars:
+        aap_deploy_install_type: bundle
+        aap_deploy_topology: growth
+        aap_deploy_install_user: "{{ lookup('env', 'USER') | default('root', true) }}"
+        aap_deploy_install_dir: /tmp/molecule-aap-deploy-growth
+        aap_deploy_setup_dir: /tmp/molecule-aap-deploy-growth/setup
+        aap_deploy_inventory_path: /tmp/molecule-aap-deploy-growth/setup/inventory
+
+        aap_deploy_manage_host_prep: false
+        aap_deploy_manage_download_unpack: false
+        aap_deploy_run_installer: false
+        aap_deploy_run_verify: false
+
+        aap_deploy_gateway_admin_password: growth-gateway
+        aap_deploy_controller_admin_password: growth-controller
+        aap_deploy_hub_admin_password: growth-hub
+        aap_deploy_eda_admin_password: growth-eda
+        aap_deploy_postgresql_admin_password: growth-postgresql
+
+        aap_deploy_bundle_dir: /tmp/molecule-aap-bundle/bundle
+
+    - name: Render enterprise bundle inventory
+      ansible.builtin.include_role:
+        name: aap_deploy
+      vars:
+        aap_deploy_install_type: bundle
+        aap_deploy_topology: enterprise
+        aap_deploy_install_user: "{{ lookup('env', 'USER') | default('root', true) }}"
+        aap_deploy_install_dir: /tmp/molecule-aap-deploy-enterprise
+        aap_deploy_setup_dir: /tmp/molecule-aap-deploy-enterprise/setup
+        aap_deploy_inventory_path: /tmp/molecule-aap-deploy-enterprise/setup/inventory
+
+        aap_deploy_manage_host_prep: false
+        aap_deploy_manage_download_unpack: false
+        aap_deploy_run_installer: false
+        aap_deploy_run_verify: false
+
+        aap_deploy_gateway_admin_password: enterprise-gateway
+        aap_deploy_controller_admin_password: enterprise-controller
+        aap_deploy_hub_admin_password: enterprise-hub
+        aap_deploy_eda_admin_password: enterprise-eda
+        aap_deploy_postgresql_admin_password: enterprise-postgresql
+
+        aap_deploy_bundle_dir: /tmp/molecule-aap-bundle/bundle
+
+        aap_deploy_enterprise_gateway_hosts:
+          - gw01.example.test
+          - gw02.example.test
+        aap_deploy_enterprise_controller_hosts:
+          - ctrl01.example.test
+          - ctrl02.example.test
+        aap_deploy_enterprise_hub_hosts:
+          - hub01.example.test
+        aap_deploy_enterprise_eda_hosts:
+          - eda01.example.test
+        aap_deploy_enterprise_postgresql_hosts:
+          - db01.example.test

@@ -1,0 +1,21 @@
+---
+- name: Ensure aap_config variables are valid
+  ansible.builtin.assert:
+    that:
+      - aap_config_enabled is boolean
+      - aap_config_manage is boolean
+      - aap_config_file_path | default('', true) | trim | length > 0
+      - aap_config_owner | default('', true) | trim | length > 0
+      - aap_config_group | default('', true) | trim | length > 0
+      - aap_config_mode | default('', true) | trim | length > 0
+      - aap_config_content is string
+      - aap_config_values is mapping
+      - (not (aap_config_manage | bool)) or (aap_config_content_effective | default('', true) | length > 0)
+      - aap_config_manage_systemd is boolean
+      - aap_config_restart_on_change is boolean
+      - >-
+        (not (aap_config_restart_on_change | bool)) or (not (aap_config_manage_systemd | bool))
+        or (aap_config_systemd_unit_name | default('', true) | trim | length > 0)
+    fail_msg: "aap_config variables are missing or invalid."
+    quiet: true
+  tags: always

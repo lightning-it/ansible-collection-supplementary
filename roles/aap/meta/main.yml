@@ -1,17 +1,20 @@
 ---
 galaxy_info:
-  role_name: aap_deploy
+  role_name: aap
+  namespace: lit
   author: René Osorio
+  description: Shared variables and prechecks for AAP roles.
   company: Lightning IT
-  description: Install AAP 2.6 using the official containerized installer workflow.
   license: GPL-3.0-only
   min_ansible_version: "2.18"
   platforms:
     - name: EL
-      versions: ["all"]
+      versions:
+        - "all"
   galaxy_tags:
+    - modulix
     - aap
-    - automationcontroller
-    - deployment
+    - automation
+    - rhel
 
 dependencies: []

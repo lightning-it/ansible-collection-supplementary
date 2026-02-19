@@ -1,0 +1,71 @@
+---
+- name: Validate FQDN hostname
+  ansible.builtin.assert:
+    that:
+      - (ansible_fqdn | default('')) is match('^.+\..+$')
+    fail_msg: >-
+      Hostname must be configured as FQDN for containerized AAP.
+      Set the host FQDN (for example: hostnamectl set-hostname host.example.com) and rerun.
+    quiet: true
+
+- name: Ensure install user primary group exists
+  ansible.builtin.group:
+    name: "{{ aap_deploy_install_user }}"
+    state: present
+  when: aap_deploy_install_user_create | bool
+
+- name: Ensure dedicated install user exists
+  ansible.builtin.user:
+    name: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    groups: "{{ (aap_deploy_install_user_groups + ['wheel']) | unique | join(',') }}"
+    append: true
+    home: "{{ aap_deploy_install_user_home }}"
+    shell: "{{ aap_deploy_install_user_shell }}"
+    create_home: true
+    state: present
+  when: aap_deploy_install_user_create | bool
+
+- name: Ensure install user has passwordless sudo access
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/{{ aap_deploy_install_user }}"
+    content: "{{ aap_deploy_install_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: '0440'
+    validate: visudo -cf %s
+  when: aap_deploy_install_user_passwordless_sudo | bool
+
+- name: Check subscription-manager registration status
+  ansible.builtin.command:
+    cmd: subscription-manager status
+  register: aap_deploy_subscription_status
+  changed_when: false
+  failed_when: aap_deploy_subscription_status.rc != 0
+
+- name: List currently enabled RHSM repositories
+  ansible.builtin.command:
+    cmd: subscription-manager repos --list-enabled
+  register: aap_deploy_enabled_repos_raw
+  changed_when: false
+
+- name: Compute missing RHSM repositories
+  ansible.builtin.set_fact:
+    aap_deploy_enabled_repos: "{{ aap_deploy_enabled_repos_raw.stdout | regex_findall('Repo ID:\\s*(\\S+)') }}"
+
+- name: Build list of missing RHSM repositories
+  ansible.builtin.set_fact:
+    aap_deploy_missing_repos: "{{ aap_deploy_required_repos | difference(aap_deploy_enabled_repos) }}"
+
+- name: Enable required RHSM repositories
+  ansible.builtin.command:
+    cmd: "subscription-manager repos --enable={{ item }}"
+  loop: "{{ aap_deploy_missing_repos }}"
+  register: aap_deploy_enable_repo_result
+  changed_when: true
+  when: aap_deploy_missing_repos | length > 0
+
+- name: Ensure host preparation packages are installed
+  ansible.builtin.dnf:
+    name: "{{ aap_deploy_required_packages }}"
+    state: present
