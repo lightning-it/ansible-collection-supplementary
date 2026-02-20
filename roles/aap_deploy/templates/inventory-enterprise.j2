@@ -33,11 +33,11 @@
 
 {% endif %}
 [all:vars]
-gateway_admin_password='{{ aap_deploy_gateway_admin_password }}'
-controller_admin_password='{{ aap_deploy_controller_admin_password }}'
-hub_admin_password='{{ aap_deploy_hub_admin_password }}'
-eda_admin_password='{{ aap_deploy_eda_admin_password }}'
-postgresql_admin_password='{{ aap_deploy_postgresql_admin_password }}'
+gateway_admin_password='{{ aap_deploy_gateway_admin_password_effective }}'
+controller_admin_password='{{ aap_deploy_controller_admin_password_effective }}'
+hub_admin_password='{{ aap_deploy_hub_admin_password_effective }}'
+eda_admin_password='{{ aap_deploy_eda_admin_password_effective }}'
+postgresql_admin_password='{{ aap_deploy_postgresql_admin_password_effective }}'
 postgresql_admin_username='{{ aap_deploy_postgresql_admin_username }}'
 
 gateway_pg_host='{{ aap_deploy_gateway_pg_host_effective }}'
@@ -49,7 +49,7 @@ hub_pg_password='{{ aap_deploy_hub_pg_password_effective }}'
 eda_pg_host='{{ aap_deploy_eda_pg_host_effective }}'
 eda_pg_password='{{ aap_deploy_eda_pg_password_effective }}'
 
-pg_admin_password='{{ aap_deploy_postgresql_admin_password }}'
+pg_admin_password='{{ aap_deploy_postgresql_admin_password_effective }}'
 redis_mode='{{ aap_deploy_redis_mode }}'
 bundle_install=true
 bundle_dir='{{ aap_deploy_bundle_dir }}'

@@ -3,17 +3,23 @@
   ansible.builtin.import_tasks: assert.yml
   tags: always
 
-- name: Load shared AAP context
-  ansible.builtin.import_role:
-    name: aap
-  tags: always
-
 - name: Skip AAP config when disabled
   ansible.builtin.debug:
     msg: "AAP config skipped (aap_config_enabled=false or aap_config_manage=false)."
   when:
     - not aap_config_enabled | bool or not aap_config_manage | bool
   changed_when: false
+  tags: always
+
+- name: Load shared AAP context
+  ansible.builtin.import_role:
+    name: aap
+  vars:
+    aap_enabled: true
+  when:
+    - aap_config_enabled | bool
+    - aap_config_manage | bool
+    - aap_config_use_shared_admin_passwords | bool
   tags: always
 
 - name: Ensure AAP config directory exists

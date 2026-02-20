@@ -3,7 +3,7 @@ galaxy_info:
   role_name: aap_deploy
   author: René Osorio
   company: Lightning IT
-  description: Install AAP 2.6 using the official containerized installer workflow.
+  description: Install AAP using the official containerized installer workflow.
   license: GPL-3.0-only
   min_ansible_version: "2.18"
   platforms:

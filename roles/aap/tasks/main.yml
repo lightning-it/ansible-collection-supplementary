@@ -22,6 +22,32 @@
     quiet: true
   when: aap_enabled | bool
 
+- name: Load OS-specific AAP defaults
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/defaults/rhel{{ ansible_distribution_major_version | string }}.yml"
+  when: aap_enabled | bool
+  tags: always
+
+- name: Ensure OS-specific package defaults are loaded
+  ansible.builtin.assert:
+    that:
+      - aap_packages_effective is sequence
+      - aap_packages_effective is not string
+      - aap_packages_effective | length > 0
+    fail_msg: >-
+      No OS-specific AAP package defaults loaded for RHEL {{ ansible_distribution_major_version | string }}.
+    quiet: true
+  when: aap_enabled | bool
+  tags: always
+
+- name: Resolve shared AAP admin passwords when required
+  ansible.builtin.import_tasks: resolve_admin_passwords.yml
+  when:
+    - aap_enabled | bool
+    - aap_resolve_admin_passwords | bool
+  tags:
+    - passwords
+
 - name: Skip aap role when disabled
   ansible.builtin.debug:
     msg: "AAP shared context skipped (aap_enabled=false)."

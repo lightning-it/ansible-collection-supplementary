@@ -1,6 +1,7 @@
 ---
-aap_config_enabled: "{{ aap_enabled | default(true, true) }}"
+aap_config_enabled: "{{ aap_enabled | default(true, true) | bool }}"
 aap_config_manage: true
+aap_config_use_shared_admin_passwords: true
 
 aap_config_file_path: >-
   {{
@@ -12,7 +13,24 @@ aap_config_group: "root"
 aap_config_mode: '0640'
 
 aap_config_content: ""
-aap_config_values: {}
+aap_config_automationhub_admin_password_default: >-
+  {{
+    (
+      aap_hub_admin_password_effective
+      | default(
+          aap_deploy_hub_admin_password_effective | default('', true),
+          true
+        )
+      | string
+      | trim
+    )
+  }}
+aap_config_values: >-
+  {{
+    {'automationhub_admin_password': aap_config_automationhub_admin_password_default}
+    if (aap_config_automationhub_admin_password_default | length > 0)
+    else {}
+  }}
 aap_config_content_effective: >-
   {{
     ((aap_config_content | trim) ~ '\n')

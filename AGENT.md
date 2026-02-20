@@ -9,8 +9,8 @@ Scope: role code, defaults, tasks, Molecule tests, role READMEs, and collection 
 
 1. Content MUST be compatible with `ansible-core` 2.18.x.
 2. Content MUST NOT require Ansible major versions newer than 2.x.
-3. This repository declares `requires_ansible: ">=2.15.0"` in `meta/runtime.yml`.
-4. New changes SHOULD remain compatible with `>=2.15.0` unless explicitly told otherwise.
+3. This repository declares `requires_ansible: ">=2.18.0"` in `meta/runtime.yml`.
+4. New changes SHOULD remain compatible with `>=2.18.0` unless explicitly told otherwise.
 5. Prefer `ansible.builtin.*` modules; use external collections only when required.
 
 ## 1. Mandatory Discovery Before Changes
@@ -267,6 +267,24 @@ Example:
 3. Vault responses and secret payloads MUST NOT be logged.
 4. Secret values MUST NOT be written to artifacts, generated docs, or committed test output.
 5. If failure output can expose secrets, task-level `no_log: true` MUST still be used.
+
+### 7.1 Secret Source of Truth and Password Lifecycle (Mandatory)
+
+1. Each environment MUST have exactly one declared source of truth for runtime passwords:
+   1. external secret manager (for example HashiCorp Vault), or
+   2. inventory variables (preferably encrypted via Ansible Vault).
+2. Password generation is allowed only when the value can be persisted immediately to the selected source of truth.
+3. Generating a password without persistence is NOT allowed for deployment flows.
+4. If a required password is missing and cannot be persisted, the role/play MUST fail fast.
+5. Secret resolution order MUST be deterministic and documented:
+   1. explicit role input variable,
+   2. secret manager read (when configured),
+   3. inventory-provided value,
+   4. generate and persist to configured backend,
+   5. fail if none of the above is possible.
+6. Rotation MUST be explicit (for example action-driven), and MUST update source of truth first, then apply change to the target service.
+7. Idempotency requirement: repeated runs with unchanged inputs MUST resolve the same effective secret values.
+8. Local file cache may be used only as an explicitly documented lab/offline fallback and MUST NOT replace a declared production source of truth.
 
 Example:
 

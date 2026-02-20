@@ -43,33 +43,17 @@
       - aap_deploy_postgresql_admin_username | default('', true) | trim | length > 0
       - aap_deploy_gateway_verify_status_codes is sequence
       - aap_deploy_gateway_verify_status_codes is not string
+      - aap_deploy_gateway_admin_password is string
+      - aap_deploy_controller_admin_password is string
+      - aap_deploy_hub_admin_password is string
+      - aap_deploy_eda_admin_password is string
+      - aap_deploy_postgresql_admin_password is string
     fail_msg: >-
       Invalid base configuration for lit.supplementary.aap_deploy.
       This role supports disconnected bundle mode only
       (aap_deploy_install_type=bundle), with absolute install paths and a non-root install user.
     quiet: true
   when: aap_deploy_enabled | bool
-  tags: always
-
-- name: Validate required installer passwords
-  ansible.builtin.assert:
-    that:
-      - aap_deploy_gateway_admin_password | default('', true) | trim | length > 0
-      - aap_deploy_controller_admin_password | default('', true) | trim | length > 0
-      - aap_deploy_hub_admin_password | default('', true) | trim | length > 0
-      - aap_deploy_eda_admin_password | default('', true) | trim | length > 0
-      - aap_deploy_postgresql_admin_password | default('', true) | trim | length > 0
-      - aap_deploy_gateway_pg_password_effective | default('', true) | trim | length > 0
-      - aap_deploy_controller_pg_password_effective | default('', true) | trim | length > 0
-      - aap_deploy_hub_pg_password_effective | default('', true) | trim | length > 0
-      - aap_deploy_eda_pg_password_effective | default('', true) | trim | length > 0
-    fail_msg: >-
-      Missing required installer passwords.
-      Provide gateway/controller/hub/eda/postgresql admin passwords and component pg passwords in role variables.
-      Defaults can come from common_password_install when defined in inventory.
-    quiet: true
-  when: aap_deploy_enabled | bool
-  no_log: true
   tags: always
 
 - name: Validate bundle install settings

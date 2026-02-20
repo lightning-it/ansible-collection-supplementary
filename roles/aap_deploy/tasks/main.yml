@@ -10,6 +10,15 @@
   when: not aap_deploy_enabled | bool
   tags: always
 
+- name: Load shared AAP context and resolve admin passwords
+  ansible.builtin.import_role:
+    name: aap
+  when: aap_deploy_enabled | bool
+  tags:
+    - passwords
+    - inventory
+    - install
+
 - name: Host preparation
   ansible.builtin.import_tasks: 10_host_prep.yml
   when:

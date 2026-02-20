@@ -15,7 +15,15 @@ Key variables:
 - `aap_config_file_path`
 - `aap_config_content`
 - `aap_config_values`
+- `aap_config_use_shared_admin_passwords`
 - `aap_config_restart_on_change`
+
+Default behavior:
+- `aap_config_enabled` is independent from `aap_deploy_enabled` and defaults to `aap_enabled`.
+- `aap_config_values` defaults to `automationhub_admin_password` sourced from shared AAP password resolution.
+- Shared resolution can be disabled with `aap_config_use_shared_admin_passwords=false`.
+- Shared password source of truth is controlled in role `aap` via `aap_admin_passwords_source_of_truth`.
+- When shared resolution is disabled, provide `aap_config_content` or `aap_config_values` explicitly.
 
 ## Dependencies
 

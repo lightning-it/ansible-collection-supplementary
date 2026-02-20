@@ -28,7 +28,7 @@ aap_deploy_inventory_path: "{{ aap_deploy_setup_dir }}/{{ aap_deploy_inventory_f
 # - managed node path (for pre-staged bundles), and
 # - control node paths inside the Ansible project mount (/runner/project/<file>
 #   and /runner/project/.artifacts/<file>).
-aap_deploy_setup_archive_src: ""
+aap_deploy_setup_archive_src: "/opt/aap/aap-containerized-setup.tar.gz"
 aap_deploy_setup_archive_checksum: ""
 aap_deploy_force_unpack: false
 aap_deploy_setup_archive_filename: >-
@@ -41,15 +41,42 @@ aap_deploy_setup_archive_path: "{{ aap_deploy_install_dir }}/{{ aap_deploy_setup
 aap_deploy_local_bundle_archive_path: "/runner/project/.artifacts/{{ aap_deploy_setup_archive_filename }}"
 aap_deploy_local_bundle_project_archive_path: "/runner/project/{{ aap_deploy_setup_archive_filename }}"
 
-# Installer passwords (required)
-aap_deploy_gateway_admin_password: "{{ common_password_install | default('', true) }}"
-aap_deploy_controller_admin_password: "{{ common_password_install | default('', true) }}"
-aap_deploy_hub_admin_password: "{{ common_password_install | default('', true) }}"
-aap_deploy_eda_admin_password: "{{ common_password_install | default('', true) }}"
-aap_deploy_postgresql_admin_password: "{{ common_password_install | default('', true) }}"
+# Installer admin passwords (explicit vars override Vault/generation flow)
+aap_deploy_gateway_admin_password: ""
+aap_deploy_controller_admin_password: ""
+aap_deploy_hub_admin_password: ""
+aap_deploy_eda_admin_password: ""
+aap_deploy_postgresql_admin_password: ""
+
+# Effective installer admin passwords are resolved by shared role `aap`
+aap_deploy_gateway_admin_password_effective: >-
+  {{
+    aap_gateway_admin_password_effective
+    | default(aap_deploy_gateway_admin_password | default('', true), true)
+  }}
+aap_deploy_controller_admin_password_effective: >-
+  {{
+    aap_controller_admin_password_effective
+    | default(aap_deploy_controller_admin_password | default('', true), true)
+  }}
+aap_deploy_hub_admin_password_effective: >-
+  {{
+    aap_hub_admin_password_effective
+    | default(aap_deploy_hub_admin_password | default('', true), true)
+  }}
+aap_deploy_eda_admin_password_effective: >-
+  {{
+    aap_eda_admin_password_effective
+    | default(aap_deploy_eda_admin_password | default('', true), true)
+  }}
+aap_deploy_postgresql_admin_password_effective: >-
+  {{
+    aap_postgresql_admin_password_effective
+    | default(aap_deploy_postgresql_admin_password | default('', true), true)
+  }}
 
 # Bundle install location (required when aap_deploy_install_type=bundle)
-aap_deploy_bundle_dir: ""
+aap_deploy_bundle_dir: "/opt/aap/setup/bundle"
 
 # Redis configuration for containerized installer inventory.
 # cluster mode requires a [redis] group with at least 6 nodes.
@@ -104,13 +131,13 @@ aap_deploy_eda_pg_host_effective: >-
   {{ aap_deploy_eda_pg_host | default(aap_deploy_postgresql_host_default, true) }}
 
 aap_deploy_gateway_pg_password_effective: >-
-  {{ aap_deploy_gateway_pg_password | default(aap_deploy_postgresql_admin_password, true) }}
+  {{ aap_deploy_gateway_pg_password | default(aap_deploy_postgresql_admin_password_effective, true) }}
 aap_deploy_controller_pg_password_effective: >-
-  {{ aap_deploy_controller_pg_password | default(aap_deploy_postgresql_admin_password, true) }}
+  {{ aap_deploy_controller_pg_password | default(aap_deploy_postgresql_admin_password_effective, true) }}
 aap_deploy_hub_pg_password_effective: >-
-  {{ aap_deploy_hub_pg_password | default(aap_deploy_postgresql_admin_password, true) }}
+  {{ aap_deploy_hub_pg_password | default(aap_deploy_postgresql_admin_password_effective, true) }}
 aap_deploy_eda_pg_password_effective: >-
-  {{ aap_deploy_eda_pg_password | default(aap_deploy_postgresql_admin_password, true) }}
+  {{ aap_deploy_eda_pg_password | default(aap_deploy_postgresql_admin_password_effective, true) }}
 
 # Host preparation
 aap_deploy_repo_arch: >-

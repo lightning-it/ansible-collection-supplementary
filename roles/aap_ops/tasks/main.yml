@@ -109,3 +109,12 @@
         - aap_ops_package_state != 'absent'
         - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
         - not ansible_check_mode
+
+- name: Rotate AAP controller admin password
+  ansible.builtin.include_tasks: rotate_password.yml
+  when:
+    - aap_ops_enabled | bool
+    - aap_ops_action == 'rotate_password'
+  tags:
+    - ops
+    - rotate_password
