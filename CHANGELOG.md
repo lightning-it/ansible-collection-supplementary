@@ -1,3 +1,9 @@
+## [1.16.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.0...v1.16.1) (2026-02-21)
+
+### Bug Fixes
+
+* token handling ah ([#99](https://github.com/lightning-it/ansible-collection-supplementary/issues/99)) ([0c6eab0](https://github.com/lightning-it/ansible-collection-supplementary/commit/0c6eab07cb1ced3751453ab707f8fd003d81ea10))
+
 ## [1.16.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.15.5...v1.16.0) (2026-02-21)
 
 ### Features
