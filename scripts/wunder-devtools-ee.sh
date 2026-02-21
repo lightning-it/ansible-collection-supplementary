@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="quay.io/l-it/ee-wunder-devtools-ubi9:v1.2.7"
+IMAGE="quay.io/l-it/ee-wunder-devtools-ubi9:v1.4.0"
 CONTAINER_HOME="${CONTAINER_HOME:-/tmp/wunder}"
 HOST_HOME_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/wunder-devtools-ee/home"
 
@@ -81,7 +81,6 @@ docker run --rm \
   ${ANSIBLE_LINT_VERSION:+-e ANSIBLE_LINT_VERSION} \
   ${COLLECTION_NAMESPACE:+-e COLLECTION_NAMESPACE} \
   ${COLLECTION_NAME:+-e COLLECTION_NAME} \
-  ${SCENARIO_FILTER:+-e SCENARIO_FILTER} \
   ${EXAMPLE_PLAYBOOK:+-e EXAMPLE_PLAYBOOK} \
   ${MOLECULE_NO_LOG:+-e MOLECULE_NO_LOG} \
   ${VAGRANT_SSH_HOST:+-e VAGRANT_SSH_HOST} \

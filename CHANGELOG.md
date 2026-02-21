@@ -1,3 +1,9 @@
+## [1.15.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.14.4...v1.15.0) (2026-02-21)
+
+### Features
+
+* refactor aap role ([#75](https://github.com/lightning-it/ansible-collection-supplementary/issues/75)) ([99b7c92](https://github.com/lightning-it/ansible-collection-supplementary/commit/99b7c92edbf3d2c9def86edf72f949eb0583bb17))
+
 ## [1.14.4](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.14.3...v1.14.4) (2026-02-14)
 
 ### Bug Fixes

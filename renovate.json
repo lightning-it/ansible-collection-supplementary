@@ -27,16 +27,6 @@
         "-\\s*name:\\s*(?<depName>[a-z0-9_]+\\.[a-z0-9_]+)[^\\n]*\\n\\s*version:\\s*\"?(?<currentValue>[^\"\\n]+)\"?"
       ],
       "datasourceTemplate": "galaxy-collection"
-    },
-    {
-      "description": "ansible.platform git tag in collections/requirements.yml",
-      "fileMatch": ["^collections/requirements\\.yml$"],
-      "matchStrings": [
-        "-\\s*name:\\s*https://github\\.com/ansible/ansible\\.platform\\.git\\s*\\n\\s*type:\\s*git\\s*\\n\\s*version:\\s*\"?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\"?"
-      ],
-      "depNameTemplate": "ansible/ansible.platform",
-      "datasourceTemplate": "github-tags",
-      "versioningTemplate": "loose"
     }
   ]
 }
