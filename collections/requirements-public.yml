@@ -35,4 +35,4 @@ collections:
   - name: community.vmware
     version: "6.2.0"
   - name: containers.podman
-    version: "1.17.0"
+    version: "1.19.0"
