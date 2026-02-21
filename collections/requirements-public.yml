@@ -1,6 +1,6 @@
 ---
 collections:
-  # renovate: datasource=galaxy-collection depName=ansible.platform
+  # renovate: datasource=github-tags depName=ansible/ansible.platform
   - name: https://github.com/ansible/ansible.platform.git
     type: git
     version: "2.5.20250702"

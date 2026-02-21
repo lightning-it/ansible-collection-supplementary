@@ -43,6 +43,18 @@
       "versioningTemplate": "loose"
     },
     {
+      "description": "ansible.platform in public requirements is tracked from upstream GitHub tags",
+      "fileMatch": [
+        "^collections/requirements-public\\.yml$"
+      ],
+      "matchStrings": [
+        "(?ms)#\\s*renovate:\\s*datasource=github-tags\\s+depName=ansible/ansible\\.platform\\s*\\n\\s*-\\s*name:\\s*https://github\\.com/ansible/ansible\\.platform\\.git\\s*\\n\\s*type:\\s*git\\s*\\n\\s*version:\\s*\"?(?<currentValue>[^\"\\n]+)\"?"
+      ],
+      "depNameTemplate": "ansible/ansible.platform",
+      "datasourceTemplate": "github-tags",
+      "versioningTemplate": "loose"
+    },
+    {
       "description": "ansible.platform in certified requirements is tracked from upstream GitHub tags",
       "fileMatch": [
         "^collections/requirements-certified\\.yml$"
