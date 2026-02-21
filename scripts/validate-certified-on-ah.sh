@@ -2,7 +2,9 @@
 set -euo pipefail
 
 requirements_file="${1:-collections/requirements-certified.yml}"
-api_base="${AUTOMATION_HUB_API_BASE:-https://console.redhat.com/api/automation-hub/content/published/v3/plugin/ansible/content/published/collections/index}"
+api_base="${AUTOMATION_HUB_API_BASE:-}"
+api_base_template="${AUTOMATION_HUB_API_BASE_TEMPLATE:-https://console.redhat.com/api/automation-hub/content/{repo}/v3/plugin/ansible/content/{repo}/collections/index}"
+api_repositories="${AUTOMATION_HUB_REPOSITORIES:-published,validated}"
 token="${AUTOMATION_HUB_TOKEN:-}"
 sso_token_url="${AUTOMATION_HUB_SSO_TOKEN_URL:-https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token}"
 sso_client_id="${AUTOMATION_HUB_SSO_CLIENT_ID:-cloud-services}"
@@ -15,6 +17,25 @@ fi
 
 if [[ ! -f "${requirements_file}" ]]; then
   echo "Requirements file not found: ${requirements_file}" >&2
+  exit 2
+fi
+
+declare -a api_bases=()
+if [[ -n "${api_base}" ]]; then
+  api_bases+=("${api_base%/}")
+else
+  IFS=',' read -r -a repo_candidates <<< "${api_repositories}"
+  for repo_name in "${repo_candidates[@]}"; do
+    repo_name="$(printf '%s' "${repo_name}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    if [[ -n "${repo_name}" ]]; then
+      resolved_base="${api_base_template//\{repo\}/${repo_name}}"
+      api_bases+=("${resolved_base%/}")
+    fi
+  done
+fi
+
+if [[ ${#api_bases[@]} -eq 0 ]]; then
+  echo "No Automation Hub API base configured." >&2
   exit 2
 fi
 
@@ -152,10 +173,10 @@ for dep in "${deps[@]}"; do
   version="${dep#* }"
   namespace="${name%%.*}"
   collection="${name#*.}"
-  url="${api_base}/${namespace}/${collection}/versions/${version}/"
+  probe_url="${api_bases[0]}/${namespace}/${collection}/versions/${version}/"
 
   if [[ -z "${resolved_auth_header}" ]]; then
-    if ! resolve_auth_header "${url}"; then
+    if ! resolve_auth_header "${probe_url}"; then
       echo "Authentication/authorization failed for Automation Hub API." >&2
       if [[ -n "${resolved_auth_failure_code}" ]]; then
         echo "HTTP status: ${resolved_auth_failure_code}" >&2
@@ -167,31 +188,50 @@ for dep in "${deps[@]}"; do
       echo "Set RH_AUTOMATION_HUB_TOKEN to a valid token from cloud.redhat.com Automation Hub token management." >&2
       exit 1
     fi
-    http_code="${resolved_http_code}"
-  else
-    http_code="$(request_with_auth_header "${resolved_auth_header}" "${url}")"
   fi
 
-  case "${http_code}" in
-    200)
-      echo "OK: ${name}:${version}"
-      ;;
-    401|403)
-      echo "Authentication/authorization failed for Automation Hub API (${http_code})." >&2
-      cat "${tmp_response}" >&2 || true
-      echo "Auth header used: ${resolved_auth_header}" >&2
-      exit 1
-      ;;
-    404)
-      echo "MISSING: ${name}:${version} is not available on Automation Hub." >&2
-      failures=$((failures + 1))
-      ;;
-    *)
-      echo "ERROR: Unexpected response ${http_code} for ${name}:${version}" >&2
-      cat "${tmp_response}" >&2 || true
-      failures=$((failures + 1))
-      ;;
-  esac
+  found_in_base=""
+  unexpected_error=false
+
+  for current_base in "${api_bases[@]}"; do
+    url="${current_base}/${namespace}/${collection}/versions/${version}/"
+    http_code="$(request_with_auth_header "${resolved_auth_header}" "${url}")"
+
+    case "${http_code}" in
+      200)
+        found_in_base="${current_base}"
+        break
+        ;;
+      401|403)
+        echo "Authentication/authorization failed for Automation Hub API (${http_code})." >&2
+        cat "${tmp_response}" >&2 || true
+        echo "Auth header used: ${resolved_auth_header}" >&2
+        exit 1
+        ;;
+      404)
+        # Try next configured repository base.
+        ;;
+      *)
+        echo "ERROR: Unexpected response ${http_code} for ${name}:${version} at ${current_base}" >&2
+        cat "${tmp_response}" >&2 || true
+        failures=$((failures + 1))
+        unexpected_error=true
+        break
+        ;;
+    esac
+  done
+
+  if [[ -n "${found_in_base}" ]]; then
+    echo "OK: ${name}:${version}"
+    continue
+  fi
+
+  if [[ "${unexpected_error}" == "true" ]]; then
+    continue
+  fi
+
+  echo "MISSING: ${name}:${version} is not available on Automation Hub." >&2
+  failures=$((failures + 1))
 done
 
 if [[ ${failures} -gt 0 ]]; then
