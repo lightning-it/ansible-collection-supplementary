@@ -1,3 +1,9 @@
+## [1.15.2](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.15.1...v1.15.2) (2026-02-21)
+
+### Bug Fixes
+
+* update ansible.platform dependency management in requirements … ([#81](https://github.com/lightning-it/ansible-collection-supplementary/issues/81)) ([0f29a39](https://github.com/lightning-it/ansible-collection-supplementary/commit/0f29a3934001fdea105a6a8d6dd4f349ec94146e))
+
 ## [1.15.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.15.0...v1.15.1) (2026-02-21)
 
 ### Bug Fixes
