@@ -1,3 +1,9 @@
+## [1.16.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.15.5...v1.16.0) (2026-02-21)
+
+### Features
+
+* enhance token handling and authentication for Automation Hub API ([#100](https://github.com/lightning-it/ansible-collection-supplementary/issues/100)) ([1208c73](https://github.com/lightning-it/ansible-collection-supplementary/commit/1208c73be87a65e15eadc56072e831c6272e533e))
+
 ## [1.15.5](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.15.4...v1.15.5) (2026-02-21)
 
 ### Bug Fixes

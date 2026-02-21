@@ -4,6 +4,9 @@ set -euo pipefail
 requirements_file="${1:-collections/requirements-certified.yml}"
 api_base="${AUTOMATION_HUB_API_BASE:-https://console.redhat.com/api/automation-hub/content/published/v3/plugin/ansible/content/published/collections/index}"
 token="${AUTOMATION_HUB_TOKEN:-}"
+sso_token_url="${AUTOMATION_HUB_SSO_TOKEN_URL:-https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token}"
+sso_client_id="${AUTOMATION_HUB_SSO_CLIENT_ID:-cloud-services}"
+sso_exchange_enabled="${AUTOMATION_HUB_EXCHANGE_OFFLINE_TOKEN:-true}"
 
 if [[ -z "${token}" ]]; then
   echo "AUTOMATION_HUB_TOKEN is required." >&2
@@ -15,17 +18,64 @@ if [[ ! -f "${requirements_file}" ]]; then
   exit 2
 fi
 
-# Normalize token value in case it was pasted with whitespace/newline artifacts.
+# Normalize token formatting.
 token="$(printf '%s' "${token}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 
+# Handle accidentally prefixed secret format:
+# RH_AUTOMATION_HUB_TOKEN:<jwt>
+if [[ "${token}" == RH_AUTOMATION_HUB_TOKEN:* ]]; then
+  token="${token#RH_AUTOMATION_HUB_TOKEN:}"
+  token="$(printf '%s' "${token}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+fi
+
+# If the token looks like a JWT refresh/offline token, try exchanging it for an
+# access token accepted by Automation Hub APIs.
+if [[ "${sso_exchange_enabled}" == "true" && "${token}" == *.*.* ]]; then
+  token_exchange_response="$(mktemp)"
+  exchange_http_code="$(
+    curl -sS \
+      -o "${token_exchange_response}" \
+      -w "%{http_code}" \
+      -X POST \
+      -H "Content-Type: application/x-www-form-urlencoded" \
+      --data-urlencode "grant_type=refresh_token" \
+      --data-urlencode "client_id=${sso_client_id}" \
+      --data-urlencode "refresh_token=${token}" \
+      "${sso_token_url}" || true
+  )"
+
+  if [[ "${exchange_http_code}" == "200" ]]; then
+    exchanged_access_token="$(
+      python3 - <<'PY' "${token_exchange_response}" 2>/dev/null
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as f:
+    data = json.load(f)
+print(data.get("access_token", ""))
+PY
+    )"
+    if [[ -n "${exchanged_access_token}" ]]; then
+      token="${exchanged_access_token}"
+      echo "INFO: Exchanged Red Hat offline token for access token."
+    fi
+  fi
+
+  rm -f "${token_exchange_response}" || true
+fi
+
 declare -a auth_headers=()
+declare -a auth_scheme_names=()
 if [[ "${token}" =~ ^(Bearer|Token)[[:space:]]+.+$ ]]; then
-  # If caller already provided auth scheme, keep it verbatim.
+  # Already includes an auth scheme.
   auth_headers+=("${token}")
+  auth_scheme_names+=("${token%% *}")
 else
-  # Try both common schemes used across Red Hat endpoints.
+  # Try both common schemes used by Red Hat APIs/gateways.
   auth_headers+=("Bearer ${token}")
   auth_headers+=("Token ${token}")
+  auth_scheme_names+=("Bearer" "Token")
 fi
 
 mapfile -t deps < <(
@@ -113,7 +163,7 @@ for dep in "${deps[@]}"; do
       if [[ -n "${resolved_auth_failure_body}" ]]; then
         printf '%s\n' "${resolved_auth_failure_body}" >&2
       fi
-      echo "Tried auth schemes: ${auth_headers[*]}" >&2
+      echo "Tried auth schemes: ${auth_scheme_names[*]}" >&2
       echo "Set RH_AUTOMATION_HUB_TOKEN to a valid token from cloud.redhat.com Automation Hub token management." >&2
       exit 1
     fi
