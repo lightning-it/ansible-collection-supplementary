@@ -1,435 +1,381 @@
-# Agent Specification – Lightning IT Ansible Collections (lit.*)
+# Lightning IT Ansible Collection Agent Guide (lit.*)
 
-You are an AI coding agent working on Lightning IT's Ansible collections under the `lit.*` namespace.
-Your main job is to **create and evolve Ansible roles, Molecule tests, and documentation** in a way that is:
+This file is the single source of truth for creating and evolving roles, Molecule scenarios,
+and role documentation in `ansible-collection-*` repositories under the `lit.*` namespace.
 
-- consistent across all `ansible-collection-*` repositories,
-- compatible with ansible-lint, pre-commit, and Molecule,
-- and friendly to semantic-release and Ansible Galaxy.
+Scope: role code, defaults, tasks, Molecule tests, role READMEs, and collection packaging hygiene.
 
-The primary collections are:
+## 0. Compatibility Baseline
 
-- `ansible-collection-foundational` → `lit.foundational`
-- `ansible-collection-rhel`         → `lit.rhel`
-- `ansible-collection-supplementary`→ `lit.supplementary`
-- `ansible-collection-ocp`          → `lit.ocp`
+1. Content MUST be compatible with `ansible-core` 2.18.x.
+2. Content MUST NOT require Ansible major versions newer than 2.x.
+3. This repository declares `requires_ansible: ">=2.18.0"` in `meta/runtime.yml`.
+4. New changes SHOULD remain compatible with `>=2.18.0` unless explicitly told otherwise.
+5. Prefer `ansible.builtin.*` modules; use external collections only when required.
 
-Always assume the repo you are in follows the pattern:
+## 1. Mandatory Discovery Before Changes
 
-- repo name: `ansible-collection-<name>`
-- collection FQCN: `lit.<name>`
+Before writing or changing role code, you MUST inspect repository reality first:
 
----
+1. `galaxy.yml` for namespace/name/license/tags/dependencies/build_ignore.
+2. `meta/runtime.yml` for collection compatibility.
+3. Lint config: `.ansible-lint`, `ansible-lint.yml`, `.yamllint`, `.pre-commit-config.yaml`.
+4. Existing role patterns under `roles/` (tasks, defaults, assert entrypoints, naming).
+5. Molecule and script behavior under `molecule/` and `scripts/devtools-molecule.sh`.
 
-## 0. Version policy (important)
+If generic guidance conflicts with repository behavior, you MUST prefer repository behavior.
 
-- The org-wide policy is to keep **ansible-core on 2.18.x** across collections and shared CI templates.
-- Do not introduce content that requires a newer ansible-core major version unless explicitly instructed.
-- Prefer `ansible.builtin.*` modules; use other collections only when required.
+## 2. Repository Baseline (This Repo)
 
-If you update workflow variables like `ANSIBLE_CORE_VERSION`, keep them consistent with the policy.
+1. `galaxy.yml` currently uses:
+   1. `namespace: lit`
+   2. `name: supplementary`
+   3. `license: GPL-3.0-only`
+   4. tag set including `modulix`
+2. Linting uses 120-character YAML line length:
+   1. `.yamllint` max line length 120
+   2. `ansible-lint.yml` YAML max line length 120
+3. Pre-commit runs devtools-based hooks for `yamllint`, `ansible-lint`, and Molecule light scenarios.
 
----
+## 3. Role Variable Naming and Mapping Rules
 
-## 1. Repository and collection conventions
+### 3.1 Role-Prefixed Variables (Mandatory)
 
-### 1.1 Deriving the collection name
+1. Variables defined and owned by a role MUST use that role prefix in snake_case.
+2. Format: `<role>_<name>`.
+3. Examples:
+   1. `selinux_state`, `selinux_policy`
+   2. `keycloak_config_skip_apply`, `keycloak_config_tg_dir`
+4. You MUST NOT bypass variable naming rules with lint suppressions (for example `# noqa var-naming`).
 
-Never hardcode the collection name if you can derive it.
+### 3.2 Secrets Variable Naming (Mandatory)
 
-- Repository name: `ansible-collection-rhel` → collection name `rhel` → `lit.rhel`
-- Repository name: `ansible-collection-supplementary` → `lit.supplementary`
+Secret and Vault-related variables MUST also be role-prefixed.
 
-Where helpful in scripts, use the pattern:
+Required pattern (adapt per role):
 
-- `COLLECTION_NAMESPACE` default `lit`
-- `COLLECTION_NAME` derived from `$GITHUB_REPOSITORY` or `basename "$PWD"` by stripping the `ansible-collection-` prefix.
+1. `<role>_use_vault`
+2. `<role>_vault_addr`
+3. `<role>_vault_token`
+4. `<role>_vault_role_id`
+5. `<role>_vault_secret_id`
+6. `<role>_vault_kv_mount`
+7. `<role>_vault_kv_path`
 
-Example bash snippet:
-
-```bash
-ns="${COLLECTION_NAMESPACE:-lit}"
-repo_basename="${GITHUB_REPOSITORY##*/}"
-name="${repo_basename#ansible-collection-}"
-```
-
-### 1.2 Collection metadata (`galaxy.yml`)
-
-- `namespace: lit`
-- `name: <collection-name>` (e.g. `rhel`, `foundational`, `supplementary`, `ocp`)
-- `license`: `GPL-3.0-only`
-- `repository`, `bugs`, `homepage` should point to the GitHub repo.
-
-- `build_ignore` must exclude CI/dev artefacts:
+Example:
 
 ```yaml
-build_ignore:
-  - node_modules
-  - vagrant
-  - .git
-  - .github
-  - .gitignore
-  - .molecule
-  - ansible_collections
-  - infra
-  - "*.terraform*"
-  - "*.tar.gz"
+myrole_use_vault: true
+myrole_vault_addr: "{{ vault_address | default('') }}"
+myrole_vault_token: "{{ vault_token | default('', true) }}"
 ```
 
-- Add collection-specific tags that reflect the domain, and **always include `modulix`**:
-  - `lit.foundational`: `modulix`, `platform`, `automation`
-  - `lit.rhel`: `modulix`, `rhel`, `linux`, `hardening`, `baseline`
-  - `lit.supplementary`: `modulix`, `keycloak`, `terraform`, `security`, `integration`
-  - `lit.ocp`: `modulix`, `openshift`, `ocp`, `kubernetes`, `day2`
+### 3.3 Canonical Mapping Rule (No Semantic Renaming)
 
-### 1.3 Collection dependencies
+This rule is about naming and mapping only. It is NOT a mandate to refactor all existing code at once.
 
-Collections may depend on each other via `galaxy.yml` `dependencies:`.
+1. If a value originates from another role/component, defaults MUST map from the source variable name.
+2. You MUST keep one canonical semantic variable name for a setting.
+3. You MUST NOT introduce secondary aliases that rebrand the same setting.
 
-- `lit.foundational` is the base collection.
-- `lit.rhel`, `lit.supplementary`, `lit.ocp` may depend on `lit.foundational`.
+Bad:
 
-When adding a dependency, always use an explicit version range consistent with your org conventions.
-
-### 1.4 Node / semantic-release (`package.json`)
-
-Each collection repo has a `package.json` like:
-
-```json
-{
-  "name": "ansible-collection-<name>",
-  "version": "0.0.0",
-  "private": true,
-  "description": "...",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/lightning-it/ansible-collection-<name>.git"
-  },
-  "bugs": {
-    "url": "https://github.com/lightning-it/ansible-collection-<name>/issues"
-  },
-  "homepage": "https://github.com/lightning-it/ansible-collection-<name>#readme",
-  "license": "GPL-3.0-only",
-  "devDependencies": {
-    "semantic-release": "^25.0.2",
-    "@semantic-release/changelog": "^6.0.3",
-    "@semantic-release/commit-analyzer": "^13.0.1",
-    "@semantic-release/git": "^10.0.1",
-    "@semantic-release/github": "^9.2.6",
-    "@semantic-release/release-notes-generator": "^14.1.0",
-    "conventional-changelog-conventionalcommits": "^7.0.2"
-  }
-}
+```yaml
+myrole_bootstrap_bucket: "{{ myrole_config_bucket }}"
+myrole_config_bucket: "{{ myrole_bootstrap_bucket }}"
 ```
 
-**Never** change semantic-release configuration unless explicitly asked.
+Good:
 
----
+```yaml
+myrole_bucket: "{{ myrole_bucket | default('vault-bucket', true) }}"
+myrole_bucket_effective: "{{ myrole_bucket | default(otherrole_bucket, true) }}"
+```
 
-## 2. Role layout and style
+For cross-role inputs, preserve producer naming and avoid translation layers.
 
-When the user asks you to create a new role `lit.<collection>.<role_name>`, you must:
+```yaml
+myrole_api_url_effective: "{{ myrole_api_url | default(minio_deploy_api_url_effective, true) }}"
+```
 
-1. Create folder structure:
+### 3.4 Role Type Naming: `_config` vs `_cac` (Mandatory)
+
+1. Use `<role>_config` for host-local/service-local configuration concerns:
+   1. local files/templates
+   2. local service/unit/runtime settings
+   3. config materialization on managed hosts
+2. Use `<role>_cac` for configuration-as-code object orchestration:
+   1. API-driven object management (for example AAP objects)
+   2. declarative object sync/reconciliation flows
+   3. composition of multiple object tasksets
+3. If both patterns are needed, they MUST be split into separate roles (`*_config` and `*_cac`).
+4. Feature role naming for CaC MUST use the suffix `_cac` (example: `aap_cac`).
+5. In `*_cac` roles, taskset entrypoint files MUST use the `cac_` prefix:
+   1. valid: `cac_11_gateway_organizations.yml`
+   2. invalid for tasksets: `playbook_05_gateway_organizations.yml`
+6. Helper/internal tasks in `*_cac` roles MUST NOT use the `cac_` prefix
+   (example: `create_authentication_token.yml`, `delete_authentication_token.yml`).
+
+## 4. Role Structure and Prechecks
+
+### 4.1 Required Role Layout
+
+Roles SHOULD follow:
 
 ```text
-roles/
-  <role_name>/
-    README.md
-    defaults/
-      main.yml
-    tasks/
-      main.yml
-    meta/
-      main.yml
-    # optionally: handlers/, vars/, templates/, files/...
+roles/<role_name>/
+  README.md
+  defaults/main.yml
+  tasks/main.yml
+  tasks/assert.yml
+  meta/main.yml
+  handlers/main.yml        # optional
+  templates/               # optional
+  files/                   # optional
 ```
 
-> Note: Do **not** place Molecule scenarios under the role directory.  
-> All Molecule scenarios live at the collection root under `molecule/`.
+Role directory names MUST be snake_case.
 
-2. Use **idempotent** Ansible code and pass ansible-lint by default.
+### 4.2 Precheck Entrypoint
 
-3. Prefer standard modules:
+1. `tasks/assert.yml` MUST exist for new or actively maintained roles.
+2. `tasks/main.yml` MUST import `assert.yml` first with `tags: always`.
+3. `assert.yml` MUST be side-effect free:
+   1. validate input types/required variables/invariants
+   2. no system mutation
+   3. no Vault/API calls
 
-- `ansible.builtin.*` for core,
-- collection modules only when needed (e.g. `community.general.*`, `ansible.posix.*`).
-
-4. Naming rules:
-
-- Role directory names are **snake_case** (underscores), e.g. `manage_esxi`, `gitops_bootstrap`.
-- Avoid hyphens in role directory names.
-- Molecule scenario directories may be kebab-case, but keep them predictable (see section 3).
-
-5. Place configuration variables in `defaults/main.yml` with:
-
-- clear names prefixed by the role:
-  - `rhel_selinux_state`, `rhel_selinux_policy` for `lit.rhel.selinux`
-  - `keycloak_config_*` for `lit.supplementary.keycloak_config`
-- sensible defaults that are safe for labs/dev by default.
-
-6. `meta/main.yml` must include:
+Required pattern:
 
 ```yaml
 ---
-galaxy_info:
-  role_name: <role_name>
-  namespace: lit
-  author: Lightning IT
-  description: ...
-  company: Lightning IT
-  license: GPL-3.0-only
-  min_ansible_version: "2.18"
-
-  platforms:
-    - name: EL
-      versions:
-        - "9"
-
-  galaxy_tags:
-    - modulix
-    - automation
-    # add role-specific tags (rhel/ocp/security/...)
-
-dependencies: []
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
 ```
 
-7. `roles/<role_name>/README.md` must:
+### 4.3 Precheck Responsibility Boundaries (Critical)
 
-- briefly describe the role,
-- document variables (from `defaults/main.yml`),
-- include at least one usage example:
+1. `assert.yml` for a role MUST validate that role's interface, not another role's internals.
+2. In `roles/<role>/tasks/assert.yml`, assertions SHOULD target `<role>_*` variables only.
+3. Non-deploy roles (`*_ops`, `*_validate`, `*_config`, `*_bootstrap`, `*_backup_restore`) MUST NOT
+   assert raw `*_deploy_*` variables directly.
+4. If a role needs values originating from another role, map them in `defaults/main.yml` into role-prefixed
+   runtime vars, then assert those mapped vars.
+5. `assert.yml` in one role MUST NOT import another role's `tasks/assert.yml` unless explicitly required by
+   repository design and documented in that role README.
+6. Action-based roles MUST use action-scoped assertions:
+   1. `*_action == 'none'`: validate only action enum and basic booleans.
+   2. `restart/reload`: validate service or pod identifiers.
+   3. `status`: validate health/status endpoint vars.
+   4. `upgrade`: validate target image/package inputs.
+
+Bad (cross-role coupling in role assert):
 
 ```yaml
-- name: Example usage
-  hosts: rhel
-  become: true
-
-  roles:
-    - role: lit.rhel.selinux
-      vars:
-        rhel_selinux_state: enforcing
-```
-
----
-
-## 3. Testing: Molecule, heavy vs. light scenarios
-
-Each role should have Molecule coverage. **All Molecule scenarios live at the collection root** in `molecule/`, not inside `roles/`.
-
-### 3.1 Light scenarios
-
-- Stored under `molecule/<scenario_name>/` at the **collection root**.
-- Must be runnable in CI and via:
-
-```bash
-bash scripts/devtools-molecule.sh
-```
-
-- Naming convention:
-
-  - Prefer: `<role-name>-basic` for light scenarios (kebab-case + `-basic`)
-  - Example:
-    - role: `manage_esxi` → scenario dir: `molecule/manage-esxi-basic/`
-    - role: `gitops_bootstrap` → scenario dir: `molecule/gitops-bootstrap-basic/`
-
-- The scenario should:
-  - run the role,
-  - verify at least one assertion (even if it’s a stub),
-  - avoid requiring real infrastructure.
-
-### 3.2 Heavy scenarios
-
-- For Vagrant/RHEL, real services, etc.
-- Scenario names end with `_heavy`, e.g.:
-  - `selinux_rhel9_heavy`
-  - `firewalld_rhel9_heavy`
-
-- Heavy scenarios are **not** run by default in pre-commit or the light CI job.
-
-When you generate Molecule config for a heavy scenario, prefer:
-
-```yaml
-driver:
-  name: delegated
-
-provisioner:
-  name: ansible
-  inventory:
-    host_vars:
-      rhel9_target:
-        ansible_host: "{{ lookup('env', 'RHEL9_SSH_HOST') | default('127.0.0.1') }}"
-        ansible_port: "{{ (lookup('env', 'RHEL9_SSH_PORT') | default('22')) | int }}"
-        ansible_user: "{{ lookup('env', 'RHEL9_SSH_USER') | default('vagrant') }}"
-        ansible_ssh_private_key_file: "{{ lookup('env', 'RHEL9_SSH_KEY') | default('') }}"
-```
-
----
-
-## 4. Execution Environment (EE) policy: use `ee-wunder-ansible-ubi9`
-
-All collection development and playbook runs should default to the **runtime EE**:
-
-- **`quay.io/l-it/ee-wunder-ansible-ubi9:<tag>`** (preferred for distribution)
-- or `ee-wunder-ansible-ubi9:local` for local iteration
-
-Do **not** reference the devtools container as the default execution image for collections and ansible-navigator runs.
-The devtools container may still exist for specialized CI tooling, but the standard execution environment is:
-
-- `ee-wunder-ansible-ubi9`
-
-### 4.1 ansible-navigator expectations
-
-- The EE should support:
-  - `ansible`, `ansible-galaxy`, `ansible-runner`
-  - `/runner` layout (AAP-compatible)
-  - `linux/amd64` and `linux/arm64` builds (multi-arch)
-
-Example `ansible-navigator.yml` snippet (reference only):
-
-```yaml
-ansible-navigator:
-  execution-environment:
-    enabled: true
-    container-engine: docker
-    image: quay.io/l-it/ee-wunder-ansible-ubi9:vX.Y.Z
-    pull:
-      policy: tag
-  mode: stdout
-  playbook-artifact:
-    enable: false
-```
-
----
-
-## 5. Devtools integration
-
-There may still be helper scripts, but tooling should be compatible with running inside the EE.
-
-If scripts wrap a container runner, the default image for running Ansible-related actions should be `ee-wunder-ansible-ubi9` unless the task explicitly needs dev-only tooling.
-
----
-
-## 6. Secrets & Vault optionality (must-follow pattern)
-
-Many roles will eventually run “Vault-first”, but must also run **100% without Vault** if configured that way.
-
-### 6.1 Goals
-
-- Vault is **optional**: role runs without Vault when disabled/unavailable.
-- No hard Vault dependency during variable loading.
-- Clear failure messages if secrets are missing in non-Vault mode.
-
-### 6.2 Rules (do this, always)
-
-1. **Never put Vault lookups in `defaults/main.yml` or `vars/main.yml`.**  
-   This is critical: Ansible may evaluate these earlier than expected.
-
-2. Add an explicit flag and compute an effective value:
-
-```yaml
-# defaults/main.yml
-use_vault: false              # safe default: runs without Vault
-use_vault_mode: "explicit"    # optional: explicit|auto
-
-vault_addr: ""
-vault_token: ""
-```
-
-```yaml
-# tasks/main.yml (or tasks/preflight.yml)
-- name: Determine whether Vault is effectively enabled
-  ansible.builtin.set_fact:
-    use_vault_effective: >-
-      {{
-        (use_vault | bool) or
-        (
-          (use_vault_mode | default('explicit')) == 'auto'
-          and (vault_addr | default('') | length > 0)
-          and (vault_token | default('') | length > 0)
-        )
-      }}
-```
-
-3. Keep Vault logic in a dedicated task file and include it conditionally:
-
-```yaml
-- name: Load secrets from Vault (only if enabled)
-  ansible.builtin.include_tasks: vault.yml
-  when: use_vault_effective | bool
-```
-
-4. Provide a non-Vault fallback that uses vars or environment variables:
-
-```yaml
-# defaults/main.yml
-myrole_admin_password: "{{ lookup('env', 'MYROLE_ADMIN_PASSWORD') | default('', true) }}"
-```
-
-```yaml
-# tasks/secrets.yml
-- name: Assert required secrets are provided when Vault is disabled
+- name: Ensure nginx_ops variables are valid
   ansible.builtin.assert:
     that:
-      - myrole_admin_password is defined
-      - myrole_admin_password | length > 0
-    fail_msg: "myrole_admin_password must be provided when use_vault=false"
-  when: not (use_vault_effective | bool)
+      - nginx_deploy_systemd_unit_name | length > 0
+      - nginx_deploy_pod_name | length > 0
 ```
 
-### 6.3 Documentation requirement
+Good (mapped in defaults, asserted in role namespace):
 
-Every role that supports Vault must document:
+```yaml
+# defaults/main.yml
+nginx_ops_systemd_unit_name: "{{ nginx_deploy_systemd_unit_name | default('', true) }}"
+nginx_ops_pod_name: "{{ nginx_deploy_pod_name | default('', true) }}"
 
-- `use_vault` / `use_vault_mode`
-- required Vault connection vars (`vault_addr`, auth vars)
-- required non-Vault vars (what must be set when Vault is off)
+# tasks/assert.yml
+- name: Ensure restart variables are set for systemd mode
+  ansible.builtin.assert:
+    that:
+      - nginx_ops_systemd_unit_name | default('', true) | trim | length > 0
+  when:
+    - nginx_ops_action == 'restart'
+    - nginx_ops_manage_systemd | bool
+```
 
----
+7. Foundational/helper roles MUST only assert variables required for their own task scope. Do not enforce
+   endpoint/runtime vars in foundational prechecks if the role only resolves credentials.
 
-## 7. CI and semantic-release
+### 4.4 FQCN Modules
 
-You must write CI-ready Ansible code and tests:
+1. Tasks MUST use FQCNs (`ansible.builtin.*` or collection FQCNs).
+2. Example:
 
-- Linting is done via GitHub Actions and pre-commit with:
-  - `yamllint`,
-  - `ansible-lint`,
-  - Molecule (for light scenarios),
-  - `actionlint` for workflows,
-  - `renovate-config-validator` for `renovate.json` where present.
+```yaml
+- name: Create config directory
+  ansible.builtin.file:
+    path: /srv/example
+    state: directory
+    mode: '0750'
+```
 
-- Release is done via `semantic-release`:
-  - Do not modify CI workflows or `.releaserc` unless asked.
-  - Assume conventional commits (`feat:`, `fix:`, `chore:`, `docs:`).
-  - Do not change versions manually in `galaxy.yml` or `package.json` unless explicitly instructed.
+## 5. Defaults and Derivations
 
----
+1. Static defaults and pure derivations SHOULD live in `defaults/main.yml`.
+2. Use derived variables such as `*_effective`, `*_enabled`, `*_manage_*` where helpful.
+3. Do not use `set_fact` for values that can be computed in defaults.
+4. Runtime discovery from remote state, commands, APIs, or Vault MUST stay in tasks, not defaults.
 
-## 8. How to respond to user requests (expected outputs)
+## 5.1 Public Reusability and Environment Neutrality
 
-When the user asks you to:
+1. Roles MUST be publicly reusable and environment-agnostic by default.
+2. Role code (`defaults/`, `tasks/`, `templates/`, `README.md`) MUST NOT hardcode environment-specific values.
+3. Environment-specific variables are NOT permitted in role defaults, including:
+   1. internal domains
+   2. inventory hostnames or FQDNs tied to one environment
+   3. environment-only URLs, tokens, or credentials
+4. Use neutral defaults and placeholders, then inject real values from inventory/group vars/playbooks.
+5. If a role needs an address/domain, expose a generic role variable and keep the default generic or empty.
+6. Environment specialization belongs in consumer inventory/playbooks, not reusable role defaults.
 
-### “Create a new role X in this collection”
-You must:
+Bad:
 
-- create `roles/X/` with `defaults`, `tasks`, `meta`, `README`,
-- add a Molecule scenario `molecule/<x-kebab>-basic/`,
-- wire the scenario to run the role and verify at least one assertion.
+```yaml
+myrole_server_name: "vault.prd.dmz.corp.l-it.io"
+myrole_api_url: "https://vault01.prd.dmz.corp.l-it.io:8200"
+```
 
-### “Add a heavy Molecule scenario to test on RHEL9 via Vagrant”
-You must:
+Good:
 
-- create `molecule/<role>_rhel9_heavy/` using delegated driver,
-- read SSH details via env vars,
-- create a dedicated helper script for that scenario,
-- ensure it is **not** run by the light CI job.
+```yaml
+myrole_server_name: "vault.example.com"
+myrole_api_url: ""
+myrole_api_url_effective: >-
+  {{
+    myrole_api_url
+    if (myrole_api_url | default('', true) | length > 0)
+    else ('https://' ~ myrole_server_name)
+  }}
+```
 
-### “Make this role usable in another collection”
-You must:
+## 6. Idempotency and Check Mode
 
-- keep role behavior generic,
-- do not hardwire repo-local assumptions,
-- keep external dependencies explicit and documented.
+1. Prefer idempotent modules over `shell`/`command`.
+2. If `shell`/`command` is required, you MUST control idempotency with at least one:
+   1. `creates` or `removes`
+   2. `changed_when` and `failed_when`
+   3. explicit state pre-check + conditional apply
+3. Read-only tasks MUST set `changed_when: false`.
+4. Check mode behavior MUST be explicit for mutating tasks that cannot run in check mode.
 
-Always preserve existing patterns and style in the repo you’re working in.
-If something is unclear, infer from existing roles and tests rather than introducing a new pattern.
+Example:
+
+```yaml
+- name: Read current state
+  ansible.builtin.command: mytool status
+  register: myrole_status
+  changed_when: false
+
+- name: Apply state when needed
+  ansible.builtin.command: mytool apply
+  when:
+    - not ansible_check_mode
+    - myrole_status.stdout != 'ready'
+  changed_when: true
+```
+
+## 7. Secrets and Logging Policy
+
+1. Secrets MUST NOT be printed in debug output.
+2. Tasks handling secrets MUST set `no_log: true`.
+3. Vault responses and secret payloads MUST NOT be logged.
+4. Secret values MUST NOT be written to artifacts, generated docs, or committed test output.
+5. If failure output can expose secrets, task-level `no_log: true` MUST still be used.
+
+### 7.1 Secret Source of Truth and Password Lifecycle (Mandatory)
+
+1. Each environment MUST have exactly one declared source of truth for runtime passwords:
+   1. external secret manager (for example HashiCorp Vault), or
+   2. inventory variables (preferably encrypted via Ansible Vault).
+2. Password generation is allowed only when the value can be persisted immediately to the selected source of truth.
+3. Generating a password without persistence is NOT allowed for deployment flows.
+4. If a required password is missing and cannot be persisted, the role/play MUST fail fast.
+5. Secret resolution order MUST be deterministic and documented:
+   1. explicit role input variable,
+   2. secret manager read (when configured),
+   3. inventory-provided value,
+   4. generate and persist to configured backend,
+   5. fail if none of the above is possible.
+6. Rotation MUST be explicit (for example action-driven), and MUST update source of truth first, then apply change to the target service.
+7. Idempotency requirement: repeated runs with unchanged inputs MUST resolve the same effective secret values.
+8. Local file cache may be used only as an explicitly documented lab/offline fallback and MUST NOT replace a declared production source of truth.
+
+Example:
+
+```yaml
+- name: Read credentials from Vault
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ myrole_vault_addr }}"
+    token: "{{ myrole_vault_token }}"
+    engine_mount_point: "{{ myrole_vault_kv_mount }}"
+    path: "{{ myrole_vault_kv_path }}"
+  register: myrole_secret
+  no_log: true
+```
+
+## 8. Molecule Standards
+
+### 8.1 Location
+
+Molecule scenarios MUST live at repository root under `molecule/`.
+
+### 8.2 Naming (Match This Repo)
+
+1. Existing light scenarios use kebab-case with `-basic` suffix:
+   1. `minio-deploy-basic`, `nginx-config-basic`, `vault-basic`
+2. Do NOT rename existing scenarios.
+3. New heavy scenarios MUST end in `_heavy` so `scripts/devtools-molecule.sh` skips them.
+4. Recommended new heavy pattern: `<role-kebab>-<purpose>_heavy`.
+
+### 8.3 Execution Behavior
+
+1. `scripts/devtools-molecule.sh` runs all root scenarios except names ending in `_heavy`.
+2. A single scenario is run with:
+
+```bash
+scripts/devtools-molecule.sh minio-config-basic
+```
+
+3. Keep light scenarios runnable in devtools and pre-commit without external infrastructure.
+
+## 9. Collection Packaging and `build_ignore`
+
+1. Keep `build_ignore` minimal and justified by real repository artifacts.
+2. This repo already ignores common paths (for example `.git`, `.github`, `.molecule`, `.ansible`, `infra`).
+3. Recommended additions, when relevant and not already present:
+   1. `molecule/` (root scenarios should not ship in release tarballs)
+   2. `.venv/`, `.tox/`
+   3. `.cache/`, `.pytest_cache/`
+   4. `.ansible/`
+   5. `dist/`, `build/`
+
+## 10. Role README Standard
+
+Each role `README.md` MUST use these section headers in this order:
+
+1. `## Requirements`
+2. `## Variables`
+3. `## Dependencies`
+4. `## Example Playbook`
+5. `## License`
+6. `## Author`
+
+Variables section SHOULD point to `defaults/main.yml` and highlight key inputs.
+
+## 11. Definition of Done
+
+Before finalizing, confirm all items below:
+
+1. `pre-commit run --all-files` passes, or failures are explicitly explained.
+2. `ansible-lint` passes under repo devtools entrypoints.
+3. Molecule light scenarios pass (`scripts/devtools-molecule.sh` or scoped equivalent).
+4. Documentation is updated for changed role interfaces.
+5. No CI, workflow, Renovate, or semantic-release config changes were made unless requested.
+6. Role prechecks are action-scoped and role-scoped:
+   1. no cross-role raw var assertions in `assert.yml`
+   2. no duplicate copy-paste assert blocks
+   3. required foreign inputs mapped in `defaults/main.yml` with role prefix
