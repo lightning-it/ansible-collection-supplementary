@@ -3,6 +3,7 @@ aap_cac_collections_requirements: "{{ role_path | dirname | dirname }}/collectio
 
 # Gateway API endpoint used by token helper tasks.
 aap_cac_gateway_hostname: "https://{{ inventory_hostname }}"
+aap_cac_token_description: "aap-cac-token"
 
 # Object reconcile tuning.
 # Set to a specific org scope (string/list as expected by object_diff role).

@@ -1,14 +1,37 @@
 ---
-- name: 'create_authentication_token | Block: Get authentication token'
-  when: 'aap_token is not defined'
+- name: create_authentication_token | Create AAP authentication token
+  when: aap_token is not defined
+  no_log: true
   block:
-    - name: 'create_authentication_token | Get authentication token for the future requests'
+    - name: create_authentication_token | Request token
       ansible.platform.token:
-        gateway_hostname: '{{ aap_cac_gateway_hostname }}'
-        gateway_username: '{{ aap_username }}'
-        gateway_password: '{{ aap_password }}'
-        gateway_validate_certs: '{{ aap_validate_certs }}'
-        description: '{{ aap_token_description }}'
-        scope: 'write'
-        state: 'present'
-      register: '__t_token'
+        gateway_hostname: "{{ aap_cac_gateway_hostname }}"
+        gateway_username: "{{ aap_username }}"
+        gateway_password: "{{ aap_password }}"
+        gateway_validate_certs: "{{ aap_validate_certs }}"
+        description: "{{ aap_cac_token_description }}"
+        scope: write
+        state: present
+      register: __aap_cac_token_create
+
+    - name: create_authentication_token | Store token fact
+      ansible.builtin.set_fact:
+        aap_token: >-
+          {{
+            __aap_cac_token_create.token
+            | default(
+              __aap_cac_token_create.json.token
+              | default(
+                __aap_cac_token_create.value
+                | default('')
+              ),
+              true
+            )
+          }}
+
+    - name: create_authentication_token | Require non-empty token
+      ansible.builtin.assert:
+        that:
+          - aap_token | default('', true) | trim | length > 0
+        fail_msg: >-
+          Failed to resolve AAP token value from ansible.platform.token module output.

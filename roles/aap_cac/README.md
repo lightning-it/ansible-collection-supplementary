@@ -14,6 +14,7 @@ See `roles/aap_cac/defaults/main.yml`.
 Key variables:
 - `aap_cac_collections_requirements`
 - `aap_cac_gateway_hostname`
+- `aap_cac_token_description`
 - `aap_cac_object_reconcile_orgs`
 - `aap_cac_object_reconcile_secure_logging`
 - `aap_cac_object_reconcile_protect_not_empty_orgs`
