@@ -75,11 +75,9 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
     echo "Limiting to scenario: ${scenario_filter}"
   fi
 
-  echo "DEBUG: docker connectivity check inside ee-wunder-devtools-ubi9..."
-  # `docker info` can fail against rootless Podman sockets even when
-  # container execution works; use `docker version` as the compatibility probe.
-  if ! docker version >/dev/null 2>&1; then
-    echo "ERROR: docker version failed inside devtools container."
+  echo "DEBUG: docker info inside ee-wunder-devtools-ubi9..."
+  if ! docker info >/dev/null 2>&1; then
+    echo "ERROR: docker info failed inside devtools container."
     exit 1
   fi
 
