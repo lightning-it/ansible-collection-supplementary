@@ -75,6 +75,31 @@ vault-basic, GitHub Actions lint, Renovate config validation):
 pre-commit run --all-files
 ```
 
+Container-based execution (recommended):
+
+```bash
+H="$HOME/.cache/wunder-home"
+mkdir -p "$H/.docker"
+
+podman run --rm -it \
+  --userns keep-id --user "$(id -u):$(id -g)" \
+  --security-opt label=disable \
+  -v "$PWD":"$PWD":z \
+  -v "$HOME/.cache":"$HOME/.cache":z \
+  -v "/run/user/$(id -u)/podman/podman.sock":"/run/user/$(id -u)/podman/podman.sock" \
+  -w "$PWD" \
+  -e HOME="$H" \
+  -e DOCKER_CONFIG="$H/.docker" \
+  -e XDG_CACHE_HOME="$HOME/.cache" \
+  -e PRE_COMMIT_HOME="$HOME/.cache/pre-commit" \
+  -e DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock" \
+  -e GIT_CONFIG_COUNT=1 \
+  -e GIT_CONFIG_KEY_0=safe.directory \
+  -e GIT_CONFIG_VALUE_0="$PWD" \
+  quay.io/l-it/ee-wunder-devtools-ubi9:latest \
+  pre-commit run --all-files
+```
+
 This will:
 
 - run `yamllint` inside the `ee-wunder-devtools-ubi9` container,

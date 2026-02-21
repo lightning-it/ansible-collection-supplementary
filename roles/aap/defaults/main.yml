@@ -33,19 +33,16 @@ aap_config_file_path_default: "{{ aap_config_dir_default }}/aap-config.yml"
 # Shared admin password resolution trigger.
 # Auto-derived from role intent:
 # - deploy run enabled
-# - config run enabled+managed+shared-password mode
-# - ops rotate_password action
+# - ops action requires resolved passwords
 aap_resolve_admin_passwords: >-
   {{
     (aap_deploy_enabled | default(false, true) | bool)
     or (
-      (aap_config_enabled | default(false, true) | bool)
-      and (aap_config_manage | default(true, true) | bool)
-      and (aap_config_use_shared_admin_passwords | default(false, true) | bool)
-    )
-    or (
       (aap_ops_enabled | default(false, true) | bool)
-      and ((aap_ops_action | default('none', true)) == 'rotate_password')
+      and (
+        ((aap_ops_action | default('none', true)) == 'rotate_password')
+        or ((aap_ops_action | default('none', true)) == 'sync_hub_password')
+      )
     )
   }}
 
@@ -72,11 +69,29 @@ aap_admin_passwords_source_of_truth: >-
 aap_admin_password: "{{ aap_deploy_admin_password | default('', true) | string | trim }}"
 
 # Optional explicit passwords (compat: consume existing aap_deploy_* vars when present)
-aap_gateway_admin_password: "{{ aap_deploy_gateway_admin_password | default(aap_admin_password, true) | string | trim }}"
-aap_controller_admin_password: "{{ aap_deploy_controller_admin_password | default(aap_admin_password, true) | string | trim }}"
+aap_gateway_admin_password: >-
+  {{
+    aap_deploy_gateway_admin_password
+    | default(aap_admin_password, true)
+    | string
+    | trim
+  }}
+aap_controller_admin_password: >-
+  {{
+    aap_deploy_controller_admin_password
+    | default(aap_admin_password, true)
+    | string
+    | trim
+  }}
 aap_hub_admin_password: "{{ aap_deploy_hub_admin_password | default(aap_admin_password, true) | string | trim }}"
 aap_eda_admin_password: "{{ aap_deploy_eda_admin_password | default(aap_admin_password, true) | string | trim }}"
-aap_postgresql_admin_password: "{{ aap_deploy_postgresql_admin_password | default(aap_admin_password, true) | string | trim }}"
+aap_postgresql_admin_password: >-
+  {{
+    aap_deploy_postgresql_admin_password
+    | default(aap_admin_password, true)
+    | string
+    | trim
+  }}
 
 # Effective shared passwords (resolved at runtime in tasks/resolve_admin_passwords.yml)
 aap_gateway_admin_password_effective: "{{ aap_gateway_admin_password | default('', true) }}"
@@ -93,7 +108,8 @@ aap_admin_passwords_generate: >-
     | default(aap_admin_passwords_source_of_truth == 'vault')
   }}
 aap_admin_passwords_generated_length: "{{ aap_deploy_passwords_generated_length | default(32, true) }}"
-aap_admin_passwords_generated_chars: "{{ aap_deploy_passwords_generated_chars | default('ascii_letters,digits', true) }}"
+aap_admin_passwords_generated_chars: >-
+  {{ aap_deploy_passwords_generated_chars | default('ascii_letters,digits', true) }}
 aap_admin_passwords_read_from_vault: >-
   {{
     aap_deploy_passwords_read_from_vault
@@ -117,11 +133,27 @@ aap_admin_passwords_vault_kv_mount: >-
     aap_deploy_passwords_vault_kv_mount
     | default(vault_engine_mount_point | default('stage-2c', true), true)
   }}
-aap_admin_passwords_vault_kv_path: "{{ aap_deploy_passwords_vault_kv_path | default(inventory_hostname ~ '/aap/deploy/admin_passwords', true) }}"
-aap_admin_passwords_vault_validate_certs: "{{ aap_deploy_passwords_vault_validate_certs | default(vault_validate_certs | default(true)) }}"
+aap_admin_passwords_vault_kv_path: >-
+  {{
+    aap_deploy_passwords_vault_kv_path
+    | default(inventory_hostname ~ '/aap/deploy/admin_passwords', true)
+  }}
+aap_admin_passwords_vault_validate_certs: >-
+  {{
+    aap_deploy_passwords_vault_validate_certs
+    | default(vault_validate_certs | default(true))
+  }}
 aap_admin_passwords_vault_token: "{{ vault_token | default('', true) }}"
-aap_admin_passwords_vault_role_id: "{{ aap_deploy_passwords_vault_role_id | default(ansible_hashi_vault_role_id | default('', true), true) }}"
-aap_admin_passwords_vault_secret_id: "{{ aap_deploy_passwords_vault_secret_id | default(ansible_hashi_vault_secret_id | default('', true), true) }}"
+aap_admin_passwords_vault_role_id: >-
+  {{
+    aap_deploy_passwords_vault_role_id
+    | default(ansible_hashi_vault_role_id | default('', true), true)
+  }}
+aap_admin_passwords_vault_secret_id: >-
+  {{
+    aap_deploy_passwords_vault_secret_id
+    | default(ansible_hashi_vault_secret_id | default('', true), true)
+  }}
 
 # Vault auth helper vars (derived)
 aap_admin_passwords_vault_auth_token: "{{ aap_admin_passwords_vault_token | default('', true) | trim }}"

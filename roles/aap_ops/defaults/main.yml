@@ -9,6 +9,27 @@ aap_ops_packages_effective: "{{ aap_packages_effective | default([], true) }}"
 aap_ops_health_url: "{{ aap_health_url | default('', true) }}"
 aap_ops_validate_certs: "{{ aap_validate_certs | default(true, true) }}"
 
+# sync_hub_password action (aap-config.yml)
+aap_ops_sync_hub_password_file_path: >-
+  {{
+    aap_config_file_path
+    | default(
+        aap_config_file_path_default
+        | default('/etc/ansible-automation-platform/aap-config.yml', true),
+        true
+      )
+  }}
+aap_ops_sync_hub_password_value: >-
+  {{
+    aap_hub_admin_password_effective
+    | default(aap_deploy_hub_admin_password_effective | default('', true), true)
+  }}
+aap_ops_sync_hub_password_key: "automationhub_admin_password"
+aap_ops_sync_hub_password_owner: "{{ aap_config_owner | default('root', true) }}"
+aap_ops_sync_hub_password_group: "{{ aap_config_group | default('root', true) }}"
+aap_ops_sync_hub_password_mode: "{{ aap_config_mode | default('0640', true) }}"
+aap_ops_sync_hub_password_no_log: true
+
 # rotate_password action (controller admin)
 aap_ops_rotate_controller_username: "admin"
 aap_ops_rotate_controller_current_password: >-

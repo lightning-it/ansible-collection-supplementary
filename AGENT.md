@@ -98,6 +98,24 @@ For cross-role inputs, preserve producer naming and avoid translation layers.
 myrole_api_url_effective: "{{ myrole_api_url | default(minio_deploy_api_url_effective, true) }}"
 ```
 
+### 3.4 Role Type Naming: `_config` vs `_cac` (Mandatory)
+
+1. Use `<role>_config` for host-local/service-local configuration concerns:
+   1. local files/templates
+   2. local service/unit/runtime settings
+   3. config materialization on managed hosts
+2. Use `<role>_cac` for configuration-as-code object orchestration:
+   1. API-driven object management (for example AAP objects)
+   2. declarative object sync/reconciliation flows
+   3. composition of multiple object tasksets
+3. If both patterns are needed, they MUST be split into separate roles (`*_config` and `*_cac`).
+4. Feature role naming for CaC MUST use the suffix `_cac` (example: `aap_cac`).
+5. In `*_cac` roles, taskset entrypoint files MUST use the `cac_` prefix:
+   1. valid: `cac_11_gateway_organizations.yml`
+   2. invalid for tasksets: `playbook_05_gateway_organizations.yml`
+6. Helper/internal tasks in `*_cac` roles MUST NOT use the `cac_` prefix
+   (example: `create_authentication_token.yml`, `delete_authentication_token.yml`).
+
 ## 4. Role Structure and Prechecks
 
 ### 4.1 Required Role Layout

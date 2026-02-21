@@ -43,7 +43,9 @@
     cmd: "loginctl enable-linger {{ aap_deploy_install_user }}"
   when:
     - not (aap_deploy_skip_if_installed | bool and aap_deploy_install_marker.stat.exists)
-    - (aap_deploy_install_user_linger_status.rc != 0) or ((aap_deploy_install_user_linger_status.stdout | trim) != 'yes')
+    - >-
+      (aap_deploy_install_user_linger_status.rc != 0)
+      or ((aap_deploy_install_user_linger_status.stdout | trim) != 'yes')
 
 - name: Ensure install user systemd manager is started
   ansible.builtin.systemd:

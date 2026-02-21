@@ -1,9 +1,9 @@
 ---
 galaxy_info:
-  role_name: aap_config
+  role_name: aap_cac
   namespace: lit
-  author: René Osorio
-  description: Manage AAP configuration file content.
+  author: Rene Osorio
+  description: Provide AAP configuration-as-code project assets.
   company: Lightning IT
   license: GPL-3.0-only
   min_ansible_version: "2.18"
@@ -14,7 +14,5 @@ galaxy_info:
   galaxy_tags:
     - modulix
     - aap
-    - automation
-    - configuration
 
 dependencies: []

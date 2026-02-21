@@ -110,6 +110,33 @@
         - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
         - not ansible_check_mode
 
+- name: Sync automation hub admin password in aap-config.yml
+  when:
+    - aap_ops_enabled | bool
+    - aap_ops_action == 'sync_hub_password'
+  tags:
+    - ops
+    - sync_hub_password
+  block:
+    - name: Ensure AAP config directory exists
+      ansible.builtin.file:
+        path: "{{ aap_ops_sync_hub_password_file_path | dirname }}"
+        state: directory
+        owner: "{{ aap_ops_sync_hub_password_owner }}"
+        group: "{{ aap_ops_sync_hub_password_group }}"
+        mode: '0755'
+
+    - name: Ensure automation hub password is set in aap-config.yml
+      ansible.builtin.lineinfile:
+        path: "{{ aap_ops_sync_hub_password_file_path }}"
+        regexp: "^{{ aap_ops_sync_hub_password_key | regex_escape }}\\s*:"
+        line: "{{ aap_ops_sync_hub_password_key }}: {{ aap_ops_sync_hub_password_value | to_json }}"
+        create: true
+        owner: "{{ aap_ops_sync_hub_password_owner }}"
+        group: "{{ aap_ops_sync_hub_password_group }}"
+        mode: "{{ aap_ops_sync_hub_password_mode }}"
+      no_log: "{{ aap_ops_sync_hub_password_no_log }}"
+
 - name: Rotate AAP controller admin password
   ansible.builtin.include_tasks: rotate_password.yml
   when:

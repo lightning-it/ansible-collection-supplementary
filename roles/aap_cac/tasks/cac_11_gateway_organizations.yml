@@ -1,0 +1,24 @@
+---
+# CaC taskset: Configure Gateway Organizations via AAP CaC role task set.
+- name: Configure Gateway Organizations via AAP CaC role task set
+  tags:
+    - organizations
+  block:
+    - name: Include tasks to create an authentication token
+      ansible.builtin.include_tasks:
+        file: "{{ role_path }}/tasks/create_authentication_token.yml"
+      when: aap_token is not defined
+
+    - name: Configure Gateway Organizations
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        aap_configuration_dispatcher_roles:
+          - role: gateway_organizations
+            var: aap_organizations
+            tags: organizations
+
+    - name: Include tasks to delete the used authentication token
+      ansible.builtin.include_tasks:
+        file: "{{ role_path }}/tasks/delete_authentication_token.yml"
+      when: aap_token is defined

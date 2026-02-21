@@ -13,6 +13,14 @@
       "datasourceTemplate": "galaxy-collection",
       "packageNameTemplate": "lit.foundational",
       "versioningTemplate": "pep440"
+    },
+    {
+      "description": "Ansible Galaxy collection versions in collections/requirements.yml",
+      "fileMatch": ["^collections/requirements\\.yml$"],
+      "matchStrings": [
+        "-\\s*name:\\s*(?<depName>[a-z0-9_]+\\.[a-z0-9_]+)[^\\n]*\\n\\s*version:\\s*\"?(?<currentValue>[^\"\\n]+)\"?"
+      ],
+      "datasourceTemplate": "galaxy-collection"
     }
   ]
 }

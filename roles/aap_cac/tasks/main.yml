@@ -1,0 +1,19 @@
+---
+- name: Discover AAP CaC tasksets
+  # Exclude composite orchestration entrypoint from full run to avoid duplicate execution.
+  ansible.builtin.set_fact:
+    aap_cac_taskset_files: >-
+      {{
+        query('ansible.builtin.fileglob', role_path ~ '/tasks/cac_*.yml')
+        | map('basename')
+        | reject('in', ['cac_34_sync_hub.yml'])
+        | sort
+      }}
+  changed_when: false
+  tags: always
+
+- name: Execute AAP CaC tasksets
+  ansible.builtin.include_tasks: "{{ role_path }}/tasks/{{ item }}"
+  loop: "{{ aap_cac_taskset_files | default([]) }}"
+  loop_control:
+    label: "{{ item }}"

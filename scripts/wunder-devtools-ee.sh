@@ -8,6 +8,7 @@ HOST_HOME_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/wunder-devtools-ee/home"
 mkdir -p "$HOST_HOME_CACHE"
 
 DOCKER_ARGS=(
+  --security-opt label=disable
   -v "$PWD":/workspace
   -w /workspace
   -e HOME="${CONTAINER_HOME}"

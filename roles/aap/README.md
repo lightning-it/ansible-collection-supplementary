@@ -30,8 +30,8 @@ Shared admin password behavior:
 - Optional foundational flow for gateway/controller/hub/eda/postgresql.
 - Resolution is auto-enabled when one of these applies:
   - `aap_deploy_enabled=true`
-  - `aap_config_enabled=true` and `aap_config_manage=true` and `aap_config_use_shared_admin_passwords=true`
   - `aap_ops_enabled=true` and `aap_ops_action=rotate_password`
+  - `aap_ops_enabled=true` and `aap_ops_action=sync_hub_password`
 - `aap_resolve_admin_passwords` can still be overridden explicitly when needed.
 - Source of truth can be explicit via `aap_admin_passwords_source_of_truth` (`inventory` or `vault`).
 - By default it auto-selects `vault` when Vault configuration/auth is available, otherwise `inventory`.

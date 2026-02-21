@@ -4,3 +4,10 @@
 exclude_paths:
   - collections/
   - .pre-commit-config.yaml
+
+# Transitional warning-only rules while role refactors are in progress.
+warn_list:
+  - var-naming[no-role-prefix]
+  - key-order[task]
+  - partial-become[task]
+  - no-changed-when

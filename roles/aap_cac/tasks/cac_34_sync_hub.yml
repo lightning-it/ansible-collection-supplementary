@@ -1,0 +1,23 @@
+---
+# CaC taskset: Synchronize Hub remotes/repositories (composite entrypoint).
+- name: Synchronize the Private Automation Hub collection repositories
+  block:
+    - name: Set fact to keep the OAUTH token
+      ansible.builtin.set_fact:
+        keep_oauth_token: true
+    - name: Include tasks to create an authentication token
+      ansible.builtin.include_tasks:
+        file: '{{ role_path }}/tasks/create_authentication_token.yml'
+      when: aap_token is not defined
+- name: Include CaC taskset to configure Private Automation Hub remotes
+  ansible.builtin.include_role:
+    name: lit.supplementary.aap_cac
+    tasks_from: cac_30_hub_collection_remotes.yml
+- name: Include CaC taskset to configure Private Automation Hub repositories
+  ansible.builtin.include_role:
+    name: lit.supplementary.aap_cac
+    tasks_from: cac_31_hub_collection_repositories.yml
+- name: Include CaC taskset to synchronize Private Automation Hub repositories
+  ansible.builtin.include_role:
+    name: lit.supplementary.aap_cac
+    tasks_from: cac_32_hub_collection_repository_sync.yml
