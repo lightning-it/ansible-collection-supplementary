@@ -8,7 +8,6 @@ VERSION_RE = re.compile(
     r"^(?P<indent>\s*)version\s*:\s*(?P<quote>['\"]?)(?P<value>[^'\"\n#]*)(?P=quote)(?P<comment>\s+#.*)?$"
 )
 
-
 def main() -> int:
     if len(sys.argv) < 2:
         print("Usage: bump_galaxy_version.py <version>", file=sys.stderr)
