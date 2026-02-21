@@ -1,0 +1,16 @@
+---
+- name: 'delete_authentication_token | Delete the authentication token used'
+  ansible.platform.token:
+    gateway_hostname: '{{ aap_cac_gateway_hostname }}'
+    gateway_username: '{{ aap_username }}'
+    gateway_password: '{{ aap_password }}'
+    gateway_validate_certs: '{{ aap_validate_certs }}'
+    existing_token: '{{ aap_token }}'
+    state: 'absent'
+  register: '__t_token'
+  no_log: true
+  when:
+    - 'aap_token is defined'
+    - >-
+        keep_oauth_token is not defined
+        or not keep_oauth_token

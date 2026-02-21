@@ -1,0 +1,14 @@
+---
+# CaC taskset: Configure Ansible Automation Platform (Gateway) Users.
+- name: Configure Ansible Automation Platform (Gateway) Users
+  block:
+    - name: Run role infra.aap_configuration.dispatch
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        aap_configuration_dispatcher_roles:
+          - role: gateway_users
+            var: aap_user_accounts
+            tags: gateway_users
+      tags:
+        - gateway_users

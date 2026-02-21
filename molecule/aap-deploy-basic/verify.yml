@@ -1,9 +1,42 @@
 ---
-- name: Verify aap_deploy converge
+- name: Verify aap_deploy template rendering
   hosts: localhost
   gather_facts: false
   tasks:
-    - name: Assert role ran
+    - name: Read rendered growth inventory
+      ansible.builtin.slurp:
+        path: /tmp/molecule-aap-deploy-growth/setup/inventory
+      register: aap_deploy_growth_inventory
+
+    - name: Read rendered enterprise inventory
+      ansible.builtin.slurp:
+        path: /tmp/molecule-aap-deploy-enterprise/setup/inventory
+      register: aap_deploy_enterprise_inventory
+
+    - name: Decode growth inventory
+      ansible.builtin.set_fact:
+        aap_deploy_growth_inventory_text: "{{ aap_deploy_growth_inventory.content | b64decode }}"
+
+    - name: Decode enterprise inventory
+      ansible.builtin.set_fact:
+        aap_deploy_enterprise_inventory_text: "{{ aap_deploy_enterprise_inventory.content | b64decode }}"
+
+    - name: Assert growth inventory contains bundle settings and local connection
       ansible.builtin.assert:
         that:
-          - true
+          - "'ansible_connection=local' in aap_deploy_growth_inventory_text"
+          - "'bundle_install=true' in aap_deploy_growth_inventory_text"
+          - "'bundle_dir=' in aap_deploy_growth_inventory_text"
+          - "'registry_username=' not in aap_deploy_growth_inventory_text"
+          - "'registry_password=' not in aap_deploy_growth_inventory_text"
+        quiet: true
+
+    - name: Assert enterprise inventory contains bundle settings without registry credentials
+      ansible.builtin.assert:
+        that:
+          - "'[automationgateway]' in aap_deploy_enterprise_inventory_text"
+          - "'bundle_install=true' in aap_deploy_enterprise_inventory_text"
+          - "'bundle_dir=' in aap_deploy_enterprise_inventory_text"
+          - "'registry_username=' not in aap_deploy_enterprise_inventory_text"
+          - "'registry_password=' not in aap_deploy_enterprise_inventory_text"
+        quiet: true

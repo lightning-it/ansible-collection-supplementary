@@ -1,0 +1,144 @@
+---
+- name: Ensure aap_ops variables are valid
+  ansible.builtin.assert:
+    that:
+      - aap_ops_enabled is boolean
+      - aap_ops_action in ['none', 'restart', 'status', 'upgrade', 'sync_hub_password', 'rotate_password']
+      - aap_ops_package_state in ['present', 'latest', 'absent']
+      - aap_ops_manage_systemd is boolean
+      - aap_ops_packages_effective is sequence
+      - aap_ops_packages_effective is not string
+      - aap_ops_health_url is string
+      - aap_ops_validate_certs is boolean
+      - aap_ops_sync_hub_password_file_path is string
+      - aap_ops_sync_hub_password_value is string
+      - aap_ops_sync_hub_password_key is string
+      - aap_ops_sync_hub_password_owner is string
+      - aap_ops_sync_hub_password_group is string
+      - aap_ops_sync_hub_password_mode is string
+      - aap_ops_sync_hub_password_no_log is boolean
+      - aap_ops_rotate_controller_username is string
+      - aap_ops_rotate_controller_current_password is string
+      - aap_ops_rotate_controller_new_password is string
+      - aap_ops_rotate_generate_password is boolean
+      - aap_ops_rotate_generated_password_length | int > 0
+      - aap_ops_rotate_generated_password_chars is string
+      - aap_ops_rotate_controller_api_base_url is string
+      - aap_ops_rotate_controller_api_base_urls is sequence
+      - aap_ops_rotate_controller_api_base_urls is not string
+      - aap_ops_rotate_validate_certs is boolean
+      - aap_ops_rotate_timeout | int > 0
+      - aap_ops_rotate_update_runtime_password_vars is boolean
+      - aap_ops_rotate_no_log is boolean
+      - aap_ops_rotate_source_of_truth in ['inventory', 'vault']
+      - aap_ops_rotate_require_vault is boolean
+      - aap_ops_rotate_vault_read_before_rotate is boolean
+      - aap_ops_rotate_vault_write_after_rotate is boolean
+      - aap_ops_rotate_vault_prefer_current_password is boolean
+      - aap_ops_rotate_vault_field_username is string
+      - aap_ops_rotate_vault_field_password is string
+      - aap_ops_rotate_vault_addr is string
+      - aap_ops_rotate_vault_kv_mount is string
+      - aap_ops_rotate_vault_kv_path is string
+      - aap_ops_rotate_vault_validate_certs is boolean
+      - aap_ops_rotate_vault_token is string
+      - aap_ops_rotate_vault_role_id is string
+      - aap_ops_rotate_vault_secret_id is string
+      - aap_ops_rotate_vault_auth_token is string
+      - aap_ops_rotate_vault_auth_role_id is string
+      - aap_ops_rotate_vault_auth_secret_id is string
+      - aap_ops_rotate_vault_use_token is boolean
+      - aap_ops_rotate_vault_auth_ok is boolean
+      - >-
+        (aap_ops_action not in ['restart', 'status']) or (not (aap_ops_manage_systemd | bool))
+        or (aap_ops_systemd_unit_name | default('', true) | trim | length > 0)
+      - >-
+        (aap_ops_action != 'upgrade') or (aap_ops_packages_effective | default([], true) | length > 0)
+      - >-
+        (aap_ops_action != 'sync_hub_password')
+        or (aap_ops_sync_hub_password_file_path | default('', true) | trim | length > 0)
+      - >-
+        (aap_ops_action != 'sync_hub_password')
+        or (aap_ops_sync_hub_password_key | default('', true) | trim | length > 0)
+      - >-
+        (aap_ops_action != 'sync_hub_password')
+        or (aap_ops_sync_hub_password_value | default('', true) | trim | length > 0)
+      - >-
+        (aap_ops_action != 'sync_hub_password')
+        or (aap_ops_sync_hub_password_owner | default('', true) | trim | length > 0)
+      - >-
+        (aap_ops_action != 'sync_hub_password')
+        or (aap_ops_sync_hub_password_group | default('', true) | trim | length > 0)
+      - >-
+        (aap_ops_action != 'sync_hub_password')
+        or (aap_ops_sync_hub_password_mode | default('', true) | trim | length > 0)
+      - >-
+        (aap_ops_action != 'rotate_password')
+        or (aap_ops_rotate_controller_username | default('', true) | trim | length > 0)
+      - >-
+        (aap_ops_action != 'rotate_password')
+        or (aap_ops_rotate_controller_current_password | default('', true) | trim | length > 0)
+        or (
+          (aap_ops_rotate_source_of_truth == 'vault')
+          and
+          (aap_ops_rotate_vault_read_before_rotate | bool)
+          and (aap_ops_rotate_vault_addr | default('', true) | trim | length > 0)
+          and (aap_ops_rotate_vault_auth_ok | bool)
+          and (aap_ops_rotate_vault_kv_mount | default('', true) | trim | length > 0)
+          and (aap_ops_rotate_vault_kv_path | default('', true) | trim | length > 0)
+        )
+      - >-
+        (aap_ops_action != 'rotate_password')
+        or (aap_ops_rotate_generate_password | bool)
+        or (aap_ops_rotate_controller_new_password | default('', true) | trim | length > 0)
+      - >-
+        (aap_ops_action != 'rotate_password')
+        or (not (aap_ops_rotate_generate_password | bool))
+        or (aap_ops_rotate_generated_password_length | int >= 12)
+      - >-
+        (aap_ops_action != 'rotate_password')
+        or (not (aap_ops_rotate_generate_password | bool))
+        or (
+          (aap_ops_rotate_source_of_truth == 'vault')
+          and (aap_ops_rotate_vault_write_after_rotate | bool)
+          and (aap_ops_rotate_vault_addr | default('', true) | trim | length > 0)
+          and (aap_ops_rotate_vault_auth_ok | bool)
+          and (aap_ops_rotate_vault_kv_mount | default('', true) | trim | length > 0)
+          and (aap_ops_rotate_vault_kv_path | default('', true) | trim | length > 0)
+        )
+      - >-
+        (aap_ops_action != 'rotate_password')
+        or (aap_ops_rotate_controller_api_base_url | default('', true) | trim | length > 0)
+        or (aap_ops_rotate_controller_api_base_urls | default([], true) | length > 0)
+      - >-
+        (aap_ops_action != 'rotate_password')
+        or (aap_ops_rotate_source_of_truth != 'inventory')
+        or (
+          not (aap_ops_rotate_require_vault | bool)
+          and not (aap_ops_rotate_vault_read_before_rotate | bool)
+          and not (aap_ops_rotate_vault_write_after_rotate | bool)
+        )
+      - >-
+        (aap_ops_action != 'rotate_password')
+        or (aap_ops_rotate_source_of_truth != 'vault')
+        or (
+          (aap_ops_rotate_require_vault | bool)
+          and (aap_ops_rotate_vault_read_before_rotate | bool)
+          and (aap_ops_rotate_vault_write_after_rotate | bool)
+          and (aap_ops_rotate_vault_addr | default('', true) | trim | length > 0)
+          and (aap_ops_rotate_vault_auth_ok | bool)
+          and (aap_ops_rotate_vault_kv_mount | default('', true) | trim | length > 0)
+          and (aap_ops_rotate_vault_kv_path | default('', true) | trim | length > 0)
+        )
+      - >-
+        (aap_ops_action != 'rotate_password')
+        or (not (aap_ops_rotate_require_vault | bool))
+        or (
+          (aap_ops_rotate_vault_addr | default('', true) | trim | length > 0)
+          and (aap_ops_rotate_vault_auth_ok | bool)
+          and (aap_ops_rotate_vault_kv_mount | default('', true) | trim | length > 0)
+          and (aap_ops_rotate_vault_kv_path | default('', true) | trim | length > 0)
+        )
+    fail_msg: "aap_ops variables are missing or invalid."
+    quiet: true
+  tags: always

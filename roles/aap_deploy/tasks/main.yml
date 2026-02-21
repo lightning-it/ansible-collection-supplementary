@@ -1,34 +1,58 @@
 ---
-- name: Skip aap_deploy when disabled
-  ansible.builtin.meta: end_play
-  when: not aap_deploy_enabled | bool
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
 
-- name: Ensure OS facts are available
-  ansible.builtin.setup:
-    gather_subset:
-      - "!all"
-      - min
-  when: ansible_distribution_major_version is not defined
-
-- name: Select package list (RHEL 9 default)
-  ansible.builtin.set_fact:
-    aap_deploy_target_major: >-
-      {{
-        '10'
-        if (ansible_distribution_major_version | default('9') | string) == '10'
-        else '9'
-      }}
-    aap_deploy_packages: >-
-      {{
-        aap_deploy_packages_rhel10
-        if (ansible_distribution_major_version | default('9') | string) == '10'
-        else aap_deploy_packages_rhel9
-      }}
+- name: Skip aap_deploy role when disabled
+  ansible.builtin.debug:
+    msg: "AAP deploy skipped because aap_deploy_enabled=false."
   changed_when: false
+  when: not aap_deploy_enabled | bool
+  tags: always
 
-- name: Install AAP package(s)
-  ansible.builtin.dnf:
-    name: "{{ aap_deploy_packages }}"
-    state: "{{ aap_deploy_package_state }}"
+- name: Load shared AAP context and resolve admin passwords
+  ansible.builtin.import_role:
+    name: aap
+  when: aap_deploy_enabled | bool
+  tags:
+    - passwords
+    - inventory
+    - install
+
+- name: Host preparation
+  ansible.builtin.import_tasks: 10_host_prep.yml
   when:
-    - (aap_deploy_packages | default([]) | length) > 0
+    - aap_deploy_enabled | bool
+    - aap_deploy_manage_host_prep | bool
+  tags:
+    - host_prep
+
+- name: Download and unpack setup archive
+  ansible.builtin.import_tasks: 20_download_unpack.yml
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_manage_download_unpack | bool
+  tags:
+    - download
+
+- name: Render installer inventory
+  ansible.builtin.import_tasks: 30_inventory.yml
+  when: aap_deploy_enabled | bool
+  tags:
+    - inventory
+
+- name: Run containerized installer
+  ansible.builtin.import_tasks: 40_install.yml
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_run_installer | bool
+  tags:
+    - install
+
+- name: Verify deployment
+  ansible.builtin.import_tasks: 50_verify.yml
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_run_verify | bool
+  tags:
+    - verify

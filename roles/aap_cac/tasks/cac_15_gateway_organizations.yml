@@ -1,0 +1,18 @@
+---
+# CaC taskset: Assign Galaxy Credentials to Gateway Organizations.
+- name: Assign Galaxy Credentials to Gateway Organizations
+  block:
+    - name: Run role infra.aap_configuration.dispatch
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        aap_configuration_dispatcher_roles:
+          - role: gateway_organizations
+            var: aap_organizations
+            tags: organizations
+            assign_galaxy_credentials_to_org: true
+        aap_organizations: '{{ controller_organizations }}'
+      tags:
+        - organizations
+  vars:
+    assign_galaxy_credentials_to_org: true

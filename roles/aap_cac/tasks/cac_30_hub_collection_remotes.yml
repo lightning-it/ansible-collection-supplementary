@@ -1,0 +1,7 @@
+---
+# CaC taskset: Configure Private Automation Hub collection remotes.
+- name: Configure Private Automation Hub collection remotes
+  block:
+    - name: Run role infra.aap_configuration.hub_collection_remote
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.hub_collection_remote

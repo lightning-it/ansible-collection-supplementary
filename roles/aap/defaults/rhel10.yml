@@ -1,0 +1,3 @@
+---
+# AAP package defaults for RHEL 10
+aap_packages_effective: "{{ aap_deploy_packages_rhel10 | default(['aap-deploy'], true) }}"

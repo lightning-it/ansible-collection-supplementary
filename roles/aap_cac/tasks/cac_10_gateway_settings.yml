@@ -1,0 +1,14 @@
+---
+# CaC taskset: Configure Gateway settings.
+- name: Configure Gateway settings
+  block:
+    - name: Run role infra.aap_configuration.dispatch
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        aap_configuration_dispatcher_roles:
+          - role: gateway_settings
+            var: gateway_settings
+            tags: settings
+      tags:
+        - settings

@@ -1,0 +1,30 @@
+---
+- name: Query running podman containers for install user
+  ansible.builtin.command:
+    cmd: podman ps --format json
+  become_user: "{{ aap_deploy_install_user }}"
+  register: aap_deploy_podman_ps
+  changed_when: false
+
+- name: Parse container list
+  ansible.builtin.set_fact:
+    aap_deploy_running_containers: "{{ aap_deploy_podman_ps.stdout | default('[]') | from_json }}"
+
+- name: Assert podman containers are running
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_running_containers | length > 0
+    fail_msg: >-
+      No running podman containers were detected for user {{ aap_deploy_install_user }}.
+      Check installer output and podman logs.
+    quiet: true
+
+- name: Check gateway HTTPS endpoint reachability
+  ansible.builtin.uri:
+    url: "https://{{ aap_deploy_gateway_verify_host }}:443"
+    method: GET
+    validate_certs: "{{ aap_deploy_gateway_verify_validate_certs }}"
+    status_code: "{{ aap_deploy_gateway_verify_status_codes }}"
+    return_content: false
+  register: aap_deploy_gateway_https_check
+  when: aap_deploy_verify_gateway_https | bool

@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: aap_cac
+  namespace: lit
+  author: Rene Osorio
+  description: Provide AAP configuration-as-code project assets.
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "all"
+  galaxy_tags:
+    - modulix
+    - aap
+
+dependencies: []

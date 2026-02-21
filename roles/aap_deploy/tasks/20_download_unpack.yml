@@ -1,0 +1,173 @@
+---
+- name: Ensure install directory exists
+  ansible.builtin.file:
+    path: "{{ aap_deploy_install_dir }}"
+    state: directory
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0755'
+
+- name: Ensure setup directory exists
+  ansible.builtin.file:
+    path: "{{ aap_deploy_setup_dir }}"
+    state: directory
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0755'
+
+- name: Check bundle archive on managed node
+  ansible.builtin.stat:
+    path: "{{ aap_deploy_setup_archive_src }}"
+  register: aap_deploy_archive_on_target
+
+- name: Check bundle archive on control node project dir
+  ansible.builtin.stat:
+    path: "{{ aap_deploy_setup_archive_src }}"
+  register: aap_deploy_archive_on_controller_src
+  delegate_to: localhost
+  become: false
+
+- name: Check bundle archive on control node local ansible dir
+  ansible.builtin.stat:
+    path: "{{ aap_deploy_local_bundle_project_archive_path }}"
+  register: aap_deploy_archive_on_controller_project
+  delegate_to: localhost
+  become: false
+
+- name: Check bundle archive on default local ansible dir fallback
+  ansible.builtin.stat:
+    path: "{{ aap_deploy_local_bundle_archive_path }}"
+  register: aap_deploy_archive_on_controller_fallback
+  delegate_to: localhost
+  become: false
+
+- name: Select bundle archive source mode
+  ansible.builtin.set_fact:
+    aap_deploy_controller_archive_path: >-
+      {{
+        aap_deploy_setup_archive_src
+        if aap_deploy_archive_on_controller_src.stat.exists
+        else (
+          aap_deploy_local_bundle_project_archive_path
+          if aap_deploy_archive_on_controller_project.stat.exists
+          else (
+            aap_deploy_local_bundle_archive_path
+            if aap_deploy_archive_on_controller_fallback.stat.exists
+            else ''
+          )
+        )
+      }}
+    aap_deploy_archive_source_mode: >-
+      {{
+        'target'
+        if aap_deploy_archive_on_target.stat.exists
+        else (
+          'controller'
+          if (
+            aap_deploy_archive_on_controller_src.stat.exists
+            or aap_deploy_archive_on_controller_project.stat.exists
+            or aap_deploy_archive_on_controller_fallback.stat.exists
+          )
+          else 'missing'
+        )
+      }}
+
+- name: Fail when bundle archive is missing on both target and control node
+  ansible.builtin.fail:
+    msg: |-
+      Disconnected bundle archive not found on either location.
+      Checked target path: {{ aap_deploy_setup_archive_src }}
+      Checked control-node path: {{ aap_deploy_setup_archive_src }}
+      Checked control-node local ansible dir: {{ aap_deploy_local_bundle_project_archive_path }}
+      Checked control-node local ansible .artifacts dir: {{ aap_deploy_local_bundle_archive_path }}
+
+      How to download and stage the bundle:
+      1. Log in to Red Hat Customer Portal.
+      2. Go to Downloads -> Red Hat Ansible Automation Platform -> 2.6.
+      3. Download the containerized setup bundle archive (.tar.gz).
+      4. Place the file in one of these locations:
+         - On target host: {{ aap_deploy_setup_archive_src }}
+         - In local Ansible dir (mounted as /runner/project/...):
+           {{ aap_deploy_local_bundle_project_archive_path }}
+         - Or in local Ansible .artifacts dir:
+           {{ aap_deploy_local_bundle_archive_path }}
+      Note: ansible-nav runs inside a container. Workstation paths like
+      /home/<user>/... are not visible unless mounted into /runner/project.
+      5. Re-run the playbook.
+  when: aap_deploy_archive_source_mode == 'missing'
+
+- name: Copy setup archive from controller project dir
+  ansible.builtin.copy:
+    src: "{{ aap_deploy_controller_archive_path }}"
+    dest: "{{ aap_deploy_setup_archive_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0644'
+  when:
+    - aap_deploy_archive_source_mode == 'controller'
+
+- name: Copy setup archive from managed node path
+  ansible.builtin.copy:
+    src: "{{ aap_deploy_setup_archive_src }}"
+    dest: "{{ aap_deploy_setup_archive_path }}"
+    remote_src: true
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0644'
+  when:
+    - aap_deploy_archive_source_mode == 'target'
+    - aap_deploy_setup_archive_src != aap_deploy_setup_archive_path
+
+- name: Ensure archive ownership when pre-staged archive path equals destination
+  ansible.builtin.file:
+    path: "{{ aap_deploy_setup_archive_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0644'
+    state: file
+  when:
+    - aap_deploy_archive_source_mode == 'target'
+    - aap_deploy_setup_archive_src == aap_deploy_setup_archive_path
+
+- name: Remove previous setup directory when force unpack is enabled
+  ansible.builtin.file:
+    path: "{{ aap_deploy_setup_dir }}"
+    state: absent
+  when: aap_deploy_force_unpack | bool
+
+- name: Recreate setup directory after forced cleanup
+  ansible.builtin.file:
+    path: "{{ aap_deploy_setup_dir }}"
+    state: directory
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0755'
+  when: aap_deploy_force_unpack | bool
+
+- name: Check unpack marker
+  ansible.builtin.stat:
+    path: "{{ aap_deploy_setup_dir }}/.aap_setup_unpacked"
+  register: aap_deploy_unpack_marker
+
+- name: Unpack containerized setup archive
+  ansible.builtin.unarchive:
+    src: "{{ aap_deploy_setup_archive_path }}"
+    dest: "{{ aap_deploy_setup_dir }}"
+    remote_src: true
+    extra_opts:
+      - --strip-components=1
+  become_user: "{{ aap_deploy_install_user }}"
+  when:
+    - aap_deploy_force_unpack | bool or not aap_deploy_unpack_marker.stat.exists
+
+- name: Write unpack marker
+  ansible.builtin.copy:
+    dest: "{{ aap_deploy_setup_dir }}/.aap_setup_unpacked"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0644'
+    content: |
+      archive={{ aap_deploy_setup_archive_path }}
+      checksum={{ aap_deploy_setup_archive_checksum | default('') }}
+  when:
+    - aap_deploy_force_unpack | bool or not aap_deploy_unpack_marker.stat.exists

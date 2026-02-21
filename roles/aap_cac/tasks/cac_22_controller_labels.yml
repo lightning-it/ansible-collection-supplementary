@@ -1,0 +1,14 @@
+---
+# CaC taskset: Configure Controller Labels.
+- name: Configure Controller Labels
+  block:
+    - name: Run role infra.aap_configuration.dispatch
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        aap_configuration_dispatcher_roles:
+          - role: controller_labels
+            var: controller_labels
+            tags: labels
+      tags:
+        - labels

@@ -1,0 +1,105 @@
+---
+- name: Check installation marker
+  ansible.builtin.stat:
+    path: "{{ aap_deploy_installed_marker_path }}"
+  register: aap_deploy_install_marker
+
+- name: Skip installer when marker exists
+  ansible.builtin.debug:
+    msg: >-
+      Skipping containerized installer because marker exists at
+      {{ aap_deploy_installed_marker_path }} and aap_deploy_skip_if_installed=true.
+  changed_when: false
+  when:
+    - aap_deploy_skip_if_installed | bool
+    - aap_deploy_install_marker.stat.exists
+
+- name: Resolve install user uid
+  ansible.builtin.command:
+    cmd: "id -u {{ aap_deploy_install_user }}"
+  register: aap_deploy_install_user_uid_cmd
+  changed_when: false
+  when:
+    - not (aap_deploy_skip_if_installed | bool and aap_deploy_install_marker.stat.exists)
+
+- name: Set install user uid fact
+  ansible.builtin.set_fact:
+    aap_deploy_install_user_uid: "{{ aap_deploy_install_user_uid_cmd.stdout | trim }}"
+  changed_when: false
+  when:
+    - not (aap_deploy_skip_if_installed | bool and aap_deploy_install_marker.stat.exists)
+
+- name: Check install user linger status
+  ansible.builtin.command:
+    cmd: "loginctl show-user {{ aap_deploy_install_user }} --property=Linger --value"
+  register: aap_deploy_install_user_linger_status
+  changed_when: false
+  failed_when: false
+  when:
+    - not (aap_deploy_skip_if_installed | bool and aap_deploy_install_marker.stat.exists)
+
+- name: Enable linger for install user
+  ansible.builtin.command:
+    cmd: "loginctl enable-linger {{ aap_deploy_install_user }}"
+  when:
+    - not (aap_deploy_skip_if_installed | bool and aap_deploy_install_marker.stat.exists)
+    - >-
+      (aap_deploy_install_user_linger_status.rc != 0)
+      or ((aap_deploy_install_user_linger_status.stdout | trim) != 'yes')
+
+- name: Ensure install user systemd manager is started
+  ansible.builtin.systemd:
+    name: "user@{{ aap_deploy_install_user_uid }}.service"
+    state: started
+  when:
+    - not (aap_deploy_skip_if_installed | bool and aap_deploy_install_marker.stat.exists)
+
+- name: Wait for install user DBus socket
+  ansible.builtin.wait_for:
+    path: "/run/user/{{ aap_deploy_install_user_uid }}/bus"
+    state: present
+    timeout: 30
+  when:
+    - not (aap_deploy_skip_if_installed | bool and aap_deploy_install_marker.stat.exists)
+
+- name: Run AAP containerized installer playbook
+  ansible.builtin.command:
+    cmd: >-
+      ansible-playbook -i {{ aap_deploy_inventory_path }} ansible.containerized_installer.install
+    chdir: "{{ aap_deploy_setup_dir }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ aap_deploy_install_user_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ aap_deploy_install_user_uid }}/bus"
+  become_user: "{{ aap_deploy_install_user }}"
+  register: aap_deploy_install_command
+  changed_when: true
+  failed_when: false
+  when:
+    - not (aap_deploy_skip_if_installed | bool and aap_deploy_install_marker.stat.exists)
+
+- name: Fail when installer command returns non-zero
+  ansible.builtin.fail:
+    msg: |-
+      Containerized AAP installer failed.
+      rc={{ aap_deploy_install_command.rc }}
+      stderr tail:
+      {{ (aap_deploy_install_command.stderr_lines | default([]))[-20:] | join('\n') }}
+      stdout tail:
+      {{ (aap_deploy_install_command.stdout_lines | default([]))[-20:] | join('\n') }}
+  when:
+    - not (aap_deploy_skip_if_installed | bool and aap_deploy_install_marker.stat.exists)
+    - aap_deploy_install_command.rc != 0
+
+- name: Write installation marker
+  ansible.builtin.copy:
+    dest: "{{ aap_deploy_installed_marker_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0644'
+    content: |
+      installed=true
+      inventory={{ aap_deploy_inventory_path }}
+      playbook=ansible.containerized_installer.install
+  when:
+    - not (aap_deploy_skip_if_installed | bool and aap_deploy_install_marker.stat.exists)
+    - aap_deploy_install_command.rc == 0

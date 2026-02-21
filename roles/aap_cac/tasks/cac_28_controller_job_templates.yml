@@ -1,0 +1,14 @@
+---
+# CaC taskset: Configure Controller Job Templates.
+- name: Configure Controller Job Templates
+  block:
+    - name: Run role infra.aap_configuration.dispatch
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        aap_configuration_dispatcher_roles:
+          - role: controller_job_templates
+            var: controller_templates
+            tags: controller_templates
+      tags:
+        - controller_templates

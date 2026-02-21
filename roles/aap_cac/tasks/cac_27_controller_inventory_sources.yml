@@ -1,0 +1,17 @@
+---
+# CaC taskset: Configure Controller Inventory Sources.
+- name: Configure Controller Inventory Sources
+  block:
+    - name: Run role infra.aap_configuration.dispatch
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        aap_configuration_dispatcher_roles:
+          - role: controller_inventory_sources
+            var: controller_inventory_sources
+            tags: controller_inventory_sources
+          - role: controller_inventory_source_update
+            var: controller_inventory_sources
+            tags: controller_inventory_sources
+      tags:
+        - controller_inventory_sources
