@@ -1,5 +1,7 @@
 ---
-aap_cac_collections_requirements: "{{ role_path | dirname | dirname }}/collections/requirements.yml"
+aap_cac_collections_profile: "certified"
+aap_cac_collections_requirements: >-
+  {{ role_path | dirname | dirname }}/collections/requirements-{{ aap_cac_collections_profile }}.yml
 
 # Gateway API endpoint used by token helper tasks.
 aap_cac_gateway_hostname: "https://{{ inventory_hostname }}"

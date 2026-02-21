@@ -1,8 +1,9 @@
 ---
 collections:
-  - name: https://github.com/ansible/ansible.platform.git
-    type: git
+  - name: ansible.platform
     version: "2.5.20250702"
+  - name: ansible.controller
+    version: "4.6.16"
   - name: ansible.posix
     version: "2.1.0"
   - name: ansible.hub

@@ -4,8 +4,13 @@ AAP configuration-as-code role tasksets for AAP object configuration.
 
 ## Requirements
 
-Install collections from:
-- `collections/requirements.yml`
+Install collections from one of:
+- `collections/requirements-public.yml` (public/GitHub flow)
+- `collections/requirements-certified.yml` (Red Hat certified flow)
+
+Default used by this role:
+- `aap_cac_collections_profile` -> `certified`
+- `aap_cac_collections_requirements` -> `collections/requirements-{{ aap_cac_collections_profile }}.yml`
 
 ## Variables
 

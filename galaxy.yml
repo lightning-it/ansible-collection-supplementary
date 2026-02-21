@@ -21,7 +21,6 @@ dependencies:
   community.general: '>=7.0.0'
   ansible.posix: '>=1.6.2'
   ansible.hub: '>=1.0.4'
-  ansible.platform: '>=2.5.20250702'
   community.vmware: '>=3.0.0'
   lit.foundational: '>=1.0.0'
   community.hashi_vault: '*'

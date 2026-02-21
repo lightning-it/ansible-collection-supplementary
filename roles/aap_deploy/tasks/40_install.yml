@@ -41,6 +41,7 @@
 - name: Enable linger for install user
   ansible.builtin.command:
     cmd: "loginctl enable-linger {{ aap_deploy_install_user }}"
+  changed_when: true
   when:
     - not (aap_deploy_skip_if_installed | bool and aap_deploy_install_marker.stat.exists)
     - >-
@@ -70,6 +71,7 @@
   environment:
     XDG_RUNTIME_DIR: "/run/user/{{ aap_deploy_install_user_uid }}"
     DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ aap_deploy_install_user_uid }}/bus"
+  become: true
   become_user: "{{ aap_deploy_install_user }}"
   register: aap_deploy_install_command
   changed_when: true

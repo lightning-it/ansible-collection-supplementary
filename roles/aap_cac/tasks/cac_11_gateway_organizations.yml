@@ -4,7 +4,7 @@
   tags:
     - organizations
   block:
-    - name: Configure Gateway Organizations
+    - name: Configure Gateway Organizations  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
       vars:

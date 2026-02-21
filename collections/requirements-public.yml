@@ -1,0 +1,38 @@
+---
+collections:
+  - name: https://github.com/ansible/ansible.platform.git
+    type: git
+    version: "2.5.20250702"
+  - name: https://github.com/ansible-collections/ansible_hub.git
+    type: git
+    version: "1.0.4"
+  - name: https://github.com/ansible/event-driven-ansible.git
+    type: git
+    version: "v2.8.1"
+  - name: https://github.com/redhat-cop/aap_utilities.git
+    type: git
+    version: "2.7.0"
+  - name: https://github.com/redhat-cop/infra.aap_configuration.git
+    type: git
+    version: "3.3.0"
+  - name: https://github.com/redhat-cop/aap_configuration_extended.git
+    type: git
+    version: "1.1.1"
+  - name: https://github.com/redhat-cop/infra.controller_configuration.git
+    type: git
+    version: "3.1.2"
+  - name: https://github.com/redhat-cop/ee_utilities.git
+    type: git
+    version: "4.0.4"
+  - name: ansible.posix
+    version: "2.1.0"
+  - name: community.general
+    version: "11.1.0"
+  - name: community.crypto
+    version: "2.26.7"
+  - name: community.hashi_vault
+    version: "7.1.0"
+  - name: community.vmware
+    version: "6.2.0"
+  - name: containers.podman
+    version: "1.17.0"

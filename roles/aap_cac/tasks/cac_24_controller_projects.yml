@@ -2,7 +2,7 @@
 # CaC taskset: Configure Controller Projects.
 - name: Configure Controller Projects
   block:
-    - name: Run role infra.aap_configuration.dispatch
+    - name: Run role infra.aap_configuration.dispatch  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
       vars:

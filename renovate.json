@@ -21,12 +21,34 @@
       "datasourceTemplate": "galaxy-collection"
     },
     {
-      "description": "Ansible Galaxy collection versions in collections/requirements.yml",
-      "fileMatch": ["^collections/requirements\\.yml$"],
+      "description": "Ansible Galaxy collection versions in collections requirements files",
+      "fileMatch": [
+        "^collections/requirements-public\\.yml$",
+        "^collections/requirements-certified\\.yml$"
+      ],
       "matchStrings": [
         "-\\s*name:\\s*(?<depName>[a-z0-9_]+\\.[a-z0-9_]+)[^\\n]*\\n\\s*version:\\s*\"?(?<currentValue>[^\"\\n]+)\"?"
       ],
       "datasourceTemplate": "galaxy-collection"
+    },
+    {
+      "description": "GitHub collection git refs in collections requirements files",
+      "fileMatch": [
+        "^collections/requirements-public\\.yml$",
+        "^collections/requirements-certified\\.yml$"
+      ],
+      "matchStrings": [
+        "-\\s*name:\\s*https://github\\.com/(?<depName>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)\\.git\\s*\\n\\s*type:\\s*git\\s*\\n\\s*version:\\s*\"?(?<currentValue>[^\"\\n]+)\"?"
+      ],
+      "datasourceTemplate": "github-tags",
+      "versioningTemplate": "loose"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "ansible.controller is tracked through Red Hat certified lifecycle",
+      "matchDepNames": ["ansible.controller"],
+      "enabled": false
     }
   ]
 }
