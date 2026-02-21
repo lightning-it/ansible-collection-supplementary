@@ -32,6 +32,18 @@
       "datasourceTemplate": "galaxy-collection"
     },
     {
+      "description": "ansible.platform in certified requirements is tracked from upstream GitHub tags",
+      "fileMatch": [
+        "^collections/requirements-certified\\.yml$"
+      ],
+      "matchStrings": [
+        "-\\s*name:\\s*ansible\\.platform\\s*\\n\\s*version:\\s*\"?(?<currentValue>[^\"\\n]+)\"?"
+      ],
+      "depNameTemplate": "ansible/ansible.platform",
+      "datasourceTemplate": "github-tags",
+      "versioningTemplate": "loose"
+    },
+    {
       "description": "GitHub collection git refs in collections requirements files",
       "fileMatch": [
         "^collections/requirements-public\\.yml$",
@@ -45,6 +57,12 @@
     }
   ],
   "packageRules": [
+    {
+      "description": "ansible.platform in certified requirements is managed from github-tags, not galaxy index",
+      "matchDepNames": ["ansible.platform"],
+      "matchDatasources": ["galaxy-collection"],
+      "enabled": false
+    },
     {
       "description": "ansible.controller is tracked through Red Hat certified lifecycle",
       "matchDepNames": ["ansible.controller"],
