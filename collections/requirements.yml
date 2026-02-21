@@ -22,7 +22,7 @@ collections:
   - name: infra.aap_utilities
     version: "2.7.0"
   - name: infra.aap_configuration
-    version: "3.3.0"
+    version: "3.9.1"
   - name: infra.aap_configuration_extended
     version: "1.1.1"
   - name: infra.controller_configuration
