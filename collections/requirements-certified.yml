@@ -27,6 +27,6 @@ collections:
   - name: infra.aap_configuration_extended
     version: "1.1.1"
   - name: infra.controller_configuration
-    version: "3.1.2"
+    version: "3.2.2"
   - name: infra.ee_utilities
     version: "4.0.4"
