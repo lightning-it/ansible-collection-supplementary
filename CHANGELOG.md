@@ -1,3 +1,9 @@
+## [1.15.4](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.15.3...v1.15.4) (2026-02-21)
+
+### Bug Fixes
+
+* pipeline creds added ah ([#95](https://github.com/lightning-it/ansible-collection-supplementary/issues/95)) ([62c1435](https://github.com/lightning-it/ansible-collection-supplementary/commit/62c143555153a1704551c2f159c7bcb298f57b11))
+
 ## [1.15.3](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.15.2...v1.15.3) (2026-02-21)
 
 ### Bug Fixes
