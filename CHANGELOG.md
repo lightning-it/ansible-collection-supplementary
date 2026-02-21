@@ -1,3 +1,9 @@
+## [1.15.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.15.0...v1.15.1) (2026-02-21)
+
+### Bug Fixes
+
+* update dept ([#79](https://github.com/lightning-it/ansible-collection-supplementary/issues/79)) ([b86e79f](https://github.com/lightning-it/ansible-collection-supplementary/commit/b86e79f61e1d5bdee31e673982496ac0dadbdcfe))
+
 ## [1.15.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.14.4...v1.15.0) (2026-02-21)
 
 ### Features
