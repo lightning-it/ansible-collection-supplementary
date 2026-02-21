@@ -2,22 +2,32 @@
 # CaC taskset: Synchronize Hub remotes/repositories (composite entrypoint).
 - name: Synchronize the Private Automation Hub collection repositories
   block:
-    - name: Set fact to keep the OAUTH token
+    - name: Record whether an auth token was provided by caller
       ansible.builtin.set_fact:
-        keep_oauth_token: true
+        aap_cac_preexisting_token: "{{ aap_token is defined }}"
+      changed_when: false
+
     - name: Include tasks to create an authentication token
       ansible.builtin.include_tasks:
         file: '{{ role_path }}/tasks/create_authentication_token.yml'
-      when: aap_token is not defined
-- name: Include CaC taskset to configure Private Automation Hub remotes
-  ansible.builtin.include_role:
-    name: lit.supplementary.aap_cac
-    tasks_from: cac_30_hub_collection_remotes.yml
-- name: Include CaC taskset to configure Private Automation Hub repositories
-  ansible.builtin.include_role:
-    name: lit.supplementary.aap_cac
-    tasks_from: cac_31_hub_collection_repositories.yml
-- name: Include CaC taskset to synchronize Private Automation Hub repositories
-  ansible.builtin.include_role:
-    name: lit.supplementary.aap_cac
-    tasks_from: cac_32_hub_collection_repository_sync.yml
+      when: not (aap_cac_preexisting_token | default(false))
+
+    - name: Include CaC taskset to configure Private Automation Hub remotes
+      ansible.builtin.include_role:
+        name: lit.supplementary.aap_cac
+        tasks_from: cac_30_hub_collection_remotes.yml
+
+    - name: Include CaC taskset to configure Private Automation Hub repositories
+      ansible.builtin.include_role:
+        name: lit.supplementary.aap_cac
+        tasks_from: cac_31_hub_collection_repositories.yml
+
+    - name: Include CaC taskset to synchronize Private Automation Hub repositories
+      ansible.builtin.include_role:
+        name: lit.supplementary.aap_cac
+        tasks_from: cac_32_hub_collection_repository_sync.yml
+  always:
+    - name: Include tasks to delete the used authentication token
+      ansible.builtin.include_tasks:
+        file: '{{ role_path }}/tasks/delete_authentication_token.yml'
+      when: not (aap_cac_preexisting_token | default(false))

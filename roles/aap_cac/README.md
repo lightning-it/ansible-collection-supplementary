@@ -24,8 +24,10 @@ Key variables:
   - `tasks/delete_authentication_token.yml`
 - Full CaC entrypoint taskset:
   - `tasks/main.yml`
+  - manages auth token lifecycle once per run (create before tasksets, delete after tasksets)
 - Composite subset entrypoint (Hub sync):
   - `tasks/cac_34_sync_hub.yml`
+  - manages auth token lifecycle for this composite flow
   - Not auto-included by `tasks/main.yml` to avoid duplicate execution.
 - Pattern example: call role task entrypoints directly, e.g.
   `roles/aap_cac/tasks/cac_11_gateway_organizations.yml`.

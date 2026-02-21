@@ -1,6 +1,6 @@
 ---
 - name: 'create_authentication_token | Block: Get authentication token'
-  when: 'aap_oauthtoken is not defined'
+  when: 'aap_token is not defined'
   block:
     - name: 'create_authentication_token | Get authentication token for the future requests'
       ansible.platform.token:

@@ -2,10 +2,6 @@
 # CaC taskset: Configure Controller settings.
 - name: Configure Controller settings
   block:
-    - name: Include tasks to create an authentication token
-      ansible.builtin.include_tasks:
-        file: '{{ role_path }}/tasks/create_authentication_token.yml'
-      when: aap_token is not defined
     - name: Run role infra.aap_configuration.dispatch
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
@@ -16,7 +12,3 @@
             tags: settings
       tags:
         - settings
-    - name: Include tasks to delete the used authentication token
-      ansible.builtin.include_tasks:
-        file: '{{ role_path }}/tasks/delete_authentication_token.yml'
-      when: aap_token is defined

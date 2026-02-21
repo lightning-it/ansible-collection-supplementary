@@ -1,19 +1,37 @@
 ---
-- name: Discover AAP CaC tasksets
-  # Exclude composite orchestration entrypoint from full run to avoid duplicate execution.
-  ansible.builtin.set_fact:
-    aap_cac_taskset_files: >-
-      {{
-        query('ansible.builtin.fileglob', role_path ~ '/tasks/cac_*.yml')
-        | map('basename')
-        | reject('in', ['cac_34_sync_hub.yml'])
-        | sort
-      }}
-  changed_when: false
-  tags: always
+- name: Execute AAP CaC tasksets with shared auth token lifecycle
+  block:
+    - name: Record whether an auth token was provided by caller
+      ansible.builtin.set_fact:
+        aap_cac_preexisting_token: "{{ aap_token is defined }}"
+      changed_when: false
+      tags: always
 
-- name: Execute AAP CaC tasksets
-  ansible.builtin.include_tasks: "{{ role_path }}/tasks/{{ item }}"
-  loop: "{{ aap_cac_taskset_files | default([]) }}"
-  loop_control:
-    label: "{{ item }}"
+    - name: Include tasks to create an authentication token
+      ansible.builtin.include_tasks:
+        file: '{{ role_path }}/tasks/create_authentication_token.yml'
+      when: not (aap_cac_preexisting_token | default(false))
+
+    - name: Discover AAP CaC tasksets
+      # Exclude composite orchestration entrypoint from full run to avoid duplicate execution.
+      ansible.builtin.set_fact:
+        aap_cac_taskset_files: >-
+          {{
+            query('ansible.builtin.fileglob', role_path ~ '/tasks/cac_*.yml')
+            | map('basename')
+            | reject('in', ['cac_34_sync_hub.yml'])
+            | sort
+          }}
+      changed_when: false
+      tags: always
+
+    - name: Execute AAP CaC tasksets
+      ansible.builtin.include_tasks: "{{ role_path }}/tasks/{{ item }}"
+      loop: "{{ aap_cac_taskset_files | default([]) }}"
+      loop_control:
+        label: "{{ item }}"
+  always:
+    - name: Include tasks to delete the used authentication token
+      ansible.builtin.include_tasks:
+        file: '{{ role_path }}/tasks/delete_authentication_token.yml'
+      when: not (aap_cac_preexisting_token | default(false))
