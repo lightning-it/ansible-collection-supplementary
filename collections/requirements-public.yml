@@ -2,7 +2,7 @@
 collections:
   - name: https://github.com/ansible/ansible.platform.git
     type: git
-    version: "2.5.20250702"
+    version: "2.6.20251106"
   - name: https://github.com/ansible-collections/ansible_hub.git
     type: git
     version: "1.0.4"
