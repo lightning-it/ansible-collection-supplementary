@@ -19,7 +19,7 @@ collections:
   # renovate: datasource=galaxy-collection depName=infra.aap_configuration
   - name: https://github.com/redhat-cop/infra.aap_configuration.git
     type: git
-    version: "3.3.0"
+    version: "3.9.1"
   # renovate: datasource=galaxy-collection depName=infra.aap_configuration_extended
   - name: https://github.com/redhat-cop/aap_configuration_extended.git
     type: git
