@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="quay.io/l-it/ee-wunder-devtools-ubi9:v1.4.0"
+IMAGE="quay.io/l-it/ee-wunder-devtools-ubi9:v1.6.0"
 CONTAINER_HOME="${CONTAINER_HOME:-/tmp/wunder}"
 HOST_HOME_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/wunder-devtools-ee/home"
 
 mkdir -p "$HOST_HOME_CACHE"
 
 DOCKER_ARGS=(
-  --security-opt label=disable
   -v "$PWD":/workspace
   -w /workspace
   -e HOME="${CONTAINER_HOME}"
