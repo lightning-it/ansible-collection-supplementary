@@ -25,6 +25,21 @@ env:
   EXAMPLE_PLAYBOOK: "playbooks/example.yml"
 
 jobs:
+  validate-certified-requirements:
+    name: Validate certified requirements on Automation Hub
+    runs-on: ubuntu-latest
+    if: ${{ secrets.RH_AUTOMATION_HUB_TOKEN != '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate certified collection versions
+        env:
+          AUTOMATION_HUB_TOKEN: ${{ secrets.RH_AUTOMATION_HUB_TOKEN }}
+        run: |
+          bash scripts/validate-certified-on-ah.sh collections/requirements-certified.yml
+
   # ---------------------------------------------------------------------------
   # Collection CI
   # ---------------------------------------------------------------------------
