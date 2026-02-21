@@ -8,7 +8,7 @@ collections:
     version: "1.0.4"
   - name: https://github.com/ansible/event-driven-ansible.git
     type: git
-    version: "v2.8.1"
+    version: "v2.11.0"
   - name: https://github.com/redhat-cop/aap_utilities.git
     type: git
     version: "2.7.0"
