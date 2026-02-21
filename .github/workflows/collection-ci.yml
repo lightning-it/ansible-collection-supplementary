@@ -35,13 +35,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Skip when Automation Hub token is not configured
-        if: ${{ env.AUTOMATION_HUB_TOKEN == '' }}
+      - name: Detect certified requirements file
+        id: certified_requirements
         run: |
-          echo "RH_AUTOMATION_HUB_TOKEN is not configured; skipping certified requirements validation."
+          if [[ -f collections/requirements-certified.yml ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip when no certified requirements file exists
+        if: ${{ steps.certified_requirements.outputs.present == 'false' }}
+        run: |
+          echo "No collections/requirements-certified.yml found; skipping Automation Hub validation."
+
+      - name: Require Automation Hub token
+        if: ${{ steps.certified_requirements.outputs.present == 'true' && env.AUTOMATION_HUB_TOKEN == '' }}
+        run: |
+          echo "RH_AUTOMATION_HUB_TOKEN is required for certified requirements validation." >&2
+          exit 1
 
       - name: Validate certified collection versions
-        if: ${{ env.AUTOMATION_HUB_TOKEN != '' }}
+        if: ${{ steps.certified_requirements.outputs.present == 'true' && env.AUTOMATION_HUB_TOKEN != '' }}
         run: |
           bash scripts/validate-certified-on-ah.sh collections/requirements-certified.yml
 
@@ -51,6 +66,7 @@ jobs:
   lint:
     name: Lint (ansible-lint via ee-wunder-devtools-ubi9)
     runs-on: ubuntu-latest
+    needs: validate-certified-requirements
 
     steps:
       # 1) Checkout the repository
