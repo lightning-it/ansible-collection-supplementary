@@ -41,6 +41,7 @@
 - name: Enable linger for install user
   ansible.builtin.command:
     cmd: "loginctl enable-linger {{ aap_deploy_install_user }}"
+  changed_when: true
   when:
     - not (aap_deploy_skip_if_installed | bool and aap_deploy_install_marker.stat.exists)
     - >-

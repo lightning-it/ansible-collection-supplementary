@@ -2,7 +2,7 @@
 # CaC taskset: Reconcile managed AAP objects and prune unmanaged objects.
 - name: Reconcile managed AAP objects and prune unmanaged objects
   block:
-    - name: Run role infra.aap_configuration_extended.object_diff
+    - name: Run role infra.aap_configuration_extended.object_diff  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: infra.aap_configuration_extended.object_diff
       vars:
@@ -36,7 +36,7 @@
             var: controller_instance_groups
             tags: instance_groups
 
-    - name: Run role infra.aap_configuration.dispatch
+    - name: Run role infra.aap_configuration.dispatch  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
       vars:
