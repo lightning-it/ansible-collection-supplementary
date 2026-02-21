@@ -156,6 +156,7 @@
     remote_src: true
     extra_opts:
       - --strip-components=1
+  become: true
   become_user: "{{ aap_deploy_install_user }}"
   when:
     - aap_deploy_force_unpack | bool or not aap_deploy_unpack_marker.stat.exists

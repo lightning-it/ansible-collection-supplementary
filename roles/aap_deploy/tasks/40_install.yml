@@ -71,6 +71,7 @@
   environment:
     XDG_RUNTIME_DIR: "/run/user/{{ aap_deploy_install_user_uid }}"
     DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ aap_deploy_install_user_uid }}/bus"
+  become: true
   become_user: "{{ aap_deploy_install_user }}"
   register: aap_deploy_install_command
   changed_when: true

@@ -2,6 +2,7 @@
 - name: Query running podman containers for install user
   ansible.builtin.command:
     cmd: podman ps --format json
+  become: true
   become_user: "{{ aap_deploy_install_user }}"
   register: aap_deploy_podman_ps
   changed_when: false
