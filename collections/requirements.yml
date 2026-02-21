@@ -18,7 +18,7 @@ collections:
   - name: community.vmware
     version: "6.2.0"
   - name: containers.podman
-    version: "1.17.0"
+    version: "1.19.0"
   - name: infra.aap_utilities
     version: "2.7.0"
   - name: infra.aap_configuration
