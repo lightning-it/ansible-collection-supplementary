@@ -9,6 +9,8 @@ Install collections from:
 
 ## Variables
 
+See `roles/aap_cac/defaults/main.yml`.
+
 Key variables:
 - `aap_cac_collections_requirements`
 - `aap_cac_gateway_hostname`
@@ -16,25 +18,41 @@ Key variables:
 - `aap_cac_object_reconcile_secure_logging`
 - `aap_cac_object_reconcile_protect_not_empty_orgs`
 
-## Notes
-
-- Role tasksets are self-contained under `roles/aap_cac/tasks`.
-- OAuth token helper tasks are part of the role:
-  - `tasks/create_authentication_token.yml`
-  - `tasks/delete_authentication_token.yml`
-- Full CaC entrypoint taskset:
-  - `tasks/main.yml`
-  - manages auth token lifecycle once per run (create before tasksets, delete after tasksets)
-- Composite subset entrypoint (Hub sync):
-  - `tasks/cac_34_sync_hub.yml`
-  - manages auth token lifecycle for this composite flow
-  - Not auto-included by `tasks/main.yml` to avoid duplicate execution.
-- Pattern example: call role task entrypoints directly, e.g.
-  `roles/aap_cac/tasks/cac_11_gateway_organizations.yml`.
-
 ## Dependencies
 
 None.
+
+## Example Playbook
+
+```yaml
+- name: Apply AAP configuration-as-code
+  hosts: aaps
+  become: true
+  gather_facts: true
+  roles:
+    - role: lit.supplementary.aap_cac
+      vars:
+        aap_cac_gateway_hostname: "https://{{ inventory_hostname }}"
+```
+
+Run a single taskset directly:
+
+```yaml
+- name: Apply only gateway organizations
+  hosts: aaps
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Include aap_cac taskset
+      ansible.builtin.include_role:
+        name: lit.supplementary.aap_cac
+        tasks_from: cac_11_gateway_organizations.yml
+```
+
+Hub sync is covered by running:
+- `cac_30_hub_collection_remotes.yml`
+- `cac_31_hub_collection_repositories.yml`
+- `cac_32_hub_collection_repository_sync.yml`
 
 ## License
 

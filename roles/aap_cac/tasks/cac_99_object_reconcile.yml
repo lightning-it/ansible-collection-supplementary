@@ -35,6 +35,7 @@
           - name: instance_groups
             var: controller_instance_groups
             tags: instance_groups
+
     - name: Run role infra.aap_configuration.dispatch
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch

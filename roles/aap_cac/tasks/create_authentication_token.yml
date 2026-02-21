@@ -12,4 +12,3 @@
         scope: 'write'
         state: 'present'
       register: '__t_token'
-...
