@@ -34,6 +34,23 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    2. `ansible-lint.yml` YAML max line length 120
 4. Pre-commit runs devtools-based hooks for `yamllint`, `ansible-lint`, and Molecule light scenarios.
 
+## 2.1 Collection Dependency Management (Mandatory)
+
+1. Collection dependency source of truth is `galaxy.yml` `dependencies`.
+2. When role code starts using modules/plugins from another collection, you MUST add that collection to
+   `galaxy.yml` immediately.
+3. Collection dependency versions MUST be maintained in `galaxy.yml`; do not duplicate version ownership in
+   `collections/requirements.yml`.
+4. `galaxy.yml` dependencies support collection FQCN + version constraints only. GitHub repo/tag sources are
+   managed via `collections/requirements.yml`.
+5. If `collections/requirements.yml` exists, it is an optional install overlay only (for
+   workspace/runtime packaging needs). It MUST NOT become the canonical source of collection dependency versions.
+6. Renovate in collection repos SHOULD track collection dependencies from `galaxy.yml` only.
+7. Renovate managers for `collections/requirements-*.yml` SHOULD be avoided in collection repos unless explicitly
+   required for a documented exception.
+8. If dependency update policy differs per dependency (for example lifecycle-managed Red Hat collections), encode
+   that as targeted Renovate `packageRules` while keeping version ownership in `galaxy.yml`.
+
 ## 3. Role Variable Naming and Mapping Rules
 
 ### 3.1 Role-Prefixed Variables (Mandatory)

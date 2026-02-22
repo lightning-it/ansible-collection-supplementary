@@ -1,4 +1,0 @@
----
-# AAP CaC matrix dependencies are declared in galaxy.yml.
-# Keep this file for optional certified-only overlays.
-collections: []

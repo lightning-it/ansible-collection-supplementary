@@ -1,8 +1,6 @@
 ---
-aap_cac_collections_profile: "certified"
-# Optional profile-specific requirements overlay file.
-aap_cac_collections_requirements: >-
-  {{ role_path | dirname | dirname }}/collections/requirements-{{ aap_cac_collections_profile }}.yml
+# Optional requirements overlay file.
+aap_cac_collections_requirements: "{{ role_path | dirname | dirname }}/collections/requirements.yml"
 
 # Canonical AAP CaC collection matrix used by this role.
 aap_cac_required_collection_matrix:

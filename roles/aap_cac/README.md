@@ -7,13 +7,11 @@ AAP configuration-as-code role tasksets for AAP object configuration.
 Install `lit.supplementary` via `ansible-galaxy collection install` so
 dependencies from `galaxy.yml` are installed automatically.
 
-Optional overlay profiles (for additional non-matrix dependencies):
-- `collections/requirements-public.yml` (public/GitHub flow)
-- `collections/requirements-certified.yml` (Red Hat certified flow)
+Optional overlay file (for additional non-matrix dependencies):
+- `collections/requirements.yml`
 
 Default used by this role:
-- `aap_cac_collections_profile` -> `certified`
-- `aap_cac_collections_requirements` -> `collections/requirements-{{ aap_cac_collections_profile }}.yml`
+- `aap_cac_collections_requirements` -> `collections/requirements.yml`
 
 ## Variables
 
@@ -40,8 +38,7 @@ This role validates and expects the AAP CaC collection matrix defined in
 `roles/aap_cac/defaults/main.yml` (`aap_cac_required_collection_matrix`).
 
 The required matrix is enforced against collection metadata in `galaxy.yml`.
-Profile files (`collections/requirements-public.yml` and
-`collections/requirements-certified.yml`) are optional overlays for additional
+`collections/requirements.yml` is an optional overlay for additional
 non-matrix dependencies.
 
 ## Example Playbook
