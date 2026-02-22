@@ -173,7 +173,9 @@
 - name: Validate staged bundle checksum when expected checksum is provided
   ansible.builtin.assert:
     that:
-      - aap_deploy_archive_target_metadata.stat.checksum | default('') | lower == aap_deploy_setup_archive_checksum | trim | lower
+      - >-
+        aap_deploy_archive_target_metadata.stat.checksum | default('') | lower
+        == aap_deploy_setup_archive_checksum | trim | lower
     fail_msg: >-
       Staged bundle checksum mismatch at {{ aap_deploy_setup_archive_path }}.
       expected={{ aap_deploy_setup_archive_checksum | trim | lower }}
@@ -183,9 +185,11 @@
   when: aap_deploy_setup_archive_checksum | default('', true) | trim | length > 0
 
 - name: Validate staged bundle tar.gz format
-  ansible.builtin.shell: "tar -tzf {{ aap_deploy_setup_archive_path | quote }} >/dev/null"
-  args:
-    executable: /bin/bash
+  ansible.builtin.unarchive:
+    src: "{{ aap_deploy_setup_archive_path }}"
+    dest: "{{ aap_deploy_setup_dir }}"
+    remote_src: true
+    list_files: true
   register: aap_deploy_archive_format_check
   changed_when: false
   failed_when: false
@@ -196,7 +200,7 @@
     msg: |-
       Staged bundle archive is not a valid tar.gz:
       path={{ aap_deploy_setup_archive_path }}
-      stderr={{ aap_deploy_archive_format_check.stderr | default('') | trim }}
+      detail={{ aap_deploy_archive_format_check.msg | default('') | trim }}
 
       Most common causes:
       - Download URL expired and returned HTML instead of the bundle.

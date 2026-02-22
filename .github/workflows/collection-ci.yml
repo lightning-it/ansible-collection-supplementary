@@ -55,6 +55,16 @@ jobs:
           echo "RH_AUTOMATION_HUB_TOKEN is required for certified requirements validation." >&2
           exit 1
 
+      - name: Sync certified collection versions from Automation Hub
+        if: ${{ steps.certified_requirements.outputs.present == 'true' && env.AUTOMATION_HUB_TOKEN != '' }}
+        run: |
+          bash scripts/sync-certified-from-ah.sh collections/requirements-certified.yml
+
+      - name: Show synced certified requirements
+        if: ${{ steps.certified_requirements.outputs.present == 'true' && env.AUTOMATION_HUB_TOKEN != '' }}
+        run: |
+          cat collections/requirements-certified.yml
+
       - name: Validate certified collection versions
         if: ${{ steps.certified_requirements.outputs.present == 'true' && env.AUTOMATION_HUB_TOKEN != '' }}
         run: |
