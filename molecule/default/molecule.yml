@@ -16,29 +16,12 @@ platforms:
 
 provisioner:
   name: ansible
-  lint: |
-    yamllint .
-    ansible-lint
   env:
     ANSIBLE_ROLES_PATH: "roles:../../roles"
-  inventory:
-    host_vars:
-      localhost:
-        ansible_connection: local
-  playbooks:
-    converge: converge.yml
-    destroy: destroy.yml
-    verify: verify.yml
 
 scenario:
   test_sequence:
     - dependency
-    - destroy
-    - syntax
-    - converge
-    - idempotence
-    - verify
-    - destroy
 
 verifier:
   name: ansible

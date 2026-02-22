@@ -139,19 +139,26 @@ PY
   # 4) Discover scenarios
   # -------------------------------------------------------------
   scenarios=()
+  scenario_root="extensions/molecule"
+  if [ ! -d "${scenario_root}" ]; then
+    scenario_root="molecule"
+  fi
 
   if [ -n "$scenario_filter" ]; then
-    if [ -d "molecule/$scenario_filter" ] && [ -f "molecule/$scenario_filter/molecule.yml" ]; then
+    if [ -d "${scenario_root}/$scenario_filter" ] && [ -f "${scenario_root}/$scenario_filter/molecule.yml" ]; then
       scenarios+=("$scenario_filter")
     else
-      echo "ERROR: Requested scenario '${scenario_filter}' not found under molecule/." >&2
+      echo "ERROR: Requested scenario '${scenario_filter}' not found under ${scenario_root}/." >&2
       exit 1
     fi
   else
-    if [ -d molecule ]; then
+    if [ -d "${scenario_root}" ]; then
       while IFS= read -r dir; do
         scen="${dir##*/}"
         case "$scen" in
+          default)
+            echo "Skipping default scenario placeholder in devtools-molecule.sh."
+            ;;
           *_heavy)
             echo "Skipping heavy scenario '\''${scen}'\'' in devtools-molecule.sh (run manually via dedicated script)."
             ;;
@@ -159,7 +166,7 @@ PY
             scenarios+=("$scen")
             ;;
         esac
-      done < <(find molecule -maxdepth 1 -mindepth 1 -type d)
+      done < <(find -L "${scenario_root}" -maxdepth 1 -mindepth 1 -type d)
     fi
   fi
 

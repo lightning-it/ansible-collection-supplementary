@@ -1,6 +1,7 @@
 ---
 dependency:
-  name: galaxy
+  name: shell
+  command: ":"
 
 driver:
   name: default
@@ -28,6 +29,16 @@ provisioner:
     converge: converge.yml
     destroy: destroy.yml
     verify: verify.yml
+
+scenario:
+  test_sequence:
+    - dependency
+    - destroy
+    - syntax
+    - converge
+    - idempotence
+    - verify
+    - destroy
 
 verifier:
   name: ansible
