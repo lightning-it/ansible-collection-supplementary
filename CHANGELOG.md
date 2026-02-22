@@ -1,3 +1,9 @@
+## [1.16.5](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.4...v1.16.5) (2026-02-22)
+
+### Bug Fixes
+
+* update fedora.linux_system_roles datasource to galaxy-collection… ([#120](https://github.com/lightning-it/ansible-collection-supplementary/issues/120)) ([e0a7088](https://github.com/lightning-it/ansible-collection-supplementary/commit/e0a70885611994c510ad519439890802925fbc15))
+
 ## [1.16.4](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.3...v1.16.4) (2026-02-22)
 
 ### Bug Fixes
