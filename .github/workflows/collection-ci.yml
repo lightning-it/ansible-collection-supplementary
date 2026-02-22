@@ -18,7 +18,7 @@ env:
   PYTHON_VERSION: "3.11"
   ANSIBLE_CORE_VERSION: "2.18.13"
   ANSIBLE_LINT_VERSION: "6.22.2"
-  TERRAFORM_VERSION: "1.6.6"
+  TERRAFORM_VERSION: "1.14.5"
   COLLECTION_NAMESPACE: lit
 
   # Example playbook that MUST exist in this repository.
