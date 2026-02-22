@@ -1,0 +1,145 @@
+---
+- name: Check installation marker before workflow
+  ansible.builtin.stat:
+    path: "{{ aap_deploy_installed_marker_path }}"
+  register: aap_deploy_install_marker_precheck
+
+- name: Check install user exists for runtime probe
+  ansible.builtin.command:
+    cmd: "getent passwd {{ aap_deploy_install_user }}"
+  register: aap_deploy_install_user_getent
+  changed_when: false
+  failed_when: false
+  when: >-
+    (aap_deploy_skip_if_runtime_active | bool)
+    or
+    (
+      (aap_deploy_skip_if_installed | bool)
+      and (aap_deploy_skip_if_installed_require_runtime | bool)
+    )
+
+- name: Probe running podman container names for install user
+  ansible.builtin.command:
+    cmd: >-
+      podman ps{% if aap_deploy_runtime_probe_all_containers | bool %} -a{% endif %}
+      --format {{ '{{.Names}}' }}
+  become: true
+  become_user: "{{ aap_deploy_install_user }}"
+  register: aap_deploy_runtime_probe_cmd
+  changed_when: false
+  failed_when: false
+  when:
+    - >-
+      (aap_deploy_skip_if_runtime_active | bool)
+      or
+      (
+        (aap_deploy_skip_if_installed | bool)
+        and (aap_deploy_skip_if_installed_require_runtime | bool)
+      )
+    - aap_deploy_install_user_getent.rc == 0
+
+- name: Build runtime detection facts
+  ansible.builtin.set_fact:
+    aap_deploy_runtime_probe_available: "{{ (aap_deploy_runtime_probe_cmd.rc | default(1)) == 0 }}"
+    aap_deploy_runtime_matching_containers: >-
+      {{
+        (
+          aap_deploy_runtime_probe_cmd.stdout_lines
+          | default([])
+          | map('trim')
+          | reject('equalto', '')
+          | select('match', aap_deploy_runtime_name_regex)
+          | list
+        )
+        if (aap_deploy_runtime_probe_cmd.rc | default(1)) == 0
+        else []
+      }}
+  changed_when: false
+
+- name: Compute marker-based skip decision
+  ansible.builtin.set_fact:
+    aap_deploy_marker_skip_allowed: >-
+      {{
+        (aap_deploy_skip_if_installed | bool)
+        and (aap_deploy_install_marker_precheck.stat.exists | default(false))
+        and (
+          not (aap_deploy_skip_if_installed_require_runtime | bool)
+          or (
+            (aap_deploy_runtime_probe_available | default(false))
+            and (
+              (aap_deploy_runtime_matching_containers | length)
+              >= (aap_deploy_skip_if_installed_runtime_min_matching_containers | int)
+            )
+          )
+        )
+      }}
+  changed_when: false
+
+- name: Detect pre-existing AAP deployment
+  ansible.builtin.set_fact:
+    aap_deploy_existing_install_detected: >-
+      {{
+        (aap_deploy_marker_skip_allowed | bool)
+        or (
+          aap_deploy_skip_if_runtime_active | bool
+          and (aap_deploy_runtime_probe_available | default(false))
+          and (
+            (aap_deploy_runtime_matching_containers | length)
+            >= (aap_deploy_runtime_min_matching_containers | int)
+          )
+        )
+      }}
+    aap_deploy_existing_install_reasons: >-
+      {{
+        []
+        + (
+          ['marker=' ~ aap_deploy_installed_marker_path]
+          if (aap_deploy_marker_skip_allowed | bool)
+          else []
+        )
+        + (
+          ['runtime=' ~ (aap_deploy_runtime_matching_containers | join(','))]
+          if (
+            aap_deploy_skip_if_runtime_active | bool
+            and (aap_deploy_runtime_probe_available | default(false))
+            and (
+              (aap_deploy_runtime_matching_containers | length)
+              >= (aap_deploy_runtime_min_matching_containers | int)
+            )
+          )
+          else []
+        )
+      }}
+  changed_when: false
+
+- name: Report install detection summary
+  ansible.builtin.debug:
+    msg: >-
+      existing_install_detected={{ aap_deploy_existing_install_detected | bool }};
+      marker_exists={{ aap_deploy_install_marker_precheck.stat.exists | default(false) }};
+      marker_skip_allowed={{ aap_deploy_marker_skip_allowed | default(false) }};
+      runtime_probe_rc={{ aap_deploy_runtime_probe_cmd.rc | default('n/a') }};
+      runtime_probe_all={{ aap_deploy_runtime_probe_all_containers | bool }};
+      runtime_match_count={{ aap_deploy_runtime_matching_containers | length }};
+      runtime_regex={{ aap_deploy_runtime_name_regex }};
+      runtime_match_threshold={{ aap_deploy_runtime_min_matching_containers | int }}.
+  changed_when: false
+
+- name: Report stale marker ignored
+  ansible.builtin.debug:
+    msg: >-
+      Marker file exists at {{ aap_deploy_installed_marker_path }} but runtime match threshold was not met.
+      Ignoring stale marker and continuing with installation workflow.
+  changed_when: false
+  when:
+    - aap_deploy_install_marker_precheck.stat.exists | default(false)
+    - not (aap_deploy_marker_skip_allowed | default(false))
+
+- name: Report install workflow skip decision
+  ansible.builtin.debug:
+    msg: >-
+      Existing AAP deployment detected ({{ aap_deploy_existing_install_reasons | join('; ') }}).
+      Skipping host prep, bundle handling, inventory render, and installer run.
+      Verification tasks still execute when enabled.
+  changed_when: false
+  when: aap_deploy_existing_install_detected | bool

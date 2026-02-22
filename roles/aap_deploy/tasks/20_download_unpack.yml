@@ -15,29 +15,34 @@
     group: "{{ aap_deploy_install_user }}"
     mode: '0755'
 
-- name: Check bundle archive on managed node
+- name: Check bundle archive on managed node destination path
+  ansible.builtin.stat:
+    path: "{{ aap_deploy_setup_archive_path }}"
+  register: aap_deploy_archive_on_target_dest
+
+- name: Check bundle archive on managed node source path
   ansible.builtin.stat:
     path: "{{ aap_deploy_setup_archive_src }}"
-  register: aap_deploy_archive_on_target
+  register: aap_deploy_archive_on_target_src
 
-- name: Check bundle archive on control node project dir
-  ansible.builtin.stat:
-    path: "{{ aap_deploy_setup_archive_src }}"
-  register: aap_deploy_archive_on_controller_src
-  delegate_to: localhost
-  become: false
-
-- name: Check bundle archive on control node local ansible dir
+- name: Check bundle archive on control node runner project dir
   ansible.builtin.stat:
     path: "{{ aap_deploy_local_bundle_project_archive_path }}"
   register: aap_deploy_archive_on_controller_project
   delegate_to: localhost
   become: false
 
-- name: Check bundle archive on default local ansible dir fallback
+- name: Check bundle archive on control node .artifacts dir fallback
   ansible.builtin.stat:
     path: "{{ aap_deploy_local_bundle_archive_path }}"
   register: aap_deploy_archive_on_controller_fallback
+  delegate_to: localhost
+  become: false
+
+- name: Check bundle archive on control node path matching setup_archive_src
+  ansible.builtin.stat:
+    path: "{{ aap_deploy_setup_archive_src }}"
+  register: aap_deploy_archive_on_controller_src
   delegate_to: localhost
   become: false
 
@@ -45,58 +50,73 @@
   ansible.builtin.set_fact:
     aap_deploy_controller_archive_path: >-
       {{
-        aap_deploy_setup_archive_src
-        if aap_deploy_archive_on_controller_src.stat.exists
+        aap_deploy_local_bundle_project_archive_path
+        if aap_deploy_archive_on_controller_project.stat.exists
         else (
-          aap_deploy_local_bundle_project_archive_path
-          if aap_deploy_archive_on_controller_project.stat.exists
+          aap_deploy_local_bundle_archive_path
+          if aap_deploy_archive_on_controller_fallback.stat.exists
           else (
-            aap_deploy_local_bundle_archive_path
-            if aap_deploy_archive_on_controller_fallback.stat.exists
+            aap_deploy_setup_archive_src
+            if aap_deploy_archive_on_controller_src.stat.exists
             else ''
           )
         )
       }}
     aap_deploy_archive_source_mode: >-
       {{
-        'target'
-        if aap_deploy_archive_on_target.stat.exists
+        'controller'
+        if (
+          aap_deploy_archive_on_controller_project.stat.exists
+          or aap_deploy_archive_on_controller_fallback.stat.exists
+          or aap_deploy_archive_on_controller_src.stat.exists
+        )
         else (
-          'controller'
-          if (
-            aap_deploy_archive_on_controller_src.stat.exists
-            or aap_deploy_archive_on_controller_project.stat.exists
-            or aap_deploy_archive_on_controller_fallback.stat.exists
+          'target_dest'
+          if aap_deploy_archive_on_target_dest.stat.exists
+          else (
+            'target_src'
+            if aap_deploy_archive_on_target_src.stat.exists
+            else 'missing'
           )
-          else 'missing'
         )
       }}
+
+- name: Report bundle archive source selection
+  ansible.builtin.debug:
+    msg: >-
+      archive_source_mode={{ aap_deploy_archive_source_mode }};
+      controller_archive_path={{ aap_deploy_controller_archive_path | default('') }};
+      target_destination={{ aap_deploy_setup_archive_path }};
+      target_source={{ aap_deploy_setup_archive_src }}.
+  changed_when: false
 
 - name: Fail when bundle archive is missing on both target and control node
   ansible.builtin.fail:
     msg: |-
       Disconnected bundle archive not found on either location.
-      Checked target path: {{ aap_deploy_setup_archive_src }}
-      Checked control-node path: {{ aap_deploy_setup_archive_src }}
-      Checked control-node local ansible dir: {{ aap_deploy_local_bundle_project_archive_path }}
-      Checked control-node local ansible .artifacts dir: {{ aap_deploy_local_bundle_archive_path }}
+      Checked control-node runner dir: {{ aap_deploy_local_bundle_project_archive_path }}
+      Checked control-node .artifacts dir: {{ aap_deploy_local_bundle_archive_path }}
+      Checked control-node custom path: {{ aap_deploy_setup_archive_src }}
+      Checked target destination path: {{ aap_deploy_setup_archive_path }}
+      Checked target source path: {{ aap_deploy_setup_archive_src }}
 
       How to download and stage the bundle:
       1. Log in to Red Hat Customer Portal.
       2. Go to Downloads -> Red Hat Ansible Automation Platform -> 2.6.
       3. Download the containerized setup bundle archive (.tar.gz).
-      4. Place the file in one of these locations:
-         - On target host: {{ aap_deploy_setup_archive_src }}
-         - In local Ansible dir (mounted as /runner/project/...):
-           {{ aap_deploy_local_bundle_project_archive_path }}
-         - Or in local Ansible .artifacts dir:
-           {{ aap_deploy_local_bundle_archive_path }}
+      4. Preferred: place the file in local runner project dir:
+         {{ aap_deploy_local_bundle_project_archive_path }}
+         The role will copy it to target path:
+         {{ aap_deploy_setup_archive_path }}
+      5. Alternatives:
+         - Local .artifacts dir: {{ aap_deploy_local_bundle_archive_path }}
+         - Pre-staged on target: {{ aap_deploy_setup_archive_path }}
       Note: ansible-nav runs inside a container. Workstation paths like
       /home/<user>/... are not visible unless mounted into /runner/project.
-      5. Re-run the playbook.
+      6. Re-run the playbook.
   when: aap_deploy_archive_source_mode == 'missing'
 
-- name: Copy setup archive from controller project dir
+- name: Copy setup archive from controller to target install dir
   ansible.builtin.copy:
     src: "{{ aap_deploy_controller_archive_path }}"
     dest: "{{ aap_deploy_setup_archive_path }}"
@@ -106,7 +126,7 @@
   when:
     - aap_deploy_archive_source_mode == 'controller'
 
-- name: Copy setup archive from managed node path
+- name: Copy setup archive from managed node source path
   ansible.builtin.copy:
     src: "{{ aap_deploy_setup_archive_src }}"
     dest: "{{ aap_deploy_setup_archive_path }}"
@@ -115,10 +135,10 @@
     group: "{{ aap_deploy_install_user }}"
     mode: '0644'
   when:
-    - aap_deploy_archive_source_mode == 'target'
+    - aap_deploy_archive_source_mode == 'target_src'
     - aap_deploy_setup_archive_src != aap_deploy_setup_archive_path
 
-- name: Ensure archive ownership when pre-staged archive path equals destination
+- name: Ensure archive ownership for already staged target archive
   ansible.builtin.file:
     path: "{{ aap_deploy_setup_archive_path }}"
     owner: "{{ aap_deploy_install_user }}"
@@ -126,8 +146,70 @@
     mode: '0644'
     state: file
   when:
-    - aap_deploy_archive_source_mode == 'target'
-    - aap_deploy_setup_archive_src == aap_deploy_setup_archive_path
+    - aap_deploy_archive_source_mode == 'target_dest'
+
+- name: Collect staged bundle metadata on target
+  ansible.builtin.stat:
+    path: "{{ aap_deploy_setup_archive_path }}"
+    checksum_algorithm: sha256
+  register: aap_deploy_archive_target_metadata
+
+- name: Validate staged bundle minimum size
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_archive_target_metadata.stat.exists | default(false)
+      - (aap_deploy_archive_target_metadata.stat.size | int) >= (aap_deploy_validate_archive_min_size_bytes | int)
+    fail_msg: >-
+      Staged bundle archive looks too small for disconnected AAP deployment:
+      path={{ aap_deploy_setup_archive_path }},
+      size={{ aap_deploy_archive_target_metadata.stat.size | default('unknown') }} bytes,
+      minimum={{ aap_deploy_validate_archive_min_size_bytes | int }} bytes.
+      This usually means the downloaded file is not the real bundle
+      (for example an HTML login/error page or the small connected setup archive).
+      Use the containerized setup bundle artifact and retry.
+    quiet: true
+  when: (aap_deploy_validate_archive_min_size_bytes | int) > 0
+
+- name: Validate staged bundle checksum when expected checksum is provided
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_archive_target_metadata.stat.checksum | default('') | lower == aap_deploy_setup_archive_checksum | trim | lower
+    fail_msg: >-
+      Staged bundle checksum mismatch at {{ aap_deploy_setup_archive_path }}.
+      expected={{ aap_deploy_setup_archive_checksum | trim | lower }}
+      actual={{ aap_deploy_archive_target_metadata.stat.checksum | default('') | lower }}
+      Re-download the bundle and retry.
+    quiet: true
+  when: aap_deploy_setup_archive_checksum | default('', true) | trim | length > 0
+
+- name: Validate staged bundle tar.gz format
+  ansible.builtin.shell: "tar -tzf {{ aap_deploy_setup_archive_path | quote }} >/dev/null"
+  args:
+    executable: /bin/bash
+  register: aap_deploy_archive_format_check
+  changed_when: false
+  failed_when: false
+  when: aap_deploy_validate_archive_format | bool
+
+- name: Fail when staged bundle is not a valid tar.gz archive
+  ansible.builtin.fail:
+    msg: |-
+      Staged bundle archive is not a valid tar.gz:
+      path={{ aap_deploy_setup_archive_path }}
+      stderr={{ aap_deploy_archive_format_check.stderr | default('') | trim }}
+
+      Most common causes:
+      - Download URL expired and returned HTML instead of the bundle.
+      - Wrong artifact downloaded (small connected setup archive instead of bundle).
+      - Incomplete/corrupted download.
+
+      Recommended checks on the runner host:
+      1. file aap-containerized-setup.tar.gz
+      2. sha256sum aap-containerized-setup.tar.gz
+      3. Re-download with quoted URL and -fL if needed.
+  when:
+    - aap_deploy_validate_archive_format | bool
+    - (aap_deploy_archive_format_check.rc | default(1)) != 0
 
 - name: Remove previous setup directory when force unpack is enabled
   ansible.builtin.file:
