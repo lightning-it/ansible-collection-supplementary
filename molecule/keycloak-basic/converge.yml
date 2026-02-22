@@ -66,4 +66,4 @@
       when: kc_compose.stat.exists
 
   roles:
-    - role: lit.supplementary.keycloak_config
+    - role: keycloak_config

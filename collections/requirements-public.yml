@@ -41,6 +41,6 @@ collections:
   - name: community.hashi_vault
     version: "7.1.0"
   - name: community.vmware
-    version: "6.2.0"
+    version: "5.10.0"
   - name: containers.podman
     version: "1.19.0"

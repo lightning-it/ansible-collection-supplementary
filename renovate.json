@@ -87,6 +87,12 @@
       "enabled": false
     },
     {
+      "description": "Stay on community.vmware 5.x while running ansible-core 2.18.x",
+      "matchDepNames": ["community.vmware"],
+      "matchDatasources": ["galaxy-collection"],
+      "allowedVersions": "/^5\\./"
+    },
+    {
       "description": "ansible.controller is tracked through Red Hat certified lifecycle",
       "matchDepNames": ["ansible.controller"],
       "enabled": false
