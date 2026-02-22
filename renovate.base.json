@@ -7,6 +7,9 @@
     ":semanticCommitType(chore)",
     ":semanticCommitScope(deps)"
   ],
+  "renovate-config-presets": {
+    "enabled": false
+  },
   "labels": ["dependencies", "renovate"],
   "timezone": "UTC",
   "schedule": [],
