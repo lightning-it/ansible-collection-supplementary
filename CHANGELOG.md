@@ -1,3 +1,9 @@
+## [1.16.4](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.3...v1.16.4) (2026-02-22)
+
+### Bug Fixes
+
+* collections expanded ([#119](https://github.com/lightning-it/ansible-collection-supplementary/issues/119)) ([0dc7a88](https://github.com/lightning-it/ansible-collection-supplementary/commit/0dc7a88361b821b3fd663113d03f422a4424801e))
+
 ## [1.16.3](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.2...v1.16.3) (2026-02-22)
 
 ### Bug Fixes
