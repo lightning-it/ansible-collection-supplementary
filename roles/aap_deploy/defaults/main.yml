@@ -30,6 +30,8 @@ aap_deploy_inventory_path: "{{ aap_deploy_setup_dir }}/{{ aap_deploy_inventory_f
 #   and /runner/project/.artifacts/<file>).
 aap_deploy_setup_archive_src: "/opt/aap/aap-containerized-setup.tar.gz"
 aap_deploy_setup_archive_checksum: ""
+aap_deploy_validate_archive_format: true
+aap_deploy_validate_archive_min_size_bytes: 100000000
 aap_deploy_force_unpack: false
 aap_deploy_setup_archive_filename: >-
   {{
@@ -165,7 +167,13 @@ aap_deploy_inventory_template: >-
 
 # Installer idempotency guard
 aap_deploy_skip_if_installed: true
+aap_deploy_skip_if_installed_require_runtime: true
+aap_deploy_skip_if_installed_runtime_min_matching_containers: 1
 aap_deploy_installed_marker_path: "{{ aap_deploy_install_dir }}/.aap_containerized_installed"
+aap_deploy_skip_if_runtime_active: true
+aap_deploy_runtime_probe_all_containers: true
+aap_deploy_runtime_name_regex: '.*(automation|ansible|aap).*'
+aap_deploy_runtime_min_matching_containers: 1
 
 # Post-install verification
 aap_deploy_verify_gateway_https: false

@@ -55,6 +55,17 @@
       "versioningTemplate": "loose"
     },
     {
+      "description": "fedora.linux_system_roles in public requirements is tracked from upstream GitHub tags",
+      "fileMatch": [
+        "^collections/requirements-public\\.yml$"
+      ],
+      "matchStrings": [
+        "(?ms)#\\s*renovate:\\s*datasource=github-tags\\s+depName=(?<depName>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)\\s*\\n\\s*-\\s*name:\\s*fedora\\.linux_system_roles\\s*\\n\\s*version:\\s*\"?(?:v)?(?<currentValue>[^\"\\n]+)\"?"
+      ],
+      "datasourceTemplate": "github-tags",
+      "versioningTemplate": "loose"
+    },
+    {
       "description": "ansible.platform in certified requirements is tracked from upstream GitHub tags",
       "fileMatch": [
         "^collections/requirements-certified\\.yml$"
@@ -88,6 +99,21 @@
         "collections/requirements-certified.yml"
       ],
       "enabled": false
+    },
+    {
+      "description": "fedora.linux_system_roles in public requirements is managed from GitHub tags, not galaxy index",
+      "matchDepNames": ["fedora.linux_system_roles"],
+      "matchDatasources": ["galaxy-collection"],
+      "matchFileNames": [
+        "collections/requirements-public.yml"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Keep community.general below 12 for linux_system_roles compatibility",
+      "matchDepNames": ["community.general"],
+      "matchDatasources": ["galaxy-collection"],
+      "allowedVersions": "<12.0.0"
     },
     {
       "description": "Stay on community.vmware 5.x while running ansible-core 2.18.x",

@@ -20,9 +20,13 @@
       - aap_deploy_run_verify is boolean
       - aap_deploy_enforce_min_mem_check is boolean
       - aap_deploy_skip_if_installed is boolean
+      - aap_deploy_skip_if_installed_require_runtime is boolean
+      - aap_deploy_skip_if_runtime_active is boolean
+      - aap_deploy_runtime_probe_all_containers is boolean
       - aap_deploy_install_user_create is boolean
       - aap_deploy_install_user_passwordless_sudo is boolean
       - aap_deploy_force_unpack is boolean
+      - aap_deploy_validate_archive_format is boolean
       - aap_deploy_verify_gateway_https is boolean
       - aap_deploy_install_user | trim | length > 0
       - aap_deploy_install_user != 'root'
@@ -37,6 +41,10 @@
       - aap_deploy_required_packages is sequence
       - aap_deploy_required_packages is not string
       - aap_deploy_min_mem_mb | int > 0
+      - aap_deploy_validate_archive_min_size_bytes | int >= 0
+      - aap_deploy_skip_if_installed_runtime_min_matching_containers | int > 0
+      - aap_deploy_runtime_name_regex | default('', true) | trim | length > 0
+      - aap_deploy_runtime_min_matching_containers | int > 0
       - aap_deploy_redis_mode in ['cluster', 'standalone']
       - aap_deploy_redis_hosts is sequence
       - aap_deploy_redis_hosts is not string

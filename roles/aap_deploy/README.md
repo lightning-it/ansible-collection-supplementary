@@ -47,17 +47,37 @@ Key variables:
 - `aap_deploy_run_installer`
 - `aap_deploy_run_verify`
 - `aap_deploy_skip_if_installed`
+- `aap_deploy_skip_if_installed_require_runtime` (default: `true`)
+- `aap_deploy_skip_if_installed_runtime_min_matching_containers` (default: `1`)
+- `aap_deploy_skip_if_runtime_active`
+- `aap_deploy_runtime_probe_all_containers` (default: `true`, uses `podman ps -a`)
+- `aap_deploy_runtime_name_regex` (default: `.*(automation|ansible|aap).*`)
+- `aap_deploy_runtime_min_matching_containers` (default: `1`)
 - `aap_deploy_enforce_min_mem_check` (default: `true`)
 - `aap_deploy_min_mem_mb` (default: `15000`, approximately 16GB)
 
 Bundle archive source behavior:
-- Role checks target path `aap_deploy_setup_archive_src`.
-- Role checks local Ansible paths:
+- Role performs an early existing-install detection (marker and runtime containers).
+- Marker-based skip is runtime-validated by default to avoid stale marker false positives.
+- When detected, host prep, bundle handling, inventory rendering, and installer execution are skipped.
+- Verification still runs (when enabled).
+- Preferred source is local runner dir:
   - `/runner/project/<bundle-file>`
+  - Role copies it to target install path `aap_deploy_setup_archive_path` (default: `/opt/aap/aap-containerized-setup.tar.gz`)
+  - Installer always uses target path.
+- Role checks local Ansible paths:
   - `/runner/project/.artifacts/<bundle-file>`
-- If missing everywhere, role fails with actionable download/staging steps.
+- If local runner file is absent, role falls back to:
+  - pre-staged target destination path (`aap_deploy_setup_archive_path`)
+  - pre-staged target source path (`aap_deploy_setup_archive_src`)
+- If missing everywhere, role fails with actionable staging steps.
+- Role validates staged archive before unpack:
+  - minimum size guard (`aap_deploy_validate_archive_min_size_bytes`, default `100000000`)
+  - optional SHA256 verification when `aap_deploy_setup_archive_checksum` is set
+  - tar.gz readability check (`aap_deploy_validate_archive_format`, default `true`)
 - Default archive path is `/opt/aap/aap-containerized-setup.tar.gz`.
 - Default bundle dir is `/opt/aap/setup/bundle`.
+- Recommended for disconnected portability: keep the bundle pre-staged on the target host at `/opt/aap/aap-containerized-setup.tar.gz`.
 
 Installer admin password behavior:
 - Passwords for gateway/controller/hub/eda/postgresql are resolved independently.

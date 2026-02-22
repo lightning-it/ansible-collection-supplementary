@@ -44,3 +44,6 @@ collections:
     version: "6.2.0"
   - name: containers.podman
     version: "1.19.0"
+  # renovate: datasource=github-tags depName=linux-system-roles/linux-system-roles
+  - name: fedora.linux_system_roles
+    version: "1.120.3"
