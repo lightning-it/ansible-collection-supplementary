@@ -19,7 +19,7 @@ tags:
   - automation
 dependencies:
   community.general: '>=7.0.0'
-  ansible.posix: '>=1.6.2'
+  ansible.posix: '>=2.1.0'
   ansible.hub: '>=1.0.4'
   community.vmware: '5.10.0'
   lit.foundational: '>=1.15.0'
