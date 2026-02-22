@@ -1,0 +1,15 @@
+---
+- name: Converge aap_cac (stub)
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Skip aap_cac in stub mode
+      ansible.builtin.debug:
+        msg: "aap_cac scenario is a syntax/stub check (no live AAP API)."
+
+    - name: Load aap_cac role entrypoint in stub mode
+      ansible.builtin.import_role:
+        name: aap_cac
+      vars:
+        aap_token: "stub-token"
+      when: false

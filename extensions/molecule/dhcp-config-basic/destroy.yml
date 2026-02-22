@@ -1,0 +1,5 @@
+---
+- name: Destroy dhcp-config-basic scenario
+  hosts: localhost
+  gather_facts: false
+  tasks: []

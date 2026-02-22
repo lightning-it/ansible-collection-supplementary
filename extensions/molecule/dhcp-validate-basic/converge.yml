@@ -1,0 +1,9 @@
+---
+- name: Converge dhcp_validate
+  hosts: localhost
+  gather_facts: false
+  vars:
+    dhcp_deploy_skip_validate: true
+    dhcp_validate_mode: report
+  roles:
+    - role: dhcp_validate

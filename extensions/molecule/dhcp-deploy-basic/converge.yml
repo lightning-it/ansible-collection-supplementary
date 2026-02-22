@@ -1,0 +1,9 @@
+---
+- name: Converge dhcp_deploy
+  hosts: localhost
+  gather_facts: true
+  vars:
+    dhcp_deploy_skip_runtime: true
+    dhcp_deploy_skip_deploy: true
+  roles:
+    - role: dhcp_deploy

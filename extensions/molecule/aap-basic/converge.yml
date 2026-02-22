@@ -1,0 +1,9 @@
+---
+- name: Converge aap
+  hosts: localhost
+  gather_facts: false
+  vars:
+    aap_enabled: false
+    aap_resolve_admin_passwords: false
+  roles:
+    - role: aap

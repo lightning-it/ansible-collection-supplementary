@@ -1,0 +1,21 @@
+---
+- name: Converge vault_validate
+  hosts: localhost
+  gather_facts: true
+  vars:
+    vault_deploy_validate_mode: report
+    vault_deploy_host_data_dir: /tmp/vault-validate-data
+    vault_deploy_host_ip: "127.0.0.1"
+    vault_deploy_api_url: "https://127.0.0.1:8200"
+    vault_deploy_health_url: "https://127.0.0.1:8200/v1/sys/health"
+    vault_deploy_container_name: "vault-vault"
+    vault_deploy_manage_systemd: false
+    vault_deploy_vault_validate_certs: false
+  pre_tasks:
+    - name: Ensure Vault data dir exists for report mode
+      ansible.builtin.file:
+        path: /tmp/vault-validate-data
+        state: directory
+        mode: '0700'
+  roles:
+    - role: vault_validate

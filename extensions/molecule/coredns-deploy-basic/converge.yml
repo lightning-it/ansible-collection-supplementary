@@ -1,0 +1,10 @@
+---
+- name: Converge coredns_deploy
+  hosts: localhost
+  gather_facts: true
+  vars:
+    coredns_deploy_health_url: "http://127.0.0.1:8080/health"
+    coredns_deploy_skip_runtime: true
+    coredns_deploy_skip_deploy: true
+  roles:
+    - role: coredns_deploy

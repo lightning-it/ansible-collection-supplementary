@@ -1,0 +1,10 @@
+---
+- name: Converge vault_ops
+  hosts: localhost
+  gather_facts: false
+  vars:
+    vault_deploy_host_ip: "127.0.0.1"
+    vault_deploy_manage_systemd: false
+    vault_ops_action: none
+  roles:
+    - role: vault_ops

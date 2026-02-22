@@ -1,0 +1,10 @@
+---
+- name: Converge aap_ops
+  hosts: localhost
+  gather_facts: false
+  vars:
+    aap_enabled: false
+    aap_ops_enabled: false
+    aap_ops_action: none
+  roles:
+    - role: aap_ops

@@ -109,7 +109,7 @@
     group: root
     mode: "0744"
 
-- name: Create initial certificate revocation list squence number
+- name: Create initial certificate revocation list sequence number
   ansible.builtin.shell: "echo 00 > crl_number"
   args:
     chdir: "{{ openvpn_key_dir }}"

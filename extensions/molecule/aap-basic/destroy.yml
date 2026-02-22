@@ -1,0 +1,5 @@
+---
+- name: Destroy aap-basic scenario
+  hosts: localhost
+  gather_facts: false
+  tasks: []
