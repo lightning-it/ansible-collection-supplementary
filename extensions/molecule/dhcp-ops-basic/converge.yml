@@ -1,0 +1,8 @@
+---
+- name: Converge dhcp_ops
+  hosts: localhost
+  gather_facts: false
+  vars:
+    dhcp_ops_action: none
+  roles:
+    - role: dhcp_ops

@@ -1,0 +1,27 @@
+---
+dependency:
+  name: shell
+  command: ":"
+
+driver:
+  name: default
+  options:
+    managed: false
+
+platforms:
+  - name: localhost
+    address: localhost
+    connection_options:
+      ansible_connection: local
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_ROLES_PATH: "roles:../../../roles"
+
+scenario:
+  test_sequence:
+    - dependency
+
+verifier:
+  name: ansible

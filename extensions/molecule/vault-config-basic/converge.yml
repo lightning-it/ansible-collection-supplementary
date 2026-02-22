@@ -1,0 +1,14 @@
+---
+- name: Converge vault_config (assert only)
+  hosts: localhost
+  gather_facts: false
+  vars:
+    vault_address: "https://vault.example.test:8200"
+    vault_config_terraform_source: "."
+    vault_deploy_host_ip: "127.0.0.1"
+    vault_deploy_manage_systemd: false
+  tasks:
+    - name: Run vault_config prechecks only
+      ansible.builtin.include_role:
+        name: vault_config
+        tasks_from: assert

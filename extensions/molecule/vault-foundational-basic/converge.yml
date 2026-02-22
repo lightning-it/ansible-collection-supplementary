@@ -1,0 +1,6 @@
+---
+- name: Converge vault_foundational
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - role: vault_foundational

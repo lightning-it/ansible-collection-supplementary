@@ -1,0 +1,13 @@
+---
+- name: Converge vault_bootstrap (assert only)
+  hosts: localhost
+  gather_facts: false
+  vars:
+    vault_deploy_host_ip: "127.0.0.1"
+    vault_deploy_manage_systemd: false
+    vault_deploy_skip_runtime: true
+  tasks:
+    - name: Run vault_bootstrap prechecks only
+      ansible.builtin.include_role:
+        name: vault_bootstrap
+        tasks_from: assert

@@ -1,0 +1,5 @@
+---
+- name: Destroy coredns-deploy-basic scenario
+  hosts: localhost
+  gather_facts: false
+  tasks: []

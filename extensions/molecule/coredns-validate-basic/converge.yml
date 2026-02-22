@@ -1,0 +1,10 @@
+---
+- name: Converge coredns_validate
+  hosts: localhost
+  gather_facts: false
+  vars:
+    coredns_deploy_health_url: "http://127.0.0.1:8080/health"
+    coredns_deploy_skip_validate: true
+    coredns_validate_mode: report
+  roles:
+    - role: coredns_validate
