@@ -50,6 +50,12 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   ns="${COLLECTION_NAMESPACE}"
   name="${COLLECTION_NAME}"
 
+  # Keep Ansible cache/install state stable and outside /workspace.
+  export HOME="/tmp/wunder"
+  mkdir -p "${HOME}/.ansible/tmp" "${HOME}/.ansible/collections"
+  export ANSIBLE_LOCAL_TEMP="${HOME}/.ansible/tmp"
+  export ANSIBLE_REMOTE_TEMP="${HOME}/.ansible/tmp"
+
   echo "Building and installing collection ${ns}.${name}..."
 
   # devtools-collection-prepare.sh prints the per-run collections dir on the last line
@@ -69,6 +75,12 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   fi
 
   cd /workspace
+
+  # Avoid stale duplicate collection resolution from ~/.ansible.
+  stale_collection_dir="${HOME}/.ansible/collections/ansible_collections/${ns}/${name}"
+  if [ -d "$stale_collection_dir" ]; then
+    rm -rf "$stale_collection_dir"
+  fi
 
   export ANSIBLE_CONFIG="/workspace/ansible.cfg"
   export ANSIBLE_COLLECTIONS_PATH="${COLLECTIONS_DIR}:/workspace/collections:/usr/share/ansible/collections"
