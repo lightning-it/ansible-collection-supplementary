@@ -21,21 +21,18 @@ Before writing or changing role code, you MUST inspect repository reality first:
 2. `meta/runtime.yml` for collection compatibility.
 3. Lint config: `.ansible-lint`, `ansible-lint.yml`, `.yamllint`, `.pre-commit-config.yaml`.
 4. Existing role patterns under `roles/` (tasks, defaults, assert entrypoints, naming).
-5. Molecule and script behavior under `extensions/molecule/` and `scripts/devtools-molecule.sh`.
+5. Molecule and script behavior under `molecule/` and `scripts/devtools-molecule.sh`.
 
 If generic guidance conflicts with repository behavior, you MUST prefer repository behavior.
 
 ## 2. Repository Baseline (This Repo)
 
-1. `galaxy.yml` currently uses:
-   1. `namespace: lit`
-   2. `name: supplementary`
-   3. `license: GPL-3.0-only`
-   4. tag set including `modulix`
-2. Linting uses 120-character YAML line length:
+1. Repository identity values (namespace, name, license, tags, dependencies) MUST be read from `galaxy.yml`.
+2. Do not copy identity metadata from another collection repository.
+3. Linting uses 120-character YAML line length:
    1. `.yamllint` max line length 120
    2. `ansible-lint.yml` YAML max line length 120
-3. Pre-commit runs devtools-based hooks for `yamllint`, `ansible-lint`, and Molecule light scenarios.
+4. Pre-commit runs devtools-based hooks for `yamllint`, `ansible-lint`, and Molecule light scenarios.
 
 ## 3. Role Variable Naming and Mapping Rules
 
@@ -321,7 +318,7 @@ Example:
 
 ### 8.1 Location
 
-Molecule scenarios MUST live at repository root under `extensions/molecule/`.
+Molecule scenarios MUST live at repository root under `molecule/`.
 
 ### 8.2 Naming (Match This Repo)
 
@@ -333,8 +330,7 @@ Molecule scenarios MUST live at repository root under `extensions/molecule/`.
 
 ### 8.3 Execution Behavior
 
-1. `scripts/devtools-molecule.sh` runs all root scenarios in `extensions/molecule/`
-   except names ending in `_heavy`.
+1. `scripts/devtools-molecule.sh` runs all root scenarios except names ending in `_heavy`.
 2. A single scenario is run with:
 
 ```bash
@@ -343,12 +339,31 @@ scripts/devtools-molecule.sh minio-config-basic
 
 3. Keep light scenarios runnable in devtools and pre-commit without external infrastructure.
 
+### 8.4 Required Basic Scenario Coverage Per Role (Mandatory)
+
+1. Every role under `roles/` MUST have a corresponding light Molecule scenario that validates the role.
+2. Required naming for new role scenarios: `<role-name-with-dashes>-basic`.
+3. If an existing role uses a legacy scenario name, do not rename it automatically, but you MUST ensure a
+   working light scenario exists for that role.
+4. Missing scenario coverage for any role is a blocker for completion.
+5. Stub scenarios are allowed only when runtime dependencies are unavailable, but the scenario MUST still run
+   through Molecule test sequence successfully.
+
+### 8.5 Scenario Quality Gate (Mandatory)
+
+For each new or changed role, and for any newly added scenario:
+
+1. Run the role scenario directly with `scripts/devtools-molecule.sh <scenario>`.
+2. The scenario MUST pass converge, idempotence, and verify (no failed tasks).
+3. `ansible-lint` MUST pass with zero fatal violations for the repository and changed scenario files.
+4. You MUST fix lint issues in scenario files (for example var naming or FQCN issues) instead of suppressing them.
+
 ## 9. Collection Packaging and `build_ignore`
 
 1. Keep `build_ignore` minimal and justified by real repository artifacts.
 2. This repo already ignores common paths (for example `.git`, `.github`, `.molecule`, `.ansible`, `infra`).
 3. Recommended additions, when relevant and not already present:
-   1. `extensions/molecule/` (root scenarios should not ship in release tarballs)
+   1. `molecule/` (root scenarios should not ship in release tarballs)
    2. `.venv/`, `.tox/`
    3. `.cache/`, `.pytest_cache/`
    4. `.ansible/`
