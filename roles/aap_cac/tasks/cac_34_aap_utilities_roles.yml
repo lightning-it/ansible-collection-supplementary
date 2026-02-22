@@ -1,0 +1,33 @@
+---
+# CaC taskset: Optional execution of infra.aap_utilities roles.
+- name: Execute optional infra.aap_utilities roles
+  when: aap_cac_enable_aap_utilities_roles | bool
+  vars:
+    __aap_cac_allowed_aap_utilities_roles:
+      - aap_backup
+      - aap_certs
+      - aap_ocp_install
+      - aap_remove
+      - aap_restore
+      - aap_setup_download
+      - aap_setup_install
+      - aap_setup_prepare
+      - git_ssh_setup
+      - kerberos
+  block:
+    - name: Validate selected infra.aap_utilities roles
+      ansible.builtin.assert:
+        that:
+          - aap_cac_aap_utilities_roles is sequence
+          - aap_cac_aap_utilities_roles | length > 0
+          - (aap_cac_aap_utilities_roles | difference(__aap_cac_allowed_aap_utilities_roles)) | length == 0
+        fail_msg: >-
+          Invalid aap_cac_aap_utilities_roles. Allowed values:
+          {{ __aap_cac_allowed_aap_utilities_roles | join(', ') }}
+
+    - name: Include selected infra.aap_utilities roles
+      ansible.builtin.include_role:
+        name: "infra.aap_utilities.{{ item }}"
+      loop: "{{ aap_cac_aap_utilities_roles }}"
+      loop_control:
+        label: "{{ item }}"

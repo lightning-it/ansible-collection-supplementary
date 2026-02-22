@@ -4,7 +4,10 @@ AAP configuration-as-code role tasksets for AAP object configuration.
 
 ## Requirements
 
-Install collections from one of:
+Install `lit.supplementary` via `ansible-galaxy collection install` so
+dependencies from `galaxy.yml` are installed automatically.
+
+Optional overlay profiles (for additional non-matrix dependencies):
 - `collections/requirements-public.yml` (public/GitHub flow)
 - `collections/requirements-certified.yml` (Red Hat certified flow)
 
@@ -18,15 +21,28 @@ See `roles/aap_cac/defaults/main.yml`.
 
 Key variables:
 - `aap_cac_collections_requirements`
+- `aap_cac_required_collection_matrix`
 - `aap_cac_gateway_hostname`
 - `aap_cac_token_description`
 - `aap_cac_object_reconcile_orgs`
 - `aap_cac_object_reconcile_secure_logging`
 - `aap_cac_object_reconcile_protect_not_empty_orgs`
+- `aap_cac_enable_aap_utilities_roles`
+- `aap_cac_aap_utilities_roles`
+- `aap_cac_enable_controller_configuration_roles`
+- `aap_cac_controller_configuration_roles`
+- `aap_cac_enable_ee_utilities_roles`
+- `aap_cac_ee_utilities_roles`
 
 ## Dependencies
 
-None.
+This role validates and expects the AAP CaC collection matrix defined in
+`roles/aap_cac/defaults/main.yml` (`aap_cac_required_collection_matrix`).
+
+The required matrix is enforced against collection metadata in `galaxy.yml`.
+Profile files (`collections/requirements-public.yml` and
+`collections/requirements-certified.yml`) are optional overlays for additional
+non-matrix dependencies.
 
 ## Example Playbook
 
@@ -59,6 +75,11 @@ Hub sync is covered by running:
 - `cac_30_hub_collection_remotes.yml`
 - `cac_31_hub_collection_repositories.yml`
 - `cac_32_hub_collection_repository_sync.yml`
+
+Optional role-dispatch tasksets:
+- `cac_34_aap_utilities_roles.yml`
+- `cac_35_controller_configuration_roles.yml`
+- `cac_36_ee_utilities_roles.yml`
 
 ## License
 

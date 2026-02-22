@@ -84,6 +84,7 @@
       "matchDepNames": ["ansible.platform"],
       "matchDatasources": ["galaxy-collection"],
       "matchFileNames": [
+        "galaxy.yml",
         "collections/requirements-public.yml",
         "collections/requirements-certified.yml"
       ],

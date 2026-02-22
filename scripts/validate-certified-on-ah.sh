@@ -117,8 +117,8 @@ mapfile -t deps < <(
 )
 
 if [[ ${#deps[@]} -eq 0 ]]; then
-  echo "No collection dependencies parsed from ${requirements_file}" >&2
-  exit 2
+  echo "No certified dependencies declared in ${requirements_file}; skipping validation."
+  exit 0
 fi
 
 failures=0
