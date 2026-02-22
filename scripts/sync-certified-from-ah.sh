@@ -183,14 +183,31 @@ path = sys.argv[1]
 with open(path, "r", encoding="utf-8") as f:
     data = json.load(f)
 
-for item in data.get("results", []):
-    version = item.get("version")
-    if isinstance(version, str) and version.strip():
-        print(version.strip())
+versions = set()
+
+def walk(node):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in {"version", "highest_version", "latest_version"} and isinstance(value, str):
+                value = value.strip()
+                if value:
+                    versions.add(value)
+            walk(value)
+    elif isinstance(node, list):
+        for value in node:
+            walk(value)
+
+walk(data)
+for version in sorted(versions):
+    print(version)
 PY
         )
         if [[ ${#page_versions[@]} -gt 0 ]]; then
-          all_versions+=("${page_versions[@]}")
+          while IFS= read -r parsed_version; do
+            if [[ "${parsed_version}" =~ ^[0-9][0-9A-Za-z._-]*$ ]]; then
+              all_versions+=("${parsed_version}")
+            fi
+          done < <(printf '%s\n' "${page_versions[@]}")
         fi
         ;;
       401|403)
