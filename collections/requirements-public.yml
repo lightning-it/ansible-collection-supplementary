@@ -11,7 +11,7 @@ collections:
   # renovate: datasource=galaxy-collection depName=ansible.eda
   - name: https://github.com/ansible/event-driven-ansible.git
     type: git
-    version: "v2.8.1"
+    version: "v2.11.0"
   # renovate: datasource=galaxy-collection depName=infra.aap_utilities
   - name: https://github.com/redhat-cop/aap_utilities.git
     type: git
