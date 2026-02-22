@@ -19,7 +19,7 @@ collections:
   # renovate: datasource=galaxy-collection depName=infra.aap_configuration
   - name: https://github.com/redhat-cop/infra.aap_configuration.git
     type: git
-    version: "3.9.1"
+    version: "4.2.1"
   # renovate: datasource=galaxy-collection depName=infra.aap_configuration_extended
   - name: https://github.com/redhat-cop/aap_configuration_extended.git
     type: git
@@ -35,7 +35,7 @@ collections:
   - name: ansible.posix
     version: "2.1.0"
   - name: community.general
-    version: "11.4.4"
+    version: "12.3.0"
   - name: community.crypto
     version: "3.1.1"
   - name: community.hashi_vault
