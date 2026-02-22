@@ -19,4 +19,4 @@ collections:
   - name: infra.controller_configuration
     version: "3.2.2"
   - name: infra.ee_utilities
-    version: "4.0.4"
+    version: "4.2.2"
