@@ -15,7 +15,7 @@ collections:
   # renovate: datasource=galaxy-collection depName=infra.aap_utilities
   - name: https://github.com/redhat-cop/aap_utilities.git
     type: git
-    version: "2.7.0"
+    version: "2.8.0"
   # renovate: datasource=galaxy-collection depName=infra.aap_configuration
   - name: https://github.com/redhat-cop/infra.aap_configuration.git
     type: git
