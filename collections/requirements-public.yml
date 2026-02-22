@@ -46,4 +46,4 @@ collections:
     version: "1.19.0"
   # renovate: datasource=galaxy-collection depName=fedora.linux_system_roles
   - name: fedora.linux_system_roles
-    version: "1.120.3"
+    version: "1.120.4"
