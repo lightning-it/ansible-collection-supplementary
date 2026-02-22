@@ -7,7 +7,7 @@ collections:
   # renovate: datasource=galaxy-collection depName=ansible.hub
   - name: https://github.com/ansible-collections/ansible_hub.git
     type: git
-    version: "1.0.0"
+    version: "1.0.4"
   # renovate: datasource=galaxy-collection depName=ansible.eda
   - name: https://github.com/ansible/event-driven-ansible.git
     type: git
