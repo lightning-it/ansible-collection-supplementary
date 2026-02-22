@@ -1,3 +1,9 @@
+## [1.16.3](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.2...v1.16.3) (2026-02-22)
+
+### Bug Fixes
+
+* update dependencies in requirements-public.yml and renovate.json ([#107](https://github.com/lightning-it/ansible-collection-supplementary/issues/107)) ([e082b48](https://github.com/lightning-it/ansible-collection-supplementary/commit/e082b480cc5a21eda2316b6208300a80ce4951e3))
+
 ## [1.16.2](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.1...v1.16.2) (2026-02-22)
 
 ### Bug Fixes
