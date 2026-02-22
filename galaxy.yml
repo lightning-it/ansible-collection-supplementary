@@ -18,7 +18,7 @@ tags:
   - security
   - automation
 dependencies:
-  community.general: '>=7.0.0'
+  community.general: '>=12.3.0'
   ansible.posix: '>=2.1.0'
   ansible.hub: '>=1.0.4'
   community.vmware: '5.10.0'
