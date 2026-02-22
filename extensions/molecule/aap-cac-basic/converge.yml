@@ -10,6 +10,4 @@
     - name: Load aap_cac role entrypoint in stub mode
       ansible.builtin.import_role:
         name: aap_cac
-      vars:
-        aap_token: "stub-token"
       when: false
