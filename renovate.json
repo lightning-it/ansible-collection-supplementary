@@ -80,10 +80,13 @@
   ],
   "packageRules": [
     {
-      "description": "ansible.platform in certified requirements is managed from github-tags, not galaxy index",
+      "description": "ansible.platform requirements are managed from github-tags, not galaxy index",
       "matchDepNames": ["ansible.platform"],
       "matchDatasources": ["galaxy-collection"],
-      "matchFileNames": ["collections/requirements-certified.yml"],
+      "matchFileNames": [
+        "collections/requirements-public.yml",
+        "collections/requirements-certified.yml"
+      ],
       "enabled": false
     },
     {
@@ -91,6 +94,22 @@
       "matchDepNames": ["community.vmware"],
       "matchDatasources": ["galaxy-collection"],
       "allowedVersions": "/^5\\./"
+    },
+    {
+      "description": "Keep redhat-cop infra collections synchronized across public and certified requirements",
+      "matchDepNames": [
+        "infra.aap_utilities",
+        "infra.aap_configuration",
+        "infra.aap_configuration_extended",
+        "infra.controller_configuration",
+        "infra.ee_utilities"
+      ],
+      "matchDatasources": ["galaxy-collection"],
+      "matchFileNames": [
+        "collections/requirements-public.yml",
+        "collections/requirements-certified.yml"
+      ],
+      "groupName": "redhat-cop infra collections (public+certified)"
     },
     {
       "description": "ansible.controller is tracked through Red Hat certified lifecycle",

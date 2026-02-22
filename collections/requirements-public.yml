@@ -1,17 +1,17 @@
 ---
 collections:
-  # renovate: datasource=galaxy-collection depName=ansible.platform
+  # renovate: datasource=github-tags depName=ansible/ansible.platform
   - name: https://github.com/ansible/ansible.platform.git
     type: git
-    version: "2.5.20250702"
+    version: "2.6.20251106"
   # renovate: datasource=galaxy-collection depName=ansible.hub
   - name: https://github.com/ansible-collections/ansible_hub.git
     type: git
-    version: "1.0.4"
+    version: "1.0.0"
   # renovate: datasource=galaxy-collection depName=ansible.eda
   - name: https://github.com/ansible/event-driven-ansible.git
     type: git
-    version: "v2.11.0"
+    version: "v2.8.1"
   # renovate: datasource=galaxy-collection depName=infra.aap_utilities
   - name: https://github.com/redhat-cop/aap_utilities.git
     type: git
@@ -23,7 +23,7 @@ collections:
   # renovate: datasource=galaxy-collection depName=infra.aap_configuration_extended
   - name: https://github.com/redhat-cop/aap_configuration_extended.git
     type: git
-    version: "1.1.1"
+    version: "4.2.0"
   # renovate: datasource=galaxy-collection depName=infra.controller_configuration
   - name: https://github.com/redhat-cop/infra.controller_configuration.git
     type: git
@@ -35,12 +35,12 @@ collections:
   - name: ansible.posix
     version: "2.1.0"
   - name: community.general
-    version: "11.4.4"
+    version: "11.1.0"
   - name: community.crypto
-    version: "2.26.7"
+    version: "2.26.3"
   - name: community.hashi_vault
     version: "7.1.0"
   - name: community.vmware
-    version: "5.10.0"
+    version: "6.2.0"
   - name: containers.podman
     version: "1.19.0"
