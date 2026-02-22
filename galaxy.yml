@@ -19,16 +19,7 @@ tags:
   - automation
 dependencies:
   community.general: '>=11.4.4,<12.0.0'
-  ansible.platform: '>=2.6.20251106'
-  ansible.controller: '>=4.6.16'
   ansible.posix: '>=2.1.0'
-  ansible.hub: '>=1.0.4'
-  ansible.eda: '>=2.11.0'
-  infra.aap_utilities: '>=2.8.0'
-  infra.aap_configuration: '>=4.2.1'
-  infra.aap_configuration_extended: '>=4.2.1'
-  infra.controller_configuration: '>=3.2.2'
-  infra.ee_utilities: '>=4.2.2'
   community.vmware: '5.10.0'
   lit.foundational: '>=1.15.0'
   community.hashi_vault: '*'

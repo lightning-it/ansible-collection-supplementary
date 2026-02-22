@@ -10,20 +10,22 @@
   when: not aap_deploy_enabled | bool
   tags: always
 
-- name: Load shared AAP context and resolve admin passwords
-  ansible.builtin.import_role:
-    name: aap
-  when: aap_deploy_enabled | bool
-  tags:
-    - passwords
-    - inventory
-    - install
-
 - name: Detect pre-existing AAP deployment
   ansible.builtin.import_tasks: 05_detect_existing_install.yml
   when: aap_deploy_enabled | bool
   tags:
     - always
+    - install
+
+- name: Load shared AAP context and resolve admin passwords
+  ansible.builtin.import_role:
+    name: aap
+  when:
+    - aap_deploy_enabled | bool
+    - not (aap_deploy_existing_install_detected | default(false))
+  tags:
+    - passwords
+    - inventory
     - install
 
 - name: Host preparation

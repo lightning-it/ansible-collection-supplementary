@@ -35,6 +35,9 @@ Shared admin password behavior:
 - `aap_resolve_admin_passwords` can still be overridden explicitly when needed.
 - Source of truth can be explicit via `aap_admin_passwords_source_of_truth` (`inventory` or `vault`).
 - By default it auto-selects `vault` when Vault configuration/auth is available, otherwise `inventory`.
+- Vault token auth can be provided via `vault_token` or `VAULT_TOKEN` environment variable.
+- AppRole auth can be provided via `ansible_hashi_vault_role_id` / `ansible_hashi_vault_secret_id`
+  or `ANSIBLE_HASHI_VAULT_ROLE_ID` / `ANSIBLE_HASHI_VAULT_SECRET_ID` environment variables.
 - Resolution order: explicit value -> Vault KV2 (source=`vault`) -> local cache (lab fallback only) -> generated value.
 - Generation is intended for persisted flows; defaults are inventory-first and non-generating.
 - With `inventory` source, each component password can be set individually.

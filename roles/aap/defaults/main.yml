@@ -143,16 +143,31 @@ aap_admin_passwords_vault_validate_certs: >-
     aap_deploy_passwords_vault_validate_certs
     | default(vault_validate_certs | default(true))
   }}
-aap_admin_passwords_vault_token: "{{ vault_token | default('', true) }}"
+aap_admin_passwords_vault_token: >-
+  {{
+    vault_token
+    | default(
+        lookup('ansible.builtin.env', 'VAULT_TOKEN') | default('', true),
+        true
+      )
+  }}
 aap_admin_passwords_vault_role_id: >-
   {{
     aap_deploy_passwords_vault_role_id
-    | default(ansible_hashi_vault_role_id | default('', true), true)
+    | default(
+        ansible_hashi_vault_role_id
+        | default(lookup('ansible.builtin.env', 'ANSIBLE_HASHI_VAULT_ROLE_ID') | default('', true), true),
+        true
+      )
   }}
 aap_admin_passwords_vault_secret_id: >-
   {{
     aap_deploy_passwords_vault_secret_id
-    | default(ansible_hashi_vault_secret_id | default('', true), true)
+    | default(
+        ansible_hashi_vault_secret_id
+        | default(lookup('ansible.builtin.env', 'ANSIBLE_HASHI_VAULT_SECRET_ID') | default('', true), true),
+        true
+      )
   }}
 
 # Vault auth helper vars (derived)

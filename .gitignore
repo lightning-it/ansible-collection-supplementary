@@ -20,8 +20,6 @@ npm-debug.log
 # Local collection installs from tests/hooks
 collections/**
 !collections/requirements.yml
-!collections/requirements-public.yml
-!collections/requirements-certified.yml
 .ansible/
 
 # Ansible logs

@@ -200,7 +200,7 @@
     msg: |-
       Staged bundle archive is not a valid tar.gz:
       path={{ aap_deploy_setup_archive_path }}
-      detail={{ aap_deploy_archive_format_check.msg | default('') | trim }}
+      detail={{ aap_deploy_archive_format_check.msg | default('unknown error') | trim }}
 
       Most common causes:
       - Download URL expired and returned HTML instead of the bundle.
@@ -208,12 +208,12 @@
       - Incomplete/corrupted download.
 
       Recommended checks on the runner host:
-      1. file aap-containerized-setup.tar.gz
-      2. sha256sum aap-containerized-setup.tar.gz
+      1. file {{ aap_deploy_setup_archive_filename }}
+      2. sha256sum {{ aap_deploy_setup_archive_filename }}
       3. Re-download with quoted URL and -fL if needed.
   when:
     - aap_deploy_validate_archive_format | bool
-    - (aap_deploy_archive_format_check.rc | default(1)) != 0
+    - aap_deploy_archive_format_check.failed | default(false) | bool
 
 - name: Remove previous setup directory when force unpack is enabled
   ansible.builtin.file:

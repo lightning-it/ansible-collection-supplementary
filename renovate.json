@@ -23,35 +23,16 @@
   ],
   "packageRules": [
     {
-      "description": "ansible.platform is managed via Red Hat lifecycle",
-      "matchDepNames": ["ansible.platform"],
-      "matchDatasources": ["galaxy-collection"],
-      "enabled": false
-    },
-    {
       "description": "Keep community.general below 12 for linux_system_roles compatibility",
       "matchDepNames": ["community.general"],
       "matchDatasources": ["galaxy-collection"],
       "allowedVersions": "<12.0.0"
     },
     {
-      "description": "Stay on community.vmware 5.x while running ansible-core 2.18.x",
+      "description": "Pin community.vmware to 5.10.0 for ansible-core 2.18.13 compatibility",
       "matchDepNames": ["community.vmware"],
       "matchDatasources": ["galaxy-collection"],
-      "allowedVersions": "/^5\\./"
-    },
-    {
-      "description": "Group Red Hat COP infra collection updates in galaxy.yml",
-      "matchDepNames": [
-        "infra.aap_utilities",
-        "infra.aap_configuration",
-        "infra.aap_configuration_extended",
-        "infra.controller_configuration",
-        "infra.ee_utilities"
-      ],
-      "matchDatasources": ["galaxy-collection"],
-      "matchFileNames": ["galaxy.yml"],
-      "groupName": "redhat-cop infra collections"
+      "allowedVersions": "/^5\\.10\\.0$/"
     }
   ]
 }

@@ -32,6 +32,10 @@ Example playbook:
 - Core collection dependencies are declared in `galaxy.yml`.
 - Optional dependency overlays:
   - `collections/requirements.yml`
+- Red Hat/AAP extension collections (for example `ansible.platform`,
+  `infra.*`) are intentionally not pinned in this collection `galaxy.yml`;
+  install them via consumer runtime overlays (for example
+  `modulix-automation/ansible/collections/requirements-rh.yml`).
 - Canonical role sources live in `roles/`; build with `ansible-galaxy
   collection build`.
 - Molecule scenario `keycloak-basic` provisions a local Keycloak container and
