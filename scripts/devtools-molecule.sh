@@ -96,10 +96,10 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   # -------------------------------------------------------------
   # 2) Install declared dependencies into the SAME per-run dir
   # -------------------------------------------------------------
-  dep_fqcns=()
+  dep_specs=()
   if [ -f /workspace/galaxy.yml ]; then
-    while IFS= read -r fqcn; do
-      dep_fqcns+=("$fqcn")
+    while IFS= read -r dep_spec; do
+      dep_specs+=("$dep_spec")
     done < <(
       python3 - <<'"PY"'
 import yaml, sys
@@ -107,18 +107,21 @@ try:
     with open("/workspace/galaxy.yml", "r", encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
     deps = data.get("dependencies") or {}
-    for fqcn in deps.keys():
-        print(fqcn)
+    for fqcn, version_spec in deps.items():
+        if version_spec in (None, "", "*"):
+            print(fqcn)
+        else:
+            print(f"{fqcn}:{version_spec}")
 except Exception as exc:  # noqa: BLE001
     sys.stderr.write(f"WARN: failed to parse galaxy.yml dependencies: {exc}\n")
 PY
     )
   fi
 
-  for dep_fqcn in "${dep_fqcns[@]}"; do
-    if [ -n "$dep_fqcn" ]; then
-      echo "Installing dependency ${dep_fqcn} into ${COLLECTIONS_DIR}..."
-      ansible-galaxy collection install "$dep_fqcn" -p "${COLLECTIONS_DIR}" --force
+  for dep_spec in "${dep_specs[@]}"; do
+    if [ -n "$dep_spec" ]; then
+      echo "Installing dependency ${dep_spec} into ${COLLECTIONS_DIR}..."
+      ansible-galaxy collection install "$dep_spec" -p "${COLLECTIONS_DIR}" --force
     fi
   done
 
