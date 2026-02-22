@@ -27,6 +27,16 @@ aap_cac_required_collection_matrix:
 
 # Gateway API endpoint used by token helper tasks.
 aap_cac_gateway_hostname: "https://{{ inventory_hostname }}"
+aap_cac_gateway_username: "{{ aap_username | default('admin', true) }}"
+aap_cac_gateway_password: >-
+  {{
+    aap_password
+    | default(
+        aap_gateway_admin_password_effective
+        | default(aap_gateway_admin_password | default('', true), true),
+        true
+      )
+  }}
 aap_cac_token_description: "aap-cac-token"
 
 # Object reconcile tuning.

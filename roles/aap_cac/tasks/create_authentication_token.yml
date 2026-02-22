@@ -6,8 +6,8 @@
     - name: create_authentication_token | Request token
       ansible.platform.token:
         gateway_hostname: "{{ aap_cac_gateway_hostname }}"
-        gateway_username: "{{ aap_username }}"
-        gateway_password: "{{ aap_password }}"
+        gateway_username: "{{ aap_cac_gateway_username }}"
+        gateway_password: "{{ aap_cac_gateway_password }}"
         gateway_validate_certs: "{{ aap_validate_certs }}"
         description: "{{ aap_cac_token_description }}"
         scope: write

@@ -21,6 +21,8 @@ Key variables:
 - `aap_cac_collections_requirements`
 - `aap_cac_required_collection_matrix`
 - `aap_cac_gateway_hostname`
+- `aap_cac_gateway_username` (defaults to legacy `aap_username`, fallback `admin`)
+- `aap_cac_gateway_password` (defaults to legacy `aap_password`, fallback `aap_gateway_admin_password_effective`)
 - `aap_cac_token_description`
 - `aap_cac_object_reconcile_orgs`
 - `aap_cac_object_reconcile_secure_logging`
