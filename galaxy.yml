@@ -25,6 +25,7 @@ dependencies:
   lit.foundational: '>=1.0.0'
   community.hashi_vault: '*'
 build_ignore:
+  - extensions/molecule
   - node_modules
   - vagrant
   - .git

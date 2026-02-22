@@ -131,6 +131,9 @@ PY
   if [ -f /workspace/ansible.cfg ]; then
     export ANSIBLE_CONFIG=/workspace/ansible.cfg
   fi
+  if [ -f /workspace/.config/molecule/config.yml ]; then
+    export XDG_CONFIG_HOME=/workspace/.config
+  fi
 
   export MOLECULE_NO_LOG="${MOLECULE_NO_LOG:-false}"
   export DOCKER_HOST="${DOCKER_HOST:-unix:///var/run/docker.sock}"
@@ -141,7 +144,8 @@ PY
   scenarios=()
   scenario_root="extensions/molecule"
   if [ ! -d "${scenario_root}" ]; then
-    scenario_root="molecule"
+    echo "ERROR: Molecule scenarios must exist under ${scenario_root}/." >&2
+    exit 1
   fi
 
   if [ -n "$scenario_filter" ]; then

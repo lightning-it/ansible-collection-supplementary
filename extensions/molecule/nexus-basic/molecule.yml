@@ -1,0 +1,45 @@
+---
+dependency:
+  name: shell
+  command: ":"
+
+driver:
+  name: default
+  options:
+    managed: false
+
+platforms:
+  - name: localhost
+    address: localhost
+    connection_options:
+      ansible_connection: local
+
+provisioner:
+  name: ansible
+  lint: |
+    yamllint .
+    ansible-lint
+  env:
+    ANSIBLE_ROLES_PATH: "roles:../../../roles"
+  inventory:
+    host_vars:
+      localhost:
+        ansible_connection: local
+        nexus_experimental_acknowledge: true
+  playbooks:
+    converge: converge.yml
+    destroy: destroy.yml
+    verify: verify.yml
+
+scenario:
+  test_sequence:
+    - dependency
+    - destroy
+    - syntax
+    - converge
+    - idempotence
+    - verify
+    - destroy
+
+verifier:
+  name: ansible

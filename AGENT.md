@@ -21,7 +21,7 @@ Before writing or changing role code, you MUST inspect repository reality first:
 2. `meta/runtime.yml` for collection compatibility.
 3. Lint config: `.ansible-lint`, `ansible-lint.yml`, `.yamllint`, `.pre-commit-config.yaml`.
 4. Existing role patterns under `roles/` (tasks, defaults, assert entrypoints, naming).
-5. Molecule and script behavior under `molecule/` and `scripts/devtools-molecule.sh`.
+5. Molecule and script behavior under `extensions/molecule/` and `scripts/devtools-molecule.sh`.
 
 If generic guidance conflicts with repository behavior, you MUST prefer repository behavior.
 
@@ -321,7 +321,7 @@ Example:
 
 ### 8.1 Location
 
-Molecule scenarios MUST live at repository root under `molecule/`.
+Molecule scenarios MUST live at repository root under `extensions/molecule/`.
 
 ### 8.2 Naming (Match This Repo)
 
@@ -333,7 +333,8 @@ Molecule scenarios MUST live at repository root under `molecule/`.
 
 ### 8.3 Execution Behavior
 
-1. `scripts/devtools-molecule.sh` runs all root scenarios except names ending in `_heavy`.
+1. `scripts/devtools-molecule.sh` runs all root scenarios in `extensions/molecule/`
+   except names ending in `_heavy`.
 2. A single scenario is run with:
 
 ```bash
@@ -347,7 +348,7 @@ scripts/devtools-molecule.sh minio-config-basic
 1. Keep `build_ignore` minimal and justified by real repository artifacts.
 2. This repo already ignores common paths (for example `.git`, `.github`, `.molecule`, `.ansible`, `infra`).
 3. Recommended additions, when relevant and not already present:
-   1. `molecule/` (root scenarios should not ship in release tarballs)
+   1. `extensions/molecule/` (root scenarios should not ship in release tarballs)
    2. `.venv/`, `.tox/`
    3. `.cache/`, `.pytest_cache/`
    4. `.ansible/`
