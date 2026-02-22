@@ -27,7 +27,7 @@ collections:
   # renovate: datasource=galaxy-collection depName=infra.controller_configuration
   - name: https://github.com/redhat-cop/infra.controller_configuration.git
     type: git
-    version: "3.1.2"
+    version: "3.2.2"
   # renovate: datasource=galaxy-collection depName=infra.ee_utilities
   - name: https://github.com/redhat-cop/ee_utilities.git
     type: git
