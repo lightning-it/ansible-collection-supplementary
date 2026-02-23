@@ -29,9 +29,13 @@ Example playbook:
 
 - `galaxy.yml` defines the collection metadata (namespace `lit`, name
   `supplementary`, license `GPL-2.0-only`).
-- Collection dependency matrices are split by distribution target:
-  - `collections/requirements-public.yml` for public/GitHub flows
-  - `collections/requirements-certified.yml` for Red Hat certified flows
+- Core collection dependencies are declared in `galaxy.yml`.
+- Optional dependency overlays:
+  - `collections/requirements.yml`
+- Red Hat/AAP extension collections (for example `ansible.platform`,
+  `infra.*`) are intentionally not pinned in this collection `galaxy.yml`;
+  install them via consumer runtime overlays (for example
+  `modulix-automation/ansible/collections/requirements-rh.yml`).
 - Canonical role sources live in `roles/`; build with `ansible-galaxy
   collection build`.
 - Molecule scenario `keycloak-basic` provisions a local Keycloak container and

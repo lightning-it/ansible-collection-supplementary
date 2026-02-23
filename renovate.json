@@ -19,76 +19,9 @@
         "(?m)^\\s{2}(?<depName>[a-z0-9_]+\\.[a-z0-9_]+):\\s*[\"']?(?<currentValue>[0-9]+(?:\\.[0-9]+){1,3})[\"']?"
       ],
       "datasourceTemplate": "galaxy-collection"
-    },
-    {
-      "description": "Ansible Galaxy collection versions in collections requirements files",
-      "fileMatch": [
-        "^collections/requirements-public\\.yml$",
-        "^collections/requirements-certified\\.yml$"
-      ],
-      "matchStrings": [
-        "-\\s*name:\\s*(?<depName>[a-z0-9_]+\\.[a-z0-9_]+)[^\\n]*\\n\\s*version:\\s*\"?(?<currentValue>[^\"\\n]+)\"?"
-      ],
-      "datasourceTemplate": "galaxy-collection"
-    },
-    {
-      "description": "Automation Hub versions for GitHub-sourced collections in public requirements",
-      "fileMatch": [
-        "^collections/requirements-public\\.yml$"
-      ],
-      "matchStrings": [
-        "(?ms)#\\s*renovate:\\s*datasource=galaxy-collection\\s+depName=(?<depName>[a-z0-9_]+\\.[a-z0-9_]+)\\s*\\n\\s*-\\s*name:\\s*https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\\.git\\s*\\n\\s*type:\\s*git\\s*\\n\\s*version:\\s*\"?(?:v)?(?<currentValue>[^\"\\n]+)\"?"
-      ],
-      "datasourceTemplate": "galaxy-collection",
-      "versioningTemplate": "loose"
-    },
-    {
-      "description": "ansible.platform in public requirements is tracked from upstream GitHub tags",
-      "fileMatch": [
-        "^collections/requirements-public\\.yml$"
-      ],
-      "matchStrings": [
-        "(?ms)#\\s*renovate:\\s*datasource=github-tags\\s+depName=ansible/ansible\\.platform\\s*\\n\\s*-\\s*name:\\s*https://github\\.com/ansible/ansible\\.platform\\.git\\s*\\n\\s*type:\\s*git\\s*\\n\\s*version:\\s*\"?(?<currentValue>[^\"\\n]+)\"?"
-      ],
-      "depNameTemplate": "ansible/ansible.platform",
-      "datasourceTemplate": "github-tags",
-      "versioningTemplate": "loose"
-    },
-    {
-      "description": "ansible.platform in certified requirements is tracked from upstream GitHub tags",
-      "fileMatch": [
-        "^collections/requirements-certified\\.yml$"
-      ],
-      "matchStrings": [
-        "-\\s*name:\\s*ansible\\.platform\\s*\\n\\s*version:\\s*\"?(?<currentValue>[^\"\\n]+)\"?"
-      ],
-      "depNameTemplate": "ansible/ansible.platform",
-      "datasourceTemplate": "github-tags",
-      "versioningTemplate": "loose"
-    },
-    {
-      "description": "GitHub collection git refs in collections requirements files",
-      "fileMatch": [
-        "^collections/requirements-certified\\.yml$"
-      ],
-      "matchStrings": [
-        "-\\s*name:\\s*https://github\\.com/(?<depName>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)\\.git\\s*\\n\\s*type:\\s*git\\s*\\n\\s*version:\\s*\"?(?<currentValue>[^\"\\n]+)\"?"
-      ],
-      "datasourceTemplate": "github-tags",
-      "versioningTemplate": "loose"
     }
   ],
   "packageRules": [
-    {
-      "description": "ansible.platform requirements are managed from github-tags, not galaxy index",
-      "matchDepNames": ["ansible.platform"],
-      "matchDatasources": ["galaxy-collection"],
-      "matchFileNames": [
-        "collections/requirements-public.yml",
-        "collections/requirements-certified.yml"
-      ],
-      "enabled": false
-    },
     {
       "description": "Keep community.general below 12 for linux_system_roles compatibility",
       "matchDepNames": ["community.general"],
@@ -96,31 +29,10 @@
       "allowedVersions": "<12.0.0"
     },
     {
-      "description": "Stay on community.vmware 5.x while running ansible-core 2.18.x",
+      "description": "Pin community.vmware to 5.10.0 for ansible-core 2.18.13 compatibility",
       "matchDepNames": ["community.vmware"],
       "matchDatasources": ["galaxy-collection"],
-      "allowedVersions": "/^5\\./"
-    },
-    {
-      "description": "Keep redhat-cop infra collections synchronized across public and certified requirements",
-      "matchDepNames": [
-        "infra.aap_utilities",
-        "infra.aap_configuration",
-        "infra.aap_configuration_extended",
-        "infra.controller_configuration",
-        "infra.ee_utilities"
-      ],
-      "matchDatasources": ["galaxy-collection"],
-      "matchFileNames": [
-        "collections/requirements-public.yml",
-        "collections/requirements-certified.yml"
-      ],
-      "groupName": "redhat-cop infra collections (public+certified)"
-    },
-    {
-      "description": "ansible.controller is tracked through Red Hat certified lifecycle",
-      "matchDepNames": ["ansible.controller"],
-      "enabled": false
+      "allowedVersions": "/^5\\.10\\.0$/"
     }
   ]
 }

@@ -4,6 +4,11 @@
   tags:
     - organizations
   block:
+    - name: Resolve effective organizations for gateway organization taskset
+      ansible.builtin.set_fact:
+        aap_organizations: "{{ aap_cac_controller_organizations_effective }}"
+      changed_when: false
+
     - name: Configure Gateway Organizations  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch

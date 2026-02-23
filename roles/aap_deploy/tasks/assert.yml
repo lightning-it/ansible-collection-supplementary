@@ -51,11 +51,11 @@
       - aap_deploy_postgresql_admin_username | default('', true) | trim | length > 0
       - aap_deploy_gateway_verify_status_codes is sequence
       - aap_deploy_gateway_verify_status_codes is not string
-      - aap_deploy_gateway_admin_password is string
-      - aap_deploy_controller_admin_password is string
-      - aap_deploy_hub_admin_password is string
-      - aap_deploy_eda_admin_password is string
-      - aap_deploy_postgresql_admin_password is string
+      - aap_deploy_gateway_admin_password_effective is string
+      - aap_deploy_controller_admin_password_effective is string
+      - aap_deploy_hub_admin_password_effective is string
+      - aap_deploy_eda_admin_password_effective is string
+      - aap_deploy_postgresql_admin_password_effective is string
     fail_msg: >-
       Invalid base configuration for lit.supplementary.aap_deploy.
       This role supports disconnected bundle mode only

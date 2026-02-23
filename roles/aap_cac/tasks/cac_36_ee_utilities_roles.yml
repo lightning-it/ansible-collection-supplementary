@@ -1,0 +1,25 @@
+---
+# CaC taskset: Optional execution of infra.ee_utilities roles.
+- name: Execute optional infra.ee_utilities roles
+  when: aap_cac_enable_ee_utilities_roles | bool
+  vars:
+    __aap_cac_allowed_ee_utilities_roles:
+      - ee_builder
+      - virtualenv_migrate
+  block:
+    - name: Validate selected infra.ee_utilities roles
+      ansible.builtin.assert:
+        that:
+          - aap_cac_ee_utilities_roles is sequence
+          - aap_cac_ee_utilities_roles | length > 0
+          - (aap_cac_ee_utilities_roles | difference(__aap_cac_allowed_ee_utilities_roles)) | length == 0
+        fail_msg: >-
+          Invalid aap_cac_ee_utilities_roles. Allowed values:
+          {{ __aap_cac_allowed_ee_utilities_roles | join(', ') }}
+
+    - name: Include selected infra.ee_utilities roles
+      ansible.builtin.include_role:
+        name: "infra.ee_utilities.{{ item }}"
+      loop: "{{ aap_cac_ee_utilities_roles }}"
+      loop_control:
+        label: "{{ item }}"

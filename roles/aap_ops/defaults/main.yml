@@ -35,7 +35,7 @@ aap_ops_rotate_controller_username: "admin"
 aap_ops_rotate_controller_current_password: >-
   {{
     aap_controller_admin_password_effective
-    | default(aap_deploy_controller_admin_password | default('', true), true)
+    | default(aap_deploy_controller_admin_password_effective | default('', true), true)
   }}
 aap_ops_rotate_controller_new_password: ""
 aap_ops_rotate_generate_password: false
@@ -55,36 +55,3 @@ aap_ops_rotate_validate_certs: "{{ aap_ops_validate_certs }}"
 aap_ops_rotate_timeout: 30
 aap_ops_rotate_update_runtime_password_vars: true
 aap_ops_rotate_no_log: true
-
-# Optional HashiCorp Vault integration for controller credential management.
-# When enabled/configured, role can read current password before rotation and
-# write the rotated password back to KV2.
-aap_ops_rotate_source_of_truth: "inventory"
-aap_ops_rotate_require_vault: "{{ aap_ops_rotate_source_of_truth == 'vault' }}"
-aap_ops_rotate_vault_read_before_rotate: "{{ aap_ops_rotate_source_of_truth == 'vault' }}"
-aap_ops_rotate_vault_write_after_rotate: "{{ aap_ops_rotate_source_of_truth == 'vault' }}"
-aap_ops_rotate_vault_prefer_current_password: "{{ aap_ops_rotate_source_of_truth == 'vault' }}"
-aap_ops_rotate_vault_field_username: "username"
-aap_ops_rotate_vault_field_password: "password"
-
-aap_ops_rotate_vault_addr: "{{ vault_address | default('', true) }}"
-aap_ops_rotate_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c', true) }}"
-aap_ops_rotate_vault_kv_path: "{{ inventory_hostname }}/aap/controller/admin"
-aap_ops_rotate_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
-aap_ops_rotate_vault_token: "{{ vault_token | default('', true) }}"
-aap_ops_rotate_vault_role_id: "{{ ansible_hashi_vault_role_id | default('', true) }}"
-aap_ops_rotate_vault_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"
-
-# Vault auth helper vars (derived)
-aap_ops_rotate_vault_auth_token: "{{ aap_ops_rotate_vault_token | default('', true) | trim }}"
-aap_ops_rotate_vault_auth_role_id: "{{ aap_ops_rotate_vault_role_id | default('', true) | trim }}"
-aap_ops_rotate_vault_auth_secret_id: "{{ aap_ops_rotate_vault_secret_id | default('', true) | trim }}"
-aap_ops_rotate_vault_use_token: "{{ (aap_ops_rotate_vault_auth_token | length) > 0 }}"
-aap_ops_rotate_vault_auth_ok: >-
-  {{
-    (aap_ops_rotate_vault_auth_token | length > 0)
-    or (
-      (aap_ops_rotate_vault_auth_role_id | length > 0)
-      and (aap_ops_rotate_vault_auth_secret_id | length > 0)
-    )
-  }}

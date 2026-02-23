@@ -1,15 +1,90 @@
 ---
-aap_cac_collections_profile: "certified"
-aap_cac_collections_requirements: >-
-  {{ role_path | dirname | dirname }}/collections/requirements-{{ aap_cac_collections_profile }}.yml
-
 # Gateway API endpoint used by token helper tasks.
 aap_cac_gateway_hostname: "https://{{ inventory_hostname }}"
+aap_cac_gateway_username: "{{ aap_username }}"
+aap_cac_gateway_password: "{{ aap_password }}"
+aap_cac_gateway_validate_certs: "{{ aap_validate_certs | default(true) }}"
 aap_cac_token_description: "aap-cac-token"
+aap_cac_token_request_retries: 5
+aap_cac_token_request_delay: 5
+aap_cac_gateway_ready_check: true
+aap_cac_gateway_ready_path: "/api/gateway/v1/ping/"
+aap_cac_gateway_ready_status_codes:
+  - 200
+  - 401
+  - 403
+aap_cac_gateway_ready_retries: 60
+aap_cac_gateway_ready_delay: 5
 
-# Object reconcile tuning.
-# Set to a specific org scope (string/list as expected by object_diff role).
-# Keep null to let the role behavior decide default scope.
-aap_cac_object_reconcile_orgs: null
-aap_cac_object_reconcile_secure_logging: false
-aap_cac_object_reconcile_protect_not_empty_orgs: true
+# Default organizations for gateway/controller organization tasksets.
+# Inventory can override this (for example per environment/tenant).
+aap_cac_controller_organizations:
+  - name: org-modulix
+
+# Effective organizations for gateway/controller organization tasksets.
+# An explicit inventory `controller_organizations` value has precedence.
+aap_cac_controller_organizations_effective: >-
+  {{
+    (
+      controller_organizations
+      if (controller_organizations is defined)
+      else aap_cac_controller_organizations
+    )
+    | default([], true)
+  }}
+
+# Optional Private Automation Hub objects.
+# Keep empty by default; inventory can provide concrete entries.
+aap_cac_hub_collection_remotes: []
+aap_cac_hub_collection_repositories: []
+aap_cac_hub_group_roles: []
+
+# Effective Hub objects for role tasksets.
+# Explicit inventory `hub_*` values have precedence.
+aap_cac_hub_collection_remotes_effective: >-
+  {{
+    (
+      hub_collection_remotes
+      if (hub_collection_remotes is defined)
+      else aap_cac_hub_collection_remotes
+    )
+    | default([], true)
+  }}
+aap_cac_hub_collection_repositories_effective: >-
+  {{
+    (
+      hub_collection_repositories
+      if (hub_collection_repositories is defined)
+      else aap_cac_hub_collection_repositories
+    )
+    | default([], true)
+  }}
+aap_cac_hub_group_roles_effective: >-
+  {{
+    (
+      hub_group_roles
+      if (hub_group_roles is defined)
+      else aap_cac_hub_group_roles
+    )
+    | default([], true)
+  }}
+
+# Optional controller license activation (manifest content only).
+aap_cac_enable_controller_license: false
+aap_cac_controller_license_state: present
+aap_cac_controller_license_force: false
+aap_cac_controller_license_secure_logging: true
+aap_cac_controller_license_manifest_content: ""
+aap_cac_controller_license_manifest_content_effective: >-
+  {{ aap_cac_controller_license_manifest_content | default('', true) | string | trim }}
+
+# Optional tasksets to execute roles from additional infra collections.
+# Disabled by default to preserve current behavior.
+aap_cac_enable_aap_utilities_roles: false
+aap_cac_aap_utilities_roles: []
+
+aap_cac_enable_controller_configuration_roles: false
+aap_cac_controller_configuration_roles: []
+
+aap_cac_enable_ee_utilities_roles: false
+aap_cac_ee_utilities_roles: []

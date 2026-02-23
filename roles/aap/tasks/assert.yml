@@ -1,5 +1,186 @@
 ---
 - name: Ensure aap variables are valid
+  vars:
+    _aap_admin_input_valid: >-
+        {{
+          (
+            (aap_admin_password_input is string)
+            and (aap_admin_password_input | trim | length > 0)
+          )
+          or (
+            (aap_admin_password_input is mapping)
+            and (
+              (
+                aap_admin_password_input.get(aap_password_active_slot, '')
+                | string
+                | trim
+                | length
+              ) > 0
+              or (
+                aap_admin_password_input.get('value', '')
+                | string
+                | trim
+                | length
+              ) > 0
+              or (
+                aap_admin_password_input.get('password', '')
+                | string
+                | trim
+                | length
+              ) > 0
+            )
+          )
+        }}
+    _aap_gateway_input_valid: >-
+        {{
+          (
+            (aap_gateway_admin_password_input is string)
+            and (aap_gateway_admin_password_input | trim | length > 0)
+          )
+          or (
+            (aap_gateway_admin_password_input is mapping)
+            and (
+              (
+                aap_gateway_admin_password_input.get(aap_password_active_slot, '')
+                | string
+                | trim
+                | length
+              ) > 0
+              or (
+                aap_gateway_admin_password_input.get('value', '')
+                | string
+                | trim
+                | length
+              ) > 0
+              or (
+                aap_gateway_admin_password_input.get('password', '')
+                | string
+                | trim
+                | length
+              ) > 0
+            )
+          )
+        }}
+    _aap_controller_input_valid: >-
+        {{
+          (
+            (aap_controller_admin_password_input is string)
+            and (aap_controller_admin_password_input | trim | length > 0)
+          )
+          or (
+            (aap_controller_admin_password_input is mapping)
+            and (
+              (
+                aap_controller_admin_password_input.get(aap_password_active_slot, '')
+                | string
+                | trim
+                | length
+              ) > 0
+              or (
+                aap_controller_admin_password_input.get('value', '')
+                | string
+                | trim
+                | length
+              ) > 0
+              or (
+                aap_controller_admin_password_input.get('password', '')
+                | string
+                | trim
+                | length
+              ) > 0
+            )
+          )
+        }}
+    _aap_hub_input_valid: >-
+        {{
+          (
+            (aap_hub_admin_password_input is string)
+            and (aap_hub_admin_password_input | trim | length > 0)
+          )
+          or (
+            (aap_hub_admin_password_input is mapping)
+            and (
+              (
+                aap_hub_admin_password_input.get(aap_password_active_slot, '')
+                | string
+                | trim
+                | length
+              ) > 0
+              or (
+                aap_hub_admin_password_input.get('value', '')
+                | string
+                | trim
+                | length
+              ) > 0
+              or (
+                aap_hub_admin_password_input.get('password', '')
+                | string
+                | trim
+                | length
+              ) > 0
+            )
+          )
+        }}
+    _aap_eda_input_valid: >-
+        {{
+          (
+            (aap_eda_admin_password_input is string)
+            and (aap_eda_admin_password_input | trim | length > 0)
+          )
+          or (
+            (aap_eda_admin_password_input is mapping)
+            and (
+              (
+                aap_eda_admin_password_input.get(aap_password_active_slot, '')
+                | string
+                | trim
+                | length
+              ) > 0
+              or (
+                aap_eda_admin_password_input.get('value', '')
+                | string
+                | trim
+                | length
+              ) > 0
+              or (
+                aap_eda_admin_password_input.get('password', '')
+                | string
+                | trim
+                | length
+              ) > 0
+            )
+          )
+        }}
+    _aap_postgresql_input_valid: >-
+        {{
+          (
+            (aap_postgresql_admin_password_input is string)
+            and (aap_postgresql_admin_password_input | trim | length > 0)
+          )
+          or (
+            (aap_postgresql_admin_password_input is mapping)
+            and (
+              (
+                aap_postgresql_admin_password_input.get(aap_password_active_slot, '')
+                | string
+                | trim
+                | length
+              ) > 0
+              or (
+                aap_postgresql_admin_password_input.get('value', '')
+                | string
+                | trim
+                | length
+              ) > 0
+              or (
+                aap_postgresql_admin_password_input.get('password', '')
+                | string
+                | trim
+                | length
+              ) > 0
+            )
+          )
+        }}
   ansible.builtin.assert:
     that:
       - aap_enabled is boolean
@@ -17,93 +198,40 @@
       - aap_config_dir_default | default('', true) | trim | length > 0
       - aap_config_file_path_default | default('', true) | trim | length > 0
       - aap_resolve_admin_passwords is boolean
-      - aap_admin_passwords_source_of_truth in ['inventory', 'vault']
-      - aap_admin_password is string
-      - aap_gateway_admin_password is string
-      - aap_controller_admin_password is string
-      - aap_hub_admin_password is string
-      - aap_eda_admin_password is string
-      - aap_postgresql_admin_password is string
-      - aap_admin_passwords_generate is boolean
-      - aap_admin_passwords_generated_length | int > 0
-      - aap_admin_passwords_generated_chars is string
-      - aap_admin_passwords_read_from_vault is boolean
-      - aap_admin_passwords_write_to_vault is boolean
-      - aap_admin_passwords_require_vault is boolean
       - aap_admin_passwords_no_log is boolean
-      - aap_admin_passwords_vault_addr is string
-      - aap_admin_passwords_vault_kv_mount is string
-      - aap_admin_passwords_vault_kv_path is string
-      - aap_admin_passwords_vault_validate_certs is boolean
-      - aap_admin_passwords_vault_token is string
-      - aap_admin_passwords_vault_role_id is string
-      - aap_admin_passwords_vault_secret_id is string
-      - aap_admin_passwords_vault_auth_token is string
-      - aap_admin_passwords_vault_auth_role_id is string
-      - aap_admin_passwords_vault_auth_secret_id is string
-      - aap_admin_passwords_vault_use_token is boolean
-      - aap_admin_passwords_vault_auth_ok is boolean
-      - aap_admin_passwords_vault_available is boolean
-      - aap_admin_passwords_local_cache_enabled is boolean
-      - aap_admin_passwords_local_cache_path is string
-      - aap_admin_passwords_local_cache_owner is string
-      - aap_admin_passwords_local_cache_group is string
-      - aap_admin_passwords_local_cache_mode is string
-      - >-
-        (not (aap_admin_passwords_local_cache_enabled | bool))
-        or (aap_admin_passwords_local_cache_path | default('', true) | trim | length > 0)
-      - >-
-        (not (aap_admin_passwords_local_cache_enabled | bool))
-        or (aap_admin_passwords_source_of_truth == 'inventory')
-      - aap_admin_password_entries is sequence
-      - aap_admin_password_entries is not string
+      - aap_password_active_slot | default('', true) | trim | length > 0
+      - aap_password_require_component_inputs is boolean
+      - aap_password_disallow_unresolved_references is boolean
+      - aap_password_reference_regex | default('', true) | trim | length > 0
+      - (aap_admin_password_input is string) or (aap_admin_password_input is mapping)
+      - (aap_gateway_admin_password_input is string) or (aap_gateway_admin_password_input is mapping)
+      - (aap_controller_admin_password_input is string) or (aap_controller_admin_password_input is mapping)
+      - (aap_hub_admin_password_input is string) or (aap_hub_admin_password_input is mapping)
+      - (aap_eda_admin_password_input is string) or (aap_eda_admin_password_input is mapping)
+      - (aap_postgresql_admin_password_input is string) or (aap_postgresql_admin_password_input is mapping)
       - >-
         (not (aap_resolve_admin_passwords | bool))
-        or (aap_admin_passwords_source_of_truth != 'inventory')
+        or (not (aap_password_require_component_inputs | bool))
         or (
-          not (aap_admin_passwords_read_from_vault | bool)
-          and not (aap_admin_passwords_write_to_vault | bool)
+          _aap_gateway_input_valid
+          and _aap_controller_input_valid
+          and _aap_hub_input_valid
+          and _aap_eda_input_valid
+          and _aap_postgresql_input_valid
         )
       - >-
         (not (aap_resolve_admin_passwords | bool))
-        or (aap_admin_passwords_source_of_truth != 'vault')
+        or (aap_password_require_component_inputs | bool)
         or (
-          (aap_admin_passwords_read_from_vault | bool)
-          and (aap_admin_passwords_vault_available | bool)
+          (_aap_gateway_input_valid or _aap_admin_input_valid)
+          and (_aap_controller_input_valid or _aap_admin_input_valid)
+          and (_aap_hub_input_valid or _aap_admin_input_valid)
+          and (_aap_eda_input_valid or _aap_admin_input_valid)
+          and (_aap_postgresql_input_valid or _aap_admin_input_valid)
         )
-      - >-
-        (not (aap_resolve_admin_passwords | bool))
-        or (not (aap_admin_passwords_require_vault | bool))
-        or (aap_admin_passwords_vault_available | bool)
-      - >-
-        (not (aap_resolve_admin_passwords | bool))
-        or (not (aap_admin_passwords_generate | bool))
-        or (
-          (
-            (aap_admin_passwords_write_to_vault | bool)
-            and (aap_admin_passwords_vault_available | bool)
-          )
-          or (aap_admin_passwords_local_cache_enabled | bool)
-        )
-      - >-
-        (not (aap_resolve_admin_passwords | bool))
-        or (
-          (aap_gateway_admin_password | default('', true) | trim | length > 0)
-          and (aap_controller_admin_password | default('', true) | trim | length > 0)
-          and (aap_hub_admin_password | default('', true) | trim | length > 0)
-          and (aap_eda_admin_password | default('', true) | trim | length > 0)
-          and (aap_postgresql_admin_password | default('', true) | trim | length > 0)
-        )
-        or (
-          (aap_admin_passwords_source_of_truth == 'vault')
-          and
-          (aap_admin_passwords_read_from_vault | bool)
-          and (aap_admin_passwords_vault_available | bool)
-        )
-        or (aap_admin_passwords_generate | bool)
     fail_msg: >-
       aap variables are missing or invalid.
-      For inventory source, set component passwords and/or aap_admin_password fallback.
-      For Vault source, ensure vault_address + token/AppRole + mount/path are configured.
+      Provide password inputs in inventory (string or structured mapping).
+      Use aap_password_active_slot (or aap_password_active alias) to select the active key.
     quiet: true
   tags: always

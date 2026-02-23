@@ -3,8 +3,8 @@
 - name: Configure Ansible Automation Platform (Gateway) role assignments
   environment:
     GATEWAY_HOST: '{{ inventory_hostname }}'
-    GATEWAY_PASSWORD: '{{ aap_username }}'
-    GATEWAY_USERNAME: '{{ aap_password }}'
+    GATEWAY_PASSWORD: '{{ aap_cac_gateway_password }}'
+    GATEWAY_USERNAME: '{{ aap_cac_gateway_username }}'
   block:
     - name: Run role infra.aap_configuration.dispatch  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:

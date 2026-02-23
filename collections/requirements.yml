@@ -1,0 +1,14 @@
+---
+collections:
+  - name: ansible.posix
+    version: "2.1.0"
+  - name: community.general
+    version: "11.4.4"
+  - name: community.crypto
+    version: "3.1.1"
+  - name: community.hashi_vault
+    version: "7.1.0"
+  - name: community.vmware
+    version: "5.10.0"
+  - name: lit.foundational
+    version: "1.15.0"

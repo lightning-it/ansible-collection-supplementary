@@ -17,41 +17,56 @@ Key variables:
 - `aap_manage_systemd`
 - `aap_systemd_unit_name`
 - `aap_resolve_admin_passwords`
-- `aap_admin_password`
-- `aap_admin_passwords_source_of_truth`
-- `aap_admin_passwords_generate`
-- `aap_admin_passwords_read_from_vault`
-- `aap_admin_passwords_write_to_vault`
-- `aap_admin_passwords_vault_addr`
-- `aap_admin_passwords_vault_kv_mount`
-- `aap_admin_passwords_vault_kv_path`
+- `aap_password_active`
+- `aap_password_active_slot`
+- `aap_password_require_component_inputs`
+- `aap_password_disallow_unresolved_references`
+- `aap_password_reference_regex`
+- `aap_admin_password_input`
+- `aap_gateway_admin_password_input`
+- `aap_controller_admin_password_input`
+- `aap_hub_admin_password_input`
+- `aap_eda_admin_password_input`
+- `aap_postgresql_admin_password_input`
 
-Shared admin password behavior:
-- Optional foundational flow for gateway/controller/hub/eda/postgresql.
-- Resolution is auto-enabled when one of these applies:
-  - `aap_deploy_enabled=true`
-  - `aap_ops_enabled=true` and `aap_ops_action=rotate_password`
-  - `aap_ops_enabled=true` and `aap_ops_action=sync_hub_password`
-- `aap_resolve_admin_passwords` can still be overridden explicitly when needed.
-- Source of truth can be explicit via `aap_admin_passwords_source_of_truth` (`inventory` or `vault`).
-- By default it auto-selects `vault` when Vault configuration/auth is available, otherwise `inventory`.
-- Resolution order: explicit value -> Vault KV2 (source=`vault`) -> local cache (lab fallback only) -> generated value.
-- Generation is intended for persisted flows; defaults are inventory-first and non-generating.
-- With `inventory` source, each component password can be set individually.
-- If a component password is not set, it falls back to `aap_admin_password`.
-- Local cache fallback is disabled by default and intended for lab/offline usage only.
-- Publishes effective vars usable by all AAP roles:
-  - `aap_gateway_admin_password_effective`
-  - `aap_controller_admin_password_effective`
-  - `aap_hub_admin_password_effective`
-  - `aap_eda_admin_password_effective`
-  - `aap_postgresql_admin_password_effective`
-- Also sets `aap_deploy_*_admin_password_effective` compatibility vars.
+## Inventory Password Input Contract
 
-OS-specific defaults:
-- Runtime loads package defaults from:
-  - `roles/aap/defaults/rhel9.yml` on RHEL 9
-  - `roles/aap/defaults/rhel10.yml` on RHEL 10
+This role is inventory-only for secret input.
+
+- The role does not contain backend-specific Vault/1Password logic.
+- Inventory values can be:
+  - literal password strings
+  - lookup-based values (for example HCP Vault/1Password lookups)
+  - structured mappings with slots (for example `active`, `next`).
+- Active slot switch:
+  - `aap_password_active` (alias)
+  - `aap_password_active_slot` (canonical)
+- `aap_password_active_slot` selects the active key for structured mappings.
+- With `aap_password_require_component_inputs=true`, missing per-component inputs fail fast.
+- With `aap_password_disallow_unresolved_references=true`, raw path-like strings
+  (for example `hc://...`, `op://...`) fail fast.
+- The role only consumes resolved effective values and publishes `*_effective` outputs.
+- Backend get-or-create behavior must be handled in inventory lookups, not in role code.
+
+Structured mapping format (per password input):
+
+```yaml
+<password_input_var>:
+  active: "<value-or-lookup>"
+  next: "<value-or-lookup>"
+  # optional fallback keys when slot key is missing:
+  # value: "<value-or-lookup>"
+  # password: "<value-or-lookup>"
+```
+
+Published effective vars:
+- `aap_admin_password_effective`
+- `aap_gateway_admin_password_effective`
+- `aap_controller_admin_password_effective`
+- `aap_hub_admin_password_effective`
+- `aap_eda_admin_password_effective`
+- `aap_postgresql_admin_password_effective`
+- `aap_deploy_*_admin_password_effective` outputs
 
 ## Dependencies
 
@@ -67,10 +82,16 @@ None.
     - role: lit.supplementary.aap
       vars:
         aap_deploy_enabled: true
-        aap_admin_passwords_source_of_truth: vault
-        aap_admin_passwords_vault_addr: "{{ vault_address }}"
-        aap_admin_passwords_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') }}"
-        aap_admin_passwords_vault_kv_path: "{{ inventory_hostname }}/aap/deploy/admin_passwords"
+        aap_password_active: active
+        aap_password_active_slot: active
+        aap_password_require_component_inputs: true
+        aap_gateway_admin_password_input:
+          active: "{{ lookup('my_secret_backend_get_or_create', 'aap/gateway/admin') }}"
+          next: "{{ lookup('my_secret_backend_get_or_create', 'aap/gateway/admin_next') }}"
+        aap_controller_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/controller/admin') }}"
+        aap_hub_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/hub/admin') }}"
+        aap_eda_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/eda/admin') }}"
+        aap_postgresql_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/postgresql/admin') }}"
 ```
 
 ## License
