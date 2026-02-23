@@ -1,3 +1,9 @@
+## [1.16.7](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.6...v1.16.7) (2026-02-23)
+
+### Bug Fixes
+
+* aap cac expanded ([#123](https://github.com/lightning-it/ansible-collection-supplementary/issues/123)) ([f0919a5](https://github.com/lightning-it/ansible-collection-supplementary/commit/f0919a50768690859caa1c04a2484acc10bedf12))
+
 ## [1.16.6](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.5...v1.16.6) (2026-02-22)
 
 ### Bug Fixes
