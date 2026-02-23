@@ -94,7 +94,7 @@ inputs = {
   (vault_config_approle_secrets_render | default(vault_config_approle_secrets)),
   "role_name",
   ["role_name", "token_policy"],
-  ["kv_mount", "credential_path", "token_ttl", "token_max_ttl"],
+  ["kv_mount", "credential_path", "token_ttl", "token_max_ttl", "token_period"],
   {
     "kv_mount": vault_config_engine_mount_point,
     "credential_path": inventory_hostname ~ "/vault/approle"
