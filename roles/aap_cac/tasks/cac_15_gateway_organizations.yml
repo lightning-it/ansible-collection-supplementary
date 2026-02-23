@@ -4,13 +4,18 @@
   vars:
     assign_galaxy_credentials_to_org: true
   block:
+    - name: Resolve effective organizations for gateway organization taskset
+      ansible.builtin.set_fact:
+        aap_organizations: "{{ aap_cac_controller_organizations_effective }}"
+      changed_when: false
+
     - name: Run role infra.aap_configuration.dispatch  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
       vars:
         aap_configuration_dispatcher_roles:
           - role: gateway_organizations
-            var: controller_organizations
+            var: aap_organizations
             tags: organizations
             assign_galaxy_credentials_to_org: true
       tags:

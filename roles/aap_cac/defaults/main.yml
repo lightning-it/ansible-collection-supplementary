@@ -21,9 +21,17 @@ aap_cac_gateway_ready_delay: 5
 aap_cac_controller_organizations:
   - name: org-modulix
 
-# Compatibility alias consumed by infra.aap_configuration roles.
-# If inventory sets controller_organizations directly, that value wins.
-controller_organizations: "{{ aap_cac_controller_organizations }}"
+# Effective organizations for gateway/controller organization tasksets.
+# An explicit inventory `controller_organizations` value has precedence.
+aap_cac_controller_organizations_effective: >-
+  {{
+    (
+      controller_organizations
+      if (controller_organizations is defined)
+      else aap_cac_controller_organizations
+    )
+    | default([], true)
+  }}
 
 # Optional Private Automation Hub objects.
 # Keep empty by default; inventory can provide concrete entries.
@@ -31,11 +39,35 @@ aap_cac_hub_collection_remotes: []
 aap_cac_hub_collection_repositories: []
 aap_cac_hub_group_roles: []
 
-# Compatibility aliases consumed by infra.aap_configuration roles.
-# Defaults come from aap_cac_* names and can still be overridden directly.
-hub_collection_remotes: "{{ aap_cac_hub_collection_remotes | default([], true) }}"
-hub_collection_repositories: "{{ aap_cac_hub_collection_repositories | default([], true) }}"
-hub_group_roles: "{{ aap_cac_hub_group_roles | default([], true) }}"
+# Effective Hub objects for role tasksets.
+# Explicit inventory `hub_*` values have precedence.
+aap_cac_hub_collection_remotes_effective: >-
+  {{
+    (
+      hub_collection_remotes
+      if (hub_collection_remotes is defined)
+      else aap_cac_hub_collection_remotes
+    )
+    | default([], true)
+  }}
+aap_cac_hub_collection_repositories_effective: >-
+  {{
+    (
+      hub_collection_repositories
+      if (hub_collection_repositories is defined)
+      else aap_cac_hub_collection_repositories
+    )
+    | default([], true)
+  }}
+aap_cac_hub_group_roles_effective: >-
+  {{
+    (
+      hub_group_roles
+      if (hub_group_roles is defined)
+      else aap_cac_hub_group_roles
+    )
+    | default([], true)
+  }}
 
 # Optional controller license activation (manifest content only).
 aap_cac_enable_controller_license: false

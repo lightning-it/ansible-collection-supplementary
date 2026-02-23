@@ -12,18 +12,37 @@
           Set aap_cac_controller_license_manifest_content in inventory.
       no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
 
+    - name: Create temporary manifest file
+      ansible.builtin.tempfile:
+        state: file
+        prefix: aap-cac-license-
+        suffix: .zip
+      register: aap_cac_controller_license_manifest_tmp
+      changed_when: false
+
+    - name: Materialize controller license manifest content
+      ansible.builtin.copy:
+        content: "{{ aap_cac_controller_license_manifest_content_effective | b64decode }}"
+        dest: "{{ aap_cac_controller_license_manifest_tmp.path }}"
+        mode: "0600"
+      no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
+      changed_when: false
+
     - name: Activate controller license with manifest content
-      ansible.builtin.include_role:
-        name: infra.controller_configuration.license
-      vars:
-        controller_hostname: "{{ aap_cac_gateway_hostname }}"
-        controller_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
-        controller_username: "{{ aap_cac_gateway_username }}"
-        controller_password: "{{ aap_cac_gateway_password }}"
+      ansible.controller.license:
+        manifest: "{{ aap_cac_controller_license_manifest_tmp.path }}"
+        force: "{{ aap_cac_controller_license_force | bool }}"
+        state: "{{ aap_cac_controller_license_state }}"
+        controller_host: "{{ aap_cac_gateway_hostname }}"
+        controller_username: "{{ aap_cac_gateway_username | default(omit, true) }}"
+        controller_password: "{{ aap_cac_gateway_password | default(omit, true) }}"
         controller_oauthtoken: "{{ aap_token | default(omit, true) }}"
-        controller_configuration_license_secure_logging: >-
-          {{ aap_cac_controller_license_secure_logging | bool }}
-        controller_license:
-          manifest_content: "{{ aap_cac_controller_license_manifest_content_effective }}"
-          force: "{{ aap_cac_controller_license_force | bool }}"
-          state: "{{ aap_cac_controller_license_state }}"
+        validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+      no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
+  always:
+    - name: Remove temporary manifest file
+      ansible.builtin.file:
+        path: "{{ aap_cac_controller_license_manifest_tmp.path }}"
+        state: absent
+      when: aap_cac_controller_license_manifest_tmp is defined
+      changed_when: false
