@@ -32,6 +32,7 @@
       retries: "{{ aap_cac_token_request_retries | int }}"
       delay: "{{ aap_cac_token_request_delay | int }}"
       until: __aap_cac_token_create is succeeded
+      changed_when: false
       no_log: true
 
     - name: create_authentication_token | Store token fact

@@ -8,6 +8,7 @@
     existing_token: '{{ aap_token }}'
     state: 'absent'
   register: '__t_token'
+  changed_when: false
   no_log: true
   when:
     - 'aap_token is defined'
