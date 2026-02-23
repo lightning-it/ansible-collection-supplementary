@@ -1,3 +1,9 @@
+## [1.16.6](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.5...v1.16.6) (2026-02-22)
+
+### Bug Fixes
+
+* sync shared assets from lightning-it/shared-assets ([#121](https://github.com/lightning-it/ansible-collection-supplementary/issues/121)) ([e29692c](https://github.com/lightning-it/ansible-collection-supplementary/commit/e29692cf4b08d955814f80ca0b28fa9f6291d208))
+
 ## [1.16.5](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.4...v1.16.5) (2026-02-22)
 
 ### Bug Fixes
