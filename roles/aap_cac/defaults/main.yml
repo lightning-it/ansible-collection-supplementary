@@ -16,19 +16,35 @@ aap_cac_gateway_ready_status_codes:
 aap_cac_gateway_ready_retries: 60
 aap_cac_gateway_ready_delay: 5
 
+# Default organizations for gateway/controller organization tasksets.
+# Inventory can override this (for example per environment/tenant).
+aap_cac_controller_organizations:
+  - name: org-modulix
+
+# Compatibility alias consumed by infra.aap_configuration roles.
+# If inventory sets controller_organizations directly, that value wins.
+controller_organizations: "{{ aap_cac_controller_organizations }}"
+
+# Optional Private Automation Hub objects.
+# Keep empty by default; inventory can provide concrete entries.
+aap_cac_hub_collection_remotes: []
+aap_cac_hub_collection_repositories: []
+aap_cac_hub_group_roles: []
+
+# Compatibility aliases consumed by infra.aap_configuration roles.
+# Defaults come from aap_cac_* names and can still be overridden directly.
+hub_collection_remotes: "{{ aap_cac_hub_collection_remotes | default([], true) }}"
+hub_collection_repositories: "{{ aap_cac_hub_collection_repositories | default([], true) }}"
+hub_group_roles: "{{ aap_cac_hub_group_roles | default([], true) }}"
+
 # Optional controller license activation (manifest content only).
 aap_cac_enable_controller_license: false
 aap_cac_controller_license_state: present
 aap_cac_controller_license_force: false
 aap_cac_controller_license_secure_logging: true
 aap_cac_controller_license_manifest_content: ""
-
-# Object reconcile tuning.
-# Set to a specific org scope (string/list as expected by object_diff role).
-# Keep null to let the role behavior decide default scope.
-aap_cac_object_reconcile_orgs: null
-aap_cac_object_reconcile_secure_logging: false
-aap_cac_object_reconcile_protect_not_empty_orgs: true
+aap_cac_controller_license_manifest_content_effective: >-
+  {{ aap_cac_controller_license_manifest_content | default('', true) | string | trim }}
 
 # Optional tasksets to execute roles from additional infra collections.
 # Disabled by default to preserve current behavior.

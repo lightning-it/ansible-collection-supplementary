@@ -3,13 +3,6 @@
 - name: Execute optional controller license activation
   when: aap_cac_enable_controller_license | bool
   block:
-    - name: Resolve effective controller license manifest content
-      ansible.builtin.set_fact:
-        aap_cac_controller_license_manifest_content_effective: >-
-          {{ aap_cac_controller_license_manifest_content | default('', true) | string | trim }}
-      changed_when: false
-      no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
-
     - name: Validate effective controller license manifest content
       ansible.builtin.assert:
         that:

@@ -10,9 +10,8 @@
       vars:
         aap_configuration_dispatcher_roles:
           - role: gateway_organizations
-            var: aap_organizations
+            var: controller_organizations
             tags: organizations
             assign_galaxy_credentials_to_org: true
-        aap_organizations: '{{ controller_organizations }}'
       tags:
         - organizations

@@ -25,14 +25,15 @@ Key variables:
 - `aap_cac_gateway_ready_status_codes`
 - `aap_cac_gateway_ready_retries`
 - `aap_cac_gateway_ready_delay`
+- `aap_cac_controller_organizations` (default: `[{name: org-modulix}]`)
+- `aap_cac_hub_collection_remotes` (default: `[]`)
+- `aap_cac_hub_collection_repositories` (default: `[]`)
+- `aap_cac_hub_group_roles` (default: `[]`)
 - `aap_cac_enable_controller_license`
 - `aap_cac_controller_license_state`
 - `aap_cac_controller_license_force`
 - `aap_cac_controller_license_secure_logging`
 - `aap_cac_controller_license_manifest_content`
-- `aap_cac_object_reconcile_orgs`
-- `aap_cac_object_reconcile_secure_logging`
-- `aap_cac_object_reconcile_protect_not_empty_orgs`
 - `aap_cac_enable_aap_utilities_roles`
 - `aap_cac_aap_utilities_roles`
 - `aap_cac_enable_controller_configuration_roles`

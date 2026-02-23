@@ -10,5 +10,5 @@
       vars:
         aap_configuration_dispatcher_roles:
           - role: gateway_organizations
-            var: aap_organizations
+            var: controller_organizations
             tags: organizations
