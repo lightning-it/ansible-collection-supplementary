@@ -51,17 +51,34 @@
       - aap_deploy_postgresql_admin_username | default('', true) | trim | length > 0
       - aap_deploy_gateway_verify_status_codes is sequence
       - aap_deploy_gateway_verify_status_codes is not string
-      - aap_deploy_gateway_admin_password is string
-      - aap_deploy_controller_admin_password is string
-      - aap_deploy_hub_admin_password is string
-      - aap_deploy_eda_admin_password is string
-      - aap_deploy_postgresql_admin_password is string
+      - aap_deploy_gateway_admin_password_effective is string
+      - aap_deploy_controller_admin_password_effective is string
+      - aap_deploy_hub_admin_password_effective is string
+      - aap_deploy_eda_admin_password_effective is string
+      - aap_deploy_postgresql_admin_password_effective is string
     fail_msg: >-
       Invalid base configuration for lit.supplementary.aap_deploy.
       This role supports disconnected bundle mode only
       (aap_deploy_install_type=bundle), with absolute install paths and a non-root install user.
     quiet: true
   when: aap_deploy_enabled | bool
+  tags: always
+
+- name: Validate effective installer admin passwords
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_gateway_admin_password_effective | default('', true) | trim | length > 0
+      - aap_deploy_controller_admin_password_effective | default('', true) | trim | length > 0
+      - aap_deploy_hub_admin_password_effective | default('', true) | trim | length > 0
+      - aap_deploy_eda_admin_password_effective | default('', true) | trim | length > 0
+      - aap_deploy_postgresql_admin_password_effective | default('', true) | trim | length > 0
+    fail_msg: >-
+      Missing effective AAP installer admin passwords.
+      Define `aap_*_admin_password_input` in inventory (string or mapping).
+      Resolve/create backend references in inventory lookups before calling this role.
+    quiet: true
+  when: aap_deploy_enabled | bool
+  no_log: "{{ aap_deploy_passwords_no_log | default(true) }}"
   tags: always
 
 - name: Validate bundle install settings

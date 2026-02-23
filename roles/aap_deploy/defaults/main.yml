@@ -43,38 +43,33 @@ aap_deploy_setup_archive_path: "{{ aap_deploy_install_dir }}/{{ aap_deploy_setup
 aap_deploy_local_bundle_archive_path: "/runner/project/.artifacts/{{ aap_deploy_setup_archive_filename }}"
 aap_deploy_local_bundle_project_archive_path: "/runner/project/{{ aap_deploy_setup_archive_filename }}"
 
-# Installer admin passwords (explicit vars override Vault/generation flow)
-aap_deploy_gateway_admin_password: ""
-aap_deploy_controller_admin_password: ""
-aap_deploy_hub_admin_password: ""
-aap_deploy_eda_admin_password: ""
-aap_deploy_postgresql_admin_password: ""
-
 # Effective installer admin passwords are resolved by shared role `aap`
+# from inventory inputs (`aap_*_admin_password_input`).
+# This role consumes only the resolved effective values.
 aap_deploy_gateway_admin_password_effective: >-
   {{
     aap_gateway_admin_password_effective
-    | default(aap_deploy_gateway_admin_password | default('', true), true)
+    | default('', true)
   }}
 aap_deploy_controller_admin_password_effective: >-
   {{
     aap_controller_admin_password_effective
-    | default(aap_deploy_controller_admin_password | default('', true), true)
+    | default('', true)
   }}
 aap_deploy_hub_admin_password_effective: >-
   {{
     aap_hub_admin_password_effective
-    | default(aap_deploy_hub_admin_password | default('', true), true)
+    | default('', true)
   }}
 aap_deploy_eda_admin_password_effective: >-
   {{
     aap_eda_admin_password_effective
-    | default(aap_deploy_eda_admin_password | default('', true), true)
+    | default('', true)
   }}
 aap_deploy_postgresql_admin_password_effective: >-
   {{
     aap_postgresql_admin_password_effective
-    | default(aap_deploy_postgresql_admin_password | default('', true), true)
+    | default('', true)
   }}
 
 # Bundle install location (required when aap_deploy_install_type=bundle)

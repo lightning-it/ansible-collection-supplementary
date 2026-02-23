@@ -4,7 +4,7 @@
     gateway_hostname: '{{ aap_cac_gateway_hostname }}'
     gateway_username: '{{ aap_cac_gateway_username }}'
     gateway_password: '{{ aap_cac_gateway_password }}'
-    gateway_validate_certs: '{{ aap_validate_certs }}'
+    gateway_validate_certs: '{{ aap_cac_gateway_validate_certs | bool }}'
     existing_token: '{{ aap_token }}'
     state: 'absent'
   register: '__t_token'

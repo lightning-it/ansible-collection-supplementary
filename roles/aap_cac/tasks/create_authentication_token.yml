@@ -1,18 +1,38 @@
 ---
+- name: create_authentication_token | Wait for gateway readiness
+  ansible.builtin.uri:
+    url: "{{ (aap_cac_gateway_hostname | regex_replace('/+$', '')) ~ aap_cac_gateway_ready_path }}"
+    method: GET
+    validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+    status_code: "{{ aap_cac_gateway_ready_status_codes }}"
+    timeout: 10
+    return_content: false
+  register: __aap_cac_gateway_ready
+  retries: "{{ aap_cac_gateway_ready_retries | int }}"
+  delay: "{{ aap_cac_gateway_ready_delay | int }}"
+  until: __aap_cac_gateway_ready is succeeded
+  changed_when: false
+  when:
+    - aap_token is not defined
+    - aap_cac_gateway_ready_check | bool
+
 - name: create_authentication_token | Create AAP authentication token
   when: aap_token is not defined
-  no_log: true
   block:
     - name: create_authentication_token | Request token
       ansible.platform.token:
         gateway_hostname: "{{ aap_cac_gateway_hostname }}"
         gateway_username: "{{ aap_cac_gateway_username }}"
         gateway_password: "{{ aap_cac_gateway_password }}"
-        gateway_validate_certs: "{{ aap_validate_certs }}"
+        gateway_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
         description: "{{ aap_cac_token_description }}"
         scope: write
         state: present
       register: __aap_cac_token_create
+      retries: "{{ aap_cac_token_request_retries | int }}"
+      delay: "{{ aap_cac_token_request_delay | int }}"
+      until: __aap_cac_token_create is succeeded
+      no_log: true
 
     - name: create_authentication_token | Store token fact
       ansible.builtin.set_fact:
@@ -20,14 +40,15 @@
           {{
             __aap_cac_token_create.token
             | default(
-              __aap_cac_token_create.json.token
-              | default(
-                __aap_cac_token_create.value
-                | default('')
-              ),
-              true
-            )
+                __aap_cac_token_create.json.token
+                | default(
+                    __aap_cac_token_create.value
+                    | default('')
+                  ),
+                true
+              )
           }}
+      no_log: true
 
     - name: create_authentication_token | Require non-empty token
       ansible.builtin.assert:
@@ -35,3 +56,12 @@
           - aap_token | default('', true) | trim | length > 0
         fail_msg: >-
           Failed to resolve AAP token value from ansible.platform.token module output.
+      no_log: true
+  rescue:
+    - name: create_authentication_token | Fail with sanitized diagnostics
+      ansible.builtin.fail:
+        msg: >-
+          Failed to create AAP token via {{ aap_cac_gateway_hostname }} as
+          user {{ aap_cac_gateway_username }} (validate_certs={{ aap_cac_gateway_validate_certs | bool }}).
+          Check gateway reachability/readiness, credentials, and certificate trust.
+          For self-signed certs, set aap_validate_certs=false (or aap_cac_gateway_validate_certs=false).

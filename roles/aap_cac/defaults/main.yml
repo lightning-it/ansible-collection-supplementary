@@ -27,17 +27,27 @@ aap_cac_required_collection_matrix:
 
 # Gateway API endpoint used by token helper tasks.
 aap_cac_gateway_hostname: "https://{{ inventory_hostname }}"
-aap_cac_gateway_username: "{{ aap_username | default('admin', true) }}"
-aap_cac_gateway_password: >-
-  {{
-    aap_password
-    | default(
-        aap_gateway_admin_password_effective
-        | default(aap_gateway_admin_password | default('', true), true),
-        true
-      )
-  }}
+aap_cac_gateway_username: "admin"
+aap_cac_gateway_password: "{{ aap_gateway_admin_password_effective | default('', true) }}"
+aap_cac_gateway_validate_certs: "{{ aap_validate_certs | default(true, true) }}"
 aap_cac_token_description: "aap-cac-token"
+aap_cac_token_request_retries: 5
+aap_cac_token_request_delay: 5
+aap_cac_gateway_ready_check: true
+aap_cac_gateway_ready_path: "/api/gateway/v1/ping/"
+aap_cac_gateway_ready_status_codes:
+  - 200
+  - 401
+  - 403
+aap_cac_gateway_ready_retries: 60
+aap_cac_gateway_ready_delay: 5
+
+# Optional controller license activation (manifest content only).
+aap_cac_enable_controller_license: false
+aap_cac_controller_license_state: present
+aap_cac_controller_license_force: false
+aap_cac_controller_license_secure_logging: true
+aap_cac_controller_license_manifest_content: ""
 
 # Object reconcile tuning.
 # Set to a specific org scope (string/list as expected by object_diff role).

@@ -1,0 +1,36 @@
+---
+# CaC taskset: Optional controller license activation via manifest content.
+- name: Execute optional controller license activation
+  when: aap_cac_enable_controller_license | bool
+  block:
+    - name: Resolve effective controller license manifest content
+      ansible.builtin.set_fact:
+        aap_cac_controller_license_manifest_content_effective: >-
+          {{ aap_cac_controller_license_manifest_content | default('', true) | string | trim }}
+      changed_when: false
+      no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
+
+    - name: Validate effective controller license manifest content
+      ansible.builtin.assert:
+        that:
+          - aap_cac_controller_license_manifest_content_effective | default('', true) | trim | length > 0
+        fail_msg: >-
+          Missing controller license manifest content.
+          Set aap_cac_controller_license_manifest_content in inventory.
+      no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
+
+    - name: Activate controller license with manifest content
+      ansible.builtin.include_role:
+        name: infra.controller_configuration.license
+      vars:
+        controller_hostname: "{{ aap_cac_gateway_hostname }}"
+        controller_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+        controller_username: "{{ aap_cac_gateway_username }}"
+        controller_password: "{{ aap_cac_gateway_password }}"
+        controller_oauthtoken: "{{ aap_token | default(omit, true) }}"
+        controller_configuration_license_secure_logging: >-
+          {{ aap_cac_controller_license_secure_logging | bool }}
+        controller_license:
+          manifest_content: "{{ aap_cac_controller_license_manifest_content_effective }}"
+          force: "{{ aap_cac_controller_license_force | bool }}"
+          state: "{{ aap_cac_controller_license_state }}"

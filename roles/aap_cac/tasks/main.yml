@@ -9,9 +9,7 @@
           - aap_cac_gateway_password | default('', true) | trim | length > 0
         fail_msg: >-
           Missing AAP CaC auth inputs.
-          Provide aap_cac_gateway_username/aap_cac_gateway_password (or legacy aap_username/aap_password),
-          or run lit.supplementary.aap first so aap_gateway_admin_password_effective is available.
-      no_log: true
+          Set aap_cac_gateway_username and aap_cac_gateway_password.
 
     - name: Record whether an auth token was provided by caller
       ansible.builtin.set_fact:

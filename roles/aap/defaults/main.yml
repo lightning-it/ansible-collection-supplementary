@@ -46,173 +46,41 @@ aap_resolve_admin_passwords: >-
     )
   }}
 
-# Password source-of-truth and resolution policy.
-# Supported values:
-# - inventory: passwords come from explicit inventory vars
-# - vault: passwords are read/written via Vault KV2
-# Backward-compatible overrides: aap_deploy_passwords_*
-aap_admin_passwords_source_of_truth: >-
+# Shared password inputs. Inventory is source of truth.
+# Inventory can provide:
+# - literal password strings
+# - structured mappings with an active slot (for example active/next)
+# - lookup-based values (for example HCP Vault/1Password get-or-create lookups)
+aap_admin_passwords_no_log: "{{ aap_deploy_passwords_no_log | default(true) }}"
+aap_password_active_slot: >-
   {{
-    aap_deploy_passwords_source_of_truth
-    | default(
-        (
-          'vault'
-          if (aap_admin_passwords_vault_available | default(false, true) | bool)
-          else 'inventory'
-        ),
-        true
-      )
+    aap_deploy_password_active_slot
+    | default('active', true)
+    | string
+    | trim
+    | lower
+  }}
+aap_password_require_component_inputs: "{{ aap_deploy_password_require_component_inputs | default(true) }}"
+aap_password_disallow_unresolved_references: "{{ aap_deploy_password_disallow_unresolved_references | default(true) }}"
+aap_password_reference_regex: >-
+  {{
+    aap_deploy_password_reference_regex
+    | default('^[A-Za-z][A-Za-z0-9+.-]*://.+', true)
   }}
 
-# Shared inventory fallback password.
-# Component passwords can override this shared fallback.
-aap_admin_password: "{{ aap_deploy_admin_password | default('', true) | string | trim }}"
-
-# Optional explicit passwords (compat: consume existing aap_deploy_* vars when present)
-aap_gateway_admin_password: >-
-  {{
-    aap_deploy_gateway_admin_password
-    | default(aap_admin_password, true)
-    | string
-    | trim
-  }}
-aap_controller_admin_password: >-
-  {{
-    aap_deploy_controller_admin_password
-    | default(aap_admin_password, true)
-    | string
-    | trim
-  }}
-aap_hub_admin_password: "{{ aap_deploy_hub_admin_password | default(aap_admin_password, true) | string | trim }}"
-aap_eda_admin_password: "{{ aap_deploy_eda_admin_password | default(aap_admin_password, true) | string | trim }}"
-aap_postgresql_admin_password: >-
-  {{
-    aap_deploy_postgresql_admin_password
-    | default(aap_admin_password, true)
-    | string
-    | trim
-  }}
+# Shared and component inventory inputs.
+# Type can be string or mapping.
+aap_admin_password_input: ""
+aap_gateway_admin_password_input: ""
+aap_controller_admin_password_input: ""
+aap_hub_admin_password_input: ""
+aap_eda_admin_password_input: ""
+aap_postgresql_admin_password_input: ""
 
 # Effective shared passwords (resolved at runtime in tasks/resolve_admin_passwords.yml)
-aap_gateway_admin_password_effective: "{{ aap_gateway_admin_password | default('', true) }}"
-aap_controller_admin_password_effective: "{{ aap_controller_admin_password | default('', true) }}"
-aap_hub_admin_password_effective: "{{ aap_hub_admin_password | default('', true) }}"
-aap_eda_admin_password_effective: "{{ aap_eda_admin_password | default('', true) }}"
-aap_postgresql_admin_password_effective: "{{ aap_postgresql_admin_password | default('', true) }}"
-
-# Resolution order in tasks:
-# provided -> Vault KV2 (when source=vault) -> local cache (lab fallback) -> generated
-aap_admin_passwords_generate: >-
-  {{
-    aap_deploy_passwords_generate
-    | default(aap_admin_passwords_source_of_truth == 'vault')
-  }}
-aap_admin_passwords_generated_length: "{{ aap_deploy_passwords_generated_length | default(32, true) }}"
-aap_admin_passwords_generated_chars: >-
-  {{ aap_deploy_passwords_generated_chars | default('ascii_letters,digits', true) }}
-aap_admin_passwords_read_from_vault: >-
-  {{
-    aap_deploy_passwords_read_from_vault
-    | default(aap_admin_passwords_source_of_truth == 'vault')
-  }}
-aap_admin_passwords_write_to_vault: >-
-  {{
-    aap_deploy_passwords_write_to_vault
-    | default(aap_admin_passwords_source_of_truth == 'vault')
-  }}
-aap_admin_passwords_require_vault: >-
-  {{
-    aap_deploy_passwords_require_vault
-    | default(aap_admin_passwords_source_of_truth == 'vault')
-  }}
-aap_admin_passwords_no_log: "{{ aap_deploy_passwords_no_log | default(true) }}"
-
-aap_admin_passwords_vault_addr: "{{ vault_address | default('', true) }}"
-aap_admin_passwords_vault_kv_mount: >-
-  {{
-    aap_deploy_passwords_vault_kv_mount
-    | default(vault_engine_mount_point | default('stage-2c', true), true)
-  }}
-aap_admin_passwords_vault_kv_path: >-
-  {{
-    aap_deploy_passwords_vault_kv_path
-    | default(inventory_hostname ~ '/aap/deploy/admin_passwords', true)
-  }}
-aap_admin_passwords_vault_validate_certs: >-
-  {{
-    aap_deploy_passwords_vault_validate_certs
-    | default(vault_validate_certs | default(true))
-  }}
-aap_admin_passwords_vault_token: >-
-  {{
-    vault_token
-    | default(
-        lookup('ansible.builtin.env', 'VAULT_TOKEN') | default('', true),
-        true
-      )
-  }}
-aap_admin_passwords_vault_role_id: >-
-  {{
-    aap_deploy_passwords_vault_role_id
-    | default(
-        ansible_hashi_vault_role_id
-        | default(lookup('ansible.builtin.env', 'ANSIBLE_HASHI_VAULT_ROLE_ID') | default('', true), true),
-        true
-      )
-  }}
-aap_admin_passwords_vault_secret_id: >-
-  {{
-    aap_deploy_passwords_vault_secret_id
-    | default(
-        ansible_hashi_vault_secret_id
-        | default(lookup('ansible.builtin.env', 'ANSIBLE_HASHI_VAULT_SECRET_ID') | default('', true), true),
-        true
-      )
-  }}
-
-# Vault auth helper vars (derived)
-aap_admin_passwords_vault_auth_token: "{{ aap_admin_passwords_vault_token | default('', true) | trim }}"
-aap_admin_passwords_vault_auth_role_id: "{{ aap_admin_passwords_vault_role_id | default('', true) | trim }}"
-aap_admin_passwords_vault_auth_secret_id: "{{ aap_admin_passwords_vault_secret_id | default('', true) | trim }}"
-aap_admin_passwords_vault_use_token: "{{ (aap_admin_passwords_vault_auth_token | length) > 0 }}"
-aap_admin_passwords_vault_auth_ok: >-
-  {{
-    (aap_admin_passwords_vault_auth_token | length > 0)
-    or (
-      (aap_admin_passwords_vault_auth_role_id | length > 0)
-      and (aap_admin_passwords_vault_auth_secret_id | length > 0)
-    )
-  }}
-aap_admin_passwords_vault_available: >-
-  {{
-    (aap_admin_passwords_vault_addr | default('', true) | trim | length > 0)
-    and (aap_admin_passwords_vault_auth_ok | bool)
-    and (aap_admin_passwords_vault_kv_mount | default('', true) | trim | length > 0)
-    and (aap_admin_passwords_vault_kv_path | default('', true) | trim | length > 0)
-  }}
-
-# Local fallback cache for lab/offline idempotency.
-# This is disabled by default and should not be used as production source of truth.
-aap_admin_passwords_local_cache_enabled: "{{ aap_deploy_passwords_local_cache_enabled | default(false) }}"
-aap_admin_passwords_local_cache_path: "/etc/ansible-automation-platform/.aap-admin-passwords.yml"
-aap_admin_passwords_local_cache_owner: "root"
-aap_admin_passwords_local_cache_group: "root"
-aap_admin_passwords_local_cache_mode: "0600"
-
-# Shared password descriptors used by tasks/resolve_admin_passwords.yml
-aap_admin_password_entries:
-  - var_name: aap_gateway_admin_password
-    effective_var_name: aap_gateway_admin_password_effective
-    vault_field: gateway_admin_password
-  - var_name: aap_controller_admin_password
-    effective_var_name: aap_controller_admin_password_effective
-    vault_field: controller_admin_password
-  - var_name: aap_hub_admin_password
-    effective_var_name: aap_hub_admin_password_effective
-    vault_field: hub_admin_password
-  - var_name: aap_eda_admin_password
-    effective_var_name: aap_eda_admin_password_effective
-    vault_field: eda_admin_password
-  - var_name: aap_postgresql_admin_password
-    effective_var_name: aap_postgresql_admin_password_effective
-    vault_field: postgresql_admin_password
+aap_admin_password_effective: ""
+aap_gateway_admin_password_effective: ""
+aap_controller_admin_password_effective: ""
+aap_hub_admin_password_effective: ""
+aap_eda_admin_password_effective: ""
+aap_postgresql_admin_password_effective: ""
