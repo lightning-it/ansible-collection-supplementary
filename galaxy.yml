@@ -23,6 +23,11 @@ dependencies:
   community.vmware: '5.10.0'
   lit.foundational: '>=1.15.0'
   community.hashi_vault: '*'
+  infra.aap_utilities: '2.8.0'
+  infra.aap_configuration: '4.2.1'
+  infra.aap_configuration_extended: '4.2.1'
+  infra.controller_configuration: '3.2.2'
+  infra.ee_utilities: '4.2.2'
 build_ignore:
   - extensions/molecule
   - node_modules

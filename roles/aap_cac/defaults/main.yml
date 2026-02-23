@@ -1,30 +1,4 @@
 ---
-# Optional requirements overlay file.
-aap_cac_collections_requirements: "{{ role_path | dirname | dirname }}/collections/requirements.yml"
-
-# Canonical AAP CaC collection matrix used by this role.
-aap_cac_required_collection_matrix:
-  - name: ansible.platform
-    version: "2.6.20251106"
-  - name: ansible.controller
-    version: "4.6.16"
-  - name: ansible.posix
-    version: "2.1.0"
-  - name: ansible.hub
-    version: "1.0.4"
-  - name: ansible.eda
-    version: "2.11.0"
-  - name: infra.aap_utilities
-    version: "2.8.0"
-  - name: infra.aap_configuration
-    version: "4.2.1"
-  - name: infra.aap_configuration_extended
-    version: "4.2.1"
-  - name: infra.controller_configuration
-    version: "3.2.2"
-  - name: infra.ee_utilities
-    version: "4.2.2"
-
 # Gateway API endpoint used by token helper tasks.
 aap_cac_gateway_hostname: "https://{{ inventory_hostname }}"
 aap_cac_gateway_username: "{{ aap_username }}"

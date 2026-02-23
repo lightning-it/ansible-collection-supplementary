@@ -4,22 +4,15 @@ AAP configuration-as-code role tasksets for AAP object configuration.
 
 ## Requirements
 
-Install `lit.supplementary` via `ansible-galaxy collection install` so
-dependencies from `galaxy.yml` are installed automatically.
-
-Optional overlay file (for additional non-matrix dependencies):
-- `collections/requirements.yml`
-
-Default used by this role:
-- `aap_cac_collections_requirements` -> `collections/requirements.yml`
+Ensure `lit.supplementary` and its dependencies are preinstalled by your
+workspace/EE preparation flow.
+Collection installation and packaging are out of scope for role task execution.
 
 ## Variables
 
 See `roles/aap_cac/defaults/main.yml`.
 
 Key variables:
-- `aap_cac_collections_requirements`
-- `aap_cac_required_collection_matrix`
 - `aap_cac_gateway_hostname`
 - `aap_cac_gateway_username` (default: `admin`)
 - `aap_cac_gateway_password` (default: `aap_gateway_admin_password_effective`)
@@ -54,12 +47,8 @@ Password and secret input behavior:
 
 ## Dependencies
 
-This role validates and expects the AAP CaC collection matrix defined in
-`roles/aap_cac/defaults/main.yml` (`aap_cac_required_collection_matrix`).
-
-The required matrix is enforced against collection metadata in `galaxy.yml`.
-`collections/requirements.yml` is an optional overlay for additional
-non-matrix dependencies.
+Collection dependencies are declared at collection level in `galaxy.yml`
+and must be provisioned by your EE/workspace install flow before role execution.
 
 ## Example Playbook
 
