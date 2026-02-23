@@ -17,6 +17,7 @@ Key variables:
 - `aap_manage_systemd`
 - `aap_systemd_unit_name`
 - `aap_resolve_admin_passwords`
+- `aap_password_active`
 - `aap_password_active_slot`
 - `aap_password_require_component_inputs`
 - `aap_password_disallow_unresolved_references`
@@ -37,11 +38,15 @@ This role is inventory-only for secret input.
   - literal password strings
   - lookup-based values (for example HCP Vault/1Password lookups)
   - structured mappings with slots (for example `active`, `next`).
+- Active slot switch:
+  - `aap_password_active` (alias)
+  - `aap_password_active_slot` (canonical)
 - `aap_password_active_slot` selects the active key for structured mappings.
 - With `aap_password_require_component_inputs=true`, missing per-component inputs fail fast.
 - With `aap_password_disallow_unresolved_references=true`, raw path-like strings
   (for example `hc://...`, `op://...`) fail fast.
 - The role only consumes resolved effective values and publishes `*_effective` outputs.
+- Backend get-or-create behavior must be handled in inventory lookups, not in role code.
 
 Structured mapping format (per password input):
 
@@ -77,6 +82,7 @@ None.
     - role: lit.supplementary.aap
       vars:
         aap_deploy_enabled: true
+        aap_password_active: active
         aap_password_active_slot: active
         aap_password_require_component_inputs: true
         aap_gateway_admin_password_input:

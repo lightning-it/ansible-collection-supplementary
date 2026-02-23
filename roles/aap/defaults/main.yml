@@ -52,10 +52,18 @@ aap_resolve_admin_passwords: >-
 # - structured mappings with an active slot (for example active/next)
 # - lookup-based values (for example HCP Vault/1Password get-or-create lookups)
 aap_admin_passwords_no_log: "{{ aap_deploy_passwords_no_log | default(true) }}"
+aap_password_active: >-
+  {{
+    aap_deploy_password_active
+    | default('active', true)
+    | string
+    | trim
+    | lower
+  }}
 aap_password_active_slot: >-
   {{
     aap_deploy_password_active_slot
-    | default('active', true)
+    | default(aap_password_active, true)
     | string
     | trim
     | lower

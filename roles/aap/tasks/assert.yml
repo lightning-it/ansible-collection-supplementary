@@ -1,8 +1,7 @@
 ---
 - name: Ensure aap variables are valid
-  ansible.builtin.assert:
-    vars:
-      _aap_admin_input_valid: >-
+  vars:
+    _aap_admin_input_valid: >-
         {{
           (
             (aap_admin_password_input is string)
@@ -32,7 +31,7 @@
             )
           )
         }}
-      _aap_gateway_input_valid: >-
+    _aap_gateway_input_valid: >-
         {{
           (
             (aap_gateway_admin_password_input is string)
@@ -62,7 +61,7 @@
             )
           )
         }}
-      _aap_controller_input_valid: >-
+    _aap_controller_input_valid: >-
         {{
           (
             (aap_controller_admin_password_input is string)
@@ -92,7 +91,7 @@
             )
           )
         }}
-      _aap_hub_input_valid: >-
+    _aap_hub_input_valid: >-
         {{
           (
             (aap_hub_admin_password_input is string)
@@ -122,7 +121,7 @@
             )
           )
         }}
-      _aap_eda_input_valid: >-
+    _aap_eda_input_valid: >-
         {{
           (
             (aap_eda_admin_password_input is string)
@@ -152,7 +151,7 @@
             )
           )
         }}
-      _aap_postgresql_input_valid: >-
+    _aap_postgresql_input_valid: >-
         {{
           (
             (aap_postgresql_admin_password_input is string)
@@ -182,6 +181,7 @@
             )
           )
         }}
+  ansible.builtin.assert:
     that:
       - aap_enabled is boolean
       - aap_supported_majors is sequence
@@ -232,6 +232,6 @@
     fail_msg: >-
       aap variables are missing or invalid.
       Provide password inputs in inventory (string or structured mapping).
-      Use aap_password_active_slot to select the active key for structured entries.
+      Use aap_password_active_slot (or aap_password_active alias) to select the active key.
     quiet: true
   tags: always

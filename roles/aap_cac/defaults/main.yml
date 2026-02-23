@@ -27,9 +27,9 @@ aap_cac_required_collection_matrix:
 
 # Gateway API endpoint used by token helper tasks.
 aap_cac_gateway_hostname: "https://{{ inventory_hostname }}"
-aap_cac_gateway_username: "admin"
-aap_cac_gateway_password: "{{ aap_gateway_admin_password_effective | default('', true) }}"
-aap_cac_gateway_validate_certs: "{{ aap_validate_certs | default(true, true) }}"
+aap_cac_gateway_username: "{{ aap_username }}"
+aap_cac_gateway_password: "{{ aap_password }}"
+aap_cac_gateway_validate_certs: "{{ aap_validate_certs | default(true) }}"
 aap_cac_token_description: "aap-cac-token"
 aap_cac_token_request_retries: 5
 aap_cac_token_request_delay: 5

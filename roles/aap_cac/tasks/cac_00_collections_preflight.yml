@@ -7,6 +7,7 @@
   vars:
     __aap_cac_collection_root: "{{ role_path | dirname | dirname }}"
     __aap_cac_galaxy_file: "{{ __aap_cac_collection_root }}/galaxy.yml"
+    __aap_cac_manifest_file: "{{ __aap_cac_collection_root }}/MANIFEST.json"
     __aap_cac_required_collection_names: >-
       {{ aap_cac_required_collection_matrix | map(attribute='name') | list }}
   block:
@@ -15,18 +16,35 @@
         path: "{{ __aap_cac_galaxy_file }}"
       register: __aap_cac_galaxy_file_stat
 
-    - name: Ensure collection galaxy metadata file is present
+    - name: Check collection MANIFEST metadata file exists
+      ansible.builtin.stat:
+        path: "{{ __aap_cac_manifest_file }}"
+      register: __aap_cac_manifest_file_stat
+
+    - name: Ensure collection metadata file is present
       ansible.builtin.assert:
         that:
-          - __aap_cac_galaxy_file_stat.stat.exists | bool
-          - __aap_cac_galaxy_file_stat.stat.isreg | bool
+          - (__aap_cac_galaxy_file_stat.stat.exists | bool) or (__aap_cac_manifest_file_stat.stat.exists | bool)
         fail_msg: >-
-          Collection galaxy metadata file not found: {{ __aap_cac_galaxy_file }}
+          Collection metadata file not found (checked galaxy.yml and MANIFEST.json) under:
+          {{ __aap_cac_collection_root }}
 
-    - name: Load collection galaxy metadata
+    - name: Load collection galaxy metadata (preferred)
       ansible.builtin.set_fact:
         __aap_cac_galaxy_metadata: >-
           {{ lookup('ansible.builtin.file', __aap_cac_galaxy_file) | from_yaml }}
+        __aap_cac_metadata_source_file: "{{ __aap_cac_galaxy_file }}"
+      when: __aap_cac_galaxy_file_stat.stat.exists | bool
+      changed_when: false
+
+    - name: Load collection MANIFEST metadata (fallback)
+      ansible.builtin.set_fact:
+        __aap_cac_galaxy_metadata: >-
+          {{ (lookup('ansible.builtin.file', __aap_cac_manifest_file) | from_json).collection_info }}
+        __aap_cac_metadata_source_file: "{{ __aap_cac_manifest_file }}"
+      when:
+        - not (__aap_cac_galaxy_file_stat.stat.exists | bool)
+        - __aap_cac_manifest_file_stat.stat.exists | bool
       changed_when: false
 
     - name: Normalize declared galaxy dependency names
@@ -40,29 +58,66 @@
           }}
       changed_when: false
 
-    - name: Ensure galaxy metadata contains required AAP CaC collection matrix
-      ansible.builtin.assert:
-        that:
-          - (__aap_cac_required_collection_names | difference(__aap_cac_galaxy_dependency_names)) | length == 0
-        fail_msg: >-
-          Missing required AAP CaC dependencies in galaxy.yml:
-          {{
-            __aap_cac_required_collection_names
-            | difference(__aap_cac_galaxy_dependency_names)
-            | join(', ')
-          }}
-
     - name: Check selected AAP CaC requirements profile file
       ansible.builtin.stat:
         path: "{{ aap_cac_collections_requirements }}"
       register: __aap_cac_collections_requirements_stat
       changed_when: false
 
+    - name: Load selected AAP CaC requirements profile
+      ansible.builtin.set_fact:
+        __aap_cac_collections_requirements_data: >-
+          {{ lookup('ansible.builtin.file', aap_cac_collections_requirements) | from_yaml }}
+      when: __aap_cac_collections_requirements_stat.stat.exists | bool
+      changed_when: false
+
+    - name: Normalize dependency names from selected requirements profile
+      ansible.builtin.set_fact:
+        __aap_cac_requirements_dependency_names: >-
+          {{
+            (__aap_cac_collections_requirements_data.collections | default([]))
+            | map(attribute='name')
+            | list
+          }}
+      when: __aap_cac_collections_requirements_stat.stat.exists | bool
+      changed_when: false
+
+    - name: Select dependency source used for AAP CaC matrix validation
+      ansible.builtin.set_fact:
+        __aap_cac_dependency_validation_names: >-
+          {{
+            (__aap_cac_requirements_dependency_names | default([]))
+            if (__aap_cac_collections_requirements_stat.stat.exists | bool)
+            else (__aap_cac_galaxy_dependency_names | default([]))
+          }}
+        __aap_cac_dependency_validation_source: >-
+          {{
+            aap_cac_collections_requirements
+            if (__aap_cac_collections_requirements_stat.stat.exists | bool)
+            else (__aap_cac_metadata_source_file | default(__aap_cac_galaxy_file))
+          }}
+      changed_when: false
+
+    - name: Ensure dependency source contains required AAP CaC collection matrix
+      ansible.builtin.assert:
+        that:
+          - (__aap_cac_required_collection_names | difference(__aap_cac_dependency_validation_names)) | length == 0
+        fail_msg: >-
+          Missing required AAP CaC dependencies in {{ __aap_cac_dependency_validation_source }}:
+          {{
+            __aap_cac_required_collection_names
+            | difference(__aap_cac_dependency_validation_names)
+            | join(', ')
+          }}
+
     - name: Show AAP CaC collection matrix source (verbosity 1)
       ansible.builtin.debug:
+        verbosity: 1
         msg:
-          galaxy_file: "{{ __aap_cac_galaxy_file }}"
+          metadata_file: "{{ __aap_cac_metadata_source_file | default(__aap_cac_galaxy_file) }}"
+          metadata_dependencies: "{{ __aap_cac_galaxy_dependency_names | default([]) }}"
           requirements_profile_file: "{{ aap_cac_collections_requirements }}"
           requirements_profile_exists: "{{ __aap_cac_collections_requirements_stat.stat.exists | bool }}"
+          requirements_dependencies: "{{ __aap_cac_requirements_dependency_names | default([]) }}"
+          validation_source: "{{ __aap_cac_dependency_validation_source }}"
           required_collections: "{{ __aap_cac_required_collection_names }}"
-      verbosity: 1

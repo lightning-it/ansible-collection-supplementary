@@ -81,7 +81,9 @@ Installer admin password behavior:
   - `aap_hub_admin_password_input`
   - `aap_eda_admin_password_input`
   - `aap_postgresql_admin_password_input`
-- Inputs can be plain strings or slot mappings (`active`/`next`) selected by `aap_password_active_slot`.
+- Inputs can be plain strings or slot mappings (`active`/`next`) selected by:
+  - `aap_password_active` (alias)
+  - `aap_password_active_slot` (canonical)
 - Backend references must be resolved in inventory (for example lookup/get-or-create), not in role code.
 - Role code does not read or write Vault directly.
 
@@ -107,6 +109,7 @@ None.
         aap_deploy_bundle_dir: /opt/aap/setup/bundle
 
         # Password inputs (inventory source of truth)
+        aap_password_active: active
         aap_password_active_slot: active
         aap_gateway_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/gateway/admin') }}"
         aap_controller_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/controller/admin') }}"
