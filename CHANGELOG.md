@@ -1,3 +1,9 @@
+## [1.16.11](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.10...v1.16.11) (2026-02-24)
+
+### Bug Fixes
+
+* update dependency lit.foundational to v1.15.3 ([#131](https://github.com/lightning-it/ansible-collection-supplementary/issues/131)) ([d23a1fd](https://github.com/lightning-it/ansible-collection-supplementary/commit/d23a1fd5793165537ec2f79f4d26ca30468b8223))
+
 ## [1.16.10](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.9...v1.16.10) (2026-02-24)
 
 ### Bug Fixes
