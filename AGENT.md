@@ -25,6 +25,26 @@ Before writing or changing role code, you MUST inspect repository reality first:
 
 If generic guidance conflicts with repository behavior, you MUST prefer repository behavior.
 
+## 1.1 Shared-Assets Managed Files (Mandatory)
+
+1. This repository receives centrally managed baseline files from `lightning-it/shared-assets`.
+2. Do not hand-edit these files in downstream repos unless you also update `shared-assets` and run sync.
+3. Managed default files from `shared-assets/default`:
+   1. `CODE_OF_CONDUCT.md`
+   2. `SECURITY.md`
+   3. `scripts/wunder-devtools-ee.sh`
+4. Managed collection baseline files from `shared-assets/ansible-collection/base`:
+   1. `AGENT.md`
+   2. `CONTRIBUTING.md`
+   3. `.ansible-lint`
+   4. `ansible.cfg`
+   5. `renovate.base.json`
+   6. `.releaserc`
+   7. `.yamllint`
+   8. `.gitignore`
+   9. shared block in `.pre-commit-config.yaml`
+5. Repo-local exceptions MUST be explicit in the sync workflow and documented in the repository.
+
 ## 2. Repository Baseline (This Repo)
 
 1. Repository identity values (namespace, name, license, tags, dependencies) MUST be read from `galaxy.yml`.

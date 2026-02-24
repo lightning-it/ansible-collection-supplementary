@@ -7,9 +7,7 @@
     {
       "customType": "regex",
       "description": "Ansible Galaxy collection dependencies in galaxy.yml (minimum version)",
-      "managerFilePatterns": [
-        "/^galaxy\\.yml$/"
-      ],
+      "managerFilePatterns": ["/^galaxy\\.yml$/"],
       "matchStrings": [
         "(?m)^\\s{2}(?<depName>[a-z0-9_]+\\.[a-z0-9_]+):\\s*[\"']?>=(?<currentValue>[0-9]+(?:\\.[0-9]+){1,3})(?:,[^\"'\\n]+)?[\"']?"
       ],
@@ -18,9 +16,7 @@
     {
       "customType": "regex",
       "description": "Ansible Galaxy collection dependencies in galaxy.yml (exact version)",
-      "managerFilePatterns": [
-        "/^galaxy\\.yml$/"
-      ],
+      "managerFilePatterns": ["/^galaxy\\.yml$/"],
       "matchStrings": [
         "(?m)^\\s{2}(?<depName>[a-z0-9_]+\\.[a-z0-9_]+):\\s*[\"']?(?<currentValue>[0-9]+(?:\\.[0-9]+){1,3})[\"']?"
       ],
