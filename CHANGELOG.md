@@ -1,3 +1,9 @@
+## [1.16.9](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.8...v1.16.9) (2026-02-24)
+
+### Bug Fixes
+
+* update community.general version constraints for compatibility ([#129](https://github.com/lightning-it/ansible-collection-supplementary/issues/129)) ([76b39ac](https://github.com/lightning-it/ansible-collection-supplementary/commit/76b39acd16e7e9df14080ff60539f13114440e55))
+
 ## [1.16.8](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.7...v1.16.8) (2026-02-23)
 
 ### Bug Fixes
