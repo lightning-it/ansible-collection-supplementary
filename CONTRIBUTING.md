@@ -29,6 +29,28 @@ This document applies to all `ansible-collection-*` repositories under
    Never commit credentials, tokens, or production configuration. Use CI
    variables, vaults, and environment variables instead.
 
+## Renovate and Entitlement-Gated Collections
+
+If a repository tracks entitlement-gated Ansible collections (for example
+Red Hat Automation Hub content) with Renovate, configure an authenticated
+registry for `galaxy-collection` lookups.
+
+Recommended registry URL:
+
+- `https://console.redhat.com/api/automation-hub/content/published/`
+
+Automation Hub requires authentication. For Red Hat offline tokens, Mend-hosted
+Renovate cannot perform the required refresh-token -> access-token exchange
+during `galaxy-collection` lookups.
+
+Policy for certified-only requirement files:
+
+- Exclude those files from Renovate checks/updates.
+- Maintain certified collection versions via controlled manual or CI workflow.
+
+Without this, Renovate lookups for collections such as `ansible.controller` or
+`redhat.satellite` will fail in Mend-hosted mode when using offline tokens.
+
 ## AI assistants / `agent.md`
 
 If you use AI coding assistants (e.g. ChatGPT, Copilot, Codex) for changes in
