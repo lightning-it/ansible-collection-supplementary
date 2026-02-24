@@ -11,4 +11,4 @@ collections:
   - name: community.vmware
     version: "5.10.0"
   - name: lit.foundational
-    version: "1.15.0"
+    version: "1.15.2"
