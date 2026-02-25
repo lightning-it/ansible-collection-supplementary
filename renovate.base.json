@@ -34,10 +34,11 @@
       "allowedVersions": "/^5\\.10\\.0$/"
     }
   ],
-  "regexManagers": [
+  "customManagers": [
     {
+      "customType": "regex",
       "description": "ansible-core version in workflow env (ANSIBLE_CORE_VERSION)",
-      "fileMatch": [".github/workflows/.*\\.ya?ml"],
+      "managerFilePatterns": ["/.github/workflows/.*\\.ya?ml/"],
       "matchStrings": ["ANSIBLE_CORE_VERSION:\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""],
       "datasourceTemplate": "pypi",
       "packageNameTemplate": "ansible-core",
