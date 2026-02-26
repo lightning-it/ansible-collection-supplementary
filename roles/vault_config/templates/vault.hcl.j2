@@ -94,7 +94,7 @@ inputs = {
   (vault_config_approle_secrets_render | default(vault_config_approle_secrets)),
   "role_name",
   ["role_name", "token_policy"],
-  ["kv_mount", "credential_path", "token_ttl", "token_max_ttl"],
+  ["kv_mount", "credential_path", "token_ttl", "token_max_ttl", "token_period"],
   {
     "kv_mount": vault_config_engine_mount_point,
     "credential_path": inventory_hostname ~ "/vault/approle"
@@ -114,8 +114,8 @@ inputs = {
   "vault_pki_intermediates",
   vault_config_pki_intermediates,
   "mount",
-  ["mount", "common_name", "signer_root_id", "vault_server"],
-  ["ttl", "max_ttl", "key_type", "key_bits", "country", "locality", "province", "ou", "organization", "csr_auto_rebuild", "csr_expiry"],
+  ["mount", "common_name", "vault_server"],
+  ["ttl", "max_ttl", "key_type", "key_bits", "country", "locality", "province", "ou", "organization", "csr_auto_rebuild", "csr_expiry", "signer_root_id", "sign_method", "external_cert_secret", "external_cert_ready", "store_csr"],
   {},
 ) }}
 
@@ -128,4 +128,22 @@ inputs = {
   {},
 ) }}
 
+{{ macros.render_block(
+  "jwt_auth_backends",
+  vault_config_jwt_auth_backends,
+  "path",
+  ["path"],
+  ["namespace", "type", "oidc_discovery_url", "bound_issuer", "jwt_validation_pubkeys"],
+  {},
+  heredoc_fields=["oidc_discovery_ca_pem"]
+) }}
+
+{{ macros.render_block(
+  "jwt_auth_backend_roles",
+  vault_config_jwt_auth_backend_roles,
+  "role_name",
+  ["role_name", "backend_key", "user_claim"],
+  ["namespace", "role_type", "bound_claims", "bound_claims_type", "bound_audiences", "token_policy"],
+  {},
+) }}
 }
