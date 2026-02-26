@@ -128,4 +128,22 @@ inputs = {
   {},
 ) }}
 
+{{ macros.render_block(
+  "jwt_auth_backends",
+  vault_config_jwt_auth_backends,
+  "path",
+  ["path"],
+  ["namespace", "type", "oidc_discovery_url", "bound_issuer", "jwt_validation_pubkeys"],
+  {},
+  heredoc_fields=["oidc_discovery_ca_pem"]
+) }}
+
+{{ macros.render_block(
+  "jwt_auth_backend_roles",
+  vault_config_jwt_auth_backend_roles,
+  "role_name",
+  ["role_name", "backend_key", "user_claim"],
+  ["namespace", "role_type", "bound_claims", "bound_claims_type", "bound_audiences", "token_policy"],
+  {},
+) }}
 }

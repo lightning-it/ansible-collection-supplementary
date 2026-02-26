@@ -38,7 +38,21 @@ EOF
 {% for o in optional %}
 {% set value = item[o] if item[o] is defined else defaults.get(o) %}
 {% if value is not none %}
-{% if o in heredoc_fields %}
+{% if o == "jwt_validation_pubkeys" %}
+      {{ "%-24s" | format(o) }} = [
+{% if value is string %}
+        <<-EOF
+{{ value }}
+EOF
+{% else %}
+{% for v in value %}
+        <<-EOF
+{{ v }}
+EOF
+{% endfor %}
+{% endif %}
+      ]
+{% elif o in heredoc_fields %}
       {{ "%-24s" | format(o) }} = <<-EOF
 {{ value }}
 EOF

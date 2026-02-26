@@ -83,6 +83,8 @@ vault_config_vault_pki_intermediates: "{{ vault_pki_intermediates | default([]) 
 vault_config_vault_pki_roles: "{{ vault_pki_roles | default([]) }}"
 vault_config_pki_roots: []
 vault_config_pki_intermediates: []
+vault_config_jwt_auth_backends: []
+vault_config_jwt_auth_backend_roles: []
 vault_config_pki_enabled: true
 
 vault_config_cert_dir: "/srv/vault/certs"
