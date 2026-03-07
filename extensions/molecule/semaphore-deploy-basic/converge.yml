@@ -1,0 +1,11 @@
+---
+- name: Converge semaphore_deploy
+  hosts: localhost
+  gather_facts: true
+  vars:
+    semaphore_deploy_install_packages: false
+    semaphore_deploy_manage_systemd: false
+    semaphore_deploy_skip_runtime: true
+    semaphore_deploy_manage_postgres: true
+  roles:
+    - role: semaphore_deploy

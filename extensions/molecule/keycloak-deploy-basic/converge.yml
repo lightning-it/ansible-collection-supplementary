@@ -1,0 +1,11 @@
+---
+- name: Converge keycloak_deploy
+  hosts: localhost
+  gather_facts: true
+  vars:
+    keycloak_deploy_install_packages: false
+    keycloak_deploy_manage_systemd: false
+    keycloak_deploy_skip_runtime: true
+    keycloak_deploy_manage_postgres: true
+  roles:
+    - role: keycloak_deploy

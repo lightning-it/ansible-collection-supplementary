@@ -1,0 +1,12 @@
+---
+- name: Converge postgres_deploy
+  hosts: localhost
+  gather_facts: true
+  vars:
+    postgres_deploy_install_packages: false
+    postgres_deploy_manage_systemd: false
+    postgres_deploy_skip_runtime: true
+    postgres_deploy_db_name: semaphore
+    postgres_deploy_db_user: semaphore
+  roles:
+    - role: postgres_deploy

@@ -1,0 +1,194 @@
+# Render with envsubst before use:
+#   : "${IDENTITY_ROOT:=/srv/wunderbox/identity}"
+#   : "${BASE_DN:=dc=wunderbox,dc=local}"
+#   : "${LDAP_HOSTNAME:=ldap.wunderbox.local}"
+#   : "${LDAP_HOST_PORT:=3389}"
+#   : "${LDAPS_HOST_PORT:=3636}"
+#   : "${KEYCLOAK_HOSTNAME:=keycloak.wunderbox.local}"
+#   : "${KEYCLOAK_HOST_PORT:=8080}"
+#   : "${KEYCLOAK_HTTP_PORT:=8080}"
+#   : "${KEYCLOAK_DB_NAME:=keycloak}"
+#   : "${KEYCLOAK_DB_USER:=keycloak}"
+#   : "${KEYCLOAK_ADMIN:=admin}"
+#   envsubst < manifests/identity-stack.pod.yaml > /tmp/identity-stack.rendered.yaml
+#   podman kube play /tmp/identity-stack.rendered.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: identity-stack
+  labels:
+    app: wunderbox-identity
+spec:
+  restartPolicy: Always
+  volumes:
+    - name: ldap-data
+      hostPath:
+        path: ${IDENTITY_ROOT}/ldap
+        type: DirectoryOrCreate
+    - name: ldap-tls
+      hostPath:
+        path: ${IDENTITY_ROOT}/ldap-tls
+        type: DirectoryOrCreate
+    - name: pg-data
+      hostPath:
+        path: ${IDENTITY_ROOT}/pg
+        type: DirectoryOrCreate
+    - name: keycloak-data
+      hostPath:
+        path: ${IDENTITY_ROOT}/keycloak
+        type: DirectoryOrCreate
+    - name: bootstrap
+      hostPath:
+        path: ${IDENTITY_ROOT}/bootstrap
+        type: DirectoryOrCreate
+    - name: secrets
+      hostPath:
+        path: ${IDENTITY_ROOT}/secrets
+        type: DirectoryOrCreate
+
+  containers:
+    - name: ldap
+      image: localhost/wunderbox-ldap:3.1-bootstrap
+      imagePullPolicy: IfNotPresent
+      ports:
+        - containerPort: 3389
+          hostPort: ${LDAP_HOST_PORT}
+          hostIP: 0.0.0.0
+        - containerPort: 3636
+          hostPort: ${LDAPS_HOST_PORT}
+          hostIP: 0.0.0.0
+      env:
+        - name: DS_SUFFIX
+          value: "${BASE_DN}"
+        - name: LDAP_BASE_DN
+          value: "${BASE_DN}"
+        - name: LDAP_HOSTNAME
+          value: "${LDAP_HOSTNAME}"
+        - name: DS_DM_PASSWORD_FILE
+          value: /opt/wunderbox/secrets/ds_dm_password
+        - name: LDAP_BOOTSTRAP_MARKER
+          value: /data/.bootstrap_done
+        - name: LDAP_SEED_LDIF
+          value: /opt/wunderbox/bootstrap/seed.ldif
+      volumeMounts:
+        - name: ldap-data
+          mountPath: /data
+        - name: ldap-tls
+          mountPath: /data/tls
+        - name: bootstrap
+          mountPath: /opt/wunderbox/bootstrap
+          readOnly: true
+        - name: secrets
+          mountPath: /opt/wunderbox/secrets
+          readOnly: true
+      readinessProbe:
+        tcpSocket:
+          port: 3389
+        initialDelaySeconds: 15
+        periodSeconds: 10
+        timeoutSeconds: 3
+      livenessProbe:
+        tcpSocket:
+          port: 3389
+        initialDelaySeconds: 30
+        periodSeconds: 20
+        timeoutSeconds: 3
+
+    - name: postgres
+      image: docker.io/library/postgres:16
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: POSTGRES_DB
+          value: "${KEYCLOAK_DB_NAME}"
+        - name: POSTGRES_USER
+          value: "${KEYCLOAK_DB_USER}"
+        - name: POSTGRES_PASSWORD_FILE
+          value: /opt/wunderbox/secrets/postgres_password
+      volumeMounts:
+        - name: pg-data
+          mountPath: /var/lib/postgresql/data
+        - name: secrets
+          mountPath: /opt/wunderbox/secrets
+          readOnly: true
+      readinessProbe:
+        exec:
+          command:
+            - /bin/sh
+            - -ec
+            - pg_isready -U "${KEYCLOAK_DB_USER}" -d "${KEYCLOAK_DB_NAME}"
+        initialDelaySeconds: 10
+        periodSeconds: 10
+        timeoutSeconds: 5
+      livenessProbe:
+        exec:
+          command:
+            - /bin/sh
+            - -ec
+            - pg_isready -U "${KEYCLOAK_DB_USER}" -d "${KEYCLOAK_DB_NAME}"
+        initialDelaySeconds: 30
+        periodSeconds: 20
+        timeoutSeconds: 5
+
+    - name: keycloak
+      image: quay.io/keycloak/keycloak:26.5.4
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/bash
+        - -ec
+      args:
+        - |
+          set -euo pipefail
+          : "${KEYCLOAK_ADMIN_PASSWORD_FILE:=/opt/wunderbox/secrets/keycloak_admin_password}"
+          : "${KC_DB_PASSWORD_FILE:=/opt/wunderbox/secrets/postgres_password}"
+          export KEYCLOAK_ADMIN_PASSWORD="$(tr -d '\r\n' < "${KEYCLOAK_ADMIN_PASSWORD_FILE}")"
+          export KC_DB_PASSWORD="$(tr -d '\r\n' < "${KC_DB_PASSWORD_FILE}")"
+          exec /opt/keycloak/bin/kc.sh start-dev --http-port=${KEYCLOAK_HTTP_PORT}
+      ports:
+        - containerPort: ${KEYCLOAK_HTTP_PORT}
+          hostPort: ${KEYCLOAK_HOST_PORT}
+          hostIP: 0.0.0.0
+      env:
+        - name: KEYCLOAK_ADMIN
+          value: "${KEYCLOAK_ADMIN}"
+        - name: KC_DB
+          value: postgres
+        - name: KC_DB_URL_HOST
+          value: 127.0.0.1
+        - name: KC_DB_URL_PORT
+          value: "5432"
+        - name: KC_DB_URL_DATABASE
+          value: "${KEYCLOAK_DB_NAME}"
+        - name: KC_DB_USERNAME
+          value: "${KEYCLOAK_DB_USER}"
+        - name: KC_HEALTH_ENABLED
+          value: "true"
+        - name: KC_HTTP_ENABLED
+          value: "true"
+        - name: KC_HOSTNAME
+          value: "${KEYCLOAK_HOSTNAME}"
+      volumeMounts:
+        - name: keycloak-data
+          mountPath: /opt/keycloak/data
+        - name: bootstrap
+          mountPath: /opt/wunderbox/bootstrap
+          readOnly: true
+        - name: secrets
+          mountPath: /opt/wunderbox/secrets
+          readOnly: true
+      readinessProbe:
+        httpGet:
+          path: /health/ready
+          port: 9000
+          scheme: HTTP
+        initialDelaySeconds: 25
+        periodSeconds: 10
+        timeoutSeconds: 3
+      livenessProbe:
+        httpGet:
+          path: /health/live
+          port: 9000
+          scheme: HTTP
+        initialDelaySeconds: 40
+        periodSeconds: 20
+        timeoutSeconds: 3

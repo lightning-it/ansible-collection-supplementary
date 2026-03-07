@@ -1,0 +1,38 @@
+---
+- name: Validate Forgejo CaC variables
+  ansible.builtin.assert:
+    that:
+      - forgejo_cac_skip_apply is boolean
+      - forgejo_cac_validate_certs is boolean
+      - forgejo_cac_request_timeout | int > 0
+      - forgejo_cac_token is string
+      - forgejo_cac_organizations is sequence
+      - forgejo_cac_organizations is not string
+      - forgejo_cac_repositories is sequence
+      - forgejo_cac_repositories is not string
+      - forgejo_cac_teams is sequence
+      - forgejo_cac_teams is not string
+      - forgejo_cac_users is sequence
+      - forgejo_cac_users is not string
+    fail_msg: "Forgejo CaC variables are missing or invalid."
+  tags: always
+
+- name: Validate Forgejo CaC API inputs when apply is enabled
+  ansible.builtin.assert:
+    that:
+      - forgejo_cac_url | default('', true) | trim | length > 0
+      - >-
+          (forgejo_cac_token | default('', true) | trim | length > 0)
+          or (
+            (forgejo_cac_admin_user | default('', true) | trim | length > 0)
+            and
+            (forgejo_cac_admin_password | default('', true) | trim | length > 0)
+          )
+    fail_msg: >-
+      In forgejo_cac apply mode, forgejo_cac_url,
+      and either forgejo_cac_token or
+      forgejo_cac_admin_user/forgejo_cac_admin_password are required.
+  when:
+    - not forgejo_cac_skip_apply | bool
+  no_log: true
+  tags: always

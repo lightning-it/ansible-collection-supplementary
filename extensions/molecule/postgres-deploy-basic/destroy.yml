@@ -1,0 +1,9 @@
+---
+- name: Destroy postgres_deploy
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Nothing to destroy for postgres_deploy basic scenario
+      ansible.builtin.debug:
+        msg: "No runtime resources created in postgres-deploy-basic."
+      changed_when: false

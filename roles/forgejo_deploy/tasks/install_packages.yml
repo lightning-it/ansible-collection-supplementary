@@ -1,0 +1,6 @@
+---
+- name: Ensure Forgejo runtime packages are installed
+  ansible.builtin.package:
+    name: "{{ forgejo_deploy_packages }}"
+    state: present
+  when: forgejo_deploy_packages is defined

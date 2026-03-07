@@ -1,0 +1,16 @@
+---
+- name: Check Forgejo API reachability
+  ansible.builtin.uri:
+    url: "{{ forgejo_cac_url }}/api/healthz"
+    method: GET
+    validate_certs: "{{ forgejo_cac_validate_certs }}"
+    timeout: "{{ forgejo_cac_request_timeout | int }}"
+    status_code: 200
+  changed_when: false
+
+- name: Show Forgejo CaC status
+  ansible.builtin.debug:
+    msg: >-
+      Forgejo CaC API preflight passed.
+      Add additional cac_*.yml tasksets in role forgejo_cac for object reconciliation.
+  changed_when: false

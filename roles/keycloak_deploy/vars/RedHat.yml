@@ -1,0 +1,3 @@
+---
+keycloak_deploy_packages:
+  - podman

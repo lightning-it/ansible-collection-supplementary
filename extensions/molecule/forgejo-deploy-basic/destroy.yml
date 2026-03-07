@@ -1,0 +1,9 @@
+---
+- name: Destroy forgejo_deploy
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Nothing to destroy for forgejo-deploy-basic
+      ansible.builtin.debug:
+        msg: "No runtime resources created in forgejo-deploy-basic."
+      changed_when: false

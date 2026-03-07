@@ -1,0 +1,6 @@
+---
+- name: Ensure Semaphore runtime packages are installed
+  ansible.builtin.package:
+    name: "{{ semaphore_deploy_packages }}"
+    state: present
+  when: semaphore_deploy_packages is defined

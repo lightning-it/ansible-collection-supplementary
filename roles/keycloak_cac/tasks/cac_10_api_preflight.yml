@@ -1,0 +1,16 @@
+---
+- name: Check Keycloak API reachability
+  ansible.builtin.uri:
+    url: "{{ keycloak_cac_url }}/realms/{{ keycloak_cac_realm }}"
+    method: GET
+    validate_certs: "{{ keycloak_cac_validate_certs }}"
+    timeout: "{{ keycloak_cac_request_timeout | int }}"
+    status_code: 200
+  changed_when: false
+
+- name: Show Keycloak CaC status
+  ansible.builtin.debug:
+    msg: >-
+      Keycloak CaC API preflight passed.
+      Add additional cac_*.yml tasksets in role keycloak_cac for object reconciliation.
+  changed_when: false

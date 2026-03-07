@@ -1,0 +1,29 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip Keycloak CaC apply when disabled
+  ansible.builtin.debug:
+    msg: "Keycloak CaC skipped (keycloak_cac_skip_apply=true)."
+  when: keycloak_cac_skip_apply | bool
+  tags: always
+
+- name: Discover Keycloak CaC tasksets
+  ansible.builtin.set_fact:
+    keycloak_cac_taskset_files: >-
+      {{
+        query('ansible.builtin.fileglob', role_path ~ '/tasks/cac_*.yml')
+        | map('basename')
+        | sort
+      }}
+  when: not keycloak_cac_skip_apply | bool
+  changed_when: false
+  tags: always
+
+- name: Execute Keycloak CaC tasksets
+  ansible.builtin.include_tasks: "{{ role_path }}/tasks/{{ item }}"
+  loop: "{{ keycloak_cac_taskset_files | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  when: not keycloak_cac_skip_apply | bool

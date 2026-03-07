@@ -1,0 +1,17 @@
+---
+# CaC execution behavior
+forgejo_cac_skip_apply: true
+
+# API access for Ansible-driven CaC
+forgejo_cac_url: "{{ forgejo_deploy_api_url_effective | default('http://127.0.0.1:3000', true) }}"
+forgejo_cac_validate_certs: false
+forgejo_cac_request_timeout: 30
+forgejo_cac_admin_user: "{{ forgejo_deploy_admin_user | default('admin', true) }}"
+forgejo_cac_admin_password: "{{ forgejo_deploy_admin_password | default('', true) }}"
+forgejo_cac_token: ""
+
+# Future object catalogs (kept empty by default)
+forgejo_cac_organizations: []
+forgejo_cac_repositories: []
+forgejo_cac_teams: []
+forgejo_cac_users: []

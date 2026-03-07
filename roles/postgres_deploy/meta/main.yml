@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: postgres_deploy
+  namespace: lit
+  author: Lightning IT
+  description: Deploy PostgreSQL as a Podman pod.
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - modulix
+    - postgres
+    - postgresql
+    - podman
+    - database
+
+dependencies: []

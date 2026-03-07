@@ -1,0 +1,14 @@
+---
+- name: Configure Forgejo (example)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    forgejo_cac_skip_apply: true
+    forgejo_cac_url: "http://localhost:3000"
+    forgejo_cac_admin_user: "admin"
+    forgejo_cac_admin_password: "admin"
+
+  roles:
+    - lit.supplementary.forgejo_cac

@@ -1,0 +1,96 @@
+---
+# Pod basics
+semaphore_deploy_pod_name: "semaphore"
+semaphore_deploy_pod_manifest_path: "/etc/podman/pods/semaphore.yml"
+semaphore_deploy_image: "docker.io/semaphoreui/semaphore:latest"
+
+# Dedicated PostgreSQL service defaults used by semaphore_deploy
+semaphore_deploy_manage_postgres: true
+semaphore_deploy_postgres_image: "docker.io/library/postgres:16"
+semaphore_deploy_postgres_pod_name: "{{ semaphore_deploy_pod_name }}-postgres"
+semaphore_deploy_postgres_pod_manifest_path: >-
+  /etc/podman/pods/{{ semaphore_deploy_postgres_pod_name }}.yml
+semaphore_deploy_postgres_container_name: "postgres"
+semaphore_deploy_container_name: "{{ semaphore_deploy_pod_name }}-semaphore"
+
+# Host paths
+semaphore_deploy_host_data_dir: "/srv/semaphore/data"
+semaphore_deploy_postgres_data_dir: "/srv/semaphore/postgres"
+semaphore_deploy_config_dir: "/srv/semaphore/config"
+semaphore_deploy_secrets_file: "{{ semaphore_deploy_config_dir }}/semaphore-secrets.yml"
+
+# Container paths
+semaphore_deploy_container_data_dir: "/var/lib/semaphore"
+semaphore_deploy_container_playbook_path: "/tmp/semaphore"
+semaphore_deploy_container_postgres_data_dir: "/var/lib/postgresql/data"
+
+# Runtime network
+semaphore_deploy_port: 3000
+semaphore_deploy_host_ip: >-
+  {{
+    ansible_default_ipv4.address
+      | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
+  }}
+semaphore_deploy_postgres_host_ip: "{{ semaphore_deploy_host_ip }}"
+semaphore_deploy_api_scheme: "http"
+semaphore_deploy_api_url: ""
+semaphore_deploy_api_url_effective: >-
+  {{
+    semaphore_deploy_api_url
+      if (semaphore_deploy_api_url | default('', true) | length > 0)
+      else (
+        semaphore_deploy_api_scheme ~ '://' ~
+        semaphore_deploy_host_ip ~ ':' ~
+        semaphore_deploy_port
+      )
+  }}
+semaphore_deploy_health_url: ""
+semaphore_deploy_health_url_effective: >-
+  {{
+    semaphore_deploy_health_url
+      if (semaphore_deploy_health_url | default('', true) | length > 0)
+      else (semaphore_deploy_api_url_effective ~ '/api/ping')
+  }}
+
+# Semaphore app config
+semaphore_deploy_admin_login: "admin"
+semaphore_deploy_admin_name: "Modulix Admin"
+semaphore_deploy_admin_email: "admin@localhost"
+semaphore_deploy_web_root: ""
+semaphore_deploy_env_extra: {}
+
+# Database config
+semaphore_deploy_db_dialect: "postgres"
+semaphore_deploy_db_name: "semaphore"
+semaphore_deploy_db_user: "semaphore"
+semaphore_deploy_db_host: "{{ semaphore_deploy_postgres_host_ip }}"
+semaphore_deploy_db_port: 5432
+
+# Secrets (preferred: inventory/Vault; fallback: generated once)
+semaphore_deploy_db_password: ""
+semaphore_deploy_admin_password: ""
+semaphore_deploy_access_key_encryption: ""
+semaphore_deploy_generate_secrets: true
+semaphore_deploy_store_generated_secrets: true
+semaphore_deploy_generated_db_password_length: 32
+semaphore_deploy_generated_admin_password_length: 32
+semaphore_deploy_generated_access_key_length: 64
+
+# Lifecycle
+semaphore_deploy_install_packages: true
+semaphore_deploy_manage_systemd: true
+semaphore_deploy_skip_runtime: false
+semaphore_deploy_skip_deploy: false
+semaphore_deploy_validate_certs: true
+
+# Internal handler flags
+semaphore_deploy_kubeplay_remove: false
+semaphore_deploy_kubeplay_run: false
+
+# Systemd
+semaphore_deploy_systemd_unit_name: >-
+  {{
+    'podman-kube@'
+    ~ (semaphore_deploy_pod_manifest_path | basename | regex_replace('\\.yml$', ''))
+    ~ '.service'
+  }}

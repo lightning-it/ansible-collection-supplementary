@@ -1,0 +1,216 @@
+---
+- name: Ensure Forgejo directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ forgejo_deploy_host_data_dir }}"
+      mode: '0750'
+    - path: "{{ forgejo_deploy_config_dir }}"
+      mode: '0750'
+    - path: "{{ forgejo_deploy_pod_manifest_path | dirname }}"
+      mode: '0755'
+  when: item.path | default('') | length > 0
+  tags:
+    - deployment
+
+- name: Check whether Forgejo generated secrets file exists
+  ansible.builtin.stat:
+    path: "{{ forgejo_deploy_secrets_file }}"
+  register: forgejo_deploy_secrets_file_stat
+  changed_when: false
+  tags:
+    - deployment
+
+- name: Load generated Forgejo secrets
+  ansible.builtin.include_vars:
+    file: "{{ forgejo_deploy_secrets_file }}"
+    name: forgejo_deploy_stored_secrets
+  when: forgejo_deploy_secrets_file_stat.stat.exists | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Build effective Forgejo secret values from inventory and stored state
+  ansible.builtin.set_fact:
+    forgejo_deploy_db_password_effective: >-
+      {{
+        (forgejo_deploy_db_password | default('', true) | trim)
+        if (forgejo_deploy_db_password | default('', true) | trim | length > 0)
+        else (
+          (forgejo_deploy_stored_secrets | default({})).forgejo_deploy_db_password
+          | default('', true) | trim
+        )
+      }}
+    forgejo_deploy_admin_password_effective: >-
+      {{
+        (forgejo_deploy_admin_password | default('', true) | trim)
+        if (forgejo_deploy_admin_password | default('', true) | trim | length > 0)
+        else (
+          (forgejo_deploy_stored_secrets | default({})).forgejo_deploy_admin_password
+          | default('', true) | trim
+        )
+      }}
+  changed_when: false
+  no_log: true
+  tags:
+    - deployment
+
+- name: Determine whether secret generation is required
+  ansible.builtin.set_fact:
+    forgejo_deploy_secrets_missing: >-
+      {{
+        (forgejo_deploy_db_password_effective | default('', true) | length == 0)
+        or (forgejo_deploy_admin_password_effective | default('', true) | length == 0)
+      }}
+  changed_when: false
+  no_log: true
+  tags:
+    - deployment
+
+- name: Fail when secrets are missing and generation is disabled
+  ansible.builtin.assert:
+    that:
+      - not forgejo_deploy_secrets_missing | bool
+    fail_msg: >-
+      Missing Forgejo secret values. Provide forgejo_deploy_db_password
+      and forgejo_deploy_admin_password, or enable
+      forgejo_deploy_generate_secrets.
+  when: not forgejo_deploy_generate_secrets | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Generate missing Forgejo secret values
+  ansible.builtin.set_fact:
+    forgejo_deploy_db_password_effective: >-
+      {{
+        forgejo_deploy_db_password_effective
+        if (forgejo_deploy_db_password_effective | default('', true) | length > 0)
+        else lookup(
+          'ansible.builtin.password',
+          '/dev/null length=' ~ (forgejo_deploy_generated_db_password_length | int | string)
+        )
+      }}
+    forgejo_deploy_admin_password_effective: >-
+      {{
+        forgejo_deploy_admin_password_effective
+        if (forgejo_deploy_admin_password_effective | default('', true) | length > 0)
+        else lookup(
+          'ansible.builtin.password',
+          '/dev/null length=' ~ (forgejo_deploy_generated_admin_password_length | int | string)
+        )
+      }}
+  when:
+    - forgejo_deploy_generate_secrets | bool
+    - forgejo_deploy_secrets_missing | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Persist generated Forgejo secrets
+  ansible.builtin.copy:
+    dest: "{{ forgejo_deploy_secrets_file }}"
+    owner: root
+    group: root
+    mode: '0600'
+    content: |
+      ---
+      forgejo_deploy_db_password: "{{ forgejo_deploy_db_password_effective }}"
+      forgejo_deploy_admin_password: "{{ forgejo_deploy_admin_password_effective }}"
+  when:
+    - forgejo_deploy_generate_secrets | bool
+    - forgejo_deploy_store_generated_secrets | bool
+    - forgejo_deploy_secrets_missing | bool
+  notify:
+    - Recreate forgejo pod
+    - Run forgejo pod
+  no_log: true
+  tags:
+    - deployment
+
+- name: Deploy dedicated PostgreSQL service for Forgejo
+  ansible.builtin.include_role:
+    name: lit.supplementary.postgres_deploy
+  vars:
+    postgres_deploy_pod_name: "{{ forgejo_deploy_postgres_pod_name }}"
+    postgres_deploy_pod_manifest_path: "{{ forgejo_deploy_postgres_pod_manifest_path }}"
+    postgres_deploy_image: "{{ forgejo_deploy_postgres_image }}"
+    postgres_deploy_container_name: "{{ forgejo_deploy_postgres_container_name }}"
+    postgres_deploy_host_data_dir: "{{ forgejo_deploy_postgres_data_dir }}"
+    postgres_deploy_container_data_dir: "{{ forgejo_deploy_container_postgres_data_dir }}"
+    postgres_deploy_port: "{{ forgejo_deploy_db_port }}"
+    postgres_deploy_host_ip: "{{ forgejo_deploy_postgres_host_ip }}"
+    postgres_deploy_db_name: "{{ forgejo_deploy_db_name }}"
+    postgres_deploy_db_user: "{{ forgejo_deploy_db_user }}"
+    postgres_deploy_db_password: "{{ forgejo_deploy_db_password_effective }}"
+    postgres_deploy_generate_password: false
+    postgres_deploy_store_generated_password: false
+    postgres_deploy_install_packages: "{{ forgejo_deploy_install_packages }}"
+    postgres_deploy_manage_systemd: "{{ forgejo_deploy_manage_systemd }}"
+    postgres_deploy_skip_runtime: "{{ forgejo_deploy_skip_runtime }}"
+    postgres_deploy_skip_deploy: "{{ forgejo_deploy_skip_deploy }}"
+  when: forgejo_deploy_manage_postgres | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Render Forgejo Pod manifest
+  ansible.builtin.template:
+    src: forgejo-pod.yml.j2
+    dest: "{{ forgejo_deploy_pod_manifest_path }}"
+    mode: '0644'
+  notify:
+    - Recreate forgejo pod
+    - Run forgejo pod
+  tags:
+    - deployment
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - deployment
+
+- name: Recreate forgejo pod (kubeplay)
+  when:
+    - forgejo_deploy_kubeplay_remove | default(false)
+    - not forgejo_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay remove (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: remove
+        kubeplay_pod_name: "{{ forgejo_deploy_pod_name }}"
+        kubeplay_app_name: forgejo_remove
+  rescue:
+    - name: Ignore kubeplay remove failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay remove failure."
+
+- name: Run forgejo pod (kubeplay)
+  when:
+    - forgejo_deploy_kubeplay_run | default(false)
+    - not forgejo_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay run (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: run
+        kubeplay_pod_name: "{{ forgejo_deploy_pod_name }}"
+        kubeplay_pod_manifest_path: "{{ forgejo_deploy_pod_manifest_path }}"
+        kubeplay_app_name: forgejo_run
+  rescue:
+    - name: Ignore kubeplay run failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay run failure."

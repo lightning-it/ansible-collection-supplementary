@@ -1,0 +1,63 @@
+# Base tree
+dn: __BASE_DN__
+objectClass: top
+objectClass: domain
+__BASE_RDN_ATTR__: __BASE_RDN_VALUE__
+
+dn: ou=people,__BASE_DN__
+objectClass: top
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,__BASE_DN__
+objectClass: top
+objectClass: organizationalUnit
+ou: groups
+
+# Users
+dn: uid=alice,ou=people,__BASE_DN__
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+objectClass: nsMemberOf
+uid: alice
+cn: Alice Wonder
+sn: Wonder
+givenName: Alice
+mail: alice@wunderbox.local
+userPassword: AlicePassw0rd!
+
+dn: uid=bob,ou=people,__BASE_DN__
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+objectClass: nsMemberOf
+uid: bob
+cn: Bob Wonder
+sn: Wonder
+givenName: Bob
+mail: bob@wunderbox.local
+userPassword: BobPassw0rd!
+
+# Direct group
+dn: cn=aio-wbx-ops,ou=groups,__BASE_DN__
+objectClass: top
+objectClass: groupOfNames
+cn: aio-wbx-ops
+member: uid=alice,ou=people,__BASE_DN__
+
+# Nested parent group (contains group dn)
+dn: cn=aio-wbx-admins,ou=groups,__BASE_DN__
+objectClass: top
+objectClass: groupOfNames
+cn: aio-wbx-admins
+member: cn=aio-wbx-ops,ou=groups,__BASE_DN__
+
+# Additional sample group
+dn: cn=aio-wbx-readers,ou=groups,__BASE_DN__
+objectClass: top
+objectClass: groupOfNames
+cn: aio-wbx-readers
+member: uid=bob,ou=people,__BASE_DN__

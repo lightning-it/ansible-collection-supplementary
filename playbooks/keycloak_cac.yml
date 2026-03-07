@@ -1,0 +1,15 @@
+---
+- name: Configure Keycloak (example)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    keycloak_cac_skip_apply: true
+    keycloak_cac_url: "http://localhost:8080"
+    keycloak_cac_realm: "master"
+    keycloak_cac_admin_user: "admin"
+    keycloak_cac_admin_password: "admin"
+
+  roles:
+    - lit.supplementary.keycloak_cac

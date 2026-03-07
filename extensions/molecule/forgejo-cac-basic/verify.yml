@@ -1,0 +1,11 @@
+---
+- name: Verify forgejo_cac
+  hosts: localhost
+  gather_facts: false
+  vars:
+    forgejo_cac_skip_apply: true
+  tasks:
+    - name: Assert forgejo_cac is in skip mode
+      ansible.builtin.assert:
+        that:
+          - forgejo_cac_skip_apply | bool

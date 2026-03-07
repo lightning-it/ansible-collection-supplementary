@@ -1,0 +1,6 @@
+---
+- name: Ensure PostgreSQL runtime packages are installed
+  ansible.builtin.package:
+    name: "{{ postgres_deploy_packages }}"
+    state: present
+  when: postgres_deploy_packages is defined

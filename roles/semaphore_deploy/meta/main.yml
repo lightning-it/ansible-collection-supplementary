@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: semaphore_deploy
+  namespace: lit
+  author: Lightning IT
+  description: Deploy Semaphore UI with PostgreSQL in a Podman pod.
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - modulix
+    - semaphore
+    - podman
+    - automation
+    - devops
+
+dependencies: []

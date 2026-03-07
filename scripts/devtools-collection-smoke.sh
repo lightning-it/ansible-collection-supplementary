@@ -5,13 +5,7 @@ COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE:-lit}"
 
 if [ -z "${COLLECTION_NAME:-}" ]; then
   if [ -f galaxy.yml ]; then
-    COLLECTION_NAME="$(python3 - <<'PY'
-import yaml
-with open("galaxy.yml", "r", encoding="utf-8") as f:
-    data = yaml.safe_load(f) or {}
-print(data.get("name", ""))
-PY
-)"
+    COLLECTION_NAME="$(scripts/devtools-galaxy.sh value name galaxy.yml || true)"
   fi
   if [ -z "${COLLECTION_NAME:-}" ]; then
     echo "ERROR: COLLECTION_NAME not set and galaxy.yml missing 'name'." >&2
@@ -54,22 +48,7 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   if [ -f /workspace/galaxy.yml ]; then
     while IFS= read -r dep_spec; do
       dep_specs+=("$dep_spec")
-    done < <(
-      python3 - <<'"PY"'
-import yaml, sys, os
-try:
-    with open("/workspace/galaxy.yml", "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-    deps = data.get("dependencies") or {}
-    for fqcn, version_spec in deps.items():
-        if version_spec in (None, "", "*"):
-            print(fqcn)
-        else:
-            print(f"{fqcn}:{version_spec}")
-except Exception as exc:  # noqa: BLE001
-    sys.stderr.write(f"WARN: failed to parse galaxy.yml dependencies: {exc}\n")
-PY
-    )
+    done < <(/workspace/scripts/devtools-galaxy.sh dependencies /workspace/galaxy.yml || true)
   fi
 
   for dep_spec in "${dep_specs[@]}"; do

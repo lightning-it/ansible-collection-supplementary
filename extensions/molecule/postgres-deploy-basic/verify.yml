@@ -1,0 +1,15 @@
+---
+- name: Verify postgres_deploy
+  hosts: localhost
+  gather_facts: false
+  vars:
+    postgres_deploy_skip_runtime: true
+    postgres_deploy_db_name: semaphore
+    postgres_deploy_db_user: semaphore
+  tasks:
+    - name: Assert postgres_deploy test variables are valid
+      ansible.builtin.assert:
+        that:
+          - postgres_deploy_skip_runtime | bool
+          - postgres_deploy_db_name == 'semaphore'
+          - postgres_deploy_db_user == 'semaphore'

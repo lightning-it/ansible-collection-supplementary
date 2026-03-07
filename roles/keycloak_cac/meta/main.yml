@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: keycloak_cac
+  namespace: lit
+  author: Lightning IT
+  description: Configuration-as-Code orchestration role for Keycloak.
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - modulix
+    - keycloak
+    - cac
+    - automation
+
+dependencies: []

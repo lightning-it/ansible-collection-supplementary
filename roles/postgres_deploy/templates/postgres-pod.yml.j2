@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ postgres_deploy_pod_name }}
+  labels:
+    app: {{ postgres_deploy_pod_name }}
+spec:
+  containers:
+    - name: {{ postgres_deploy_container_name }}
+      image: {{ postgres_deploy_image }}
+      ports:
+        - containerPort: {{ postgres_deploy_port }}
+          hostPort: {{ postgres_deploy_port }}
+          hostIP: {{ postgres_deploy_host_ip }}
+      env:
+        - name: POSTGRES_DB
+          value: "{{ postgres_deploy_db_name }}"
+        - name: POSTGRES_USER
+          value: "{{ postgres_deploy_db_user }}"
+        - name: POSTGRES_PASSWORD
+          value: "{{ postgres_deploy_db_password_effective }}"
+      volumeMounts:
+        - name: postgres-data
+          mountPath: {{ postgres_deploy_container_data_dir }}
+
+  volumes:
+    - name: postgres-data
+      hostPath:
+        path: {{ postgres_deploy_host_data_dir }}
+        type: DirectoryOrCreate

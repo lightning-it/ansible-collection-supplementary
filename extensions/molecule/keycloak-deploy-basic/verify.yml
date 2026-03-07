@@ -1,0 +1,15 @@
+---
+- name: Verify keycloak_deploy
+  hosts: localhost
+  gather_facts: false
+  vars:
+    keycloak_deploy_skip_runtime: true
+    keycloak_deploy_manage_postgres: true
+    keycloak_deploy_db_vendor: postgres
+  tasks:
+    - name: Assert keycloak_deploy test variables are valid
+      ansible.builtin.assert:
+        that:
+          - keycloak_deploy_skip_runtime | bool
+          - keycloak_deploy_manage_postgres | bool
+          - keycloak_deploy_db_vendor == 'postgres'

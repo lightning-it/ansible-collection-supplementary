@@ -1,0 +1,29 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip Semaphore CaC apply when disabled
+  ansible.builtin.debug:
+    msg: "Semaphore CaC skipped (semaphore_cac_skip_apply=true)."
+  when: semaphore_cac_skip_apply | bool
+  tags: always
+
+- name: Discover Semaphore CaC tasksets
+  ansible.builtin.set_fact:
+    semaphore_cac_taskset_files: >-
+      {{
+        query('ansible.builtin.fileglob', role_path ~ '/tasks/cac_*.yml')
+        | map('basename')
+        | sort
+      }}
+  when: not semaphore_cac_skip_apply | bool
+  changed_when: false
+  tags: always
+
+- name: Execute Semaphore CaC tasksets
+  ansible.builtin.include_tasks: "{{ role_path }}/tasks/{{ item }}"
+  loop: "{{ semaphore_cac_taskset_files | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  when: not semaphore_cac_skip_apply | bool

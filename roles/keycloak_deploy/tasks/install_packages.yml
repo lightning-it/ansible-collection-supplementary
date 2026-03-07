@@ -1,0 +1,6 @@
+---
+- name: Ensure Keycloak runtime packages are installed
+  ansible.builtin.package:
+    name: "{{ keycloak_deploy_packages }}"
+    state: present
+  when: keycloak_deploy_packages is defined

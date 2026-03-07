@@ -1,0 +1,169 @@
+---
+- name: Ensure PostgreSQL directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ postgres_deploy_host_data_dir }}"
+      mode: '0750'
+    - path: "{{ postgres_deploy_config_dir }}"
+      mode: '0750'
+    - path: "{{ postgres_deploy_pod_manifest_path | dirname }}"
+      mode: '0755'
+  when: item.path | default('') | length > 0
+  tags:
+    - deployment
+
+- name: Check whether generated PostgreSQL secrets file exists
+  ansible.builtin.stat:
+    path: "{{ postgres_deploy_secrets_file }}"
+  register: postgres_deploy_secrets_file_stat
+  changed_when: false
+  tags:
+    - deployment
+
+- name: Load generated PostgreSQL secrets
+  ansible.builtin.include_vars:
+    file: "{{ postgres_deploy_secrets_file }}"
+    name: postgres_deploy_stored_secrets
+  when: postgres_deploy_secrets_file_stat.stat.exists | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Build effective PostgreSQL password from inventory and stored state
+  ansible.builtin.set_fact:
+    postgres_deploy_db_password_effective: >-
+      {{
+        (postgres_deploy_db_password | default('', true) | trim)
+        if (postgres_deploy_db_password | default('', true) | trim | length > 0)
+        else (
+          (postgres_deploy_stored_secrets | default({})).postgres_deploy_db_password
+          | default('', true) | trim
+        )
+      }}
+  changed_when: false
+  no_log: true
+  tags:
+    - deployment
+
+- name: Determine whether password generation is required
+  ansible.builtin.set_fact:
+    postgres_deploy_password_missing: >-
+      {{
+        postgres_deploy_db_password_effective | default('', true) | length == 0
+      }}
+  changed_when: false
+  no_log: true
+  tags:
+    - deployment
+
+- name: Fail when password is missing and generation is disabled
+  ansible.builtin.assert:
+    that:
+      - not postgres_deploy_password_missing | bool
+    fail_msg: >-
+      Missing PostgreSQL password. Provide postgres_deploy_db_password,
+      or enable postgres_deploy_generate_password.
+  when: not postgres_deploy_generate_password | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Generate missing PostgreSQL password
+  ansible.builtin.set_fact:
+    postgres_deploy_db_password_effective: >-
+      {{
+        postgres_deploy_db_password_effective
+        if (postgres_deploy_db_password_effective | default('', true) | length > 0)
+        else lookup(
+          'ansible.builtin.password',
+          '/dev/null length=' ~ (postgres_deploy_generated_password_length | int | string)
+        )
+      }}
+  when:
+    - postgres_deploy_generate_password | bool
+    - postgres_deploy_password_missing | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Persist generated PostgreSQL password
+  ansible.builtin.copy:
+    dest: "{{ postgres_deploy_secrets_file }}"
+    owner: root
+    group: root
+    mode: '0600'
+    content: |
+      ---
+      postgres_deploy_db_password: "{{ postgres_deploy_db_password_effective }}"
+  when:
+    - postgres_deploy_generate_password | bool
+    - postgres_deploy_store_generated_password | bool
+    - postgres_deploy_password_missing | bool
+  notify:
+    - Recreate postgres pod
+    - Run postgres pod
+  no_log: true
+  tags:
+    - deployment
+
+- name: Render PostgreSQL Pod manifest
+  ansible.builtin.template:
+    src: postgres-pod.yml.j2
+    dest: "{{ postgres_deploy_pod_manifest_path }}"
+    mode: '0644'
+  notify:
+    - Recreate postgres pod
+    - Run postgres pod
+  tags:
+    - deployment
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - deployment
+
+- name: Recreate postgres pod (kubeplay)
+  when:
+    - postgres_deploy_kubeplay_remove | default(false)
+    - not postgres_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay remove (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: remove
+        kubeplay_pod_name: "{{ postgres_deploy_pod_name }}"
+        kubeplay_app_name: postgres_remove
+  rescue:
+    - name: Ignore kubeplay remove failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay remove failure."
+
+- name: Run postgres pod (kubeplay)
+  when:
+    - postgres_deploy_kubeplay_run | default(false)
+    - not postgres_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay run (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: run
+        kubeplay_pod_name: "{{ postgres_deploy_pod_name }}"
+        kubeplay_pod_manifest_path: "{{ postgres_deploy_pod_manifest_path }}"
+        kubeplay_app_name: postgres_run
+  rescue:
+    - name: Ignore kubeplay run failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay run failure."

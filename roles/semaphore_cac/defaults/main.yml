@@ -1,0 +1,14 @@
+---
+# CaC execution behavior
+semaphore_cac_skip_apply: true
+
+# API access for Ansible-driven CaC
+semaphore_cac_url: "https://{{ semaphore_fqdn | default(inventory_hostname, true) }}"
+semaphore_cac_validate_certs: false
+semaphore_cac_request_timeout: 30
+semaphore_cac_admin_login: "{{ semaphore_deploy_admin_login | default('admin', true) }}"
+semaphore_cac_admin_password: "{{ semaphore_deploy_admin_password | default('', true) }}"
+
+# Future object catalogs (kept empty by default)
+semaphore_cac_users: []
+semaphore_cac_projects: []

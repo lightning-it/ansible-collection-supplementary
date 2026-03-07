@@ -1,0 +1,9 @@
+---
+- name: Destroy keycloak_deploy
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Nothing to destroy for keycloak-deploy-basic
+      ansible.builtin.debug:
+        msg: "No runtime resources created in keycloak-deploy-basic."
+      changed_when: false
