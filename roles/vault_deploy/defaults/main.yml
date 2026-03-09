@@ -47,8 +47,8 @@ vault_deploy_api_delegate_to: "{{ vault_api_delegate_to | default('localhost') }
 # Prefer inventory/global `vault_engine_mount_point` if provided, otherwise default for this role.
 vault_deploy_engine_mount_point: "{{ vault_engine_mount_point | default('stage-2c', true) }}"
 vault_deploy_hashi_vault_auth_method: "{{ vault_hashi_vault_auth_method | default('approle') }}"
-vault_deploy_vault_pki_path: "pki-inter-ec-2025/issue"
-vault_deploy_vault_pki_role: "limited_dns_2y"
+vault_deploy_vault_pki_path: "{{ (vault_pki_issue_mount | default('pki-inter-ec-2025', true)) ~ '/issue' }}"
+vault_deploy_vault_pki_role: "{{ vault_pki_issue_role | default('limited_dns_2y', true) }}"
 
 # Ansible Vault handling
 vault_deploy_ansible_vault_pw: "{{ vault_ansible_vault_pw | default('') }}"

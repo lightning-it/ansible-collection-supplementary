@@ -1,4 +1,67 @@
 ---
+- name: Build effective vhost list based on enabled services
+  ansible.builtin.set_fact:
+    nginx_config_vhosts_effective: "{{ _nginx_config_vhosts_effective_filtered }}"
+  vars:
+    _nginx_config_services_cfg: >-
+      {{
+        (
+          services.wunderbox
+          if (
+            services is defined and
+            services is mapping and
+            services.wunderbox is defined and
+            services.wunderbox is mapping
+          )
+          else (wunderbox_services | default({}, true))
+        )
+      }}
+    _nginx_config_has_services_cfg: "{{ (_nginx_config_services_cfg | default({}, true) | length) > 0 }}"
+    _nginx_config_enabled_values: >-
+      {{ nginx_config_enabled_values | default(['enabled', 'true', 'yes', 'on', '1', 'y']) }}
+    _nginx_config_vhost_service_map: "{{ nginx_config_vhost_service_key_map | default({}, true) }}"
+    _nginx_config_vhosts_input: >-
+      {{
+        nginx_config_vhosts_effective_raw
+        | default(nginx_config_vhosts_effective | default([], true), true)
+      }}
+    _nginx_config_vhosts_effective_filtered: >-
+      {%- set ns = namespace(items=[]) -%}
+      {%- for _vhost in _nginx_config_vhosts_input -%}
+      {%- set _gate = namespace(enabled=true) -%}
+      {%- set _vhost_ns = namespace(service_keys=[]) -%}
+      {%- if (_vhost.enabled_when_services is defined)
+            and (_vhost.enabled_when_services is sequence)
+            and (_vhost.enabled_when_services is not string) -%}
+      {%- set _vhost_ns.service_keys = _vhost.enabled_when_services -%}
+      {%- elif (_vhost.enabled_when_service is defined)
+              and ((_vhost.enabled_when_service | string | trim | length) > 0) -%}
+      {%- set _vhost_ns.service_keys = [_vhost.enabled_when_service] -%}
+      {%- elif (_vhost.name is defined)
+              and (_nginx_config_vhost_service_map[_vhost.name] is defined) -%}
+      {%- if (_nginx_config_vhost_service_map[_vhost.name] is sequence)
+            and (_nginx_config_vhost_service_map[_vhost.name] is not string) -%}
+      {%- set _vhost_ns.service_keys = _nginx_config_vhost_service_map[_vhost.name] -%}
+      {%- else -%}
+      {%- set _vhost_ns.service_keys = [_nginx_config_vhost_service_map[_vhost.name]] -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- if _nginx_config_has_services_cfg and (_vhost_ns.service_keys | length > 0) -%}
+      {%- for _svc in _vhost_ns.service_keys -%}
+      {%- if (_nginx_config_services_cfg[_svc] | default('disabled') | string | lower)
+            not in _nginx_config_enabled_values -%}
+      {%- set _gate.enabled = false -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endif -%}
+      {%- if _gate.enabled -%}
+      {%- set ns.items = ns.items + [_vhost] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ ns.items }}
+  changed_when: false
+  tags: always
+
 - name: Prechecks
   ansible.builtin.import_tasks: assert.yml
   tags: always

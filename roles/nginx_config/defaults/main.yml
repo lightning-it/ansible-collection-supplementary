@@ -16,8 +16,8 @@ nginx_config_vault_address: "{{ vault_address | default('') }}"
 nginx_config_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
 nginx_config_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') }}"
 nginx_config_vault_kv_path: "{{ inventory_hostname }}/nginx/certificate"
-nginx_config_vault_pki_path: "pki-inter-ec-2025/issue"
-nginx_config_vault_pki_role: "limited_dns_2y"
+nginx_config_vault_pki_path: "{{ vault_config_vault_pki_path }}"
+nginx_config_vault_pki_role: "{{ vault_config_vault_pki_role }}"
 nginx_config_vault_token: "{{ vault_token | default('', true) }}"
 nginx_config_vault_role_id: "{{ ansible_hashi_vault_role_id | default('', true) }}"
 nginx_config_vault_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"
@@ -41,7 +41,9 @@ nginx_config_proxy_default_directives:
   - "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for"
   - "proxy_set_header X-Forwarded-Proto https"
   - "proxy_http_version 1.1"
-nginx_config_vhosts_effective: >-
+nginx_config_enabled_values: ['enabled', 'true', 'yes', 'on', '1', 'y']
+nginx_config_vhost_service_key_map: {}
+nginx_config_vhosts_effective_raw: >-
   {{
     (nginx_config_vhosts | default([], true))
     + (
@@ -50,6 +52,7 @@ nginx_config_vhosts_effective: >-
       else []
     )
   }}
+nginx_config_vhosts_effective: "{{ nginx_config_vhosts_effective_raw }}"
 nginx_config_has_force_https_vhosts: >-
   {{
     (
