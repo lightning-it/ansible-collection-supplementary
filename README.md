@@ -168,7 +168,8 @@ sudo rm -rf /srv/wunderbox/identity/*
 Supplementary Ansible collection for ModuLix / Lightning IT.
 It includes service deployment and Configuration-as-Code roles such as
 `keycloak_deploy`, `keycloak_cac`, `forgejo_deploy`, `forgejo_cac`,
-`semaphore_deploy`, `semaphore_cac`, `postgres_deploy`, and `cloudflared`.
+`semaphore_deploy`, `semaphore_cac`, `nessus_deploy`, `nessus_cac`,
+`postgres_deploy`, and `cloudflared`.
 
 ## Usage
 
@@ -219,6 +220,10 @@ Example playbook:
   Semaphore deployment including PostgreSQL role integration.
 - Molecule scenario `semaphore-cac-basic` validates the Semaphore CaC role in
   skip mode.
+- Molecule scenario `nessus-deploy-basic` validates role wiring for Nessus
+  deployment.
+- Molecule scenario `nessus-cac-basic` validates the Nessus CaC role in skip
+  mode.
 - Molecule scenario `vault-basic` runs the vault role with a stub terragrunt role
   to validate basics locally.
 - Molecule scenario `openvpn-basic` runs the openvpn role without standing up a
@@ -255,9 +260,10 @@ Molecule, etc.).
 
 To run all configured linters (YAML, ansible-lint, Molecule keycloak-deploy-basic,
 keycloak-cac-basic, keycloak-basic, forgejo-deploy-basic, forgejo-cac-basic,
-postgres-deploy-basic, semaphore-deploy-basic, semaphore-cac-basic, openvpn-basic,
-cloudflared-basic, gitlab-runner-basic, nexus-basic, manage-esxi-basic, vault-basic,
-GitHub Actions lint, Renovate config validation):
+postgres-deploy-basic, semaphore-deploy-basic, semaphore-cac-basic,
+nessus-deploy-basic, nessus-cac-basic, openvpn-basic, cloudflared-basic,
+gitlab-runner-basic, nexus-basic, manage-esxi-basic, vault-basic, GitHub Actions
+lint, Renovate config validation):
 
 ```bash
 pre-commit run --all-files
@@ -294,9 +300,9 @@ This will:
 - run `ansible-lint` inside the devtools container (after building the collection),
 - run the `keycloak-deploy-basic`, `keycloak-cac-basic`, `keycloak-basic`,
   `forgejo-deploy-basic`, `forgejo-cac-basic`, `postgres-deploy-basic`,
-  `semaphore-deploy-basic`, `semaphore-cac-basic`, `openvpn-basic`,
-  `gitlab-runner-basic`, `nexus-basic`, `manage-esxi-basic`, and `vault-basic`
-  Molecule scenarios,
+  `semaphore-deploy-basic`, `semaphore-cac-basic`, `nessus-deploy-basic`,
+  `nessus-cac-basic`, `openvpn-basic`, `gitlab-runner-basic`, `nexus-basic`,
+  `manage-esxi-basic`, and `vault-basic` Molecule scenarios,
 - lint `.github/workflows/*.yml` via `actionlint` (Docker),
 - validate `renovate.json` via `renovate-config-validator` (Docker), if present.
 

@@ -5,7 +5,8 @@ semaphore_deploy_pod_manifest_path: "/etc/podman/pods/semaphore.yml"
 semaphore_deploy_image: "docker.io/semaphoreui/semaphore:latest"
 
 # Dedicated PostgreSQL service defaults used by semaphore_deploy
-semaphore_deploy_manage_postgres: true
+# Default is shared PostgreSQL managed outside this role.
+semaphore_deploy_manage_postgres: false
 semaphore_deploy_postgres_image: "docker.io/library/postgres:16"
 semaphore_deploy_postgres_pod_name: "{{ semaphore_deploy_pod_name }}-postgres"
 semaphore_deploy_postgres_pod_manifest_path: >-
@@ -31,7 +32,11 @@ semaphore_deploy_host_ip: >-
     ansible_default_ipv4.address
       | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
   }}
-semaphore_deploy_postgres_host_ip: "{{ semaphore_deploy_host_ip }}"
+semaphore_deploy_postgres_host_ip: >-
+  {{
+    postgres_deploy_host_ip
+    | default(semaphore_deploy_host_ip)
+  }}
 semaphore_deploy_api_scheme: "http"
 semaphore_deploy_api_url: ""
 semaphore_deploy_api_url_effective: >-
@@ -64,7 +69,7 @@ semaphore_deploy_db_dialect: "postgres"
 semaphore_deploy_db_name: "semaphore"
 semaphore_deploy_db_user: "semaphore"
 semaphore_deploy_db_host: "{{ semaphore_deploy_postgres_host_ip }}"
-semaphore_deploy_db_port: 5432
+semaphore_deploy_db_port: "{{ postgres_deploy_port | default(5432) }}"
 
 # Secrets (preferred: inventory/Vault; fallback: generated once)
 semaphore_deploy_db_password: ""

@@ -1,0 +1,6 @@
+---
+- name: Ensure Nessus runtime packages are installed
+  ansible.builtin.package:
+    name: "{{ nessus_deploy_packages }}"
+    state: present
+  when: nessus_deploy_packages is defined

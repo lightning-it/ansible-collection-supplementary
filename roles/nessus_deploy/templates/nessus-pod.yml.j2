@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ nessus_deploy_pod_name }}
+  labels:
+    app: {{ nessus_deploy_pod_name }}
+spec:
+  containers:
+    - name: {{ nessus_deploy_container_name }}
+      image: {{ nessus_deploy_image }}
+{% if nessus_deploy_extra_start_args | default([]) | length > 0 %}
+      args:
+{% for arg in nessus_deploy_extra_start_args | default([]) %}
+        - "{{ arg }}"
+{% endfor %}
+{% endif %}
+      ports:
+        - containerPort: {{ nessus_deploy_port }}
+          hostPort: {{ nessus_deploy_port }}
+          hostIP: {{ nessus_deploy_host_ip }}
+      env:
+        - name: USERNAME
+          value: "{{ nessus_deploy_admin_user }}"
+        - name: PASSWORD
+          value: "{{ nessus_deploy_admin_password_effective }}"
+{% if nessus_deploy_activation_code | default('', true) | trim | length > 0 %}
+        - name: ACTIVATION_CODE
+          value: "{{ nessus_deploy_activation_code | trim }}"
+{% endif %}
+{% if nessus_deploy_env_extra is defined and nessus_deploy_env_extra | length > 0 %}
+{% for key, value in nessus_deploy_env_extra.items() %}
+        - name: {{ key }}
+          value: "{{ value }}"
+{% endfor %}
+{% endif %}
+      volumeMounts:
+        - name: nessus-data
+          mountPath: {{ nessus_deploy_container_data_dir }}
+
+  volumes:
+    - name: nessus-data
+      hostPath:
+        path: {{ nessus_deploy_host_data_dir }}
+        type: DirectoryOrCreate

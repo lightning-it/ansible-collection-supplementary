@@ -1,0 +1,10 @@
+---
+- name: Converge nessus_deploy
+  hosts: localhost
+  gather_facts: true
+  vars:
+    nessus_deploy_install_packages: false
+    nessus_deploy_manage_systemd: false
+    nessus_deploy_skip_runtime: true
+  roles:
+    - role: nessus_deploy

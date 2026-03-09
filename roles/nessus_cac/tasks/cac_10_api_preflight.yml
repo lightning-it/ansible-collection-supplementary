@@ -1,0 +1,16 @@
+---
+- name: Check Nessus API reachability
+  ansible.builtin.uri:
+    url: "{{ nessus_cac_url }}/server/status"
+    method: GET
+    validate_certs: "{{ nessus_cac_validate_certs }}"
+    timeout: "{{ nessus_cac_request_timeout | int }}"
+    status_code: [200, 401, 403]
+  changed_when: false
+
+- name: Show Nessus CaC status
+  ansible.builtin.debug:
+    msg: >-
+      Nessus CaC API preflight passed.
+      Add additional cac_*.yml tasksets in role nessus_cac for object reconciliation.
+  changed_when: false

@@ -1,0 +1,15 @@
+---
+# CaC execution behavior
+nessus_cac_skip_apply: true
+
+# API access for Ansible-driven CaC
+nessus_cac_url: "{{ nessus_deploy_api_url_effective | default('https://127.0.0.1:8834', true) }}"
+nessus_cac_validate_certs: false
+nessus_cac_request_timeout: 30
+nessus_cac_username: "{{ nessus_deploy_admin_user | default('admin', true) }}"
+nessus_cac_password: "{{ nessus_deploy_admin_password | default('', true) }}"
+
+# Future object catalogs (kept empty by default)
+nessus_cac_policies: []
+nessus_cac_scans: []
+nessus_cac_folders: []

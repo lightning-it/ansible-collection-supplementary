@@ -20,6 +20,7 @@ echo "Running collection smoke test for ${COLLECTION_NAMESPACE}.${COLLECTION_NAM
 COLLECTION_NAMESPACE="$COLLECTION_NAMESPACE" \
 COLLECTION_NAME="$COLLECTION_NAME" \
 EXAMPLE_PLAYBOOK="$EXAMPLE_PLAYBOOK" \
+CONTAINER_HOME=/tmp/wunder \
 bash scripts/wunder-devtools-ee.sh bash -lc '
   set -euo pipefail
 

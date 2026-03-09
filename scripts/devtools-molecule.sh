@@ -52,6 +52,7 @@ WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0 \
 COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE}" \
 COLLECTION_NAME="${COLLECTION_NAME}" \
 SCENARIO_FILTER="${SCENARIO_FILTER}" \
+CONTAINER_HOME=/tmp/wunder \
 bash scripts/wunder-devtools-ee.sh bash -lc '
   set -euo pipefail
 

@@ -1,0 +1,40 @@
+---
+- name: Manage Nessus systemd unit
+  when:
+    - nessus_deploy_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+    - not ansible_check_mode
+  tags:
+    - systemd
+  block:
+    - name: Escape kube play manifest path
+      ansible.builtin.command:
+        cmd: "systemd-escape {{ nessus_deploy_pod_manifest_path }}"
+      register: nessus_deploy_systemd_name
+      changed_when: false
+
+    - name: Ensure podman-kube drop-in directory exists
+      ansible.builtin.file:
+        path: "/etc/systemd/system/podman-kube@{{ nessus_deploy_systemd_name.stdout }}.service.d"
+        state: directory
+        mode: '0755'
+
+    - name: Enable and start Podman kube systemd unit
+      ansible.builtin.systemd:
+        name: "podman-kube@{{ nessus_deploy_systemd_name.stdout }}.service"
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Wait until Nessus health endpoint is reachable
+      ansible.builtin.uri:
+        url: "{{ nessus_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ nessus_deploy_validate_certs }}"
+        timeout: 10
+        status_code: [200, 401, 403]
+      register: nessus_deploy_health
+      until: nessus_deploy_health.status in [200, 401, 403]
+      retries: 30
+      delay: 5
+      changed_when: false

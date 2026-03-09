@@ -2,5 +2,6 @@
 # Keep ansible-lint focused on our source tree, not vendored dependencies or
 # packaged artifacts that may exist under collections/.
 exclude_paths:
+  - .ansible/
   - collections/
   - .pre-commit-config.yaml

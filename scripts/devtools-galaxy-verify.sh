@@ -19,6 +19,7 @@ echo "Using collection: ${COLLECTION_NAMESPACE}.${COLLECTION_NAME}"
 
 COLLECTION_NAMESPACE="$COLLECTION_NAMESPACE" \
 COLLECTION_NAME="$COLLECTION_NAME" \
+CONTAINER_HOME=/tmp/wunder \
 bash scripts/wunder-devtools-ee.sh bash -lc '
   set -euo pipefail
 

@@ -26,6 +26,7 @@ dependencies:
   lit.foundational: '>=1.15.4'
   community.hashi_vault: '*'
 build_ignore:
+  - .ansible
   - extensions/molecule
   - node_modules
   - vagrant

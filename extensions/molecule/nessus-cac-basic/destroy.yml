@@ -1,0 +1,9 @@
+---
+- name: Destroy nessus_cac
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Nothing to destroy for nessus-cac-basic
+      ansible.builtin.debug:
+        msg: "No runtime resources created in nessus-cac-basic."
+      changed_when: false

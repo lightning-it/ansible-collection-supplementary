@@ -1,0 +1,72 @@
+---
+# Pod basics
+nessus_deploy_pod_name: "nessus"
+nessus_deploy_pod_manifest_path: "/etc/podman/pods/nessus.yml"
+nessus_deploy_image: "docker.io/tenableofficial/nessus:latest"
+nessus_deploy_container_name: "{{ nessus_deploy_pod_name }}-nessus"
+
+# Host paths
+nessus_deploy_host_data_dir: "/srv/nessus/data"
+nessus_deploy_config_dir: "/srv/nessus/config"
+nessus_deploy_secrets_file: "{{ nessus_deploy_config_dir }}/nessus-secrets.yml"
+
+# Container paths
+nessus_deploy_container_data_dir: "/opt/nessus/var/nessus"
+
+# Runtime network
+nessus_deploy_port: 8834
+nessus_deploy_host_ip: >-
+  {{
+    ansible_default_ipv4.address
+      | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
+  }}
+nessus_deploy_api_scheme: "https"
+nessus_deploy_api_url: ""
+nessus_deploy_api_url_effective: >-
+  {{
+    nessus_deploy_api_url
+      if (nessus_deploy_api_url | default('', true) | length > 0)
+      else (
+        nessus_deploy_api_scheme ~ '://' ~
+        nessus_deploy_host_ip ~ ':' ~
+        nessus_deploy_port
+      )
+  }}
+nessus_deploy_health_url: ""
+nessus_deploy_health_url_effective: >-
+  {{
+    nessus_deploy_health_url
+      if (nessus_deploy_health_url | default('', true) | length > 0)
+      else (nessus_deploy_api_url_effective ~ '/server/status')
+  }}
+
+# Nessus app config
+nessus_deploy_admin_user: "admin"
+nessus_deploy_admin_password: ""
+nessus_deploy_activation_code: ""
+nessus_deploy_extra_start_args: []
+nessus_deploy_env_extra: {}
+
+# Secrets (preferred: inventory/Vault; fallback: generated once)
+nessus_deploy_generate_admin_password: true
+nessus_deploy_store_generated_admin_password: true
+nessus_deploy_generated_admin_password_length: 32
+
+# Lifecycle
+nessus_deploy_install_packages: true
+nessus_deploy_manage_systemd: true
+nessus_deploy_skip_runtime: false
+nessus_deploy_skip_deploy: false
+nessus_deploy_validate_certs: false
+
+# Internal handler flags
+nessus_deploy_kubeplay_remove: false
+nessus_deploy_kubeplay_run: false
+
+# Systemd
+nessus_deploy_systemd_unit_name: >-
+  {{
+    'podman-kube@'
+    ~ (nessus_deploy_pod_manifest_path | basename | regex_replace('\\.ya?ml$', ''))
+    ~ '.service'
+  }}

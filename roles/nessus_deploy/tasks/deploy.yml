@@ -1,0 +1,53 @@
+---
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+  when: ansible_os_family == 'RedHat'
+
+- name: Skip Nessus runtime deployment in check mode
+  ansible.builtin.debug:
+    msg: "Nessus runtime deployment skipped in check mode."
+  when:
+    - ansible_check_mode
+    - not nessus_deploy_skip_runtime | bool
+    - not nessus_deploy_skip_deploy | bool
+  tags: always
+
+- name: Deploy Nessus runtime
+  when:
+    - not nessus_deploy_skip_runtime | bool
+    - not nessus_deploy_skip_deploy | bool
+    - not ansible_check_mode
+  block:
+    - name: Ensure required packages are installed
+      ansible.builtin.include_tasks: install_packages.yml
+      when: nessus_deploy_install_packages | bool
+      tags:
+        - install
+
+    - name: Deploy Nessus Pod
+      ansible.builtin.include_tasks: deploy_pod.yml
+      tags:
+        - deployment
+
+    - name: Install systemd unit for Nessus Pod
+      ansible.builtin.include_tasks: systemd.yml
+      when: nessus_deploy_manage_systemd | bool
+      tags:
+        - systemd
+
+    - name: Wait until Nessus health endpoint is reachable (non-systemd)
+      ansible.builtin.uri:
+        url: "{{ nessus_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ nessus_deploy_validate_certs }}"
+        timeout: 10
+        status_code: [200, 401, 403]
+      register: nessus_deploy_health
+      until: nessus_deploy_health.status in [200, 401, 403]
+      retries: 30
+      delay: 5
+      changed_when: false
+      when: not nessus_deploy_manage_systemd | bool
+      tags:
+        - deployment
+        - api
