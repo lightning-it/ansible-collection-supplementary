@@ -1,26 +1,24 @@
 ---
-# CaC taskset: Optional execution of infra.controller_configuration inventory/runtime roles.
-- name: Execute optional infra.controller_configuration inventory/runtime roles
-  when: aap_cac_controller_configuration_inventory_runtime_roles | length > 0
+# CaC taskset: Execute infra.controller_configuration inventory/runtime roles from provided content.
+- name: Execute infra.controller_configuration inventory/runtime roles from provided content
   vars:
-    __aap_cac_allowed_controller_configuration_inventory_runtime_roles:
-      - bulk_host_create
-      - groups
-      - hosts
-      - instances
+    aap_cac_controller_configuration_inventory_runtime_role_presence:
+      bulk_host_create: "{{ controller_bulk_hosts | default([], true) | length > 0 }}"
+      hosts: "{{ controller_hosts | default([], true) | length > 0 }}"
+      groups: "{{ controller_groups | default([], true) | length > 0 }}"
+      instances: "{{ controller_instances | default([], true) | length > 0 }}"
   block:
-    - name: Validate selected infra.controller_configuration inventory/runtime roles
-      ansible.builtin.assert:
-        that:
-          - aap_cac_controller_configuration_inventory_runtime_roles is sequence
-          - >
-            (aap_cac_controller_configuration_inventory_runtime_roles
-            | difference(__aap_cac_allowed_controller_configuration_inventory_runtime_roles))
-            | length == 0
-        fail_msg: >-
-          Invalid aap_cac_controller_configuration_inventory_runtime_roles.
-          Allowed values:
-          {{ __aap_cac_allowed_controller_configuration_inventory_runtime_roles | join(', ') }}
+    - name: Build inventory/runtime role list from provided content
+      ansible.builtin.set_fact:
+        aap_cac_controller_configuration_inventory_runtime_roles: >-
+          {{
+            aap_cac_controller_configuration_inventory_runtime_role_presence
+            | dict2items
+            | selectattr('value', 'equalto', true)
+            | map(attribute='key')
+            | list
+          }}
+      changed_when: false
 
     - name: Include infra.controller_configuration inventory/runtime roles
       ansible.builtin.include_role:

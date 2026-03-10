@@ -29,17 +29,11 @@ Key variables:
 - `aap_cac_hub_collection_remotes` (default: `[]`)
 - `aap_cac_hub_collection_repositories` (default: `[]`)
 - `aap_cac_hub_group_roles` (default: `[]`)
-- `aap_cac_enable_controller_license`
 - `aap_cac_controller_license_state`
 - `aap_cac_controller_license_force`
 - `aap_cac_controller_license_secure_logging`
 - `aap_cac_controller_license_manifest_content`
-- `aap_cac_controller_configuration_jobs_roles`
-- `aap_cac_controller_configuration_filetree_roles`
-- `aap_cac_controller_configuration_inventory_runtime_roles`
-- `aap_cac_controller_configuration_platform_ops_roles`
 - `ee_list` (triggers `ee_builder` taskset when non-empty)
-- `venv_migrate_default_venv_paths` (triggers `virtualenv_migrate` taskset when non-empty)
 
 Password and secret input behavior:
 - Inventory is the source of truth.
@@ -74,7 +68,6 @@ Controller license activation via manifest content from inventory:
   roles:
     - role: lit.supplementary.aap_cac
       vars:
-        aap_cac_enable_controller_license: true
         aap_cac_controller_license_manifest_content: "{{ vault_aap_subscription_manifest_b64 }}"
 ```
 
@@ -106,7 +99,6 @@ Optional role-dispatch tasksets:
 - `cac_35_controller_configuration_inventory_runtime.yml`
 - `cac_35_controller_configuration_platform_ops.yml`
 - `cac_36_ee_utilities_ee_builder.yml`
-- `cac_36_ee_utilities_virtualenv_migrate.yml`
 
 ## License
 

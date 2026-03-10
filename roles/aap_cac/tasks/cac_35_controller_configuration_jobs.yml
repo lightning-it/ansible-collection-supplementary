@@ -1,29 +1,32 @@
 ---
-# CaC taskset: Optional execution of infra.controller_configuration job roles.
-- name: Execute optional infra.controller_configuration job roles
-  when: aap_cac_controller_configuration_jobs_roles | length > 0
+# CaC taskset: Execute infra.controller_configuration job roles from provided content.
+- name: Execute infra.controller_configuration job roles from provided content
   vars:
-    __aap_cac_allowed_controller_configuration_jobs_roles:
-      - ad_hoc_command
-      - ad_hoc_command_cancel
-      - bulk_job_launch
-      - collect_async_status
-      - job_launch
-      - jobs_cancel
-      - workflow_job_templates
-      - workflow_launch
+    aap_cac_controller_configuration_jobs_role_presence:
+      ad_hoc_command: "{{ controller_ad_hoc_commands | default([], true) | length > 0 }}"
+      ad_hoc_command_cancel: "{{ controller_ad_hoc_commands_cancel | default([], true) | length > 0 }}"
+      bulk_job_launch: "{{ controller_bulk_launch_jobs | default([], true) | length > 0 }}"
+      collect_async_status: >-
+        {{
+          cas_job_async_results_item is defined and
+          (cas_job_async_results_item.ansible_job_id is defined)
+        }}
+      job_launch: "{{ controller_launch_jobs | default([], true) | length > 0 }}"
+      jobs_cancel: "{{ controller_cancel_jobs | default([], true) | length > 0 }}"
+      workflow_job_templates: "{{ controller_workflows | default([], true) | length > 0 }}"
+      workflow_launch: "{{ controller_workflow_launch_jobs | default([], true) | length > 0 }}"
   block:
-    - name: Validate selected infra.controller_configuration job roles
-      ansible.builtin.assert:
-        that:
-          - aap_cac_controller_configuration_jobs_roles is sequence
-          - >
-            (aap_cac_controller_configuration_jobs_roles
-            | difference(__aap_cac_allowed_controller_configuration_jobs_roles))
-            | length == 0
-        fail_msg: >-
-          Invalid aap_cac_controller_configuration_jobs_roles. Allowed values:
-          {{ __aap_cac_allowed_controller_configuration_jobs_roles | join(', ') }}
+    - name: Build infra.controller_configuration job role list from provided content
+      ansible.builtin.set_fact:
+        aap_cac_controller_configuration_jobs_roles: >-
+          {{
+            aap_cac_controller_configuration_jobs_role_presence
+            | dict2items
+            | selectattr('value', 'equalto', true)
+            | map(attribute='key')
+            | list
+          }}
+      changed_when: false
 
     - name: Include infra.controller_configuration job roles
       ansible.builtin.include_role:

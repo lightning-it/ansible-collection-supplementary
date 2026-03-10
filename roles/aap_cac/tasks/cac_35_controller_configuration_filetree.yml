@@ -1,23 +1,30 @@
 ---
-# CaC taskset: Optional execution of infra.controller_configuration filetree roles.
-- name: Execute optional infra.controller_configuration filetree roles
-  when: aap_cac_controller_configuration_filetree_roles | length > 0
+# CaC taskset: Execute infra.controller_configuration filetree roles from provided content.
+- name: Execute infra.controller_configuration filetree roles from provided content
   vars:
-    __aap_cac_allowed_controller_configuration_filetree_roles:
-      - filetree_create
-      - filetree_read
+    aap_cac_controller_configuration_filetree_role_presence:
+      filetree_create: >-
+        {{
+          output_path is defined or
+          input_tag is defined
+        }}
+      filetree_read: >-
+        {{
+          dir_orgs_vars is defined and
+          orgs is defined
+        }}
   block:
-    - name: Validate selected infra.controller_configuration filetree roles
-      ansible.builtin.assert:
-        that:
-          - aap_cac_controller_configuration_filetree_roles is sequence
-          - >
-            (aap_cac_controller_configuration_filetree_roles
-            | difference(__aap_cac_allowed_controller_configuration_filetree_roles))
-            | length == 0
-        fail_msg: >-
-          Invalid aap_cac_controller_configuration_filetree_roles. Allowed values:
-          {{ __aap_cac_allowed_controller_configuration_filetree_roles | join(', ') }}
+    - name: Build infra.controller_configuration filetree role list from provided content
+      ansible.builtin.set_fact:
+        aap_cac_controller_configuration_filetree_roles: >-
+          {{
+            aap_cac_controller_configuration_filetree_role_presence
+            | dict2items
+            | selectattr('value', 'equalto', true)
+            | map(attribute='key')
+            | list
+          }}
+      changed_when: false
 
     - name: Include infra.controller_configuration filetree roles
       ansible.builtin.include_role:

@@ -1,33 +1,54 @@
 ---
-# CaC taskset: Optional execution of infra.controller_configuration platform/ops roles.
-- name: Execute optional infra.controller_configuration platform/ops roles
-  when: aap_cac_controller_configuration_platform_ops_roles | length > 0
+# CaC taskset: Execute infra.controller_configuration platform/ops roles from provided content.
+- name: Execute infra.controller_configuration platform/ops roles from provided content
   vars:
-    __aap_cac_allowed_controller_configuration_platform_ops_roles:
-      - applications
-      - credential_input_sources
-      - dispatch
-      - execution_environments
-      - global_vars
-      - meta_dependency_check
-      - notification_templates
-      - object_diff
-      - project_update
-      - roles
-      - schedules
+    aap_cac_controller_configuration_platform_ops_role_presence:
+      applications: "{{ controller_applications | default([], true) | length > 0 }}"
+      credential_input_sources: "{{ controller_credential_input_sources | default([], true) | length > 0 }}"
+      dispatch: "{{ controller_configuration_dispatcher_roles | default([], true) | length > 0 }}"
+      execution_environments: "{{ controller_execution_environments | default([], true) | length > 0 }}"
+      global_vars: >-
+        {{
+          operation_translate is defined and
+          operation_translate is mapping and
+          operation_translate | length > 0
+        }}
+      meta_dependency_check: "{{ controller_dependency_check | default(false) | bool }}"
+      notification_templates: "{{ controller_notifications | default([], true) | length > 0 }}"
+      object_diff: >-
+        {{
+          (controller_configuration_object_diff_tasks | default([], true) | length > 0) and
+          (
+            controller_organizations | default([], true) | length > 0 or
+            controller_applications | default([], true) | length > 0 or
+            controller_projects | default([], true) | length > 0 or
+            controller_execution_environments | default([], true) | length > 0 or
+            controller_notifications | default([], true) | length > 0 or
+            controller_credentials | default([], true) | length > 0 or
+            controller_credential_input_sources | default([], true) | length > 0 or
+            controller_hosts | default([], true) | length > 0 or
+            controller_groups | default([], true) | length > 0 or
+            controller_templates | default([], true) | length > 0 or
+            controller_workflows | default([], true) | length > 0 or
+            controller_schedules | default([], true) | length > 0 or
+            controller_roles | default([], true) | length > 0
+          )
+        }}
+      project_update: "{{ controller_projects | default([], true) | length > 0 }}"
+      roles: "{{ controller_roles | default([], true) | length > 0 }}"
+      schedules: "{{ controller_schedules | default([], true) | length > 0 }}"
   block:
-    - name: Validate selected infra.controller_configuration platform/ops roles
-      ansible.builtin.assert:
-        that:
-          - aap_cac_controller_configuration_platform_ops_roles is sequence
-          - >
-            (aap_cac_controller_configuration_platform_ops_roles
-            | difference(__aap_cac_allowed_controller_configuration_platform_ops_roles))
-            | length == 0
-        fail_msg: >-
-          Invalid aap_cac_controller_configuration_platform_ops_roles.
-          Allowed values:
-          {{ __aap_cac_allowed_controller_configuration_platform_ops_roles | join(', ') }}
+    - name: Build platform/ops role list from provided content
+      ansible.builtin.set_fact:
+        aap_cac_controller_configuration_platform_ops_roles: >-
+          {{
+            aap_cac_controller_configuration_platform_ops_role_presence
+            | dict2items
+            | selectattr('value', 'equalto', true)
+            | map(attribute='key')
+            | list
+          }}
+      changed_when: false
 
     - name: Include infra.controller_configuration platform/ops roles
       ansible.builtin.include_role:

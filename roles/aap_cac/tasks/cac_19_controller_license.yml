@@ -1,12 +1,12 @@
 ---
-# CaC taskset: Optional controller license activation via manifest content.
-- name: Execute optional controller license activation
-  when: aap_cac_enable_controller_license | bool
+# CaC taskset: Controller license activation via manifest content.
+- name: Execute controller license activation
+  when: aap_cac_controller_license_manifest_content | default('', true) | string | trim | length > 0
   block:
-    - name: Validate effective controller license manifest content
+    - name: Validate controller license manifest content
       ansible.builtin.assert:
         that:
-          - aap_cac_controller_license_manifest_content_effective | default('', true) | trim | length > 0
+          - aap_cac_controller_license_manifest_content | default('', true) | string | trim | length > 0
         fail_msg: >-
           Missing controller license manifest content.
           Set aap_cac_controller_license_manifest_content in inventory.
@@ -22,7 +22,7 @@
 
     - name: Materialize controller license manifest content
       ansible.builtin.copy:
-        content: "{{ aap_cac_controller_license_manifest_content_effective | b64decode }}"
+        content: "{{ aap_cac_controller_license_manifest_content | b64decode }}"
         dest: "{{ aap_cac_controller_license_manifest_tmp.path }}"
         mode: "0600"
       no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
