@@ -97,6 +97,12 @@ vault_deploy_wrapper_config: false
 vault_deploy_wrapper_validate_pre: false
 vault_deploy_wrapper_validate_post: false
 
+# Optional integration with nginx reverse proxy.
+# Reloading nginx after Vault restarts avoids stale upstream DNS/IP cache entries.
+vault_deploy_reload_nginx_after_restart: true
+vault_deploy_nginx_container_name: >-
+  {{ nginx_deploy_container_name | default('nginx-nginx', true) }}
+
 # Configure vault
 vault_deploy_terraformstate_baseurl: "https://gitlab.com/api/v4/projects/70576743/terraform/state"
 vault_deploy_url: >-

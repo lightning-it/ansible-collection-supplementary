@@ -43,3 +43,31 @@
   when:
     - vault_deploy_manage_systemd | bool
     - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+
+- name: Check nginx container exists for post-vault restart reload
+  ansible.builtin.command:
+    cmd: "podman inspect {{ vault_deploy_nginx_container_name }}"
+  register: vault_deploy_nginx_container_exists
+  changed_when: false
+  failed_when: false
+  listen:
+    - Recreate vault pod
+    - Run vault pod
+  when:
+    - vault_deploy_reload_nginx_after_restart | bool
+    - not ansible_check_mode
+
+- name: Reload nginx after vault restart
+  ansible.builtin.command:
+    cmd: "podman exec {{ vault_deploy_nginx_container_name }} nginx -s reload"
+  register: vault_deploy_nginx_reload
+  changed_when: vault_deploy_nginx_reload.rc == 0
+  failed_when: false
+  listen:
+    - Recreate vault pod
+    - Run vault pod
+  when:
+    - vault_deploy_reload_nginx_after_restart | bool
+    - not ansible_check_mode
+    - vault_deploy_nginx_container_exists is defined
+    - vault_deploy_nginx_container_exists.rc == 0
