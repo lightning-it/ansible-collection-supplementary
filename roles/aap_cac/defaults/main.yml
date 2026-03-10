@@ -18,8 +18,7 @@ aap_cac_gateway_ready_delay: 5
 
 # Default organizations for gateway/controller organization tasksets.
 # Inventory can override this (for example per environment/tenant).
-aap_cac_controller_organizations:
-  - name: org-modulix
+aap_cac_controller_organizations: ""
 
 # Private Automation Hub objects.
 aap_cac_hub_collection_remotes: []

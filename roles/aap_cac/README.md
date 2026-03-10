@@ -25,7 +25,7 @@ Key variables:
 - `aap_cac_gateway_ready_status_codes`
 - `aap_cac_gateway_ready_retries`
 - `aap_cac_gateway_ready_delay`
-- `aap_cac_controller_organizations` (default: `[{name: org-modulix}]`)
+- `aap_cac_controller_organizations` (default: `[{name: ModuLix}]`)
 - `aap_cac_hub_collection_remotes` (default: `[]`)
 - `aap_cac_hub_collection_repositories` (default: `[]`)
 - `aap_cac_hub_group_roles` (default: `[]`)
