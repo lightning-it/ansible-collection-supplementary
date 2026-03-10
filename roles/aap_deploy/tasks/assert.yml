@@ -117,7 +117,7 @@
       - aap_deploy_setup_download_dest_dir.startswith('/')
     fail_msg: >-
       Invalid AAP setup download configuration.
-      Set aap_deploy_setup_download_offline_token and related download inputs,
+      Set rh_offline_token (or aap_deploy_setup_download_offline_token) and related download inputs,
       and provide an absolute aap_deploy_setup_download_dest_dir.
     quiet: true
   when:

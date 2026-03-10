@@ -23,7 +23,7 @@ aap_deploy_setup_dir: "{{ aap_deploy_install_dir }}/setup"
 # Setup archive download and staging
 # Download/prepare/install are delegated to infra.aap_utilities roles.
 # Provide an offline token from https://access.redhat.com/management/api/ .
-aap_deploy_setup_download_offline_token: ""
+aap_deploy_setup_download_offline_token: "{{ rh_offline_token | default('', true) | trim }}"
 aap_deploy_setup_download_version: "2.6"
 aap_deploy_setup_download_version_patch: false
 aap_deploy_setup_download_type: setup-bundle
