@@ -1,0 +1,2 @@
+---
+aap_destory_enabled: "{{ aap_enabled | default(true, true) }}"

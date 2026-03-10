@@ -1,6 +1,6 @@
 # aap_ops
 
-Operate AAP host install (restart, status, upgrade, sync_hub_password, rotate_password).
+Operate AAP host install (restart, status, upgrade, sync_hub_password, rotate_password, backup, restore, certs).
 
 ## Requirements
 
@@ -69,6 +69,44 @@ Sync `automationhub_admin_password` into `aap-config.yml`:
         aap_ops_action: sync_hub_password
         aap_ops_sync_hub_password_file_path: /etc/ansible-automation-platform/aap-config.yml
         aap_ops_sync_hub_password_value: "{{ aap_hub_admin_password_effective }}"
+```
+
+Run vendor AAP backup:
+
+```yaml
+- name: Backup AAP
+  hosts: aap_nodes
+  gather_facts: true
+  roles:
+    - role: lit.supplementary.aap_ops
+      vars:
+        aap_ops_action: backup
+```
+
+Run vendor AAP restore:
+
+```yaml
+- name: Restore AAP
+  hosts: aap_nodes
+  gather_facts: true
+  roles:
+    - role: lit.supplementary.aap_ops
+      vars:
+        aap_ops_action: restore
+```
+
+Install/rotate AAP TLS certificates via vendor role:
+
+```yaml
+- name: Apply AAP certs
+  hosts: aap_nodes
+  gather_facts: true
+  roles:
+    - role: lit.supplementary.aap_ops
+      vars:
+        aap_ops_action: certs
+        aap_certs_controller_ssl_cert: /path/to/tower.cert
+        aap_certs_controller_ssl_key: /path/to/tower.key
 ```
 
 ## License

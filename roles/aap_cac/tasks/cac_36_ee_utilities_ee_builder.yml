@@ -1,0 +1,15 @@
+---
+# CaC taskset: Build execution environments via infra.ee_utilities.ee_builder.
+- name: Execute infra.ee_utilities.ee_builder when ee_list is provided
+  when: ee_list | default([], true) | length > 0
+  block:
+    - name: Validate ee_list input for ee_builder
+      ansible.builtin.assert:
+        that:
+          - ee_list is sequence
+          - ee_list is not string
+        fail_msg: "ee_list must be a list when using the ee_builder taskset."
+
+    - name: Include infra.ee_utilities.ee_builder
+      ansible.builtin.include_role:
+        name: infra.ee_utilities.ee_builder

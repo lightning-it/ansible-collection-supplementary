@@ -1,0 +1,37 @@
+---
+# CaC taskset: Optional execution of infra.controller_configuration platform/ops roles.
+- name: Execute optional infra.controller_configuration platform/ops roles
+  when: aap_cac_controller_configuration_platform_ops_roles | length > 0
+  vars:
+    __aap_cac_allowed_controller_configuration_platform_ops_roles:
+      - applications
+      - credential_input_sources
+      - dispatch
+      - execution_environments
+      - global_vars
+      - meta_dependency_check
+      - notification_templates
+      - object_diff
+      - project_update
+      - roles
+      - schedules
+  block:
+    - name: Validate selected infra.controller_configuration platform/ops roles
+      ansible.builtin.assert:
+        that:
+          - aap_cac_controller_configuration_platform_ops_roles is sequence
+          - >
+            (aap_cac_controller_configuration_platform_ops_roles
+            | difference(__aap_cac_allowed_controller_configuration_platform_ops_roles))
+            | length == 0
+        fail_msg: >-
+          Invalid aap_cac_controller_configuration_platform_ops_roles.
+          Allowed values:
+          {{ __aap_cac_allowed_controller_configuration_platform_ops_roles | join(', ') }}
+
+    - name: Include infra.controller_configuration platform/ops roles
+      ansible.builtin.include_role:
+        name: "infra.controller_configuration.{{ item }}"
+      loop: "{{ aap_cac_controller_configuration_platform_ops_roles }}"
+      loop_control:
+        label: "{{ item }}"

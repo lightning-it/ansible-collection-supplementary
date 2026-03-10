@@ -34,12 +34,12 @@ Key variables:
 - `aap_cac_controller_license_force`
 - `aap_cac_controller_license_secure_logging`
 - `aap_cac_controller_license_manifest_content`
-- `aap_cac_enable_aap_utilities_roles`
-- `aap_cac_aap_utilities_roles`
-- `aap_cac_enable_controller_configuration_roles`
-- `aap_cac_controller_configuration_roles`
-- `aap_cac_enable_ee_utilities_roles`
-- `aap_cac_ee_utilities_roles`
+- `aap_cac_controller_configuration_jobs_roles`
+- `aap_cac_controller_configuration_filetree_roles`
+- `aap_cac_controller_configuration_inventory_runtime_roles`
+- `aap_cac_controller_configuration_platform_ops_roles`
+- `ee_list` (triggers `ee_builder` taskset when non-empty)
+- `venv_migrate_default_venv_paths` (triggers `virtualenv_migrate` taskset when non-empty)
 
 Password and secret input behavior:
 - Inventory is the source of truth.
@@ -101,9 +101,12 @@ Optional additional tasksets:
 - `cac_19_controller_license.yml` (manifest content only)
 
 Optional role-dispatch tasksets:
-- `cac_34_aap_utilities_roles.yml`
-- `cac_35_controller_configuration_roles.yml`
-- `cac_36_ee_utilities_roles.yml`
+- `cac_35_controller_configuration_jobs.yml`
+- `cac_35_controller_configuration_filetree.yml`
+- `cac_35_controller_configuration_inventory_runtime.yml`
+- `cac_35_controller_configuration_platform_ops.yml`
+- `cac_36_ee_utilities_ee_builder.yml`
+- `cac_36_ee_utilities_virtualenv_migrate.yml`
 
 ## License
 

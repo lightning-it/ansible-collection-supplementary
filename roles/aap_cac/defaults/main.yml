@@ -80,11 +80,7 @@ aap_cac_controller_license_manifest_content_effective: >-
 
 # Optional tasksets to execute roles from additional infra collections.
 # Disabled by default to preserve current behavior.
-aap_cac_enable_aap_utilities_roles: false
-aap_cac_aap_utilities_roles: []
-
-aap_cac_enable_controller_configuration_roles: false
-aap_cac_controller_configuration_roles: []
-
-aap_cac_enable_ee_utilities_roles: false
-aap_cac_ee_utilities_roles: []
+aap_cac_controller_configuration_jobs_roles: []
+aap_cac_controller_configuration_filetree_roles: []
+aap_cac_controller_configuration_inventory_runtime_roles: []
+aap_cac_controller_configuration_platform_ops_roles: []

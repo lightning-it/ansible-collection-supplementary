@@ -15,246 +15,175 @@
     group: "{{ aap_deploy_install_user }}"
     mode: '0755'
 
-- name: Check bundle archive on managed node destination path
-  ansible.builtin.stat:
-    path: "{{ aap_deploy_setup_archive_path }}"
-  register: aap_deploy_archive_on_target_dest
+- name: Download setup bundle via infra.aap_utilities.aap_setup_download  # noqa var-naming[no-role-prefix]
+  ansible.builtin.include_role:
+    name: infra.aap_utilities.aap_setup_download
+  vars:
+    aap_setup_down_offline_token: "{{ aap_deploy_setup_download_offline_token }}"
+    aap_setup_down_version: "{{ aap_deploy_setup_download_version }}"
+    aap_setup_down_version_patch: "{{ aap_deploy_setup_download_version_patch }}"
+    aap_setup_down_dest_dir: "{{ aap_deploy_setup_download_dest_dir }}"
+    aap_setup_down_type: "{{ aap_deploy_setup_download_type }}"
+    aap_setup_containerized: "{{ aap_deploy_setup_download_containerized }}"
+    aap_setup_arch: "{{ aap_deploy_setup_download_arch }}"
+    aap_setup_rhel_version: "{{ aap_deploy_setup_download_rhel_version }}"
 
-- name: Check bundle archive on managed node source path
-  ansible.builtin.stat:
-    path: "{{ aap_deploy_setup_archive_src }}"
-  register: aap_deploy_archive_on_target_src
-
-- name: Check bundle archive on control node runner project dir
-  ansible.builtin.stat:
-    path: "{{ aap_deploy_local_bundle_project_archive_path }}"
-  register: aap_deploy_archive_on_controller_project
-  delegate_to: localhost
-  become: false
-
-- name: Check bundle archive on control node .artifacts dir fallback
-  ansible.builtin.stat:
-    path: "{{ aap_deploy_local_bundle_archive_path }}"
-  register: aap_deploy_archive_on_controller_fallback
-  delegate_to: localhost
-  become: false
-
-- name: Check bundle archive on control node path matching setup_archive_src
-  ansible.builtin.stat:
-    path: "{{ aap_deploy_setup_archive_src }}"
-  register: aap_deploy_archive_on_controller_src
-  delegate_to: localhost
-  become: false
-
-- name: Select bundle archive source mode
+- name: Record downloaded setup bundle path
   ansible.builtin.set_fact:
-    aap_deploy_controller_archive_path: >-
-      {{
-        aap_deploy_local_bundle_project_archive_path
-        if aap_deploy_archive_on_controller_project.stat.exists
-        else (
-          aap_deploy_local_bundle_archive_path
-          if aap_deploy_archive_on_controller_fallback.stat.exists
-          else (
-            aap_deploy_setup_archive_src
-            if aap_deploy_archive_on_controller_src.stat.exists
-            else ''
-          )
-        )
-      }}
-    aap_deploy_archive_source_mode: >-
-      {{
-        'controller'
-        if (
-          aap_deploy_archive_on_controller_project.stat.exists
-          or aap_deploy_archive_on_controller_fallback.stat.exists
-          or aap_deploy_archive_on_controller_src.stat.exists
-        )
-        else (
-          'target_dest'
-          if aap_deploy_archive_on_target_dest.stat.exists
-          else (
-            'target_src'
-            if aap_deploy_archive_on_target_src.stat.exists
-            else 'missing'
-          )
-        )
-      }}
-
-- name: Report bundle archive source selection
-  ansible.builtin.debug:
-    msg: >-
-      archive_source_mode={{ aap_deploy_archive_source_mode }};
-      controller_archive_path={{ aap_deploy_controller_archive_path | default('') }};
-      target_destination={{ aap_deploy_setup_archive_path }};
-      target_source={{ aap_deploy_setup_archive_src }}.
+    aap_deploy_downloaded_archive_path: "{{ aap_setup_down_installer_file | default('', true) | trim }}"
   changed_when: false
 
-- name: Fail when bundle archive is missing on both target and control node
-  ansible.builtin.fail:
-    msg: |-
-      Disconnected bundle archive not found on either location.
-      Checked control-node runner dir: {{ aap_deploy_local_bundle_project_archive_path }}
-      Checked control-node .artifacts dir: {{ aap_deploy_local_bundle_archive_path }}
-      Checked control-node custom path: {{ aap_deploy_setup_archive_src }}
-      Checked target destination path: {{ aap_deploy_setup_archive_path }}
-      Checked target source path: {{ aap_deploy_setup_archive_src }}
-
-      How to download and stage the bundle:
-      1. Log in to Red Hat Customer Portal.
-      2. Go to Downloads -> Red Hat Ansible Automation Platform -> 2.6.
-      3. Download the containerized setup bundle archive (.tar.gz).
-      4. Preferred: place the file in local runner project dir:
-         {{ aap_deploy_local_bundle_project_archive_path }}
-         The role will copy it to target path:
-         {{ aap_deploy_setup_archive_path }}
-      5. Alternatives:
-         - Local .artifacts dir: {{ aap_deploy_local_bundle_archive_path }}
-         - Pre-staged on target: {{ aap_deploy_setup_archive_path }}
-      Note: ansible-nav runs inside a container. Workstation paths like
-      /home/<user>/... are not visible unless mounted into /runner/project.
-      6. Re-run the playbook.
-  when: aap_deploy_archive_source_mode == 'missing'
-
-- name: Copy setup archive from controller to target install dir
-  ansible.builtin.copy:
-    src: "{{ aap_deploy_controller_archive_path }}"
-    dest: "{{ aap_deploy_setup_archive_path }}"
-    owner: "{{ aap_deploy_install_user }}"
-    group: "{{ aap_deploy_install_user }}"
-    mode: '0644'
-  when:
-    - aap_deploy_archive_source_mode == 'controller'
-
-- name: Copy setup archive from managed node source path
-  ansible.builtin.copy:
-    src: "{{ aap_deploy_setup_archive_src }}"
-    dest: "{{ aap_deploy_setup_archive_path }}"
-    remote_src: true
-    owner: "{{ aap_deploy_install_user }}"
-    group: "{{ aap_deploy_install_user }}"
-    mode: '0644'
-  when:
-    - aap_deploy_archive_source_mode == 'target_src'
-    - aap_deploy_setup_archive_src != aap_deploy_setup_archive_path
-
-- name: Ensure archive ownership for already staged target archive
-  ansible.builtin.file:
-    path: "{{ aap_deploy_setup_archive_path }}"
-    owner: "{{ aap_deploy_install_user }}"
-    group: "{{ aap_deploy_install_user }}"
-    mode: '0644'
-    state: file
-  when:
-    - aap_deploy_archive_source_mode == 'target_dest'
-
-- name: Collect staged bundle metadata on target
-  ansible.builtin.stat:
-    path: "{{ aap_deploy_setup_archive_path }}"
-    checksum_algorithm: sha256
-  register: aap_deploy_archive_target_metadata
-
-- name: Validate staged bundle minimum size
+- name: Ensure setup bundle download produced a file path
   ansible.builtin.assert:
     that:
-      - aap_deploy_archive_target_metadata.stat.exists | default(false)
-      - (aap_deploy_archive_target_metadata.stat.size | int) >= (aap_deploy_validate_archive_min_size_bytes | int)
+      - aap_deploy_downloaded_archive_path | length > 0
     fail_msg: >-
-      Staged bundle archive looks too small for disconnected AAP deployment:
-      path={{ aap_deploy_setup_archive_path }},
-      size={{ aap_deploy_archive_target_metadata.stat.size | default('unknown') }} bytes,
-      minimum={{ aap_deploy_validate_archive_min_size_bytes | int }} bytes.
-      This usually means the downloaded file is not the real bundle
-      (for example an HTML login/error page or the small connected setup archive).
-      Use the containerized setup bundle artifact and retry.
+      Download role did not provide aap_setup_down_installer_file.
+      Check download inputs and token validity.
     quiet: true
-  when: (aap_deploy_validate_archive_min_size_bytes | int) > 0
 
-- name: Validate staged bundle checksum when expected checksum is provided
-  ansible.builtin.assert:
-    that:
-      - >-
-        aap_deploy_archive_target_metadata.stat.checksum | default('') | lower
-        == aap_deploy_setup_archive_checksum | trim | lower
-    fail_msg: >-
-      Staged bundle checksum mismatch at {{ aap_deploy_setup_archive_path }}.
-      expected={{ aap_deploy_setup_archive_checksum | trim | lower }}
-      actual={{ aap_deploy_archive_target_metadata.stat.checksum | default('') | lower }}
-      Re-download the bundle and retry.
-    quiet: true
-  when: aap_deploy_setup_archive_checksum | default('', true) | trim | length > 0
-
-- name: Validate staged bundle tar.gz format
-  ansible.builtin.unarchive:
-    src: "{{ aap_deploy_setup_archive_path }}"
-    dest: "{{ aap_deploy_setup_dir }}"
-    remote_src: true
-    list_files: true
-  register: aap_deploy_archive_format_check
+- name: Build setup inventory node groups
+  ansible.builtin.set_fact:
+    aap_deploy_setup_prep_inv_nodes: >-
+      {{
+        (
+          {
+            'automationgateway': {
+              (aap_deploy_growth_gateway_host): (
+                'ansible_connection=local ansible_host=' ~ aap_deploy_growth_gateway_host
+              )
+            },
+            'automationcontroller': {
+              (aap_deploy_growth_controller_host): (
+                'ansible_connection=local ansible_host=' ~ aap_deploy_growth_controller_host
+              )
+            },
+            'automationhub': {
+              (aap_deploy_growth_hub_host): (
+                'ansible_connection=local ansible_host=' ~ aap_deploy_growth_hub_host
+              )
+            },
+            'automationeda': {
+              (aap_deploy_growth_eda_host): (
+                'ansible_connection=local ansible_host=' ~ aap_deploy_growth_eda_host
+              )
+            },
+            'database': {
+              (aap_deploy_growth_postgresql_host): (
+                'ansible_connection=local ansible_host=' ~ aap_deploy_growth_postgresql_host
+              )
+            }
+          }
+          if aap_deploy_topology == 'growth'
+          else
+          {
+            'automationgateway': dict(
+              aap_deploy_enterprise_gateway_hosts
+              | zip(
+                  aap_deploy_enterprise_gateway_hosts
+                  | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | list
+                )
+            ),
+            'automationcontroller': dict(
+              aap_deploy_enterprise_controller_hosts
+              | zip(
+                  aap_deploy_enterprise_controller_hosts
+                  | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | list
+                )
+            ),
+            'automationhub': dict(
+              aap_deploy_enterprise_hub_hosts
+              | zip(
+                  aap_deploy_enterprise_hub_hosts
+                  | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | list
+                )
+            ),
+            'automationeda': dict(
+              aap_deploy_enterprise_eda_hosts
+              | zip(
+                  aap_deploy_enterprise_eda_hosts
+                  | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | list
+                )
+            ),
+            'database': dict(
+              aap_deploy_enterprise_postgresql_hosts
+              | zip(
+                  aap_deploy_enterprise_postgresql_hosts
+                  | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | list
+                )
+            )
+          }
+        )
+        | combine(
+            (
+              {
+                'redis': dict(
+                  aap_deploy_redis_hosts
+                  | zip(
+                      aap_deploy_redis_hosts
+                      | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                      | list
+                    )
+                )
+              }
+              if aap_deploy_redis_mode == 'cluster'
+              else {}
+            ),
+            recursive=true
+          )
+      }}
   changed_when: false
-  failed_when: false
-  when: aap_deploy_validate_archive_format | bool
 
-- name: Fail when staged bundle is not a valid tar.gz archive
-  ansible.builtin.fail:
-    msg: |-
-      Staged bundle archive is not a valid tar.gz:
-      path={{ aap_deploy_setup_archive_path }}
-      detail={{ aap_deploy_archive_format_check.msg | default('unknown error') | trim }}
+- name: Build setup inventory variables
+  ansible.builtin.set_fact:
+    aap_deploy_setup_prep_inv_vars:
+      automationcontroller: {}
+      automationhub: {}
+      automationeda: {}
+      all:
+        gateway_admin_password: "'{{ aap_deploy_gateway_admin_password_effective }}'"
+        controller_admin_password: "'{{ aap_deploy_controller_admin_password_effective }}'"
+        hub_admin_password: "'{{ aap_deploy_hub_admin_password_effective }}'"
+        eda_admin_password: "'{{ aap_deploy_eda_admin_password_effective }}'"
+        postgresql_admin_password: "'{{ aap_deploy_postgresql_admin_password_effective }}'"
+        postgresql_admin_username: "'{{ aap_deploy_postgresql_admin_username }}'"
+        gateway_pg_host: "'{{ aap_deploy_gateway_pg_host_effective }}'"
+        gateway_pg_password: "'{{ aap_deploy_gateway_pg_password_effective }}'"
+        controller_pg_host: "'{{ aap_deploy_controller_pg_host_effective }}'"
+        controller_pg_password: "'{{ aap_deploy_controller_pg_password_effective }}'"
+        hub_pg_host: "'{{ aap_deploy_hub_pg_host_effective }}'"
+        hub_pg_password: "'{{ aap_deploy_hub_pg_password_effective }}'"
+        eda_pg_host: "'{{ aap_deploy_eda_pg_host_effective }}'"
+        eda_pg_password: "'{{ aap_deploy_eda_pg_password_effective }}'"
+        pg_admin_password: "'{{ aap_deploy_postgresql_admin_password_effective }}'"
+        redis_mode: "'{{ aap_deploy_redis_mode }}'"
+        bundle_install: true
+        bundle_dir: "'{{ aap_deploy_bundle_dir }}'"
+    aap_deploy_setup_prep_inv_secrets: {}
+  changed_when: false
 
-      Most common causes:
-      - Download URL expired and returned HTML instead of the bundle.
-      - Wrong artifact downloaded (small connected setup archive instead of bundle).
-      - Incomplete/corrupted download.
+- name: Prepare setup bundle and render installer inventory via vendor role  # noqa var-naming[no-role-prefix]
+  ansible.builtin.include_role:
+    name: infra.aap_utilities.aap_setup_prepare
+  vars:
+    aap_setup_containerized: "{{ aap_deploy_setup_download_containerized }}"
+    aap_setup_prep_containerized: "{{ aap_deploy_setup_download_containerized }}"
+    aap_setup_prep_installer_file: "{{ aap_deploy_downloaded_archive_path }}"
+    aap_setup_prep_working_dir: "{{ aap_deploy_setup_dir }}"
+    aap_setup_prep_process_template: "{{ aap_deploy_setup_prepare_process_template }}"
+    aap_setup_prep_inv_nodes: "{{ aap_deploy_setup_prep_inv_nodes }}"
+    aap_setup_prep_inv_vars: "{{ aap_deploy_setup_prep_inv_vars }}"
+    aap_setup_prep_inv_secrets: "{{ aap_deploy_setup_prep_inv_secrets }}"
 
-      Recommended checks on the runner host:
-      1. file {{ aap_deploy_setup_archive_filename }}
-      2. sha256sum {{ aap_deploy_setup_archive_filename }}
-      3. Re-download with quoted URL and -fL if needed.
-  when:
-    - aap_deploy_validate_archive_format | bool
-    - aap_deploy_archive_format_check.failed | default(false) | bool
-
-- name: Remove previous setup directory when force unpack is enabled
+- name: Ensure prepared setup directory ownership for install user
   ansible.builtin.file:
-    path: "{{ aap_deploy_setup_dir }}"
-    state: absent
-  when: aap_deploy_force_unpack | bool
-
-- name: Recreate setup directory after forced cleanup
-  ansible.builtin.file:
-    path: "{{ aap_deploy_setup_dir }}"
+    path: "{{ aap_setup_prep_setup_dir }}"
     state: directory
     owner: "{{ aap_deploy_install_user }}"
     group: "{{ aap_deploy_install_user }}"
-    mode: '0755'
-  when: aap_deploy_force_unpack | bool
-
-- name: Check unpack marker
-  ansible.builtin.stat:
-    path: "{{ aap_deploy_setup_dir }}/.aap_setup_unpacked"
-  register: aap_deploy_unpack_marker
-
-- name: Unpack containerized setup archive
-  ansible.builtin.unarchive:
-    src: "{{ aap_deploy_setup_archive_path }}"
-    dest: "{{ aap_deploy_setup_dir }}"
-    remote_src: true
-    extra_opts:
-      - --strip-components=1
-  become: true
-  become_user: "{{ aap_deploy_install_user }}"
-  when:
-    - aap_deploy_force_unpack | bool or not aap_deploy_unpack_marker.stat.exists
-
-- name: Write unpack marker
-  ansible.builtin.copy:
-    dest: "{{ aap_deploy_setup_dir }}/.aap_setup_unpacked"
-    owner: "{{ aap_deploy_install_user }}"
-    group: "{{ aap_deploy_install_user }}"
-    mode: '0644'
-    content: |
-      archive={{ aap_deploy_setup_archive_path }}
-      checksum={{ aap_deploy_setup_archive_checksum | default('') }}
-  when:
-    - aap_deploy_force_unpack | bool or not aap_deploy_unpack_marker.stat.exists
+    recurse: true

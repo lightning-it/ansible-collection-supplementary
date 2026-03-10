@@ -19,29 +19,22 @@ aap_deploy_install_user_passwordless_sudo: true
 # Installation paths
 aap_deploy_install_dir: /opt/aap
 aap_deploy_setup_dir: "{{ aap_deploy_install_dir }}/setup"
-aap_deploy_inventory_filename: inventory
-aap_deploy_inventory_path: "{{ aap_deploy_setup_dir }}/{{ aap_deploy_inventory_filename }}"
 
-# Setup archive source
-# Path to the setup bundle archive (.tar.gz).
-# The role checks both:
-# - managed node path (for pre-staged bundles), and
-# - control node paths inside the Ansible project mount (/runner/project/<file>
-#   and /runner/project/.artifacts/<file>).
-aap_deploy_setup_archive_src: "/opt/aap/aap-containerized-setup.tar.gz"
-aap_deploy_setup_archive_checksum: ""
-aap_deploy_validate_archive_format: true
-aap_deploy_validate_archive_min_size_bytes: 100000000
-aap_deploy_force_unpack: false
-aap_deploy_setup_archive_filename: >-
-  {{
-    (aap_deploy_setup_archive_src | basename)
-    if (aap_deploy_setup_archive_src | default('', true) | trim | length > 0)
-    else 'aap-containerized-setup.tar.gz'
-  }}
-aap_deploy_setup_archive_path: "{{ aap_deploy_install_dir }}/{{ aap_deploy_setup_archive_filename }}"
-aap_deploy_local_bundle_archive_path: "/runner/project/.artifacts/{{ aap_deploy_setup_archive_filename }}"
-aap_deploy_local_bundle_project_archive_path: "/runner/project/{{ aap_deploy_setup_archive_filename }}"
+# Setup archive download and staging
+# Download/prepare/install are delegated to infra.aap_utilities roles.
+# Provide an offline token from https://access.redhat.com/management/api/ .
+aap_deploy_setup_download_offline_token: ""
+aap_deploy_setup_download_version: "2.6"
+aap_deploy_setup_download_version_patch: false
+aap_deploy_setup_download_type: setup-bundle
+aap_deploy_setup_download_containerized: true
+aap_deploy_setup_download_arch: "{{ aap_deploy_repo_arch }}"
+aap_deploy_setup_download_rhel_version: "{{ ansible_distribution_major_version | default(9, true) }}"
+aap_deploy_setup_download_dest_dir: "{{ aap_deploy_install_dir }}"
+aap_deploy_setup_prepare_process_template: true
+aap_deploy_setup_install_force: true
+aap_deploy_setup_install_extra_vars: {}
+aap_deploy_setup_install_extra_vars_files: []
 
 # Effective installer admin passwords are resolved by shared role `aap`
 # from inventory inputs (`aap_*_admin_password_input`).
@@ -73,7 +66,7 @@ aap_deploy_postgresql_admin_password_effective: >-
   }}
 
 # Bundle install location (required when aap_deploy_install_type=bundle)
-aap_deploy_bundle_dir: "/opt/aap/setup/bundle"
+aap_deploy_bundle_dir: bundle
 
 # Redis configuration for containerized installer inventory.
 # cluster mode requires a [redis] group with at least 6 nodes.
@@ -157,8 +150,6 @@ aap_deploy_run_installer: true
 aap_deploy_run_verify: true
 aap_deploy_enforce_min_mem_check: true
 aap_deploy_min_mem_mb: 15000
-aap_deploy_inventory_template: >-
-  {{ 'inventory-growth.j2' if aap_deploy_topology == 'growth' else 'inventory-enterprise.j2' }}
 
 # Installer idempotency guard
 aap_deploy_skip_if_installed: true

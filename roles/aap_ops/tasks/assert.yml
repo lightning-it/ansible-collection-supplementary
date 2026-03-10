@@ -3,7 +3,17 @@
   ansible.builtin.assert:
     that:
       - aap_ops_enabled is boolean
-      - aap_ops_action in ['none', 'restart', 'status', 'upgrade', 'sync_hub_password', 'rotate_password']
+      - aap_ops_action in [
+          'none',
+          'restart',
+          'status',
+          'upgrade',
+          'sync_hub_password',
+          'rotate_password',
+          'backup',
+          'restore',
+          'certs'
+        ]
       - aap_ops_package_state in ['present', 'latest', 'absent']
       - aap_ops_manage_systemd is boolean
       - aap_ops_packages_effective is sequence

@@ -1,0 +1,27 @@
+---
+# CaC taskset: Optional execution of infra.controller_configuration filetree roles.
+- name: Execute optional infra.controller_configuration filetree roles
+  when: aap_cac_controller_configuration_filetree_roles | length > 0
+  vars:
+    __aap_cac_allowed_controller_configuration_filetree_roles:
+      - filetree_create
+      - filetree_read
+  block:
+    - name: Validate selected infra.controller_configuration filetree roles
+      ansible.builtin.assert:
+        that:
+          - aap_cac_controller_configuration_filetree_roles is sequence
+          - >
+            (aap_cac_controller_configuration_filetree_roles
+            | difference(__aap_cac_allowed_controller_configuration_filetree_roles))
+            | length == 0
+        fail_msg: >-
+          Invalid aap_cac_controller_configuration_filetree_roles. Allowed values:
+          {{ __aap_cac_allowed_controller_configuration_filetree_roles | join(', ') }}
+
+    - name: Include infra.controller_configuration filetree roles
+      ansible.builtin.include_role:
+        name: "infra.controller_configuration.{{ item }}"
+      loop: "{{ aap_cac_controller_configuration_filetree_roles }}"
+      loop_control:
+        label: "{{ item }}"

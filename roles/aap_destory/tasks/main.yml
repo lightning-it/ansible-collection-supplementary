@@ -1,0 +1,21 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip AAP remove when disabled
+  ansible.builtin.debug:
+    msg: "AAP remove skipped (aap_destory_enabled=false)."
+  changed_when: false
+  when: not aap_destory_enabled | bool
+  tags: always
+
+- name: Remove AAP using vendor role
+  ansible.builtin.include_role:
+    name: infra.aap_utilities.aap_remove
+  when:
+    - aap_destory_enabled | bool
+    - not ansible_check_mode
+  tags:
+    - aap_destory
+    - aap_remove
