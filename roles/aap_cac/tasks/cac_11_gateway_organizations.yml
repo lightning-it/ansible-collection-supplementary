@@ -1,6 +1,6 @@
 ---
-# CaC taskset: Configure Gateway Organizations via AAP CaC role task set.
-- name: Configure Gateway Organizations via AAP CaC role task set
+# CaC taskset: Configure Gateway and Controller organizations.
+- name: Configure Gateway and Controller organizations
   tags:
     - organizations
   block:
@@ -9,11 +9,45 @@
         aap_organizations: "{{ aap_cac_controller_organizations }}"
       changed_when: false
 
-    - name: Configure Gateway Organizations  # noqa var-naming[no-role-prefix]
+    - name: Resolve effective Controller admin password
+      ansible.builtin.set_fact:
+        aap_cac_controller_password_effective: >-
+          {{
+            aap_controller_admin_password_input
+            | default(aap_gateway_admin_password_input, true)
+            | default('', true)
+            | string
+            | trim
+          }}
+      changed_when: false
+
+    - name: Configure Gateway organizations
+      ansible.platform.organization:
+        name: "{{ __gateway_organization_item.name | mandatory }}"
+        new_name: "{{ __gateway_organization_item.new_name | default(omit) }}"
+        description: "{{ __gateway_organization_item.description | default(omit) }}"
+        state: >-
+          {{
+            __gateway_organization_item.state
+            | default(platform_state | default(omit, true))
+          }}
+        gateway_hostname: "{{ aap_cac_gateway_hostname }}"
+        gateway_username: "{{ aap_cac_gateway_username }}"
+        gateway_password: "{{ aap_cac_gateway_password }}"
+        gateway_request_timeout: "{{ aap_request_timeout | default(omit, true) }}"
+        gateway_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+      loop: "{{ aap_organizations }}"
+      loop_control:
+        loop_var: __gateway_organization_item
+        label: "{{ __gateway_organization_item.name }}"
+
+    - name: Configure Controller organizations  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
       vars:
+        aap_password: "{{ aap_cac_controller_password_effective }}"
+        aap_token: ""
         aap_configuration_dispatcher_roles:
-          - role: gateway_organizations
+          - role: controller_organizations
             var: aap_organizations
             tags: organizations

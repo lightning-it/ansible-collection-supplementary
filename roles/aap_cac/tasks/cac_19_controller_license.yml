@@ -35,8 +35,12 @@
         state: "{{ aap_cac_controller_license_state }}"
         controller_host: "{{ aap_cac_gateway_hostname }}"
         controller_username: "{{ aap_cac_gateway_username | default(omit, true) }}"
-        controller_password: "{{ aap_cac_gateway_password | default(omit, true) }}"
-        controller_oauthtoken: "{{ aap_token | default(omit, true) }}"
+        controller_password: >-
+          {{
+            aap_controller_admin_password_input
+            | default(aap_gateway_admin_password_input, true)
+            | default(omit, true)
+          }}
         validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
       no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
   always:

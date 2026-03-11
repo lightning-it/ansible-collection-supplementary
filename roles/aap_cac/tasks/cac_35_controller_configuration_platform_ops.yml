@@ -13,7 +13,6 @@
           operation_translate is mapping and
           operation_translate | length > 0
         }}
-      meta_dependency_check: "{{ controller_dependency_check | default(false) | bool }}"
       notification_templates: "{{ controller_notifications | default([], true) | length > 0 }}"
       object_diff: >-
         {{

@@ -17,7 +17,6 @@
     - aap_cac_gateway_ready_check | bool
 
 - name: create_authentication_token | Create AAP authentication token
-  when: aap_token is not defined
   block:
     - name: create_authentication_token | Request token
       ansible.platform.token:
@@ -34,22 +33,44 @@
       until: __aap_cac_token_create is succeeded
       changed_when: false
       no_log: true
+      when: aap_token is not defined
 
-    - name: create_authentication_token | Store token fact
+    - name: create_authentication_token | Normalize token facts
       ansible.builtin.set_fact:
-        aap_token: >-
+        aap_cac_created_token: "{{ __aap_cac_created_token }}"
+        aap_token: "{{ __aap_cac_token_value }}"
+      vars:
+        __aap_cac_created_token: >-
           {{
-            __aap_cac_token_create.token
-            | default(
-                __aap_cac_token_create.json.token
-                | default(
-                    __aap_cac_token_create.value
-                    | default('')
-                  ),
-                true
+            (
+              aap_token
+              if (aap_token is mapping)
+              else (
+                __aap_cac_token_create.aap_token
+                | default(__aap_cac_token_create.ansible_facts.aap_token, true)
+                | default({}, true)
               )
+            )
+          }}
+        __aap_cac_token_value: >-
+          {{
+            (
+              __aap_cac_created_token.token
+              | default(
+                  __aap_cac_token_create.token
+                  | default(
+                      __aap_cac_token_create.json.token
+                      | default(__aap_cac_token_create.value, true),
+                      true
+                    ),
+                  true
+                )
+            ) | default('', true) | string | trim
           }}
       no_log: true
+      when:
+        - __aap_cac_token_create is defined
+        - not (__aap_cac_token_create is skipped)
 
     - name: create_authentication_token | Require non-empty token
       ansible.builtin.assert:
@@ -58,6 +79,9 @@
         fail_msg: >-
           Failed to resolve AAP token value from ansible.platform.token module output.
       no_log: true
+      when:
+        - __aap_cac_token_create is defined
+        - not (__aap_cac_token_create is skipped)
   rescue:
     - name: create_authentication_token | Fail with sanitized diagnostics
       ansible.builtin.fail:
