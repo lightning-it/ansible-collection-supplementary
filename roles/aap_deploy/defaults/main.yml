@@ -19,18 +19,62 @@ aap_deploy_install_user_passwordless_sudo: true
 # Installation paths
 aap_deploy_install_dir: /opt/aap
 aap_deploy_setup_dir: "{{ aap_deploy_install_dir }}/setup"
+aap_deploy_local_project_root: "{{ playbook_dir | dirname | dirname }}"
 
-# Setup archive download and staging
-# Download/prepare/install are delegated to infra.aap_utilities roles.
-# Provide an offline token from https://access.redhat.com/management/api/ .
-aap_deploy_setup_download_offline_token: "{{ rh_offline_token | default('', true) | trim }}"
+# Setup archive staging (disconnected-first).
+# We intentionally use a local control-node copy of the AAP bundle and copy it
+# to the managed host. This workflow must work without internet access.
 aap_deploy_setup_download_version: "2.6"
-aap_deploy_setup_download_version_patch: false
-aap_deploy_setup_download_type: setup-bundle
 aap_deploy_setup_download_containerized: true
-aap_deploy_setup_download_arch: "{{ aap_deploy_repo_arch }}"
-aap_deploy_setup_download_rhel_version: "{{ ansible_distribution_major_version | default(9, true) }}"
-aap_deploy_setup_download_dest_dir: "{{ aap_deploy_install_dir }}"
+aap_deploy_setup_archive_src: >-
+  {{
+    (
+      (
+        lookup('ansible.builtin.env', 'AAP_BUNDLE_FILE')
+        | default('', true)
+        | trim
+      )
+      if (
+        (
+          lookup('ansible.builtin.env', 'AAP_BUNDLE_FILE')
+          | default('', true)
+          | trim
+        ).startswith('/')
+      )
+      else (
+        aap_deploy_local_project_root ~ '/' ~
+        (
+          lookup('ansible.builtin.env', 'AAP_BUNDLE_FILE')
+          | default('', true)
+          | trim
+        )
+        if (
+          lookup('ansible.builtin.env', 'AAP_BUNDLE_FILE')
+          | default('', true)
+          | trim
+          | length > 0
+        )
+        else '/opt/aap/aap-containerized-setup.tar.gz'
+      )
+    )
+  }}
+aap_deploy_setup_archive_checksum: ""
+aap_deploy_validate_archive_format: true
+aap_deploy_validate_archive_min_size_bytes: 100000000
+aap_deploy_force_unpack: false
+aap_deploy_setup_archive_filename: >-
+  {{
+    (aap_deploy_setup_archive_src | basename)
+    if (aap_deploy_setup_archive_src | default('', true) | trim | length > 0)
+    else 'aap-containerized-setup.tar.gz'
+  }}
+aap_deploy_setup_archive_path: >-
+  {{ aap_deploy_install_dir }}/{{ aap_deploy_setup_archive_filename }}
+aap_deploy_local_bundle_archive_path: >-
+  {{ aap_deploy_local_project_root }}/.artifacts/{{
+  aap_deploy_setup_archive_filename }}
+aap_deploy_local_bundle_project_archive_path: >-
+  {{ aap_deploy_local_project_root }}/{{ aap_deploy_setup_archive_filename }}
 aap_deploy_setup_prepare_process_template: true
 aap_deploy_setup_install_force: true
 aap_deploy_setup_install_extra_vars: {}
@@ -136,12 +180,30 @@ aap_deploy_repo_arch: >-
     if (ansible_architecture | default('x86_64')) in ['aarch64', 'arm64']
     else 'x86_64'
   }}
+aap_deploy_requires_ansible_builder: >-
+  {{ (ee_list | default([], true) | length > 0) | bool }}
 aap_deploy_required_repos:
   - "rhel-{{ ansible_distribution_major_version | default('9') }}-for-{{ aap_deploy_repo_arch }}-baseos-rpms"
   - "rhel-{{ ansible_distribution_major_version | default('9') }}-for-{{ aap_deploy_repo_arch }}-appstream-rpms"
-aap_deploy_required_packages:
+aap_deploy_base_required_packages:
   - ansible-core
   - podman
+aap_deploy_extra_required_packages: >-
+  {{
+    (
+      ['ansible-builder']
+      if aap_deploy_requires_ansible_builder | bool
+      else []
+    )
+    | to_json
+    | from_json
+  }}
+aap_deploy_required_packages: >-
+  {{
+    (aap_deploy_base_required_packages + aap_deploy_extra_required_packages)
+    | to_json
+    | from_json
+  }}
 
 # Workflow controls (useful for testing)
 aap_deploy_manage_host_prep: true

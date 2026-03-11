@@ -47,7 +47,7 @@
   tags:
     - host_prep
 
-- name: Download setup bundle and prepare installer workspace
+- name: Stage local setup bundle and prepare installer workspace
   ansible.builtin.import_tasks: 20_download_unpack.yml
   when:
     - aap_deploy_enabled | bool

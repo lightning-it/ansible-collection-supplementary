@@ -25,6 +25,8 @@
       - aap_deploy_runtime_probe_all_containers is boolean
       - aap_deploy_install_user_create is boolean
       - aap_deploy_install_user_passwordless_sudo is boolean
+      - aap_deploy_force_unpack is boolean
+      - aap_deploy_validate_archive_format is boolean
       - aap_deploy_setup_download_containerized is boolean
       - aap_deploy_setup_prepare_process_template is boolean
       - aap_deploy_setup_install_force is boolean
@@ -35,6 +37,8 @@
       - aap_deploy_install_dir.startswith('/')
       - aap_deploy_setup_dir | trim | length > 0
       - aap_deploy_setup_dir.startswith('/')
+      - aap_deploy_setup_archive_path | trim | length > 0
+      - aap_deploy_setup_archive_path.startswith('/')
       - aap_deploy_required_repos is sequence
       - aap_deploy_required_repos is not string
       - aap_deploy_required_packages is sequence
@@ -43,6 +47,7 @@
       - aap_deploy_setup_install_extra_vars_files is sequence
       - aap_deploy_setup_install_extra_vars_files is not string
       - aap_deploy_min_mem_mb | int > 0
+      - aap_deploy_validate_archive_min_size_bytes | int >= 0
       - aap_deploy_skip_if_installed_runtime_min_matching_containers | int > 0
       - aap_deploy_runtime_name_regex | default('', true) | trim | length > 0
       - aap_deploy_runtime_min_matching_containers | int > 0
@@ -104,21 +109,18 @@
   when: aap_deploy_enabled | bool
   tags: always
 
-- name: Validate setup bundle download settings when archive management is enabled
+- name: Validate local setup bundle staging settings when archive management is enabled
   ansible.builtin.assert:
     that:
-      - aap_deploy_setup_download_offline_token | default('', true) | trim | length > 0
-      - aap_deploy_setup_download_version | default('', true) | trim | length > 0
-      - aap_deploy_setup_download_type | default('', true) | trim | length > 0
-      - aap_deploy_setup_download_type in ['setup', 'setup-bundle', 'containerized-setup']
-      - aap_deploy_setup_download_arch | default('', true) | trim | length > 0
-      - aap_deploy_setup_download_rhel_version | string | trim | length > 0
-      - aap_deploy_setup_download_dest_dir | default('', true) | trim | length > 0
-      - aap_deploy_setup_download_dest_dir.startswith('/')
+      - aap_deploy_setup_archive_src | default('', true) | trim | length > 0
+      - aap_deploy_setup_archive_src.startswith('/')
+      - (aap_deploy_setup_archive_src | regex_search('^https?://')) is none
     fail_msg: >-
-      Invalid AAP setup download configuration.
-      Set rh_offline_token (or aap_deploy_setup_download_offline_token) and related download inputs,
-      and provide an absolute aap_deploy_setup_download_dest_dir.
+      Invalid local AAP bundle staging configuration.
+      We have to use our local copy of the AAP bundle instead of the default AAP download role
+      because this workflow must always work without internet access.
+      Set aap_deploy_setup_archive_src to a local file path on the control node or pre-stage the
+      bundle on the managed host.
     quiet: true
   when:
     - aap_deploy_enabled | bool

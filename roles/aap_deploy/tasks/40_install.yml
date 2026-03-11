@@ -6,6 +6,7 @@
       become: true
       become_user: "{{ aap_deploy_install_user }}"
   vars:
+    aap_setup_down_version: "{{ aap_deploy_setup_download_version }}"
     aap_setup_containerized: "{{ aap_deploy_setup_download_containerized }}"
     aap_setup_inst_containerized: "{{ aap_deploy_setup_download_containerized }}"
     aap_setup_inst_force: "{{ aap_deploy_setup_install_force }}"
