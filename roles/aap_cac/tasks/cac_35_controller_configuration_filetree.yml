@@ -4,6 +4,9 @@
 - name: >-
     Execute infra.controller_configuration filetree roles
     from provided content
+  tags:
+    - filetree_create
+    - filetree_read
   vars:
     aap_cac_controller_configuration_filetree_valid_tags:
       - all
@@ -39,6 +42,19 @@
           orgs is defined
         }}
   block:
+    - name: Build filetree requested tag filter from ansible_run_tags
+      ansible.builtin.set_fact:
+        aap_cac_controller_configuration_filetree_requested_tags: >-
+          {{
+            ansible_run_tags
+            | default([])
+            | intersect(
+                aap_cac_controller_configuration_filetree_role_presence.keys()
+                | list
+              )
+          }}
+      changed_when: false
+
     - name: >-
         Build infra.controller_configuration
         filetree role list from provided content
@@ -48,10 +64,26 @@
             aap_cac_controller_configuration_filetree_role_presence
             | dict2items
             | selectattr('value', 'equalto', true)
+            | selectattr('key', 'in', __aap_cac_controller_configuration_filetree_allowed_roles)
             | map(attribute='key')
             | list
           }}
       changed_when: false
+      vars:
+        __aap_cac_controller_configuration_filetree_allowed_roles: >-
+          {{
+            (
+              aap_cac_controller_configuration_filetree_requested_tags
+              if (
+                aap_cac_controller_configuration_filetree_requested_tags
+                | length > 0
+              )
+              else (
+                aap_cac_controller_configuration_filetree_role_presence.keys()
+                | list
+              )
+            )
+          }}
 
     - name: Include infra.controller_configuration filetree roles
       ansible.builtin.include_role:

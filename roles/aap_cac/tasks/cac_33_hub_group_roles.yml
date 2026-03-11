@@ -1,6 +1,8 @@
 ---
 # CaC taskset: Configure Private Automation Hub group roles.
 - name: Configure Private Automation Hub group roles
+  tags:
+    - hub_group_roles
   block:
     - name: Set Hub group roles
       ansible.builtin.set_fact:

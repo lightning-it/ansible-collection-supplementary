@@ -1,6 +1,8 @@
 ---
 # CaC taskset: Synchronize Private Automation Hub repositories.
 - name: Synchronize Private Automation Hub repositories
+  tags:
+    - hub_collection_repository_sync
   block:
     - name: Set Hub collection repositories for sync
       ansible.builtin.set_fact:

@@ -1,6 +1,17 @@
 ---
 # CaC taskset: Execute infra.controller_configuration platform/ops roles from provided content.
 - name: Execute infra.controller_configuration platform/ops roles from provided content
+  tags:
+    - applications
+    - credential_input_sources
+    - dispatch
+    - execution_environments
+    - global_vars
+    - notification_templates
+    - object_diff
+    - project_update
+    - roles
+    - schedules
   vars:
     aap_cac_controller_configuration_platform_ops_role_presence:
       applications: "{{ controller_applications | default([], true) | length > 0 }}"
@@ -37,6 +48,19 @@
       roles: "{{ controller_roles | default([], true) | length > 0 }}"
       schedules: "{{ controller_schedules | default([], true) | length > 0 }}"
   block:
+    - name: Build platform/ops requested tag filter from ansible_run_tags
+      ansible.builtin.set_fact:
+        aap_cac_controller_configuration_platform_ops_requested_tags: >-
+          {{
+            ansible_run_tags
+            | default([])
+            | intersect(
+                aap_cac_controller_configuration_platform_ops_role_presence.keys()
+                | list
+              )
+          }}
+      changed_when: false
+
     - name: Build platform/ops role list from provided content
       ansible.builtin.set_fact:
         aap_cac_controller_configuration_platform_ops_roles: >-
@@ -44,10 +68,30 @@
             aap_cac_controller_configuration_platform_ops_role_presence
             | dict2items
             | selectattr('value', 'equalto', true)
+            | selectattr(
+                'key',
+                'in',
+                __aap_cac_controller_configuration_platform_ops_allowed_roles
+              )
             | map(attribute='key')
             | list
           }}
       changed_when: false
+      vars:
+        __aap_cac_controller_configuration_platform_ops_allowed_roles: >-
+          {{
+            (
+              aap_cac_controller_configuration_platform_ops_requested_tags
+              if (
+                aap_cac_controller_configuration_platform_ops_requested_tags
+                | length > 0
+              )
+              else (
+                aap_cac_controller_configuration_platform_ops_role_presence.keys()
+                | list
+              )
+            )
+          }}
 
     - name: Resolve effective Controller admin password
       ansible.builtin.set_fact:

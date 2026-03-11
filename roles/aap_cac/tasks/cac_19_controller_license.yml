@@ -2,6 +2,8 @@
 # CaC taskset: Controller license activation via manifest content.
 - name: Execute controller license activation
   when: aap_cac_controller_license_manifest_content | default('', true) | string | trim | length > 0
+  tags:
+    - controller_license
   block:
     - name: Validate controller license manifest content
       ansible.builtin.assert:

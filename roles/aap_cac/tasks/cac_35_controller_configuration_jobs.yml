@@ -1,6 +1,14 @@
 ---
 # CaC taskset: Execute infra.controller_configuration job roles from provided content.
 - name: Execute infra.controller_configuration job roles from provided content
+  tags:
+    - ad_hoc_command
+    - ad_hoc_command_cancel
+    - bulk_job_launch
+    - job_launch
+    - jobs_cancel
+    - workflow_job_templates
+    - workflow_launch
   vars:
     aap_cac_controller_configuration_jobs_role_presence:
       ad_hoc_command: "{{ controller_ad_hoc_commands | default([], true) | length > 0 }}"
@@ -16,6 +24,19 @@
       workflow_job_templates: "{{ controller_workflows | default([], true) | length > 0 }}"
       workflow_launch: "{{ controller_workflow_launch_jobs | default([], true) | length > 0 }}"
   block:
+    - name: Build job requested tag filter from ansible_run_tags
+      ansible.builtin.set_fact:
+        aap_cac_controller_configuration_jobs_requested_tags: >-
+          {{
+            ansible_run_tags
+            | default([])
+            | intersect(
+                aap_cac_controller_configuration_jobs_role_presence.keys()
+                | list
+              )
+          }}
+      changed_when: false
+
     - name: Build infra.controller_configuration job role list from provided content
       ansible.builtin.set_fact:
         aap_cac_controller_configuration_jobs_roles: >-
@@ -23,10 +44,26 @@
             aap_cac_controller_configuration_jobs_role_presence
             | dict2items
             | selectattr('value', 'equalto', true)
+            | selectattr('key', 'in', __aap_cac_controller_configuration_jobs_allowed_roles)
             | map(attribute='key')
             | list
           }}
       changed_when: false
+      vars:
+        __aap_cac_controller_configuration_jobs_allowed_roles: >-
+          {{
+            (
+              aap_cac_controller_configuration_jobs_requested_tags
+              if (
+                aap_cac_controller_configuration_jobs_requested_tags
+                | length > 0
+              )
+              else (
+                aap_cac_controller_configuration_jobs_role_presence.keys()
+                | list
+              )
+            )
+          }}
 
     - name: Resolve effective Controller admin password
       ansible.builtin.set_fact:

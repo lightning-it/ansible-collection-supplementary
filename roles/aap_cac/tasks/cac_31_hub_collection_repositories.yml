@@ -1,6 +1,9 @@
 ---
 # CaC taskset: Connect Private Automation Hub remotes to repositories.
 - name: Connect Private Automation Hub remotes to repositories
+  tags:
+    - hub_collection_repository
+    - hub_collection_repositories
   block:
     - name: Set Hub collection repositories
       ansible.builtin.set_fact:

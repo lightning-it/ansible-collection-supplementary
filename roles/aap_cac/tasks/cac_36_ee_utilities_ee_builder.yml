@@ -2,6 +2,8 @@
 # CaC taskset: Build execution environments via infra.ee_utilities.ee_builder.
 - name: Execute infra.ee_utilities.ee_builder when ee_list is provided
   when: ee_list | default([], true) | length > 0
+  tags:
+    - ee_builder
   block:
     - name: Validate ee_list input for ee_builder
       ansible.builtin.assert:

@@ -1,6 +1,9 @@
 ---
 # CaC taskset: Configure Private Automation Hub collection remotes.
 - name: Configure Private Automation Hub collection remotes
+  tags:
+    - hub_collection_remote
+    - hub_collection_remotes
   block:
     - name: Set Hub collection remotes
       ansible.builtin.set_fact:
