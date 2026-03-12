@@ -7,13 +7,7 @@ COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE:-lit}"
 
 if [ -z "${COLLECTION_NAME:-}" ]; then
   if [ -f galaxy.yml ]; then
-    COLLECTION_NAME="$(python3 - <<'PY'
-import yaml
-with open("galaxy.yml", "r", encoding="utf-8") as f:
-    data = yaml.safe_load(f) or {}
-print(data.get("name", ""))
-PY
-)"
+    COLLECTION_NAME="$(scripts/devtools-galaxy.sh value name galaxy.yml || true)"
   fi
   if [ -z "${COLLECTION_NAME:-}" ]; then
     echo "ERROR: COLLECTION_NAME not set and galaxy.yml missing 'name'." >&2
@@ -25,6 +19,7 @@ echo "Using collection: ${COLLECTION_NAMESPACE}.${COLLECTION_NAME}"
 
 COLLECTION_NAMESPACE="$COLLECTION_NAMESPACE" \
 COLLECTION_NAME="$COLLECTION_NAME" \
+CONTAINER_HOME=/tmp/wunder \
 bash scripts/wunder-devtools-ee.sh bash -lc '
   set -euo pipefail
 
