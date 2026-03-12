@@ -1,3 +1,9 @@
+## [1.17.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.13...v1.17.0) (2026-03-12)
+
+### Features
+
+* extra tools added ([#142](https://github.com/lightning-it/ansible-collection-supplementary/issues/142)) ([15886ae](https://github.com/lightning-it/ansible-collection-supplementary/commit/15886aed8c39f17eb22e498e9e7dddb1c1620191))
+
 ## [1.16.13](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.12...v1.16.13) (2026-03-12)
 
 ### Bug Fixes
