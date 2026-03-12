@@ -1,21 +1,41 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
+galaxy_top_level_value() {
+  local key="$1"
+  local file="${2:-galaxy.yml}"
+  awk -v key="$key" '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*$/ { next }
+    {
+      line=$0
+      sub(/^[[:space:]]+/, "", line)
+      if (line ~ ("^" key ":[[:space:]]*")) {
+        val=line
+        sub(("^" key ":[[:space:]]*"), "", val)
+        sub(/[[:space:]]+#.*$/, "", val)
+        gsub(/^["'\'']|["'\'']$/, "", val)
+        print val
+        exit
+      }
+    }
+  ' "$file"
+}
+
 COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE:-lit}"
 
 if [ -f galaxy.yml ]; then
-  COLLECTION_NAME="$(python3 - <<'PY'
-import yaml
-with open("galaxy.yml", "r", encoding="utf-8") as f:
-    data = yaml.safe_load(f) or {}
-print(data.get("name", ""))
-PY
-)"
+  COLLECTION_NAME="$(galaxy_top_level_value "name" "galaxy.yml")"
 fi
 
 if [ -z "${COLLECTION_NAME:-}" ]; then
   echo "ERROR: Failed to derive COLLECTION_NAME from galaxy.yml." >&2
   exit 1
+fi
+
+REQUIRES_ANSIBLE=""
+if [ -f meta/runtime.yml ]; then
+  REQUIRES_ANSIBLE="$(galaxy_top_level_value "requires_ansible" "meta/runtime.yml" || true)"
 fi
 
 ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION:-$(python3 - <<'PY'
@@ -37,13 +57,35 @@ except Exception:
 PY
 )}"
 
+ANSIBLE_LINT_SKIP_META_RUNTIME=0
+if [ -n "${REQUIRES_ANSIBLE:-}" ] && [ -n "${ANSIBLE_LINT_VERSION:-}" ]; then
+  req_minor=0
+  lint_major=0
+  req_minor_parsed="$(printf '%s' "$REQUIRES_ANSIBLE" | sed -nE 's/^>=2\.([0-9]+).*/\1/p')"
+  if [ -n "${req_minor_parsed:-}" ]; then
+    req_minor="$req_minor_parsed"
+  fi
+  if [[ "$ANSIBLE_LINT_VERSION" =~ ^([0-9]+) ]]; then
+    lint_major="${BASH_REMATCH[1]}"
+  fi
+  # ansible-lint 6.x does not recognize >=2.18 in meta/runtime.yml.
+  if [ "$req_minor" -ge 18 ] && [ "$lint_major" -lt 24 ]; then
+    ANSIBLE_LINT_SKIP_META_RUNTIME=1
+  fi
+fi
+
 echo "Running ansible-lint for collection: ${COLLECTION_NAMESPACE}.${COLLECTION_NAME}"
 echo "Using ansible-core ${ANSIBLE_CORE_VERSION}, ansible-lint ${ANSIBLE_LINT_VERSION}"
+if [ "${ANSIBLE_LINT_SKIP_META_RUNTIME}" = "1" ]; then
+  echo "WARN: ansible-lint ${ANSIBLE_LINT_VERSION} cannot validate requires_ansible >=2.18.0; skipping meta-runtime check."
+fi
 
 COLLECTION_NAMESPACE="$COLLECTION_NAMESPACE" \
 COLLECTION_NAME="$COLLECTION_NAME" \
 ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION}" \
 ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}" \
+ANSIBLE_LINT_SKIP_META_RUNTIME="${ANSIBLE_LINT_SKIP_META_RUNTIME}" \
+CONTAINER_HOME=/tmp/wunder \
 bash scripts/wunder-devtools-ee.sh bash -lc '
   set -euo pipefail
 
@@ -90,5 +132,9 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   export ANSIBLE_LINT_CONFIG="/workspace/.ansible-lint"
 
   echo "Running ansible-lint in /workspace..."
-  ansible-lint
+  ansible_lint_args=()
+  if [ "${ANSIBLE_LINT_SKIP_META_RUNTIME:-0}" = "1" ]; then
+    ansible_lint_args+=("-x" "meta-runtime")
+  fi
+  ansible-lint "${ansible_lint_args[@]}"
 '
