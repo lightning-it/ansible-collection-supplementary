@@ -5,10 +5,17 @@
     apply:
       become: true
       become_user: "{{ aap_deploy_install_user }}"
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ aap_deploy_install_user_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ aap_deploy_install_user_uid }}/bus"
   vars:
     aap_setup_down_version: "{{ aap_deploy_setup_download_version }}"
     aap_setup_containerized: "{{ aap_deploy_setup_download_containerized }}"
     aap_setup_inst_containerized: "{{ aap_deploy_setup_download_containerized }}"
+    aap_setup_inst_setup_dir: "{{ aap_setup_prep_setup_dir }}"
+    aap_setup_prep_inv_nodes: "{{ aap_deploy_setup_prep_inv_nodes }}"
+    aap_setup_prep_inv_vars: "{{ aap_deploy_setup_prep_inv_vars }}"
+    aap_setup_prep_inv_secrets: "{{ aap_deploy_setup_prep_inv_secrets }}"
     aap_setup_inst_force: "{{ aap_deploy_setup_install_force }}"
     aap_setup_inst_extra_vars: "{{ aap_deploy_setup_install_extra_vars }}"
     aap_setup_inst_extra_vars_files: "{{ aap_deploy_setup_install_extra_vars_files }}"

@@ -344,7 +344,7 @@
         pg_admin_password: "'{{ aap_deploy_postgresql_admin_password_effective }}'"
         redis_mode: "'{{ aap_deploy_redis_mode }}'"
         bundle_install: true
-        bundle_dir: "'{{ aap_deploy_bundle_dir }}'"
+        bundle_dir: "{{ aap_deploy_bundle_dir_effective }}"
     aap_deploy_setup_prep_inv_secrets: {}
   changed_when: false
 

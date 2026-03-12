@@ -1,0 +1,25 @@
+---
+# CaC taskset: Configure Controller teams from the shared PoC team data.
+- name: Configure Controller teams
+  block:
+    - name: Run role infra.aap_configuration.dispatch
+      # noqa var-naming[no-role-prefix]
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        aap_password: >-
+          {{
+            aap_controller_admin_password_input
+            | default(aap_gateway_admin_password_input, true)
+            | default('', true)
+            | string
+            | trim
+          }}
+        aap_token: ""
+        aap_configuration_dispatcher_roles:
+          - role: controller_teams
+            var: aap_teams
+            tags: teams
+      when: aap_teams | default([], true) | length > 0
+      tags:
+        - teams

@@ -68,6 +68,11 @@ aap_deploy_setup_archive_filename: >-
     if (aap_deploy_setup_archive_src | default('', true) | trim | length > 0)
     else 'aap-containerized-setup.tar.gz'
   }}
+aap_deploy_setup_archive_extract_dirname: >-
+  {{
+    aap_deploy_setup_archive_filename
+    | regex_replace('\.tar\.gz$', '')
+  }}
 aap_deploy_setup_archive_path: >-
   {{ aap_deploy_install_dir }}/{{ aap_deploy_setup_archive_filename }}
 aap_deploy_local_bundle_archive_path: >-
@@ -111,6 +116,16 @@ aap_deploy_postgresql_admin_password_effective: >-
 
 # Bundle install location (required when aap_deploy_install_type=bundle)
 aap_deploy_bundle_dir: bundle
+aap_deploy_bundle_dir_effective: >-
+  {{
+    aap_deploy_bundle_dir
+    if (aap_deploy_bundle_dir | default('', true) | trim).startswith('/')
+    else (
+      aap_deploy_setup_dir ~ '/' ~
+      aap_deploy_setup_archive_extract_dirname ~ '/' ~
+      aap_deploy_bundle_dir
+    )
+  }}
 
 # Redis configuration for containerized installer inventory.
 # cluster mode requires a [redis] group with at least 6 nodes.
