@@ -1,0 +1,31 @@
+---
+- name: Validate Keycloak CaC variables
+  ansible.builtin.assert:
+    that:
+      - keycloak_cac_skip_apply is boolean
+      - keycloak_cac_validate_certs is boolean
+      - keycloak_cac_request_timeout | int > 0
+      - keycloak_cac_realms is sequence
+      - keycloak_cac_realms is not string
+      - keycloak_cac_clients is sequence
+      - keycloak_cac_clients is not string
+      - keycloak_cac_users is sequence
+      - keycloak_cac_users is not string
+    fail_msg: "Keycloak CaC variables are missing or invalid."
+  tags: always
+
+- name: Validate Keycloak CaC API inputs when apply is enabled
+  ansible.builtin.assert:
+    that:
+      - keycloak_cac_url | default('', true) | trim | length > 0
+      - keycloak_cac_admin_user | default('', true) | trim | length > 0
+      - keycloak_cac_admin_password | default('', true) | trim | length > 0
+      - keycloak_cac_realm | default('', true) | trim | length > 0
+    fail_msg: >-
+      In keycloak_cac apply mode, keycloak_cac_url,
+      keycloak_cac_admin_user, keycloak_cac_admin_password and
+      keycloak_cac_realm are required.
+  when:
+    - not keycloak_cac_skip_apply | bool
+  no_log: true
+  tags: always

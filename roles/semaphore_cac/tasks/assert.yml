@@ -1,0 +1,27 @@
+---
+- name: Validate Semaphore CaC variables
+  ansible.builtin.assert:
+    that:
+      - semaphore_cac_skip_apply is boolean
+      - semaphore_cac_validate_certs is boolean
+      - semaphore_cac_request_timeout | int > 0
+      - semaphore_cac_users is sequence
+      - semaphore_cac_users is not string
+      - semaphore_cac_projects is sequence
+      - semaphore_cac_projects is not string
+    fail_msg: "Semaphore CaC variables are missing or invalid."
+  tags: always
+
+- name: Validate Semaphore CaC API inputs when apply is enabled
+  ansible.builtin.assert:
+    that:
+      - semaphore_cac_url | default('', true) | trim | length > 0
+      - semaphore_cac_admin_login | default('', true) | trim | length > 0
+      - semaphore_cac_admin_password | default('', true) | trim | length > 0
+    fail_msg: >-
+      In semaphore_cac apply mode, semaphore_cac_url,
+      semaphore_cac_admin_login and semaphore_cac_admin_password are required.
+  when:
+    - not semaphore_cac_skip_apply | bool
+  no_log: true
+  tags: always

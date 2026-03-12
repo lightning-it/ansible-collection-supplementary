@@ -1,0 +1,8 @@
+---
+- name: Converge forgejo_cac
+  hosts: localhost
+  gather_facts: false
+  vars:
+    forgejo_cac_skip_apply: true
+  roles:
+    - role: forgejo_cac

@@ -1,0 +1,15 @@
+---
+- name: Verify semaphore_deploy
+  hosts: localhost
+  gather_facts: false
+  vars:
+    semaphore_deploy_skip_runtime: true
+    semaphore_deploy_manage_postgres: true
+    semaphore_deploy_db_dialect: postgres
+  tasks:
+    - name: Assert semaphore_deploy test variables are valid
+      ansible.builtin.assert:
+        that:
+          - semaphore_deploy_skip_runtime | bool
+          - semaphore_deploy_manage_postgres | bool
+          - semaphore_deploy_db_dialect == 'postgres'

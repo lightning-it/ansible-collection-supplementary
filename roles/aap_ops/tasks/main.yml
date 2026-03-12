@@ -145,3 +145,33 @@
   tags:
     - ops
     - rotate_password
+
+- name: Backup AAP using vendor role
+  ansible.builtin.include_role:
+    name: infra.aap_utilities.aap_backup
+  when:
+    - aap_ops_enabled | bool
+    - aap_ops_action == 'backup'
+  tags:
+    - ops
+    - backup
+
+- name: Restore AAP using vendor role
+  ansible.builtin.include_role:
+    name: infra.aap_utilities.aap_restore
+  when:
+    - aap_ops_enabled | bool
+    - aap_ops_action == 'restore'
+  tags:
+    - ops
+    - restore
+
+- name: Manage AAP certificates using vendor role
+  ansible.builtin.include_role:
+    name: infra.aap_utilities.aap_certs
+  when:
+    - aap_ops_enabled | bool
+    - aap_ops_action == 'certs'
+  tags:
+    - ops
+    - certs

@@ -42,9 +42,9 @@ vault_config_terraformstate_baseurl: ""
 vault_config_init: "{{ vault_init | default({}, true) }}"
 vault_config_token: >-
   {{
-    (vault_token | default('', true) | trim)
-    if ((vault_token | default('', true) | trim) | length > 0)
-    else ((vault_config_init | default({}, true)).root_token | default('', true) | trim)
+    ((vault_config_init | default({}, true)).root_token | default('', true) | trim)
+    if (((vault_config_init | default({}, true)).root_token | default('', true) | trim | length) > 0)
+    else (vault_token | default('', true) | trim)
   }}
 
 vault_config_vault_address: "{{ vault_config_url }}"
@@ -76,8 +76,8 @@ vault_config_approle_token_max_ttl: ""
 vault_config_approle_bootstrap: true
 vault_config_approle_primary_role_name: "{{ vault_approle_primary_role_name | default('', true) }}"
 
-vault_config_vault_pki_path: "pki-inter-ec-2025/issue"
-vault_config_vault_pki_role: "limited_dns_2y"
+vault_config_vault_pki_path: "{{ vault_pki_issue_mount }} /issue"
+vault_config_vault_pki_role: "{{ vault_pki_issue_role }}"
 vault_config_vault_pki_roots: "{{ vault_pki_roots | default([]) }}"
 vault_config_vault_pki_intermediates: "{{ vault_pki_intermediates | default([]) }}"
 vault_config_vault_pki_roles: "{{ vault_pki_roles | default([]) }}"

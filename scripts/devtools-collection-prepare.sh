@@ -11,13 +11,8 @@ if [ ! -f /workspace/galaxy.yml ]; then
   exit 1
 fi
 
-read -r ns name <<<"$(python3 - <<'PY'
-import yaml
-with open("/workspace/galaxy.yml", "r", encoding="utf-8") as f:
-    data = yaml.safe_load(f) or {}
-print(data.get("namespace",""), data.get("name",""))
-PY
-)"
+ns="$(/workspace/scripts/devtools-galaxy.sh value namespace /workspace/galaxy.yml || true)"
+name="$(/workspace/scripts/devtools-galaxy.sh value name /workspace/galaxy.yml || true)"
 
 ns="${COLLECTION_NAMESPACE:-$ns}"
 if [ -z "${ns:-}" ] || [ -z "${name:-}" ]; then

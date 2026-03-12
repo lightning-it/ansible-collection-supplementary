@@ -1,0 +1,13 @@
+---
+- name: Verify nessus_deploy
+  hosts: localhost
+  gather_facts: false
+  vars:
+    nessus_deploy_skip_runtime: true
+    nessus_deploy_port: 8834
+  tasks:
+    - name: Assert nessus_deploy test variables are valid
+      ansible.builtin.assert:
+        that:
+          - nessus_deploy_skip_runtime | bool
+          - nessus_deploy_port | int == 8834

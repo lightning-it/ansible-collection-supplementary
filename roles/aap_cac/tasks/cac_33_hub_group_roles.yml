@@ -1,13 +1,25 @@
 ---
 # CaC taskset: Configure Private Automation Hub group roles.
 - name: Configure Private Automation Hub group roles
+  tags:
+    - hub_group_roles
   block:
-    - name: Resolve effective Hub group roles
+    - name: Set Hub group roles
       ansible.builtin.set_fact:
-        hub_group_roles: "{{ aap_cac_hub_group_roles_effective }}"
+        hub_group_roles: "{{ aap_cac_hub_group_roles }}"
       changed_when: false
 
-    - name: Run role infra.aap_configuration.hub_group_roles
+    - name: Run role infra.aap_configuration.hub_group_roles  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: infra.aap_configuration.hub_group_roles
-      when: aap_cac_hub_group_roles_effective | length > 0
+      vars:
+        aap_password: >-
+          {{
+            aap_hub_admin_password_input
+            | default(aap_gateway_admin_password_input, true)
+            | default('', true)
+            | string
+            | trim
+          }}
+        aap_token: ""
+      when: aap_cac_hub_group_roles | length > 0

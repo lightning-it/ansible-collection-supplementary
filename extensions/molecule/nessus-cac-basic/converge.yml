@@ -1,0 +1,8 @@
+---
+- name: Converge nessus_cac
+  hosts: localhost
+  gather_facts: false
+  vars:
+    nessus_cac_skip_apply: true
+  roles:
+    - role: nessus_cac

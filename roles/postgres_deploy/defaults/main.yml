@@ -1,0 +1,50 @@
+---
+# Pod basics
+postgres_deploy_pod_name: "postgres"
+postgres_deploy_pod_manifest_path: "/etc/podman/pods/postgres.yml"
+postgres_deploy_image: "docker.io/library/postgres:16"
+postgres_deploy_container_name: "postgres"
+
+# Host paths
+postgres_deploy_host_data_dir: "/srv/postgres/data"
+postgres_deploy_config_dir: "/srv/postgres/config"
+postgres_deploy_secrets_file: "{{ postgres_deploy_config_dir }}/postgres-secrets.yml"
+
+# Container paths
+postgres_deploy_container_data_dir: "/var/lib/postgresql/data"
+
+# Runtime network
+postgres_deploy_port: 5432
+postgres_deploy_host_ip: >-
+  {{
+    ansible_default_ipv4.address
+      | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
+  }}
+
+# Database config
+postgres_deploy_db_name: "postgres"
+postgres_deploy_db_user: "postgres"
+postgres_deploy_db_password: ""
+
+# Secrets (preferred: inventory/Vault; fallback: generated once)
+postgres_deploy_generate_password: true
+postgres_deploy_store_generated_password: true
+postgres_deploy_generated_password_length: 32
+
+# Lifecycle
+postgres_deploy_install_packages: true
+postgres_deploy_manage_systemd: true
+postgres_deploy_skip_runtime: false
+postgres_deploy_skip_deploy: false
+
+# Internal handler flags
+postgres_deploy_kubeplay_remove: false
+postgres_deploy_kubeplay_run: false
+
+# Systemd
+postgres_deploy_systemd_unit_name: >-
+  {{
+    'podman-kube@'
+    ~ (postgres_deploy_pod_manifest_path | basename | regex_replace('\\.ya?ml$', ''))
+    ~ '.service'
+  }}

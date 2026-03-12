@@ -1,0 +1,16 @@
+---
+- name: Check Semaphore API reachability
+  ansible.builtin.uri:
+    url: "{{ semaphore_cac_url }}/api/ping"
+    method: GET
+    validate_certs: "{{ semaphore_cac_validate_certs }}"
+    timeout: "{{ semaphore_cac_request_timeout | int }}"
+    status_code: 200
+  changed_when: false
+
+- name: Show Semaphore CaC status
+  ansible.builtin.debug:
+    msg: >-
+      Semaphore CaC API preflight passed.
+      Add additional cac_*.yml tasksets in role semaphore_cac for object reconciliation.
+  changed_when: false

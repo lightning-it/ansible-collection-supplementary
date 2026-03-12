@@ -1,13 +1,26 @@
 ---
 # CaC taskset: Connect Private Automation Hub remotes to repositories.
 - name: Connect Private Automation Hub remotes to repositories
+  tags:
+    - hub_collection_repository
+    - hub_collection_repositories
   block:
-    - name: Resolve effective Hub collection repositories
+    - name: Set Hub collection repositories
       ansible.builtin.set_fact:
-        hub_collection_repositories: "{{ aap_cac_hub_collection_repositories_effective }}"
+        hub_collection_repositories: "{{ aap_cac_hub_collection_repositories }}"
       changed_when: false
 
-    - name: Run role infra.aap_configuration.hub_collection_repository
+    - name: Run role infra.aap_configuration.hub_collection_repository  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: infra.aap_configuration.hub_collection_repository
-      when: aap_cac_hub_collection_repositories_effective | length > 0
+      vars:
+        aap_password: >-
+          {{
+            aap_hub_admin_password_input
+            | default(aap_gateway_admin_password_input, true)
+            | default('', true)
+            | string
+            | trim
+          }}
+        aap_token: ""
+      when: aap_cac_hub_collection_repositories | length > 0

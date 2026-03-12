@@ -1,0 +1,52 @@
+---
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+  when: ansible_os_family == 'RedHat'
+
+- name: Skip Semaphore runtime deployment in check mode
+  ansible.builtin.debug:
+    msg: "Semaphore runtime deployment skipped in check mode."
+  when:
+    - ansible_check_mode
+    - not semaphore_deploy_skip_runtime | bool
+    - not semaphore_deploy_skip_deploy | bool
+  tags: always
+
+- name: Deploy Semaphore runtime
+  when:
+    - not semaphore_deploy_skip_runtime | bool
+    - not semaphore_deploy_skip_deploy | bool
+    - not ansible_check_mode
+  block:
+    - name: Ensure required packages are installed
+      ansible.builtin.include_tasks: install_packages.yml
+      when: semaphore_deploy_install_packages | bool
+      tags:
+        - install
+
+    - name: Deploy Semaphore Pod
+      ansible.builtin.include_tasks: deploy_pod.yml
+      tags:
+        - deployment
+
+    - name: Install systemd unit for Semaphore Pod
+      ansible.builtin.include_tasks: systemd.yml
+      when: semaphore_deploy_manage_systemd | bool
+      tags:
+        - systemd
+
+    - name: Wait until Semaphore health endpoint is reachable (non-systemd)
+      ansible.builtin.uri:
+        url: "{{ semaphore_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ semaphore_deploy_validate_certs }}"
+      register: semaphore_deploy_health
+      until: semaphore_deploy_health.status == 200
+      retries: 30
+      delay: 5
+      changed_when: false
+      failed_when: semaphore_deploy_health is failed or semaphore_deploy_health.status != 200
+      when: not semaphore_deploy_manage_systemd | bool
+      tags:
+        - deployment
+        - api

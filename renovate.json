@@ -21,9 +21,56 @@
         "(?m)^\\s{2}(?<depName>[a-z0-9_]+\\.[a-z0-9_]+):\\s*[\"']?(?<currentValue>[0-9]+(?:\\.[0-9]+){1,3})[\"']?"
       ],
       "datasourceTemplate": "galaxy-collection"
+    },
+    {
+      "customType": "regex",
+      "description": "ansible-core version in pre-commit ansible-lint hook",
+      "managerFilePatterns": [
+        "/^\\.pre-commit-config\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "ANSIBLE_CORE_VERSION=(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"
+      ],
+      "datasourceTemplate": "pypi",
+      "packageNameTemplate": "ansible-core",
+      "versioningTemplate": "pep440"
+    },
+    {
+      "customType": "regex",
+      "description": "ansible-core pinned install version in GitHub workflows",
+      "managerFilePatterns": [
+        "/^\\.github\\/workflows\\/.*\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "ansible-core==(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"
+      ],
+      "datasourceTemplate": "pypi",
+      "packageNameTemplate": "ansible-core",
+      "versioningTemplate": "pep440"
+    },
+    {
+      "customType": "regex",
+      "description": "Role min_ansible_version pins in role metadata",
+      "managerFilePatterns": [
+        "/^roles\\/[^/]+\\/meta\\/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "min_ansible_version:\\s*[\"'](?<currentValue>[0-9]+\\.[0-9]+)[\"']"
+      ],
+      "datasourceTemplate": "pypi",
+      "packageNameTemplate": "ansible-core",
+      "versioningTemplate": "pep440",
+      "extractVersionTemplate": "^(?<version>[0-9]+\\.[0-9]+)"
     }
   ],
   "packageRules": [
+    {
+      "description": "Track ansible-core pins in this collection on 2.18.x",
+      "matchPackageNames": [
+        "ansible-core"
+      ],
+      "allowedVersions": "/^2\\.18(?:\\.[0-9]+)?$/"
+    },
     {
       "description": "Keep community.general on 11.x for linux_system_roles compatibility",
       "matchDepNames": [

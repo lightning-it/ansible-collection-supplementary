@@ -1,0 +1,106 @@
+---
+# CaC taskset: Execute infra.controller_configuration filetree roles
+# from provided content.
+- name: >-
+    Execute infra.controller_configuration filetree roles
+    from provided content
+  tags:
+    - filetree_create
+    - filetree_read
+  vars:
+    aap_cac_controller_configuration_filetree_valid_tags:
+      - all
+      - settings
+      - credentials
+      - credential_types
+      - execution_environments
+      - groups
+      - hosts
+      - inventory
+      - inventory_sources
+      - job_templates
+      - notification_templates
+      - organizations
+      - projects
+      - roles
+      - teams
+      - users
+      - workflow_job_templates
+      - instance_groups
+      - applications
+      - labels
+      - schedules
+    aap_cac_controller_configuration_filetree_role_presence:
+      filetree_create: >-
+        {{
+          output_path is defined or
+          input_tag is defined
+        }}
+      filetree_read: >-
+        {{
+          dir_orgs_vars is defined and
+          orgs is defined
+        }}
+  block:
+    - name: Build filetree requested tag filter from ansible_run_tags
+      ansible.builtin.set_fact:
+        aap_cac_controller_configuration_filetree_requested_tags: >-
+          {{
+            ansible_run_tags
+            | default([])
+            | intersect(
+                aap_cac_controller_configuration_filetree_role_presence.keys()
+                | list
+              )
+          }}
+      changed_when: false
+
+    - name: >-
+        Build infra.controller_configuration
+        filetree role list from provided content
+      ansible.builtin.set_fact:
+        aap_cac_controller_configuration_filetree_roles: >-
+          {{
+            aap_cac_controller_configuration_filetree_role_presence
+            | dict2items
+            | selectattr('value', 'equalto', true)
+            | selectattr('key', 'in', __aap_cac_controller_configuration_filetree_allowed_roles)
+            | map(attribute='key')
+            | list
+          }}
+      changed_when: false
+      vars:
+        __aap_cac_controller_configuration_filetree_allowed_roles: >-
+          {{
+            (
+              aap_cac_controller_configuration_filetree_requested_tags
+              if (
+                aap_cac_controller_configuration_filetree_requested_tags
+                | length > 0
+              )
+              else (
+                aap_cac_controller_configuration_filetree_role_presence.keys()
+                | list
+              )
+            )
+          }}
+
+    - name: Include infra.controller_configuration filetree roles
+      ansible.builtin.include_role:
+        name: >-
+          infra.controller_configuration.{{
+            __controller_configuration_filetree_role
+          }}
+      vars:
+        valid_tags: "{{ aap_cac_controller_configuration_filetree_valid_tags }}"
+        controller_hostname: "{{ aap_cac_gateway_hostname }}"
+        controller_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+        controller_oauthtoken: "{{ aap_token | default(omit, true) }}"
+        controller_username: >-
+          {{ aap_cac_gateway_username | default(omit, true) }}
+        controller_password: >-
+          {{ aap_cac_gateway_password | default(omit, true) }}
+      loop: "{{ aap_cac_controller_configuration_filetree_roles }}"
+      loop_control:
+        loop_var: __controller_configuration_filetree_role
+        label: "{{ __controller_configuration_filetree_role }}"

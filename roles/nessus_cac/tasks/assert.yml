@@ -1,0 +1,29 @@
+---
+- name: Validate Nessus CaC variables
+  ansible.builtin.assert:
+    that:
+      - nessus_cac_skip_apply is boolean
+      - nessus_cac_validate_certs is boolean
+      - nessus_cac_request_timeout | int > 0
+      - nessus_cac_policies is sequence
+      - nessus_cac_policies is not string
+      - nessus_cac_scans is sequence
+      - nessus_cac_scans is not string
+      - nessus_cac_folders is sequence
+      - nessus_cac_folders is not string
+    fail_msg: "Nessus CaC variables are missing or invalid."
+  tags: always
+
+- name: Validate Nessus CaC API inputs when apply is enabled
+  ansible.builtin.assert:
+    that:
+      - nessus_cac_url | default('', true) | trim | length > 0
+      - nessus_cac_username | default('', true) | trim | length > 0
+      - nessus_cac_password | default('', true) | trim | length > 0
+    fail_msg: >-
+      In nessus_cac apply mode, nessus_cac_url,
+      nessus_cac_username and nessus_cac_password are required.
+  when:
+    - not nessus_cac_skip_apply | bool
+  no_log: true
+  tags: always

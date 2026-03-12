@@ -1,13 +1,25 @@
 ---
 # CaC taskset: Synchronize Private Automation Hub repositories.
 - name: Synchronize Private Automation Hub repositories
+  tags:
+    - hub_collection_repository_sync
   block:
-    - name: Resolve effective Hub collection repositories for sync
+    - name: Set Hub collection repositories for sync
       ansible.builtin.set_fact:
-        hub_collection_repositories: "{{ aap_cac_hub_collection_repositories_effective }}"
+        hub_collection_repositories: "{{ aap_cac_hub_collection_repositories }}"
       changed_when: false
 
-    - name: Run role infra.aap_configuration.hub_collection_repository_sync
+    - name: Run role infra.aap_configuration.hub_collection_repository_sync  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: infra.aap_configuration.hub_collection_repository_sync
-      when: aap_cac_hub_collection_repositories_effective | length > 0
+      vars:
+        aap_password: >-
+          {{
+            aap_hub_admin_password_input
+            | default(aap_gateway_admin_password_input, true)
+            | default('', true)
+            | string
+            | trim
+          }}
+        aap_token: ""
+      when: aap_cac_hub_collection_repositories | length > 0

@@ -1,0 +1,52 @@
+---
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+  when: ansible_os_family == 'RedHat'
+
+- name: Skip Forgejo runtime deployment in check mode
+  ansible.builtin.debug:
+    msg: "Forgejo runtime deployment skipped in check mode."
+  when:
+    - ansible_check_mode
+    - not forgejo_deploy_skip_runtime | bool
+    - not forgejo_deploy_skip_deploy | bool
+  tags: always
+
+- name: Deploy Forgejo runtime
+  when:
+    - not forgejo_deploy_skip_runtime | bool
+    - not forgejo_deploy_skip_deploy | bool
+    - not ansible_check_mode
+  block:
+    - name: Ensure required packages are installed
+      ansible.builtin.include_tasks: install_packages.yml
+      when: forgejo_deploy_install_packages | bool
+      tags:
+        - install
+
+    - name: Deploy Forgejo Pod
+      ansible.builtin.include_tasks: deploy_pod.yml
+      tags:
+        - deployment
+
+    - name: Install systemd unit for Forgejo Pod
+      ansible.builtin.include_tasks: systemd.yml
+      when: forgejo_deploy_manage_systemd | bool
+      tags:
+        - systemd
+
+    - name: Wait until Forgejo health endpoint is reachable (non-systemd)
+      ansible.builtin.uri:
+        url: "{{ forgejo_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ forgejo_deploy_validate_certs }}"
+      register: forgejo_deploy_health
+      until: forgejo_deploy_health.status == 200
+      retries: 30
+      delay: 5
+      changed_when: false
+      failed_when: forgejo_deploy_health is failed or forgejo_deploy_health.status != 200
+      when: not forgejo_deploy_manage_systemd | bool
+      tags:
+        - deployment
+        - api

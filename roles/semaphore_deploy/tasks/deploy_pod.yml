@@ -1,0 +1,236 @@
+---
+- name: Ensure Semaphore directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ semaphore_deploy_host_data_dir }}"
+      mode: '0750'
+    - path: "{{ semaphore_deploy_config_dir }}"
+      mode: '0750'
+    - path: "{{ semaphore_deploy_pod_manifest_path | dirname }}"
+      mode: '0755'
+  when: item.path | default('') | length > 0
+  tags:
+    - deployment
+
+- name: Check whether Semaphore generated secrets file exists
+  ansible.builtin.stat:
+    path: "{{ semaphore_deploy_secrets_file }}"
+  register: semaphore_deploy_secrets_file_stat
+  changed_when: false
+  tags:
+    - deployment
+
+- name: Load generated Semaphore secrets
+  ansible.builtin.include_vars:
+    file: "{{ semaphore_deploy_secrets_file }}"
+    name: semaphore_deploy_stored_secrets
+  when: semaphore_deploy_secrets_file_stat.stat.exists | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Build effective Semaphore secret values from inventory and stored state
+  ansible.builtin.set_fact:
+    semaphore_deploy_db_password_effective: >-
+      {{
+        (semaphore_deploy_db_password | default('', true) | trim)
+        if (semaphore_deploy_db_password | default('', true) | trim | length > 0)
+        else (
+          (semaphore_deploy_stored_secrets | default({})).semaphore_deploy_db_password
+          | default('', true) | trim
+        )
+      }}
+    semaphore_deploy_admin_password_effective: >-
+      {{
+        (semaphore_deploy_admin_password | default('', true) | trim)
+        if (semaphore_deploy_admin_password | default('', true) | trim | length > 0)
+        else (
+          (semaphore_deploy_stored_secrets | default({})).semaphore_deploy_admin_password
+          | default('', true) | trim
+        )
+      }}
+    semaphore_deploy_access_key_encryption_effective: >-
+      {{
+        (semaphore_deploy_access_key_encryption | default('', true) | trim)
+        if (semaphore_deploy_access_key_encryption | default('', true) | trim | length > 0)
+        else (
+          (semaphore_deploy_stored_secrets | default({})).semaphore_deploy_access_key_encryption
+          | default('', true) | trim
+        )
+      }}
+  changed_when: false
+  no_log: true
+  tags:
+    - deployment
+
+- name: Determine whether secret generation is required
+  ansible.builtin.set_fact:
+    semaphore_deploy_secrets_missing: >-
+      {{
+        (semaphore_deploy_db_password_effective | default('', true) | length == 0)
+        or (semaphore_deploy_admin_password_effective | default('', true) | length == 0)
+        or (semaphore_deploy_access_key_encryption_effective | default('', true) | length == 0)
+      }}
+  changed_when: false
+  no_log: true
+  tags:
+    - deployment
+
+- name: Fail when secrets are missing and generation is disabled
+  ansible.builtin.assert:
+    that:
+      - not semaphore_deploy_secrets_missing | bool
+    fail_msg: >-
+      Missing Semaphore secret values. Provide semaphore_deploy_db_password,
+      semaphore_deploy_admin_password and semaphore_deploy_access_key_encryption,
+      or enable semaphore_deploy_generate_secrets.
+  when: not semaphore_deploy_generate_secrets | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Generate missing Semaphore secret values
+  ansible.builtin.set_fact:
+    semaphore_deploy_db_password_effective: >-
+      {{
+        semaphore_deploy_db_password_effective
+        if (semaphore_deploy_db_password_effective | default('', true) | length > 0)
+        else lookup(
+          'ansible.builtin.password',
+          '/dev/null length=' ~ (semaphore_deploy_generated_db_password_length | int | string)
+        )
+      }}
+    semaphore_deploy_admin_password_effective: >-
+      {{
+        semaphore_deploy_admin_password_effective
+        if (semaphore_deploy_admin_password_effective | default('', true) | length > 0)
+        else lookup(
+          'ansible.builtin.password',
+          '/dev/null length=' ~ (semaphore_deploy_generated_admin_password_length | int | string)
+        )
+      }}
+    semaphore_deploy_access_key_encryption_effective: >-
+      {{
+        semaphore_deploy_access_key_encryption_effective
+        if (semaphore_deploy_access_key_encryption_effective | default('', true) | length > 0)
+        else lookup(
+          'ansible.builtin.password',
+          '/dev/null length=' ~ (semaphore_deploy_generated_access_key_length | int | string)
+        )
+      }}
+  when:
+    - semaphore_deploy_generate_secrets | bool
+    - semaphore_deploy_secrets_missing | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Persist generated Semaphore secrets
+  ansible.builtin.copy:
+    dest: "{{ semaphore_deploy_secrets_file }}"
+    owner: root
+    group: root
+    mode: '0600'
+    content: |
+      ---
+      semaphore_deploy_db_password: "{{ semaphore_deploy_db_password_effective }}"
+      semaphore_deploy_admin_password: "{{ semaphore_deploy_admin_password_effective }}"
+      semaphore_deploy_access_key_encryption: "{{ semaphore_deploy_access_key_encryption_effective }}"
+  when:
+    - semaphore_deploy_generate_secrets | bool
+    - semaphore_deploy_store_generated_secrets | bool
+    - semaphore_deploy_secrets_missing | bool
+  notify:
+    - Recreate semaphore pod
+    - Run semaphore pod
+  no_log: true
+  tags:
+    - deployment
+
+- name: Deploy dedicated PostgreSQL service for Semaphore
+  ansible.builtin.include_role:
+    name: lit.supplementary.postgres_deploy
+  vars:
+    postgres_deploy_pod_name: "{{ semaphore_deploy_postgres_pod_name }}"
+    postgres_deploy_pod_manifest_path: "{{ semaphore_deploy_postgres_pod_manifest_path }}"
+    postgres_deploy_image: "{{ semaphore_deploy_postgres_image }}"
+    postgres_deploy_container_name: "{{ semaphore_deploy_postgres_container_name }}"
+    postgres_deploy_host_data_dir: "{{ semaphore_deploy_postgres_data_dir }}"
+    postgres_deploy_container_data_dir: "{{ semaphore_deploy_container_postgres_data_dir }}"
+    postgres_deploy_port: "{{ semaphore_deploy_db_port }}"
+    postgres_deploy_host_ip: "{{ semaphore_deploy_postgres_host_ip }}"
+    postgres_deploy_db_name: "{{ semaphore_deploy_db_name }}"
+    postgres_deploy_db_user: "{{ semaphore_deploy_db_user }}"
+    postgres_deploy_db_password: "{{ semaphore_deploy_db_password_effective }}"
+    postgres_deploy_generate_password: false
+    postgres_deploy_store_generated_password: false
+    postgres_deploy_install_packages: "{{ semaphore_deploy_install_packages }}"
+    postgres_deploy_manage_systemd: "{{ semaphore_deploy_manage_systemd }}"
+    postgres_deploy_skip_runtime: "{{ semaphore_deploy_skip_runtime }}"
+    postgres_deploy_skip_deploy: "{{ semaphore_deploy_skip_deploy }}"
+  when: semaphore_deploy_manage_postgres | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Render Semaphore Pod manifest
+  ansible.builtin.template:
+    src: semaphore-pod.yml.j2
+    dest: "{{ semaphore_deploy_pod_manifest_path }}"
+    mode: '0644'
+  notify:
+    - Recreate semaphore pod
+    - Run semaphore pod
+  tags:
+    - deployment
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - deployment
+
+- name: Recreate semaphore pod (kubeplay)
+  when:
+    - semaphore_deploy_kubeplay_remove | default(false)
+    - not semaphore_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay remove (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: remove
+        kubeplay_pod_name: "{{ semaphore_deploy_pod_name }}"
+        kubeplay_app_name: semaphore_remove
+  rescue:
+    - name: Ignore kubeplay remove failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay remove failure."
+
+- name: Run semaphore pod (kubeplay)
+  when:
+    - semaphore_deploy_kubeplay_run | default(false)
+    - not semaphore_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay run (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: run
+        kubeplay_pod_name: "{{ semaphore_deploy_pod_name }}"
+        kubeplay_pod_manifest_path: "{{ semaphore_deploy_pod_manifest_path }}"
+        kubeplay_app_name: semaphore_run
+  rescue:
+    - name: Ignore kubeplay run failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay run failure."

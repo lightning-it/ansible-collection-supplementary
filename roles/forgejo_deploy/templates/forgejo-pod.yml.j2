@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ forgejo_deploy_pod_name }}
+  labels:
+    app: {{ forgejo_deploy_pod_name }}
+spec:
+  containers:
+    - name: {{ forgejo_deploy_container_name }}
+      image: {{ forgejo_deploy_image }}
+      ports:
+        - containerPort: {{ forgejo_deploy_port }}
+          hostPort: {{ forgejo_deploy_port }}
+          hostIP: {{ forgejo_deploy_host_ip }}
+      env:
+        - name: USER_UID
+          value: "{{ forgejo_deploy_run_user_uid }}"
+        - name: USER_GID
+          value: "{{ forgejo_deploy_run_user_gid }}"
+        - name: FORGEJO__database__DB_TYPE
+          value: "{{ forgejo_deploy_db_type }}"
+        - name: FORGEJO__database__HOST
+          value: "{{ forgejo_deploy_db_host }}:{{ forgejo_deploy_db_port }}"
+        - name: FORGEJO__database__NAME
+          value: "{{ forgejo_deploy_db_name }}"
+        - name: FORGEJO__database__USER
+          value: "{{ forgejo_deploy_db_user }}"
+        - name: FORGEJO__database__PASSWD
+          value: "{{ forgejo_deploy_db_password_effective }}"
+        - name: FORGEJO__server__ROOT_URL
+          value: "{{ forgejo_deploy_root_url_effective }}"
+        - name: FORGEJO__server__HTTP_PORT
+          value: "{{ forgejo_deploy_port }}"
+        - name: FORGEJO__security__INSTALL_LOCK
+          value: "{{ forgejo_deploy_install_lock | ternary('true', 'false') }}"
+        - name: FORGEJO__service__DISABLE_REGISTRATION
+          value: "{{ forgejo_deploy_disable_registration | ternary('true', 'false') }}"
+{% if forgejo_deploy_env_extra is defined and forgejo_deploy_env_extra | length > 0 %}
+{% for key, value in forgejo_deploy_env_extra.items() %}
+        - name: {{ key }}
+          value: "{{ value }}"
+{% endfor %}
+{% endif %}
+      volumeMounts:
+        - name: forgejo-data
+          mountPath: {{ forgejo_deploy_container_data_dir }}
+
+  volumes:
+    - name: forgejo-data
+      hostPath:
+        path: {{ forgejo_deploy_host_data_dir }}
+        type: DirectoryOrCreate

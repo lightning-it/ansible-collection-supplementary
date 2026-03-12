@@ -1,0 +1,39 @@
+---
+- name: Manage Semaphore systemd unit
+  when:
+    - semaphore_deploy_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+    - not ansible_check_mode
+  tags:
+    - systemd
+  block:
+    - name: Escape kube play manifest path
+      ansible.builtin.command:
+        cmd: "systemd-escape {{ semaphore_deploy_pod_manifest_path }}"
+      register: semaphore_deploy_systemd_name
+      changed_when: false
+
+    - name: Ensure podman-kube drop-in directory exists
+      ansible.builtin.file:
+        path: "/etc/systemd/system/podman-kube@{{ semaphore_deploy_systemd_name.stdout }}.service.d"
+        state: directory
+        mode: '0755'
+
+    - name: Enable and start Podman kube systemd unit
+      ansible.builtin.systemd:
+        name: "podman-kube@{{ semaphore_deploy_systemd_name.stdout }}.service"
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Wait until Semaphore health endpoint is reachable
+      ansible.builtin.uri:
+        url: "{{ semaphore_deploy_health_url_effective }}"
+        method: GET
+        validate_certs: "{{ semaphore_deploy_validate_certs }}"
+      register: semaphore_deploy_health
+      until: semaphore_deploy_health.status == 200
+      retries: 30
+      delay: 5
+      changed_when: false
+      failed_when: semaphore_deploy_health is failed or semaphore_deploy_health.status != 200

@@ -47,7 +47,7 @@
   tags:
     - host_prep
 
-- name: Download and unpack setup archive
+- name: Stage local setup bundle and prepare installer workspace
   ansible.builtin.import_tasks: 20_download_unpack.yml
   when:
     - aap_deploy_enabled | bool
@@ -55,13 +55,6 @@
     - not (aap_deploy_existing_install_detected | default(false))
   tags:
     - download
-
-- name: Render installer inventory
-  ansible.builtin.import_tasks: 30_inventory.yml
-  when:
-    - aap_deploy_enabled | bool
-    - not (aap_deploy_existing_install_detected | default(false))
-  tags:
     - inventory
 
 - name: Run containerized installer

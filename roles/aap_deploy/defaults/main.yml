@@ -19,16 +19,45 @@ aap_deploy_install_user_passwordless_sudo: true
 # Installation paths
 aap_deploy_install_dir: /opt/aap
 aap_deploy_setup_dir: "{{ aap_deploy_install_dir }}/setup"
-aap_deploy_inventory_filename: inventory
-aap_deploy_inventory_path: "{{ aap_deploy_setup_dir }}/{{ aap_deploy_inventory_filename }}"
+aap_deploy_local_project_root: "{{ playbook_dir | dirname | dirname }}"
 
-# Setup archive source
-# Path to the setup bundle archive (.tar.gz).
-# The role checks both:
-# - managed node path (for pre-staged bundles), and
-# - control node paths inside the Ansible project mount (/runner/project/<file>
-#   and /runner/project/.artifacts/<file>).
-aap_deploy_setup_archive_src: "/opt/aap/aap-containerized-setup.tar.gz"
+# Setup archive staging (disconnected-first).
+# We intentionally use a local control-node copy of the AAP bundle and copy it
+# to the managed host. This workflow must work without internet access.
+aap_deploy_setup_download_version: "2.6"
+aap_deploy_setup_download_containerized: true
+aap_deploy_setup_archive_src: >-
+  {{
+    (
+      (
+        lookup('ansible.builtin.env', 'AAP_BUNDLE_FILE')
+        | default('', true)
+        | trim
+      )
+      if (
+        (
+          lookup('ansible.builtin.env', 'AAP_BUNDLE_FILE')
+          | default('', true)
+          | trim
+        ).startswith('/')
+      )
+      else (
+        aap_deploy_local_project_root ~ '/' ~
+        (
+          lookup('ansible.builtin.env', 'AAP_BUNDLE_FILE')
+          | default('', true)
+          | trim
+        )
+        if (
+          lookup('ansible.builtin.env', 'AAP_BUNDLE_FILE')
+          | default('', true)
+          | trim
+          | length > 0
+        )
+        else '/opt/aap/aap-containerized-setup.tar.gz'
+      )
+    )
+  }}
 aap_deploy_setup_archive_checksum: ""
 aap_deploy_validate_archive_format: true
 aap_deploy_validate_archive_min_size_bytes: 100000000
@@ -39,9 +68,22 @@ aap_deploy_setup_archive_filename: >-
     if (aap_deploy_setup_archive_src | default('', true) | trim | length > 0)
     else 'aap-containerized-setup.tar.gz'
   }}
-aap_deploy_setup_archive_path: "{{ aap_deploy_install_dir }}/{{ aap_deploy_setup_archive_filename }}"
-aap_deploy_local_bundle_archive_path: "/runner/project/.artifacts/{{ aap_deploy_setup_archive_filename }}"
-aap_deploy_local_bundle_project_archive_path: "/runner/project/{{ aap_deploy_setup_archive_filename }}"
+aap_deploy_setup_archive_extract_dirname: >-
+  {{
+    aap_deploy_setup_archive_filename
+    | regex_replace('\.tar\.gz$', '')
+  }}
+aap_deploy_setup_archive_path: >-
+  {{ aap_deploy_install_dir }}/{{ aap_deploy_setup_archive_filename }}
+aap_deploy_local_bundle_archive_path: >-
+  {{ aap_deploy_local_project_root }}/.artifacts/{{
+  aap_deploy_setup_archive_filename }}
+aap_deploy_local_bundle_project_archive_path: >-
+  {{ aap_deploy_local_project_root }}/{{ aap_deploy_setup_archive_filename }}
+aap_deploy_setup_prepare_process_template: true
+aap_deploy_setup_install_force: true
+aap_deploy_setup_install_extra_vars: {}
+aap_deploy_setup_install_extra_vars_files: []
 
 # Effective installer admin passwords are resolved by shared role `aap`
 # from inventory inputs (`aap_*_admin_password_input`).
@@ -73,7 +115,17 @@ aap_deploy_postgresql_admin_password_effective: >-
   }}
 
 # Bundle install location (required when aap_deploy_install_type=bundle)
-aap_deploy_bundle_dir: "/opt/aap/setup/bundle"
+aap_deploy_bundle_dir: bundle
+aap_deploy_bundle_dir_effective: >-
+  {{
+    aap_deploy_bundle_dir
+    if (aap_deploy_bundle_dir | default('', true) | trim).startswith('/')
+    else (
+      aap_deploy_setup_dir ~ '/' ~
+      aap_deploy_setup_archive_extract_dirname ~ '/' ~
+      aap_deploy_bundle_dir
+    )
+  }}
 
 # Redis configuration for containerized installer inventory.
 # cluster mode requires a [redis] group with at least 6 nodes.
@@ -143,12 +195,30 @@ aap_deploy_repo_arch: >-
     if (ansible_architecture | default('x86_64')) in ['aarch64', 'arm64']
     else 'x86_64'
   }}
+aap_deploy_requires_ansible_builder: >-
+  {{ (ee_list | default([], true) | length > 0) | bool }}
 aap_deploy_required_repos:
   - "rhel-{{ ansible_distribution_major_version | default('9') }}-for-{{ aap_deploy_repo_arch }}-baseos-rpms"
   - "rhel-{{ ansible_distribution_major_version | default('9') }}-for-{{ aap_deploy_repo_arch }}-appstream-rpms"
-aap_deploy_required_packages:
+aap_deploy_base_required_packages:
   - ansible-core
   - podman
+aap_deploy_extra_required_packages: >-
+  {{
+    (
+      ['ansible-builder']
+      if aap_deploy_requires_ansible_builder | bool
+      else []
+    )
+    | to_json
+    | from_json
+  }}
+aap_deploy_required_packages: >-
+  {{
+    (aap_deploy_base_required_packages + aap_deploy_extra_required_packages)
+    | to_json
+    | from_json
+  }}
 
 # Workflow controls (useful for testing)
 aap_deploy_manage_host_prep: true
@@ -157,8 +227,6 @@ aap_deploy_run_installer: true
 aap_deploy_run_verify: true
 aap_deploy_enforce_min_mem_check: true
 aap_deploy_min_mem_mb: 15000
-aap_deploy_inventory_template: >-
-  {{ 'inventory-growth.j2' if aap_deploy_topology == 'growth' else 'inventory-enterprise.j2' }}
 
 # Installer idempotency guard
 aap_deploy_skip_if_installed: true

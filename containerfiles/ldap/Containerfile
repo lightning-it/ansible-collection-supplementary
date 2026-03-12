@@ -1,0 +1,12 @@
+FROM 389ds/dirsrv:3.1
+
+USER root
+
+RUN mkdir -p /opt/wunderbox/bootstrap
+
+COPY bootstrap/seed.ldif /opt/wunderbox/bootstrap/seed.ldif
+COPY containerfiles/ldap/entrypoint-wrapper.sh /usr/local/bin/wunderbox-ldap-entrypoint.sh
+
+RUN chmod 0755 /usr/local/bin/wunderbox-ldap-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/wunderbox-ldap-entrypoint.sh"]

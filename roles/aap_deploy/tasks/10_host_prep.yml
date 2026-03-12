@@ -36,6 +36,28 @@
     validate: visudo -cf %s
   when: aap_deploy_install_user_passwordless_sudo | bool
 
+- name: Resolve install user UID
+  ansible.builtin.command:
+    cmd: "id -u {{ aap_deploy_install_user }}"
+  register: aap_deploy_install_user_uid_result
+  changed_when: false
+
+- name: Record install user UID fact
+  ansible.builtin.set_fact:
+    aap_deploy_install_user_uid: "{{ aap_deploy_install_user_uid_result.stdout | trim }}"
+  changed_when: false
+
+- name: Enable lingering for install user
+  ansible.builtin.command:
+    cmd: "loginctl enable-linger {{ aap_deploy_install_user }}"
+  args:
+    creates: "/var/lib/systemd/linger/{{ aap_deploy_install_user }}"
+
+- name: Ensure install user systemd manager is running
+  ansible.builtin.systemd:
+    name: "user@{{ aap_deploy_install_user_uid }}.service"
+    state: started
+
 - name: Check subscription-manager registration status
   ansible.builtin.command:
     cmd: subscription-manager status

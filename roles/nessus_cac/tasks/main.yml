@@ -1,0 +1,29 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip Nessus CaC apply when disabled
+  ansible.builtin.debug:
+    msg: "Nessus CaC skipped (nessus_cac_skip_apply=true)."
+  when: nessus_cac_skip_apply | bool
+  tags: always
+
+- name: Discover Nessus CaC tasksets
+  ansible.builtin.set_fact:
+    nessus_cac_taskset_files: >-
+      {{
+        query('ansible.builtin.fileglob', role_path ~ '/tasks/cac_*.yml')
+        | map('basename')
+        | sort
+      }}
+  when: not nessus_cac_skip_apply | bool
+  changed_when: false
+  tags: always
+
+- name: Execute Nessus CaC tasksets
+  ansible.builtin.include_tasks: "{{ role_path }}/tasks/{{ item }}"
+  loop: "{{ nessus_cac_taskset_files | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  when: not nessus_cac_skip_apply | bool

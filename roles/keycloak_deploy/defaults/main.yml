@@ -1,0 +1,99 @@
+---
+# Pod basics
+keycloak_deploy_pod_name: "keycloak"
+keycloak_deploy_pod_manifest_path: "/etc/podman/pods/keycloak.yml"
+keycloak_deploy_image: "quay.io/keycloak/keycloak:latest"
+
+# Dedicated PostgreSQL service defaults used by keycloak_deploy
+# Default is shared PostgreSQL managed outside this role.
+keycloak_deploy_manage_postgres: false
+keycloak_deploy_postgres_image: "docker.io/library/postgres:16"
+keycloak_deploy_postgres_pod_name: "{{ keycloak_deploy_pod_name }}-postgres"
+keycloak_deploy_postgres_pod_manifest_path: >-
+  /etc/podman/pods/{{ keycloak_deploy_postgres_pod_name }}.yml
+keycloak_deploy_postgres_container_name: "postgres"
+keycloak_deploy_container_name: "{{ keycloak_deploy_pod_name }}-keycloak"
+
+# Host paths
+keycloak_deploy_host_data_dir: "/srv/keycloak/data"
+keycloak_deploy_postgres_data_dir: "/srv/keycloak/postgres"
+keycloak_deploy_config_dir: "/srv/keycloak/config"
+keycloak_deploy_secrets_file: "{{ keycloak_deploy_config_dir }}/keycloak-secrets.yml"
+
+# Container paths
+keycloak_deploy_container_data_dir: "/opt/keycloak/data"
+keycloak_deploy_container_postgres_data_dir: "/var/lib/postgresql/data"
+
+# Runtime network
+keycloak_deploy_port: 8080
+keycloak_deploy_host_ip: >-
+  {{
+    ansible_default_ipv4.address
+      | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
+  }}
+keycloak_deploy_postgres_host_ip: >-
+  {{
+    postgres_deploy_host_ip
+    | default(keycloak_deploy_host_ip)
+  }}
+keycloak_deploy_api_scheme: "http"
+keycloak_deploy_api_url: ""
+keycloak_deploy_api_url_effective: >-
+  {{
+    keycloak_deploy_api_url
+      if (keycloak_deploy_api_url | default('', true) | length > 0)
+      else (
+        keycloak_deploy_api_scheme ~ '://' ~
+        keycloak_deploy_host_ip ~ ':' ~
+        keycloak_deploy_port
+      )
+  }}
+keycloak_deploy_health_url: ""
+keycloak_deploy_health_url_effective: >-
+  {{
+    keycloak_deploy_health_url
+      if (keycloak_deploy_health_url | default('', true) | length > 0)
+      else (keycloak_deploy_api_url_effective ~ '/realms/master')
+  }}
+
+# Keycloak app config
+keycloak_deploy_admin_user: "admin"
+keycloak_deploy_env_extra: {}
+keycloak_deploy_extra_start_args: []
+keycloak_deploy_hostname: ""
+keycloak_deploy_proxy_headers: ""
+keycloak_deploy_http_relative_path: ""
+
+# Database config
+keycloak_deploy_db_vendor: "postgres"
+keycloak_deploy_db_name: "keycloak"
+keycloak_deploy_db_user: "keycloak"
+keycloak_deploy_db_host: "{{ keycloak_deploy_postgres_host_ip }}"
+keycloak_deploy_db_port: "{{ postgres_deploy_port | default(5432) }}"
+
+# Secrets (preferred: inventory/Vault; fallback: generated once)
+keycloak_deploy_db_password: ""
+keycloak_deploy_admin_password: ""
+keycloak_deploy_generate_secrets: true
+keycloak_deploy_store_generated_secrets: true
+keycloak_deploy_generated_db_password_length: 32
+keycloak_deploy_generated_admin_password_length: 32
+
+# Lifecycle
+keycloak_deploy_install_packages: true
+keycloak_deploy_manage_systemd: true
+keycloak_deploy_skip_runtime: false
+keycloak_deploy_skip_deploy: false
+keycloak_deploy_validate_certs: true
+
+# Internal handler flags
+keycloak_deploy_kubeplay_remove: false
+keycloak_deploy_kubeplay_run: false
+
+# Systemd
+keycloak_deploy_systemd_unit_name: >-
+  {{
+    'podman-kube@'
+    ~ (keycloak_deploy_pod_manifest_path | basename | regex_replace('\\.ya?ml$', ''))
+    ~ '.service'
+  }}

@@ -6,11 +6,17 @@
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
       vars:
+        aap_password: >-
+          {{
+            aap_controller_admin_password_input
+            | default(aap_gateway_admin_password_input, true)
+            | default('', true)
+            | string
+            | trim
+          }}
+        aap_token: ""
         aap_configuration_dispatcher_roles:
           - role: controller_inventory_sources
-            var: controller_inventory_sources
-            tags: controller_inventory_sources
-          - role: controller_inventory_source_update
             var: controller_inventory_sources
             tags: controller_inventory_sources
       tags:

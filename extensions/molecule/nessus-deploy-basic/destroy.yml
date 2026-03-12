@@ -1,0 +1,9 @@
+---
+- name: Destroy nessus_deploy
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Nothing to destroy for nessus-deploy-basic
+      ansible.builtin.debug:
+        msg: "No runtime resources created in nessus-deploy-basic."
+      changed_when: false

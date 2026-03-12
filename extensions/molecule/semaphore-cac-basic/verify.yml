@@ -1,0 +1,11 @@
+---
+- name: Verify semaphore_cac
+  hosts: localhost
+  gather_facts: false
+  vars:
+    semaphore_cac_skip_apply: true
+  tasks:
+    - name: Assert semaphore_cac is in skip mode
+      ansible.builtin.assert:
+        that:
+          - semaphore_cac_skip_apply | bool

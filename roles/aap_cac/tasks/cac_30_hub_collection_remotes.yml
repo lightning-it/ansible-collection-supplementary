@@ -1,13 +1,26 @@
 ---
 # CaC taskset: Configure Private Automation Hub collection remotes.
 - name: Configure Private Automation Hub collection remotes
+  tags:
+    - hub_collection_remote
+    - hub_collection_remotes
   block:
-    - name: Resolve effective Hub collection remotes
+    - name: Set Hub collection remotes
       ansible.builtin.set_fact:
-        hub_collection_remotes: "{{ aap_cac_hub_collection_remotes_effective }}"
+        hub_collection_remotes: "{{ aap_cac_hub_collection_remotes }}"
       changed_when: false
 
-    - name: Run role infra.aap_configuration.hub_collection_remote
+    - name: Run role infra.aap_configuration.hub_collection_remote  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: infra.aap_configuration.hub_collection_remote
-      when: aap_cac_hub_collection_remotes_effective | length > 0
+      vars:
+        aap_password: >-
+          {{
+            aap_hub_admin_password_input
+            | default(aap_gateway_admin_password_input, true)
+            | default('', true)
+            | string
+            | trim
+          }}
+        aap_token: ""
+      when: aap_cac_hub_collection_remotes | length > 0

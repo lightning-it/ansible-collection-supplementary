@@ -1,0 +1,31 @@
+---
+- name: Ensure core Nessus deploy variables are valid
+  ansible.builtin.assert:
+    that:
+      - nessus_deploy_pod_name | default('', true) | trim | length > 0
+      - nessus_deploy_pod_manifest_path | default('', true) | trim | length > 0
+      - nessus_deploy_image | default('', true) | trim | length > 0
+      - nessus_deploy_container_name | default('', true) | trim | length > 0
+      - nessus_deploy_host_data_dir | default('', true) | trim | length > 0
+      - nessus_deploy_config_dir | default('', true) | trim | length > 0
+      - nessus_deploy_secrets_file | default('', true) | trim | length > 0
+      - nessus_deploy_container_data_dir | default('', true) | trim | length > 0
+      - nessus_deploy_port | int > 0
+      - nessus_deploy_host_ip | default('', true) | trim | length > 0
+      - nessus_deploy_api_scheme in ['http', 'https']
+      - nessus_deploy_health_url_effective | default('', true) | trim | length > 0
+      - nessus_deploy_admin_user | default('', true) | trim | length > 0
+      - nessus_deploy_activation_code is string
+      - nessus_deploy_extra_start_args is sequence
+      - nessus_deploy_extra_start_args is not string
+      - nessus_deploy_env_extra is mapping
+      - nessus_deploy_install_packages is boolean
+      - nessus_deploy_manage_systemd is boolean
+      - nessus_deploy_skip_runtime is boolean
+      - nessus_deploy_skip_deploy is boolean
+      - nessus_deploy_validate_certs is boolean
+      - nessus_deploy_generate_admin_password is boolean
+      - nessus_deploy_store_generated_admin_password is boolean
+      - nessus_deploy_generated_admin_password_length | int >= 16
+    fail_msg: "Nessus deploy variables are missing or invalid."
+  tags: always

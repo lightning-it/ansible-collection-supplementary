@@ -1,0 +1,8 @@
+---
+- name: Ensure aap_destory variables are valid
+  ansible.builtin.assert:
+    that:
+      - aap_destory_enabled is boolean
+    fail_msg: "aap_destory variables are missing or invalid."
+    quiet: true
+  tags: always

@@ -1,0 +1,106 @@
+---
+# Pod basics
+forgejo_deploy_pod_name: "forgejo"
+forgejo_deploy_pod_manifest_path: "/etc/podman/pods/forgejo.yml"
+forgejo_deploy_image: "codeberg.org/forgejo/forgejo:10"
+
+# Dedicated PostgreSQL service defaults used by forgejo_deploy
+# Default is shared PostgreSQL managed outside this role.
+forgejo_deploy_manage_postgres: false
+forgejo_deploy_postgres_image: "docker.io/library/postgres:16"
+forgejo_deploy_postgres_pod_name: "{{ forgejo_deploy_pod_name }}-postgres"
+forgejo_deploy_postgres_pod_manifest_path: >-
+  /etc/podman/pods/{{ forgejo_deploy_postgres_pod_name }}.yml
+forgejo_deploy_postgres_container_name: "postgres"
+forgejo_deploy_container_name: "{{ forgejo_deploy_pod_name }}-forgejo"
+
+# Host paths
+forgejo_deploy_host_data_dir: "/srv/forgejo/data"
+forgejo_deploy_postgres_data_dir: "/srv/forgejo/postgres"
+forgejo_deploy_config_dir: "/srv/forgejo/config"
+forgejo_deploy_secrets_file: "{{ forgejo_deploy_config_dir }}/forgejo-secrets.yml"
+
+# Container paths
+forgejo_deploy_container_data_dir: "/data"
+forgejo_deploy_container_postgres_data_dir: "/var/lib/postgresql/data"
+
+# Runtime network
+forgejo_deploy_port: 3000
+forgejo_deploy_host_ip: >-
+  {{
+    ansible_default_ipv4.address
+      | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
+  }}
+forgejo_deploy_postgres_host_ip: >-
+  {{
+    postgres_deploy_host_ip
+    | default(forgejo_deploy_host_ip)
+  }}
+forgejo_deploy_api_scheme: "http"
+forgejo_deploy_api_url: ""
+forgejo_deploy_api_url_effective: >-
+  {{
+    forgejo_deploy_api_url
+      if (forgejo_deploy_api_url | default('', true) | length > 0)
+      else (
+        forgejo_deploy_api_scheme ~ '://' ~
+        forgejo_deploy_host_ip ~ ':' ~
+        forgejo_deploy_port
+      )
+  }}
+forgejo_deploy_health_url: ""
+forgejo_deploy_health_url_effective: >-
+  {{
+    forgejo_deploy_health_url
+      if (forgejo_deploy_health_url | default('', true) | length > 0)
+      else (forgejo_deploy_api_url_effective ~ '/api/healthz')
+  }}
+
+# Forgejo app config
+forgejo_deploy_admin_user: "admin"
+forgejo_deploy_run_user_uid: "1000"
+forgejo_deploy_run_user_gid: "1000"
+forgejo_deploy_root_url: ""
+forgejo_deploy_root_url_effective: >-
+  {{
+    forgejo_deploy_root_url
+      if (forgejo_deploy_root_url | default('', true) | length > 0)
+      else forgejo_deploy_api_url_effective
+  }}
+forgejo_deploy_install_lock: false
+forgejo_deploy_disable_registration: true
+forgejo_deploy_env_extra: {}
+
+# Database config
+forgejo_deploy_db_type: "postgres"
+forgejo_deploy_db_name: "forgejo"
+forgejo_deploy_db_user: "forgejo"
+forgejo_deploy_db_host: "{{ forgejo_deploy_postgres_host_ip }}"
+forgejo_deploy_db_port: "{{ postgres_deploy_port | default(5432) }}"
+
+# Secrets (preferred: inventory/Vault; fallback: generated once)
+forgejo_deploy_db_password: ""
+forgejo_deploy_admin_password: ""
+forgejo_deploy_generate_secrets: true
+forgejo_deploy_store_generated_secrets: true
+forgejo_deploy_generated_db_password_length: 32
+forgejo_deploy_generated_admin_password_length: 32
+
+# Lifecycle
+forgejo_deploy_install_packages: true
+forgejo_deploy_manage_systemd: true
+forgejo_deploy_skip_runtime: false
+forgejo_deploy_skip_deploy: false
+forgejo_deploy_validate_certs: true
+
+# Internal handler flags
+forgejo_deploy_kubeplay_remove: false
+forgejo_deploy_kubeplay_run: false
+
+# Systemd
+forgejo_deploy_systemd_unit_name: >-
+  {{
+    'podman-kube@'
+    ~ (forgejo_deploy_pod_manifest_path | basename | regex_replace('\\.ya?ml$', ''))
+    ~ '.service'
+  }}

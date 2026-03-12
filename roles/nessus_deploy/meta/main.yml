@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: nessus_deploy
+  namespace: lit
+  author: Lightning IT
+  description: Deploy Nessus in a Podman pod.
+  company: Lightning IT
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - modulix
+    - nessus
+    - podman
+    - security
+    - automation
+
+dependencies: []

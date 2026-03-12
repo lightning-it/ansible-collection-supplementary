@@ -1,0 +1,16 @@
+---
+# CaC execution behavior
+keycloak_cac_skip_apply: true
+
+# API access for Ansible-driven CaC
+keycloak_cac_url: "{{ keycloak_deploy_api_url_effective | default('http://127.0.0.1:8080', true) }}"
+keycloak_cac_validate_certs: false
+keycloak_cac_request_timeout: 30
+keycloak_cac_admin_user: "{{ keycloak_deploy_admin_user | default('admin', true) }}"
+keycloak_cac_admin_password: "{{ keycloak_deploy_admin_password | default('', true) }}"
+keycloak_cac_realm: "master"
+
+# Future object catalogs (kept empty by default)
+keycloak_cac_realms: []
+keycloak_cac_clients: []
+keycloak_cac_users: []

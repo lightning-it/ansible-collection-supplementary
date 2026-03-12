@@ -1,0 +1,96 @@
+---
+# CaC taskset: Execute infra.controller_configuration job roles from provided content.
+- name: Execute infra.controller_configuration job roles from provided content
+  tags:
+    - ad_hoc_command
+    - ad_hoc_command_cancel
+    - bulk_job_launch
+    - job_launch
+    - jobs_cancel
+    - workflow_job_templates
+    - workflow_launch
+  vars:
+    aap_cac_controller_configuration_jobs_role_presence:
+      ad_hoc_command: "{{ controller_ad_hoc_commands | default([], true) | length > 0 }}"
+      ad_hoc_command_cancel: "{{ controller_ad_hoc_commands_cancel | default([], true) | length > 0 }}"
+      bulk_job_launch: "{{ controller_bulk_launch_jobs | default([], true) | length > 0 }}"
+      collect_async_status: >-
+        {{
+          cas_job_async_results_item is defined and
+          (cas_job_async_results_item.ansible_job_id is defined)
+        }}
+      job_launch: "{{ controller_launch_jobs | default([], true) | length > 0 }}"
+      jobs_cancel: "{{ controller_cancel_jobs | default([], true) | length > 0 }}"
+      workflow_job_templates: "{{ controller_workflows | default([], true) | length > 0 }}"
+      workflow_launch: "{{ controller_workflow_launch_jobs | default([], true) | length > 0 }}"
+  block:
+    - name: Build job requested tag filter from ansible_run_tags
+      ansible.builtin.set_fact:
+        aap_cac_controller_configuration_jobs_requested_tags: >-
+          {{
+            ansible_run_tags
+            | default([])
+            | intersect(
+                aap_cac_controller_configuration_jobs_role_presence.keys()
+                | list
+              )
+          }}
+      changed_when: false
+
+    - name: Build infra.controller_configuration job role list from provided content
+      ansible.builtin.set_fact:
+        aap_cac_controller_configuration_jobs_roles: >-
+          {{
+            aap_cac_controller_configuration_jobs_role_presence
+            | dict2items
+            | selectattr('value', 'equalto', true)
+            | selectattr('key', 'in', __aap_cac_controller_configuration_jobs_allowed_roles)
+            | map(attribute='key')
+            | list
+          }}
+      changed_when: false
+      vars:
+        __aap_cac_controller_configuration_jobs_allowed_roles: >-
+          {{
+            (
+              aap_cac_controller_configuration_jobs_requested_tags
+              if (
+                aap_cac_controller_configuration_jobs_requested_tags
+                | length > 0
+              )
+              else (
+                aap_cac_controller_configuration_jobs_role_presence.keys()
+                | list
+              )
+            )
+          }}
+
+    - name: Resolve effective Controller admin password
+      ansible.builtin.set_fact:
+        aap_cac_controller_password_effective: >-
+          {{
+            aap_controller_admin_password_input
+            | default(aap_gateway_admin_password_input, true)
+            | default('', true)
+            | string
+            | trim
+          }}
+      changed_when: false
+
+    - name: Include infra.controller_configuration job roles
+      ansible.builtin.include_role:
+        name: >-
+          infra.controller_configuration.{{
+            __controller_configuration_jobs_role
+          }}
+      vars:
+        controller_hostname: "{{ aap_cac_gateway_hostname }}"
+        controller_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+        controller_username: >-
+          {{ aap_cac_gateway_username | default(omit, true) }}
+        controller_password: >-
+          {{ aap_cac_controller_password_effective | default(omit, true) }}
+      loop: "{{ aap_cac_controller_configuration_jobs_roles }}"
+      loop_control:
+        loop_var: __controller_configuration_jobs_role
+        label: "{{ __controller_configuration_jobs_role }}"

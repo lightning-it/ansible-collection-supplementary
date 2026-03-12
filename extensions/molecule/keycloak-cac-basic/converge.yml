@@ -1,0 +1,8 @@
+---
+- name: Converge keycloak_cac
+  hosts: localhost
+  gather_facts: false
+  vars:
+    keycloak_cac_skip_apply: true
+  roles:
+    - role: keycloak_cac

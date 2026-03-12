@@ -1,0 +1,124 @@
+---
+# CaC taskset: Execute infra.controller_configuration platform/ops roles from provided content.
+- name: Execute infra.controller_configuration platform/ops roles from provided content
+  tags:
+    - applications
+    - credential_input_sources
+    - dispatch
+    - execution_environments
+    - global_vars
+    - notification_templates
+    - object_diff
+    - project_update
+    - roles
+    - schedules
+  vars:
+    aap_cac_controller_configuration_platform_ops_role_presence:
+      applications: "{{ controller_applications | default([], true) | length > 0 }}"
+      credential_input_sources: "{{ controller_credential_input_sources | default([], true) | length > 0 }}"
+      dispatch: "{{ controller_configuration_dispatcher_roles | default([], true) | length > 0 }}"
+      execution_environments: "{{ controller_execution_environments | default([], true) | length > 0 }}"
+      global_vars: >-
+        {{
+          operation_translate is defined and
+          operation_translate is mapping and
+          operation_translate | length > 0
+        }}
+      notification_templates: "{{ controller_notifications | default([], true) | length > 0 }}"
+      object_diff: >-
+        {{
+          (controller_configuration_object_diff_tasks | default([], true) | length > 0) and
+          (
+            controller_organizations | default([], true) | length > 0 or
+            controller_applications | default([], true) | length > 0 or
+            controller_projects | default([], true) | length > 0 or
+            controller_execution_environments | default([], true) | length > 0 or
+            controller_notifications | default([], true) | length > 0 or
+            controller_credentials | default([], true) | length > 0 or
+            controller_credential_input_sources | default([], true) | length > 0 or
+            controller_hosts | default([], true) | length > 0 or
+            controller_groups | default([], true) | length > 0 or
+            controller_templates | default([], true) | length > 0 or
+            controller_workflows | default([], true) | length > 0 or
+            controller_schedules | default([], true) | length > 0 or
+            controller_roles | default([], true) | length > 0
+          )
+        }}
+      project_update: "{{ controller_projects | default([], true) | length > 0 }}"
+      roles: "{{ controller_roles | default([], true) | length > 0 }}"
+      schedules: "{{ controller_schedules | default([], true) | length > 0 }}"
+  block:
+    - name: Build platform/ops requested tag filter from ansible_run_tags
+      ansible.builtin.set_fact:
+        aap_cac_controller_configuration_platform_ops_requested_tags: >-
+          {{
+            ansible_run_tags
+            | default([])
+            | intersect(
+                aap_cac_controller_configuration_platform_ops_role_presence.keys()
+                | list
+              )
+          }}
+      changed_when: false
+
+    - name: Build platform/ops role list from provided content
+      ansible.builtin.set_fact:
+        aap_cac_controller_configuration_platform_ops_roles: >-
+          {{
+            aap_cac_controller_configuration_platform_ops_role_presence
+            | dict2items
+            | selectattr('value', 'equalto', true)
+            | selectattr(
+                'key',
+                'in',
+                __aap_cac_controller_configuration_platform_ops_allowed_roles
+              )
+            | map(attribute='key')
+            | list
+          }}
+      changed_when: false
+      vars:
+        __aap_cac_controller_configuration_platform_ops_allowed_roles: >-
+          {{
+            (
+              aap_cac_controller_configuration_platform_ops_requested_tags
+              if (
+                aap_cac_controller_configuration_platform_ops_requested_tags
+                | length > 0
+              )
+              else (
+                aap_cac_controller_configuration_platform_ops_role_presence.keys()
+                | list
+              )
+            )
+          }}
+
+    - name: Resolve effective Controller admin password
+      ansible.builtin.set_fact:
+        aap_cac_controller_password_effective: >-
+          {{
+            aap_controller_admin_password_input
+            | default(aap_gateway_admin_password_input, true)
+            | default('', true)
+            | string
+            | trim
+          }}
+      changed_when: false
+
+    - name: Include infra.controller_configuration platform/ops roles
+      ansible.builtin.include_role:
+        name: >-
+          infra.controller_configuration.{{
+            __controller_configuration_platform_ops_role
+          }}
+      vars:
+        controller_hostname: "{{ aap_cac_gateway_hostname }}"
+        controller_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+        controller_username: >-
+          {{ aap_cac_gateway_username | default(omit, true) }}
+        controller_password: >-
+          {{ aap_cac_controller_password_effective | default(omit, true) }}
+      loop: "{{ aap_cac_controller_configuration_platform_ops_roles }}"
+      loop_control:
+        loop_var: __controller_configuration_platform_ops_role
+        label: "{{ __controller_configuration_platform_ops_role }}"

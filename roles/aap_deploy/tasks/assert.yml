@@ -27,6 +27,9 @@
       - aap_deploy_install_user_passwordless_sudo is boolean
       - aap_deploy_force_unpack is boolean
       - aap_deploy_validate_archive_format is boolean
+      - aap_deploy_setup_download_containerized is boolean
+      - aap_deploy_setup_prepare_process_template is boolean
+      - aap_deploy_setup_install_force is boolean
       - aap_deploy_verify_gateway_https is boolean
       - aap_deploy_install_user | trim | length > 0
       - aap_deploy_install_user != 'root'
@@ -34,12 +37,15 @@
       - aap_deploy_install_dir.startswith('/')
       - aap_deploy_setup_dir | trim | length > 0
       - aap_deploy_setup_dir.startswith('/')
-      - aap_deploy_inventory_path | trim | length > 0
-      - aap_deploy_inventory_path.startswith('/')
+      - aap_deploy_setup_archive_path | trim | length > 0
+      - aap_deploy_setup_archive_path.startswith('/')
       - aap_deploy_required_repos is sequence
       - aap_deploy_required_repos is not string
       - aap_deploy_required_packages is sequence
       - aap_deploy_required_packages is not string
+      - aap_deploy_setup_install_extra_vars is mapping
+      - aap_deploy_setup_install_extra_vars_files is sequence
+      - aap_deploy_setup_install_extra_vars_files is not string
       - aap_deploy_min_mem_mb | int > 0
       - aap_deploy_validate_archive_min_size_bytes | int >= 0
       - aap_deploy_skip_if_installed_runtime_min_matching_containers | int > 0
@@ -68,10 +74,8 @@
   ansible.builtin.assert:
     that:
       - aap_deploy_bundle_dir | default('', true) | trim | length > 0
-      - (aap_deploy_bundle_dir | regex_search('/bundle')) is not none
     fail_msg: >-
-      aap_deploy_install_type=bundle requires aap_deploy_bundle_dir to point to a path
-      that contains the bundle/ directory for the setup archive.
+      aap_deploy_install_type=bundle requires a non-empty aap_deploy_bundle_dir.
     quiet: true
   when:
     - aap_deploy_enabled | bool
@@ -105,15 +109,18 @@
   when: aap_deploy_enabled | bool
   tags: always
 
-- name: Validate setup archive source when archive management is enabled
+- name: Validate local setup bundle staging settings when archive management is enabled
   ansible.builtin.assert:
     that:
       - aap_deploy_setup_archive_src | default('', true) | trim | length > 0
       - aap_deploy_setup_archive_src.startswith('/')
       - (aap_deploy_setup_archive_src | regex_search('^https?://')) is none
     fail_msg: >-
-      aap_deploy_setup_archive_src is required when aap_deploy_manage_download_unpack=true.
-      Disconnected mode requires an absolute local bundle archive path (no URL).
+      Invalid local AAP bundle staging configuration.
+      We have to use our local copy of the AAP bundle instead of the default AAP download role
+      because this workflow must always work without internet access.
+      Set aap_deploy_setup_archive_src to a local file path on the control node or pre-stage the
+      bundle on the managed host.
     quiet: true
   when:
     - aap_deploy_enabled | bool

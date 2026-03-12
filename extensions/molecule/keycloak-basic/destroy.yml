@@ -1,13 +1,9 @@
 ---
-- name: Destroy
+- name: Destroy keycloak_cac (legacy keycloak-basic)
   hosts: localhost
   gather_facts: false
-
   tasks:
-    - name: Tear down Keycloak (docker compose)
-      ansible.builtin.command:
-        cmd: >-
-          docker compose -f
-          {{ playbook_dir }}/../../tests/keycloak/docker-compose.yml down -v
-      failed_when: false
+    - name: Nothing to destroy for keycloak-basic
+      ansible.builtin.debug:
+        msg: "No runtime resources created in keycloak-basic."
       changed_when: false

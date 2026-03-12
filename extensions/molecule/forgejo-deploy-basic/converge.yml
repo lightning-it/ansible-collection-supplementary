@@ -1,0 +1,11 @@
+---
+- name: Converge forgejo_deploy
+  hosts: localhost
+  gather_facts: true
+  vars:
+    forgejo_deploy_install_packages: false
+    forgejo_deploy_manage_systemd: false
+    forgejo_deploy_skip_runtime: true
+    forgejo_deploy_manage_postgres: true
+  roles:
+    - role: forgejo_deploy

@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ keycloak_deploy_pod_name }}
+  labels:
+    app: {{ keycloak_deploy_pod_name }}
+spec:
+  containers:
+    - name: {{ keycloak_deploy_container_name }}
+      image: {{ keycloak_deploy_image }}
+      command:
+        - /opt/keycloak/bin/kc.sh
+      args:
+        - start-dev
+{% for arg in keycloak_deploy_extra_start_args | default([]) %}
+        - "{{ arg }}"
+{% endfor %}
+      ports:
+        - containerPort: {{ keycloak_deploy_port }}
+          hostPort: {{ keycloak_deploy_port }}
+          hostIP: {{ keycloak_deploy_host_ip }}
+      env:
+        - name: KC_DB
+          value: "{{ keycloak_deploy_db_vendor }}"
+        - name: KC_DB_URL_HOST
+          value: "{{ keycloak_deploy_db_host }}"
+        - name: KC_DB_URL_PORT
+          value: "{{ keycloak_deploy_db_port }}"
+        - name: KC_DB_URL_DATABASE
+          value: "{{ keycloak_deploy_db_name }}"
+        - name: KC_DB_USERNAME
+          value: "{{ keycloak_deploy_db_user }}"
+        - name: KC_DB_PASSWORD
+          value: "{{ keycloak_deploy_db_password_effective }}"
+        - name: KEYCLOAK_ADMIN
+          value: "{{ keycloak_deploy_admin_user }}"
+        - name: KEYCLOAK_ADMIN_PASSWORD
+          value: "{{ keycloak_deploy_admin_password_effective }}"
+        - name: KC_HEALTH_ENABLED
+          value: "true"
+{% if keycloak_deploy_hostname | default('', true) | trim | length > 0 %}
+        - name: KC_HOSTNAME
+          value: "{{ keycloak_deploy_hostname | trim }}"
+{% endif %}
+{% if keycloak_deploy_proxy_headers | default('', true) | trim | length > 0 %}
+        - name: KC_PROXY_HEADERS
+          value: "{{ keycloak_deploy_proxy_headers | trim }}"
+{% endif %}
+{% if keycloak_deploy_http_relative_path | default('', true) | trim | length > 0 %}
+        - name: KC_HTTP_RELATIVE_PATH
+          value: "{{ keycloak_deploy_http_relative_path | trim }}"
+{% endif %}
+{% if keycloak_deploy_env_extra is defined and keycloak_deploy_env_extra | length > 0 %}
+{% for key, value in keycloak_deploy_env_extra.items() %}
+        - name: {{ key }}
+          value: "{{ value }}"
+{% endfor %}
+{% endif %}
+      volumeMounts:
+        - name: keycloak-data
+          mountPath: {{ keycloak_deploy_container_data_dir }}
+
+  volumes:
+    - name: keycloak-data
+      hostPath:
+        path: {{ keycloak_deploy_host_data_dir }}
+        type: DirectoryOrCreate

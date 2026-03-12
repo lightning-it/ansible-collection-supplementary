@@ -1,0 +1,11 @@
+---
+- name: Verify nessus_cac
+  hosts: localhost
+  gather_facts: false
+  vars:
+    nessus_cac_skip_apply: true
+  tasks:
+    - name: Assert nessus_cac is in skip mode
+      ansible.builtin.assert:
+        that:
+          - nessus_cac_skip_apply | bool

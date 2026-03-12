@@ -1,0 +1,8 @@
+---
+- name: Converge semaphore_cac
+  hosts: localhost
+  gather_facts: false
+  vars:
+    semaphore_cac_skip_apply: true
+  roles:
+    - role: semaphore_cac

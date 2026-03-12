@@ -1,0 +1,25 @@
+---
+- name: Ensure core PostgreSQL deploy variables are valid
+  ansible.builtin.assert:
+    that:
+      - postgres_deploy_pod_name | default('', true) | trim | length > 0
+      - postgres_deploy_pod_manifest_path | default('', true) | trim | length > 0
+      - postgres_deploy_image | default('', true) | trim | length > 0
+      - postgres_deploy_container_name | default('', true) | trim | length > 0
+      - postgres_deploy_host_data_dir | default('', true) | trim | length > 0
+      - postgres_deploy_config_dir | default('', true) | trim | length > 0
+      - postgres_deploy_secrets_file | default('', true) | trim | length > 0
+      - postgres_deploy_container_data_dir | default('', true) | trim | length > 0
+      - postgres_deploy_db_name | default('', true) | trim | length > 0
+      - postgres_deploy_db_user | default('', true) | trim | length > 0
+      - postgres_deploy_port | int > 0
+      - postgres_deploy_host_ip | default('', true) | trim | length > 0
+      - postgres_deploy_install_packages is boolean
+      - postgres_deploy_manage_systemd is boolean
+      - postgres_deploy_skip_runtime is boolean
+      - postgres_deploy_skip_deploy is boolean
+      - postgres_deploy_generate_password is boolean
+      - postgres_deploy_store_generated_password is boolean
+      - postgres_deploy_generated_password_length | int >= 16
+    fail_msg: "PostgreSQL deploy variables are missing or invalid."
+  tags: always

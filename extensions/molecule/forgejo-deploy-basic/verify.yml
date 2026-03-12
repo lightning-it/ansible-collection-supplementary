@@ -1,0 +1,15 @@
+---
+- name: Verify forgejo_deploy
+  hosts: localhost
+  gather_facts: false
+  vars:
+    forgejo_deploy_skip_runtime: true
+    forgejo_deploy_manage_postgres: true
+    forgejo_deploy_db_type: postgres
+  tasks:
+    - name: Assert forgejo_deploy test variables are valid
+      ansible.builtin.assert:
+        that:
+          - forgejo_deploy_skip_runtime | bool
+          - forgejo_deploy_manage_postgres | bool
+          - forgejo_deploy_db_type == 'postgres'

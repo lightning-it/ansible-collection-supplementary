@@ -1,0 +1,39 @@
+---
+- name: Ensure core Semaphore deploy variables are valid
+  ansible.builtin.assert:
+    that:
+      - semaphore_deploy_pod_name | default('', true) | trim | length > 0
+      - semaphore_deploy_pod_manifest_path | default('', true) | trim | length > 0
+      - semaphore_deploy_image | default('', true) | trim | length > 0
+      - semaphore_deploy_manage_postgres is boolean
+      - semaphore_deploy_postgres_image | default('', true) | trim | length > 0
+      - semaphore_deploy_postgres_pod_name | default('', true) | trim | length > 0
+      - semaphore_deploy_postgres_pod_manifest_path | default('', true) | trim | length > 0
+      - semaphore_deploy_postgres_container_name | default('', true) | trim | length > 0
+      - semaphore_deploy_host_data_dir | default('', true) | trim | length > 0
+      - semaphore_deploy_postgres_data_dir | default('', true) | trim | length > 0
+      - semaphore_deploy_config_dir | default('', true) | trim | length > 0
+      - semaphore_deploy_secrets_file | default('', true) | trim | length > 0
+      - semaphore_deploy_container_data_dir | default('', true) | trim | length > 0
+      - semaphore_deploy_container_postgres_data_dir | default('', true) | trim | length > 0
+      - semaphore_deploy_db_dialect in ['postgres']
+      - semaphore_deploy_db_name | default('', true) | trim | length > 0
+      - semaphore_deploy_db_user | default('', true) | trim | length > 0
+      - semaphore_deploy_db_host | default('', true) | trim | length > 0
+      - semaphore_deploy_db_port | int > 0
+      - semaphore_deploy_port | int > 0
+      - semaphore_deploy_host_ip | default('', true) | trim | length > 0
+      - semaphore_deploy_postgres_host_ip | default('', true) | trim | length > 0
+      - semaphore_deploy_install_packages is boolean
+      - semaphore_deploy_manage_systemd is boolean
+      - semaphore_deploy_skip_runtime is boolean
+      - semaphore_deploy_skip_deploy is boolean
+      - semaphore_deploy_generate_secrets is boolean
+      - semaphore_deploy_store_generated_secrets is boolean
+      - semaphore_deploy_validate_certs is boolean
+      - semaphore_deploy_generated_db_password_length | int >= 16
+      - semaphore_deploy_generated_admin_password_length | int >= 16
+      - semaphore_deploy_generated_access_key_length | int >= 32
+      - semaphore_deploy_env_extra is mapping
+    fail_msg: "Semaphore deploy variables are missing or invalid."
+  tags: always

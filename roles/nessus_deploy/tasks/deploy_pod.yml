@@ -1,0 +1,169 @@
+---
+- name: Ensure Nessus directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ nessus_deploy_host_data_dir }}"
+      mode: '0750'
+    - path: "{{ nessus_deploy_config_dir }}"
+      mode: '0750'
+    - path: "{{ nessus_deploy_pod_manifest_path | dirname }}"
+      mode: '0755'
+  when: item.path | default('') | length > 0
+  tags:
+    - deployment
+
+- name: Check whether Nessus generated secrets file exists
+  ansible.builtin.stat:
+    path: "{{ nessus_deploy_secrets_file }}"
+  register: nessus_deploy_secrets_file_stat
+  changed_when: false
+  tags:
+    - deployment
+
+- name: Load generated Nessus secrets
+  ansible.builtin.include_vars:
+    file: "{{ nessus_deploy_secrets_file }}"
+    name: nessus_deploy_stored_secrets
+  when: nessus_deploy_secrets_file_stat.stat.exists | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Build effective Nessus admin password from inventory and stored state
+  ansible.builtin.set_fact:
+    nessus_deploy_admin_password_effective: >-
+      {{
+        (nessus_deploy_admin_password | default('', true) | trim)
+        if (nessus_deploy_admin_password | default('', true) | trim | length > 0)
+        else (
+          (nessus_deploy_stored_secrets | default({})).nessus_deploy_admin_password
+          | default('', true) | trim
+        )
+      }}
+  changed_when: false
+  no_log: true
+  tags:
+    - deployment
+
+- name: Determine whether admin password generation is required
+  ansible.builtin.set_fact:
+    nessus_deploy_admin_password_missing: >-
+      {{
+        nessus_deploy_admin_password_effective | default('', true) | length == 0
+      }}
+  changed_when: false
+  no_log: true
+  tags:
+    - deployment
+
+- name: Fail when Nessus admin password is missing and generation is disabled
+  ansible.builtin.assert:
+    that:
+      - not nessus_deploy_admin_password_missing | bool
+    fail_msg: >-
+      Missing Nessus admin password. Provide nessus_deploy_admin_password
+      or enable nessus_deploy_generate_admin_password.
+  when: not nessus_deploy_generate_admin_password | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Generate missing Nessus admin password
+  ansible.builtin.set_fact:
+    nessus_deploy_admin_password_effective: >-
+      {{
+        nessus_deploy_admin_password_effective
+        if (nessus_deploy_admin_password_effective | default('', true) | length > 0)
+        else lookup(
+          'ansible.builtin.password',
+          '/dev/null length=' ~ (nessus_deploy_generated_admin_password_length | int | string)
+        )
+      }}
+  when:
+    - nessus_deploy_generate_admin_password | bool
+    - nessus_deploy_admin_password_missing | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Persist generated Nessus admin password
+  ansible.builtin.copy:
+    dest: "{{ nessus_deploy_secrets_file }}"
+    owner: root
+    group: root
+    mode: '0600'
+    content: |
+      ---
+      nessus_deploy_admin_password: "{{ nessus_deploy_admin_password_effective }}"
+  when:
+    - nessus_deploy_generate_admin_password | bool
+    - nessus_deploy_store_generated_admin_password | bool
+    - nessus_deploy_admin_password_missing | bool
+  notify:
+    - Recreate nessus pod
+    - Run nessus pod
+  no_log: true
+  tags:
+    - deployment
+
+- name: Render Nessus Pod manifest
+  ansible.builtin.template:
+    src: nessus-pod.yml.j2
+    dest: "{{ nessus_deploy_pod_manifest_path }}"
+    mode: '0644'
+  notify:
+    - Recreate nessus pod
+    - Run nessus pod
+  tags:
+    - deployment
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - deployment
+
+- name: Recreate nessus pod (kubeplay)
+  when:
+    - nessus_deploy_kubeplay_remove | default(false)
+    - not nessus_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay remove (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: remove
+        kubeplay_pod_name: "{{ nessus_deploy_pod_name }}"
+        kubeplay_app_name: nessus_remove
+  rescue:
+    - name: Ignore kubeplay remove failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay remove failure."
+
+- name: Run nessus pod (kubeplay)
+  when:
+    - nessus_deploy_kubeplay_run | default(false)
+    - not nessus_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay run (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: run
+        kubeplay_pod_name: "{{ nessus_deploy_pod_name }}"
+        kubeplay_pod_manifest_path: "{{ nessus_deploy_pod_manifest_path }}"
+        kubeplay_app_name: nessus_run
+  rescue:
+    - name: Ignore kubeplay run failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay run failure."
