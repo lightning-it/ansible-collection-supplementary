@@ -6,6 +6,6 @@ galaxy_info:
   description: Role to manage sonatype nexus Installation
   company: Lightning IT
   license: license (BSD, MIT)
-  min_ansible_version: '2.8'
+  min_ansible_version: '2.18'
   galaxy_tags: []
 dependencies: []
