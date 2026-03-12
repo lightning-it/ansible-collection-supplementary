@@ -1,3 +1,9 @@
+## [1.16.13](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.12...v1.16.13) (2026-03-12)
+
+### Bug Fixes
+
+* remove unused route 172.16.30.0 from OpenVPN configuration ([#141](https://github.com/lightning-it/ansible-collection-supplementary/issues/141)) ([161b1ae](https://github.com/lightning-it/ansible-collection-supplementary/commit/161b1ae2163e249b59c3745d0ce11c3f8e300eaa))
+
 ## [1.16.12](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.11...v1.16.12) (2026-02-24)
 
 ### Bug Fixes
