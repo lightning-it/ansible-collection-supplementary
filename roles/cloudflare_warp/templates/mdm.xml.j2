@@ -1,0 +1,32 @@
+<dict>
+  <key>organization</key>
+  <string>{{ cloudflare_warp_organization }}</string>
+  <key>auth_client_id</key>
+  <string>{{ cloudflare_warp_auth_client_id }}</string>
+  <key>auth_client_secret</key>
+  <string>{{ cloudflare_warp_auth_client_secret }}</string>
+  <key>auto_connect</key>
+  <integer>{{ cloudflare_warp_auto_connect | int }}</integer>
+  <key>onboarding</key>
+{% if cloudflare_warp_onboarding | bool %}
+  <true/>
+{% else %}
+  <false/>
+{% endif %}
+  <key>service_mode</key>
+  <string>{{ cloudflare_warp_service_mode }}</string>
+  <key>switch_locked</key>
+{% if cloudflare_warp_switch_locked | bool %}
+  <true/>
+{% else %}
+  <false/>
+{% endif %}
+{% if cloudflare_warp_gateway_unique_id | default('', true) | trim | length > 0 %}
+  <key>gateway_unique_id</key>
+  <string>{{ cloudflare_warp_gateway_unique_id }}</string>
+{% endif %}
+{% if cloudflare_warp_support_url | default('', true) | trim | length > 0 %}
+  <key>support_url</key>
+  <string>{{ cloudflare_warp_support_url }}</string>
+{% endif %}
+</dict>

@@ -1,0 +1,18 @@
+---
+- name: Ensure Cloudflare WARP MDM directory exists
+  ansible.builtin.file:
+    path: "{{ cloudflare_warp_mdm_path | dirname }}"
+    state: directory
+    owner: "{{ cloudflare_warp_mdm_owner }}"
+    group: "{{ cloudflare_warp_mdm_group }}"
+    mode: "0755"
+
+- name: Configure Cloudflare WARP MDM profile
+  ansible.builtin.template:
+    src: mdm.xml.j2
+    dest: "{{ cloudflare_warp_mdm_path }}"
+    owner: "{{ cloudflare_warp_mdm_owner }}"
+    group: "{{ cloudflare_warp_mdm_group }}"
+    mode: "{{ cloudflare_warp_mdm_mode }}"
+  notify: Restart Cloudflare WARP service
+  no_log: "{{ cloudflare_warp_no_log | bool }}"

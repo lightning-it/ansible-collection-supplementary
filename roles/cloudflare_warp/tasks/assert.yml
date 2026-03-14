@@ -1,0 +1,32 @@
+---
+- name: Assert Cloudflare WARP is only used on RedHat-family hosts
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.os_family == "RedHat"
+    fail_msg: "The cloudflare_warp role currently supports RedHat-family hosts only."
+
+- name: Assert Cloudflare WARP service mode is supported
+  ansible.builtin.assert:
+    that:
+      - cloudflare_warp_service_mode in ['warp', '1dot1', 'proxy', 'postureonly', 'tunnelonly']
+    fail_msg: >-
+      cloudflare_warp_service_mode must be one of:
+      warp, 1dot1, proxy, postureonly, tunnelonly.
+
+- name: Assert Cloudflare WARP connection state is supported
+  ansible.builtin.assert:
+    that:
+      - cloudflare_warp_connection_state in ['connected', 'disconnected', 'ignore']
+    fail_msg: "cloudflare_warp_connection_state must be connected, disconnected, or ignore."
+
+- name: Assert Cloudflare WARP MDM enrollment variables are present
+  ansible.builtin.assert:
+    that:
+      - cloudflare_warp_organization | default('', true) | trim | length > 0
+      - cloudflare_warp_auth_client_id | default('', true) | trim | length > 0
+      - cloudflare_warp_auth_client_secret | default('', true) | trim | length > 0
+    fail_msg: >-
+      Cloudflare WARP enrollment requires cloudflare_warp_organization,
+      cloudflare_warp_auth_client_id, and cloudflare_warp_auth_client_secret.
+  no_log: "{{ cloudflare_warp_no_log | bool }}"
+  when: cloudflare_warp_configure_mdm | bool

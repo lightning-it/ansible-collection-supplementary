@@ -1,0 +1,37 @@
+---
+cloudflare_warp_enabled: false
+cloudflare_warp_no_log: true
+
+cloudflare_warp_package_name: cloudflare-warp
+cloudflare_warp_package_state: present
+cloudflare_warp_update_cache: true
+
+cloudflare_warp_manage_repo: true
+cloudflare_warp_repo_url: "https://pkg.cloudflareclient.com/cloudflare-warp-ascii.repo"
+cloudflare_warp_repo_path: "/etc/yum.repos.d/cloudflare-warp.repo"
+
+cloudflare_warp_install: true
+cloudflare_warp_manage_service: true
+cloudflare_warp_service_name: warp-svc
+cloudflare_warp_cli_path: /bin/warp-cli
+
+cloudflare_warp_configure_mdm: true
+cloudflare_warp_mdm_path: /var/lib/cloudflare-warp/mdm.xml
+cloudflare_warp_mdm_owner: root
+cloudflare_warp_mdm_group: root
+cloudflare_warp_mdm_mode: "0600"
+
+cloudflare_warp_organization: ""
+cloudflare_warp_auth_client_id: ""
+cloudflare_warp_auth_client_secret: ""
+cloudflare_warp_gateway_unique_id: ""
+cloudflare_warp_auto_connect: 1
+cloudflare_warp_onboarding: false
+cloudflare_warp_service_mode: warp
+cloudflare_warp_support_url: ""
+cloudflare_warp_switch_locked: false
+
+# Desired runtime state once the client is installed and configured.
+# Valid values: connected, disconnected, ignore
+cloudflare_warp_connection_state: connected
+cloudflare_warp_show_status: false

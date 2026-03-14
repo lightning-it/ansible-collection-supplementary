@@ -1,0 +1,21 @@
+---
+- name: Verify cloudflare_warp converge
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Stat rendered Cloudflare WARP MDM profile
+      ansible.builtin.stat:
+        path: /tmp/cloudflare-warp/mdm.xml
+      register: _cloudflare_warp_mdm
+
+    - name: Read rendered Cloudflare WARP MDM profile
+      ansible.builtin.slurp:
+        path: /tmp/cloudflare-warp/mdm.xml
+      register: _cloudflare_warp_mdm_content
+
+    - name: Assert Cloudflare WARP MDM profile was rendered
+      ansible.builtin.assert:
+        that:
+          - _cloudflare_warp_mdm.stat.exists
+          - (_cloudflare_warp_mdm_content.content | b64decode) is search('test-team')
+          - (_cloudflare_warp_mdm_content.content | b64decode) is search('auth_client_id')

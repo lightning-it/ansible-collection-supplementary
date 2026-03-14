@@ -1,0 +1,14 @@
+---
+- name: Install Cloudflare WARP repo (RHEL)
+  ansible.builtin.get_url:
+    url: "{{ cloudflare_warp_repo_url }}"
+    dest: "{{ cloudflare_warp_repo_path }}"
+    mode: "0644"
+  when: cloudflare_warp_manage_repo | bool
+
+- name: Install Cloudflare WARP package
+  ansible.builtin.dnf:
+    name: "{{ cloudflare_warp_package_name }}"
+    state: "{{ cloudflare_warp_package_state }}"
+    update_cache: "{{ cloudflare_warp_update_cache }}"
+  when: cloudflare_warp_install | bool

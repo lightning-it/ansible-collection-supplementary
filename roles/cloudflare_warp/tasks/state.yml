@@ -1,0 +1,47 @@
+---
+- name: Query current Cloudflare WARP status
+  ansible.builtin.command:
+    argv:
+      - "{{ cloudflare_warp_cli_path }}"
+      - --accept-tos
+      - status
+  register: _cloudflare_warp_status
+  changed_when: false
+  retries: 5
+  delay: 2
+  until: _cloudflare_warp_status.rc == 0
+  when: cloudflare_warp_connection_state != 'ignore'
+
+- name: Connect Cloudflare WARP
+  ansible.builtin.command:
+    argv:
+      - "{{ cloudflare_warp_cli_path }}"
+      - --accept-tos
+      - connect
+  register: _cloudflare_warp_connect
+  changed_when: true
+  when:
+    - cloudflare_warp_connection_state == 'connected'
+    - (_cloudflare_warp_status.stdout | default('') | regex_search('(?im)\\bConnected\\b')) is none
+
+- name: Disconnect Cloudflare WARP
+  ansible.builtin.command:
+    argv:
+      - "{{ cloudflare_warp_cli_path }}"
+      - --accept-tos
+      - disconnect
+  register: _cloudflare_warp_disconnect
+  changed_when: true
+  when:
+    - cloudflare_warp_connection_state == 'disconnected'
+    - (_cloudflare_warp_status.stdout | default('') | regex_search('(?im)\\bDisconnected\\b')) is none
+
+- name: Show Cloudflare WARP status
+  ansible.builtin.command:
+    argv:
+      - "{{ cloudflare_warp_cli_path }}"
+      - --accept-tos
+      - status
+  register: _cloudflare_warp_status_show
+  changed_when: false
+  when: cloudflare_warp_show_status | bool

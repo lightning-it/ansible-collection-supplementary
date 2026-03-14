@@ -1,0 +1,6 @@
+---
+- name: Restart Cloudflare WARP service
+  ansible.builtin.systemd:
+    name: "{{ cloudflare_warp_service_name }}"
+    state: restarted
+  when: cloudflare_warp_manage_service | bool
