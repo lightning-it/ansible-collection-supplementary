@@ -76,6 +76,11 @@ aap_deploy_setup_archive_extract_dirname: >-
     aap_deploy_setup_archive_filename
     | regex_replace('\.tar\.gz$', '')
   }}
+aap_deploy_setup_archive_extract_dirname_effective: >-
+  {{
+    aap_deploy_setup_archive_extract_dirname_detected
+    | default(aap_deploy_setup_archive_extract_dirname, true)
+  }}
 aap_deploy_setup_archive_path: >-
   {{ aap_deploy_install_dir }}/{{ aap_deploy_setup_archive_filename }}
 aap_deploy_local_bundle_archive_path: >-
@@ -163,7 +168,7 @@ aap_deploy_bundle_dir_effective: >-
     if (aap_deploy_bundle_dir | default('', true) | trim).startswith('/')
     else (
       aap_deploy_setup_dir ~ '/' ~
-      aap_deploy_setup_archive_extract_dirname ~ '/' ~
+      aap_deploy_setup_archive_extract_dirname_effective ~ '/' ~
       aap_deploy_bundle_dir
     )
   }}

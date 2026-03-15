@@ -265,6 +265,22 @@
     - aap_deploy_validate_archive_format | bool
     - aap_deploy_archive_format_check.failed | default(false) | bool
 
+- name: Detect effective extracted setup bundle directory name
+  ansible.builtin.set_fact:
+    aap_deploy_setup_archive_extract_dirname_detected: >-
+      {{
+        (
+          aap_deploy_archive_format_check.files | default([])
+          | map('regex_replace', '/.*$', '')
+          | reject('equalto', '')
+          | list
+          | first
+        )
+        | default(aap_deploy_setup_archive_extract_dirname, true)
+      }}
+  changed_when: false
+  when: aap_deploy_validate_archive_format | bool
+
 - name: Record staged setup bundle path
   ansible.builtin.set_fact:
     aap_deploy_downloaded_archive_path: "{{ aap_deploy_setup_archive_path }}"
