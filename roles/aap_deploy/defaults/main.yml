@@ -59,6 +59,9 @@ aap_deploy_setup_archive_src: >-
     )
   }}
 aap_deploy_setup_archive_checksum: ""
+aap_deploy_setup_archive_autodetect_patterns:
+  - "aap-containerized-setup.tar.gz"
+  - "ansible-automation-platform-containerized-setup-bundle-*.tar.gz"
 aap_deploy_validate_archive_format: true
 aap_deploy_validate_archive_min_size_bytes: 100000000
 aap_deploy_force_unpack: false
