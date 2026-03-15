@@ -1,0 +1,25 @@
+---
+- name: wait_for_controller_readiness | Wait for controller readiness via gateway
+  ansible.builtin.uri:
+    url: "{{ (aap_cac_gateway_hostname | regex_replace('/+$', '')) ~ aap_cac_controller_ready_path }}"
+    method: GET
+    validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+    status_code: "{{ aap_cac_controller_ready_status_codes }}"
+    timeout: 10
+    return_content: false
+  register: __aap_cac_controller_ready
+  retries: "{{ aap_cac_controller_ready_retries | int }}"
+  delay: "{{ aap_cac_controller_ready_delay | int }}"
+  until: __aap_cac_controller_ready is succeeded
+  changed_when: false
+  when:
+    - aap_cac_controller_ready_check | bool
+    - not (aap_cac_controller_ready_confirmed | default(false))
+
+- name: wait_for_controller_readiness | Record controller readiness
+  ansible.builtin.set_fact:
+    aap_cac_controller_ready_confirmed: true
+  changed_when: false
+  when:
+    - aap_cac_controller_ready_check | bool
+    - not (aap_cac_controller_ready_confirmed | default(false))

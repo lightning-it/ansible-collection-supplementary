@@ -15,6 +15,14 @@ aap_cac_gateway_ready_status_codes:
   - 403
 aap_cac_gateway_ready_retries: 60
 aap_cac_gateway_ready_delay: 5
+aap_cac_controller_ready_check: true
+aap_cac_controller_ready_path: "/api/controller/v2/ping/"
+aap_cac_controller_ready_status_codes:
+  - 200
+  - 401
+  - 403
+aap_cac_controller_ready_retries: 120
+aap_cac_controller_ready_delay: 5
 
 # Default organizations for gateway/controller organization tasksets.
 # Inventory can override this (for example per environment/tenant).

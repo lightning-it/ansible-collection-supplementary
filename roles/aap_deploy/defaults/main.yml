@@ -200,6 +200,23 @@ aap_deploy_tls_customer_files:
     key_src: ""
   ca_cert_src: ""
 aap_deploy_tls_vault_pki_mount_point: ""
+aap_deploy_tls_vault_kv_mount_point: >-
+  {{
+    hc_vault_engine_mount_point
+    | default(vault_engine_mount_point | default('', true), true)
+    | string
+    | trim
+  }}
+aap_deploy_tls_vault_read_token: >-
+  {{
+    hc_vault_token
+    | default('', true)
+    | string
+    | trim
+  }}
+aap_deploy_tls_vault_pki_approle_path: ""
+aap_deploy_tls_vault_pki_role_id: ""
+aap_deploy_tls_vault_pki_secret_id: ""
 aap_deploy_tls_vault_pki_ttl: ""
 aap_deploy_tls_vault_pki_format: pem
 aap_deploy_tls_vault_pki_private_key_format: pkcs8

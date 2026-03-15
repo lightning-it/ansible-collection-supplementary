@@ -48,6 +48,9 @@
       roles: "{{ controller_roles | default([], true) | length > 0 }}"
       schedules: "{{ controller_schedules | default([], true) | length > 0 }}"
   block:
+    - name: Wait for controller readiness
+      ansible.builtin.include_tasks: "{{ role_path }}/tasks/wait_for_controller_readiness.yml"
+
     - name: Build platform/ops requested tag filter from ansible_run_tags
       ansible.builtin.set_fact:
         aap_cac_controller_configuration_platform_ops_requested_tags: >-

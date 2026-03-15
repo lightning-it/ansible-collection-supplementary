@@ -37,13 +37,198 @@
     mode: '0644'
   when: aap_deploy_tls_source == 'customer_files'
 
+- name: Read Vault PKI AppRole credentials from Vault KV
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ hc_vault_addr }}"
+    token: "{{ aap_deploy_tls_vault_read_token }}"
+    validate_certs: "{{ aap_deploy_tls_vault_pki_validate_certs | bool }}"
+    engine_mount_point: "{{ aap_deploy_tls_vault_kv_mount_point }}"
+    path: "{{ aap_deploy_tls_vault_pki_approle_path }}"
+  register: aap_deploy_tls_vault_pki_approle_kv
+  delegate_to: localhost
+  become: false
+  failed_when: false
+  when:
+    - aap_deploy_tls_source == 'vault_pki'
+    - aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+  no_log: true
+
+- name: Ensure Vault PKI AppRole credentials are available
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_tls_vault_pki_approle_kv is defined
+      - not (aap_deploy_tls_vault_pki_approle_kv.failed | default(false) | bool)
+      - aap_deploy_tls_vault_pki_approle_kv.data is defined
+      - aap_deploy_tls_vault_pki_approle_kv.data.data is defined
+      - aap_deploy_tls_vault_pki_approle_kv.data.data.role_id | default('', true) | trim | length > 0
+      - aap_deploy_tls_vault_pki_approle_kv.data.data.secret_id | default('', true) | trim | length > 0
+    fail_msg: >-
+      Failed to read Vault PKI AppRole credentials from
+      {{ aap_deploy_tls_vault_kv_mount_point }}/data/{{ aap_deploy_tls_vault_pki_approle_path }}.
+      Ensure the KV secret exists and the read token has access.
+    quiet: true
+  when:
+    - aap_deploy_tls_source == 'vault_pki'
+    - aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+  no_log: true
+
+- name: Compute effective Vault PKI auth inputs
+  ansible.builtin.set_fact:
+    aap_deploy_tls_vault_pki_role_id_effective: >-
+      {{
+        (
+          aap_deploy_tls_vault_pki_approle_kv.data.data.role_id
+          if (
+            aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+            and aap_deploy_tls_vault_pki_approle_kv is defined
+            and aap_deploy_tls_vault_pki_approle_kv.data is defined
+            and aap_deploy_tls_vault_pki_approle_kv.data.data is defined
+          )
+          else (
+            aap_deploy_tls_vault_pki_role_id
+            | default(hc_vault_role_id | default('', true), true)
+          )
+        )
+        | string
+        | trim
+      }}
+    aap_deploy_tls_vault_pki_secret_id_effective: >-
+      {{
+        (
+          aap_deploy_tls_vault_pki_approle_kv.data.data.secret_id
+          if (
+            aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+            and aap_deploy_tls_vault_pki_approle_kv is defined
+            and aap_deploy_tls_vault_pki_approle_kv.data is defined
+            and aap_deploy_tls_vault_pki_approle_kv.data.data is defined
+          )
+          else (
+            aap_deploy_tls_vault_pki_secret_id
+            | default(hc_vault_secret_id | default('', true), true)
+          )
+        )
+        | string
+        | trim
+      }}
+    aap_deploy_tls_vault_pki_auth_method_effective: >-
+      {{
+        'approle'
+        if (
+          (
+            (
+              aap_deploy_tls_vault_pki_approle_kv.data.data.role_id
+              if (
+                aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+                and aap_deploy_tls_vault_pki_approle_kv is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data.data is defined
+              )
+              else (
+                aap_deploy_tls_vault_pki_role_id
+                | default(hc_vault_role_id | default('', true), true)
+              )
+            )
+            | string
+            | trim
+            | length
+          ) > 0
+          and
+          (
+            (
+              aap_deploy_tls_vault_pki_approle_kv.data.data.secret_id
+              if (
+                aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+                and aap_deploy_tls_vault_pki_approle_kv is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data.data is defined
+              )
+              else (
+                aap_deploy_tls_vault_pki_secret_id
+                | default(hc_vault_secret_id | default('', true), true)
+              )
+            )
+            | string
+            | trim
+            | length
+          ) > 0
+        )
+        else hc_vault_auth_method
+      }}
+    aap_deploy_tls_vault_pki_token_effective: >-
+      {{
+        (
+          ''
+          if (
+            (
+              aap_deploy_tls_vault_pki_approle_kv.data.data.role_id
+              if (
+                aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+                and aap_deploy_tls_vault_pki_approle_kv is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data.data is defined
+              )
+              else (
+                aap_deploy_tls_vault_pki_role_id
+                | default(hc_vault_role_id | default('', true), true)
+              )
+            )
+            | string
+            | trim
+            | length
+          ) > 0
+          and
+          (
+            (
+              aap_deploy_tls_vault_pki_approle_kv.data.data.secret_id
+              if (
+                aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+                and aap_deploy_tls_vault_pki_approle_kv is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data.data is defined
+              )
+              else (
+                aap_deploy_tls_vault_pki_secret_id
+                | default(hc_vault_secret_id | default('', true), true)
+              )
+            )
+            | string
+            | trim
+            | length
+          ) > 0
+          else (
+            hc_vault_token
+            | default('', true)
+            | string
+            | trim
+          )
+        )
+      }}
+  changed_when: false
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
 - name: Generate Vault PKI leaf certificates for AAP services
   community.hashi_vault.vault_pki_generate_certificate:
     url: "{{ hc_vault_addr }}"
-    auth_method: "{{ hc_vault_auth_method }}"
-    token: "{{ hc_vault_token | default(omit, true) }}"
-    role_id: "{{ hc_vault_role_id | default(omit, true) }}"
-    secret_id: "{{ hc_vault_secret_id | default(omit, true) }}"
+    auth_method: "{{ aap_deploy_tls_vault_pki_auth_method_effective }}"
+    token: >-
+      {{
+        aap_deploy_tls_vault_pki_token_effective
+        if (aap_deploy_tls_vault_pki_token_effective | default('', true) | trim | length > 0)
+        else omit
+      }}
+    role_id: >-
+      {{
+        aap_deploy_tls_vault_pki_role_id_effective
+        if (aap_deploy_tls_vault_pki_role_id_effective | default('', true) | trim | length > 0)
+        else omit
+      }}
+    secret_id: >-
+      {{
+        aap_deploy_tls_vault_pki_secret_id_effective
+        if (aap_deploy_tls_vault_pki_secret_id_effective | default('', true) | trim | length > 0)
+        else omit
+      }}
     validate_certs: "{{ aap_deploy_tls_vault_pki_validate_certs | bool }}"
     engine_mount_point: "{{ aap_deploy_tls_vault_pki_mount_point }}"
     role_name: "{{ aap_deploy_tls_vault_pki_services[item].role_name }}"
