@@ -114,6 +114,44 @@ aap_deploy_postgresql_admin_password_effective: >-
     | default('', true)
   }}
 
+# Persist service-backed SSO so gateway-authenticated UI/API calls work across
+# Controller, Hub, and EDA after redeploys.
+aap_deploy_controller_service_backed_sso_enabled: true
+aap_deploy_controller_extra_settings_additional: []
+aap_deploy_controller_extra_settings: >-
+  {{
+    (
+      [
+        {
+          'setting': 'ENABLE_SERVICE_BACKED_SSO',
+          'value': (aap_deploy_controller_service_backed_sso_enabled | bool)
+        }
+      ]
+      + (aap_deploy_controller_extra_settings_additional | default([], true))
+    )
+    | to_json
+    | from_json
+  }}
+
+aap_deploy_hub_service_backed_sso_enabled: true
+aap_deploy_hub_extra_settings_additional: []
+aap_deploy_hub_extra_settings: >-
+  {{
+    (
+      [
+        {
+          'setting': 'ENABLE_SERVICE_BACKED_SSO',
+          'value': (aap_deploy_hub_service_backed_sso_enabled | bool)
+        }
+      ]
+      + (aap_deploy_hub_extra_settings_additional | default([], true))
+    )
+    | to_json
+    | from_json
+  }}
+
+aap_deploy_eda_service_backed_sso_enabled: true
+
 # Bundle install location (required when aap_deploy_install_type=bundle)
 aap_deploy_bundle_dir: bundle
 aap_deploy_bundle_dir_effective: >-

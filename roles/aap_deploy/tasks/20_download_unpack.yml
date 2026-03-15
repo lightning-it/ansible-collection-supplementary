@@ -323,8 +323,10 @@
 - name: Build setup inventory variables
   ansible.builtin.set_fact:
     aap_deploy_setup_prep_inv_vars:
-      automationcontroller: {}
-      automationhub: {}
+      automationcontroller:
+        controller_extra_settings: "{{ aap_deploy_controller_extra_settings }}"
+      automationhub:
+        hub_extra_settings: "{{ aap_deploy_hub_extra_settings }}"
       automationeda: {}
       all:
         gateway_admin_password: "'{{ aap_deploy_gateway_admin_password_effective }}'"

@@ -57,6 +57,16 @@
     - download
     - inventory
 
+- name: Customize prepared installer workspace
+  ansible.builtin.import_tasks: 25_customize_prepared_installer.yml
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_manage_download_unpack | bool
+    - not (aap_deploy_existing_install_detected | default(false))
+  tags:
+    - download
+    - inventory
+
 - name: Run containerized installer
   ansible.builtin.import_tasks: 40_install.yml
   when:

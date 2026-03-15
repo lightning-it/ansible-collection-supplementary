@@ -1,0 +1,13 @@
+---
+- name: Enable service-backed SSO in prepared EDA installer template
+  ansible.builtin.replace:
+    path: >-
+      {{
+        aap_setup_prep_setup_dir
+      }}/collections/ansible_collections/ansible/containerized_installer/roles/automationeda/templates/settings.yaml.j2
+    regexp: '^ENABLE_SERVICE_BACKED_SSO: False$'
+    replace: >-
+      ENABLE_SERVICE_BACKED_SSO: {{
+        'True' if aap_deploy_eda_service_backed_sso_enabled | bool else 'False'
+      }}
+  when: aap_deploy_eda_service_backed_sso_enabled is boolean
