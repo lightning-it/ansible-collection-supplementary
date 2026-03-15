@@ -1,0 +1,186 @@
+---
+- name: Ensure TLS asset directory exists
+  ansible.builtin.file:
+    path: "{{ aap_deploy_tls_dir }}"
+    state: directory
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0755'
+
+- name: Copy customer TLS service certificates to target
+  ansible.builtin.copy:
+    src: "{{ aap_deploy_tls_customer_files[item].cert_src }}"
+    dest: "{{ aap_deploy_tls_target_files[item].cert_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0644'
+  loop: "{{ aap_deploy_tls_services }}"
+  when: aap_deploy_tls_source == 'customer_files'
+
+- name: Copy customer TLS service keys to target
+  ansible.builtin.copy:
+    src: "{{ aap_deploy_tls_customer_files[item].key_src }}"
+    dest: "{{ aap_deploy_tls_target_files[item].key_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0600'
+  loop: "{{ aap_deploy_tls_services }}"
+  when: aap_deploy_tls_source == 'customer_files'
+  no_log: true
+
+- name: Copy customer CA certificate to target
+  ansible.builtin.copy:
+    src: "{{ aap_deploy_tls_customer_files.ca_cert_src }}"
+    dest: "{{ aap_deploy_tls_ca_cert_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0644'
+  when: aap_deploy_tls_source == 'customer_files'
+
+- name: Generate Vault PKI leaf certificates for AAP services
+  community.hashi_vault.vault_pki_generate_certificate:
+    url: "{{ hc_vault_addr }}"
+    auth_method: "{{ hc_vault_auth_method }}"
+    token: "{{ hc_vault_token | default(omit, true) }}"
+    role_id: "{{ hc_vault_role_id | default(omit, true) }}"
+    secret_id: "{{ hc_vault_secret_id | default(omit, true) }}"
+    validate_certs: "{{ aap_deploy_tls_vault_pki_validate_certs | bool }}"
+    engine_mount_point: "{{ aap_deploy_tls_vault_pki_mount_point }}"
+    role_name: "{{ aap_deploy_tls_vault_pki_services[item].role_name }}"
+    common_name: "{{ aap_deploy_tls_vault_pki_services[item].common_name }}"
+    alt_names: "{{ aap_deploy_tls_vault_pki_services[item].alt_names }}"
+    ip_sans: "{{ aap_deploy_tls_vault_pki_services[item].ip_sans }}"
+    ttl: "{{ aap_deploy_tls_vault_pki_ttl | default(omit, true) }}"
+    format: "{{ aap_deploy_tls_vault_pki_format }}"
+    private_key_format: "{{ aap_deploy_tls_vault_pki_private_key_format }}"
+  register: aap_deploy_tls_vault_pki_results
+  loop: "{{ aap_deploy_tls_services }}"
+  delegate_to: localhost
+  become: false
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
+- name: Record shared Vault PKI CA bundle
+  ansible.builtin.set_fact:
+    aap_deploy_tls_vault_ca_bundle: >-
+      {{
+        (
+          (
+            (
+              aap_deploy_tls_vault_pki_results.results | first
+            ).data.data.ca_chain | default([])
+          )
+          + [
+            (
+              aap_deploy_tls_vault_pki_results.results | first
+            ).data.data.issuing_ca | default('')
+          ]
+        )
+        | reject('equalto', '')
+        | unique
+        | join('\n')
+      }}
+  changed_when: false
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
+- name: Ensure Vault PKI issued one shared CA bundle
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          (
+            item.data.data.ca_chain | default([])
+          )
+          + [
+            item.data.data.issuing_ca | default('')
+          ]
+        )
+        | reject('equalto', '')
+        | unique
+        | join('\n')
+        == aap_deploy_tls_vault_ca_bundle
+    fail_msg: >-
+      Vault PKI issued multiple CA bundles for AAP service certificates.
+      Configure the services to use the same PKI issuer before rerunning.
+    quiet: true
+  loop: "{{ aap_deploy_tls_vault_pki_results.results | default([]) }}"
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
+- name: Copy Vault PKI service certificates to target
+  ansible.builtin.copy:
+    content: >-
+      {{
+        (
+          [item.data.data.certificate]
+          + (item.data.data.ca_chain | default([]))
+        )
+        | reject('equalto', '')
+        | join('\n')
+      }}
+    dest: "{{ aap_deploy_tls_target_files[item.item].cert_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0644'
+  loop: "{{ aap_deploy_tls_vault_pki_results.results | default([]) }}"
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
+- name: Copy Vault PKI service keys to target
+  ansible.builtin.copy:
+    content: "{{ item.data.data.private_key }}"
+    dest: "{{ aap_deploy_tls_target_files[item.item].key_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0600'
+  loop: "{{ aap_deploy_tls_vault_pki_results.results | default([]) }}"
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
+- name: Copy shared Vault PKI CA bundle to target
+  ansible.builtin.copy:
+    content: "{{ aap_deploy_tls_vault_ca_bundle }}"
+    dest: "{{ aap_deploy_tls_ca_cert_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0644'
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
+- name: Reset staged TLS installer vars
+  ansible.builtin.set_fact:
+    aap_deploy_tls_inventory_vars: {}
+  changed_when: false
+
+- name: Record staged TLS service paths for installer inventory
+  ansible.builtin.set_fact:
+    aap_deploy_tls_inventory_vars: >-
+      {{
+        (aap_deploy_tls_inventory_vars | default({}, true))
+        | combine(
+            {
+              (item ~ '_tls_cert'): "'" ~ aap_deploy_tls_target_files[item].cert_path ~ "'",
+              (item ~ '_tls_key'): "'" ~ aap_deploy_tls_target_files[item].key_path ~ "'",
+              (item ~ '_tls_remote'): true
+            },
+            recursive=true
+          )
+      }}
+  loop: "{{ aap_deploy_tls_services }}"
+  changed_when: false
+
+- name: Record staged shared CA path for installer inventory
+  ansible.builtin.set_fact:
+    aap_deploy_tls_inventory_vars: >-
+      {{
+        (aap_deploy_tls_inventory_vars | default({}, true))
+        | combine(
+            {
+              'custom_ca_cert': "'" ~ aap_deploy_tls_ca_cert_path ~ "'",
+              'ca_tls_remote': true
+            },
+            recursive=true
+          )
+      }}
+  changed_when: false
