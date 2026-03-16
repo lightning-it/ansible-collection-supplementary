@@ -261,9 +261,15 @@
             ).data.data.issuing_ca | default('')
           ]
         )
+        | map('string')
+        | map('replace', '\r', '')
+        | map('replace', '\\n', '\n')
+        | map('trim')
         | reject('equalto', '')
         | unique
         | join('\n')
+        | regex_replace('\n+$', '')
+      ) ~ '\n'
       }}
   changed_when: false
   when: aap_deploy_tls_source == 'vault_pki'
@@ -281,9 +287,15 @@
             item.data.data.issuing_ca | default('')
           ]
         )
+        | map('string')
+        | map('replace', '\r', '')
+        | map('replace', '\\n', '\n')
+        | map('trim')
         | reject('equalto', '')
         | unique
         | join('\n')
+        | regex_replace('\n+$', '')
+        ~ '\n'
         == aap_deploy_tls_vault_ca_bundle
     fail_msg: >-
       Vault PKI issued multiple CA bundles for AAP service certificates.
@@ -301,8 +313,14 @@
           [item.data.data.certificate]
           + (item.data.data.ca_chain | default([]))
         )
+        | map('string')
+        | map('replace', '\r', '')
+        | map('replace', '\\n', '\n')
+        | map('trim')
         | reject('equalto', '')
         | join('\n')
+        | regex_replace('\n+$', '')
+      ) ~ '\n'
       }}
     dest: "{{ aap_deploy_tls_target_files[item.item].cert_path }}"
     owner: "{{ aap_deploy_install_user }}"
@@ -314,7 +332,18 @@
 
 - name: Copy Vault PKI service keys to target
   ansible.builtin.copy:
-    content: "{{ item.data.data.private_key }}"
+    content: >-
+      {{
+        (
+          item.data.data.private_key
+          | default('', true)
+          | string
+          | replace('\r', '')
+          | replace('\\n', '\n')
+          | trim
+          | regex_replace('\n+$', '')
+        ) ~ '\n'
+      }}
     dest: "{{ aap_deploy_tls_target_files[item.item].key_path }}"
     owner: "{{ aap_deploy_install_user }}"
     group: "{{ aap_deploy_install_user }}"
