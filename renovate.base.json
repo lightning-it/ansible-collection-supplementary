@@ -43,6 +43,23 @@
       "datasourceTemplate": "pypi",
       "packageNameTemplate": "ansible-core",
       "versioningTemplate": "pep440"
+    },
+    {
+      "customType": "regex",
+      "description": "ee-wunder-devtools-ubi9 image tag in collection docs and helper scripts",
+      "managerFilePatterns": [
+        "/^scripts\\/.*\\.sh$/",
+        "/^README\\.md$/",
+        "/^CONTRIBUTING\\.md$/",
+        "/^AGENT\\.md$/",
+        "/^\\.github\\/workflows\\/.*\\.ya?ml$/",
+        "/^\\.pre-commit-config\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "quay\\.io/l-it/ee-wunder-devtools-ubi9:v(?<currentValue>[0-9.]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "packageNameTemplate": "quay.io/l-it/ee-wunder-devtools-ubi9"
     }
   ]
 }
