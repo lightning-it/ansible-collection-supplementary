@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="quay.io/l-it/ee-wunder-devtools-ubi9:v1.8.0"
+IMAGE="quay.io/l-it/ee-wunder-devtools-ubi9:v1.8.1"
 CONTAINER_HOME="${CONTAINER_HOME:-/tmp/wunder}"
 HOST_HOME_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/wunder-devtools-ee/home"
 
@@ -139,7 +139,6 @@ fi
   ${ANSIBLE_ROLES_PATH:+-e ANSIBLE_ROLES_PATH} \
   ${ANSIBLE_CORE_VERSION:+-e ANSIBLE_CORE_VERSION} \
   ${ANSIBLE_LINT_VERSION:+-e ANSIBLE_LINT_VERSION} \
-  ${ANSIBLE_LINT_SKIP_META_RUNTIME:+-e ANSIBLE_LINT_SKIP_META_RUNTIME} \
   ${COLLECTION_NAMESPACE:+-e COLLECTION_NAMESPACE} \
   ${COLLECTION_NAME:+-e COLLECTION_NAME} \
   ${EXAMPLE_PLAYBOOK:+-e EXAMPLE_PLAYBOOK} \
