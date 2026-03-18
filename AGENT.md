@@ -71,6 +71,19 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
 8. If dependency update policy differs per dependency (for example lifecycle-managed collections), encode that as
    targeted Renovate `packageRules` while keeping version ownership in `galaxy.yml`.
 
+## 2.2 Package Version Management (Mandatory)
+
+1. Repository-owned package/tool dependency versions MUST be fixed to explicit versions wherever the repository is
+   the source of truth for that version.
+2. Do not introduce open-ended or floating version ranges such as `>=`, `<=`, `~=`, `^`, or `latest` unless the
+   repository already requires that pattern or the user explicitly asks for it.
+3. When a package version is maintained outside `galaxy.yml` (for example in `requirements.txt`,
+   `.pre-commit-config.yaml`, `package.json`, or tool-specific config), Renovate SHOULD manage that version.
+4. When adding a new repo-managed package version, you SHOULD also add or confirm Renovate coverage for that file
+   and dependency.
+5. Do not create parallel version ownership for the same dependency across multiple files unless the repository
+   explicitly documents that split.
+
 ## 3. Role Variable Naming and Mapping Rules
 
 ### 3.1 Role-Prefixed Variables (Mandatory)
