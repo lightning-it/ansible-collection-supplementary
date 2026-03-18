@@ -67,8 +67,13 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
 
   echo "DEBUG: docker info inside ee-wunder-devtools-ubi9..."
   if ! docker info >/dev/null 2>&1; then
-    echo "ERROR: docker info failed inside devtools container."
-    exit 1
+    echo "WARN: docker info failed inside devtools container." >&2
+    if [ "${CI:-false}" = "true" ] || [ "${GITHUB_ACTIONS:-false}" = "true" ]; then
+      echo "ERROR: Docker is required for Molecule tests in CI." >&2
+      exit 1
+    fi
+    echo "Skipping Molecule tests because Docker is unavailable in the local devtools container." >&2
+    exit 0
   fi
 
   # -------------------------------------------------------------
