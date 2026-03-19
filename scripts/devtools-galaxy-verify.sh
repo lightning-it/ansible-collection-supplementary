@@ -20,7 +20,7 @@ echo "Using collection: ${COLLECTION_NAMESPACE}.${COLLECTION_NAME}"
 COLLECTION_NAMESPACE="$COLLECTION_NAMESPACE" \
 COLLECTION_NAME="$COLLECTION_NAME" \
 CONTAINER_HOME=/tmp/wunder \
-bash scripts/wunder-devtools-ee.sh bash -lc '
+bash scripts/wunder-devtools-ee.sh bash -c '
   set -euo pipefail
 
   ns="${COLLECTION_NAMESPACE}"
@@ -29,7 +29,7 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   echo "Building and verifying collection ${ns}.${name}..."
 
   # devtools-collection-prepare.sh prints the per-run collections dir on the last line
-  COLLECTIONS_DIR="$(/workspace/scripts/devtools-collection-prepare.sh | tail -n 1)"
+  COLLECTIONS_DIR="$(bash /workspace/scripts/devtools-collection-prepare.sh | tail -n 1)"
 
   if [ -z "${COLLECTIONS_DIR:-}" ] || [ ! -d "${COLLECTIONS_DIR}" ]; then
     echo "ERROR: COLLECTIONS_DIR not found/invalid: ${COLLECTIONS_DIR:-<empty>}" >&2
