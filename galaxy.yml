@@ -1,7 +1,7 @@
 ---
 namespace: lit
 name: supplementary
-version: 1.17.0
+version: 1.18.0
 readme: README.md
 description: >
   Supplementary Ansible collection for ModuLix, providing configuration

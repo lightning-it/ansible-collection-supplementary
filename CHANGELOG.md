@@ -1,3 +1,9 @@
+## [1.18.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.17.0...v1.18.0) (2026-03-19)
+
+### Features
+
+* app added cloudflare ([#148](https://github.com/lightning-it/ansible-collection-supplementary/issues/148)) ([b2721fb](https://github.com/lightning-it/ansible-collection-supplementary/commit/b2721fb564a33261c5a07a23f2c34874ba782aca))
+
 ## [1.17.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.16.13...v1.17.0) (2026-03-12)
 
 ### Features
