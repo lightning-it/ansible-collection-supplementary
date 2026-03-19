@@ -47,8 +47,29 @@
   tags:
     - host_prep
 
+- name: Stage TLS assets for installer inventory
+  ansible.builtin.import_tasks: 15_stage_tls_assets.yml
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_tls_enabled | bool
+    - aap_deploy_manage_download_unpack | bool
+    - not (aap_deploy_existing_install_detected | default(false))
+  tags:
+    - inventory
+    - tls
+
 - name: Stage local setup bundle and prepare installer workspace
   ansible.builtin.import_tasks: 20_download_unpack.yml
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_manage_download_unpack | bool
+    - not (aap_deploy_existing_install_detected | default(false))
+  tags:
+    - download
+    - inventory
+
+- name: Customize prepared installer workspace
+  ansible.builtin.import_tasks: 25_customize_prepared_installer.yml
   when:
     - aap_deploy_enabled | bool
     - aap_deploy_manage_download_unpack | bool

@@ -41,12 +41,33 @@
   delegate_to: localhost
   become: false
 
+- name: Discover bundle archive candidates on control node runner project dir
+  ansible.builtin.find:
+    paths: "{{ aap_deploy_local_project_root }}"
+    patterns: "{{ aap_deploy_setup_archive_autodetect_patterns }}"
+    recurse: false
+    file_type: file
+  register: aap_deploy_archive_candidates_on_controller_project
+  delegate_to: localhost
+  become: false
+
 - name: Check bundle archive on control node .artifacts dir fallback
   ansible.builtin.stat:
     path: "{{ aap_deploy_local_bundle_archive_path }}"
   register: aap_deploy_archive_on_controller_fallback
   delegate_to: localhost
   become: false
+
+- name: Discover bundle archive candidates on control node .artifacts dir fallback
+  ansible.builtin.find:
+    paths: "{{ aap_deploy_local_project_root }}/.artifacts"
+    patterns: "{{ aap_deploy_setup_archive_autodetect_patterns }}"
+    recurse: false
+    file_type: file
+  register: aap_deploy_archive_candidates_on_controller_fallback
+  delegate_to: localhost
+  become: false
+  failed_when: false
 
 - name: Check bundle archive on control node path matching setup_archive_src
   ansible.builtin.stat:
@@ -55,6 +76,30 @@
   delegate_to: localhost
   become: false
 
+- name: Resolve autodetected bundle archive candidates on control node
+  ansible.builtin.set_fact:
+    aap_deploy_controller_project_archive_autodetected_path: >-
+      {{
+        (
+          aap_deploy_archive_candidates_on_controller_project.files | default([])
+          | sort(attribute='mtime', reverse=true)
+          | map(attribute='path')
+          | list
+          | first
+        ) | default('', true)
+      }}
+    aap_deploy_controller_fallback_archive_autodetected_path: >-
+      {{
+        (
+          aap_deploy_archive_candidates_on_controller_fallback.files | default([])
+          | sort(attribute='mtime', reverse=true)
+          | map(attribute='path')
+          | list
+          | first
+        ) | default('', true)
+      }}
+  changed_when: false
+
 - name: Select bundle archive source mode
   ansible.builtin.set_fact:
     aap_deploy_controller_archive_path: >-
@@ -62,12 +107,20 @@
         aap_deploy_local_bundle_project_archive_path
         if aap_deploy_archive_on_controller_project.stat.exists
         else (
-          aap_deploy_local_bundle_archive_path
-          if aap_deploy_archive_on_controller_fallback.stat.exists
+          aap_deploy_controller_project_archive_autodetected_path
+          if (aap_deploy_controller_project_archive_autodetected_path | length > 0)
           else (
-            aap_deploy_setup_archive_src
-            if aap_deploy_archive_on_controller_src.stat.exists
-            else ''
+            aap_deploy_local_bundle_archive_path
+            if aap_deploy_archive_on_controller_fallback.stat.exists
+            else (
+              aap_deploy_controller_fallback_archive_autodetected_path
+              if (aap_deploy_controller_fallback_archive_autodetected_path | length > 0)
+              else (
+                aap_deploy_setup_archive_src
+                if aap_deploy_archive_on_controller_src.stat.exists
+                else ''
+              )
+            )
           )
         )
       }}
@@ -76,7 +129,9 @@
         'controller'
         if (
           aap_deploy_archive_on_controller_project.stat.exists
+          or (aap_deploy_controller_project_archive_autodetected_path | length > 0)
           or aap_deploy_archive_on_controller_fallback.stat.exists
+          or (aap_deploy_controller_fallback_archive_autodetected_path | length > 0)
           or aap_deploy_archive_on_controller_src.stat.exists
         )
         else (
@@ -110,6 +165,7 @@
       Checked control-node project dir: {{ aap_deploy_local_bundle_project_archive_path }}
       Checked control-node .artifacts dir: {{ aap_deploy_local_bundle_archive_path }}
       Checked control-node custom path: {{ aap_deploy_setup_archive_src }}
+      Checked control-node autodetect patterns: {{ aap_deploy_setup_archive_autodetect_patterns | join(', ') }}
       Checked target destination path: {{ aap_deploy_setup_archive_path }}
       Checked target source path: {{ aap_deploy_setup_archive_src }}
 
@@ -208,6 +264,22 @@
   when:
     - aap_deploy_validate_archive_format | bool
     - aap_deploy_archive_format_check.failed | default(false) | bool
+
+- name: Detect effective extracted setup bundle directory name
+  ansible.builtin.set_fact:
+    aap_deploy_setup_archive_extract_dirname_detected: >-
+      {{
+        (
+          aap_deploy_archive_format_check.files | default([])
+          | map('regex_replace', '/.*$', '')
+          | reject('equalto', '')
+          | list
+          | first
+        )
+        | default(aap_deploy_setup_archive_extract_dirname, true)
+      }}
+  changed_when: false
+  when: aap_deploy_validate_archive_format | bool
 
 - name: Record staged setup bundle path
   ansible.builtin.set_fact:
@@ -323,28 +395,35 @@
 - name: Build setup inventory variables
   ansible.builtin.set_fact:
     aap_deploy_setup_prep_inv_vars:
-      automationcontroller: {}
-      automationhub: {}
+      automationcontroller:
+        controller_extra_settings: "{{ aap_deploy_controller_extra_settings }}"
+      automationhub:
+        hub_extra_settings: "{{ aap_deploy_hub_extra_settings }}"
       automationeda: {}
-      all:
-        gateway_admin_password: "'{{ aap_deploy_gateway_admin_password_effective }}'"
-        controller_admin_password: "'{{ aap_deploy_controller_admin_password_effective }}'"
-        hub_admin_password: "'{{ aap_deploy_hub_admin_password_effective }}'"
-        eda_admin_password: "'{{ aap_deploy_eda_admin_password_effective }}'"
-        postgresql_admin_password: "'{{ aap_deploy_postgresql_admin_password_effective }}'"
-        postgresql_admin_username: "'{{ aap_deploy_postgresql_admin_username }}'"
-        gateway_pg_host: "'{{ aap_deploy_gateway_pg_host_effective }}'"
-        gateway_pg_password: "'{{ aap_deploy_gateway_pg_password_effective }}'"
-        controller_pg_host: "'{{ aap_deploy_controller_pg_host_effective }}'"
-        controller_pg_password: "'{{ aap_deploy_controller_pg_password_effective }}'"
-        hub_pg_host: "'{{ aap_deploy_hub_pg_host_effective }}'"
-        hub_pg_password: "'{{ aap_deploy_hub_pg_password_effective }}'"
-        eda_pg_host: "'{{ aap_deploy_eda_pg_host_effective }}'"
-        eda_pg_password: "'{{ aap_deploy_eda_pg_password_effective }}'"
-        pg_admin_password: "'{{ aap_deploy_postgresql_admin_password_effective }}'"
-        redis_mode: "'{{ aap_deploy_redis_mode }}'"
-        bundle_install: true
-        bundle_dir: "{{ aap_deploy_bundle_dir_effective }}"
+      all: >-
+        {{
+          {
+            'gateway_admin_password': "'" ~ aap_deploy_gateway_admin_password_effective ~ "'",
+            'controller_admin_password': "'" ~ aap_deploy_controller_admin_password_effective ~ "'",
+            'hub_admin_password': "'" ~ aap_deploy_hub_admin_password_effective ~ "'",
+            'eda_admin_password': "'" ~ aap_deploy_eda_admin_password_effective ~ "'",
+            'postgresql_admin_password': "'" ~ aap_deploy_postgresql_admin_password_effective ~ "'",
+            'postgresql_admin_username': "'" ~ aap_deploy_postgresql_admin_username ~ "'",
+            'gateway_pg_host': "'" ~ aap_deploy_gateway_pg_host_effective ~ "'",
+            'gateway_pg_password': "'" ~ aap_deploy_gateway_pg_password_effective ~ "'",
+            'controller_pg_host': "'" ~ aap_deploy_controller_pg_host_effective ~ "'",
+            'controller_pg_password': "'" ~ aap_deploy_controller_pg_password_effective ~ "'",
+            'hub_pg_host': "'" ~ aap_deploy_hub_pg_host_effective ~ "'",
+            'hub_pg_password': "'" ~ aap_deploy_hub_pg_password_effective ~ "'",
+            'eda_pg_host': "'" ~ aap_deploy_eda_pg_host_effective ~ "'",
+            'eda_pg_password': "'" ~ aap_deploy_eda_pg_password_effective ~ "'",
+            'pg_admin_password': "'" ~ aap_deploy_postgresql_admin_password_effective ~ "'",
+            'redis_mode': "'" ~ aap_deploy_redis_mode ~ "'",
+            'bundle_install': true,
+            'bundle_dir': aap_deploy_bundle_dir_effective
+          }
+          | combine(aap_deploy_tls_inventory_vars | default({}, true), recursive=true)
+        }}
     aap_deploy_setup_prep_inv_secrets: {}
   changed_when: false
 

@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: cloudflare_warp
+  namespace: lit
+  author: René Osorio
+  company: Lightning IT
+  description: Install and manage the Cloudflare WARP client for Zero Trust device connectivity.
+  license: GPL-3.0-only
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions: ["all"]
+  galaxy_tags:
+    - modulix
+    - automation
+    - cloudflare
+    - warp
+    - zerotrust
+    - networking
+
+dependencies: []

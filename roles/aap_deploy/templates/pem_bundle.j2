@@ -1,0 +1,5 @@
+{% for pem_entry in aap_deploy_tls_pem_entries | default([]) %}
+{{ pem_entry | string | replace('\r', '') | replace('\\n', '\n') | trim }}
+{% if not loop.last %}
+{% endif %}
+{% endfor %}

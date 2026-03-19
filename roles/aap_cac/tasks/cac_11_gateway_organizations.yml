@@ -4,6 +4,9 @@
   tags:
     - organizations
   block:
+    - name: Wait for controller readiness
+      ansible.builtin.include_tasks: "{{ role_path }}/tasks/wait_for_controller_readiness.yml"
+
     - name: Set organizations for gateway organization taskset
       ansible.builtin.set_fact:
         aap_organizations: "{{ aap_cac_controller_organizations }}"

@@ -1,0 +1,7 @@
+---
+- name: Ensure Cloudflare WARP service is enabled and started
+  ansible.builtin.systemd:
+    name: "{{ cloudflare_warp_service_name }}"
+    enabled: true
+    state: started
+  when: cloudflare_warp_manage_service | bool

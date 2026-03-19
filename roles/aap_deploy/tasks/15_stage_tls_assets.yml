@@ -1,0 +1,545 @@
+---
+- name: Ensure TLS asset directory exists
+  ansible.builtin.file:
+    path: "{{ aap_deploy_tls_dir }}"
+    state: directory
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0755'
+
+- name: Copy customer TLS service certificates to target
+  ansible.builtin.copy:
+    src: "{{ aap_deploy_tls_customer_files[item].cert_src }}"
+    dest: "{{ aap_deploy_tls_target_files[item].cert_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0644'
+  loop: "{{ aap_deploy_tls_services }}"
+  when: aap_deploy_tls_source == 'customer_files'
+
+- name: Copy customer TLS service keys to target
+  ansible.builtin.copy:
+    src: "{{ aap_deploy_tls_customer_files[item].key_src }}"
+    dest: "{{ aap_deploy_tls_target_files[item].key_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0600'
+  loop: "{{ aap_deploy_tls_services }}"
+  when: aap_deploy_tls_source == 'customer_files'
+  no_log: true
+
+- name: Copy customer CA certificate to target
+  ansible.builtin.copy:
+    src: "{{ aap_deploy_tls_customer_files.ca_cert_src }}"
+    dest: "{{ aap_deploy_tls_ca_cert_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0644'
+  when: aap_deploy_tls_source == 'customer_files'
+
+- name: Read Vault PKI AppRole credentials from Vault KV
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ hc_vault_addr }}"
+    token: "{{ aap_deploy_tls_vault_read_token }}"
+    validate_certs: "{{ aap_deploy_tls_vault_pki_validate_certs | bool }}"
+    engine_mount_point: "{{ aap_deploy_tls_vault_kv_mount_point }}"
+    path: "{{ aap_deploy_tls_vault_pki_approle_path }}"
+  register: aap_deploy_tls_vault_pki_approle_kv
+  delegate_to: localhost
+  become: false
+  failed_when: false
+  when:
+    - aap_deploy_tls_source == 'vault_pki'
+    - aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+  no_log: true
+
+- name: Ensure Vault PKI AppRole credentials are available
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_tls_vault_pki_approle_kv is defined
+      - not (aap_deploy_tls_vault_pki_approle_kv.failed | default(false) | bool)
+      - aap_deploy_tls_vault_pki_approle_kv.data is defined
+      - aap_deploy_tls_vault_pki_approle_kv.data.data is defined
+      - aap_deploy_tls_vault_pki_approle_kv.data.data.role_id | default('', true) | trim | length > 0
+      - aap_deploy_tls_vault_pki_approle_kv.data.data.secret_id | default('', true) | trim | length > 0
+    fail_msg: >-
+      Failed to read Vault PKI AppRole credentials from
+      {{ aap_deploy_tls_vault_kv_mount_point }}/data/{{ aap_deploy_tls_vault_pki_approle_path }}.
+      Ensure the KV secret exists and the read token has access.
+    quiet: true
+  when:
+    - aap_deploy_tls_source == 'vault_pki'
+    - aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+  no_log: true
+
+- name: Compute effective Vault PKI auth inputs
+  ansible.builtin.set_fact:
+    aap_deploy_tls_vault_pki_role_id_effective: >-
+      {{
+        (
+          aap_deploy_tls_vault_pki_approle_kv.data.data.role_id
+          if (
+            aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+            and aap_deploy_tls_vault_pki_approle_kv is defined
+            and aap_deploy_tls_vault_pki_approle_kv.data is defined
+            and aap_deploy_tls_vault_pki_approle_kv.data.data is defined
+          )
+          else (
+            aap_deploy_tls_vault_pki_role_id
+            | default(hc_vault_role_id | default('', true), true)
+          )
+        )
+        | string
+        | trim
+      }}
+    aap_deploy_tls_vault_pki_secret_id_effective: >-
+      {{
+        (
+          aap_deploy_tls_vault_pki_approle_kv.data.data.secret_id
+          if (
+            aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+            and aap_deploy_tls_vault_pki_approle_kv is defined
+            and aap_deploy_tls_vault_pki_approle_kv.data is defined
+            and aap_deploy_tls_vault_pki_approle_kv.data.data is defined
+          )
+          else (
+            aap_deploy_tls_vault_pki_secret_id
+            | default(hc_vault_secret_id | default('', true), true)
+          )
+        )
+        | string
+        | trim
+      }}
+    aap_deploy_tls_vault_pki_auth_method_effective: >-
+      {{
+        'approle'
+        if (
+          (
+            (
+              aap_deploy_tls_vault_pki_approle_kv.data.data.role_id
+              if (
+                aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+                and aap_deploy_tls_vault_pki_approle_kv is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data.data is defined
+              )
+              else (
+                aap_deploy_tls_vault_pki_role_id
+                | default(hc_vault_role_id | default('', true), true)
+              )
+            )
+            | string
+            | trim
+            | length
+          ) > 0
+          and
+          (
+            (
+              aap_deploy_tls_vault_pki_approle_kv.data.data.secret_id
+              if (
+                aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+                and aap_deploy_tls_vault_pki_approle_kv is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data.data is defined
+              )
+              else (
+                aap_deploy_tls_vault_pki_secret_id
+                | default(hc_vault_secret_id | default('', true), true)
+              )
+            )
+            | string
+            | trim
+            | length
+          ) > 0
+        )
+        else hc_vault_auth_method
+      }}
+    aap_deploy_tls_vault_pki_token_effective: >-
+      {{
+        (
+          ''
+          if (
+            (
+              aap_deploy_tls_vault_pki_approle_kv.data.data.role_id
+              if (
+                aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+                and aap_deploy_tls_vault_pki_approle_kv is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data.data is defined
+              )
+              else (
+                aap_deploy_tls_vault_pki_role_id
+                | default(hc_vault_role_id | default('', true), true)
+              )
+            )
+            | string
+            | trim
+            | length
+          ) > 0
+          and
+          (
+            (
+              aap_deploy_tls_vault_pki_approle_kv.data.data.secret_id
+              if (
+                aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+                and aap_deploy_tls_vault_pki_approle_kv is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data is defined
+                and aap_deploy_tls_vault_pki_approle_kv.data.data is defined
+              )
+              else (
+                aap_deploy_tls_vault_pki_secret_id
+                | default(hc_vault_secret_id | default('', true), true)
+              )
+            )
+            | string
+            | trim
+            | length
+          ) > 0
+          else (
+            hc_vault_token
+            | default('', true)
+            | string
+            | trim
+          )
+        )
+      }}
+  changed_when: false
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
+- name: Generate Vault PKI leaf certificates for AAP services
+  community.hashi_vault.vault_pki_generate_certificate:
+    url: "{{ hc_vault_addr }}"
+    auth_method: "{{ aap_deploy_tls_vault_pki_auth_method_effective }}"
+    token: >-
+      {{
+        aap_deploy_tls_vault_pki_token_effective
+        if (aap_deploy_tls_vault_pki_token_effective | default('', true) | trim | length > 0)
+        else omit
+      }}
+    role_id: >-
+      {{
+        aap_deploy_tls_vault_pki_role_id_effective
+        if (aap_deploy_tls_vault_pki_role_id_effective | default('', true) | trim | length > 0)
+        else omit
+      }}
+    secret_id: >-
+      {{
+        aap_deploy_tls_vault_pki_secret_id_effective
+        if (aap_deploy_tls_vault_pki_secret_id_effective | default('', true) | trim | length > 0)
+        else omit
+      }}
+    validate_certs: "{{ aap_deploy_tls_vault_pki_validate_certs | bool }}"
+    engine_mount_point: "{{ aap_deploy_tls_vault_pki_mount_point }}"
+    role_name: "{{ aap_deploy_tls_vault_pki_services[item].role_name }}"
+    common_name: "{{ aap_deploy_tls_vault_pki_services[item].common_name }}"
+    alt_names: "{{ aap_deploy_tls_vault_pki_services[item].alt_names }}"
+    ip_sans: "{{ aap_deploy_tls_vault_pki_services[item].ip_sans }}"
+    ttl: "{{ aap_deploy_tls_vault_pki_ttl | default(omit, true) }}"
+    format: "{{ aap_deploy_tls_vault_pki_format }}"
+    private_key_format: "{{ aap_deploy_tls_vault_pki_private_key_format }}"
+  register: aap_deploy_tls_vault_pki_results
+  loop: "{{ aap_deploy_tls_services }}"
+  delegate_to: localhost
+  become: false
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
+- name: Build normalized Vault PKI CA bundle candidates
+  ansible.builtin.set_fact:
+    _aap_deploy_tls_vault_ca_bundles: >-
+      {{
+        (_aap_deploy_tls_vault_ca_bundles | default([]))
+        + [
+          (
+            (
+              (item.data.data.ca_chain | default([]))
+              + [(item.data.data.issuing_ca | default(''))]
+            )
+            | map('string')
+            | map('replace', '\r', '')
+            | map('replace', '\\n', "\n")
+            | map('trim')
+            | reject('equalto', '')
+            | unique
+            | join("\n")
+            | replace('\\n', "\n")
+            | regex_replace("\n+$", '')
+          )
+        ]
+      }}
+  loop: "{{ aap_deploy_tls_vault_pki_results.results | default([]) }}"
+  changed_when: false
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
+- name: Ensure Vault PKI issued one shared CA bundle
+  ansible.builtin.assert:
+    that:
+      - (_aap_deploy_tls_vault_ca_bundles | default([]) | length) > 0
+      - (_aap_deploy_tls_vault_ca_bundles | default([]) | unique | length) == 1
+    fail_msg: >-
+      Vault PKI issued multiple CA bundles for AAP service certificates.
+      Configure the services to use the same PKI issuer before rerunning.
+    quiet: true
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
+- name: Record shared Vault PKI CA bundle
+  ansible.builtin.set_fact:
+    aap_deploy_tls_vault_ca_bundle: >-
+      {{
+        (_aap_deploy_tls_vault_ca_bundles | default([]) | unique | first)
+      }}
+    aap_deploy_tls_vault_ca_entries: >-
+      {{
+        (
+          (
+            aap_deploy_tls_vault_pki_results.results | first
+          ).data.data.ca_chain | default([])
+        )
+        + [
+          (
+            (
+              aap_deploy_tls_vault_pki_results.results | first
+            ).data.data.issuing_ca | default('')
+          )
+        ]
+      }}
+  changed_when: false
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
+- name: Inspect first Vault PKI CA certificate
+  community.crypto.x509_certificate_info:
+    content: "{{ aap_deploy_tls_vault_ca_entries | first }}"
+  register: aap_deploy_tls_vault_ca_first_info
+  delegate_to: localhost
+  become: false
+  when:
+    - aap_deploy_tls_source == 'vault_pki'
+    - (aap_deploy_tls_vault_ca_entries | default([]) | length) > 0
+  no_log: true
+
+- name: Derive Vault PKI issuer certificate PEM URL
+  ansible.builtin.set_fact:
+    aap_deploy_tls_vault_ca_issuer_pem_url: >-
+      {{
+        aap_deploy_tls_vault_ca_first_info.issuer_uri
+        | default('', true)
+        | string
+        | trim
+        | regex_replace('/$', '')
+        | regex_replace('/ca$', '/ca/pem')
+      }}
+  changed_when: false
+  when:
+    - aap_deploy_tls_source == 'vault_pki'
+    - aap_deploy_tls_vault_ca_first_info is defined
+  no_log: true
+
+- name: Read Vault PKI issuer certificate PEM from issuer URI
+  ansible.builtin.uri:
+    url: "{{ aap_deploy_tls_vault_ca_issuer_pem_url }}"
+    method: GET
+    return_content: true
+    validate_certs: "{{ aap_deploy_tls_vault_pki_validate_certs | bool }}"
+    status_code: 200
+  register: aap_deploy_tls_vault_ca_issuer_pem
+  delegate_to: localhost
+  become: false
+  failed_when: false
+  when:
+    - aap_deploy_tls_source == 'vault_pki'
+    - aap_deploy_tls_vault_ca_first_info is defined
+    - >-
+      (aap_deploy_tls_vault_ca_first_info.subject_ordered | default([]))
+      !=
+      (aap_deploy_tls_vault_ca_first_info.issuer_ordered | default([]))
+    - aap_deploy_tls_vault_ca_issuer_pem_url | default('', true) | trim | length > 0
+  no_log: true
+
+- name: Ensure Vault PKI issuer certificate is readable when CA is not self-signed
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_tls_vault_ca_issuer_pem is defined
+      - not (aap_deploy_tls_vault_ca_issuer_pem.failed | default(false) | bool)
+      - aap_deploy_tls_vault_ca_issuer_pem.status | default(0) | int == 200
+      - aap_deploy_tls_vault_ca_issuer_pem.content | default('', true) | trim | length > 0
+    fail_msg: >-
+      Vault PKI returned a non-self-signed issuing CA for AAP TLS, but the root
+      certificate could not be read from {{ aap_deploy_tls_vault_ca_issuer_pem_url }}.
+      The staged custom-ca.crt would be incomplete and later TLS verification would fail.
+    quiet: true
+  when:
+    - aap_deploy_tls_source == 'vault_pki'
+    - aap_deploy_tls_vault_ca_first_info is defined
+    - >-
+      (aap_deploy_tls_vault_ca_first_info.subject_ordered | default([]))
+      !=
+      (aap_deploy_tls_vault_ca_first_info.issuer_ordered | default([]))
+  no_log: true
+
+- name: Append Vault PKI issuer certificate to shared CA entries
+  ansible.builtin.set_fact:
+    aap_deploy_tls_vault_ca_entries: >-
+      {{
+        (
+          (aap_deploy_tls_vault_ca_entries | default([]))
+          + [
+              (
+                aap_deploy_tls_vault_ca_issuer_pem.content
+                if (
+                  aap_deploy_tls_vault_ca_issuer_pem is defined
+                  and not (aap_deploy_tls_vault_ca_issuer_pem.failed | default(false) | bool)
+                  and (aap_deploy_tls_vault_ca_issuer_pem.status | default(0) | int) == 200
+                )
+                else ''
+              )
+            ]
+        )
+        | map('string')
+        | map('replace', '\r', '')
+        | map('replace', '\\n', "\n")
+        | map('trim')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+    aap_deploy_tls_vault_ca_bundle: >-
+      {{
+        (
+          (
+            (aap_deploy_tls_vault_ca_entries | default([]))
+            + [
+                (
+                  aap_deploy_tls_vault_ca_issuer_pem.content
+                  if (
+                    aap_deploy_tls_vault_ca_issuer_pem is defined
+                    and not (aap_deploy_tls_vault_ca_issuer_pem.failed | default(false) | bool)
+                    and (aap_deploy_tls_vault_ca_issuer_pem.status | default(0) | int) == 200
+                  )
+                  else ''
+                )
+              ]
+          )
+          | map('string')
+          | map('replace', '\r', '')
+          | map('replace', '\\n', "\n")
+          | map('trim')
+          | reject('equalto', '')
+          | unique
+          | join("\n")
+          | regex_replace("\n+$", '')
+        )
+      }}
+  changed_when: false
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
+- name: Inspect final Vault PKI trust anchor certificate
+  community.crypto.x509_certificate_info:
+    content: "{{ aap_deploy_tls_vault_ca_entries | last }}"
+  register: aap_deploy_tls_vault_ca_last_info
+  delegate_to: localhost
+  become: false
+  when:
+    - aap_deploy_tls_source == 'vault_pki'
+    - (aap_deploy_tls_vault_ca_entries | default([]) | length) > 0
+  no_log: true
+
+- name: Ensure Vault PKI shared CA bundle ends at trust anchor
+  ansible.builtin.assert:
+    that:
+      - >-
+        (aap_deploy_tls_vault_ca_last_info.subject_ordered | default([]))
+        ==
+        (aap_deploy_tls_vault_ca_last_info.issuer_ordered | default([]))
+    fail_msg: >-
+      Vault PKI shared CA bundle for AAP TLS does not end in a self-signed trust anchor.
+      custom-ca.crt would be incomplete and the AAP installer readiness checks would fail.
+    quiet: true
+  when:
+    - aap_deploy_tls_source == 'vault_pki'
+    - aap_deploy_tls_vault_ca_last_info is defined
+  no_log: true
+
+- name: Copy Vault PKI service certificates to target
+  ansible.builtin.template:
+    src: pem_bundle.j2
+    dest: "{{ aap_deploy_tls_target_files[item.item].cert_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0644'
+  loop: "{{ aap_deploy_tls_vault_pki_results.results | default([]) }}"
+  vars:
+    aap_deploy_tls_pem_entries: >-
+      {{
+        [item.data.data.certificate]
+        + (item.data.data.ca_chain | default([]))
+      }}
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
+- name: Copy Vault PKI service keys to target
+  ansible.builtin.template:
+    src: pem_bundle.j2
+    dest: "{{ aap_deploy_tls_target_files[item.item].key_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0600'
+  loop: "{{ aap_deploy_tls_vault_pki_results.results | default([]) }}"
+  vars:
+    aap_deploy_tls_pem_entries:
+      - "{{ item.data.data.private_key }}"
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
+- name: Copy shared Vault PKI CA bundle to target
+  ansible.builtin.template:
+    src: pem_bundle.j2
+    dest: "{{ aap_deploy_tls_ca_cert_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0644'
+  vars:
+    aap_deploy_tls_pem_entries: "{{ aap_deploy_tls_vault_ca_entries }}"
+  when: aap_deploy_tls_source == 'vault_pki'
+  no_log: true
+
+- name: Reset staged TLS installer vars
+  ansible.builtin.set_fact:
+    aap_deploy_tls_inventory_vars: {}
+  changed_when: false
+
+- name: Record staged TLS service paths for installer inventory
+  ansible.builtin.set_fact:
+    aap_deploy_tls_inventory_vars: >-
+      {{
+        (aap_deploy_tls_inventory_vars | default({}, true))
+        | combine(
+            {
+              (item ~ '_tls_cert'): "'" ~ aap_deploy_tls_target_files[item].cert_path ~ "'",
+              (item ~ '_tls_key'): "'" ~ aap_deploy_tls_target_files[item].key_path ~ "'",
+              (item ~ '_tls_remote'): true
+            },
+            recursive=true
+          )
+      }}
+  loop: "{{ aap_deploy_tls_services }}"
+  changed_when: false
+
+- name: Record staged shared CA path for installer inventory
+  ansible.builtin.set_fact:
+    aap_deploy_tls_inventory_vars: >-
+      {{
+        (aap_deploy_tls_inventory_vars | default({}, true))
+        | combine(
+            {
+              'custom_ca_cert': "'" ~ aap_deploy_tls_ca_cert_path ~ "'",
+              'ca_tls_remote': true
+            },
+            recursive=true
+          )
+      }}
+  changed_when: false

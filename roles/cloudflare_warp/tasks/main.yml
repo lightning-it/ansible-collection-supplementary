@@ -1,0 +1,23 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  when: cloudflare_warp_enabled | bool
+  tags: always
+
+- name: Install Cloudflare WARP
+  ansible.builtin.import_tasks: install.yml
+  when: cloudflare_warp_enabled | bool
+
+- name: Configure Cloudflare WARP MDM profile
+  ansible.builtin.import_tasks: configure.yml
+  when:
+    - cloudflare_warp_enabled | bool
+    - cloudflare_warp_configure_mdm | bool
+
+- name: Manage Cloudflare WARP service
+  ansible.builtin.import_tasks: service.yml
+  when: cloudflare_warp_enabled | bool
+
+- name: Enforce Cloudflare WARP runtime state
+  ansible.builtin.import_tasks: state.yml
+  when: cloudflare_warp_enabled | bool

@@ -42,6 +42,11 @@ Key variables:
 - `aap_deploy_hub_admin_password_effective`
 - `aap_deploy_eda_admin_password_effective`
 - `aap_deploy_postgresql_admin_password_effective`
+- `aap_deploy_tls_enabled`
+- `aap_deploy_tls_source` (`customer_files` or `vault_pki`)
+- `aap_deploy_tls_customer_files` (controller-side cert/key paths plus `ca_cert_src`)
+- `aap_deploy_tls_vault_pki_mount_point`
+- `aap_deploy_tls_vault_pki_services` (per-service `role_name`, `common_name`, `alt_names`, `ip_sans`)
 - `aap_deploy_manage_host_prep`
 - `aap_deploy_manage_download_unpack`
 - `aap_deploy_run_installer`
@@ -80,7 +85,14 @@ Installer admin password behavior:
   - `aap_password_active` (alias)
   - `aap_password_active_slot` (canonical)
 - Backend references must be resolved in inventory (for example lookup/get-or-create), not in role code.
-- Role code does not read or write Vault directly.
+- Admin password resolution in this role does not read or write Vault directly.
+
+Installer TLS behavior:
+- When enabled, the role stages TLS assets under `aap_deploy_tls_dir` on the managed host.
+- The upstream installer receives only remote file paths (`*_tls_cert`, `*_tls_key`, `custom_ca_cert`).
+- Default layout is separate cert/key pairs for gateway, controller, hub, and EDA, plus one shared CA file.
+- `customer_files` copies controller-side files to the target before installer prep.
+- `vault_pki` generates separate leaf certs per service/FQDN from HashiCorp Vault PKI and reuses one shared CA bundle.
 
 ## Dependencies
 

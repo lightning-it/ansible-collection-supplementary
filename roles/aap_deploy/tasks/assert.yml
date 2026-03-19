@@ -182,6 +182,116 @@
     - aap_deploy_manage_host_prep | bool
   tags: always
 
+- name: Validate TLS staging settings
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_tls_enabled is boolean
+      - aap_deploy_tls_source in ['customer_files', 'vault_pki']
+      - aap_deploy_tls_dir | default('', true) | trim | length > 0
+      - aap_deploy_tls_dir.startswith('/')
+      - aap_deploy_tls_ca_cert_path | default('', true) | trim | length > 0
+      - aap_deploy_tls_ca_cert_path.startswith('/')
+      - aap_deploy_tls_services is sequence
+      - aap_deploy_tls_services is not string
+      - aap_deploy_tls_services | length > 0
+      - aap_deploy_tls_target_files is mapping
+      - aap_deploy_tls_customer_files is mapping
+      - aap_deploy_tls_vault_pki_services is mapping
+    fail_msg: >-
+      Invalid TLS staging configuration for lit.supplementary.aap_deploy.
+      When TLS is enabled, choose a supported source and provide absolute target paths.
+    quiet: true
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_tls_enabled | bool
+  tags: always
+
+- name: Validate customer TLS file inputs
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_tls_customer_files[item].cert_src | default('', true) | trim | length > 0
+      - aap_deploy_tls_customer_files[item].cert_src.startswith('/')
+      - aap_deploy_tls_customer_files[item].key_src | default('', true) | trim | length > 0
+      - aap_deploy_tls_customer_files[item].key_src.startswith('/')
+      - aap_deploy_tls_target_files[item].cert_path | default('', true) | trim | length > 0
+      - aap_deploy_tls_target_files[item].cert_path.startswith('/')
+      - aap_deploy_tls_target_files[item].key_path | default('', true) | trim | length > 0
+      - aap_deploy_tls_target_files[item].key_path.startswith('/')
+    fail_msg: >-
+      Missing customer TLS file inputs for {{ item }}.
+      Provide absolute controller-side cert/key paths in aap_deploy_tls_customer_files.
+    quiet: true
+  loop: "{{ aap_deploy_tls_services }}"
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_tls_enabled | bool
+    - aap_deploy_tls_source == 'customer_files'
+  tags: always
+
+- name: Validate customer CA input
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_tls_customer_files.ca_cert_src | default('', true) | trim | length > 0
+      - aap_deploy_tls_customer_files.ca_cert_src.startswith('/')
+    fail_msg: >-
+      Missing customer CA certificate input.
+      Provide aap_deploy_tls_customer_files.ca_cert_src as an absolute controller-side path.
+    quiet: true
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_tls_enabled | bool
+    - aap_deploy_tls_source == 'customer_files'
+  tags: always
+
+- name: Validate Vault PKI TLS inputs
+  ansible.builtin.assert:
+    that:
+      - hc_vault_addr | default('', true) | trim | length > 0
+      - >-
+        (hc_vault_auth_ok | default(false) | bool)
+        or (
+          (aap_deploy_tls_vault_pki_role_id | default('', true) | trim | length > 0)
+          and (aap_deploy_tls_vault_pki_secret_id | default('', true) | trim | length > 0)
+        )
+      - aap_deploy_tls_vault_pki_mount_point | default('', true) | trim | length > 0
+      - aap_deploy_tls_vault_pki_services[item].role_name | default('', true) | trim | length > 0
+      - aap_deploy_tls_vault_pki_services[item].common_name | default('', true) | trim | length > 0
+      - aap_deploy_tls_vault_pki_services[item].alt_names is sequence
+      - aap_deploy_tls_vault_pki_services[item].alt_names is not string
+      - aap_deploy_tls_vault_pki_services[item].ip_sans is sequence
+      - aap_deploy_tls_vault_pki_services[item].ip_sans is not string
+      - aap_deploy_tls_target_files[item].cert_path | default('', true) | trim | length > 0
+      - aap_deploy_tls_target_files[item].cert_path.startswith('/')
+      - aap_deploy_tls_target_files[item].key_path | default('', true) | trim | length > 0
+      - aap_deploy_tls_target_files[item].key_path.startswith('/')
+    fail_msg: >-
+      Missing Vault PKI TLS inputs for {{ item }}.
+      Provide a PKI mount point, working HashiCorp Vault auth or explicit PKI AppRole creds,
+      and role/common-name data.
+    quiet: true
+  loop: "{{ aap_deploy_tls_services }}"
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_tls_enabled | bool
+    - aap_deploy_tls_source == 'vault_pki'
+  tags: always
+
+- name: Validate Vault PKI AppRole lookup inputs
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_tls_vault_kv_mount_point | default('', true) | trim | length > 0
+      - aap_deploy_tls_vault_read_token | default('', true) | trim | length > 0
+    fail_msg: >-
+      Vault PKI AppRole lookup requires aap_deploy_tls_vault_kv_mount_point and
+      aap_deploy_tls_vault_read_token so the PKI AppRole credentials can be read from KV.
+    quiet: true
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_tls_enabled | bool
+    - aap_deploy_tls_source == 'vault_pki'
+    - aap_deploy_tls_vault_pki_approle_path | default('', true) | trim | length > 0
+  tags: always
+
 - name: Ensure memory facts are available for installer RAM precheck
   ansible.builtin.setup:
     gather_subset:

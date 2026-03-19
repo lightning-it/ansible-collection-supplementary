@@ -2,6 +2,9 @@
 # CaC taskset: Configure Controller Inventories.
 - name: Configure Controller Inventories
   block:
+    - name: Wait for controller readiness
+      ansible.builtin.include_tasks: "{{ role_path }}/tasks/wait_for_controller_readiness.yml"
+
     - name: Run role infra.aap_configuration.dispatch  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch

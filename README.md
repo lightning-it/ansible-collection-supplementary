@@ -169,7 +169,7 @@ Supplementary Ansible collection for ModuLix / Lightning IT.
 It includes service deployment and Configuration-as-Code roles such as
 `keycloak_deploy`, `keycloak_cac`, `forgejo_deploy`, `forgejo_cac`,
 `semaphore_deploy`, `semaphore_cac`, `nessus_deploy`, `nessus_cac`,
-`postgres_deploy`, and `cloudflared`.
+`postgres_deploy`, `cloudflared`, and `cloudflare_warp`.
 
 ## Usage
 
@@ -230,6 +230,9 @@ Example playbook:
   server to validate role wiring and defaults.
 - Molecule scenario `cloudflared-basic` runs the cloudflared role with install
   steps disabled to validate role wiring and defaults.
+- Molecule scenario `cloudflare-warp-basic` renders a headless WARP `mdm.xml`
+  profile with install/service steps disabled to validate role wiring and
+  defaults.
 - Molecule scenario `gitlab-runner-basic` runs the gitlab_runner stub role
   (acknowledging experimental status) to keep lint/test coverage green.
   It uses the repo’s roles path to source the role locally.
@@ -290,7 +293,7 @@ podman run --rm -it \
   -e GIT_CONFIG_COUNT=1 \
   -e GIT_CONFIG_KEY_0=safe.directory \
   -e GIT_CONFIG_VALUE_0="$PWD" \
-  quay.io/l-it/ee-wunder-devtools-ubi9:latest \
+  quay.io/l-it/ee-wunder-devtools-ubi9:v1.8.1 \
   pre-commit run --all-files
 ```
 

@@ -59,6 +59,9 @@ aap_deploy_setup_archive_src: >-
     )
   }}
 aap_deploy_setup_archive_checksum: ""
+aap_deploy_setup_archive_autodetect_patterns:
+  - "aap-containerized-setup.tar.gz"
+  - "ansible-automation-platform-containerized-setup-bundle-*.tar.gz"
 aap_deploy_validate_archive_format: true
 aap_deploy_validate_archive_min_size_bytes: 100000000
 aap_deploy_force_unpack: false
@@ -72,6 +75,11 @@ aap_deploy_setup_archive_extract_dirname: >-
   {{
     aap_deploy_setup_archive_filename
     | regex_replace('\.tar\.gz$', '')
+  }}
+aap_deploy_setup_archive_extract_dirname_effective: >-
+  {{
+    aap_deploy_setup_archive_extract_dirname_detected
+    | default(aap_deploy_setup_archive_extract_dirname, true)
   }}
 aap_deploy_setup_archive_path: >-
   {{ aap_deploy_install_dir }}/{{ aap_deploy_setup_archive_filename }}
@@ -114,6 +122,150 @@ aap_deploy_postgresql_admin_password_effective: >-
     | default('', true)
   }}
 
+# Persist service-backed SSO so gateway-authenticated UI/API calls work across
+# Controller, Hub, and EDA after redeploys.
+aap_deploy_controller_service_backed_sso_enabled: true
+aap_deploy_controller_extra_settings_additional: []
+aap_deploy_controller_extra_settings: >-
+  {{
+    (
+      [
+        {
+          'setting': 'ENABLE_SERVICE_BACKED_SSO',
+          'value': (aap_deploy_controller_service_backed_sso_enabled | bool)
+        }
+      ]
+      + (aap_deploy_controller_extra_settings_additional | default([], true))
+    )
+    | to_json
+    | from_json
+  }}
+
+aap_deploy_hub_service_backed_sso_enabled: true
+aap_deploy_hub_extra_settings_additional: []
+aap_deploy_hub_extra_settings: >-
+  {{
+    (
+      [
+        {
+          'setting': 'ENABLE_SERVICE_BACKED_SSO',
+          'value': (aap_deploy_hub_service_backed_sso_enabled | bool)
+        }
+      ]
+      + (aap_deploy_hub_extra_settings_additional | default([], true))
+    )
+    | to_json
+    | from_json
+  }}
+
+aap_deploy_eda_service_backed_sso_enabled: true
+
+# TLS asset staging for installer inventory.
+# We stage all certificate material on the target first, then hand only remote
+# file paths to the upstream installer inventory.
+aap_deploy_tls_enabled: false
+aap_deploy_tls_source: customer_files
+aap_deploy_tls_dir: "{{ aap_deploy_install_dir }}/tls"
+aap_deploy_tls_ca_cert_path: "{{ aap_deploy_tls_dir }}/custom-ca.crt"
+aap_deploy_tls_services:
+  - gateway
+  - controller
+  - hub
+  - eda
+aap_deploy_tls_target_files:
+  gateway:
+    cert_path: "{{ aap_deploy_tls_dir }}/gateway.crt"
+    key_path: "{{ aap_deploy_tls_dir }}/gateway.key"
+  controller:
+    cert_path: "{{ aap_deploy_tls_dir }}/controller.crt"
+    key_path: "{{ aap_deploy_tls_dir }}/controller.key"
+  hub:
+    cert_path: "{{ aap_deploy_tls_dir }}/hub.crt"
+    key_path: "{{ aap_deploy_tls_dir }}/hub.key"
+  eda:
+    cert_path: "{{ aap_deploy_tls_dir }}/eda.crt"
+    key_path: "{{ aap_deploy_tls_dir }}/eda.key"
+aap_deploy_tls_customer_files:
+  gateway:
+    cert_src: ""
+    key_src: ""
+  controller:
+    cert_src: ""
+    key_src: ""
+  hub:
+    cert_src: ""
+    key_src: ""
+  eda:
+    cert_src: ""
+    key_src: ""
+  ca_cert_src: ""
+aap_deploy_tls_vault_pki_mount_point: ""
+aap_deploy_tls_vault_kv_mount_point: >-
+  {{
+    hc_vault_engine_mount_point
+    | default(vault_engine_mount_point | default('', true), true)
+    | string
+    | trim
+  }}
+aap_deploy_tls_vault_read_token: >-
+  {{
+    hc_vault_token
+    | default('', true)
+    | string
+    | trim
+  }}
+aap_deploy_tls_vault_pki_approle_path: ""
+aap_deploy_tls_vault_pki_role_id: ""
+aap_deploy_tls_vault_pki_secret_id: ""
+aap_deploy_tls_vault_pki_ttl: ""
+aap_deploy_tls_vault_pki_format: pem
+aap_deploy_tls_vault_pki_private_key_format: pkcs8
+aap_deploy_tls_vault_pki_validate_certs: >-
+  {{ hc_vault_validate_certs | default(false, true) | bool }}
+aap_deploy_tls_vault_pki_role_name_default: ""
+aap_deploy_tls_vault_pki_services:
+  gateway:
+    role_name: >-
+      {{
+        aap_deploy_tls_vault_pki_role_name_gateway
+        | default(aap_deploy_tls_vault_pki_role_name_default | default('gateway', true), true)
+      }}
+    common_name: "{{ aap_deploy_tls_gateway_host_default }}"
+    alt_names:
+      - "{{ aap_deploy_tls_gateway_host_default }}"
+    ip_sans: []
+  controller:
+    role_name: >-
+      {{
+        aap_deploy_tls_vault_pki_role_name_controller
+        | default(aap_deploy_tls_vault_pki_role_name_default | default('controller', true), true)
+      }}
+    common_name: "{{ aap_deploy_tls_controller_host_default }}"
+    alt_names:
+      - "{{ aap_deploy_tls_controller_host_default }}"
+    ip_sans: []
+  hub:
+    role_name: >-
+      {{
+        aap_deploy_tls_vault_pki_role_name_hub
+        | default(aap_deploy_tls_vault_pki_role_name_default | default('hub', true), true)
+      }}
+    common_name: "{{ aap_deploy_tls_hub_host_default }}"
+    alt_names:
+      - "{{ aap_deploy_tls_hub_host_default }}"
+    ip_sans: []
+  eda:
+    role_name: >-
+      {{
+        aap_deploy_tls_vault_pki_role_name_eda
+        | default(aap_deploy_tls_vault_pki_role_name_default | default('eda', true), true)
+      }}
+    common_name: "{{ aap_deploy_tls_eda_host_default }}"
+    alt_names:
+      - "{{ aap_deploy_tls_eda_host_default }}"
+    ip_sans: []
+aap_deploy_tls_inventory_vars: {}
+
 # Bundle install location (required when aap_deploy_install_type=bundle)
 aap_deploy_bundle_dir: bundle
 aap_deploy_bundle_dir_effective: >-
@@ -122,7 +274,7 @@ aap_deploy_bundle_dir_effective: >-
     if (aap_deploy_bundle_dir | default('', true) | trim).startswith('/')
     else (
       aap_deploy_setup_dir ~ '/' ~
-      aap_deploy_setup_archive_extract_dirname ~ '/' ~
+      aap_deploy_setup_archive_extract_dirname_effective ~ '/' ~
       aap_deploy_bundle_dir
     )
   }}
@@ -150,6 +302,31 @@ aap_deploy_enterprise_eda_hosts:
   - "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_enterprise_postgresql_hosts:
   - "{{ ansible_fqdn | default(inventory_hostname) }}"
+
+aap_deploy_tls_gateway_host_default: >-
+  {{
+    aap_deploy_growth_gateway_host
+    if aap_deploy_topology == 'growth'
+    else (aap_deploy_enterprise_gateway_hosts | first)
+  }}
+aap_deploy_tls_controller_host_default: >-
+  {{
+    aap_deploy_growth_controller_host
+    if aap_deploy_topology == 'growth'
+    else (aap_deploy_enterprise_controller_hosts | first)
+  }}
+aap_deploy_tls_hub_host_default: >-
+  {{
+    aap_deploy_growth_hub_host
+    if aap_deploy_topology == 'growth'
+    else (aap_deploy_enterprise_hub_hosts | first)
+  }}
+aap_deploy_tls_eda_host_default: >-
+  {{
+    aap_deploy_growth_eda_host
+    if aap_deploy_topology == 'growth'
+    else (aap_deploy_enterprise_eda_hosts | first)
+  }}
 
 # PostgreSQL connection inputs for service components.
 # Defaults target the managed database host from selected topology.

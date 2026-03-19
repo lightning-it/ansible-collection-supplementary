@@ -1,0 +1,6 @@
+---
+- name: Converge cloudflare_warp
+  hosts: localhost
+  gather_facts: true
+  roles:
+    - role: cloudflare_warp
