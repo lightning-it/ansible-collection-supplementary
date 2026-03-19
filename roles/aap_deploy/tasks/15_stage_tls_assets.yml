@@ -15,7 +15,22 @@
     group: "{{ aap_deploy_install_user }}"
     mode: '0644'
   loop: "{{ aap_deploy_tls_services }}"
-  when: aap_deploy_tls_source == 'customer_files'
+  when:
+    - aap_deploy_tls_source == 'customer_files'
+    - aap_deploy_tls_customer_files[item].cert_src | default('', true) | trim | length > 0
+
+- name: Write customer TLS service certificates to target from inline content
+  ansible.builtin.copy:
+    content: "{{ aap_deploy_tls_customer_files[item].cert_content }}"
+    dest: "{{ aap_deploy_tls_target_files[item].cert_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0644'
+  loop: "{{ aap_deploy_tls_services }}"
+  when:
+    - aap_deploy_tls_source == 'customer_files'
+    - aap_deploy_tls_customer_files[item].cert_src | default('', true) | trim | length == 0
+    - aap_deploy_tls_customer_files[item].cert_content | default('', true) | trim | length > 0
 
 - name: Copy customer TLS service keys to target
   ansible.builtin.copy:
@@ -25,7 +40,23 @@
     group: "{{ aap_deploy_install_user }}"
     mode: '0600'
   loop: "{{ aap_deploy_tls_services }}"
-  when: aap_deploy_tls_source == 'customer_files'
+  when:
+    - aap_deploy_tls_source == 'customer_files'
+    - aap_deploy_tls_customer_files[item].key_src | default('', true) | trim | length > 0
+  no_log: true
+
+- name: Write customer TLS service keys to target from inline content
+  ansible.builtin.copy:
+    content: "{{ aap_deploy_tls_customer_files[item].key_content }}"
+    dest: "{{ aap_deploy_tls_target_files[item].key_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0600'
+  loop: "{{ aap_deploy_tls_services }}"
+  when:
+    - aap_deploy_tls_source == 'customer_files'
+    - aap_deploy_tls_customer_files[item].key_src | default('', true) | trim | length == 0
+    - aap_deploy_tls_customer_files[item].key_content | default('', true) | trim | length > 0
   no_log: true
 
 - name: Copy customer CA certificate to target
@@ -35,7 +66,21 @@
     owner: "{{ aap_deploy_install_user }}"
     group: "{{ aap_deploy_install_user }}"
     mode: '0644'
-  when: aap_deploy_tls_source == 'customer_files'
+  when:
+    - aap_deploy_tls_source == 'customer_files'
+    - aap_deploy_tls_customer_files.ca_cert_src | default('', true) | trim | length > 0
+
+- name: Write customer CA certificate to target from inline content
+  ansible.builtin.copy:
+    content: "{{ aap_deploy_tls_customer_files.ca_cert_content }}"
+    dest: "{{ aap_deploy_tls_ca_cert_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0644'
+  when:
+    - aap_deploy_tls_source == 'customer_files'
+    - aap_deploy_tls_customer_files.ca_cert_src | default('', true) | trim | length == 0
+    - aap_deploy_tls_customer_files.ca_cert_content | default('', true) | trim | length > 0
 
 - name: Read Vault PKI AppRole credentials from Vault KV
   community.hashi_vault.vault_kv2_get:
