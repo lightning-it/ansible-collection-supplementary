@@ -77,7 +77,7 @@ fi
 echo "Running ansible-lint for collection: ${COLLECTION_NAMESPACE}.${COLLECTION_NAME}"
 echo "Using ansible-core ${ANSIBLE_CORE_VERSION}, ansible-lint ${ANSIBLE_LINT_VERSION}"
 if [ "${ANSIBLE_LINT_SKIP_META_RUNTIME}" = "1" ]; then
-  echo "WARN: ansible-lint ${ANSIBLE_LINT_VERSION} cannot validate requires_ansible >=2.18.0; skipping meta-runtime check."
+  echo "WARN: ansible-lint ${ANSIBLE_LINT_VERSION} cannot validate requires_ansible >=2.18.0; skipping meta-runtime checks."
 fi
 
 COLLECTION_NAMESPACE="$COLLECTION_NAMESPACE" \
@@ -134,7 +134,8 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   echo "Running ansible-lint in /workspace..."
   ansible_lint_args=()
   if [ "${ANSIBLE_LINT_SKIP_META_RUNTIME:-0}" = "1" ]; then
-    ansible_lint_args+=("-x" "meta-runtime")
+    ansible_lint_args+=("-x" "meta-runtime,meta-runtime[unsupported-version]")
+    ansible_lint_args+=("--exclude" "meta/runtime.yml")
   fi
   ansible-lint "${ansible_lint_args[@]}"
 '

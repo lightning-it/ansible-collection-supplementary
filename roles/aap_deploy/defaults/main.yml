@@ -225,25 +225,41 @@ aap_deploy_tls_vault_pki_validate_certs: >-
 aap_deploy_tls_vault_pki_role_name_default: ""
 aap_deploy_tls_vault_pki_services:
   gateway:
-    role_name: "{{ aap_deploy_tls_vault_pki_role_name_gateway | default(aap_deploy_tls_vault_pki_role_name_default | default('gateway', true), true) }}"
+    role_name: >-
+      {{
+        aap_deploy_tls_vault_pki_role_name_gateway
+        | default(aap_deploy_tls_vault_pki_role_name_default | default('gateway', true), true)
+      }}
     common_name: "{{ aap_deploy_tls_gateway_host_default }}"
     alt_names:
       - "{{ aap_deploy_tls_gateway_host_default }}"
     ip_sans: []
   controller:
-    role_name: "{{ aap_deploy_tls_vault_pki_role_name_controller | default(aap_deploy_tls_vault_pki_role_name_default | default('controller', true), true) }}"
+    role_name: >-
+      {{
+        aap_deploy_tls_vault_pki_role_name_controller
+        | default(aap_deploy_tls_vault_pki_role_name_default | default('controller', true), true)
+      }}
     common_name: "{{ aap_deploy_tls_controller_host_default }}"
     alt_names:
       - "{{ aap_deploy_tls_controller_host_default }}"
     ip_sans: []
   hub:
-    role_name: "{{ aap_deploy_tls_vault_pki_role_name_hub | default(aap_deploy_tls_vault_pki_role_name_default | default('hub', true), true) }}"
+    role_name: >-
+      {{
+        aap_deploy_tls_vault_pki_role_name_hub
+        | default(aap_deploy_tls_vault_pki_role_name_default | default('hub', true), true)
+      }}
     common_name: "{{ aap_deploy_tls_hub_host_default }}"
     alt_names:
       - "{{ aap_deploy_tls_hub_host_default }}"
     ip_sans: []
   eda:
-    role_name: "{{ aap_deploy_tls_vault_pki_role_name_eda | default(aap_deploy_tls_vault_pki_role_name_default | default('eda', true), true) }}"
+    role_name: >-
+      {{
+        aap_deploy_tls_vault_pki_role_name_eda
+        | default(aap_deploy_tls_vault_pki_role_name_default | default('eda', true), true)
+      }}
     common_name: "{{ aap_deploy_tls_eda_host_default }}"
     alt_names:
       - "{{ aap_deploy_tls_eda_host_default }}"
