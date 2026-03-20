@@ -20,7 +20,7 @@ repos:
         name: ansible-lint (via ee-wunder-devtools-ubi9)
         language: system
         entry: >-
-          bash -lc "ANSIBLE_CORE_VERSION=2.15.13
+          bash -lc "ANSIBLE_CORE_VERSION=2.18.14
           ANSIBLE_LINT_VERSION=6.22.2
           scripts/devtools-ansible-lint.sh"
         pass_filenames: false
