@@ -209,17 +209,30 @@
 - name: Validate customer TLS file inputs
   ansible.builtin.assert:
     that:
-      - aap_deploy_tls_customer_files[item].cert_src | default('', true) | trim | length > 0
-      - aap_deploy_tls_customer_files[item].cert_src.startswith('/')
-      - aap_deploy_tls_customer_files[item].key_src | default('', true) | trim | length > 0
-      - aap_deploy_tls_customer_files[item].key_src.startswith('/')
+      - >-
+        (
+          (aap_deploy_tls_customer_files[item].cert_src | default('', true) | trim | length > 0)
+          and aap_deploy_tls_customer_files[item].cert_src.startswith('/')
+        )
+        or (
+          aap_deploy_tls_customer_files[item].cert_content | default('', true) | trim | length > 0
+        )
+      - >-
+        (
+          (aap_deploy_tls_customer_files[item].key_src | default('', true) | trim | length > 0)
+          and aap_deploy_tls_customer_files[item].key_src.startswith('/')
+        )
+        or (
+          aap_deploy_tls_customer_files[item].key_content | default('', true) | trim | length > 0
+        )
       - aap_deploy_tls_target_files[item].cert_path | default('', true) | trim | length > 0
       - aap_deploy_tls_target_files[item].cert_path.startswith('/')
       - aap_deploy_tls_target_files[item].key_path | default('', true) | trim | length > 0
       - aap_deploy_tls_target_files[item].key_path.startswith('/')
     fail_msg: >-
       Missing customer TLS file inputs for {{ item }}.
-      Provide absolute controller-side cert/key paths in aap_deploy_tls_customer_files.
+      Provide either absolute controller-side cert/key paths or inline cert/key content
+      in aap_deploy_tls_customer_files.
     quiet: true
   loop: "{{ aap_deploy_tls_services }}"
   when:
@@ -231,11 +244,18 @@
 - name: Validate customer CA input
   ansible.builtin.assert:
     that:
-      - aap_deploy_tls_customer_files.ca_cert_src | default('', true) | trim | length > 0
-      - aap_deploy_tls_customer_files.ca_cert_src.startswith('/')
+      - >-
+        (
+          (aap_deploy_tls_customer_files.ca_cert_src | default('', true) | trim | length > 0)
+          and aap_deploy_tls_customer_files.ca_cert_src.startswith('/')
+        )
+        or (
+          aap_deploy_tls_customer_files.ca_cert_content | default('', true) | trim | length > 0
+        )
     fail_msg: >-
       Missing customer CA certificate input.
-      Provide aap_deploy_tls_customer_files.ca_cert_src as an absolute controller-side path.
+      Provide either aap_deploy_tls_customer_files.ca_cert_src as an absolute controller-side path
+      or inline aap_deploy_tls_customer_files.ca_cert_content.
     quiet: true
   when:
     - aap_deploy_enabled | bool
