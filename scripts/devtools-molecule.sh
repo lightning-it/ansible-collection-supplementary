@@ -53,7 +53,7 @@ COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE}" \
 COLLECTION_NAME="${COLLECTION_NAME}" \
 SCENARIO_FILTER="${SCENARIO_FILTER}" \
 CONTAINER_HOME=/tmp/wunder \
-bash scripts/wunder-devtools-ee.sh bash -lc '
+bash scripts/wunder-devtools-ee.sh bash -c '
   set -euo pipefail
 
   ns="${COLLECTION_NAMESPACE}"
@@ -79,7 +79,7 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   # -------------------------------------------------------------
   # 1) Build + install this collection into a per-run collections dir
   # -------------------------------------------------------------
-  COLLECTIONS_DIR="$(/workspace/scripts/devtools-collection-prepare.sh | tail -n 1)"
+  COLLECTIONS_DIR="$(bash /workspace/scripts/devtools-collection-prepare.sh | tail -n 1)"
 
   if [ -z "${COLLECTIONS_DIR:-}" ] || [ ! -d "${COLLECTIONS_DIR}" ]; then
     echo "ERROR: COLLECTIONS_DIR not found/invalid: ${COLLECTIONS_DIR:-<empty>}" >&2
@@ -95,7 +95,7 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   if [ -f /workspace/galaxy.yml ]; then
     while IFS= read -r dep_spec; do
       dep_specs+=("$dep_spec")
-    done < <(/workspace/scripts/devtools-galaxy.sh dependencies /workspace/galaxy.yml || true)
+    done < <(bash /workspace/scripts/devtools-galaxy.sh dependencies /workspace/galaxy.yml || true)
   fi
 
   for dep_spec in "${dep_specs[@]}"; do

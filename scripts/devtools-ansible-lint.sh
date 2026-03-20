@@ -39,12 +39,16 @@ if [ -f meta/runtime.yml ]; then
 fi
 
 ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION:-$(python3 - <<'PY'
-import ansible
 try:
-    from ansible.release import __version__  # type: ignore
+    import ansible  # type: ignore
 except Exception:
-    __version__ = getattr(ansible, "__version__", "")
-print(__version__)
+    print("")
+else:
+    try:
+        from ansible.release import __version__  # type: ignore
+    except Exception:
+        __version__ = getattr(ansible, "__version__", "")
+    print(__version__)
 PY
 )}"
 
@@ -58,18 +62,20 @@ PY
 )}"
 
 ANSIBLE_LINT_SKIP_META_RUNTIME=0
-if [ -n "${REQUIRES_ANSIBLE:-}" ] && [ -n "${ANSIBLE_LINT_VERSION:-}" ]; then
+if [ -n "${REQUIRES_ANSIBLE:-}" ]; then
   req_minor=0
   lint_major=0
   req_minor_parsed="$(printf '%s' "$REQUIRES_ANSIBLE" | sed -nE 's/^>=2\.([0-9]+).*/\1/p')"
   if [ -n "${req_minor_parsed:-}" ]; then
     req_minor="$req_minor_parsed"
   fi
-  if [[ "$ANSIBLE_LINT_VERSION" =~ ^([0-9]+) ]]; then
+  if [[ "${ANSIBLE_LINT_VERSION:-}" =~ ^([0-9]+) ]]; then
     lint_major="${BASH_REMATCH[1]}"
   fi
   # ansible-lint 6.x does not recognize >=2.18 in meta/runtime.yml.
-  if [ "$req_minor" -ge 18 ] && [ "$lint_major" -lt 24 ]; then
+  # If the host does not have ansible-lint installed, version detection may be blank;
+  # still enable the skip for >=2.18 because the real lint run happens in the devtools image.
+  if [ "$req_minor" -ge 18 ] && { [ "$lint_major" -eq 0 ] || [ "$lint_major" -lt 24 ]; }; then
     ANSIBLE_LINT_SKIP_META_RUNTIME=1
   fi
 fi
@@ -86,14 +92,15 @@ ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION}" \
 ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}" \
 ANSIBLE_LINT_SKIP_META_RUNTIME="${ANSIBLE_LINT_SKIP_META_RUNTIME}" \
 CONTAINER_HOME=/tmp/wunder \
-bash scripts/wunder-devtools-ee.sh bash -lc '
+bash scripts/wunder-devtools-ee.sh bash -c '
   set -euo pipefail
 
   ns="${COLLECTION_NAMESPACE}"
   name="${COLLECTION_NAME}"
 
   # Keep Ansible cache/install state stable and outside /workspace.
-  export HOME="/tmp/wunder"
+  export HOME="${HOME:-/tmp/wunder}"
+  mkdir -p "${HOME}"
   mkdir -p "${HOME}/.ansible/tmp" "${HOME}/.ansible/collections"
   export ANSIBLE_LOCAL_TEMP="${HOME}/.ansible/tmp"
   export ANSIBLE_REMOTE_TEMP="${HOME}/.ansible/tmp"
@@ -101,7 +108,7 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   echo "Building and installing collection ${ns}.${name}..."
 
   # devtools-collection-prepare.sh prints the per-run collections dir on the last line
-  COLLECTIONS_DIR="$(/workspace/scripts/devtools-collection-prepare.sh | tail -n 1)"
+  COLLECTIONS_DIR="$(bash /workspace/scripts/devtools-collection-prepare.sh | tail -n 1)"
 
   if [ -z "${COLLECTIONS_DIR:-}" ] || [ ! -d "${COLLECTIONS_DIR}" ]; then
     echo "ERROR: COLLECTIONS_DIR not found/invalid: ${COLLECTIONS_DIR:-<empty>}" >&2

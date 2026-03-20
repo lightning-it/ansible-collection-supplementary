@@ -28,7 +28,8 @@ fi
 echo "Preparing collection ${ns}.${name} inside ee-wunder-devtools-ubi9..."
 
 # Stable HOME + stable ansible tmp (ansible-galaxy downloads)
-export HOME=/tmp/wunder
+export HOME="${HOME:-/tmp/wunder}"
+mkdir -p "$HOME"
 mkdir -p "$HOME/.ansible/tmp"
 export ANSIBLE_LOCAL_TEMP="$HOME/.ansible/tmp"
 export ANSIBLE_REMOTE_TEMP="$HOME/.ansible/tmp"
@@ -40,26 +41,26 @@ if [ -d "$stale_collection_dir" ]; then
 fi
 
 # Per-run XDG cache (avoids ansible-compat/ansible-lint races)
-export XDG_CACHE_HOME="$(mktemp -d /tmp/wunder/xdg-cache.XXXXXX)"
+export XDG_CACHE_HOME="$(mktemp -d "${HOME}/xdg-cache.XXXXXX")"
 if [ "${DEBUG:-0}" = "1" ]; then
   echo "XDG_CACHE_HOME=$XDG_CACHE_HOME"
 fi
 
 # Per-run install target
-COLLECTIONS_DIR="$(mktemp -d /tmp/wunder/collections.XXXXXX)"
+COLLECTIONS_DIR="$(mktemp -d "${HOME}/collections.XXXXXX")"
 export ANSIBLE_COLLECTIONS_PATH="${COLLECTIONS_DIR}:/usr/share/ansible/collections"
 
 cd /workspace
 
 # Build artifact and capture the output path
-build_out="$(ansible-galaxy collection build --output-path /tmp/wunder --force)"
+build_out="$(ansible-galaxy collection build --output-path "${HOME}" --force)"
 artifact="$(printf "%s\n" "$build_out" | awk '/Created collection for/ {print $NF}' | tail -n 1)"
 
 if [ -z "${artifact:-}" ] || [ ! -f "$artifact" ]; then
   echo "ERROR: Collection artifact not found. Build output was:" >&2
   echo "$build_out" >&2
-  echo "DEBUG: /tmp/wunder contents:" >&2
-  ls -la /tmp/wunder >&2 || true
+  echo "DEBUG: ${HOME} contents:" >&2
+  ls -la "${HOME}" >&2 || true
   exit 1
 fi
 
