@@ -1,3 +1,15 @@
+## [1.18.2](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.1...v1.18.2) (2026-03-20)
+
+### Bug Fixes
+
+* update dependency ansible-core to v2.18.14 ([#153](https://github.com/lightning-it/ansible-collection-supplementary/issues/153)) ([c253065](https://github.com/lightning-it/ansible-collection-supplementary/commit/c25306559ab19653ab43cabfcb578d584a2d0f09))
+
+## [1.18.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.0...v1.18.1) (2026-03-20)
+
+### Bug Fixes
+
+* ansible customer certs ([#154](https://github.com/lightning-it/ansible-collection-supplementary/issues/154)) ([ce24d35](https://github.com/lightning-it/ansible-collection-supplementary/commit/ce24d356fa09421a52dc08342e7af577dbda0a05))
+
 ## [1.18.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.17.0...v1.18.0) (2026-03-19)
 
 ### Features
