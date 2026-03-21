@@ -19,6 +19,10 @@
     aap_setup_inst_force: "{{ aap_deploy_setup_install_force }}"
     aap_setup_inst_extra_vars: "{{ aap_deploy_setup_install_extra_vars }}"
     aap_setup_inst_extra_vars_files: "{{ aap_deploy_setup_install_extra_vars_files }}"
+    controller_validate_certs: "{{ aap_validate_certs | bool }}"
+    ah_validate_certs: "{{ aap_validate_certs | bool }}"
+    eda_validate_certs: "{{ aap_validate_certs | bool }}"
+    gateway_validate_certs: "{{ aap_validate_certs | bool }}"
 
 - name: Write installation marker
   ansible.builtin.copy:

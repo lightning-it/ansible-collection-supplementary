@@ -21,7 +21,13 @@
 
 - name: Write customer TLS service certificates to target from inline content
   ansible.builtin.copy:
-    content: "{{ aap_deploy_tls_customer_files[item].cert_content }}"
+    content: >-
+      {{
+        aap_deploy_tls_customer_files[item].cert_content
+        | default('', true)
+        | string
+        | replace('\\n', '\n')
+      }}
     dest: "{{ aap_deploy_tls_target_files[item].cert_path }}"
     owner: "{{ aap_deploy_install_user }}"
     group: "{{ aap_deploy_install_user }}"
@@ -47,7 +53,13 @@
 
 - name: Write customer TLS service keys to target from inline content
   ansible.builtin.copy:
-    content: "{{ aap_deploy_tls_customer_files[item].key_content }}"
+    content: >-
+      {{
+        aap_deploy_tls_customer_files[item].key_content
+        | default('', true)
+        | string
+        | replace('\\n', '\n')
+      }}
     dest: "{{ aap_deploy_tls_target_files[item].key_path }}"
     owner: "{{ aap_deploy_install_user }}"
     group: "{{ aap_deploy_install_user }}"
@@ -72,7 +84,13 @@
 
 - name: Write customer CA certificate to target from inline content
   ansible.builtin.copy:
-    content: "{{ aap_deploy_tls_customer_files.ca_cert_content }}"
+    content: >-
+      {{
+        aap_deploy_tls_customer_files.ca_cert_content
+        | default('', true)
+        | string
+        | replace('\\n', '\n')
+      }}
     dest: "{{ aap_deploy_tls_ca_cert_path }}"
     owner: "{{ aap_deploy_install_user }}"
     group: "{{ aap_deploy_install_user }}"
