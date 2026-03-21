@@ -1,3 +1,9 @@
+## [1.18.4](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.3...v1.18.4) (2026-03-21)
+
+### Bug Fixes
+
+* update quay.io/l-it/ee-wunder-devtools-ubi9 docker tag to v1.8.3 ([#156](https://github.com/lightning-it/ansible-collection-supplementary/issues/156)) ([2256346](https://github.com/lightning-it/ansible-collection-supplementary/commit/22563469121a9f6a1de7c5df052dc0c89a988a64))
+
 ## [1.18.3](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.2...v1.18.3) (2026-03-21)
 
 ### Bug Fixes
