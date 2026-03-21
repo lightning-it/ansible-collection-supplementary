@@ -1,3 +1,9 @@
+## [1.18.3](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.2...v1.18.3) (2026-03-21)
+
+### Bug Fixes
+
+* aap cert handling ([#155](https://github.com/lightning-it/ansible-collection-supplementary/issues/155)) ([dc3d091](https://github.com/lightning-it/ansible-collection-supplementary/commit/dc3d091eb8661d1a7d6c0f2c0085cfa8f8dd225a))
+
 ## [1.18.2](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.1...v1.18.2) (2026-03-20)
 
 ### Bug Fixes
