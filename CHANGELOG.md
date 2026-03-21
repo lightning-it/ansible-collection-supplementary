@@ -1,3 +1,9 @@
+## [1.18.5](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.4...v1.18.5) (2026-03-21)
+
+### Bug Fixes
+
+* add missing passwords for automationhub and ah in bundle metadata ([#157](https://github.com/lightning-it/ansible-collection-supplementary/issues/157)) ([dc3c19d](https://github.com/lightning-it/ansible-collection-supplementary/commit/dc3c19d6b462ba915ef2d792dca7e9083ce9f925))
+
 ## [1.18.4](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.3...v1.18.4) (2026-03-21)
 
 ### Bug Fixes
