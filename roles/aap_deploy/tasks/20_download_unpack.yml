@@ -406,6 +406,8 @@
             'gateway_admin_password': "'" ~ aap_deploy_gateway_admin_password_effective ~ "'",
             'controller_admin_password': "'" ~ aap_deploy_controller_admin_password_effective ~ "'",
             'hub_admin_password': "'" ~ aap_deploy_hub_admin_password_effective ~ "'",
+            'automationhub_admin_password': "'" ~ aap_deploy_hub_admin_password_effective ~ "'",
+            'ah_password': "'" ~ aap_deploy_hub_admin_password_effective ~ "'",
             'eda_admin_password': "'" ~ aap_deploy_eda_admin_password_effective ~ "'",
             'controller_validate_certs': (aap_validate_certs | bool),
             'ah_validate_certs': (aap_validate_certs | bool),
