@@ -20,7 +20,7 @@ tags:
 # Keep entitlement-gated AAP dependencies (for example infra.*) out of collection metadata.
 # Install them via EE/workspace requirements files (for example requirements-rh.yml).
 dependencies:
-  community.general: '>=11.4.5,<12.0.0'
+  community.general: '>=11.4.6,<12.0.0'
   ansible.posix: '>=2.1.0'
   community.vmware: '5.10.0'
   lit.foundational: '>=1.17.1'
