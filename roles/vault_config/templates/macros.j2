@@ -12,7 +12,7 @@
 {%- elif val is sequence -%}
 [
 {%- for item in val %}
-{{ "\n" + " " * indent }}{{ format_hcl_value(item, indent + 2) }},
+{{ "\n" + " " * indent }}{{ format_hcl_value(item, indent + 2) }}{% if not loop.last %},{% endif %}
 {%- endfor %}
 {{ "\n" + " " * (indent - 2) }}]
 {%- else -%}
@@ -29,7 +29,7 @@
 {% set value = item[r] %}
 {% if r in heredoc_fields %}
       {{ "%-24s" | format(r) }} = <<-EOF
-{{ value }}
+{{ value | trim }}
 EOF
 {% else %}
       {{ "%-24s" | format(r) }} = {{ format_hcl_value(value, 8) }}
@@ -38,9 +38,23 @@ EOF
 {% for o in optional %}
 {% set value = item[o] if item[o] is defined else defaults.get(o) %}
 {% if value is not none %}
-{% if o in heredoc_fields %}
+{% if o == "jwt_validation_pubkeys" %}
+      {{ "%-24s" | format(o) }} = [
+{% if value is string %}
+        <<-EOF
+{{ value | trim }}
+EOF
+{% else %}
+{% for v in value %}
+        <<-EOF
+{{ v | trim }}
+EOF
+{% endfor %}
+{% endif %}
+      ]
+{% elif o in heredoc_fields %}
       {{ "%-24s" | format(o) }} = <<-EOF
-{{ value }}
+{{ value | trim }}
 EOF
 {% else %}
       {{ "%-24s" | format(o) }} = {{ format_hcl_value(value, 8) }}

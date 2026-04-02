@@ -35,11 +35,11 @@
 - name: Derive Vault PKI mount and role paths
   ansible.builtin.set_fact:
     vault_config_pki_mount: >-
-      {{ (vault_config_vault_pki_path | default('', true) | trim).split('/')[0] }}
+      {{ (vault_config_pki_path | default('', true) | trim).split('/')[0] }}
     vault_config_pki_role_path: >-
       {{
-        (vault_config_vault_pki_path | default('', true) | trim).split('/')[0]
-        ~ '/roles/' ~ vault_config_vault_pki_role
+        (vault_config_pki_path | default('', true) | trim).split('/')[0]
+        ~ '/roles/' ~ vault_config_pki_role
       }}
   changed_when: false
   tags:
@@ -72,7 +72,7 @@
     that:
       - vault_config_pki_role_exists | default(false) | bool
     fail_msg: >-
-      Vault PKI role {{ vault_config_vault_pki_role }} not found under
+      Vault PKI role {{ vault_config_pki_role }} not found under
       {{ vault_config_pki_mount }}. Configure PKI mount/role before requesting
       certificates.
   tags:
@@ -206,7 +206,7 @@
     role_id: "{{ vault_config_role_id | default(omit, true) }}"
     secret_id: "{{ vault_config_secret_id | default(omit, true) }}"
     validate_certs: "{{ vault_config_vault_validate_certs }}"
-    path: "{{ vault_config_vault_pki_path }}/{{ vault_config_vault_pki_role }}"
+    path: "{{ vault_config_pki_path }}/{{ vault_config_pki_role }}"
     data:
       common_name: "{{ vault_config_vault_hostname }}"
       alt_names: "localhost,{{ vault_config_vault_hostname }}"

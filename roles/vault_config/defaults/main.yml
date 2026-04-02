@@ -76,14 +76,17 @@ vault_config_approle_token_max_ttl: ""
 vault_config_approle_bootstrap: true
 vault_config_approle_primary_role_name: "{{ vault_approle_primary_role_name | default('', true) }}"
 
-vault_config_vault_pki_path: "{{ vault_pki_issue_mount }}/issue"
-vault_config_vault_pki_role: "{{ vault_pki_issue_role }}"
-vault_config_vault_pki_roots: "{{ vault_pki_roots | default([]) }}"
-vault_config_vault_pki_intermediates: "{{ vault_pki_intermediates | default([]) }}"
-vault_config_vault_pki_roles: "{{ vault_pki_roles | default([]) }}"
-vault_config_pki_roots: []
-vault_config_pki_intermediates: []
+vault_config_pki_path: "{{ vault_pki_issue_mount }}/issue"
+vault_config_pki_role: "{{ vault_pki_issue_role }}"
+vault_config_namespaces: "{{ vault_namespaces | default([]) }}"
+vault_config_auth_backends: "{{ vault_auth_backends | default([]) }}"
+vault_config_jwt_auth_backends: "{{ vault_jwt_auth_backends | default([]) }}"
+vault_config_jwt_auth_backend_roles: "{{ vault_jwt_auth_backend_roles | default([]) }}"
+vault_config_pki_roots: "{{ vault_pki_roots | default([]) }}"
+vault_config_pki_intermediates: "{{ vault_pki_intermediates | default([]) }}"
 vault_config_pki_enabled: true
+vault_config_pki_roles: "{{ vault_pki_roles | default([]) }}"
+vault_config_transit_secret_backend_keys: "{{ vault_transit_secret_backend_keys | default([]) }}"
 
 vault_config_cert_dir: "/srv/vault/certs"
 vault_config_pod_name: "vault"
