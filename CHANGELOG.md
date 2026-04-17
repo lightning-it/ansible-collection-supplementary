@@ -1,3 +1,10 @@
+## [1.18.6](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.5...v1.18.6) (2026-04-17)
+
+### Bug Fixes
+
+* add new resources ([4943f93](https://github.com/lightning-it/ansible-collection-supplementary/commit/4943f939dff8e32977b1857ce7776b48bde69157))
+* remove bootstrap approles ([c1d5ec4](https://github.com/lightning-it/ansible-collection-supplementary/commit/c1d5ec4787fda2226c981e9825bd27422a194621))
+
 ## [1.18.5](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.4...v1.18.5) (2026-03-21)
 
 ### Bug Fixes
