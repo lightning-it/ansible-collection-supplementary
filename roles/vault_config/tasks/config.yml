@@ -666,15 +666,6 @@
     - terragrunt_apply
     - tfstate
 
-- name: Bootstrap AppRole credentials
-  ansible.builtin.include_tasks: bootstrap_approle.yml
-  when:
-    - vault_config_hashi_vault_auth_method == 'approle'
-    - vault_config_approle_bootstrap | bool
-    - not ansible_check_mode
-  tags:
-    - vault_config_pki
-
 - name: Request Vault PKI certificate
   ansible.builtin.include_tasks: vault_pki.yml
   when:
