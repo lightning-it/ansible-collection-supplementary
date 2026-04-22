@@ -142,7 +142,7 @@ inputs = {
   vault_config_jwt_auth_backends,
   "key",
   ["path"],
-  ["namespace", "type", "oidc_discovery_url", "bound_issuer", "jwt_validation_pubkeys"],
+  ["namespace", "type", "oidc_discovery_url", "bound_issuer", "jwt_validation_pubkeys", "oidc_discovery_ca_pem"],
   {},
   heredoc_fields=["oidc_discovery_ca_pem"]
 ) }}
@@ -158,7 +158,7 @@ inputs = {
 
 {{ macros.render_block(
   "transit_secret_backend_key",
-  vault_config_transit_secret_backend_key,
+  vault_config_transit_secret_backend_keys,
   "key",
   ["name", "backend"],
   ["type", "namespace"],
@@ -167,7 +167,7 @@ inputs = {
 
 {{ macros.render_block(
   "namespace",
-  vault_config_namespace,
+  vault_config_namespaces,
   "path",
   ["path"],
   [],
