@@ -1,3 +1,9 @@
+## [1.18.7](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.6...v1.18.7) (2026-04-22)
+
+### Bug Fixes
+
+* some improvements + fixes ([13b280d](https://github.com/lightning-it/ansible-collection-supplementary/commit/13b280d30787a16997b9036d0aaea47640f14aed))
+
 ## [1.18.6](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.5...v1.18.6) (2026-04-17)
 
 ### Bug Fixes
