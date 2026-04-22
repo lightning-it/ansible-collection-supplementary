@@ -554,9 +554,21 @@
             file: "{{ vault_config_terragrunt_vars_file.path }}"
           no_log: true
 
+        - name: Bootstrap run
+          ansible.builtin.include_role:
+            name: lit.foundational.terragrunt
+          loop:
+            - "-var bootstrap_phase=1"
+            - "-var bootstrap_phase=2"
+            - "-var bootstrap_phase=3"
+          loop_control:
+            loop_var: terragrunt_args
+          when: vault_config_bootstrap
+
         - name: Run terragrunt role
           ansible.builtin.include_role:
             name: lit.foundational.terragrunt
+          when: not vault_config_bootstrap
 
       always:
         - name: Cleanup temporary terragrunt vars file
@@ -569,11 +581,6 @@
           changed_when: false
 
   rescue:
-    - name: Record terragrunt failure (do not sync local tfstate to target)
-      ansible.builtin.set_fact:
-        vault_config_terragrunt_failed: true
-      changed_when: false
-
     - name: Show terragrunt failure summary
       ansible.builtin.debug:
         msg: >-
@@ -608,7 +615,6 @@
       when:
         - vault_config_tfstate_backend == 'local'
         - vault_config_tfstate_files.matched | default(0) | int > 0
-        - not (vault_config_terragrunt_failed | default(false) | bool)
 
     - name: Remove local Vault bootstrap tfstate files after successful sync (controller cache)
       ansible.builtin.file:
@@ -621,7 +627,6 @@
         - vault_config_tfstate_files.matched | default(0) | int > 0
         - not (vault_config_tfstate_keep_local | default(false) | bool)
         - vault_config_tfstate_backend == 'local'
-        - not (vault_config_terragrunt_failed | default(false) | bool)
       delegate_to: localhost
       changed_when: false
 
@@ -637,7 +642,6 @@
       when:
         - not (vault_config_tfstate_keep_local | default(false) | bool)
         - vault_config_tfstate_backend == 'local'
-        - not (vault_config_terragrunt_failed | default(false) | bool)
 
     - name: Remove local Vault tfstate cache dir when empty (controller cache)
       ansible.builtin.file:
@@ -649,22 +653,9 @@
       when:
         - not (vault_config_tfstate_keep_local | default(false) | bool)
         - vault_config_tfstate_backend == 'local'
-        - not (vault_config_terragrunt_failed | default(false) | bool)
         - vault_config_tfstate_dir_local_contents is defined
         - (vault_config_tfstate_dir_local_contents.matched | default(0) | int) == 0
         - vault_config_terraform_state_dir_local | default('', true) | trim | length > 1
-
-- name: Fail when terragrunt failed (tfstate is not synced back to target)
-  ansible.builtin.fail:
-    msg: >-
-      Terragrunt failed while configuring Vault. To avoid overwriting good state,
-      local tfstate cache was not synced back to {{ vault_config_terraform_state_dir }}.
-      Re-run with the same inventory/vars after reviewing the terragrunt error above.
-  when: vault_config_terragrunt_failed | default(false) | bool
-  tags:
-    - config
-    - terragrunt_apply
-    - tfstate
 
 - name: Request Vault PKI certificate
   ansible.builtin.include_tasks: vault_pki.yml
