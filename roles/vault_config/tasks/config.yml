@@ -8,7 +8,7 @@
   changed_when: false
   failed_when: vault_config_seal_status.status not in [200]
   tags:
-    - config
+    - vault_config
     - api
 
 - name: Fail when Vault is sealed
@@ -16,7 +16,7 @@
     msg: "Vault is sealed; run vault_bootstrap or unseal manually before configuring."
   when: vault_config_seal_status.json.sealed | default(true)
   tags:
-    - config
+    - vault_config
 
 - name: Ensure Vault token is available
   ansible.builtin.assert:
@@ -24,10 +24,11 @@
       - vault_config_token | default('', true) | trim | length > 0
     fail_msg: "vault_config_token is required to configure Vault (or provide vault_config_init.root_token)."
   tags:
-    - config
+    - vault_config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
+    - vault_data
 
 - name: Validate Vault token via lookup-self (preflight)
   ansible.builtin.uri:
@@ -43,11 +44,12 @@
   become: false
   no_log: true
   tags:
-    - config
+    - vault_config
     - api
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
+    - vault_data
 
 - name: Refresh Vault token from vault_token or vault_init root token when lookup fails
   ansible.builtin.set_fact:
@@ -74,10 +76,11 @@
         (vault_init.root_token | default('', true) | trim | length > 0)
       )
   tags:
-    - config
+    - vault_config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
+    - vault_data
 
 - name: Re-validate Vault token via lookup-self after refresh
   ansible.builtin.uri:
@@ -95,11 +98,12 @@
   when:
     - vault_config_token_lookup.status | default(0) | int != 200
   tags:
-    - config
+    - vault_config
     - api
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
+    - vault_data
 
 - name: Fail when Vault token is invalid for configured endpoint
   ansible.builtin.fail:
@@ -119,11 +123,12 @@
   when:
     - _vault_config_token_lookup_status | int != 200
   tags:
-    - config
+    - vault_config
     - api
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
+    - vault_data
 
 - name: Collect configured Vault secret store paths
   ansible.builtin.set_fact:
@@ -139,7 +144,7 @@
       }}
   changed_when: false
   tags:
-    - config
+    - vault_config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
@@ -156,7 +161,7 @@
   when:
     - vault_config_secret_store_paths | default([], true) | length > 0
   tags:
-    - config
+    - vault_config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
@@ -183,7 +188,7 @@
     loop_var: vault_config_approle_item
   when: vault_config_approle_secrets | default([], true) | length > 0
   tags:
-    - config
+    - vault_config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
@@ -238,7 +243,7 @@
     - (vault_config_vault_pki_roots | default([], true) | length > 0)
       or (vault_config_vault_pki_intermediates | default([], true) | length > 0)
   tags:
-    - config
+    - vault_config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
@@ -252,10 +257,11 @@
   changed_when: false
   when: not ansible_check_mode
   tags:
-    - config
+    - vault_config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
+    - vault_data
 
 - name: Ensure Vault bootstrap state directory exists on target
   ansible.builtin.file:
@@ -266,10 +272,11 @@
     group: root
   when: not ansible_check_mode
   tags:
-    - config
+    - vault_config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
+    - vault_data
 
 - name: Check if MinIO is deployed (manifest exists)
   ansible.builtin.stat:
@@ -277,7 +284,7 @@
   register: vault_config_minio_manifest
   changed_when: false
   tags:
-    - config
+    - vault_config
     - tfstate
 
 - name: Find existing Vault bootstrap tfstate files on target
@@ -291,10 +298,11 @@
   register: vault_config_tfstate_files_remote
   changed_when: false
   tags:
-    - config
+    - vault_config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
+    - vault_data
 
 - name: Read MinIO tfstate backend credentials from Vault
   delegate_to: "{{ vault_config_api_delegate_to }}"
@@ -310,7 +318,7 @@
   no_log: true
   when: vault_config_minio_manifest.stat.exists | default(false) | bool
   tags:
-    - config
+    - vault_config
     - tfstate
 
 - name: Parse MinIO tfstate backend credentials
@@ -327,7 +335,7 @@
   no_log: true
   when: vault_config_minio_manifest.stat.exists | default(false) | bool
   tags:
-    - config
+    - vault_config
     - tfstate
 
 - name: Determine Vault tfstate backend (local bootstrap vs MinIO S3)
@@ -342,8 +350,9 @@
       }}
   changed_when: false
   tags:
-    - config
+    - vault_config
     - tfstate
+    - vault_data
 
 - name: Mark Vault tfstate dir as pending migration (handled by minio_bootstrap)
   ansible.builtin.set_fact:
@@ -356,7 +365,7 @@
   changed_when: false
   when: vault_config_tfstate_backend == 'local'
   tags:
-    - config
+    - vault_config
     - tfstate
     - tfstate_migrate
 
@@ -402,7 +411,7 @@
   changed_when: false
   when: vault_config_tfstate_backend == 's3'
   tags:
-    - config
+    - vault_config
     - tfstate
 
 - name: Assert remote tfstate backend vars are resolved
@@ -419,7 +428,7 @@
   no_log: true
   when: vault_config_tfstate_backend == 's3'
   tags:
-    - config
+    - vault_config
     - tfstate
 
 - name: Remove local Vault bootstrap tfstate before syncing from target (target is source-of-truth)
@@ -430,10 +439,11 @@
   changed_when: false
   when: not ansible_check_mode
   tags:
-    - config
+    - vault_config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
+    - vault_data
 
 - name: Remove local Vault bootstrap tfstate backup before syncing from target (best effort)
   ansible.builtin.file:
@@ -443,10 +453,11 @@
   changed_when: false
   when: not ansible_check_mode
   tags:
-    - config
+    - vault_config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
+    - vault_data
 
 - name: Copy target tfstate files to controller (target is source-of-truth)
   ansible.builtin.fetch:
@@ -462,20 +473,22 @@
   no_log: true
   changed_when: false
   tags:
-    - config
+    - vault_config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
+    - vault_data
 
 - name: Set Vault terragrunt template path
   ansible.builtin.set_fact:
     vault_config_terragrunt_template_path: "{{ role_path }}/templates/vault.hcl.j2"
   changed_when: false
   tags:
-    - config
+    - vault_config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
+    - vault_data
 
 - name: Build terragrunt import list for existing Vault mounts/auth backends (best effort)
   ansible.builtin.set_fact:
@@ -508,7 +521,7 @@
       {{ imports }}
   when: vault_config_terragrunt_imports is not defined
   tags:
-    - config
+    - vault_config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
@@ -516,11 +529,12 @@
 - name: Run terragrunt to configure Vault (sync tfstate back only on success)
   when: not ansible_check_mode
   tags:
-    - config
+    - vault_config
     - terragrunt_validate
     - terragrunt_plan
     - terragrunt_apply
     - tfstate
+    - vault_data
   block:
     - name: Terragrunt apply (Vault config)
       block:
