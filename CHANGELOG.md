@@ -1,3 +1,9 @@
+## [1.18.9](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.8...v1.18.9) (2026-05-14)
+
+### Bug Fixes
+
+* only manage vault content ([5d156a2](https://github.com/lightning-it/ansible-collection-supplementary/commit/5d156a24ccbda0270003da5683b53cdba0881300))
+
 ## [1.18.8](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.7...v1.18.8) (2026-04-22)
 
 ### Bug Fixes
