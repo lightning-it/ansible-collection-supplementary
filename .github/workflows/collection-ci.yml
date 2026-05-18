@@ -16,7 +16,7 @@ permissions:
 env:
   # Common tool versions (override if needed)
   PYTHON_VERSION: "3.11"
-  ANSIBLE_CORE_VERSION: "2.18.16"
+  ANSIBLE_CORE_VERSION: "2.18.17"
   ANSIBLE_LINT_VERSION: "6.22.2"
   TERRAFORM_VERSION: "1.15.2"
   COLLECTION_NAMESPACE: lit
