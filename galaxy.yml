@@ -21,7 +21,7 @@ tags:
 # Install them via EE/workspace requirements files (for example requirements-rh.yml).
 dependencies:
   community.general: '>=11.4.8,<12.0.0'
-  ansible.posix: '>=2.1.0'
+  ansible.posix: '>=2.2.0'
   community.vmware: '5.10.0'
   lit.foundational: '>=1.17.2'
   community.hashi_vault: '*'
