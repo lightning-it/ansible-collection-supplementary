@@ -222,6 +222,11 @@ aap_deploy_required_packages: >-
 
 # Workflow controls (useful for testing)
 aap_deploy_manage_host_prep: true
+# When true, validate subscription-manager registration and enable required
+# RHSM repositories. When false, skip subscription-manager/RHSM repository
+# management and assume repositories are provided by the platform baseline,
+# Satellite, or local repo configuration.
+aap_deploy_manage_rhsm_repos: true
 aap_deploy_manage_download_unpack: true
 aap_deploy_run_installer: true
 aap_deploy_run_verify: true
