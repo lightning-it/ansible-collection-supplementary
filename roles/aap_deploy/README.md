@@ -49,6 +49,7 @@ Key variables:
 - `aap_deploy_tls_vault_pki_mount_point`
 - `aap_deploy_tls_vault_pki_services` (per-service `role_name`, `common_name`, `alt_names`, `ip_sans`)
 - `aap_deploy_manage_host_prep`
+- `aap_deploy_manage_rhsm_repos`
 - `aap_deploy_manage_download_unpack`
 - `aap_deploy_run_installer`
 - `aap_deploy_run_verify`
@@ -71,6 +72,21 @@ Vendor-driven installer behavior:
 - Role prepares the setup workspace and renders installer inventory via `infra.aap_utilities.aap_setup_prepare`.
 - Role runs the containerized installer via `infra.aap_utilities.aap_setup_install`.
 - Default bundle dir is `bundle` (relative to the extracted setup directory).
+
+Satellite or baseline-managed repositories:
+
+```yaml
+aap_deploy_manage_host_prep: true
+aap_deploy_manage_rhsm_repos: false
+```
+
+Use `aap_deploy_manage_rhsm_repos: false` on systems where repository
+configuration is already handled externally, such as by Satellite, a platform
+baseline, or local repo files. Host preparation remains enabled, including user
+setup, sudoers, lingering, systemd manager startup, repository usability
+validation with `dnf repolist`, and package installation. Only
+subscription-manager registration checks and RHSM repository enablement are
+skipped.
 
 Installer admin password behavior:
 - Passwords for gateway/controller/hub/eda/postgresql are resolved independently.
