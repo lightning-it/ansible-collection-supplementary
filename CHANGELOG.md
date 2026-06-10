@@ -1,3 +1,9 @@
+## [1.19.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.9...v1.19.0) (2026-06-10)
+
+### Features
+
+* add support for managing RHSM repositories in aap_deploy role ([#175](https://github.com/lightning-it/ansible-collection-supplementary/issues/175)) ([aa58e46](https://github.com/lightning-it/ansible-collection-supplementary/commit/aa58e465061bd29ae52326307e5227b909c68476))
+
 ## [1.18.9](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.8...v1.18.9) (2026-05-14)
 
 ### Bug Fixes
