@@ -1,16 +1,19 @@
 # aap_deploy
 
-Install Red Hat Ansible Automation Platform (AAP) 2.6 with the official containerized installer in
-bundle mode.
+Install Red Hat Ansible Automation Platform (AAP) with the official containerized installer in
+bundle mode. This role targets AAP 2.7 containerized deployments.
 
 ## Requirements
 
 - RHEL host with FQDN hostname.
 - Dedicated non-root install user with sudo (rootless Podman model).
 - RHSM registration and BaseOS/AppStream repositories when host prep is enabled.
-- `ansible-core` and `podman` on target host (managed by host prep if enabled).
+- `ansible-core`, `python3`, and `podman` on target host (managed by host prep if enabled).
 - `infra.aap_utilities` collection installed in the execution environment.
 - Red Hat offline token for installer download API access.
+- Enough local storage for bundle copy and extraction. Red Hat documents a minimum 60 GB
+  total local disk, 15 GB installation directory when separately partitioned, and 10 GB
+  temporary directory for offline/bundled installations. Size customer bundle workflows larger.
 
 ## Variables
 
@@ -33,6 +36,8 @@ Key variables:
 - `aap_deploy_bundle_dir` (path containing `/bundle`)
 - `aap_deploy_redis_mode` (`standalone` or `cluster`)
 - `aap_deploy_redis_hosts` (required when `aap_deploy_redis_mode=cluster`, at least 6 hosts)
+- `aap_deploy_automationmetrics_enabled` (default: `true`)
+- `aap_deploy_setup_prep_inv_nodes_extra`
 - `aap_deploy_postgresql_admin_username` (default: `postgres`)
 - `aap_deploy_gateway_pg_host` / `aap_deploy_controller_pg_host` / `aap_deploy_hub_pg_host` / `aap_deploy_eda_pg_host`
 - `aap_deploy_gateway_pg_password` / `aap_deploy_controller_pg_password`
@@ -73,6 +78,45 @@ Vendor-driven installer behavior:
 - Role runs the containerized installer via `infra.aap_utilities.aap_setup_install`.
 - Default bundle dir is `bundle` (relative to the extracted setup directory).
 
+AAP 2.7 automation metrics inventory:
+
+```yaml
+aap_deploy_setup_download_version: "2.7"
+aap_deploy_automationmetrics_enabled: true
+aap_deploy_growth_automationmetrics_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
+```
+
+AAP 2.7 containerized installer preflight requires an `automationmetrics`
+inventory group. Growth topology uses `aap_deploy_growth_automationmetrics_host`;
+enterprise topology uses `aap_deploy_enterprise_automationmetrics_hosts`.
+
+Use `aap_deploy_setup_prep_inv_nodes_extra` to merge additional installer
+inventory groups into the generated `aap_setup_prep_inv_nodes` map.
+
+Expected single-host inventory groups rendered for AAP 2.7 growth topology:
+
+```ini
+[automationcontroller]
+aap.example.com
+
+[automationmetrics]
+aap.example.com
+
+[database]
+aap.example.com
+```
+
+The role fails early when neither `aap_deploy_automationmetrics_enabled` nor an
+explicit `automationmetrics` entry in `aap_deploy_setup_prep_inv_nodes_extra` is set.
+
+RHEL 10 host prep:
+- AAP 2.7 supports RHEL 10 containerized installs.
+- Required RHSM repository IDs are generated from
+  `ansible_distribution_major_version`, so RHEL 10 resolves to
+  `rhel-10-for-<arch>-baseos-rpms` and `rhel-10-for-<arch>-appstream-rpms`.
+- Red Hat documents `ansible-core` from RHEL AppStream for installation on RHEL 10.
+  Host prep installs `ansible-core`, `python3`, and `podman`.
+
 Satellite or baseline-managed repositories:
 
 ```yaml
@@ -87,6 +131,31 @@ setup, sudoers, lingering, systemd manager startup, repository usability
 validation with `dnf repolist`, and package installation. Only
 subscription-manager registration checks and RHSM repository enablement are
 skipped.
+
+Bundle source handling:
+- The role autodetects `aap-containerized-setup.tar.gz` and
+  `ansible-automation-platform-containerized-setup-bundle-*.tar.gz` in the
+  project root or `.artifacts`.
+- For GitHub release assets or other artifact stores, reassemble split assets on
+  the controller before running the role. Do not rely on the role to join split files.
+- A stable customer layout is:
+
+```yaml
+aap_deploy_setup_archive_src: "{{ aap_deploy_local_project_root }}/files/aap/aap-containerized-setup.tar.gz"
+aap_deploy_setup_archive_path: "{{ aap_deploy_install_dir }}/aap-containerized-setup.tar.gz"
+```
+
+Large bundle copy and temporary space:
+- Ansible copies modules and transfer payloads through `ansible_remote_tmp`.
+- If the SSH user's home filesystem is small, set a larger remote temp path in
+  inventory, for example:
+
+```yaml
+ansible_remote_tmp: /appl/ansible-tmp
+```
+
+Ensure the remote temp path, `aap_deploy_install_dir`, and setup extraction path
+have enough free space for the compressed bundle and extracted installer.
 
 Installer admin password behavior:
 - Passwords for gateway/controller/hub/eda/postgresql are resolved independently.
@@ -110,6 +179,42 @@ Installer TLS behavior:
 - Default layout is separate cert/key pairs for gateway, controller, hub, and EDA, plus one shared CA file.
 - `customer_files` copies controller-side files to the target before installer prep.
 - `vault_pki` generates separate leaf certs per service/FQDN from HashiCorp Vault PKI and reuses one shared CA bundle.
+- `aap_deploy_tls_enabled` defaults to `false` and `aap_deploy_tls_source`
+  defaults to `customer_files`; Vault PKI is not read unless
+  `aap_deploy_tls_source: vault_pki` is explicitly set.
+- A single customer certificate/key pair can be reused for gateway, controller,
+  hub, and EDA when the certificate SANs cover every FQDN handed to the installer.
+- For bootstrap or self-signed deployments, prefer `customer_files` with explicit
+  cert/key paths or inline `cert_content`/`key_content`, plus a CA certificate.
+
+Controller license manifest:
+- License activation is handled by the companion `lit.supplementary.aap_cac`
+  role through `aap_cac_controller_license_manifest_content`.
+- Provide the manifest as base64 content from inventory or a secret backend.
+- Do not commit real `manifest.zip` or `manifest.zip.b64` files.
+
+Example:
+
+```yaml
+aap_cac_controller_license_manifest_content: >-
+  {{ lookup('ansible.builtin.file', playbook_dir ~ '/files/aap/manifest.zip.b64') }}
+```
+
+Troubleshooting:
+- `You must have a host set in the [automationmetrics] section`: keep
+  `aap_deploy_automationmetrics_enabled: true`, or provide the group through
+  `aap_deploy_setup_prep_inv_nodes_extra`.
+- `No space left on device` during bundle copy: set `ansible_remote_tmp` to a
+  filesystem with enough free space and verify `aap_deploy_install_dir`.
+- `Overall Status: Not registered` on Satellite/baseline systems: keep
+  `aap_deploy_manage_host_prep: true` and set
+  `aap_deploy_manage_rhsm_repos: false`.
+
+Local validation:
+
+```bash
+ansible-playbook tests/aap_deploy_inventory_nodes.yml
+```
 
 ## Dependencies
 
@@ -118,7 +223,7 @@ Requires `infra.aap_utilities` in the execution environment.
 ## Example Playbook
 
 ```yaml
-- name: Install AAP 2.6 (growth, downloaded bundle)
+- name: Install AAP 2.7 (growth, downloaded bundle)
   hosts: aap_hosts
   become: true
   gather_facts: true
@@ -130,7 +235,8 @@ Requires `infra.aap_utilities` in the execution environment.
         aap_deploy_install_user: aap
         aap_deploy_install_dir: /opt/aap
         rh_offline_token: "{{ lookup('community.hashi_vault.vault_kv2_get', 'my/path')['secret']['rh_offline_token'] }}"
-        aap_deploy_setup_download_version: "2.6"
+        aap_deploy_setup_download_version: "2.7"
+        aap_deploy_automationmetrics_enabled: true
         aap_deploy_setup_download_containerized: true
         aap_deploy_bundle_dir: bundle
 
