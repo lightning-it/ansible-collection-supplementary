@@ -38,6 +38,14 @@ Key variables:
 - `aap_deploy_redis_hosts` (required when `aap_deploy_redis_mode=cluster`, at least 6 hosts)
 - `aap_deploy_growth_automationmetrics_host`
 - `aap_deploy_enterprise_automationmetrics_hosts`
+- `aap_deploy_automationmetrics_pg_host`
+- `aap_deploy_automationmetrics_pg_database`
+- `aap_deploy_automationmetrics_pg_username`
+- `aap_deploy_automationmetrics_pg_password`
+- `aap_deploy_automationmetrics_controller_read_pg_username`
+- `aap_deploy_automationmetrics_controller_read_pg_password`
+- `aap_deploy_automationmetrics_secret_key`
+- `aap_deploy_automationmetrics_resource_server`
 - `aap_deploy_setup_prep_inv_nodes_extra`
 - `aap_deploy_postgresql_admin_username` (default: `postgres`)
 - `aap_deploy_gateway_pg_host` / `aap_deploy_controller_pg_host` / `aap_deploy_hub_pg_host` / `aap_deploy_eda_pg_host`
@@ -79,7 +87,7 @@ Vendor-driven installer behavior:
 - Role runs the containerized installer via `infra.aap_utilities.aap_setup_install`.
 - Default bundle dir is `bundle` (relative to the extracted setup directory).
 
-AAP 2.7 automation metrics inventory:
+## Automation metrics service
 
 ```yaml
 aap_deploy_setup_download_version: "2.7"
@@ -87,9 +95,34 @@ aap_deploy_growth_automationmetrics_host: "{{ ansible_fqdn | default(inventory_h
 ```
 
 AAP 2.7 containerized installer preflight requires an `automationmetrics`
-inventory group. The role always generates it. Growth topology uses
-`aap_deploy_growth_automationmetrics_host`; enterprise topology uses
+inventory group and metrics service database variables. The role always
+generates `[automationmetrics]` and the required `automationmetrics_*`
+installer variables.
+
+Growth topology runs metrics on `aap_deploy_growth_automationmetrics_host` and
+sets `automationmetrics_pg_host` to the selected PostgreSQL/database host by
+default. Enterprise topology builds the group from
 `aap_deploy_enterprise_automationmetrics_hosts`.
+
+Default/customer-overridable metrics settings:
+
+```yaml
+aap_deploy_automationmetrics_pg_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_automationmetrics_pg_database: automationmetrics
+aap_deploy_automationmetrics_pg_username: automationmetrics
+aap_deploy_automationmetrics_pg_password: "{{ aap_postgresql_admin_password_input }}"
+aap_deploy_automationmetrics_controller_read_pg_password: "{{ aap_postgresql_admin_password_input }}"
+```
+
+For external or custom database layouts, override:
+
+```yaml
+aap_deploy_automationmetrics_pg_host: db.example.com
+aap_deploy_automationmetrics_pg_password: "{{ vault_metrics_pg_password }}"
+aap_deploy_automationmetrics_controller_read_pg_password: "{{ vault_metrics_controller_read_password }}"
+aap_deploy_automationmetrics_secret_key: "{{ vault_metrics_secret_key }}"
+aap_deploy_automationmetrics_resource_server: "{{ vault_metrics_resource_server }}"
+```
 
 Use `aap_deploy_setup_prep_inv_nodes_extra` to merge additional installer
 inventory groups into the generated `aap_setup_prep_inv_nodes` map.
@@ -109,6 +142,16 @@ aap.example.com
 
 The role validates that the selected metrics host list is non-empty before
 rendering the installer inventory.
+
+After the preparation step, verify the generated inventory with:
+
+```bash
+grep -nE "automationmetrics|automationmetrics_pg_host|automationmetrics_pg_password|automationmetrics_controller_read_pg_password" /appl/aap/setup/*/inventory
+```
+
+Expected output includes `[automationmetrics]`, `automationmetrics_pg_host`,
+`automationmetrics_pg_password`, and
+`automationmetrics_controller_read_pg_password`.
 
 RHEL 10 host prep:
 - AAP 2.7 supports RHEL 10 containerized installs.
@@ -216,6 +259,10 @@ Troubleshooting:
 - `You must have a host set in the [automationmetrics] section`: this should
   not happen in the 2.7-only role. Verify the updated collection is active and
   the generated installer inventory contains `[automationmetrics]`.
+- `automationmetrics_pg_host must be set and not empty`: verify the updated
+  collection is active and the generated installer inventory contains
+  `automationmetrics_pg_host` under `[all:vars]`. Override
+  `aap_deploy_automationmetrics_pg_host` if using a custom database layout.
 - `No space left on device` during bundle copy: set `ansible_remote_tmp` to a
   filesystem with enough free space and verify `aap_deploy_install_dir`.
 - `Overall Status: Not registered` on Satellite/baseline systems: keep

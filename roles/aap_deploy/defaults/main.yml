@@ -348,6 +348,48 @@ aap_deploy_postgresql_host_default: >-
   }}
 aap_deploy_postgresql_admin_username: postgres
 
+# Automation metrics service database and application secrets.
+aap_deploy_automationmetrics_pg_host: "{{ aap_deploy_postgresql_host_default }}"
+aap_deploy_automationmetrics_pg_database: automationmetrics
+aap_deploy_automationmetrics_pg_username: automationmetrics
+aap_deploy_automationmetrics_pg_password: >-
+  {{
+    aap_deploy_postgresql_admin_password_effective
+    | default(
+        aap_postgresql_admin_password_input
+        | default(aap_admin_password_input | default('', true), true),
+        true
+      )
+  }}
+aap_deploy_automationmetrics_controller_read_pg_username: automationmetrics_controller_reader
+aap_deploy_automationmetrics_controller_read_pg_password: >-
+  {{
+    aap_deploy_postgresql_admin_password_effective
+    | default(
+        aap_postgresql_admin_password_input
+        | default(aap_admin_password_input | default('', true), true),
+        true
+      )
+  }}
+aap_deploy_automationmetrics_secret_key: >-
+  {{
+    aap_breakglass_password_input
+    | default(
+        aap_admin_password_effective
+        | default(aap_admin_password_input | default('', true), true),
+        true
+      )
+  }}
+aap_deploy_automationmetrics_resource_server: >-
+  {{
+    aap_breakglass_password_input
+    | default(
+        aap_admin_password_effective
+        | default(aap_admin_password_input | default('', true), true),
+        true
+      )
+  }}
+
 aap_deploy_gateway_pg_host: ""
 aap_deploy_controller_pg_host: ""
 aap_deploy_hub_pg_host: ""

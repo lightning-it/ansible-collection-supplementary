@@ -104,3 +104,46 @@
             aap_deploy_setup_prep_inv_nodes.futuregroup['future01.example.com']
             == 'ansible_host=future01.example.com'
         quiet: true
+
+- name: Validate automation metrics installer variables
+  hosts: localhost
+  gather_facts: false
+  vars:
+    aap_validate_certs: false
+    aap_admin_password_input: test-admin-password
+    aap_postgresql_admin_password_input: test-postgresql-password
+    aap_deploy_gateway_admin_password_effective: test-gateway-password
+    aap_deploy_controller_admin_password_effective: test-controller-password
+    aap_deploy_hub_admin_password_effective: test-hub-password
+    aap_deploy_eda_admin_password_effective: test-eda-password
+    aap_deploy_postgresql_admin_password_effective: test-postgresql-password
+  tasks:
+    - name: Build installer inventory variables
+      ansible.builtin.include_role:
+        name: aap_deploy
+        tasks_from: 22_build_setup_inventory_vars.yml
+
+    - name: Assert automation metrics installer variables are present
+      ansible.builtin.assert:
+        that:
+          - "'automationmetrics_pg_host' in aap_deploy_setup_prep_inv_vars.all"
+          - "'automationmetrics_pg_database' in aap_deploy_setup_prep_inv_vars.all"
+          - "'automationmetrics_pg_username' in aap_deploy_setup_prep_inv_vars.all"
+          - "'automationmetrics_pg_password' in aap_deploy_setup_prep_inv_vars.all"
+          - >-
+            'automationmetrics_controller_read_pg_username'
+            in aap_deploy_setup_prep_inv_vars.all
+          - >-
+            'automationmetrics_controller_read_pg_password'
+            in aap_deploy_setup_prep_inv_vars.all
+          - "'automationmetrics_secret_key' in aap_deploy_setup_prep_inv_vars.all"
+          - "'automationmetrics_resource_server' in aap_deploy_setup_prep_inv_vars.all"
+          - aap_deploy_setup_prep_inv_vars.all.automationmetrics_pg_host | length > 2
+          - aap_deploy_setup_prep_inv_vars.all.automationmetrics_pg_password | length > 2
+          - >-
+            aap_deploy_setup_prep_inv_vars.all.automationmetrics_controller_read_pg_password
+            | length > 2
+          - aap_deploy_setup_prep_inv_vars.all.automationmetrics_secret_key | length > 2
+          - aap_deploy_setup_prep_inv_vars.all.automationmetrics_resource_server | length > 2
+        quiet: true
+      no_log: true

@@ -59,6 +59,13 @@
       - aap_deploy_growth_automationmetrics_host | default('', true) | trim | length > 0
       - aap_deploy_enterprise_automationmetrics_hosts is sequence
       - aap_deploy_enterprise_automationmetrics_hosts is not string
+      - aap_deploy_automationmetrics_pg_database | default('', true) | trim | length > 0
+      - aap_deploy_automationmetrics_pg_username | default('', true) | trim | length > 0
+      - >-
+        aap_deploy_automationmetrics_controller_read_pg_username
+        | default('', true)
+        | trim
+        | length > 0
       - aap_deploy_postgresql_admin_username | default('', true) | trim | length > 0
       - aap_deploy_gateway_verify_status_codes is sequence
       - aap_deploy_gateway_verify_status_codes is not string

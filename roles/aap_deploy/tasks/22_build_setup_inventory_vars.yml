@@ -1,0 +1,53 @@
+---
+- name: Build setup inventory variables
+  ansible.builtin.set_fact:
+    aap_deploy_setup_prep_inv_vars:
+      automationcontroller:
+        controller_extra_settings: "{{ aap_deploy_controller_extra_settings }}"
+      automationhub:
+        hub_extra_settings: "{{ aap_deploy_hub_extra_settings }}"
+      automationeda: {}
+      all: >-
+        {{
+          {
+            'gateway_admin_password': "'" ~ aap_deploy_gateway_admin_password_effective ~ "'",
+            'controller_admin_password': "'" ~ aap_deploy_controller_admin_password_effective ~ "'",
+            'hub_admin_password': "'" ~ aap_deploy_hub_admin_password_effective ~ "'",
+            'automationhub_admin_password': "'" ~ aap_deploy_hub_admin_password_effective ~ "'",
+            'ah_password': "'" ~ aap_deploy_hub_admin_password_effective ~ "'",
+            'eda_admin_password': "'" ~ aap_deploy_eda_admin_password_effective ~ "'",
+            'controller_validate_certs': (aap_validate_certs | bool),
+            'ah_validate_certs': (aap_validate_certs | bool),
+            'eda_validate_certs': (aap_validate_certs | bool),
+            'gateway_validate_certs': (aap_validate_certs | bool),
+            'postgresql_admin_password': "'" ~ aap_deploy_postgresql_admin_password_effective ~ "'",
+            'postgresql_admin_username': "'" ~ aap_deploy_postgresql_admin_username ~ "'",
+            'gateway_pg_host': "'" ~ aap_deploy_gateway_pg_host_effective ~ "'",
+            'gateway_pg_password': "'" ~ aap_deploy_gateway_pg_password_effective ~ "'",
+            'controller_pg_host': "'" ~ aap_deploy_controller_pg_host_effective ~ "'",
+            'controller_pg_password': "'" ~ aap_deploy_controller_pg_password_effective ~ "'",
+            'hub_pg_host': "'" ~ aap_deploy_hub_pg_host_effective ~ "'",
+            'hub_pg_password': "'" ~ aap_deploy_hub_pg_password_effective ~ "'",
+            'eda_pg_host': "'" ~ aap_deploy_eda_pg_host_effective ~ "'",
+            'eda_pg_password': "'" ~ aap_deploy_eda_pg_password_effective ~ "'",
+            'automationmetrics_pg_host': "'" ~ aap_deploy_automationmetrics_pg_host ~ "'",
+            'automationmetrics_pg_database': "'" ~ aap_deploy_automationmetrics_pg_database ~ "'",
+            'automationmetrics_pg_username': "'" ~ aap_deploy_automationmetrics_pg_username ~ "'",
+            'automationmetrics_pg_password': "'" ~ aap_deploy_automationmetrics_pg_password ~ "'",
+            'automationmetrics_controller_read_pg_username': (
+              "'" ~ aap_deploy_automationmetrics_controller_read_pg_username ~ "'"
+            ),
+            'automationmetrics_controller_read_pg_password': (
+              "'" ~ aap_deploy_automationmetrics_controller_read_pg_password ~ "'"
+            ),
+            'automationmetrics_secret_key': "'" ~ aap_deploy_automationmetrics_secret_key ~ "'",
+            'automationmetrics_resource_server': "'" ~ aap_deploy_automationmetrics_resource_server ~ "'",
+            'pg_admin_password': "'" ~ aap_deploy_postgresql_admin_password_effective ~ "'",
+            'redis_mode': "'" ~ aap_deploy_redis_mode ~ "'",
+            'bundle_install': true,
+            'bundle_dir': aap_deploy_bundle_dir_effective
+          }
+          | combine(aap_deploy_tls_inventory_vars | default({}, true), recursive=true)
+        }}
+    aap_deploy_setup_prep_inv_secrets: {}
+  changed_when: false

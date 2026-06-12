@@ -1,4 +1,23 @@
 ---
+- name: Validate automation metrics installer secrets
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_automationmetrics_pg_host | string | trim | length > 0
+      - aap_deploy_automationmetrics_pg_password | string | trim | length > 0
+      - >-
+        aap_deploy_automationmetrics_controller_read_pg_password
+        | string
+        | trim
+        | length > 0
+      - aap_deploy_automationmetrics_secret_key | string | trim | length > 0
+      - aap_deploy_automationmetrics_resource_server | string | trim | length > 0
+    fail_msg: >-
+      Missing required AAP 2.7 automation metrics installer values.
+      Define metrics database passwords and secret values in inventory, or set
+      shared AAP admin/PostgreSQL password inputs before running aap_deploy.
+    quiet: true
+  no_log: "{{ aap_admin_passwords_no_log | default(true) }}"
+
 - name: Run AAP containerized installer via vendor role  # noqa var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: infra.aap_utilities.aap_setup_install
