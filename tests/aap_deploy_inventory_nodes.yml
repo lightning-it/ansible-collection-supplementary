@@ -16,6 +16,25 @@
           - "'database' in aap_deploy_setup_prep_inv_nodes"
         quiet: true
 
+    - name: Read role defaults for legacy default checks
+      ansible.builtin.slurp:
+        src: "{{ playbook_dir }}/../roles/aap_deploy/defaults/main.yml"
+      register: aap_deploy_defaults_file
+
+    - name: Assert no legacy defaults remain
+      ansible.builtin.assert:
+        that:
+          - >-
+            'aap_deploy_setup_download_version: "2.7"'
+            in (aap_deploy_defaults_file.content | b64decode)
+          - >-
+            ('aap_deploy_' ~ 'automationmetrics_' ~ 'enabled')
+            not in (aap_deploy_defaults_file.content | b64decode)
+          - >-
+            ('AAP ' ~ '2' ~ '.6')
+            not in (aap_deploy_defaults_file.content | b64decode)
+        quiet: true
+
 - name: Validate AAP 2.7 growth automation metrics inventory nodes
   hosts: localhost
   gather_facts: false
