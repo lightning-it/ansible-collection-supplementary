@@ -117,12 +117,10 @@
                   aap_deploy_enterprise_automationmetrics_hosts
                   | map('regex_replace', '^(.*)$', 'ansible_host=\1')
                   | list
-                )
+              )
             )
           )
         }
-        if aap_deploy_automationmetrics_enabled | bool
-        else {}
       }}
   changed_when: false
 

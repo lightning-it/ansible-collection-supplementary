@@ -36,7 +36,8 @@ Key variables:
 - `aap_deploy_bundle_dir` (path containing `/bundle`)
 - `aap_deploy_redis_mode` (`standalone` or `cluster`)
 - `aap_deploy_redis_hosts` (required when `aap_deploy_redis_mode=cluster`, at least 6 hosts)
-- `aap_deploy_automationmetrics_enabled` (default: `true`)
+- `aap_deploy_growth_automationmetrics_host`
+- `aap_deploy_enterprise_automationmetrics_hosts`
 - `aap_deploy_setup_prep_inv_nodes_extra`
 - `aap_deploy_postgresql_admin_username` (default: `postgres`)
 - `aap_deploy_gateway_pg_host` / `aap_deploy_controller_pg_host` / `aap_deploy_hub_pg_host` / `aap_deploy_eda_pg_host`
@@ -82,13 +83,13 @@ AAP 2.7 automation metrics inventory:
 
 ```yaml
 aap_deploy_setup_download_version: "2.7"
-aap_deploy_automationmetrics_enabled: true
 aap_deploy_growth_automationmetrics_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 ```
 
 AAP 2.7 containerized installer preflight requires an `automationmetrics`
-inventory group. Growth topology uses `aap_deploy_growth_automationmetrics_host`;
-enterprise topology uses `aap_deploy_enterprise_automationmetrics_hosts`.
+inventory group. The role always generates it. Growth topology uses
+`aap_deploy_growth_automationmetrics_host`; enterprise topology uses
+`aap_deploy_enterprise_automationmetrics_hosts`.
 
 Use `aap_deploy_setup_prep_inv_nodes_extra` to merge additional installer
 inventory groups into the generated `aap_setup_prep_inv_nodes` map.
@@ -106,8 +107,8 @@ aap.example.com
 aap.example.com
 ```
 
-The role fails early when neither `aap_deploy_automationmetrics_enabled` nor an
-explicit `automationmetrics` entry in `aap_deploy_setup_prep_inv_nodes_extra` is set.
+The role validates that the selected metrics host list is non-empty before
+rendering the installer inventory.
 
 RHEL 10 host prep:
 - AAP 2.7 supports RHEL 10 containerized installs.
@@ -143,6 +144,17 @@ Bundle source handling:
 ```yaml
 aap_deploy_setup_archive_src: "{{ aap_deploy_local_project_root }}/files/aap/aap-containerized-setup.tar.gz"
 aap_deploy_setup_archive_path: "{{ aap_deploy_install_dir }}/aap-containerized-setup.tar.gz"
+```
+
+Customer baseline/Satellite example:
+
+```yaml
+aap_deploy_install_dir: /appl/aap
+aap_deploy_install_user: aap
+aap_deploy_install_user_home: /appl/aap/home/aap
+aap_deploy_manage_host_prep: true
+aap_deploy_manage_rhsm_repos: false
+ansible_remote_tmp: /appl/ansible-tmp
 ```
 
 Large bundle copy and temporary space:
@@ -201,9 +213,9 @@ aap_cac_controller_license_manifest_content: >-
 ```
 
 Troubleshooting:
-- `You must have a host set in the [automationmetrics] section`: keep
-  `aap_deploy_automationmetrics_enabled: true`, or provide the group through
-  `aap_deploy_setup_prep_inv_nodes_extra`.
+- `You must have a host set in the [automationmetrics] section`: this should
+  not happen in the 2.7-only role. Verify the updated collection is active and
+  the generated installer inventory contains `[automationmetrics]`.
 - `No space left on device` during bundle copy: set `ansible_remote_tmp` to a
   filesystem with enough free space and verify `aap_deploy_install_dir`.
 - `Overall Status: Not registered` on Satellite/baseline systems: keep
@@ -236,9 +248,12 @@ Requires `infra.aap_utilities` in the execution environment.
         aap_deploy_install_dir: /opt/aap
         rh_offline_token: "{{ lookup('community.hashi_vault.vault_kv2_get', 'my/path')['secret']['rh_offline_token'] }}"
         aap_deploy_setup_download_version: "2.7"
-        aap_deploy_automationmetrics_enabled: true
         aap_deploy_setup_download_containerized: true
         aap_deploy_bundle_dir: bundle
+
+        # Customer baseline/Satellite example
+        aap_deploy_manage_host_prep: true
+        aap_deploy_manage_rhsm_repos: false
 
         # Password inputs (inventory source of truth)
         aap_password_active: active

@@ -291,9 +291,6 @@ aap_deploy_growth_hub_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_growth_eda_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_growth_postgresql_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 
-# AAP 2.7 requires an automationmetrics inventory group.
-aap_deploy_automationmetrics_enabled: true
-
 # Growth/single-node automation metrics host.
 aap_deploy_growth_automationmetrics_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 
