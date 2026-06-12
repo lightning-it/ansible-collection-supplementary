@@ -1,3 +1,9 @@
+## [1.22.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.21.0...v1.22.0) (2026-06-12)
+
+### Features
+
+* add automation metrics service variables and validation for AAP 2.7 ([#178](https://github.com/lightning-it/ansible-collection-supplementary/issues/178)) ([59268de](https://github.com/lightning-it/ansible-collection-supplementary/commit/59268dea11f71305030ee0647fff3be148e3514f))
+
 ## [1.21.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.20.0...v1.21.0) (2026-06-12)
 
 ### Features
