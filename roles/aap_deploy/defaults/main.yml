@@ -24,7 +24,7 @@ aap_deploy_local_project_root: "{{ playbook_dir | dirname | dirname }}"
 # Setup archive staging (disconnected-first).
 # We intentionally use a local control-node copy of the AAP bundle and copy it
 # to the managed host. This workflow must work without internet access.
-aap_deploy_setup_download_version: "2.6"
+aap_deploy_setup_download_version: "2.7"
 aap_deploy_setup_download_containerized: true
 aap_deploy_setup_archive_src: >-
   {{
@@ -291,6 +291,12 @@ aap_deploy_growth_hub_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_growth_eda_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_growth_postgresql_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 
+# AAP 2.7 requires an automationmetrics inventory group.
+aap_deploy_automationmetrics_enabled: true
+
+# Growth/single-node automation metrics host.
+aap_deploy_growth_automationmetrics_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
+
 # Enterprise topology hosts (lists)
 aap_deploy_enterprise_gateway_hosts:
   - "{{ ansible_fqdn | default(inventory_hostname) }}"
@@ -302,6 +308,13 @@ aap_deploy_enterprise_eda_hosts:
   - "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_enterprise_postgresql_hosts:
   - "{{ ansible_fqdn | default(inventory_hostname) }}"
+
+# Enterprise/multi-node automation metrics hosts.
+aap_deploy_enterprise_automationmetrics_hosts:
+  - "{{ ansible_fqdn | default(inventory_hostname) }}"
+
+# Generic extension point for future installer inventory groups.
+aap_deploy_setup_prep_inv_nodes_extra: {}
 
 aap_deploy_tls_gateway_host_default: >-
   {{
@@ -379,6 +392,7 @@ aap_deploy_required_repos:
   - "rhel-{{ ansible_distribution_major_version | default('9') }}-for-{{ aap_deploy_repo_arch }}-appstream-rpms"
 aap_deploy_base_required_packages:
   - ansible-core
+  - python3
   - podman
 aap_deploy_extra_required_packages: >-
   {{

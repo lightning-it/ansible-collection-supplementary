@@ -1,0 +1,87 @@
+---
+- name: Validate AAP 2.7 default inventory nodes
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Build default aap_deploy inventory nodes
+      ansible.builtin.include_role:
+        name: aap_deploy
+        tasks_from: 21_build_setup_inventory_nodes.yml
+
+    - name: Assert automationmetrics is present by default
+      ansible.builtin.assert:
+        that:
+          - "'automationmetrics' in aap_deploy_setup_prep_inv_nodes"
+          - "'automationcontroller' in aap_deploy_setup_prep_inv_nodes"
+          - "'database' in aap_deploy_setup_prep_inv_nodes"
+        quiet: true
+
+- name: Validate AAP 2.7 growth automation metrics inventory nodes
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Build growth automation metrics inventory nodes
+      ansible.builtin.include_role:
+        name: aap_deploy
+        tasks_from: 21_build_setup_inventory_nodes.yml
+      vars:
+        aap_deploy_growth_automationmetrics_host: aap.example.com
+
+    - name: Assert growth automationmetrics group is present
+      ansible.builtin.assert:
+        that:
+          - "'automationmetrics' in aap_deploy_setup_prep_inv_nodes"
+          - "'aap.example.com' in aap_deploy_setup_prep_inv_nodes.automationmetrics"
+          - >-
+            aap_deploy_setup_prep_inv_nodes.automationmetrics['aap.example.com']
+            == 'ansible_connection=local ansible_host=aap.example.com'
+        quiet: true
+
+- name: Validate enterprise automation metrics inventory nodes
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Build enterprise automation metrics inventory nodes
+      ansible.builtin.include_role:
+        name: aap_deploy
+        tasks_from: 21_build_setup_inventory_nodes.yml
+      vars:
+        aap_deploy_topology: enterprise
+        aap_deploy_enterprise_automationmetrics_hosts:
+          - metrics01.example.com
+          - metrics02.example.com
+
+    - name: Assert enterprise automationmetrics group is present
+      ansible.builtin.assert:
+        that:
+          - "'automationmetrics' in aap_deploy_setup_prep_inv_nodes"
+          - >-
+            aap_deploy_setup_prep_inv_nodes.automationmetrics.keys() | list
+            == ['metrics01.example.com', 'metrics02.example.com']
+          - >-
+            aap_deploy_setup_prep_inv_nodes.automationmetrics['metrics01.example.com']
+            == 'ansible_host=metrics01.example.com'
+        quiet: true
+
+- name: Validate extra installer inventory nodes
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Build inventory nodes with extra group
+      ansible.builtin.include_role:
+        name: aap_deploy
+        tasks_from: 21_build_setup_inventory_nodes.yml
+      vars:
+        aap_deploy_setup_prep_inv_nodes_extra:
+          futuregroup:
+            future01.example.com: ansible_host=future01.example.com
+
+    - name: Assert extra group is merged
+      ansible.builtin.assert:
+        that:
+          - "'futuregroup' in aap_deploy_setup_prep_inv_nodes"
+          - "'future01.example.com' in aap_deploy_setup_prep_inv_nodes.futuregroup"
+          - >-
+            aap_deploy_setup_prep_inv_nodes.futuregroup['future01.example.com']
+            == 'ansible_host=future01.example.com'
+        quiet: true
