@@ -1,3 +1,9 @@
+## [1.20.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.19.0...v1.20.0) (2026-06-12)
+
+### Features
+
+* aap version 2 7 ([#176](https://github.com/lightning-it/ansible-collection-supplementary/issues/176)) ([167c00d](https://github.com/lightning-it/ansible-collection-supplementary/commit/167c00de121b1be1b76ca390b751747f8b04140c))
+
 ## [1.19.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.9...v1.19.0) (2026-06-10)
 
 ### Features
