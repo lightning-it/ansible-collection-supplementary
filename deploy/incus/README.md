@@ -24,6 +24,82 @@ RHEL 10:
 - prefer `INCUS_RHEL10_IMAGE`
 - otherwise use `local:rhel10-ci`
 
+## Create Local RHEL Image Aliases
+
+The helper scripts expect private RHEL images to already be present in the
+Incus image store. They do not download or publish Red Hat images.
+Run these commands as a user that can access Incus, for example a user in the
+`incus-admin` group, and confirm `incus info` works first.
+VM mode also requires KVM on the Incus host; confirm `/dev/kvm` exists before
+creating RHEL VMs.
+
+### Get a RHEL 10 qcow2
+
+Use one of these protected Red Hat sources:
+
+- Download the official RHEL 10 KVM Guest Image from the Red Hat Customer Portal
+  Software & Download Center:
+  <https://access.redhat.com/downloads>
+- Build a custom RHEL 10 KVM guest `.qcow2` with RHEL image builder:
+  <https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/10/html/composing_a_customized_rhel_system_image/creating-and-deploying-guest-images-wht-image-builder>
+
+The downloaded or built file should be a KVM/cloud guest image in qcow2 format.
+Keep it on the Incus host, for example:
+
+```bash
+sudo mkdir -p /srv/incus/images
+sudo cp /path/to/rhel-10-*-x86_64-kvm.qcow2 /srv/incus/images/rhel-10-cloud.qcow2
+sudo chown "$(id -u):$(id -g)" /srv/incus/images/rhel-10-cloud.qcow2
+```
+
+Check the required RHEL 10 alias:
+
+```bash
+incus image info local:rhel10-ci
+```
+
+If you already have Incus image artifacts, import them and assign the alias:
+
+```bash
+incus image import /path/to/metadata.tar.xz /path/to/disk.qcow2 \
+  --alias rhel10-ci
+```
+
+If you have a standalone RHEL 10 cloud qcow2, create a minimal Incus metadata
+tarball first:
+
+```bash
+workdir="$(mktemp -d)"
+cp /srv/incus/images/rhel-10-cloud.qcow2 "$workdir/rootfs.img"
+cat > "$workdir/metadata.yaml" <<EOF
+architecture: x86_64
+creation_date: $(date +%s)
+properties:
+  os: Red Hat Enterprise Linux
+  release: "10"
+  description: RHEL 10 cloud image
+EOF
+
+tar -C "$workdir" -cJf "$workdir/metadata.tar.xz" metadata.yaml
+incus image import "$workdir/metadata.tar.xz" "$workdir/rootfs.img" \
+  --alias rhel10-ci
+rm -rf "$workdir"
+```
+
+Verify the imported image is a VM image:
+
+```bash
+incus image list local:rhel10-ci
+incus image info local:rhel10-ci | grep -E 'type|description|release'
+```
+
+If your alias should point at a different name, keep the image as-is and export
+the override before using the scripts:
+
+```bash
+export INCUS_RHEL10_IMAGE=local:my-rhel10-image
+```
+
 ## Common Usage
 
 Create the default validated RHEL 9.8 VM:

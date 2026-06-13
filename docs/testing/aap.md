@@ -36,6 +36,9 @@ Recommended image aliases:
 - `local:rhel9-ci`
 - `local:rhel10-ci`
 
+See `deploy/incus/README.md` for creating the local `rhel10-ci` image alias
+from Incus image artifacts or a standalone RHEL cloud qcow2.
+
 Override aliases when needed:
 
 - `INCUS_RHEL98_IMAGE`

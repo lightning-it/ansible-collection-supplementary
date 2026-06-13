@@ -96,8 +96,9 @@ if [ "${run_installer}" = "true" ] && [ ! -f "${bundle_file}" ]; then
   exit 1
 fi
 
-if ! incus info >/dev/null 2>&1; then
+if ! incus_info_output="$(incus info 2>&1)"; then
   echo "ERROR: incus is installed, but no reachable Incus daemon/remote is configured." >&2
+  printf '%s\n' "${incus_info_output}" >&2
   echo "Run this script on an Incus host, or configure the local incus client to use a remote Incus host." >&2
   exit 1
 fi

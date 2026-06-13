@@ -226,6 +226,11 @@ trap 'rm -f "${tmp_user_data}"' EXIT
 render_user_data "$profile_file" "$name" "$fqdn" "$ssh_user" "$public_key" > "${tmp_user_data}"
 
 if [ "$mode" = "vm" ]; then
+  if [ ! -e /dev/kvm ]; then
+    echo "ERROR: VM mode requires KVM, but /dev/kvm is not available on this host." >&2
+    echo "Enable/expose hardware virtualization or use an Incus host with KVM support." >&2
+    exit 1
+  fi
   incus init "$image" "$name" --vm
   if [ -n "${INCUS_VM_CPU:-}" ]; then
     incus config set "$name" limits.cpu "${INCUS_VM_CPU}"
