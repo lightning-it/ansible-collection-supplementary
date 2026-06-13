@@ -5,12 +5,12 @@ bundle mode.
 
 ## Requirements
 
-- RHEL host with FQDN hostname.
+- Red Hat Enterprise Linux 9 or 10 host with FQDN hostname.
 - Dedicated non-root install user with sudo (rootless Podman model).
 - RHSM registration and BaseOS/AppStream repositories when host prep is enabled.
 - `ansible-core` and `podman` on target host (managed by host prep if enabled).
 - `infra.aap_utilities` collection installed in the execution environment.
-- Red Hat offline token for installer download API access.
+- A local AAP containerized setup bundle on the control node for real installer runs.
 
 ## Variables
 
@@ -61,13 +61,16 @@ Key variables:
 - `aap_deploy_runtime_min_matching_containers` (default: `1`)
 - `aap_deploy_enforce_min_mem_check` (default: `true`)
 - `aap_deploy_min_mem_mb` (default: `15000`, approximately 16GB)
+- `aap_deploy_growth_inventory_connection` (default: `local`)
+- `aap_deploy_growth_inventory_hostvars_extra`
+- `aap_deploy_enterprise_inventory_hostvars_extra`
 
 Vendor-driven installer behavior:
 - Role performs an early existing-install detection (marker and runtime containers).
 - Marker-based skip is runtime-validated by default to avoid stale marker false positives.
 - When detected, host prep, bundle handling, inventory rendering, and installer execution are skipped.
 - Verification still runs (when enabled).
-- Role downloads the bundle via `infra.aap_utilities.aap_setup_download`.
+- Role expects a controller-side bundle path and copies it to the managed host.
 - Role prepares the setup workspace and renders installer inventory via `infra.aap_utilities.aap_setup_prepare`.
 - Role runs the containerized installer via `infra.aap_utilities.aap_setup_install`.
 - Default bundle dir is `bundle` (relative to the extracted setup directory).

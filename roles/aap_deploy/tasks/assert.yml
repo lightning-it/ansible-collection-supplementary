@@ -8,10 +8,32 @@
     - ansible_distribution is not defined
     - aap_deploy_enabled | bool
 
+- name: Validate supported AAP deploy platform
+  ansible.builtin.assert:
+    that:
+      - (ansible_distribution | default('')) == 'RedHat'
+      - (ansible_distribution_major_version | string) in aap_deploy_supported_majors
+    fail_msg: >-
+      Unsupported platform ansible_distribution='{{ ansible_distribution | default('unknown') }}'
+      ansible_distribution_major_version='{{ ansible_distribution_major_version | default('unknown') }}'.
+      lit.supplementary.aap_deploy supports Red Hat Enterprise Linux
+      {{ aap_deploy_supported_majors | join('/') }} only.
+    quiet: true
+  when: aap_deploy_enabled | bool
+  tags: always
+
+- name: Load OS-specific AAP deploy vars
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/vars/RedHat-{{ ansible_distribution_major_version | string }}.yml"
+  when: aap_deploy_enabled | bool
+  tags: always
+
 - name: Validate aap_deploy role switches and mode
   ansible.builtin.assert:
     that:
       - aap_deploy_enabled is boolean
+      - aap_deploy_supported_majors is sequence
+      - aap_deploy_supported_majors is not string
       - aap_deploy_install_type == 'bundle'
       - aap_deploy_topology in ['growth', 'enterprise']
       - aap_deploy_manage_host_prep is boolean
@@ -54,6 +76,9 @@
       - aap_deploy_redis_mode in ['cluster', 'standalone']
       - aap_deploy_redis_hosts is sequence
       - aap_deploy_redis_hosts is not string
+      - aap_deploy_growth_inventory_connection in ['local', 'ssh']
+      - aap_deploy_growth_inventory_hostvars_extra is string
+      - aap_deploy_enterprise_inventory_hostvars_extra is string
       - aap_deploy_postgresql_admin_username | default('', true) | trim | length > 0
       - aap_deploy_gateway_verify_status_codes is sequence
       - aap_deploy_gateway_verify_status_codes is not string
@@ -172,9 +197,10 @@
 - name: Validate platform for host preparation
   ansible.builtin.assert:
     that:
-      - (ansible_os_family | default('')) == 'RedHat'
+      - (ansible_distribution | default('')) == 'RedHat'
+      - (ansible_distribution_major_version | string) in aap_deploy_supported_majors
     fail_msg: >-
-      Host preparation expects RHEL-compatible systems.
+      Host preparation supports Red Hat Enterprise Linux {{ aap_deploy_supported_majors | join('/') }} only.
       Set aap_deploy_manage_host_prep=false if this role is only being used to render inventory.
     quiet: true
   when:

@@ -1,0 +1,14 @@
+---
+- name: Destroy aap-rhel10 Incus instance
+  hosts: localhost
+  gather_facts: false
+  vars:
+    molecule_instance_name: "{{ lookup('ansible.builtin.env', 'MOLECULE_AAP_INSTANCE') }}"
+  tasks:
+    - name: Destroy RHEL 10 Incus instance
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../deploy/incus/destroy.sh"
+          - "{{ molecule_instance_name }}"
+      changed_when: false
+      failed_when: false

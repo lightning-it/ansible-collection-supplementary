@@ -1,0 +1,46 @@
+---
+dependency:
+  name: shell
+  command: ":"
+
+driver:
+  name: delegated
+
+platforms:
+  - name: localhost
+    managed: false
+
+provisioner:
+  name: ansible
+  lint: |
+    yamllint .
+    ansible-lint
+  env:
+    MOLECULE_AAP_INSTANCE: molecule-aap-rhel9
+  inventory:
+    host_vars:
+      localhost:
+        ansible_connection: local
+  playbooks:
+    create: create.yml
+    prepare: prepare.yml
+    converge: converge.yml
+    idempotence: idempotence.yml
+    destroy: destroy.yml
+    verify: verify.yml
+
+scenario:
+  name: aap-rhel9
+  test_sequence:
+    - dependency
+    - destroy
+    - syntax
+    - create
+    - prepare
+    - converge
+    - idempotence
+    - verify
+    - destroy
+
+verifier:
+  name: ansible

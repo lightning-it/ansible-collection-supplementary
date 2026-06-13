@@ -1,4 +1,33 @@
 ---
+- name: Ensure minimum AAP facts are available
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - min
+  when:
+    - aap_enabled | bool
+    - ansible_distribution is not defined
+  tags: always
+
+- name: Validate supported AAP platform
+  ansible.builtin.assert:
+    that:
+      - (ansible_distribution | default('')) == 'RedHat'
+      - (ansible_distribution_major_version | string) in aap_supported_majors
+    fail_msg: >-
+      Unsupported platform ansible_distribution='{{ ansible_distribution | default('unknown') }}'
+      ansible_distribution_major_version='{{ ansible_distribution_major_version | default('unknown') }}'.
+      This role supports Red Hat Enterprise Linux {{ aap_supported_majors | join('/') }} only.
+    quiet: true
+  when: aap_enabled | bool
+  tags: always
+
+- name: Load OS-specific AAP vars
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/vars/RedHat-{{ ansible_distribution_major_version | string }}.yml"
+  when: aap_enabled | bool
+  tags: always
+
 - name: Ensure aap variables are valid
   vars:
     _aap_admin_input_valid: >-
@@ -190,6 +219,7 @@
       - aap_target_major in aap_supported_majors
       - aap_packages_effective is sequence
       - aap_packages_effective is not string
+      - aap_packages_effective | length > 0
       - aap_package_state in ['present', 'latest', 'absent']
       - aap_manage_systemd is boolean
       - (not (aap_manage_systemd | bool)) or (aap_systemd_unit_name | default('', true) | trim | length > 0)

@@ -1,0 +1,33 @@
+---
+- name: Create aap-rhel9 Incus instance
+  hosts: localhost
+  gather_facts: false
+  vars:
+    aap_deploy_molecule_instance_name: "{{ lookup('ansible.builtin.env', 'MOLECULE_AAP_INSTANCE') }}"
+    aap_deploy_molecule_inventory_path: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/incus-inventory.yml
+  tasks:
+    - name: Create RHEL 9 Incus VM
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../deploy/incus/create.sh"
+          - --version
+          - "9"
+          - --vm
+          - --name
+          - "{{ aap_deploy_molecule_instance_name }}"
+      changed_when: true
+
+    - name: Build Molecule inventory from Incus instance
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/../../deploy/incus/inventory.sh"
+          - "{{ aap_deploy_molecule_instance_name }}"
+      register: aap_deploy_molecule_generated_inventory
+      changed_when: false
+
+    - name: Persist Molecule inventory
+      ansible.builtin.copy:
+        dest: "{{ aap_deploy_molecule_inventory_path }}"
+        content: "{{ aap_deploy_molecule_generated_inventory.stdout ~ '\n' }}"
+        mode: "0600"

@@ -99,7 +99,7 @@ bash scripts/wunder-devtools-ee.sh bash -c '
   name="${COLLECTION_NAME}"
 
   # Keep Ansible cache/install state stable and outside /workspace.
-  export HOME="${HOME:-/tmp/wunder}"
+  export HOME="$(mktemp -d "${HOME:-/tmp/wunder}/ansible-lint-home.XXXXXX")"
   mkdir -p "${HOME}"
   mkdir -p "${HOME}/.ansible/tmp" "${HOME}/.ansible/collections"
   export ANSIBLE_LOCAL_TEMP="${HOME}/.ansible/tmp"

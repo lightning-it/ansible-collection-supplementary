@@ -21,6 +21,7 @@ tags:
 # Install them via EE/workspace requirements files (for example requirements-rh.yml).
 dependencies:
   community.general: '>=11.4.5,<12.0.0'
+  community.crypto: '>=2.22.3,<3.0.0'
   ansible.posix: '>=2.1.0'
   community.vmware: '5.10.0'
   lit.foundational: '>=1.17.1'
@@ -29,7 +30,6 @@ build_ignore:
   - .ansible
   - extensions/molecule
   - node_modules
-  - vagrant
   - .git
   - .github
   - .gitignore

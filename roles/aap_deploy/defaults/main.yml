@@ -1,5 +1,8 @@
 ---
 aap_deploy_enabled: true
+aap_deploy_supported_majors:
+  - "9"
+  - "10"
 
 # Installation mode
 # This role supports disconnected bundle installs only.
@@ -96,6 +99,13 @@ aap_deploy_setup_install_extra_vars_files: []
 # Effective installer admin passwords are resolved by shared role `aap`
 # from inventory inputs (`aap_*_admin_password_input`).
 # This role consumes only the resolved effective values.
+aap_deploy_validate_certs: true
+aap_deploy_admin_password_input: ""
+aap_deploy_gateway_admin_password_input: ""
+aap_deploy_controller_admin_password_input: ""
+aap_deploy_hub_admin_password_input: ""
+aap_deploy_eda_admin_password_input: ""
+aap_deploy_postgresql_admin_password_input: ""
 aap_deploy_gateway_admin_password_effective: >-
   {{
     aap_gateway_admin_password_effective
@@ -290,6 +300,8 @@ aap_deploy_growth_controller_host: "{{ ansible_fqdn | default(inventory_hostname
 aap_deploy_growth_hub_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_growth_eda_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_growth_postgresql_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_growth_inventory_connection: local
+aap_deploy_growth_inventory_hostvars_extra: ""
 
 # Enterprise topology hosts (lists)
 aap_deploy_enterprise_gateway_hosts:
@@ -302,6 +314,7 @@ aap_deploy_enterprise_eda_hosts:
   - "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_enterprise_postgresql_hosts:
   - "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_enterprise_inventory_hostvars_extra: ""
 
 aap_deploy_tls_gateway_host_default: >-
   {{
@@ -374,12 +387,9 @@ aap_deploy_repo_arch: >-
   }}
 aap_deploy_requires_ansible_builder: >-
   {{ (ee_list | default([], true) | length > 0) | bool }}
-aap_deploy_required_repos:
-  - "rhel-{{ ansible_distribution_major_version | default('9') }}-for-{{ aap_deploy_repo_arch }}-baseos-rpms"
-  - "rhel-{{ ansible_distribution_major_version | default('9') }}-for-{{ aap_deploy_repo_arch }}-appstream-rpms"
-aap_deploy_base_required_packages:
-  - ansible-core
-  - podman
+aap_deploy_required_repos: "{{ aap_deploy_required_repos_default | default([], true) }}"
+aap_deploy_base_required_packages: >-
+  {{ aap_deploy_base_required_packages_default | default(['ansible-core', 'podman'], true) }}
 aap_deploy_extra_required_packages: >-
   {{
     (

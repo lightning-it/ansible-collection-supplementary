@@ -4,7 +4,7 @@ Shared AAP context role that centralizes common variables and prechecks.
 
 ## Requirements
 
-None.
+Supports Red Hat Enterprise Linux 9 and 10 only.
 
 ## Variables
 

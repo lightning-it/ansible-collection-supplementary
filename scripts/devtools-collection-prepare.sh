@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Build and install the collection inside the ee-wunder-devtools-ubi9 container.
 # Installs into a per-run collections dir to avoid stale state.
-# Prints COLLECTIONS_DIR as the last line for callers.
+# Prints COLLECTIONS_DIR as the only stdout line for callers.
 
 # Derive namespace+name from galaxy.yml (authoritative)
 if [ ! -f /workspace/galaxy.yml ]; then
@@ -25,7 +25,7 @@ if [ -z "${ns:-}" ] || [ -z "${name:-}" ]; then
   exit 1
 fi
 
-echo "Preparing collection ${ns}.${name} inside ee-wunder-devtools-ubi9..."
+echo "Preparing collection ${ns}.${name} inside ee-wunder-devtools-ubi9..." >&2
 
 # Stable HOME + stable ansible tmp (ansible-galaxy downloads)
 export HOME="${HOME:-/tmp/wunder}"
@@ -43,17 +43,18 @@ fi
 # Per-run XDG cache (avoids ansible-compat/ansible-lint races)
 export XDG_CACHE_HOME="$(mktemp -d "${HOME}/xdg-cache.XXXXXX")"
 if [ "${DEBUG:-0}" = "1" ]; then
-  echo "XDG_CACHE_HOME=$XDG_CACHE_HOME"
+  echo "XDG_CACHE_HOME=$XDG_CACHE_HOME" >&2
 fi
 
 # Per-run install target
 COLLECTIONS_DIR="$(mktemp -d "${HOME}/collections.XXXXXX")"
 export ANSIBLE_COLLECTIONS_PATH="${COLLECTIONS_DIR}:/usr/share/ansible/collections"
+BUILD_OUTPUT_DIR="$(mktemp -d "${HOME}/build.XXXXXX")"
 
 cd /workspace
 
 # Build artifact and capture the output path
-build_out="$(ansible-galaxy collection build --output-path "${HOME}" --force)"
+build_out="$(ansible-galaxy collection build --output-path "${BUILD_OUTPUT_DIR}" --force)"
 artifact="$(printf "%s\n" "$build_out" | awk '/Created collection for/ {print $NF}' | tail -n 1)"
 
 if [ -z "${artifact:-}" ] || [ ! -f "$artifact" ]; then
@@ -65,9 +66,9 @@ if [ -z "${artifact:-}" ] || [ ! -f "$artifact" ]; then
 fi
 
 # Install this collection into per-run dir
-ansible-galaxy collection install "$artifact" -p "${COLLECTIONS_DIR}" --force
+ansible-galaxy collection install "$artifact" -p "${COLLECTIONS_DIR}" --force >&2
 
-echo "Collection ${ns}.${name} installed in ${COLLECTIONS_DIR}"
+echo "Collection ${ns}.${name} installed in ${COLLECTIONS_DIR}" >&2
 
-# Print the path so caller scripts can capture it if needed
+# Print the path so caller scripts can capture it if needed.
 echo "${COLLECTIONS_DIR}"
