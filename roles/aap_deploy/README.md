@@ -1,6 +1,6 @@
 # aap_deploy
 
-Install Red Hat Ansible Automation Platform (AAP) 2.6 with the official containerized installer in
+Install Red Hat Ansible Automation Platform (AAP) 2.7 with the official containerized installer in
 bundle mode.
 
 ## Requirements
@@ -22,11 +22,7 @@ Key variables:
 - `aap_deploy_topology` (`growth` or `enterprise`)
 - `aap_deploy_install_user`
 - `aap_deploy_install_dir`
-- `rh_offline_token` (preferred input, usually seeded from Vault in inventory/playbook)
-- `aap_deploy_setup_download_offline_token` (optional override; defaults to `rh_offline_token`)
-- `aap_deploy_setup_download_version`
-- `aap_deploy_setup_download_version_patch`
-- `aap_deploy_setup_download_type`
+- `aap_deploy_setup_download_version` (default: `"2.7"`)
 - `aap_deploy_setup_download_containerized`
 - `aap_deploy_setup_prepare_process_template`
 - `aap_deploy_setup_install_force`
@@ -105,7 +101,7 @@ Requires `infra.aap_utilities` in the execution environment.
 ## Example Playbook
 
 ```yaml
-- name: Install AAP 2.6 (growth, downloaded bundle)
+- name: Install AAP 2.7 (growth, disconnected bundle)
   hosts: aap_hosts
   become: true
   gather_facts: true
@@ -116,8 +112,7 @@ Requires `infra.aap_utilities` in the execution environment.
         aap_deploy_topology: growth
         aap_deploy_install_user: aap
         aap_deploy_install_dir: /opt/aap
-        rh_offline_token: "{{ lookup('community.hashi_vault.vault_kv2_get', 'my/path')['secret']['rh_offline_token'] }}"
-        aap_deploy_setup_download_version: "2.6"
+        aap_deploy_setup_download_version: "2.7"
         aap_deploy_setup_download_containerized: true
         aap_deploy_bundle_dir: bundle
 

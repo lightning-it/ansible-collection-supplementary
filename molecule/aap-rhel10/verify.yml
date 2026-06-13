@@ -39,6 +39,16 @@
           - (ansible_distribution_major_version | string) == '10'
         quiet: true
 
+    - name: Load aap_deploy role defaults
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/aap_deploy/defaults/main.yml"
+
+    - name: Assert AAP 2.7 is the role default for RHEL 10
+      ansible.builtin.assert:
+        that:
+          - aap_deploy_setup_download_version == '2.7'
+        quiet: true
+
     - name: Check full-install marker when enabled
       ansible.builtin.stat:
         path: /opt/aap/.aap_containerized_installed
