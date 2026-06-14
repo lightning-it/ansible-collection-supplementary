@@ -24,7 +24,7 @@ dependencies:
   community.crypto: '>=2.26.8,<3.0.0'
   ansible.posix: '>=2.2.0'
   community.vmware: '5.10.0'
-  lit.rhel: '>=1.15.0'
+  lit.rhel: '>=1.16.0'
   lit.foundational: '>=1.17.2'
   community.hashi_vault: '*'
 build_ignore:
