@@ -53,6 +53,7 @@
       - aap_deploy_setup_prepare_process_template is boolean
       - aap_deploy_setup_install_force is boolean
       - aap_deploy_verify_gateway_https is boolean
+      - aap_deploy_manage_rhsm_repos is boolean
       - aap_deploy_install_user | trim | length > 0
       - aap_deploy_install_user != 'root'
       - aap_deploy_install_dir | trim | length > 0
@@ -79,6 +80,17 @@
       - aap_deploy_growth_inventory_connection in ['local', 'ssh']
       - aap_deploy_growth_inventory_hostvars_extra is string
       - aap_deploy_enterprise_inventory_hostvars_extra is string
+      - aap_deploy_setup_prep_inv_nodes_extra is mapping
+      - aap_deploy_growth_automationmetrics_host | default('', true) | trim | length > 0
+      - aap_deploy_enterprise_automationmetrics_hosts is sequence
+      - aap_deploy_enterprise_automationmetrics_hosts is not string
+      - aap_deploy_automationmetrics_pg_database | default('', true) | trim | length > 0
+      - aap_deploy_automationmetrics_pg_username | default('', true) | trim | length > 0
+      - >-
+        aap_deploy_automationmetrics_controller_read_pg_username
+        | default('', true)
+        | trim
+        | length > 0
       - aap_deploy_postgresql_admin_username | default('', true) | trim | length > 0
       - aap_deploy_gateway_verify_status_codes is sequence
       - aap_deploy_gateway_verify_status_codes is not string
@@ -93,6 +105,28 @@
       (aap_deploy_install_type=bundle), with absolute install paths and a non-root install user.
     quiet: true
   when: aap_deploy_enabled | bool
+  tags: always
+
+- name: Validate automation metrics inventory hosts
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          aap_deploy_growth_automationmetrics_host
+          if aap_deploy_topology == 'growth'
+          else (aap_deploy_enterprise_automationmetrics_hosts | first | default('', true))
+        )
+        | default('', true)
+        | trim
+        | length > 0
+    fail_msg: >-
+      AAP 2.7 containerized installations require an automationmetrics inventory
+      group when automationcontroller is present. Set
+      aap_deploy_growth_automationmetrics_host for growth topology or
+      aap_deploy_enterprise_automationmetrics_hosts for enterprise topology.
+    quiet: true
+  when:
+    - aap_deploy_enabled | bool
   tags: always
 
 - name: Validate bundle install settings

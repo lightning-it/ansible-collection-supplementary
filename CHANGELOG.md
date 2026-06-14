@@ -1,3 +1,52 @@
+## [1.22.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.21.0...v1.22.0) (2026-06-12)
+
+### Features
+
+* add automation metrics service variables and validation for AAP 2.7 ([#178](https://github.com/lightning-it/ansible-collection-supplementary/issues/178)) ([59268de](https://github.com/lightning-it/ansible-collection-supplementary/commit/59268dea11f71305030ee0647fff3be148e3514f))
+
+## [1.21.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.20.0...v1.21.0) (2026-06-12)
+
+### Features
+
+* aap version 2 7 ([#177](https://github.com/lightning-it/ansible-collection-supplementary/issues/177)) ([196e52e](https://github.com/lightning-it/ansible-collection-supplementary/commit/196e52eafb109452991bf0260f4c8ce4c862826a))
+
+## [1.20.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.19.0...v1.20.0) (2026-06-12)
+
+### Features
+
+* aap version 2 7 ([#176](https://github.com/lightning-it/ansible-collection-supplementary/issues/176)) ([167c00d](https://github.com/lightning-it/ansible-collection-supplementary/commit/167c00de121b1be1b76ca390b751747f8b04140c))
+
+## [1.19.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.9...v1.19.0) (2026-06-10)
+
+### Features
+
+* add support for managing RHSM repositories in aap_deploy role ([#175](https://github.com/lightning-it/ansible-collection-supplementary/issues/175)) ([aa58e46](https://github.com/lightning-it/ansible-collection-supplementary/commit/aa58e465061bd29ae52326307e5227b909c68476))
+
+## [1.18.9](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.8...v1.18.9) (2026-05-14)
+
+### Bug Fixes
+
+* only manage vault content ([5d156a2](https://github.com/lightning-it/ansible-collection-supplementary/commit/5d156a24ccbda0270003da5683b53cdba0881300))
+
+## [1.18.8](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.7...v1.18.8) (2026-04-22)
+
+### Bug Fixes
+
+* bump dependency version ([65ec9cf](https://github.com/lightning-it/ansible-collection-supplementary/commit/65ec9cf882a7f778e5296a2984a12badf19423a9))
+
+## [1.18.7](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.6...v1.18.7) (2026-04-22)
+
+### Bug Fixes
+
+* some improvements + fixes ([13b280d](https://github.com/lightning-it/ansible-collection-supplementary/commit/13b280d30787a16997b9036d0aaea47640f14aed))
+
+## [1.18.6](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.5...v1.18.6) (2026-04-17)
+
+### Bug Fixes
+
+* add new resources ([4943f93](https://github.com/lightning-it/ansible-collection-supplementary/commit/4943f939dff8e32977b1857ce7776b48bde69157))
+* remove bootstrap approles ([c1d5ec4](https://github.com/lightning-it/ansible-collection-supplementary/commit/c1d5ec4787fda2226c981e9825bd27422a194621))
+
 ## [1.18.5](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.18.4...v1.18.5) (2026-03-21)
 
 ### Bug Fixes

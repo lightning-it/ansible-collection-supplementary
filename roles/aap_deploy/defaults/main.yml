@@ -319,6 +319,9 @@ aap_deploy_enterprise_postgresql_hosts:
   - "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_enterprise_inventory_hostvars_extra: ""
 
+# Generic extension point for future installer inventory groups.
+aap_deploy_setup_prep_inv_nodes_extra: {}
+
 aap_deploy_tls_gateway_host_default: >-
   {{
     aap_deploy_growth_gateway_host
@@ -354,18 +357,57 @@ aap_deploy_postgresql_host_default: >-
   }}
 aap_deploy_postgresql_admin_username: postgres
 
+# Automation metrics service database and application secrets.
+aap_deploy_automationmetrics_pg_host: "{{ aap_deploy_postgresql_host_default }}"
+aap_deploy_automationmetrics_pg_database: automationmetrics
+aap_deploy_automationmetrics_pg_username: automationmetrics
+aap_deploy_automationmetrics_pg_password: >-
+  {{
+    aap_deploy_postgresql_admin_password_effective
+    | default(
+        aap_postgresql_admin_password_input
+        | default(aap_admin_password_input | default('', true), true),
+        true
+      )
+  }}
+aap_deploy_automationmetrics_controller_read_pg_username: automationmetrics_controller_reader
+aap_deploy_automationmetrics_controller_read_pg_password: >-
+  {{
+    aap_deploy_postgresql_admin_password_effective
+    | default(
+        aap_postgresql_admin_password_input
+        | default(aap_admin_password_input | default('', true), true),
+        true
+      )
+  }}
+aap_deploy_automationmetrics_secret_key: >-
+  {{
+    aap_breakglass_password_input
+    | default(
+        aap_admin_password_effective
+        | default(aap_admin_password_input | default('', true), true),
+        true
+      )
+  }}
+aap_deploy_automationmetrics_resource_server: >-
+  {{
+    aap_breakglass_password_input
+    | default(
+        aap_admin_password_effective
+        | default(aap_admin_password_input | default('', true), true),
+        true
+      )
+  }}
+
 aap_deploy_gateway_pg_host: ""
 aap_deploy_controller_pg_host: ""
 aap_deploy_hub_pg_host: ""
 aap_deploy_eda_pg_host: ""
-aap_deploy_automationmetrics_pg_host: ""
 aap_deploy_automationmetrics_controller_read_pg_host: ""
 aap_deploy_gateway_pg_password: ""
 aap_deploy_controller_pg_password: ""
 aap_deploy_hub_pg_password: ""
 aap_deploy_eda_pg_password: ""
-aap_deploy_automationmetrics_pg_password: ""
-aap_deploy_automationmetrics_controller_read_pg_password: ""
 
 aap_deploy_gateway_pg_host_effective: >-
   {{ aap_deploy_gateway_pg_host | default(aap_deploy_postgresql_host_default, true) }}
@@ -413,7 +455,7 @@ aap_deploy_requires_ansible_builder: >-
   {{ (ee_list | default([], true) | length > 0) | bool }}
 aap_deploy_required_repos: "{{ aap_deploy_required_repos_default | default([], true) }}"
 aap_deploy_base_required_packages: >-
-  {{ aap_deploy_base_required_packages_default | default(['ansible-core', 'podman'], true) }}
+  {{ aap_deploy_base_required_packages_default | default(['ansible-core', 'python3', 'podman'], true) }}
 aap_deploy_extra_required_packages: >-
   {{
     (
@@ -433,6 +475,11 @@ aap_deploy_required_packages: >-
 
 # Workflow controls (useful for testing)
 aap_deploy_manage_host_prep: true
+# When true, validate subscription-manager registration and enable required
+# RHSM repositories. When false, skip subscription-manager/RHSM repository
+# management and assume repositories are provided by the platform baseline,
+# Satellite, or local repo configuration.
+aap_deploy_manage_rhsm_repos: true
 aap_deploy_manage_download_unpack: true
 aap_deploy_run_installer: true
 aap_deploy_run_verify: true

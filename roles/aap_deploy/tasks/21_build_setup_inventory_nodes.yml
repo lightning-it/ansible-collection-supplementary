@@ -1,0 +1,228 @@
+---
+- name: Build base setup inventory node groups
+  ansible.builtin.set_fact:
+    aap_deploy_setup_prep_inv_nodes_base: >-
+      {{
+        (
+          {
+            'automationgateway': {
+              (aap_deploy_growth_gateway_host): (
+                'ansible_connection=' ~ aap_deploy_growth_inventory_connection
+                ~ ' ansible_host=' ~ aap_deploy_growth_gateway_host
+                ~ (
+                  ' ' ~ (aap_deploy_growth_inventory_hostvars_extra | trim)
+                  if (aap_deploy_growth_inventory_hostvars_extra | trim | length > 0)
+                  else ''
+                )
+              )
+            },
+            'automationcontroller': {
+              (aap_deploy_growth_controller_host): (
+                'ansible_connection=' ~ aap_deploy_growth_inventory_connection
+                ~ ' ansible_host=' ~ aap_deploy_growth_controller_host
+                ~ (
+                  ' ' ~ (aap_deploy_growth_inventory_hostvars_extra | trim)
+                  if (aap_deploy_growth_inventory_hostvars_extra | trim | length > 0)
+                  else ''
+                )
+              )
+            },
+            'automationhub': {
+              (aap_deploy_growth_hub_host): (
+                'ansible_connection=' ~ aap_deploy_growth_inventory_connection
+                ~ ' ansible_host=' ~ aap_deploy_growth_hub_host
+                ~ (
+                  ' ' ~ (aap_deploy_growth_inventory_hostvars_extra | trim)
+                  if (aap_deploy_growth_inventory_hostvars_extra | trim | length > 0)
+                  else ''
+                )
+              )
+            },
+            'automationeda': {
+              (aap_deploy_growth_eda_host): (
+                'ansible_connection=' ~ aap_deploy_growth_inventory_connection
+                ~ ' ansible_host=' ~ aap_deploy_growth_eda_host
+                ~ (
+                  ' ' ~ (aap_deploy_growth_inventory_hostvars_extra | trim)
+                  if (aap_deploy_growth_inventory_hostvars_extra | trim | length > 0)
+                  else ''
+                )
+              )
+            },
+            'database': {
+              (aap_deploy_growth_postgresql_host): (
+                'ansible_connection=' ~ aap_deploy_growth_inventory_connection
+                ~ ' ansible_host=' ~ aap_deploy_growth_postgresql_host
+                ~ (
+                  ' ' ~ (aap_deploy_growth_inventory_hostvars_extra | trim)
+                  if (aap_deploy_growth_inventory_hostvars_extra | trim | length > 0)
+                  else ''
+                )
+              )
+            }
+          }
+          if aap_deploy_topology == 'growth'
+          else
+          {
+            'automationgateway': dict(
+              aap_deploy_enterprise_gateway_hosts
+              | zip(
+                  aap_deploy_enterprise_gateway_hosts
+                  | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | map(
+                      'regex_replace',
+                      '$',
+                      (
+                        ' ' ~ (aap_deploy_enterprise_inventory_hostvars_extra | trim)
+                        if (aap_deploy_enterprise_inventory_hostvars_extra | trim | length > 0)
+                        else ''
+                      )
+                    )
+                  | list
+                )
+            ),
+            'automationcontroller': dict(
+              aap_deploy_enterprise_controller_hosts
+              | zip(
+                  aap_deploy_enterprise_controller_hosts
+                  | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | map(
+                      'regex_replace',
+                      '$',
+                      (
+                        ' ' ~ (aap_deploy_enterprise_inventory_hostvars_extra | trim)
+                        if (aap_deploy_enterprise_inventory_hostvars_extra | trim | length > 0)
+                        else ''
+                      )
+                    )
+                  | list
+                )
+            ),
+            'automationhub': dict(
+              aap_deploy_enterprise_hub_hosts
+              | zip(
+                  aap_deploy_enterprise_hub_hosts
+                  | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | map(
+                      'regex_replace',
+                      '$',
+                      (
+                        ' ' ~ (aap_deploy_enterprise_inventory_hostvars_extra | trim)
+                        if (aap_deploy_enterprise_inventory_hostvars_extra | trim | length > 0)
+                        else ''
+                      )
+                    )
+                  | list
+                )
+            ),
+            'automationeda': dict(
+              aap_deploy_enterprise_eda_hosts
+              | zip(
+                  aap_deploy_enterprise_eda_hosts
+                  | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | map(
+                      'regex_replace',
+                      '$',
+                      (
+                        ' ' ~ (aap_deploy_enterprise_inventory_hostvars_extra | trim)
+                        if (aap_deploy_enterprise_inventory_hostvars_extra | trim | length > 0)
+                        else ''
+                      )
+                    )
+                  | list
+                )
+            ),
+            'database': dict(
+              aap_deploy_enterprise_postgresql_hosts
+              | zip(
+                  aap_deploy_enterprise_postgresql_hosts
+                  | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | map(
+                      'regex_replace',
+                      '$',
+                      (
+                        ' ' ~ (aap_deploy_enterprise_inventory_hostvars_extra | trim)
+                        if (aap_deploy_enterprise_inventory_hostvars_extra | trim | length > 0)
+                        else ''
+                      )
+                    )
+                  | list
+                )
+            )
+          }
+        )
+      }}
+  changed_when: false
+
+- name: Build Redis setup inventory node groups
+  ansible.builtin.set_fact:
+    aap_deploy_setup_prep_inv_nodes_redis: >-
+      {{
+        {
+          'redis': dict(
+            aap_deploy_redis_hosts
+            | zip(
+                aap_deploy_redis_hosts
+                | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                | list
+              )
+          )
+        }
+        if aap_deploy_redis_mode == 'cluster'
+        else {}
+      }}
+  changed_when: false
+
+- name: Build automation metrics setup inventory node group
+  ansible.builtin.set_fact:
+    aap_deploy_setup_prep_inv_nodes_automationmetrics: >-
+      {{
+        {
+          'automationmetrics': (
+            {
+              (aap_deploy_growth_automationmetrics_host): (
+                'ansible_connection=' ~ aap_deploy_growth_inventory_connection
+                ~ ' ansible_host=' ~ aap_deploy_growth_automationmetrics_host
+                ~ (
+                  ' ' ~ (aap_deploy_growth_inventory_hostvars_extra | trim)
+                  if (aap_deploy_growth_inventory_hostvars_extra | trim | length > 0)
+                  else ''
+                )
+              )
+            }
+            if aap_deploy_topology == 'growth'
+            else dict(
+              aap_deploy_enterprise_automationmetrics_hosts
+              | zip(
+                  aap_deploy_enterprise_automationmetrics_hosts
+                  | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | map(
+                      'regex_replace',
+                      '$',
+                      (
+                        ' ' ~ (aap_deploy_enterprise_inventory_hostvars_extra | trim)
+                        if (aap_deploy_enterprise_inventory_hostvars_extra | trim | length > 0)
+                        else ''
+                      )
+                    )
+                  | list
+              )
+            )
+          )
+        }
+      }}
+  changed_when: false
+
+- name: Build setup inventory node groups
+  ansible.builtin.set_fact:
+    aap_deploy_setup_prep_inv_nodes: >-
+      {{
+        aap_deploy_setup_prep_inv_nodes_base
+        | combine(aap_deploy_setup_prep_inv_nodes_redis, recursive=true)
+        | combine(aap_deploy_setup_prep_inv_nodes_automationmetrics, recursive=true)
+        | combine(
+            aap_deploy_setup_prep_inv_nodes_extra | default({}, true),
+            recursive=true
+          )
+      }}
+  changed_when: false

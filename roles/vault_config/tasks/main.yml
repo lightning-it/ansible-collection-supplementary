@@ -5,3 +5,4 @@
 
 - name: Configure Vault (post-deploy)
   ansible.builtin.include_tasks: config.yml
+  tags: always
