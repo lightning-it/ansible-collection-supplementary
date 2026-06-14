@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="quay.io/l-it/ee-wunder-devtools-ubi9:v1.8.5"
+IMAGE="quay.io/l-it/ee-wunder-devtools-ubi9:v1.8.3"
 CONTAINER_HOME="${CONTAINER_HOME:-/tmp/wunder}"
 HOST_HOME_CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/wunder-devtools-ee/v2/home"
 HOST_HOME_CACHE_SCOPE="host-uid-$(id -u)"
@@ -12,11 +12,6 @@ HOST_HOME_CACHE="${HOST_HOME_CACHE:-${HOST_HOME_CACHE_ROOT}/${HOST_HOME_CACHE_SC
 
 mkdir -p "$HOST_HOME_CACHE"
 chmod 700 "$HOST_HOME_CACHE" 2>/dev/null || true
-if [ "${WUNDER_DEVTOOLS_RUN_AS_HOST_UID:-0}" = "1" ]; then
-  mkdir -p "$HOST_HOME_CACHE/.ansible/tmp" "$HOST_HOME_CACHE/.ansible/collections" "$HOST_HOME_CACHE/.cache"
-  chmod 777 "$HOST_HOME_CACHE" 2>/dev/null || true
-  chmod -R a+rwX "$HOST_HOME_CACHE" 2>/dev/null || true
-fi
 
 WORKSPACE_MOUNT="${PWD}:/workspace"
 HOME_CACHE_MOUNT="${HOST_HOME_CACHE}:${CONTAINER_HOME}"
@@ -170,11 +165,7 @@ PY
     DOCKER_ARGS+=(--group-add 0)
   fi
 elif [ "${PODMAN_ROOTLESS}" = "1" ]; then
-  if [ "${WUNDER_DEVTOOLS_RUN_AS_HOST_UID:-0}" = "1" ]; then
-    DOCKER_ARGS+=(--user "$(id -u):$(id -g)")
-  else
-    DOCKER_ARGS+=(--user 0:0)
-  fi
+  DOCKER_ARGS+=(--user 0:0)
 fi
 
 if [ "$(uname -s)" = "Linux" ]; then

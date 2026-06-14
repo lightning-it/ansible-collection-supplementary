@@ -28,6 +28,9 @@ bash scripts/wunder-devtools-ee.sh bash -c '
   name="${COLLECTION_NAME}"
   example="${EXAMPLE_PLAYBOOK:-playbooks/example.yml}"
 
+  export HOME="$(mktemp -d /tmp/collection-smoke-home.XXXXXX)"
+  mkdir -p "${HOME}"
+
   echo "Running collection smoke test for ${ns}.${name} with example playbook: ${example}"
 
   # -------------------------------------------------------------------
