@@ -1,3 +1,9 @@
+## [1.24.5](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.4...v1.24.5) (2026-06-14)
+
+### Bug Fixes
+
+* **incus:** match VM network config by MAC address ([#194](https://github.com/lightning-it/ansible-collection-supplementary/issues/194)) ([3cbcb7b](https://github.com/lightning-it/ansible-collection-supplementary/commit/3cbcb7b0be7d19f8f7346b7cfe641a9df8c51149))
+
 ## [1.24.4](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.3...v1.24.4) (2026-06-14)
 
 ### Bug Fixes
