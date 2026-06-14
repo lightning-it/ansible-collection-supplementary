@@ -1,3 +1,9 @@
+## [1.25.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.25.0...v1.25.1) (2026-06-14)
+
+### Bug Fixes
+
+* **incus:** allow short guest hostnames ([#201](https://github.com/lightning-it/ansible-collection-supplementary/issues/201)) ([c6c45ce](https://github.com/lightning-it/ansible-collection-supplementary/commit/c6c45cea1d1db47a767f2ae2065711421b7f4384))
+
 ## [1.25.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.8...v1.25.0) (2026-06-14)
 
 ### Features
