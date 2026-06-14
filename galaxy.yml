@@ -25,7 +25,7 @@ dependencies:
   ansible.posix: '>=2.2.0'
   community.vmware: '5.10.0'
   lit.rhel: '>=1.16.1'
-  lit.foundational: '>=1.17.2'
+  lit.foundational: '>=1.18.0'
   community.hashi_vault: '*'
 build_ignore:
   - .ansible
