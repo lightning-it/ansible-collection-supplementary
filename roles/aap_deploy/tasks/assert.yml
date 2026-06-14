@@ -52,6 +52,7 @@
       - aap_deploy_setup_download_containerized is boolean
       - aap_deploy_setup_prepare_process_template is boolean
       - aap_deploy_setup_install_force is boolean
+      - aap_deploy_installer_wait is boolean
       - aap_deploy_verify_gateway_https is boolean
       - aap_deploy_manage_rhsm_repos is boolean
       - aap_deploy_install_user | trim | length > 0
@@ -69,6 +70,8 @@
       - aap_deploy_setup_install_extra_vars is mapping
       - aap_deploy_setup_install_extra_vars_files is sequence
       - aap_deploy_setup_install_extra_vars_files is not string
+      - aap_deploy_installer_async_jid_path | trim | length > 0
+      - aap_deploy_installer_async_jid_path.startswith('/')
       - aap_deploy_min_mem_mb | int > 0
       - aap_deploy_validate_archive_min_size_bytes | int >= 0
       - aap_deploy_skip_if_installed_runtime_min_matching_containers | int > 0

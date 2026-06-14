@@ -35,6 +35,8 @@ Key variables:
 - `aap_deploy_setup_install_force`
 - `aap_deploy_bundle_dir` (path containing `/bundle`)
 - `aap_deploy_installer_runner` (`native` or `vendor`, default: `native`)
+- `aap_deploy_installer_wait`
+- `aap_deploy_installer_async_jid_path`
 - `aap_deploy_installer_async_timeout`
 - `aap_deploy_installer_async_retries`
 - `aap_deploy_installer_async_delay`
@@ -99,6 +101,13 @@ Installer behavior:
 - By default, role runs the prepared containerized installer command directly
   with controlled async status polling. Set `aap_deploy_installer_runner:
   vendor` to use `infra.aap_utilities.aap_setup_install` for compatibility.
+- For CI or other orchestrators that cannot hold one Ansible polling task open
+  for the full installer runtime, set `aap_deploy_installer_wait: false`.
+  The role starts the native installer asynchronously, writes the async job id to
+  `aap_deploy_installer_async_jid_path`, skips the install marker, and skips
+  verification for that run. The orchestrator must poll the async job id with
+  short Ansible calls, fail on a non-zero installer return code, and run
+  verification after the async job finishes successfully.
 - Role writes the installer Ansible log below `aap_deploy_installer_log_dir`.
 - On installer failure, role prints redacted diagnostics before returning failure.
 - Default bundle dir is `bundle` (relative to the extracted setup directory).
