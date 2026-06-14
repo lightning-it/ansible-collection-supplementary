@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-image="quay.io/l-it/ee-wunder-devtools-ubi9:v1.8.3"
+image="quay.io/l-it/ee-wunder-devtools-ubi9:v1.8.5"
 batch_size=200
 
 collect_yaml_files() {
