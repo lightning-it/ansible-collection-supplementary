@@ -91,6 +91,10 @@ automation/inventory repositories.
    `deploy/incus/README.md` together when image assumptions change.
 6. `/dev/kvm` is required for VM-based Incus testing. Container-only Incus tests
    do not need KVM, but the AAP RHEL 10 workflow is VM-based.
+7. Keep AAP test guest hostnames short. AAP EDA builds PostgreSQL identifiers
+   from the hostname and a UUID; use `deploy/incus/create.sh --hostname` and
+   `deploy/incus/inventory.sh --host-alias` when the Incus instance name includes
+   a long CI run ID.
 
 ## RHEL Registration Rules
 

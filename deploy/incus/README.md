@@ -108,10 +108,23 @@ Create the default validated RHEL 9.8 VM:
 deploy/incus/create.sh --version 9 --vm --name aap-rhel9-dev
 ```
 
+Use a separate short guest hostname when the Incus instance name needs extra
+uniqueness:
+
+```bash
+deploy/incus/create.sh --version 9 --vm --name aap-rhel9-dev-123456 --hostname aap-rhel9-dev
+```
+
 Print a usable Ansible inventory:
 
 ```bash
 deploy/incus/inventory.sh aap-rhel9-dev > /tmp/aap-rhel9-dev.yml
+```
+
+Use the same short name as inventory alias when needed:
+
+```bash
+deploy/incus/inventory.sh aap-rhel9-dev-123456 --host-alias aap-rhel9-dev > /tmp/aap-rhel9-dev.yml
 ```
 
 Wait for the instance explicitly:

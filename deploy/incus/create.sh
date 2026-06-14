@@ -5,13 +5,14 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   cat <<'EOF'
-Usage: deploy/incus/create.sh [--version 9|10] [--vm|--container] [--name INSTANCE]
+Usage: deploy/incus/create.sh [--version 9|10] [--vm|--container] [--name INSTANCE] [--hostname HOSTNAME]
 
 Create a local Incus instance for AAP development.
 Defaults:
   --version 9
   --vm
   --name aap-rhel<version>-<timestamp>
+  --hostname INSTANCE
 EOF
 }
 
@@ -162,6 +163,7 @@ raise SystemExit(1)
 version="9"
 mode="vm"
 name=""
+hostname=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -179,6 +181,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --name)
       name="${2:-}"
+      shift 2
+      ;;
+    --hostname)
+      hostname="${2:-}"
       shift 2
       ;;
     -h|--help)
@@ -216,6 +222,10 @@ if [ -z "$name" ]; then
   name="aap-rhel${version}-$(date -u +%Y%m%d%H%M%S)"
 fi
 
+if [ -z "$hostname" ]; then
+  hostname="$name"
+fi
+
 if incus info "$name" >/dev/null 2>&1; then
   echo "ERROR: Incus instance already exists: ${name}" >&2
   exit 1
@@ -231,10 +241,10 @@ if [ -z "$public_key" ]; then
   exit 1
 fi
 
-if [[ "$name" == *.* ]]; then
-  fqdn="$name"
+if [[ "$hostname" == *.* ]]; then
+  fqdn="$hostname"
 else
-  fqdn="${name}.${INCUS_FQDN_SUFFIX:-incus.local}"
+  fqdn="${hostname}.${INCUS_FQDN_SUFFIX:-incus.local}"
 fi
 
 case "$version" in
@@ -245,7 +255,7 @@ esac
 tmp_user_data="$(mktemp)"
 tmp_network_config="$(mktemp)"
 trap 'rm -f "${tmp_user_data}" "${tmp_network_config}"' EXIT
-render_user_data "$profile_file" "$name" "$fqdn" "$ssh_user" "$public_key" > "${tmp_user_data}"
+render_user_data "$profile_file" "$hostname" "$fqdn" "$ssh_user" "$public_key" > "${tmp_user_data}"
 
 if [ "$mode" = "vm" ]; then
   require_cmd mkisofs
@@ -288,6 +298,7 @@ ip_address="$(instance_ipv4 "$name")"
 
 echo "Instance ready."
 echo "  Name: ${name}"
+echo "  Hostname: ${hostname}"
 echo "  Mode: ${mode}"
 echo "  Image: ${image}"
 echo "  FQDN: ${fqdn}"

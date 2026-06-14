@@ -84,6 +84,9 @@ deploy/incus/destroy.sh aap-rhel10-dev
 ```
 
 The Incus helper inventory targets the `aap_hosts` group used by `playbooks/aap_deploy.yml`.
+For AAP EDA tests, keep the guest hostname short. If the Incus instance name is
+long because it includes a run ID, pass `--hostname` to `deploy/incus/create.sh`
+and the same short name as `--host-alias` to `deploy/incus/inventory.sh`.
 
 For registered RHEL test VMs, keep the base image unregistered and prepare each
 runtime VM idempotently after boot. The playbook composes `lit.rhel.rhsm`,
