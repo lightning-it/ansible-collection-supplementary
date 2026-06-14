@@ -106,6 +106,15 @@
       changed_when: false
       when: aap_deploy_installer_runner == 'native'
 
+    - name: Write native installer async job id
+      ansible.builtin.copy:
+        dest: "{{ aap_deploy_installer_async_jid_path }}"
+        owner: "{{ aap_deploy_install_user }}"
+        group: "{{ aap_deploy_install_user }}"
+        mode: '0640'
+        content: "{{ aap_deploy_installer_async_job.ansible_job_id }}\n"
+      when: aap_deploy_installer_runner == 'native'
+
     - name: Wait for native AAP containerized installer
       ansible.builtin.async_status:
         jid: "{{ aap_deploy_installer_async_job.ansible_job_id }}"
@@ -118,7 +127,9 @@
       until: aap_deploy_installer_async_status.finished | bool
       retries: "{{ aap_deploy_installer_async_retries | int }}"
       delay: "{{ aap_deploy_installer_async_delay | int }}"
-      when: aap_deploy_installer_runner == 'native'
+      when:
+        - aap_deploy_installer_runner == 'native'
+        - aap_deploy_installer_wait | bool
 
     - name: Fail when native installer exited non-zero
       ansible.builtin.fail:
@@ -130,7 +141,17 @@
           {{ aap_deploy_installer_async_status.stderr | default('') | trim }}
       when:
         - aap_deploy_installer_runner == 'native'
+        - aap_deploy_installer_wait | bool
         - (aap_deploy_installer_async_status.rc | default(0) | int) != 0
+
+    - name: Report native installer external polling handoff
+      ansible.builtin.debug:
+        msg: >-
+          Native AAP containerized installer started asynchronously.
+          External polling is required with jid file {{ aap_deploy_installer_async_jid_path }}.
+      when:
+        - aap_deploy_installer_runner == 'native'
+        - not (aap_deploy_installer_wait | bool)
 
     - name: Run AAP containerized installer via vendor role  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:
@@ -179,3 +200,6 @@
       installed=true
       setup_dir={{ aap_setup_prep_setup_dir | default(aap_deploy_setup_dir, true) }}
       playbook=infra.aap_utilities.aap_setup_install
+  when: >-
+    aap_deploy_installer_runner != 'native'
+    or (aap_deploy_installer_wait | bool)
