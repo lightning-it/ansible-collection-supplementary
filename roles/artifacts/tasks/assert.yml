@@ -1,0 +1,54 @@
+---
+- name: Validate artifacts role inputs
+  ansible.builtin.assert:
+    that:
+      - artifacts_enabled is boolean
+      - artifacts_default_owner | trim | length > 0
+      - artifacts_default_group | trim | length > 0
+      - artifacts_default_mode | trim | length > 0
+      - artifacts_default_directory_mode | trim | length > 0
+      - artifacts_default_validate_certs is boolean
+      - artifacts_default_timeout | int > 0
+      - artifacts_default_force is boolean
+      - artifacts_default_no_log is boolean
+      - artifacts_items is sequence
+      - artifacts_items is not string
+      - artifacts_results is sequence
+      - artifacts_results is not string
+    fail_msg: "Invalid configuration for lit.supplementary.artifacts."
+    quiet: true
+  changed_when: false
+  when: artifacts_enabled | bool
+
+- name: Validate artifact item definitions
+  ansible.builtin.assert:
+    that:
+      - artifacts_item is mapping
+      - artifacts_item.dest | default('', true) | trim | length > 0
+      - artifacts_item.dest.startswith('/')
+      - artifacts_item.source | default('url') in ['url', 'local', 'remote']
+      - >-
+        artifacts_item.source | default('url') != 'url'
+        or artifacts_item.url | default('', true) | trim | length > 0
+      - >-
+        artifacts_item.source | default('url') != 'local'
+        or artifacts_item.src | default('', true) | trim | length > 0
+      - >-
+        artifacts_item.source | default('url') != 'remote'
+        or (
+          artifacts_item.remote_src | default(artifacts_item.src | default('', true), true)
+          | trim
+          | length > 0
+        )
+      - artifacts_item.checksum | default('', true) is string
+      - artifacts_item.headers | default({}) is mapping
+    fail_msg: >-
+      Invalid artifact item. Each item requires an absolute dest and one valid source:
+      url+url, local+src, or remote+remote_src/src.
+    quiet: true
+  changed_when: false
+  loop: "{{ artifacts_items }}"
+  loop_control:
+    loop_var: artifacts_item
+    label: "{{ artifacts_item.name | default(artifacts_item.dest | default('artifact')) }}"
+  when: artifacts_enabled | bool

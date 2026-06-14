@@ -1,0 +1,35 @@
+---
+- name: Converge artifacts
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    artifacts_molecule_ephemeral_dir: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') | default('/tmp/lit-artifacts-basic', true) }}
+    artifacts_molecule_root: "{{ artifacts_molecule_ephemeral_dir }}/artifacts"
+    artifacts_molecule_src: "{{ artifacts_molecule_root }}/source.txt"
+    artifacts_molecule_dest: "{{ artifacts_molecule_root }}/dest/source.txt"
+  pre_tasks:
+    - name: Ensure molecule artifact source directory exists
+      ansible.builtin.file:
+        path: "{{ artifacts_molecule_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: Create molecule artifact source file
+      ansible.builtin.copy:
+        dest: "{{ artifacts_molecule_src }}"
+        content: |
+          lit artifact test
+        mode: "0644"
+  roles:
+    - role: artifacts
+      vars:
+        artifacts_default_owner: "{{ lookup('ansible.builtin.pipe', 'id -un') }}"
+        artifacts_default_group: "{{ lookup('ansible.builtin.pipe', 'id -gn') }}"
+        artifacts_items:
+          - name: molecule-local-artifact
+            source: local
+            src: "{{ artifacts_molecule_src }}"
+            dest: "{{ artifacts_molecule_dest }}"
+            checksum: sha256:01b9f9fc8345b112da8f385104eccf04cd76f55f6c1da69bd678dc02db980441

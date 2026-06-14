@@ -1,0 +1,7 @@
+---
+- name: Stage binary artifacts
+  hosts: "{{ artifacts_target | default('artifact_hosts') }}"
+  become: true
+  gather_facts: false
+  roles:
+    - role: lit.supplementary.artifacts

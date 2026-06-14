@@ -1,0 +1,26 @@
+---
+- name: Verify artifacts
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    artifacts_molecule_ephemeral_dir: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') | default('/tmp/lit-artifacts-basic', true) }}
+    artifacts_molecule_root: "{{ artifacts_molecule_ephemeral_dir }}/artifacts"
+    artifacts_molecule_dest: "{{ artifacts_molecule_root }}/dest/source.txt"
+  tasks:
+    - name: Check staged artifact
+      ansible.builtin.stat:
+        path: "{{ artifacts_molecule_dest }}"
+        checksum_algorithm: sha256
+        get_checksum: true
+      register: artifacts_molecule_dest_stat
+
+    - name: Assert staged artifact exists with expected checksum
+      ansible.builtin.assert:
+        that:
+          - artifacts_molecule_dest_stat.stat.exists
+          - >-
+            artifacts_molecule_dest_stat.stat.checksum
+            == '01b9f9fc8345b112da8f385104eccf04cd76f55f6c1da69bd678dc02db980441'
+        quiet: true
