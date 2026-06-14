@@ -1,3 +1,9 @@
+## [1.24.4](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.3...v1.24.4) (2026-06-14)
+
+### Bug Fixes
+
+* **incus:** make cloud-init profiles valid user-data ([#193](https://github.com/lightning-it/ansible-collection-supplementary/issues/193)) ([332e177](https://github.com/lightning-it/ansible-collection-supplementary/commit/332e177e6377add964d4441b198e75304e3cb0bf))
+
 ## [1.24.3](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.2...v1.24.3) (2026-06-14)
 
 ### Bug Fixes
