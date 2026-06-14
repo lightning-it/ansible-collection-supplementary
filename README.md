@@ -203,9 +203,9 @@ Example playbook:
   install them via consumer runtime overlays (for example
   `modulix-automation/ansible/collections/requirements-rh.yml`).
 - AAP development and testing now uses Incus VMs instead of Vagrant:
-  - [docs/testing/README.md](/home/rene/sources/ansible-collection-supplementary/docs/testing/README.md)
-  - [docs/testing/aap.md](/home/rene/sources/ansible-collection-supplementary/docs/testing/aap.md)
-  - [deploy/incus/README.md](/home/rene/sources/ansible-collection-supplementary/deploy/incus/README.md)
+  - [docs/testing/README.md](docs/testing/README.md)
+  - [docs/testing/aap.md](docs/testing/aap.md)
+  - [deploy/incus/README.md](deploy/incus/README.md)
 - Canonical role sources live in `roles/`; build with `ansible-galaxy
   collection build`.
 - Molecule scenario `keycloak-deploy-basic` validates role wiring for Keycloak

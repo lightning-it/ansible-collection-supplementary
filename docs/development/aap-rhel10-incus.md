@@ -27,11 +27,12 @@ The current image alias was created from the RHEL 10 qcow2 with two development 
 ## 1. Set Variables On Workbench
 
 ```bash
-cd /home/rene/sources/ansible-collection-supplementary
+export SOURCES_DIR="${SOURCES_DIR:-${HOME}/sources}"
+cd "${SOURCES_DIR}/ansible-collection-supplementary"
 
-export COLLECTION_REPO_DIR="/home/rene/sources/ansible-collection-supplementary"
-export AUTOMATION_ANSIBLE_DIR="/home/rene/sources/modulix-automation/ansible"
-export INVENTORY_FILE="/home/rene/sources/ansible-inventory-lit/inventories/corp/inventory.yml"
+export COLLECTION_REPO_DIR="${SOURCES_DIR}/ansible-collection-supplementary"
+export AUTOMATION_ANSIBLE_DIR="${SOURCES_DIR}/modulix-automation/ansible"
+export INVENTORY_FILE="${SOURCES_DIR}/ansible-inventory-lit/inventories/corp/inventory.yml"
 
 export CIWKR01_HOST="ciwkr01.prd.dmz.corp.l-it.io"
 export CIWKR01_MGMT_IP="10.10.30.40"
