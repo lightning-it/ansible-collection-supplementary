@@ -1,5 +1,5 @@
----
 # cloud-config
+# yamllint disable rule:document-start
 hostname: __HOSTNAME__
 fqdn: __FQDN__
 manage_etc_hosts: true
