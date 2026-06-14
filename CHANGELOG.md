@@ -1,3 +1,9 @@
+## [1.24.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.0...v1.24.1) (2026-06-14)
+
+### Bug Fixes
+
+* **incus:** attach cloud-init config disk for VMs ([#188](https://github.com/lightning-it/ansible-collection-supplementary/issues/188)) ([9d31f46](https://github.com/lightning-it/ansible-collection-supplementary/commit/9d31f460c01e4a28b3d8755413a3473996430354))
+
 ## [1.24.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.23.1...v1.24.0) (2026-06-14)
 
 ### Features
