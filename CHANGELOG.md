@@ -1,3 +1,9 @@
+## [1.24.2](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.1...v1.24.2) (2026-06-14)
+
+### Bug Fixes
+
+* **incus:** allow IPv6 instance addresses ([#190](https://github.com/lightning-it/ansible-collection-supplementary/issues/190)) ([f6bae2d](https://github.com/lightning-it/ansible-collection-supplementary/commit/f6bae2d2771eb3a6b12b473fbbe3968c1dc9ab5e))
+
 ## [1.24.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.0...v1.24.1) (2026-06-14)
 
 ### Bug Fixes
