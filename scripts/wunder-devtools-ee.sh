@@ -12,6 +12,11 @@ HOST_HOME_CACHE="${HOST_HOME_CACHE:-${HOST_HOME_CACHE_ROOT}/${HOST_HOME_CACHE_SC
 
 mkdir -p "$HOST_HOME_CACHE"
 chmod 700 "$HOST_HOME_CACHE" 2>/dev/null || true
+if [ "${WUNDER_DEVTOOLS_RUN_AS_HOST_UID:-0}" = "1" ]; then
+  mkdir -p "$HOST_HOME_CACHE/.ansible/tmp" "$HOST_HOME_CACHE/.ansible/collections" "$HOST_HOME_CACHE/.cache"
+  chmod 777 "$HOST_HOME_CACHE" 2>/dev/null || true
+  chmod -R a+rwX "$HOST_HOME_CACHE" 2>/dev/null || true
+fi
 
 WORKSPACE_MOUNT="${PWD}:/workspace"
 HOME_CACHE_MOUNT="${HOST_HOME_CACHE}:${CONTAINER_HOME}"
@@ -76,6 +81,33 @@ fi
 DOCKER_ARGS+=(-v "$WORKSPACE_MOUNT")
 DOCKER_ARGS+=(-v "$HOME_CACHE_MOUNT")
 
+WORKSPACE_REAL="$(pwd -P)"
+SOURCE_ROOT_HOST="${WUNDER_DEVTOOLS_SOURCE_ROOT_HOST:-${WUNDER_DEVTOOLS_SOURCE_ROOT:-}}"
+if [ -z "${SOURCE_ROOT_HOST:-}" ]; then
+  SOURCE_ROOT_HOST="$(cd "${WORKSPACE_REAL}/.." && pwd -P)"
+fi
+SOURCE_ROOT_CONTAINER="${WUNDER_DEVTOOLS_SOURCE_ROOT_CONTAINER:-/sources}"
+mounted_source_root=0
+if [ -d "$SOURCE_ROOT_HOST" ]; then
+  shopt -s nullglob
+  for collection_dir in "$SOURCE_ROOT_HOST"/ansible-collection-*; do
+    [ -d "$collection_dir" ] || continue
+    collection_real="$(cd "$collection_dir" && pwd -P)"
+    [ "$collection_real" = "$WORKSPACE_REAL" ] && continue
+    collection_base="$(basename "$collection_real")"
+    collection_mount="${collection_real}:${SOURCE_ROOT_CONTAINER}/${collection_base}:ro"
+    if [ "$CONTAINER_BIN" = "podman" ] && [ "$(uname -s)" = "Linux" ]; then
+      collection_mount="${collection_mount},z"
+    fi
+    DOCKER_ARGS+=(-v "$collection_mount")
+    mounted_source_root=1
+  done
+  shopt -u nullglob
+fi
+if [ "$mounted_source_root" = "1" ]; then
+  DOCKER_ARGS+=(-e "WUNDER_DEVTOOLS_SOURCE_ROOT=${SOURCE_ROOT_CONTAINER}")
+fi
+
 PODMAN_ROOTLESS=0
 if [ "$CONTAINER_BIN" = "podman" ]; then
   podman_rootless="$(podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null || true)"
@@ -138,7 +170,11 @@ PY
     DOCKER_ARGS+=(--group-add 0)
   fi
 elif [ "${PODMAN_ROOTLESS}" = "1" ]; then
-  DOCKER_ARGS+=(--user 0:0)
+  if [ "${WUNDER_DEVTOOLS_RUN_AS_HOST_UID:-0}" = "1" ]; then
+    DOCKER_ARGS+=(--user "$(id -u):$(id -g)")
+  else
+    DOCKER_ARGS+=(--user 0:0)
+  fi
 fi
 
 if [ "$(uname -s)" = "Linux" ]; then
@@ -151,7 +187,8 @@ if [ "$CONTAINER_BIN" = "docker" ]; then
   else
     sanitize_docker_host_env
     if [ -z "${DOCKER_HOST:-}" ] && [ -S "/run/user/$(id -u)/podman/podman.sock" ]; then
-      export DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"
+      DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"
+      export DOCKER_HOST
     fi
   fi
 fi

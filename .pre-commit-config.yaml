@@ -9,8 +9,8 @@ repos:
       - id: yamllint-ee
         name: yamllint (via ee-wunder-devtools-ubi9)
         language: system
-        entry: bash scripts/wunder-devtools-ee.sh yamllint
-        pass_filenames: true
+        entry: bash scripts/devtools-yamllint.sh
+        pass_filenames: false
         files: \.(yml|yaml)$
 
       # -------------------------------------------------------------------
@@ -41,9 +41,7 @@ repos:
       - id: github-actions-lint
         name: GitHub Actions workflow linting (actionlint)
         language: system
-        entry: >-
-          bash -lc 'docker run --rm -v "$PWD":/repo
-          -w /repo docker.io/rhysd/actionlint:latest'
+        entry: bash scripts/devtools-actionlint.sh
         pass_filenames: false
         files: ^\.github/workflows/.*\.ya?ml$
 
@@ -55,11 +53,7 @@ repos:
         language: system
         pass_filenames: false
         files: ^renovate\.json$
-        entry: >-
-          bash -lc 'docker run --rm
-          -v "$PWD":/repo -w /repo
-          renovate/renovate:latest
-          renovate-config-validator'
+        entry: bash scripts/devtools-renovate-config-validator.sh
 
       # -------------------------------------------------------------------
       # ansible-collection smoke test (via ee-wunder-devtools-ubi9)
@@ -80,4 +74,4 @@ repos:
         entry: bash scripts/devtools-galaxy-verify.sh
         pass_filenames: false
         files: ^(roles/|galaxy\.yml)
-  # <<< END shared-assets pre-commit
+# <<< END shared-assets pre-commit

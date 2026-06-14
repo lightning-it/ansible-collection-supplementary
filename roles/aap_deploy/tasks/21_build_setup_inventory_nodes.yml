@@ -7,27 +7,57 @@
           {
             'automationgateway': {
               (aap_deploy_growth_gateway_host): (
-                'ansible_connection=local ansible_host=' ~ aap_deploy_growth_gateway_host
+                'ansible_connection=' ~ aap_deploy_growth_inventory_connection
+                ~ ' ansible_host=' ~ aap_deploy_growth_gateway_host
+                ~ (
+                  ' ' ~ (aap_deploy_growth_inventory_hostvars_extra | trim)
+                  if (aap_deploy_growth_inventory_hostvars_extra | trim | length > 0)
+                  else ''
+                )
               )
             },
             'automationcontroller': {
               (aap_deploy_growth_controller_host): (
-                'ansible_connection=local ansible_host=' ~ aap_deploy_growth_controller_host
+                'ansible_connection=' ~ aap_deploy_growth_inventory_connection
+                ~ ' ansible_host=' ~ aap_deploy_growth_controller_host
+                ~ (
+                  ' ' ~ (aap_deploy_growth_inventory_hostvars_extra | trim)
+                  if (aap_deploy_growth_inventory_hostvars_extra | trim | length > 0)
+                  else ''
+                )
               )
             },
             'automationhub': {
               (aap_deploy_growth_hub_host): (
-                'ansible_connection=local ansible_host=' ~ aap_deploy_growth_hub_host
+                'ansible_connection=' ~ aap_deploy_growth_inventory_connection
+                ~ ' ansible_host=' ~ aap_deploy_growth_hub_host
+                ~ (
+                  ' ' ~ (aap_deploy_growth_inventory_hostvars_extra | trim)
+                  if (aap_deploy_growth_inventory_hostvars_extra | trim | length > 0)
+                  else ''
+                )
               )
             },
             'automationeda': {
               (aap_deploy_growth_eda_host): (
-                'ansible_connection=local ansible_host=' ~ aap_deploy_growth_eda_host
+                'ansible_connection=' ~ aap_deploy_growth_inventory_connection
+                ~ ' ansible_host=' ~ aap_deploy_growth_eda_host
+                ~ (
+                  ' ' ~ (aap_deploy_growth_inventory_hostvars_extra | trim)
+                  if (aap_deploy_growth_inventory_hostvars_extra | trim | length > 0)
+                  else ''
+                )
               )
             },
             'database': {
               (aap_deploy_growth_postgresql_host): (
-                'ansible_connection=local ansible_host=' ~ aap_deploy_growth_postgresql_host
+                'ansible_connection=' ~ aap_deploy_growth_inventory_connection
+                ~ ' ansible_host=' ~ aap_deploy_growth_postgresql_host
+                ~ (
+                  ' ' ~ (aap_deploy_growth_inventory_hostvars_extra | trim)
+                  if (aap_deploy_growth_inventory_hostvars_extra | trim | length > 0)
+                  else ''
+                )
               )
             }
           }
@@ -39,6 +69,15 @@
               | zip(
                   aap_deploy_enterprise_gateway_hosts
                   | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | map(
+                      'regex_replace',
+                      '$',
+                      (
+                        ' ' ~ (aap_deploy_enterprise_inventory_hostvars_extra | trim)
+                        if (aap_deploy_enterprise_inventory_hostvars_extra | trim | length > 0)
+                        else ''
+                      )
+                    )
                   | list
                 )
             ),
@@ -47,6 +86,15 @@
               | zip(
                   aap_deploy_enterprise_controller_hosts
                   | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | map(
+                      'regex_replace',
+                      '$',
+                      (
+                        ' ' ~ (aap_deploy_enterprise_inventory_hostvars_extra | trim)
+                        if (aap_deploy_enterprise_inventory_hostvars_extra | trim | length > 0)
+                        else ''
+                      )
+                    )
                   | list
                 )
             ),
@@ -55,6 +103,15 @@
               | zip(
                   aap_deploy_enterprise_hub_hosts
                   | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | map(
+                      'regex_replace',
+                      '$',
+                      (
+                        ' ' ~ (aap_deploy_enterprise_inventory_hostvars_extra | trim)
+                        if (aap_deploy_enterprise_inventory_hostvars_extra | trim | length > 0)
+                        else ''
+                      )
+                    )
                   | list
                 )
             ),
@@ -63,6 +120,15 @@
               | zip(
                   aap_deploy_enterprise_eda_hosts
                   | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | map(
+                      'regex_replace',
+                      '$',
+                      (
+                        ' ' ~ (aap_deploy_enterprise_inventory_hostvars_extra | trim)
+                        if (aap_deploy_enterprise_inventory_hostvars_extra | trim | length > 0)
+                        else ''
+                      )
+                    )
                   | list
                 )
             ),
@@ -71,6 +137,15 @@
               | zip(
                   aap_deploy_enterprise_postgresql_hosts
                   | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | map(
+                      'regex_replace',
+                      '$',
+                      (
+                        ' ' ~ (aap_deploy_enterprise_inventory_hostvars_extra | trim)
+                        if (aap_deploy_enterprise_inventory_hostvars_extra | trim | length > 0)
+                        else ''
+                      )
+                    )
                   | list
                 )
             )
@@ -106,8 +181,13 @@
           'automationmetrics': (
             {
               (aap_deploy_growth_automationmetrics_host): (
-                'ansible_connection=local ansible_host=' ~
-                aap_deploy_growth_automationmetrics_host
+                'ansible_connection=' ~ aap_deploy_growth_inventory_connection
+                ~ ' ansible_host=' ~ aap_deploy_growth_automationmetrics_host
+                ~ (
+                  ' ' ~ (aap_deploy_growth_inventory_hostvars_extra | trim)
+                  if (aap_deploy_growth_inventory_hostvars_extra | trim | length > 0)
+                  else ''
+                )
               )
             }
             if aap_deploy_topology == 'growth'
@@ -116,6 +196,15 @@
               | zip(
                   aap_deploy_enterprise_automationmetrics_hosts
                   | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | map(
+                      'regex_replace',
+                      '$',
+                      (
+                        ' ' ~ (aap_deploy_enterprise_inventory_hostvars_extra | trim)
+                        if (aap_deploy_enterprise_inventory_hostvars_extra | trim | length > 0)
+                        else ''
+                      )
+                    )
                   | list
               )
             )

@@ -1,0 +1,34 @@
+---
+- name: Prepare ephemeral RHEL guests
+  hosts: "{{ rhel_guest_target | default('all') }}"
+  become: true
+  gather_facts: true
+  vars:
+    rhel_guest_repositories_default:
+      "9":
+        - rhel-9-for-x86_64-baseos-rpms
+        - rhel-9-for-x86_64-appstream-rpms
+      "10":
+        - rhel-10-for-x86_64-baseos-rpms
+        - rhel-10-for-x86_64-appstream-rpms
+  roles:
+    - role: lit.rhel.rhsm
+      vars:
+        rhsm_state: present
+        rhsm_method: "{{ rhel_guest_rhsm_method | default('rhsm') }}"
+        rhsm_org: "{{ lookup('ansible.builtin.env', 'RHSM_ORG_ID') | default('', true) }}"
+        rhsm_activation_key: "{{ lookup('ansible.builtin.env', 'RHSM_ACTIVATION_KEY') | default('', true) }}"
+        rhsm_username: "{{ rhel_guest_rhsm_username | default('') }}"
+        rhsm_password: "{{ rhel_guest_rhsm_password | default('') }}"
+        rhsm_auto_attach: "{{ rhel_guest_rhsm_auto_attach | default(true) }}"
+        rhsm_force_register: "{{ rhel_guest_rhsm_force_register | default(false) }}"
+    - role: lit.rhel.repos
+      vars:
+        repos_enabled: "{{ rhel_guest_repos_enabled | default(true) }}"
+        repos_rhsm_repositories: >-
+          {{
+            rhel_guest_repositories
+            | default(rhel_guest_repositories_default[ansible_distribution_major_version | string] | default([]), true)
+          }}
+        repos_makecache: "{{ rhel_guest_repos_makecache | default(true) }}"
+    - role: lit.rhel.virtual_guest

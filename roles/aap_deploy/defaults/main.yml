@@ -1,5 +1,8 @@
 ---
 aap_deploy_enabled: true
+aap_deploy_supported_majors:
+  - "9"
+  - "10"
 
 # Installation mode
 # This role supports disconnected bundle installs only.
@@ -96,6 +99,13 @@ aap_deploy_setup_install_extra_vars_files: []
 # Effective installer admin passwords are resolved by shared role `aap`
 # from inventory inputs (`aap_*_admin_password_input`).
 # This role consumes only the resolved effective values.
+aap_deploy_validate_certs: true
+aap_deploy_admin_password_input: ""
+aap_deploy_gateway_admin_password_input: ""
+aap_deploy_controller_admin_password_input: ""
+aap_deploy_hub_admin_password_input: ""
+aap_deploy_eda_admin_password_input: ""
+aap_deploy_postgresql_admin_password_input: ""
 aap_deploy_gateway_admin_password_effective: >-
   {{
     aap_gateway_admin_password_effective
@@ -289,10 +299,10 @@ aap_deploy_growth_gateway_host: "{{ ansible_fqdn | default(inventory_hostname) }
 aap_deploy_growth_controller_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_growth_hub_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_growth_eda_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
-aap_deploy_growth_postgresql_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
-
-# Growth/single-node automation metrics host.
 aap_deploy_growth_automationmetrics_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_growth_postgresql_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_growth_inventory_connection: local
+aap_deploy_growth_inventory_hostvars_extra: ""
 
 # Enterprise topology hosts (lists)
 aap_deploy_enterprise_gateway_hosts:
@@ -303,12 +313,11 @@ aap_deploy_enterprise_hub_hosts:
   - "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_enterprise_eda_hosts:
   - "{{ ansible_fqdn | default(inventory_hostname) }}"
-aap_deploy_enterprise_postgresql_hosts:
-  - "{{ ansible_fqdn | default(inventory_hostname) }}"
-
-# Enterprise/multi-node automation metrics hosts.
 aap_deploy_enterprise_automationmetrics_hosts:
   - "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_enterprise_postgresql_hosts:
+  - "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_enterprise_inventory_hostvars_extra: ""
 
 # Generic extension point for future installer inventory groups.
 aap_deploy_setup_prep_inv_nodes_extra: {}
@@ -394,6 +403,7 @@ aap_deploy_gateway_pg_host: ""
 aap_deploy_controller_pg_host: ""
 aap_deploy_hub_pg_host: ""
 aap_deploy_eda_pg_host: ""
+aap_deploy_automationmetrics_controller_read_pg_host: ""
 aap_deploy_gateway_pg_password: ""
 aap_deploy_controller_pg_password: ""
 aap_deploy_hub_pg_password: ""
@@ -407,6 +417,13 @@ aap_deploy_hub_pg_host_effective: >-
   {{ aap_deploy_hub_pg_host | default(aap_deploy_postgresql_host_default, true) }}
 aap_deploy_eda_pg_host_effective: >-
   {{ aap_deploy_eda_pg_host | default(aap_deploy_postgresql_host_default, true) }}
+aap_deploy_automationmetrics_pg_host_effective: >-
+  {{ aap_deploy_automationmetrics_pg_host | default(aap_deploy_postgresql_host_default, true) }}
+aap_deploy_automationmetrics_controller_read_pg_host_effective: >-
+  {{
+    aap_deploy_automationmetrics_controller_read_pg_host
+    | default(aap_deploy_controller_pg_host_effective, true)
+  }}
 
 aap_deploy_gateway_pg_password_effective: >-
   {{ aap_deploy_gateway_pg_password | default(aap_deploy_postgresql_admin_password_effective, true) }}
@@ -416,6 +433,16 @@ aap_deploy_hub_pg_password_effective: >-
   {{ aap_deploy_hub_pg_password | default(aap_deploy_postgresql_admin_password_effective, true) }}
 aap_deploy_eda_pg_password_effective: >-
   {{ aap_deploy_eda_pg_password | default(aap_deploy_postgresql_admin_password_effective, true) }}
+aap_deploy_automationmetrics_pg_password_effective: >-
+  {{
+    aap_deploy_automationmetrics_pg_password
+    | default(aap_deploy_postgresql_admin_password_effective, true)
+  }}
+aap_deploy_automationmetrics_controller_read_pg_password_effective: >-
+  {{
+    aap_deploy_automationmetrics_controller_read_pg_password
+    | default(aap_deploy_controller_pg_password_effective, true)
+  }}
 
 # Host preparation
 aap_deploy_repo_arch: >-
@@ -426,13 +453,9 @@ aap_deploy_repo_arch: >-
   }}
 aap_deploy_requires_ansible_builder: >-
   {{ (ee_list | default([], true) | length > 0) | bool }}
-aap_deploy_required_repos:
-  - "rhel-{{ ansible_distribution_major_version | default('9') }}-for-{{ aap_deploy_repo_arch }}-baseos-rpms"
-  - "rhel-{{ ansible_distribution_major_version | default('9') }}-for-{{ aap_deploy_repo_arch }}-appstream-rpms"
-aap_deploy_base_required_packages:
-  - ansible-core
-  - python3
-  - podman
+aap_deploy_required_repos: "{{ aap_deploy_required_repos_default | default([], true) }}"
+aap_deploy_base_required_packages: >-
+  {{ aap_deploy_base_required_packages_default | default(['ansible-core', 'python3', 'podman'], true) }}
 aap_deploy_extra_required_packages: >-
   {{
     (

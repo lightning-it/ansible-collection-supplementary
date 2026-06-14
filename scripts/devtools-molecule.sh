@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2086,SC2154
 set -eo pipefail
 
 # Run all non-*heavy Molecule scenarios for the current collection
@@ -89,24 +90,7 @@ bash scripts/wunder-devtools-ee.sh bash -c '
   export ANSIBLE_COLLECTIONS_PATH="${COLLECTIONS_DIR}:/usr/share/ansible/collections"
 
   # -------------------------------------------------------------
-  # 2) Install declared dependencies into the SAME per-run dir
-  # -------------------------------------------------------------
-  dep_specs=()
-  if [ -f /workspace/galaxy.yml ]; then
-    while IFS= read -r dep_spec; do
-      dep_specs+=("$dep_spec")
-    done < <(bash /workspace/scripts/devtools-galaxy.sh dependencies /workspace/galaxy.yml || true)
-  fi
-
-  for dep_spec in "${dep_specs[@]}"; do
-    if [ -n "$dep_spec" ]; then
-      echo "Installing dependency ${dep_spec} into ${COLLECTIONS_DIR}..."
-      ansible-galaxy collection install "$dep_spec" -p "${COLLECTIONS_DIR}" --force
-    fi
-  done
-
-  # -------------------------------------------------------------
-  # 3) Configure Ansible env for Molecule
+  # 2) Configure Ansible env for Molecule
   # -------------------------------------------------------------
   if [ -f /workspace/ansible.cfg ]; then
     export ANSIBLE_CONFIG=/workspace/ansible.cfg
@@ -116,7 +100,7 @@ bash scripts/wunder-devtools-ee.sh bash -c '
   export DOCKER_HOST="${DOCKER_HOST:-unix:///var/run/docker.sock}"
 
   # -------------------------------------------------------------
-  # 4) Discover scenarios
+  # 3) Discover scenarios
   # -------------------------------------------------------------
   scenarios=()
 
@@ -131,11 +115,16 @@ bash scripts/wunder-devtools-ee.sh bash -c '
     if [ -d molecule ]; then
       while IFS= read -r dir; do
         scen="${dir##*/}"
+        scenario_mode_file="molecule/${scen}/.molecule-mode"
         case "$scen" in
           *_heavy)
             echo "Skipping heavy scenario '\''${scen}'\'' in devtools-molecule.sh (run manually via dedicated script)."
             ;;
           *)
+            if [ -f "${scenario_mode_file}" ] && [ "${MOLECULE_RUN_PROTECTED:-false}" != "true" ]; then
+              echo "Skipping protected scenario '${scen}' (set MOLECULE_RUN_PROTECTED=true to include it)."
+              continue
+            fi
             scenarios+=("$scen")
             ;;
         esac

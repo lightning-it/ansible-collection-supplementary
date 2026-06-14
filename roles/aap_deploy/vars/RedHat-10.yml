@@ -1,0 +1,9 @@
+---
+aap_deploy_required_repos_default:
+  - "rhel-10-for-{{ aap_deploy_repo_arch }}-baseos-rpms"
+  - "rhel-10-for-{{ aap_deploy_repo_arch }}-appstream-rpms"
+
+aap_deploy_base_required_packages_default:
+  - acl
+  - ansible-core
+  - podman
