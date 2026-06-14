@@ -1,3 +1,9 @@
+## [1.24.7](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.6...v1.24.7) (2026-06-14)
+
+### Bug Fixes
+
+* **aap:** add installer diagnostics ([#197](https://github.com/lightning-it/ansible-collection-supplementary/issues/197)) ([f20ae05](https://github.com/lightning-it/ansible-collection-supplementary/commit/f20ae0504fd1bf317092c315e98146bb2630adab))
+
 ## [1.24.6](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.5...v1.24.6) (2026-06-14)
 
 ### Bug Fixes
