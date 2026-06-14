@@ -5,6 +5,9 @@
 .terraform.lock.hcl
 /infra/
 
+# Vagrant artifacts (all .vagrant directories)
+**/.vagrant/
+
 # OS/editor noise
 .DS_Store
 *.swp
@@ -17,7 +20,6 @@ npm-debug.log
 # Local collection installs from tests/hooks
 collections/**
 !collections/requirements.yml
-!collections/requirements-rh.yml
 .ansible/
 
 # Ansible logs
