@@ -1,0 +1,19 @@
+---
+artifacts_enabled: true
+
+artifacts_default_owner: root
+artifacts_default_group: root
+artifacts_default_mode: "0644"
+artifacts_default_directory_mode: "0755"
+artifacts_default_validate_certs: true
+artifacts_default_timeout: 1800
+artifacts_default_force: false
+artifacts_default_no_log: false
+
+# List of artifacts to stage on the managed host.
+# Supported sources:
+# - url: download with ansible.builtin.get_url, suitable for HTTPS and presigned S3 URLs
+# - local: copy from the controller to the managed host
+# - remote: copy from one path on the managed host to another
+artifacts_items: []
+artifacts_results: []

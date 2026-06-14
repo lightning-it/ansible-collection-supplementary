@@ -1,0 +1,25 @@
+---
+galaxy_info:
+  role_name: artifacts
+  namespace: lit
+  author: Rene Osorio
+  description: Stage and verify binary artifacts from URL, controller, or managed-host sources.
+  company: Lightning IT
+  license: GPL-2.0-only
+  min_ansible_version: "2.18"
+
+  platforms:
+    - name: EL
+      versions:
+        - all
+    - name: Ubuntu
+      versions:
+        - all
+
+  galaxy_tags:
+    - artifacts
+    - s3
+    - automation
+    - platform
+
+dependencies: []
