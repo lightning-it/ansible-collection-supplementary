@@ -43,7 +43,7 @@ instance_status() {
   incus list "$name" -c s --format csv 2>/dev/null | head -n 1 | tr -d '\r'
 }
 
-instance_ipv4() {
+instance_ip_address() {
   local name="$1"
 
   incus list "$name" --format json | python3 -c '
@@ -51,13 +51,20 @@ import json
 import sys
 
 instances = json.load(sys.stdin)
+addresses = []
 for instance in instances:
     network = instance.get("state", {}).get("network", {})
     for iface in network.values():
         for addr in iface.get("addresses", []):
-            if addr.get("family") == "inet" and addr.get("address") != "127.0.0.1":
-                print(addr["address"])
-                raise SystemExit(0)
+            family = addr.get("family")
+            address = addr.get("address", "")
+            if family == "inet" and address != "127.0.0.1":
+                addresses.append((0, address))
+            elif family == "inet6" and address and not address.startswith(("::1", "fe80:")):
+                addresses.append((1, address))
+if addresses:
+    print(sorted(addresses)[0][1])
+    raise SystemExit(0)
 raise SystemExit(1)
 ' 2>/dev/null || true
 }
@@ -132,7 +139,7 @@ fi
 
 ip_address=""
 while [ "${SECONDS}" -lt "${deadline}" ]; do
-  ip_address="$(instance_ipv4 "$name")"
+  ip_address="$(instance_ip_address "$name")"
   if [ -n "$ip_address" ]; then
     break
   fi
@@ -140,7 +147,7 @@ while [ "${SECONDS}" -lt "${deadline}" ]; do
 done
 
 if [ -z "$ip_address" ]; then
-  echo "ERROR: no IPv4 address detected for ${name} within ${timeout}s" >&2
+  echo "ERROR: no usable IP address detected for ${name} within ${timeout}s" >&2
   exit 1
 fi
 
