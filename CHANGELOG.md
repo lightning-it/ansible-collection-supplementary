@@ -1,3 +1,9 @@
+## [1.25.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.8...v1.25.0) (2026-06-14)
+
+### Features
+
+* **aap:** support external installer polling ([#200](https://github.com/lightning-it/ansible-collection-supplementary/issues/200)) ([d9dcc47](https://github.com/lightning-it/ansible-collection-supplementary/commit/d9dcc47eb2d810f00fa0296102f1aa5ff9c549ab))
+
 ## [1.24.8](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.7...v1.24.8) (2026-06-14)
 
 ### Bug Fixes
