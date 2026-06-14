@@ -30,15 +30,18 @@
             'hub_pg_password': "'" ~ aap_deploy_hub_pg_password_effective ~ "'",
             'eda_pg_host': "'" ~ aap_deploy_eda_pg_host_effective ~ "'",
             'eda_pg_password': "'" ~ aap_deploy_eda_pg_password_effective ~ "'",
-            'automationmetrics_pg_host': "'" ~ aap_deploy_automationmetrics_pg_host ~ "'",
+            'automationmetrics_pg_host': "'" ~ aap_deploy_automationmetrics_pg_host_effective ~ "'",
             'automationmetrics_pg_database': "'" ~ aap_deploy_automationmetrics_pg_database ~ "'",
             'automationmetrics_pg_username': "'" ~ aap_deploy_automationmetrics_pg_username ~ "'",
-            'automationmetrics_pg_password': "'" ~ aap_deploy_automationmetrics_pg_password ~ "'",
+            'automationmetrics_pg_password': "'" ~ aap_deploy_automationmetrics_pg_password_effective ~ "'",
+            'automationmetrics_controller_read_pg_host': (
+              "'" ~ aap_deploy_automationmetrics_controller_read_pg_host_effective ~ "'"
+            ),
             'automationmetrics_controller_read_pg_username': (
               "'" ~ aap_deploy_automationmetrics_controller_read_pg_username ~ "'"
             ),
             'automationmetrics_controller_read_pg_password': (
-              "'" ~ aap_deploy_automationmetrics_controller_read_pg_password ~ "'"
+              "'" ~ aap_deploy_automationmetrics_controller_read_pg_password_effective ~ "'"
             ),
             'automationmetrics_secret_key': "'" ~ aap_deploy_automationmetrics_secret_key ~ "'",
             'automationmetrics_resource_server': "'" ~ aap_deploy_automationmetrics_resource_server ~ "'",
