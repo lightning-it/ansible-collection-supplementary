@@ -2,10 +2,15 @@
 - name: Validate automation metrics installer secrets
   ansible.builtin.assert:
     that:
-      - aap_deploy_automationmetrics_pg_host | string | trim | length > 0
-      - aap_deploy_automationmetrics_pg_password | string | trim | length > 0
+      - aap_deploy_automationmetrics_pg_host_effective | string | trim | length > 0
       - >-
-        aap_deploy_automationmetrics_controller_read_pg_password
+        aap_deploy_automationmetrics_controller_read_pg_host_effective
+        | string
+        | trim
+        | length > 0
+      - aap_deploy_automationmetrics_pg_password_effective | string | trim | length > 0
+      - >-
+        aap_deploy_automationmetrics_controller_read_pg_password_effective
         | string
         | trim
         | length > 0
