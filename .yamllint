@@ -1,6 +1,10 @@
 ---
 extends: default
 
+ignore: |
+  deploy/incus/profiles/rhel9.yml
+  deploy/incus/profiles/rhel10.yml
+
 rules:
   line-length:
     max: 120

@@ -1,4 +1,4 @@
-# cloud-config
+#cloud-config
 # yamllint disable rule:document-start
 hostname: __HOSTNAME__
 fqdn: __FQDN__
