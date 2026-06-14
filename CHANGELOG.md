@@ -1,3 +1,9 @@
+## [1.24.3](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.2...v1.24.3) (2026-06-14)
+
+### Bug Fixes
+
+* **incus:** provide VM cloud-init network config ([#192](https://github.com/lightning-it/ansible-collection-supplementary/issues/192)) ([d7a1c1e](https://github.com/lightning-it/ansible-collection-supplementary/commit/d7a1c1ed7142acd91b276e78b7ebdf1e103570b7))
+
 ## [1.24.2](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.1...v1.24.2) (2026-06-14)
 
 ### Bug Fixes
