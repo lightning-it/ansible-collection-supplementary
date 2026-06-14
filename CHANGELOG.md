@@ -1,3 +1,9 @@
+## [1.24.6](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.5...v1.24.6) (2026-06-14)
+
+### Bug Fixes
+
+* **incus:** use exact cloud-config header ([#195](https://github.com/lightning-it/ansible-collection-supplementary/issues/195)) ([c4c7b5e](https://github.com/lightning-it/ansible-collection-supplementary/commit/c4c7b5e88a0fcc6c8a9a2ec69676e754f1e40ac4))
+
 ## [1.24.5](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.4...v1.24.5) (2026-06-14)
 
 ### Bug Fixes
