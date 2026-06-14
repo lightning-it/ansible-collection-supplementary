@@ -1,3 +1,9 @@
+## [1.23.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.23.0...v1.23.1) (2026-06-14)
+
+### Bug Fixes
+
+* update dependency community.crypto to v2.26.8 ([#181](https://github.com/lightning-it/ansible-collection-supplementary/issues/181)) ([ce7dd1b](https://github.com/lightning-it/ansible-collection-supplementary/commit/ce7dd1b3188418141d0f39db8d12819ff72fe41d))
+
 ## [1.23.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.22.0...v1.23.0) (2026-06-14)
 
 ### Features
