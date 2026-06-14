@@ -226,6 +226,7 @@ trap 'rm -f "${tmp_user_data}"' EXIT
 render_user_data "$profile_file" "$name" "$fqdn" "$ssh_user" "$public_key" > "${tmp_user_data}"
 
 if [ "$mode" = "vm" ]; then
+  require_cmd mkisofs
   if [ ! -e /dev/kvm ]; then
     echo "ERROR: VM mode requires KVM, but /dev/kvm is not available on this host." >&2
     echo "Enable/expose hardware virtualization or use an Incus host with KVM support." >&2
@@ -241,6 +242,8 @@ if [ "$mode" = "vm" ]; then
   if [ -n "${INCUS_VM_MEMORY:-}" ]; then
     incus config set "$name" limits.memory "${INCUS_VM_MEMORY}"
   fi
+  incus config set "$name" cloud-init.user-data - < "${tmp_user_data}"
+  incus config device add "$name" cloud-init disk source=cloud-init:config
 else
   incus init "$image" "$name"
   if [ -n "${INCUS_CONTAINER_CPU:-}" ]; then
@@ -249,9 +252,9 @@ else
   if [ -n "${INCUS_CONTAINER_MEMORY:-}" ]; then
     incus config set "$name" limits.memory "${INCUS_CONTAINER_MEMORY}"
   fi
+  incus config set "$name" user.user-data - < "${tmp_user_data}"
 fi
 
-incus config set "$name" user.user-data - < "${tmp_user_data}"
 incus start "$name"
 
 "${script_dir}/wait-for-instance.sh" "$name" --timeout "${INCUS_WAIT_TIMEOUT:-900}"
