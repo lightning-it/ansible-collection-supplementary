@@ -1,3 +1,9 @@
+## [1.23.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.22.0...v1.23.0) (2026-06-14)
+
+### Features
+
+* aap 2.7 on rhel 10 ([#179](https://github.com/lightning-it/ansible-collection-supplementary/issues/179)) ([47c5ea8](https://github.com/lightning-it/ansible-collection-supplementary/commit/47c5ea81d52221f461e38999b8779b2f7487c24b))
+
 ## [1.22.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.21.0...v1.22.0) (2026-06-12)
 
 ### Features
