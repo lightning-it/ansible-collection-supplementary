@@ -1,7 +1,7 @@
 ---
 namespace: lit
 name: supplementary
-version: 1.24.1
+version: 1.25.1
 readme: README.md
 description: >
   Supplementary Ansible collection for ModuLix, providing configuration
@@ -21,10 +21,10 @@ tags:
 # Install them via EE/workspace requirements files (for example requirements-rh.yml).
 dependencies:
   community.general: '>=11.4.8,<12.0.0'
-  community.crypto: '>=3.2.1,<4.0.0'
+  community.crypto: '>=3.2.2,<4.0.0'
   ansible.posix: '>=2.2.0'
   community.vmware: '5.10.0'
-  lit.rhel: '>=1.16.0'
+  lit.rhel: '>=1.16.1'
   lit.foundational: '>=1.18.0'
   community.hashi_vault: '*'
 build_ignore:

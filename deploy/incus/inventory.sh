@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: deploy/incus/inventory.sh INSTANCE [--group GROUP]
+Usage: deploy/incus/inventory.sh INSTANCE [--group GROUP] [--host-alias HOST]
 
 Print a YAML inventory for an Incus instance created by deploy/incus/create.sh.
 EOF
@@ -37,7 +37,7 @@ resolve_ssh_private_key_file() {
   exit 1
 }
 
-instance_ipv4() {
+instance_ip_address() {
   local name="$1"
 
   incus list "$name" --format json | python3 -c '
@@ -45,13 +45,20 @@ import json
 import sys
 
 instances = json.load(sys.stdin)
+addresses = []
 for instance in instances:
     network = instance.get("state", {}).get("network", {})
     for iface in network.values():
         for addr in iface.get("addresses", []):
-            if addr.get("family") == "inet" and addr.get("address") != "127.0.0.1":
-                print(addr["address"])
-                raise SystemExit(0)
+            family = addr.get("family")
+            address = addr.get("address", "")
+            if family == "inet" and address != "127.0.0.1":
+                addresses.append((0, address))
+            elif family == "inet6" and address and not address.startswith(("::1", "fe80:")):
+                addresses.append((1, address))
+if addresses:
+    print(sorted(addresses)[0][1])
+    raise SystemExit(0)
 raise SystemExit(1)
 ' 2>/dev/null || true
 }
@@ -63,12 +70,17 @@ fi
 
 name="$1"
 group="aap_hosts"
+host_alias=""
 shift
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --group)
       group="${2:-}"
+      shift 2
+      ;;
+    --host-alias)
+      host_alias="${2:-}"
       shift 2
       ;;
     -h|--help)
@@ -91,23 +103,24 @@ if ! incus info "$name" >/dev/null 2>&1; then
   exit 1
 fi
 
-ip_address="$(instance_ipv4 "$name")"
+ip_address="$(instance_ip_address "$name")"
 if [ -z "$ip_address" ]; then
-  echo "ERROR: could not determine IPv4 address for ${name}" >&2
+  echo "ERROR: could not determine usable IP address for ${name}" >&2
   exit 1
 fi
 
 ssh_user="${INCUS_SSH_USER:-cloud-user}"
 private_key_file="$(resolve_ssh_private_key_file)"
 ssh_common_args="${INCUS_SSH_COMMON_ARGS:--o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null}"
+inventory_host="${host_alias:-$name}"
 
 cat <<EOF
 all:
   children:
     ${group}:
       hosts:
-        ${name}:
-          ansible_host: ${ip_address}
+        ${inventory_host}:
+          ansible_host: "${ip_address}"
           ansible_user: ${ssh_user}
           ansible_become: true
           ansible_python_interpreter: /usr/bin/python3

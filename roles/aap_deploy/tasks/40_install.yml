@@ -23,30 +23,172 @@
     quiet: true
   no_log: "{{ aap_admin_passwords_no_log | default(true) }}"
 
-- name: Run AAP containerized installer via vendor role  # noqa var-naming[no-role-prefix]
-  ansible.builtin.include_role:
-    name: infra.aap_utilities.aap_setup_install
-    apply:
+- name: Ensure installer log directory exists
+  ansible.builtin.file:
+    path: "{{ aap_deploy_installer_log_dir }}"
+    state: directory
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0750'
+
+- name: Validate installer runner
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_installer_runner in ['native', 'vendor']
+    fail_msg: >-
+      Unsupported aap_deploy_installer_runner={{ aap_deploy_installer_runner }}.
+      Supported values are native and vendor.
+    quiet: true
+
+- name: Run AAP containerized installer with diagnostics
+  block:
+    - name: Write native installer ansible.cfg
+      ansible.builtin.copy:
+        dest: "{{ aap_setup_prep_setup_dir }}/ansible.cfg"
+        owner: "{{ aap_deploy_install_user }}"
+        group: "{{ aap_deploy_install_user }}"
+        mode: '0644'
+        content: |
+          [defaults]
+          collections_path = ./collections
+          inventory = ./inventory
+          log_path = {{ aap_deploy_installer_log_dir }}/aap_install.log
+      when: aap_deploy_installer_runner == 'native'
+
+    - name: Write native installer extra vars file
+      ansible.builtin.copy:
+        dest: "{{ aap_deploy_installer_extra_vars_path }}"
+        owner: "{{ aap_deploy_install_user }}"
+        group: "{{ aap_deploy_install_user }}"
+        mode: '0600'
+        content: "{{ aap_deploy_setup_install_extra_vars | to_nice_yaml }}"
+      when:
+        - aap_deploy_installer_runner == 'native'
+        - (aap_deploy_setup_install_extra_vars | length) > 0
+
+    - name: Copy native installer extra vars files to workspace
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ aap_setup_prep_setup_dir }}/{{ item | basename }}"
+        owner: "{{ aap_deploy_install_user }}"
+        group: "{{ aap_deploy_install_user }}"
+        mode: '0600'
+      loop: "{{ aap_deploy_setup_install_extra_vars_files }}"
+      register: aap_deploy_installer_extra_vars_files_copied
+      when:
+        - aap_deploy_installer_runner == 'native'
+        - (aap_deploy_setup_install_extra_vars_files | length) > 0
+
+    - name: Build native installer command
+      ansible.builtin.set_fact:
+        aap_deploy_installer_command: >-
+          ansible-playbook -i inventory ansible.containerized_installer.install
+          {% if (aap_deploy_setup_install_extra_vars | length) > 0 %}
+          -e @{{ aap_deploy_installer_extra_vars_path | quote }}
+          {% endif %}
+          {% for extra_vars_file in (aap_deploy_installer_extra_vars_files_copied.results | default([])) %}
+          -e @{{ extra_vars_file.dest | quote }}
+          {% endfor %}
+      when: aap_deploy_installer_runner == 'native'
+
+    - name: Start native AAP containerized installer
+      ansible.builtin.command:
+        cmd: "{{ aap_deploy_installer_command }}"
+        chdir: "{{ aap_setup_prep_setup_dir }}"
+      async: "{{ aap_deploy_installer_async_timeout | int }}"
+      poll: 0
       become: true
       become_user: "{{ aap_deploy_install_user }}"
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ aap_deploy_install_user_uid }}"
         DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ aap_deploy_install_user_uid }}/bus"
-  vars:
-    aap_setup_down_version: "{{ aap_deploy_setup_download_version }}"
-    aap_setup_containerized: "{{ aap_deploy_setup_download_containerized }}"
-    aap_setup_inst_containerized: "{{ aap_deploy_setup_download_containerized }}"
-    aap_setup_inst_setup_dir: "{{ aap_setup_prep_setup_dir }}"
-    aap_setup_prep_inv_nodes: "{{ aap_deploy_setup_prep_inv_nodes }}"
-    aap_setup_prep_inv_vars: "{{ aap_deploy_setup_prep_inv_vars }}"
-    aap_setup_prep_inv_secrets: "{{ aap_deploy_setup_prep_inv_secrets }}"
-    aap_setup_inst_force: "{{ aap_deploy_setup_install_force }}"
-    aap_setup_inst_extra_vars: "{{ aap_deploy_setup_install_extra_vars }}"
-    aap_setup_inst_extra_vars_files: "{{ aap_deploy_setup_install_extra_vars_files }}"
-    controller_validate_certs: "{{ aap_validate_certs | bool }}"
-    ah_validate_certs: "{{ aap_validate_certs | bool }}"
-    eda_validate_certs: "{{ aap_validate_certs | bool }}"
-    gateway_validate_certs: "{{ aap_validate_certs | bool }}"
+      register: aap_deploy_installer_async_job
+      changed_when: false
+      when: aap_deploy_installer_runner == 'native'
+
+    - name: Write native installer async job id
+      ansible.builtin.copy:
+        dest: "{{ aap_deploy_installer_async_jid_path }}"
+        owner: "{{ aap_deploy_install_user }}"
+        group: "{{ aap_deploy_install_user }}"
+        mode: '0640'
+        content: "{{ aap_deploy_installer_async_job.ansible_job_id }}\n"
+      when: aap_deploy_installer_runner == 'native'
+
+    - name: Wait for native AAP containerized installer
+      ansible.builtin.async_status:
+        jid: "{{ aap_deploy_installer_async_job.ansible_job_id }}"
+      become: true
+      become_user: "{{ aap_deploy_install_user }}"
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ aap_deploy_install_user_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ aap_deploy_install_user_uid }}/bus"
+      register: aap_deploy_installer_async_status
+      until: aap_deploy_installer_async_status.finished | bool
+      retries: "{{ aap_deploy_installer_async_retries | int }}"
+      delay: "{{ aap_deploy_installer_async_delay | int }}"
+      when:
+        - aap_deploy_installer_runner == 'native'
+        - aap_deploy_installer_wait | bool
+
+    - name: Fail when native installer exited non-zero
+      ansible.builtin.fail:
+        msg: |-
+          Native AAP containerized installer exited with rc={{ aap_deploy_installer_async_status.rc }}.
+          stdout:
+          {{ aap_deploy_installer_async_status.stdout | default('') | trim }}
+          stderr:
+          {{ aap_deploy_installer_async_status.stderr | default('') | trim }}
+      when:
+        - aap_deploy_installer_runner == 'native'
+        - aap_deploy_installer_wait | bool
+        - (aap_deploy_installer_async_status.rc | default(0) | int) != 0
+
+    - name: Report native installer external polling handoff
+      ansible.builtin.debug:
+        msg: >-
+          Native AAP containerized installer started asynchronously.
+          External polling is required with jid file {{ aap_deploy_installer_async_jid_path }}.
+      when:
+        - aap_deploy_installer_runner == 'native'
+        - not (aap_deploy_installer_wait | bool)
+
+    - name: Run AAP containerized installer via vendor role  # noqa var-naming[no-role-prefix]
+      ansible.builtin.include_role:
+        name: infra.aap_utilities.aap_setup_install
+        apply:
+          become: true
+          become_user: "{{ aap_deploy_install_user }}"
+          environment:
+            XDG_RUNTIME_DIR: "/run/user/{{ aap_deploy_install_user_uid }}"
+            DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ aap_deploy_install_user_uid }}/bus"
+      vars:
+        aap_setup_down_version: "{{ aap_deploy_setup_download_version }}"
+        aap_setup_containerized: "{{ aap_deploy_setup_download_containerized }}"
+        aap_setup_inst_containerized: "{{ aap_deploy_setup_download_containerized }}"
+        aap_setup_inst_setup_dir: "{{ aap_setup_prep_setup_dir }}"
+        aap_setup_inst_log_dir: "{{ aap_deploy_installer_log_dir }}"
+        aap_setup_prep_inv_nodes: "{{ aap_deploy_setup_prep_inv_nodes }}"
+        aap_setup_prep_inv_vars: "{{ aap_deploy_setup_prep_inv_vars }}"
+        aap_setup_prep_inv_secrets: "{{ aap_deploy_setup_prep_inv_secrets }}"
+        aap_setup_inst_force: "{{ aap_deploy_setup_install_force }}"
+        aap_setup_inst_extra_vars: "{{ aap_deploy_setup_install_extra_vars }}"
+        aap_setup_inst_extra_vars_files: "{{ aap_deploy_setup_install_extra_vars_files }}"
+        controller_validate_certs: "{{ aap_validate_certs | bool }}"
+        ah_validate_certs: "{{ aap_validate_certs | bool }}"
+        eda_validate_certs: "{{ aap_validate_certs | bool }}"
+        gateway_validate_certs: "{{ aap_validate_certs | bool }}"
+      when: aap_deploy_installer_runner == 'vendor'
+  rescue:
+    - name: Collect AAP installer failure diagnostics
+      ansible.builtin.include_tasks: 45_installer_diagnostics.yml
+      when: aap_deploy_installer_diagnostics_enabled | bool
+
+    - name: Fail after AAP installer diagnostics
+      ansible.builtin.fail:
+        msg: >-
+          AAP containerized installer failed. Review the redacted diagnostics
+          above and the installer log directory {{ aap_deploy_installer_log_dir }}.
 
 - name: Write installation marker
   ansible.builtin.copy:
@@ -58,3 +200,6 @@
       installed=true
       setup_dir={{ aap_setup_prep_setup_dir | default(aap_deploy_setup_dir, true) }}
       playbook=infra.aap_utilities.aap_setup_install
+  when: >-
+    aap_deploy_installer_runner != 'native'
+    or (aap_deploy_installer_wait | bool)

@@ -1,3 +1,57 @@
+## [1.25.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.25.0...v1.25.1) (2026-06-14)
+
+### Bug Fixes
+
+* **incus:** allow short guest hostnames ([#201](https://github.com/lightning-it/ansible-collection-supplementary/issues/201)) ([c6c45ce](https://github.com/lightning-it/ansible-collection-supplementary/commit/c6c45cea1d1db47a767f2ae2065711421b7f4384))
+
+## [1.25.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.8...v1.25.0) (2026-06-14)
+
+### Features
+
+* **aap:** support external installer polling ([#200](https://github.com/lightning-it/ansible-collection-supplementary/issues/200)) ([d9dcc47](https://github.com/lightning-it/ansible-collection-supplementary/commit/d9dcc47eb2d810f00fa0296102f1aa5ff9c549ab))
+
+## [1.24.8](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.7...v1.24.8) (2026-06-14)
+
+### Bug Fixes
+
+* **aap:** run installer with native async polling ([#199](https://github.com/lightning-it/ansible-collection-supplementary/issues/199)) ([2d291a9](https://github.com/lightning-it/ansible-collection-supplementary/commit/2d291a989a8ea93875bf23ce0b2af2127f3fc3ac))
+
+## [1.24.7](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.6...v1.24.7) (2026-06-14)
+
+### Bug Fixes
+
+* **aap:** add installer diagnostics ([#197](https://github.com/lightning-it/ansible-collection-supplementary/issues/197)) ([f20ae05](https://github.com/lightning-it/ansible-collection-supplementary/commit/f20ae0504fd1bf317092c315e98146bb2630adab))
+
+## [1.24.6](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.5...v1.24.6) (2026-06-14)
+
+### Bug Fixes
+
+* **incus:** use exact cloud-config header ([#195](https://github.com/lightning-it/ansible-collection-supplementary/issues/195)) ([c4c7b5e](https://github.com/lightning-it/ansible-collection-supplementary/commit/c4c7b5e88a0fcc6c8a9a2ec69676e754f1e40ac4))
+
+## [1.24.5](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.4...v1.24.5) (2026-06-14)
+
+### Bug Fixes
+
+* **incus:** match VM network config by MAC address ([#194](https://github.com/lightning-it/ansible-collection-supplementary/issues/194)) ([3cbcb7b](https://github.com/lightning-it/ansible-collection-supplementary/commit/3cbcb7b0be7d19f8f7346b7cfe641a9df8c51149))
+
+## [1.24.4](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.3...v1.24.4) (2026-06-14)
+
+### Bug Fixes
+
+* **incus:** make cloud-init profiles valid user-data ([#193](https://github.com/lightning-it/ansible-collection-supplementary/issues/193)) ([332e177](https://github.com/lightning-it/ansible-collection-supplementary/commit/332e177e6377add964d4441b198e75304e3cb0bf))
+
+## [1.24.3](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.2...v1.24.3) (2026-06-14)
+
+### Bug Fixes
+
+* **incus:** provide VM cloud-init network config ([#192](https://github.com/lightning-it/ansible-collection-supplementary/issues/192)) ([d7a1c1e](https://github.com/lightning-it/ansible-collection-supplementary/commit/d7a1c1ed7142acd91b276e78b7ebdf1e103570b7))
+
+## [1.24.2](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.1...v1.24.2) (2026-06-14)
+
+### Bug Fixes
+
+* **incus:** allow IPv6 instance addresses ([#190](https://github.com/lightning-it/ansible-collection-supplementary/issues/190)) ([f6bae2d](https://github.com/lightning-it/ansible-collection-supplementary/commit/f6bae2d2771eb3a6b12b473fbbe3968c1dc9ab5e))
+
 ## [1.24.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.0...v1.24.1) (2026-06-14)
 
 ### Bug Fixes

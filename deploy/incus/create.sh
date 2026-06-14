@@ -5,13 +5,14 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   cat <<'EOF'
-Usage: deploy/incus/create.sh [--version 9|10] [--vm|--container] [--name INSTANCE]
+Usage: deploy/incus/create.sh [--version 9|10] [--vm|--container] [--name INSTANCE] [--hostname HOSTNAME]
 
 Create a local Incus instance for AAP development.
 Defaults:
   --version 9
   --vm
   --name aap-rhel<version>-<timestamp>
+  --hostname INSTANCE
 EOF
 }
 
@@ -119,6 +120,27 @@ render_user_data() {
     "$template_file"
 }
 
+render_network_config() {
+  local mac_address="$1"
+
+  cat <<'EOF'
+version: 2
+ethernets:
+  incus0:
+EOF
+  if [ -n "$mac_address" ]; then
+    cat <<EOF
+    match:
+      macaddress: "${mac_address}"
+EOF
+  fi
+  cat <<'EOF'
+    dhcp4: true
+    dhcp6: true
+    accept-ra: true
+EOF
+}
+
 instance_ipv4() {
   local name="$1"
 
@@ -141,6 +163,7 @@ raise SystemExit(1)
 version="9"
 mode="vm"
 name=""
+hostname=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -158,6 +181,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --name)
       name="${2:-}"
+      shift 2
+      ;;
+    --hostname)
+      hostname="${2:-}"
       shift 2
       ;;
     -h|--help)
@@ -195,6 +222,10 @@ if [ -z "$name" ]; then
   name="aap-rhel${version}-$(date -u +%Y%m%d%H%M%S)"
 fi
 
+if [ -z "$hostname" ]; then
+  hostname="$name"
+fi
+
 if incus info "$name" >/dev/null 2>&1; then
   echo "ERROR: Incus instance already exists: ${name}" >&2
   exit 1
@@ -210,10 +241,10 @@ if [ -z "$public_key" ]; then
   exit 1
 fi
 
-if [[ "$name" == *.* ]]; then
-  fqdn="$name"
+if [[ "$hostname" == *.* ]]; then
+  fqdn="$hostname"
 else
-  fqdn="${name}.${INCUS_FQDN_SUFFIX:-incus.local}"
+  fqdn="${hostname}.${INCUS_FQDN_SUFFIX:-incus.local}"
 fi
 
 case "$version" in
@@ -222,8 +253,9 @@ case "$version" in
 esac
 
 tmp_user_data="$(mktemp)"
-trap 'rm -f "${tmp_user_data}"' EXIT
-render_user_data "$profile_file" "$name" "$fqdn" "$ssh_user" "$public_key" > "${tmp_user_data}"
+tmp_network_config="$(mktemp)"
+trap 'rm -f "${tmp_user_data}" "${tmp_network_config}"' EXIT
+render_user_data "$profile_file" "$hostname" "$fqdn" "$ssh_user" "$public_key" > "${tmp_user_data}"
 
 if [ "$mode" = "vm" ]; then
   require_cmd mkisofs
@@ -242,7 +274,10 @@ if [ "$mode" = "vm" ]; then
   if [ -n "${INCUS_VM_MEMORY:-}" ]; then
     incus config set "$name" limits.memory "${INCUS_VM_MEMORY}"
   fi
+  mac_address="$(incus config get "$name" volatile.eth0.hwaddr)"
+  render_network_config "$mac_address" > "${tmp_network_config}"
   incus config set "$name" cloud-init.user-data - < "${tmp_user_data}"
+  incus config set "$name" cloud-init.network-config - < "${tmp_network_config}"
   incus config device add "$name" cloud-init disk source=cloud-init:config
 else
   incus init "$image" "$name"
@@ -263,6 +298,7 @@ ip_address="$(instance_ipv4 "$name")"
 
 echo "Instance ready."
 echo "  Name: ${name}"
+echo "  Hostname: ${hostname}"
 echo "  Mode: ${mode}"
 echo "  Image: ${image}"
 echo "  FQDN: ${fqdn}"

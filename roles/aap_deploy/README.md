@@ -11,7 +11,8 @@ bundle mode.
   For ephemeral Incus VMs, keep the base image unregistered and run
   `playbooks/rhel_prepare.yml` before this role. That playbook composes
   `lit.rhel.rhsm`, `lit.rhel.repos`, and `lit.rhel.virtual_guest`.
-- `ansible-core`, `python3`, and `podman` on target host (managed by host prep if enabled).
+- `ansible-core`, `git`, `podman`, `rsync`, `tar`, and `unzip` on target host
+  (managed by host prep if enabled).
 - `infra.aap_utilities` collection installed in the execution environment.
 - A local AAP containerized setup bundle on the control node for real installer runs.
 - Enough local storage for bundle copy and extraction. Red Hat documents a minimum 60 GB
@@ -33,6 +34,15 @@ Key variables:
 - `aap_deploy_setup_prepare_process_template`
 - `aap_deploy_setup_install_force`
 - `aap_deploy_bundle_dir` (path containing `/bundle`)
+- `aap_deploy_installer_runner` (`native` or `vendor`, default: `native`)
+- `aap_deploy_installer_wait`
+- `aap_deploy_installer_async_jid_path`
+- `aap_deploy_installer_async_timeout`
+- `aap_deploy_installer_async_retries`
+- `aap_deploy_installer_async_delay`
+- `aap_deploy_installer_log_dir`
+- `aap_deploy_installer_diagnostics_enabled`
+- `aap_deploy_installer_diagnostics_log_tail_lines`
 - `aap_deploy_redis_mode` (`standalone` or `cluster`)
 - `aap_deploy_redis_hosts` (required when `aap_deploy_redis_mode=cluster`, at least 6 hosts)
 - `aap_deploy_growth_automationmetrics_host`
@@ -81,14 +91,25 @@ Key variables:
 - `aap_deploy_growth_automationmetrics_host`
 - `aap_deploy_enterprise_automationmetrics_hosts`
 
-Vendor-driven installer behavior:
+Installer behavior:
 - Role performs an early existing-install detection (marker and runtime containers).
 - Marker-based skip is runtime-validated by default to avoid stale marker false positives.
 - When detected, host prep, bundle handling, inventory rendering, and installer execution are skipped.
 - Verification still runs (when enabled).
 - Role expects a controller-side bundle path and copies it to the managed host.
 - Role prepares the setup workspace and renders installer inventory via `infra.aap_utilities.aap_setup_prepare`.
-- Role runs the containerized installer via `infra.aap_utilities.aap_setup_install`.
+- By default, role runs the prepared containerized installer command directly
+  with controlled async status polling. Set `aap_deploy_installer_runner:
+  vendor` to use `infra.aap_utilities.aap_setup_install` for compatibility.
+- For CI or other orchestrators that cannot hold one Ansible polling task open
+  for the full installer runtime, set `aap_deploy_installer_wait: false`.
+  The role starts the native installer asynchronously, writes the async job id to
+  `aap_deploy_installer_async_jid_path`, skips the install marker, and skips
+  verification for that run. The orchestrator must poll the async job id with
+  short Ansible calls, fail on a non-zero installer return code, and run
+  verification after the async job finishes successfully.
+- Role writes the installer Ansible log below `aap_deploy_installer_log_dir`.
+- On installer failure, role prints redacted diagnostics before returning failure.
 - Default bundle dir is `bundle` (relative to the extracted setup directory).
 
 ## Automation metrics service
@@ -163,7 +184,8 @@ RHEL 10 host prep:
   `ansible_distribution_major_version`, so RHEL 10 resolves to
   `rhel-10-for-<arch>-baseos-rpms` and `rhel-10-for-<arch>-appstream-rpms`.
 - Red Hat documents `ansible-core` from RHEL AppStream for installation on RHEL 10.
-  Host prep installs `ansible-core`, `python3`, and `podman`.
+  Host prep installs the packages required by the wrapper role and the upstream
+  `infra.aap_utilities.aap_setup_prepare` role.
 
 Satellite or baseline-managed repositories:
 
