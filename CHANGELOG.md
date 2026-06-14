@@ -1,3 +1,9 @@
+## [1.24.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.23.1...v1.24.0) (2026-06-14)
+
+### Features
+
+* update automation metrics variables to use effective values ([#184](https://github.com/lightning-it/ansible-collection-supplementary/issues/184)) ([d016fc6](https://github.com/lightning-it/ansible-collection-supplementary/commit/d016fc6f68cae57ce82dfda2b5a59f39e225a84d))
+
 ## [1.23.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.23.0...v1.23.1) (2026-06-14)
 
 ### Bug Fixes
