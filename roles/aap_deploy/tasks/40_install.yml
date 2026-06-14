@@ -23,30 +23,51 @@
     quiet: true
   no_log: "{{ aap_admin_passwords_no_log | default(true) }}"
 
-- name: Run AAP containerized installer via vendor role  # noqa var-naming[no-role-prefix]
-  ansible.builtin.include_role:
-    name: infra.aap_utilities.aap_setup_install
-    apply:
-      become: true
-      become_user: "{{ aap_deploy_install_user }}"
-      environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ aap_deploy_install_user_uid }}"
-        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ aap_deploy_install_user_uid }}/bus"
-  vars:
-    aap_setup_down_version: "{{ aap_deploy_setup_download_version }}"
-    aap_setup_containerized: "{{ aap_deploy_setup_download_containerized }}"
-    aap_setup_inst_containerized: "{{ aap_deploy_setup_download_containerized }}"
-    aap_setup_inst_setup_dir: "{{ aap_setup_prep_setup_dir }}"
-    aap_setup_prep_inv_nodes: "{{ aap_deploy_setup_prep_inv_nodes }}"
-    aap_setup_prep_inv_vars: "{{ aap_deploy_setup_prep_inv_vars }}"
-    aap_setup_prep_inv_secrets: "{{ aap_deploy_setup_prep_inv_secrets }}"
-    aap_setup_inst_force: "{{ aap_deploy_setup_install_force }}"
-    aap_setup_inst_extra_vars: "{{ aap_deploy_setup_install_extra_vars }}"
-    aap_setup_inst_extra_vars_files: "{{ aap_deploy_setup_install_extra_vars_files }}"
-    controller_validate_certs: "{{ aap_validate_certs | bool }}"
-    ah_validate_certs: "{{ aap_validate_certs | bool }}"
-    eda_validate_certs: "{{ aap_validate_certs | bool }}"
-    gateway_validate_certs: "{{ aap_validate_certs | bool }}"
+- name: Ensure installer log directory exists
+  ansible.builtin.file:
+    path: "{{ aap_deploy_installer_log_dir }}"
+    state: directory
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0750'
+
+- name: Run AAP containerized installer with diagnostics
+  block:
+    - name: Run AAP containerized installer via vendor role  # noqa var-naming[no-role-prefix]
+      ansible.builtin.include_role:
+        name: infra.aap_utilities.aap_setup_install
+        apply:
+          become: true
+          become_user: "{{ aap_deploy_install_user }}"
+          environment:
+            XDG_RUNTIME_DIR: "/run/user/{{ aap_deploy_install_user_uid }}"
+            DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ aap_deploy_install_user_uid }}/bus"
+      vars:
+        aap_setup_down_version: "{{ aap_deploy_setup_download_version }}"
+        aap_setup_containerized: "{{ aap_deploy_setup_download_containerized }}"
+        aap_setup_inst_containerized: "{{ aap_deploy_setup_download_containerized }}"
+        aap_setup_inst_setup_dir: "{{ aap_setup_prep_setup_dir }}"
+        aap_setup_inst_log_dir: "{{ aap_deploy_installer_log_dir }}"
+        aap_setup_prep_inv_nodes: "{{ aap_deploy_setup_prep_inv_nodes }}"
+        aap_setup_prep_inv_vars: "{{ aap_deploy_setup_prep_inv_vars }}"
+        aap_setup_prep_inv_secrets: "{{ aap_deploy_setup_prep_inv_secrets }}"
+        aap_setup_inst_force: "{{ aap_deploy_setup_install_force }}"
+        aap_setup_inst_extra_vars: "{{ aap_deploy_setup_install_extra_vars }}"
+        aap_setup_inst_extra_vars_files: "{{ aap_deploy_setup_install_extra_vars_files }}"
+        controller_validate_certs: "{{ aap_validate_certs | bool }}"
+        ah_validate_certs: "{{ aap_validate_certs | bool }}"
+        eda_validate_certs: "{{ aap_validate_certs | bool }}"
+        gateway_validate_certs: "{{ aap_validate_certs | bool }}"
+  rescue:
+    - name: Collect AAP installer failure diagnostics
+      ansible.builtin.include_tasks: 45_installer_diagnostics.yml
+      when: aap_deploy_installer_diagnostics_enabled | bool
+
+    - name: Fail after AAP installer diagnostics
+      ansible.builtin.fail:
+        msg: >-
+          AAP containerized installer failed. Review the redacted diagnostics
+          above and the installer log directory {{ aap_deploy_installer_log_dir }}.
 
 - name: Write installation marker
   ansible.builtin.copy:

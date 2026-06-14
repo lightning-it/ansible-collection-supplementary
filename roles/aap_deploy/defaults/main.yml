@@ -95,6 +95,9 @@ aap_deploy_setup_prepare_process_template: true
 aap_deploy_setup_install_force: true
 aap_deploy_setup_install_extra_vars: {}
 aap_deploy_setup_install_extra_vars_files: []
+aap_deploy_installer_log_dir: "{{ aap_deploy_install_dir }}/logs"
+aap_deploy_installer_diagnostics_enabled: true
+aap_deploy_installer_diagnostics_log_tail_lines: 180
 
 # Effective installer admin passwords are resolved by shared role `aap`
 # from inventory inputs (`aap_*_admin_password_input`).

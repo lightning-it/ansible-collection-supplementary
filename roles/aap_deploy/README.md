@@ -11,7 +11,8 @@ bundle mode.
   For ephemeral Incus VMs, keep the base image unregistered and run
   `playbooks/rhel_prepare.yml` before this role. That playbook composes
   `lit.rhel.rhsm`, `lit.rhel.repos`, and `lit.rhel.virtual_guest`.
-- `ansible-core`, `python3`, and `podman` on target host (managed by host prep if enabled).
+- `ansible-core`, `git`, `podman`, `rsync`, `tar`, and `unzip` on target host
+  (managed by host prep if enabled).
 - `infra.aap_utilities` collection installed in the execution environment.
 - A local AAP containerized setup bundle on the control node for real installer runs.
 - Enough local storage for bundle copy and extraction. Red Hat documents a minimum 60 GB
@@ -33,6 +34,9 @@ Key variables:
 - `aap_deploy_setup_prepare_process_template`
 - `aap_deploy_setup_install_force`
 - `aap_deploy_bundle_dir` (path containing `/bundle`)
+- `aap_deploy_installer_log_dir`
+- `aap_deploy_installer_diagnostics_enabled`
+- `aap_deploy_installer_diagnostics_log_tail_lines`
 - `aap_deploy_redis_mode` (`standalone` or `cluster`)
 - `aap_deploy_redis_hosts` (required when `aap_deploy_redis_mode=cluster`, at least 6 hosts)
 - `aap_deploy_growth_automationmetrics_host`
@@ -89,6 +93,8 @@ Vendor-driven installer behavior:
 - Role expects a controller-side bundle path and copies it to the managed host.
 - Role prepares the setup workspace and renders installer inventory via `infra.aap_utilities.aap_setup_prepare`.
 - Role runs the containerized installer via `infra.aap_utilities.aap_setup_install`.
+- Role writes the vendor installer Ansible log below `aap_deploy_installer_log_dir`.
+- On installer failure, role prints redacted diagnostics before returning failure.
 - Default bundle dir is `bundle` (relative to the extracted setup directory).
 
 ## Automation metrics service
@@ -163,7 +169,8 @@ RHEL 10 host prep:
   `ansible_distribution_major_version`, so RHEL 10 resolves to
   `rhel-10-for-<arch>-baseos-rpms` and `rhel-10-for-<arch>-appstream-rpms`.
 - Red Hat documents `ansible-core` from RHEL AppStream for installation on RHEL 10.
-  Host prep installs `ansible-core`, `python3`, and `podman`.
+  Host prep installs the packages required by the wrapper role and the upstream
+  `infra.aap_utilities.aap_setup_prepare` role.
 
 Satellite or baseline-managed repositories:
 

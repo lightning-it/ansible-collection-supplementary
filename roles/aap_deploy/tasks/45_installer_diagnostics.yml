@@ -1,0 +1,94 @@
+---
+- name: Report installer diagnostic context
+  ansible.builtin.debug:
+    msg:
+      - "setup_dir={{ aap_setup_prep_setup_dir | default(aap_deploy_setup_dir, true) }}"
+      - "log_dir={{ aap_deploy_installer_log_dir }}"
+      - "install_user={{ aap_deploy_install_user }}"
+
+- name: Collect filesystem capacity
+  ansible.builtin.command:
+    cmd: df -hT {{ aap_deploy_install_dir | quote }} /tmp
+  register: aap_deploy_diag_df
+  changed_when: false
+  failed_when: false
+
+- name: Show filesystem capacity
+  ansible.builtin.debug:
+    var: aap_deploy_diag_df.stdout_lines
+
+- name: Collect failed user services  # noqa command-instead-of-module
+  ansible.builtin.command:
+    cmd: systemctl --user --failed --no-pager
+  become: true
+  become_user: "{{ aap_deploy_install_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ aap_deploy_install_user_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ aap_deploy_install_user_uid }}/bus"
+  register: aap_deploy_diag_failed_units
+  changed_when: false
+  failed_when: false
+
+- name: Show failed user services
+  ansible.builtin.debug:
+    var: aap_deploy_diag_failed_units.stdout_lines
+
+- name: Collect rootless podman containers
+  ansible.builtin.command:
+    cmd: podman ps -a --format json
+  become: true
+  become_user: "{{ aap_deploy_install_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ aap_deploy_install_user_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ aap_deploy_install_user_uid }}/bus"
+  register: aap_deploy_diag_podman
+  changed_when: false
+  failed_when: false
+
+- name: Show rootless podman containers
+  ansible.builtin.debug:
+    var: aap_deploy_diag_podman.stdout_lines
+
+- name: Find recent installer log files
+  ansible.builtin.find:
+    paths:
+      - "{{ aap_deploy_installer_log_dir }}"
+      - "{{ aap_setup_prep_setup_dir | default(aap_deploy_setup_dir, true) }}"
+    patterns:
+      - "*.log"
+      - "*.out"
+      - "*.err"
+    file_type: file
+    recurse: true
+    age: -6h
+  register: aap_deploy_diag_logs
+  failed_when: false
+
+- name: Show discovered installer log files
+  ansible.builtin.debug:
+    msg: "{{ aap_deploy_diag_logs.files | default([]) | map(attribute='path') | list }}"
+
+- name: Show redacted installer log tails
+  ansible.builtin.shell: |
+    set -o pipefail
+    tail -n {{ aap_deploy_installer_diagnostics_log_tail_lines | int }} {{ item.path | quote }} \
+      | sed -E 's/((password|passwd|token|secret|key)[[:alnum:]_ -]*[=:][[:space:]]*)[^[:space:]"]+/\1[REDACTED]/Ig'
+  args:
+    executable: /bin/bash
+  loop: "{{ aap_deploy_diag_logs.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: aap_deploy_diag_log_tails
+  changed_when: false
+  failed_when: false
+  when: aap_deploy_diag_logs.files | default([]) | length > 0
+
+- name: Print redacted installer log tails
+  ansible.builtin.debug:
+    msg: "{{ item.stdout_lines }}"
+  loop: "{{ aap_deploy_diag_log_tails.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.path | default('unknown') }}"
+  when:
+    - aap_deploy_diag_log_tails is defined
+    - item.stdout_lines | default([]) | length > 0
