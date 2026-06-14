@@ -16,19 +16,23 @@ aap_target_major: >-
   }}
 
 # Shared package selection.
-# OS-specific package defaults are loaded at runtime from defaults/rhel9.yml or defaults/rhel10.yml.
-aap_packages_effective: []
+# OS-specific package defaults are loaded from vars/RedHat-9.yml or vars/RedHat-10.yml.
+aap_packages_effective: "{{ aap_default_packages | default([], true) }}"
 aap_package_state: "{{ aap_deploy_package_state | default('present', true) }}"
 
 # Shared service/runtime defaults
 aap_manage_systemd: true
-aap_systemd_unit_name: "automation-controller.service"
+aap_systemd_unit_name: "{{ aap_default_systemd_unit_name | default('automation-controller.service', true) }}"
 aap_health_url: ""
-aap_validate_certs: true
+aap_validate_certs: "{{ aap_deploy_validate_certs | default(true) }}"
 
 # Shared config defaults
-aap_config_dir_default: "/etc/ansible-automation-platform"
-aap_config_file_path_default: "{{ aap_config_dir_default }}/aap-config.yml"
+aap_config_dir_default: "{{ aap_default_config_dir | default('/etc/ansible-automation-platform', true) }}"
+aap_config_file_path_default: >-
+  {{
+    aap_default_config_file_path
+    | default(aap_config_dir_default ~ '/aap-config.yml', true)
+  }}
 
 # Shared admin password resolution trigger.
 # Auto-derived from role intent:
@@ -78,12 +82,12 @@ aap_password_reference_regex: >-
 
 # Shared and component inventory inputs.
 # Type can be string or mapping.
-aap_admin_password_input: ""
-aap_gateway_admin_password_input: ""
-aap_controller_admin_password_input: ""
-aap_hub_admin_password_input: ""
-aap_eda_admin_password_input: ""
-aap_postgresql_admin_password_input: ""
+aap_admin_password_input: "{{ aap_deploy_admin_password_input | default('', true) }}"
+aap_gateway_admin_password_input: "{{ aap_deploy_gateway_admin_password_input | default('', true) }}"
+aap_controller_admin_password_input: "{{ aap_deploy_controller_admin_password_input | default('', true) }}"
+aap_hub_admin_password_input: "{{ aap_deploy_hub_admin_password_input | default('', true) }}"
+aap_eda_admin_password_input: "{{ aap_deploy_eda_admin_password_input | default('', true) }}"
+aap_postgresql_admin_password_input: "{{ aap_deploy_postgresql_admin_password_input | default('', true) }}"
 
 # Effective shared passwords (resolved at runtime in tasks/resolve_admin_passwords.yml)
 aap_admin_password_effective: ""

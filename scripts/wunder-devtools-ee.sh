@@ -12,6 +12,11 @@ HOST_HOME_CACHE="${HOST_HOME_CACHE:-${HOST_HOME_CACHE_ROOT}/${HOST_HOME_CACHE_SC
 
 mkdir -p "$HOST_HOME_CACHE"
 chmod 700 "$HOST_HOME_CACHE" 2>/dev/null || true
+if [ "${WUNDER_DEVTOOLS_RUN_AS_HOST_UID:-0}" = "1" ]; then
+  mkdir -p "$HOST_HOME_CACHE/.ansible/tmp" "$HOST_HOME_CACHE/.ansible/collections" "$HOST_HOME_CACHE/.cache"
+  chmod 777 "$HOST_HOME_CACHE" 2>/dev/null || true
+  chmod -R a+rwX "$HOST_HOME_CACHE" 2>/dev/null || true
+fi
 
 WORKSPACE_MOUNT="${PWD}:/workspace"
 HOME_CACHE_MOUNT="${HOST_HOME_CACHE}:${CONTAINER_HOME}"
@@ -165,7 +170,11 @@ PY
     DOCKER_ARGS+=(--group-add 0)
   fi
 elif [ "${PODMAN_ROOTLESS}" = "1" ]; then
-  DOCKER_ARGS+=(--user 0:0)
+  if [ "${WUNDER_DEVTOOLS_RUN_AS_HOST_UID:-0}" = "1" ]; then
+    DOCKER_ARGS+=(--user "$(id -u):$(id -g)")
+  else
+    DOCKER_ARGS+=(--user 0:0)
+  fi
 fi
 
 if [ "$(uname -s)" = "Linux" ]; then

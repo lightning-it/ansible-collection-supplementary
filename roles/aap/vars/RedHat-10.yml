@@ -1,0 +1,5 @@
+---
+aap_default_packages: "{{ aap_deploy_packages_rhel10 | default(['aap-deploy'], true) }}"
+aap_default_systemd_unit_name: automation-controller.service
+aap_default_config_dir: /etc/ansible-automation-platform
+aap_default_config_file_path: "{{ aap_default_config_dir }}/aap-config.yml"

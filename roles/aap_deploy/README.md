@@ -1,16 +1,19 @@
 # aap_deploy
 
-Install Red Hat Ansible Automation Platform (AAP) with the official containerized installer in
-bundle mode. This role targets AAP 2.7 containerized deployments.
+Install Red Hat Ansible Automation Platform (AAP) 2.7 with the official containerized installer in
+bundle mode.
 
 ## Requirements
 
-- RHEL host with FQDN hostname.
+- Red Hat Enterprise Linux 9 or 10 host with FQDN hostname.
 - Dedicated non-root install user with sudo (rootless Podman model).
 - RHSM registration and BaseOS/AppStream repositories when host prep is enabled.
+  For ephemeral Incus VMs, keep the base image unregistered and run
+  `playbooks/rhel_prepare.yml` before this role. That playbook composes
+  `lit.rhel.rhsm`, `lit.rhel.repos`, and `lit.rhel.virtual_guest`.
 - `ansible-core`, `python3`, and `podman` on target host (managed by host prep if enabled).
 - `infra.aap_utilities` collection installed in the execution environment.
-- Red Hat offline token for installer download API access.
+- A local AAP containerized setup bundle on the control node for real installer runs.
 - Enough local storage for bundle copy and extraction. Red Hat documents a minimum 60 GB
   total local disk, 15 GB installation directory when separately partitioned, and 10 GB
   temporary directory for offline/bundled installations. Size customer bundle workflows larger.
@@ -25,11 +28,7 @@ Key variables:
 - `aap_deploy_topology` (`growth` or `enterprise`)
 - `aap_deploy_install_user`
 - `aap_deploy_install_dir`
-- `rh_offline_token` (preferred input, usually seeded from Vault in inventory/playbook)
-- `aap_deploy_setup_download_offline_token` (optional override; defaults to `rh_offline_token`)
-- `aap_deploy_setup_download_version`
-- `aap_deploy_setup_download_version_patch`
-- `aap_deploy_setup_download_type`
+- `aap_deploy_setup_download_version` (default: `"2.7"`)
 - `aap_deploy_setup_download_containerized`
 - `aap_deploy_setup_prepare_process_template`
 - `aap_deploy_setup_install_force`
@@ -76,13 +75,18 @@ Key variables:
 - `aap_deploy_runtime_min_matching_containers` (default: `1`)
 - `aap_deploy_enforce_min_mem_check` (default: `true`)
 - `aap_deploy_min_mem_mb` (default: `15000`, approximately 16GB)
+- `aap_deploy_growth_inventory_connection` (default: `local`)
+- `aap_deploy_growth_inventory_hostvars_extra`
+- `aap_deploy_enterprise_inventory_hostvars_extra`
+- `aap_deploy_growth_automationmetrics_host`
+- `aap_deploy_enterprise_automationmetrics_hosts`
 
 Vendor-driven installer behavior:
 - Role performs an early existing-install detection (marker and runtime containers).
 - Marker-based skip is runtime-validated by default to avoid stale marker false positives.
 - When detected, host prep, bundle handling, inventory rendering, and installer execution are skipped.
 - Verification still runs (when enabled).
-- Role downloads the bundle via `infra.aap_utilities.aap_setup_download`.
+- Role expects a controller-side bundle path and copies it to the managed host.
 - Role prepares the setup workspace and renders installer inventory via `infra.aap_utilities.aap_setup_prepare`.
 - Role runs the containerized installer via `infra.aap_utilities.aap_setup_install`.
 - Default bundle dir is `bundle` (relative to the extracted setup directory).
@@ -282,7 +286,7 @@ Requires `infra.aap_utilities` in the execution environment.
 ## Example Playbook
 
 ```yaml
-- name: Install AAP 2.7 (growth, downloaded bundle)
+- name: Install AAP 2.7 (growth, disconnected bundle)
   hosts: aap_hosts
   become: true
   gather_facts: true
@@ -293,7 +297,6 @@ Requires `infra.aap_utilities` in the execution environment.
         aap_deploy_topology: growth
         aap_deploy_install_user: aap
         aap_deploy_install_dir: /opt/aap
-        rh_offline_token: "{{ lookup('community.hashi_vault.vault_kv2_get', 'my/path')['secret']['rh_offline_token'] }}"
         aap_deploy_setup_download_version: "2.7"
         aap_deploy_setup_download_containerized: true
         aap_deploy_bundle_dir: bundle
