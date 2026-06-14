@@ -1,3 +1,9 @@
+## [1.26.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.25.1...v1.26.0) (2026-06-14)
+
+### Features
+
+* artifacts handling ([#204](https://github.com/lightning-it/ansible-collection-supplementary/issues/204)) ([c6a4e9e](https://github.com/lightning-it/ansible-collection-supplementary/commit/c6a4e9e37c6e57eed7cb7eddd557b6e083986d62))
+
 ## [1.25.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.25.0...v1.25.1) (2026-06-14)
 
 ### Bug Fixes
