@@ -120,10 +120,20 @@ render_user_data() {
 }
 
 render_network_config() {
+  local mac_address="$1"
+
   cat <<'EOF'
 version: 2
 ethernets:
-  eth0:
+  incus0:
+EOF
+  if [ -n "$mac_address" ]; then
+    cat <<EOF
+    match:
+      macaddress: "${mac_address}"
+EOF
+  fi
+  cat <<'EOF'
     dhcp4: true
     dhcp6: true
     accept-ra: true
@@ -236,7 +246,6 @@ tmp_user_data="$(mktemp)"
 tmp_network_config="$(mktemp)"
 trap 'rm -f "${tmp_user_data}" "${tmp_network_config}"' EXIT
 render_user_data "$profile_file" "$name" "$fqdn" "$ssh_user" "$public_key" > "${tmp_user_data}"
-render_network_config > "${tmp_network_config}"
 
 if [ "$mode" = "vm" ]; then
   require_cmd mkisofs
@@ -255,6 +264,8 @@ if [ "$mode" = "vm" ]; then
   if [ -n "${INCUS_VM_MEMORY:-}" ]; then
     incus config set "$name" limits.memory "${INCUS_VM_MEMORY}"
   fi
+  mac_address="$(incus config get "$name" volatile.eth0.hwaddr)"
+  render_network_config "$mac_address" > "${tmp_network_config}"
   incus config set "$name" cloud-init.user-data - < "${tmp_user_data}"
   incus config set "$name" cloud-init.network-config - < "${tmp_network_config}"
   incus config device add "$name" cloud-init disk source=cloud-init:config
