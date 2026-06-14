@@ -20,9 +20,12 @@ Environment overrides:
   AAP_DEMO_HOST_PREP            Run RHSM/package host prep (default: true)
   AAP_DEMO_RUN_INSTALLER         Run the AAP installer (default: true)
   AAP_DEMO_RUN_VERIFY            Run post-install verification tasks (default: true)
+  RHSM_ORG_ID                    RHSM organization id for RHEL VM registration
+  RHSM_ACTIVATION_KEY            RHSM activation key for RHEL VM registration
   INCUS_RHEL10_IMAGE             Incus image alias (default: local:rhel10-ci)
   INCUS_VM_CPU                   VM CPU count (default: 4)
-  INCUS_VM_MEMORY                VM memory (default: 16GiB)
+  INCUS_VM_MEMORY                VM memory (default: 20GiB)
+  INCUS_VM_ROOT_SIZE             VM root disk size (default: 70GiB)
 EOF
 }
 
@@ -76,7 +79,8 @@ cd "${repo_root}"
 
 export INCUS_RHEL10_IMAGE="${INCUS_RHEL10_IMAGE:-local:rhel10-ci}"
 export INCUS_VM_CPU="${INCUS_VM_CPU:-4}"
-export INCUS_VM_MEMORY="${INCUS_VM_MEMORY:-16GiB}"
+export INCUS_VM_MEMORY="${INCUS_VM_MEMORY:-20GiB}"
+export INCUS_VM_ROOT_SIZE="${INCUS_VM_ROOT_SIZE:-70GiB}"
 
 instance="${AAP_DEMO_INSTANCE:-aap-rhel10-demo}"
 inventory_path="${AAP_DEMO_INVENTORY:-/tmp/${instance}.yml}"
@@ -122,6 +126,13 @@ fi
 deploy/incus/inventory.sh "${instance}" > "${inventory_path}"
 chmod 0600 "${inventory_path}"
 
+if [ "${host_prep}" = "true" ]; then
+  ansible-playbook \
+    -i "${inventory_path}" \
+    playbooks/rhel_prepare.yml \
+    -e rhel_guest_target=aap_hosts
+fi
+
 cat > "${vars_path}" <<EOF
 ---
 aap_password_require_component_inputs: false
@@ -153,4 +164,6 @@ AAP demo run complete.
 
 Destroy the VM when finished:
   deploy/incus/destroy.sh ${instance}
+
+The destroy helper unregisters RHSM from a running guest before deleting it.
 EOF

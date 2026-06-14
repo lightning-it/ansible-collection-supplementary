@@ -345,6 +345,17 @@
                 )
               )
             },
+            'automationmetrics': {
+              (aap_deploy_growth_automationmetrics_host): (
+                'ansible_connection=' ~ aap_deploy_growth_inventory_connection
+                ~ ' ansible_host=' ~ aap_deploy_growth_automationmetrics_host
+                ~ (
+                  ' ' ~ (aap_deploy_growth_inventory_hostvars_extra | trim)
+                  if (aap_deploy_growth_inventory_hostvars_extra | trim | length > 0)
+                  else ''
+                )
+              )
+            },
             'database': {
               (aap_deploy_growth_postgresql_host): (
                 'ansible_connection=' ~ aap_deploy_growth_inventory_connection
@@ -428,6 +439,23 @@
                   | list
                 )
             ),
+            'automationmetrics': dict(
+              aap_deploy_enterprise_automationmetrics_hosts
+              | zip(
+                  aap_deploy_enterprise_automationmetrics_hosts
+                  | map('regex_replace', '^(.*)$', 'ansible_host=\1')
+                  | map(
+                      'regex_replace',
+                      '$',
+                      (
+                        ' ' ~ (aap_deploy_enterprise_inventory_hostvars_extra | trim)
+                        if (aap_deploy_enterprise_inventory_hostvars_extra | trim | length > 0)
+                        else ''
+                      )
+                    )
+                  | list
+                )
+            ),
             'database': dict(
               aap_deploy_enterprise_postgresql_hosts
               | zip(
@@ -498,6 +526,16 @@
             'hub_pg_password': "'" ~ aap_deploy_hub_pg_password_effective ~ "'",
             'eda_pg_host': "'" ~ aap_deploy_eda_pg_host_effective ~ "'",
             'eda_pg_password': "'" ~ aap_deploy_eda_pg_password_effective ~ "'",
+            'automationmetrics_pg_host': "'" ~ aap_deploy_automationmetrics_pg_host_effective ~ "'",
+            'automationmetrics_pg_password': (
+              "'" ~ aap_deploy_automationmetrics_pg_password_effective ~ "'"
+            ),
+            'automationmetrics_controller_read_pg_host': (
+              "'" ~ aap_deploy_automationmetrics_controller_read_pg_host_effective ~ "'"
+            ),
+            'automationmetrics_controller_read_pg_password': (
+              "'" ~ aap_deploy_automationmetrics_controller_read_pg_password_effective ~ "'"
+            ),
             'pg_admin_password': "'" ~ aap_deploy_postgresql_admin_password_effective ~ "'",
             'redis_mode': "'" ~ aap_deploy_redis_mode ~ "'",
             'bundle_install': true,

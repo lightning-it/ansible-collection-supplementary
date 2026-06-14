@@ -8,6 +8,9 @@ bundle mode.
 - Red Hat Enterprise Linux 9 or 10 host with FQDN hostname.
 - Dedicated non-root install user with sudo (rootless Podman model).
 - RHSM registration and BaseOS/AppStream repositories when host prep is enabled.
+  For ephemeral Incus VMs, keep the base image unregistered and run
+  `playbooks/rhel_prepare.yml` before this role. That playbook composes
+  `lit.rhel.rhsm`, `lit.rhel.repos`, and `lit.rhel.virtual_guest`.
 - `ansible-core` and `podman` on target host (managed by host prep if enabled).
 - `infra.aap_utilities` collection installed in the execution environment.
 - A local AAP containerized setup bundle on the control node for real installer runs.
@@ -60,6 +63,8 @@ Key variables:
 - `aap_deploy_growth_inventory_connection` (default: `local`)
 - `aap_deploy_growth_inventory_hostvars_extra`
 - `aap_deploy_enterprise_inventory_hostvars_extra`
+- `aap_deploy_growth_automationmetrics_host`
+- `aap_deploy_enterprise_automationmetrics_hosts`
 
 Vendor-driven installer behavior:
 - Role performs an early existing-install detection (marker and runtime containers).

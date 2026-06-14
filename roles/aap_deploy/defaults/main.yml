@@ -299,6 +299,7 @@ aap_deploy_growth_gateway_host: "{{ ansible_fqdn | default(inventory_hostname) }
 aap_deploy_growth_controller_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_growth_hub_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_growth_eda_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_growth_automationmetrics_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_growth_postgresql_host: "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_growth_inventory_connection: local
 aap_deploy_growth_inventory_hostvars_extra: ""
@@ -311,6 +312,8 @@ aap_deploy_enterprise_controller_hosts:
 aap_deploy_enterprise_hub_hosts:
   - "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_enterprise_eda_hosts:
+  - "{{ ansible_fqdn | default(inventory_hostname) }}"
+aap_deploy_enterprise_automationmetrics_hosts:
   - "{{ ansible_fqdn | default(inventory_hostname) }}"
 aap_deploy_enterprise_postgresql_hosts:
   - "{{ ansible_fqdn | default(inventory_hostname) }}"
@@ -355,10 +358,14 @@ aap_deploy_gateway_pg_host: ""
 aap_deploy_controller_pg_host: ""
 aap_deploy_hub_pg_host: ""
 aap_deploy_eda_pg_host: ""
+aap_deploy_automationmetrics_pg_host: ""
+aap_deploy_automationmetrics_controller_read_pg_host: ""
 aap_deploy_gateway_pg_password: ""
 aap_deploy_controller_pg_password: ""
 aap_deploy_hub_pg_password: ""
 aap_deploy_eda_pg_password: ""
+aap_deploy_automationmetrics_pg_password: ""
+aap_deploy_automationmetrics_controller_read_pg_password: ""
 
 aap_deploy_gateway_pg_host_effective: >-
   {{ aap_deploy_gateway_pg_host | default(aap_deploy_postgresql_host_default, true) }}
@@ -368,6 +375,13 @@ aap_deploy_hub_pg_host_effective: >-
   {{ aap_deploy_hub_pg_host | default(aap_deploy_postgresql_host_default, true) }}
 aap_deploy_eda_pg_host_effective: >-
   {{ aap_deploy_eda_pg_host | default(aap_deploy_postgresql_host_default, true) }}
+aap_deploy_automationmetrics_pg_host_effective: >-
+  {{ aap_deploy_automationmetrics_pg_host | default(aap_deploy_postgresql_host_default, true) }}
+aap_deploy_automationmetrics_controller_read_pg_host_effective: >-
+  {{
+    aap_deploy_automationmetrics_controller_read_pg_host
+    | default(aap_deploy_controller_pg_host_effective, true)
+  }}
 
 aap_deploy_gateway_pg_password_effective: >-
   {{ aap_deploy_gateway_pg_password | default(aap_deploy_postgresql_admin_password_effective, true) }}
@@ -377,6 +391,16 @@ aap_deploy_hub_pg_password_effective: >-
   {{ aap_deploy_hub_pg_password | default(aap_deploy_postgresql_admin_password_effective, true) }}
 aap_deploy_eda_pg_password_effective: >-
   {{ aap_deploy_eda_pg_password | default(aap_deploy_postgresql_admin_password_effective, true) }}
+aap_deploy_automationmetrics_pg_password_effective: >-
+  {{
+    aap_deploy_automationmetrics_pg_password
+    | default(aap_deploy_postgresql_admin_password_effective, true)
+  }}
+aap_deploy_automationmetrics_controller_read_pg_password_effective: >-
+  {{
+    aap_deploy_automationmetrics_controller_read_pg_password
+    | default(aap_deploy_controller_pg_password_effective, true)
+  }}
 
 # Host preparation
 aap_deploy_repo_arch: >-

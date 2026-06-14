@@ -85,6 +85,28 @@ deploy/incus/destroy.sh aap-rhel10-dev
 
 The Incus helper inventory targets the `aap_hosts` group used by `playbooks/aap_deploy.yml`.
 
+For registered RHEL test VMs, keep the base image unregistered and prepare each
+runtime VM idempotently after boot. The playbook composes `lit.rhel.rhsm`,
+`lit.rhel.repos`, and `lit.rhel.virtual_guest`:
+
+```bash
+export RHSM_ORG_ID="..."
+export RHSM_ACTIVATION_KEY="..."
+ansible-playbook -i /tmp/aap-rhel10-dev.yml playbooks/rhel_prepare.yml \
+  -e rhel_guest_target=aap_hosts
+```
+
+Before deleting a registered VM, unregister it:
+
+```bash
+ansible-playbook -i /tmp/aap-rhel10-dev.yml playbooks/rhel_teardown.yml \
+  -e rhel_guest_target=aap_hosts
+deploy/incus/destroy.sh aap-rhel10-dev
+```
+
+`deploy/incus/destroy.sh` also attempts RHSM unregister/clean from a running
+guest before deletion, so direct helper usage keeps the same lifecycle.
+
 ## Molecule Workflows
 
 Protected RHEL 9.8 path:
@@ -118,7 +140,8 @@ scripts/demo-aap-rhel10-incus.sh
 
 The script installs `collections/requirements.yml` and
 `collections/requirements-rh.yml`, creates or reuses a RHEL 10 Incus VM, writes a
-temporary inventory and vars file under `/tmp`, and runs `playbooks/aap_deploy.yml`.
+temporary inventory and vars file under `/tmp`, runs `playbooks/rhel_prepare.yml`
+when host prep is enabled, and runs `playbooks/aap_deploy.yml`.
 Run it from an environment that already has the `incus` CLI and a reachable
 Incus daemon or remote. The selected Incus remote must provide a RHEL 10 image
 alias such as `local:rhel10-ci`.
@@ -189,9 +212,10 @@ SSH:
 
 DNF / RHSM:
 
-- `ssh cloud-user@<ip> sudo subscription-manager status`
-- `ssh cloud-user@<ip> sudo subscription-manager repos --list-enabled`
-- if you do not want RHSM checks, keep `aap_deploy_manage_host_prep=false`
+- `ansible -i <inventory> aap_hosts -m ansible.builtin.command -a 'subscription-manager status' -b`
+- `ansible -i <inventory> aap_hosts -m ansible.builtin.command -a 'subscription-manager repos --list-enabled' -b`
+- if you do not want RHSM checks, keep `aap_deploy_manage_host_prep=false` and
+  skip `playbooks/rhel_prepare.yml`
 
 SELinux:
 

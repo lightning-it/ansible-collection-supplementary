@@ -27,6 +27,19 @@
   hosts: molecule_targets
   become: true
   gather_facts: true
+  vars:
+    molecule_full_install: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_AAP_FULL_INSTALL') | default('false', true) | bool }}
+    molecule_rhsm_enabled_env: "{{ lookup('ansible.builtin.env', 'MOLECULE_RHSM_ENABLED') | default('', true) }}"
+    molecule_rhsm_enabled: >-
+      {{
+        (molecule_rhsm_enabled_env | bool)
+        if (molecule_rhsm_enabled_env | trim | length > 0)
+        else (molecule_full_install | bool)
+      }}
+    molecule_rhel_repositories:
+      - rhel-9-for-x86_64-baseos-rpms
+      - rhel-9-for-x86_64-appstream-rpms
   tasks:
     - name: Assert target is RHEL 9
       ansible.builtin.assert:
@@ -39,3 +52,25 @@
       ansible.builtin.command:
         cmd: python3 --version
       changed_when: false
+
+    - name: Prepare RHEL registration, repositories, and guest baseline
+      when: molecule_rhsm_enabled | bool
+      block:
+        - name: Register RHEL guest
+          ansible.builtin.include_role:
+            name: lit.rhel.rhsm
+          vars:
+            rhsm_state: present
+            rhsm_method: rhsm
+            rhsm_org: "{{ lookup('ansible.builtin.env', 'RHSM_ORG_ID') | default('', true) }}"
+            rhsm_activation_key: "{{ lookup('ansible.builtin.env', 'RHSM_ACTIVATION_KEY') | default('', true) }}"
+
+        - name: Enable RHEL repositories
+          ansible.builtin.include_role:
+            name: lit.rhel.repos
+          vars:
+            repos_rhsm_repositories: "{{ molecule_rhel_repositories }}"
+
+        - name: Configure RHEL virtual guest baseline
+          ansible.builtin.include_role:
+            name: lit.rhel.virtual_guest

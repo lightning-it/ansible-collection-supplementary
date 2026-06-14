@@ -126,6 +126,14 @@ Destroy the instance:
 deploy/incus/destroy.sh aap-rhel9-dev
 ```
 
+`destroy.sh` unregisters RHSM from a running RHEL guest before deleting it.
+This keeps ephemeral clones from leaving stale Red Hat consumers behind.
+
+Useful teardown overrides:
+
+- `INCUS_RHSM_UNREGISTER_ON_DESTROY=false` skips unregister/clean.
+- `INCUS_RHSM_UNREGISTER_STRICT=false` deletes even when unregister fails.
+
 ## Environment Variables
 
 - `INCUS_RHEL98_IMAGE`
@@ -138,7 +146,10 @@ deploy/incus/destroy.sh aap-rhel9-dev
 - `INCUS_FQDN_SUFFIX`
 - `INCUS_VM_CPU`
 - `INCUS_VM_MEMORY`
+- `INCUS_VM_ROOT_SIZE`
 - `INCUS_WAIT_TIMEOUT`
+- `INCUS_RHSM_UNREGISTER_ON_DESTROY`
+- `INCUS_RHSM_UNREGISTER_STRICT`
 
 Example env files:
 
@@ -151,3 +162,7 @@ Example env files:
 - Container mode is optional and intended only for fast-path experimentation with images that already provide
   systemd, cloud-init, and SSH.
 - The scripts do not download private RHEL images or publish any image content.
+- Keep imported RHEL base images unregistered. Use cloud-init for hostname and SSH access only; use
+  `playbooks/rhel_prepare.yml` to compose `lit.rhel.rhsm`, `lit.rhel.repos`, and
+  `lit.rhel.virtual_guest` for runtime VMs. Use `playbooks/rhel_teardown.yml`
+  or `destroy.sh` to unregister them before deletion.

@@ -159,9 +159,10 @@
       - aap_deploy_growth_controller_host | default('', true) | trim | length > 0
       - aap_deploy_growth_hub_host | default('', true) | trim | length > 0
       - aap_deploy_growth_eda_host | default('', true) | trim | length > 0
+      - aap_deploy_growth_automationmetrics_host | default('', true) | trim | length > 0
       - aap_deploy_growth_postgresql_host | default('', true) | trim | length > 0
     fail_msg: >-
-      Growth topology requires one host value for gateway/controller/hub/eda/postgresql.
+      Growth topology requires one host value for gateway/controller/hub/eda/automationmetrics/postgresql.
     quiet: true
   when:
     - aap_deploy_enabled | bool
@@ -183,11 +184,14 @@
       - aap_deploy_enterprise_eda_hosts is sequence
       - aap_deploy_enterprise_eda_hosts is not string
       - aap_deploy_enterprise_eda_hosts | length > 0
+      - aap_deploy_enterprise_automationmetrics_hosts is sequence
+      - aap_deploy_enterprise_automationmetrics_hosts is not string
+      - aap_deploy_enterprise_automationmetrics_hosts | length > 0
       - aap_deploy_enterprise_postgresql_hosts is sequence
       - aap_deploy_enterprise_postgresql_hosts is not string
       - aap_deploy_enterprise_postgresql_hosts | length > 0
     fail_msg: >-
-      Enterprise topology requires non-empty host lists for gateway/controller/hub/eda/postgresql.
+      Enterprise topology requires non-empty host lists for gateway/controller/hub/eda/automationmetrics/postgresql.
     quiet: true
   when:
     - aap_deploy_enabled | bool

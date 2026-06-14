@@ -114,6 +114,14 @@ INCUS_WAIT_TIMEOUT=900 \
 $TEST_DIR/incus/create.sh --version 10 --vm --name $TEST_VM"
 ```
 
+For a full AAP installer run, recreate the VM with larger sizing:
+
+```bash
+export INCUS_VM_CPU=4
+export INCUS_VM_MEMORY=20GiB
+export INCUS_VM_ROOT_SIZE=70GiB
+```
+
 ## 5. Build Temporary Workbench Inventory
 
 The temporary inventory uses workbench as the Ansible control node and jumps through `ciwkr01`
@@ -176,7 +184,31 @@ Expected:
 ping: pong
 ```
 
-## 7. Run The AAP Role Smoke Test
+## 7. Prepare RHEL Registration For Full Installs
+
+The base Incus image must stay unregistered. For full AAP installer runs,
+prepare the runtime VM idempotently after boot. The playbook explicitly
+composes `lit.rhel.rhsm`, `lit.rhel.repos`, and `lit.rhel.virtual_guest`:
+
+```bash
+export RHSM_ORG_ID="${RHSM_ORG_ID:?set RHSM_ORG_ID in your shell first}"
+export RHSM_ACTIVATION_KEY="${RHSM_ACTIVATION_KEY:?set RHSM_ACTIVATION_KEY in your shell first}"
+
+ANSIBLE_CONFIG=ansible.cfg ansible-playbook \
+  -i "$TEST_DIR/inventory.yml" \
+  playbooks/rhel_prepare.yml \
+  -e rhel_guest_target=aap_hosts
+```
+
+This playbook:
+
+- registers only when the VM is not already registered.
+- enables missing BaseOS/AppStream repositories.
+- installs reusable VM guest packages such as `cloud-utils-growpart`, `python3`, and `qemu-guest-agent`.
+
+Skip this step for the public-safe smoke test below.
+
+## 8. Run The AAP Role Smoke Test
 
 This validates RHEL 10 targeting, role prechecks, shared AAP password resolution, and the AAP 2.7 role defaults.
 It does not run host prep, bundle unpack, or the real installer.
@@ -218,7 +250,7 @@ failed=0
 unreachable=0
 ```
 
-## 8. Run The RHEL 10 Verifier
+## 9. Run The RHEL 10 Verifier
 
 `molecule/aap-rhel10/verify.yml` expects Molecule's generated inventory name.
 For this remote-Incus development flow, copy the temporary inventory to that expected name.
@@ -238,7 +270,7 @@ Expected checks:
 - major version is `10`.
 - `aap_deploy_setup_download_version` is `2.7`.
 
-## 9. Full AAP Install Later
+## 10. Full AAP Install Later
 
 The smoke workflow above does not install AAP. A real install needs the AAP 2.7
 containerized setup bundle on the control node or already staged on the managed VM.
@@ -258,11 +290,23 @@ aap_deploy_run_installer: true
 aap_deploy_run_verify: true
 ```
 
-Host prep may require RHSM registration and repositories inside the RHEL 10 VM.
+Run `playbooks/rhel_prepare.yml` before the full install. Host prep expects RHSM
+registration and repositories inside the runtime RHEL 10 VM.
 
-## 10. Cleanup
+## 11. Cleanup
 
-Destroy the VM on `ciwkr01`:
+Unregister the runtime VM first:
+
+```bash
+cd "$COLLECTION_REPO_DIR"
+
+ANSIBLE_CONFIG=ansible.cfg ansible-playbook \
+  -i "$TEST_DIR/inventory.yml" \
+  playbooks/rhel_teardown.yml \
+  -e rhel_guest_target=aap_hosts
+```
+
+Then destroy the VM on `ciwkr01`:
 
 ```bash
 cd "$AUTOMATION_ANSIBLE_DIR"
@@ -274,6 +318,9 @@ ANSIBLE_CONFIG=ansible.cfg ansible \
   -m ansible.builtin.shell \
   -a "$TEST_DIR/incus/destroy.sh $TEST_VM"
 ```
+
+`destroy.sh` also unregisters/cleans RHSM from a running guest by default, so
+direct helper usage keeps the same safety behavior.
 
 Remove temporary workbench files:
 

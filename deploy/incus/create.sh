@@ -232,6 +232,9 @@ if [ "$mode" = "vm" ]; then
     exit 1
   fi
   incus init "$image" "$name" --vm
+  if [ -n "${INCUS_VM_ROOT_SIZE:-}" ]; then
+    incus config device override "$name" root size="${INCUS_VM_ROOT_SIZE}"
+  fi
   if [ -n "${INCUS_VM_CPU:-}" ]; then
     incus config set "$name" limits.cpu "${INCUS_VM_CPU}"
   fi

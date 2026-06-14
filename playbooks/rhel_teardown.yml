@@ -1,0 +1,11 @@
+---
+- name: Unregister ephemeral RHEL guests
+  hosts: "{{ rhel_guest_target | default('all') }}"
+  become: true
+  gather_facts: true
+  roles:
+    - role: lit.rhel.rhsm
+      vars:
+        rhsm_state: absent
+        rhsm_method: "{{ rhel_guest_rhsm_method | default('rhsm') }}"
+        rhsm_clean_on_absent: "{{ rhel_guest_rhsm_clean_on_absent | default(true) }}"

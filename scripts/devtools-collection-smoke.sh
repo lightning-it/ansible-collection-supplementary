@@ -43,31 +43,14 @@ bash scripts/wunder-devtools-ee.sh bash -c '
   export ANSIBLE_COLLECTIONS_PATH="${COLLECTIONS_DIR}:/usr/share/ansible/collections"
 
   # -------------------------------------------------------------------
-  # 2) Install declared dependencies into the SAME per-run dir
-  # -------------------------------------------------------------------
-  dep_specs=()
-  if [ -f /workspace/galaxy.yml ]; then
-    while IFS= read -r dep_spec; do
-      dep_specs+=("$dep_spec")
-    done < <(bash /workspace/scripts/devtools-galaxy.sh dependencies /workspace/galaxy.yml || true)
-  fi
-
-  for dep_spec in "${dep_specs[@]}"; do
-    if [ -n "$dep_spec" ]; then
-      echo "Installing dependency ${dep_spec} into ${COLLECTIONS_DIR}..."
-      ansible-galaxy collection install "$dep_spec" -p "${COLLECTIONS_DIR}" --force
-    fi
-  done
-
-  # -------------------------------------------------------------------
-  # 3) Configure Ansible (optional)
+  # 2) Configure Ansible (optional)
   # -------------------------------------------------------------------
   if [ -f /workspace/ansible.cfg ]; then
     export ANSIBLE_CONFIG=/workspace/ansible.cfg
   fi
 
   # -------------------------------------------------------------------
-  # 4) Run example playbook
+  # 3) Run example playbook
   # -------------------------------------------------------------------
   ansible-playbook -i localhost, "${example}"
 '
