@@ -1,3 +1,9 @@
+## [1.24.8](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.7...v1.24.8) (2026-06-14)
+
+### Bug Fixes
+
+* **aap:** run installer with native async polling ([#199](https://github.com/lightning-it/ansible-collection-supplementary/issues/199)) ([2d291a9](https://github.com/lightning-it/ansible-collection-supplementary/commit/2d291a989a8ea93875bf23ce0b2af2127f3fc3ac))
+
 ## [1.24.7](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.24.6...v1.24.7) (2026-06-14)
 
 ### Bug Fixes
