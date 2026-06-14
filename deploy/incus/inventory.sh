@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: deploy/incus/inventory.sh INSTANCE [--group GROUP]
+Usage: deploy/incus/inventory.sh INSTANCE [--group GROUP] [--host-alias HOST]
 
 Print a YAML inventory for an Incus instance created by deploy/incus/create.sh.
 EOF
@@ -70,12 +70,17 @@ fi
 
 name="$1"
 group="aap_hosts"
+host_alias=""
 shift
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --group)
       group="${2:-}"
+      shift 2
+      ;;
+    --host-alias)
+      host_alias="${2:-}"
       shift 2
       ;;
     -h|--help)
@@ -107,13 +112,14 @@ fi
 ssh_user="${INCUS_SSH_USER:-cloud-user}"
 private_key_file="$(resolve_ssh_private_key_file)"
 ssh_common_args="${INCUS_SSH_COMMON_ARGS:--o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null}"
+inventory_host="${host_alias:-$name}"
 
 cat <<EOF
 all:
   children:
     ${group}:
       hosts:
-        ${name}:
+        ${inventory_host}:
           ansible_host: "${ip_address}"
           ansible_user: ${ssh_user}
           ansible_become: true
