@@ -34,6 +34,10 @@ Key variables:
 - `aap_deploy_setup_prepare_process_template`
 - `aap_deploy_setup_install_force`
 - `aap_deploy_bundle_dir` (path containing `/bundle`)
+- `aap_deploy_installer_runner` (`native` or `vendor`, default: `native`)
+- `aap_deploy_installer_async_timeout`
+- `aap_deploy_installer_async_retries`
+- `aap_deploy_installer_async_delay`
 - `aap_deploy_installer_log_dir`
 - `aap_deploy_installer_diagnostics_enabled`
 - `aap_deploy_installer_diagnostics_log_tail_lines`
@@ -85,15 +89,17 @@ Key variables:
 - `aap_deploy_growth_automationmetrics_host`
 - `aap_deploy_enterprise_automationmetrics_hosts`
 
-Vendor-driven installer behavior:
+Installer behavior:
 - Role performs an early existing-install detection (marker and runtime containers).
 - Marker-based skip is runtime-validated by default to avoid stale marker false positives.
 - When detected, host prep, bundle handling, inventory rendering, and installer execution are skipped.
 - Verification still runs (when enabled).
 - Role expects a controller-side bundle path and copies it to the managed host.
 - Role prepares the setup workspace and renders installer inventory via `infra.aap_utilities.aap_setup_prepare`.
-- Role runs the containerized installer via `infra.aap_utilities.aap_setup_install`.
-- Role writes the vendor installer Ansible log below `aap_deploy_installer_log_dir`.
+- By default, role runs the prepared containerized installer command directly
+  with controlled async status polling. Set `aap_deploy_installer_runner:
+  vendor` to use `infra.aap_utilities.aap_setup_install` for compatibility.
+- Role writes the installer Ansible log below `aap_deploy_installer_log_dir`.
 - On installer failure, role prints redacted diagnostics before returning failure.
 - Default bundle dir is `bundle` (relative to the extracted setup directory).
 
