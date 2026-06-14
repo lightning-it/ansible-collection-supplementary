@@ -51,18 +51,18 @@ Policy for certified-only requirement files:
 Without this, Renovate lookups for collections such as `ansible.controller` or
 `redhat.satellite` will fail in Mend-hosted mode when using offline tokens.
 
-## AI assistants / `AGENTS.md`
+## AI assistants / `agent.md`
 
 If you use AI coding assistants (e.g. ChatGPT, Copilot, Codex) for changes in
 this repository:
 
-- Make sure they follow the rules defined in `AGENTS.md` at the repository root.
-- Always **load and apply** `AGENTS.md` before asking the assistant to create or
+- Make sure they follow the rules defined in `agent.md` at the repository root.
+- Always **load and apply** `agent.md` before asking the assistant to create or
   modify roles, Molecule scenarios, CI workflows, or helper scripts.
 - Do not accept suggestions that:
   - hardcode collection names where they should be derived,
   - break existing patterns for roles, Molecule, or devtools integration,
-  - bypass linting or testing conventions described in `AGENTS.md`.
+  - bypass linting or testing conventions described in `agent.md`.
 
 In short: AI-generated changes are welcome, but they must conform to the same
 standards as handwritten code and follow the shared agent specification.
@@ -74,8 +74,7 @@ Before opening a pull request:
 - [ ] Branch from `main`.  
 - [ ] Run `pre-commit install` once per clone, then `pre-commit run --all-files`.  
 - [ ] Run `molecule test` for affected roles/scenarios (`devtools-molecule.sh` for
-      public-safe scenarios, `molecule test -s aap-rhel9` / `aap-rhel10` for
-      protected Incus-backed AAP VM tests).
+      light scenarios, dedicated `*_heavy` scripts for Vagrant/VM-based tests).  
 - [ ] Validate `ansible-galaxy collection build` if you touched `galaxy.yml`,
       `meta/main.yml`, or collection layout.  
 - [ ] Update `README.md` and example playbooks when user-facing behaviour changes.  
@@ -125,7 +124,7 @@ Collections assume the following tooling:
   - ansible-core, ansible-lint, Molecule,
   - semantic-release + Node toolchain.
 - Local scripts under `scripts/` (e.g. `devtools-ansible-lint.sh`,
-  `devtools-molecule.sh`, protected Incus scenarios under `molecule/aap-rhel*`)
+  `devtools-molecule.sh`, heavy scenarios like `devtools-molecule-*_heavy.sh`)
   are part of the expected workflow.
 
 When in doubt, prefer running checks through the devtools wrapper scripts so

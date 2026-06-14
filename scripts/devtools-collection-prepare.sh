@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Build and install the collection inside the ee-wunder-devtools-ubi9 container.
 # Installs into a per-run collections dir to avoid stale state.
-# Prints COLLECTIONS_DIR as the only stdout line for callers.
+# Prints COLLECTIONS_DIR as the last line for callers.
 
 # Derive namespace+name from galaxy.yml (authoritative)
 if [ ! -f /workspace/galaxy.yml ]; then
@@ -25,7 +25,7 @@ if [ -z "${ns:-}" ] || [ -z "${name:-}" ]; then
   exit 1
 fi
 
-echo "Preparing collection ${ns}.${name} inside ee-wunder-devtools-ubi9..." >&2
+echo "Preparing collection ${ns}.${name} inside ee-wunder-devtools-ubi9..."
 
 # Stable HOME + stable ansible tmp (ansible-galaxy downloads)
 export HOME="${HOME:-/tmp/wunder}"
@@ -44,7 +44,7 @@ fi
 XDG_CACHE_HOME="$(mktemp -d "${HOME}/xdg-cache.XXXXXX")"
 export XDG_CACHE_HOME
 if [ "${DEBUG:-0}" = "1" ]; then
-  echo "XDG_CACHE_HOME=$XDG_CACHE_HOME" >&2
+  echo "XDG_CACHE_HOME=$XDG_CACHE_HOME"
 fi
 
 # Per-run install target
@@ -110,9 +110,9 @@ if [ -z "${artifact:-}" ] || [ ! -f "$artifact" ]; then
 fi
 
 # Install this collection into per-run dir
-ansible-galaxy collection install "$artifact" -p "${COLLECTIONS_DIR}" --force --no-deps >&2
+ansible-galaxy collection install "$artifact" -p "${COLLECTIONS_DIR}" --force --no-deps
 
-echo "Collection ${ns}.${name} installed in ${COLLECTIONS_DIR}" >&2
+echo "Collection ${ns}.${name} installed in ${COLLECTIONS_DIR}"
 
-# Print the path so caller scripts can capture it if needed.
+# Print the path so caller scripts can capture it if needed
 echo "${COLLECTIONS_DIR}"

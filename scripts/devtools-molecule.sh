@@ -115,16 +115,11 @@ bash scripts/wunder-devtools-ee.sh bash -c '
     if [ -d molecule ]; then
       while IFS= read -r dir; do
         scen="${dir##*/}"
-        scenario_mode_file="molecule/${scen}/.molecule-mode"
         case "$scen" in
           *_heavy)
             echo "Skipping heavy scenario '\''${scen}'\'' in devtools-molecule.sh (run manually via dedicated script)."
             ;;
           *)
-            if [ -f "${scenario_mode_file}" ] && [ "${MOLECULE_RUN_PROTECTED:-false}" != "true" ]; then
-              echo "Skipping protected scenario '${scen}' (set MOLECULE_RUN_PROTECTED=true to include it)."
-              continue
-            fi
             scenarios+=("$scen")
             ;;
         esac

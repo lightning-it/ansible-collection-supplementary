@@ -26,6 +26,9 @@ bash scripts/wunder-devtools-ee.sh bash -c '
   ns="${COLLECTION_NAMESPACE}"
   name="${COLLECTION_NAME}"
 
+  export HOME="$(mktemp -d /tmp/galaxy-verify-home.XXXXXX)"
+  mkdir -p "${HOME}"
+
   echo "Building and verifying collection ${ns}.${name}..."
 
   # devtools-collection-prepare.sh prints the per-run collections dir on the last line
