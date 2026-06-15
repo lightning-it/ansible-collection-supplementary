@@ -1,3 +1,9 @@
+## [1.26.3](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.26.2...v1.26.3) (2026-06-15)
+
+### Bug Fixes
+
+* update token handling across multiple AAP CAC tasks ([#215](https://github.com/lightning-it/ansible-collection-supplementary/issues/215)) ([5c8c251](https://github.com/lightning-it/ansible-collection-supplementary/commit/5c8c251f26e6d4006a83f8eec2bde295a6a76805))
+
 ## [1.26.2](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.26.1...v1.26.2) (2026-06-15)
 
 ### Bug Fixes
