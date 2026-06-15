@@ -27,6 +27,23 @@
       when: not (aap_cac_preexisting_token | default(false))
       tags: always
 
+    - name: Normalize AAP CaC token for downstream roles
+      ansible.builtin.set_fact:
+        aap_cac_auth_token: >-
+          {{
+            (
+              aap_token.token
+              if (aap_token is mapping)
+              else aap_token
+            )
+            | default('', true)
+            | string
+            | trim
+          }}
+      changed_when: false
+      no_log: true
+      tags: always
+
     - name: Discover AAP CaC tasksets
       ansible.builtin.set_fact:
         aap_cac_taskset_files: >-

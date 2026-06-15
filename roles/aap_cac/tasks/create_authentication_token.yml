@@ -39,6 +39,7 @@
       ansible.builtin.set_fact:
         aap_cac_created_token: "{{ __aap_cac_created_token }}"
         aap_token: "{{ __aap_cac_token_value }}"
+        aap_cac_auth_token: "{{ __aap_cac_token_value }}"
       vars:
         __aap_cac_created_token: >-
           {{

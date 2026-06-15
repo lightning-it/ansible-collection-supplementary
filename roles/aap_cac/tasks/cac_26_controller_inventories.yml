@@ -17,7 +17,7 @@
             | string
             | trim
           }}
-        aap_token: ""
+        aap_token: "{{ aap_cac_auth_token | default(omit, true) }}"
         aap_configuration_dispatcher_roles:
           - role: controller_inventories
             var: controller_inventories
