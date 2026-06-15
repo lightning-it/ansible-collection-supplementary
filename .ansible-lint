@@ -5,5 +5,3 @@ exclude_paths:
   - .ansible/
   - collections/
   - .pre-commit-config.yaml
-  - deploy/incus/profiles/rhel9.yml
-  - deploy/incus/profiles/rhel10.yml
