@@ -1,3 +1,9 @@
+## [1.27.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.26.3...v1.27.0) (2026-06-15)
+
+### Features
+
+* new gateway api ([#216](https://github.com/lightning-it/ansible-collection-supplementary/issues/216)) ([86b646d](https://github.com/lightning-it/ansible-collection-supplementary/commit/86b646dc42fa80c4ae7bffbde769009fa075a971))
+
 ## [1.26.3](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.26.2...v1.26.3) (2026-06-15)
 
 ### Bug Fixes
