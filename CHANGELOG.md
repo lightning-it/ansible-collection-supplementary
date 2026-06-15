@@ -1,3 +1,9 @@
+## [1.28.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.27.0...v1.28.0) (2026-06-15)
+
+### Features
+
+* add temporary environment validation for AAP installer and enhance installation tasks ([#217](https://github.com/lightning-it/ansible-collection-supplementary/issues/217)) ([57f9c15](https://github.com/lightning-it/ansible-collection-supplementary/commit/57f9c1536da71eec77e07fa7a5b523fd8261fa31))
+
 ## [1.27.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.26.3...v1.27.0) (2026-06-15)
 
 ### Features
