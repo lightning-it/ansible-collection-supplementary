@@ -33,6 +33,10 @@ Key variables:
 - `aap_deploy_setup_download_containerized`
 - `aap_deploy_setup_prepare_process_template`
 - `aap_deploy_setup_install_force`
+- `aap_deploy_install_environment`
+- `aap_deploy_debug_install_environment`
+- `aap_deploy_manage_install_tmp_dir`
+- `aap_deploy_install_tmp_dir`
 - `aap_deploy_bundle_dir` (path containing `/bundle`)
 - `aap_deploy_installer_runner` (`native` or `vendor`, default: `native`)
 - `aap_deploy_installer_wait`
@@ -241,6 +245,47 @@ ansible_remote_tmp: /appl/ansible-tmp
 Ensure the remote temp path, `aap_deploy_install_dir`, and setup extraction path
 have enough free space for the compressed bundle and extracted installer.
 
+## Installer Temporary Directory
+
+For bundled/offline AAP installs, the vendor installer extracts and loads large
+container images. If `/tmp` is small, the install can fail with:
+
+```text
+No space left on device
+```
+
+Use inventory to move both Ansible module staging and the installer process
+temporary directory:
+
+```yaml
+ansible_remote_tmp: /appl/ansible-tmp
+aap_deploy_manage_install_tmp_dir: true
+aap_deploy_install_tmp_dir: /appl/tmp
+aap_deploy_install_environment:
+  TMPDIR: /appl/tmp
+  TEMP: /appl/tmp
+  TMP: /appl/tmp
+```
+
+`ansible_remote_tmp` controls Ansible module staging.
+`aap_deploy_install_environment` controls the environment of the AAP
+containerized installer task.
+
+Enable the temporary environment diagnostic when validating a new host:
+
+```yaml
+aap_deploy_debug_install_environment: true
+```
+
+Expected diagnostic output:
+
+```text
+TMPDIR=/appl/tmp
+TEMP=/appl/tmp
+TMP=/appl/tmp
+tempfile.gettempdir()=/appl/tmp
+```
+
 Installer admin password behavior:
 - Passwords for gateway/controller/hub/eda/postgresql are resolved independently.
 - Resolution is handled by shared role `aap`.
@@ -297,6 +342,11 @@ Troubleshooting:
   `aap_deploy_automationmetrics_pg_host` if using a custom database layout.
 - `No space left on device` during bundle copy: set `ansible_remote_tmp` to a
   filesystem with enough free space and verify `aap_deploy_install_dir`.
+- `gzip: /tmp/ansible... No space left on device`: the installer did not
+  receive the custom temp environment or `/tmp` is too small. Check that the
+  installer task has `environment: "{{ aap_deploy_installer_environment }}"`,
+  and enable `aap_deploy_debug_install_environment` to confirm
+  `tempfile.gettempdir()=/appl/tmp`.
 - `Overall Status: Not registered` on Satellite/baseline systems: keep
   `aap_deploy_manage_host_prep: true` and set
   `aap_deploy_manage_rhsm_repos: false`.

@@ -99,9 +99,7 @@
       poll: 0
       become: true
       become_user: "{{ aap_deploy_install_user }}"
-      environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ aap_deploy_install_user_uid }}"
-        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ aap_deploy_install_user_uid }}/bus"
+      environment: "{{ aap_deploy_installer_environment }}"
       register: aap_deploy_installer_async_job
       changed_when: false
       when: aap_deploy_installer_runner == 'native'
@@ -120,9 +118,7 @@
         jid: "{{ aap_deploy_installer_async_job.ansible_job_id }}"
       become: true
       become_user: "{{ aap_deploy_install_user }}"
-      environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ aap_deploy_install_user_uid }}"
-        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ aap_deploy_install_user_uid }}/bus"
+      environment: "{{ aap_deploy_installer_environment }}"
       register: aap_deploy_installer_async_status
       until: aap_deploy_installer_async_status.finished | bool
       retries: "{{ aap_deploy_installer_async_retries | int }}"
@@ -159,9 +155,7 @@
         apply:
           become: true
           become_user: "{{ aap_deploy_install_user }}"
-          environment:
-            XDG_RUNTIME_DIR: "/run/user/{{ aap_deploy_install_user_uid }}"
-            DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ aap_deploy_install_user_uid }}/bus"
+          environment: "{{ aap_deploy_installer_environment }}"
       vars:
         aap_setup_down_version: "{{ aap_deploy_setup_download_version }}"
         aap_setup_containerized: "{{ aap_deploy_setup_download_containerized }}"

@@ -53,6 +53,10 @@
       - aap_deploy_setup_prepare_process_template is boolean
       - aap_deploy_setup_install_force is boolean
       - aap_deploy_installer_wait is boolean
+      - aap_deploy_install_environment is mapping
+      - aap_deploy_debug_install_environment is boolean
+      - aap_deploy_manage_install_tmp_dir is boolean
+      - aap_deploy_install_tmp_dir is string
       - aap_deploy_verify_gateway_https is boolean
       - aap_deploy_manage_rhsm_repos is boolean
       - aap_deploy_install_user | trim | length > 0
@@ -109,6 +113,20 @@
       (aap_deploy_install_type=bundle), with absolute install paths and a non-root install user.
     quiet: true
   when: aap_deploy_enabled | bool
+  tags: always
+
+- name: Validate managed AAP installer temporary directory
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_install_tmp_dir | trim | length > 0
+      - aap_deploy_install_tmp_dir.startswith('/')
+    fail_msg: >-
+      aap_deploy_install_tmp_dir must be an absolute path when
+      aap_deploy_manage_install_tmp_dir=true.
+    quiet: true
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_manage_install_tmp_dir | bool
   tags: always
 
 - name: Validate automation metrics inventory hosts

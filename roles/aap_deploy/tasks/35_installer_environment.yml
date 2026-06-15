@@ -1,0 +1,38 @@
+---
+- name: Build AAP installer execution environment
+  ansible.builtin.set_fact:
+    aap_deploy_installer_environment: >-
+      {{
+        (
+          aap_deploy_install_environment
+          | default({}, true)
+        )
+        | combine(
+          {
+            'XDG_RUNTIME_DIR': '/run/user/' ~ aap_deploy_install_user_uid,
+            'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/' ~ aap_deploy_install_user_uid ~ '/bus'
+          }
+        )
+      }}
+  no_log: "{{ aap_admin_passwords_no_log | default(true) }}"
+
+- name: Show effective installer temporary environment
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import os, tempfile
+        print("TMPDIR=" + str(os.environ.get("TMPDIR")))
+        print("TEMP=" + str(os.environ.get("TEMP")))
+        print("TMP=" + str(os.environ.get("TMP")))
+        print("tempfile.gettempdir()=" + tempfile.gettempdir())
+  environment: "{{ aap_deploy_installer_environment }}"
+  register: aap_deploy_install_environment_debug_result
+  changed_when: false
+  when: aap_deploy_debug_install_environment | default(false) | bool
+
+- name: Print effective installer temporary environment
+  ansible.builtin.debug:
+    var: aap_deploy_install_environment_debug_result.stdout_lines
+  when: aap_deploy_debug_install_environment | default(false) | bool
