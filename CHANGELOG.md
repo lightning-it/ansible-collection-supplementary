@@ -1,3 +1,9 @@
+## [1.26.2](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.26.1...v1.26.2) (2026-06-15)
+
+### Bug Fixes
+
+* add yamllint disable comment for rhel10 and rhel9 profiles ([#211](https://github.com/lightning-it/ansible-collection-supplementary/issues/211)) ([cf2f63f](https://github.com/lightning-it/ansible-collection-supplementary/commit/cf2f63fa73b712a894d73e0ad3aaa8aa70b77508))
+
 ## [1.26.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.26.0...v1.26.1) (2026-06-15)
 
 ### Bug Fixes
