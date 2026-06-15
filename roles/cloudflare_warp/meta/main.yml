@@ -5,7 +5,7 @@ galaxy_info:
   author: René Osorio
   company: Lightning IT
   description: Install and manage the Cloudflare WARP client for Zero Trust device connectivity.
-  license: GPL-3.0-only
+  license: MIT
   min_ansible_version: "2.18"
   platforms:
     - name: EL

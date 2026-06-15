@@ -6,9 +6,9 @@ real RHEL behavior, including systemd, SELinux, firewalld, RHSM, and rootless Po
 
 Use these docs:
 
-- [docs/testing/aap.md](/home/rene/sources/ansible-collection-supplementary/docs/testing/aap.md) for AAP-specific workflows
-- [docs/development/aap-rhel10-incus.md](/home/rene/sources/ansible-collection-supplementary/docs/development/aap-rhel10-incus.md) for the workbench-to-ciwkr01 RHEL 10 development test
-- [deploy/incus/README.md](/home/rene/sources/ansible-collection-supplementary/deploy/incus/README.md) for the Incus helper scripts
+- [docs/testing/aap.md](aap.md) for AAP-specific workflows
+- [docs/development/aap-rhel10-incus.md](../development/aap-rhel10-incus.md) for the workbench-to-ciwkr01 RHEL 10 development test
+- [deploy/incus/README.md](../../deploy/incus/README.md) for the Incus helper scripts
 
 Test classes:
 

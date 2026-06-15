@@ -1,0 +1,147 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip aap_prepare role when disabled
+  ansible.builtin.debug:
+    msg: "AAP prepare skipped because aap_prepare_enabled=false."
+  changed_when: false
+  when: not (aap_prepare_enabled | bool)
+  tags: always
+
+- name: Reset resolved AAP prepare artifacts
+  ansible.builtin.set_fact:
+    aap_prepare_artifacts_items: []
+  changed_when: false
+  when: aap_prepare_enabled | bool
+  tags:
+    - aap_prepare
+    - artifacts
+
+- name: Resolve AAP setup bundle artifact
+  ansible.builtin.include_tasks: resolve_artifact.yml
+  vars:
+    aap_prepare_current_label: aap_setup_bundle
+    aap_prepare_current_required: "{{ aap_prepare_bundle_required | bool }}"
+    aap_prepare_current_source: "{{ aap_prepare_bundle_source }}"
+    aap_prepare_current_url: "{{ aap_prepare_bundle_url }}"
+    aap_prepare_current_src: "{{ aap_prepare_bundle_src }}"
+    aap_prepare_current_remote_src: "{{ aap_prepare_bundle_remote_src }}"
+    aap_prepare_current_dest: "{{ aap_prepare_bundle_dest }}"
+    aap_prepare_current_checksum: "{{ aap_prepare_bundle_checksum }}"
+    aap_prepare_current_mode: "0644"
+    aap_prepare_current_artifact_dir: "{{ aap_prepare_artifact_dir }}"
+    aap_prepare_current_autodetect: "{{ aap_prepare_bundle_autodetect | bool }}"
+    aap_prepare_current_autodetect_patterns: "{{ aap_prepare_bundle_autodetect_patterns }}"
+  when: aap_prepare_enabled | bool
+  tags:
+    - aap_prepare
+    - artifacts
+
+- name: Resolve AAP manifest artifact
+  ansible.builtin.include_tasks: resolve_artifact.yml
+  vars:
+    aap_prepare_current_label: aap_manifest
+    aap_prepare_current_required: "{{ aap_prepare_manifest_required | bool }}"
+    aap_prepare_current_source: "{{ aap_prepare_manifest_source }}"
+    aap_prepare_current_url: "{{ aap_prepare_manifest_url }}"
+    aap_prepare_current_src: "{{ aap_prepare_manifest_src }}"
+    aap_prepare_current_remote_src: "{{ aap_prepare_manifest_remote_src }}"
+    aap_prepare_current_dest: "{{ aap_prepare_manifest_dest }}"
+    aap_prepare_current_checksum: "{{ aap_prepare_manifest_checksum }}"
+    aap_prepare_current_mode: "0600"
+    aap_prepare_current_artifact_dir: "{{ aap_prepare_artifact_dir }}"
+    aap_prepare_current_autodetect: "{{ aap_prepare_manifest_autodetect | bool }}"
+    aap_prepare_current_autodetect_patterns: "{{ aap_prepare_manifest_autodetect_patterns }}"
+  when: aap_prepare_enabled | bool
+  tags:
+    - aap_prepare
+    - artifacts
+    - controller_license
+
+- name: Stage resolved AAP artifacts
+  ansible.builtin.include_role:
+    name: lit.supplementary.artifacts
+  vars:
+    artifacts_items: "{{ aap_prepare_artifacts_items }}"
+    artifacts_default_owner: root
+    artifacts_default_group: root
+  when:
+    - aap_prepare_enabled | bool
+    - aap_prepare_artifacts_items | length > 0
+  tags:
+    - aap_prepare
+    - artifacts
+
+- name: Collect prepared AAP setup bundle metadata
+  ansible.builtin.stat:
+    path: "{{ aap_prepare_bundle_dest }}"
+    checksum_algorithm: sha256
+  register: aap_prepare_bundle_stat
+  when:
+    - aap_prepare_enabled | bool
+    - aap_prepare_bundle_required | bool
+  tags:
+    - aap_prepare
+    - artifacts
+
+- name: Validate prepared AAP setup bundle
+  ansible.builtin.assert:
+    that:
+      - aap_prepare_bundle_stat.stat.exists | default(false)
+      - (aap_prepare_bundle_stat.stat.size | int) >= (aap_prepare_bundle_min_size_bytes | int)
+    fail_msg: >-
+      AAP setup bundle is missing or too small at {{ aap_prepare_bundle_dest }}.
+      Stage a valid bundle through aap_prepare_* variables or {{ aap_prepare_artifact_dir }}.
+    quiet: true
+  when:
+    - aap_prepare_enabled | bool
+    - aap_prepare_bundle_required | bool
+  tags:
+    - aap_prepare
+    - artifacts
+
+- name: Collect prepared AAP manifest metadata
+  ansible.builtin.stat:
+    path: "{{ aap_prepare_manifest_dest }}"
+    checksum_algorithm: sha256
+  register: aap_prepare_manifest_stat
+  when:
+    - aap_prepare_enabled | bool
+    - aap_prepare_manifest_required | bool
+  tags:
+    - aap_prepare
+    - artifacts
+    - controller_license
+
+- name: Validate prepared AAP manifest
+  ansible.builtin.assert:
+    that:
+      - aap_prepare_manifest_stat.stat.exists | default(false)
+      - (aap_prepare_manifest_stat.stat.size | int) > 0
+    fail_msg: >-
+      AAP manifest is missing or empty at {{ aap_prepare_manifest_dest }}.
+      Stage a valid manifest through aap_prepare_* variables or {{ aap_prepare_artifact_dir }}.
+    quiet: true
+  when:
+    - aap_prepare_enabled | bool
+    - aap_prepare_manifest_required | bool
+  tags:
+    - aap_prepare
+    - artifacts
+    - controller_license
+
+- name: Publish prepared AAP artifact paths for downstream roles
+  ansible.builtin.set_fact:
+    aap_prepare_bundle_dest_effective: "{{ aap_prepare_bundle_dest }}"
+    aap_prepare_manifest_dest_effective: "{{ aap_prepare_manifest_dest }}"
+    aap_deploy_setup_archive_src: "{{ aap_prepare_bundle_dest }}"
+    aap_deploy_setup_archive_path: "{{ aap_prepare_bundle_dest }}"
+    aap_cac_controller_license_manifest_remote_src: "{{ aap_prepare_manifest_dest }}"
+  changed_when: false
+  when: aap_prepare_enabled | bool
+  tags:
+    - aap_prepare
+    - artifacts
+    - controller_license

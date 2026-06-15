@@ -37,4 +37,7 @@ aap_cac_hub_group_roles: []
 aap_cac_controller_license_state: present
 aap_cac_controller_license_force: false
 aap_cac_controller_license_secure_logging: true
+aap_cac_controller_license_required: false
 aap_cac_controller_license_manifest_content: ""
+aap_cac_controller_license_manifest_remote_src: >-
+  {{ aap_prepare_manifest_dest_effective | default('', true) }}

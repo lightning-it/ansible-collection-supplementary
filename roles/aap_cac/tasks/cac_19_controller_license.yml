@@ -1,41 +1,120 @@
 ---
-# CaC taskset: Controller license activation via manifest content.
+- name: Resolve controller license manifest source
+  ansible.builtin.set_fact:
+    aap_cac_controller_license_manifest_content_effective: >-
+      {{ aap_cac_controller_license_manifest_content | default('', true) | string | trim }}
+    aap_cac_controller_license_manifest_remote_src_effective: >-
+      {{ aap_cac_controller_license_manifest_remote_src | default('', true) | string | trim }}
+  changed_when: false
+  tags:
+    - controller_license
+  no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
+
+- name: Check remote controller license manifest
+  ansible.builtin.stat:
+    path: "{{ aap_cac_controller_license_manifest_remote_src_effective }}"
+  register: aap_cac_controller_license_manifest_remote_stat
+  when: aap_cac_controller_license_manifest_remote_src_effective | length > 0
+  tags:
+    - controller_license
+  no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
+
+- name: Resolve remote controller license manifest availability
+  ansible.builtin.set_fact:
+    aap_cac_controller_license_manifest_remote_exists: >-
+      {{
+        (
+          (aap_cac_controller_license_manifest_remote_stat | default({})).stat
+          | default({})
+        ).exists
+        | default(false)
+        | bool
+      }}
+    aap_cac_controller_license_manifest_remote_size: >-
+      {{
+        (
+          (aap_cac_controller_license_manifest_remote_stat | default({})).stat
+          | default({})
+        ).size
+        | default(0)
+        | int
+      }}
+  changed_when: false
+  tags:
+    - controller_license
+  no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
+
+- name: Validate required controller license manifest
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          aap_cac_controller_license_manifest_content_effective | length > 0
+        )
+        or
+        (
+          aap_cac_controller_license_manifest_remote_exists | bool
+          and (aap_cac_controller_license_manifest_remote_size | int) > 0
+        )
+    fail_msg: >-
+      Missing controller license manifest. Provide
+      aap_cac_controller_license_manifest_content or stage a remote manifest
+      with lit.supplementary.aap_prepare.
+    quiet: true
+  when: aap_cac_controller_license_required | bool
+  tags:
+    - controller_license
+  no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
+
+# CaC taskset: Controller license activation via manifest content or prepared remote path.
 - name: Execute controller license activation
-  when: aap_cac_controller_license_manifest_content | default('', true) | string | trim | length > 0
+  when: >-
+    (
+      aap_cac_controller_license_manifest_content_effective | length > 0
+    )
+    or
+    (
+      aap_cac_controller_license_manifest_remote_exists | bool
+      and (aap_cac_controller_license_manifest_remote_size | int) > 0
+    )
   tags:
     - controller_license
   block:
     - name: Wait for controller readiness
       ansible.builtin.include_tasks: "{{ role_path }}/tasks/wait_for_controller_readiness.yml"
 
-    - name: Validate controller license manifest content
-      ansible.builtin.assert:
-        that:
-          - aap_cac_controller_license_manifest_content | default('', true) | string | trim | length > 0
-        fail_msg: >-
-          Missing controller license manifest content.
-          Set aap_cac_controller_license_manifest_content in inventory.
-      no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
-
-    - name: Create temporary manifest file
+    - name: Create temporary manifest file for inline content
       ansible.builtin.tempfile:
         state: file
         prefix: aap-cac-license-
         suffix: .zip
       register: aap_cac_controller_license_manifest_tmp
       changed_when: false
+      when: aap_cac_controller_license_manifest_content_effective | length > 0
 
     - name: Materialize controller license manifest content
       ansible.builtin.copy:
-        content: "{{ aap_cac_controller_license_manifest_content | b64decode }}"
+        content: "{{ aap_cac_controller_license_manifest_content_effective | b64decode }}"
         dest: "{{ aap_cac_controller_license_manifest_tmp.path }}"
         mode: "0600"
       no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
       changed_when: false
+      when: aap_cac_controller_license_manifest_content_effective | length > 0
 
-    - name: Activate controller license with manifest content
+    - name: Select controller license manifest path
+      ansible.builtin.set_fact:
+        aap_cac_controller_license_manifest_path_effective: >-
+          {{
+            aap_cac_controller_license_manifest_tmp.path
+            if (aap_cac_controller_license_manifest_content_effective | length > 0)
+            else aap_cac_controller_license_manifest_remote_src_effective
+          }}
+      changed_when: false
+      no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
+
+    - name: Activate controller license with manifest
       ansible.controller.license:
-        manifest: "{{ aap_cac_controller_license_manifest_tmp.path }}"
+        manifest: "{{ aap_cac_controller_license_manifest_path_effective }}"
         force: "{{ aap_cac_controller_license_force | bool }}"
         state: "{{ aap_cac_controller_license_state }}"
         controller_host: "{{ aap_cac_gateway_hostname }}"

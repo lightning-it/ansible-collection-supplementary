@@ -164,6 +164,7 @@
 
       Checked control-node project dir: {{ aap_deploy_local_bundle_project_archive_path }}
       Checked control-node .artifacts dir: {{ aap_deploy_local_bundle_archive_path }}
+      Checked control-node artifact dir: {{ aap_deploy_artifact_dir }}
       Checked control-node custom path: {{ aap_deploy_setup_archive_src }}
       Checked control-node autodetect patterns: {{ aap_deploy_setup_archive_autodetect_patterns | join(', ') }}
       Checked target destination path: {{ aap_deploy_setup_archive_path }}
@@ -172,6 +173,7 @@
       Put the bundle on your MacBook and rerun, for example:
       - place/rename it to {{ aap_deploy_local_bundle_project_archive_path }}
       - or place it at {{ aap_deploy_local_bundle_archive_path }}
+      - or set aap_deploy_artifact_dir to the directory containing the bundle
       - or set aap_deploy_setup_archive_src to an absolute local file path
       - or pre-stage it on the managed host at {{ aap_deploy_setup_archive_path }}
   when: aap_deploy_archive_source_mode == 'missing'

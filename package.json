@@ -11,7 +11,7 @@
     "url": "https://github.com/lightning-it/ansible-collection-supplementary/issues"
   },
   "homepage": "https://github.com/lightning-it/ansible-collection-supplementary#readme",
-  "license": "GPL-2.0-only",
+  "license": "MIT",
   "devDependencies": {
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/commit-analyzer": "^13.0.1",

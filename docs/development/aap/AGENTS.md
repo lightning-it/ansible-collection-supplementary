@@ -98,8 +98,8 @@ automation/inventory repositories.
 
 ## RHEL Registration Rules
 
-1. Use `lit.rhel.rhsm` from `/home/rene/sources/ansible-collection-rhel` for
-   RHSM lifecycle management.
+1. Use `lit.rhel.rhsm` from the sibling `ansible-collection-rhel` checkout
+   for RHSM lifecycle management.
 2. Use `rhsm_state=present` after boot to register runtime VMs.
 3. Use `lit.rhel.repos` to enable required RHEL repositories.
 4. Use `lit.rhel.virtual_guest` for reusable VM guest packages and services.

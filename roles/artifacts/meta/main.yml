@@ -5,7 +5,7 @@ galaxy_info:
   author: Rene Osorio
   description: Stage and verify binary artifacts from URL, controller, or managed-host sources.
   company: Lightning IT
-  license: GPL-2.0-only
+  license: MIT
   min_ansible_version: "2.18"
 
   platforms:

@@ -64,4 +64,4 @@ Each `artifacts_items` entry supports:
 
 ## License
 
-GPL-2.0-only
+MIT
