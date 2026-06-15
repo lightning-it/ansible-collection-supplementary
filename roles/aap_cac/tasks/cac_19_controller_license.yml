@@ -118,6 +118,7 @@
         force: "{{ aap_cac_controller_license_force | bool }}"
         state: "{{ aap_cac_controller_license_state }}"
         controller_host: "{{ aap_cac_gateway_hostname }}"
+        controller_oauthtoken: "{{ aap_cac_auth_token | default(omit, true) }}"
         controller_username: "{{ aap_cac_gateway_username | default(omit, true) }}"
         controller_password: >-
           {{
@@ -132,5 +133,7 @@
       ansible.builtin.file:
         path: "{{ aap_cac_controller_license_manifest_tmp.path }}"
         state: absent
-      when: aap_cac_controller_license_manifest_tmp is defined
+      when:
+        - aap_cac_controller_license_manifest_tmp is defined
+        - aap_cac_controller_license_manifest_tmp.path is defined
       changed_when: false

@@ -22,5 +22,5 @@
             | string
             | trim
           }}
-        aap_token: ""
+        aap_token: "{{ aap_cac_auth_token | default(omit, true) }}"
       when: aap_cac_hub_collection_repositories | length > 0

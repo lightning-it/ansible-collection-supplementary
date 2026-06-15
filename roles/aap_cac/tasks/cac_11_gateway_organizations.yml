@@ -49,7 +49,7 @@
         name: infra.aap_configuration.dispatch
       vars:
         aap_password: "{{ aap_cac_controller_password_effective }}"
-        aap_token: ""
+        aap_token: "{{ aap_cac_auth_token | default(omit, true) }}"
         aap_configuration_dispatcher_roles:
           - role: controller_organizations
             var: aap_organizations
