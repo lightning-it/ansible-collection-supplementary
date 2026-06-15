@@ -388,13 +388,15 @@ Molecule scenarios MUST live at repository root under `molecule/`.
 ### 8.3 Execution Behavior
 
 1. `scripts/devtools-molecule.sh` runs all root scenarios except names ending in `_heavy`.
-2. A single scenario is run with:
+2. Scenarios with `.molecule-mode` set to `protected-incus` are skipped unless
+   `MOLECULE_RUN_PROTECTED=true` is set and the devtools container has the `incus` CLI.
+3. A single scenario is run with:
 
 ```bash
 scripts/devtools-molecule.sh minio-config-basic
 ```
 
-3. Keep light scenarios runnable in devtools and pre-commit without external infrastructure.
+4. Keep light scenarios runnable in devtools and pre-commit without external infrastructure.
 
 ### 8.4 Required Basic Scenario Coverage Per Role (Mandatory)
 
