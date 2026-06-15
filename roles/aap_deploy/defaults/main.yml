@@ -104,6 +104,14 @@ aap_deploy_setup_prepare_process_template: true
 aap_deploy_setup_install_force: true
 aap_deploy_setup_install_extra_vars: {}
 aap_deploy_setup_install_extra_vars_files: []
+
+# Optional environment variables passed to the AAP containerized installer task.
+# Useful for moving installer temp extraction away from small /tmp.
+aap_deploy_install_environment: {}
+aap_deploy_debug_install_environment: false
+aap_deploy_manage_install_tmp_dir: false
+aap_deploy_install_tmp_dir: ""
+
 aap_deploy_installer_runner: native
 aap_deploy_installer_wait: true
 aap_deploy_installer_async_timeout: 14400

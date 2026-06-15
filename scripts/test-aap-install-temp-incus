@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+COLLECTION_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+
+INCUS_IMAGE="${INCUS_IMAGE:-images:rockylinux/9/cloud}"
+INCUS_INSTANCE="${INCUS_INSTANCE:-aap27-temp-test-$$}"
+INCUS_VM="${INCUS_VM:-false}"
+KEEP_INCUS="${KEEP_INCUS:-false}"
+WORK_DIR="${WORK_DIR:-$(mktemp -d)}"
+
+cleanup() {
+  if [[ "${KEEP_INCUS}" != "1" && "${KEEP_INCUS}" != "true" ]]; then
+    incus delete --force "${INCUS_INSTANCE}" >/dev/null 2>&1 || true
+  fi
+  rm -rf "${WORK_DIR}"
+}
+trap cleanup EXIT
+
+launch_args=()
+if [[ "${INCUS_VM}" == "1" || "${INCUS_VM}" == "true" ]]; then
+  launch_args+=(--vm)
+fi
+
+echo "Launching ${INCUS_INSTANCE} from ${INCUS_IMAGE}..."
+incus launch "${INCUS_IMAGE}" "${INCUS_INSTANCE}" "${launch_args[@]}"
+
+echo "Waiting for Incus instance command channel..."
+for _ in {1..60}; do
+  if incus exec "${INCUS_INSTANCE}" -- true >/dev/null 2>&1; then
+    break
+  fi
+  sleep 2
+done
+
+incus exec "${INCUS_INSTANCE}" -- bash -lc '
+set -euo pipefail
+if ! command -v python3 >/dev/null 2>&1 || ! command -v sudo >/dev/null 2>&1; then
+  dnf -y install python3 sudo
+fi
+groupadd -f aap
+id aap >/dev/null 2>&1 || useradd -g aap -m -s /bin/bash aap
+mkdir -p /appl/tmp /appl/ansible-tmp
+chmod 1777 /appl/tmp
+chmod 700 /appl/ansible-tmp
+'
+
+cat > "${WORK_DIR}/inventory.yml" <<EOF
+---
+all:
+  children:
+    aap_hosts:
+      hosts:
+        ${INCUS_INSTANCE}:
+          ansible_connection: community.general.incus
+          ansible_python_interpreter: /usr/bin/python3
+          ansible_become: true
+          ansible_remote_tmp: /appl/ansible-tmp
+EOF
+
+cat > "${WORK_DIR}/playbook.yml" <<'EOF'
+---
+- name: Validate AAP installer temp env through Incus
+  hosts: aap_hosts
+  gather_facts: false
+  become: true
+  vars:
+    aap_deploy_install_user: aap
+    aap_deploy_install_environment:
+      TMPDIR: /appl/tmp
+      TEMP: /appl/tmp
+      TMP: /appl/tmp
+    aap_deploy_debug_install_environment: true
+    aap_admin_passwords_no_log: false
+  tasks:
+    - name: Assert Ansible remote tmp is configured for the test host
+      ansible.builtin.assert:
+        that:
+          - ansible_remote_tmp == '/appl/ansible-tmp'
+        quiet: true
+
+    - name: Resolve install user UID
+      ansible.builtin.command:
+        cmd: id -u "{{ aap_deploy_install_user }}"
+      register: aap_deploy_install_user_uid_result
+      changed_when: false
+
+    - name: Record install user UID fact
+      ansible.builtin.set_fact:
+        aap_deploy_install_user_uid: "{{ aap_deploy_install_user_uid_result.stdout | trim }}"
+      changed_when: false
+
+    - name: Include role installer environment tasks
+      ansible.builtin.include_tasks: >-
+        {{ lookup('ansible.builtin.env', 'COLLECTION_ROOT') }}/roles/aap_deploy/tasks/35_installer_environment.yml
+
+    - name: Assert installer temporary environment is honored
+      ansible.builtin.assert:
+        that:
+          - "'TMPDIR=/appl/tmp' in aap_deploy_install_environment_debug_result.stdout"
+          - "'TEMP=/appl/tmp' in aap_deploy_install_environment_debug_result.stdout"
+          - "'TMP=/appl/tmp' in aap_deploy_install_environment_debug_result.stdout"
+          - "'tempfile.gettempdir()=/appl/tmp' in aap_deploy_install_environment_debug_result.stdout"
+        quiet: true
+EOF
+
+echo "Running Ansible diagnostic..."
+COLLECTION_ROOT="${COLLECTION_ROOT}" ansible-playbook -i "${WORK_DIR}/inventory.yml" "${WORK_DIR}/playbook.yml"
+
+echo "AAP installer temp environment diagnostic succeeded for ${INCUS_INSTANCE}."

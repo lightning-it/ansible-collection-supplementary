@@ -47,6 +47,18 @@
     aap_deploy_install_user_uid: "{{ aap_deploy_install_user_uid_result.stdout | trim }}"
   changed_when: false
 
+- name: Ensure AAP installer temporary directory exists
+  ansible.builtin.file:
+    path: "{{ aap_deploy_install_tmp_dir }}"
+    state: directory
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '1777'
+  become: true
+  when:
+    - aap_deploy_manage_install_tmp_dir | bool
+    - aap_deploy_install_tmp_dir | trim | length > 0
+
 - name: Enable lingering for install user
   ansible.builtin.command:
     cmd: "loginctl enable-linger {{ aap_deploy_install_user }}"

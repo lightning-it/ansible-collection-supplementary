@@ -132,6 +132,40 @@ export MOLECULE_AAP_FULL_INSTALL=true
 MOLECULE_RUN_PROTECTED=true molecule test -s aap-rhel9
 ```
 
+## Installer Temp Environment Validation
+
+Use this lightweight Incus diagnostic when validating that
+`aap_deploy_install_environment` reaches the installer task. It does not require
+an AAP bundle and does not run the full vendor installer.
+
+```bash
+scripts/test-aap-install-temp-incus
+```
+
+Defaults:
+
+- `INCUS_IMAGE=images:rockylinux/9/cloud`
+- `INCUS_INSTANCE=aap27-temp-test-<pid>`
+- container mode
+
+Useful overrides:
+
+```bash
+INCUS_IMAGE=local:rhel10-ci INCUS_VM=true scripts/test-aap-install-temp-incus
+KEEP_INCUS=1 scripts/test-aap-install-temp-incus
+```
+
+The helper prepares `/appl/tmp` and `/appl/ansible-tmp`, runs the same
+`roles/aap_deploy/tasks/35_installer_environment.yml` diagnostic used by the
+role, and asserts:
+
+```text
+TMPDIR=/appl/tmp
+TEMP=/appl/tmp
+TMP=/appl/tmp
+tempfile.gettempdir()=/appl/tmp
+```
+
 ## AAP 2.7 RHEL 10 Demo Script
 
 For a local end-to-end AAP 2.7 demo on RHEL 10:
