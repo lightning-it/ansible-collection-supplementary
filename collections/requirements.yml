@@ -13,4 +13,4 @@ collections:
   - name: lit.rhel
     version: "1.16.2"
   - name: lit.foundational
-    version: "1.18.0"
+    version: "1.18.1"
