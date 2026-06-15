@@ -22,7 +22,17 @@ aap_deploy_install_user_passwordless_sudo: true
 # Installation paths
 aap_deploy_install_dir: /opt/aap
 aap_deploy_setup_dir: "{{ aap_deploy_install_dir }}/setup"
-aap_deploy_local_project_root: "{{ playbook_dir | dirname | dirname }}"
+aap_deploy_local_project_root: >-
+  {{
+    lookup('ansible.builtin.env', 'AAP_PROJECT_ROOT')
+    | default(lookup('ansible.builtin.env', 'PWD'), true)
+    | default(playbook_dir | dirname | dirname, true)
+  }}
+aap_deploy_artifact_dir: >-
+  {{
+    lookup('ansible.builtin.env', 'AAP_ARTIFACT_DIR')
+    | default(aap_deploy_local_project_root ~ '/.artifacts', true)
+  }}
 
 # Setup archive staging (disconnected-first).
 # We intentionally use a local control-node copy of the AAP bundle and copy it
@@ -87,8 +97,7 @@ aap_deploy_setup_archive_extract_dirname_effective: >-
 aap_deploy_setup_archive_path: >-
   {{ aap_deploy_install_dir }}/{{ aap_deploy_setup_archive_filename }}
 aap_deploy_local_bundle_archive_path: >-
-  {{ aap_deploy_local_project_root }}/.artifacts/{{
-  aap_deploy_setup_archive_filename }}
+  {{ aap_deploy_artifact_dir }}/{{ aap_deploy_setup_archive_filename }}
 aap_deploy_local_bundle_project_archive_path: >-
   {{ aap_deploy_local_project_root }}/{{ aap_deploy_setup_archive_filename }}
 aap_deploy_setup_prepare_process_template: true

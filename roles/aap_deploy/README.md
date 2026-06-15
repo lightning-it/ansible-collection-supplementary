@@ -203,15 +203,16 @@ subscription-manager registration checks and RHSM repository enablement are
 skipped.
 
 Bundle source handling:
-- The role autodetects `aap-containerized-setup.tar.gz` and
-  `ansible-automation-platform-containerized-setup-bundle-*.tar.gz` in the
-  project root or `.artifacts`.
-- For GitHub release assets or other artifact stores, reassemble split assets on
-  the controller before running the role. Do not rely on the role to join split files.
+- Preferred enterprise flow: use `lit.supplementary.aap_prepare` before this
+  role to download/copy/check the protected setup bundle onto the managed host.
+- This role still supports direct local bundle fallback for compatibility, but
+  artifact store integration belongs in `aap_prepare`.
+- For GitHub release assets or other artifact stores, reassemble split assets
+  before running the role. Do not rely on the role to join split files.
 - A stable customer layout is:
 
 ```yaml
-aap_deploy_setup_archive_src: "{{ aap_deploy_local_project_root }}/files/aap/aap-containerized-setup.tar.gz"
+aap_deploy_artifact_dir: "{{ aap_deploy_local_project_root }}/.artifacts"
 aap_deploy_setup_archive_path: "{{ aap_deploy_install_dir }}/aap-containerized-setup.tar.gz"
 ```
 
@@ -270,8 +271,11 @@ Installer TLS behavior:
 
 Controller license manifest:
 - License activation is handled by the companion `lit.supplementary.aap_cac`
-  role through `aap_cac_controller_license_manifest_content`.
-- Provide the manifest as base64 content from inventory or a secret backend.
+  role.
+- Preferred enterprise flow: use `lit.supplementary.aap_prepare` before
+  `aap_cac` to download/copy/check the protected manifest onto the managed host.
+- Inventory may still provide base64 content through
+  `aap_cac_controller_license_manifest_content`.
 - Do not commit real `manifest.zip` or `manifest.zip.b64` files.
 
 Example:
@@ -339,7 +343,7 @@ Requires `infra.aap_utilities` in the execution environment.
 
 ## License
 
-GPL-3.0-only
+MIT
 
 ## Author
 

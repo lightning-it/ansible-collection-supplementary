@@ -194,7 +194,7 @@ Example playbook:
 ## Development
 
 - `galaxy.yml` defines the collection metadata (namespace `lit`, name
-  `supplementary`, license `GPL-2.0-only`).
+  `supplementary`, license `MIT`).
 - Core collection dependencies are declared in `galaxy.yml`.
 - Optional dependency overlays:
   - `collections/requirements.yml`

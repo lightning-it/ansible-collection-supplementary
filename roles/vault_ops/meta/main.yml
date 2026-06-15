@@ -3,7 +3,7 @@ galaxy_info:
   description: Day-2 operations for Vault
   company: Lightning IT
   author: Dirk Egert, René Osorio
-  license: GPL-3.0-only
+  license: MIT
   min_ansible_version: '2.18'
   role_name: vault_ops
   namespace: default

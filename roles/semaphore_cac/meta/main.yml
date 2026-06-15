@@ -5,7 +5,7 @@ galaxy_info:
   author: Lightning IT
   description: Configuration-as-Code orchestration role for Semaphore UI.
   company: Lightning IT
-  license: GPL-3.0-only
+  license: MIT
   min_ansible_version: "2.18"
   platforms:
     - name: EL

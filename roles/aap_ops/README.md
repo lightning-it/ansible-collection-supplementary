@@ -111,7 +111,7 @@ Install/rotate AAP TLS certificates via vendor role:
 
 ## License
 
-GPL-3.0-only
+MIT
 
 ## Author
 

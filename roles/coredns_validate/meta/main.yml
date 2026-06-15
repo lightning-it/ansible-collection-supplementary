@@ -5,7 +5,7 @@ galaxy_info:
   author: René Osorio
   description: Validate CoreDNS Podman deployment health and configuration.
   company: Lightning IT
-  license: GPL-3.0-only
+  license: MIT
   min_ansible_version: "2.18"
   platforms:
     - name: EL

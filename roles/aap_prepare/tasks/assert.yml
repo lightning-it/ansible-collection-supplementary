@@ -1,0 +1,33 @@
+---
+- name: Validate AAP prepare role inputs
+  ansible.builtin.assert:
+    that:
+      - aap_prepare_enabled is boolean
+      - aap_prepare_artifact_dir | trim | length > 0
+      - aap_prepare_validate_certs is boolean
+      - aap_prepare_timeout | int > 0
+      - aap_prepare_force is boolean
+      - aap_prepare_no_log is boolean
+      - aap_prepare_bundle_required is boolean
+      - aap_prepare_bundle_source in ['auto', 'url', 'local', 'remote']
+      - aap_prepare_bundle_dest | trim | length > 0
+      - aap_prepare_bundle_dest.startswith('/')
+      - aap_prepare_bundle_checksum | default('', true) is string
+      - aap_prepare_bundle_min_size_bytes | int >= 0
+      - aap_prepare_bundle_autodetect is boolean
+      - aap_prepare_bundle_autodetect_patterns is sequence
+      - aap_prepare_bundle_autodetect_patterns is not string
+      - aap_prepare_manifest_required is boolean
+      - aap_prepare_manifest_source in ['auto', 'url', 'local', 'remote']
+      - aap_prepare_manifest_dest | trim | length > 0
+      - aap_prepare_manifest_dest.startswith('/')
+      - aap_prepare_manifest_checksum | default('', true) is string
+      - aap_prepare_manifest_autodetect is boolean
+      - aap_prepare_manifest_autodetect_patterns is sequence
+      - aap_prepare_manifest_autodetect_patterns is not string
+      - aap_prepare_artifacts_items is sequence
+      - aap_prepare_artifacts_items is not string
+    fail_msg: "Invalid configuration for lit.supplementary.aap_prepare."
+    quiet: true
+  changed_when: false
+  when: aap_prepare_enabled | bool

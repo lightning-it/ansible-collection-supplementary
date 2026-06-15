@@ -71,6 +71,24 @@ Controller license activation via manifest content from inventory:
         aap_cac_controller_license_manifest_content: "{{ vault_aap_subscription_manifest_b64 }}"
 ```
 
+Controller license activation via prepared runtime artifact:
+
+```yaml
+- name: Apply AAP configuration-as-code
+  hosts: aaps
+  become: true
+  gather_facts: true
+  roles:
+    - role: lit.supplementary.aap_cac
+      vars:
+        aap_cac_controller_license_required: true
+        aap_cac_controller_license_manifest_remote_src: /opt/aap/manifest.zip
+```
+
+The preferred flow is to run `lit.supplementary.aap_prepare` first. That role
+stages the manifest and publishes `aap_cac_controller_license_manifest_remote_src`
+for this role.
+
 Run a single taskset directly:
 
 ```yaml
@@ -102,7 +120,7 @@ Optional role-dispatch tasksets:
 
 ## License
 
-GPL-3.0-only
+MIT
 
 ## Author
 

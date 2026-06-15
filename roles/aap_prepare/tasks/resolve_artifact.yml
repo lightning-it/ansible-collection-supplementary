@@ -1,0 +1,187 @@
+---
+- name: Reset AAP prepare candidate state
+  ansible.builtin.set_fact:
+    aap_prepare_current_source_effective: ""
+    aap_prepare_current_src_effective: ""
+    aap_prepare_current_url_effective: ""
+    aap_prepare_current_remote_src_effective: ""
+    aap_prepare_current_candidates: []
+  changed_when: false
+
+- name: Discover controller-local artifact candidates
+  ansible.builtin.find:
+    paths: "{{ aap_prepare_current_artifact_dir }}"
+    patterns: "{{ aap_prepare_current_autodetect_patterns }}"
+    recurse: false
+    file_type: file
+  register: aap_prepare_current_find
+  delegate_to: localhost
+  become: false
+  failed_when: false
+  when:
+    - aap_prepare_current_source == 'auto'
+    - aap_prepare_current_autodetect | bool
+    - aap_prepare_current_url | default('', true) | trim | length == 0
+    - aap_prepare_current_src | default('', true) | trim | length == 0
+    - aap_prepare_current_remote_src | default('', true) | trim | length == 0
+  no_log: "{{ aap_prepare_no_log | bool }}"
+
+- name: Store controller-local artifact candidates
+  ansible.builtin.set_fact:
+    aap_prepare_current_candidates: >-
+      {{
+        aap_prepare_current_find.files
+        | default([])
+        | sort(attribute='path')
+        | map(attribute='path')
+        | list
+      }}
+  changed_when: false
+  when: aap_prepare_current_find is defined
+  no_log: "{{ aap_prepare_no_log | bool }}"
+
+- name: Validate controller-local artifact candidate count
+  ansible.builtin.assert:
+    that:
+      - aap_prepare_current_candidates | length == 1
+    fail_msg: >-
+      Expected exactly one {{ aap_prepare_current_label }} in {{ aap_prepare_current_artifact_dir }}
+      matching {{ aap_prepare_current_autodetect_patterns | join(', ') }}, found
+      {{ aap_prepare_current_candidates | length }}.
+      Set the explicit {{ aap_prepare_current_label }} source in inventory.
+    quiet: true
+  when:
+    - aap_prepare_current_required | bool
+    - aap_prepare_current_source == 'auto'
+    - aap_prepare_current_url | default('', true) | trim | length == 0
+    - aap_prepare_current_src | default('', true) | trim | length == 0
+    - aap_prepare_current_remote_src | default('', true) | trim | length == 0
+  no_log: "{{ aap_prepare_no_log | bool }}"
+
+- name: Resolve AAP prepare artifact source
+  ansible.builtin.set_fact:
+    aap_prepare_current_source_effective: >-
+      {{
+        'url'
+        if (
+          aap_prepare_current_source == 'url'
+          or (
+            aap_prepare_current_source == 'auto'
+            and aap_prepare_current_url | default('', true) | trim | length > 0
+          )
+        )
+        else (
+          'remote'
+          if (
+            aap_prepare_current_source == 'remote'
+            or (
+              aap_prepare_current_source == 'auto'
+              and aap_prepare_current_remote_src | default('', true) | trim | length > 0
+            )
+          )
+          else (
+            'local'
+            if (
+              aap_prepare_current_source == 'local'
+              or (
+                aap_prepare_current_source == 'auto'
+                and (
+                  aap_prepare_current_src | default('', true) | trim | length > 0
+                  or aap_prepare_current_candidates | length == 1
+                )
+              )
+            )
+            else ''
+          )
+        )
+      }}
+    aap_prepare_current_url_effective: "{{ aap_prepare_current_url | default('', true) | trim }}"
+    aap_prepare_current_src_effective: >-
+      {{
+        aap_prepare_current_src
+        if aap_prepare_current_src | default('', true) | trim | length > 0
+        else (aap_prepare_current_candidates | first | default('', true))
+      }}
+    aap_prepare_current_remote_src_effective: "{{ aap_prepare_current_remote_src | default('', true) | trim }}"
+  changed_when: false
+  no_log: "{{ aap_prepare_no_log | bool }}"
+
+- name: Validate required AAP prepare artifact source
+  ansible.builtin.assert:
+    that:
+      - aap_prepare_current_source_effective | trim | length > 0
+    fail_msg: >-
+      Missing required {{ aap_prepare_current_label }} source. Provide a URL,
+      controller-local source, managed-host source, or exactly one matching file
+      in {{ aap_prepare_current_artifact_dir }}.
+    quiet: true
+  when: aap_prepare_current_required | bool
+  no_log: "{{ aap_prepare_no_log | bool }}"
+
+- name: Append resolved URL artifact
+  ansible.builtin.set_fact:
+    aap_prepare_artifacts_items: >-
+      {{
+        aap_prepare_artifacts_items
+        + [
+          {
+            'name': aap_prepare_current_label,
+            'source': 'url',
+            'url': aap_prepare_current_url_effective,
+            'dest': aap_prepare_current_dest,
+            'checksum': aap_prepare_current_checksum,
+            'mode': aap_prepare_current_mode,
+            'force': aap_prepare_force,
+            'validate_certs': aap_prepare_validate_certs,
+            'timeout': aap_prepare_timeout,
+            'no_log': aap_prepare_no_log
+          }
+        ]
+      }}
+  changed_when: false
+  when: aap_prepare_current_source_effective == 'url'
+  no_log: "{{ aap_prepare_no_log | bool }}"
+
+- name: Append resolved controller-local artifact
+  ansible.builtin.set_fact:
+    aap_prepare_artifacts_items: >-
+      {{
+        aap_prepare_artifacts_items
+        + [
+          {
+            'name': aap_prepare_current_label,
+            'source': 'local',
+            'src': aap_prepare_current_src_effective,
+            'dest': aap_prepare_current_dest,
+            'checksum': aap_prepare_current_checksum,
+            'mode': aap_prepare_current_mode,
+            'force': aap_prepare_force,
+            'no_log': aap_prepare_no_log
+          }
+        ]
+      }}
+  changed_when: false
+  when: aap_prepare_current_source_effective == 'local'
+  no_log: "{{ aap_prepare_no_log | bool }}"
+
+- name: Append resolved managed-host artifact
+  ansible.builtin.set_fact:
+    aap_prepare_artifacts_items: >-
+      {{
+        aap_prepare_artifacts_items
+        + [
+          {
+            'name': aap_prepare_current_label,
+            'source': 'remote',
+            'remote_src': aap_prepare_current_remote_src_effective,
+            'dest': aap_prepare_current_dest,
+            'checksum': aap_prepare_current_checksum,
+            'mode': aap_prepare_current_mode,
+            'force': aap_prepare_force,
+            'no_log': aap_prepare_no_log
+          }
+        ]
+      }}
+  changed_when: false
+  when: aap_prepare_current_source_effective == 'remote'
+  no_log: "{{ aap_prepare_no_log | bool }}"

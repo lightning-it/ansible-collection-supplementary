@@ -1,0 +1,42 @@
+---
+aap_prepare_enabled: true
+
+aap_prepare_artifact_dir: >-
+  {{
+    lookup('ansible.builtin.env', 'AAP_ARTIFACT_DIR')
+    | default(lookup('ansible.builtin.env', 'PWD') ~ '/.artifacts', true)
+  }}
+aap_prepare_validate_certs: true
+aap_prepare_timeout: 1800
+aap_prepare_force: false
+aap_prepare_no_log: true
+
+aap_prepare_bundle_required: true
+aap_prepare_bundle_source: auto
+aap_prepare_bundle_url: ""
+aap_prepare_bundle_src: ""
+aap_prepare_bundle_remote_src: ""
+aap_prepare_bundle_dest: >-
+  {{ aap_deploy_setup_archive_path | default('/opt/aap/aap-containerized-setup.tar.gz', true) }}
+aap_prepare_bundle_checksum: "{{ aap_deploy_setup_archive_checksum | default('', true) }}"
+aap_prepare_bundle_min_size_bytes: >-
+  {{ aap_deploy_validate_archive_min_size_bytes | default(100000000, true) }}
+aap_prepare_bundle_autodetect: true
+aap_prepare_bundle_autodetect_patterns:
+  - aap-containerized-setup.tar.gz
+  - ansible-automation-platform-containerized-setup-bundle-*.tar.gz
+
+aap_prepare_manifest_required: "{{ aap_cac_controller_license_required | default(false, true) }}"
+aap_prepare_manifest_source: auto
+aap_prepare_manifest_url: ""
+aap_prepare_manifest_src: ""
+aap_prepare_manifest_remote_src: ""
+aap_prepare_manifest_dest: >-
+  {{ aap_deploy_install_dir | default('/opt/aap', true) }}/manifest.zip
+aap_prepare_manifest_checksum: ""
+aap_prepare_manifest_autodetect: true
+aap_prepare_manifest_autodetect_patterns:
+  - manifest*.zip
+  - '*manifest*.zip'
+
+aap_prepare_artifacts_items: []

@@ -1,21 +1,19 @@
 ---
 galaxy_info:
-  role_name: nessus_deploy
+  role_name: aap_prepare
   namespace: lit
-  author: Lightning IT
-  description: Deploy Nessus in a Podman pod.
+  author: Rene Osorio
+  description: Prepare protected AAP runtime artifacts before deployment.
   company: Lightning IT
   license: MIT
   min_ansible_version: "2.18"
   platforms:
     - name: EL
       versions:
-        - "9"
+        - "all"
   galaxy_tags:
     - modulix
-    - nessus
-    - podman
-    - security
-    - automation
+    - aap
+    - artifacts
 
 dependencies: []

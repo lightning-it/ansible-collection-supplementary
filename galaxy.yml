@@ -10,7 +10,7 @@ repository: https://github.com/lightning-it/ansible-collection-supplementary
 authors:
   - Lightning IT
 license:
-  - GPL-2.0-only
+  - MIT
 tags:
   - modulix
   - keycloak

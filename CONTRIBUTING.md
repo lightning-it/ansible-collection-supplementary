@@ -21,7 +21,7 @@ This document applies to all `ansible-collection-*` repositories under
    when functionality changes. Explain _why_ as well as _what_.
 
 4. **Respect the licence.**  
-   All contributions are under `GPL-2.0-only`. New dependencies must be licence
+   All contributions are under `MIT`. New dependencies must be licence
    compatible and, where relevant, documented in `requirements.yml` or
    `requirements.txt`.
 

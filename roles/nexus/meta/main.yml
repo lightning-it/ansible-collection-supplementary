@@ -5,7 +5,7 @@ galaxy_info:
   author: Dirk Egert, René Osorio
   description: Role to manage sonatype nexus Installation
   company: Lightning IT
-  license: license (BSD, MIT)
+  license: MIT
   min_ansible_version: '2.18'
   galaxy_tags: []
 dependencies: []
