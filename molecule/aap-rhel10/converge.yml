@@ -44,7 +44,7 @@
           Full-install mode requires AAP_BUNDLE_FILE to point at a local AAP setup bundle on the control node.
         quiet: true
   roles:
-    - role: aap_deploy
+    - role: lit.supplementary.aap_deploy
       vars:
         aap_deploy_topology: growth
         aap_deploy_bundle_dir: /opt/aap/bundle
