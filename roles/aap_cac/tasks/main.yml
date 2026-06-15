@@ -31,16 +31,21 @@
       ansible.builtin.set_fact:
         aap_cac_auth_token: >-
           {{
-            (
-              aap_token.token
-              if (aap_token is mapping)
-              else aap_token
-            )
+            aap_token
             | default('', true)
             | string
             | trim
           }}
       changed_when: false
+      no_log: true
+      tags: always
+
+    - name: Require AAP CaC token value
+      ansible.builtin.assert:
+        that:
+          - aap_cac_auth_token | default('', true) | string | trim | length > 0
+        fail_msg: >-
+          AAP CaC requires a non-empty AAP 2.7 gateway token string.
       no_log: true
       tags: always
 

@@ -18,15 +18,23 @@
 
 - name: create_authentication_token | Create AAP authentication token
   block:
-    - name: create_authentication_token | Request token
-      ansible.platform.token:
-        gateway_hostname: "{{ aap_cac_gateway_hostname }}"
-        gateway_username: "{{ aap_cac_gateway_username }}"
-        gateway_password: "{{ aap_cac_gateway_password }}"
-        gateway_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
-        description: "{{ aap_cac_token_description }}"
-        scope: write
-        state: present
+    - name: create_authentication_token | Request token from AAP 2.7 gateway API
+      ansible.builtin.uri:
+        url: "{{ (aap_cac_gateway_hostname | regex_replace('/+$', '')) ~ '/api/gateway/v1/tokens/' }}"
+        method: POST
+        user: "{{ aap_cac_gateway_username }}"
+        password: "{{ aap_cac_gateway_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+        body_format: json
+        body:
+          description: "{{ aap_cac_token_description }}"
+          scope: write
+        status_code:
+          - 200
+          - 201
+        timeout: 30
+        return_content: true
       register: __aap_cac_token_create
       retries: "{{ aap_cac_token_request_retries | int }}"
       delay: "{{ aap_cac_token_request_delay | int }}"
@@ -37,36 +45,18 @@
 
     - name: create_authentication_token | Normalize token facts
       ansible.builtin.set_fact:
-        aap_cac_created_token: "{{ __aap_cac_created_token }}"
+        aap_cac_created_token:
+          id: "{{ __aap_cac_token_create.json.id | default('') | string }}"
+          token: "{{ __aap_cac_token_create.json.token | default('') | string }}"
         aap_token: "{{ __aap_cac_token_value }}"
         aap_cac_auth_token: "{{ __aap_cac_token_value }}"
       vars:
-        __aap_cac_created_token: >-
-          {{
-            (
-              aap_token
-              if (aap_token is mapping)
-              else (
-                __aap_cac_token_create.aap_token
-                | default(__aap_cac_token_create.ansible_facts.aap_token, true)
-                | default({}, true)
-              )
-            )
-          }}
         __aap_cac_token_value: >-
           {{
-            (
-              __aap_cac_created_token.token
-              | default(
-                  __aap_cac_token_create.token
-                  | default(
-                      __aap_cac_token_create.json.token
-                      | default(__aap_cac_token_create.value, true),
-                      true
-                    ),
-                  true
-                )
-            ) | default('', true) | string | trim
+            __aap_cac_token_create.json.token
+            | default('', true)
+            | string
+            | trim
           }}
       no_log: true
       when:
@@ -76,9 +66,10 @@
     - name: create_authentication_token | Require non-empty token
       ansible.builtin.assert:
         that:
+          - aap_cac_created_token.id | default('', true) | string | trim | length > 0
           - aap_token | default('', true) | trim | length > 0
         fail_msg: >-
-          Failed to resolve AAP token value from ansible.platform.token module output.
+          Failed to resolve AAP 2.7 gateway token id or token value from API response.
       no_log: true
       when:
         - __aap_cac_token_create is defined
@@ -87,7 +78,7 @@
     - name: create_authentication_token | Fail with sanitized diagnostics
       ansible.builtin.fail:
         msg: >-
-          Failed to create AAP token via {{ aap_cac_gateway_hostname }} as
+          Failed to create AAP 2.7 gateway token via {{ aap_cac_gateway_hostname }} as
           user {{ aap_cac_gateway_username }} (validate_certs={{ aap_cac_gateway_validate_certs | bool }}).
           Check gateway reachability/readiness, credentials, and certificate trust.
           For self-signed certs, set aap_validate_certs=false (or aap_cac_gateway_validate_certs=false).

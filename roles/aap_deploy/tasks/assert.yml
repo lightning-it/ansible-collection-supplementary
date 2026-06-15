@@ -67,6 +67,7 @@
       - aap_deploy_required_repos is not string
       - aap_deploy_required_packages is sequence
       - aap_deploy_required_packages is not string
+      - aap_deploy_setup_download_version == '2.7'
       - aap_deploy_setup_install_extra_vars is mapping
       - aap_deploy_setup_install_extra_vars_files is sequence
       - aap_deploy_setup_install_extra_vars_files is not string
@@ -104,7 +105,7 @@
       - aap_deploy_postgresql_admin_password_effective is string
     fail_msg: >-
       Invalid base configuration for lit.supplementary.aap_deploy.
-      This role supports disconnected bundle mode only
+      This role supports AAP 2.7 disconnected bundle mode only
       (aap_deploy_install_type=bundle), with absolute install paths and a non-root install user.
     quiet: true
   when: aap_deploy_enabled | bool

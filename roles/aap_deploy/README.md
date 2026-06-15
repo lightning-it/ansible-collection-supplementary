@@ -29,7 +29,7 @@ Key variables:
 - `aap_deploy_topology` (`growth` or `enterprise`)
 - `aap_deploy_install_user`
 - `aap_deploy_install_dir`
-- `aap_deploy_setup_download_version` (default: `"2.7"`)
+- `aap_deploy_setup_download_version` (fixed: `"2.7"`)
 - `aap_deploy_setup_download_containerized`
 - `aap_deploy_setup_prepare_process_template`
 - `aap_deploy_setup_install_force`
@@ -180,6 +180,8 @@ Expected output includes `[automationmetrics]`, `automationmetrics_pg_host`,
 
 RHEL 10 host prep:
 - AAP 2.7 supports RHEL 10 containerized installs.
+- This role is 2.7-only and fails fast when
+  `aap_deploy_setup_download_version` is changed to another version.
 - Required RHSM repository IDs are generated from
   `ansible_distribution_major_version`, so RHEL 10 resolves to
   `rhel-10-for-<arch>-baseos-rpms` and `rhel-10-for-<arch>-appstream-rpms`.
