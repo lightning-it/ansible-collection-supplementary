@@ -1,3 +1,4 @@
+# yamllint disable rule:comments
 #cloud-config
 # yamllint disable rule:document-start
 hostname: __HOSTNAME__

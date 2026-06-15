@@ -4,4 +4,4 @@
   become: true
   gather_facts: true
   roles:
-    - role: aap_deploy
+    - role: lit.supplementary.aap_deploy

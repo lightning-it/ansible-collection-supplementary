@@ -23,7 +23,7 @@
           lit artifact test
         mode: "0644"
   roles:
-    - role: artifacts
+    - role: lit.supplementary.artifacts
       vars:
         artifacts_default_owner: "{{ lookup('ansible.builtin.pipe', 'id -un') }}"
         artifacts_default_group: "{{ lookup('ansible.builtin.pipe', 'id -gn') }}"
