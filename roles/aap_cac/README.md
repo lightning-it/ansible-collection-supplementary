@@ -7,6 +7,8 @@ AAP configuration-as-code role tasksets for AAP object configuration.
 Ensure `lit.supplementary` and its dependencies are preinstalled by your
 workspace/EE preparation flow.
 Collection installation and packaging are out of scope for role task execution.
+This role supports AAP 2.7 and uses the AAP gateway token API directly for the
+temporary configuration-as-code authentication token.
 
 ## Variables
 
@@ -39,6 +41,8 @@ Password and secret input behavior:
 - Inventory is the source of truth.
 - Inventory may provide plain values, Ansible Vault values, or lookup-based values (for example HCP Vault).
 - This role does not read or write Vault directly.
+- If `aap_token` is provided by the caller, it must be the raw AAP 2.7 gateway
+  token string.
 
 ## Dependencies
 
