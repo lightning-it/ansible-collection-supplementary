@@ -235,6 +235,7 @@ ansible_remote_tmp: /appl/ansible-tmp
 
 Large bundle copy and temporary space:
 - Ansible copies modules and transfer payloads through `ansible_remote_tmp`.
+  That is general Ansible runtime behavior, not AAP installer behavior.
 - If the SSH user's home filesystem is small, set a larger remote temp path in
   inventory, for example:
 
@@ -242,8 +243,10 @@ Large bundle copy and temporary space:
 ansible_remote_tmp: /appl/ansible-tmp
 ```
 
-Ensure the remote temp path, `aap_deploy_install_dir`, and setup extraction path
-have enough free space for the compressed bundle and extracted installer.
+Prepare custom `ansible_remote_tmp` paths before fact gathering or application
+roles with `lit.foundational.ansible_remote_tmp`. It uses a raw bootstrap
+command first because normal Ansible modules cannot run when `ansible_remote_tmp`
+is missing or too restrictive.
 
 ## Installer Temporary Directory
 
@@ -267,9 +270,11 @@ aap_deploy_install_environment:
   TMP: /appl/tmp
 ```
 
-`ansible_remote_tmp` controls Ansible module staging.
-`aap_deploy_install_environment` controls the environment of the AAP
-containerized installer task.
+`ansible_remote_tmp` controls Ansible module staging and should be prepared by
+`lit.foundational.ansible_remote_tmp`. `aap_deploy_install_environment`
+controls the environment of the AAP containerized installer task.
+When `aap_deploy_manage_install_tmp_dir=true`, `aap_deploy_install_tmp_dir` is
+created as `root:root` with mode `1777` so become-user workflows can use it.
 
 Enable the temporary environment diagnostic when validating a new host:
 

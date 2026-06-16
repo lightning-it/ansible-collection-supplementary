@@ -51,8 +51,8 @@
   ansible.builtin.file:
     path: "{{ aap_deploy_install_tmp_dir }}"
     state: directory
-    owner: "{{ aap_deploy_install_user }}"
-    group: "{{ aap_deploy_install_user }}"
+    owner: root
+    group: root
     mode: '1777'
   become: true
   when:
