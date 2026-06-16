@@ -1,3 +1,9 @@
+## [1.30.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.30.0...v1.30.1) (2026-06-16)
+
+### Bug Fixes
+
+* role aap deploy ([#223](https://github.com/lightning-it/ansible-collection-supplementary/issues/223)) ([437c79e](https://github.com/lightning-it/ansible-collection-supplementary/commit/437c79e912f6bf281d4072df82679f183efe2ee3))
+
 ## [1.30.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.29.0...v1.30.0) (2026-06-16)
 
 ### Features
