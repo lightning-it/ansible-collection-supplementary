@@ -102,6 +102,7 @@ bash scripts/wunder-devtools-ee.sh bash -c '
   export HOME="$(mktemp -d /tmp/ansible-lint-home.XXXXXX)"
   mkdir -p "${HOME}"
   mkdir -p "${HOME}/.ansible/tmp" "${HOME}/.ansible/collections"
+  export ANSIBLE_HOME="${HOME}/.ansible"
   export ANSIBLE_LOCAL_TEMP="${HOME}/.ansible/tmp"
   export ANSIBLE_REMOTE_TEMP="${HOME}/.ansible/tmp"
 
@@ -129,6 +130,10 @@ bash scripts/wunder-devtools-ee.sh bash -c '
   stale_collection_dir="${HOME}/.ansible/collections/ansible_collections/${ns}/${name}"
   if [ -d "$stale_collection_dir" ]; then
     rm -rf "$stale_collection_dir"
+  fi
+  workspace_stale_collection_dir="/workspace/.ansible/collections/ansible_collections/${ns}/${name}"
+  if [ -d "$workspace_stale_collection_dir" ]; then
+    rm -rf "$workspace_stale_collection_dir"
   fi
 
   export ANSIBLE_CONFIG="/workspace/ansible.cfg"
