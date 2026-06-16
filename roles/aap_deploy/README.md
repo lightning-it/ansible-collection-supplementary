@@ -60,6 +60,9 @@ Key variables:
 - `aap_deploy_automationmetrics_secret_key`
 - `aap_deploy_automationmetrics_resource_server`
 - `aap_deploy_setup_prep_inv_nodes_extra`
+- `aap_deploy_gateway_main_url` (optional installer `gateway_main_url`)
+- `aap_deploy_gateway_nginx_http_port` / `aap_deploy_gateway_nginx_https_port`
+- `aap_deploy_envoy_http_port` / `aap_deploy_envoy_https_port`
 - `aap_deploy_postgresql_admin_username` (default: `postgres`)
 - `aap_deploy_gateway_pg_host` / `aap_deploy_controller_pg_host` / `aap_deploy_hub_pg_host` / `aap_deploy_eda_pg_host`
 - `aap_deploy_gateway_pg_password` / `aap_deploy_controller_pg_password`

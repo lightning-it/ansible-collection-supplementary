@@ -22,7 +22,7 @@
 
 - name: Check gateway HTTPS endpoint reachability
   ansible.builtin.uri:
-    url: "https://{{ aap_deploy_gateway_verify_host }}:443"
+    url: "{{ aap_deploy_gateway_verify_url }}"
     method: GET
     validate_certs: "{{ aap_deploy_gateway_verify_validate_certs }}"
     status_code: "{{ aap_deploy_gateway_verify_status_codes }}"

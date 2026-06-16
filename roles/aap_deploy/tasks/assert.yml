@@ -89,6 +89,17 @@
       - aap_deploy_growth_inventory_hostvars_extra is string
       - aap_deploy_enterprise_inventory_hostvars_extra is string
       - aap_deploy_setup_prep_inv_nodes_extra is mapping
+      - aap_deploy_gateway_main_url is string
+      - aap_deploy_gateway_nginx_http_port | int > 0
+      - aap_deploy_gateway_nginx_http_port | int <= 65535
+      - aap_deploy_gateway_nginx_https_port | int > 0
+      - aap_deploy_gateway_nginx_https_port | int <= 65535
+      - aap_deploy_gateway_nginx_disable_https is boolean
+      - aap_deploy_envoy_http_port | int > 0
+      - aap_deploy_envoy_http_port | int <= 65535
+      - aap_deploy_envoy_https_port | int > 0
+      - aap_deploy_envoy_https_port | int <= 65535
+      - aap_deploy_envoy_disable_https is boolean
       - aap_deploy_growth_automationmetrics_host | default('', true) | trim | length > 0
       - aap_deploy_enterprise_automationmetrics_hosts is sequence
       - aap_deploy_enterprise_automationmetrics_hosts is not string
@@ -102,6 +113,7 @@
       - aap_deploy_postgresql_admin_username | default('', true) | trim | length > 0
       - aap_deploy_gateway_verify_status_codes is sequence
       - aap_deploy_gateway_verify_status_codes is not string
+      - aap_deploy_gateway_verify_url is string
       - aap_deploy_gateway_admin_password_effective is string
       - aap_deploy_controller_admin_password_effective is string
       - aap_deploy_hub_admin_password_effective is string
@@ -113,6 +125,18 @@
       (aap_deploy_install_type=bundle), with absolute install paths and a non-root install user.
     quiet: true
   when: aap_deploy_enabled | bool
+  tags: always
+
+- name: Validate explicit gateway main URL
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_gateway_main_url | trim is match('^https?://')
+    fail_msg: >-
+      aap_deploy_gateway_main_url must start with http:// or https:// when set.
+    quiet: true
+  when:
+    - aap_deploy_enabled | bool
+    - aap_deploy_gateway_main_url | trim | length > 0
   tags: always
 
 - name: Validate managed AAP installer temporary directory

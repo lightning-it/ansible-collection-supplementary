@@ -351,6 +351,16 @@ aap_deploy_enterprise_inventory_hostvars_extra: ""
 # Generic extension point for future installer inventory groups.
 aap_deploy_setup_prep_inv_nodes_extra: {}
 
+# Gateway public URL and listener ports for the containerized installer
+# inventory. Leave aap_deploy_gateway_main_url empty to use upstream defaults.
+aap_deploy_gateway_main_url: ""
+aap_deploy_gateway_nginx_http_port: 8083
+aap_deploy_gateway_nginx_https_port: 8446
+aap_deploy_gateway_nginx_disable_https: false
+aap_deploy_envoy_http_port: 80
+aap_deploy_envoy_https_port: 443
+aap_deploy_envoy_disable_https: false
+
 aap_deploy_tls_gateway_host_default: >-
   {{
     aap_deploy_growth_gateway_host
@@ -532,6 +542,11 @@ aap_deploy_gateway_verify_host: >-
     aap_deploy_growth_gateway_host
     if aap_deploy_topology == 'growth'
     else (aap_deploy_enterprise_gateway_hosts | first)
+  }}
+aap_deploy_gateway_verify_url: >-
+  {{
+    aap_deploy_gateway_main_url
+    | default('https://' ~ aap_deploy_gateway_verify_host ~ ':443', true)
   }}
 aap_deploy_gateway_verify_validate_certs: true
 aap_deploy_gateway_verify_status_codes:
