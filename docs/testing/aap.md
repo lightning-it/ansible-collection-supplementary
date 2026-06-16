@@ -155,9 +155,11 @@ INCUS_IMAGE=local:rhel10-ci INCUS_VM=true scripts/test-aap-install-temp-incus
 KEEP_INCUS=1 scripts/test-aap-install-temp-incus
 ```
 
-The helper prepares `/appl/tmp` and `/appl/ansible-tmp`, runs the same
-`roles/aap_deploy/tasks/35_installer_environment.yml` diagnostic used by the
-role, and asserts:
+The helper intentionally starts with restrictive `/appl/ansible-tmp`
+permissions, uses `lit.foundational.ansible_remote_tmp` to repair the general
+Ansible module staging directory, then runs the same
+`roles/aap_deploy/tasks/35_installer_environment.yml` diagnostic used by
+`aap_deploy` and asserts:
 
 ```text
 TMPDIR=/appl/tmp

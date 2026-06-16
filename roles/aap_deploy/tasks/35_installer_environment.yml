@@ -28,6 +28,8 @@
         print("TMP=" + str(os.environ.get("TMP")))
         print("tempfile.gettempdir()=" + tempfile.gettempdir())
   environment: "{{ aap_deploy_installer_environment }}"
+  become: true
+  become_user: "{{ aap_deploy_install_user }}"
   register: aap_deploy_install_environment_debug_result
   changed_when: false
   when: aap_deploy_debug_install_environment | default(false) | bool

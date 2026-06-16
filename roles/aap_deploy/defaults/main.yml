@@ -116,7 +116,7 @@ aap_deploy_installer_runner: native
 aap_deploy_installer_wait: true
 aap_deploy_installer_async_timeout: 14400
 aap_deploy_installer_async_retries: 720
-aap_deploy_installer_async_delay: 20
+aap_deploy_installer_async_delay: 10
 aap_deploy_installer_log_dir: "{{ aap_deploy_install_dir }}/logs"
 aap_deploy_installer_async_jid_path: >-
   {{ aap_deploy_installer_log_dir }}/aap_installer_async_jid

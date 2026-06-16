@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 COLLECTION_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+SOURCES_ROOT="$(cd -- "${COLLECTION_ROOT}/.." && pwd)"
+FOUNDATIONAL_COLLECTION_ROOT="${FOUNDATIONAL_COLLECTION_ROOT:-${SOURCES_ROOT}/ansible-collection-foundational}"
 
 INCUS_IMAGE="${INCUS_IMAGE:-images:rockylinux/9/cloud}"
 INCUS_INSTANCE="${INCUS_INSTANCE:-aap27-temp-test-$$}"
@@ -41,6 +43,7 @@ if ! command -v python3 >/dev/null 2>&1 || ! command -v sudo >/dev/null 2>&1; th
 fi
 groupadd -f aap
 id aap >/dev/null 2>&1 || useradd -g aap -m -s /bin/bash aap
+id svc_ansible >/dev/null 2>&1 || useradd -m -s /bin/bash svc_ansible
 mkdir -p /appl/tmp /appl/ansible-tmp
 chmod 1777 /appl/tmp
 chmod 700 /appl/ansible-tmp
@@ -61,11 +64,15 @@ EOF
 
 cat > "${WORK_DIR}/playbook.yml" <<'EOF'
 ---
-- name: Validate AAP installer temp env through Incus
+- name: Validate remote tmp bootstrap and AAP installer temp env through Incus
   hosts: aap_hosts
   gather_facts: false
   become: true
   vars:
+    ansible_remote_tmp_path: /appl/ansible-tmp
+    ansible_remote_tmp_validate_users:
+      - svc_ansible
+      - aap
     aap_deploy_install_user: aap
     aap_deploy_install_environment:
       TMPDIR: /appl/tmp
@@ -74,6 +81,10 @@ cat > "${WORK_DIR}/playbook.yml" <<'EOF'
     aap_deploy_debug_install_environment: true
     aap_admin_passwords_no_log: false
   tasks:
+    - name: Bootstrap Ansible remote tmp before normal module use
+      ansible.builtin.include_role:
+        name: ansible_remote_tmp
+
     - name: Assert Ansible remote tmp is configured for the test host
       ansible.builtin.assert:
         that:
@@ -106,6 +117,8 @@ cat > "${WORK_DIR}/playbook.yml" <<'EOF'
 EOF
 
 echo "Running Ansible diagnostic..."
-COLLECTION_ROOT="${COLLECTION_ROOT}" ansible-playbook -i "${WORK_DIR}/inventory.yml" "${WORK_DIR}/playbook.yml"
+export COLLECTION_ROOT
+export ANSIBLE_ROLES_PATH="${COLLECTION_ROOT}/roles:${FOUNDATIONAL_COLLECTION_ROOT}/roles"
+ansible-playbook -i "${WORK_DIR}/inventory.yml" "${WORK_DIR}/playbook.yml"
 
 echo "AAP installer temp environment diagnostic succeeded for ${INCUS_INSTANCE}."
