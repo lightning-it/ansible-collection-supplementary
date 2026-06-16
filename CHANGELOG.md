@@ -1,3 +1,9 @@
+## [1.30.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.29.0...v1.30.0) (2026-06-16)
+
+### Features
+
+* enhance AAP deployment with Ansible remote tmp bootstrap and improved diagnostics ([#220](https://github.com/lightning-it/ansible-collection-supplementary/issues/220)) ([f04e341](https://github.com/lightning-it/ansible-collection-supplementary/commit/f04e341b19272981883e6132107bd3d78f1d185b))
+
 ## [1.29.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.28.1...v1.29.0) (2026-06-16)
 
 ### Features
