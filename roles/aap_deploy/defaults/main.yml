@@ -360,19 +360,6 @@ aap_deploy_gateway_nginx_disable_https: false
 aap_deploy_envoy_http_port: 80
 aap_deploy_envoy_https_port: 443
 aap_deploy_envoy_disable_https: false
-aap_deploy_dns_precheck_enabled: true
-aap_deploy_dns_precheck_hostname: >-
-  {{
-    (
-      aap_deploy_gateway_main_url
-      | urlsplit('hostname')
-    )
-    if (aap_deploy_gateway_main_url | default('', true) | trim | length > 0)
-    else aap_deploy_gateway_verify_host
-  }}
-aap_deploy_dns_precheck_require_ipv4: true
-aap_deploy_dns_precheck_reject_link_local: true
-aap_deploy_dns_precheck_expected_addresses: []
 
 aap_deploy_tls_gateway_host_default: >-
   {{

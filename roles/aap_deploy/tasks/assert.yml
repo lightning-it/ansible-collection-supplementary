@@ -100,12 +100,6 @@
       - aap_deploy_envoy_https_port | int > 0
       - aap_deploy_envoy_https_port | int <= 65535
       - aap_deploy_envoy_disable_https is boolean
-      - aap_deploy_dns_precheck_enabled is boolean
-      - aap_deploy_dns_precheck_hostname is string
-      - aap_deploy_dns_precheck_require_ipv4 is boolean
-      - aap_deploy_dns_precheck_reject_link_local is boolean
-      - aap_deploy_dns_precheck_expected_addresses is sequence
-      - aap_deploy_dns_precheck_expected_addresses is not string
       - aap_deploy_growth_automationmetrics_host | default('', true) | trim | length > 0
       - aap_deploy_enterprise_automationmetrics_hosts is sequence
       - aap_deploy_enterprise_automationmetrics_hosts is not string
@@ -131,20 +125,6 @@
       (aap_deploy_install_type=bundle), with absolute install paths and a non-root install user.
     quiet: true
   when: aap_deploy_enabled | bool
-  tags: always
-
-- name: Validate AAP DNS precheck settings
-  ansible.builtin.assert:
-    that:
-      - aap_deploy_dns_precheck_hostname | trim | length > 0
-      - aap_deploy_dns_precheck_hostname is not match('^https?://')
-    fail_msg: >-
-      aap_deploy_dns_precheck_hostname must be a plain DNS hostname, not a URL.
-      Set a valid AAP public hostname or disable the DNS precheck explicitly.
-    quiet: true
-  when:
-    - aap_deploy_enabled | bool
-    - aap_deploy_dns_precheck_enabled | bool
   tags: always
 
 - name: Validate explicit gateway main URL
