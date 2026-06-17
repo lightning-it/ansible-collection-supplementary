@@ -14,17 +14,73 @@
     state: present
   when: aap_deploy_install_user_create | bool
 
+- name: Ensure install user home parent directory exists
+  ansible.builtin.file:
+    path: "{{ aap_deploy_install_user_home | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: aap_deploy_install_user_create | bool
+
+- name: Inspect existing install user account
+  ansible.builtin.command:
+    cmd: "getent passwd {{ aap_deploy_install_user }}"
+  register: aap_deploy_install_user_passwd_result
+  changed_when: false
+  failed_when: false
+  when: aap_deploy_install_user_create | bool
+
+- name: Inspect install user primary group
+  ansible.builtin.command:
+    cmd: "getent group {{ aap_deploy_install_user }}"
+  register: aap_deploy_install_user_group_result
+  changed_when: false
+  failed_when: false
+  when: aap_deploy_install_user_create | bool
+
+- name: Decide whether install user account must be changed
+  ansible.builtin.set_fact:
+    aap_deploy_install_user_account_needs_change: >-
+      {{
+        (aap_deploy_install_user_passwd_result.rc | default(1) != 0)
+        or (
+          (aap_deploy_install_user_passwd_result.stdout.split(':')[3] | default(''))
+          !=
+          (aap_deploy_install_user_group_result.stdout.split(':')[2] | default(''))
+        )
+        or (
+          (aap_deploy_install_user_passwd_result.stdout.split(':')[5] | default(''))
+          != aap_deploy_install_user_home
+        )
+        or (
+          (aap_deploy_install_user_passwd_result.stdout.split(':')[6] | default(''))
+          != aap_deploy_install_user_shell
+        )
+        or ((aap_deploy_install_user_groups | length) > 0)
+      }}
+  changed_when: false
+  when: aap_deploy_install_user_create | bool
+
 - name: Ensure dedicated install user exists
   ansible.builtin.user:
     name: "{{ aap_deploy_install_user }}"
     group: "{{ aap_deploy_install_user }}"
-    groups: "{{ (aap_deploy_install_user_groups + ['wheel']) | unique | join(',') }}"
-    append: true
+    groups: >-
+      {{
+        (
+          (aap_deploy_install_user_groups | length) > 0
+        )
+        | ternary(aap_deploy_install_user_groups | unique | join(','), omit)
+      }}
+    append: "{{ ((aap_deploy_install_user_groups | length) > 0) | ternary(true, omit) }}"
     home: "{{ aap_deploy_install_user_home }}"
     shell: "{{ aap_deploy_install_user_shell }}"
     create_home: true
     state: present
-  when: aap_deploy_install_user_create | bool
+  when:
+    - aap_deploy_install_user_create | bool
+    - aap_deploy_install_user_account_needs_change | bool
 
 - name: Ensure install user has passwordless sudo access
   ansible.builtin.copy:
@@ -46,6 +102,47 @@
   ansible.builtin.set_fact:
     aap_deploy_install_user_uid: "{{ aap_deploy_install_user_uid_result.stdout | trim }}"
   changed_when: false
+
+- name: Resolve rootless Podman runroot
+  ansible.builtin.set_fact:
+    aap_deploy_podman_runroot_effective: >-
+      {{
+        aap_deploy_podman_runroot
+        | default('/run/user/' ~ aap_deploy_install_user_uid ~ '/containers', true)
+      }}
+  changed_when: false
+  when: aap_deploy_manage_podman_storage | bool
+
+- name: Ensure rootless Podman graphroot exists
+  ansible.builtin.file:
+    path: "{{ aap_deploy_podman_graphroot }}"
+    state: directory
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0700'
+  when: aap_deploy_manage_podman_storage | bool
+
+- name: Ensure install user containers config directory exists
+  ansible.builtin.file:
+    path: "{{ aap_deploy_podman_storage_conf_path | dirname }}"
+    state: directory
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0700'
+  when: aap_deploy_manage_podman_storage | bool
+
+- name: Configure rootless Podman storage for install user
+  ansible.builtin.copy:
+    dest: "{{ aap_deploy_podman_storage_conf_path }}"
+    owner: "{{ aap_deploy_install_user }}"
+    group: "{{ aap_deploy_install_user }}"
+    mode: '0600'
+    content: |
+      [storage]
+      driver = "{{ aap_deploy_podman_storage_driver }}"
+      runroot = "{{ aap_deploy_podman_runroot_effective }}"
+      graphroot = "{{ aap_deploy_podman_graphroot }}"
+  when: aap_deploy_manage_podman_storage | bool
 
 - name: Ensure AAP installer temporary directory exists
   ansible.builtin.file:

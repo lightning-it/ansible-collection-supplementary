@@ -4,19 +4,33 @@
     path: "{{ aap_deploy_installed_marker_path }}"
   register: aap_deploy_install_marker_precheck
 
+- name: Decide whether runtime probe is safe before host preparation
+  ansible.builtin.set_fact:
+    aap_deploy_runtime_probe_requested: >-
+      {{
+        (
+          (aap_deploy_skip_if_installed | bool)
+          and (aap_deploy_skip_if_installed_require_runtime | bool)
+          and (aap_deploy_install_marker_precheck.stat.exists | default(false))
+        )
+        or
+        (
+          (aap_deploy_skip_if_runtime_active | bool)
+          and (
+            (aap_deploy_install_marker_precheck.stat.exists | default(false))
+            or not (aap_deploy_manage_host_prep | bool)
+          )
+        )
+      }}
+  changed_when: false
+
 - name: Check install user exists for runtime probe
   ansible.builtin.command:
     cmd: "getent passwd {{ aap_deploy_install_user }}"
   register: aap_deploy_install_user_getent
   changed_when: false
   failed_when: false
-  when: >-
-    (aap_deploy_skip_if_runtime_active | bool)
-    or
-    (
-      (aap_deploy_skip_if_installed | bool)
-      and (aap_deploy_skip_if_installed_require_runtime | bool)
-    )
+  when: aap_deploy_runtime_probe_requested | bool
 
 - name: Probe running podman container names for install user
   ansible.builtin.command:
@@ -29,14 +43,8 @@
   changed_when: false
   failed_when: false
   when:
-    - >-
-      (aap_deploy_skip_if_runtime_active | bool)
-      or
-      (
-        (aap_deploy_skip_if_installed | bool)
-        and (aap_deploy_skip_if_installed_require_runtime | bool)
-      )
-    - aap_deploy_install_user_getent.rc == 0
+    - aap_deploy_runtime_probe_requested | bool
+    - (aap_deploy_install_user_getent.rc | default(1)) == 0
 
 - name: Build runtime detection facts
   ansible.builtin.set_fact:

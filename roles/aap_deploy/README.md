@@ -90,6 +90,9 @@ Key variables:
 - `aap_deploy_runtime_probe_all_containers` (default: `true`, uses `podman ps -a`)
 - `aap_deploy_runtime_name_regex` (default: `.*(automation|ansible|aap).*`)
 - `aap_deploy_runtime_min_matching_containers` (default: `1`)
+- `aap_deploy_manage_podman_storage`
+- `aap_deploy_podman_graphroot`
+- `aap_deploy_podman_runroot`
 - `aap_deploy_enforce_min_mem_check` (default: `true`)
 - `aap_deploy_min_mem_mb` (default: `15000`, approximately 16GB)
 - `aap_deploy_growth_inventory_connection` (default: `local`)
@@ -230,7 +233,9 @@ Customer baseline/Satellite example:
 ```yaml
 aap_deploy_install_dir: /appl/aap
 aap_deploy_install_user: aap
-aap_deploy_install_user_home: /appl/aap/home/aap
+aap_deploy_install_user_home: /home/aap
+aap_deploy_manage_podman_storage: true
+aap_deploy_podman_graphroot: /appl/containers/aap/storage
 aap_deploy_manage_host_prep: true
 aap_deploy_manage_rhsm_repos: false
 ansible_remote_tmp: /appl/ansible-tmp
