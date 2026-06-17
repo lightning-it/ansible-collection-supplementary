@@ -1,2 +1,2 @@
 ---
-aap_destroy_enabled: "{{ aap_destory_enabled | default(aap_enabled | default(true, true), true) }}"
+aap_destroy_enabled: "{{ aap_enabled | default(true, true) }}"

@@ -118,70 +118,59 @@
   when: aap_prepare_current_required | bool
   no_log: "{{ aap_prepare_no_log | bool }}"
 
-- name: Append resolved URL artifact
+- name: Build resolved AAP prepare artifact item
   ansible.builtin.set_fact:
-    aap_prepare_artifacts_items: >-
+    aap_prepare_current_artifact_item: >-
       {{
-        aap_prepare_artifacts_items
-        + [
-          {
-            'name': aap_prepare_current_label,
-            'source': 'url',
-            'url': aap_prepare_current_url_effective,
-            'dest': aap_prepare_current_dest,
-            'checksum': aap_prepare_current_checksum,
-            'mode': aap_prepare_current_mode,
-            'force': aap_prepare_force,
-            'validate_certs': aap_prepare_validate_certs,
-            'timeout': aap_prepare_timeout,
-            'no_log': aap_prepare_no_log
-          }
-        ]
+        {
+          'name': aap_prepare_current_label,
+          'source': aap_prepare_current_source_effective,
+          'dest': aap_prepare_current_dest,
+          'checksum': aap_prepare_current_checksum,
+          'mode': aap_prepare_current_mode,
+          'force': aap_prepare_force,
+          'no_log': aap_prepare_no_log
+        }
+        | combine(
+            (
+              {
+                'url': aap_prepare_current_url_effective,
+                'validate_certs': aap_prepare_validate_certs,
+                'timeout': aap_prepare_timeout
+              }
+              if aap_prepare_current_source_effective == 'url'
+              else {}
+            ),
+            recursive=true
+          )
+        | combine(
+            (
+              {'src': aap_prepare_current_src_effective}
+              if aap_prepare_current_source_effective == 'local'
+              else {}
+            ),
+            recursive=true
+          )
+        | combine(
+            (
+              {'remote_src': aap_prepare_current_remote_src_effective}
+              if aap_prepare_current_source_effective == 'remote'
+              else {}
+            ),
+            recursive=true
+          )
       }}
   changed_when: false
-  when: aap_prepare_current_source_effective == 'url'
+  when: aap_prepare_current_source_effective | length > 0
   no_log: "{{ aap_prepare_no_log | bool }}"
 
-- name: Append resolved controller-local artifact
+- name: Append resolved AAP prepare artifact
   ansible.builtin.set_fact:
     aap_prepare_artifacts_items: >-
       {{
         aap_prepare_artifacts_items
-        + [
-          {
-            'name': aap_prepare_current_label,
-            'source': 'local',
-            'src': aap_prepare_current_src_effective,
-            'dest': aap_prepare_current_dest,
-            'checksum': aap_prepare_current_checksum,
-            'mode': aap_prepare_current_mode,
-            'force': aap_prepare_force,
-            'no_log': aap_prepare_no_log
-          }
-        ]
+        + [aap_prepare_current_artifact_item]
       }}
   changed_when: false
-  when: aap_prepare_current_source_effective == 'local'
-  no_log: "{{ aap_prepare_no_log | bool }}"
-
-- name: Append resolved managed-host artifact
-  ansible.builtin.set_fact:
-    aap_prepare_artifacts_items: >-
-      {{
-        aap_prepare_artifacts_items
-        + [
-          {
-            'name': aap_prepare_current_label,
-            'source': 'remote',
-            'remote_src': aap_prepare_current_remote_src_effective,
-            'dest': aap_prepare_current_dest,
-            'checksum': aap_prepare_current_checksum,
-            'mode': aap_prepare_current_mode,
-            'force': aap_prepare_force,
-            'no_log': aap_prepare_no_log
-          }
-        ]
-      }}
-  changed_when: false
-  when: aap_prepare_current_source_effective == 'remote'
+  when: aap_prepare_current_artifact_item is defined
   no_log: "{{ aap_prepare_no_log | bool }}"

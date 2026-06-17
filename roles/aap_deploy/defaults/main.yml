@@ -13,11 +13,8 @@ aap_deploy_topology: growth
 
 # Dedicated non-root install user (rootless podman model)
 aap_deploy_install_user: aap
-aap_deploy_install_user_create: true
-aap_deploy_install_user_home: "{{ aap_deploy_install_dir | dirname }}/home/{{ aap_deploy_install_user }}"
+aap_deploy_install_user_home: "{{ aap_deploy_install_dir }}/{{ aap_deploy_install_user }}"
 aap_deploy_install_user_shell: /bin/bash
-aap_deploy_install_user_groups: []
-aap_deploy_install_user_passwordless_sudo: true
 
 # Installation paths
 aap_deploy_install_dir: /opt/aap
@@ -451,7 +448,6 @@ aap_deploy_required_commands: >-
   }}
 
 # Workflow controls (useful for testing)
-aap_deploy_manage_host_prep: true
 aap_deploy_manage_download_unpack: true
 aap_deploy_run_installer: true
 aap_deploy_run_verify: true

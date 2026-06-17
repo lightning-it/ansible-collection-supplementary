@@ -8,89 +8,25 @@
       Set the host FQDN (for example: hostnamectl set-hostname host.example.com) and rerun.
     quiet: true
 
-- name: Ensure install user primary group exists
-  ansible.builtin.group:
-    name: "{{ aap_deploy_install_user }}"
-    state: present
-  when: aap_deploy_install_user_create | bool
-
-- name: Ensure install user home parent directory exists
-  ansible.builtin.file:
-    path: "{{ aap_deploy_install_user_home | dirname }}"
-    state: directory
-    owner: root
-    group: root
-    mode: '0755'
-  when: aap_deploy_install_user_create | bool
-
 - name: Inspect existing install user account
   ansible.builtin.command:
     cmd: "getent passwd {{ aap_deploy_install_user }}"
   register: aap_deploy_install_user_passwd_result
   changed_when: false
   failed_when: false
-  when: aap_deploy_install_user_create | bool
 
-- name: Inspect install user primary group
-  ansible.builtin.command:
-    cmd: "getent group {{ aap_deploy_install_user }}"
-  register: aap_deploy_install_user_group_result
-  changed_when: false
-  failed_when: false
-  when: aap_deploy_install_user_create | bool
-
-- name: Decide whether install user account must be changed
-  ansible.builtin.set_fact:
-    aap_deploy_install_user_account_needs_change: >-
-      {{
-        (aap_deploy_install_user_passwd_result.rc | default(1) != 0)
-        or (
-          (aap_deploy_install_user_passwd_result.stdout.split(':')[3] | default(''))
-          !=
-          (aap_deploy_install_user_group_result.stdout.split(':')[2] | default(''))
-        )
-        or (
-          (aap_deploy_install_user_passwd_result.stdout.split(':')[5] | default(''))
-          != aap_deploy_install_user_home
-        )
-        or (
-          (aap_deploy_install_user_passwd_result.stdout.split(':')[6] | default(''))
-          != aap_deploy_install_user_shell
-        )
-        or ((aap_deploy_install_user_groups | length) > 0)
-      }}
-  changed_when: false
-  when: aap_deploy_install_user_create | bool
-
-- name: Ensure dedicated install user exists
-  ansible.builtin.user:
-    name: "{{ aap_deploy_install_user }}"
-    group: "{{ aap_deploy_install_user }}"
-    groups: >-
-      {{
-        (
-          (aap_deploy_install_user_groups | length) > 0
-        )
-        | ternary(aap_deploy_install_user_groups | unique | join(','), omit)
-      }}
-    append: "{{ ((aap_deploy_install_user_groups | length) > 0) | ternary(true, omit) }}"
-    home: "{{ aap_deploy_install_user_home }}"
-    shell: "{{ aap_deploy_install_user_shell }}"
-    create_home: true
-    state: present
-  when:
-    - aap_deploy_install_user_create | bool
-    - aap_deploy_install_user_account_needs_change | bool
-
-- name: Ensure install user has passwordless sudo access
-  ansible.builtin.copy:
-    dest: "/etc/sudoers.d/{{ aap_deploy_install_user }}"
-    content: "{{ aap_deploy_install_user }} ALL=(ALL) NOPASSWD:ALL\n"
-    owner: root
-    group: root
-    mode: '0440'
-    validate: visudo -cf %s
-  when: aap_deploy_install_user_passwordless_sudo | bool
+- name: Validate install user is prepared
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_install_user_passwd_result.rc == 0
+      - (aap_deploy_install_user_passwd_result.stdout.split(':')[5] | default('')) == aap_deploy_install_user_home
+      - (aap_deploy_install_user_passwd_result.stdout.split(':')[6] | default('')) == aap_deploy_install_user_shell
+    fail_msg: >-
+      AAP install user '{{ aap_deploy_install_user }}' is missing or has
+      unexpected account settings. Prepare it before aap_deploy with the RHEL
+      users role. Expected home={{ aap_deploy_install_user_home }},
+      shell={{ aap_deploy_install_user_shell }}.
+    quiet: true
 
 - name: Resolve install user UID
   ansible.builtin.command:

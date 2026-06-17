@@ -30,7 +30,6 @@
       - aap_deploy_supported_majors is not string
       - aap_deploy_install_type == 'bundle'
       - aap_deploy_topology in ['growth', 'enterprise']
-      - aap_deploy_manage_host_prep is boolean
       - aap_deploy_manage_download_unpack is boolean
       - aap_deploy_run_installer is boolean
       - aap_deploy_run_verify is boolean
@@ -39,8 +38,6 @@
       - aap_deploy_skip_if_installed_require_runtime is boolean
       - aap_deploy_skip_if_runtime_active is boolean
       - aap_deploy_runtime_probe_all_containers is boolean
-      - aap_deploy_install_user_create is boolean
-      - aap_deploy_install_user_passwordless_sudo is boolean
       - aap_deploy_force_unpack is boolean
       - aap_deploy_validate_archive_format is boolean
       - aap_deploy_setup_download_containerized is boolean
@@ -57,7 +54,6 @@
       - aap_deploy_install_user_home | trim | length > 0
       - aap_deploy_install_user_home.startswith('/')
       - aap_deploy_install_user_home != aap_deploy_install_dir
-      - not aap_deploy_install_user_home.startswith(aap_deploy_install_dir.rstrip('/') ~ '/')
       - aap_deploy_install_dir | trim | length > 0
       - aap_deploy_install_dir.startswith('/')
       - aap_deploy_setup_dir | trim | length > 0
@@ -253,20 +249,6 @@
   when:
     - aap_deploy_enabled | bool
     - aap_deploy_topology == 'enterprise'
-  tags: always
-
-- name: Validate platform for host preparation
-  ansible.builtin.assert:
-    that:
-      - (ansible_distribution | default('')) == 'RedHat'
-      - (ansible_distribution_major_version | string) in aap_deploy_supported_majors
-    fail_msg: >-
-      Host preparation supports Red Hat Enterprise Linux {{ aap_deploy_supported_majors | join('/') }} only.
-      Set aap_deploy_manage_host_prep=false if this role is only being used to render inventory.
-    quiet: true
-  when:
-    - aap_deploy_enabled | bool
-    - aap_deploy_manage_host_prep | bool
   tags: always
 
 - name: Validate TLS staging settings

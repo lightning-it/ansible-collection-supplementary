@@ -6,7 +6,8 @@ bundle mode.
 ## Requirements
 
 - Red Hat Enterprise Linux 9 or 10 host with FQDN hostname.
-- Dedicated non-root install user with sudo (rootless Podman model).
+- Dedicated non-root install user with sudo, prepared before this role, for
+  example with `lit.rhel.users`.
 - RHSM registration, repositories, and baseline packages prepared before this
   role, for example with `lit.rhel.rhsm`, `lit.rhel.repos`, and
   `lit.rhel.virtual_guest`.
@@ -77,7 +78,6 @@ Key variables:
   `cert_content`/`key_content`, plus `ca_cert_src` or `ca_cert_content`)
 - `aap_deploy_tls_vault_pki_mount_point`
 - `aap_deploy_tls_vault_pki_services` (per-service `role_name`, `common_name`, `alt_names`, `ip_sans`)
-- `aap_deploy_manage_host_prep`
 - `aap_deploy_manage_download_unpack`
 - `aap_deploy_run_installer`
 - `aap_deploy_run_verify`
@@ -204,8 +204,7 @@ Customer baseline/Satellite example:
 ```yaml
 aap_deploy_install_dir: /appl/aap
 aap_deploy_install_user: aap
-aap_deploy_install_user_home: /appl/home/aap
-aap_deploy_manage_host_prep: true
+aap_deploy_install_user_home: /appl/aap/aap
 ```
 
 Keep the install user home on a filesystem with enough space for the AAP
@@ -323,7 +322,7 @@ Troubleshooting:
 - `No space left on device` while loading execution-plane images below
   `<install-user-home>/aap/containers/storage`: move
   `aap_deploy_install_user_home` to a filesystem with enough space, for example
-  `/appl/home/aap`, then reinstall from a clean host or clean stale installer
+  `/appl/aap/aap`, then reinstall from a clean host or clean stale installer
   state first.
 - `Overall Status: Not registered`: run the RHEL RHSM/repository preparation
   before this role.
@@ -357,7 +356,6 @@ Requires `infra.aap_utilities` in the execution environment.
         aap_deploy_bundle_dir: bundle
 
         # Customer baseline/Satellite/RHSM preparation happens before this role.
-        aap_deploy_manage_host_prep: true
 
         # Password inputs (inventory source of truth)
         aap_password_active: active

@@ -80,9 +80,6 @@
   tags:
     - controller_license
   block:
-    - name: Wait for controller readiness
-      ansible.builtin.include_tasks: "{{ role_path }}/tasks/wait_for_controller_readiness.yml"
-
     - name: Create temporary manifest file for inline content
       ansible.builtin.tempfile:
         state: file

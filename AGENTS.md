@@ -172,6 +172,28 @@ myrole_api_url_effective: "{{ myrole_api_url | default(minio_deploy_api_url_effe
 
 ## 4. Role Structure and Prechecks
 
+### 4.0 Role Responsibility Boundaries
+
+1. Keep operating-system preparation in the operating-system collection:
+   1. users and groups
+   2. sudoers policy
+   3. packages and repositories
+   4. RHSM registration
+   5. Podman installation and rootless storage
+   6. generic Ansible remote temporary directories
+2. Application roles MUST consume prepared OS state and validate it, not create
+   or repair it. For example, AAP roles may validate the `aap` install user and
+   required commands, but user creation belongs to `lit.rhel.users`.
+3. Artifact discovery, download, checksum verification, and staging belong in a
+   dedicated prepare/artifacts role. Deploy roles SHOULD consume final prepared
+   paths and avoid parallel fallback discovery logic.
+4. Avoid repeated near-identical task branches for source variants such as
+   `url`, `local`, and `remote`. Resolve source-specific values once, build one
+   normalized item, and pass that normalized item to the generic implementation.
+5. Compatibility wrappers for misspelled role names or legacy aliases are
+   temporary. Remove them once no maintained playbook, runbook, Molecule
+   scenario, or documentation references them.
+
 ### 4.1 Required Role Layout
 
 Roles SHOULD follow:
