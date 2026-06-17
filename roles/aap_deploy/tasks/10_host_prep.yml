@@ -14,12 +14,27 @@
     state: present
   when: aap_deploy_install_user_create | bool
 
+- name: Ensure install user home parent directory exists
+  ansible.builtin.file:
+    path: "{{ aap_deploy_install_user_home | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: aap_deploy_install_user_create | bool
+
 - name: Ensure dedicated install user exists
   ansible.builtin.user:
     name: "{{ aap_deploy_install_user }}"
     group: "{{ aap_deploy_install_user }}"
-    groups: "{{ (aap_deploy_install_user_groups + ['wheel']) | unique | join(',') }}"
-    append: true
+    groups: >-
+      {{
+        (
+          (aap_deploy_install_user_groups | length) > 0
+        )
+        | ternary(aap_deploy_install_user_groups | unique | join(','), omit)
+      }}
+    append: "{{ ((aap_deploy_install_user_groups | length) > 0) | ternary(true, omit) }}"
     home: "{{ aap_deploy_install_user_home }}"
     shell: "{{ aap_deploy_install_user_shell }}"
     create_home: true
