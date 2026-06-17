@@ -1,3 +1,9 @@
+## [1.31.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.30.1...v1.31.0) (2026-06-17)
+
+### Features
+
+* enhance runtime probe ([#228](https://github.com/lightning-it/ansible-collection-supplementary/issues/228)) ([efe2c13](https://github.com/lightning-it/ansible-collection-supplementary/commit/efe2c13bc0889fb5461d28152d0ee9b5c887f099))
+
 ## [1.30.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.30.0...v1.30.1) (2026-06-16)
 
 ### Bug Fixes
