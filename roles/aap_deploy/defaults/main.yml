@@ -22,68 +22,16 @@ aap_deploy_install_user_passwordless_sudo: true
 # Installation paths
 aap_deploy_install_dir: /opt/aap
 aap_deploy_setup_dir: "{{ aap_deploy_install_dir }}/setup"
-aap_deploy_local_project_root: >-
-  {{
-    lookup('ansible.builtin.env', 'AAP_PROJECT_ROOT')
-    | default(lookup('ansible.builtin.env', 'PWD'), true)
-    | default(playbook_dir | dirname | dirname, true)
-  }}
-aap_deploy_artifact_dir: >-
-  {{
-    lookup('ansible.builtin.env', 'AAP_ARTIFACT_DIR')
-    | default(aap_deploy_local_project_root ~ '/.artifacts', true)
-  }}
 
-# Setup archive staging (disconnected-first).
-# We intentionally use a local control-node copy of the AAP bundle and copy it
-# to the managed host. This workflow must work without internet access.
+# Setup archive consumed from a prepared managed-host path.
+# Artifact discovery/download/copy is owned by lit.supplementary.aap_prepare.
 aap_deploy_setup_download_version: "2.7"
 aap_deploy_setup_download_containerized: true
-aap_deploy_setup_archive_src: >-
-  {{
-    (
-      (
-        lookup('ansible.builtin.env', 'AAP_BUNDLE_FILE')
-        | default('', true)
-        | trim
-      )
-      if (
-        (
-          lookup('ansible.builtin.env', 'AAP_BUNDLE_FILE')
-          | default('', true)
-          | trim
-        ).startswith('/')
-      )
-      else (
-        aap_deploy_local_project_root ~ '/' ~
-        (
-          lookup('ansible.builtin.env', 'AAP_BUNDLE_FILE')
-          | default('', true)
-          | trim
-        )
-        if (
-          lookup('ansible.builtin.env', 'AAP_BUNDLE_FILE')
-          | default('', true)
-          | trim
-          | length > 0
-        )
-        else aap_deploy_install_dir ~ '/aap-containerized-setup.tar.gz'
-      )
-    )
-  }}
 aap_deploy_setup_archive_checksum: ""
-aap_deploy_setup_archive_autodetect_patterns:
-  - "aap-containerized-setup.tar.gz"
-  - "ansible-automation-platform-containerized-setup-bundle-*.tar.gz"
 aap_deploy_validate_archive_format: true
 aap_deploy_validate_archive_min_size_bytes: 100000000
 aap_deploy_force_unpack: false
-aap_deploy_setup_archive_filename: >-
-  {{
-    (aap_deploy_setup_archive_src | basename)
-    if (aap_deploy_setup_archive_src | default('', true) | trim | length > 0)
-    else 'aap-containerized-setup.tar.gz'
-  }}
+aap_deploy_setup_archive_filename: aap-containerized-setup.tar.gz
 aap_deploy_setup_archive_extract_dirname: >-
   {{
     aap_deploy_setup_archive_filename
@@ -96,10 +44,6 @@ aap_deploy_setup_archive_extract_dirname_effective: >-
   }}
 aap_deploy_setup_archive_path: >-
   {{ aap_deploy_install_dir }}/{{ aap_deploy_setup_archive_filename }}
-aap_deploy_local_bundle_archive_path: >-
-  {{ aap_deploy_artifact_dir }}/{{ aap_deploy_setup_archive_filename }}
-aap_deploy_local_bundle_project_archive_path: >-
-  {{ aap_deploy_local_project_root }}/{{ aap_deploy_setup_archive_filename }}
 aap_deploy_setup_prepare_process_template: true
 aap_deploy_setup_install_force: true
 aap_deploy_setup_install_extra_vars: {}
@@ -112,7 +56,6 @@ aap_deploy_debug_install_environment: false
 aap_deploy_manage_install_tmp_dir: false
 aap_deploy_install_tmp_dir: ""
 
-aap_deploy_installer_runner: native
 aap_deploy_installer_wait: true
 aap_deploy_installer_async_timeout: 14400
 aap_deploy_installer_async_retries: 720
@@ -484,18 +427,13 @@ aap_deploy_automationmetrics_controller_read_pg_password_effective: >-
   }}
 
 # Host preparation
-aap_deploy_repo_arch: >-
-  {{
-    'aarch64'
-    if (ansible_architecture | default('x86_64')) in ['aarch64', 'arm64']
-    else 'x86_64'
-  }}
 aap_deploy_requires_ansible_builder: >-
   {{ (ee_list | default([], true) | length > 0) | bool }}
-aap_deploy_required_repos: "{{ aap_deploy_required_repos_default | default([], true) }}"
-aap_deploy_base_required_packages: >-
-  {{ aap_deploy_base_required_packages_default | default(['ansible-core', 'python3', 'podman'], true) }}
-aap_deploy_extra_required_packages: >-
+aap_deploy_base_required_commands:
+  - ansible-playbook
+  - podman
+  - python3
+aap_deploy_extra_required_commands: >-
   {{
     (
       ['ansible-builder']
@@ -505,20 +443,15 @@ aap_deploy_extra_required_packages: >-
     | to_json
     | from_json
   }}
-aap_deploy_required_packages: >-
+aap_deploy_required_commands: >-
   {{
-    (aap_deploy_base_required_packages + aap_deploy_extra_required_packages)
+    (aap_deploy_base_required_commands + aap_deploy_extra_required_commands)
     | to_json
     | from_json
   }}
 
 # Workflow controls (useful for testing)
 aap_deploy_manage_host_prep: true
-# When true, validate subscription-manager registration and enable required
-# RHSM repositories. When false, skip subscription-manager/RHSM repository
-# management and assume repositories are provided by the platform baseline,
-# Satellite, or local repo configuration.
-aap_deploy_manage_rhsm_repos: true
 aap_deploy_manage_download_unpack: true
 aap_deploy_run_installer: true
 aap_deploy_run_verify: true

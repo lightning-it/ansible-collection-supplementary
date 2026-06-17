@@ -1,6 +1,9 @@
 # aap_destory
 
-Execute vendor AAP removal role `infra.aap_utilities.aap_remove`.
+Deprecated compatibility wrapper for the misspelled role name.
+
+Use `lit.supplementary.aap_destroy` for new playbooks. This role delegates to
+`aap_destroy` so older playbooks keep working during migration.
 
 ## Requirements
 
@@ -8,10 +11,11 @@ Execute vendor AAP removal role `infra.aap_utilities.aap_remove`.
 
 ## Variables
 
-See `roles/aap_destory/defaults/main.yml`.
+See `roles/aap_destroy/defaults/main.yml`.
 
 Key variables:
-- `aap_destory_enabled`
+- `aap_destroy_enabled`
+- `aap_destory_enabled` for compatibility with existing playbooks
 
 ## Dependencies
 

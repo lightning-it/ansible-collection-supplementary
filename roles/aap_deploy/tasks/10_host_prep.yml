@@ -126,49 +126,12 @@
     name: "user@{{ aap_deploy_install_user_uid }}.service"
     state: started
 
-- name: Check subscription-manager registration status
-  ansible.builtin.command:
-    cmd: subscription-manager status
-  register: aap_deploy_subscription_status
+- name: Validate required AAP deploy commands are available
+  ansible.builtin.shell:
+    cmd: "command -v {{ item | quote }}"
+    executable: /bin/bash
+  become: true
+  become_user: "{{ aap_deploy_install_user }}"
+  loop: "{{ aap_deploy_required_commands }}"
   changed_when: false
-  failed_when: aap_deploy_subscription_status.rc != 0
-  when: aap_deploy_manage_rhsm_repos | bool
-
-- name: List currently enabled RHSM repositories
-  ansible.builtin.command:
-    cmd: subscription-manager repos --list-enabled
-  register: aap_deploy_enabled_repos_raw
-  changed_when: false
-  when: aap_deploy_manage_rhsm_repos | bool
-
-- name: Compute missing RHSM repositories
-  ansible.builtin.set_fact:
-    aap_deploy_enabled_repos: "{{ aap_deploy_enabled_repos_raw.stdout | regex_findall('Repo ID:\\s*(\\S+)') }}"
-  when: aap_deploy_manage_rhsm_repos | bool
-
-- name: Build list of missing RHSM repositories
-  ansible.builtin.set_fact:
-    aap_deploy_missing_repos: "{{ aap_deploy_required_repos | difference(aap_deploy_enabled_repos) }}"
-  when: aap_deploy_manage_rhsm_repos | bool
-
-- name: Enable required RHSM repositories
-  ansible.builtin.command:
-    cmd: "subscription-manager repos --enable={{ item }}"
-  loop: "{{ aap_deploy_missing_repos }}"
-  register: aap_deploy_enable_repo_result
-  changed_when: true
-  when:
-    - aap_deploy_manage_rhsm_repos | bool
-    - aap_deploy_missing_repos | length > 0
-
-- name: Validate package repositories are available
-  ansible.builtin.command:
-    cmd: dnf repolist
-  register: aap_deploy_dnf_repolist_result
-  changed_when: false
-  failed_when: aap_deploy_dnf_repolist_result.rc != 0
-
-- name: Ensure host preparation packages are installed
-  ansible.builtin.dnf:
-    name: "{{ aap_deploy_required_packages }}"
-    state: present
+  register: aap_deploy_required_command_result

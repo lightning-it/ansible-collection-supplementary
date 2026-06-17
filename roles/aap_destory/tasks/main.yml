@@ -3,19 +3,18 @@
   ansible.builtin.import_tasks: assert.yml
   tags: always
 
-- name: Skip AAP remove when disabled
-  ansible.builtin.debug:
-    msg: "AAP remove skipped (aap_destory_enabled=false)."
-  changed_when: false
-  when: not aap_destory_enabled | bool
-  tags: always
-
-- name: Remove AAP using vendor role
+- name: Delegate typo compatibility role to aap_destroy
   ansible.builtin.include_role:
-    name: infra.aap_utilities.aap_remove
-  when:
-    - aap_destory_enabled | bool
-    - not ansible_check_mode
+    name: lit.supplementary.aap_destroy
+  vars:
+    aap_destroy_enabled: "{{ aap_destory_enabled }}"
   tags:
     - aap_destory
+    - aap_destroy
     - aap_remove
+
+- name: Report deprecated aap_destory role name
+  ansible.builtin.debug:
+    msg: "Role lit.supplementary.aap_destory is deprecated. Use lit.supplementary.aap_destroy."
+  changed_when: false
+  tags: always

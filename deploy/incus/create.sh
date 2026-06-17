@@ -77,25 +77,20 @@ select_image() {
   exit 1
 }
 
-resolve_ssh_public_key_file() {
-  if [ -n "${INCUS_SSH_PUBLIC_KEY_FILE:-}" ]; then
-    printf '%s\n' "${INCUS_SSH_PUBLIC_KEY_FILE}"
-    return
-  fi
-
-  local candidate
-  for candidate in \
-    "${HOME}/.ssh/id_ed25519.pub" \
-    "${HOME}/.ssh/id_ecdsa.pub" \
-    "${HOME}/.ssh/id_rsa.pub"; do
-    if [ -f "$candidate" ]; then
-      printf '%s\n' "$candidate"
-      return
+resolve_ssh_public_keys() {
+  {
+    if [ -n "${INCUS_SSH_PUBLIC_KEY:-}" ]; then
+      printf '%s\n' "${INCUS_SSH_PUBLIC_KEY}"
     fi
-  done
 
-  echo "ERROR: no SSH public key found. Set INCUS_SSH_PUBLIC_KEY_FILE." >&2
-  exit 1
+    if [ -n "${INCUS_SSH_PUBLIC_KEY_FILE:-}" ]; then
+      if [ ! -f "${INCUS_SSH_PUBLIC_KEY_FILE}" ]; then
+        echo "ERROR: SSH public key file does not exist: ${INCUS_SSH_PUBLIC_KEY_FILE}" >&2
+        exit 1
+      fi
+      sed '/^[[:space:]]*$/d' "${INCUS_SSH_PUBLIC_KEY_FILE}"
+    fi
+  } | awk 'NF && !seen[$0]++'
 }
 
 resolve_ssh_user() {
@@ -107,17 +102,41 @@ render_user_data() {
   local instance_name="$2"
   local instance_fqdn="$3"
   local ssh_user="$4"
-  local public_key="$5"
-  local escaped_key
+  local public_keys="$5"
+  local authorized_keys_yaml=""
+  local key
 
-  escaped_key="$(printf '%s' "$public_key" | sed -e 's/[\/&]/\\&/g')"
+  while IFS= read -r key; do
+    if [ -n "$key" ]; then
+      authorized_keys_yaml+="      - ${key}"$'\n'
+    fi
+  done <<< "$public_keys"
 
-  sed \
-    -e "s/__HOSTNAME__/${instance_name}/g" \
-    -e "s/__FQDN__/${instance_fqdn}/g" \
-    -e "s/__SSH_USER__/${ssh_user}/g" \
-    -e "s/__SSH_PUBLIC_KEY__/${escaped_key}/g" \
-    "$template_file"
+  TEMPLATE_FILE="$template_file" \
+  INSTANCE_NAME="$instance_name" \
+  INSTANCE_FQDN="$instance_fqdn" \
+  SSH_USER="$ssh_user" \
+  AUTHORIZED_KEYS_YAML="${authorized_keys_yaml%$'\n'}" \
+  python3 <<'PY'
+import os
+import json
+from pathlib import Path
+
+template = Path(os.environ["TEMPLATE_FILE"]).read_text()
+authorized_keys = [
+    key.strip()
+    for key in os.environ["AUTHORIZED_KEYS_YAML"].splitlines()
+    if key.strip()
+]
+content = (
+    template
+    .replace("__HOSTNAME__", os.environ["INSTANCE_NAME"])
+    .replace("__FQDN__", os.environ["INSTANCE_FQDN"])
+    .replace("__SSH_USER__", os.environ["SSH_USER"])
+    .replace("__SSH_AUTHORIZED_KEYS__", json.dumps(authorized_keys))
+)
+print(content, end="")
+PY
 }
 
 render_network_config() {
@@ -233,11 +252,10 @@ fi
 
 image="$(select_image "$version")"
 ssh_user="$(resolve_ssh_user)"
-pubkey_file="$(resolve_ssh_public_key_file)"
-public_key="$(tr -d '\n' < "$pubkey_file")"
+public_keys="$(resolve_ssh_public_keys)"
 
-if [ -z "$public_key" ]; then
-  echo "ERROR: SSH public key file is empty: ${pubkey_file}" >&2
+if [ -z "$public_keys" ]; then
+  echo "ERROR: no SSH public key found. Set INCUS_SSH_PUBLIC_KEY or INCUS_SSH_PUBLIC_KEY_FILE." >&2
   exit 1
 fi
 
@@ -255,7 +273,7 @@ esac
 tmp_user_data="$(mktemp)"
 tmp_network_config="$(mktemp)"
 trap 'rm -f "${tmp_user_data}" "${tmp_network_config}"' EXIT
-render_user_data "$profile_file" "$hostname" "$fqdn" "$ssh_user" "$public_key" > "${tmp_user_data}"
+render_user_data "$profile_file" "$hostname" "$fqdn" "$ssh_user" "$public_keys" > "${tmp_user_data}"
 
 if [ "$mode" = "vm" ]; then
   require_cmd mkisofs

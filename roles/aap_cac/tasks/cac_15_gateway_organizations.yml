@@ -10,18 +10,6 @@
         aap_organizations: "{{ aap_cac_controller_organizations }}"
       changed_when: false
 
-    - name: Resolve effective Controller admin password
-      ansible.builtin.set_fact:
-        aap_cac_controller_password_effective: >-
-          {{
-            aap_controller_admin_password_input
-            | default(aap_gateway_admin_password_input, true)
-            | default('', true)
-            | string
-            | trim
-          }}
-      changed_when: false
-
     - name: Run role infra.aap_configuration.dispatch  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch

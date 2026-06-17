@@ -49,7 +49,6 @@ aap_prepare_manifest_checksum: "sha256:{{ vault_aap_manifest_sha256 }}"
 
 After staging, the role publishes host facts consumed by downstream roles:
 
-- `aap_deploy_setup_archive_src`
 - `aap_deploy_setup_archive_path`
 - `aap_cac_controller_license_manifest_remote_src`
 

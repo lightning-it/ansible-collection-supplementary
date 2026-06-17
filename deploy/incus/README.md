@@ -152,6 +152,7 @@ Useful teardown overrides:
 - `INCUS_RHEL98_IMAGE`
 - `INCUS_RHEL9_IMAGE`
 - `INCUS_RHEL10_IMAGE`
+- `INCUS_SSH_PUBLIC_KEY`
 - `INCUS_SSH_PUBLIC_KEY_FILE`
 - `INCUS_SSH_PRIVATE_KEY_FILE`
 - `INCUS_SSH_USER`
@@ -163,6 +164,10 @@ Useful teardown overrides:
 - `INCUS_WAIT_TIMEOUT`
 - `INCUS_RHSM_UNREGISTER_ON_DESTROY`
 - `INCUS_RHSM_UNREGISTER_STRICT`
+
+Provide SSH access with `INCUS_SSH_PUBLIC_KEY` or `INCUS_SSH_PUBLIC_KEY_FILE`.
+Do not hardcode personal or customer keys in this collection; keep those values
+in inventory, local environment files, or CI secrets.
 
 Example env files:
 

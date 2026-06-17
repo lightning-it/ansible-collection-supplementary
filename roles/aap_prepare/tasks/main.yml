@@ -136,7 +136,6 @@
   ansible.builtin.set_fact:
     aap_prepare_bundle_dest_effective: "{{ aap_prepare_bundle_dest }}"
     aap_prepare_manifest_dest_effective: "{{ aap_prepare_manifest_dest }}"
-    aap_deploy_setup_archive_src: "{{ aap_prepare_bundle_dest }}"
     aap_deploy_setup_archive_path: "{{ aap_prepare_bundle_dest }}"
     aap_cac_controller_license_manifest_remote_src: "{{ aap_prepare_manifest_dest }}"
   changed_when: false

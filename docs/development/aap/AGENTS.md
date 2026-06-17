@@ -69,11 +69,11 @@ automation/inventory repositories.
 4. Validate downloaded bundles before using them:
    - size should be multiple GiB for the full containerized setup bundle.
    - `tar -tzf` or the role archive validation must succeed.
-5. Keep the role able to find a bundle from:
-   - explicit local control-node path
-   - project root
-   - project `.artifacts/`
-   - already staged target path
+5. Keep bundle discovery, download, copy, and validation in
+   `lit.supplementary.aap_prepare`.
+6. Keep `lit.supplementary.aap_deploy` focused on consuming the prepared
+   `aap_deploy_setup_archive_path`, rendering installer inventory, and running
+   the AAP 2.7 installer.
 
 ## Incus Test VM Rules
 

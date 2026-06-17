@@ -7,15 +7,14 @@ bundle mode.
 
 - Red Hat Enterprise Linux 9 or 10 host with FQDN hostname.
 - Dedicated non-root install user with sudo (rootless Podman model).
-- RHSM registration and BaseOS/AppStream repositories when host prep is enabled.
-  For ephemeral Incus VMs, keep the base image unregistered and run
-  `playbooks/rhel_prepare.yml` before this role. That playbook composes
-  `lit.rhel.rhsm`, `lit.rhel.repos`, and `lit.rhel.virtual_guest`.
-- `ansible-core`, `git`, `rsync`, `tar`, and `unzip` on target host
-  (managed by host prep if enabled).
+- RHSM registration, repositories, and baseline packages prepared before this
+  role, for example with `lit.rhel.rhsm`, `lit.rhel.repos`, and
+  `lit.rhel.virtual_guest`.
+- `ansible-playbook`, `podman`, and `python3` available on the target host.
 - Podman prepared on the target host, for example with `lit.rhel.podman`.
 - `infra.aap_utilities` collection installed in the execution environment.
-- A local AAP containerized setup bundle on the control node for real installer runs.
+- AAP containerized setup bundle staged on the managed host with
+  `lit.supplementary.aap_prepare`.
 - Enough local storage for bundle copy and extraction. Red Hat documents a minimum 60 GB
   total local disk, 15 GB installation directory when separately partitioned, and 10 GB
   temporary directory for offline/bundled installations. Size customer bundle workflows larger.
@@ -39,7 +38,6 @@ Key variables:
 - `aap_deploy_manage_install_tmp_dir`
 - `aap_deploy_install_tmp_dir`
 - `aap_deploy_bundle_dir` (path containing `/bundle`)
-- `aap_deploy_installer_runner` (`native` or `vendor`, default: `native`)
 - `aap_deploy_installer_wait`
 - `aap_deploy_installer_async_jid_path`
 - `aap_deploy_installer_async_timeout`
@@ -80,7 +78,6 @@ Key variables:
 - `aap_deploy_tls_vault_pki_mount_point`
 - `aap_deploy_tls_vault_pki_services` (per-service `role_name`, `common_name`, `alt_names`, `ip_sans`)
 - `aap_deploy_manage_host_prep`
-- `aap_deploy_manage_rhsm_repos`
 - `aap_deploy_manage_download_unpack`
 - `aap_deploy_run_installer`
 - `aap_deploy_run_verify`
@@ -104,11 +101,11 @@ Installer behavior:
 - Marker-based skip is runtime-validated by default to avoid stale marker false positives.
 - When detected, host prep, bundle handling, inventory rendering, and installer execution are skipped.
 - Verification still runs (when enabled).
-- Role expects a controller-side bundle path and copies it to the managed host.
+- Role expects `lit.supplementary.aap_prepare` to stage the setup bundle on the
+  managed host at `aap_deploy_setup_archive_path`.
 - Role prepares the setup workspace and renders installer inventory via `infra.aap_utilities.aap_setup_prepare`.
 - By default, role runs the prepared containerized installer command directly
-  with controlled async status polling. Set `aap_deploy_installer_runner:
-  vendor` to use `infra.aap_utilities.aap_setup_install` for compatibility.
+  with controlled async status polling.
 - For CI or other orchestrators that cannot hold one Ansible polling task open
   for the full installer runtime, set `aap_deploy_installer_wait: false`.
   The role starts the native installer asynchronously, writes the async job id to
@@ -190,39 +187,15 @@ RHEL 10 host prep:
 - AAP 2.7 supports RHEL 10 containerized installs.
 - This role is 2.7-only and fails fast when
   `aap_deploy_setup_download_version` is changed to another version.
-- Required RHSM repository IDs are generated from
-  `ansible_distribution_major_version`, so RHEL 10 resolves to
-  `rhel-10-for-<arch>-baseos-rpms` and `rhel-10-for-<arch>-appstream-rpms`.
-- Red Hat documents `ansible-core` from RHEL AppStream for installation on RHEL 10.
-  Host prep installs the packages required by the wrapper role and the upstream
-  `infra.aap_utilities.aap_setup_prepare` role.
-
-Satellite or baseline-managed repositories:
-
-```yaml
-aap_deploy_manage_host_prep: true
-aap_deploy_manage_rhsm_repos: false
-```
-
-Use `aap_deploy_manage_rhsm_repos: false` on systems where repository
-configuration is already handled externally, such as by Satellite, a platform
-baseline, or local repo files. Host preparation remains enabled, including user
-setup, sudoers, lingering, systemd manager startup, repository usability
-validation with `dnf repolist`, and package installation. Only
-subscription-manager registration checks and RHSM repository enablement are
-skipped.
 
 Bundle source handling:
-- Preferred enterprise flow: use `lit.supplementary.aap_prepare` before this
-  role to download/copy/check the protected setup bundle onto the managed host.
-- This role still supports direct local bundle fallback for compatibility, but
-  artifact store integration belongs in `aap_prepare`.
+- Use `lit.supplementary.aap_prepare` before this role to download/copy/check
+  the protected setup bundle onto the managed host.
 - For GitHub release assets or other artifact stores, reassemble split assets
   before running the role. Do not rely on the role to join split files.
 - A stable customer layout is:
 
 ```yaml
-aap_deploy_artifact_dir: "{{ aap_deploy_local_project_root }}/.artifacts"
 aap_deploy_setup_archive_path: "{{ aap_deploy_install_dir }}/aap-containerized-setup.tar.gz"
 ```
 
@@ -233,8 +206,6 @@ aap_deploy_install_dir: /appl/aap
 aap_deploy_install_user: aap
 aap_deploy_install_user_home: /appl/home/aap
 aap_deploy_manage_host_prep: true
-aap_deploy_manage_rhsm_repos: false
-ansible_remote_tmp: /appl/ansible-tmp
 ```
 
 Keep the install user home on a filesystem with enough space for the AAP
@@ -244,20 +215,9 @@ storage configuration below the install user's home directory.
 Rootless Podman storage is an operating-system concern. Configure it with
 `lit.rhel.podman` before running this role.
 
-Large bundle copy and temporary space:
-- Ansible copies modules and transfer payloads through `ansible_remote_tmp`.
-  That is general Ansible runtime behavior, not AAP installer behavior.
-- If the SSH user's home filesystem is small, set a larger remote temp path in
-  inventory, for example:
-
-```yaml
-ansible_remote_tmp: /appl/ansible-tmp
-```
-
-Prepare custom `ansible_remote_tmp` paths before fact gathering or application
-roles with `lit.foundational.ansible_remote_tmp`. It uses a raw bootstrap
-command first because normal Ansible modules cannot run when `ansible_remote_tmp`
-is missing or too restrictive.
+Ansible module staging is an operating-system/runtime concern. If inventory
+sets a custom `ansible_remote_tmp`, prepare it before running this role with the
+shared OS preparation runbook or `lit.foundational.ansible_remote_tmp`.
 
 ## Installer Temporary Directory
 
@@ -268,11 +228,9 @@ container images. If `/tmp` is small, the install can fail with:
 No space left on device
 ```
 
-Use inventory to move both Ansible module staging and the installer process
-temporary directory:
+Use inventory to move the installer process temporary directory:
 
 ```yaml
-ansible_remote_tmp: /appl/ansible-tmp
 aap_deploy_manage_install_tmp_dir: true
 aap_deploy_install_tmp_dir: /appl/tmp
 aap_deploy_install_environment:
@@ -281,11 +239,10 @@ aap_deploy_install_environment:
   TMP: /appl/tmp
 ```
 
-`ansible_remote_tmp` controls Ansible module staging and should be prepared by
-`lit.foundational.ansible_remote_tmp`. `aap_deploy_install_environment`
-controls the environment of the AAP containerized installer task.
-When `aap_deploy_manage_install_tmp_dir=true`, `aap_deploy_install_tmp_dir` is
-created as `root:root` with mode `1777` so become-user workflows can use it.
+`aap_deploy_install_environment` controls the environment of the AAP
+containerized installer task. When `aap_deploy_manage_install_tmp_dir=true`,
+`aap_deploy_install_tmp_dir` is created as `root:root` with mode `1777` so
+become-user workflows can use it.
 
 Enable the temporary environment diagnostic when validating a new host:
 
@@ -368,9 +325,8 @@ Troubleshooting:
   `aap_deploy_install_user_home` to a filesystem with enough space, for example
   `/appl/home/aap`, then reinstall from a clean host or clean stale installer
   state first.
-- `Overall Status: Not registered` on Satellite/baseline systems: keep
-  `aap_deploy_manage_host_prep: true` and set
-  `aap_deploy_manage_rhsm_repos: false`.
+- `Overall Status: Not registered`: run the RHEL RHSM/repository preparation
+  before this role.
 
 Local validation:
 
@@ -400,9 +356,8 @@ Requires `infra.aap_utilities` in the execution environment.
         aap_deploy_setup_download_containerized: true
         aap_deploy_bundle_dir: bundle
 
-        # Customer baseline/Satellite example
+        # Customer baseline/Satellite/RHSM preparation happens before this role.
         aap_deploy_manage_host_prep: true
-        aap_deploy_manage_rhsm_repos: false
 
         # Password inputs (inventory source of truth)
         aap_password_active: active

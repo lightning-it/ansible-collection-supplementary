@@ -69,6 +69,17 @@ raise SystemExit(1)
 ' 2>/dev/null || true
 }
 
+ssh_target() {
+  local user="$1"
+  local address="$2"
+
+  if [[ "$address" == *:* ]]; then
+    printf '%s@[%s]\n' "$user" "$address"
+  else
+    printf '%s@%s\n' "$user" "$address"
+  fi
+}
+
 name="${1:-}"
 timeout="900"
 
@@ -114,6 +125,7 @@ fi
 
 ssh_user="${INCUS_SSH_USER:-cloud-user}"
 private_key_file="$(resolve_ssh_private_key_file)"
+ssh_destination=""
 ssh_opts=(
   -o BatchMode=yes
   -o StrictHostKeyChecking=no
@@ -151,19 +163,27 @@ if [ -z "$ip_address" ]; then
   exit 1
 fi
 
+ssh_destination="$(ssh_target "$ssh_user" "$ip_address")"
+
 while [ "${SECONDS}" -lt "${deadline}" ]; do
-  if ssh "${ssh_opts[@]}" "${ssh_user}@${ip_address}" true >/dev/null 2>&1; then
+  refreshed_ip_address="$(instance_ip_address "$name")"
+  if [ -n "$refreshed_ip_address" ] && [ "$refreshed_ip_address" != "$ip_address" ]; then
+    ip_address="$refreshed_ip_address"
+    ssh_destination="$(ssh_target "$ssh_user" "$ip_address")"
+  fi
+
+  if ssh "${ssh_opts[@]}" "${ssh_destination}" true >/dev/null 2>&1; then
     break
   fi
   sleep 5
 done
 
-if ! ssh "${ssh_opts[@]}" "${ssh_user}@${ip_address}" true >/dev/null 2>&1; then
+if ! ssh "${ssh_opts[@]}" "${ssh_destination}" true >/dev/null 2>&1; then
   echo "ERROR: SSH did not become ready for ${name} (${ip_address}) within ${timeout}s" >&2
   exit 1
 fi
 
-ssh "${ssh_opts[@]}" "${ssh_user}@${ip_address}" \
+ssh "${ssh_opts[@]}" "${ssh_destination}" \
   'if command -v cloud-init >/dev/null 2>&1; then sudo cloud-init status --wait || cloud-init status --wait || true; fi'
 
 echo "Instance is ready: ${name} (${ip_address})"

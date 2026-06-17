@@ -43,6 +43,15 @@
         fail_msg: >-
           Full-install mode requires AAP_BUNDLE_FILE to point at a local AAP setup bundle on the control node.
         quiet: true
+
+    - name: Prepare AAP bundle for full install
+      ansible.builtin.include_role:
+        name: lit.supplementary.aap_prepare
+      vars:
+        aap_prepare_bundle_source: local
+        aap_prepare_bundle_src: "{{ lookup('ansible.builtin.env', 'AAP_BUNDLE_FILE') }}"
+        aap_prepare_manifest_required: false
+      when: aap_deploy_molecule_full_install | bool
   roles:
     - role: lit.supplementary.aap_deploy
       vars:
