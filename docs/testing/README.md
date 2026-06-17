@@ -1,28 +1,12 @@
 # Testing
 
-This collection now uses Incus as the active local AAP development and test workflow.
-Vagrant has been removed from the active path because the AAP roles need a closer match to
-real RHEL behavior, including systemd, SELinux, firewalld, RHSM, and rootless Podman.
-
 Use these docs:
 
-- [docs/testing/aap.md](aap.md) for AAP-specific workflows
-- [docs/development/aap-rhel10-incus.md](../development/aap-rhel10-incus.md) for the workbench-to-ciwkr01 RHEL 10 development test
-- [deploy/incus/README.md](../../deploy/incus/README.md) for the Incus helper scripts
+- [AAP testing](aap.md)
 
-Test classes:
+AAP Incus lifecycle code is not kept in this collection. Use
+`lit.ubuntu.incus_instance` from `ansible-collection-ubuntu` for Incus guests and
+run this collection's AAP roles against the generated RHEL inventory.
 
-- Public-safe checks:
-  Run lint, syntax, and non-protected Molecule checks. These do not require private RHEL images,
-  RHSM credentials, Red Hat credentials, or repository secrets.
-- Protected RHEL checks:
-  Run `molecule/aap-rhel9` and `molecule/aap-rhel10` on a trusted self-hosted machine with Incus
-  installed and private image aliases preloaded.
-
-Useful commands:
-
-```bash
-bash scripts/devtools-molecule.sh
-MOLECULE_RUN_PROTECTED=true molecule test -s aap-rhel9
-MOLECULE_RUN_PROTECTED=true molecule test -s aap-rhel10
-```
+Public-safe checks stay in this repository. Protected infrastructure validation
+belongs in the consumer validation repository.

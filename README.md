@@ -202,10 +202,11 @@ Example playbook:
   `infra.*`) are intentionally not pinned in this collection `galaxy.yml`;
   install them via consumer runtime overlays (for example
   `modulix-automation/ansible/collections/requirements-rh.yml`).
-- AAP development and testing now uses Incus VMs instead of Vagrant:
+- AAP development and testing uses Ansible-managed Incus VMs. Incus instance
+  lifecycle is owned by `lit.ubuntu.incus_instance`; this collection only owns
+  AAP role behavior:
   - [docs/testing/README.md](docs/testing/README.md)
   - [docs/testing/aap.md](docs/testing/aap.md)
-  - [deploy/incus/README.md](deploy/incus/README.md)
 - Canonical role sources live in `roles/`; build with `ansible-galaxy
   collection build`.
 - Molecule scenario `keycloak-deploy-basic` validates role wiring for Keycloak
@@ -244,9 +245,9 @@ Example playbook:
   experimental status) to keep coverage green.
 - Molecule scenario `manage-esxi-basic` uses a stub manage_esxi role so tests stay
   green without vCenter/ESXi access.
-- Protected AAP Molecule scenarios now live under `molecule/aap-rhel9` and
-  `molecule/aap-rhel10`; `scripts/devtools-molecule.sh` skips them unless
-  `MOLECULE_RUN_PROTECTED=true`.
+- Protected AAP Incus scenarios are intentionally not implemented in this
+  collection right now. Recreate them through `lit.ubuntu.incus_instance`
+  instead of shell helpers.
 
 ## Local checks
 
