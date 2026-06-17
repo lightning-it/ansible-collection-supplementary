@@ -11,8 +11,9 @@ bundle mode.
   For ephemeral Incus VMs, keep the base image unregistered and run
   `playbooks/rhel_prepare.yml` before this role. That playbook composes
   `lit.rhel.rhsm`, `lit.rhel.repos`, and `lit.rhel.virtual_guest`.
-- `ansible-core`, `git`, `podman`, `rsync`, `tar`, and `unzip` on target host
+- `ansible-core`, `git`, `rsync`, `tar`, and `unzip` on target host
   (managed by host prep if enabled).
+- Podman prepared on the target host, for example with `lit.rhel.podman`.
 - `infra.aap_utilities` collection installed in the execution environment.
 - A local AAP containerized setup bundle on the control node for real installer runs.
 - Enough local storage for bundle copy and extraction. Red Hat documents a minimum 60 GB
@@ -90,9 +91,6 @@ Key variables:
 - `aap_deploy_runtime_probe_all_containers` (default: `true`, uses `podman ps -a`)
 - `aap_deploy_runtime_name_regex` (default: `.*(automation|ansible|aap).*`)
 - `aap_deploy_runtime_min_matching_containers` (default: `1`)
-- `aap_deploy_manage_podman_storage`
-- `aap_deploy_podman_graphroot`
-- `aap_deploy_podman_runroot`
 - `aap_deploy_enforce_min_mem_check` (default: `true`)
 - `aap_deploy_min_mem_mb` (default: `15000`, approximately 16GB)
 - `aap_deploy_growth_inventory_connection` (default: `local`)
@@ -233,13 +231,18 @@ Customer baseline/Satellite example:
 ```yaml
 aap_deploy_install_dir: /appl/aap
 aap_deploy_install_user: aap
-aap_deploy_install_user_home: /home/aap
-aap_deploy_manage_podman_storage: true
-aap_deploy_podman_graphroot: /appl/containers/aap/storage
+aap_deploy_install_user_home: /appl/home/aap
 aap_deploy_manage_host_prep: true
 aap_deploy_manage_rhsm_repos: false
 ansible_remote_tmp: /appl/ansible-tmp
 ```
+
+Keep the install user home on a filesystem with enough space for the AAP
+execution-plane images. The AAP 2.7 containerized installer writes its own
+storage configuration below the install user's home directory.
+
+Rootless Podman storage is an operating-system concern. Configure it with
+`lit.rhel.podman` before running this role.
 
 Large bundle copy and temporary space:
 - Ansible copies modules and transfer payloads through `ansible_remote_tmp`.
@@ -360,6 +363,11 @@ Troubleshooting:
   installer task has `environment: "{{ aap_deploy_installer_environment }}"`,
   and enable `aap_deploy_debug_install_environment` to confirm
   `tempfile.gettempdir()=/appl/tmp`.
+- `No space left on device` while loading execution-plane images below
+  `<install-user-home>/aap/containers/storage`: move
+  `aap_deploy_install_user_home` to a filesystem with enough space, for example
+  `/appl/home/aap`, then reinstall from a clean host or clean stale installer
+  state first.
 - `Overall Status: Not registered` on Satellite/baseline systems: keep
   `aap_deploy_manage_host_prep: true` and set
   `aap_deploy_manage_rhsm_repos: false`.

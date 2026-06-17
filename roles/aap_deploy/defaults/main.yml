@@ -14,7 +14,7 @@ aap_deploy_topology: growth
 # Dedicated non-root install user (rootless podman model)
 aap_deploy_install_user: aap
 aap_deploy_install_user_create: true
-aap_deploy_install_user_home: "/home/{{ aap_deploy_install_user }}"
+aap_deploy_install_user_home: "{{ aap_deploy_install_dir | dirname }}/home/{{ aap_deploy_install_user }}"
 aap_deploy_install_user_shell: /bin/bash
 aap_deploy_install_user_groups: []
 aap_deploy_install_user_passwordless_sudo: true
@@ -111,17 +111,6 @@ aap_deploy_install_environment: {}
 aap_deploy_debug_install_environment: false
 aap_deploy_manage_install_tmp_dir: false
 aap_deploy_install_tmp_dir: ""
-
-# Optional rootless Podman storage configuration for the install user.
-# Keep the Linux home small and place large image/container storage on the
-# application filesystem when needed.
-aap_deploy_manage_podman_storage: false
-aap_deploy_podman_storage_driver: overlay
-aap_deploy_podman_storage_conf_path: >-
-  {{ aap_deploy_install_user_home }}/.config/containers/storage.conf
-aap_deploy_podman_graphroot: >-
-  {{ aap_deploy_install_dir | dirname }}/containers/{{ aap_deploy_install_user }}/storage
-aap_deploy_podman_runroot: ""
 
 aap_deploy_installer_runner: native
 aap_deploy_installer_wait: true

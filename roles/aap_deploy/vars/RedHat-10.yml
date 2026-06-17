@@ -7,7 +7,6 @@ aap_deploy_base_required_packages_default:
   - acl
   - ansible-core
   - git
-  - podman
   - rsync
   - tar
   - unzip

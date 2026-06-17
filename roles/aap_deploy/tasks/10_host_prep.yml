@@ -103,47 +103,6 @@
     aap_deploy_install_user_uid: "{{ aap_deploy_install_user_uid_result.stdout | trim }}"
   changed_when: false
 
-- name: Resolve rootless Podman runroot
-  ansible.builtin.set_fact:
-    aap_deploy_podman_runroot_effective: >-
-      {{
-        aap_deploy_podman_runroot
-        | default('/run/user/' ~ aap_deploy_install_user_uid ~ '/containers', true)
-      }}
-  changed_when: false
-  when: aap_deploy_manage_podman_storage | bool
-
-- name: Ensure rootless Podman graphroot exists
-  ansible.builtin.file:
-    path: "{{ aap_deploy_podman_graphroot }}"
-    state: directory
-    owner: "{{ aap_deploy_install_user }}"
-    group: "{{ aap_deploy_install_user }}"
-    mode: '0700'
-  when: aap_deploy_manage_podman_storage | bool
-
-- name: Ensure install user containers config directory exists
-  ansible.builtin.file:
-    path: "{{ aap_deploy_podman_storage_conf_path | dirname }}"
-    state: directory
-    owner: "{{ aap_deploy_install_user }}"
-    group: "{{ aap_deploy_install_user }}"
-    mode: '0700'
-  when: aap_deploy_manage_podman_storage | bool
-
-- name: Configure rootless Podman storage for install user
-  ansible.builtin.copy:
-    dest: "{{ aap_deploy_podman_storage_conf_path }}"
-    owner: "{{ aap_deploy_install_user }}"
-    group: "{{ aap_deploy_install_user }}"
-    mode: '0600'
-    content: |
-      [storage]
-      driver = "{{ aap_deploy_podman_storage_driver }}"
-      runroot = "{{ aap_deploy_podman_runroot_effective }}"
-      graphroot = "{{ aap_deploy_podman_graphroot }}"
-  when: aap_deploy_manage_podman_storage | bool
-
 - name: Ensure AAP installer temporary directory exists
   ansible.builtin.file:
     path: "{{ aap_deploy_install_tmp_dir }}"

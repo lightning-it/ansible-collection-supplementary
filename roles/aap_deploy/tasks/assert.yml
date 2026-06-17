@@ -57,17 +57,14 @@
       - aap_deploy_debug_install_environment is boolean
       - aap_deploy_manage_install_tmp_dir is boolean
       - aap_deploy_install_tmp_dir is string
-      - aap_deploy_manage_podman_storage is boolean
-      - aap_deploy_podman_storage_driver in ['overlay']
-      - aap_deploy_podman_storage_conf_path | trim | length > 0
-      - aap_deploy_podman_storage_conf_path.startswith('/')
-      - aap_deploy_podman_graphroot | trim | length > 0
-      - aap_deploy_podman_graphroot.startswith('/')
-      - aap_deploy_podman_runroot is string
       - aap_deploy_verify_gateway_https is boolean
       - aap_deploy_manage_rhsm_repos is boolean
       - aap_deploy_install_user | trim | length > 0
       - aap_deploy_install_user != 'root'
+      - aap_deploy_install_user_home | trim | length > 0
+      - aap_deploy_install_user_home.startswith('/')
+      - aap_deploy_install_user_home != aap_deploy_install_dir
+      - not aap_deploy_install_user_home.startswith(aap_deploy_install_dir.rstrip('/') ~ '/')
       - aap_deploy_install_dir | trim | length > 0
       - aap_deploy_install_dir.startswith('/')
       - aap_deploy_setup_dir | trim | length > 0
