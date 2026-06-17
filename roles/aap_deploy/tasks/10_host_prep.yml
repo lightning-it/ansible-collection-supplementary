@@ -8,89 +8,25 @@
       Set the host FQDN (for example: hostnamectl set-hostname host.example.com) and rerun.
     quiet: true
 
-- name: Ensure install user primary group exists
-  ansible.builtin.group:
-    name: "{{ aap_deploy_install_user }}"
-    state: present
-  when: aap_deploy_install_user_create | bool
-
-- name: Ensure install user home parent directory exists
-  ansible.builtin.file:
-    path: "{{ aap_deploy_install_user_home | dirname }}"
-    state: directory
-    owner: root
-    group: root
-    mode: '0755'
-  when: aap_deploy_install_user_create | bool
-
 - name: Inspect existing install user account
   ansible.builtin.command:
     cmd: "getent passwd {{ aap_deploy_install_user }}"
   register: aap_deploy_install_user_passwd_result
   changed_when: false
   failed_when: false
-  when: aap_deploy_install_user_create | bool
 
-- name: Inspect install user primary group
-  ansible.builtin.command:
-    cmd: "getent group {{ aap_deploy_install_user }}"
-  register: aap_deploy_install_user_group_result
-  changed_when: false
-  failed_when: false
-  when: aap_deploy_install_user_create | bool
-
-- name: Decide whether install user account must be changed
-  ansible.builtin.set_fact:
-    aap_deploy_install_user_account_needs_change: >-
-      {{
-        (aap_deploy_install_user_passwd_result.rc | default(1) != 0)
-        or (
-          (aap_deploy_install_user_passwd_result.stdout.split(':')[3] | default(''))
-          !=
-          (aap_deploy_install_user_group_result.stdout.split(':')[2] | default(''))
-        )
-        or (
-          (aap_deploy_install_user_passwd_result.stdout.split(':')[5] | default(''))
-          != aap_deploy_install_user_home
-        )
-        or (
-          (aap_deploy_install_user_passwd_result.stdout.split(':')[6] | default(''))
-          != aap_deploy_install_user_shell
-        )
-        or ((aap_deploy_install_user_groups | length) > 0)
-      }}
-  changed_when: false
-  when: aap_deploy_install_user_create | bool
-
-- name: Ensure dedicated install user exists
-  ansible.builtin.user:
-    name: "{{ aap_deploy_install_user }}"
-    group: "{{ aap_deploy_install_user }}"
-    groups: >-
-      {{
-        (
-          (aap_deploy_install_user_groups | length) > 0
-        )
-        | ternary(aap_deploy_install_user_groups | unique | join(','), omit)
-      }}
-    append: "{{ ((aap_deploy_install_user_groups | length) > 0) | ternary(true, omit) }}"
-    home: "{{ aap_deploy_install_user_home }}"
-    shell: "{{ aap_deploy_install_user_shell }}"
-    create_home: true
-    state: present
-  when:
-    - aap_deploy_install_user_create | bool
-    - aap_deploy_install_user_account_needs_change | bool
-
-- name: Ensure install user has passwordless sudo access
-  ansible.builtin.copy:
-    dest: "/etc/sudoers.d/{{ aap_deploy_install_user }}"
-    content: "{{ aap_deploy_install_user }} ALL=(ALL) NOPASSWD:ALL\n"
-    owner: root
-    group: root
-    mode: '0440'
-    validate: visudo -cf %s
-  when: aap_deploy_install_user_passwordless_sudo | bool
+- name: Validate install user is prepared
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_install_user_passwd_result.rc == 0
+      - (aap_deploy_install_user_passwd_result.stdout.split(':')[5] | default('')) == aap_deploy_install_user_home
+      - (aap_deploy_install_user_passwd_result.stdout.split(':')[6] | default('')) == aap_deploy_install_user_shell
+    fail_msg: >-
+      AAP install user '{{ aap_deploy_install_user }}' is missing or has
+      unexpected account settings. Prepare it before aap_deploy with the RHEL
+      users role. Expected home={{ aap_deploy_install_user_home }},
+      shell={{ aap_deploy_install_user_shell }}.
+    quiet: true
 
 - name: Resolve install user UID
   ansible.builtin.command:
@@ -102,47 +38,6 @@
   ansible.builtin.set_fact:
     aap_deploy_install_user_uid: "{{ aap_deploy_install_user_uid_result.stdout | trim }}"
   changed_when: false
-
-- name: Resolve rootless Podman runroot
-  ansible.builtin.set_fact:
-    aap_deploy_podman_runroot_effective: >-
-      {{
-        aap_deploy_podman_runroot
-        | default('/run/user/' ~ aap_deploy_install_user_uid ~ '/containers', true)
-      }}
-  changed_when: false
-  when: aap_deploy_manage_podman_storage | bool
-
-- name: Ensure rootless Podman graphroot exists
-  ansible.builtin.file:
-    path: "{{ aap_deploy_podman_graphroot }}"
-    state: directory
-    owner: "{{ aap_deploy_install_user }}"
-    group: "{{ aap_deploy_install_user }}"
-    mode: '0700'
-  when: aap_deploy_manage_podman_storage | bool
-
-- name: Ensure install user containers config directory exists
-  ansible.builtin.file:
-    path: "{{ aap_deploy_podman_storage_conf_path | dirname }}"
-    state: directory
-    owner: "{{ aap_deploy_install_user }}"
-    group: "{{ aap_deploy_install_user }}"
-    mode: '0700'
-  when: aap_deploy_manage_podman_storage | bool
-
-- name: Configure rootless Podman storage for install user
-  ansible.builtin.copy:
-    dest: "{{ aap_deploy_podman_storage_conf_path }}"
-    owner: "{{ aap_deploy_install_user }}"
-    group: "{{ aap_deploy_install_user }}"
-    mode: '0600'
-    content: |
-      [storage]
-      driver = "{{ aap_deploy_podman_storage_driver }}"
-      runroot = "{{ aap_deploy_podman_runroot_effective }}"
-      graphroot = "{{ aap_deploy_podman_graphroot }}"
-  when: aap_deploy_manage_podman_storage | bool
 
 - name: Ensure AAP installer temporary directory exists
   ansible.builtin.file:
@@ -167,49 +62,12 @@
     name: "user@{{ aap_deploy_install_user_uid }}.service"
     state: started
 
-- name: Check subscription-manager registration status
-  ansible.builtin.command:
-    cmd: subscription-manager status
-  register: aap_deploy_subscription_status
+- name: Validate required AAP deploy commands are available
+  ansible.builtin.shell:
+    cmd: "command -v {{ item | quote }}"
+    executable: /bin/bash
+  become: true
+  become_user: "{{ aap_deploy_install_user }}"
+  loop: "{{ aap_deploy_required_commands }}"
   changed_when: false
-  failed_when: aap_deploy_subscription_status.rc != 0
-  when: aap_deploy_manage_rhsm_repos | bool
-
-- name: List currently enabled RHSM repositories
-  ansible.builtin.command:
-    cmd: subscription-manager repos --list-enabled
-  register: aap_deploy_enabled_repos_raw
-  changed_when: false
-  when: aap_deploy_manage_rhsm_repos | bool
-
-- name: Compute missing RHSM repositories
-  ansible.builtin.set_fact:
-    aap_deploy_enabled_repos: "{{ aap_deploy_enabled_repos_raw.stdout | regex_findall('Repo ID:\\s*(\\S+)') }}"
-  when: aap_deploy_manage_rhsm_repos | bool
-
-- name: Build list of missing RHSM repositories
-  ansible.builtin.set_fact:
-    aap_deploy_missing_repos: "{{ aap_deploy_required_repos | difference(aap_deploy_enabled_repos) }}"
-  when: aap_deploy_manage_rhsm_repos | bool
-
-- name: Enable required RHSM repositories
-  ansible.builtin.command:
-    cmd: "subscription-manager repos --enable={{ item }}"
-  loop: "{{ aap_deploy_missing_repos }}"
-  register: aap_deploy_enable_repo_result
-  changed_when: true
-  when:
-    - aap_deploy_manage_rhsm_repos | bool
-    - aap_deploy_missing_repos | length > 0
-
-- name: Validate package repositories are available
-  ansible.builtin.command:
-    cmd: dnf repolist
-  register: aap_deploy_dnf_repolist_result
-  changed_when: false
-  failed_when: aap_deploy_dnf_repolist_result.rc != 0
-
-- name: Ensure host preparation packages are installed
-  ansible.builtin.dnf:
-    name: "{{ aap_deploy_required_packages }}"
-    state: present
+  register: aap_deploy_required_command_result

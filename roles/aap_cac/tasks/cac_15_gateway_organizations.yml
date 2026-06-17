@@ -2,24 +2,9 @@
 # CaC taskset: Assign Galaxy credentials to Controller organizations.
 - name: Assign Galaxy credentials to Controller organizations
   block:
-    - name: Wait for controller readiness
-      ansible.builtin.include_tasks: "{{ role_path }}/tasks/wait_for_controller_readiness.yml"
-
     - name: Set organizations for gateway organization taskset
       ansible.builtin.set_fact:
         aap_organizations: "{{ aap_cac_controller_organizations }}"
-      changed_when: false
-
-    - name: Resolve effective Controller admin password
-      ansible.builtin.set_fact:
-        aap_cac_controller_password_effective: >-
-          {{
-            aap_controller_admin_password_input
-            | default(aap_gateway_admin_password_input, true)
-            | default('', true)
-            | string
-            | trim
-          }}
       changed_when: false
 
     - name: Run role infra.aap_configuration.dispatch  # noqa var-naming[no-role-prefix]

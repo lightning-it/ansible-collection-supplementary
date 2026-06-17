@@ -80,9 +80,6 @@
   tags:
     - controller_license
   block:
-    - name: Wait for controller readiness
-      ansible.builtin.include_tasks: "{{ role_path }}/tasks/wait_for_controller_readiness.yml"
-
     - name: Create temporary manifest file for inline content
       ansible.builtin.tempfile:
         state: file
@@ -120,12 +117,7 @@
         controller_host: "{{ aap_cac_gateway_hostname }}"
         controller_oauthtoken: "{{ aap_cac_auth_token | default(omit, true) }}"
         controller_username: "{{ aap_cac_gateway_username | default(omit, true) }}"
-        controller_password: >-
-          {{
-            aap_controller_admin_password_input
-            | default(aap_gateway_admin_password_input, true)
-            | default(omit, true)
-          }}
+        controller_password: "{{ aap_cac_controller_password_effective | default(omit, true) }}"
         validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
       no_log: "{{ aap_cac_controller_license_secure_logging | bool }}"
   always:

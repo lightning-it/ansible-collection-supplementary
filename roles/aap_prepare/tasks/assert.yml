@@ -8,6 +8,7 @@
       - aap_prepare_timeout | int > 0
       - aap_prepare_force is boolean
       - aap_prepare_no_log is boolean
+      - aap_prepare_gateway_dns_precheck_enabled is boolean
       - aap_prepare_bundle_required is boolean
       - aap_prepare_bundle_source in ['auto', 'url', 'local', 'remote']
       - aap_prepare_bundle_dest | trim | length > 0

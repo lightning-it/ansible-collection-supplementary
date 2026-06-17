@@ -26,7 +26,6 @@
         aap_deploy_setup_dir: /tmp/molecule-aap-deploy-growth/setup
         aap_deploy_inventory_path: /tmp/molecule-aap-deploy-growth/setup/inventory
 
-        aap_deploy_manage_host_prep: false
         aap_deploy_manage_download_unpack: false
         aap_deploy_run_installer: false
         aap_deploy_run_verify: false
@@ -50,7 +49,6 @@
         aap_deploy_setup_dir: /tmp/molecule-aap-deploy-enterprise/setup
         aap_deploy_inventory_path: /tmp/molecule-aap-deploy-enterprise/setup/inventory
 
-        aap_deploy_manage_host_prep: false
         aap_deploy_manage_download_unpack: false
         aap_deploy_run_installer: false
         aap_deploy_run_verify: false

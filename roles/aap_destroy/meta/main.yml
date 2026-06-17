@@ -1,9 +1,9 @@
 ---
 galaxy_info:
-  role_name: aap_destory
+  role_name: aap_destroy
   namespace: lit
   author: René Osorio
-  description: Wrapper role to remove AAP using infra.aap_utilities.aap_remove.
+  description: Remove AAP using infra.aap_utilities.aap_remove.
   company: Lightning IT
   license: MIT
   min_ansible_version: "2.18"

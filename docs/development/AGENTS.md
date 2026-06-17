@@ -17,6 +17,5 @@ These notes are for role development workflows, not production runbooks.
    Direct SSH is acceptable only for the temporary jump/proxy setup documented here.
 6. Keep AAP full-install steps separate from public-safe smoke tests.
    Full install requires a private AAP bundle and may require RHSM access.
-7. If the Incus image workaround changes, update this directory and `deploy/incus/README.md`
-   together so the image assumptions stay consistent.
-
+7. Incus lifecycle belongs to `lit.ubuntu.incus_instance`; do not add shell
+   helper workflows under this collection.

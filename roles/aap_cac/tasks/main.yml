@@ -49,6 +49,39 @@
       no_log: true
       tags: always
 
+    - name: Resolve effective AAP CaC component passwords
+      ansible.builtin.set_fact:
+        aap_cac_gateway_password_effective: >-
+          {{
+            aap_cac_gateway_password
+            | default(aap_gateway_admin_password_input | default('', true), true)
+            | string
+            | trim
+          }}
+        aap_cac_controller_password_effective: >-
+          {{
+            aap_controller_admin_password_input
+            | default(aap_cac_gateway_password, true)
+            | default(aap_gateway_admin_password_input | default('', true), true)
+            | string
+            | trim
+          }}
+        aap_cac_hub_password_effective: >-
+          {{
+            aap_hub_admin_password_input
+            | default(aap_cac_gateway_password, true)
+            | default(aap_gateway_admin_password_input | default('', true), true)
+            | string
+            | trim
+          }}
+      changed_when: false
+      no_log: true
+      tags: always
+
+    - name: Wait for controller readiness once before AAP CaC tasksets
+      ansible.builtin.include_tasks: "{{ role_path }}/tasks/wait_for_controller_readiness.yml"
+      tags: always
+
     - name: Discover AAP CaC tasksets
       ansible.builtin.set_fact:
         aap_cac_taskset_files: >-

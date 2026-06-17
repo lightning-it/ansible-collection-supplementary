@@ -13,13 +13,6 @@
       ansible.builtin.include_role:
         name: infra.aap_configuration.hub_group_roles
       vars:
-        aap_password: >-
-          {{
-            aap_hub_admin_password_input
-            | default(aap_gateway_admin_password_input, true)
-            | default('', true)
-            | string
-            | trim
-          }}
+        aap_password: "{{ aap_cac_hub_password_effective }}"
         aap_token: "{{ aap_cac_auth_token | default(omit, true) }}"
       when: aap_cac_hub_group_roles | length > 0

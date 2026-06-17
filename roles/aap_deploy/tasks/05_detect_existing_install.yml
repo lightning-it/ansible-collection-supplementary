@@ -16,10 +16,7 @@
         or
         (
           (aap_deploy_skip_if_runtime_active | bool)
-          and (
-            (aap_deploy_install_marker_precheck.stat.exists | default(false))
-            or not (aap_deploy_manage_host_prep | bool)
-          )
+          and (aap_deploy_install_marker_precheck.stat.exists | default(false))
         )
       }}
   changed_when: false

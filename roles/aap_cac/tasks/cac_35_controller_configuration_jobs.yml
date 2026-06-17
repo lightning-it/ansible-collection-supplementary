@@ -24,9 +24,6 @@
       workflow_job_templates: "{{ controller_workflows | default([], true) | length > 0 }}"
       workflow_launch: "{{ controller_workflow_launch_jobs | default([], true) | length > 0 }}"
   block:
-    - name: Wait for controller readiness
-      ansible.builtin.include_tasks: "{{ role_path }}/tasks/wait_for_controller_readiness.yml"
-
     - name: Build job requested tag filter from ansible_run_tags
       ansible.builtin.set_fact:
         aap_cac_controller_configuration_jobs_requested_tags: >-
@@ -67,18 +64,6 @@
               )
             )
           }}
-
-    - name: Resolve effective Controller admin password
-      ansible.builtin.set_fact:
-        aap_cac_controller_password_effective: >-
-          {{
-            aap_controller_admin_password_input
-            | default(aap_gateway_admin_password_input, true)
-            | default('', true)
-            | string
-            | trim
-          }}
-      changed_when: false
 
     - name: Include infra.controller_configuration job roles
       ansible.builtin.include_role:

@@ -84,32 +84,6 @@
           health={{ aap_ops_health.status | default('unknown') }},
           service={{ aap_ops_service_state.state | default('unknown') }}
 
-- name: Upgrade AAP packages
-  when:
-    - aap_ops_enabled | bool
-    - aap_ops_action == 'upgrade'
-  tags:
-    - ops
-    - upgrade
-  block:
-    - name: Upgrade AAP package set
-      ansible.builtin.dnf:
-        name: "{{ aap_ops_packages_effective }}"
-        state: "{{ aap_ops_package_state }}"
-      when:
-        - aap_ops_packages_effective | default([], true) | length > 0
-        - not ansible_check_mode
-
-    - name: Restart AAP service after upgrade
-      ansible.builtin.systemd:
-        name: "{{ aap_ops_systemd_unit_name }}"
-        state: restarted
-      when:
-        - aap_ops_manage_systemd | bool
-        - aap_ops_package_state != 'absent'
-        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
-        - not ansible_check_mode
-
 - name: Sync automation hub admin password in aap-config.yml
   when:
     - aap_ops_enabled | bool

@@ -1,6 +1,6 @@
 # aap_ops
 
-Operate AAP host install (restart, status, upgrade, sync_hub_password, rotate_password, backup, restore, certs).
+Operate AAP host install (restart, status, sync_hub_password, rotate_password, backup, restore, certs).
 
 ## Requirements
 
@@ -12,7 +12,6 @@ See `roles/aap_ops/defaults/main.yml` and `roles/aap/defaults/main.yml`.
 
 Key variables:
 - `aap_ops_action`
-- `aap_ops_package_state`
 - `aap_ops_systemd_unit_name`
 - `aap_ops_sync_hub_password_file_path`
 - `aap_ops_sync_hub_password_value`

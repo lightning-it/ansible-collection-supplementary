@@ -1,0 +1,106 @@
+---
+- name: Resolve AAP gateway URL precheck hostname
+  ansible.builtin.set_fact:
+    aap_prepare_gateway_dns_precheck_hostname: >-
+      {{
+        (
+          aap_deploy_gateway_main_url
+          | default('', true)
+          | urlsplit('hostname')
+        )
+        if (aap_deploy_gateway_main_url | default('', true) | trim | length > 0)
+        else
+        (
+          aap_cac_gateway_hostname
+          | default('', true)
+          | regex_replace('^https?://', '')
+          | regex_replace('/.*$', '')
+          | regex_replace(':.*$', '')
+        )
+      }}
+  changed_when: false
+  tags:
+    - aap_prepare
+    - aap_deploy
+    - dns
+
+- name: Validate AAP gateway URL precheck hostname
+  ansible.builtin.assert:
+    that:
+      - aap_prepare_gateway_dns_precheck_hostname | trim | length > 0
+      - aap_prepare_gateway_dns_precheck_hostname is not match('^https?://')
+    fail_msg: >-
+      AAP gateway URL precheck requires a resolvable hostname. Set
+      aap_deploy_gateway_main_url or aap_cac_gateway_hostname to the AAP
+      gateway FQDN before running the AAP rollout.
+    quiet: true
+  changed_when: false
+  tags:
+    - aap_prepare
+    - aap_deploy
+    - dns
+
+- name: Resolve AAP gateway URL before AAP preparation
+  ansible.builtin.command:
+    argv:
+      - getent
+      - ahostsv4
+      - "{{ aap_prepare_gateway_dns_precheck_hostname }}"
+  register: aap_prepare_gateway_dns_precheck_getent
+  changed_when: false
+  failed_when: false
+  tags:
+    - aap_prepare
+    - aap_deploy
+    - dns
+
+- name: Build AAP gateway URL address lists
+  ansible.builtin.set_fact:
+    aap_prepare_gateway_dns_precheck_addresses: >-
+      {{
+        aap_prepare_gateway_dns_precheck_getent.stdout_lines
+        | default([], true)
+        | map('split')
+        | map(attribute=0)
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+    aap_prepare_gateway_dns_local_addresses: >-
+      {{
+        ansible_all_ipv4_addresses
+        | default([], true)
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+  changed_when: false
+  tags:
+    - aap_prepare
+    - aap_deploy
+    - dns
+
+- name: Require AAP gateway URL to resolve to this host
+  ansible.builtin.assert:
+    that:
+      - aap_prepare_gateway_dns_precheck_addresses | length > 0
+      - aap_prepare_gateway_dns_local_addresses | length > 0
+      - >-
+        (
+          aap_prepare_gateway_dns_precheck_addresses
+          | intersect(aap_prepare_gateway_dns_local_addresses)
+          | length
+        ) > 0
+    fail_msg: >-
+      AAP gateway hostname '{{ aap_prepare_gateway_dns_precheck_hostname }}'
+      must resolve to one of this host's IPv4 addresses before rollout.
+      Resolved:
+      {{ aap_prepare_gateway_dns_precheck_addresses | default([]) | join(', ') | default('none', true) }}.
+      Local:
+      {{ aap_prepare_gateway_dns_local_addresses | default([]) | join(', ') | default('none', true) }}.
+    quiet: true
+  changed_when: false
+  tags:
+    - aap_prepare
+    - aap_deploy
+    - dns

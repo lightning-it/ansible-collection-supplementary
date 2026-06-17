@@ -22,12 +22,6 @@
   when: aap_deploy_enabled | bool
   tags: always
 
-- name: Load OS-specific AAP deploy vars
-  ansible.builtin.include_vars:
-    file: "{{ role_path }}/vars/RedHat-{{ ansible_distribution_major_version | string }}.yml"
-  when: aap_deploy_enabled | bool
-  tags: always
-
 - name: Validate aap_deploy role switches and mode
   ansible.builtin.assert:
     that:
@@ -36,7 +30,6 @@
       - aap_deploy_supported_majors is not string
       - aap_deploy_install_type == 'bundle'
       - aap_deploy_topology in ['growth', 'enterprise']
-      - aap_deploy_manage_host_prep is boolean
       - aap_deploy_manage_download_unpack is boolean
       - aap_deploy_run_installer is boolean
       - aap_deploy_run_verify is boolean
@@ -45,8 +38,6 @@
       - aap_deploy_skip_if_installed_require_runtime is boolean
       - aap_deploy_skip_if_runtime_active is boolean
       - aap_deploy_runtime_probe_all_containers is boolean
-      - aap_deploy_install_user_create is boolean
-      - aap_deploy_install_user_passwordless_sudo is boolean
       - aap_deploy_force_unpack is boolean
       - aap_deploy_validate_archive_format is boolean
       - aap_deploy_setup_download_containerized is boolean
@@ -57,27 +48,20 @@
       - aap_deploy_debug_install_environment is boolean
       - aap_deploy_manage_install_tmp_dir is boolean
       - aap_deploy_install_tmp_dir is string
-      - aap_deploy_manage_podman_storage is boolean
-      - aap_deploy_podman_storage_driver in ['overlay']
-      - aap_deploy_podman_storage_conf_path | trim | length > 0
-      - aap_deploy_podman_storage_conf_path.startswith('/')
-      - aap_deploy_podman_graphroot | trim | length > 0
-      - aap_deploy_podman_graphroot.startswith('/')
-      - aap_deploy_podman_runroot is string
       - aap_deploy_verify_gateway_https is boolean
-      - aap_deploy_manage_rhsm_repos is boolean
       - aap_deploy_install_user | trim | length > 0
       - aap_deploy_install_user != 'root'
+      - aap_deploy_install_user_home | trim | length > 0
+      - aap_deploy_install_user_home.startswith('/')
+      - aap_deploy_install_user_home != aap_deploy_install_dir
       - aap_deploy_install_dir | trim | length > 0
       - aap_deploy_install_dir.startswith('/')
       - aap_deploy_setup_dir | trim | length > 0
       - aap_deploy_setup_dir.startswith('/')
       - aap_deploy_setup_archive_path | trim | length > 0
       - aap_deploy_setup_archive_path.startswith('/')
-      - aap_deploy_required_repos is sequence
-      - aap_deploy_required_repos is not string
-      - aap_deploy_required_packages is sequence
-      - aap_deploy_required_packages is not string
+      - aap_deploy_required_commands is sequence
+      - aap_deploy_required_commands is not string
       - aap_deploy_setup_download_version == '2.7'
       - aap_deploy_setup_install_extra_vars is mapping
       - aap_deploy_setup_install_extra_vars_files is sequence
@@ -221,24 +205,6 @@
   when: aap_deploy_enabled | bool
   tags: always
 
-- name: Validate local setup bundle staging settings when archive management is enabled
-  ansible.builtin.assert:
-    that:
-      - aap_deploy_setup_archive_src | default('', true) | trim | length > 0
-      - aap_deploy_setup_archive_src.startswith('/')
-      - (aap_deploy_setup_archive_src | regex_search('^https?://')) is none
-    fail_msg: >-
-      Invalid local AAP bundle staging configuration.
-      We have to use our local copy of the AAP bundle instead of the default AAP download role
-      because this workflow must always work without internet access.
-      Set aap_deploy_setup_archive_src to a local file path on the control node or pre-stage the
-      bundle on the managed host.
-    quiet: true
-  when:
-    - aap_deploy_enabled | bool
-    - aap_deploy_manage_download_unpack | bool
-  tags: always
-
 - name: Validate growth topology host settings
   ansible.builtin.assert:
     that:
@@ -283,20 +249,6 @@
   when:
     - aap_deploy_enabled | bool
     - aap_deploy_topology == 'enterprise'
-  tags: always
-
-- name: Validate platform for host preparation
-  ansible.builtin.assert:
-    that:
-      - (ansible_distribution | default('')) == 'RedHat'
-      - (ansible_distribution_major_version | string) in aap_deploy_supported_majors
-    fail_msg: >-
-      Host preparation supports Red Hat Enterprise Linux {{ aap_deploy_supported_majors | join('/') }} only.
-      Set aap_deploy_manage_host_prep=false if this role is only being used to render inventory.
-    quiet: true
-  when:
-    - aap_deploy_enabled | bool
-    - aap_deploy_manage_host_prep | bool
   tags: always
 
 - name: Validate TLS staging settings
