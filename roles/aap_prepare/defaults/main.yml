@@ -10,6 +10,7 @@ aap_prepare_validate_certs: true
 aap_prepare_timeout: 1800
 aap_prepare_force: false
 aap_prepare_no_log: true
+aap_prepare_gateway_dns_precheck_enabled: true
 
 aap_prepare_bundle_required: true
 aap_prepare_bundle_source: auto

@@ -10,6 +10,16 @@
   when: not (aap_prepare_enabled | bool)
   tags: always
 
+- name: Validate AAP gateway DNS resolves to this host
+  ansible.builtin.import_tasks: precheck_gateway_dns.yml
+  when:
+    - aap_prepare_enabled | bool
+    - aap_prepare_gateway_dns_precheck_enabled | bool
+  tags:
+    - aap_prepare
+    - aap_deploy
+    - dns
+
 - name: Reset resolved AAP prepare artifacts
   ansible.builtin.set_fact:
     aap_prepare_artifacts_items: []

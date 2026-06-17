@@ -6,6 +6,11 @@ The role stages the AAP containerized setup bundle and subscription manifest on
 the managed AAP host. It is intentionally independent from the Red Hat installer
 workflow in `aap_deploy` and from API configuration in `aap_cac`.
 
+Before staging artifacts, the role validates that the configured AAP gateway
+hostname resolves to one of the managed host's IPv4 addresses. Disable this
+precheck with `aap_prepare_gateway_dns_precheck_enabled: false` when DNS is
+managed outside the rollout window.
+
 ## Sources
 
 Each artifact can come from:
@@ -19,6 +24,7 @@ Each artifact can come from:
 ## Defaults
 
 - `aap_prepare_artifact_dir`: `${PWD}/.artifacts`
+- `aap_prepare_gateway_dns_precheck_enabled`: `true`
 - setup bundle patterns:
   - `aap-containerized-setup.tar.gz`
   - `ansible-automation-platform-containerized-setup-bundle-*.tar.gz`
