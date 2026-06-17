@@ -26,7 +26,8 @@ automation/inventory/operations repositories.
 3. Keep Automation Hub-only requirements in the consumer runtime overlay.
 4. Keep role-owned variables prefixed with the owning role name.
 5. Keep `acl` available through RHEL host preparation. The upstream installer can
-   fail while becoming the rootless `aap` user if POSIX ACL tooling is missing.
+   fail while becoming the rootless AAP install user (`svc_aap` by default) if
+   POSIX ACL tooling is missing.
 6. Keep AAP installer temp handling in `aap_deploy`; this is distinct from the
    generic Ansible remote temp role in `lit.foundational`.
 

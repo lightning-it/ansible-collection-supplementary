@@ -203,8 +203,8 @@ Customer baseline/Satellite example:
 
 ```yaml
 aap_deploy_install_dir: /appl/aap
-aap_deploy_install_user: aap
-aap_deploy_install_user_home: /appl/aap/aap
+aap_deploy_install_user: svc_aap
+aap_deploy_install_user_home: /appl/home/svc_aap
 ```
 
 Keep the install user home on a filesystem with enough space for the AAP
@@ -322,7 +322,7 @@ Troubleshooting:
 - `No space left on device` while loading execution-plane images below
   `<install-user-home>/aap/containers/storage`: move
   `aap_deploy_install_user_home` to a filesystem with enough space, for example
-  `/appl/aap/aap`, then reinstall from a clean host or clean stale installer
+  `/appl/home/svc_aap`, then reinstall from a clean host or clean stale installer
   state first.
 - `Overall Status: Not registered`: run the RHEL RHSM/repository preparation
   before this role.
@@ -349,7 +349,7 @@ Requires `infra.aap_utilities` in the execution environment.
       vars:
         aap_deploy_install_type: bundle
         aap_deploy_topology: growth
-        aap_deploy_install_user: aap
+        aap_deploy_install_user: svc_aap
         aap_deploy_install_dir: /opt/aap
         aap_deploy_setup_download_version: "2.7"
         aap_deploy_setup_download_containerized: true

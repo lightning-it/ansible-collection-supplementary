@@ -12,8 +12,13 @@ aap_deploy_install_type: bundle
 aap_deploy_topology: growth
 
 # Dedicated non-root install user (rootless podman model)
-aap_deploy_install_user: aap
-aap_deploy_install_user_home: "{{ aap_deploy_install_dir }}/{{ aap_deploy_install_user }}"
+aap_deploy_install_user: svc_aap
+aap_deploy_install_user_home: >-
+  {{
+    '/appl/home/' ~ aap_deploy_install_user
+    if (aap_deploy_install_dir | string).startswith('/appl/')
+    else (aap_deploy_install_dir | regex_replace('/+$', '')) ~ '/' ~ aap_deploy_install_user
+  }}
 aap_deploy_install_user_shell: /bin/bash
 
 # Installation paths
