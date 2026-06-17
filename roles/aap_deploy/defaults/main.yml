@@ -67,7 +67,7 @@ aap_deploy_setup_archive_src: >-
           | trim
           | length > 0
         )
-        else '/opt/aap/aap-containerized-setup.tar.gz'
+        else aap_deploy_install_dir ~ '/aap-containerized-setup.tar.gz'
       )
     )
   }}
