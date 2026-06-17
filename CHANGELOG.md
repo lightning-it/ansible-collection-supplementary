@@ -1,3 +1,9 @@
+## [1.31.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.31.0...v1.31.1) (2026-06-17)
+
+### Bug Fixes
+
+* podman moved ([#229](https://github.com/lightning-it/ansible-collection-supplementary/issues/229)) ([1697600](https://github.com/lightning-it/ansible-collection-supplementary/commit/16976002783218858c3ebd6ff17ff63d55beaff0))
+
 ## [1.31.0](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.30.1...v1.31.0) (2026-06-17)
 
 ### Features
