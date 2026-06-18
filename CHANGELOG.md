@@ -1,3 +1,9 @@
+## [1.31.3](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.31.2...v1.31.3) (2026-06-18)
+
+### Bug Fixes
+
+* update dependency lit.rhel to v1.17.1 ([#233](https://github.com/lightning-it/ansible-collection-supplementary/issues/233)) ([f4e146e](https://github.com/lightning-it/ansible-collection-supplementary/commit/f4e146ed4e3dc459e9f26fb1ff3b8a7ea172afe0))
+
 ## [1.31.2](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.31.1...v1.31.2) (2026-06-18)
 
 ### Bug Fixes
