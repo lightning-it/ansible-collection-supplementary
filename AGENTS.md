@@ -34,22 +34,23 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    2. `SECURITY.md`
    3. `scripts/wunder-devtools-ee.sh`
 4. Managed collection baseline files from `shared-assets/ansible-collection/base`:
-   1. `AGENT.md` or downstream `AGENTS.md` when the repository uses the plural name
-   2. `CONTRIBUTING.md`
-   3. `.ansible-lint`
-   4. `ansible.cfg`
-   5. `renovate.base.json`
-   6. `.releaserc`
-   7. `.yamllint`
-   8. `.gitignore`
-   9. shared block in `.pre-commit-config.yaml`
-   10. `scripts/bump_galaxy_version.py`
-   11. `scripts/devtools-ansible-lint.sh`
-   12. `scripts/devtools-collection-prepare.sh`
-   13. `scripts/devtools-collection-smoke.sh`
-   14. `scripts/devtools-galaxy-verify.sh`
-   15. `scripts/devtools-galaxy.sh`
-   16. `scripts/devtools-molecule.sh`
+   1. `AGENT.md`
+   2. `AGENTS.md`
+   3. `CONTRIBUTING.md`
+   4. `.ansible-lint`
+   5. `ansible.cfg`
+   6. `renovate.base.json`
+   7. `.releaserc`
+   8. `.yamllint`
+   9. `.gitignore`
+   10. shared block in `.pre-commit-config.yaml`
+   11. `scripts/bump_galaxy_version.py`
+   12. `scripts/devtools-ansible-lint.sh`
+   13. `scripts/devtools-collection-prepare.sh`
+   14. `scripts/devtools-collection-smoke.sh`
+   15. `scripts/devtools-galaxy-verify.sh`
+   16. `scripts/devtools-galaxy.sh`
+   17. `scripts/devtools-molecule.sh`
 5. Repo-local exceptions MUST be explicit in the sync workflow and documented in the repository.
 
 ## 2. Repository Baseline (This Repo)
@@ -90,6 +91,42 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    and dependency.
 5. Do not create parallel version ownership for the same dependency across multiple files unless the repository
    explicitly documents that split.
+
+## 2.3 Ansible Collection Renovate and Release Policy
+
+For Lightning IT Ansible collection repositories, follow the shared Renovate and release model.
+
+Do not duplicate generic Renovate policy in individual collection repositories. Generic Renovate rules must be
+maintained in `lightning-it/shared-assets` and consumed through the repository's `renovate.json` `extends`
+configuration.
+
+Collection repositories may only define repository-specific Renovate overrides, such as:
+
+1. temporary version pins
+2. compatibility constraints
+3. collection-specific package rules
+4. local custom managers that are not reusable
+
+The standard branch and release model is:
+
+1. `develop` is the automated integration branch.
+2. Renovate targets `develop`.
+3. Safe patch, minor, pin, and digest updates may auto-merge into `develop` after required CI passes.
+4. Major updates require manual approval.
+5. `main` is the stable release branch and the only real release branch.
+6. `develop` must not be configured as a `semantic-release` branch unless an explicit pre-release strategy is
+   requested.
+7. Weekly promotion from `develop` to `main` must happen through a pull request.
+8. Weekly promotion may use GitHub auto-merge, but must not bypass required checks.
+9. Do not direct-push from `develop` to `main`.
+10. `semantic-release` must remain main-only for stable releases.
+
+When changing shared Renovate or release documentation and agent instructions, final output MUST:
+
+1. confirm that the `shared-assets` README documents the shared Renovate and release workflow
+2. confirm that `AGENTS.md` contains persistent instructions for future agents/Codex runs
+3. list exactly which `AGENTS.md` files were updated
+4. if no `AGENTS.md` exists, create one in the most appropriate location and state why
 
 ## 3. Role Variable Naming and Mapping Rules
 
