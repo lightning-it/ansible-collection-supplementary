@@ -1,3 +1,9 @@
+## [1.31.2](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.31.1...v1.31.2) (2026-06-18)
+
+### Bug Fixes
+
+* update ansible-core (2.18.x only) to v2.18.17 ([#231](https://github.com/lightning-it/ansible-collection-supplementary/issues/231)) ([37cf6c6](https://github.com/lightning-it/ansible-collection-supplementary/commit/37cf6c60a56839aa8097ecbd07223f192f5e146b))
+
 ## [1.31.1](https://github.com/lightning-it/ansible-collection-supplementary/compare/v1.31.0...v1.31.1) (2026-06-17)
 
 ### Bug Fixes
