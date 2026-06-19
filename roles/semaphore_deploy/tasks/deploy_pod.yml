@@ -25,11 +25,25 @@
   tags:
     - deployment
 
-- name: Load generated Semaphore secrets
-  ansible.builtin.include_vars:
-    file: "{{ semaphore_deploy_secrets_file }}"
-    name: semaphore_deploy_stored_secrets
+- name: Read generated Semaphore secrets
+  ansible.builtin.slurp:
+    src: "{{ semaphore_deploy_secrets_file }}"
   when: semaphore_deploy_secrets_file_stat.stat.exists | bool
+  register: semaphore_deploy_secrets_file_content
+  no_log: true
+  tags:
+    - deployment
+
+- name: Load generated Semaphore secrets
+  ansible.builtin.set_fact:
+    semaphore_deploy_stored_secrets: >-
+      {{
+        semaphore_deploy_secrets_file_content.content
+        | b64decode
+        | from_yaml
+      }}
+  when: semaphore_deploy_secrets_file_stat.stat.exists | bool
+  changed_when: false
   no_log: true
   tags:
     - deployment
@@ -68,6 +82,24 @@
   tags:
     - deployment
 
+- name: Determine Semaphore access key validity
+  ansible.builtin.set_fact:
+    semaphore_deploy_access_key_encryption_invalid: >-
+      {{
+        (semaphore_deploy_access_key_encryption_effective | default('', true) | length > 0)
+        and (
+          not (
+            semaphore_deploy_access_key_encryption_effective
+            is match('^[A-Za-z0-9+/]+={0,2}$')
+          )
+          or (semaphore_deploy_access_key_encryption_effective | length) % 4 != 0
+        )
+      }}
+  changed_when: false
+  no_log: true
+  tags:
+    - deployment
+
 - name: Determine whether secret generation is required
   ansible.builtin.set_fact:
     semaphore_deploy_secrets_missing: >-
@@ -75,6 +107,7 @@
         (semaphore_deploy_db_password_effective | default('', true) | length == 0)
         or (semaphore_deploy_admin_password_effective | default('', true) | length == 0)
         or (semaphore_deploy_access_key_encryption_effective | default('', true) | length == 0)
+        or semaphore_deploy_access_key_encryption_invalid | bool
       }}
   changed_when: false
   no_log: true
@@ -117,11 +150,15 @@
     semaphore_deploy_access_key_encryption_effective: >-
       {{
         semaphore_deploy_access_key_encryption_effective
-        if (semaphore_deploy_access_key_encryption_effective | default('', true) | length > 0)
+        if (
+          semaphore_deploy_access_key_encryption_effective | default('', true) | length > 0
+          and not semaphore_deploy_access_key_encryption_invalid | bool
+        )
         else lookup(
           'ansible.builtin.password',
           '/dev/null length=' ~ (semaphore_deploy_generated_access_key_length | int | string)
-        )
+          ~ ' chars=ascii_letters,digits'
+        ) | b64encode
       }}
   when:
     - semaphore_deploy_generate_secrets | bool
@@ -161,6 +198,7 @@
     postgres_deploy_image: "{{ semaphore_deploy_postgres_image }}"
     postgres_deploy_container_name: "{{ semaphore_deploy_postgres_container_name }}"
     postgres_deploy_host_data_dir: "{{ semaphore_deploy_postgres_data_dir }}"
+    postgres_deploy_config_dir: "{{ semaphore_deploy_postgres_config_dir }}"
     postgres_deploy_container_data_dir: "{{ semaphore_deploy_container_postgres_data_dir }}"
     postgres_deploy_port: "{{ semaphore_deploy_db_port }}"
     postgres_deploy_host_ip: "{{ semaphore_deploy_postgres_host_ip }}"

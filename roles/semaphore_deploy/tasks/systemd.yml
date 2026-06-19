@@ -13,6 +13,12 @@
       register: semaphore_deploy_systemd_name
       changed_when: false
 
+    - name: Install Podman kube systemd template
+      ansible.builtin.template:
+        src: podman-kube@.service.j2
+        dest: /etc/systemd/system/podman-kube@.service
+        mode: '0644'
+
     - name: Ensure podman-kube drop-in directory exists
       ansible.builtin.file:
         path: "/etc/systemd/system/podman-kube@{{ semaphore_deploy_systemd_name.stdout }}.service.d"

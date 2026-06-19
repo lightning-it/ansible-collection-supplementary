@@ -17,6 +17,7 @@ semaphore_deploy_container_name: "{{ semaphore_deploy_pod_name }}-semaphore"
 # Host paths
 semaphore_deploy_host_data_dir: "/srv/semaphore/data"
 semaphore_deploy_postgres_data_dir: "/srv/semaphore/postgres"
+semaphore_deploy_postgres_config_dir: "/srv/semaphore/postgres-config"
 semaphore_deploy_config_dir: "/srv/semaphore/config"
 semaphore_deploy_secrets_file: "{{ semaphore_deploy_config_dir }}/semaphore-secrets.yml"
 
@@ -69,7 +70,7 @@ semaphore_deploy_db_dialect: "postgres"
 semaphore_deploy_db_name: "semaphore"
 semaphore_deploy_db_user: "semaphore"
 semaphore_deploy_db_host: "{{ semaphore_deploy_postgres_host_ip }}"
-semaphore_deploy_db_port: "{{ postgres_deploy_port | default(5432) }}"
+semaphore_deploy_db_port: 5432
 
 # Secrets (preferred: inventory/Vault; fallback: generated once)
 semaphore_deploy_db_password: ""

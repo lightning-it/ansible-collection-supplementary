@@ -1,0 +1,3 @@
+---
+semaphore_deploy_packages:
+  - podman

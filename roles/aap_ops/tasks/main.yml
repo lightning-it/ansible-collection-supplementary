@@ -74,7 +74,8 @@
 
     - name: Default AAP service state when not using systemd
       ansible.builtin.set_fact:
-        aap_ops_service_state: {}
+        aap_ops_service_state:
+          state: not-managed
       changed_when: false
       when: aap_ops_service_state is not defined
 
@@ -82,7 +83,10 @@
       ansible.builtin.debug:
         msg: >-
           health={{ aap_ops_health.status | default('unknown') }},
-          service={{ aap_ops_service_state.state | default('unknown') }}
+          service={{
+            aap_ops_service_state.state
+            | default((aap_ops_manage_systemd | bool) | ternary('unknown', 'not-managed'))
+          }}
 
 - name: Sync automation hub admin password in aap-config.yml
   when:
