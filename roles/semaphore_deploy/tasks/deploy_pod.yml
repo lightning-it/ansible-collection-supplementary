@@ -93,6 +93,7 @@
             is match('^[A-Za-z0-9+/]+={0,2}$')
           )
           or (semaphore_deploy_access_key_encryption_effective | length) % 4 != 0
+          or (semaphore_deploy_access_key_encryption_effective | b64decode | length) not in [16, 24, 32]
         )
       }}
   changed_when: false

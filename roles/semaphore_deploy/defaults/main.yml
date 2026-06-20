@@ -80,7 +80,7 @@ semaphore_deploy_generate_secrets: true
 semaphore_deploy_store_generated_secrets: true
 semaphore_deploy_generated_db_password_length: 32
 semaphore_deploy_generated_admin_password_length: 32
-semaphore_deploy_generated_access_key_length: 64
+semaphore_deploy_generated_access_key_length: 32
 
 # Lifecycle
 semaphore_deploy_install_packages: true

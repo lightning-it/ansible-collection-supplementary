@@ -1,0 +1,3 @@
+---
+# This role intentionally consumes the Vault backup/restore defaults from
+# `vault_deploy`; keep this file so the role has the standard collection layout.

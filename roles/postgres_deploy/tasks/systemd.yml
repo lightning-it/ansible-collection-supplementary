@@ -25,9 +25,20 @@
         state: directory
         mode: '0755'
 
+    - name: Determine PostgreSQL kube unit state
+      ansible.builtin.set_fact:
+        postgres_deploy_systemd_state: >-
+          {{
+            (
+              postgres_deploy_kubeplay_run | default(false)
+              or postgres_deploy_kubeplay_remove | default(false)
+            ) | ternary('restarted', 'started')
+          }}
+      changed_when: false
+
     - name: Enable and start Podman kube systemd unit
       ansible.builtin.systemd:
         name: "podman-kube@{{ postgres_deploy_systemd_name.stdout }}.service"
         enabled: true
-        state: started
+        state: "{{ postgres_deploy_systemd_state }}"
         daemon_reload: true

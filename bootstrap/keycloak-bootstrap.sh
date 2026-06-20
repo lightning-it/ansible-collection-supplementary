@@ -48,8 +48,8 @@ extract_first_id() {
 }
 
 wait_for_keycloak() {
-  local i
-  for i in $(seq 1 120); do
+  local _
+  for _ in $(seq 1 120); do
     if curl -fsS "${KEYCLOAK_PUBLIC_URL}/realms/master/.well-known/openid-configuration" >/dev/null 2>&1; then
       return 0
     fi

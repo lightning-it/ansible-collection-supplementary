@@ -240,7 +240,7 @@ Example playbook:
   defaults.
 - Molecule scenario `gitlab-runner-basic` runs the gitlab_runner stub role
   (acknowledging experimental status) to keep lint/test coverage green.
-  It uses the repo’s roles path to source the role locally.
+  It uses the repo's roles path to source the role locally.
 - Molecule scenario `nexus-basic` runs the nexus stub role (acknowledging
   experimental status) to keep coverage green.
 - Molecule scenario `manage-esxi-basic` uses a stub manage_esxi role so tests stay
@@ -257,7 +257,7 @@ local development and CI.
 
 ### 1. Install pre-commit
 
-If you haven’t already:
+If you haven't already:
 
 ```bash
 pip install pre-commit

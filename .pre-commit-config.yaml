@@ -80,4 +80,4 @@ repos:
         entry: bash scripts/devtools-galaxy-verify.sh
         pass_filenames: false
         files: ^(roles/|galaxy\.yml)
-  # <<< END shared-assets pre-commit
+      # <<< END shared-assets pre-commit
