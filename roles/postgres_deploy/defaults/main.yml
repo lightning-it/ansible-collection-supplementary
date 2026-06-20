@@ -18,6 +18,7 @@ postgres_deploy_container_data_dir: "/var/lib/postgresql/data"
 
 # Runtime network
 postgres_deploy_port: 5432
+postgres_deploy_container_port: 5432
 postgres_deploy_host_ip: >-
   {{
     ansible_default_ipv4.address

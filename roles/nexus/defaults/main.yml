@@ -1,5 +1,21 @@
 ---
 nexus_nexus_hostname: ''
+nexus_packages_base:
+  - podman
+  - python3
+  - python3-pip
+  - jq
+nexus_packages_redhat:
+  - python3-libselinux
+nexus_packages: >-
+  {{
+    nexus_packages_base
+    + (
+      nexus_packages_redhat
+      if (ansible_os_family | default('')) == 'RedHat'
+      else []
+    )
+  }}
 nexus_nexus_host_ip: >-
   {{
     ansible_default_ipv4.address

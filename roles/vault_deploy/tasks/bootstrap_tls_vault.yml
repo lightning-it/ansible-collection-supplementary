@@ -99,7 +99,9 @@
         organization_name: Ansible, Inc.
         subject_alt_name:
           - "IP:127.0.0.1"
+          - "IP:{{ vault_deploy_host_ip }}"
           - "DNS:{{ inventory_hostname }}"
+          - "DNS:{{ vault_deploy_vault_hostname }}"
           - "DNS:localhost"
           - "DNS:vault"
       register: csr

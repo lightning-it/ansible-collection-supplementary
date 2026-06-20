@@ -7,11 +7,12 @@ Scope: role code, defaults, tasks, Molecule tests, role READMEs, and collection 
 
 ## 0. Compatibility Baseline
 
-1. Content MUST be compatible with `ansible-core` 2.18.x.
+1. Content MUST be compatible with the `ansible-core` range declared in `meta/runtime.yml`.
 2. Content MUST NOT require Ansible major versions newer than 2.x.
-3. This repository declares `requires_ansible: ">=2.18.0"` in `meta/runtime.yml`.
-4. New changes SHOULD remain compatible with `>=2.18.0` unless explicitly told otherwise.
-5. Prefer `ansible.builtin.*` modules; use external collections only when required.
+3. `meta/runtime.yml` is the source of truth for `requires_ansible`; do not hardcode a different baseline in code,
+   docs, tests, or CI.
+4. New changes SHOULD remain compatible with the declared minimum version unless explicitly told otherwise.
+5. Prefer `ansible.builtin.*` modules; use external collections only when required and declared in `galaxy.yml`.
 
 ## 1. Mandatory Discovery Before Changes
 
@@ -61,7 +62,96 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    2. `ansible-lint.yml` YAML max line length 120
 4. Pre-commit runs devtools-based hooks for `yamllint`, `ansible-lint`, and Molecule light scenarios.
 
-## 2.1 Collection Dependency Management (Mandatory)
+## 2.1 Production Review Standard (Community, Red Hat, Efficiency)
+
+Use this standard when reviewing, creating, or changing collection content. Treat it as the baseline audit prompt for
+production readiness, Ansible Galaxy readiness, and Red Hat Ansible Automation Platform readiness.
+
+### 2.1.1 Collection Structure and Metadata
+
+1. Verify correct collection layout and naming under the repository root.
+2. Keep `galaxy.yml` complete and accurate: namespace, name, version, README, description, repository, authors,
+   license, tags, dependencies, and `build_ignore`.
+3. Keep `meta/runtime.yml` aligned with the supported Ansible range.
+4. Keep README, changelog/release notes, examples, role docs, and licensing suitable for publication.
+5. Ensure collection dependencies are declared once in `galaxy.yml` unless this guide documents an overlay exception.
+
+### 2.1.2 Ansible Community Best Practices
+
+1. Roles and playbooks MUST be idempotent.
+2. Use FQCNs for modules and plugins.
+3. Prefer purpose-built modules over `ansible.builtin.command` or `ansible.builtin.shell`.
+4. When command or shell tasks are justified, define precise `changed_when` and `failed_when` behavior.
+5. Support check mode and diff mode where the underlying operation can do so safely.
+6. Keep task names specific, variables role-prefixed, defaults clear, and handlers explicit.
+7. Avoid hardcoded hosts, users, credentials, private URLs, site-specific paths, and environment-specific values.
+8. Prefer structured module parameters and filters over ad hoc string parsing.
+
+### 2.1.3 Red Hat and Enterprise Readiness
+
+1. Content SHOULD run predictably in Red Hat Ansible Automation Platform and execution environments.
+2. Avoid dependencies that cannot be resolved in the repository's default public CI/runtime path.
+3. Keep entitlement-gated dependencies out of collection metadata and document the consumer/workspace overlay instead.
+4. Do not require controller credentials, Red Hat credentials, or private infrastructure for public lint and unit gates.
+5. Document supported platforms, required privileges, external services, and operational boundaries.
+6. Keep examples realistic for controller-based automation and CI/CD use.
+
+### 2.1.4 Testing and Quality Gates
+
+1. `ansible-lint --profile production .` SHOULD pass, or repository-specific devtools lint MUST pass with documented
+   equivalent strictness.
+2. `ansible-test sanity --docker` SHOULD pass for custom modules/plugins and collection packaging concerns.
+3. Unit tests SHOULD cover custom modules, plugins, filters, and module_utils helpers.
+4. Integration tests SHOULD cover real behavior, failure cases, idempotency, check mode, and upgrade paths.
+5. Molecule scenarios SHOULD cover role behavior with converge, idempotence, and verify.
+6. CI SHOULD run lint, sanity, unit, integration, package build, and smoke install where practical.
+
+Recommended commands when applicable:
+
+```bash
+ansible-lint --profile production .
+ansible-test sanity --docker
+ansible-test units --docker
+ansible-test integration --docker
+ansible-galaxy collection build .
+ansible-galaxy collection install ./<built-artifact>.tar.gz --force
+```
+
+### 2.1.5 Code Efficiency and Maintainability
+
+1. Avoid repeated expensive lookups, package queries, fact gathering, API calls, and templating loops.
+2. Disable or scope fact gathering when facts are not needed.
+3. Cache reusable data with registered variables or facts when that is clearer and cheaper.
+4. Use efficient loops, filters, pagination, retries, timeouts, and backoff for API-driven roles.
+5. Put repeated Python logic in `module_utils` and repeated role logic in focused task files or roles.
+6. Keep module argument specs explicit and return values predictable.
+7. Keep YAML readable, sorted where the repo already sorts, and free of duplicated blocks that should be shared.
+
+### 2.1.6 Security Review
+
+1. No secrets, tokens, passwords, keys, private URLs, or sensitive inventory values may be committed.
+2. Use `no_log: true` for tasks handling sensitive values, while still keeping debuggability where safe.
+3. Quote shell inputs and avoid command injection risks.
+4. Do not use unsafe `eval`, `exec`, or template expansion patterns.
+5. Validate TLS certificates by default. Any opt-out MUST be explicit, documented, and narrowly scoped.
+6. Apply least-privilege defaults for users, files, services, API tokens, and controller objects.
+
+### 2.1.7 Review Output Format
+
+When asked for a review, report findings in this order:
+
+1. Executive summary: production-ready, nearly ready, or not ready.
+2. Critical findings: deployment breakers, security risks, or publication blockers.
+3. Major findings: correctness, idempotency, compatibility, maintainability, or testing gaps.
+4. Minor findings: style, naming, documentation, or polish.
+5. Efficiency improvements.
+6. Security review.
+7. Testing gaps.
+8. Recommended fix plan.
+
+For each finding, include severity, file and line, why it matters, recommended fix, and example corrected code when useful.
+
+## 2.2 Collection Dependency Management (Mandatory)
 
 1. Collection dependency source of truth is `galaxy.yml` `dependencies`.
 2. When role code starts using modules/plugins from another collection, you MUST add that collection to
@@ -78,7 +168,7 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
 8. If dependency update policy differs per dependency (for example lifecycle-managed collections), encode that as
    targeted Renovate `packageRules` while keeping version ownership in `galaxy.yml`.
 
-## 2.2 Package Version Management (Mandatory)
+## 2.3 Package Version Management (Mandatory)
 
 1. Repository-owned package/tool dependency versions MUST be fixed to explicit versions wherever the repository is
    the source of truth for that version.
@@ -91,7 +181,7 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
 5. Do not create parallel version ownership for the same dependency across multiple files unless the repository
    explicitly documents that split.
 
-## 2.3 Ansible Collection Renovate and Release Policy
+## 2.4 Ansible Collection Renovate and Release Policy
 
 For Lightning IT Ansible collection repositories, follow the shared Renovate and release model.
 

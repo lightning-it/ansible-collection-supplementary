@@ -166,6 +166,31 @@
     - terragrunt_plan
     - terragrunt_apply
 
+- name: Normalize Vault secret stores for terragrunt
+  ansible.builtin.set_fact:
+    vault_config_secret_stores_render: "{{ (vault_config_secret_stores_render | default([])) + [_entry] }}"
+  changed_when: false
+  vars:
+    _entry: >-
+      {{
+        vault_config_secret_store_item
+        | combine({
+            'key': (
+              vault_config_secret_store_item.key
+              | default(vault_config_secret_store_item.path, true)
+            )
+          }, recursive=True)
+      }}
+  loop: "{{ vault_config_secret_stores | default([], true) }}"
+  loop_control:
+    loop_var: vault_config_secret_store_item
+  when: vault_config_secret_stores | default([], true) | length > 0
+  tags:
+    - vault_config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
 - name: Normalize AppRole secrets for terragrunt
   ansible.builtin.set_fact:
     vault_config_approle_secrets_render: "{{ (vault_config_approle_secrets_render | default([])) + [_entry] }}"
@@ -176,6 +201,10 @@
       {{
         vault_config_approle_item
         | combine({
+            'key': (
+              vault_config_approle_item.key
+              | default(vault_config_approle_item.role_name, true)
+            ),
             'token_policy': (
               _token_policy
               if (_token_policy is sequence and _token_policy is not string)
@@ -193,12 +222,58 @@
     - terragrunt_plan
     - terragrunt_apply
 
+- name: Normalize inline AppRole policies for terragrunt
+  ansible.builtin.set_fact:
+    vault_config_policies_render: >-
+      {{ (vault_config_policies_render | default(vault_config_policies | default([], true))) + [_entry] }}
+  changed_when: false
+  vars:
+    _token_policy: "{{ vault_config_approle_item.token_policy | default(vault_config_approle_policy_name, true) }}"
+    _policy_name: >-
+      {{
+        (_token_policy[0] if (_token_policy is sequence and _token_policy is not string) else _token_policy)
+      }}
+    _entry: >-
+      {{
+        {
+          'key': _policy_name,
+          'name': _policy_name,
+          'policy': vault_config_approle_item.policy
+        }
+      }}
+  loop: "{{ vault_config_approle_secrets | default([], true) }}"
+  loop_control:
+    loop_var: vault_config_approle_item
+  when:
+    - vault_config_approle_secrets | default([], true) | length > 0
+    - vault_config_approle_item.policy is defined
+    - vault_config_approle_item.policy | trim | length > 0
+  tags:
+    - vault_config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
+- name: Apply normalized Vault config blocks for terragrunt
+  ansible.builtin.set_fact:
+    vault_config_secret_stores: "{{ vault_config_secret_stores_render | default(vault_config_secret_stores, true) }}"
+    vault_config_policies: "{{ vault_config_policies_render | default(vault_config_policies, true) }}"
+    vault_config_approle_secrets: >-
+      {{ vault_config_approle_secrets_render | default(vault_config_approle_secrets, true) }}
+  changed_when: false
+  tags:
+    - vault_config
+    - terragrunt_validate
+    - terragrunt_plan
+    - terragrunt_apply
+
 - name: Normalize Vault PKI server fields for terragrunt
   ansible.builtin.set_fact:
     vault_config_vault_pki_roots: "{{ _vault_pki_roots }}"
     vault_config_vault_pki_intermediates: "{{ _vault_pki_intermediates }}"
     vault_config_pki_roots: "{{ _vault_pki_roots_compat }}"
     vault_config_pki_intermediates: "{{ _vault_pki_intermediates_compat }}"
+    vault_config_pki_roles: "{{ _vault_pki_roles_compat }}"
   changed_when: false
   vars:
     _default_server: >-
@@ -209,7 +284,10 @@
       }}
     _vault_pki_roots: >-
       {%- set roots = [] -%}
-      {%- for item in vault_config_vault_pki_roots | default([], true) -%}
+      {%- for item in (
+            vault_config_vault_pki_roots
+            | default(vault_config_pki_roots | default([], true), true)
+          ) -%}
       {%- set server = item.vault_config_server
           | default(item.vault_server | default(_default_server, true), true) -%}
       {%- set _ = roots.append(item | combine({'vault_config_server': server}, recursive=True)) -%}
@@ -217,7 +295,10 @@
       {{ roots }}
     _vault_pki_intermediates: >-
       {%- set intermediates = [] -%}
-      {%- for item in vault_config_vault_pki_intermediates | default([], true) -%}
+      {%- for item in (
+            vault_config_vault_pki_intermediates
+            | default(vault_config_pki_intermediates | default([], true), true)
+          ) -%}
       {%- set server = item.vault_config_server
           | default(item.vault_server | default(_default_server, true), true) -%}
       {%- set _ = intermediates.append(item | combine({'vault_config_server': server}, recursive=True)) -%}
@@ -228,7 +309,8 @@
       {%- for item in _vault_pki_roots -%}
       {%- set server = item.vault_server
           | default(item.vault_config_server | default(_default_server, true), true) -%}
-      {%- set _ = roots.append(item | combine({'vault_server': server}, recursive=True)) -%}
+      {%- set key = item.key | default(item.mount, true) -%}
+      {%- set _ = roots.append(item | combine({'key': key, 'vault_server': server}, recursive=True)) -%}
       {%- endfor -%}
       {{ roots }}
     _vault_pki_intermediates_compat: >-
@@ -236,12 +318,27 @@
       {%- for item in _vault_pki_intermediates -%}
       {%- set server = item.vault_server
           | default(item.vault_config_server | default(_default_server, true), true) -%}
-      {%- set _ = intermediates.append(item | combine({'vault_server': server}, recursive=True)) -%}
+      {%- set key = item.key | default(item.mount, true) -%}
+      {%- set _ = intermediates.append(item | combine({'key': key, 'vault_server': server}, recursive=True)) -%}
       {%- endfor -%}
       {{ intermediates }}
+    _vault_pki_roles_compat: >-
+      {%- set roles = [] -%}
+      {%- for item in vault_config_pki_roles | default([], true) -%}
+      {%- set key = item.key | default(item.name, true) -%}
+      {%- set _ = roles.append(item | combine({'key': key}, recursive=True)) -%}
+      {%- endfor -%}
+      {{ roles }}
   when:
-    - (vault_config_vault_pki_roots | default([], true) | length > 0)
-      or (vault_config_vault_pki_intermediates | default([], true) | length > 0)
+    - >-
+      (vault_config_vault_pki_roots | default(vault_config_pki_roots | default([], true), true) | length > 0)
+      or
+      (
+        vault_config_vault_pki_intermediates
+        | default(vault_config_pki_intermediates | default([], true), true)
+        | length > 0
+      )
+      or (vault_config_pki_roles | default([], true) | length > 0)
   tags:
     - vault_config
     - terragrunt_validate
@@ -601,6 +698,13 @@
           Terragrunt failed in task
           {{ ansible_failed_task.name | default('unknown') }}
           (rc={{ ansible_failed_result.rc | default('n/a') }}).
+
+    - name: Fail after terragrunt error
+      ansible.builtin.fail:
+        msg: >-
+          Terragrunt failed while configuring Vault; downstream services depend
+          on Vault policies, AppRoles, and PKI being applied.
+      when: vault_config_fail_on_terragrunt_error | default(true) | bool
 
   always:
     - name: Find local Vault bootstrap tfstate files

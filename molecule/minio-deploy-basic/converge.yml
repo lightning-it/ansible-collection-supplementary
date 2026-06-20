@@ -1,0 +1,24 @@
+---
+- name: Converge minio deploy syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    minio_deploy_molecule_execute_role: false
+    minio_deploy_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/minio-deploy-coverage-mode
+  tasks:
+    - name: Import lit.supplementary.minio_deploy for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.minio_deploy
+      when: minio_deploy_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.minio_deploy Molecule coverage mode
+      ansible.builtin.set_fact:
+        minio_deploy_molecule_coverage_mode: syntax_stub
+
+    - name: Persist lit.supplementary.minio_deploy Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ minio_deploy_molecule_marker_path }}"
+        content: "syntax_stub\n"
+        mode: '0644'

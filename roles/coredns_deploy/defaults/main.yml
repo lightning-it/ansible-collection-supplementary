@@ -52,6 +52,7 @@ coredns_deploy_corefile: |
       reload
       loadbalance
   }
+coredns_deploy_corefile_force: true
 
 # Resolver management on the host
 coredns_deploy_manage_resolver: true

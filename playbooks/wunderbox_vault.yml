@@ -3,21 +3,64 @@
   hosts: all
   gather_facts: true
   become: true
+  vars:
+    wunderbox_backend_host_ip: "127.0.0.1"
+    wunderbox_public_host: "{{ ansible_fqdn | default(inventory_hostname, true) }}"
+    wunderbox_domain: "{{ wunderbox_public_host }}"
+    wunderbox_services:
+      vault: enabled
+    vault_deploy_host_ip: "{{ wunderbox_backend_host_ip }}"
+    nginx_deploy_host_ip: >-
+      {{
+        ansible_default_ipv4.address
+          | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
+      }}
+    nginx_deploy_tls_host_port: 443
+    nginx_config_service_vhosts_enabled: true
+    nginx_config_remove_default: true
+    nginx_config_tls_source: "{{ wunderbox_nginx_tls_source | default('selfsigned', true) }}"
+    nginx_config_vault_pki_path: "{{ vault_config_vault_pki_path | default('pki/issue', true) }}"
+    nginx_config_vault_pki_role: "{{ vault_config_vault_pki_role | default('wunderbox', true) }}"
+    nginx_config_service_vhosts:
+      - name: vault
+        server_name: "vault.{{ wunderbox_domain }}"
+        upstream_url: "https://{{ wunderbox_backend_host_ip }}:{{ vault_deploy_port | default(8200) }}"
+        force_https: true
+        proxy_directives:
+          - "proxy_set_header Host $host"
+          - "proxy_set_header X-Real-IP $remote_addr"
+          - "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for"
+          - "proxy_set_header X-Forwarded-Proto https"
+          - "proxy_http_version 1.1"
+          - "proxy_ssl_server_name on"
+          - "proxy_ssl_verify off"
   roles:
-    - role: lit.supplementary.vault_validate
+    - role: nginx_deploy
+      tags:
+        - nginx
+        - deploy
+    - role: vault_validate
       tags:
         - preflight
         - validate
-    - role: lit.supplementary.vault_deploy
+    - role: vault_deploy
       tags:
         - deploy
-    - role: lit.supplementary.vault_validate
+    - role: vault_validate
       tags:
         - postflight
         - validate
-    - role: lit.supplementary.vault_bootstrap
+    - role: vault_bootstrap
       tags:
         - bootstrap
-    - role: lit.supplementary.vault_config
+    - role: vault_config
       tags:
         - configure
+    - role: nginx_config
+      tags:
+        - nginx
+        - configure
+    - role: nginx_validate
+      tags:
+        - nginx
+        - validate

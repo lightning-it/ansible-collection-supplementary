@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ dhcp_kube_deploy_pod_name }}
+  labels:
+    app: dhcp
+spec:
+{% if dhcp_kube_deploy_use_host_network | bool %}
+  hostNetwork: true
+{% endif %}
+  containers:
+    - name: dhcp
+      image: {{ dhcp_kube_deploy_image }}
+{% if dhcp_kube_deploy_command | length > 0 %}
+      command:
+{% for item in dhcp_kube_deploy_command %}
+        - "{{ item }}"
+{% endfor %}
+{% endif %}
+      args:
+{% for item in dhcp_kube_deploy_args %}
+        - "{{ item }}"
+{% endfor %}
+{% for item in dhcp_kube_deploy_interfaces %}
+        - "{{ item }}"
+{% endfor %}
+      securityContext:
+        privileged: {{ dhcp_kube_deploy_privileged | bool | ternary('true', 'false') }}
+        runAsUser: {{ dhcp_kube_deploy_run_as_user }}
+        runAsGroup: {{ dhcp_kube_deploy_run_as_group }}
+        runAsNonRoot: {{ dhcp_kube_deploy_run_as_non_root | bool | ternary('true', 'false') }}
+{% if dhcp_kube_deploy_required_capabilities | length > 0 %}
+        capabilities:
+          add:
+{% for item in dhcp_kube_deploy_required_capabilities %}
+            - {{ item }}
+{% endfor %}
+{% endif %}
+{% if dhcp_kube_deploy_env_extra | length > 0 %}
+      env:
+{% for key, value in dhcp_kube_deploy_env_extra.items() %}
+        - name: {{ key }}
+          value: "{{ value }}"
+{% endfor %}
+{% endif %}
+      volumeMounts:
+        - name: dhcp-config
+          mountPath: {{ dhcp_kube_deploy_container_config_path }}
+          readOnly: true
+        - name: dhcp-state
+          mountPath: {{ dhcp_kube_deploy_container_data_dir }}
+  volumes:
+    - name: dhcp-config
+      hostPath:
+        path: {{ dhcp_kube_deploy_host_config_path }}
+        type: File
+      selinuxRelabel: true
+    - name: dhcp-state
+      hostPath:
+        path: {{ dhcp_kube_deploy_host_data_dir }}
+        type: DirectoryOrCreate
+      selinuxRelabel: true

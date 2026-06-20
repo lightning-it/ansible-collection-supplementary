@@ -9,7 +9,7 @@ spec:
     - name: {{ postgres_deploy_container_name }}
       image: {{ postgres_deploy_image }}
       ports:
-        - containerPort: {{ postgres_deploy_port }}
+        - containerPort: {{ postgres_deploy_container_port }}
           hostPort: {{ postgres_deploy_port }}
           hostIP: {{ postgres_deploy_host_ip }}
       env:

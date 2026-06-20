@@ -8,6 +8,10 @@ This role is intentionally separate from `lit.supplementary.cloudflared`.
 device-side WARP client, its MDM enrollment profile, the `warp-svc` daemon, and
 the desired connection state.
 
+## Requirements
+
+None.
+
 ## Variables
 
 Primary toggles:
@@ -41,7 +45,11 @@ Useful optional variables:
 - `cloudflare_warp_show_status`: Run a final `warp-cli status` check
   (default: `false`).
 
-## Example
+## Dependencies
+
+None.
+
+## Example Playbook
 
 ```yaml
 - hosts: workbenches
@@ -57,7 +65,17 @@ Useful optional variables:
         cloudflare_warp_connection_state: connected
 ```
 
-## Notes
+## License
+
+MIT
+
+## Author
+
+Lightning IT
+
+## Additional Notes
+
+### Notes
 
 - Use a service token with Service Auth device enrollment permissions.
 - The role manages the Linux MDM file at `/var/lib/cloudflare-warp/mdm.xml`

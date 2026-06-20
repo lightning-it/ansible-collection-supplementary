@@ -18,6 +18,17 @@
   tags:
     - systemd
 
+- name: Restart Podman kube systemd unit when pod recreation was requested
+  ansible.builtin.systemd:
+    name: "podman-kube@{{ nexus_systemd_name.stdout }}.service"
+    state: restarted
+    daemon_reload: true
+  when:
+    - nexus_kubeplay_remove | default(false) | bool
+      or nexus_kubeplay_run | default(false) | bool
+  tags:
+    - systemd
+
 - name: Verify Nexus pod is running
   ansible.builtin.command: podman pod ps --filter name={{ nexus_pod_name }}
   register: pod_status

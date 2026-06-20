@@ -33,7 +33,8 @@
     owner: "{{ coredns_deploy_run_as_user }}"
     group: "{{ coredns_deploy_run_as_group }}"
     mode: '0644'
-  register: coredns_deploy_corefile
+    force: "{{ coredns_deploy_corefile_force | bool }}"
+  register: coredns_deploy_corefile_render
   notify: Reload coredns
   tags:
     - config

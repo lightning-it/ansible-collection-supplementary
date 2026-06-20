@@ -1,0 +1,25 @@
+---
+- name: Read current user id for DHCP kube deployment
+  ansible.builtin.command: id -u
+  register: dhcp_kube_deploy_uid
+  changed_when: false
+
+- name: Require root user for DHCP kube deployment
+  ansible.builtin.assert:
+    that:
+      - dhcp_kube_deploy_uid.stdout | trim == '0'
+    fail_msg: "DHCP kube deployment must run with become/root because DHCP requires rootful Podman."
+    quiet: true
+
+- name: Read Podman rootless mode
+  ansible.builtin.command:
+    cmd: "podman info --format {{ '{{' }} .Host.Security.Rootless {{ '}}' }}"
+  register: dhcp_kube_deploy_podman_rootless
+  changed_when: false
+
+- name: Require rootful Podman for DHCP kube deployment
+  ansible.builtin.assert:
+    that:
+      - dhcp_kube_deploy_podman_rootless.stdout | trim in ['false', '<no value>']
+    fail_msg: "DHCP kube deployment requires rootful Podman; current Podman runtime is rootless."
+    quiet: true

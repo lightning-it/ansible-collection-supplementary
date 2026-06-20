@@ -1,0 +1,16 @@
+---
+- name: Converge aap cac syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_cac_molecule_execute_role: false
+  tasks:
+    - name: Import lit.supplementary.aap_cac for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.aap_cac
+      when: aap_cac_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.aap_cac Molecule coverage mode
+      ansible.builtin.set_fact:
+        aap_cac_molecule_coverage_mode: syntax_stub

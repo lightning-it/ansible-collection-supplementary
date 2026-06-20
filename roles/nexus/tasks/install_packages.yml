@@ -1,12 +1,7 @@
 ---
 - name: Install required base packages
   ansible.builtin.package:
-    name:
-      - podman
-      - python3
-      - python3-libselinux
-      - python3-pip
-      - jq
+    name: "{{ nexus_packages }}"
     state: present
   tags:
     - install

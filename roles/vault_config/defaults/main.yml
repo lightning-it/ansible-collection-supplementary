@@ -55,6 +55,9 @@ vault_config_api_retries: 5
 vault_config_api_retry_delay: 2
 # MinIO S3 backend TLS behavior for terraform/terragrunt state access via endpoint (e.g. api.minio... via nginx).
 vault_config_tfstate_s3_insecure: "{{ not (vault_config_vault_validate_certs | bool) }}"
+# Vault config is a dependency for downstream application roles. A failed
+# Terragrunt run must stop the play unless explicitly relaxed for debugging.
+vault_config_fail_on_terragrunt_error: true
 vault_config_vault_hostname: "{{ inventory_hostname }}"
 # Run Vault API calls from the controller/EE by default.
 vault_config_api_delegate_to: localhost

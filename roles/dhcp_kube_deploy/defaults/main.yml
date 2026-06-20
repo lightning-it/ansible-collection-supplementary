@@ -1,0 +1,64 @@
+---
+# Pod basics
+dhcp_kube_deploy_pod_name: "dhcp"
+dhcp_kube_deploy_pod_manifest_path: "/etc/podman/pods/dhcp.yml"
+dhcp_kube_deploy_image: ""
+dhcp_kube_deploy_container_name: "{{ dhcp_kube_deploy_pod_name }}-dhcp"
+
+# DHCP broadcast/relay behavior generally requires rootful host networking.
+dhcp_kube_deploy_use_host_network: true
+dhcp_kube_deploy_require_rootful: true
+dhcp_kube_deploy_required_capabilities:
+  - NET_ADMIN
+  - NET_RAW
+  - NET_BIND_SERVICE
+dhcp_kube_deploy_privileged: false
+dhcp_kube_deploy_run_as_user: 0
+dhcp_kube_deploy_run_as_group: 0
+dhcp_kube_deploy_run_as_non_root: false
+
+# Host paths
+dhcp_kube_deploy_host_config_dir: "/srv/dhcp/config"
+dhcp_kube_deploy_host_config_path: "{{ dhcp_kube_deploy_host_config_dir }}/dhcpd.conf"
+dhcp_kube_deploy_host_data_dir: "/srv/dhcp/state"
+dhcp_kube_deploy_host_lease_path: "{{ dhcp_kube_deploy_host_data_dir }}/dhcpd.leases"
+
+# Container paths
+dhcp_kube_deploy_container_config_path: "/etc/dhcp/dhcpd.conf"
+dhcp_kube_deploy_container_data_dir: "/var/lib/dhcp"
+dhcp_kube_deploy_container_lease_path: "{{ dhcp_kube_deploy_container_data_dir }}/dhcpd.leases"
+
+# DHCP runtime command. The image must provide `dhcpd` or override this list.
+dhcp_kube_deploy_command:
+  - dhcpd
+dhcp_kube_deploy_args:
+  - "-4"
+  - "-f"
+  - "-d"
+  - "--no-pid"
+  - "-cf"
+  - "{{ dhcp_kube_deploy_container_config_path }}"
+  - "-lf"
+  - "{{ dhcp_kube_deploy_container_lease_path }}"
+dhcp_kube_deploy_interfaces: []
+dhcp_kube_deploy_env_extra: {}
+
+# DHCP config content
+dhcp_kube_deploy_config: ""
+dhcp_kube_deploy_manage_config: true
+
+# Lifecycle
+dhcp_kube_deploy_manage_file_ownership: true
+dhcp_kube_deploy_install_packages: true
+dhcp_kube_deploy_packages:
+  - podman
+dhcp_kube_deploy_manage_systemd: true
+dhcp_kube_deploy_skip_runtime: false
+dhcp_kube_deploy_skip_deploy: false
+dhcp_kube_deploy_skip_config: false
+dhcp_kube_deploy_skip_validate: false
+dhcp_kube_deploy_validate_running: true
+
+# Internal handler flags
+dhcp_kube_deploy_kubeplay_remove: false
+dhcp_kube_deploy_kubeplay_run: false

@@ -1,0 +1,36 @@
+---
+- name: Converge DHCP kube deploy render-only
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    dhcp_kube_molecule_ephemeral_dir: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') | default('/tmp/lit-dhcp-kube-basic', true) }}
+    dhcp_kube_molecule_root: "{{ dhcp_kube_molecule_ephemeral_dir }}/dhcp"
+    dhcp_kube_molecule_config_dir: "{{ dhcp_kube_molecule_root }}/config"
+    dhcp_kube_molecule_data_dir: "{{ dhcp_kube_molecule_root }}/state"
+    dhcp_kube_molecule_pod_dir: "{{ dhcp_kube_molecule_root }}/pods"
+  roles:
+    - role: lit.supplementary.dhcp_kube_deploy
+      vars:
+        dhcp_kube_deploy_skip_runtime: true
+        dhcp_kube_deploy_manage_file_ownership: false
+        dhcp_kube_deploy_install_packages: false
+        dhcp_kube_deploy_manage_systemd: false
+        dhcp_kube_deploy_skip_validate: true
+        dhcp_kube_deploy_image: "registry.example.com/infra/dhcpd:4.4"
+        dhcp_kube_deploy_host_config_dir: "{{ dhcp_kube_molecule_config_dir }}"
+        dhcp_kube_deploy_host_config_path: "{{ dhcp_kube_molecule_config_dir }}/dhcpd.conf"
+        dhcp_kube_deploy_host_data_dir: "{{ dhcp_kube_molecule_data_dir }}"
+        dhcp_kube_deploy_host_lease_path: "{{ dhcp_kube_molecule_data_dir }}/dhcpd.leases"
+        dhcp_kube_deploy_pod_manifest_path: "{{ dhcp_kube_molecule_pod_dir }}/dhcp.yml"
+        dhcp_kube_deploy_interfaces:
+          - eth1
+        dhcp_kube_deploy_config: |
+          default-lease-time 600;
+          max-lease-time 7200;
+          authoritative;
+          subnet 192.0.2.0 netmask 255.255.255.0 {
+            range 192.0.2.100 192.0.2.150;
+            option routers 192.0.2.1;
+          }

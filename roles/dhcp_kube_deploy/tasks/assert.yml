@@ -1,0 +1,61 @@
+---
+- name: Ensure DHCP kube deploy variables are valid
+  ansible.builtin.assert:
+    that:
+      - dhcp_kube_deploy_pod_name | default('', true) | trim | length > 0
+      - dhcp_kube_deploy_pod_manifest_path | default('', true) | trim | length > 0
+      - dhcp_kube_deploy_image | default('', true) | trim | length > 0
+      - dhcp_kube_deploy_container_name | default('', true) | trim | length > 0
+      - dhcp_kube_deploy_use_host_network is boolean
+      - dhcp_kube_deploy_require_rootful is boolean
+      - dhcp_kube_deploy_required_capabilities is sequence
+      - dhcp_kube_deploy_required_capabilities is not string
+      - dhcp_kube_deploy_privileged is boolean
+      - dhcp_kube_deploy_run_as_user | int == 0
+      - dhcp_kube_deploy_run_as_group | int == 0
+      - dhcp_kube_deploy_run_as_non_root is boolean
+      - not dhcp_kube_deploy_run_as_non_root | bool
+      - dhcp_kube_deploy_host_config_dir | default('', true) | trim | length > 0
+      - dhcp_kube_deploy_host_config_path | default('', true) | trim | length > 0
+      - dhcp_kube_deploy_host_data_dir | default('', true) | trim | length > 0
+      - dhcp_kube_deploy_host_lease_path | default('', true) | trim | length > 0
+      - dhcp_kube_deploy_container_config_path | default('', true) | trim | length > 0
+      - dhcp_kube_deploy_container_data_dir | default('', true) | trim | length > 0
+      - dhcp_kube_deploy_container_lease_path | default('', true) | trim | length > 0
+      - dhcp_kube_deploy_command is sequence
+      - dhcp_kube_deploy_command is not string
+      - dhcp_kube_deploy_args is sequence
+      - dhcp_kube_deploy_args is not string
+      - dhcp_kube_deploy_interfaces is sequence
+      - dhcp_kube_deploy_interfaces is not string
+      - dhcp_kube_deploy_env_extra is mapping
+      - dhcp_kube_deploy_config is string
+      - dhcp_kube_deploy_manage_config is boolean
+      - dhcp_kube_deploy_manage_file_ownership is boolean
+      - dhcp_kube_deploy_install_packages is boolean
+      - dhcp_kube_deploy_manage_systemd is boolean
+      - dhcp_kube_deploy_skip_runtime is boolean
+      - dhcp_kube_deploy_skip_deploy is boolean
+      - dhcp_kube_deploy_skip_config is boolean
+      - dhcp_kube_deploy_skip_validate is boolean
+      - dhcp_kube_deploy_validate_running is boolean
+      - >-
+        (not (dhcp_kube_deploy_manage_config | bool))
+        or (dhcp_kube_deploy_skip_config | bool)
+        or (dhcp_kube_deploy_config | trim | length > 0)
+    fail_msg: "DHCP kube deploy variables are missing or invalid."
+    quiet: true
+  tags: always
+
+- name: Ensure DHCP kube deploy production network mode is explicit
+  ansible.builtin.assert:
+    that:
+      - dhcp_kube_deploy_use_host_network | bool
+    fail_msg: >-
+      DHCP kube deploy requires host networking by default. Override only after
+      validating an equivalent L2/macvlan design for DHCP broadcast traffic.
+    quiet: true
+  when:
+    - not dhcp_kube_deploy_skip_runtime | bool
+    - not dhcp_kube_deploy_skip_deploy | bool
+  tags: always

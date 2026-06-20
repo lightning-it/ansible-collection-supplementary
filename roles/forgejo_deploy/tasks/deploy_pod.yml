@@ -7,7 +7,11 @@
     group: "{{ item.group | default('root') }}"
     mode: "{{ item.mode }}"
   loop:
+    - path: "{{ forgejo_deploy_host_data_dir | dirname }}"
+      mode: '0755'
     - path: "{{ forgejo_deploy_host_data_dir }}"
+      owner: "{{ forgejo_deploy_run_user_uid }}"
+      group: "{{ forgejo_deploy_run_user_gid }}"
       mode: '0750'
     - path: "{{ forgejo_deploy_config_dir }}"
       mode: '0750'
@@ -25,11 +29,25 @@
   tags:
     - deployment
 
-- name: Load generated Forgejo secrets
-  ansible.builtin.include_vars:
-    file: "{{ forgejo_deploy_secrets_file }}"
-    name: forgejo_deploy_stored_secrets
+- name: Read generated Forgejo secrets
+  ansible.builtin.slurp:
+    src: "{{ forgejo_deploy_secrets_file }}"
+  register: forgejo_deploy_secrets_file_content
   when: forgejo_deploy_secrets_file_stat.stat.exists | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Load generated Forgejo secrets
+  ansible.builtin.set_fact:
+    forgejo_deploy_stored_secrets: >-
+      {{
+        forgejo_deploy_secrets_file_content.content
+        | b64decode
+        | from_yaml
+      }}
+  when: forgejo_deploy_secrets_file_stat.stat.exists | bool
+  changed_when: false
   no_log: true
   tags:
     - deployment
@@ -119,8 +137,8 @@
     mode: '0600'
     content: |
       ---
-      forgejo_deploy_db_password: "{{ forgejo_deploy_db_password_effective }}"
-      forgejo_deploy_admin_password: "{{ forgejo_deploy_admin_password_effective }}"
+      forgejo_deploy_db_password: {{ forgejo_deploy_db_password_effective | to_json }}
+      forgejo_deploy_admin_password: {{ forgejo_deploy_admin_password_effective | to_json }}
   when:
     - forgejo_deploy_generate_secrets | bool
     - forgejo_deploy_store_generated_secrets | bool

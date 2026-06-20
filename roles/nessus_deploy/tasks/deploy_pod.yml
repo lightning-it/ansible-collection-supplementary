@@ -17,6 +17,54 @@
   tags:
     - deployment
 
+- name: Check whether Nessus image data has been seeded
+  ansible.builtin.stat:
+    path: "{{ nessus_deploy_host_data_dir }}/{{ nessus_deploy_seed_required_file }}"
+  register: nessus_deploy_seed_required_file_stat
+  changed_when: false
+  when: nessus_deploy_seed_data_from_image | bool
+  tags:
+    - deployment
+
+- name: Seed Nessus data directory from container image
+  when:
+    - nessus_deploy_seed_data_from_image | bool
+    - not nessus_deploy_seed_required_file_stat.stat.exists | default(false) | bool
+    - not ansible_check_mode
+  tags:
+    - deployment
+  block:
+    - name: Remove stale Nessus seed container
+      ansible.builtin.command:
+        cmd: "podman rm -f {{ nessus_deploy_pod_name }}-seed"
+      register: nessus_deploy_seed_rm
+      failed_when: false
+      changed_when: nessus_deploy_seed_rm.rc == 0
+
+    - name: Create temporary Nessus seed container
+      ansible.builtin.command:
+        cmd: "podman create --name {{ nessus_deploy_pod_name }}-seed {{ nessus_deploy_image }}"
+      changed_when: true
+
+    - name: Copy default Nessus data from image to host data directory
+      ansible.builtin.command:
+        cmd: >-
+          podman cp
+          {{ nessus_deploy_pod_name }}-seed:{{ nessus_deploy_container_data_dir }}/.
+          {{ nessus_deploy_host_data_dir }}/
+      changed_when: true
+      notify:
+        - Recreate nessus pod
+        - Run nessus pod
+
+  always:
+    - name: Remove temporary Nessus seed container
+      ansible.builtin.command:
+        cmd: "podman rm -f {{ nessus_deploy_pod_name }}-seed"
+      register: nessus_deploy_seed_cleanup
+      failed_when: false
+      changed_when: false
+
 - name: Check whether Nessus generated secrets file exists
   ansible.builtin.stat:
     path: "{{ nessus_deploy_secrets_file }}"
@@ -25,11 +73,25 @@
   tags:
     - deployment
 
-- name: Load generated Nessus secrets
-  ansible.builtin.include_vars:
-    file: "{{ nessus_deploy_secrets_file }}"
-    name: nessus_deploy_stored_secrets
+- name: Read generated Nessus secrets
+  ansible.builtin.slurp:
+    src: "{{ nessus_deploy_secrets_file }}"
+  register: nessus_deploy_secrets_file_content
   when: nessus_deploy_secrets_file_stat.stat.exists | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Load generated Nessus secrets
+  ansible.builtin.set_fact:
+    nessus_deploy_stored_secrets: >-
+      {{
+        nessus_deploy_secrets_file_content.content
+        | b64decode
+        | from_yaml
+      }}
+  when: nessus_deploy_secrets_file_stat.stat.exists | bool
+  changed_when: false
   no_log: true
   tags:
     - deployment
@@ -99,7 +161,7 @@
     mode: '0600'
     content: |
       ---
-      nessus_deploy_admin_password: "{{ nessus_deploy_admin_password_effective }}"
+      nessus_deploy_admin_password: {{ nessus_deploy_admin_password_effective | to_json }}
   when:
     - nessus_deploy_generate_admin_password | bool
     - nessus_deploy_store_generated_admin_password | bool

@@ -36,7 +36,11 @@ Each `artifacts_items` entry supports:
 - `headers`: Optional HTTP headers for URL downloads.
 - `owner`, `group`, `mode`, `directory_mode`, `force`, `validate_certs`, `timeout`, `no_log`.
 
-## Example
+## Dependencies
+
+None.
+
+## Example Playbook
 
 ```yaml
 ---
@@ -65,3 +69,7 @@ Each `artifacts_items` entry supports:
 ## License
 
 MIT
+
+## Author
+
+Lightning IT

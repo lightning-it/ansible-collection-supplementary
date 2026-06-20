@@ -7,7 +7,11 @@
     group: "{{ item.group | default('root') }}"
     mode: "{{ item.mode }}"
   loop:
+    - path: "{{ keycloak_deploy_host_data_dir | dirname }}"
+      mode: '0755'
     - path: "{{ keycloak_deploy_host_data_dir }}"
+      owner: "{{ keycloak_deploy_run_user_uid }}"
+      group: "{{ keycloak_deploy_run_user_gid }}"
       mode: '0750'
     - path: "{{ keycloak_deploy_config_dir }}"
       mode: '0750'
@@ -25,11 +29,25 @@
   tags:
     - deployment
 
-- name: Load generated Keycloak secrets
-  ansible.builtin.include_vars:
-    file: "{{ keycloak_deploy_secrets_file }}"
-    name: keycloak_deploy_stored_secrets
+- name: Read generated Keycloak secrets
+  ansible.builtin.slurp:
+    src: "{{ keycloak_deploy_secrets_file }}"
+  register: keycloak_deploy_secrets_file_content
   when: keycloak_deploy_secrets_file_stat.stat.exists | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Load generated Keycloak secrets
+  ansible.builtin.set_fact:
+    keycloak_deploy_stored_secrets: >-
+      {{
+        keycloak_deploy_secrets_file_content.content
+        | b64decode
+        | from_yaml
+      }}
+  when: keycloak_deploy_secrets_file_stat.stat.exists | bool
+  changed_when: false
   no_log: true
   tags:
     - deployment
@@ -119,8 +137,8 @@
     mode: '0600'
     content: |
       ---
-      keycloak_deploy_db_password: "{{ keycloak_deploy_db_password_effective }}"
-      keycloak_deploy_admin_password: "{{ keycloak_deploy_admin_password_effective }}"
+      keycloak_deploy_db_password: {{ keycloak_deploy_db_password_effective | to_json }}
+      keycloak_deploy_admin_password: {{ keycloak_deploy_admin_password_effective | to_json }}
   when:
     - keycloak_deploy_generate_secrets | bool
     - keycloak_deploy_store_generated_secrets | bool
@@ -155,6 +173,47 @@
     postgres_deploy_skip_deploy: "{{ keycloak_deploy_skip_deploy }}"
   when: keycloak_deploy_manage_postgres | bool
   no_log: true
+  tags:
+    - deployment
+
+- name: Wait until dedicated Keycloak PostgreSQL is reachable
+  ansible.builtin.wait_for:
+    host: "{{ keycloak_deploy_db_host }}"
+    port: "{{ keycloak_deploy_db_port }}"
+    delay: "{{ keycloak_deploy_postgres_wait_delay }}"
+    timeout: "{{ keycloak_deploy_postgres_wait_timeout }}"
+    state: started
+  when:
+    - keycloak_deploy_manage_postgres | bool
+    - not keycloak_deploy_skip_runtime | bool
+  tags:
+    - deployment
+
+- name: Probe existing Keycloak health before start
+  ansible.builtin.uri:
+    url: "{{ keycloak_deploy_health_url_effective }}"
+    method: GET
+    status_code:
+      - 200
+    validate_certs: "{{ keycloak_deploy_validate_certs }}"
+    timeout: "{{ keycloak_deploy_prestart_health_timeout }}"
+  register: keycloak_deploy_prestart_health
+  failed_when: false
+  changed_when: false
+  when: not keycloak_deploy_skip_runtime | bool
+  tags:
+    - deployment
+
+- name: Request Keycloak restart when existing service is unhealthy
+  ansible.builtin.set_fact:
+    keycloak_deploy_restart_requested: true
+  changed_when: true
+  notify:
+    - Recreate keycloak pod
+    - Run keycloak pod
+  when:
+    - not keycloak_deploy_skip_runtime | bool
+    - keycloak_deploy_prestart_health.status | default(0) | int != 200
   tags:
     - deployment
 

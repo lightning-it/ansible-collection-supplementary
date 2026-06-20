@@ -21,10 +21,15 @@
       - keycloak_deploy_db_user | default('', true) | trim | length > 0
       - keycloak_deploy_db_host | default('', true) | trim | length > 0
       - keycloak_deploy_db_port | int > 0
+      - keycloak_deploy_postgres_wait_timeout | int > 0
+      - keycloak_deploy_postgres_wait_delay | int >= 0
+      - keycloak_deploy_prestart_health_timeout | int > 0
       - keycloak_deploy_port | int > 0
       - keycloak_deploy_host_ip | default('', true) | trim | length > 0
       - keycloak_deploy_postgres_host_ip | default('', true) | trim | length > 0
       - keycloak_deploy_admin_user | default('', true) | trim | length > 0
+      - keycloak_deploy_run_user_uid | default('', true) | trim | length > 0
+      - keycloak_deploy_run_user_gid | default('', true) | trim | length > 0
       - keycloak_deploy_extra_start_args is sequence
       - keycloak_deploy_extra_start_args is not string
       - keycloak_deploy_install_packages is boolean

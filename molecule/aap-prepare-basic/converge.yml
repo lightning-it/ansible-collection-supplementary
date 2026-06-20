@@ -1,0 +1,16 @@
+---
+- name: Converge aap prepare syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_prepare_molecule_execute_role: false
+  tasks:
+    - name: Import lit.supplementary.aap_prepare for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.aap_prepare
+      when: aap_prepare_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.aap_prepare Molecule coverage mode
+      ansible.builtin.set_fact:
+        aap_prepare_molecule_coverage_mode: syntax_stub
