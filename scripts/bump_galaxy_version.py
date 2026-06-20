@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import re
 import sys
 from pathlib import Path
@@ -7,6 +5,7 @@ from pathlib import Path
 VERSION_RE = re.compile(
     r"^(?P<indent>\s*)version\s*:\s*(?P<quote>['\"]?)(?P<value>[^'\"\n#]*)(?P=quote)(?P<comment>\s+#.*)?$"
 )
+
 
 def main() -> int:
     if len(sys.argv) < 2:

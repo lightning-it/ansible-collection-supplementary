@@ -141,6 +141,6 @@ your local behaviour matches CI.
 ---
 
 _This file is managed centrally for Lightning IT Ansible collections. Downstream
-repositories should not edit their copy directly — propose changes via the
-shared assets repository or the designated “collection-meta” repo so every
+repositories should not edit their copy directly  - propose changes via the
+shared assets repository or the designated `collection-meta` repo so every
 collection stays aligned._
