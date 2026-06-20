@@ -91,6 +91,44 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
 5. Do not create parallel version ownership for the same dependency across multiple files unless the repository
    explicitly documents that split.
 
+## 2.3 Ansible Collection Renovate and Release Policy
+
+For Lightning IT Ansible collection repositories, follow the shared Renovate and release model.
+
+Do not duplicate generic Renovate policy in individual collection repositories. Generic Renovate rules must be
+maintained in `lightning-it/shared-assets` and consumed through the repository's `renovate.json` `extends`
+configuration.
+
+Collection repositories may only define repository-specific Renovate overrides, such as:
+
+- temporary version pins
+- compatibility constraints
+- collection-specific package rules
+- local custom managers that are not reusable
+
+The standard branch and release model is:
+
+- `develop` is the automated integration branch.
+- Renovate targets `develop`.
+- Safe patch, minor, pin, and digest updates may auto-merge into `develop` after required CI passes.
+- Major updates require manual approval.
+- `main` is the stable release branch.
+- `develop` must not be configured as a semantic-release branch unless an explicit pre-release strategy is
+  requested.
+- Weekly promotion from `develop` to `main` must happen through a pull request.
+- Weekly promotion may use GitHub auto-merge, but must not bypass required checks.
+- Do not direct-push from `develop` to `main`.
+- semantic-release must remain main-only for stable releases.
+
+Automation safety requirements:
+
+- Protected branches must require pull request review.
+- Only trusted Renovate PRs may be auto-approved by collection automation.
+- A trusted Renovate PR must have `renovate[bot]` as both trigger actor and PR author, a `renovate/*` source
+  branch, `develop` as the base branch, and both `renovate` and `dependencies` labels.
+- Human and external contributor PRs must not be auto-approved or auto-merged by collection automation.
+- Do not use `pull_request_target` for Renovate approval or merge automation.
+
 ## 3. Role Variable Naming and Mapping Rules
 
 ### 3.1 Role-Prefixed Variables (Mandatory)
