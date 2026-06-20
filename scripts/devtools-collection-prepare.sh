@@ -49,7 +49,10 @@ fi
 
 # Per-run install target
 COLLECTIONS_DIR="$(mktemp -d "${HOME}/collections.XXXXXX")"
+ROLES_DIR="${HOME}/roles"
+mkdir -p "${ROLES_DIR}"
 export ANSIBLE_COLLECTIONS_PATH="${COLLECTIONS_DIR}:/usr/share/ansible/collections"
+export ANSIBLE_ROLES_PATH="${ROLES_DIR}:/workspace/roles:/usr/share/ansible/roles"
 BUILD_OUTPUT_DIR="$(mktemp -d "${HOME}/build.XXXXXX")"
 
 cd /workspace
@@ -96,6 +99,20 @@ for dep_spec in "${dep_specs[@]}"; do
     install_collection_dependency "$dep_spec"
   fi
 done
+
+if [ -f /workspace/requirements.yml ] && python3 - <<'PY'
+import sys
+import yaml
+
+with open("/workspace/requirements.yml", "r", encoding="utf-8") as req_file:
+    data = yaml.safe_load(req_file) or {}
+
+sys.exit(0 if data.get("roles") else 1)
+PY
+then
+  echo "Installing role requirements from /workspace/requirements.yml into ${ROLES_DIR}..." >&2
+  ansible-galaxy role install -r /workspace/requirements.yml -p "${ROLES_DIR}" --force >&2
+fi
 
 # Build artifact and capture the output path
 build_out="$(ansible-galaxy collection build --output-path "${BUILD_OUTPUT_DIR}" --force)"

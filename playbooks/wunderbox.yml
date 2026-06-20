@@ -1,0 +1,220 @@
+---
+- name: Wunderbox
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    wunderbox_backend_host_ip: "127.0.0.1"
+    wunderbox_public_host: "{{ ansible_fqdn | default(inventory_hostname, true) }}"
+    wunderbox_domain: "{{ wunderbox_public_host }}"
+    wunderbox_enabled_values:
+      - enabled
+      - "true"
+      - "yes"
+      - "on"
+      - "1"
+      - "y"
+    wunderbox_service_defaults:
+      vault: enabled
+    wunderbox_services_inventory: >-
+      {{
+        services.wunderbox
+        if (
+          services is defined and
+          services is mapping and
+          services.wunderbox is defined and
+          services.wunderbox is mapping
+        )
+        else {}
+      }}
+    wunderbox_services: >-
+      {{
+        wunderbox_service_defaults
+        | combine(wunderbox_services_inventory, recursive=True)
+        | combine(wunderbox_services_extra | default({}, true), recursive=True)
+      }}
+    wunderbox_services_effective: "{{ wunderbox_services }}"
+
+    vault_deploy_host_ip: "{{ wunderbox_backend_host_ip }}"
+    forgejo_deploy_host_ip: "{{ wunderbox_backend_host_ip }}"
+    keycloak_deploy_host_ip: "{{ wunderbox_backend_host_ip }}"
+    minio_deploy_host_ip: "{{ wunderbox_backend_host_ip }}"
+    semaphore_deploy_host_ip: "{{ wunderbox_backend_host_ip }}"
+    nessus_deploy_host_ip: "{{ wunderbox_backend_host_ip }}"
+    nexus_nexus_host_ip: "{{ wunderbox_backend_host_ip }}"
+    nexus_expose_host_https: true
+    nexus_caddy_host_port: 8443
+    nexus_api_base_url: "https://{{ wunderbox_backend_host_ip }}:{{ nexus_caddy_host_port }}"
+
+    nginx_deploy_host_ip: >-
+      {{
+        ansible_default_ipv4.address
+          | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
+      }}
+    nginx_deploy_tls_host_port: 443
+    nginx_config_service_vhosts_enabled: true
+    nginx_config_remove_default: true
+    nginx_config_tls_source: "{{ wunderbox_nginx_tls_source | default('selfsigned', true) }}"
+    nginx_config_vault_pki_path: "{{ vault_config_vault_pki_path | default('pki/issue', true) }}"
+    nginx_config_vault_pki_role: "{{ vault_config_vault_pki_role | default('wunderbox', true) }}"
+    nginx_config_vhost_service_key_map:
+      forgejo: forgejo
+      keycloak: keycloak
+      minio-api: minio
+      minio-console: minio
+      nessus: nessus
+      nexus: nexus
+      semaphore: semaphore
+      vault: vault
+    nginx_config_service_vhosts:
+      - name: vault
+        server_name: "vault.{{ wunderbox_domain }}"
+        upstream_url: "https://{{ wunderbox_backend_host_ip }}:{{ vault_deploy_port | default(8200) }}"
+        force_https: true
+        proxy_directives:
+          - "proxy_set_header Host $host"
+          - "proxy_set_header X-Real-IP $remote_addr"
+          - "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for"
+          - "proxy_set_header X-Forwarded-Proto https"
+          - "proxy_http_version 1.1"
+          - "proxy_ssl_server_name on"
+          - "proxy_ssl_verify off"
+      - name: forgejo
+        server_name: "forgejo.{{ wunderbox_domain }}"
+        upstream_url: "http://{{ wunderbox_backend_host_ip }}:{{ forgejo_deploy_port | default(3000) }}"
+        force_https: true
+      - name: keycloak
+        server_name: "keycloak.{{ wunderbox_domain }}"
+        upstream_url: "http://{{ wunderbox_backend_host_ip }}:{{ keycloak_deploy_port | default(8080) }}"
+        force_https: true
+      - name: minio-api
+        server_name: "minio.{{ wunderbox_domain }}"
+        upstream_url: "http://{{ wunderbox_backend_host_ip }}:{{ minio_deploy_port | default(9000) }}"
+        force_https: true
+      - name: minio-console
+        server_name: "minio-console.{{ wunderbox_domain }}"
+        upstream_url: "http://{{ wunderbox_backend_host_ip }}:{{ minio_deploy_console_port | default(9001) }}"
+        force_https: true
+      - name: nessus
+        server_name: "nessus.{{ wunderbox_domain }}"
+        upstream_url: "https://{{ wunderbox_backend_host_ip }}:{{ nessus_deploy_port | default(8834) }}"
+        force_https: true
+        proxy_directives:
+          - "proxy_set_header Host $host"
+          - "proxy_set_header X-Real-IP $remote_addr"
+          - "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for"
+          - "proxy_set_header X-Forwarded-Proto https"
+          - "proxy_http_version 1.1"
+          - "proxy_ssl_server_name on"
+          - "proxy_ssl_verify off"
+      - name: nexus
+        server_name: "nexus.{{ wunderbox_domain }}"
+        upstream_url: "https://{{ wunderbox_backend_host_ip }}:{{ nexus_caddy_host_port }}"
+        force_https: true
+        proxy_directives:
+          - "proxy_set_header Host $host"
+          - "proxy_set_header X-Real-IP $remote_addr"
+          - "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for"
+          - "proxy_set_header X-Forwarded-Proto https"
+          - "proxy_http_version 1.1"
+          - "proxy_ssl_server_name on"
+          - "proxy_ssl_verify off"
+      - name: semaphore
+        server_name: "semaphore.{{ wunderbox_domain }}"
+        upstream_url: "http://{{ wunderbox_backend_host_ip }}:{{ semaphore_deploy_port | default(3000) }}"
+        force_https: true
+  roles:
+    - role: nginx_deploy
+      tags:
+        - nginx
+        - deploy
+
+    - role: vault_validate
+      when: >-
+        (wunderbox_services_effective.vault | default('disabled', true) | string | lower)
+        in wunderbox_enabled_values
+      tags:
+        - vault
+        - preflight
+        - validate
+    - role: vault_deploy
+      when: >-
+        (wunderbox_services_effective.vault | default('disabled', true) | string | lower)
+        in wunderbox_enabled_values
+      tags:
+        - vault
+        - deploy
+    - role: vault_validate
+      when: >-
+        (wunderbox_services_effective.vault | default('disabled', true) | string | lower)
+        in wunderbox_enabled_values
+      tags:
+        - vault
+        - postflight
+        - validate
+    - role: vault_bootstrap
+      when: >-
+        (wunderbox_services_effective.vault | default('disabled', true) | string | lower)
+        in wunderbox_enabled_values
+      tags:
+        - vault
+        - bootstrap
+    - role: vault_config
+      when: >-
+        (wunderbox_services_effective.vault | default('disabled', true) | string | lower)
+        in wunderbox_enabled_values
+      tags:
+        - vault
+        - configure
+
+    - role: forgejo_deploy
+      when: >-
+        (wunderbox_services_effective.forgejo | default('disabled', true) | string | lower)
+        in wunderbox_enabled_values
+      tags:
+        - forgejo
+        - deploy
+    - role: keycloak_deploy
+      when: >-
+        (wunderbox_services_effective.keycloak | default('disabled', true) | string | lower)
+        in wunderbox_enabled_values
+      tags:
+        - keycloak
+        - deploy
+    - role: minio_deploy
+      when: >-
+        (wunderbox_services_effective.minio | default('disabled', true) | string | lower)
+        in wunderbox_enabled_values
+      tags:
+        - minio
+        - deploy
+    - role: nessus_deploy
+      when: >-
+        (wunderbox_services_effective.nessus | default('disabled', true) | string | lower)
+        in wunderbox_enabled_values
+      tags:
+        - nessus
+        - deploy
+    - role: nexus
+      when: >-
+        (wunderbox_services_effective.nexus | default('disabled', true) | string | lower)
+        in wunderbox_enabled_values
+      tags:
+        - nexus
+        - deploy
+    - role: semaphore_deploy
+      when: >-
+        (wunderbox_services_effective.semaphore | default('disabled', true) | string | lower)
+        in wunderbox_enabled_values
+      tags:
+        - semaphore
+        - deploy
+
+    - role: nginx_config
+      tags:
+        - nginx
+        - configure
+    - role: nginx_validate
+      tags:
+        - nginx
+        - validate

@@ -126,18 +126,19 @@ bash scripts/wunder-devtools-ee.sh bash -c '
 
   cd /workspace
 
-  # Avoid stale duplicate collection resolution from ~/.ansible.
+  # Avoid stale duplicate collection resolution from local test caches.
   stale_collection_dir="${HOME}/.ansible/collections/ansible_collections/${ns}/${name}"
   if [ -d "$stale_collection_dir" ]; then
     rm -rf "$stale_collection_dir"
   fi
-  workspace_stale_collection_dir="/workspace/.ansible/collections/ansible_collections/${ns}/${name}"
+  workspace_stale_collection_dir="/workspace/.ansible/collections/ansible_collections"
   if [ -d "$workspace_stale_collection_dir" ]; then
     rm -rf "$workspace_stale_collection_dir"
   fi
 
   export ANSIBLE_CONFIG="/workspace/ansible.cfg"
   export ANSIBLE_COLLECTIONS_PATH="${COLLECTIONS_DIR}:/workspace/collections:/usr/share/ansible/collections"
+  export ANSIBLE_ROLES_PATH="${HOME}/roles:/workspace/roles:/usr/share/ansible/roles"
 
   export ANSIBLE_LINT_OFFLINE=true
   export ANSIBLE_LINT_SKIP_GALAXY_INSTALL=1

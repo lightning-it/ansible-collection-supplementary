@@ -1,9 +1,0 @@
----
-- name: Verify dhcp-deploy-basic converge
-  hosts: localhost
-  gather_facts: false
-  tasks:
-    - name: Assert converge ran
-      ansible.builtin.assert:
-        that:
-          - true

@@ -50,8 +50,10 @@ spec:
       ports:
         - containerPort: {{ minio_deploy_port }}
           hostPort: {{ minio_deploy_port }}
+          hostIP: {{ minio_deploy_host_ip }}
         - containerPort: {{ minio_deploy_console_port }}
           hostPort: {{ minio_deploy_console_port }}
+          hostIP: {{ minio_deploy_host_ip }}
       securityContext:
         runAsUser: {{ minio_deploy_run_as_user }}
         runAsGroup: {{ minio_deploy_run_as_group }}

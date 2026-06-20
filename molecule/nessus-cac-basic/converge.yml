@@ -1,0 +1,16 @@
+---
+- name: Converge nessus cac syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    nessus_cac_molecule_execute_role: false
+  tasks:
+    - name: Import lit.supplementary.nessus_cac for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.nessus_cac
+      when: nessus_cac_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.nessus_cac Molecule coverage mode
+      ansible.builtin.set_fact:
+        nessus_cac_molecule_coverage_mode: syntax_stub

@@ -13,6 +13,7 @@
       - postgres_deploy_db_name | default('', true) | trim | length > 0
       - postgres_deploy_db_user | default('', true) | trim | length > 0
       - postgres_deploy_port | int > 0
+      - postgres_deploy_container_port | int > 0
       - postgres_deploy_host_ip | default('', true) | trim | length > 0
       - postgres_deploy_install_packages is boolean
       - postgres_deploy_manage_systemd is boolean

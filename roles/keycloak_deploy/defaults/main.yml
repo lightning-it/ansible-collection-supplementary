@@ -58,6 +58,8 @@ keycloak_deploy_health_url_effective: >-
 
 # Keycloak app config
 keycloak_deploy_admin_user: "admin"
+keycloak_deploy_run_user_uid: "1000"
+keycloak_deploy_run_user_gid: "1000"
 keycloak_deploy_env_extra: {}
 keycloak_deploy_extra_start_args: []
 keycloak_deploy_hostname: ""
@@ -70,6 +72,9 @@ keycloak_deploy_db_name: "keycloak"
 keycloak_deploy_db_user: "keycloak"
 keycloak_deploy_db_host: "{{ keycloak_deploy_postgres_host_ip }}"
 keycloak_deploy_db_port: "{{ postgres_deploy_port | default(5432) }}"
+keycloak_deploy_postgres_wait_timeout: 120
+keycloak_deploy_postgres_wait_delay: 0
+keycloak_deploy_prestart_health_timeout: 5
 
 # Secrets (preferred: inventory/Vault; fallback: generated once)
 keycloak_deploy_db_password: ""

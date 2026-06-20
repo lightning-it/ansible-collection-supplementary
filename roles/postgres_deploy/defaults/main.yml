@@ -7,6 +7,9 @@ postgres_deploy_container_name: "postgres"
 
 # Host paths
 postgres_deploy_host_data_dir: "/srv/postgres/data"
+postgres_deploy_host_data_owner: "999"
+postgres_deploy_host_data_group: "999"
+postgres_deploy_host_data_mode: "0700"
 postgres_deploy_config_dir: "/srv/postgres/config"
 postgres_deploy_secrets_file: "{{ postgres_deploy_config_dir }}/postgres-secrets.yml"
 
@@ -15,6 +18,7 @@ postgres_deploy_container_data_dir: "/var/lib/postgresql/data"
 
 # Runtime network
 postgres_deploy_port: 5432
+postgres_deploy_container_port: 5432
 postgres_deploy_host_ip: >-
   {{
     ansible_default_ipv4.address

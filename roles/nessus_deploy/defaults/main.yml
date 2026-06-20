@@ -58,6 +58,8 @@ nessus_deploy_manage_systemd: true
 nessus_deploy_skip_runtime: false
 nessus_deploy_skip_deploy: false
 nessus_deploy_validate_certs: false
+nessus_deploy_seed_data_from_image: true
+nessus_deploy_seed_required_file: "nessus-services"
 
 # Internal handler flags
 nessus_deploy_kubeplay_remove: false

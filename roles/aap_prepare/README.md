@@ -11,17 +11,11 @@ hostname resolves to one of the managed host's IPv4 addresses. Disable this
 precheck with `aap_prepare_gateway_dns_precheck_enabled: false` when DNS is
 managed outside the rollout window.
 
-## Sources
+## Requirements
 
-Each artifact can come from:
+None.
 
-- `url`: HTTPS, presigned S3, Hetzner Object Storage, MinIO, or similar
-- `local`: controller-local file
-- `remote`: file already present on the managed host
-- `auto`: explicit URL/local/remote value when set, otherwise exactly one
-  matching file in `aap_prepare_artifact_dir`
-
-## Defaults
+## Variables
 
 - `aap_prepare_artifact_dir`: `${PWD}/.artifacts`
 - `aap_prepare_gateway_dns_precheck_enabled`: `true`
@@ -32,7 +26,11 @@ Each artifact can come from:
   - `manifest*.zip`
   - `*manifest*.zip`
 
-## Example
+## Dependencies
+
+None.
+
+## Example Playbook
 
 ```yaml
 aap_prepare_artifact_dir: "{{ lookup('ansible.builtin.env', 'PWD') }}/.artifacts"
@@ -61,3 +59,19 @@ After staging, the role publishes host facts consumed by downstream roles:
 ## License
 
 MIT
+
+## Author
+
+Lightning IT
+
+## Additional Notes
+
+### Sources
+
+Each artifact can come from:
+
+- `url`: HTTPS, presigned S3, Hetzner Object Storage, MinIO, or similar
+- `local`: controller-local file
+- `remote`: file already present on the managed host
+- `auto`: explicit URL/local/remote value when set, otherwise exactly one
+  matching file in `aap_prepare_artifact_dir`

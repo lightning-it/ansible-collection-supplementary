@@ -29,7 +29,43 @@ Key variables:
 - `aap_eda_admin_password_input`
 - `aap_postgresql_admin_password_input`
 
-## Inventory Password Input Contract
+## Dependencies
+
+None.
+
+## Example Playbook
+
+```yaml
+- name: Load shared AAP context
+  hosts: aap_nodes
+  gather_facts: true
+  roles:
+    - role: lit.supplementary.aap
+      vars:
+        aap_deploy_enabled: true
+        aap_password_active: active
+        aap_password_active_slot: active
+        aap_password_require_component_inputs: true
+        aap_gateway_admin_password_input:
+          active: "{{ lookup('my_secret_backend_get_or_create', 'aap/gateway/admin') }}"
+          next: "{{ lookup('my_secret_backend_get_or_create', 'aap/gateway/admin_next') }}"
+        aap_controller_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/controller/admin') }}"
+        aap_hub_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/hub/admin') }}"
+        aap_eda_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/eda/admin') }}"
+        aap_postgresql_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/postgresql/admin') }}"
+```
+
+## License
+
+MIT
+
+## Author
+
+Lightning IT
+
+## Additional Notes
+
+### Inventory Password Input Contract
 
 This role is inventory-only for secret input.
 
@@ -67,37 +103,3 @@ Published effective vars:
 - `aap_eda_admin_password_effective`
 - `aap_postgresql_admin_password_effective`
 - `aap_deploy_*_admin_password_effective` outputs
-
-## Dependencies
-
-None.
-
-## Example Playbook
-
-```yaml
-- name: Load shared AAP context
-  hosts: aap_nodes
-  gather_facts: true
-  roles:
-    - role: lit.supplementary.aap
-      vars:
-        aap_deploy_enabled: true
-        aap_password_active: active
-        aap_password_active_slot: active
-        aap_password_require_component_inputs: true
-        aap_gateway_admin_password_input:
-          active: "{{ lookup('my_secret_backend_get_or_create', 'aap/gateway/admin') }}"
-          next: "{{ lookup('my_secret_backend_get_or_create', 'aap/gateway/admin_next') }}"
-        aap_controller_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/controller/admin') }}"
-        aap_hub_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/hub/admin') }}"
-        aap_eda_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/eda/admin') }}"
-        aap_postgresql_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/postgresql/admin') }}"
-```
-
-## License
-
-MIT
-
-## Author
-
-Lightning IT

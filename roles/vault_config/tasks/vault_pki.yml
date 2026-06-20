@@ -271,6 +271,8 @@
   ansible.builtin.copy:
     dest: "{{ item.dest }}"
     content: "{{ item.content }}"
+    owner: "{{ item.owner | default(vault_deploy_run_as_user | default(100)) }}"
+    group: "{{ item.group | default(vault_deploy_run_as_group | default(1000)) }}"
     mode: "{{ item.mode }}"
   loop:
     - dest: "{{ vault_config_cert_dir }}/vault.crt"
@@ -282,7 +284,7 @@
       content: >-
         {{ vault_config_pki_cert.data.data.private_key
            | default(vault_config_existing_cert_data.private_key) }}
-      mode: "0644"
+      mode: "0600"
     - dest: "{{ vault_config_cert_dir }}/ca.crt"
       content: >-
         {{ vault_config_pki_cert.data.data.issuing_ca

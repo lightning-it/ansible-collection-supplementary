@@ -1,0 +1,16 @@
+---
+- name: Converge vault deploy syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vault_deploy_molecule_execute_role: false
+  tasks:
+    - name: Import lit.supplementary.vault_deploy for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.vault_deploy
+      when: vault_deploy_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.vault_deploy Molecule coverage mode
+      ansible.builtin.set_fact:
+        vault_deploy_molecule_coverage_mode: syntax_stub

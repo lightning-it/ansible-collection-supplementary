@@ -1,0 +1,51 @@
+---
+- name: Validate DHCP Podman kube-play manifest exists
+  ansible.builtin.stat:
+    path: "{{ dhcp_deploy_pod_manifest_path }}"
+  register: dhcp_deploy_manifest_stat
+  changed_when: false
+
+- name: Require DHCP Podman kube-play manifest
+  ansible.builtin.assert:
+    that:
+      - dhcp_deploy_manifest_stat.stat.exists
+    fail_msg: "DHCP Podman kube-play manifest {{ dhcp_deploy_pod_manifest_path }} is missing."
+    quiet: true
+
+- name: Validate DHCP lease file persistence
+  ansible.builtin.stat:
+    path: "{{ dhcp_deploy_host_lease_path }}"
+  register: dhcp_deploy_lease_stat
+  changed_when: false
+
+- name: Require persistent DHCP lease file
+  ansible.builtin.assert:
+    that:
+      - dhcp_deploy_lease_stat.stat.exists
+      - dhcp_deploy_lease_stat.stat.isreg
+      - not (dhcp_deploy_host_lease_path is match('^/(tmp|var/tmp)(/|$)'))
+    fail_msg: >-
+      DHCP lease state must exist as a persistent host file outside /tmp:
+      {{ dhcp_deploy_host_lease_path }}.
+    quiet: true
+
+- name: Inspect DHCP Podman kube-play container state
+  ansible.builtin.command:
+    cmd: "podman inspect {{ dhcp_deploy_container_name }} --format {{ '{{' }}.State.Running{{ '}}' }}"
+  register: dhcp_deploy_container_running
+  changed_when: false
+  failed_when: false
+  when:
+    - dhcp_deploy_validate_running | bool
+    - not dhcp_deploy_skip_runtime | bool
+
+- name: Require DHCP Podman kube-play container to be running
+  ansible.builtin.assert:
+    that:
+      - dhcp_deploy_container_running.rc == 0
+      - dhcp_deploy_container_running.stdout | trim == 'true'
+    fail_msg: "DHCP Podman kube-play container {{ dhcp_deploy_container_name }} is not running."
+    quiet: true
+  when:
+    - dhcp_deploy_validate_running | bool
+    - not dhcp_deploy_skip_runtime | bool

@@ -8,7 +8,9 @@
     mode: "{{ item.mode }}"
   loop:
     - path: "{{ postgres_deploy_host_data_dir }}"
-      mode: '0750'
+      owner: "{{ postgres_deploy_host_data_owner }}"
+      group: "{{ postgres_deploy_host_data_group }}"
+      mode: "{{ postgres_deploy_host_data_mode }}"
     - path: "{{ postgres_deploy_config_dir }}"
       mode: '0750'
     - path: "{{ postgres_deploy_pod_manifest_path | dirname }}"
@@ -25,11 +27,25 @@
   tags:
     - deployment
 
-- name: Load generated PostgreSQL secrets
-  ansible.builtin.include_vars:
-    file: "{{ postgres_deploy_secrets_file }}"
-    name: postgres_deploy_stored_secrets
+- name: Read generated PostgreSQL secrets
+  ansible.builtin.slurp:
+    src: "{{ postgres_deploy_secrets_file }}"
   when: postgres_deploy_secrets_file_stat.stat.exists | bool
+  register: postgres_deploy_secrets_file_content
+  no_log: true
+  tags:
+    - deployment
+
+- name: Load generated PostgreSQL secrets
+  ansible.builtin.set_fact:
+    postgres_deploy_stored_secrets: >-
+      {{
+        postgres_deploy_secrets_file_content.content
+        | b64decode
+        | from_yaml
+      }}
+  when: postgres_deploy_secrets_file_stat.stat.exists | bool
+  changed_when: false
   no_log: true
   tags:
     - deployment

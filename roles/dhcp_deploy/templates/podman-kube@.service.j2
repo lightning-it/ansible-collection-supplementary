@@ -1,0 +1,13 @@
+[Unit]
+Description=Podman kube play %I
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/podman kube play --replace %I
+ExecStop=/usr/bin/podman kube down --ignore %I
+
+[Install]
+WantedBy=multi-user.target

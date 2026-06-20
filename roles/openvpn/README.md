@@ -1,3 +1,5 @@
+# lit.supplementary.openvpn
+
 Role Name
 =========
 
@@ -73,3 +75,34 @@ cd /etc/openvpn/otp
 chcon -u system_u -t openvpn_etc_rw_t tim.google_authenticator
 
 systemctl restart openvpn-server@openvpn_udp_1194.service
+
+## Requirements
+
+None.
+
+## Variables
+
+See `defaults/main.yml`.
+
+## Dependencies
+
+None.
+
+## Example Playbook
+
+```yaml
+---
+- name: Use lit.supplementary.openvpn
+  hosts: all
+  become: true
+  roles:
+    - role: lit.supplementary.openvpn
+```
+
+## License
+
+MIT
+
+## Author
+
+Lightning IT

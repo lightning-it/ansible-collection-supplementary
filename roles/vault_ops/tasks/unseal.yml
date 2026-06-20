@@ -80,7 +80,9 @@
         dest: "{{ vault_bootstrap_controller_tmp.path }}/ansible.cfg"
         content: ""
         mode: "0600"
-      when: vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+      when:
+        - vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+        - not (vault_deploy_ansible_vault_pw | string is search('\\{\\{'))
 
     - name: Create temporary vault password file (controller temp dir)
       delegate_to: localhost
@@ -89,7 +91,9 @@
         dest: "{{ vault_bootstrap_controller_tmp.path }}/.vault_deploy_pass"
         content: "{{ vault_deploy_ansible_vault_pw }}"
         mode: "0600"
-      when: vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+      when:
+        - vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+        - not (vault_deploy_ansible_vault_pw | string is search('\\{\\{'))
 
     - name: Decrypt init file (controller; explicit password)
       delegate_to: localhost
@@ -102,7 +106,9 @@
       environment:
         ANSIBLE_CONFIG: "{{ vault_bootstrap_controller_tmp.path }}/ansible.cfg"
         ANSIBLE_VAULT_PASSWORD_FILE: "{{ vault_bootstrap_controller_tmp.path }}/.vault_deploy_pass"
-      when: vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+      when:
+        - vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+        - not (vault_deploy_ansible_vault_pw | string is search('\\{\\{'))
 
     - name: Decrypt init file (controller; default vault config)
       delegate_to: localhost
@@ -112,7 +118,6 @@
       register: vault_bootstrap_init_view
       changed_when: false
       failed_when: false
-      when: vault_deploy_ansible_vault_pw | default('', true) | trim | length == 0
 
     - name: Parse init file and expose facts for follow-on tasks/roles
       ansible.builtin.set_fact:

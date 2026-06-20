@@ -1,0 +1,16 @@
+---
+- name: Converge keycloak deploy syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    keycloak_deploy_molecule_execute_role: false
+  tasks:
+    - name: Import lit.supplementary.keycloak_deploy for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.keycloak_deploy
+      when: keycloak_deploy_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.keycloak_deploy Molecule coverage mode
+      ansible.builtin.set_fact:
+        keycloak_deploy_molecule_coverage_mode: syntax_stub

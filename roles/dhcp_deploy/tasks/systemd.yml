@@ -1,26 +1,44 @@
 ---
-- name: Manage DHCP systemd unit
+- name: Manage DHCP Podman kube-play systemd unit
   when:
     - dhcp_deploy_manage_systemd | bool
     - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+    - not ansible_check_mode
   tags:
     - systemd
   block:
-    - name: Enable and start DHCP service
-      ansible.builtin.systemd:
-        name: "{{ dhcp_deploy_systemd_unit_name }}"
-        enabled: true
-        state: started
-
-    - name: Wait until DHCP health endpoint is reachable
-      ansible.builtin.uri:
-        url: "{{ dhcp_deploy_health_url_effective }}"
-        method: GET
-        validate_certs: "{{ dhcp_deploy_validate_certs }}"
-      register: dhcp_deploy_health
-      until: dhcp_deploy_health.status == 200
-      retries: 30
-      delay: 5
+    - name: Escape DHCP Podman kube-play play manifest path
+      ansible.builtin.command:
+        cmd: "systemd-escape {{ dhcp_deploy_pod_manifest_path }}"
+      register: dhcp_deploy_systemd_name
       changed_when: false
-      failed_when: dhcp_deploy_health is failed or dhcp_deploy_health.status != 200
-      when: dhcp_deploy_health_url_effective | default('') | length > 0
+
+    - name: Install Podman kube systemd template
+      ansible.builtin.template:
+        src: podman-kube@.service.j2
+        dest: /etc/systemd/system/podman-kube@.service
+        mode: '0644'
+
+    - name: Ensure DHCP podman-kube drop-in directory exists
+      ansible.builtin.file:
+        path: "/etc/systemd/system/podman-kube@{{ dhcp_deploy_systemd_name.stdout }}.service.d"
+        state: directory
+        mode: '0755'
+
+    - name: Determine DHCP Podman kube-play unit state
+      ansible.builtin.set_fact:
+        dhcp_deploy_systemd_state: >-
+          {{
+            (
+              dhcp_deploy_kubeplay_run | default(false)
+              or dhcp_deploy_kubeplay_remove | default(false)
+            ) | ternary('restarted', 'started')
+          }}
+      changed_when: false
+
+    - name: Enable and start DHCP Podman kube-play systemd unit
+      ansible.builtin.systemd:
+        name: "podman-kube@{{ dhcp_deploy_systemd_name.stdout }}.service"
+        enabled: true
+        state: "{{ dhcp_deploy_systemd_state }}"
+        daemon_reload: true

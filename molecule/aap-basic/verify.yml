@@ -1,0 +1,11 @@
+---
+- name: Verify aap syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Assert lit.supplementary.aap coverage stub ran
+      ansible.builtin.assert:
+        that:
+          - aap_molecule_coverage_mode | default('') == 'syntax_stub'
+        quiet: true

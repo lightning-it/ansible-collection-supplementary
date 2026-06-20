@@ -1,22 +1,128 @@
 ---
-- name: Ensure core DHCP variables are set
+- name: Ensure DHCP deploy variables are valid
   ansible.builtin.assert:
     that:
-      - dhcp_deploy_service_name | length > 0
-      - dhcp_deploy_systemd_unit_name | length > 0
-      - dhcp_deploy_host_config_dir | length > 0
-      - dhcp_deploy_host_config_path | length > 0
-      - dhcp_deploy_host_data_dir | length > 0
-      - dhcp_deploy_sysconfig_path | length > 0
-      - dhcp_deploy_manage_systemd is boolean
-      - dhcp_deploy_manage_service is boolean
+      - dhcp_deploy_pod_name | default('', true) | trim | length > 0
+      - dhcp_deploy_pod_manifest_path | default('', true) | trim | length > 0
+      - dhcp_deploy_image | default('', true) | trim | length > 0
+      - dhcp_deploy_container_name | default('', true) | trim | length > 0
+      - dhcp_deploy_use_host_network is boolean
+      - dhcp_deploy_require_rootful is boolean
+      - dhcp_deploy_required_capabilities is sequence
+      - dhcp_deploy_required_capabilities is not string
+      - dhcp_deploy_privileged is boolean
+      - dhcp_deploy_run_as_user | int == 0
+      - dhcp_deploy_run_as_group | int == 0
+      - dhcp_deploy_run_as_non_root is boolean
+      - not dhcp_deploy_run_as_non_root | bool
+      - dhcp_deploy_host_config_dir | default('', true) | trim | length > 0
+      - dhcp_deploy_host_config_path | default('', true) | trim | length > 0
+      - dhcp_deploy_host_data_dir | default('', true) | trim | length > 0
+      - dhcp_deploy_host_lease_path | default('', true) | trim | length > 0
+      - dhcp_deploy_container_config_path | default('', true) | trim | length > 0
+      - dhcp_deploy_container_data_dir | default('', true) | trim | length > 0
+      - dhcp_deploy_container_lease_path | default('', true) | trim | length > 0
+      - dhcp_deploy_command is sequence
+      - dhcp_deploy_command is not string
+      - dhcp_deploy_args is sequence
+      - dhcp_deploy_args is not string
+      - dhcp_deploy_interfaces is sequence
+      - dhcp_deploy_interfaces is not string
+      - dhcp_deploy_env_extra is mapping
+      - dhcp_deploy_production_ready is boolean
+      - dhcp_deploy_production_evidence is mapping
+      - dhcp_deploy_production_evidence_reference is string
+      - dhcp_deploy_allow_unpinned_image is boolean
+      - dhcp_deploy_validate_interfaces is boolean
+      - dhcp_deploy_require_interface_link is boolean
+      - dhcp_deploy_validate_udp67_available is boolean
+      - dhcp_deploy_validate_native_service_absent is boolean
+      - dhcp_deploy_native_service_names is sequence
+      - dhcp_deploy_native_service_names is not string
+      - dhcp_deploy_validate_config_syntax is boolean
+      - dhcp_deploy_config_test_argv is sequence
+      - dhcp_deploy_config_test_argv is not string
+      - dhcp_deploy_config is string
       - dhcp_deploy_manage_config is boolean
+      - dhcp_deploy_manage_file_ownership is boolean
       - dhcp_deploy_install_packages is boolean
+      - dhcp_deploy_manage_systemd is boolean
       - dhcp_deploy_skip_runtime is boolean
       - dhcp_deploy_skip_deploy is boolean
       - dhcp_deploy_skip_config is boolean
       - dhcp_deploy_skip_validate is boolean
-      - dhcp_deploy_validate_certs is boolean
-      - dhcp_deploy_health_url_effective is string
-    fail_msg: "DHCP core variables are missing or invalid."
+      - dhcp_deploy_validate_running is boolean
+      - >-
+        (not (dhcp_deploy_manage_config | bool))
+        or (dhcp_deploy_skip_config | bool)
+        or (dhcp_deploy_config | trim | length > 0)
+    fail_msg: "DHCP deploy variables are missing or invalid."
+    quiet: true
+  tags: always
+
+- name: Ensure DHCP deploy runtime is production-gated
+  ansible.builtin.assert:
+    that:
+      - dhcp_deploy_production_ready | bool
+      - dhcp_deploy_production_evidence.rhel_first_validated | default(false) | bool
+      - dhcp_deploy_production_evidence.ubuntu_target_validated | default(false) | bool
+      - dhcp_deploy_production_evidence.l2_broadcast_validated | default(false) | bool
+      - dhcp_deploy_production_evidence.lease_persistence_validated | default(false) | bool
+      - dhcp_deploy_production_evidence.reboot_recovery_validated | default(false) | bool
+      - dhcp_deploy_production_evidence.renewal_validated | default(false) | bool
+      - dhcp_deploy_production_evidence.backup_failover_validated | default(false) | bool
+      - dhcp_deploy_production_evidence.no_rogue_dhcp_validated | default(false) | bool
+      - dhcp_deploy_production_evidence_reference | trim | length > 0
+    fail_msg: >-
+      DHCP Podman kube-play runtime deployment is blocked. Mark it production-ready only
+      after RHEL-first validation and target Ubuntu validation prove L2
+      broadcast behavior, persistent leases, reboot recovery, renewals,
+      backup/failover expectations, and no-rogue-DHCP checks. Set
+      dhcp_deploy_production_ready=true and provide a non-empty
+      dhcp_deploy_production_evidence_reference with the validation record.
+    quiet: true
+  when:
+    - not dhcp_deploy_skip_runtime | bool
+    - not dhcp_deploy_skip_deploy | bool
+  tags: always
+
+- name: Ensure DHCP deploy production network mode is explicit
+  ansible.builtin.assert:
+    that:
+      - dhcp_deploy_use_host_network | bool
+    fail_msg: >-
+      DHCP deploy requires host networking by default. Override only after
+      validating an equivalent L2/macvlan design for DHCP broadcast traffic.
+    quiet: true
+  when:
+    - not dhcp_deploy_skip_runtime | bool
+    - not dhcp_deploy_skip_deploy | bool
+  tags: always
+
+- name: Ensure DHCP deploy runtime inputs are production-safe
+  ansible.builtin.assert:
+    that:
+      - dhcp_deploy_interfaces | length > 0
+      - dhcp_deploy_manage_systemd | bool
+      - dhcp_deploy_host_data_dir is match('^/')
+      - dhcp_deploy_host_lease_path is match('^/')
+      - not (dhcp_deploy_host_data_dir is match('^/(tmp|var/tmp)(/|$)'))
+      - not (dhcp_deploy_host_lease_path is match('^/(tmp|var/tmp)(/|$)'))
+      - >-
+        dhcp_deploy_allow_unpinned_image | bool
+        or (
+          dhcp_deploy_image is search('@sha256:')
+          or (
+            dhcp_deploy_image is search(':[^/:]+$')
+            and not (dhcp_deploy_image is search(':latest$'))
+          )
+        )
+    fail_msg: >-
+      DHCP Podman kube-play runtime requires at least one interface, systemd management,
+      persistent non-/tmp lease storage, and a pinned/non-latest image. Set
+      dhcp_deploy_allow_unpinned_image=true only for a controlled test.
+    quiet: true
+  when:
+    - not dhcp_deploy_skip_runtime | bool
+    - not dhcp_deploy_skip_deploy | bool
   tags: always

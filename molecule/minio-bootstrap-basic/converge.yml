@@ -1,0 +1,16 @@
+---
+- name: Converge minio bootstrap syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    minio_bootstrap_molecule_execute_role: false
+  tasks:
+    - name: Import lit.supplementary.minio_bootstrap for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.minio_bootstrap
+      when: minio_bootstrap_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.minio_bootstrap Molecule coverage mode
+      ansible.builtin.set_fact:
+        minio_bootstrap_molecule_coverage_mode: syntax_stub

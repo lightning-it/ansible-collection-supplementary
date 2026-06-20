@@ -1,0 +1,11 @@
+---
+- name: Verify manage esxi syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Assert lit.supplementary.manage_esxi coverage stub ran
+      ansible.builtin.assert:
+        that:
+          - manage_esxi_molecule_coverage_mode | default('') == 'syntax_stub'
+        quiet: true

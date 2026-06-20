@@ -1,18 +1,12 @@
 ---
-- name: Restart dhcp
-  ansible.builtin.systemd:
-    name: "{{ dhcp_deploy_systemd_unit_name }}"
-    state: restarted
-  when:
-    - dhcp_deploy_manage_systemd | bool
-    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
-    - not ansible_check_mode
+- name: Recreate DHCP Podman kube-play pod
+  ansible.builtin.set_fact:
+    dhcp_deploy_kubeplay_remove: true
+  changed_when: false
+  when: not dhcp_deploy_skip_runtime | bool
 
-- name: Reload dhcp
-  ansible.builtin.systemd:
-    name: "{{ dhcp_deploy_systemd_unit_name }}"
-    state: restarted
-  when:
-    - dhcp_deploy_manage_systemd | bool
-    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
-    - not ansible_check_mode
+- name: Run DHCP Podman kube-play pod
+  ansible.builtin.set_fact:
+    dhcp_deploy_kubeplay_run: true
+  changed_when: false
+  when: not dhcp_deploy_skip_runtime | bool

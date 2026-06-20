@@ -1,6 +1,6 @@
 ---
 - name: Install EPEL for RHEL
-  ansible.builtin.yum:
+  ansible.builtin.package:
     name: "{{ openvpn_epel_package_name }}"
     state: present
     disable_gpg_check: true
