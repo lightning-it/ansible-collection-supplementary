@@ -1,0 +1,32 @@
+---
+- name: Verify incus_esxi_image
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    incus_esxi_image_molecule_ephemeral_dir: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') | default('/tmp/lit-incus-esxi-image-basic', true) }}
+    incus_esxi_image_molecule_root: "{{ incus_esxi_image_molecule_ephemeral_dir }}/incus-esxi-image"
+  tasks:
+    - name: Check fake nested ESXi image alias
+      ansible.builtin.stat:
+        path: "{{ incus_esxi_image_molecule_root }}/state/images/esxi-packer-ci"
+      register: incus_esxi_image_molecule_alias
+
+    - name: Check fake nested ESXi backup image alias
+      ansible.builtin.stat:
+        path: "{{ incus_esxi_image_molecule_root }}/state/images/esxi-packer-ci-backup"
+      register: incus_esxi_image_molecule_backup_alias
+
+    - name: Check fake nested ESXi backup import instance cleanup
+      ansible.builtin.stat:
+        path: "{{ incus_esxi_image_molecule_root }}/state/instances/esxi-packer-ci-backup-import"
+      register: incus_esxi_image_molecule_backup_instance
+
+    - name: Assert fake nested ESXi image alias was created
+      ansible.builtin.assert:
+        that:
+          - incus_esxi_image_molecule_alias.stat.exists
+          - incus_esxi_image_molecule_backup_alias.stat.exists
+          - not incus_esxi_image_molecule_backup_instance.stat.exists
+        quiet: true

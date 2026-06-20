@@ -1,0 +1,191 @@
+---
+- name: Validate nested ESXi role input
+  ansible.builtin.assert:
+    that:
+      - incus_nested_esxi_state in ['present', 'absent']
+      - incus_nested_esxi_instance_name | length > 0
+      - incus_nested_esxi_state == 'absent' or incus_nested_esxi_image | length > 0
+      - incus_nested_esxi_state == 'absent' or incus_nested_esxi_endpoint | length > 0
+      - incus_nested_esxi_state == 'absent' or incus_nested_esxi_username | length > 0
+      - incus_nested_esxi_state == 'absent' or incus_nested_esxi_password | length > 0
+      - incus_nested_esxi_wait_timeout is number
+      - incus_nested_esxi_wait_delay is number
+    quiet: true
+    fail_msg: "Invalid incus_nested_esxi role input."
+  no_log: "{{ incus_nested_esxi_password | length > 0 }}"
+  tags:
+    - always
+
+- name: Check required local commands
+  ansible.builtin.command:
+    argv:
+      - bash
+      - -lc
+      - "command -v incus >/dev/null && command -v curl >/dev/null"
+  delegate_to: "{{ incus_nested_esxi_delegate_to }}"
+  changed_when: false
+  tags:
+    - always
+
+- name: Check nested ESXi Incus instance state
+  ansible.builtin.command:
+    argv:
+      - incus
+      - info
+      - "{{ incus_nested_esxi_instance_name }}"
+  register: incus_nested_esxi_instance_info
+  delegate_to: "{{ incus_nested_esxi_delegate_to }}"
+  changed_when: false
+  failed_when: false
+  tags:
+    - always
+
+- name: Destroy nested ESXi Incus VM
+  ansible.builtin.command:
+    argv:
+      - incus
+      - delete
+      - -f
+      - "{{ incus_nested_esxi_instance_name }}"
+  delegate_to: "{{ incus_nested_esxi_delegate_to }}"
+  changed_when: true
+  when:
+    - incus_nested_esxi_state == 'absent'
+    - incus_nested_esxi_instance_info.rc == 0
+  tags:
+    - incus_nested_esxi_absent
+
+- name: End role after absent state
+  ansible.builtin.meta: end_role
+  when: incus_nested_esxi_state == 'absent'
+  tags:
+    - incus_nested_esxi_absent
+
+- name: Fail when nested ESXi Incus VM already exists
+  ansible.builtin.assert:
+    that:
+      - incus_nested_esxi_instance_info.rc != 0 or incus_nested_esxi_destroy_existing | bool
+    quiet: true
+    fail_msg: >-
+      Incus instance {{ incus_nested_esxi_instance_name }} already exists. Remove it first
+      or set incus_nested_esxi_destroy_existing=true.
+  tags:
+    - incus_nested_esxi_present
+
+- name: Remove existing nested ESXi Incus VM when requested
+  ansible.builtin.command:
+    argv:
+      - incus
+      - delete
+      - -f
+      - "{{ incus_nested_esxi_instance_name }}"
+  delegate_to: "{{ incus_nested_esxi_delegate_to }}"
+  changed_when: true
+  when:
+    - incus_nested_esxi_instance_info.rc == 0
+    - incus_nested_esxi_destroy_existing | bool
+  tags:
+    - incus_nested_esxi_present
+
+- name: Initialize nested ESXi Incus VM
+  ansible.builtin.command:
+    argv:
+      - incus
+      - init
+      - "{{ incus_nested_esxi_image }}"
+      - "{{ incus_nested_esxi_instance_name }}"
+      - --vm
+      - -c
+      - "limits.cpu={{ incus_nested_esxi_cpu }}"
+      - -c
+      - "limits.memory={{ incus_nested_esxi_memory }}"
+      - -c
+      - "security.secureboot={{ incus_nested_esxi_secureboot | bool | ternary('true', 'false') }}"
+      - -c
+      - "security.nesting={{ incus_nested_esxi_nesting | bool | ternary('true', 'false') }}"
+  delegate_to: "{{ incus_nested_esxi_delegate_to }}"
+  changed_when: true
+  tags:
+    - incus_nested_esxi_present
+
+- name: Override nested ESXi root disk size
+  ansible.builtin.command:
+    argv:
+      - incus
+      - config
+      - device
+      - override
+      - "{{ incus_nested_esxi_instance_name }}"
+      - root
+      - "size={{ incus_nested_esxi_root_disk_size }}"
+  delegate_to: "{{ incus_nested_esxi_delegate_to }}"
+  changed_when: true
+  when: incus_nested_esxi_root_disk_size | length > 0
+  tags:
+    - incus_nested_esxi_present
+
+- name: Apply nested ESXi raw QEMU settings
+  ansible.builtin.command:
+    argv:
+      - incus
+      - config
+      - set
+      - "{{ incus_nested_esxi_instance_name }}"
+      - raw.qemu
+      - "{{ incus_nested_esxi_raw_qemu }}"
+  delegate_to: "{{ incus_nested_esxi_delegate_to }}"
+  changed_when: true
+  when: incus_nested_esxi_raw_qemu | length > 0
+  tags:
+    - incus_nested_esxi_present
+
+- name: Start nested ESXi Incus VM
+  ansible.builtin.command:
+    argv:
+      - incus
+      - start
+      - "{{ incus_nested_esxi_instance_name }}"
+  delegate_to: "{{ incus_nested_esxi_delegate_to }}"
+  changed_when: true
+  tags:
+    - incus_nested_esxi_present
+
+- name: Wait for nested ESXi API endpoint
+  ansible.builtin.uri:
+    url: "https://{{ incus_nested_esxi_endpoint }}/sdk"
+    method: GET
+    validate_certs: false
+    status_code:
+      - 200
+      - 301
+      - 302
+      - 401
+      - 403
+      - 404
+  register: incus_nested_esxi_api_wait
+  delegate_to: "{{ incus_nested_esxi_delegate_to }}"
+  changed_when: false
+  failed_when: false
+  until: incus_nested_esxi_api_wait.status | default(0) in [200, 301, 302, 401, 403, 404]
+  retries: "{{ ((incus_nested_esxi_wait_timeout | int) / (incus_nested_esxi_wait_delay | int)) | round(0, 'ceil') | int }}"
+  delay: "{{ incus_nested_esxi_wait_delay | int }}"
+  tags:
+    - incus_nested_esxi_present
+
+- name: Expose nested ESXi Packer connection facts
+  ansible.builtin.set_fact:
+    incus_nested_esxi_packer_vars:
+      vsphere_server: "{{ incus_nested_esxi_endpoint }}"
+      vsphere_username: "{{ incus_nested_esxi_username }}"
+      vsphere_password: "{{ incus_nested_esxi_password }}"
+      vsphere_insecure: "{{ not incus_nested_esxi_validate_certs | bool }}"
+      vsphere_datacenter: "{{ incus_nested_esxi_datacenter }}"
+      vsphere_cluster: ""
+      vsphere_host: "{{ incus_nested_esxi_endpoint }}"
+      vsphere_resource_pool: ""
+      vsphere_datastore: "{{ incus_nested_esxi_datastore }}"
+      vsphere_folder: "{{ incus_nested_esxi_folder }}"
+      vsphere_network: "{{ incus_nested_esxi_network }}"
+  no_log: true
+  tags:
+    - incus_nested_esxi_present

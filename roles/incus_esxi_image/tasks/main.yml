@@ -1,0 +1,61 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip Incus ESXi image role when disabled
+  ansible.builtin.meta: end_host
+  when: not (incus_esxi_image_enabled | bool)
+
+- name: Resolve Incus ESXi image command arguments
+  ansible.builtin.set_fact:
+    incus_esxi_image_base_argv: >-
+      {{
+        [incus_esxi_image_binary]
+        + (['--force-local'] if incus_esxi_image_force_local | bool else [])
+        + (['--project', incus_esxi_image_project] if incus_esxi_image_project | trim | length > 0 else [])
+      }}
+    incus_esxi_image_info_ref: "local:{{ incus_esxi_image_alias }}"
+
+- name: Check current nested ESXi Incus image alias
+  ansible.builtin.command:
+    argv: "{{ incus_esxi_image_base_argv + ['image', 'info', incus_esxi_image_info_ref] }}"
+  become: "{{ incus_esxi_image_command_user | trim | length > 0 }}"
+  become_user: "{{ incus_esxi_image_command_user if incus_esxi_image_command_user | trim | length > 0 else omit }}"
+  register: incus_esxi_image_info
+  changed_when: false
+  failed_when: false
+
+- name: Initialize nested ESXi Incus image result state
+  ansible.builtin.set_fact:
+    incus_esxi_image_imported: false
+    incus_esxi_image_source_mode: "{{ 'existing' if incus_esxi_image_info.rc == 0 else 'pending' }}"
+
+- name: Import nested ESXi Incus image from metadata artifact
+  ansible.builtin.import_tasks: metadata.yml
+  when:
+    - incus_esxi_image_metadata | trim | length > 0
+    - incus_esxi_image_replace | bool or incus_esxi_image_info.rc != 0
+
+- name: Import nested ESXi Incus image from backup artifact
+  ansible.builtin.import_tasks: backup.yml
+  when:
+    - incus_esxi_image_backup | trim | length > 0
+    - incus_esxi_image_replace | bool or incus_esxi_image_info.rc != 0
+
+- name: Verify nested ESXi Incus image alias
+  ansible.builtin.command:
+    argv: "{{ incus_esxi_image_base_argv + ['image', 'info', incus_esxi_image_info_ref] }}"
+  become: "{{ incus_esxi_image_command_user | trim | length > 0 }}"
+  become_user: "{{ incus_esxi_image_command_user if incus_esxi_image_command_user | trim | length > 0 else omit }}"
+  register: incus_esxi_image_verify
+  changed_when: false
+
+- name: Record nested ESXi Incus image result
+  ansible.builtin.set_fact:
+    incus_esxi_image_result:
+      alias: "{{ incus_esxi_image_alias }}"
+      image: "{{ incus_esxi_image_info_ref }}"
+      imported: "{{ incus_esxi_image_imported | default(false) | bool }}"
+      source: "{{ incus_esxi_image_source_mode }}"
+      nested_esxi_image: "{{ incus_esxi_image_info_ref }}"
