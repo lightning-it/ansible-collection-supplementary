@@ -7,10 +7,11 @@
     ":semanticCommitType(chore)",
     ":semanticCommitScope(deps)"
   ],
-  "renovate-config-presets": {
+  "renovate-config": {
     "enabled": false
   },
   "labels": ["dependencies", "renovate"],
+  "baseBranchPatterns": ["develop"],
   "timezone": "UTC",
   "schedule": [],
   "rebaseWhen": "conflicted",
