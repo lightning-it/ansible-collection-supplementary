@@ -1,0 +1,98 @@
+---
+- name: Validate DHCP service interfaces exist
+  ansible.builtin.command:
+    argv:
+      - ip
+      - -o
+      - link
+      - show
+      - dev
+      - "{{ item }}"
+  loop: "{{ dhcp_deploy_interfaces }}"
+  loop_control:
+    label: "{{ item }}"
+  register: dhcp_deploy_interface_state
+  changed_when: false
+  failed_when: false
+  when: dhcp_deploy_validate_interfaces | bool
+
+- name: Require DHCP service interfaces to be usable
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - >-
+        (not dhcp_deploy_require_interface_link | bool)
+        or (item.stdout is search('state UP'))
+        or (item.stdout is search('LOWER_UP'))
+    fail_msg: >-
+      DHCP interface {{ item.item }} is missing or not link-up. DHCP requires a
+      validated L2/broadcast interface before production deployment.
+    quiet: true
+  loop: "{{ dhcp_deploy_interface_state.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('unknown') }}"
+  when: dhcp_deploy_validate_interfaces | bool
+
+- name: Inspect existing DHCP Podman kube-play container state
+  ansible.builtin.command:
+    cmd: "podman inspect {{ dhcp_deploy_container_name }} --format {{ '{{' }}.State.Running{{ '}}' }}"
+  register: dhcp_deploy_existing_container_running
+  changed_when: false
+  failed_when: false
+
+- name: Check for UDP/67 listeners
+  ansible.builtin.command:
+    argv:
+      - ss
+      - -H
+      - -ulnp
+      - sport
+      - "="
+      - :67
+  register: dhcp_deploy_udp67_listeners
+  changed_when: false
+  failed_when: false
+  when: dhcp_deploy_validate_udp67_available | bool
+
+- name: Require UDP/67 to be free or owned by existing DHCP container
+  ansible.builtin.assert:
+    that:
+      - >-
+        (dhcp_deploy_udp67_listeners.stdout | default('') | trim | length == 0)
+        or (dhcp_deploy_existing_container_running.stdout | default('') | trim == 'true')
+    fail_msg: >-
+      UDP/67 is already in use and the managed DHCP container is not running.
+      Refusing to start a second DHCP service.
+    quiet: true
+  when: dhcp_deploy_validate_udp67_available | bool
+
+- name: Check native DHCP services are inactive
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - "{{ item }}"
+  loop: "{{ dhcp_deploy_native_service_names }}"
+  loop_control:
+    label: "{{ item }}"
+  register: dhcp_deploy_native_services
+  changed_when: false
+  failed_when: false
+  when:
+    - dhcp_deploy_validate_native_service_absent | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+
+- name: Require native DHCP services to be inactive
+  ansible.builtin.assert:
+    that:
+      - item.stdout | trim != 'active'
+    fail_msg: >-
+      Native DHCP service {{ item.item }} is active. Disable the host-native
+      service before deploying containerized DHCP.
+    quiet: true
+  loop: "{{ dhcp_deploy_native_services.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('unknown') }}"
+  when:
+    - dhcp_deploy_validate_native_service_absent | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'

@@ -1,16 +1,36 @@
 ---
-- name: Converge dhcp deploy syntax coverage
+- name: Converge DHCP deploy render-only
   hosts: localhost
   connection: local
-  gather_facts: false
+  gather_facts: true
   vars:
-    dhcp_deploy_molecule_execute_role: false
-  tasks:
-    - name: Import lit.supplementary.dhcp_deploy for syntax coverage
-      ansible.builtin.import_role:
-        name: lit.supplementary.dhcp_deploy
-      when: dhcp_deploy_molecule_execute_role | bool
-
-    - name: Record lit.supplementary.dhcp_deploy Molecule coverage mode
-      ansible.builtin.set_fact:
-        dhcp_deploy_molecule_coverage_mode: syntax_stub
+    dhcp_deploy_molecule_ephemeral_dir: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') | default('/tmp/lit-dhcp-basic', true) }}
+    dhcp_deploy_molecule_root: "{{ dhcp_deploy_molecule_ephemeral_dir }}/dhcp"
+    dhcp_deploy_molecule_config_dir: "{{ dhcp_deploy_molecule_root }}/config"
+    dhcp_deploy_molecule_data_dir: "{{ dhcp_deploy_molecule_root }}/state"
+    dhcp_deploy_molecule_pod_dir: "{{ dhcp_deploy_molecule_root }}/pods"
+  roles:
+    - role: lit.supplementary.dhcp_deploy
+      vars:
+        dhcp_deploy_skip_runtime: true
+        dhcp_deploy_manage_file_ownership: false
+        dhcp_deploy_install_packages: false
+        dhcp_deploy_manage_systemd: false
+        dhcp_deploy_skip_validate: true
+        dhcp_deploy_image: "registry.example.com/infra/dhcpd:4.4"
+        dhcp_deploy_host_config_dir: "{{ dhcp_deploy_molecule_config_dir }}"
+        dhcp_deploy_host_config_path: "{{ dhcp_deploy_molecule_config_dir }}/dhcpd.conf"
+        dhcp_deploy_host_data_dir: "{{ dhcp_deploy_molecule_data_dir }}"
+        dhcp_deploy_host_lease_path: "{{ dhcp_deploy_molecule_data_dir }}/dhcpd.leases"
+        dhcp_deploy_pod_manifest_path: "{{ dhcp_deploy_molecule_pod_dir }}/dhcp.yml"
+        dhcp_deploy_interfaces:
+          - eth1
+        dhcp_deploy_config: |
+          default-lease-time 600;
+          max-lease-time 7200;
+          authoritative;
+          subnet 192.0.2.0 netmask 255.255.255.0 {
+            range 192.0.2.100 192.0.2.150;
+            option routers 192.0.2.1;
+          }

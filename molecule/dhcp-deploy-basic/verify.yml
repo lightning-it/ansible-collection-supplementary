@@ -1,11 +1,44 @@
 ---
-- name: Verify dhcp deploy syntax coverage
+- name: Verify DHCP deploy render-only
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    dhcp_deploy_molecule_ephemeral_dir: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') | default('/tmp/lit-dhcp-basic', true) }}
+    dhcp_deploy_molecule_root: "{{ dhcp_deploy_molecule_ephemeral_dir }}/dhcp"
+    dhcp_deploy_molecule_config_path: "{{ dhcp_deploy_molecule_root }}/config/dhcpd.conf"
+    dhcp_deploy_molecule_lease_path: "{{ dhcp_deploy_molecule_root }}/state/dhcpd.leases"
+    dhcp_deploy_molecule_pod_path: "{{ dhcp_deploy_molecule_root }}/pods/dhcp.yml"
   tasks:
-    - name: Assert lit.supplementary.dhcp_deploy coverage stub ran
+    - name: Read rendered DHCP Podman kube-play files
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - "{{ dhcp_deploy_molecule_config_path }}"
+        - "{{ dhcp_deploy_molecule_lease_path }}"
+        - "{{ dhcp_deploy_molecule_pod_path }}"
+      register: dhcp_deploy_molecule_files
+
+    - name: Set rendered DHCP Podman kube-play file content
+      ansible.builtin.set_fact:
+        dhcp_deploy_molecule_config_content: "{{ dhcp_deploy_molecule_files.results[0].content | b64decode }}"
+        dhcp_deploy_molecule_lease_content: "{{ dhcp_deploy_molecule_files.results[1].content | b64decode }}"
+        dhcp_deploy_molecule_pod_content: "{{ dhcp_deploy_molecule_files.results[2].content | b64decode }}"
+
+    - name: Assert rendered DHCP Podman kube-play config and manifest
       ansible.builtin.assert:
         that:
-          - dhcp_deploy_molecule_coverage_mode | default('') == 'syntax_stub'
+          - "'authoritative;' in dhcp_deploy_molecule_config_content"
+          - "'range 192.0.2.100 192.0.2.150;' in dhcp_deploy_molecule_config_content"
+          - dhcp_deploy_molecule_lease_content == ''
+          - "'kind: Pod' in dhcp_deploy_molecule_pod_content"
+          - "'hostNetwork: true' in dhcp_deploy_molecule_pod_content"
+          - "'registry.example.com/infra/dhcpd:4.4' in dhcp_deploy_molecule_pod_content"
+          - "'NET_ADMIN' in dhcp_deploy_molecule_pod_content"
+          - "'NET_RAW' in dhcp_deploy_molecule_pod_content"
+          - "'NET_BIND_SERVICE' in dhcp_deploy_molecule_pod_content"
+          - "'/etc/dhcp/dhcpd.conf' in dhcp_deploy_molecule_pod_content"
+          - "'/var/lib/dhcp' in dhcp_deploy_molecule_pod_content"
+          - "'eth1' in dhcp_deploy_molecule_pod_content"
         quiet: true

@@ -1,35 +1,111 @@
 ---
-# Host install (RPM + systemd)
-dhcp_deploy_install_packages: true
-dhcp_deploy_run_as_user: "root"
-dhcp_deploy_run_as_group: "root"
-dhcp_deploy_config_owner: "{{ dhcp_deploy_run_as_user }}"
-dhcp_deploy_config_group: "{{ dhcp_deploy_run_as_group }}"
+# Pod basics
+dhcp_deploy_pod_name: "dhcp"
+dhcp_deploy_pod_manifest_path: "/etc/podman/pods/dhcp.yml"
+dhcp_deploy_image: ""
+dhcp_deploy_container_name: "{{ dhcp_deploy_pod_name }}-dhcp"
+
+# DHCP broadcast/relay behavior generally requires rootful host networking.
+dhcp_deploy_use_host_network: true
+dhcp_deploy_require_rootful: true
+dhcp_deploy_required_capabilities:
+  - NET_ADMIN
+  - NET_RAW
+  - NET_BIND_SERVICE
+dhcp_deploy_privileged: false
+dhcp_deploy_run_as_user: 0
+dhcp_deploy_run_as_group: 0
+dhcp_deploy_run_as_non_root: false
 
 # Host paths
-dhcp_deploy_host_config_dir: "/etc/dhcp"
+dhcp_deploy_host_config_dir: "/srv/dhcp/config"
 dhcp_deploy_host_config_path: "{{ dhcp_deploy_host_config_dir }}/dhcpd.conf"
-dhcp_deploy_host_data_dir: "/var/lib/dhcpd"
-dhcp_deploy_sysconfig_path: "/etc/sysconfig/dhcpd"
+dhcp_deploy_host_data_dir: "/srv/dhcp/state"
+dhcp_deploy_host_lease_path: "{{ dhcp_deploy_host_data_dir }}/dhcpd.leases"
+
+# Container paths
+dhcp_deploy_container_config_path: "/etc/dhcp/dhcpd.conf"
+dhcp_deploy_container_data_dir: "/var/lib/dhcp"
+dhcp_deploy_container_lease_path: "{{ dhcp_deploy_container_data_dir }}/dhcpd.leases"
+
+# DHCP runtime command. The image must provide `dhcpd` or override this list.
+dhcp_deploy_command:
+  - dhcpd
+dhcp_deploy_args:
+  - "-4"
+  - "-f"
+  - "-d"
+  - "--no-pid"
+  - "-cf"
+  - "{{ dhcp_deploy_container_config_path }}"
+  - "-lf"
+  - "{{ dhcp_deploy_container_lease_path }}"
 dhcp_deploy_interfaces: []
+dhcp_deploy_env_extra: {}
 
-# DHCP service
-dhcp_deploy_service_name: "dhcpd"
-dhcp_deploy_manage_service: false
-dhcp_deploy_manage_systemd: "{{ dhcp_deploy_manage_service }}"
-dhcp_deploy_systemd_unit_name: "{{ dhcp_deploy_service_name }}"
+# Production safety gate. Runtime deployment fails closed until every required
+# evidence flag below is true. Render-only test runs can still set
+# dhcp_deploy_skip_runtime=true.
+dhcp_deploy_production_ready: false
+dhcp_deploy_production_evidence:
+  rhel_first_validated: false
+  ubuntu_target_validated: false
+  l2_broadcast_validated: false
+  lease_persistence_validated: false
+  reboot_recovery_validated: false
+  renewal_validated: false
+  backup_failover_validated: false
+  no_rogue_dhcp_validated: false
+dhcp_deploy_production_evidence_reference: ""
 
-# Optional health check URL
-dhcp_deploy_health_url: ""
-dhcp_deploy_health_url_effective: "{{ dhcp_deploy_health_url }}"
-dhcp_deploy_validate_certs: true
+# Runtime preflight checks.
+dhcp_deploy_allow_unpinned_image: false
+dhcp_deploy_validate_interfaces: true
+dhcp_deploy_require_interface_link: true
+dhcp_deploy_validate_udp67_available: true
+dhcp_deploy_validate_native_service_absent: true
+dhcp_deploy_native_service_names:
+  - dhcpd
+  - isc-dhcp-server
+dhcp_deploy_validate_config_syntax: true
+dhcp_deploy_config_test_argv:
+  - podman
+  - run
+  - --rm
+  - --network
+  - none
+  - --user
+  - "0:0"
+  - --volume
+  - "{{ dhcp_deploy_host_config_path }}:{{ dhcp_deploy_container_config_path }}:ro"
+  - --volume
+  - "{{ dhcp_deploy_host_data_dir }}:{{ dhcp_deploy_container_data_dir }}:Z"
+  - --entrypoint
+  - "{{ dhcp_deploy_command | first | default('dhcpd') }}"
+  - "{{ dhcp_deploy_image }}"
+  - "-t"
+  - "-4"
+  - "-cf"
+  - "{{ dhcp_deploy_container_config_path }}"
+  - "-lf"
+  - "{{ dhcp_deploy_container_lease_path }}"
 
 # DHCP config content
 dhcp_deploy_config: ""
-dhcp_deploy_manage_config: false
+dhcp_deploy_manage_config: true
 
-# Deployment control
+# Lifecycle
+dhcp_deploy_manage_file_ownership: true
+dhcp_deploy_install_packages: true
+dhcp_deploy_packages:
+  - podman
+dhcp_deploy_manage_systemd: true
 dhcp_deploy_skip_runtime: false
 dhcp_deploy_skip_deploy: false
 dhcp_deploy_skip_config: false
 dhcp_deploy_skip_validate: false
+dhcp_deploy_validate_running: true
+
+# Internal handler flags
+dhcp_deploy_kubeplay_remove: false
+dhcp_deploy_kubeplay_run: false
