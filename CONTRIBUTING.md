@@ -141,6 +141,10 @@ sweeps, do them in a separate PR.
 
 - Versioning follows semantic versioning and `galaxy.yml` is the source of
   truth for the collection version.
+- Ansible collections do not use `semantic-release`: `feat:` and `fix:` commits
+  are useful PR conventions, but releases are explicit maintainer actions so the
+  collection changelog, `galaxy.yml` version, release branch, and Galaxy
+  publication stay aligned.
 - Release preparation is manual via the **Prepare collection release** workflow.
 - The workflow creates or updates a `release/vX.Y.Z` branch, runs
   `antsibull-changelog release`, bumps `galaxy.yml`, builds the collection, and

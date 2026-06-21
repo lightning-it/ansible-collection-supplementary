@@ -66,22 +66,29 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
 
 1. Ansible collection changelog handling MUST stay repository-based.
 2. NEVER replace Ansible collection changelog files with GitHub Release notes only.
-3. Use `antsibull-changelog` for collection changelogs:
+3. Ansible collection releases MUST NOT use `semantic-release`.
+4. `semantic-release` remains allowed for non-collection repositories only.
+5. If a repository has `galaxy.yml` and collection structure such as `roles/`, `plugins/`, or `playbooks/`,
+   treat it as an Ansible Collection repository.
+6. Shared release workflow logic belongs in `shared-assets`; do not duplicate large release workflows into
+   collection repositories.
+7. Use `antsibull-changelog` for collection changelogs:
    1. fragments live under `changelogs/fragments/`,
    2. generated changelog metadata lives in `changelogs/changelog.yaml`,
    3. generated release notes live in `CHANGELOG.rst`.
-4. Every user-visible feature, fix, deprecation, removal, security fix, or known issue MUST add a fragment under
+8. Every user-visible feature, fix, deprecation, removal, security fix, or known issue MUST add a fragment under
    `changelogs/fragments/<meaningful-name>.yml`.
-5. Normal feature/fix PRs MUST NOT manually edit generated changelog files:
+9. Normal feature/fix PRs MUST NOT manually edit generated changelog files:
    1. `changelogs/changelog.yaml`,
    2. `CHANGELOG.rst`,
    3. legacy `CHANGELOG.md` files where they still exist.
-6. Generated changelog files and `galaxy.yml` version bumps are release-PR changes only.
-7. Release preparation MUST happen on `release/vX.Y.Z` branches and open a PR into `main`.
-8. No workflow or agent may push release commits directly to `main`.
-9. GitHub Release notes are an additional publishing surface; they MUST be generated from or aligned with the
+10. Generated changelog files and `galaxy.yml` version bumps are release-PR changes only.
+11. Release preparation MUST happen on `release/vX.Y.Z` branches and open a PR into `main`.
+12. Publishing happens only after the release PR is merged into `main`.
+13. No workflow or agent may push release commits directly to `main`.
+14. GitHub Release notes are an additional publishing surface; they MUST be generated from or aligned with the
    repository changelog, not used as the only changelog.
-10. GitHub repository settings, branch protection, required checks, workflow permissions, labels, environments,
+15. GitHub repository settings, branch protection, required checks, workflow permissions, labels, environments,
     secrets, and release-bot permissions MUST be changed only through `github-management-lit`.
 
 ## 2.1 Production Review Standard (Community, Red Hat, Efficiency)
