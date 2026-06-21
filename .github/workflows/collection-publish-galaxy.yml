@@ -36,11 +36,19 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install "ansible-core==2.18.17"
 
-      # 4) Build the collection artifact (tarball) from the current source tree
+      # 4) Align galaxy.yml with the published release tag without committing to main.
+      - name: Set collection version from release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          python scripts/bump_galaxy_version.py "$version"
+
+      # 5) Build the collection artifact (tarball) from the current source tree
       - name: Build collection
         run: ansible-galaxy collection build --force
 
-      # 5) Publish the built tarball to Ansible Galaxy
+      # 6) Publish the built tarball to Ansible Galaxy
       #    Uses ANSIBLE_GALAXY_API_KEY secret for authentication.
       - name: Publish collection to Ansible Galaxy
         env:

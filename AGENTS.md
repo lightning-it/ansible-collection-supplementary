@@ -73,7 +73,7 @@ production readiness, Ansible Galaxy readiness, and Red Hat Ansible Automation P
 2. Keep `galaxy.yml` complete and accurate: namespace, name, version, README, description, repository, authors,
    license, tags, dependencies, and `build_ignore`.
 3. Keep `meta/runtime.yml` aligned with the supported Ansible range.
-4. Keep README, changelog/release notes, examples, role docs, and licensing suitable for publication.
+4. Keep README, GitHub Release notes, examples, role docs, and licensing suitable for publication.
 5. Ensure collection dependencies are declared once in `galaxy.yml` unless this guide documents an overlay exception.
 
 ### 2.1.2 Ansible Community Best Practices

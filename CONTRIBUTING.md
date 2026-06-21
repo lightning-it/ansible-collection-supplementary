@@ -17,8 +17,8 @@ This document applies to all `ansible-collection-*` repositories under
    refactors unless they are clearly part of the change description.
 
 3. **Document behaviour.**  
-   Update READMEs, role documentation, example playbooks, and changelog entries
-   when functionality changes. Explain _why_ as well as _what_.
+   Update READMEs, role documentation, and example playbooks when functionality
+   changes. Explain _why_ as well as _what_.
 
 4. **Respect the licence.**  
    All contributions are under `MIT`. New dependencies must be licence
@@ -84,7 +84,7 @@ Before opening a pull request:
 For collections using semantic-release:
 
 - [ ] Follow conventional commits (`feat:`, `fix:`, `chore:`, `docs:`) so the
-      release tooling can infer version bumps and changelog entries.
+      release tooling can infer version bumps and GitHub Release notes.
 
 ## Pull Request Expectations
 
