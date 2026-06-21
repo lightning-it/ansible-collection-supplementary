@@ -3,9 +3,9 @@
 name: Collection CI
 
 on:
-  # CI on pushes to main and version tags (v*)
+  # CI on pushes to integration/stable branches and version tags (v*)
   push:
-    branches: ["main"]
+    branches: ["develop", "main"]
     tags: ["v*"]
   # CI on all PRs
   pull_request:
