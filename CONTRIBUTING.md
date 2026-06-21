@@ -8,24 +8,24 @@ This document applies to all `ansible-collection-*` repositories under
 
 ## Ground Rules
 
-1. **Automate everything you can.**  
+1. **Automate everything you can.**
    Run the shared pre-commit hooks (`pre-commit run --all-files`) and ensure all
    GitHub Actions workflows are green before asking for review.
 
-2. **Keep changes scoped.**  
+2. **Keep changes scoped.**
    Focus each pull request on a single fix or feature. Avoid opportunistic
    refactors unless they are clearly part of the change description.
 
-3. **Document behaviour.**  
-   Update READMEs, role documentation, example playbooks, and changelog entries
-   when functionality changes. Explain _why_ as well as _what_.
+3. **Document behaviour.**
+   Update READMEs, role documentation, example playbooks, and changelog
+   fragments when functionality changes. Explain _why_ as well as _what_.
 
-4. **Respect the licence.**  
+4. **Respect the licence.**
    All contributions are under `MIT`. New dependencies must be licence
    compatible and, where relevant, documented in `requirements.yml` or
    `requirements.txt`.
 
-5. **No secrets or customer data.**  
+5. **No secrets or customer data.**
    Never commit credentials, tokens, or production configuration. Use CI
    variables, vaults, and environment variables instead.
 
@@ -51,18 +51,18 @@ Policy for certified-only requirement files:
 Without this, Renovate lookups for collections such as `ansible.controller` or
 `redhat.satellite` will fail in Mend-hosted mode when using offline tokens.
 
-## AI assistants / `agent.md`
+## AI assistants / `AGENTS.md`
 
 If you use AI coding assistants (e.g. ChatGPT, Copilot, Codex) for changes in
 this repository:
 
-- Make sure they follow the rules defined in `agent.md` at the repository root.
-- Always **load and apply** `agent.md` before asking the assistant to create or
+- Make sure they follow the rules defined in `AGENTS.md` at the repository root.
+- Always **load and apply** `AGENTS.md` before asking the assistant to create or
   modify roles, Molecule scenarios, CI workflows, or helper scripts.
 - Do not accept suggestions that:
   - hardcode collection names where they should be derived,
   - break existing patterns for roles, Molecule, or devtools integration,
-  - bypass linting or testing conventions described in `agent.md`.
+  - bypass linting or testing conventions described in `AGENTS.md`.
 
 In short: AI-generated changes are welcome, but they must conform to the same
 standards as handwritten code and follow the shared agent specification.
@@ -71,26 +71,61 @@ standards as handwritten code and follow the shared agent specification.
 
 Before opening a pull request:
 
-- [ ] Branch from `main`.  
-- [ ] Run `pre-commit install` once per clone, then `pre-commit run --all-files`.  
+- [ ] Branch from `main`.
+- [ ] Run `pre-commit install` once per clone, then `pre-commit run --all-files`.
 - [ ] Run `molecule test` for affected roles/scenarios (`devtools-molecule.sh` for
-      light scenarios, dedicated `*_heavy` scripts for Vagrant/VM-based tests).  
+      light scenarios, dedicated `*_heavy` scripts for Vagrant/VM-based tests).
 - [ ] Validate `ansible-galaxy collection build` if you touched `galaxy.yml`,
-      `meta/main.yml`, or collection layout.  
-- [ ] Update `README.md` and example playbooks when user-facing behaviour changes.  
-- [ ] Make sure GitHub Actions are green (Collection CI, Semantic Release dry-run
-      on PRs).  
+      `meta/main.yml`, or collection layout.
+- [ ] Add a changelog fragment for user-visible collection changes.
+- [ ] Update `README.md` and example playbooks when user-facing behaviour changes.
+- [ ] Make sure GitHub Actions are green (Collection CI and changelog checks).
 
-For collections using semantic-release:
+## Changelog Fragments
 
-- [ ] Follow conventional commits (`feat:`, `fix:`, `chore:`, `docs:`) so the
-      release tooling can infer version bumps and changelog entries.
+Lightning IT Ansible collections use the official Ansible collection changelog
+workflow with `antsibull-changelog`.
+
+Normal feature and fix PRs must add a fragment under:
+
+```text
+changelogs/fragments/<meaningful-name>.yml
+```
+
+Use one or more supported antsibull categories:
+
+```yaml
+---
+minor_changes:
+  - role_name - Add support for the new user-visible behavior.
+bugfixes:
+  - role_name - Fix idempotency when the target file already exists.
+security_fixes:
+  - role_name - Avoid logging sensitive token material.
+```
+
+Do not manually edit generated changelog files in normal feature or fix PRs:
+
+- `changelogs/changelog.yaml`
+- `CHANGELOG.rst`
+- legacy `CHANGELOG.md` files, where still present
+
+Generated changelog files are changed by release PRs from `release/vX.Y.Z`
+branches only.
+
+Fragment exceptions are allowed when a PR is documentation-only, CI-only,
+metadata-only, or test-only. Apply one of these labels when appropriate:
+
+- `skip-changelog`
+- `documentation`
+- `ci`
+- `tests`
 
 ## Pull Request Expectations
 
 Each pull request should include:
 
-- A concise title following conventional commits  
+- A concise title following conventional commits
   (e.g. `fix: address selinux idempotency`, `feat: add tf_runner role`).
 - A description covering:
   - the problem,
@@ -104,14 +139,21 @@ sweeps, do them in a separate PR.
 
 ## Release Process Highlights
 
-- Versioning is handled by **semantic-release** via GitHub Actions.
-- Do **not** create tags manually; tags are created by the release workflow on
-  merge to `main`.
-- Changelogs are generated automatically based on commit messages and the
-  configured semantic-release plugins.
-- Publishing to Ansible Galaxy (where configured) is done from CI
-  (e.g. `ansible-collection-*/.github/workflows/*publish-galaxy.yml`).
-  Do not upload local builds manually.
+- Versioning follows semantic versioning and `galaxy.yml` is the source of
+  truth for the collection version.
+- Ansible collections do not use `semantic-release`: `feat:` and `fix:` commits
+  are useful PR conventions, but releases are explicit maintainer actions so the
+  collection changelog, `galaxy.yml` version, release branch, and Galaxy
+  publication stay aligned.
+- Release preparation is manual via the **Prepare collection release** workflow.
+- The workflow creates or updates a `release/vX.Y.Z` branch, runs
+  `antsibull-changelog release`, bumps `galaxy.yml`, builds the collection, and
+  opens a release PR into `main`.
+- Do **not** push release commits directly to `main`.
+- GitHub Release notes are generated from the repository changelog content after
+  the release PR is merged.
+- Publishing to Ansible Galaxy is done from CI only when explicitly enabled and
+  `GALAXY_API_TOKEN` is configured. Do not upload local builds manually.
 
 ## Tooling & Dev Environment
 
@@ -122,7 +164,7 @@ Collections assume the following tooling:
 - **ee-wunder-devtools-ubi9** container as the canonical dev/CI environment:
   - Terraform, tflint, terraform-docs,
   - ansible-core, ansible-lint, Molecule,
-  - semantic-release + Node toolchain.
+  - antsibull-changelog and collection build tooling.
 - Local scripts under `scripts/` (e.g. `devtools-ansible-lint.sh`,
   `devtools-molecule.sh`, heavy scenarios like `devtools-molecule-*_heavy.sh`)
   are part of the expected workflow.

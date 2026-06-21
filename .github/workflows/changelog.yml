@@ -1,0 +1,16 @@
+# yamllint disable rule:truthy
+---
+name: Changelog
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  changelog:
+    uses: lightning-it/shared-assets/.github/workflows/ansible-collection-changelog-validate.yml@main
+    with:
+      require_fragment: true

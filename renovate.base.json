@@ -18,6 +18,17 @@
   "prConcurrentLimit": 5,
   "packageRules": [
     {
+      "description": "Automerge safe non-major updates into develop after CI passes",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest", "pinDigest"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Require manual approval for major updates",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
       "groupName": "ansible-core (2.18.x only)",
       "matchPackageNames": ["ansible-core"],
       "allowedVersions": "/^2\\.18\\./"
@@ -52,7 +63,7 @@
         "/^scripts\\/.*\\.sh$/",
         "/^README\\.md$/",
         "/^CONTRIBUTING\\.md$/",
-        "/^AGENT\\.md$/",
+        "/^AGENTS\\.md$/",
         "/^\\.github\\/workflows\\/.*\\.ya?ml$/",
         "/^\\.pre-commit-config\\.ya?ml$/"
       ],
