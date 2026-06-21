@@ -144,7 +144,11 @@ jobs:
           ansible-galaxy collection build --force
 
           tarball="$(ls ./*.tar.gz)"
-          summary="$(awk '/^v'"$VERSION"'$/{flag=1; print; next} /^v[0-9]/{if(flag) exit} flag {print}' CHANGELOG.rst || true)"
+          summary="$(
+            awk \
+              '/^v'"$VERSION"'$/{flag=1; print; next} /^v[0-9]/{if(flag) exit} flag {print}' \
+              CHANGELOG.rst || true
+          )"
 
           git add galaxy.yml changelogs CHANGELOG.rst
           git commit -m "chore(release): prepare v${VERSION}"
@@ -171,9 +175,20 @@ jobs:
             fi
           } > "$body_file"
 
-          existing="$(gh pr list --base "$TARGET_BRANCH" --head "$RELEASE_BRANCH" --state open --json url --jq '.[0].url')"
+          existing="$(
+            gh pr list \
+              --base "$TARGET_BRANCH" \
+              --head "$RELEASE_BRANCH" \
+              --state open \
+              --json url \
+              --jq '.[0].url'
+          )"
           if [ -n "$existing" ]; then
             gh pr edit "$existing" --title "Release v${VERSION}" --body-file "$body_file"
           else
-            gh pr create --base "$TARGET_BRANCH" --head "$RELEASE_BRANCH" --title "Release v${VERSION}" --body-file "$body_file"
+            gh pr create \
+              --base "$TARGET_BRANCH" \
+              --head "$RELEASE_BRANCH" \
+              --title "Release v${VERSION}" \
+              --body-file "$body_file"
           fi
