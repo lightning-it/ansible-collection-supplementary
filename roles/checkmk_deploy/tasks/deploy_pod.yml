@@ -8,12 +8,93 @@
     mode: "{{ item.mode }}"
   loop:
     - path: "{{ checkmk_deploy_host_data_dir }}"
-      mode: '0750'
+      mode: "{{ checkmk_deploy_host_data_mode }}"
     - path: "{{ checkmk_deploy_config_dir }}"
       mode: '0750'
     - path: "{{ checkmk_deploy_pod_manifest_path | dirname }}"
       mode: '0755'
   when: item.path | default('') | length > 0
+  tags:
+    - deployment
+
+- name: Check Checkmk site directory
+  ansible.builtin.stat:
+    path: "{{ checkmk_deploy_host_data_dir }}/{{ checkmk_deploy_site_name }}"
+  register: checkmk_deploy_site_dir_stat
+  changed_when: false
+  when: checkmk_deploy_repair_incomplete_site | bool
+  tags:
+    - deployment
+
+- name: Check required Checkmk site files
+  ansible.builtin.stat:
+    path: "{{ checkmk_deploy_host_data_dir }}/{{ checkmk_deploy_site_name }}/{{ item }}"
+  loop: "{{ checkmk_deploy_required_site_files }}"
+  register: checkmk_deploy_required_site_file_stats
+  changed_when: false
+  when:
+    - checkmk_deploy_repair_incomplete_site | bool
+    - checkmk_deploy_site_dir_stat.stat.exists | default(false) | bool
+  tags:
+    - deployment
+
+- name: Mark incomplete Checkmk site for repair
+  ansible.builtin.set_fact:
+    checkmk_deploy_incomplete_site: >-
+      {{
+        checkmk_deploy_site_dir_stat.stat.exists | default(false) | bool
+        and (
+          checkmk_deploy_required_site_file_stats.results | default([])
+          | selectattr('stat.exists', 'equalto', false)
+          | list
+          | length
+        ) > 0
+      }}
+  changed_when: false
+  when: checkmk_deploy_repair_incomplete_site | bool
+  tags:
+    - deployment
+
+- name: Stop Checkmk pod before repairing incomplete site
+  ansible.builtin.systemd:
+    name: "{{ checkmk_deploy_systemd_unit_name }}"
+    state: stopped
+  failed_when: false
+  when:
+    - checkmk_deploy_incomplete_site | default(false) | bool
+    - checkmk_deploy_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+  tags:
+    - deployment
+
+- name: Remove stale Checkmk containers before repairing incomplete site
+  ansible.builtin.command:
+    argv:
+      - podman
+      - rm
+      - --force
+      - "{{ item }}"
+  loop:
+    - "{{ checkmk_deploy_container_name }}"
+    - "{{ checkmk_deploy_pod_name }}-{{ checkmk_deploy_container_name }}"
+  register: checkmk_deploy_remove_stale_containers
+  changed_when: checkmk_deploy_remove_stale_containers.rc == 0
+  failed_when: false
+  when: checkmk_deploy_incomplete_site | default(false) | bool
+  tags:
+    - deployment
+
+- name: Move incomplete Checkmk site aside
+  ansible.builtin.command:
+    argv:
+      - mv
+      - "{{ checkmk_deploy_host_data_dir }}/{{ checkmk_deploy_site_name }}"
+      - "{{ checkmk_deploy_host_data_dir }}/{{ checkmk_deploy_site_name }}.incomplete.{{ ansible_date_time.epoch }}"
+  when: checkmk_deploy_incomplete_site | default(false) | bool
+  changed_when: true
+  notify:
+    - Recreate Checkmk pod
+    - Run Checkmk pod
   tags:
     - deployment
 

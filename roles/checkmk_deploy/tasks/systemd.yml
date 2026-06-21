@@ -23,7 +23,15 @@
       ansible.builtin.systemd:
         name: "podman-kube@{{ checkmk_deploy_systemd_name.stdout }}.service"
         enabled: true
-        state: started
+        state: >-
+          {{
+            'restarted'
+            if (
+              checkmk_deploy_kubeplay_remove | default(false) | bool
+              or checkmk_deploy_kubeplay_run | default(false) | bool
+            )
+            else 'started'
+          }}
         daemon_reload: true
 
     - name: Wait until Checkmk endpoint is reachable

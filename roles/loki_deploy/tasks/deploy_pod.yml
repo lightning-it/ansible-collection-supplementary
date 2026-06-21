@@ -8,7 +8,9 @@
     mode: "{{ item.mode }}"
   loop:
     - path: "{{ loki_deploy_host_data_dir }}"
-      mode: '0750'
+      owner: "{{ loki_deploy_host_data_owner }}"
+      group: "{{ loki_deploy_host_data_group }}"
+      mode: "{{ loki_deploy_host_data_mode }}"
     - path: "{{ loki_deploy_config_dir }}"
       mode: '0750'
     - path: "{{ loki_deploy_pod_manifest_path | dirname }}"

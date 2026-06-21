@@ -100,7 +100,7 @@
       become: false
       ansible.builtin.command: >-
         ansible-vault view {{ vault_bootstrap_controller_tmp.path }}/vault-init.yml.vault
-      register: vault_bootstrap_init_view
+      register: vault_bootstrap_init_view_explicit
       changed_when: false
       failed_when: false
       environment:
@@ -115,9 +115,38 @@
       become: false
       ansible.builtin.command: >-
         ansible-vault view {{ vault_bootstrap_controller_tmp.path }}/vault-init.yml.vault
-      register: vault_bootstrap_init_view
+      register: vault_bootstrap_init_view_default
       changed_when: false
       failed_when: false
+      when: >-
+        vault_bootstrap_init_view_explicit is not defined
+        or vault_bootstrap_init_view_explicit is skipped
+        or vault_bootstrap_init_view_explicit.rc | default(1) != 0
+
+    - name: Select decrypted init file view
+      ansible.builtin.set_fact:
+        vault_bootstrap_init_view: >-
+          {{
+            vault_bootstrap_init_view_explicit
+            if (
+              vault_bootstrap_init_view_explicit is defined
+              and not (vault_bootstrap_init_view_explicit is skipped)
+              and vault_bootstrap_init_view_explicit.rc | default(1) == 0
+            )
+            else vault_bootstrap_init_view_default
+          }}
+      changed_when: false
+      no_log: true
+      when: >-
+        (
+          vault_bootstrap_init_view_explicit is defined
+          and not (vault_bootstrap_init_view_explicit is skipped)
+        )
+        or
+        (
+          vault_bootstrap_init_view_default is defined
+          and not (vault_bootstrap_init_view_default is skipped)
+        )
 
     - name: Parse init file and expose facts for follow-on tasks/roles
       ansible.builtin.set_fact:

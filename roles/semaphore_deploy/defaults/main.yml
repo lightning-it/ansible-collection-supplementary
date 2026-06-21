@@ -90,6 +90,8 @@ semaphore_deploy_vault_role_id: "{{ ansible_hashi_vault_role_id | default('', tr
 semaphore_deploy_vault_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"
 semaphore_deploy_vault_read_before_generate: true
 semaphore_deploy_vault_store_admin_password: true
+semaphore_deploy_vault_store_generated_secrets: true
+semaphore_deploy_vault_remove_local_secret_file: true
 semaphore_deploy_vault_auth_token: "{{ semaphore_deploy_vault_token | default('', true) | trim }}"
 semaphore_deploy_vault_auth_role_id: "{{ semaphore_deploy_vault_role_id | default('', true) | trim }}"
 semaphore_deploy_vault_auth_secret_id: "{{ semaphore_deploy_vault_secret_id | default('', true) | trim }}"
@@ -103,6 +105,16 @@ semaphore_deploy_vault_auth_ok: >-
       (semaphore_deploy_vault_auth_role_id | length > 0)
       and (semaphore_deploy_vault_auth_secret_id | length > 0)
     )
+  }}
+semaphore_deploy_postgres_vault_kv_mount: >-
+  {{
+    postgres_deploy_vault_kv_mount
+    | default(semaphore_deploy_vault_kv_mount, true)
+  }}
+semaphore_deploy_postgres_vault_kv_path: >-
+  {{
+    postgres_deploy_vault_kv_path
+    | default('', true)
   }}
 
 # Lifecycle
