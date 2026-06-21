@@ -5,7 +5,10 @@
   gather_facts: false
   vars:
     incus_esxi_image_molecule_ephemeral_dir: >-
-      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') | default('/tmp/lit-incus-esxi-image-basic', true) }}
+      {{
+        lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY')
+        | default('/tmp/lit-incus-esxi-image-basic', true)
+      }}
     incus_esxi_image_molecule_root: "{{ incus_esxi_image_molecule_ephemeral_dir }}/incus-esxi-image"
   tasks:
     - name: Check fake nested ESXi image alias

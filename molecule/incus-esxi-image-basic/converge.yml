@@ -5,7 +5,10 @@
   gather_facts: false
   vars:
     incus_esxi_image_molecule_ephemeral_dir: >-
-      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') | default('/tmp/lit-incus-esxi-image-basic', true) }}
+      {{
+        lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY')
+        | default('/tmp/lit-incus-esxi-image-basic', true)
+      }}
     incus_esxi_image_molecule_root: "{{ incus_esxi_image_molecule_ephemeral_dir }}/incus-esxi-image"
     incus_esxi_image_molecule_bin: "{{ incus_esxi_image_molecule_root }}/bin/incus"
     incus_esxi_image_molecule_metadata: "{{ incus_esxi_image_molecule_root }}/esxi-metadata.tar.xz"

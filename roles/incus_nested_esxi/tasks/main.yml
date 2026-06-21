@@ -167,7 +167,12 @@
   changed_when: false
   failed_when: false
   until: incus_nested_esxi_api_wait.status | default(0) in [200, 301, 302, 401, 403, 404]
-  retries: "{{ ((incus_nested_esxi_wait_timeout | int) / (incus_nested_esxi_wait_delay | int)) | round(0, 'ceil') | int }}"
+  retries: >-
+    {{
+      ((incus_nested_esxi_wait_timeout | int) / (incus_nested_esxi_wait_delay | int))
+      | round(0, 'ceil')
+      | int
+    }}
   delay: "{{ incus_nested_esxi_wait_delay | int }}"
   tags:
     - incus_nested_esxi_present

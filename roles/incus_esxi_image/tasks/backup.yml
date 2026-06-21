@@ -57,7 +57,11 @@
       {{
         incus_esxi_image_base_argv
         + ['import']
-        + (['--storage', incus_esxi_image_backup_storage_pool] if incus_esxi_image_backup_storage_pool | trim | length > 0 else [])
+        + (
+          ['--storage', incus_esxi_image_backup_storage_pool]
+          if incus_esxi_image_backup_storage_pool | trim | length > 0
+          else []
+        )
         + [incus_esxi_image_backup, incus_esxi_image_backup_instance_name]
       }}
   become: "{{ incus_esxi_image_command_user | trim | length > 0 }}"
