@@ -58,6 +58,8 @@ keycloak_deploy_health_url_effective: >-
 
 # Keycloak app config
 keycloak_deploy_admin_user: "admin"
+keycloak_deploy_run_user_uid: "1000"
+keycloak_deploy_run_user_gid: "1000"
 keycloak_deploy_env_extra: {}
 keycloak_deploy_extra_start_args: []
 keycloak_deploy_hostname: ""
@@ -70,14 +72,42 @@ keycloak_deploy_db_name: "keycloak"
 keycloak_deploy_db_user: "keycloak"
 keycloak_deploy_db_host: "{{ keycloak_deploy_postgres_host_ip }}"
 keycloak_deploy_db_port: "{{ postgres_deploy_port | default(5432) }}"
+keycloak_deploy_postgres_wait_timeout: 120
+keycloak_deploy_postgres_wait_delay: 0
+keycloak_deploy_prestart_health_timeout: 5
 
-# Secrets (preferred: inventory/Vault; fallback: generated once)
+# Secrets (preferred: inventory/Ansible Vault or HC Vault)
 keycloak_deploy_db_password: ""
 keycloak_deploy_admin_password: ""
 keycloak_deploy_generate_secrets: true
 keycloak_deploy_store_generated_secrets: true
 keycloak_deploy_generated_db_password_length: 32
 keycloak_deploy_generated_admin_password_length: 32
+keycloak_deploy_allow_local_secret_files: false
+keycloak_deploy_vault_address: "{{ vault_address | default('') }}"
+keycloak_deploy_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') }}"
+keycloak_deploy_vault_kv_path: "{{ inventory_hostname }}/keycloak/secrets"
+keycloak_deploy_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
+keycloak_deploy_vault_token: "{{ vault_token | default('', true) }}"
+keycloak_deploy_vault_role_id: "{{ ansible_hashi_vault_role_id | default('', true) }}"
+keycloak_deploy_vault_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"
+keycloak_deploy_vault_read_before_generate: true
+keycloak_deploy_vault_store_generated_secrets: true
+keycloak_deploy_vault_remove_local_secret_file: true
+keycloak_deploy_vault_auth_token: "{{ keycloak_deploy_vault_token | default('', true) | trim }}"
+keycloak_deploy_vault_auth_role_id: "{{ keycloak_deploy_vault_role_id | default('', true) | trim }}"
+keycloak_deploy_vault_auth_secret_id: "{{ keycloak_deploy_vault_secret_id | default('', true) | trim }}"
+keycloak_deploy_vault_use_token: "{{ (keycloak_deploy_vault_auth_token | length) > 0 }}"
+keycloak_deploy_vault_auth_method: >-
+  {{ 'token' if (keycloak_deploy_vault_use_token | bool) else 'approle' }}
+keycloak_deploy_vault_auth_ok: >-
+  {{
+    (keycloak_deploy_vault_auth_token | length > 0)
+    or (
+      (keycloak_deploy_vault_auth_role_id | length > 0)
+      and (keycloak_deploy_vault_auth_secret_id | length > 0)
+    )
+  }}
 
 # Lifecycle
 keycloak_deploy_install_packages: true

@@ -1,0 +1,3 @@
+---
+coredns_deploy_packages:
+  - podman

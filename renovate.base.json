@@ -7,15 +7,27 @@
     ":semanticCommitType(chore)",
     ":semanticCommitScope(deps)"
   ],
-  "renovate-config-presets": {
+  "renovate-config": {
     "enabled": false
   },
   "labels": ["dependencies", "renovate"],
+  "baseBranchPatterns": ["develop"],
   "timezone": "UTC",
   "schedule": [],
   "rebaseWhen": "conflicted",
   "prConcurrentLimit": 5,
   "packageRules": [
+    {
+      "description": "Automerge safe non-major updates into develop after CI passes",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest", "pinDigest"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Require manual approval for major updates",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
     {
       "groupName": "ansible-core (2.18.x only)",
       "matchPackageNames": ["ansible-core"],
@@ -51,7 +63,7 @@
         "/^scripts\\/.*\\.sh$/",
         "/^README\\.md$/",
         "/^CONTRIBUTING\\.md$/",
-        "/^AGENT\\.md$/",
+        "/^AGENTS\\.md$/",
         "/^\\.github\\/workflows\\/.*\\.ya?ml$/",
         "/^\\.pre-commit-config\\.ya?ml$/"
       ],

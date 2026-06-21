@@ -1,0 +1,24 @@
+---
+- name: Converge keycloak cac syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    keycloak_cac_molecule_execute_role: false
+    keycloak_cac_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/keycloak-cac-coverage-mode
+  tasks:
+    - name: Import lit.supplementary.keycloak_cac for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.keycloak_cac
+      when: keycloak_cac_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.keycloak_cac Molecule coverage mode
+      ansible.builtin.set_fact:
+        keycloak_cac_molecule_coverage_mode: syntax_stub
+
+    - name: Persist lit.supplementary.keycloak_cac Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ keycloak_cac_molecule_marker_path }}"
+        content: "syntax_stub\n"
+        mode: "0644"

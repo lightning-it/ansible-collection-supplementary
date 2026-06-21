@@ -3,8 +3,10 @@
 name: Promote develop to main
 
 on:
+  push:
+    branches: ["develop"]
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "17 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -23,20 +25,23 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Create or update promotion PR and enable auto-merge
+      - name: Create or update promotion PR
         env:
-          ACTIONS_TOKEN: ${{ github.token }}
           RELEASE_TOKEN: ${{ secrets.LITRELEASEBOT_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
           if [ -z "${RELEASE_TOKEN:-}" ]; then
-            echo "LITRELEASEBOT_TOKEN is required to create PRs and enable auto-merge."
+            echo "LITRELEASEBOT_TOKEN is required to create or update"
+            echo "promotion PRs."
             exit 1
           fi
 
-          if ! git ls-remote --exit-code --heads origin develop >/dev/null 2>&1; then
+          if ! git ls-remote \
+            --exit-code \
+            --heads origin develop >/dev/null 2>&1
+          then
             echo "develop branch does not exist; skipping promotion."
             exit 0
           fi
@@ -49,9 +54,10 @@ jobs:
           fi
 
           title="chore(release): promote develop to main"
-          body=$'Weekly promotion PR from `develop` to `main`.\n\n'
-          body+=$'This PR must merge only after required checks pass. '
-          body+=$'GitHub auto-merge is enabled by this workflow.'
+          body=$'Promotion PR from `develop` to `main`.\n\n'
+          body+=$'Review this PR when Renovate updates have accumulated '
+          body+=$'in `develop`. '
+          body+=$'Merge manually after required checks pass.'
 
           pr_url="$(GH_TOKEN="$RELEASE_TOKEN" gh pr list \
             --repo "$REPO" \
@@ -74,17 +80,3 @@ jobs:
               --title "$title" \
               --body "$body"
           fi
-
-          approved_count="$(GH_TOKEN="$ACTIONS_TOKEN" gh pr view "$pr_url" \
-            --repo "$REPO" \
-            --json reviews \
-            --jq '[.reviews[] | select(.author.login == "github-actions[bot]" and .state == "APPROVED")] | length')"
-
-          if [ "$approved_count" -eq 0 ]; then
-            GH_TOKEN="$ACTIONS_TOKEN" gh pr review "$pr_url" \
-              --repo "$REPO" \
-              --approve \
-              --body "Approved trusted weekly develop-to-main promotion created by automation."
-          fi
-
-          GH_TOKEN="$RELEASE_TOKEN" gh pr merge "$pr_url" --repo "$REPO" --auto --merge

@@ -1,44 +1,50 @@
 ---
-- name: Include OS-specific variables
-  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
-  when: ansible_os_family == 'RedHat'
-
-- name: Deploy DHCP runtime
+- name: Deploy DHCP Podman kube-play runtime
   when:
     - not dhcp_deploy_skip_runtime | bool
     - not dhcp_deploy_skip_deploy | bool
   block:
     - name: Ensure required packages are installed
-      ansible.builtin.include_tasks: install_packages.yml
+      ansible.builtin.package:
+        name: "{{ dhcp_deploy_packages }}"
+        state: present
       when: dhcp_deploy_install_packages | bool
       tags:
         - install
 
-    - name: Deploy DHCP configuration
-      ansible.builtin.include_tasks: deploy_config.yml
+    - name: Validate rootful Podman runtime
+      ansible.builtin.include_tasks: validate_rootful.yml
+      when: dhcp_deploy_require_rootful | bool
+      tags:
+        - validate
+
+    - name: Run DHCP Podman kube-play production preflight
+      ansible.builtin.include_tasks: preflight.yml
+      tags:
+        - validate
+        - preflight
+
+    - name: Deploy DHCP Podman kube-play pod
+      ansible.builtin.include_tasks: deploy_pod.yml
       tags:
         - deployment
 
-    - name: Manage DHCP systemd unit
+    - name: Manage DHCP Podman kube-play systemd unit
       ansible.builtin.include_tasks: systemd.yml
       when: dhcp_deploy_manage_systemd | bool
       tags:
         - systemd
 
-    - name: Wait until DHCP health endpoint is reachable (non-systemd)
-      ansible.builtin.uri:
-        url: "{{ dhcp_deploy_health_url_effective }}"
-        method: GET
-        validate_certs: "{{ dhcp_deploy_validate_certs }}"
-      register: dhcp_deploy_health
-      until: dhcp_deploy_health.status == 200
-      retries: 30
-      delay: 5
-      changed_when: false
-      failed_when: dhcp_deploy_health is failed or dhcp_deploy_health.status != 200
-      when:
-        - not dhcp_deploy_manage_systemd | bool
-        - dhcp_deploy_health_url_effective | default('') | length > 0
+    - name: Validate DHCP Podman kube-play runtime
+      ansible.builtin.include_tasks: validate.yml
+      when: not dhcp_deploy_skip_validate | bool
       tags:
-        - deployment
-        - api
+        - validate
+
+- name: Render DHCP Podman kube-play files without runtime
+  ansible.builtin.include_tasks: deploy_pod.yml
+  when:
+    - dhcp_deploy_skip_runtime | bool
+    - not dhcp_deploy_skip_deploy | bool
+  tags:
+    - deployment

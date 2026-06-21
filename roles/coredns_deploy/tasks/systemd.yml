@@ -117,7 +117,7 @@
             'restarted'
             if (
               (coredns_deploy_pod_manifest is defined and coredns_deploy_pod_manifest.changed)
-              or (coredns_deploy_corefile is defined and coredns_deploy_corefile.changed)
+              or (coredns_deploy_corefile_render is defined and coredns_deploy_corefile_render.changed)
               or (coredns_deploy_force_restart | default(false))
             )
             else 'started'

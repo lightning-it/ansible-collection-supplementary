@@ -130,6 +130,44 @@
   tags:
     - config
 
+- name: Copy provided TLS certificate file
+  ansible.builtin.copy:
+    src: "{{ nginx_config_tls_certificate_file_source }}"
+    dest: "{{ nginx_config_tls_certificate_host_path }}"
+    owner: "{{ nginx_deploy_run_as_user }}"
+    group: "{{ nginx_deploy_run_as_group }}"
+    mode: '0644'
+    remote_src: "{{ nginx_config_tls_file_remote_src }}"
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'file'
+    - nginx_config_tls_certificate_file_source | default('', true) | trim | length > 0
+    - not ansible_check_mode
+  notify: Reload nginx
+  tags:
+    - config
+
+- name: Copy provided TLS private key file
+  ansible.builtin.copy:
+    src: "{{ nginx_config_tls_certificate_key_file_source }}"
+    dest: "{{ nginx_config_tls_certificate_key_host_path }}"
+    owner: "{{ nginx_deploy_run_as_user }}"
+    group: "{{ nginx_deploy_run_as_group }}"
+    mode: '0600'
+    remote_src: "{{ nginx_config_tls_file_remote_src }}"
+  no_log: "{{ nginx_config_tls_no_log }}"
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'file'
+    - nginx_config_tls_certificate_key_file_source | default('', true) | trim | length > 0
+    - not ansible_check_mode
+  notify: Reload nginx
+  tags:
+    - config
+
 - name: Read TLS certificate from Vault KV2
   delegate_to: localhost
   become: false
@@ -163,7 +201,7 @@
   when:
     - not nginx_deploy_skip_config | bool
     - nginx_config_has_force_https_vhosts | bool
-    - nginx_config_tls_source == 'vault'
+    - nginx_config_tls_source in ['vault', 'file']
   tags:
     - config
 
@@ -176,7 +214,7 @@
   when:
     - not nginx_deploy_skip_config | bool
     - nginx_config_has_force_https_vhosts | bool
-    - nginx_config_tls_source == 'vault'
+    - nginx_config_tls_source in ['vault', 'file']
   tags:
     - config
 
@@ -185,20 +223,20 @@
     nginx_config_vault_cert_ca_chain_stored: >-
       {{
         (
-          nginx_config_vault_cert_data.ca_chain
+          nginx_config_vault_cert_data.get('ca_chain')
           if (
-            nginx_config_vault_cert_data.ca_chain is sequence
-            and nginx_config_vault_cert_data.ca_chain is not string
+            nginx_config_vault_cert_data.get('ca_chain') is sequence
+            and nginx_config_vault_cert_data.get('ca_chain') is not string
           )
           else (
-            [nginx_config_vault_cert_data.ca_chain | string]
+            [nginx_config_vault_cert_data.get('ca_chain') | string]
             if (
-              nginx_config_vault_cert_data.ca_chain is defined
-              and (nginx_config_vault_cert_data.ca_chain | string | trim | length > 0)
+              nginx_config_vault_cert_data.get('ca_chain') is not none
+              and (nginx_config_vault_cert_data.get('ca_chain') | string | trim | length > 0)
             )
             else (
-              [nginx_config_vault_cert_data.issuing_ca]
-              if (nginx_config_vault_cert_data.issuing_ca | default('', true) | trim | length > 0)
+              [nginx_config_vault_cert_data.get('issuing_ca')]
+              if (nginx_config_vault_cert_data.get('issuing_ca') | default('', true) | trim | length > 0)
               else []
             )
           )
@@ -213,7 +251,63 @@
   when:
     - not nginx_deploy_skip_config | bool
     - nginx_config_has_force_https_vhosts | bool
-    - nginx_config_tls_source == 'vault'
+    - nginx_config_tls_source in ['vault', 'file']
+  tags:
+    - config
+
+- name: Check whether local TLS certificate exists
+  ansible.builtin.stat:
+    path: "{{ nginx_config_tls_certificate_host_path }}"
+  register: nginx_config_local_tls_certificate_stat
+  changed_when: false
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source in ['vault', 'file']
+  tags:
+    - config
+
+- name: Check whether local TLS private key exists
+  ansible.builtin.stat:
+    path: "{{ nginx_config_tls_certificate_key_host_path }}"
+  register: nginx_config_local_tls_key_stat
+  changed_when: false
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source in ['vault', 'file']
+  tags:
+    - config
+
+- name: Set local TLS certificate presence flag
+  ansible.builtin.set_fact:
+    nginx_config_local_tls_present: >-
+      {{
+        (nginx_config_local_tls_certificate_stat.stat.exists | default(false))
+        and
+        (nginx_config_local_tls_key_stat.stat.exists | default(false))
+      }}
+  changed_when: false
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source in ['vault', 'file']
+  tags:
+    - config
+
+- name: Ensure local TLS files are present when source=file
+  ansible.builtin.assert:
+    that:
+      - nginx_config_local_tls_present | default(false) | bool
+    fail_msg: >-
+      nginx_config_tls_source=file requires certificate and key files at
+      nginx_config_tls_certificate_host_path and
+      nginx_config_tls_certificate_key_host_path, or source files to copy.
+    quiet: true
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'file'
   tags:
     - config
 
@@ -298,46 +392,6 @@
       }}
   changed_when: false
   no_log: "{{ nginx_config_tls_no_log }}"
-  when:
-    - not nginx_deploy_skip_config | bool
-    - nginx_config_has_force_https_vhosts | bool
-    - nginx_config_tls_source == 'vault'
-  tags:
-    - config
-
-- name: Check whether local TLS certificate exists
-  ansible.builtin.stat:
-    path: "{{ nginx_config_tls_certificate_host_path }}"
-  register: nginx_config_local_tls_certificate_stat
-  changed_when: false
-  when:
-    - not nginx_deploy_skip_config | bool
-    - nginx_config_has_force_https_vhosts | bool
-    - nginx_config_tls_source == 'vault'
-  tags:
-    - config
-
-- name: Check whether local TLS private key exists
-  ansible.builtin.stat:
-    path: "{{ nginx_config_tls_certificate_key_host_path }}"
-  register: nginx_config_local_tls_key_stat
-  changed_when: false
-  when:
-    - not nginx_deploy_skip_config | bool
-    - nginx_config_has_force_https_vhosts | bool
-    - nginx_config_tls_source == 'vault'
-  tags:
-    - config
-
-- name: Set local TLS certificate presence flag
-  ansible.builtin.set_fact:
-    nginx_config_local_tls_present: >-
-      {{
-        (nginx_config_local_tls_certificate_stat.stat.exists | default(false))
-        and
-        (nginx_config_local_tls_key_stat.stat.exists | default(false))
-      }}
-  changed_when: false
   when:
     - not nginx_deploy_skip_config | bool
     - nginx_config_has_force_https_vhosts | bool
@@ -452,20 +506,20 @@
     nginx_config_vault_generated_ca_chain: >-
       {{
         (
-          nginx_config_vault_generated_cert_data.ca_chain
+          nginx_config_vault_generated_cert_data.get('ca_chain')
           if (
-            nginx_config_vault_generated_cert_data.ca_chain is sequence
-            and nginx_config_vault_generated_cert_data.ca_chain is not string
+            nginx_config_vault_generated_cert_data.get('ca_chain') is sequence
+            and nginx_config_vault_generated_cert_data.get('ca_chain') is not string
           )
           else (
-            [nginx_config_vault_generated_cert_data.ca_chain | string]
+            [nginx_config_vault_generated_cert_data.get('ca_chain') | string]
             if (
-              nginx_config_vault_generated_cert_data.ca_chain is defined
-              and (nginx_config_vault_generated_cert_data.ca_chain | string | trim | length > 0)
+              nginx_config_vault_generated_cert_data.get('ca_chain') is not none
+              and (nginx_config_vault_generated_cert_data.get('ca_chain') | string | trim | length > 0)
             )
             else (
-              [nginx_config_vault_generated_cert_data.issuing_ca]
-              if (nginx_config_vault_generated_cert_data.issuing_ca | default('', true) | trim | length > 0)
+              [nginx_config_vault_generated_cert_data.get('issuing_ca')]
+              if (nginx_config_vault_generated_cert_data.get('issuing_ca') | default('', true) | trim | length > 0)
               else []
             )
           )

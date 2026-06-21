@@ -1,0 +1,39 @@
+---
+- name: Manage Alloy systemd unit
+  when:
+    - alloy_deploy_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+    - not ansible_check_mode
+  tags:
+    - systemd
+  block:
+    - name: Escape kube play manifest path
+      ansible.builtin.command:
+        cmd: "systemd-escape {{ alloy_deploy_pod_manifest_path }}"
+      register: alloy_deploy_systemd_name
+      changed_when: false
+
+    - name: Ensure podman-kube drop-in directory exists
+      ansible.builtin.file:
+        path: "/etc/systemd/system/podman-kube@{{ alloy_deploy_systemd_name.stdout }}.service.d"
+        state: directory
+        mode: '0755'
+
+    - name: Enable and start Podman kube systemd unit
+      ansible.builtin.systemd:
+        name: "podman-kube@{{ alloy_deploy_systemd_name.stdout }}.service"
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Wait until Alloy readiness endpoint is reachable
+      ansible.builtin.uri:
+        url: "{{ alloy_deploy_ready_url }}"
+        method: GET
+        validate_certs: "{{ alloy_deploy_validate_certs }}"
+      register: alloy_deploy_health
+      until: alloy_deploy_health.status == 200
+      retries: 30
+      delay: 5
+      changed_when: false
+      failed_when: alloy_deploy_health is failed or alloy_deploy_health.status != 200

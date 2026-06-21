@@ -1,0 +1,22 @@
+---
+incus_nested_esxi_delegate_to: localhost
+incus_nested_esxi_state: present
+incus_nested_esxi_image: ""
+incus_nested_esxi_instance_name: ""
+incus_nested_esxi_endpoint: ""
+incus_nested_esxi_username: root
+incus_nested_esxi_password: ""
+incus_nested_esxi_cpu: "8"
+incus_nested_esxi_memory: 32GiB
+incus_nested_esxi_root_disk_size: ""
+incus_nested_esxi_raw_qemu: ""
+incus_nested_esxi_secureboot: false
+incus_nested_esxi_nesting: true
+incus_nested_esxi_destroy_existing: false
+incus_nested_esxi_wait_timeout: 1800
+incus_nested_esxi_wait_delay: 20
+incus_nested_esxi_datacenter: ha-datacenter
+incus_nested_esxi_datastore: datastore1
+incus_nested_esxi_network: "VM Network"
+incus_nested_esxi_folder: ""
+incus_nested_esxi_validate_certs: false

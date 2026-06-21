@@ -117,7 +117,51 @@ Installer behavior:
 - On installer failure, role prints redacted diagnostics before returning failure.
 - Default bundle dir is `bundle` (relative to the extracted setup directory).
 
-## Automation metrics service
+## Dependencies
+
+Requires `infra.aap_utilities` in the execution environment.
+
+## Example Playbook
+
+```yaml
+- name: Install AAP 2.7 (growth, disconnected bundle)
+  hosts: aap_hosts
+  become: true
+  gather_facts: true
+  roles:
+    - role: lit.supplementary.aap_deploy
+      vars:
+        aap_deploy_install_type: bundle
+        aap_deploy_topology: growth
+        aap_deploy_install_user: svc_aap
+        aap_deploy_install_dir: /opt/aap
+        aap_deploy_setup_download_version: "2.7"
+        aap_deploy_setup_download_containerized: true
+        aap_deploy_bundle_dir: bundle
+
+        # Customer baseline/Satellite/RHSM preparation happens before this role.
+
+        # Password inputs (inventory source of truth)
+        aap_password_active: active
+        aap_password_active_slot: active
+        aap_gateway_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/gateway/admin') }}"
+        aap_controller_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/controller/admin') }}"
+        aap_hub_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/hub/admin') }}"
+        aap_eda_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/eda/admin') }}"
+        aap_postgresql_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/postgresql/admin') }}"
+```
+
+## License
+
+MIT
+
+## Author
+
+Lightning IT
+
+## Additional Notes
+
+### Automation metrics service
 
 ```yaml
 aap_deploy_setup_download_version: "2.7"
@@ -218,7 +262,7 @@ Ansible module staging is an operating-system/runtime concern. If inventory
 sets a custom `ansible_remote_tmp`, prepare it before running this role with the
 shared OS preparation runbook or `lit.foundational.ansible_remote_tmp`.
 
-## Installer Temporary Directory
+### Installer Temporary Directory
 
 For bundled/offline AAP installs, the vendor installer extracts and loads large
 container images. If `/tmp` is small, the install can fail with:
@@ -332,45 +376,3 @@ Local validation:
 ```bash
 ansible-playbook tests/aap_deploy_inventory_nodes.yml
 ```
-
-## Dependencies
-
-Requires `infra.aap_utilities` in the execution environment.
-
-## Example Playbook
-
-```yaml
-- name: Install AAP 2.7 (growth, disconnected bundle)
-  hosts: aap_hosts
-  become: true
-  gather_facts: true
-  roles:
-    - role: lit.supplementary.aap_deploy
-      vars:
-        aap_deploy_install_type: bundle
-        aap_deploy_topology: growth
-        aap_deploy_install_user: svc_aap
-        aap_deploy_install_dir: /opt/aap
-        aap_deploy_setup_download_version: "2.7"
-        aap_deploy_setup_download_containerized: true
-        aap_deploy_bundle_dir: bundle
-
-        # Customer baseline/Satellite/RHSM preparation happens before this role.
-
-        # Password inputs (inventory source of truth)
-        aap_password_active: active
-        aap_password_active_slot: active
-        aap_gateway_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/gateway/admin') }}"
-        aap_controller_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/controller/admin') }}"
-        aap_hub_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/hub/admin') }}"
-        aap_eda_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/eda/admin') }}"
-        aap_postgresql_admin_password_input: "{{ lookup('my_secret_backend_get_or_create', 'aap/postgresql/admin') }}"
-```
-
-## License
-
-MIT
-
-## Author
-
-Lightning IT

@@ -1,0 +1,24 @@
+---
+- name: Converge vault foundational syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vault_foundational_molecule_execute_role: false
+    vault_foundational_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-foundational-coverage-mode
+  tasks:
+    - name: Import lit.supplementary.vault_foundational for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.vault_foundational
+      when: vault_foundational_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.vault_foundational Molecule coverage mode
+      ansible.builtin.set_fact:
+        vault_foundational_molecule_coverage_mode: syntax_stub
+
+    - name: Persist lit.supplementary.vault_foundational Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ vault_foundational_molecule_marker_path }}"
+        content: "syntax_stub\n"
+        mode: "0644"

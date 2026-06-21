@@ -1,0 +1,19 @@
+---
+- name: Verify vault ops syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vault_ops_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-ops-coverage-mode
+  tasks:
+    - name: Read lit.supplementary.vault_ops coverage marker
+      ansible.builtin.slurp:
+        src: "{{ vault_ops_molecule_marker_path }}"
+      register: vault_ops_molecule_marker
+
+    - name: Assert lit.supplementary.vault_ops coverage stub ran
+      ansible.builtin.assert:
+        that:
+          - vault_ops_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true

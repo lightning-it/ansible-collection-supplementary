@@ -1,0 +1,19 @@
+---
+- name: Verify aap ops syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_ops_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-ops-coverage-mode
+  tasks:
+    - name: Read lit.supplementary.aap_ops coverage marker
+      ansible.builtin.slurp:
+        src: "{{ aap_ops_molecule_marker_path }}"
+      register: aap_ops_molecule_marker
+
+    - name: Assert lit.supplementary.aap_ops coverage stub ran
+      ansible.builtin.assert:
+        that:
+          - aap_ops_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true

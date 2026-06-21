@@ -1,0 +1,19 @@
+---
+- name: Verify nexus syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    nexus_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/nexus-coverage-mode
+  tasks:
+    - name: Read lit.supplementary.nexus coverage marker
+      ansible.builtin.slurp:
+        src: "{{ nexus_molecule_marker_path }}"
+      register: nexus_molecule_marker
+
+    - name: Assert lit.supplementary.nexus coverage stub ran
+      ansible.builtin.assert:
+        that:
+          - nexus_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true

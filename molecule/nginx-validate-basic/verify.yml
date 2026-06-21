@@ -1,0 +1,19 @@
+---
+- name: Verify nginx validate syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    nginx_validate_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/nginx-validate-coverage-mode
+  tasks:
+    - name: Read lit.supplementary.nginx_validate coverage marker
+      ansible.builtin.slurp:
+        src: "{{ nginx_validate_molecule_marker_path }}"
+      register: nginx_validate_molecule_marker
+
+    - name: Assert lit.supplementary.nginx_validate coverage stub ran
+      ansible.builtin.assert:
+        that:
+          - nginx_validate_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true

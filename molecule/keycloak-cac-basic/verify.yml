@@ -1,0 +1,19 @@
+---
+- name: Verify keycloak cac syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    keycloak_cac_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/keycloak-cac-coverage-mode
+  tasks:
+    - name: Read lit.supplementary.keycloak_cac coverage marker
+      ansible.builtin.slurp:
+        src: "{{ keycloak_cac_molecule_marker_path }}"
+      register: keycloak_cac_molecule_marker
+
+    - name: Assert lit.supplementary.keycloak_cac coverage stub ran
+      ansible.builtin.assert:
+        that:
+          - keycloak_cac_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true

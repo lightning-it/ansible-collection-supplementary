@@ -1,0 +1,20 @@
+---
+all:
+  hosts:
+    wunderbox02.prd.dmz.corp.l-it.io:
+      ansible_host: 10.10.30.122
+      wunderbox_domain: wunderbox02.prd.dmz.corp.l-it.io
+      grafana_deploy_public_fqdn: grafana.wunderbox02.prd.dmz.corp.l-it.io
+      checkmk_deploy_public_fqdn: checkmk.wunderbox02.prd.dmz.corp.l-it.io
+      loki_deploy_host_ip: 127.0.0.1
+      grafana_deploy_host_ip: 127.0.0.1
+      checkmk_deploy_host_ip: 127.0.0.1
+
+      # Store these in HC Vault when available:
+      # - stage-2c/wunderbox02.prd.dmz.corp.l-it.io/grafana/admin
+      # - stage-2c/wunderbox02.prd.dmz.corp.l-it.io/checkmk/admin
+      # Otherwise provide encrypted values with ansible-vault.
+      grafana_deploy_admin_user: admin
+      grafana_deploy_admin_password: "{{ vault_wunderbox02_grafana_admin_password | default('') }}"
+      checkmk_deploy_admin_user: cmkadmin
+      checkmk_deploy_admin_password: "{{ vault_wunderbox02_checkmk_admin_password | default('') }}"

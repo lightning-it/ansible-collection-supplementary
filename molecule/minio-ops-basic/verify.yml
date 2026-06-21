@@ -1,0 +1,19 @@
+---
+- name: Verify minio ops syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    minio_ops_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/minio-ops-coverage-mode
+  tasks:
+    - name: Read lit.supplementary.minio_ops coverage marker
+      ansible.builtin.slurp:
+        src: "{{ minio_ops_molecule_marker_path }}"
+      register: minio_ops_molecule_marker
+
+    - name: Assert lit.supplementary.minio_ops coverage stub ran
+      ansible.builtin.assert:
+        that:
+          - minio_ops_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true

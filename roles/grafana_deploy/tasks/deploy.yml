@@ -1,0 +1,52 @@
+---
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+  when: ansible_os_family in ['RedHat', 'Debian']
+
+- name: Skip Grafana runtime deployment in check mode
+  ansible.builtin.debug:
+    msg: "Grafana runtime deployment skipped in check mode."
+  when:
+    - ansible_check_mode
+    - not grafana_deploy_skip_runtime | bool
+    - not grafana_deploy_skip_deploy | bool
+  tags: always
+
+- name: Deploy Grafana runtime
+  when:
+    - not grafana_deploy_skip_runtime | bool
+    - not grafana_deploy_skip_deploy | bool
+    - not ansible_check_mode
+  block:
+    - name: Ensure required packages are installed
+      ansible.builtin.include_tasks: install_packages.yml
+      when: grafana_deploy_install_packages | bool
+      tags:
+        - install
+
+    - name: Deploy Grafana Pod
+      ansible.builtin.include_tasks: deploy_pod.yml
+      tags:
+        - deployment
+
+    - name: Install systemd unit for Grafana Pod
+      ansible.builtin.include_tasks: systemd.yml
+      when: grafana_deploy_manage_systemd | bool
+      tags:
+        - systemd
+
+    - name: Wait until Grafana health endpoint is reachable (non-systemd)
+      ansible.builtin.uri:
+        url: "{{ grafana_deploy_health_url }}"
+        method: GET
+        validate_certs: "{{ grafana_deploy_validate_certs }}"
+      register: grafana_deploy_health
+      until: grafana_deploy_health.status == 200
+      retries: 30
+      delay: 5
+      changed_when: false
+      failed_when: grafana_deploy_health is failed or grafana_deploy_health.status != 200
+      when: not grafana_deploy_manage_systemd | bool
+      tags:
+        - deployment
+        - api

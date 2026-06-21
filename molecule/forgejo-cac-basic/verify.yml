@@ -1,0 +1,19 @@
+---
+- name: Verify forgejo cac syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    forgejo_cac_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/forgejo-cac-coverage-mode
+  tasks:
+    - name: Read lit.supplementary.forgejo_cac coverage marker
+      ansible.builtin.slurp:
+        src: "{{ forgejo_cac_molecule_marker_path }}"
+      register: forgejo_cac_molecule_marker
+
+    - name: Assert lit.supplementary.forgejo_cac coverage stub ran
+      ansible.builtin.assert:
+        that:
+          - forgejo_cac_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true

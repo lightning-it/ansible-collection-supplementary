@@ -9,6 +9,11 @@
       - semaphore_cac_users is not string
       - semaphore_cac_projects is sequence
       - semaphore_cac_projects is not string
+      - >-
+        semaphore_cac_projects
+        | selectattr('name', 'defined')
+        | list
+        | length == semaphore_cac_projects | length
     fail_msg: "Semaphore CaC variables are missing or invalid."
   tags: always
 

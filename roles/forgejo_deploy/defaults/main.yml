@@ -78,13 +78,38 @@ forgejo_deploy_db_user: "forgejo"
 forgejo_deploy_db_host: "{{ forgejo_deploy_postgres_host_ip }}"
 forgejo_deploy_db_port: "{{ postgres_deploy_port | default(5432) }}"
 
-# Secrets (preferred: inventory/Vault; fallback: generated once)
+# Secrets (preferred: inventory/Ansible Vault or HC Vault)
 forgejo_deploy_db_password: ""
 forgejo_deploy_admin_password: ""
 forgejo_deploy_generate_secrets: true
 forgejo_deploy_store_generated_secrets: true
 forgejo_deploy_generated_db_password_length: 32
 forgejo_deploy_generated_admin_password_length: 32
+forgejo_deploy_allow_local_secret_files: false
+forgejo_deploy_vault_address: "{{ vault_address | default('') }}"
+forgejo_deploy_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') }}"
+forgejo_deploy_vault_kv_path: "{{ inventory_hostname }}/forgejo/secrets"
+forgejo_deploy_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
+forgejo_deploy_vault_token: "{{ vault_token | default('', true) }}"
+forgejo_deploy_vault_role_id: "{{ ansible_hashi_vault_role_id | default('', true) }}"
+forgejo_deploy_vault_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"
+forgejo_deploy_vault_read_before_generate: true
+forgejo_deploy_vault_store_generated_secrets: true
+forgejo_deploy_vault_remove_local_secret_file: true
+forgejo_deploy_vault_auth_token: "{{ forgejo_deploy_vault_token | default('', true) | trim }}"
+forgejo_deploy_vault_auth_role_id: "{{ forgejo_deploy_vault_role_id | default('', true) | trim }}"
+forgejo_deploy_vault_auth_secret_id: "{{ forgejo_deploy_vault_secret_id | default('', true) | trim }}"
+forgejo_deploy_vault_use_token: "{{ (forgejo_deploy_vault_auth_token | length) > 0 }}"
+forgejo_deploy_vault_auth_method: >-
+  {{ 'token' if (forgejo_deploy_vault_use_token | bool) else 'approle' }}
+forgejo_deploy_vault_auth_ok: >-
+  {{
+    (forgejo_deploy_vault_auth_token | length > 0)
+    or (
+      (forgejo_deploy_vault_auth_role_id | length > 0)
+      and (forgejo_deploy_vault_auth_secret_id | length > 0)
+    )
+  }}
 
 # Lifecycle
 forgejo_deploy_install_packages: true

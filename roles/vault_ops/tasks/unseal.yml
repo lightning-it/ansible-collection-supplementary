@@ -80,7 +80,9 @@
         dest: "{{ vault_bootstrap_controller_tmp.path }}/ansible.cfg"
         content: ""
         mode: "0600"
-      when: vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+      when:
+        - vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+        - not (vault_deploy_ansible_vault_pw | string is search('\\{\\{'))
 
     - name: Create temporary vault password file (controller temp dir)
       delegate_to: localhost
@@ -89,30 +91,62 @@
         dest: "{{ vault_bootstrap_controller_tmp.path }}/.vault_deploy_pass"
         content: "{{ vault_deploy_ansible_vault_pw }}"
         mode: "0600"
-      when: vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+      when:
+        - vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+        - not (vault_deploy_ansible_vault_pw | string is search('\\{\\{'))
 
     - name: Decrypt init file (controller; explicit password)
       delegate_to: localhost
       become: false
       ansible.builtin.command: >-
         ansible-vault view {{ vault_bootstrap_controller_tmp.path }}/vault-init.yml.vault
-      register: vault_bootstrap_init_view
+      register: vault_bootstrap_init_view_explicit
       changed_when: false
       failed_when: false
       environment:
         ANSIBLE_CONFIG: "{{ vault_bootstrap_controller_tmp.path }}/ansible.cfg"
         ANSIBLE_VAULT_PASSWORD_FILE: "{{ vault_bootstrap_controller_tmp.path }}/.vault_deploy_pass"
-      when: vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+      when:
+        - vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+        - not (vault_deploy_ansible_vault_pw | string is search('\\{\\{'))
 
     - name: Decrypt init file (controller; default vault config)
       delegate_to: localhost
       become: false
       ansible.builtin.command: >-
         ansible-vault view {{ vault_bootstrap_controller_tmp.path }}/vault-init.yml.vault
-      register: vault_bootstrap_init_view
+      register: vault_bootstrap_init_view_default
       changed_when: false
       failed_when: false
-      when: vault_deploy_ansible_vault_pw | default('', true) | trim | length == 0
+      when: >-
+        vault_bootstrap_init_view_explicit is not defined
+        or vault_bootstrap_init_view_explicit is skipped
+        or vault_bootstrap_init_view_explicit.rc | default(1) != 0
+
+    - name: Select decrypted init file view
+      ansible.builtin.set_fact:
+        vault_bootstrap_init_view: >-
+          {{
+            vault_bootstrap_init_view_explicit
+            if (
+              vault_bootstrap_init_view_explicit is defined
+              and not (vault_bootstrap_init_view_explicit is skipped)
+              and vault_bootstrap_init_view_explicit.rc | default(1) == 0
+            )
+            else vault_bootstrap_init_view_default
+          }}
+      changed_when: false
+      no_log: true
+      when: >-
+        (
+          vault_bootstrap_init_view_explicit is defined
+          and not (vault_bootstrap_init_view_explicit is skipped)
+        )
+        or
+        (
+          vault_bootstrap_init_view_default is defined
+          and not (vault_bootstrap_init_view_default is skipped)
+        )
 
     - name: Parse init file and expose facts for follow-on tasks/roles
       ansible.builtin.set_fact:

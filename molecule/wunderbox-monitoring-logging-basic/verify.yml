@@ -1,0 +1,25 @@
+---
+- name: Verify Wunderbox monitoring and logging syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Check Wunderbox monitoring and logging role entrypoints
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../../roles/{{ item }}/tasks/main.yml"
+      loop:
+        - loki_deploy
+        - alloy_deploy
+        - grafana_deploy
+        - checkmk_deploy
+      register: monitoring_logging_role_entrypoints
+
+    - name: Assert Wunderbox monitoring and logging role entrypoints exist
+      ansible.builtin.assert:
+        that:
+          - >-
+            monitoring_logging_role_entrypoints.results
+            | selectattr('stat.exists')
+            | list
+            | length == 4
+        quiet: true

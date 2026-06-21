@@ -1,0 +1,24 @@
+---
+- name: Converge manage esxi syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    manage_esxi_molecule_execute_role: false
+    manage_esxi_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/manage-esxi-coverage-mode
+  tasks:
+    - name: Import lit.supplementary.manage_esxi for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.manage_esxi
+      when: manage_esxi_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.manage_esxi Molecule coverage mode
+      ansible.builtin.set_fact:
+        manage_esxi_molecule_coverage_mode: syntax_stub
+
+    - name: Persist lit.supplementary.manage_esxi Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ manage_esxi_molecule_marker_path }}"
+        content: "syntax_stub\n"
+        mode: "0644"

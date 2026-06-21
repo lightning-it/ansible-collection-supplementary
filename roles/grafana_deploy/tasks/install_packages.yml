@@ -1,0 +1,6 @@
+---
+- name: Ensure Grafana runtime packages are installed
+  ansible.builtin.package:
+    name: "{{ grafana_deploy_packages }}"
+    state: present
+  when: grafana_deploy_packages is defined

@@ -19,3 +19,10 @@ These notes are for role development workflows, not production runbooks.
    Full install requires a private AAP bundle and may require RHSM access.
 7. Incus lifecycle belongs to `lit.ubuntu.incus_instance`; do not add shell
    helper workflows under this collection.
+
+## Secret Storage Rule
+
+- Never commit secret values, tokens, passwords, private keys, activation codes, or decrypted Vault output.
+- When HC Vault is configured for a role or runbook, generated credentials must be read from HC Vault first, generated only when missing, written back to HC Vault, and then consumed by the application from the Vault-backed Ansible variables. Do not keep generated plaintext secret files on the managed host unless a role has an explicit break-glass option such as `*_allow_local_secret_files=true`.
+- When HC Vault is not configured, required credentials must be supplied from Ansible Vault encrypted inventory variables. Do not add new plaintext generated-secret fallbacks.
+- Tasks that read, generate, write, template, or compare secret material must use `no_log: true`.

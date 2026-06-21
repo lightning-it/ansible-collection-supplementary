@@ -17,6 +17,7 @@ semaphore_deploy_container_name: "{{ semaphore_deploy_pod_name }}-semaphore"
 # Host paths
 semaphore_deploy_host_data_dir: "/srv/semaphore/data"
 semaphore_deploy_postgres_data_dir: "/srv/semaphore/postgres"
+semaphore_deploy_postgres_config_dir: "/srv/semaphore/postgres-config"
 semaphore_deploy_config_dir: "/srv/semaphore/config"
 semaphore_deploy_secrets_file: "{{ semaphore_deploy_config_dir }}/semaphore-secrets.yml"
 
@@ -69,7 +70,7 @@ semaphore_deploy_db_dialect: "postgres"
 semaphore_deploy_db_name: "semaphore"
 semaphore_deploy_db_user: "semaphore"
 semaphore_deploy_db_host: "{{ semaphore_deploy_postgres_host_ip }}"
-semaphore_deploy_db_port: "{{ postgres_deploy_port | default(5432) }}"
+semaphore_deploy_db_port: 5432
 
 # Secrets (preferred: inventory/Vault; fallback: generated once)
 semaphore_deploy_db_password: ""
@@ -79,7 +80,42 @@ semaphore_deploy_generate_secrets: true
 semaphore_deploy_store_generated_secrets: true
 semaphore_deploy_generated_db_password_length: 32
 semaphore_deploy_generated_admin_password_length: 32
-semaphore_deploy_generated_access_key_length: 64
+semaphore_deploy_generated_access_key_length: 32
+semaphore_deploy_vault_address: "{{ vault_address | default('') }}"
+semaphore_deploy_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') }}"
+semaphore_deploy_vault_kv_path: "{{ inventory_hostname }}/semaphore/admin"
+semaphore_deploy_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
+semaphore_deploy_vault_token: "{{ vault_token | default('', true) }}"
+semaphore_deploy_vault_role_id: "{{ ansible_hashi_vault_role_id | default('', true) }}"
+semaphore_deploy_vault_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"
+semaphore_deploy_vault_read_before_generate: true
+semaphore_deploy_vault_store_admin_password: true
+semaphore_deploy_vault_store_generated_secrets: true
+semaphore_deploy_vault_remove_local_secret_file: true
+semaphore_deploy_vault_auth_token: "{{ semaphore_deploy_vault_token | default('', true) | trim }}"
+semaphore_deploy_vault_auth_role_id: "{{ semaphore_deploy_vault_role_id | default('', true) | trim }}"
+semaphore_deploy_vault_auth_secret_id: "{{ semaphore_deploy_vault_secret_id | default('', true) | trim }}"
+semaphore_deploy_vault_use_token: "{{ (semaphore_deploy_vault_auth_token | length) > 0 }}"
+semaphore_deploy_vault_auth_method: >-
+  {{ 'token' if (semaphore_deploy_vault_use_token | bool) else 'approle' }}
+semaphore_deploy_vault_auth_ok: >-
+  {{
+    (semaphore_deploy_vault_auth_token | length > 0)
+    or (
+      (semaphore_deploy_vault_auth_role_id | length > 0)
+      and (semaphore_deploy_vault_auth_secret_id | length > 0)
+    )
+  }}
+semaphore_deploy_postgres_vault_kv_mount: >-
+  {{
+    postgres_deploy_vault_kv_mount
+    | default(semaphore_deploy_vault_kv_mount, true)
+  }}
+semaphore_deploy_postgres_vault_kv_path: >-
+  {{
+    postgres_deploy_vault_kv_path
+    | default('', true)
+  }}
 
 # Lifecycle
 semaphore_deploy_install_packages: true
@@ -87,6 +123,7 @@ semaphore_deploy_manage_systemd: true
 semaphore_deploy_skip_runtime: false
 semaphore_deploy_skip_deploy: false
 semaphore_deploy_validate_certs: true
+semaphore_deploy_enforce_admin_password: true
 
 # Internal handler flags
 semaphore_deploy_kubeplay_remove: false

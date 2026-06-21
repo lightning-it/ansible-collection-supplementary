@@ -13,6 +13,8 @@
       - nginx_config_service_vhosts_enabled is boolean
       - nginx_config_service_vhosts is sequence
       - nginx_config_service_vhosts is not string
+      - nginx_config_service_vhosts_extra is sequence
+      - nginx_config_service_vhosts_extra is not string
       - nginx_config_remove_default is boolean
       - nginx_config_conf_d_dir | default('', true) | trim | length > 0
       - nginx_config_vhost_mode | default('', true) | trim | length > 0
@@ -22,7 +24,10 @@
       - nginx_config_tls_certificate_key | default('', true) | trim | length > 0
       - nginx_config_tls_certificate_host_path | default('', true) | trim | length > 0
       - nginx_config_tls_certificate_key_host_path | default('', true) | trim | length > 0
-      - nginx_config_tls_source in ['vault', 'selfsigned']
+      - nginx_config_tls_source in ['vault', 'file', 'selfsigned']
+      - nginx_config_tls_certificate_file_source is string
+      - nginx_config_tls_certificate_key_file_source is string
+      - nginx_config_tls_file_remote_src is boolean
       - nginx_config_tls_self_signed_days | int > 0
       - nginx_config_tls_common_name | default('', true) | trim | length > 0
       - nginx_config_tls_no_log is boolean
@@ -60,6 +65,30 @@
   when:
     - nginx_config_has_force_https_vhosts | bool
     - nginx_config_tls_source == 'vault'
+  tags: always
+
+- name: Ensure file TLS inputs are complete when source=file
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          nginx_config_tls_certificate_file_source | default('', true) | trim | length == 0
+          and nginx_config_tls_certificate_key_file_source | default('', true) | trim | length == 0
+        )
+        or
+        (
+          nginx_config_tls_certificate_file_source | default('', true) | trim | length > 0
+          and nginx_config_tls_certificate_key_file_source | default('', true) | trim | length > 0
+        )
+    fail_msg: >-
+      nginx_config_tls_source=file requires both
+      nginx_config_tls_certificate_file_source and
+      nginx_config_tls_certificate_key_file_source, or neither when the
+      certificate and key already exist at the nginx host paths.
+    quiet: true
+  when:
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'file'
   tags: always
 
 - name: Ensure nginx vhost definitions are valid

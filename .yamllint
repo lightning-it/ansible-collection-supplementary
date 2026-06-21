@@ -1,7 +1,21 @@
 ---
 extends: default
 
+ignore: |
+  .ansible/
+  .cache/
+  .pytest_cache/
+  .tox/
+  .venv/
+  ansible_collections/
+  build/
+  collections/
+  deploy/incus/generated/
+  dist/
+  node_modules/
+
 rules:
+  comments-indentation: disable
   line-length:
     max: 120
     allow-non-breakable-words: true

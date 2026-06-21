@@ -14,9 +14,12 @@ Key variables:
 - `nginx_config_vhosts`
 - `nginx_config_service_vhosts_enabled`
 - `nginx_config_service_vhosts`
-- `nginx_config_tls_source` (`vault` or `selfsigned`, default: `vault`)
+- `nginx_config_tls_source` (`vault`, `file`, or `selfsigned`, default: `vault`)
 - `nginx_config_tls_certificate`
 - `nginx_config_tls_certificate_key`
+- `nginx_config_tls_certificate_file_source`
+- `nginx_config_tls_certificate_key_file_source`
+- `nginx_config_tls_file_remote_src`
 - `nginx_config_vault_address`
 - `nginx_config_vault_kv_mount`
 - `nginx_config_vault_kv_path`

@@ -1,0 +1,19 @@
+---
+- name: Verify nginx config syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    nginx_config_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/nginx-config-coverage-mode
+  tasks:
+    - name: Read lit.supplementary.nginx_config coverage marker
+      ansible.builtin.slurp:
+        src: "{{ nginx_config_molecule_marker_path }}"
+      register: nginx_config_molecule_marker
+
+    - name: Assert lit.supplementary.nginx_config coverage stub ran
+      ansible.builtin.assert:
+        that:
+          - nginx_config_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true

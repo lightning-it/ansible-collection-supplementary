@@ -1,0 +1,19 @@
+---
+- name: Verify semaphore cac syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    semaphore_cac_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/semaphore-cac-coverage-mode
+  tasks:
+    - name: Read lit.supplementary.semaphore_cac coverage marker
+      ansible.builtin.slurp:
+        src: "{{ semaphore_cac_molecule_marker_path }}"
+      register: semaphore_cac_molecule_marker
+
+    - name: Assert lit.supplementary.semaphore_cac coverage stub ran
+      ansible.builtin.assert:
+        that:
+          - semaphore_cac_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true

@@ -92,6 +92,148 @@
     - init
     - bootstrap
 
+- name: Load Vault init payload from persisted init file
+  when:
+    - vault_deploy_initialized | bool
+    - vault_bootstrap_init_file.stat.exists | default(false)
+    - vault_token | default('', true) | trim | length == 0
+    - (vault_init | default({}, true)).root_token | default('', true) | trim | length == 0
+  no_log: true
+  tags:
+    - init
+    - bootstrap
+  block:
+    - name: Create controller bootstrap temp dir for init read
+      delegate_to: localhost
+      become: false
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: vault-bootstrap-read-
+      register: vault_bootstrap_read_tmp
+      changed_when: false
+
+    - name: Fetch encrypted init file to controller temp dir
+      ansible.builtin.fetch:
+        src: "{{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault') }}"
+        dest: "{{ vault_bootstrap_read_tmp.path }}/vault-init.yml.vault"
+        flat: true
+      become: true
+      changed_when: false
+
+    - name: Create controller ansible config for init read
+      delegate_to: localhost
+      become: false
+      ansible.builtin.copy:
+        dest: "{{ vault_bootstrap_read_tmp.path }}/ansible.cfg"
+        content: ""
+        mode: "0600"
+      changed_when: false
+      when:
+        - vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+        - not (vault_deploy_ansible_vault_pw | string is search('\\{\\{'))
+
+    - name: Create temporary vault password file for init read
+      delegate_to: localhost
+      become: false
+      ansible.builtin.copy:
+        dest: "{{ vault_bootstrap_read_tmp.path }}/.vault_deploy_pass"
+        content: "{{ vault_deploy_ansible_vault_pw }}"
+        mode: "0600"
+      changed_when: false
+      when:
+        - vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+        - not (vault_deploy_ansible_vault_pw | string is search('\\{\\{'))
+
+    - name: Decrypt init file with explicit password
+      delegate_to: localhost
+      become: false
+      ansible.builtin.command: >-
+        ansible-vault view {{ vault_bootstrap_read_tmp.path }}/vault-init.yml.vault
+      register: vault_bootstrap_existing_init_view_explicit
+      changed_when: false
+      failed_when: false
+      environment:
+        ANSIBLE_CONFIG: "{{ vault_bootstrap_read_tmp.path }}/ansible.cfg"
+        ANSIBLE_VAULT_PASSWORD_FILE: "{{ vault_bootstrap_read_tmp.path }}/.vault_deploy_pass"
+      when:
+        - vault_deploy_ansible_vault_pw | default('', true) | trim | length > 0
+        - not (vault_deploy_ansible_vault_pw | string is search('\\{\\{'))
+
+    - name: Decrypt init file with default vault config
+      delegate_to: localhost
+      become: false
+      ansible.builtin.command: >-
+        ansible-vault view {{ vault_bootstrap_read_tmp.path }}/vault-init.yml.vault
+      register: vault_bootstrap_existing_init_view_default
+      changed_when: false
+      failed_when: false
+      when: >-
+        vault_bootstrap_existing_init_view_explicit is not defined
+        or vault_bootstrap_existing_init_view_explicit is skipped
+        or vault_bootstrap_existing_init_view_explicit.rc | default(1) != 0
+
+    - name: Select decrypted init file view
+      ansible.builtin.set_fact:
+        vault_bootstrap_existing_init_view: >-
+          {{
+            vault_bootstrap_existing_init_view_explicit
+            if (
+              vault_bootstrap_existing_init_view_explicit is defined
+              and not (vault_bootstrap_existing_init_view_explicit is skipped)
+              and vault_bootstrap_existing_init_view_explicit.rc | default(1) == 0
+            )
+            else vault_bootstrap_existing_init_view_default
+          }}
+      changed_when: false
+      no_log: true
+      when: >-
+        (
+          vault_bootstrap_existing_init_view_explicit is defined
+          and not (vault_bootstrap_existing_init_view_explicit is skipped)
+        )
+        or
+        (
+          vault_bootstrap_existing_init_view_default is defined
+          and not (vault_bootstrap_existing_init_view_default is skipped)
+        )
+
+    - name: Parse persisted Vault init payload
+      ansible.builtin.set_fact:
+        vault_bootstrap_existing_init_payload: "{{ vault_bootstrap_existing_init_view.stdout | from_yaml }}"
+      changed_when: false
+      when:
+        - vault_bootstrap_existing_init_view is defined
+        - vault_bootstrap_existing_init_view.rc | default(1) == 0
+        - vault_bootstrap_existing_init_view.stdout | default('') | trim | length > 0
+
+    - name: Expose persisted Vault init payload as runtime facts
+      ansible.builtin.set_fact:
+        vault_init: "{{ vault_bootstrap_existing_init_payload.vault_init | default({}, true) }}"
+        vault_deploy_init: "{{ vault_bootstrap_existing_init_payload.vault_init | default({}, true) }}"
+        vault_deploy_unseal_keys: >-
+          {{
+            (vault_bootstrap_existing_init_payload.vault_init.unseal_keys_b64 | default([]))
+            if (vault_bootstrap_existing_init_payload.vault_init.unseal_keys_b64 | default([]) | length > 0)
+            else (vault_bootstrap_existing_init_payload.vault_init.unseal_keys_hex | default([]))
+          }}
+        vault_bootstrap_token: >-
+          {{ vault_bootstrap_existing_init_payload.vault_init.root_token | default('', true) | trim }}
+        vault_token: >-
+          {{ vault_bootstrap_existing_init_payload.vault_init.root_token | default('', true) | trim }}
+      changed_when: false
+      when:
+        - vault_bootstrap_existing_init_payload is defined
+        - vault_bootstrap_existing_init_payload.vault_init is defined
+        - vault_bootstrap_existing_init_payload.vault_init.root_token | default('', true) | trim | length > 0
+
+    - name: Cleanup controller temp dir for init read
+      delegate_to: localhost
+      become: false
+      ansible.builtin.file:
+        path: "{{ vault_bootstrap_read_tmp.path }}"
+        state: absent
+      changed_when: false
+
 - name: Initialize Vault
   ansible.builtin.command: >-
     podman exec {{ vault_deploy_container_name }}

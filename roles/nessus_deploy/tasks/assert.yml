@@ -24,6 +24,8 @@
       - nessus_deploy_skip_runtime is boolean
       - nessus_deploy_skip_deploy is boolean
       - nessus_deploy_validate_certs is boolean
+      - nessus_deploy_seed_data_from_image is boolean
+      - nessus_deploy_seed_required_file | default('', true) | trim | length > 0
       - nessus_deploy_generate_admin_password is boolean
       - nessus_deploy_store_generated_admin_password is boolean
       - nessus_deploy_generated_admin_password_length | int >= 16

@@ -1,7 +1,7 @@
 ---
 - name: Include OS-specific variables
   ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
-  when: ansible_os_family == 'RedHat'
+  when: ansible_os_family in ['RedHat', 'Debian']
 
 - name: Skip Semaphore runtime deployment in check mode
   ansible.builtin.debug:
@@ -46,6 +46,13 @@
       delay: 5
       changed_when: false
       failed_when: semaphore_deploy_health is failed or semaphore_deploy_health.status != 200
+      when: not semaphore_deploy_manage_systemd | bool
+      tags:
+        - deployment
+        - api
+
+    - name: Enforce Semaphore admin password (non-systemd)
+      ansible.builtin.include_tasks: enforce_admin_password.yml
       when: not semaphore_deploy_manage_systemd | bool
       tags:
         - deployment

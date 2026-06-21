@@ -1,0 +1,24 @@
+---
+- name: Converge vault bootstrap syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vault_bootstrap_molecule_execute_role: false
+    vault_bootstrap_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-bootstrap-coverage-mode
+  tasks:
+    - name: Import lit.supplementary.vault_bootstrap for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.vault_bootstrap
+      when: vault_bootstrap_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.vault_bootstrap Molecule coverage mode
+      ansible.builtin.set_fact:
+        vault_bootstrap_molecule_coverage_mode: syntax_stub
+
+    - name: Persist lit.supplementary.vault_bootstrap Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ vault_bootstrap_molecule_marker_path }}"
+        content: "syntax_stub\n"
+        mode: "0644"

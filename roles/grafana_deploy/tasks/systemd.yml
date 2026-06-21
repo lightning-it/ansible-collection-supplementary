@@ -1,0 +1,47 @@
+---
+- name: Manage Grafana systemd unit
+  when:
+    - grafana_deploy_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+    - not ansible_check_mode
+  tags:
+    - systemd
+  block:
+    - name: Escape kube play manifest path
+      ansible.builtin.command:
+        cmd: "systemd-escape {{ grafana_deploy_pod_manifest_path }}"
+      register: grafana_deploy_systemd_name
+      changed_when: false
+
+    - name: Ensure podman-kube drop-in directory exists
+      ansible.builtin.file:
+        path: "/etc/systemd/system/podman-kube@{{ grafana_deploy_systemd_name.stdout }}.service.d"
+        state: directory
+        mode: '0755'
+
+    - name: Enable and start Podman kube systemd unit
+      ansible.builtin.systemd:
+        name: "podman-kube@{{ grafana_deploy_systemd_name.stdout }}.service"
+        enabled: true
+        state: >-
+          {{
+            'restarted'
+            if (
+              grafana_deploy_kubeplay_remove | default(false) | bool
+              or grafana_deploy_kubeplay_run | default(false) | bool
+            )
+            else 'started'
+          }}
+        daemon_reload: true
+
+    - name: Wait until Grafana health endpoint is reachable
+      ansible.builtin.uri:
+        url: "{{ grafana_deploy_health_url }}"
+        method: GET
+        validate_certs: "{{ grafana_deploy_validate_certs }}"
+      register: grafana_deploy_health
+      until: grafana_deploy_health.status == 200
+      retries: 30
+      delay: 5
+      changed_when: false
+      failed_when: grafana_deploy_health is failed or grafana_deploy_health.status != 200

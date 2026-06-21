@@ -1,0 +1,27 @@
+---
+incus_esxi_image_enabled: true
+
+incus_esxi_image_binary: incus
+incus_esxi_image_force_local: true
+incus_esxi_image_command_user: ""
+incus_esxi_image_project: ""
+
+incus_esxi_image_alias: esxi-packer-ci
+incus_esxi_image_replace: false
+incus_esxi_image_public: false
+incus_esxi_image_properties:
+  os: ESXi
+  description: Nested ESXi image for Packer vSphere validation
+
+# Import an image artifact directly with `incus image import`.
+incus_esxi_image_metadata: ""
+incus_esxi_image_rootfs: ""
+
+# Or import an Incus instance backup, publish it as an image, then clean up.
+incus_esxi_image_backup: ""
+incus_esxi_image_backup_instance_name: "{{ incus_esxi_image_alias }}-image-import"
+incus_esxi_image_backup_storage_pool: ""
+incus_esxi_image_destroy_existing_backup_instance: false
+incus_esxi_image_cleanup_backup_instance: true
+
+incus_esxi_image_result: {}

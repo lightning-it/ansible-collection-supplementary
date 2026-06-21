@@ -1,0 +1,10 @@
+---
+# First-pass Checkmk object registration hook data.
+# Full Checkmk object provisioning is intentionally left for a later CaC role.
+enabled: {{ checkmk_deploy_monitoring_hooks_enabled | bool | to_json }}
+targets:
+{% for target in checkmk_deploy_monitoring_targets %}
+  - name: {{ target.name | to_json }}
+    kind: {{ target.kind | default('http') | to_json }}
+    endpoint: {{ target.endpoint | default('') | to_json }}
+{% endfor %}

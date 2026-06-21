@@ -1,0 +1,19 @@
+---
+- name: Verify minio foundational syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    minio_foundational_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/minio-foundational-coverage-mode
+  tasks:
+    - name: Read lit.supplementary.minio_foundational coverage marker
+      ansible.builtin.slurp:
+        src: "{{ minio_foundational_molecule_marker_path }}"
+      register: minio_foundational_molecule_marker
+
+    - name: Assert lit.supplementary.minio_foundational coverage stub ran
+      ansible.builtin.assert:
+        that:
+          - minio_foundational_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true

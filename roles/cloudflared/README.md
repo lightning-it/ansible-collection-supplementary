@@ -2,6 +2,10 @@
 
 Install and manage a Cloudflare Tunnel using `cloudflared` and a tunnel token.
 
+## Requirements
+
+None.
+
 ## Variables
 
 Required:
@@ -21,7 +25,11 @@ Optional:
 - `cloudflared_service_name`: Service name (default: `cloudflared`).
 - `cloudflared_show_status`: Show `systemctl` status (default: `false`).
 
-## Example
+## Dependencies
+
+None.
+
+## Example Playbook
 
 ```yaml
 - hosts: gateways
@@ -32,3 +40,11 @@ Optional:
         cloudflared_tunnel_token: "{{ vault_cloudflared_tunnel_token }}"
         cloudflared_show_status: true
 ```
+
+## License
+
+MIT
+
+## Author
+
+Lightning IT

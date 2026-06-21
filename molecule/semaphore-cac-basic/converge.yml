@@ -1,0 +1,24 @@
+---
+- name: Converge semaphore cac syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    semaphore_cac_molecule_execute_role: false
+    semaphore_cac_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/semaphore-cac-coverage-mode
+  tasks:
+    - name: Import lit.supplementary.semaphore_cac for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.semaphore_cac
+      when: semaphore_cac_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.semaphore_cac Molecule coverage mode
+      ansible.builtin.set_fact:
+        semaphore_cac_molecule_coverage_mode: syntax_stub
+
+    - name: Persist lit.supplementary.semaphore_cac Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ semaphore_cac_molecule_marker_path }}"
+        content: "syntax_stub\n"
+        mode: "0644"

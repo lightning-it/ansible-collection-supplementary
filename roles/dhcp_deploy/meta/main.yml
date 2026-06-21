@@ -2,8 +2,8 @@
 galaxy_info:
   role_name: dhcp_deploy
   namespace: lit
-  author: René Osorio
-  description: Deploy ISC DHCP (dhcpd) on the host using RPMs and managed config.
+  author: Lightning IT
+  description: Deploy DHCP as a rootful Podman kube-play pod.
   company: Lightning IT
   license: MIT
   min_ansible_version: "2.18"
@@ -11,12 +11,15 @@ galaxy_info:
     - name: EL
       versions:
         - "9"
+    - name: Ubuntu
+      versions:
+        - "jammy"
+        - "noble"
   galaxy_tags:
     - modulix
     - dhcp
-    - dns
+    - podman
     - networking
-    - rhel
     - automation
 
 dependencies: []

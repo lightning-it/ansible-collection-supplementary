@@ -1,0 +1,19 @@
+---
+- name: Verify vault bootstrap syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vault_bootstrap_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-bootstrap-coverage-mode
+  tasks:
+    - name: Read lit.supplementary.vault_bootstrap coverage marker
+      ansible.builtin.slurp:
+        src: "{{ vault_bootstrap_molecule_marker_path }}"
+      register: vault_bootstrap_molecule_marker
+
+    - name: Assert lit.supplementary.vault_bootstrap coverage stub ran
+      ansible.builtin.assert:
+        that:
+          - vault_bootstrap_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true

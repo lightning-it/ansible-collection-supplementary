@@ -1,0 +1,19 @@
+---
+- name: Verify vault foundational syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vault_foundational_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-foundational-coverage-mode
+  tasks:
+    - name: Read lit.supplementary.vault_foundational coverage marker
+      ansible.builtin.slurp:
+        src: "{{ vault_foundational_molecule_marker_path }}"
+      register: vault_foundational_molecule_marker
+
+    - name: Assert lit.supplementary.vault_foundational coverage stub ran
+      ansible.builtin.assert:
+        that:
+          - vault_foundational_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true

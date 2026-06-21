@@ -1,0 +1,24 @@
+---
+- name: Converge aap syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_molecule_execute_role: false
+    aap_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-coverage-mode
+  tasks:
+    - name: Import lit.supplementary.aap for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.aap
+      when: aap_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.aap Molecule coverage mode
+      ansible.builtin.set_fact:
+        aap_molecule_coverage_mode: syntax_stub
+
+    - name: Persist lit.supplementary.aap Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ aap_molecule_marker_path }}"
+        content: "syntax_stub\n"
+        mode: "0644"

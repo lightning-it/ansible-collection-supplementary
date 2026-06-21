@@ -1,0 +1,19 @@
+---
+- name: Verify manage esxi syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    manage_esxi_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/manage-esxi-coverage-mode
+  tasks:
+    - name: Read lit.supplementary.manage_esxi coverage marker
+      ansible.builtin.slurp:
+        src: "{{ manage_esxi_molecule_marker_path }}"
+      register: manage_esxi_molecule_marker
+
+    - name: Assert lit.supplementary.manage_esxi coverage stub ran
+      ansible.builtin.assert:
+        that:
+          - manage_esxi_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true

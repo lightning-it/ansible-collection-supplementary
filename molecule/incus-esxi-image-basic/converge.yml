@@ -1,0 +1,134 @@
+---
+- name: Converge incus_esxi_image
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    incus_esxi_image_molecule_ephemeral_dir: >-
+      {{
+        lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY')
+        | default('/tmp/lit-incus-esxi-image-basic', true)
+      }}
+    incus_esxi_image_molecule_root: "{{ incus_esxi_image_molecule_ephemeral_dir }}/incus-esxi-image"
+    incus_esxi_image_molecule_bin: "{{ incus_esxi_image_molecule_root }}/bin/incus"
+    incus_esxi_image_molecule_metadata: "{{ incus_esxi_image_molecule_root }}/esxi-metadata.tar.xz"
+    incus_esxi_image_molecule_rootfs: "{{ incus_esxi_image_molecule_root }}/esxi.qcow2"
+    incus_esxi_image_molecule_backup: "{{ incus_esxi_image_molecule_root }}/esxi-backup.tar.gz"
+  pre_tasks:
+    - name: Create fake Incus directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ incus_esxi_image_molecule_root }}"
+        - "{{ incus_esxi_image_molecule_root }}/bin"
+        - "{{ incus_esxi_image_molecule_root }}/state/images"
+        - "{{ incus_esxi_image_molecule_root }}/state/instances"
+
+    - name: Create fake Incus command
+      ansible.builtin.copy:
+        dest: "{{ incus_esxi_image_molecule_bin }}"
+        mode: "0755"
+        content: |-
+          #!/usr/bin/env bash
+          set -euo pipefail
+          state_dir="{{ incus_esxi_image_molecule_root }}/state"
+          {% raw %}
+          args=()
+          while [ "$#" -gt 0 ]; do
+            case "$1" in
+              --force-local) shift ;;
+              --project) shift 2 ;;
+              *) args+=("$1"); shift ;;
+            esac
+          done
+          if [ "${args[0]:-}" = "image" ] && [ "${args[1]:-}" = "info" ]; then
+            ref="${args[2]#local:}"
+            test -f "${state_dir}/images/${ref}"
+            exit $?
+          fi
+          if [ "${args[0]:-}" = "image" ] && [ "${args[1]:-}" = "import" ]; then
+            alias=""
+            for ((i=0; i<${#args[@]}; i++)); do
+              if [ "${args[$i]}" = "--alias" ]; then
+                alias="${args[$((i+1))]}"
+              fi
+            done
+            test -n "${alias}"
+            touch "${state_dir}/images/${alias}"
+            exit 0
+          fi
+          if [ "${args[0]:-}" = "image" ] && [ "${args[1]:-}" = "delete" ]; then
+            ref="${args[2]#local:}"
+            rm -f "${state_dir}/images/${ref}"
+            exit 0
+          fi
+          if [ "${args[0]:-}" = "info" ]; then
+            test -f "${state_dir}/instances/${args[1]}"
+            exit $?
+          fi
+          if [ "${args[0]:-}" = "delete" ]; then
+            rm -f "${state_dir}/instances/${args[-1]}"
+            exit 0
+          fi
+          if [ "${args[0]:-}" = "import" ]; then
+            name="${args[-1]}"
+            touch "${state_dir}/instances/${name}"
+            exit 0
+          fi
+          if [ "${args[0]:-}" = "stop" ]; then
+            exit 0
+          fi
+          if [ "${args[0]:-}" = "publish" ]; then
+            alias=""
+            for ((i=0; i<${#args[@]}; i++)); do
+              if [ "${args[$i]}" = "--alias" ]; then
+                alias="${args[$((i+1))]}"
+              fi
+            done
+            test -n "${alias}"
+            touch "${state_dir}/images/${alias}"
+            exit 0
+          fi
+          printf 'unsupported fake incus command: %s\n' "${args[*]}" >&2
+          exit 2
+          {% endraw %}
+
+    - name: Create fake nested ESXi metadata artifact
+      ansible.builtin.copy:
+        dest: "{{ incus_esxi_image_molecule_metadata }}"
+        content: |
+          fake metadata
+        mode: "0644"
+
+    - name: Create fake nested ESXi rootfs artifact
+      ansible.builtin.copy:
+        dest: "{{ incus_esxi_image_molecule_rootfs }}"
+        content: |
+          fake rootfs
+        mode: "0644"
+
+    - name: Create fake nested ESXi backup artifact
+      ansible.builtin.copy:
+        dest: "{{ incus_esxi_image_molecule_backup }}"
+        content: |
+          fake backup
+        mode: "0644"
+
+  roles:
+    - role: lit.supplementary.incus_esxi_image
+      vars:
+        incus_esxi_image_binary: "{{ incus_esxi_image_molecule_bin }}"
+        incus_esxi_image_alias: esxi-packer-ci
+        incus_esxi_image_metadata: "{{ incus_esxi_image_molecule_metadata }}"
+        incus_esxi_image_rootfs: "{{ incus_esxi_image_molecule_rootfs }}"
+        incus_esxi_image_replace: false
+
+    - role: lit.supplementary.incus_esxi_image
+      vars:
+        incus_esxi_image_binary: "{{ incus_esxi_image_molecule_bin }}"
+        incus_esxi_image_alias: esxi-packer-ci-backup
+        incus_esxi_image_backup: "{{ incus_esxi_image_molecule_backup }}"
+        incus_esxi_image_backup_instance_name: esxi-packer-ci-backup-import
+        incus_esxi_image_replace: false

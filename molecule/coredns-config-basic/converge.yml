@@ -1,0 +1,24 @@
+---
+- name: Converge coredns config syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    coredns_config_molecule_execute_role: false
+    coredns_config_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/coredns-config-coverage-mode
+  tasks:
+    - name: Import lit.supplementary.coredns_config for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.coredns_config
+      when: coredns_config_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.coredns_config Molecule coverage mode
+      ansible.builtin.set_fact:
+        coredns_config_molecule_coverage_mode: syntax_stub
+
+    - name: Persist lit.supplementary.coredns_config Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ coredns_config_molecule_marker_path }}"
+        content: "syntax_stub\n"
+        mode: "0644"

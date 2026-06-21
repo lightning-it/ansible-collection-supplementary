@@ -1,3 +1,5 @@
+# lit.supplementary.manage_esxi
+
 Role Name
 =========
 
@@ -36,3 +38,34 @@ Author Information
 ------------------
 
 An optional section for the role authors to include contact information, or a website (HTML is not allowed).
+
+## Requirements
+
+None.
+
+## Variables
+
+See `defaults/main.yml`.
+
+## Dependencies
+
+None.
+
+## Example Playbook
+
+```yaml
+---
+- name: Use lit.supplementary.manage_esxi
+  hosts: all
+  become: true
+  roles:
+    - role: lit.supplementary.manage_esxi
+```
+
+## License
+
+MIT
+
+## Author
+
+Lightning IT

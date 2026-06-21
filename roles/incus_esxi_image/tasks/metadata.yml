@@ -1,0 +1,64 @@
+---
+- name: Check nested ESXi Incus image metadata artifact
+  ansible.builtin.stat:
+    path: "{{ incus_esxi_image_metadata }}"
+  register: incus_esxi_image_metadata_stat
+  when: (incus_esxi_image_metadata | regex_search('^https?://')) is none
+
+- name: Assert nested ESXi Incus image metadata artifact exists
+  ansible.builtin.assert:
+    that:
+      - incus_esxi_image_metadata_stat.stat.exists | default(false)
+    fail_msg: "Nested ESXi Incus image metadata artifact is missing: {{ incus_esxi_image_metadata }}"
+    quiet: true
+  when: (incus_esxi_image_metadata | regex_search('^https?://')) is none
+
+- name: Check nested ESXi Incus image rootfs artifact
+  ansible.builtin.stat:
+    path: "{{ incus_esxi_image_rootfs }}"
+  register: incus_esxi_image_rootfs_stat
+  when:
+    - incus_esxi_image_rootfs | trim | length > 0
+    - (incus_esxi_image_rootfs | regex_search('^https?://')) is none
+
+- name: Assert nested ESXi Incus image rootfs artifact exists
+  ansible.builtin.assert:
+    that:
+      - incus_esxi_image_rootfs_stat.stat.exists | default(false)
+    fail_msg: "Nested ESXi Incus image rootfs artifact is missing: {{ incus_esxi_image_rootfs }}"
+    quiet: true
+  when:
+    - incus_esxi_image_rootfs | trim | length > 0
+    - (incus_esxi_image_rootfs | regex_search('^https?://')) is none
+
+- name: Initialize nested ESXi Incus image property arguments
+  ansible.builtin.set_fact:
+    incus_esxi_image_property_args: []
+
+- name: Build nested ESXi Incus image property arguments
+  ansible.builtin.set_fact:
+    incus_esxi_image_property_args: "{{ incus_esxi_image_property_args + [item.key ~ '=' ~ (item.value | string)] }}"
+  loop: "{{ incus_esxi_image_properties | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Import nested ESXi Incus image artifact
+  ansible.builtin.command:
+    argv: >-
+      {{
+        incus_esxi_image_base_argv
+        + ['image', 'import', incus_esxi_image_metadata]
+        + ([incus_esxi_image_rootfs] if incus_esxi_image_rootfs | trim | length > 0 else [])
+        + ['--alias', incus_esxi_image_alias]
+        + (['--public'] if incus_esxi_image_public | bool else [])
+        + (['--reuse'] if incus_esxi_image_replace | bool else [])
+        + incus_esxi_image_property_args
+      }}
+  become: "{{ incus_esxi_image_command_user | trim | length > 0 }}"
+  become_user: "{{ incus_esxi_image_command_user if incus_esxi_image_command_user | trim | length > 0 else omit }}"
+  changed_when: true
+
+- name: Record nested ESXi metadata image import
+  ansible.builtin.set_fact:
+    incus_esxi_image_imported: true
+    incus_esxi_image_source_mode: metadata

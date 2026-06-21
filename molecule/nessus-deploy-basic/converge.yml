@@ -1,0 +1,24 @@
+---
+- name: Converge nessus deploy syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    nessus_deploy_molecule_execute_role: false
+    nessus_deploy_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/nessus-deploy-coverage-mode
+  tasks:
+    - name: Import lit.supplementary.nessus_deploy for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.nessus_deploy
+      when: nessus_deploy_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.nessus_deploy Molecule coverage mode
+      ansible.builtin.set_fact:
+        nessus_deploy_molecule_coverage_mode: syntax_stub
+
+    - name: Persist lit.supplementary.nessus_deploy Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ nessus_deploy_molecule_marker_path }}"
+        content: "syntax_stub\n"
+        mode: "0644"

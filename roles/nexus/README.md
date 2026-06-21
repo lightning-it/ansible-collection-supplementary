@@ -4,12 +4,45 @@ Provision Sonatype Nexus Repository Manager as part of the
 `lit.foundation_services` collection. The role is currently a template
 and documents the intended interface for future development.
 
-## Usage Documentation
+## Requirements
+
+None.
+
+## Variables
+
+See `defaults/main.yml`.
+
+## Dependencies
+
+None.
+
+## Example Playbook
+
+```yaml
+---
+- name: Use lit.supplementary.nexus
+  hosts: all
+  become: true
+  roles:
+    - role: lit.supplementary.nexus
+```
+
+## License
+
+MIT
+
+## Author
+
+Lightning IT
+
+## Additional Notes
+
+### Usage Documentation
 
 Consult the collection `README.md` for configuration variables, storage
 settings, and operational guidelines shared across all foundation services.
 
-## Testing
+### Testing
 
 Run the bundled Molecule scenario prior to publishing updates:
 

@@ -55,8 +55,8 @@ start_ldap() {
 }
 
 wait_for_ldap() {
-  local i
-  for i in $(seq 1 120); do
+  local _
+  for _ in $(seq 1 120); do
     if ldapsearch -x \
       -H "ldap://127.0.0.1:${LDAP_PORT}" \
       -D "${LDAP_DM_DN}" \
