@@ -13,7 +13,7 @@ on:
         required: false
         default: ""
       target_branch:
-        description: Release PR target branch.
+        description: Release PR target branch. Must be main.
         required: false
         default: main
       create_github_release:
