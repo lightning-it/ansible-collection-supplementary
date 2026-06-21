@@ -1,0 +1,59 @@
+# yamllint disable rule:truthy
+---
+name: Publish collection release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: ["main"]
+    paths:
+      - galaxy.yml
+      - CHANGELOG.rst
+      - changelogs/changelog.yaml
+  workflow_dispatch:
+    inputs:
+      create_github_release:
+        description: Create the GitHub Release.
+        required: false
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+      publish_galaxy:
+        description: Publish to Ansible Galaxy.
+        required: false
+        default: "false"
+        type: choice
+        options: ["true", "false"]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.pull_request.merged == true &&
+        startsWith(github.event.pull_request.head.ref, 'release/v')
+      )
+    uses: lightning-it/shared-assets/.github/workflows/ansible-collection-publish.yml@main
+    with:
+      create_github_release: >-
+        ${{
+          github.event_name == 'workflow_dispatch'
+          && inputs.create_github_release == 'true'
+          || (
+            github.event_name == 'pull_request'
+            && contains(github.event.pull_request.body, 'GitHub release creation: `true`')
+          )
+        }}
+      publish_galaxy: >-
+        ${{
+          github.event_name == 'workflow_dispatch'
+          && inputs.publish_galaxy == 'true'
+          || (
+            github.event_name == 'pull_request'
+            && contains(github.event.pull_request.body, 'Galaxy publishing: `true`')
+          )
+        }}
+    secrets: inherit
