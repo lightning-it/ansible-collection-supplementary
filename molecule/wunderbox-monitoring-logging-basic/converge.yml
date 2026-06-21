@@ -8,22 +8,22 @@
   tasks:
     - name: Import Loki role for syntax coverage
       ansible.builtin.import_role:
-        name: loki_deploy
+        name: lit.supplementary.loki_deploy
       when: monitoring_logging_molecule_execute_roles | bool
 
     - name: Import Alloy role for syntax coverage
       ansible.builtin.import_role:
-        name: alloy_deploy
+        name: lit.supplementary.alloy_deploy
       when: monitoring_logging_molecule_execute_roles | bool
 
     - name: Import Grafana role for syntax coverage
       ansible.builtin.import_role:
-        name: grafana_deploy
+        name: lit.supplementary.grafana_deploy
       when: monitoring_logging_molecule_execute_roles | bool
 
     - name: Import Checkmk role for syntax coverage
       ansible.builtin.import_role:
-        name: checkmk_deploy
+        name: lit.supplementary.checkmk_deploy
       when: monitoring_logging_molecule_execute_roles | bool
 
     - name: Record Wunderbox monitoring and logging Molecule coverage mode
