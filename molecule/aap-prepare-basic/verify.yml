@@ -3,9 +3,17 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    aap_prepare_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-prepare-coverage-mode
   tasks:
+    - name: Read lit.supplementary.aap_prepare coverage marker
+      ansible.builtin.slurp:
+        src: "{{ aap_prepare_molecule_marker_path }}"
+      register: aap_prepare_molecule_marker
+
     - name: Assert lit.supplementary.aap_prepare coverage stub ran
       ansible.builtin.assert:
         that:
-          - aap_prepare_molecule_coverage_mode | default('') == 'syntax_stub'
+          - aap_prepare_molecule_marker.content | b64decode | trim == 'syntax_stub'
         quiet: true

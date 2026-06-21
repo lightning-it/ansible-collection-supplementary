@@ -3,9 +3,17 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    semaphore_deploy_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/semaphore-deploy-coverage-mode
   tasks:
+    - name: Read lit.supplementary.semaphore_deploy coverage marker
+      ansible.builtin.slurp:
+        src: "{{ semaphore_deploy_molecule_marker_path }}"
+      register: semaphore_deploy_molecule_marker
+
     - name: Assert lit.supplementary.semaphore_deploy coverage stub ran
       ansible.builtin.assert:
         that:
-          - semaphore_deploy_molecule_coverage_mode | default('') == 'syntax_stub'
+          - semaphore_deploy_molecule_marker.content | b64decode | trim == 'syntax_stub'
         quiet: true

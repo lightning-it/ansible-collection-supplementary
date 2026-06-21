@@ -3,9 +3,17 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    coredns_deploy_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/coredns-deploy-coverage-mode
   tasks:
+    - name: Read lit.supplementary.coredns_deploy coverage marker
+      ansible.builtin.slurp:
+        src: "{{ coredns_deploy_molecule_marker_path }}"
+      register: coredns_deploy_molecule_marker
+
     - name: Assert lit.supplementary.coredns_deploy coverage stub ran
       ansible.builtin.assert:
         that:
-          - coredns_deploy_molecule_coverage_mode | default('') == 'syntax_stub'
+          - coredns_deploy_molecule_marker.content | b64decode | trim == 'syntax_stub'
         quiet: true

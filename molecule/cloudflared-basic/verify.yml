@@ -3,9 +3,17 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    cloudflared_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/cloudflared-coverage-mode
   tasks:
+    - name: Read lit.supplementary.cloudflared coverage marker
+      ansible.builtin.slurp:
+        src: "{{ cloudflared_molecule_marker_path }}"
+      register: cloudflared_molecule_marker
+
     - name: Assert lit.supplementary.cloudflared coverage stub ran
       ansible.builtin.assert:
         that:
-          - cloudflared_molecule_coverage_mode | default('') == 'syntax_stub'
+          - cloudflared_molecule_marker.content | b64decode | trim == 'syntax_stub'
         quiet: true

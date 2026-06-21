@@ -1,0 +1,347 @@
+---
+- name: Ensure Checkmk directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ checkmk_deploy_host_data_dir }}"
+      mode: "{{ checkmk_deploy_host_data_mode }}"
+    - path: "{{ checkmk_deploy_config_dir }}"
+      mode: '0750'
+    - path: "{{ checkmk_deploy_pod_manifest_path | dirname }}"
+      mode: '0755'
+  when: item.path | default('') | length > 0
+  tags:
+    - deployment
+
+- name: Check Checkmk site directory
+  ansible.builtin.stat:
+    path: "{{ checkmk_deploy_host_data_dir }}/{{ checkmk_deploy_site_name }}"
+  register: checkmk_deploy_site_dir_stat
+  changed_when: false
+  when: checkmk_deploy_repair_incomplete_site | bool
+  tags:
+    - deployment
+
+- name: Check required Checkmk site files
+  ansible.builtin.stat:
+    path: "{{ checkmk_deploy_host_data_dir }}/{{ checkmk_deploy_site_name }}/{{ item }}"
+  loop: "{{ checkmk_deploy_required_site_files }}"
+  register: checkmk_deploy_required_site_file_stats
+  changed_when: false
+  when:
+    - checkmk_deploy_repair_incomplete_site | bool
+    - checkmk_deploy_site_dir_stat.stat.exists | default(false) | bool
+  tags:
+    - deployment
+
+- name: Mark incomplete Checkmk site for repair
+  ansible.builtin.set_fact:
+    checkmk_deploy_incomplete_site: >-
+      {{
+        checkmk_deploy_site_dir_stat.stat.exists | default(false) | bool
+        and (
+          checkmk_deploy_required_site_file_stats.results | default([])
+          | selectattr('stat.exists', 'equalto', false)
+          | list
+          | length
+        ) > 0
+      }}
+  changed_when: false
+  when: checkmk_deploy_repair_incomplete_site | bool
+  tags:
+    - deployment
+
+- name: Stop Checkmk pod before repairing incomplete site
+  ansible.builtin.systemd:
+    name: "{{ checkmk_deploy_systemd_unit_name }}"
+    state: stopped
+  failed_when: false
+  when:
+    - checkmk_deploy_incomplete_site | default(false) | bool
+    - checkmk_deploy_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+  tags:
+    - deployment
+
+- name: Remove stale Checkmk containers before repairing incomplete site
+  ansible.builtin.command:
+    argv:
+      - podman
+      - rm
+      - --force
+      - "{{ item }}"
+  loop:
+    - "{{ checkmk_deploy_container_name }}"
+    - "{{ checkmk_deploy_pod_name }}-{{ checkmk_deploy_container_name }}"
+  register: checkmk_deploy_remove_stale_containers
+  changed_when: checkmk_deploy_remove_stale_containers.rc == 0
+  failed_when: false
+  when: checkmk_deploy_incomplete_site | default(false) | bool
+  tags:
+    - deployment
+
+- name: Move incomplete Checkmk site aside
+  ansible.builtin.command:
+    argv:
+      - mv
+      - "{{ checkmk_deploy_host_data_dir }}/{{ checkmk_deploy_site_name }}"
+      - "{{ checkmk_deploy_host_data_dir }}/{{ checkmk_deploy_site_name }}.incomplete.{{ ansible_date_time.epoch }}"
+  when: checkmk_deploy_incomplete_site | default(false) | bool
+  changed_when: true
+  notify:
+    - Recreate Checkmk pod
+    - Run Checkmk pod
+  tags:
+    - deployment
+
+- name: Check whether Checkmk generated secrets file exists
+  ansible.builtin.stat:
+    path: "{{ checkmk_deploy_secrets_file }}"
+  register: checkmk_deploy_secrets_file_stat
+  changed_when: false
+  tags:
+    - deployment
+
+- name: Read generated Checkmk secrets
+  ansible.builtin.slurp:
+    src: "{{ checkmk_deploy_secrets_file }}"
+  register: checkmk_deploy_secrets_file_content
+  when: checkmk_deploy_secrets_file_stat.stat.exists | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Load generated Checkmk secrets
+  ansible.builtin.set_fact:
+    checkmk_deploy_stored_secrets: "{{ checkmk_deploy_secrets_file_content.content | b64decode | from_yaml }}"
+  when: checkmk_deploy_secrets_file_stat.stat.exists | bool
+  changed_when: false
+  no_log: true
+  tags:
+    - deployment
+
+- name: Read Checkmk admin password from Vault
+  delegate_to: localhost
+  become: false
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ checkmk_deploy_vault_address }}"
+    engine_mount_point: "{{ checkmk_deploy_vault_kv_mount }}"
+    path: "{{ checkmk_deploy_vault_kv_path }}"
+    validate_certs: "{{ checkmk_deploy_vault_validate_certs }}"
+    auth_method: "{{ checkmk_deploy_vault_auth_method }}"
+    token: "{{ checkmk_deploy_vault_auth_token if (checkmk_deploy_vault_use_token | bool) else omit }}"
+    role_id: "{{ checkmk_deploy_vault_auth_role_id if not (checkmk_deploy_vault_use_token | bool) else omit }}"
+    secret_id: >-
+      {{
+        checkmk_deploy_vault_auth_secret_id
+        if not (checkmk_deploy_vault_use_token | bool)
+        else omit
+      }}
+  register: checkmk_deploy_vault_secret_read
+  failed_when: false
+  no_log: true
+  when:
+    - checkmk_deploy_vault_read_before_generate | bool
+    - checkmk_deploy_vault_address | default('', true) | trim | length > 0
+    - checkmk_deploy_vault_auth_ok | bool
+  tags:
+    - deployment
+
+- name: Normalize Checkmk Vault secret
+  ansible.builtin.set_fact:
+    checkmk_deploy_vault_secrets: "{{ (checkmk_deploy_vault_secret_read.data | default({})).data | default({}) }}"
+  changed_when: false
+  no_log: true
+  when: checkmk_deploy_vault_secret_read is defined
+  tags:
+    - deployment
+
+- name: Build effective Checkmk admin password
+  ansible.builtin.set_fact:
+    checkmk_deploy_admin_password_effective: >-
+      {{
+        (checkmk_deploy_admin_password | default('', true) | trim)
+        if (checkmk_deploy_admin_password | default('', true) | trim | length > 0)
+        else (
+          (checkmk_deploy_vault_secrets | default({})).checkmk_deploy_admin_password
+          | default((checkmk_deploy_vault_secrets | default({})).password | default('', true), true)
+          | trim
+        )
+      }}
+  changed_when: false
+  no_log: true
+  tags:
+    - deployment
+
+- name: Fall back to local Checkmk secret when allowed
+  ansible.builtin.set_fact:
+    checkmk_deploy_admin_password_effective: >-
+      {{
+        (checkmk_deploy_stored_secrets | default({})).checkmk_deploy_admin_password
+        | default('', true)
+        | trim
+      }}
+  when:
+    - checkmk_deploy_admin_password_effective | default('', true) | length == 0
+    - checkmk_deploy_allow_local_secret_files | bool
+  changed_when: false
+  no_log: true
+  tags:
+    - deployment
+
+- name: Determine whether Checkmk admin password generation is required
+  ansible.builtin.set_fact:
+    checkmk_deploy_admin_password_missing: >-
+      {{ checkmk_deploy_admin_password_effective | default('', true) | length == 0 }}
+    checkmk_deploy_vault_admin_password_missing: >-
+      {{
+        (
+          (checkmk_deploy_vault_secrets | default({})).checkmk_deploy_admin_password
+          | default((checkmk_deploy_vault_secrets | default({})).password | default('', true), true)
+          | trim
+          | length
+        ) == 0
+      }}
+  changed_when: false
+  no_log: true
+  tags:
+    - deployment
+
+- name: Fail when Checkmk admin password cannot be stored securely
+  ansible.builtin.assert:
+    that:
+      - not checkmk_deploy_admin_password_missing | bool
+    fail_msg: >-
+      Missing Checkmk admin password and HC Vault is not available. Provide
+      checkmk_deploy_admin_password from inventory/Ansible Vault, configure
+      Checkmk Vault auth, or explicitly set checkmk_deploy_allow_local_secret_files=true.
+  when:
+    - checkmk_deploy_admin_password_missing | bool
+    - not checkmk_deploy_allow_local_secret_files | bool
+    - not (
+        checkmk_deploy_vault_address | default('', true) | trim | length > 0
+        and checkmk_deploy_vault_auth_ok | bool
+        and checkmk_deploy_vault_store_generated_admin_password | bool
+      )
+  no_log: true
+  tags:
+    - deployment
+
+- name: Generate missing Checkmk admin password
+  ansible.builtin.set_fact:
+    checkmk_deploy_admin_password_effective: >-
+      {{
+        lookup(
+          'ansible.builtin.password',
+          '/dev/null length=' ~ (checkmk_deploy_generated_admin_password_length | int | string)
+        )
+      }}
+  when:
+    - checkmk_deploy_generate_admin_password | bool
+    - checkmk_deploy_admin_password_missing | bool
+  no_log: true
+  tags:
+    - deployment
+
+- name: Persist Checkmk admin password in Vault
+  delegate_to: localhost
+  become: false
+  community.hashi_vault.vault_kv2_write:
+    url: "{{ checkmk_deploy_vault_address }}"
+    engine_mount_point: "{{ checkmk_deploy_vault_kv_mount }}"
+    path: "{{ checkmk_deploy_vault_kv_path }}"
+    validate_certs: "{{ checkmk_deploy_vault_validate_certs }}"
+    auth_method: "{{ checkmk_deploy_vault_auth_method }}"
+    token: "{{ checkmk_deploy_vault_auth_token if (checkmk_deploy_vault_use_token | bool) else omit }}"
+    role_id: "{{ checkmk_deploy_vault_auth_role_id if not (checkmk_deploy_vault_use_token | bool) else omit }}"
+    secret_id: >-
+      {{
+        checkmk_deploy_vault_auth_secret_id
+        if not (checkmk_deploy_vault_use_token | bool)
+        else omit
+      }}
+    data:
+      checkmk_deploy_admin_user: "{{ checkmk_deploy_admin_user }}"
+      checkmk_deploy_admin_password: "{{ checkmk_deploy_admin_password_effective }}"
+      password: "{{ checkmk_deploy_admin_password_effective }}"
+  register: checkmk_deploy_vault_secret_write
+  no_log: true
+  when:
+    - checkmk_deploy_store_generated_admin_password | bool
+    - checkmk_deploy_vault_store_generated_admin_password | bool
+    - checkmk_deploy_vault_address | default('', true) | trim | length > 0
+    - checkmk_deploy_vault_auth_ok | bool
+    - checkmk_deploy_vault_admin_password_missing | bool
+    - checkmk_deploy_admin_password_effective | default('', true) | trim | length > 0
+  tags:
+    - deployment
+
+- name: Render Checkmk monitoring hook notes
+  ansible.builtin.template:
+    src: monitoring-targets.yml.j2
+    dest: "{{ checkmk_deploy_config_dir }}/monitoring-targets.yml"
+    mode: '0644'
+  tags:
+    - deployment
+
+- name: Render Checkmk Pod manifest
+  ansible.builtin.template:
+    src: checkmk-pod.yml.j2
+    dest: "{{ checkmk_deploy_pod_manifest_path }}"
+    mode: '0644'
+  notify:
+    - Recreate Checkmk pod
+    - Run Checkmk pod
+  no_log: true
+  tags:
+    - deployment
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - deployment
+
+- name: Recreate Checkmk pod (kubeplay)
+  when:
+    - checkmk_deploy_kubeplay_remove | default(false)
+    - not checkmk_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay remove (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: remove
+        kubeplay_pod_name: "{{ checkmk_deploy_pod_name }}"
+        kubeplay_app_name: checkmk_deploy_remove
+  rescue:
+    - name: Ignore kubeplay remove failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay remove failure."
+
+- name: Run Checkmk pod (kubeplay)
+  when:
+    - checkmk_deploy_kubeplay_run | default(false)
+    - not checkmk_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay run (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: run
+        kubeplay_pod_name: "{{ checkmk_deploy_pod_name }}"
+        kubeplay_pod_manifest_path: "{{ checkmk_deploy_pod_manifest_path }}"
+        kubeplay_app_name: checkmk_deploy_run
+  rescue:
+    - name: Ignore kubeplay run failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay run failure."

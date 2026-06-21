@@ -1,0 +1,48 @@
+---
+- name: Manage Checkmk systemd unit
+  when:
+    - checkmk_deploy_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+    - not ansible_check_mode
+  tags:
+    - systemd
+  block:
+    - name: Escape kube play manifest path
+      ansible.builtin.command:
+        cmd: "systemd-escape {{ checkmk_deploy_pod_manifest_path }}"
+      register: checkmk_deploy_systemd_name
+      changed_when: false
+
+    - name: Ensure podman-kube drop-in directory exists
+      ansible.builtin.file:
+        path: "/etc/systemd/system/podman-kube@{{ checkmk_deploy_systemd_name.stdout }}.service.d"
+        state: directory
+        mode: '0755'
+
+    - name: Enable and start Podman kube systemd unit
+      ansible.builtin.systemd:
+        name: "podman-kube@{{ checkmk_deploy_systemd_name.stdout }}.service"
+        enabled: true
+        state: >-
+          {{
+            'restarted'
+            if (
+              checkmk_deploy_kubeplay_remove | default(false) | bool
+              or checkmk_deploy_kubeplay_run | default(false) | bool
+            )
+            else 'started'
+          }}
+        daemon_reload: true
+
+    - name: Wait until Checkmk endpoint is reachable
+      ansible.builtin.uri:
+        url: "{{ checkmk_deploy_health_url }}"
+        method: GET
+        status_code: "{{ checkmk_deploy_health_status_codes }}"
+        validate_certs: "{{ checkmk_deploy_validate_certs }}"
+      register: checkmk_deploy_health
+      until: checkmk_deploy_health.status in checkmk_deploy_health_status_codes
+      retries: 60
+      delay: 5
+      changed_when: false
+      failed_when: checkmk_deploy_health is failed

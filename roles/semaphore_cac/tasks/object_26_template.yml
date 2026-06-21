@@ -1,0 +1,89 @@
+---
+- name: Resolve existing Semaphore template references
+  ansible.builtin.set_fact:
+    semaphore_cac_template_existing: >-
+      {{
+        semaphore_cac_templates_get.json
+        | selectattr('name', 'equalto', semaphore_cac_template.name)
+        | list
+        | first
+        | default({})
+      }}
+    semaphore_cac_template_repository: >-
+      {{
+        semaphore_cac_repositories_get.json | default([])
+        | selectattr('name', 'equalto', semaphore_cac_template.repository_name)
+        | list
+        | first
+        | default({})
+      }}
+    semaphore_cac_template_inventory: >-
+      {{
+        semaphore_cac_inventories_get.json | default([])
+        | selectattr('name', 'equalto', semaphore_cac_template.inventory_name)
+        | list
+        | first
+        | default({})
+      }}
+    semaphore_cac_template_environment: >-
+      {{
+        semaphore_cac_environments_get.json | default([])
+        | selectattr('name', 'equalto', semaphore_cac_template.environment_name | default(''))
+        | list
+        | first
+        | default({})
+      }}
+  changed_when: false
+
+- name: Validate Semaphore template references
+  ansible.builtin.assert:
+    that:
+      - semaphore_cac_template_repository.id is defined
+      - semaphore_cac_template_inventory.id is defined
+    fail_msg: "Semaphore template {{ semaphore_cac_template.name }} references a missing repository or inventory."
+
+- name: Build Semaphore template request
+  ansible.builtin.set_fact:
+    semaphore_cac_template_request: >-
+      {{
+        {
+          'name': semaphore_cac_template.name,
+          'project_id': semaphore_cac_project_current.id,
+          'inventory_id': semaphore_cac_template_inventory.id,
+          'repository_id': semaphore_cac_template_repository.id,
+          'playbook': semaphore_cac_template.playbook,
+          'arguments': semaphore_cac_template.arguments | default('[]'),
+          'description': semaphore_cac_template.description | default(''),
+          'allow_override_args_in_task': semaphore_cac_template.allow_override_args_in_task | default(false),
+          'limit': semaphore_cac_template.limit | default(''),
+          'suppress_success_alerts': semaphore_cac_template.suppress_success_alerts | default(false),
+          'app': semaphore_cac_template.app | default('ansible'),
+          'git_branch': semaphore_cac_template.git_branch | default('main'),
+          'survey_vars': semaphore_cac_template.survey_vars | default([]),
+          'type': semaphore_cac_template.type | default('deploy'),
+          'autorun': semaphore_cac_template.autorun | default(false)
+        }
+        | combine(
+            {'environment_id': semaphore_cac_template_environment.id}
+            if (semaphore_cac_template_environment.id is defined)
+            else {}
+          )
+        | combine(
+            {'environment_ids': [semaphore_cac_template_environment.id]}
+            if (semaphore_cac_template_environment.id is defined)
+            else {}
+          )
+      }}
+  changed_when: false
+
+- name: Create Semaphore template
+  ansible.builtin.uri:
+    url: "{{ semaphore_cac_url }}/api/project/{{ semaphore_cac_project_current.id }}/templates"
+    method: POST
+    headers: "{{ semaphore_cac_api_headers }}"
+    body_format: json
+    body: "{{ semaphore_cac_template_request }}"
+    validate_certs: "{{ semaphore_cac_validate_certs }}"
+    timeout: "{{ semaphore_cac_request_timeout | int }}"
+    status_code: 201
+  when: semaphore_cac_template_existing.id is not defined

@@ -1,0 +1,127 @@
+---
+- name: Wunderbox monitoring and logging PoC
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    wunderbox_backend_host_ip: "127.0.0.1"
+    wunderbox_public_host: "{{ ansible_fqdn | default(inventory_hostname, true) }}"
+    wunderbox_domain: "{{ wunderbox_public_host }}"
+
+    loki_deploy_host_ip: "{{ wunderbox_backend_host_ip }}"
+    alloy_deploy_host_ip: "{{ wunderbox_backend_host_ip }}"
+    grafana_deploy_host_ip: "{{ wunderbox_backend_host_ip }}"
+    checkmk_deploy_host_ip: "{{ wunderbox_backend_host_ip }}"
+    grafana_deploy_public_fqdn: "grafana.{{ wunderbox_domain }}"
+    checkmk_deploy_public_fqdn: "checkmk.{{ wunderbox_domain }}"
+    grafana_deploy_root_url: "https://{{ grafana_deploy_public_fqdn }}"
+    checkmk_deploy_public_url: "https://{{ checkmk_deploy_public_fqdn }}"
+    checkmk_deploy_site_name: "wunderbox"
+    alloy_deploy_label_zone: "wunderbox"
+    alloy_deploy_label_role: "wunderbox"
+    checkmk_deploy_monitoring_targets:
+      - name: wunderbox-host
+        kind: host
+        endpoint: "{{ inventory_hostname }}"
+      - name: coredns-health
+        kind: http
+        endpoint: "http://127.0.0.1:8082/health"
+      - name: nginx
+        kind: http
+        endpoint: "http://127.0.0.1/"
+      - name: vault-health
+        kind: https
+        endpoint: "https://127.0.0.1:8200/v1/sys/health"
+      - name: keycloak
+        kind: https
+        endpoint: "https://keycloak.{{ wunderbox_domain }}"
+      - name: minio-api
+        kind: https
+        endpoint: "https://minio.{{ wunderbox_domain }}"
+      - name: nexus
+        kind: https
+        endpoint: "https://nexus.{{ wunderbox_domain }}"
+      - name: nessus
+        kind: https
+        endpoint: "https://nessus.{{ wunderbox_domain }}"
+      - name: forgejo
+        kind: https
+        endpoint: "https://forgejo.{{ wunderbox_domain }}"
+      - name: postgresql
+        kind: tcp
+        endpoint: "127.0.0.1:5432"
+      - name: grafana
+        kind: https
+        endpoint: "https://{{ grafana_deploy_public_fqdn }}"
+      - name: loki-ready
+        kind: http
+        endpoint: "http://127.0.0.1:3100/ready"
+      - name: external-aio-semaphore
+        kind: external
+        endpoint: ""
+      - name: external-aap
+        kind: external
+        endpoint: ""
+      - name: external-openshift-api
+        kind: external
+        endpoint: ""
+      - name: external-openshift-console
+        kind: external
+        endpoint: ""
+      - name: external-satellite
+        kind: external
+        endpoint: ""
+
+    nginx_deploy_host_ip: >-
+      {{
+        ansible_default_ipv4.address
+          | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
+      }}
+    nginx_deploy_tls_host_port: 443
+    nginx_config_service_vhosts_enabled: true
+    nginx_config_remove_default: true
+    nginx_config_tls_source: "{{ wunderbox_nginx_tls_source | default('selfsigned', true) }}"
+    nginx_config_vault_pki_path: "{{ vault_config_vault_pki_path | default('pki/issue', true) }}"
+    nginx_config_vault_pki_role: "{{ vault_config_vault_pki_role | default('wunderbox', true) }}"
+    nginx_config_service_vhosts:
+      - name: grafana
+        server_name: "{{ grafana_deploy_public_fqdn }}"
+        upstream_url: "http://{{ wunderbox_backend_host_ip }}:{{ grafana_deploy_port | default(3002) }}"
+        force_https: true
+      - name: checkmk
+        server_name: "{{ checkmk_deploy_public_fqdn }}"
+        upstream_url: "http://{{ wunderbox_backend_host_ip }}:{{ checkmk_deploy_port | default(5000) }}"
+        force_https: true
+  roles:
+    - role: loki_deploy
+      tags:
+        - loki
+        - logging
+        - deploy
+    - role: alloy_deploy
+      tags:
+        - alloy
+        - logging
+        - deploy
+    - role: grafana_deploy
+      tags:
+        - grafana
+        - logging
+        - deploy
+    - role: checkmk_deploy
+      tags:
+        - checkmk
+        - monitoring
+        - deploy
+    - role: nginx_deploy
+      tags:
+        - nginx
+        - deploy
+    - role: nginx_config
+      tags:
+        - nginx
+        - configure
+    - role: nginx_validate
+      tags:
+        - nginx
+        - validate

@@ -5,6 +5,8 @@
   gather_facts: false
   vars:
     vault_ops_molecule_execute_role: false
+    vault_ops_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-ops-coverage-mode
   tasks:
     - name: Import lit.supplementary.vault_ops for syntax coverage
       ansible.builtin.import_role:
@@ -14,3 +16,9 @@
     - name: Record lit.supplementary.vault_ops Molecule coverage mode
       ansible.builtin.set_fact:
         vault_ops_molecule_coverage_mode: syntax_stub
+
+    - name: Persist lit.supplementary.vault_ops Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ vault_ops_molecule_marker_path }}"
+        content: "syntax_stub\n"
+        mode: "0644"

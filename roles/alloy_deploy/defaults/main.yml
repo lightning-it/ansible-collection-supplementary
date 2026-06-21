@@ -1,0 +1,88 @@
+---
+alloy_deploy_pod_name: "alloy"
+alloy_deploy_container_name: "alloy"
+alloy_deploy_image: "docker.io/grafana/alloy:v1.7.5"
+alloy_deploy_pod_manifest_path: "/etc/podman/pods/alloy.yml"
+
+alloy_deploy_config_dir: "/srv/alloy/config"
+alloy_deploy_data_dir: "/srv/alloy/data"
+alloy_deploy_config_file: "{{ alloy_deploy_config_dir }}/config.alloy"
+alloy_deploy_container_config_file: "/etc/alloy/config.alloy"
+alloy_deploy_container_data_dir: "/var/lib/alloy/data"
+
+alloy_deploy_host_ip: "127.0.0.1"
+alloy_deploy_port: 12345
+alloy_deploy_loki_url: "http://127.0.0.1:3100/loki/api/v1/push"
+alloy_deploy_ready_url: "http://{{ alloy_deploy_host_ip }}:{{ alloy_deploy_port }}/-/ready"
+alloy_deploy_validate_certs: true
+alloy_deploy_log_level: "info"
+alloy_deploy_extra_args: []
+alloy_deploy_env_extra: {}
+
+alloy_deploy_label_environment: "{{ logging_environment | default('local', true) }}"
+alloy_deploy_label_zone: "{{ logging_zone | default('local', true) }}"
+alloy_deploy_label_role: "logging"
+alloy_deploy_label_host: "{{ inventory_hostname }}"
+alloy_deploy_extra_labels: {}
+
+alloy_deploy_collect_journald: true
+alloy_deploy_collect_container_logs: true
+alloy_deploy_collect_nginx_logs: true
+alloy_deploy_collect_vault_logs: true
+alloy_deploy_collect_vault_audit_logs: false
+alloy_deploy_collect_keycloak_logs: true
+alloy_deploy_collect_nexus_logs: true
+alloy_deploy_collect_forgejo_logs: true
+alloy_deploy_collect_paths:
+  - name: containers
+    enabled: "{{ alloy_deploy_collect_container_logs }}"
+    service: containers
+    paths:
+      - "/var/lib/containers/storage/overlay-containers/*/userdata/ctr.log"
+  - name: nginx
+    enabled: "{{ alloy_deploy_collect_nginx_logs }}"
+    service: nginx
+    paths:
+      - "/srv/nginx/logs/*.log"
+  - name: vault
+    enabled: "{{ alloy_deploy_collect_vault_logs }}"
+    service: vault
+    paths:
+      - "/srv/vault/logs/*.log"
+  - name: keycloak
+    enabled: "{{ alloy_deploy_collect_keycloak_logs }}"
+    service: keycloak
+    paths:
+      - "/srv/keycloak/logs/*.log"
+  - name: nexus
+    enabled: "{{ alloy_deploy_collect_nexus_logs }}"
+    service: nexus
+    paths:
+      - "/srv/nexus/logs/*.log"
+      - "/srv/nexus/data/log/*.log"
+  - name: forgejo
+    enabled: "{{ alloy_deploy_collect_forgejo_logs }}"
+    service: forgejo
+    paths:
+      - "/srv/forgejo/logs/*.log"
+      - "/srv/forgejo/data/log/*.log"
+  - name: vault_audit
+    enabled: "{{ alloy_deploy_collect_vault_audit_logs }}"
+    service: vault-audit
+    paths:
+      - "/srv/vault/audit/*.log"
+alloy_deploy_extra_log_paths: []
+
+alloy_deploy_install_packages: true
+alloy_deploy_manage_systemd: true
+alloy_deploy_skip_runtime: false
+alloy_deploy_skip_deploy: false
+alloy_deploy_kubeplay_remove: false
+alloy_deploy_kubeplay_run: false
+
+alloy_deploy_systemd_unit_name: >-
+  {{
+    'podman-kube@'
+    ~ (alloy_deploy_pod_manifest_path | basename | regex_replace('\\.ya?ml$', ''))
+    ~ '.service'
+  }}

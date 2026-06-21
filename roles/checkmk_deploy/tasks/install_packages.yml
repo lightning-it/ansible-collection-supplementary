@@ -1,0 +1,6 @@
+---
+- name: Ensure Checkmk runtime packages are installed
+  ansible.builtin.package:
+    name: "{{ checkmk_deploy_packages }}"
+    state: present
+  when: checkmk_deploy_packages is defined

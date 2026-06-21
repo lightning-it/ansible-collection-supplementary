@@ -1,0 +1,89 @@
+---
+- name: Ensure Alloy directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ alloy_deploy_config_dir }}"
+      mode: '0750'
+    - path: "{{ alloy_deploy_data_dir }}"
+      mode: '0750'
+    - path: "{{ alloy_deploy_pod_manifest_path | dirname }}"
+      mode: '0755'
+  when: item.path | default('') | length > 0
+  notify:
+    - Recreate Alloy pod
+    - Run Alloy pod
+  tags:
+    - deployment
+
+- name: Render Alloy config
+  ansible.builtin.template:
+    src: config.alloy.j2
+    dest: "{{ alloy_deploy_config_file }}"
+    mode: '0644'
+  notify:
+    - Recreate Alloy pod
+    - Run Alloy pod
+  tags:
+    - deployment
+
+- name: Render Alloy Pod manifest
+  ansible.builtin.template:
+    src: alloy-pod.yml.j2
+    dest: "{{ alloy_deploy_pod_manifest_path }}"
+    mode: '0644'
+  notify:
+    - Recreate Alloy pod
+    - Run Alloy pod
+  tags:
+    - deployment
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - deployment
+
+- name: Recreate Alloy pod (kubeplay)
+  when:
+    - alloy_deploy_kubeplay_remove | default(false)
+    - not alloy_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay remove (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: remove
+        kubeplay_pod_name: "{{ alloy_deploy_pod_name }}"
+        kubeplay_app_name: alloy_deploy_remove
+  rescue:
+    - name: Ignore kubeplay remove failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay remove failure."
+
+- name: Run Alloy pod (kubeplay)
+  when:
+    - alloy_deploy_kubeplay_run | default(false)
+    - not alloy_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay run (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: run
+        kubeplay_pod_name: "{{ alloy_deploy_pod_name }}"
+        kubeplay_pod_manifest_path: "{{ alloy_deploy_pod_manifest_path }}"
+        kubeplay_app_name: alloy_deploy_run
+  rescue:
+    - name: Ignore kubeplay run failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay run failure."

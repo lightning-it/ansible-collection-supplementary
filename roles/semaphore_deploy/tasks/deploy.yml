@@ -50,3 +50,10 @@
       tags:
         - deployment
         - api
+
+    - name: Enforce Semaphore admin password (non-systemd)
+      ansible.builtin.include_tasks: enforce_admin_password.yml
+      when: not semaphore_deploy_manage_systemd | bool
+      tags:
+        - deployment
+        - api

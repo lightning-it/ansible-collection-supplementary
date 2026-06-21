@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ alloy_deploy_pod_name }}
+  labels:
+    app: {{ alloy_deploy_pod_name }}
+spec:
+  containers:
+    - name: {{ alloy_deploy_container_name }}
+      image: {{ alloy_deploy_image }}
+      args:
+        - run
+        - {{ alloy_deploy_container_config_file }}
+        - --server.http.listen-addr=0.0.0.0:{{ alloy_deploy_port }}
+        - --storage.path={{ alloy_deploy_container_data_dir }}
+{% for arg in alloy_deploy_extra_args %}
+        - {{ arg }}
+{% endfor %}
+      ports:
+        - containerPort: {{ alloy_deploy_port }}
+          hostPort: {{ alloy_deploy_port }}
+          hostIP: {{ alloy_deploy_host_ip }}
+{% if alloy_deploy_env_extra | length > 0 %}
+      env:
+{% for key, value in alloy_deploy_env_extra.items() %}
+        - name: {{ key }}
+          value: "{{ value }}"
+{% endfor %}
+{% endif %}
+      volumeMounts:
+        - name: alloy-config
+          mountPath: {{ alloy_deploy_container_config_file }}
+        - name: alloy-data
+          mountPath: {{ alloy_deploy_container_data_dir }}
+        - name: systemd-journal
+          mountPath: /var/log/journal
+          readOnly: true
+        - name: machine-id
+          mountPath: /etc/machine-id
+          readOnly: true
+        - name: containers-storage
+          mountPath: /var/lib/containers/storage
+          readOnly: true
+        - name: srv-logs
+          mountPath: /srv
+          readOnly: true
+  volumes:
+    - name: alloy-config
+      hostPath:
+        path: {{ alloy_deploy_config_file }}
+        type: File
+    - name: alloy-data
+      hostPath:
+        path: {{ alloy_deploy_data_dir }}
+        type: DirectoryOrCreate
+    - name: systemd-journal
+      hostPath:
+        path: /var/log/journal
+        type: DirectoryOrCreate
+    - name: machine-id
+      hostPath:
+        path: /etc/machine-id
+        type: File
+    - name: containers-storage
+      hostPath:
+        path: /var/lib/containers/storage
+        type: DirectoryOrCreate
+    - name: srv-logs
+      hostPath:
+        path: /srv
+        type: DirectoryOrCreate

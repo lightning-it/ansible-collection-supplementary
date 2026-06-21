@@ -1,0 +1,50 @@
+{% set base_labels = {
+  "host": alloy_deploy_label_host,
+  "environment": alloy_deploy_label_environment,
+  "zone": alloy_deploy_label_zone,
+  "role": alloy_deploy_label_role
+} | combine(alloy_deploy_extra_labels) %}
+logging {
+  level = "{{ alloy_deploy_log_level }}"
+}
+
+loki.write "default" {
+  endpoint {
+    url = "{{ alloy_deploy_loki_url }}"
+  }
+}
+
+{% if alloy_deploy_collect_journald | bool %}
+loki.source.journal "systemd" {
+  labels = {
+{% for key, value in base_labels.items() %}
+    {{ key | to_json }} = {{ value | string | to_json }},
+{% endfor %}
+    "service" = "journald",
+  }
+  forward_to = [loki.write.default.receiver]
+}
+{% endif %}
+
+{% for item in (alloy_deploy_collect_paths + alloy_deploy_extra_log_paths) %}
+{% if item.enabled | default(true) | bool %}
+local.file_match "{{ item.name }}" {
+  path_targets = [
+{% for path in item.paths | default([]) %}
+    {
+      "__path__" = {{ path | to_json }},
+{% for key, value in base_labels.items() %}
+      {{ key | to_json }} = {{ value | string | to_json }},
+{% endfor %}
+      "service" = {{ item.service | default(item.name) | string | to_json }},
+    },
+{% endfor %}
+  ]
+}
+
+loki.source.file "{{ item.name }}" {
+  targets = local.file_match.{{ item.name }}.targets
+  forward_to = [loki.write.default.receiver]
+}
+{% endif %}
+{% endfor %}

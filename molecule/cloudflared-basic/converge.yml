@@ -5,6 +5,8 @@
   gather_facts: false
   vars:
     cloudflared_molecule_execute_role: false
+    cloudflared_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/cloudflared-coverage-mode
   tasks:
     - name: Import lit.supplementary.cloudflared for syntax coverage
       ansible.builtin.import_role:
@@ -14,3 +16,9 @@
     - name: Record lit.supplementary.cloudflared Molecule coverage mode
       ansible.builtin.set_fact:
         cloudflared_molecule_coverage_mode: syntax_stub
+
+    - name: Persist lit.supplementary.cloudflared Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ cloudflared_molecule_marker_path }}"
+        content: "syntax_stub\n"
+        mode: "0644"

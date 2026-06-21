@@ -47,10 +47,35 @@ nessus_deploy_activation_code: ""
 nessus_deploy_extra_start_args: []
 nessus_deploy_env_extra: {}
 
-# Secrets (preferred: inventory/Vault; fallback: generated once)
+# Secrets (preferred: inventory/Ansible Vault or HC Vault)
 nessus_deploy_generate_admin_password: true
 nessus_deploy_store_generated_admin_password: true
 nessus_deploy_generated_admin_password_length: 32
+nessus_deploy_allow_local_secret_files: false
+nessus_deploy_vault_address: "{{ vault_address | default('') }}"
+nessus_deploy_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') }}"
+nessus_deploy_vault_kv_path: "{{ inventory_hostname }}/nessus/admin"
+nessus_deploy_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
+nessus_deploy_vault_token: "{{ vault_token | default('', true) }}"
+nessus_deploy_vault_role_id: "{{ ansible_hashi_vault_role_id | default('', true) }}"
+nessus_deploy_vault_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"
+nessus_deploy_vault_read_before_generate: true
+nessus_deploy_vault_store_generated_admin_password: true
+nessus_deploy_vault_remove_local_secret_file: true
+nessus_deploy_vault_auth_token: "{{ nessus_deploy_vault_token | default('', true) | trim }}"
+nessus_deploy_vault_auth_role_id: "{{ nessus_deploy_vault_role_id | default('', true) | trim }}"
+nessus_deploy_vault_auth_secret_id: "{{ nessus_deploy_vault_secret_id | default('', true) | trim }}"
+nessus_deploy_vault_use_token: "{{ (nessus_deploy_vault_auth_token | length) > 0 }}"
+nessus_deploy_vault_auth_method: >-
+  {{ 'token' if (nessus_deploy_vault_use_token | bool) else 'approle' }}
+nessus_deploy_vault_auth_ok: >-
+  {{
+    (nessus_deploy_vault_auth_token | length > 0)
+    or (
+      (nessus_deploy_vault_auth_role_id | length > 0)
+      and (nessus_deploy_vault_auth_secret_id | length > 0)
+    )
+  }}
 
 # Lifecycle
 nessus_deploy_install_packages: true

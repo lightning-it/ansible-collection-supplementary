@@ -1,0 +1,52 @@
+---
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+  when: ansible_os_family in ['RedHat', 'Debian']
+
+- name: Skip Loki runtime deployment in check mode
+  ansible.builtin.debug:
+    msg: "Loki runtime deployment skipped in check mode."
+  when:
+    - ansible_check_mode
+    - not loki_deploy_skip_runtime | bool
+    - not loki_deploy_skip_deploy | bool
+  tags: always
+
+- name: Deploy Loki runtime
+  when:
+    - not loki_deploy_skip_runtime | bool
+    - not loki_deploy_skip_deploy | bool
+    - not ansible_check_mode
+  block:
+    - name: Ensure required packages are installed
+      ansible.builtin.include_tasks: install_packages.yml
+      when: loki_deploy_install_packages | bool
+      tags:
+        - install
+
+    - name: Deploy Loki Pod
+      ansible.builtin.include_tasks: deploy_pod.yml
+      tags:
+        - deployment
+
+    - name: Install systemd unit for Loki Pod
+      ansible.builtin.include_tasks: systemd.yml
+      when: loki_deploy_manage_systemd | bool
+      tags:
+        - systemd
+
+    - name: Wait until Loki readiness endpoint is reachable (non-systemd)
+      ansible.builtin.uri:
+        url: "{{ loki_deploy_ready_url }}"
+        method: GET
+        validate_certs: "{{ loki_deploy_validate_certs }}"
+      register: loki_deploy_health
+      until: loki_deploy_health.status == 200
+      retries: 30
+      delay: 5
+      changed_when: false
+      failed_when: loki_deploy_health is failed or loki_deploy_health.status != 200
+      when: not loki_deploy_manage_systemd | bool
+      tags:
+        - deployment
+        - api

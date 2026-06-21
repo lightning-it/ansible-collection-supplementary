@@ -3,9 +3,17 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    gitlab_runner_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/gitlab-runner-coverage-mode
   tasks:
+    - name: Read lit.supplementary.gitlab_runner coverage marker
+      ansible.builtin.slurp:
+        src: "{{ gitlab_runner_molecule_marker_path }}"
+      register: gitlab_runner_molecule_marker
+
     - name: Assert lit.supplementary.gitlab_runner coverage stub ran
       ansible.builtin.assert:
         that:
-          - gitlab_runner_molecule_coverage_mode | default('') == 'syntax_stub'
+          - gitlab_runner_molecule_marker.content | b64decode | trim == 'syntax_stub'
         quiet: true

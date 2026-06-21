@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ checkmk_deploy_pod_name }}
+  labels:
+    app: {{ checkmk_deploy_pod_name }}
+spec:
+  containers:
+    - name: {{ checkmk_deploy_container_name }}
+      image: {{ checkmk_deploy_image }}
+      ports:
+        - containerPort: 5000
+          hostPort: {{ checkmk_deploy_port }}
+          hostIP: {{ checkmk_deploy_host_ip }}
+      env:
+        - name: CMK_SITE_ID
+          value: "{{ checkmk_deploy_site_name }}"
+        - name: CMK_PASSWORD
+          value: "{{ checkmk_deploy_admin_password_effective }}"
+{% for key, value in checkmk_deploy_env_extra.items() %}
+        - name: {{ key }}
+          value: "{{ value }}"
+{% endfor %}
+      volumeMounts:
+        - name: checkmk-data
+          mountPath: {{ checkmk_deploy_container_data_dir }}
+  volumes:
+    - name: checkmk-data
+      hostPath:
+        path: {{ checkmk_deploy_host_data_dir }}
+        type: DirectoryOrCreate

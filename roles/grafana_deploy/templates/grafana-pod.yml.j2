@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ grafana_deploy_pod_name }}
+  labels:
+    app: {{ grafana_deploy_pod_name }}
+spec:
+  containers:
+    - name: {{ grafana_deploy_container_name }}
+      image: {{ grafana_deploy_image }}
+      ports:
+        - containerPort: 3000
+          hostPort: {{ grafana_deploy_port }}
+          hostIP: {{ grafana_deploy_host_ip }}
+      env:
+        - name: GF_SECURITY_ADMIN_USER
+          value: "{{ grafana_deploy_admin_user }}"
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "{{ grafana_deploy_admin_password_effective }}"
+        - name: GF_SERVER_ROOT_URL
+          value: "{{ grafana_deploy_root_url }}"
+        - name: GF_AUTH_ANONYMOUS_ENABLED
+          value: "false"
+{% for key, value in grafana_deploy_env_extra.items() %}
+        - name: {{ key }}
+          value: "{{ value }}"
+{% endfor %}
+      volumeMounts:
+        - name: grafana-data
+          mountPath: {{ grafana_deploy_container_data_dir }}
+        - name: grafana-provisioning
+          mountPath: {{ grafana_deploy_container_provisioning_dir }}
+  volumes:
+    - name: grafana-data
+      hostPath:
+        path: {{ grafana_deploy_host_data_dir }}
+        type: DirectoryOrCreate
+    - name: grafana-provisioning
+      hostPath:
+        path: {{ grafana_deploy_provisioning_dir }}
+        type: DirectoryOrCreate

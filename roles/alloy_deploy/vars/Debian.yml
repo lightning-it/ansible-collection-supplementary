@@ -1,0 +1,3 @@
+---
+alloy_deploy_packages:
+  - podman

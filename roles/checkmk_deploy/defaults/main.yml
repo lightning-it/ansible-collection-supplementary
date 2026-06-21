@@ -1,0 +1,77 @@
+---
+checkmk_deploy_pod_name: "checkmk"
+checkmk_deploy_container_name: "checkmk"
+checkmk_deploy_image: "docker.io/checkmk/check-mk-raw:2.3.0-latest"
+checkmk_deploy_pod_manifest_path: "/etc/podman/pods/checkmk.yml"
+
+checkmk_deploy_host_data_dir: "/srv/checkmk/data"
+checkmk_deploy_host_data_mode: "0755"
+checkmk_deploy_config_dir: "/srv/checkmk/config"
+checkmk_deploy_container_data_dir: "/omd/sites"
+checkmk_deploy_repair_incomplete_site: true
+checkmk_deploy_required_site_files:
+  - "etc/omd/site.conf"
+  - "etc/apache/listen-port.conf"
+
+checkmk_deploy_site_name: "monitoring"
+checkmk_deploy_admin_user: "cmkadmin"
+checkmk_deploy_admin_password: ""
+checkmk_deploy_generate_admin_password: true
+checkmk_deploy_store_generated_admin_password: true
+checkmk_deploy_generated_admin_password_length: 32
+checkmk_deploy_allow_local_secret_files: false
+checkmk_deploy_secrets_file: "{{ checkmk_deploy_config_dir }}/checkmk-secrets.yml"
+
+checkmk_deploy_host_ip: "127.0.0.1"
+checkmk_deploy_port: 5000
+checkmk_deploy_public_fqdn: "checkmk.{{ inventory_hostname }}"
+checkmk_deploy_public_url: "https://{{ checkmk_deploy_public_fqdn }}"
+checkmk_deploy_health_url: >-
+  http://{{ checkmk_deploy_host_ip }}:{{ checkmk_deploy_port }}/{{ checkmk_deploy_site_name }}/check_mk/
+checkmk_deploy_health_status_codes:
+  - 200
+  - 302
+checkmk_deploy_validate_certs: true
+checkmk_deploy_env_extra: {}
+
+checkmk_deploy_vault_address: "{{ vault_address | default('') }}"
+checkmk_deploy_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') }}"
+checkmk_deploy_vault_kv_path: "{{ inventory_hostname }}/checkmk/admin"
+checkmk_deploy_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
+checkmk_deploy_vault_token: "{{ vault_token | default('', true) }}"
+checkmk_deploy_vault_role_id: "{{ ansible_hashi_vault_role_id | default('', true) }}"
+checkmk_deploy_vault_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"
+checkmk_deploy_vault_read_before_generate: true
+checkmk_deploy_vault_store_generated_admin_password: true
+checkmk_deploy_vault_remove_local_secret_file: true
+checkmk_deploy_vault_auth_token: "{{ checkmk_deploy_vault_token | default('', true) | trim }}"
+checkmk_deploy_vault_auth_role_id: "{{ checkmk_deploy_vault_role_id | default('', true) | trim }}"
+checkmk_deploy_vault_auth_secret_id: "{{ checkmk_deploy_vault_secret_id | default('', true) | trim }}"
+checkmk_deploy_vault_use_token: "{{ (checkmk_deploy_vault_auth_token | length) > 0 }}"
+checkmk_deploy_vault_auth_method: >-
+  {{ 'token' if (checkmk_deploy_vault_use_token | bool) else 'approle' }}
+checkmk_deploy_vault_auth_ok: >-
+  {{
+    (checkmk_deploy_vault_auth_token | length > 0)
+    or (
+      (checkmk_deploy_vault_auth_role_id | length > 0)
+      and (checkmk_deploy_vault_auth_secret_id | length > 0)
+    )
+  }}
+
+checkmk_deploy_monitoring_hooks_enabled: false
+checkmk_deploy_monitoring_targets: []
+
+checkmk_deploy_install_packages: true
+checkmk_deploy_manage_systemd: true
+checkmk_deploy_skip_runtime: false
+checkmk_deploy_skip_deploy: false
+checkmk_deploy_kubeplay_remove: false
+checkmk_deploy_kubeplay_run: false
+
+checkmk_deploy_systemd_unit_name: >-
+  {{
+    'podman-kube@'
+    ~ (checkmk_deploy_pod_manifest_path | regex_replace('^/', '-') | regex_replace('/', '-'))
+    ~ '.service'
+  }}

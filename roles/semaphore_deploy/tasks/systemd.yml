@@ -54,3 +54,6 @@
       delay: 5
       changed_when: false
       failed_when: semaphore_deploy_health is failed or semaphore_deploy_health.status != 200
+
+    - name: Enforce Semaphore admin password
+      ansible.builtin.include_tasks: enforce_admin_password.yml

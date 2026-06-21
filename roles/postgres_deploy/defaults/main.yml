@@ -30,10 +30,35 @@ postgres_deploy_db_name: "postgres"
 postgres_deploy_db_user: "postgres"
 postgres_deploy_db_password: ""
 
-# Secrets (preferred: inventory/Vault; fallback: generated once)
+# Secrets (preferred: inventory/Ansible Vault or HC Vault)
 postgres_deploy_generate_password: true
 postgres_deploy_store_generated_password: true
 postgres_deploy_generated_password_length: 32
+postgres_deploy_allow_local_secret_files: false
+postgres_deploy_vault_address: "{{ vault_address | default('') }}"
+postgres_deploy_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') }}"
+postgres_deploy_vault_kv_path: "{{ inventory_hostname }}/postgres/{{ postgres_deploy_pod_name }}"
+postgres_deploy_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
+postgres_deploy_vault_token: "{{ vault_token | default('', true) }}"
+postgres_deploy_vault_role_id: "{{ ansible_hashi_vault_role_id | default('', true) }}"
+postgres_deploy_vault_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"
+postgres_deploy_vault_read_before_generate: true
+postgres_deploy_vault_store_generated_password: true
+postgres_deploy_vault_remove_local_secret_file: true
+postgres_deploy_vault_auth_token: "{{ postgres_deploy_vault_token | default('', true) | trim }}"
+postgres_deploy_vault_auth_role_id: "{{ postgres_deploy_vault_role_id | default('', true) | trim }}"
+postgres_deploy_vault_auth_secret_id: "{{ postgres_deploy_vault_secret_id | default('', true) | trim }}"
+postgres_deploy_vault_use_token: "{{ (postgres_deploy_vault_auth_token | length) > 0 }}"
+postgres_deploy_vault_auth_method: >-
+  {{ 'token' if (postgres_deploy_vault_use_token | bool) else 'approle' }}
+postgres_deploy_vault_auth_ok: >-
+  {{
+    (postgres_deploy_vault_auth_token | length > 0)
+    or (
+      (postgres_deploy_vault_auth_role_id | length > 0)
+      and (postgres_deploy_vault_auth_secret_id | length > 0)
+    )
+  }}
 
 # Lifecycle
 postgres_deploy_install_packages: true

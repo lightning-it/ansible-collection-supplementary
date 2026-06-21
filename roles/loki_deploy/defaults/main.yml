@@ -1,0 +1,47 @@
+---
+loki_deploy_pod_name: "loki"
+loki_deploy_container_name: "loki"
+loki_deploy_image: "docker.io/grafana/loki:3.4.2"
+loki_deploy_pod_manifest_path: "/etc/podman/pods/loki.yml"
+
+loki_deploy_host_data_dir: "/srv/loki/data"
+loki_deploy_host_data_owner: "10001"
+loki_deploy_host_data_group: "10001"
+loki_deploy_host_data_mode: "0750"
+loki_deploy_config_dir: "/srv/loki/config"
+loki_deploy_config_file: "{{ loki_deploy_config_dir }}/local-config.yaml"
+loki_deploy_container_data_dir: "/loki"
+loki_deploy_container_config_file: "/etc/loki/local-config.yaml"
+
+loki_deploy_host_ip: "127.0.0.1"
+loki_deploy_port: 3100
+loki_deploy_expose_public: false
+loki_deploy_retention_period: "168h"
+loki_deploy_auth_enabled: false
+loki_deploy_log_level: "info"
+loki_deploy_extra_args: []
+loki_deploy_env_extra: {}
+
+loki_deploy_api_url: ""
+loki_deploy_api_url_effective: >-
+  {{
+    loki_deploy_api_url
+      if (loki_deploy_api_url | default('', true) | length > 0)
+      else ('http://' ~ loki_deploy_host_ip ~ ':' ~ (loki_deploy_port | string))
+  }}
+loki_deploy_ready_url: "{{ loki_deploy_api_url_effective }}/ready"
+loki_deploy_validate_certs: true
+
+loki_deploy_install_packages: true
+loki_deploy_manage_systemd: true
+loki_deploy_skip_runtime: false
+loki_deploy_skip_deploy: false
+loki_deploy_kubeplay_remove: false
+loki_deploy_kubeplay_run: false
+
+loki_deploy_systemd_unit_name: >-
+  {{
+    'podman-kube@'
+    ~ (loki_deploy_pod_manifest_path | basename | regex_replace('\\.ya?ml$', ''))
+    ~ '.service'
+  }}

@@ -7,8 +7,12 @@ semaphore_cac_url: "https://{{ semaphore_fqdn | default(inventory_hostname, true
 semaphore_cac_validate_certs: false
 semaphore_cac_request_timeout: 30
 semaphore_cac_admin_login: "{{ semaphore_deploy_admin_login | default('admin', true) }}"
-semaphore_cac_admin_password: "{{ semaphore_deploy_admin_password | default('', true) }}"
+semaphore_cac_admin_password: >-
+  {{
+    semaphore_deploy_admin_password_effective
+    | default(semaphore_deploy_admin_password | default('', true), true)
+  }}
 
-# Future object catalogs (kept empty by default)
+# Object catalogs (kept empty by default)
 semaphore_cac_users: []
 semaphore_cac_projects: []

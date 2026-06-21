@@ -1,0 +1,42 @@
+---
+- name: Validate Incus ESXi image role inputs
+  ansible.builtin.assert:
+    that:
+      - incus_esxi_image_enabled is boolean
+      - incus_esxi_image_binary | trim | length > 0
+      - incus_esxi_image_force_local is boolean
+      - incus_esxi_image_command_user is string
+      - incus_esxi_image_project is string
+      - incus_esxi_image_alias | trim | length > 0
+      - "':' not in incus_esxi_image_alias"
+      - incus_esxi_image_replace is boolean
+      - incus_esxi_image_public is boolean
+      - incus_esxi_image_properties is mapping
+      - incus_esxi_image_metadata is string
+      - incus_esxi_image_rootfs is string
+      - incus_esxi_image_backup is string
+      - incus_esxi_image_backup_instance_name | trim | length > 0
+      - "':' not in incus_esxi_image_backup_instance_name"
+      - incus_esxi_image_backup_storage_pool is string
+      - incus_esxi_image_destroy_existing_backup_instance is boolean
+      - incus_esxi_image_cleanup_backup_instance is boolean
+      - >-
+        (incus_esxi_image_metadata | trim | length > 0)
+        !=
+        (incus_esxi_image_backup | trim | length > 0)
+    fail_msg: >-
+      Invalid configuration for lit.supplementary.incus_esxi_image. Configure
+      exactly one private source: incus_esxi_image_metadata or
+      incus_esxi_image_backup. Aliases must not include a remote prefix.
+    quiet: true
+  changed_when: false
+  when: incus_esxi_image_enabled | bool
+
+- name: Check required Incus ESXi image commands
+  ansible.builtin.command:
+    argv:
+      - bash
+      - -lc
+      - "command -v {{ incus_esxi_image_binary | quote }} >/dev/null"
+  changed_when: false
+  when: incus_esxi_image_enabled | bool

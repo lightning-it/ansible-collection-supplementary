@@ -1,0 +1,29 @@
+---
+- name: Ensure Checkmk variables are valid
+  ansible.builtin.assert:
+    that:
+      - checkmk_deploy_pod_name | default('', true) | trim | length > 0
+      - checkmk_deploy_container_name | default('', true) | trim | length > 0
+      - checkmk_deploy_image | default('', true) | trim | length > 0
+      - checkmk_deploy_pod_manifest_path | default('', true) | trim | length > 0
+      - checkmk_deploy_host_data_dir | default('', true) | trim | length > 0
+      - checkmk_deploy_config_dir | default('', true) | trim | length > 0
+      - checkmk_deploy_site_name | default('', true) | trim | length > 0
+      - checkmk_deploy_admin_user | default('', true) | trim | length > 0
+      - checkmk_deploy_host_ip | default('', true) | trim | length > 0
+      - checkmk_deploy_port | int > 0
+      - checkmk_deploy_public_fqdn | default('', true) | trim | length > 0
+      - checkmk_deploy_generate_admin_password is boolean
+      - checkmk_deploy_store_generated_admin_password is boolean
+      - checkmk_deploy_allow_local_secret_files is boolean
+      - checkmk_deploy_vault_store_generated_admin_password is boolean
+      - checkmk_deploy_generated_admin_password_length | int >= 16
+      - checkmk_deploy_monitoring_hooks_enabled is boolean
+      - checkmk_deploy_monitoring_targets is sequence
+      - checkmk_deploy_install_packages is boolean
+      - checkmk_deploy_manage_systemd is boolean
+      - checkmk_deploy_skip_runtime is boolean
+      - checkmk_deploy_skip_deploy is boolean
+      - checkmk_deploy_env_extra is mapping
+    fail_msg: "Checkmk variables are missing or invalid."
+  tags: always

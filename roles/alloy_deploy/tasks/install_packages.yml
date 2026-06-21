@@ -1,0 +1,6 @@
+---
+- name: Ensure Alloy runtime packages are installed
+  ansible.builtin.package:
+    name: "{{ alloy_deploy_packages }}"
+    state: present
+  when: alloy_deploy_packages is defined
