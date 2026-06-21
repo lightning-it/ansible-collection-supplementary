@@ -1,0 +1,53 @@
+---
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+  when: ansible_os_family in ['RedHat', 'Debian']
+
+- name: Skip Checkmk runtime deployment in check mode
+  ansible.builtin.debug:
+    msg: "Checkmk runtime deployment skipped in check mode."
+  when:
+    - ansible_check_mode
+    - not checkmk_deploy_skip_runtime | bool
+    - not checkmk_deploy_skip_deploy | bool
+  tags: always
+
+- name: Deploy Checkmk runtime
+  when:
+    - not checkmk_deploy_skip_runtime | bool
+    - not checkmk_deploy_skip_deploy | bool
+    - not ansible_check_mode
+  block:
+    - name: Ensure required packages are installed
+      ansible.builtin.include_tasks: install_packages.yml
+      when: checkmk_deploy_install_packages | bool
+      tags:
+        - install
+
+    - name: Deploy Checkmk Pod
+      ansible.builtin.include_tasks: deploy_pod.yml
+      tags:
+        - deployment
+
+    - name: Install systemd unit for Checkmk Pod
+      ansible.builtin.include_tasks: systemd.yml
+      when: checkmk_deploy_manage_systemd | bool
+      tags:
+        - systemd
+
+    - name: Wait until Checkmk endpoint is reachable (non-systemd)
+      ansible.builtin.uri:
+        url: "{{ checkmk_deploy_health_url }}"
+        method: GET
+        status_code: "{{ checkmk_deploy_health_status_codes }}"
+        validate_certs: "{{ checkmk_deploy_validate_certs }}"
+      register: checkmk_deploy_health
+      until: checkmk_deploy_health.status in checkmk_deploy_health_status_codes
+      retries: 60
+      delay: 5
+      changed_when: false
+      failed_when: checkmk_deploy_health is failed
+      when: not checkmk_deploy_manage_systemd | bool
+      tags:
+        - deployment
+        - api

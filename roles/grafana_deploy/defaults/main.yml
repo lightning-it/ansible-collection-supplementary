@@ -1,0 +1,71 @@
+---
+grafana_deploy_pod_name: "grafana"
+grafana_deploy_container_name: "grafana"
+grafana_deploy_image: "docker.io/grafana/grafana:11.5.2"
+grafana_deploy_pod_manifest_path: "/etc/podman/pods/grafana.yml"
+
+grafana_deploy_host_data_dir: "/srv/grafana/data"
+grafana_deploy_config_dir: "/srv/grafana/config"
+grafana_deploy_provisioning_dir: "{{ grafana_deploy_config_dir }}/provisioning"
+grafana_deploy_datasources_dir: "{{ grafana_deploy_provisioning_dir }}/datasources"
+grafana_deploy_dashboards_dir: "{{ grafana_deploy_provisioning_dir }}/dashboards"
+grafana_deploy_datasource_file: "{{ grafana_deploy_datasources_dir }}/loki.yml"
+grafana_deploy_container_data_dir: "/var/lib/grafana"
+grafana_deploy_container_provisioning_dir: "/etc/grafana/provisioning"
+
+grafana_deploy_host_ip: "127.0.0.1"
+grafana_deploy_port: 3002
+grafana_deploy_public_fqdn: "grafana.{{ inventory_hostname }}"
+grafana_deploy_root_url: "https://{{ grafana_deploy_public_fqdn }}"
+grafana_deploy_health_url: "http://{{ grafana_deploy_host_ip }}:{{ grafana_deploy_port }}/api/health"
+grafana_deploy_validate_certs: true
+grafana_deploy_loki_url: "http://127.0.0.1:3100"
+grafana_deploy_loki_datasource_name: "Loki"
+grafana_deploy_loki_datasource_uid: "loki_deploy"
+grafana_deploy_env_extra: {}
+
+grafana_deploy_admin_user: "admin"
+grafana_deploy_admin_password: ""
+grafana_deploy_generate_admin_password: true
+grafana_deploy_store_generated_admin_password: true
+grafana_deploy_generated_admin_password_length: 32
+grafana_deploy_allow_local_secret_files: false
+grafana_deploy_secrets_file: "{{ grafana_deploy_config_dir }}/grafana-secrets.yml"
+grafana_deploy_vault_address: "{{ vault_address | default('') }}"
+grafana_deploy_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') }}"
+grafana_deploy_vault_kv_path: "{{ inventory_hostname }}/grafana/admin"
+grafana_deploy_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
+grafana_deploy_vault_token: "{{ vault_token | default('', true) }}"
+grafana_deploy_vault_role_id: "{{ ansible_hashi_vault_role_id | default('', true) }}"
+grafana_deploy_vault_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"
+grafana_deploy_vault_read_before_generate: true
+grafana_deploy_vault_store_generated_admin_password: true
+grafana_deploy_vault_remove_local_secret_file: true
+grafana_deploy_vault_auth_token: "{{ grafana_deploy_vault_token | default('', true) | trim }}"
+grafana_deploy_vault_auth_role_id: "{{ grafana_deploy_vault_role_id | default('', true) | trim }}"
+grafana_deploy_vault_auth_secret_id: "{{ grafana_deploy_vault_secret_id | default('', true) | trim }}"
+grafana_deploy_vault_use_token: "{{ (grafana_deploy_vault_auth_token | length) > 0 }}"
+grafana_deploy_vault_auth_method: >-
+  {{ 'token' if (grafana_deploy_vault_use_token | bool) else 'approle' }}
+grafana_deploy_vault_auth_ok: >-
+  {{
+    (grafana_deploy_vault_auth_token | length > 0)
+    or (
+      (grafana_deploy_vault_auth_role_id | length > 0)
+      and (grafana_deploy_vault_auth_secret_id | length > 0)
+    )
+  }}
+
+grafana_deploy_install_packages: true
+grafana_deploy_manage_systemd: true
+grafana_deploy_skip_runtime: false
+grafana_deploy_skip_deploy: false
+grafana_deploy_kubeplay_remove: false
+grafana_deploy_kubeplay_run: false
+
+grafana_deploy_systemd_unit_name: >-
+  {{
+    'podman-kube@'
+    ~ (grafana_deploy_pod_manifest_path | basename | regex_replace('\\.ya?ml$', ''))
+    ~ '.service'
+  }}

@@ -1,0 +1,6 @@
+---
+- name: Ensure Loki runtime packages are installed
+  ansible.builtin.package:
+    name: "{{ loki_deploy_packages }}"
+    state: present
+  when: loki_deploy_packages is defined

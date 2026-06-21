@@ -1,0 +1,74 @@
+---
+- name: Resolve existing Semaphore project
+  ansible.builtin.set_fact:
+    semaphore_cac_project_existing: >-
+      {{
+        semaphore_cac_projects_get.json
+        | selectattr('name', 'equalto', semaphore_cac_project.name)
+        | list
+        | first
+        | default({})
+      }}
+  changed_when: false
+
+- name: Build Semaphore project request
+  ansible.builtin.set_fact:
+    semaphore_cac_project_request: >-
+      {{
+        {
+          'name': semaphore_cac_project.name,
+          'alert': semaphore_cac_project.alert | default(false),
+          'max_parallel_tasks': semaphore_cac_project.max_parallel_tasks | default(0),
+          'type': semaphore_cac_project.type | default(''),
+          'demo': semaphore_cac_project.demo | default(false)
+        }
+        | combine(
+            {'alert_chat': semaphore_cac_project.alert_chat}
+            if (semaphore_cac_project.alert_chat is defined)
+            else {}
+          )
+      }}
+  changed_when: false
+
+- name: Create Semaphore project
+  ansible.builtin.uri:
+    url: "{{ semaphore_cac_url }}/api/projects"
+    method: POST
+    headers: "{{ semaphore_cac_api_headers }}"
+    body_format: json
+    body: "{{ semaphore_cac_project_request }}"
+    validate_certs: "{{ semaphore_cac_validate_certs }}"
+    timeout: "{{ semaphore_cac_request_timeout | int }}"
+    status_code: 201
+  register: semaphore_cac_project_create
+  when: semaphore_cac_project_existing.id is not defined
+
+- name: Set current Semaphore project
+  ansible.builtin.set_fact:
+    semaphore_cac_project_current: >-
+      {{
+        semaphore_cac_project_create.json
+        if (semaphore_cac_project_existing.id is not defined)
+        else semaphore_cac_project_existing
+      }}
+  changed_when: false
+
+- name: Reconcile Semaphore project keys
+  ansible.builtin.include_tasks: object_22_keys.yml
+  when: semaphore_cac_project['keys'] | default([]) | length > 0
+
+- name: Reconcile Semaphore project repositories
+  ansible.builtin.include_tasks: object_23_repositories.yml
+  when: semaphore_cac_project['repositories'] | default([]) | length > 0
+
+- name: Reconcile Semaphore project environments
+  ansible.builtin.include_tasks: object_24_environments.yml
+  when: semaphore_cac_project['environments'] | default([]) | length > 0
+
+- name: Reconcile Semaphore project inventories
+  ansible.builtin.include_tasks: object_25_inventories.yml
+  when: semaphore_cac_project['inventories'] | default([]) | length > 0
+
+- name: Reconcile Semaphore project templates
+  ansible.builtin.include_tasks: object_26_templates.yml
+  when: semaphore_cac_project['templates'] | default([]) | length > 0

@@ -1,0 +1,89 @@
+---
+- name: Ensure Loki directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ loki_deploy_host_data_dir }}"
+      mode: '0750'
+    - path: "{{ loki_deploy_config_dir }}"
+      mode: '0750'
+    - path: "{{ loki_deploy_pod_manifest_path | dirname }}"
+      mode: '0755'
+  when: item.path | default('') | length > 0
+  notify:
+    - Recreate Loki pod
+    - Run Loki pod
+  tags:
+    - deployment
+
+- name: Render Loki config
+  ansible.builtin.template:
+    src: loki-local-config.yaml.j2
+    dest: "{{ loki_deploy_config_file }}"
+    mode: '0644'
+  notify:
+    - Recreate Loki pod
+    - Run Loki pod
+  tags:
+    - deployment
+
+- name: Render Loki Pod manifest
+  ansible.builtin.template:
+    src: loki-pod.yml.j2
+    dest: "{{ loki_deploy_pod_manifest_path }}"
+    mode: '0644'
+  notify:
+    - Recreate Loki pod
+    - Run Loki pod
+  tags:
+    - deployment
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+  tags:
+    - deployment
+
+- name: Recreate Loki pod (kubeplay)
+  when:
+    - loki_deploy_kubeplay_remove | default(false)
+    - not loki_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay remove (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: remove
+        kubeplay_pod_name: "{{ loki_deploy_pod_name }}"
+        kubeplay_app_name: loki_deploy_remove
+  rescue:
+    - name: Ignore kubeplay remove failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay remove failure."
+
+- name: Run Loki pod (kubeplay)
+  when:
+    - loki_deploy_kubeplay_run | default(false)
+    - not loki_deploy_skip_runtime | bool
+  tags:
+    - deployment
+  block:
+    - name: Run kubeplay run (best effort)
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps: []
+        kubeplay_action: run
+        kubeplay_pod_name: "{{ loki_deploy_pod_name }}"
+        kubeplay_pod_manifest_path: "{{ loki_deploy_pod_manifest_path }}"
+        kubeplay_app_name: loki_deploy_run
+  rescue:
+    - name: Ignore kubeplay run failure
+      ansible.builtin.debug:
+        msg: "Skipping kubeplay run failure."

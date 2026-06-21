@@ -1,0 +1,31 @@
+---
+- name: Resolve existing Semaphore environment
+  ansible.builtin.set_fact:
+    semaphore_cac_environment_existing: >-
+      {{
+        semaphore_cac_environments_get.json
+        | selectattr('name', 'equalto', semaphore_cac_environment.name)
+        | list
+        | first
+        | default({})
+      }}
+  changed_when: false
+
+- name: Create Semaphore environment
+  ansible.builtin.uri:
+    url: "{{ semaphore_cac_url }}/api/project/{{ semaphore_cac_project_current.id }}/environment"
+    method: POST
+    headers: "{{ semaphore_cac_api_headers }}"
+    body_format: json
+    body:
+      name: "{{ semaphore_cac_environment.name }}"
+      project_id: "{{ semaphore_cac_project_current.id }}"
+      password: "{{ semaphore_cac_environment.password | default('') }}"
+      json: "{{ semaphore_cac_environment.json | default('{}') }}"
+      env: "{{ semaphore_cac_environment.env | default('{}') }}"
+      secrets: "{{ semaphore_cac_environment.secrets | default([]) }}"
+    validate_certs: "{{ semaphore_cac_validate_certs }}"
+    timeout: "{{ semaphore_cac_request_timeout | int }}"
+    status_code: 201
+  when: semaphore_cac_environment_existing.id is not defined
+  no_log: "{{ semaphore_cac_environment.no_log | default(false) }}"

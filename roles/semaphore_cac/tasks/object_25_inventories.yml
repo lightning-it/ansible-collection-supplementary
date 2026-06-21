@@ -1,0 +1,29 @@
+---
+- name: Get Semaphore inventories
+  ansible.builtin.uri:
+    url: "{{ semaphore_cac_url }}/api/project/{{ semaphore_cac_project_current.id }}/inventory?sort=name&order=asc"
+    method: GET
+    headers: "{{ semaphore_cac_api_headers }}"
+    validate_certs: "{{ semaphore_cac_validate_certs }}"
+    timeout: "{{ semaphore_cac_request_timeout | int }}"
+    status_code: 200
+  register: semaphore_cac_inventories_get
+  changed_when: false
+
+- name: Ensure Semaphore inventories exist
+  ansible.builtin.include_tasks: object_25_inventory.yml
+  loop: "{{ semaphore_cac_project['inventories'] | default([]) }}"
+  loop_control:
+    loop_var: semaphore_cac_inventory
+    label: "{{ semaphore_cac_inventory.name }}"
+
+- name: Refresh Semaphore inventories
+  ansible.builtin.uri:
+    url: "{{ semaphore_cac_url }}/api/project/{{ semaphore_cac_project_current.id }}/inventory?sort=name&order=asc"
+    method: GET
+    headers: "{{ semaphore_cac_api_headers }}"
+    validate_certs: "{{ semaphore_cac_validate_certs }}"
+    timeout: "{{ semaphore_cac_request_timeout | int }}"
+    status_code: 200
+  register: semaphore_cac_inventories_get
+  changed_when: false

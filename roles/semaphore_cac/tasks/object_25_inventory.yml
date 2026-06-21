@@ -1,0 +1,68 @@
+---
+- name: Resolve existing Semaphore inventory references
+  ansible.builtin.set_fact:
+    semaphore_cac_inventory_existing: >-
+      {{
+        semaphore_cac_inventories_get.json
+        | selectattr('name', 'equalto', semaphore_cac_inventory.name)
+        | list
+        | first
+        | default({})
+      }}
+    semaphore_cac_inventory_repository: >-
+      {{
+        semaphore_cac_repositories_get.json | default([])
+        | selectattr('name', 'equalto', semaphore_cac_inventory.repository_name | default(''))
+        | list
+        | first
+        | default({})
+      }}
+    semaphore_cac_inventory_ssh_key: >-
+      {{
+        semaphore_cac_keys_get.json | default([])
+        | selectattr('name', 'equalto', semaphore_cac_inventory.ssh_key_name | default('None'))
+        | list
+        | first
+        | default({})
+      }}
+    semaphore_cac_inventory_become_key: >-
+      {{
+        semaphore_cac_keys_get.json | default([])
+        | selectattr('name', 'equalto', semaphore_cac_inventory.become_key_name | default('None'))
+        | list
+        | first
+        | default({})
+      }}
+  changed_when: false
+
+- name: Build Semaphore inventory request
+  ansible.builtin.set_fact:
+    semaphore_cac_inventory_request: >-
+      {{
+        {
+          'name': semaphore_cac_inventory.name,
+          'project_id': semaphore_cac_project_current.id,
+          'inventory': semaphore_cac_inventory.inventory,
+          'type': semaphore_cac_inventory.type | default('file'),
+          'ssh_key_id': semaphore_cac_inventory_ssh_key.id | default(0),
+          'become_key_id': semaphore_cac_inventory_become_key.id | default(0)
+        }
+        | combine(
+            {'repository_id': semaphore_cac_inventory_repository.id}
+            if (semaphore_cac_inventory_repository.id is defined)
+            else {}
+          )
+      }}
+  changed_when: false
+
+- name: Create Semaphore inventory
+  ansible.builtin.uri:
+    url: "{{ semaphore_cac_url }}/api/project/{{ semaphore_cac_project_current.id }}/inventory"
+    method: POST
+    headers: "{{ semaphore_cac_api_headers }}"
+    body_format: json
+    body: "{{ semaphore_cac_inventory_request }}"
+    validate_certs: "{{ semaphore_cac_validate_certs }}"
+    timeout: "{{ semaphore_cac_request_timeout | int }}"
+    status_code: 201
+  when: semaphore_cac_inventory_existing.id is not defined

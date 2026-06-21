@@ -1,0 +1,12 @@
+---
+- name: Recreate Loki pod
+  ansible.builtin.set_fact:
+    loki_deploy_kubeplay_remove: true
+  changed_when: false
+  when: not loki_deploy_skip_runtime | bool
+
+- name: Run Loki pod
+  ansible.builtin.set_fact:
+    loki_deploy_kubeplay_run: true
+  changed_when: false
+  when: not loki_deploy_skip_runtime | bool

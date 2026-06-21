@@ -1,0 +1,27 @@
+---
+- name: Ensure Alloy variables are valid
+  ansible.builtin.assert:
+    that:
+      - alloy_deploy_pod_name | default('', true) | trim | length > 0
+      - alloy_deploy_container_name | default('', true) | trim | length > 0
+      - alloy_deploy_image | default('', true) | trim | length > 0
+      - alloy_deploy_pod_manifest_path | default('', true) | trim | length > 0
+      - alloy_deploy_config_dir | default('', true) | trim | length > 0
+      - alloy_deploy_data_dir | default('', true) | trim | length > 0
+      - alloy_deploy_config_file | default('', true) | trim | length > 0
+      - alloy_deploy_host_ip | default('', true) | trim | length > 0
+      - alloy_deploy_port | int > 0
+      - alloy_deploy_loki_url | default('', true) | trim | length > 0
+      - alloy_deploy_collect_journald is boolean
+      - alloy_deploy_collect_vault_audit_logs is boolean
+      - alloy_deploy_install_packages is boolean
+      - alloy_deploy_manage_systemd is boolean
+      - alloy_deploy_skip_runtime is boolean
+      - alloy_deploy_skip_deploy is boolean
+      - alloy_deploy_env_extra is mapping
+      - alloy_deploy_extra_labels is mapping
+      - alloy_deploy_collect_paths is sequence
+      - alloy_deploy_extra_log_paths is sequence
+      - alloy_deploy_extra_args is sequence
+    fail_msg: "Alloy variables are missing or invalid."
+  tags: always

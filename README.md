@@ -169,7 +169,82 @@ Supplementary Ansible collection for ModuLix / Lightning IT.
 It includes service deployment and Configuration-as-Code roles such as
 `keycloak_deploy`, `keycloak_cac`, `forgejo_deploy`, `forgejo_cac`,
 `semaphore_deploy`, `semaphore_cac`, `nessus_deploy`, `nessus_cac`,
-`postgres_deploy`, `cloudflared`, and `cloudflare_warp`.
+`postgres_deploy`, `checkmk_deploy`, `loki_deploy`,
+`alloy_deploy`, `grafana_deploy`, `cloudflared`, and
+`cloudflare_warp`.
+
+## Wunderbox Monitoring and Logging PoC
+
+The Wunderbox PoC monitoring/logging stack is intentionally small and
+single-host:
+
+- Checkmk is the primary monitoring system.
+- Loki, Alloy, and Grafana provide the technical logging stack.
+- Loki is internal by default on `127.0.0.1:3100`.
+- Grafana and Checkmk are the only public reverse-proxy vhosts added by
+  `playbooks/wunderbox_monitoring_logging.yml`.
+- Prometheus and Alertmanager are intentionally not included in this PoC scope.
+- Forgejo Runner is intentionally excluded from the Wunderbox playbook and may be
+  deployed later on a separate VM if customer CI/CD is required.
+
+Example invocation:
+
+```bash
+ansible-playbook -i inventory.yml \
+  playbooks/wunderbox_monitoring_logging.yml
+```
+
+Example inventory snippet:
+
+```yaml
+all:
+  hosts:
+    wunderbox02.prd.dmz.corp.l-it.io:
+      grafana_deploy_public_fqdn: grafana.wunderbox02.prd.dmz.corp.l-it.io
+      checkmk_deploy_public_fqdn: checkmk.wunderbox02.prd.dmz.corp.l-it.io
+      grafana_deploy_admin_password: "{{ vault_wunderbox02_grafana_admin_password }}"
+      checkmk_deploy_admin_password: "{{ vault_wunderbox02_checkmk_admin_password }}"
+```
+
+Service catalog:
+
+| Service | Exposure | Login |
+|---|---|---|
+| Checkmk | `https://checkmk.<wunderbox-domain>` | `cmkadmin`, password from HC Vault or Ansible Vault |
+| Grafana | `https://grafana.<wunderbox-domain>` | `admin`, password from HC Vault or Ansible Vault |
+| Loki | Internal only, `http://127.0.0.1:3100` | No public login |
+| Alloy | Agent only | No user login |
+
+Persistent data defaults:
+
+| Role | Data path |
+|---|---|
+| `checkmk_deploy` | `/srv/checkmk/data` |
+| `loki_deploy` | `/srv/loki/data` |
+| `alloy_deploy` | `/srv/alloy/data` |
+| `grafana_deploy` | `/srv/grafana/data` |
+
+Secrets:
+
+- Grafana admin: HC Vault path `{{ inventory_hostname }}/grafana/admin`, or
+  `grafana_deploy_admin_password` from Ansible Vault.
+- Checkmk admin: HC Vault path `{{ inventory_hostname }}/checkmk/admin`, or
+  `checkmk_deploy_admin_password` from Ansible Vault.
+- No plaintext generated secret files are written unless the explicit
+  `*_allow_local_secret_files=true` break-glass variable is set.
+
+Alloy default log collection:
+
+- journald/systemd
+- Podman container log files when present
+- NGINX, Vault operational, Keycloak, Nexus, and Forgejo log paths under `/srv`
+- Vault audit logs are disabled by default with
+  `alloy_deploy_collect_vault_audit_logs: false`
+
+Checkmk object registration is represented by
+`checkmk_deploy_monitoring_targets` and rendered as hook data for a future
+Checkmk CaC role. The first implementation deploys Checkmk but does not yet
+create Checkmk hosts/services through its API.
 
 ## Usage
 
@@ -229,6 +304,10 @@ Example playbook:
   deployment.
 - Molecule scenario `nessus-cac-basic` validates the Nessus CaC role in skip
   mode.
+- Molecule scenario `wunderbox-monitoring-logging-basic` validates syntax
+  wiring for the generic Checkmk, Loki, Alloy, and Grafana deploy roles. Runtime
+  container startup is intentionally skipped in CI because Checkmk and Grafana
+  are heavyweight service containers.
 - Molecule scenario `vault-basic` runs the vault role with a stub terragrunt role
   to validate basics locally.
 - Molecule scenario `openvpn-basic` runs the openvpn role without standing up a

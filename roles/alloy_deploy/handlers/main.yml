@@ -1,0 +1,12 @@
+---
+- name: Recreate Alloy pod
+  ansible.builtin.set_fact:
+    alloy_deploy_kubeplay_remove: true
+  changed_when: false
+  when: not alloy_deploy_skip_runtime | bool
+
+- name: Run Alloy pod
+  ansible.builtin.set_fact:
+    alloy_deploy_kubeplay_run: true
+  changed_when: false
+  when: not alloy_deploy_skip_runtime | bool

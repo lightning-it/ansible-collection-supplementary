@@ -1,0 +1,29 @@
+---
+- name: Get Semaphore environments
+  ansible.builtin.uri:
+    url: "{{ semaphore_cac_url }}/api/project/{{ semaphore_cac_project_current.id }}/environment?sort=name&order=asc"
+    method: GET
+    headers: "{{ semaphore_cac_api_headers }}"
+    validate_certs: "{{ semaphore_cac_validate_certs }}"
+    timeout: "{{ semaphore_cac_request_timeout | int }}"
+    status_code: 200
+  register: semaphore_cac_environments_get
+  changed_when: false
+
+- name: Ensure Semaphore environments exist
+  ansible.builtin.include_tasks: object_24_environment.yml
+  loop: "{{ semaphore_cac_project['environments'] | default([]) }}"
+  loop_control:
+    loop_var: semaphore_cac_environment
+    label: "{{ semaphore_cac_environment.name }}"
+
+- name: Refresh Semaphore environments
+  ansible.builtin.uri:
+    url: "{{ semaphore_cac_url }}/api/project/{{ semaphore_cac_project_current.id }}/environment?sort=name&order=asc"
+    method: GET
+    headers: "{{ semaphore_cac_api_headers }}"
+    validate_certs: "{{ semaphore_cac_validate_certs }}"
+    timeout: "{{ semaphore_cac_request_timeout | int }}"
+    status_code: 200
+  register: semaphore_cac_environments_get
+  changed_when: false

@@ -1,0 +1,3 @@
+---
+checkmk_deploy_packages:
+  - podman
