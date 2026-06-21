@@ -1,4 +1,4 @@
-# yamllint disable rule:truthy
+# yamllint disable rule:truthy rule:line-length
 ---
 name: Changelog
 
@@ -11,6 +11,68 @@ permissions:
 
 jobs:
   changelog:
-    uses: lightning-it/shared-assets/.github/workflows/ansible-collection-changelog-validate.yml@main
-    with:
-      require_fragment: true
+    name: Changelog fragments
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install antsibull-changelog
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install antsibull-changelog
+
+      - name: Validate changelog policy
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
+          REQUIRE_FRAGMENT: "true"
+        run: |
+          set -euo pipefail
+
+          antsibull-changelog lint
+
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          echo "$changed"
+
+          labels="$(jq -r '.[]' <<<"$LABELS_JSON")"
+          has_label() {
+            grep -Fxq "$1" <<<"$labels"
+          }
+
+          if has_label skip-changelog || has_label documentation || has_label ci || has_label tests; then
+            echo "Changelog fragment requirement skipped by PR label."
+            exit 0
+          fi
+
+          generated_re='^(CHANGELOG\.(md|rst)|changelogs/changelog\.yaml)$'
+          if grep -E "$generated_re" <<<"$changed"; then
+            if [[ "${GITHUB_HEAD_REF:-}" != release/v* ]]; then
+              echo "::error::Generated changelog files may only be changed by release/vX.Y.Z PRs."
+              exit 1
+            fi
+          fi
+
+          if [ "$REQUIRE_FRAGMENT" != "true" ]; then
+            exit 0
+          fi
+
+          user_visible="$(grep -Ev '^(\.github/|\.releaserc|\.pre-commit-config\.yaml|\.ansible-lint|\.yamllint|renovate|README\.md|docs/|molecule/|tests/|CHANGELOG\.(md|rst)|changelogs/config\.yaml|changelogs/changelog\.yaml|changelogs/fragments/|package(-lock)?\.json|AGENTS\.md|CONTRIBUTING\.md|SECURITY\.md)' <<<"$changed" || true)"
+          if [ -z "$user_visible" ]; then
+            echo "Only documentation, CI, tests, metadata, or changelog files changed."
+            exit 0
+          fi
+
+          if ! grep -Eq '^changelogs/fragments/[^/]+\.ya?ml$' <<<"$changed"; then
+            echo "::error::User-visible collection changes require a changelog fragment under changelogs/fragments/."
+            exit 1
+          fi

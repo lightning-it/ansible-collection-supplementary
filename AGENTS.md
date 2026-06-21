@@ -28,18 +28,18 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
 
 ## 1.1 Shared-Assets Managed Files (Mandatory)
 
-1. This repository receives centrally managed baseline files from `lightning-it/shared-assets`.
-2. Do not hand-edit these files in downstream repos unless you also update `shared-assets` and run sync.
-3. Managed default files from `shared-assets/default`:
+1. This repository receives centrally managed baseline files rendered from `lightning-it/shared-assets-lit`.
+2. Do not hand-edit these files in downstream repos unless you also update `shared-assets-lit` and run sync.
+3. Managed default files from `shared-assets-lit/default`:
    1. `CODE_OF_CONDUCT.md`
    2. `SECURITY.md`
    3. `scripts/wunder-devtools-ee.sh`
-4. Managed collection baseline files from `shared-assets/ansible-collection/base`:
+4. Managed collection baseline files from `shared-assets-lit/ansible-collection/base`:
    1. `AGENTS.md`
    2. `CONTRIBUTING.md`
    3. `.ansible-lint`
    4. `ansible.cfg`
-   5. `renovate.base.json`
+   5. `renovate.json` rendered from `renovate.base.json`
    6. `changelogs/config.yaml`
    7. `.yamllint`
    8. `.gitignore`
@@ -70,8 +70,7 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
 4. `semantic-release` remains allowed for non-collection repositories only.
 5. If a repository has `galaxy.yml` and collection structure such as `roles/`, `plugins/`, or `playbooks/`,
    treat it as an Ansible Collection repository.
-6. Shared release workflow logic belongs in `shared-assets`; do not duplicate large release workflows into
-   collection repositories.
+6. Shared release workflow logic belongs in `shared-assets-lit` and is rendered into local collection workflows.
 7. Use `antsibull-changelog` for collection changelogs:
    1. fragments live under `changelogs/fragments/`,
    2. generated changelog metadata lives in `changelogs/changelog.yaml`,
@@ -226,9 +225,8 @@ For each finding, include severity, file and line, why it matters, recommended f
 
 For Lightning IT Ansible collection repositories, follow the shared Renovate and release model.
 
-Do not duplicate generic Renovate policy in individual collection repositories. Generic Renovate rules must be
-maintained in `lightning-it/shared-assets` and consumed through the repository's `renovate.json` `extends`
-configuration.
+Do not hand-maintain generic Renovate policy in individual collection repositories. Generic Renovate rules must be
+maintained in `lightning-it/shared-assets-lit` and rendered into each repository's local `renovate.json`.
 
 Collection repositories may only define repository-specific Renovate overrides, such as:
 
