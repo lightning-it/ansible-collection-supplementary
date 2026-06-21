@@ -1,0 +1,31 @@
+# yamllint disable rule:truthy
+---
+name: Publish collection release
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - galaxy.yml
+      - CHANGELOG.rst
+      - CHANGELOG.md
+      - changelogs/changelog.yaml
+  workflow_dispatch:
+    inputs:
+      publish_galaxy:
+        description: Publish to Ansible Galaxy.
+        required: false
+        default: "false"
+        type: choice
+        options: ["true", "false"]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    uses: lightning-it/shared-assets/.github/workflows/ansible-collection-publish.yml@main
+    with:
+      publish_galaxy: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_galaxy == 'true' }}
+    secrets: inherit

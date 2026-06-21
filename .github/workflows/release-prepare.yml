@@ -1,0 +1,45 @@
+# yamllint disable rule:truthy
+---
+name: Prepare collection release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, for example 1.2.3
+        required: true
+      base_branch:
+        description: Base branch. Leave empty to prefer develop, then main.
+        required: false
+        default: ""
+      target_branch:
+        description: Release PR target branch.
+        required: false
+        default: main
+      create_github_release:
+        description: Create a GitHub release after merge.
+        required: false
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+      publish_galaxy:
+        description: Publish to Ansible Galaxy after merge.
+        required: false
+        default: "false"
+        type: choice
+        options: ["true", "false"]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    uses: lightning-it/shared-assets/.github/workflows/ansible-collection-release-prepare.yml@main
+    with:
+      version: ${{ inputs.version }}
+      base_branch: ${{ inputs.base_branch }}
+      target_branch: ${{ inputs.target_branch }}
+      create_github_release: ${{ inputs.create_github_release == 'true' }}
+      publish_galaxy: ${{ inputs.publish_galaxy == 'true' }}
+    secrets: inherit
