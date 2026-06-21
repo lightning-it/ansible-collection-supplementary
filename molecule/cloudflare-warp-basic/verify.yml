@@ -3,9 +3,17 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    cloudflare_warp_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/cloudflare-warp-coverage-mode
   tasks:
+    - name: Read lit.supplementary.cloudflare_warp coverage marker
+      ansible.builtin.slurp:
+        src: "{{ cloudflare_warp_molecule_marker_path }}"
+      register: cloudflare_warp_molecule_marker
+
     - name: Assert lit.supplementary.cloudflare_warp coverage stub ran
       ansible.builtin.assert:
         that:
-          - cloudflare_warp_molecule_coverage_mode | default('') == 'syntax_stub'
+          - cloudflare_warp_molecule_marker.content | b64decode | trim == 'syntax_stub'
         quiet: true

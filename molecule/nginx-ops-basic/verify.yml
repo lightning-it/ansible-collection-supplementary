@@ -3,9 +3,17 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    nginx_ops_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/nginx-ops-coverage-mode
   tasks:
+    - name: Read lit.supplementary.nginx_ops coverage marker
+      ansible.builtin.slurp:
+        src: "{{ nginx_ops_molecule_marker_path }}"
+      register: nginx_ops_molecule_marker
+
     - name: Assert lit.supplementary.nginx_ops coverage stub ran
       ansible.builtin.assert:
         that:
-          - nginx_ops_molecule_coverage_mode | default('') == 'syntax_stub'
+          - nginx_ops_molecule_marker.content | b64decode | trim == 'syntax_stub'
         quiet: true

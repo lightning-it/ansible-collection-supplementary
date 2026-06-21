@@ -5,6 +5,8 @@
   gather_facts: false
   vars:
     gitlab_runner_molecule_execute_role: false
+    gitlab_runner_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/gitlab-runner-coverage-mode
   tasks:
     - name: Import lit.supplementary.gitlab_runner for syntax coverage
       ansible.builtin.import_role:
@@ -14,3 +16,9 @@
     - name: Record lit.supplementary.gitlab_runner Molecule coverage mode
       ansible.builtin.set_fact:
         gitlab_runner_molecule_coverage_mode: syntax_stub
+
+    - name: Persist lit.supplementary.gitlab_runner Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ gitlab_runner_molecule_marker_path }}"
+        content: "syntax_stub\n"
+        mode: "0644"

@@ -5,6 +5,8 @@
   gather_facts: false
   vars:
     coredns_ops_molecule_execute_role: false
+    coredns_ops_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/coredns-ops-coverage-mode
   tasks:
     - name: Import lit.supplementary.coredns_ops for syntax coverage
       ansible.builtin.import_role:
@@ -14,3 +16,9 @@
     - name: Record lit.supplementary.coredns_ops Molecule coverage mode
       ansible.builtin.set_fact:
         coredns_ops_molecule_coverage_mode: syntax_stub
+
+    - name: Persist lit.supplementary.coredns_ops Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ coredns_ops_molecule_marker_path }}"
+        content: "syntax_stub\n"
+        mode: "0644"

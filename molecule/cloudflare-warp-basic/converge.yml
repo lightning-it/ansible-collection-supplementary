@@ -5,6 +5,8 @@
   gather_facts: false
   vars:
     cloudflare_warp_molecule_execute_role: false
+    cloudflare_warp_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/cloudflare-warp-coverage-mode
   tasks:
     - name: Import lit.supplementary.cloudflare_warp for syntax coverage
       ansible.builtin.import_role:
@@ -14,3 +16,9 @@
     - name: Record lit.supplementary.cloudflare_warp Molecule coverage mode
       ansible.builtin.set_fact:
         cloudflare_warp_molecule_coverage_mode: syntax_stub
+
+    - name: Persist lit.supplementary.cloudflare_warp Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ cloudflare_warp_molecule_marker_path }}"
+        content: "syntax_stub\n"
+        mode: "0644"

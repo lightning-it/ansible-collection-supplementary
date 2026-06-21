@@ -35,10 +35,9 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    2. `SECURITY.md`
    3. `scripts/wunder-devtools-ee.sh`
 4. Managed collection baseline files from `shared-assets/ansible-collection/base`:
-   1. `AGENT.md`
-   2. `AGENTS.md`
-   3. `CONTRIBUTING.md`
-   4. `.ansible-lint`
+   1. `AGENTS.md`
+   2. `CONTRIBUTING.md`
+   3. `.ansible-lint`
    5. `ansible.cfg`
    6. `renovate.base.json`
    7. `.releaserc`
@@ -106,6 +105,18 @@ production readiness, Ansible Galaxy readiness, and Red Hat Ansible Automation P
 4. Integration tests SHOULD cover real behavior, failure cases, idempotency, check mode, and upgrade paths.
 5. Molecule scenarios SHOULD cover role behavior with converge, idempotence, and verify.
 6. CI SHOULD run lint, sanity, unit, integration, package build, and smoke install where practical.
+7. For PR or CI fixes, reproduce the failing gate locally first and do not rely on GitHub Actions as the first
+   end-to-end verifier. Run the repository devtools gates from the repo root before finalizing whenever the
+   needed runtime is available. Docker or Podman is sufficient for the default public gates; protected or heavy
+   Incus scenarios additionally require an accessible Incus daemon and suitable images.
+
+Required local PR gates for collection changes, when the scripts exist:
+
+```bash
+bash scripts/devtools-ansible-lint.sh
+bash scripts/devtools-molecule.sh
+bash scripts/devtools-collection-smoke.sh
+```
 
 Recommended commands when applicable:
 
@@ -595,8 +606,13 @@ Variables section SHOULD point to `defaults/main.yml` and highlight key inputs.
 Before finalizing, confirm all items below:
 
 1. `pre-commit run --all-files` passes, or failures are explicitly explained.
-2. `ansible-lint` passes under repo devtools entrypoints.
-3. Molecule light scenarios pass (`scripts/devtools-molecule.sh` or scoped equivalent).
+2. Local collection PR gates pass before using GitHub Actions as verification, whenever the scripts exist and
+   the needed runtime is available:
+   1. `bash scripts/devtools-ansible-lint.sh`
+   2. `bash scripts/devtools-molecule.sh`
+   3. `bash scripts/devtools-collection-smoke.sh`
+3. If a local gate is skipped, the final response names the missing runtime or concrete blocker, such as no
+   Docker/Podman socket or protected Incus requirements.
 4. Documentation is updated for changed role interfaces.
 5. No CI, workflow, Renovate, or semantic-release config changes were made unless requested.
 6. Role prechecks are action-scoped and role-scoped:

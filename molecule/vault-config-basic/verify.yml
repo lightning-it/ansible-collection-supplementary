@@ -3,9 +3,17 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    vault_config_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-config-coverage-mode
   tasks:
+    - name: Read lit.supplementary.vault_config coverage marker
+      ansible.builtin.slurp:
+        src: "{{ vault_config_molecule_marker_path }}"
+      register: vault_config_molecule_marker
+
     - name: Assert lit.supplementary.vault_config coverage stub ran
       ansible.builtin.assert:
         that:
-          - vault_config_molecule_coverage_mode | default('') == 'syntax_stub'
+          - vault_config_molecule_marker.content | b64decode | trim == 'syntax_stub'
         quiet: true

@@ -3,9 +3,17 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    nessus_cac_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/nessus-cac-coverage-mode
   tasks:
+    - name: Read lit.supplementary.nessus_cac coverage marker
+      ansible.builtin.slurp:
+        src: "{{ nessus_cac_molecule_marker_path }}"
+      register: nessus_cac_molecule_marker
+
     - name: Assert lit.supplementary.nessus_cac coverage stub ran
       ansible.builtin.assert:
         that:
-          - nessus_cac_molecule_coverage_mode | default('') == 'syntax_stub'
+          - nessus_cac_molecule_marker.content | b64decode | trim == 'syntax_stub'
         quiet: true
