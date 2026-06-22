@@ -54,10 +54,10 @@ jobs:
             exit 0
           fi
 
-          generated_re='^(CHANGELOG\.(md|rst)|changelogs/changelog\.yaml)$'
+          generated_re='^(CHANGELOG\.(md|rst)|changelogs/(changelog|\.plugin-cache)\.yaml)$'
           if grep -E "$generated_re" <<<"$changed"; then
-            if [[ "${GITHUB_HEAD_REF:-}" != release/v* ]]; then
-              echo "::error::Generated changelog files may only be changed by release/vX.Y.Z PRs."
+            if [[ "${GITHUB_HEAD_REF:-}" != release/v* && "${GITHUB_HEAD_REF:-}" != backsync/release-* ]]; then
+              echo "::error::Generated changelog files may only be changed by release/vX.Y.Z or release back-sync PRs."
               exit 1
             fi
           fi
