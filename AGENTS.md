@@ -83,11 +83,13 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    3. legacy `CHANGELOG.md` files where they still exist.
 10. Generated changelog files and `galaxy.yml` version bumps are release-PR changes only.
 11. Release preparation MUST happen on `release/vX.Y.Z` branches and open a PR into `main`.
-12. Publishing happens only after the release PR is merged into `main`.
-13. No workflow or agent may push release commits directly to `main`.
-14. GitHub Release notes are an additional publishing surface; they MUST be generated from or aligned with the
+12. The release preparation workflow MAY automatically create that PR after a push to `main` when unreleased
+    changelog fragments exist.
+13. Publishing happens only after the release PR is merged into `main`.
+14. No workflow or agent may push release commits directly to `main`.
+15. GitHub Release notes are an additional publishing surface; they MUST be generated from or aligned with the
    repository changelog, not used as the only changelog.
-15. GitHub repository settings, branch protection, required checks, workflow permissions, labels, environments,
+16. GitHub repository settings, branch protection, required checks, workflow permissions, labels, environments,
     secrets, and release-bot permissions MUST be changed only through `github-management-lit`.
 
 ## 2.1 Production Review Standard (Community, Red Hat, Efficiency)
@@ -245,7 +247,8 @@ The standard branch and release model is:
 - Promotion from `develop` to `main` must happen through a pull request.
 - Promotion pull requests must remain a human-visible manual merge checkpoint after required checks pass.
 - Do not direct-push from `develop` to `main`.
-- Collection releases must be prepared from `release/vX.Y.Z` branches with `antsibull-changelog`.
+- Collection release PRs are created automatically from `release/vX.Y.Z` branches after `main` receives unreleased
+  changelog fragments.
 - Release PRs target `main` and must pass required checks before merge.
 
 Automation safety requirements:

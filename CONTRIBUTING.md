@@ -145,10 +145,14 @@ sweeps, do them in a separate PR.
   are useful PR conventions, but releases are explicit maintainer actions so the
   collection changelog, `galaxy.yml` version, release branch, and Galaxy
   publication stay aligned.
-- Release preparation is manual via the **Prepare collection release** workflow.
-- The workflow creates or updates a `release/vX.Y.Z` branch, runs
-  `antsibull-changelog release`, bumps `galaxy.yml`, builds the collection, and
-  opens a release PR into `main`.
+- Release preparation is automatic after feature changes are merged to `main`:
+  the **Prepare collection release** workflow opens a `release/vX.Y.Z` PR when
+  unreleased changelog fragments exist.
+- The workflow calculates the next feature version by default, creates or
+  updates a `release/vX.Y.Z` branch, runs `antsibull-changelog release`, bumps
+  `galaxy.yml`, builds the collection, and opens a release PR into `main`.
+- Maintainers may still run the workflow manually to choose an explicit version
+  or retry a release preparation.
 - Do **not** push release commits directly to `main`.
 - GitHub Release notes are generated from the repository changelog content after
   the release PR is merged.
