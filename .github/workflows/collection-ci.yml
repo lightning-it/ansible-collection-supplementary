@@ -16,7 +16,6 @@ permissions:
 env:
   # Common tool versions (override if needed)
   PYTHON_VERSION: "3.11"
-  ANSIBLE_CORE_VERSION: "2.18.18"
   ANSIBLE_LINT_VERSION: "6.22.2"
   TERRAFORM_VERSION: "1.15.6"
   COLLECTION_NAMESPACE: lit
@@ -42,7 +41,6 @@ jobs:
         env:
           # These env vars make the script generic across collections
           COLLECTION_NAMESPACE: ${{ env.COLLECTION_NAMESPACE }}
-          ANSIBLE_CORE_VERSION: ${{ env.ANSIBLE_CORE_VERSION }}
           ANSIBLE_LINT_VERSION: ${{ env.ANSIBLE_LINT_VERSION }}
         run: |
           bash scripts/devtools-ansible-lint.sh

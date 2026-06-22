@@ -19,12 +19,19 @@ repos:
       - id: ansible-lint-ee
         name: ansible-lint (via ee-wunder-devtools-ubi9)
         language: system
-        entry: >-
-          bash -lc "ANSIBLE_CORE_VERSION=2.15.13
-          ANSIBLE_LINT_VERSION=6.22.2
-          scripts/devtools-ansible-lint.sh"
+        entry: bash scripts/devtools-ansible-lint.sh
         pass_filenames: false
-        files: \.(yml|yaml)$
+        always_run: true
+
+      # -------------------------------------------------------------------
+      # Changelog policy (via ee-wunder-devtools-ubi9)
+      # -------------------------------------------------------------------
+      - id: changelog-policy-ee
+        name: changelog policy (via ee-wunder-devtools-ubi9)
+        language: system
+        entry: bash scripts/devtools-changelog-check.sh
+        pass_filenames: false
+        always_run: true
 
       # -------------------------------------------------------------------
       # Molecule tests non-heavy scenarios (via ee-wunder-devtools-ubi9)
@@ -34,6 +41,7 @@ repos:
         language: system
         entry: bash scripts/devtools-molecule.sh
         pass_filenames: false
+        always_run: true
 
       # -------------------------------------------------------------------
       # GitHub Actions workflow linting (actionlint)
@@ -42,8 +50,12 @@ repos:
         name: GitHub Actions workflow linting (actionlint)
         language: system
         entry: >-
-          bash -lc 'docker run --rm -v "$PWD":/repo
-          -w /repo docker.io/rhysd/actionlint:latest'
+          bash scripts/wunder-devtools-ee.sh bash -lc
+          'if ! docker info >/dev/null 2>&1; then
+          if [ "${CI:-false}" = "true" ] || [ "${GITHUB_ACTIONS:-false}" = "true" ];
+          then echo "ERROR: Docker API is required for actionlint in CI." >&2; exit 1; fi;
+          echo "Skipping actionlint because Docker API is unavailable locally." >&2; exit 0; fi;
+          docker run --rm -v "$WUNDER_DEVTOOLS_HOST_WORKSPACE":/repo -w /repo docker.io/rhysd/actionlint:latest'
         pass_filenames: false
         files: ^\.github/workflows/.*\.ya?ml$
 
@@ -56,10 +68,13 @@ repos:
         pass_filenames: false
         files: ^renovate\.json$
         entry: >-
-          bash -lc 'docker run --rm
-          -v "$PWD":/repo -w /repo
-          renovate/renovate:latest
-          renovate-config-validator'
+          bash scripts/wunder-devtools-ee.sh bash -lc
+          'if ! docker info >/dev/null 2>&1; then
+          if [ "${CI:-false}" = "true" ] || [ "${GITHUB_ACTIONS:-false}" = "true" ];
+          then echo "ERROR: Docker API is required for renovate-config-validator in CI." >&2; exit 1; fi;
+          echo "Skipping renovate config validation because Docker API is unavailable locally." >&2; exit 0; fi;
+          docker run --rm -v "$WUNDER_DEVTOOLS_HOST_WORKSPACE":/repo -w /repo
+          renovate/renovate:latest renovate-config-validator'
 
       # -------------------------------------------------------------------
       # ansible-collection smoke test (via ee-wunder-devtools-ubi9)
@@ -69,7 +84,7 @@ repos:
         language: system
         entry: bash scripts/devtools-collection-smoke.sh
         pass_filenames: false
-        files: ^(playbooks/|roles/|galaxy\.yml|runtime\.yml)
+        always_run: true
 
       # -------------------------------------------------------------------
       # Galaxy-style role verification (via ee-wunder-devtools-ubi9)

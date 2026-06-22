@@ -131,14 +131,16 @@ production readiness, Ansible Galaxy readiness, and Red Hat Ansible Automation P
 
 ### 2.1.4 Testing and Quality Gates
 
-1. `ansible-lint --profile production .` SHOULD pass, or repository-specific devtools lint MUST pass with documented
+1. `pre-commit run --all-files` MUST be the first local PR preflight for collection repositories. Shared hooks run
+   the PR-equivalent changelog, ansible-lint, Molecule light, and smoke gates through `ee-wunder-devtools-ubi9`.
+2. `ansible-lint --profile production .` SHOULD pass, or repository-specific devtools lint MUST pass with documented
    equivalent strictness.
-2. `ansible-test sanity --docker` SHOULD pass for custom modules/plugins and collection packaging concerns.
-3. Unit tests SHOULD cover custom modules, plugins, filters, and module_utils helpers.
-4. Integration tests SHOULD cover real behavior, failure cases, idempotency, check mode, and upgrade paths.
-5. Molecule scenarios SHOULD cover role behavior with converge, idempotence, and verify.
-6. CI SHOULD run lint, sanity, unit, integration, package build, and smoke install where practical.
-7. For PR or CI fixes, reproduce the failing gate locally first and do not rely on GitHub Actions as the first
+3. `ansible-test sanity --docker` SHOULD pass for custom modules/plugins and collection packaging concerns.
+4. Unit tests SHOULD cover custom modules, plugins, filters, and module_utils helpers.
+5. Integration tests SHOULD cover real behavior, failure cases, idempotency, check mode, and upgrade paths.
+6. Molecule scenarios SHOULD cover role behavior with converge, idempotence, and verify.
+7. CI SHOULD run lint, sanity, unit, integration, package build, and smoke install where practical.
+8. For PR or CI fixes, reproduce the failing gate locally first and do not rely on GitHub Actions as the first
    end-to-end verifier. Run the repository devtools gates from the repo root before finalizing whenever the
    needed runtime is available. Docker or Podman is sufficient for the default public gates; protected or heavy
    Incus scenarios additionally require an accessible Incus daemon and suitable images.
@@ -146,9 +148,11 @@ production readiness, Ansible Galaxy readiness, and Red Hat Ansible Automation P
 Required local PR gates for collection changes, when the scripts exist:
 
 ```bash
+pre-commit run --all-files
 bash scripts/devtools-ansible-lint.sh
 bash scripts/devtools-molecule.sh
 bash scripts/devtools-collection-smoke.sh
+bash scripts/devtools-changelog-check.sh
 ```
 
 Recommended commands when applicable:
@@ -640,12 +644,13 @@ Variables section SHOULD point to `defaults/main.yml` and highlight key inputs.
 
 Before finalizing, confirm all items below:
 
-1. `pre-commit run --all-files` passes, or failures are explicitly explained.
+1. `pre-commit run --all-files` passes through `ee-wunder-devtools-ubi9`, or failures are explicitly explained.
 2. Local collection PR gates pass before using GitHub Actions as verification, whenever the scripts exist and
    the needed runtime is available:
-   1. `bash scripts/devtools-ansible-lint.sh`
-   2. `bash scripts/devtools-molecule.sh`
-   3. `bash scripts/devtools-collection-smoke.sh`
+   1. `bash scripts/devtools-changelog-check.sh`
+   2. `bash scripts/devtools-ansible-lint.sh`
+   3. `bash scripts/devtools-molecule.sh`
+   4. `bash scripts/devtools-collection-smoke.sh`
 3. If a local gate is skipped, the final response names the missing runtime or concrete blocker, such as no
    Docker/Podman socket or protected Incus requirements.
 4. Documentation is updated for changed role interfaces.
