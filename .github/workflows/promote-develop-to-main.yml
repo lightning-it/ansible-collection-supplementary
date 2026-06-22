@@ -78,6 +78,18 @@ jobs:
             exit 0
           fi
 
+          if git diff --quiet origin/main origin/develop -- .; then
+            echo "develop and main have no file differences; promotion not needed."
+            if [ -n "$pr_url" ]; then
+              close_comment="Closing empty promotion PR: develop and main"
+              close_comment+=" have no file differences after back-sync."
+              GH_TOKEN="$RELEASE_TOKEN" gh pr close "$pr_url" \
+                --repo "$REPO" \
+                --comment "$close_comment"
+            fi
+            exit 0
+          fi
+
           body=$'Promotion PR from `develop` to `main`.\n\n'
           body+=$'Review this PR when Renovate updates have accumulated '
           body+=$'in `develop`. '
