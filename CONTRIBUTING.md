@@ -167,8 +167,9 @@ sweeps, do them in a separate PR.
 
 Collections assume the following tooling:
 
-- **pre-commit** with shared hooks (YAML, ansible-lint, Molecule, actionlint,
-  renovate-config-validator, etc.).
+- **pre-commit** with shared hooks. The collection hooks are devtools-backed
+  and intentionally mirror the PR gates: changelog policy, ansible-lint,
+  Molecule light scenarios, and collection smoke build/install.
 - **ee-wunder-devtools-ubi9** container as the canonical dev/CI environment:
   - Terraform, tflint, terraform-docs,
   - ansible-core, ansible-lint, Molecule,
@@ -177,8 +178,9 @@ Collections assume the following tooling:
   `devtools-molecule.sh`, heavy scenarios like `devtools-molecule-*_heavy.sh`)
   are part of the expected workflow.
 
-When in doubt, prefer running checks through the devtools wrapper scripts so
-your local behaviour matches CI.
+Run `pre-commit run --all-files` before opening or updating a PR. The local
+hooks use the same `ee-wunder-devtools-ubi9` container path as GitHub Actions,
+so host-installed Ansible tooling must not be treated as authoritative.
 
 ## Getting Help
 
