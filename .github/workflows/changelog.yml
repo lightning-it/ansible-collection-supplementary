@@ -62,6 +62,11 @@ jobs:
             fi
           fi
 
+          if [[ "${GITHUB_HEAD_REF:-}" == release/v* || "${GITHUB_HEAD_REF:-}" == backsync/release-* ]]; then
+            echo "Release and release back-sync PRs manage generated changelog files."
+            exit 0
+          fi
+
           if [ "$REQUIRE_FRAGMENT" != "true" ]; then
             exit 0
           fi

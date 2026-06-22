@@ -81,7 +81,9 @@ jobs:
           body=$'Promotion PR from `develop` to `main`.\n\n'
           body+=$'Review this PR when Renovate updates have accumulated '
           body+=$'in `develop`. '
-          body+=$'Merge manually after required checks pass.'
+          body+=$'Merge manually after required checks pass.\n\n'
+          body+=$'Merge this PR with a merge commit, not squash or rebase, '
+          body+=$'so `develop` becomes an ancestor of `main`.'
 
           if [ -z "$pr_url" ]; then
             pr_url="$(GH_TOKEN="$RELEASE_TOKEN" gh pr create \

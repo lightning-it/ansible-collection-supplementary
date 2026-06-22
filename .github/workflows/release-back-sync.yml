@@ -101,11 +101,39 @@ jobs:
           body=$'Release back-sync from `main` to `develop`.\n\n'
           body+=$'This PR brings release-generated files, changelog metadata, '
           body+=$'and `galaxy.yml` version changes back to `develop` after '
-          body+="\`${tag}\` was published."
+          body+="\`${tag}\` was published.\n\n"
+          body+=$'Merge this PR with a merge commit, not squash or rebase, '
+          body+=$'so `main` becomes an ancestor of `develop`.'
 
           git switch -C "$branch" origin/develop
-          git merge --no-ff -X theirs origin/main \
+          git merge --no-ff -X ours origin/main \
             -m "chore: sync ${tag} release back to develop"
+
+          release_paths=(
+            CHANGELOG.rst
+            changelogs/.plugin-cache.yaml
+            changelogs/changelog.yaml
+            galaxy.yml
+          )
+          for path in "${release_paths[@]}"; do
+            if git cat-file -e "origin/main:${path}" 2>/dev/null; then
+              git checkout origin/main -- "$path"
+            else
+              rm -f "$path"
+            fi
+          done
+
+          release_base="$(git rev-parse origin/main^1 2>/dev/null || true)"
+          if [ -n "$release_base" ]; then
+            git diff --name-only --diff-filter=D \
+              "$release_base" origin/main -- changelogs/fragments/ \
+              | xargs -r rm -f
+          fi
+
+          git add -A CHANGELOG.rst changelogs galaxy.yml
+          if ! git diff --cached --quiet; then
+            git commit --amend --no-edit
+          fi
 
           if git diff --quiet origin/develop...HEAD; then
             echo "No release back-sync changes to push."
