@@ -140,7 +140,23 @@ jobs:
             exit 0
           fi
 
-          git push --force-with-lease origin "$branch"
+          if ! git push --force-with-lease origin "$branch"; then
+            existing="$(
+              gh pr list \
+                --repo "$REPO" \
+                --base develop \
+                --head "$branch" \
+                --state open \
+                --json url \
+                --jq '.[0].url'
+            )"
+            if [ -n "$existing" ]; then
+              echo "Release back-sync PR already exists after push race: $existing"
+            else
+              echo "Force-with-lease failed and no open PR exists; retrying branch push."
+              git push --force origin "$branch"
+            fi
+          fi
 
           if ! gh label list --repo "$REPO" --json name --jq '.[].name' \
             | grep -Fxq skip-changelog
@@ -148,7 +164,7 @@ jobs:
             gh label create skip-changelog \
               --repo "$REPO" \
               --description "Changelog fragment intentionally not required for this PR." \
-              --color "6f42c1"
+              --color "6f42c1" || true
           fi
 
           existing="$(
