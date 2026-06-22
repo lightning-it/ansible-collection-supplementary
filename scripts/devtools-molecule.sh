@@ -124,6 +124,11 @@ bash scripts/wunder-devtools-ee.sh env \
       mode="$(tr -d "[:space:]" < "${mode_file}")"
     fi
 
+    if [ ! -f "molecule/${scen}/molecule.yml" ]; then
+      echo "Skipping Molecule helper directory '${scen}' (no molecule.yml)."
+      return
+    fi
+
     case "${mode}" in
       protected-incus)
         if [ "${protected_enabled}" != "true" ]; then
