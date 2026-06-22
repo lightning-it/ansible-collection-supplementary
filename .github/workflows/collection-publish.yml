@@ -36,24 +36,86 @@ jobs:
         github.event.pull_request.merged == true &&
         startsWith(github.event.pull_request.head.ref, 'release/v')
       )
-    uses: lightning-it/shared-assets/.github/workflows/ansible-collection-publish.yml@main
-    with:
-      create_github_release: >-
-        ${{
-          github.event_name == 'workflow_dispatch'
-          && inputs.create_github_release == 'true'
-          || (
-            github.event_name == 'pull_request'
-            && contains(github.event.pull_request.body, 'GitHub release creation: `true`')
-          )
-        }}
-      publish_galaxy: >-
-        ${{
-          github.event_name == 'workflow_dispatch'
-          && inputs.publish_galaxy == 'true'
-          || (
-            github.event_name == 'pull_request'
-            && contains(github.event.pull_request.body, 'Galaxy publishing: `true`')
-          )
-        }}
-    secrets: inherit
+    name: Publish collection release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ansible-core pyyaml
+
+      - name: Build and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CREATE_GITHUB_RELEASE: >-
+            ${{
+              github.event_name == 'workflow_dispatch'
+              && inputs.create_github_release == 'true'
+              || (
+                github.event_name == 'pull_request'
+                && contains(github.event.pull_request.body, 'GitHub release creation: `true`')
+              )
+            }}
+          PUBLISH_GALAXY: >-
+            ${{
+              github.event_name == 'workflow_dispatch'
+              && inputs.publish_galaxy == 'true'
+              || (
+                github.event_name == 'pull_request'
+                && contains(github.event.pull_request.body, 'Galaxy publishing: `true`')
+              )
+            }}
+          GALAXY_API_TOKEN: ${{ secrets.GALAXY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          version="$(python - <<'PY'
+          import yaml
+          print(yaml.safe_load(open("galaxy.yml"))["version"])
+          PY
+          )"
+          tag="v${version}"
+
+          ansible-galaxy collection build --force
+          tarball="$(ls ./*.tar.gz)"
+
+          notes="$(mktemp)"
+          if [ ! -f CHANGELOG.rst ]; then
+            echo "::error::CHANGELOG.rst is required for collection GitHub Release notes."
+            exit 1
+          fi
+          awk '/^v'"$version"'$/{flag=1; print; next} /^v[0-9]/{if(flag) exit} flag {print}' CHANGELOG.rst > "$notes"
+
+          if [ "$CREATE_GITHUB_RELEASE" = "true" ]; then
+            if [ ! -s "$notes" ]; then
+              echo "::error::No CHANGELOG.rst section found for $tag."
+              exit 1
+            fi
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "GitHub release $tag already exists; leaving it unchanged."
+            else
+              gh release create "$tag" "$tarball" --target main --title "$tag" --notes-file "$notes"
+            fi
+          else
+            echo "GitHub release creation disabled for this release."
+          fi
+
+          if [ "$PUBLISH_GALAXY" = "true" ]; then
+            if [ -z "${GALAXY_API_TOKEN:-}" ]; then
+              echo "::error::GALAXY_API_TOKEN is required when publish_galaxy is true."
+              exit 1
+            fi
+            ansible-galaxy collection publish "$tarball" --api-key "$GALAXY_API_TOKEN"
+          fi
