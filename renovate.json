@@ -41,23 +41,5 @@
       "allowedVersions": "/^5\\.10\\.0$/"
     }
   ],
-  "customManagers": [
-    {
-      "customType": "regex",
-      "description": "ee-wunder-devtools-ubi9 image tag in collection docs and helper scripts",
-      "managerFilePatterns": [
-        "/^scripts\\/.*\\.sh$/",
-        "/^README\\.md$/",
-        "/^CONTRIBUTING\\.md$/",
-        "/^AGENTS\\.md$/",
-        "/^\\.github\\/workflows\\/.*\\.ya?ml$/",
-        "/^\\.pre-commit-config\\.ya?ml$/"
-      ],
-      "matchStrings": [
-        "quay\\.io/l-it/ee-wunder-devtools-ubi9:v(?<currentValue>[0-9.]+)"
-      ],
-      "datasourceTemplate": "docker",
-      "packageNameTemplate": "quay.io/l-it/ee-wunder-devtools-ubi9"
-    }
-  ]
+  "customManagers": []
 }
