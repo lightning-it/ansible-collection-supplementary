@@ -28,3 +28,10 @@ releases:
     fragments:
       - release-verification-1.yml
     release_date: '2026-06-22'
+  1.35.0:
+    changes:
+      minor_changes:
+        - lit.supplementary - Verify automated collection release workflow cycle 2.
+    fragments:
+      - release-verification-2.yml
+    release_date: '2026-06-22'
