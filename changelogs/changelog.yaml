@@ -1,7 +1,17 @@
 ---
-ancestor:
+ancestor: null
 releases:
   1.32.0:
+    changes:
+      bugfixes:
+        - dhcp_deploy - Use a valid Ubuntu platform version in role metadata.
+      minor_changes:
+        - Require lit.foundational 1.21.0 or newer.
+    fragments:
+      - 247-lit-foundational.yml
+      - dhcp-deploy-meta-platform.yml
+    release_date: '2026-06-22'
+  1.33.0:
     changes:
       bugfixes:
         - dhcp_deploy - Use a valid Ubuntu platform version in role metadata.
