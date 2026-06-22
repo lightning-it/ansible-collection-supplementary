@@ -183,11 +183,32 @@ jobs:
               --body "$body" \
               --add-label skip-changelog
           else
-            gh pr create \
-              --repo "$REPO" \
-              --base develop \
-              --head "$branch" \
-              --title "$title" \
-              --body "$body" \
-              --label skip-changelog
+            if ! gh pr create \
+                --repo "$REPO" \
+                --base develop \
+                --head "$branch" \
+                --title "$title" \
+                --body "$body" \
+                --label skip-changelog
+            then
+              existing="$(
+                gh pr list \
+                  --repo "$REPO" \
+                  --base develop \
+                  --head "$branch" \
+                  --state open \
+                  --json url \
+                  --jq '.[0].url'
+              )"
+              if [ -z "$existing" ]; then
+                echo "::error::Failed to create release back-sync PR."
+                exit 1
+              fi
+              echo "Release back-sync PR was created by another run: $existing"
+              gh pr edit "$existing" \
+                --repo "$REPO" \
+                --title "$title" \
+                --body "$body" \
+                --add-label skip-changelog
+            fi
           fi
