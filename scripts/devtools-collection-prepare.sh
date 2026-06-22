@@ -85,7 +85,13 @@ install_collection_dependency() {
 }
 
 dep_specs=()
-if [ -f /workspace/galaxy.yml ]; then
+if [ -f /workspace/collections/requirements.yml ]; then
+  echo "Installing collection requirements from collections/requirements.yml into ${COLLECTIONS_DIR}..." >&2
+  ansible-galaxy collection install \
+    -r /workspace/collections/requirements.yml \
+    -p "${COLLECTIONS_DIR}" \
+    --force >&2
+elif [ -f /workspace/galaxy.yml ]; then
   while IFS= read -r dep_spec; do
     dep_specs+=("$dep_spec")
   done < <(bash /workspace/scripts/devtools-galaxy.sh dependencies /workspace/galaxy.yml || true)

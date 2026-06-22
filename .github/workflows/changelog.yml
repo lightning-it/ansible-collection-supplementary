@@ -66,7 +66,12 @@ jobs:
             exit 0
           fi
 
-          user_visible="$(grep -Ev '^(\.github/|\.releaserc|\.pre-commit-config\.yaml|\.ansible-lint|\.yamllint|renovate|README\.md|docs/|molecule/|tests/|CHANGELOG\.(md|rst)|changelogs/config\.yaml|changelogs/changelog\.yaml|changelogs/fragments/|package(-lock)?\.json|AGENTS\.md|CONTRIBUTING\.md|SECURITY\.md)' <<<"$changed" || true)"
+          non_user_visible_re='^(\.github/|\.releaserc|\.pre-commit-config\.yaml|\.ansible-lint|'
+          non_user_visible_re+='\.yamllint|renovate|README\.md|docs/|molecule/|tests/|scripts/|'
+          non_user_visible_re+='CHANGELOG\.(md|rst)|changelogs/config\.yaml|'
+          non_user_visible_re+='changelogs/changelog\.yaml|changelogs/fragments/|'
+          non_user_visible_re+='package(-lock)?\.json|AGENTS\.md|CONTRIBUTING\.md|SECURITY\.md)'
+          user_visible="$(grep -Ev "$non_user_visible_re" <<<"$changed" || true)"
           if [ -z "$user_visible" ]; then
             echo "Only documentation, CI, tests, metadata, or changelog files changed."
             exit 0

@@ -3,11 +3,14 @@
 name: Prepare collection release
 
 on:
+  push:
+    branches: ["main"]
   workflow_dispatch:
     inputs:
       version:
-        description: Release version, for example 1.2.3
-        required: true
+        description: Release version, for example 1.2.3. Leave empty on manual runs to calculate the next feature version.
+        required: false
+        default: ""
       base_branch:
         description: Base branch. Leave empty to prefer develop, then main.
         required: false
@@ -37,6 +40,12 @@ jobs:
   prepare:
     name: Prepare release PR
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'push' &&
+        !startsWith(github.event.head_commit.message, 'chore(release): prepare v')
+      )
     env:
       RELEASE_BOT_APP_ID: ${{ secrets.RELEASE_BOT_APP_ID }}
       RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
@@ -90,41 +99,92 @@ jobs:
           python -m pip install ansible-core antsibull-changelog pyyaml
 
       - name: Prepare release branch
+        id: prepare-release
         env:
           GH_TOKEN: ${{ steps.token.outputs.value }}
-          VERSION: ${{ inputs.version }}
-          BASE_BRANCH_INPUT: ${{ inputs.base_branch }}
-          TARGET_BRANCH: ${{ inputs.target_branch }}
-          CREATE_GITHUB_RELEASE: ${{ inputs.create_github_release == 'true' }}
-          PUBLISH_GALAXY: ${{ inputs.publish_galaxy == 'true' }}
+          VERSION_INPUT: ${{ github.event.inputs.version }}
+          BASE_BRANCH_INPUT: ${{ github.event.inputs.base_branch }}
+          TARGET_BRANCH_INPUT: ${{ github.event.inputs.target_branch }}
+          CREATE_GITHUB_RELEASE_INPUT: ${{ github.event.inputs.create_github_release }}
+          PUBLISH_GALAXY_INPUT: ${{ github.event.inputs.publish_galaxy }}
+          AUTO_RELEASE_BUMP: minor
         run: |
           set -euo pipefail
 
+          VERSION="${VERSION_INPUT:-}"
           case "$VERSION" in
             v*) VERSION="${VERSION#v}" ;;
           esac
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::Version must be semantic versioning, for example 1.2.3."
-            exit 1
-          fi
-          if [ "$TARGET_BRANCH" != "main" ]; then
-            echo "::error::Collection release PRs must target main."
-            exit 1
-          fi
+          TARGET_BRANCH="${TARGET_BRANCH_INPUT:-main}"
+          CREATE_GITHUB_RELEASE="${CREATE_GITHUB_RELEASE_INPUT:-true}"
+          PUBLISH_GALAXY="${PUBLISH_GALAXY_INPUT:-false}"
 
-          if [ -n "$BASE_BRANCH_INPUT" ]; then
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            BASE_BRANCH="main"
+          elif [ -n "$BASE_BRANCH_INPUT" ]; then
             BASE_BRANCH="$BASE_BRANCH_INPUT"
           elif git ls-remote --exit-code --heads origin develop >/dev/null 2>&1; then
             BASE_BRANCH="develop"
           else
             BASE_BRANCH="$TARGET_BRANCH"
           fi
-
-          RELEASE_BRANCH="release/v${VERSION}"
+          if [ "$TARGET_BRANCH" != "main" ]; then
+            echo "::error::Collection release PRs must target main."
+            exit 1
+          fi
 
           git config user.name "litreleasebot"
           git config user.email "litreleasebot@users.noreply.github.com"
           git fetch origin "$BASE_BRANCH" "$TARGET_BRANCH"
+          git switch -C release-prepare-base "origin/$BASE_BRANCH"
+
+          fragment_count="$(
+            find changelogs/fragments \
+              -maxdepth 1 \
+              -type f \
+              \( -name '*.yml' -o -name '*.yaml' \) \
+              ! -name '.gitkeep' \
+              | wc -l
+          )"
+          if [ "$fragment_count" -eq 0 ]; then
+            echo "No changelog fragments found; no collection release PR needed."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "$VERSION" ]; then
+            VERSION="$(
+              python - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+          import yaml
+
+          data = yaml.safe_load(Path("galaxy.yml").read_text()) or {}
+          current = str(data.get("version", "")).removeprefix("v")
+          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:[-.][0-9A-Za-z.-]+)?", current)
+          if not match:
+              raise SystemExit(f"Cannot calculate next version from galaxy.yml version: {current!r}")
+          major, minor, patch = map(int, match.groups())
+          bump = os.environ.get("AUTO_RELEASE_BUMP", "minor")
+          if bump == "major":
+              print(f"{major + 1}.0.0")
+          elif bump == "patch":
+              print(f"{major}.{minor}.{patch + 1}")
+          else:
+              print(f"{major}.{minor + 1}.0")
+          PY
+            )"
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Version must be semantic versioning, for example 1.2.3."
+            exit 1
+          fi
+          export VERSION
+
+          RELEASE_BRANCH="release/v${VERSION}"
+          echo "Preparing release PR for v${VERSION} from ${BASE_BRANCH} to ${TARGET_BRANCH}."
+
           git switch -C "$RELEASE_BRANCH" "origin/$BASE_BRANCH"
 
           python - <<'PY'
