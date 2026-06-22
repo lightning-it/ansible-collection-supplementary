@@ -151,6 +151,10 @@ sweeps, do them in a separate PR.
 - The workflow calculates the next feature version by default, creates or
   updates a `release/vX.Y.Z` branch, runs `antsibull-changelog release`, bumps
   `galaxy.yml`, builds the collection, and opens a release PR into `main`.
+- After the release PR is merged and the GitHub Release is published, automation
+  opens a release back-sync PR from `main` to `develop`.
+- `develop` to `main` promotion PRs are opened only when `main` is already an
+  ancestor of `develop`; merge release back-sync PRs before promoting more work.
 - Maintainers may still run the workflow manually to choose an explicit version
   or retry a release preparation.
 - Do **not** push release commits directly to `main`.

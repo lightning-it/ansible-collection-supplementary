@@ -54,12 +54,26 @@ jobs:
             exit 0
           fi
 
-          generated_re='^(CHANGELOG\.(md|rst)|changelogs/changelog\.yaml)$'
+          generated_re='^(CHANGELOG\.(md|rst)|changelogs/(changelog|\.plugin-cache)\.yaml)$'
+          is_release_branch=false
+          is_release_promotion=false
+          if [[ "${GITHUB_HEAD_REF:-}" == release/v* || "${GITHUB_HEAD_REF:-}" == backsync/release-* ]]; then
+            is_release_branch=true
+          fi
+          if [[ "${GITHUB_HEAD_REF:-}" == develop && "${GITHUB_BASE_REF:-}" == main ]]; then
+            is_release_promotion=true
+          fi
+
           if grep -E "$generated_re" <<<"$changed"; then
-            if [[ "${GITHUB_HEAD_REF:-}" != release/v* ]]; then
-              echo "::error::Generated changelog files may only be changed by release/vX.Y.Z PRs."
+            if [ "$is_release_branch" != "true" ] && [ "$is_release_promotion" != "true" ]; then
+              echo "::error::Generated changelog files may only be changed by release/vX.Y.Z or release back-sync PRs."
               exit 1
             fi
+          fi
+
+          if [ "$is_release_branch" = "true" ]; then
+            echo "Release and release back-sync PRs manage generated changelog files."
+            exit 0
           fi
 
           if [ "$REQUIRE_FRAGMENT" != "true" ]; then
@@ -72,6 +86,13 @@ jobs:
           non_user_visible_re+='changelogs/changelog\.yaml|changelogs/fragments/|'
           non_user_visible_re+='package(-lock)?\.json|AGENTS\.md|CONTRIBUTING\.md|SECURITY\.md)'
           user_visible="$(grep -Ev "$non_user_visible_re" <<<"$changed" || true)"
+          if [ "$is_release_promotion" = "true" ]; then
+            promotion_metadata_re='^(galaxy\.yml|CHANGELOG\.(md|rst)|'
+            promotion_metadata_re+='changelogs/(changelog|\.plugin-cache)\.yaml)$'
+            user_visible="$(
+              grep -Ev "$non_user_visible_re|$promotion_metadata_re" <<<"$changed" || true
+            )"
+          fi
           if [ -z "$user_visible" ]; then
             echo "Only documentation, CI, tests, metadata, or changelog files changed."
             exit 0

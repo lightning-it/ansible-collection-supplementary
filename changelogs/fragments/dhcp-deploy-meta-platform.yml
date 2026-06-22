@@ -1,0 +1,3 @@
+---
+bugfixes:
+  - dhcp_deploy - Use a valid Ubuntu platform version in role metadata.

@@ -87,9 +87,12 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
     changelog fragments exist.
 13. Publishing happens only after the release PR is merged into `main`.
 14. No workflow or agent may push release commits directly to `main`.
-15. GitHub Release notes are an additional publishing surface; they MUST be generated from or aligned with the
+15. After a release is published from `main`, release-generated files MUST be synced back to `develop` with a
+    `backsync/release-vX.Y.Z-to-develop` PR before any new `develop` to `main` promotion.
+16. A `develop` to `main` promotion MUST only be opened when `main` is an ancestor of `develop`.
+17. GitHub Release notes are an additional publishing surface; they MUST be generated from or aligned with the
    repository changelog, not used as the only changelog.
-16. GitHub repository settings, branch protection, required checks, workflow permissions, labels, environments,
+18. GitHub repository settings, branch protection, required checks, workflow permissions, labels, environments,
     secrets, and release-bot permissions MUST be changed only through `github-management-lit`.
 
 ## 2.1 Production Review Standard (Community, Red Hat, Efficiency)

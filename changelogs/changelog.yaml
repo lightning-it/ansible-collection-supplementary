@@ -1,5 +1,5 @@
 ---
-ancestor: null
+ancestor:
 releases:
   1.32.0:
     changes:
