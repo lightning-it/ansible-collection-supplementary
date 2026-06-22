@@ -26,6 +26,7 @@ on:
         options: ["true", "false"]
 
 permissions:
+  actions: write
   contents: write
 
 jobs:
@@ -38,12 +39,43 @@ jobs:
       )
     name: Publish collection release
     runs-on: ubuntu-latest
+    env:
+      RELEASE_BOT_APP_ID: ${{ secrets.RELEASE_BOT_APP_ID }}
+      RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
 
     steps:
+      - name: Create GitHub App token
+        id: app-token
+        if: ${{ env.RELEASE_BOT_APP_ID != '' && env.RELEASE_BOT_PRIVATE_KEY != '' }}
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ env.RELEASE_BOT_APP_ID }}
+          private-key: ${{ env.RELEASE_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Resolve release token
+        id: token
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          TOKEN: ${{ secrets.LITRELEASEBOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${APP_TOKEN:-}" ]; then
+            echo "value=$APP_TOKEN" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -n "${TOKEN:-}" ]; then
+            echo "value=$TOKEN" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "value=${{ github.token }}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout main
         uses: actions/checkout@v7
         with:
           ref: main
+          token: ${{ steps.token.outputs.value }}
           fetch-depth: 0
 
       - name: Setup Python
@@ -58,7 +90,7 @@ jobs:
 
       - name: Build and publish
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.token.outputs.value }}
           CREATE_GITHUB_RELEASE: >-
             ${{
               github.event_name == 'workflow_dispatch'
@@ -108,6 +140,7 @@ jobs:
             else
               gh release create "$tag" "$tarball" --target main --title "$tag" --notes-file "$notes"
             fi
+            gh workflow run release-back-sync.yml --ref main -f tag="$tag"
           else
             echo "GitHub release creation disabled for this release."
           fi
