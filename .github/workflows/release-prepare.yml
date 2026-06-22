@@ -193,15 +193,56 @@ jobs:
           from pathlib import Path
           import yaml
 
+          class LintFriendlyDumper(yaml.SafeDumper):
+              def increase_indent(self, flow=False, indentless=False):
+                  return super().increase_indent(flow, False)
+
+          def write_yaml(path, data):
+              path.write_text(
+                  yaml.dump(
+                      data,
+                      Dumper=LintFriendlyDumper,
+                      sort_keys=False,
+                      explicit_start=True,
+                  )
+              )
+
           version = os.environ["VERSION"]
           path = Path("galaxy.yml")
           data = yaml.safe_load(path.read_text())
           data["version"] = version
-          path.write_text(yaml.safe_dump(data, sort_keys=False, explicit_start=True))
+          write_yaml(path, data)
           PY
 
           antsibull-changelog lint
           antsibull-changelog release
+
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          class LintFriendlyDumper(yaml.SafeDumper):
+              def increase_indent(self, flow=False, indentless=False):
+                  return super().increase_indent(flow, False)
+
+          for path in (
+              Path("galaxy.yml"),
+              Path("changelogs/changelog.yaml"),
+              Path("changelogs/.plugin-cache.yaml"),
+          ):
+              if not path.exists():
+                  continue
+              data = yaml.safe_load(path.read_text())
+              path.write_text(
+                  yaml.dump(
+                      data,
+                      Dumper=LintFriendlyDumper,
+                      sort_keys=False,
+                      explicit_start=True,
+                  )
+              )
+          PY
+
           ansible-galaxy collection build --force
 
           tarball="$(ls ./*.tar.gz)"

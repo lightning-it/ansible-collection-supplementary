@@ -1,0 +1,149 @@
+# yamllint disable rule:truthy
+---
+name: Back-sync collection release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to back-sync, for example v1.2.3.
+        required: true
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  back-sync:
+    name: Open release back-sync PR
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_BOT_APP_ID: ${{ secrets.RELEASE_BOT_APP_ID }}
+      RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+    steps:
+      - name: Create GitHub App token
+        id: app-token
+        if: ${{ env.RELEASE_BOT_APP_ID != '' && env.RELEASE_BOT_PRIVATE_KEY != '' }}
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ env.RELEASE_BOT_APP_ID }}
+          private-key: ${{ env.RELEASE_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Resolve release token
+        id: token
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          TOKEN: ${{ secrets.LITRELEASEBOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${APP_TOKEN:-}" ]; then
+            echo "value=$APP_TOKEN" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -n "${TOKEN:-}" ]; then
+            echo "value=$TOKEN" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "::error::RELEASE_BOT_APP_ID and RELEASE_BOT_PRIVATE_KEY,"
+            echo "or LITRELEASEBOT_TOKEN, are required to create release"
+            echo "back-sync branches and PRs."
+          }
+          exit 1
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          token: ${{ steps.token.outputs.value }}
+          fetch-depth: 0
+
+      - name: Open or update release back-sync PR
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.value }}
+          TAG_INPUT: ${{ github.event.inputs.tag }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          tag="${RELEASE_TAG:-${TAG_INPUT:-}}"
+          if [ -z "$tag" ]; then
+            echo "::error::Release tag is required."
+            exit 1
+          fi
+          case "$tag" in
+            v*) ;;
+            *) tag="v${tag}" ;;
+          esac
+
+          if ! git ls-remote --exit-code --heads origin develop >/dev/null 2>&1; then
+            echo "develop branch does not exist; skipping release back-sync."
+            exit 0
+          fi
+
+          git config user.name "litreleasebot"
+          git config user.email "litreleasebot@users.noreply.github.com"
+          git fetch origin main develop
+
+          if git merge-base --is-ancestor origin/main origin/develop; then
+            echo "develop already contains main; release back-sync not needed."
+            exit 0
+          fi
+
+          branch="backsync/release-${tag}-to-develop"
+          title="chore: sync ${tag} release back to develop"
+          body=$'Release back-sync from `main` to `develop`.\n\n'
+          body+=$'This PR brings release-generated files, changelog metadata, '
+          body+=$'and `galaxy.yml` version changes back to `develop` after '
+          body+="\`${tag}\` was published."
+
+          git switch -C "$branch" origin/develop
+          git merge --no-ff -X theirs origin/main \
+            -m "chore: sync ${tag} release back to develop"
+
+          if git diff --quiet origin/develop...HEAD; then
+            echo "No release back-sync changes to push."
+            exit 0
+          fi
+
+          git push --force-with-lease origin "$branch"
+
+          if ! gh label list --repo "$REPO" --json name --jq '.[].name' \
+            | grep -Fxq skip-changelog
+          then
+            gh label create skip-changelog \
+              --repo "$REPO" \
+              --description "Changelog fragment intentionally not required for this PR." \
+              --color "6f42c1"
+          fi
+
+          existing="$(
+            gh pr list \
+              --repo "$REPO" \
+              --base develop \
+              --head "$branch" \
+              --state open \
+              --json url \
+              --jq '.[0].url'
+          )"
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" \
+              --repo "$REPO" \
+              --title "$title" \
+              --body "$body" \
+              --add-label skip-changelog
+          else
+            gh pr create \
+              --repo "$REPO" \
+              --base develop \
+              --head "$branch" \
+              --title "$title" \
+              --body "$body" \
+              --label skip-changelog
+          fi
