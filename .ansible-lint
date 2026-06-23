@@ -5,3 +5,7 @@ exclude_paths:
   - .ansible/
   - collections/
   - .pre-commit-config.yaml
+  # ansible-lint 6.x uses a stale role metadata schema that rejects supported
+  # platform labels such as EL 10 and Ubuntu jammy. Collection packaging still
+  # validates collection-level metadata via galaxy.yml and build/install smoke.
+  - roles/*/meta/main.yml
