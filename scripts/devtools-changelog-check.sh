@@ -12,11 +12,6 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   cd /workspace
   git config --global --add safe.directory /workspace >/dev/null 2>&1 || true
 
-  if ! command -v antsibull-changelog >/dev/null 2>&1; then
-    echo "Installing antsibull-changelog inside the devtools container..."
-    python3 -m pip install --upgrade antsibull-changelog
-    export PATH="${HOME}/.local/bin:${PATH}"
-  fi
   antsibull-changelog lint
 
   diff_names() {
