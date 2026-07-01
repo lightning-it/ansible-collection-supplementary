@@ -1,0 +1,11 @@
+---
+# Orchestrator switches for the full Keycloak lifecycle.
+keycloak_run_preflight: true
+keycloak_run_deploy: true
+keycloak_run_config: true
+keycloak_run_cac: true
+keycloak_run_validate: true
+keycloak_run_ops: false
+keycloak_run_backup_restore: false
+keycloak_run_upgrade: false
+keycloak_run_destroy: false

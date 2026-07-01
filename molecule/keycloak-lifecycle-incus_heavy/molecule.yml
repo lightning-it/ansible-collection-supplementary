@@ -1,0 +1,53 @@
+---
+dependency:
+  name: shell
+  command: ":"
+
+driver:
+  name: default
+
+platforms:
+  - name: lit-keycloak-lifecycle-heavy-ct
+    image: images:ubuntu/24.04
+    type: container
+    ipv4_address: 10.248.82.50/24
+    ipv4_gateway: 10.248.82.1
+    dns_servers:
+      - 1.1.1.1
+      - 8.8.8.8
+    config:
+      - key: security.nesting
+        value: "true"
+      - key: security.privileged
+        value: "true"
+
+provisioner:
+  name: ansible
+  inventory:
+    host_vars:
+      lit-keycloak-lifecycle-heavy-ct:
+        ansible_connection: community.general.incus
+        ansible_python_interpreter: /usr/bin/python3
+  env:
+    ANSIBLE_COLLECTIONS_PATH: "/home/rene/sources/modulix-automation/ansible/collections:/tmp/codex-keycloak-collections:/home/rene/.ansible/collections:/usr/share/ansible/collections"
+    ANSIBLE_ROLES_PATH: "/home/rene/sources/ansible-collection-supplementary/roles:/home/rene/sources/ansible-collection-foundational/roles:/home/rene/.ansible/roles:/usr/share/ansible/roles:/etc/ansible/roles"
+  playbooks:
+    create: create.yml
+    prepare: prepare.yml
+    converge: converge.yml
+    verify: verify.yml
+    destroy: destroy.yml
+
+scenario:
+  name: keycloak-lifecycle-incus_heavy
+  test_sequence:
+    - dependency
+    - syntax
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy
+
+verifier:
+  name: ansible

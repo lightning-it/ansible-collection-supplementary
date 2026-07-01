@@ -1,0 +1,57 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Ensure Keycloak backup directory exists
+  ansible.builtin.file:
+    path: "{{ keycloak_backup_restore_dir }}"
+    state: directory
+    mode: '0750'
+  when: keycloak_backup_restore_execute | bool
+  tags:
+    - backup
+    - restore
+
+- name: Report backup/restore dry run
+  ansible.builtin.debug:
+    msg: >-
+      Keycloak {{ keycloak_backup_restore_action }} prepared but not executed.
+      Set keycloak_backup_restore_execute=true to run database commands.
+  when: not keycloak_backup_restore_execute | bool
+  tags:
+    - backup
+    - restore
+
+- name: Run Keycloak PostgreSQL backup
+  ansible.builtin.command:
+    cmd: >-
+      pg_dump
+      --host {{ keycloak_backup_restore_db_host }}
+      --port {{ keycloak_backup_restore_db_port }}
+      --username {{ keycloak_backup_restore_db_user }}
+      --format plain
+      --file {{ keycloak_backup_restore_file }}
+      {{ keycloak_backup_restore_db_name }}
+  changed_when: true
+  when:
+    - keycloak_backup_restore_execute | bool
+    - keycloak_backup_restore_action == 'backup'
+  tags:
+    - backup
+
+- name: Restore Keycloak PostgreSQL backup
+  ansible.builtin.command:
+    cmd: >-
+      psql
+      --host {{ keycloak_backup_restore_db_host }}
+      --port {{ keycloak_backup_restore_db_port }}
+      --username {{ keycloak_backup_restore_db_user }}
+      --dbname {{ keycloak_backup_restore_db_name }}
+      --file {{ keycloak_backup_restore_file }}
+  changed_when: true
+  when:
+    - keycloak_backup_restore_execute | bool
+    - keycloak_backup_restore_action == 'restore'
+  tags:
+    - restore

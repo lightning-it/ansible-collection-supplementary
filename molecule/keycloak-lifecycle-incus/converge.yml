@@ -1,0 +1,40 @@
+---
+- name: Converge Keycloak lifecycle roles on Incus
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    keycloak_deploy_skip_runtime: true
+    keycloak_deploy_skip_deploy: true
+    keycloak_deploy_generate_secrets: false
+    keycloak_deploy_db_password: molecule-db-password
+    keycloak_deploy_admin_password: molecule-admin-password
+    keycloak_deploy_manage_systemd: false
+    keycloak_deploy_install_packages: false
+    keycloak_config_skip_apply: true
+    keycloak_cac_skip_apply: true
+    keycloak_validate_strict: false
+    keycloak_validate_url: http://127.0.0.1:8080
+    keycloak_ops_action: status
+    keycloak_backup_restore_execute: false
+    keycloak_upgrade_execute: false
+    keycloak_upgrade_target_image: quay.io/keycloak/keycloak:latest
+    keycloak_destroy_execute: false
+    keycloak_preflight_check_podman: false
+    keycloak_preflight_check_systemd: false
+    keycloak_preflight_check_ports: false
+    keycloak_run_ops: true
+    keycloak_run_backup_restore: true
+    keycloak_run_upgrade: true
+    keycloak_run_destroy: true
+  roles:
+    - role: keycloak_preflight
+    - role: keycloak_deploy
+    - role: keycloak_config
+    - role: keycloak_cac
+    - role: keycloak_validate
+    - role: keycloak_ops
+    - role: keycloak_backup_restore
+    - role: keycloak_upgrade
+    - role: keycloak_destroy
+    - role: keycloak

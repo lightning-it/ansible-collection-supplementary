@@ -1,0 +1,8 @@
+---
+keycloak_preflight_strict: true
+keycloak_preflight_check_podman: true
+keycloak_preflight_check_systemd: "{{ keycloak_deploy_manage_systemd | default(true) }}"
+keycloak_preflight_check_ports: true
+keycloak_preflight_required_ports:
+  - "{{ keycloak_deploy_port | default(8080) }}"
+keycloak_preflight_check_vault_auth: false

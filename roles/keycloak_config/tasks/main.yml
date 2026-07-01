@@ -1,0 +1,34 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip Keycloak runtime config apply when disabled
+  ansible.builtin.debug:
+    msg: "Keycloak runtime config skipped (keycloak_config_skip_apply=true)."
+  when: keycloak_config_skip_apply | bool
+  tags: always
+
+- name: Build Keycloak deploy overrides from config role
+  ansible.builtin.set_fact:
+    keycloak_deploy_env_extra: >-
+      {{
+        keycloak_deploy_env_extra | default({})
+        | combine(keycloak_config_runtime_env, recursive=True)
+      }}
+    keycloak_deploy_extra_start_args: "{{ keycloak_config_extra_start_args }}"
+    keycloak_deploy_hostname: "{{ keycloak_config_hostname }}"
+    keycloak_deploy_proxy_headers: "{{ keycloak_config_proxy_headers }}"
+    keycloak_deploy_http_relative_path: "{{ keycloak_config_http_relative_path }}"
+  when: not keycloak_config_skip_apply | bool
+  changed_when: false
+  tags:
+    - config
+
+- name: Re-render Keycloak deployment with config overrides
+  ansible.builtin.include_role:
+    name: keycloak_deploy
+  when: not keycloak_config_skip_apply | bool
+  tags:
+    - config
+    - deployment

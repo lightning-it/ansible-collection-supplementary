@@ -1,0 +1,56 @@
+---
+- name: Fully deploy Keycloak lifecycle on Incus
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    keycloak_deploy_image: quay.io/keycloak/keycloak:26.0
+    keycloak_deploy_manage_postgres: true
+    keycloak_deploy_manage_systemd: false
+    keycloak_deploy_install_packages: true
+    keycloak_deploy_validate_certs: false
+    keycloak_deploy_allow_local_secret_files: true
+    keycloak_deploy_store_generated_secrets: true
+    keycloak_deploy_generate_secrets: false
+    keycloak_deploy_db_password: molecule-db-password
+    keycloak_deploy_admin_user: admin
+    keycloak_deploy_admin_password: molecule-admin-password
+    keycloak_deploy_host_ip: 127.0.0.1
+    keycloak_deploy_postgres_host_ip: 127.0.0.1
+    keycloak_deploy_db_host: 127.0.0.1
+    keycloak_deploy_port: 18080
+    keycloak_deploy_db_port: 15432
+    keycloak_deploy_health_url: "http://127.0.0.1:18080/realms/master"
+    keycloak_deploy_api_url: "http://127.0.0.1:18080"
+    keycloak_deploy_pod_name: keycloak-heavy
+    keycloak_deploy_postgres_pod_name: keycloak-heavy-postgres
+    keycloak_deploy_pod_manifest_path: /etc/podman/pods/keycloak-heavy.yml
+    keycloak_deploy_postgres_pod_manifest_path: /etc/podman/pods/keycloak-heavy-postgres.yml
+    keycloak_deploy_host_data_dir: /srv/keycloak-heavy/data
+    keycloak_deploy_postgres_data_dir: /srv/keycloak-heavy/postgres
+    keycloak_deploy_config_dir: /srv/keycloak-heavy/config
+    keycloak_deploy_secrets_file: /srv/keycloak-heavy/config/keycloak-secrets.yml
+    keycloak_preflight_check_podman: false
+    keycloak_preflight_check_systemd: false
+    keycloak_preflight_check_ports: true
+    keycloak_preflight_required_ports:
+      - 18080
+      - 15432
+    keycloak_config_skip_apply: true
+    keycloak_cac_skip_apply: false
+    keycloak_cac_url: "http://127.0.0.1:18080"
+    keycloak_cac_realm: master
+    keycloak_cac_admin_user: admin
+    keycloak_cac_admin_password: molecule-admin-password
+    keycloak_validate_strict: true
+    keycloak_validate_url: "http://127.0.0.1:18080"
+    keycloak_validate_realm: master
+    keycloak_validate_validate_certs: false
+    keycloak_run_ops: true
+    keycloak_ops_action: status
+    keycloak_ops_container_name: keycloak-heavy-keycloak
+    keycloak_run_backup_restore: false
+    keycloak_run_upgrade: false
+    keycloak_run_destroy: false
+  roles:
+    - role: keycloak

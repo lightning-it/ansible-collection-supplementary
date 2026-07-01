@@ -1,0 +1,464 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip aap_preflight role when disabled
+  ansible.builtin.debug:
+    msg: "AAP preflight skipped because aap_preflight_enabled=false."
+  changed_when: false
+  when: not (aap_preflight_enabled | bool)
+  tags: always
+
+- name: Wait for AAP SSH path
+  ansible.builtin.wait_for_connection:
+    timeout: "{{ aap_preflight_wait_for_connection_timeout }}"
+    sleep: 5
+  when: aap_preflight_enabled | bool
+  tags:
+    - aap_preflight
+    - ssh
+
+- name: Gather minimal facts
+  ansible.builtin.setup:
+    gather_subset:
+      - min
+  when: aap_preflight_enabled | bool
+  tags:
+    - aap_preflight
+    - facts
+
+- name: Verify automation login user
+  ansible.builtin.set_fact:
+    aap_preflight_effective_ansible_user: >-
+      {{
+        ansible_user
+        | default(ansible_ssh_user | default(ansible_facts.user_id | default('', true), true), true)
+        | string
+        | trim
+      }}
+  changed_when: false
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_expected_users | bool
+  tags:
+    - aap_preflight
+    - users
+
+- name: Verify passwordless sudo reaches root
+  ansible.builtin.command:
+    argv:
+      - whoami
+  become: true
+  register: aap_preflight_become_whoami
+  changed_when: false
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_expected_users | bool
+  tags:
+    - aap_preflight
+    - sudo
+
+- name: Assert automation and runtime users are separated
+  ansible.builtin.assert:
+    that:
+      - aap_preflight_effective_ansible_user == aap_preflight_expected_ansible_user
+      - aap_preflight_become_whoami.stdout | trim == 'root'
+      - aap_preflight_install_user | trim | length > 0
+      - aap_preflight_effective_ansible_user != aap_preflight_install_user
+    fail_msg: >-
+      AAP setup must run through {{ aap_preflight_expected_ansible_user }} with
+      passwordless sudo, while AAP runtime uses {{ aap_preflight_install_user }}.
+      Current configured SSH user is {{
+      aap_preflight_effective_ansible_user | default('unknown') }}.
+    quiet: true
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_expected_users | bool
+  tags:
+    - aap_preflight
+    - users
+    - sudo
+
+- name: Verify AAP and Vault DNS
+  ansible.builtin.getent:
+    database: ahostsv4
+    key: "{{ item }}"
+  loop:
+    - "{{ ansible_host | default(inventory_hostname) }}"
+    - >-
+      {{
+        (
+          hc_vault_addr
+          | default(vault_address | default(lookup('ansible.builtin.env', 'VAULT_ADDR'), true), true)
+          | regex_replace('^[a-zA-Z][a-zA-Z0-9+.-]*://', '')
+          | regex_replace('/.*$', '')
+          | regex_replace(':.*$', '')
+        )
+      }}
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_dns | bool
+    - item | string | trim | length > 0
+  tags:
+    - aap_preflight
+    - dns
+
+- name: Verify required AAP host commands
+  ansible.builtin.command:
+    argv:
+      - which
+      - "{{ item }}"
+  changed_when: false
+  loop: "{{ aap_preflight_required_commands }}"
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_commands | bool
+  tags:
+    - aap_preflight
+    - packages
+
+- name: Verify required AAP host paths
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  register: aap_preflight_required_path_stats
+  loop: "{{ aap_preflight_required_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_paths | bool
+  tags:
+    - aap_preflight
+    - filesystem
+
+- name: Assert required AAP host paths
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists | default(false)
+      - item.stat.isdir | default(false)
+      - >-
+        (
+          item.item.mode | default('', true) | string | trim | length == 0
+        )
+        or
+        (
+          item.stat.mode | default('') == item.item.mode
+        )
+      - >-
+        (
+          item.item.owner | default('', true) | string | trim | length == 0
+        )
+        or
+        (
+          item.stat.pw_name | default('') == item.item.owner
+        )
+      - >-
+        (
+          item.item.group | default('', true) | string | trim | length == 0
+        )
+        or
+        (
+          item.stat.gr_name | default('') == item.item.group
+        )
+    fail_msg: >-
+      Required AAP path is not ready: {{ item.item.path }}. Expected owner={{
+      item.item.owner | default('any') }}, group={{ item.item.group | default('any') }},
+      mode={{ item.item.mode | default('any') }}; got owner={{
+      item.stat.pw_name | default('missing') }}, group={{
+      item.stat.gr_name | default('missing') }}, mode={{
+      item.stat.mode | default('missing') }}.
+    quiet: true
+  loop: "{{ aap_preflight_required_path_stats.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_paths | bool
+  tags:
+    - aap_preflight
+    - filesystem
+
+- name: Verify Podman version
+  ansible.builtin.command:
+    argv:
+      - podman
+      - --version
+  changed_when: false
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_podman | bool
+  tags:
+    - aap_preflight
+    - podman
+
+- name: Check AAP installed marker
+  ansible.builtin.stat:
+    path: "{{ aap_preflight_installed_marker_path }}"
+  register: aap_preflight_installed_marker
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_runtime | bool
+  tags:
+    - aap_preflight
+    - runtime
+
+- name: Check install-user runtime processes
+  ansible.builtin.command:
+    argv:
+      - pgrep
+      - -a
+      - -u
+      - "{{ aap_preflight_install_user }}"
+  register: aap_preflight_install_user_processes
+  changed_when: false
+  failed_when: false
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_runtime | bool
+  tags:
+    - aap_preflight
+    - runtime
+
+- name: Assert first-install runtime state
+  ansible.builtin.assert:
+    that:
+      - >-
+        (aap_preflight_installed_marker.stat.exists | default(false))
+        or (aap_preflight_install_user_processes.rc | default(1) != 0)
+    fail_msg: >-
+      Stop stale {{ aap_preflight_install_user }} processes before first
+      install: {{ aap_preflight_install_user_processes.stdout_lines | default([]) }}
+    quiet: true
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_runtime | bool
+  tags:
+    - aap_preflight
+    - runtime
+
+- name: Verify runtime user Podman info
+  ansible.builtin.command:
+    argv:
+      - sudo
+      - -iu
+      - "{{ aap_preflight_install_user }}"
+      - podman
+      - info
+      - --format
+      - "{{ '{{' }} .Store.GraphRoot {{ '}}' }}"
+  changed_when: false
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_podman | bool
+  tags:
+    - aap_preflight
+    - podman
+
+- name: Verify remote AAP artifact source files
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: true
+  register: aap_preflight_artifact_stats
+  loop: "{{ aap_preflight_remote_artifacts }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_artifacts | bool
+    - item.required | bool
+    - item.source == 'remote'
+    - item.path | string | trim | length > 0
+  tags:
+    - aap_preflight
+    - artifacts
+
+- name: Assert remote AAP artifact source files exist
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists | default(false)
+      - item.stat.isreg | default(false)
+      - (item.stat.size | int) > 0
+    fail_msg: "Required AAP artifact source is missing or empty: {{ item.item.path }}"
+    quiet: true
+  loop: "{{ aap_preflight_artifact_stats.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_artifacts | bool
+    - not item.skipped | default(false)
+  tags:
+    - aap_preflight
+    - artifacts
+
+- name: Validate Ansible Vault secret values
+  ansible.builtin.assert:
+    that:
+      - lookup('ansible.builtin.vars', item, default='') | string | trim | length > 0
+      - lookup('ansible.builtin.vars', item, default='') | string is not match('^CHANGE_ME')
+      - lookup('ansible.builtin.vars', item, default='') | string is not match('^lit-dry-run-only')
+    fail_msg: >-
+      {{ item }} must be set as a real encrypted Ansible Vault value before
+      AAP deploy.
+    quiet: true
+  loop: "{{ aap_preflight_ansible_vault_required_secret_vars }}"
+  no_log: true
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_ansible_vault | bool
+  tags:
+    - aap_preflight
+    - secrets
+
+- name: Resolve Vault preflight values
+  ansible.builtin.set_fact:
+    aap_preflight_vault_addr_effective: >-
+      {{
+        hc_vault_addr
+        | default(vault_address | default(lookup('ansible.builtin.env', 'VAULT_ADDR'), true), true)
+        | string
+        | trim
+      }}
+    aap_preflight_vault_token_effective: >-
+      {{
+        hc_vault_token
+        | default(vault_token | default(lookup('ansible.builtin.env', 'VAULT_TOKEN'), true), true)
+        | string
+        | trim
+      }}
+    aap_preflight_vault_mount_effective: >-
+      {{
+        hc_vault_engine_mount_point
+        | default(vault_engine_mount_point | default(lookup('ansible.builtin.env', 'VAULT_ENGINE_MOUNT_POINT'), true), true)
+        | string
+        | trim
+      }}
+    aap_preflight_vault_validate_certs_effective: >-
+      {{ hc_vault_validate_certs | default(vault_validate_certs | default(false, true), true) | bool }}
+  no_log: true
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_vault | bool
+  tags:
+    - aap_preflight
+    - vault
+
+- name: Assert Vault preflight token values
+  ansible.builtin.assert:
+    that:
+      - aap_preflight_vault_addr_effective | length > 0
+      - aap_preflight_vault_token_effective | length > 0
+      - aap_preflight_vault_mount_effective | length > 0
+    fail_msg: >-
+      Vault preflight requires Vault address, token, and KV mount. Export
+      VAULT_TOKEN or provide vault_token through vaulted inventory.
+    quiet: true
+  no_log: true
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_vault | bool
+  tags:
+    - aap_preflight
+    - vault
+
+- name: Check Vault health
+  ansible.builtin.uri:
+    url: "{{ aap_preflight_vault_addr_effective }}/v1/sys/health"
+    method: GET
+    validate_certs: "{{ aap_preflight_vault_validate_certs_effective }}"
+    status_code: [200, 429, 472, 473]
+    return_content: false
+  delegate_to: localhost
+  become: false
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_vault | bool
+  tags:
+    - aap_preflight
+    - vault
+
+- name: Check Vault token
+  ansible.builtin.uri:
+    url: "{{ aap_preflight_vault_addr_effective }}/v1/auth/token/lookup-self"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ aap_preflight_vault_token_effective }}"
+    validate_certs: "{{ aap_preflight_vault_validate_certs_effective }}"
+    status_code: [200, 400, 401, 403]
+    return_content: false
+  register: aap_preflight_vault_token_check
+  failed_when: false
+  delegate_to: localhost
+  become: false
+  no_log: true
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_vault | bool
+  tags:
+    - aap_preflight
+    - vault
+
+- name: Assert Vault token lookup succeeded
+  ansible.builtin.assert:
+    that:
+      - aap_preflight_vault_token_check.status | default(0) | int == 200
+    fail_msg: >-
+      Vault token lookup failed for {{ aap_preflight_vault_addr_effective
+      }}/v1/auth/token/lookup-self with HTTP {{
+      aap_preflight_vault_token_check.status | default('unknown') }}.
+    quiet: true
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_vault | bool
+  tags:
+    - aap_preflight
+    - vault
+
+- name: Check required Vault KV paths
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_preflight_vault_addr_effective }}/v1/{{
+        aap_preflight_vault_mount_effective
+      }}/data/{{ item }}
+    method: GET
+    headers:
+      X-Vault-Token: "{{ aap_preflight_vault_token_effective }}"
+    validate_certs: "{{ aap_preflight_vault_validate_certs_effective }}"
+    status_code: [200, 400, 401, 403, 404]
+    return_content: false
+  register: aap_preflight_vault_path_checks
+  failed_when: false
+  delegate_to: localhost
+  become: false
+  no_log: true
+  loop:
+    - "{{ hc_vault_defaults_kv_path | default(lookup('ansible.builtin.env', 'AAP_VAULT_DEFAULTS_KV_PATH'), true) }}"
+    - "{{ hc_vault_aap_admin_passwords_kv_path | default(lookup('ansible.builtin.env', 'AAP_VAULT_ADMIN_PASSWORDS_KV_PATH'), true) }}"
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_vault | bool
+    - item | string | trim | length > 0
+  tags:
+    - aap_preflight
+    - vault
+
+- name: Assert required Vault KV paths are readable
+  ansible.builtin.assert:
+    that:
+      - item.status | default(0) | int == 200
+    fail_msg: >-
+      Vault KV path is not readable: {{
+      aap_preflight_vault_mount_effective }}/data/{{ item.item }} returned
+      HTTP {{ item.status | default('unknown') }}.
+    quiet: true
+  loop: "{{ aap_preflight_vault_path_checks.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('unknown') }}"
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_vault | bool
+    - not item.skipped | default(false)
+  tags:
+    - aap_preflight
+    - vault

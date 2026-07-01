@@ -1,0 +1,57 @@
+---
+aap_preflight_enabled: true
+
+aap_preflight_expected_ansible_user: svc_ansible
+aap_preflight_install_user: "{{ aap_deploy_install_user | default('svc_aap', true) }}"
+aap_preflight_installed_marker_path: "{{ aap_deploy_installed_marker_path | default('/appl/aap/.aap_containerized_installed', true) }}"
+
+aap_preflight_wait_for_connection_timeout: 120
+aap_preflight_check_expected_users: true
+aap_preflight_check_dns: true
+aap_preflight_check_commands: true
+aap_preflight_check_paths: true
+aap_preflight_check_podman: true
+aap_preflight_check_runtime: true
+aap_preflight_check_artifacts: true
+aap_preflight_check_vault: "{{ (aap_secret_backend | default('hashicorp_vault', true)) == 'hashicorp_vault' }}"
+aap_preflight_check_ansible_vault: "{{ (aap_secret_backend | default('hashicorp_vault', true)) == 'ansible_vault' }}"
+
+aap_preflight_required_commands:
+  - podman
+  - git
+  - openssl
+  - python3
+  - sudo
+
+aap_preflight_required_paths:
+  - path: /appl
+    mode: "0755"
+    owner: root
+    group: root
+  - path: /appl/tmp
+    mode: "1777"
+  - path: /appl/ansible-tmp
+    mode: "1777"
+  - path: /appl/home
+    mode: "0755"
+  - path: /appl/podman
+    mode: "0755"
+
+aap_preflight_remote_artifacts:
+  - name: bundle
+    source: "{{ aap_prepare_bundle_source | default('auto', true) }}"
+    path: "{{ aap_prepare_bundle_remote_src | default('', true) }}"
+    required: "{{ aap_prepare_bundle_required | default(true) | bool }}"
+  - name: manifest
+    source: "{{ aap_prepare_manifest_source | default('auto', true) }}"
+    path: "{{ aap_prepare_manifest_remote_src | default('', true) }}"
+    required: "{{ aap_prepare_manifest_required | default(false) | bool }}"
+
+aap_preflight_ansible_vault_required_secret_vars:
+  - aap_gateway_admin_password_input
+  - aap_controller_admin_password_input
+  - aap_hub_admin_password_input
+  - aap_eda_admin_password_input
+  - aap_postgresql_admin_password_input
+  - aap_breakglass_password_input
+  - rh_offline_token

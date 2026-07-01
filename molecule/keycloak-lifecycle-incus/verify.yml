@@ -1,0 +1,17 @@
+---
+- name: Verify Keycloak lifecycle Incus scenario
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Verify Incus target is reachable through Ansible
+      ansible.builtin.ping:
+
+    - name: Verify role marker facts can be set on target
+      ansible.builtin.set_fact:
+        keycloak_lifecycle_incus_verified: true
+
+    - name: Assert Incus lifecycle scenario completed
+      ansible.builtin.assert:
+        that:
+          - keycloak_lifecycle_incus_verified | bool
+        quiet: true

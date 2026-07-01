@@ -1,0 +1,11 @@
+---
+keycloak_destroy_execute: false
+keycloak_destroy_remove_data: false
+keycloak_destroy_remove_secrets: false
+keycloak_destroy_pod_name: "{{ keycloak_deploy_pod_name | default('keycloak', true) }}"
+keycloak_destroy_pod_manifest_path: "{{ keycloak_deploy_pod_manifest_path | default('/etc/podman/pods/keycloak.yml', true) }}"
+keycloak_destroy_data_paths:
+  - "{{ keycloak_deploy_host_data_dir | default('/srv/keycloak/data', true) }}"
+  - "{{ keycloak_deploy_postgres_data_dir | default('/srv/keycloak/postgres', true) }}"
+keycloak_destroy_secret_paths:
+  - "{{ keycloak_deploy_secrets_file | default('/srv/keycloak/config/keycloak-secrets.yml', true) }}"

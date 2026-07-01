@@ -1,0 +1,16 @@
+---
+- name: Validate Keycloak backup/restore variables
+  ansible.builtin.assert:
+    that:
+      - keycloak_backup_restore_action in keycloak_backup_restore_allowed_actions
+      - keycloak_backup_restore_allowed_actions is sequence
+      - keycloak_backup_restore_allowed_actions is not string
+      - keycloak_backup_restore_execute is boolean
+      - keycloak_backup_restore_dir | default('', true) | trim | length > 0
+      - keycloak_backup_restore_file | default('', true) | trim | length > 0
+      - keycloak_backup_restore_db_name | default('', true) | trim | length > 0
+      - keycloak_backup_restore_db_user | default('', true) | trim | length > 0
+      - keycloak_backup_restore_db_host | default('', true) | trim | length > 0
+      - keycloak_backup_restore_db_port | int > 0
+    fail_msg: "Keycloak backup/restore variables are missing or invalid."
+  tags: always

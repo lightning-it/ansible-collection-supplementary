@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  description: Orchestrate the Keycloak deployment and day-2 lifecycle roles
+  company: Lightning IT
+  author: Dirk Egert, René Osorio
+  license: MIT
+  min_ansible_version: '2.18'
+  role_name: keycloak
+  namespace: default
+  galaxy_tags: []
+dependencies: []

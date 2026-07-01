@@ -1,0 +1,27 @@
+---
+- name: Validate AAP preflight role inputs
+  ansible.builtin.assert:
+    that:
+      - aap_preflight_enabled is boolean
+      - aap_preflight_wait_for_connection_timeout | int > 0
+      - aap_preflight_check_expected_users is boolean
+      - aap_preflight_check_dns is boolean
+      - aap_preflight_check_commands is boolean
+      - aap_preflight_check_paths is boolean
+      - aap_preflight_check_podman is boolean
+      - aap_preflight_check_runtime is boolean
+      - aap_preflight_check_artifacts is boolean
+      - aap_preflight_check_vault is boolean
+      - aap_preflight_check_ansible_vault is boolean
+      - aap_preflight_required_commands is sequence
+      - aap_preflight_required_commands is not string
+      - aap_preflight_required_paths is sequence
+      - aap_preflight_required_paths is not string
+      - aap_preflight_remote_artifacts is sequence
+      - aap_preflight_remote_artifacts is not string
+      - aap_preflight_ansible_vault_required_secret_vars is sequence
+      - aap_preflight_ansible_vault_required_secret_vars is not string
+    fail_msg: "Invalid configuration for lit.supplementary.aap_preflight."
+    quiet: true
+  changed_when: false
+  when: aap_preflight_enabled | bool

@@ -1,0 +1,64 @@
+---
+- name: Run Keycloak preflight
+  ansible.builtin.include_role:
+    name: keycloak_preflight
+  when: keycloak_run_preflight | bool
+  tags:
+    - preflight
+
+- name: Deploy Keycloak
+  ansible.builtin.include_role:
+    name: keycloak_deploy
+  when: keycloak_run_deploy | bool
+  tags:
+    - deployment
+
+- name: Configure Keycloak runtime
+  ansible.builtin.include_role:
+    name: keycloak_config
+  when: keycloak_run_config | bool
+  tags:
+    - config
+
+- name: Apply Keycloak configuration as code
+  ansible.builtin.include_role:
+    name: keycloak_cac
+  when: keycloak_run_cac | bool
+  tags:
+    - cac
+
+- name: Validate Keycloak
+  ansible.builtin.include_role:
+    name: keycloak_validate
+  when: keycloak_run_validate | bool
+  tags:
+    - validate
+
+- name: Run Keycloak operations
+  ansible.builtin.include_role:
+    name: keycloak_ops
+  when: keycloak_run_ops | bool
+  tags:
+    - ops
+
+- name: Run Keycloak backup or restore
+  ansible.builtin.include_role:
+    name: keycloak_backup_restore
+  when: keycloak_run_backup_restore | bool
+  tags:
+    - backup
+    - restore
+
+- name: Upgrade Keycloak
+  ansible.builtin.include_role:
+    name: keycloak_upgrade
+  when: keycloak_run_upgrade | bool
+  tags:
+    - upgrade
+
+- name: Destroy Keycloak
+  ansible.builtin.include_role:
+    name: keycloak_destroy
+  when: keycloak_run_destroy | bool
+  tags:
+    - destroy

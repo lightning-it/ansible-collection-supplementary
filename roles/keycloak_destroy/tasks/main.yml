@@ -1,0 +1,56 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Report Keycloak destroy dry run
+  ansible.builtin.debug:
+    msg: "Keycloak destroy is disabled. Set keycloak_destroy_execute=true to remove runtime resources."
+  when: not keycloak_destroy_execute | bool
+  tags:
+    - destroy
+
+- name: Remove Keycloak pod with kubeplay
+  ansible.builtin.include_role:
+    name: lit.foundational.kubeplay
+  vars:
+    kubeplay_apps: []
+    kubeplay_action: remove
+    kubeplay_pod_name: "{{ keycloak_destroy_pod_name }}"
+    kubeplay_app_name: keycloak_remove
+  when: keycloak_destroy_execute | bool
+  tags:
+    - destroy
+
+- name: Remove Keycloak pod manifest
+  ansible.builtin.file:
+    path: "{{ keycloak_destroy_pod_manifest_path }}"
+    state: absent
+  when: keycloak_destroy_execute | bool
+  tags:
+    - destroy
+
+- name: Remove Keycloak data paths
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ keycloak_destroy_data_paths }}"
+  when:
+    - keycloak_destroy_execute | bool
+    - keycloak_destroy_remove_data | bool
+  tags:
+    - destroy
+    - data
+
+- name: Remove Keycloak secret paths
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ keycloak_destroy_secret_paths }}"
+  when:
+    - keycloak_destroy_execute | bool
+    - keycloak_destroy_remove_secrets | bool
+  no_log: true
+  tags:
+    - destroy
+    - secrets

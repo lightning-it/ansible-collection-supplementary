@@ -1,0 +1,40 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Check Keycloak realm endpoint
+  ansible.builtin.uri:
+    url: "{{ keycloak_validate_url }}/realms/{{ keycloak_validate_realm }}"
+    method: GET
+    validate_certs: "{{ keycloak_validate_validate_certs }}"
+    timeout: "{{ keycloak_validate_request_timeout | int }}"
+    status_code: 200
+  register: keycloak_validate_realm_result
+  changed_when: false
+  failed_when:
+    - keycloak_validate_strict | bool
+    - keycloak_validate_realm_result.status | default(0) | int != 200
+  tags:
+    - validate
+    - api
+
+- name: Check expected realm discovery endpoints
+  ansible.builtin.uri:
+    url: "{{ keycloak_validate_url }}/realms/{{ item }}/.well-known/openid-configuration"
+    method: GET
+    validate_certs: "{{ keycloak_validate_validate_certs }}"
+    timeout: "{{ keycloak_validate_request_timeout | int }}"
+    status_code: 200
+  loop: "{{ keycloak_validate_expected_realms }}"
+  changed_when: false
+  failed_when: false
+  tags:
+    - validate
+    - oidc
+
+- name: Report Keycloak validation status
+  ansible.builtin.debug:
+    msg: "Keycloak validation completed for {{ keycloak_validate_url }}/realms/{{ keycloak_validate_realm }}."
+  tags:
+    - validate

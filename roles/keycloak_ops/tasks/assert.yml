@@ -1,0 +1,11 @@
+---
+- name: Validate Keycloak ops variables
+  ansible.builtin.assert:
+    that:
+      - keycloak_ops_action in keycloak_ops_allowed_actions
+      - keycloak_ops_container_name | default('', true) | trim | length > 0
+      - keycloak_ops_allowed_actions is sequence
+      - keycloak_ops_allowed_actions is not string
+      - keycloak_ops_use_systemd is boolean
+    fail_msg: "Keycloak ops variables are missing or invalid."
+  tags: always

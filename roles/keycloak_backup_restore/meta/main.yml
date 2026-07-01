@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  description: Back up or restore Keycloak PostgreSQL state
+  company: Lightning IT
+  author: Dirk Egert, René Osorio
+  license: MIT
+  min_ansible_version: '2.18'
+  role_name: keycloak_backup_restore
+  namespace: default
+  galaxy_tags: []
+dependencies: []

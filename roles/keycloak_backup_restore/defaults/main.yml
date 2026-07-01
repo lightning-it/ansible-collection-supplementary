@@ -1,0 +1,13 @@
+---
+keycloak_backup_restore_action: "backup"
+keycloak_backup_restore_allowed_actions:
+  - backup
+  - restore
+keycloak_backup_restore_execute: false
+keycloak_backup_restore_dir: "/srv/keycloak/backups"
+keycloak_backup_restore_db_name: "{{ keycloak_deploy_db_name | default('keycloak', true) }}"
+keycloak_backup_restore_db_user: "{{ keycloak_deploy_db_user | default('keycloak', true) }}"
+keycloak_backup_restore_db_host: "{{ keycloak_deploy_db_host | default('127.0.0.1', true) }}"
+keycloak_backup_restore_db_port: "{{ keycloak_deploy_db_port | default(5432) }}"
+keycloak_backup_restore_file: >-
+  {{ keycloak_backup_restore_dir }}/keycloak-{{ ansible_date_time.iso8601_basic_short | default('manual') }}.sql

@@ -1,0 +1,8 @@
+---
+keycloak_ops_action: "status"
+keycloak_ops_allowed_actions:
+  - status
+  - restart
+keycloak_ops_container_name: "{{ keycloak_deploy_container_name | default('keycloak-keycloak', true) }}"
+keycloak_ops_systemd_unit_name: "{{ keycloak_deploy_systemd_unit_name | default('', true) }}"
+keycloak_ops_use_systemd: "{{ keycloak_deploy_manage_systemd | default(true) }}"
