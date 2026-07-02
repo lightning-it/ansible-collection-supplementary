@@ -1,0 +1,11 @@
+---
+- name: Validate rsyslog preflight variables
+  ansible.builtin.assert:
+    that:
+      - rsyslog_preflight_strict is boolean
+      - rsyslog_preflight_check_packages is boolean
+      - rsyslog_preflight_check_ports is boolean
+      - rsyslog_preflight_required_tcp_ports is sequence
+      - rsyslog_preflight_required_tcp_ports is not string
+    fail_msg: "rsyslog preflight variables are missing or invalid."
+  tags: always

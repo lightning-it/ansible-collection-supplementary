@@ -1,0 +1,26 @@
+---
+- name: Validate rsyslog backup/restore variables
+  ansible.builtin.assert:
+    that:
+      - rsyslog_backup_restore_action in rsyslog_backup_restore_allowed_actions
+      - rsyslog_backup_restore_allowed_actions is sequence
+      - rsyslog_backup_restore_allowed_actions is not string
+      - rsyslog_backup_restore_execute is boolean
+      - rsyslog_backup_restore_backup_dir | default('', true) | trim | length > 0
+      - rsyslog_backup_restore_file | default('', true) | trim | length > 0
+      - rsyslog_backup_restore_restore_source | default('', true) | trim | length > 0
+      - rsyslog_backup_restore_paths is sequence
+      - rsyslog_backup_restore_paths is not string
+      - rsyslog_backup_restore_retention_keep_last | int >= 0
+    fail_msg: "rsyslog backup/restore variables are missing or invalid."
+  tags: always
+
+- name: Validate rsyslog restore confirmation
+  ansible.builtin.assert:
+    that:
+      - rsyslog_backup_restore_restore_confirm == 'YES_RESTORE'
+    fail_msg: "Set rsyslog_backup_restore_restore_confirm=YES_RESTORE for rsyslog restore."
+  when:
+    - rsyslog_backup_restore_execute | bool
+    - rsyslog_backup_restore_action == 'restore'
+  tags: always

@@ -1,0 +1,7 @@
+---
+rsyslog_ops_action: "status"
+rsyslog_ops_allowed_actions:
+  - status
+  - restart
+rsyslog_ops_systemd_scope: "{{ rsyslog_deploy_systemd_scope | default('system', true) }}"
+rsyslog_ops_service_name: "{{ rsyslog_deploy_systemd_unit_name | default('rsyslog', true) }}.service"

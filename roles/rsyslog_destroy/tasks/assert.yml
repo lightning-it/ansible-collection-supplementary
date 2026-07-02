@@ -1,0 +1,21 @@
+---
+- name: Validate rsyslog destroy variables
+  ansible.builtin.assert:
+    that:
+      - rsyslog_destroy_execute is boolean
+      - rsyslog_destroy_remove_packages is boolean
+      - rsyslog_destroy_remove_data is boolean
+      - rsyslog_destroy_remove_config is boolean
+      - rsyslog_destroy_remove_systemd is boolean
+      - rsyslog_destroy_systemd_unit_name | default('', true) | trim | length > 0
+      - rsyslog_destroy_systemd_scope in ['system', 'user']
+      - rsyslog_destroy_quadlet_dir | default('', true) | trim | length > 0
+      - rsyslog_destroy_manifest_path | default('', true) | trim | length > 0
+      - rsyslog_destroy_packages is sequence
+      - rsyslog_destroy_packages is not string
+      - rsyslog_destroy_data_paths is sequence
+      - rsyslog_destroy_data_paths is not string
+      - rsyslog_destroy_config_paths is sequence
+      - rsyslog_destroy_config_paths is not string
+    fail_msg: "rsyslog destroy variables are missing or invalid."
+  tags: always

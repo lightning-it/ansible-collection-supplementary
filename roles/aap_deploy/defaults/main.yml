@@ -278,6 +278,47 @@ aap_deploy_growth_postgresql_host: "{{ ansible_fqdn | default(inventory_hostname
 aap_deploy_growth_inventory_connection: local
 aap_deploy_growth_inventory_hostvars_extra: ""
 
+# The upstream containerized installer uses inventory host names in a few local
+# readiness checks. Keep short inventory names usable by ensuring they resolve
+# on the AAP host before the installer runs.
+aap_deploy_manage_host_aliases: true
+aap_deploy_host_alias_address: >-
+  {{
+    aap_ansible_host
+    | default(ansible_host | default(ansible_default_ipv4.address | default('', true), true), true)
+  }}
+aap_deploy_host_aliases: >-
+  {{
+    (
+      [
+        aap_deploy_growth_gateway_host,
+        aap_deploy_growth_controller_host,
+        aap_deploy_growth_hub_host,
+        aap_deploy_growth_eda_host,
+        aap_deploy_growth_automationmetrics_host,
+        aap_deploy_growth_postgresql_host,
+        aap_fqdn | default('', true)
+      ]
+      if aap_deploy_topology == 'growth'
+      else (
+        aap_deploy_enterprise_gateway_hosts
+        + aap_deploy_enterprise_controller_hosts
+        + aap_deploy_enterprise_hub_hosts
+        + aap_deploy_enterprise_eda_hosts
+        + aap_deploy_enterprise_automationmetrics_hosts
+        + aap_deploy_enterprise_postgresql_hosts
+        + [aap_fqdn | default('', true)]
+      )
+    )
+    | map('string')
+    | map('trim')
+    | reject('equalto', '')
+    | reject('equalto', 'localhost')
+    | reject('match', '^\\d+\\.\\d+\\.\\d+\\.\\d+$')
+    | unique
+    | list
+  }}
+
 # Enterprise topology hosts (lists)
 aap_deploy_enterprise_gateway_hosts:
   - "{{ ansible_fqdn | default(inventory_hostname) }}"
@@ -466,8 +507,11 @@ aap_deploy_skip_if_installed_runtime_min_matching_containers: 1
 aap_deploy_installed_marker_path: "{{ aap_deploy_install_dir }}/.aap_containerized_installed"
 aap_deploy_skip_if_runtime_active: true
 aap_deploy_runtime_probe_all_containers: true
-aap_deploy_runtime_name_regex: '.*(automation|ansible|aap).*'
+aap_deploy_runtime_name_regex: '^(automation-|postgresql$|redis-|receptor$)'
 aap_deploy_runtime_min_matching_containers: 1
+aap_deploy_reset_partial_install_enabled: false
+aap_deploy_reset_partial_install_remove_setup: true
+aap_deploy_reset_partial_install_remove_logs: true
 
 # Post-install verification
 aap_deploy_verify_gateway_https: false

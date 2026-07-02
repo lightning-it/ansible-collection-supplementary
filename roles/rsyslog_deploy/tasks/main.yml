@@ -1,0 +1,79 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip rsyslog deployment in check mode
+  ansible.builtin.debug:
+    msg: "rsyslog container deployment skipped in check mode."
+  when:
+    - ansible_check_mode
+    - not rsyslog_deploy_skip_runtime | bool
+    - not rsyslog_deploy_skip_deploy | bool
+  tags: always
+
+- name: Deploy rsyslog container runtime
+  when:
+    - not rsyslog_deploy_skip_runtime | bool
+    - not rsyslog_deploy_skip_deploy | bool
+    - not ansible_check_mode
+  block:
+    - name: Install rsyslog container runtime packages
+      ansible.builtin.package:
+        name: "{{ rsyslog_deploy_packages }}"
+        state: present
+      when: rsyslog_deploy_install_packages | bool
+      tags:
+        - install
+
+    - name: Ensure rsyslog container directories exist
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ rsyslog_deploy_config_dir }}"
+          mode: "{{ rsyslog_deploy_dir_mode }}"
+        - path: "{{ rsyslog_deploy_log_dir }}"
+          mode: "{{ rsyslog_deploy_log_dir_mode }}"
+        - path: "{{ rsyslog_deploy_pod_manifest_path | dirname }}"
+          mode: "0755"
+      tags:
+        - deployment
+
+    - name: Render rsyslog configuration
+      ansible.builtin.template:
+        src: rsyslog.conf.j2
+        dest: "{{ rsyslog_deploy_config_path }}"
+        mode: "{{ rsyslog_deploy_config_mode }}"
+      register: rsyslog_deploy_config_render
+      tags:
+        - config
+
+    - name: Render rsyslog Pod manifest
+      ansible.builtin.template:
+        src: rsyslog-pod.yml.j2
+        dest: "{{ rsyslog_deploy_pod_manifest_path }}"
+        mode: "0644"
+      register: rsyslog_deploy_manifest_render
+      tags:
+        - deployment
+
+    - name: Manage rsyslog persistent container service
+      ansible.builtin.include_role:
+        name: lit.foundational.podman_systemd
+      vars:
+        podman_systemd_action: >-
+          {{
+            'restarted'
+            if (rsyslog_deploy_config_render.changed or rsyslog_deploy_manifest_render.changed)
+            else 'present'
+          }}
+        podman_systemd_unit_name: "{{ rsyslog_deploy_systemd_unit_name }}"
+        podman_systemd_description: "{{ rsyslog_deploy_systemd_description }}"
+        podman_systemd_manifest_path: "{{ rsyslog_deploy_pod_manifest_path }}"
+        podman_systemd_scope: "{{ rsyslog_deploy_systemd_scope }}"
+        podman_systemd_quadlet_dir: "{{ rsyslog_deploy_quadlet_dir }}"
+        podman_systemd_enabled: "{{ rsyslog_deploy_systemd_enabled }}"
+      tags:
+        - deployment

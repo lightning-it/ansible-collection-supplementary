@@ -1,0 +1,12 @@
+---
+- name: Validate rsyslog validate variables
+  ansible.builtin.assert:
+    that:
+      - rsyslog_validate_strict is boolean
+      - rsyslog_validate_host | default('', true) | trim | length > 0
+      - rsyslog_validate_tcp_port | int > 0
+      - rsyslog_validate_timeout | int > 0
+      - rsyslog_validate_log_path | default('', true) | trim | length > 0
+      - rsyslog_validate_check_log_file is boolean
+    fail_msg: "rsyslog validate variables are missing or invalid."
+  tags: always

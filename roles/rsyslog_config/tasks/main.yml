@@ -1,0 +1,20 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip rsyslog runtime config apply when disabled
+  ansible.builtin.debug:
+    msg: "rsyslog runtime config skipped (rsyslog_config_skip_apply=true)."
+  when: rsyslog_config_skip_apply | bool
+  tags:
+    - config
+
+- name: Report rsyslog deploy overrides
+  ansible.builtin.debug:
+    var: rsyslog_config_deploy_overrides
+  when:
+    - not rsyslog_config_skip_apply | bool
+    - rsyslog_config_deploy_overrides | length > 0
+  tags:
+    - config

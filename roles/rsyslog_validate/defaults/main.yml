@@ -1,0 +1,8 @@
+---
+rsyslog_validate_strict: true
+rsyslog_validate_host: "127.0.0.1"
+rsyslog_validate_tcp_port: "{{ rsyslog_deploy_tcp_port | default(1514, true) }}"
+rsyslog_validate_timeout: 10
+rsyslog_validate_log_path: >-
+  {{ rsyslog_deploy_log_dir | default('/srv/rsyslog/log', true) }}/{{ rsyslog_deploy_log_file | default('remote.log', true) }}
+rsyslog_validate_check_log_file: false

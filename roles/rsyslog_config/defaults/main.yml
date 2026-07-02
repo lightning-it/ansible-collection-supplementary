@@ -1,0 +1,3 @@
+---
+rsyslog_config_skip_apply: true
+rsyslog_config_deploy_overrides: {}

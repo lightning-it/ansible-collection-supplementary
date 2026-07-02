@@ -14,6 +14,7 @@ aap_deploy_gateway_verify_url: "{{ '{{' }} aap_deploy_gateway_main_url {{ '}}' }
 aap_deploy_install_user: {{ aap_effective_install_user }}
 aap_deploy_install_user_home: /appl/home/{{ aap_effective_install_user }}
 aap_deploy_install_user_shell: /bin/bash
+aap_deploy_reset_partial_install_enabled: true
 
 aap_deploy_growth_gateway_host: {{ aap_inventory_host | to_json }}
 aap_deploy_growth_controller_host: {{ aap_inventory_host | to_json }}

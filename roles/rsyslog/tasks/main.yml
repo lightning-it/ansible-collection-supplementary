@@ -1,0 +1,57 @@
+---
+- name: Run rsyslog preflight
+  ansible.builtin.include_role:
+    name: rsyslog_preflight
+  when: rsyslog_run_preflight | bool
+  tags:
+    - preflight
+
+- name: Deploy rsyslog
+  ansible.builtin.include_role:
+    name: rsyslog_deploy
+  when: rsyslog_run_deploy | bool
+  tags:
+    - deployment
+
+- name: Configure rsyslog
+  ansible.builtin.include_role:
+    name: rsyslog_config
+  when: rsyslog_run_config | bool
+  tags:
+    - config
+
+- name: Validate rsyslog
+  ansible.builtin.include_role:
+    name: rsyslog_validate
+  when: rsyslog_run_validate | bool
+  tags:
+    - validate
+
+- name: Run rsyslog operations
+  ansible.builtin.include_role:
+    name: rsyslog_ops
+  when: rsyslog_run_ops | bool
+  tags:
+    - ops
+
+- name: Run rsyslog backup or restore
+  ansible.builtin.include_role:
+    name: rsyslog_backup_restore
+  when: rsyslog_run_backup_restore | bool
+  tags:
+    - backup
+    - restore
+
+- name: Upgrade rsyslog
+  ansible.builtin.include_role:
+    name: rsyslog_upgrade
+  when: rsyslog_run_upgrade | bool
+  tags:
+    - upgrade
+
+- name: Destroy rsyslog
+  ansible.builtin.include_role:
+    name: rsyslog_destroy
+  when: rsyslog_run_destroy | bool
+  tags:
+    - destroy

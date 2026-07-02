@@ -1,0 +1,8 @@
+---
+- name: Validate rsyslog config variables
+  ansible.builtin.assert:
+    that:
+      - rsyslog_config_skip_apply is boolean
+      - rsyslog_config_deploy_overrides is mapping
+    fail_msg: "rsyslog config variables are missing or invalid."
+  tags: always
