@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: samba_config
+  author: LIT
+  description: Samba runtime configuration wrapper.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

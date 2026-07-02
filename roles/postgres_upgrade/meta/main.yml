@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: postgres_upgrade
+  author: LIT
+  description: Upgrade PostgreSQL deployment images.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

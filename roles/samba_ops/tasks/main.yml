@@ -1,0 +1,67 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Inspect Samba daemon status
+  ansible.builtin.command: pgrep -a smbd
+  register: samba_ops_status
+  changed_when: false
+  failed_when: false
+  when: samba_ops_action == 'status'
+  tags:
+    - ops
+    - status
+
+- name: Report Samba daemon status
+  ansible.builtin.debug:
+    msg: "Samba smbd status: {{ 'running' if samba_ops_status.rc == 0 else 'not running' }}"
+  when: samba_ops_action == 'status'
+  tags:
+    - ops
+    - status
+
+- name: Restart Samba through systemd
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: restarted
+  loop:
+    - "{{ samba_ops_smbd_service }}"
+    - "{{ samba_ops_nmbd_service }}"
+  when:
+    - samba_ops_action == 'restart'
+    - samba_ops_use_systemd | bool
+  tags:
+    - ops
+    - restart
+
+- name: Stop Samba daemons directly
+  ansible.builtin.command: "pkill -x {{ item }}"
+  loop:
+    - smbd
+    - nmbd
+  register: samba_ops_stop_direct
+  changed_when: samba_ops_stop_direct.rc == 0
+  failed_when: false
+  when:
+    - samba_ops_action == 'restart'
+    - not samba_ops_use_systemd | bool
+  tags:
+    - ops
+    - restart
+
+- name: Start Samba daemons directly
+  ansible.builtin.command:
+    argv:
+      - "{{ item }}"
+      - -D
+  loop:
+    - "{{ samba_ops_smbd_path }}"
+    - "{{ samba_ops_nmbd_path }}"
+  changed_when: true
+  when:
+    - samba_ops_action == 'restart'
+    - not samba_ops_use_systemd | bool
+  tags:
+    - ops
+    - restart

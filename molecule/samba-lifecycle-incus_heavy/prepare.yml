@@ -1,0 +1,22 @@
+---
+- name: Prepare heavy Samba lifecycle Incus target
+  hosts: all
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Wait for outbound HTTP from Incus target
+      ansible.builtin.command: curl -4 -fsS --connect-timeout 10 http://archive.ubuntu.com/ubuntu/
+      changed_when: false
+
+    - name: Force apt to use IPv4 in Incus target
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/99force-ipv4
+        content: |
+          Acquire::ForceIPv4 "true";
+        mode: '0644'
+
+    - name: Refresh apt cache for Samba installation
+      ansible.builtin.apt:
+        update_cache: true
+        update_cache_retries: 2
+        cache_valid_time: 3600

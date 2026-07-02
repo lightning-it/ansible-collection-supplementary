@@ -1,0 +1,21 @@
+---
+- name: Validate Samba deploy variables
+  ansible.builtin.assert:
+    that:
+      - samba_deploy_packages is sequence
+      - samba_deploy_packages is not string
+      - samba_deploy_install_packages is boolean
+      - samba_deploy_manage_systemd is boolean
+      - samba_deploy_skip_runtime is boolean
+      - samba_deploy_skip_deploy is boolean
+      - samba_deploy_workgroup | default('', true) | trim | length > 0
+      - samba_deploy_config_path | default('', true) | trim | length > 0
+      - samba_deploy_share_name | default('', true) | trim | length > 0
+      - samba_deploy_share_path | default('', true) | trim | length > 0
+      - samba_deploy_share_guest_ok is boolean
+      - samba_deploy_share_read_only is boolean
+      - samba_deploy_share_browseable is boolean
+      - samba_deploy_extra_global_options is mapping
+      - samba_deploy_extra_share_options is mapping
+    fail_msg: "Samba deploy variables are missing or invalid."
+  tags: always

@@ -17,9 +17,12 @@
     keycloak_deploy_admin_password: molecule-admin-password
     keycloak_deploy_host_ip: 127.0.0.1
     keycloak_deploy_postgres_host_ip: 0.0.0.0
-    keycloak_deploy_db_host: host.containers.internal
+    keycloak_deploy_db_host: postgres
+    keycloak_deploy_db_wait_host: 127.0.0.1
     keycloak_deploy_port: 18080
-    keycloak_deploy_db_port: 15432
+    keycloak_deploy_db_port: 5432
+    keycloak_deploy_postgres_port: 15432
+    keycloak_deploy_db_wait_port: 15432
     keycloak_deploy_container_name: keycloak
     keycloak_deploy_env_extra:
       KC_HTTP_PORT: "18080"
@@ -52,8 +55,36 @@
     keycloak_run_ops: true
     keycloak_ops_action: status
     keycloak_ops_container_name: keycloak-heavy-keycloak
-    keycloak_run_backup_restore: false
+    keycloak_run_backup_restore: true
+    keycloak_backup_restore_action: backup
+    keycloak_backup_restore_execute: true
+    keycloak_backup_restore_url: "http://127.0.0.1:18080"
+    keycloak_backup_restore_admin_user: admin
+    keycloak_backup_restore_admin_password: molecule-admin-password
+    keycloak_backup_restore_realm: master
+    keycloak_backup_restore_dir: /srv/keycloak-heavy/backups
+    keycloak_backup_restore_file: /srv/keycloak-heavy/backups/keycloak-master-realm.json
     keycloak_run_upgrade: false
     keycloak_run_destroy: false
   roles:
     - role: keycloak
+
+- name: Back up PostgreSQL separately from Keycloak
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    postgres_backup_restore_action: backup
+    postgres_backup_restore_execute: true
+    postgres_backup_restore_backup_dir: /srv/keycloak-heavy/backups
+    postgres_backup_restore_file: /srv/keycloak-heavy/backups/keycloak-postgres.dump
+    postgres_backup_restore_db_name: keycloak
+    postgres_backup_restore_db_user: keycloak
+    postgres_backup_restore_db_password: molecule-db-password
+    postgres_backup_restore_db_host: 127.0.0.1
+    postgres_backup_restore_db_port: 5432
+    postgres_backup_restore_format: custom
+    postgres_backup_restore_execution_mode: podman
+    postgres_backup_restore_container_name: keycloak-heavy-postgres-postgres
+  roles:
+    - role: postgres_backup_restore

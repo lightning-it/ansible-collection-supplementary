@@ -1,0 +1,8 @@
+---
+- name: Validate Samba config variables
+  ansible.builtin.assert:
+    that:
+      - samba_config_skip_apply is boolean
+      - samba_config_deploy_overrides is mapping
+    fail_msg: "Samba config variables are missing or invalid."
+  tags: always

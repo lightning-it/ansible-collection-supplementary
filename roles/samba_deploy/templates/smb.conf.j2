@@ -1,0 +1,25 @@
+[global]
+   workgroup = {{ samba_deploy_workgroup }}
+   server string = {{ samba_deploy_server_string }}
+   security = {{ samba_deploy_security }}
+   map to guest = {{ samba_deploy_map_to_guest }}
+   log file = /var/log/samba/log.%m
+   max log size = 1000
+   server role = standalone server
+   obey pam restrictions = yes
+   usershare allow guests = yes
+{% for key, value in samba_deploy_extra_global_options.items() %}
+   {{ key }} = {{ value }}
+{% endfor %}
+
+[{{ samba_deploy_share_name }}]
+   path = {{ samba_deploy_share_path }}
+   comment = {{ samba_deploy_share_comment }}
+   browseable = {{ 'yes' if samba_deploy_share_browseable | bool else 'no' }}
+   read only = {{ 'yes' if samba_deploy_share_read_only | bool else 'no' }}
+   guest ok = {{ 'yes' if samba_deploy_share_guest_ok | bool else 'no' }}
+   create mask = {{ samba_deploy_share_create_mask }}
+   directory mask = {{ samba_deploy_share_directory_mask }}
+{% for key, value in samba_deploy_extra_share_options.items() %}
+   {{ key }} = {{ value }}
+{% endfor %}

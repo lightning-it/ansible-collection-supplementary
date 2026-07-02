@@ -1,0 +1,43 @@
+---
+- name: Validate PostgreSQL backup/restore variables
+  ansible.builtin.assert:
+    that:
+      - postgres_backup_restore_action in postgres_backup_restore_allowed_actions
+      - postgres_backup_restore_allowed_actions is sequence
+      - postgres_backup_restore_allowed_actions is not string
+      - postgres_backup_restore_execute is boolean
+      - postgres_backup_restore_backup_dir | default('', true) | trim | length > 0
+      - postgres_backup_restore_file | default('', true) | trim | length > 0
+      - postgres_backup_restore_restore_source | default('', true) | trim | length > 0
+      - postgres_backup_restore_retention_keep_last | int >= 0
+      - postgres_backup_restore_db_name | default('', true) | trim | length > 0
+      - postgres_backup_restore_db_user | default('', true) | trim | length > 0
+      - postgres_backup_restore_db_host | default('', true) | trim | length > 0
+      - postgres_backup_restore_db_port | int > 0
+      - postgres_backup_restore_format in ['custom', 'plain']
+      - postgres_backup_restore_execution_mode in ['client', 'podman']
+      - postgres_backup_restore_container_name | default('', true) | trim | length > 0
+      - postgres_backup_restore_clean is boolean
+      - postgres_backup_restore_if_exists is boolean
+      - postgres_backup_restore_create_db is boolean
+      - postgres_backup_restore_extra_pg_dump_args is sequence
+      - postgres_backup_restore_extra_pg_dump_args is not string
+      - postgres_backup_restore_extra_pg_restore_args is sequence
+      - postgres_backup_restore_extra_pg_restore_args is not string
+      - postgres_backup_restore_extra_psql_args is sequence
+      - postgres_backup_restore_extra_psql_args is not string
+    fail_msg: "PostgreSQL backup/restore variables are missing or invalid."
+  tags: always
+
+- name: Validate PostgreSQL restore confirmation
+  ansible.builtin.assert:
+    that:
+      - postgres_backup_restore_restore_confirm == 'YES_RESTORE'
+      - postgres_backup_restore_restore_source | default('', true) | trim | length > 0
+    fail_msg: >-
+      Set postgres_backup_restore_restore_confirm=YES_RESTORE and
+      postgres_backup_restore_restore_source for PostgreSQL restore.
+  when:
+    - postgres_backup_restore_execute | bool
+    - postgres_backup_restore_action == 'restore'
+  tags: always

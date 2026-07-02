@@ -1,0 +1,45 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Inspect PostgreSQL container status
+  ansible.builtin.command: "podman inspect {{ postgres_ops_container_name }} --format {{ '{{.State.Status}}' }}"
+  register: postgres_ops_container_status
+  changed_when: false
+  failed_when: false
+  when: postgres_ops_action == 'status'
+  tags:
+    - ops
+    - status
+
+- name: Report PostgreSQL container status
+  ansible.builtin.debug:
+    msg: "PostgreSQL container {{ postgres_ops_container_name }} status: {{ postgres_ops_container_status.stdout | default('unknown') | trim }}"
+  when: postgres_ops_action == 'status'
+  tags:
+    - ops
+    - status
+
+- name: Restart PostgreSQL through systemd
+  ansible.builtin.systemd:
+    name: "{{ postgres_ops_systemd_unit_name }}"
+    state: restarted
+    daemon_reload: true
+  when:
+    - postgres_ops_action == 'restart'
+    - postgres_ops_use_systemd | bool
+    - postgres_ops_systemd_unit_name | trim | length > 0
+  tags:
+    - ops
+    - restart
+
+- name: Restart PostgreSQL container directly
+  ansible.builtin.command: "podman restart {{ postgres_ops_container_name }}"
+  changed_when: true
+  when:
+    - postgres_ops_action == 'restart'
+    - not postgres_ops_use_systemd | bool
+  tags:
+    - ops
+    - restart

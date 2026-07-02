@@ -1,0 +1,8 @@
+---
+- name: Validate PostgreSQL config variables
+  ansible.builtin.assert:
+    that:
+      - postgres_config_skip_apply is boolean
+      - postgres_config_deploy_overrides is mapping
+    fail_msg: "PostgreSQL config variables are missing or invalid."
+  tags: always

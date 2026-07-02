@@ -1,0 +1,27 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip PostgreSQL runtime config apply when disabled
+  ansible.builtin.debug:
+    msg: "PostgreSQL runtime config skipped (postgres_config_skip_apply=true)."
+  when: postgres_config_skip_apply | bool
+  tags:
+    - config
+
+- name: Build PostgreSQL deploy overrides from config role
+  ansible.builtin.set_fact:
+    postgres_config_effective_deploy_overrides: "{{ postgres_config_deploy_overrides }}"
+  when: not postgres_config_skip_apply | bool
+  tags:
+    - config
+
+- name: Report PostgreSQL deploy overrides
+  ansible.builtin.debug:
+    var: postgres_config_effective_deploy_overrides
+  when:
+    - not postgres_config_skip_apply | bool
+    - postgres_config_effective_deploy_overrides | length > 0
+  tags:
+    - config

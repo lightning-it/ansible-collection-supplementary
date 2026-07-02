@@ -1,0 +1,3 @@
+---
+samba_config_skip_apply: true
+samba_config_deploy_overrides: {}

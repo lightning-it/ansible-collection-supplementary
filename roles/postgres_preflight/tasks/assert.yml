@@ -1,0 +1,13 @@
+---
+- name: Validate PostgreSQL preflight variables
+  ansible.builtin.assert:
+    that:
+      - postgres_preflight_strict is boolean
+      - postgres_preflight_check_podman is boolean
+      - postgres_preflight_check_systemd is boolean
+      - postgres_preflight_check_ports is boolean
+      - postgres_preflight_required_ports is sequence
+      - postgres_preflight_required_ports is not string
+      - postgres_preflight_check_vault_auth is boolean
+    fail_msg: "PostgreSQL preflight variables are missing or invalid."
+  tags: always

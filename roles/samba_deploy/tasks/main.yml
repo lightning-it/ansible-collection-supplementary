@@ -1,0 +1,96 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip Samba deployment in check mode
+  ansible.builtin.debug:
+    msg: "Samba deployment skipped in check mode."
+  when:
+    - ansible_check_mode
+    - not samba_deploy_skip_runtime | bool
+    - not samba_deploy_skip_deploy | bool
+  tags: always
+
+- name: Deploy Samba runtime
+  when:
+    - not samba_deploy_skip_runtime | bool
+    - not samba_deploy_skip_deploy | bool
+    - not ansible_check_mode
+  block:
+    - name: Install Samba packages
+      ansible.builtin.package:
+        name: "{{ samba_deploy_packages }}"
+        state: present
+      when: samba_deploy_install_packages | bool
+      tags:
+        - install
+
+    - name: Ensure Samba share directory exists
+      ansible.builtin.file:
+        path: "{{ samba_deploy_share_path }}"
+        state: directory
+        owner: "{{ samba_deploy_share_owner }}"
+        group: "{{ samba_deploy_share_group }}"
+        mode: "{{ samba_deploy_share_mode }}"
+      tags:
+        - deployment
+
+    - name: Render Samba configuration
+      ansible.builtin.template:
+        src: smb.conf.j2
+        dest: "{{ samba_deploy_config_path }}"
+        mode: "0644"
+      register: samba_deploy_config_render
+      tags:
+        - config
+
+    - name: Validate Samba configuration
+      ansible.builtin.command:
+        argv:
+          - testparm
+          - -s
+          - "{{ samba_deploy_config_path }}"
+      changed_when: false
+      tags:
+        - validate
+
+    - name: Restart Samba through systemd
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: restarted
+        enabled: true
+        daemon_reload: true
+      loop:
+        - "{{ samba_deploy_smbd_service }}"
+        - "{{ samba_deploy_nmbd_service }}"
+      when:
+        - samba_deploy_manage_systemd | bool
+        - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+      tags:
+        - deployment
+
+    - name: Stop existing Samba daemon processes
+      ansible.builtin.command: "pkill -x {{ item }}"
+      loop:
+        - smbd
+        - nmbd
+      register: samba_deploy_stop_direct
+      changed_when: samba_deploy_stop_direct.rc == 0
+      failed_when: false
+      when: not samba_deploy_manage_systemd | bool
+      tags:
+        - deployment
+
+    - name: Start Samba daemons directly
+      ansible.builtin.command:
+        argv:
+          - "{{ item }}"
+          - -D
+      loop:
+        - "{{ samba_deploy_smbd_path }}"
+        - "{{ samba_deploy_nmbd_path }}"
+      changed_when: true
+      when: not samba_deploy_manage_systemd | bool
+      tags:
+        - deployment
