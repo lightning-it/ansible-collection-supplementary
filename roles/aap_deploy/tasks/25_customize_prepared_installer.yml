@@ -111,8 +111,8 @@
 - name: Make prepared default EDA decision environments optional
   ansible.builtin.replace:
     path: "{{ aap_setup_prep_setup_dir }}/collections/ansible_collections/ansible/containerized_installer/roles/automationeda/tasks/decision_environment.yml"
-    regexp: >-
-      ^(\s*)loop: '\{\{ _default_de \| union\(_de_extra_images \| default\(\[\]\)\) \}\}'$
+    regexp: |-
+      ^(\s*)loop: '\{\{ _default_de \| union\(_de_extra_images \| default\(\[\]\)\) \}\}'(?:\n\1when: hub_seed_execution_environment_images \| default\(true\) \| bool)?$
     replace: |-
       {% raw %}\1loop: '{{ _default_de | union(_de_extra_images | default([])) }}'
       \1when: hub_seed_execution_environment_images | default(true) | bool{% endraw %}
