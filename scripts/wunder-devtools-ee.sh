@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="quay.io/l-it/ee-wunder-devtools-ubi9:v1.8.8"
+IMAGE="quay.io/l-it/ee-wunder-devtools-ubi9:v1.9.2"
 CONTAINER_HOME="${CONTAINER_HOME:-/tmp/wunder}"
 HOST_HOME_CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/wunder-devtools-ee/v2/home"
 HOST_HOME_CACHE_SCOPE="host-uid-$(id -u)"
@@ -143,6 +143,7 @@ PY
 
   DOCKER_ARGS+=(-v "$DOCKER_SOCKET_REAL":/var/run/docker.sock)
   DOCKER_ARGS+=(-e DOCKER_HOST=unix:///var/run/docker.sock)
+  DOCKER_ARGS+=(-e "WUNDER_DEVTOOLS_DOCKER_SOCKET_HOST=${DOCKER_SOCKET_REAL}")
 
   DOCKER_ARGS+=(
     -e HTTP_PROXY=
@@ -211,6 +212,8 @@ fi
   ${PRE_COMMIT_FROM_REF:+-e PRE_COMMIT_FROM_REF} \
   ${PRE_COMMIT_TO_REF:+-e PRE_COMMIT_TO_REF} \
   ${CHANGELOG_BASE_REF:+-e CHANGELOG_BASE_REF} \
+  ${GH_TOKEN:+-e GH_TOKEN} \
+  ${GITHUB_TOKEN:+-e GITHUB_TOKEN} \
   ${CI:+-e CI} \
   ${GITHUB_ACTIONS:+-e GITHUB_ACTIONS} \
   ${VAGRANT_SSH_HOST:+-e VAGRANT_SSH_HOST} \
