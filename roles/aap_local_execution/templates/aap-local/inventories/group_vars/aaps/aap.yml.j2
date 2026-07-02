@@ -67,6 +67,7 @@ aap_tls_selfsigned_output_dir: /runner/project/files/tls
 aap_tls_selfsigned_common_name: {{ aap_fqdn | to_json }}
 aap_tls_selfsigned_dns_names:
   - {{ aap_fqdn | to_json }}
+  - {{ aap_inventory_host | to_json }}
 aap_deploy_tls_customer_files:
   ca_cert_src: "{{ '{{' }} aap_tls_selfsigned_output_dir {{ '}}' }}/aap-selfsigned-ca.crt"
   gateway:
