@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: samba_validate
+  author: LIT
+  description: Validate Samba configuration and share availability.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

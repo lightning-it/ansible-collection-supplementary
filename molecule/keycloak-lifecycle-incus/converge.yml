@@ -27,6 +27,28 @@
     keycloak_run_backup_restore: true
     keycloak_run_upgrade: true
     keycloak_run_destroy: true
+    postgres_deploy_skip_runtime: true
+    postgres_deploy_skip_deploy: true
+    postgres_deploy_generate_password: false
+    postgres_deploy_db_password: molecule-db-password
+    postgres_deploy_manage_systemd: false
+    postgres_deploy_install_packages: false
+    postgres_config_skip_apply: true
+    postgres_validate_strict: false
+    postgres_validate_db_password: molecule-db-password
+    postgres_ops_action: status
+    postgres_ops_use_systemd: false
+    postgres_backup_restore_execute: false
+    postgres_upgrade_execute: false
+    postgres_upgrade_target_image: docker.io/library/postgres:16
+    postgres_destroy_execute: false
+    postgres_preflight_check_podman: false
+    postgres_preflight_check_systemd: false
+    postgres_preflight_check_ports: false
+    postgres_run_ops: true
+    postgres_run_backup_restore: true
+    postgres_run_upgrade: true
+    postgres_run_destroy: true
   roles:
     - role: keycloak_preflight
     - role: keycloak_deploy
@@ -38,3 +60,12 @@
     - role: keycloak_upgrade
     - role: keycloak_destroy
     - role: keycloak
+    - role: postgres_preflight
+    - role: postgres_deploy
+    - role: postgres_config
+    - role: postgres_validate
+    - role: postgres_ops
+    - role: postgres_backup_restore
+    - role: postgres_upgrade
+    - role: postgres_destroy
+    - role: postgres

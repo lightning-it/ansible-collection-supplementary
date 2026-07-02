@@ -1,0 +1,86 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Report disabled Samba backup/restore
+  ansible.builtin.debug:
+    msg: "Samba backup/restore disabled."
+  when: samba_backup_restore_action == 'none'
+  tags:
+    - backup
+    - restore
+
+- name: Ensure Samba backup directory exists
+  ansible.builtin.file:
+    path: "{{ samba_backup_restore_file | dirname }}"
+    state: directory
+    mode: "0750"
+  when:
+    - samba_backup_restore_execute | bool
+    - samba_backup_restore_action in ['backup', 'restore']
+  tags:
+    - backup
+    - restore
+
+- name: Report Samba backup/restore dry run
+  ansible.builtin.debug:
+    msg: >-
+      Samba {{ samba_backup_restore_action }} prepared but not executed.
+      Set samba_backup_restore_execute=true to run filesystem backup/restore.
+  when:
+    - not samba_backup_restore_execute | bool
+    - samba_backup_restore_action in ['backup', 'restore']
+  tags:
+    - backup
+    - restore
+
+- name: Create Samba backup archive
+  community.general.archive:
+    path: "{{ samba_backup_restore_paths }}"
+    dest: "{{ samba_backup_restore_file }}"
+    format: gz
+    mode: "0600"
+  when:
+    - samba_backup_restore_execute | bool
+    - samba_backup_restore_action == 'backup'
+  tags:
+    - backup
+
+- name: Prune old Samba backups
+  when:
+    - samba_backup_restore_execute | bool
+    - samba_backup_restore_action == 'backup'
+    - samba_backup_restore_retention_keep_last | int > 0
+  tags:
+    - backup
+    - retention
+  block:
+    - name: Find Samba backup files
+      ansible.builtin.find:
+        paths: "{{ samba_backup_restore_backup_dir }}"
+        patterns: "samba-*.tar.gz"
+        file_type: file
+      register: samba_backup_restore_files
+
+    - name: Remove old Samba backup files
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: >-
+        {{
+          (samba_backup_restore_files.files | sort(attribute='mtime') | reverse)
+          [samba_backup_restore_retention_keep_last | int:]
+        }}
+      when: samba_backup_restore_files.files | length > samba_backup_restore_retention_keep_last | int
+
+- name: Restore Samba backup archive
+  ansible.builtin.unarchive:
+    src: "{{ samba_backup_restore_restore_source }}"
+    dest: /
+    remote_src: true
+  when:
+    - samba_backup_restore_execute | bool
+    - samba_backup_restore_action == 'restore'
+  tags:
+    - restore

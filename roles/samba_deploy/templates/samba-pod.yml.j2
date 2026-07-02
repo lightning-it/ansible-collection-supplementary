@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ samba_deploy_pod_name }}
+  labels:
+    app: {{ samba_deploy_pod_name }}
+spec:
+  containers:
+    - name: {{ samba_deploy_container_name }}
+      image: {{ samba_deploy_image }}
+      args:
+        - "-w"
+        - "{{ samba_deploy_workgroup }}"
+        - "-n"
+        - "-s"
+        - "{{ samba_deploy_share_name }};{{ samba_deploy_container_share_dir }};{{ 'yes' if samba_deploy_share_browseable | bool else 'no' }};{{ 'yes' if samba_deploy_share_read_only | bool else 'no' }};{{ 'yes' if samba_deploy_share_guest_ok | bool else 'no' }};all;none;;{{ samba_deploy_share_comment }}"
+{% for arg in samba_deploy_extra_args %}
+        - "{{ arg }}"
+{% endfor %}
+      ports:
+        - containerPort: {{ samba_deploy_container_netbios_port }}
+          hostPort: {{ samba_deploy_netbios_port }}
+          hostIP: {{ samba_deploy_host_ip }}
+        - containerPort: {{ samba_deploy_container_smb_port }}
+          hostPort: {{ samba_deploy_smb_port }}
+          hostIP: {{ samba_deploy_host_ip }}
+      volumeMounts:
+        - name: samba-share
+          mountPath: {{ samba_deploy_container_share_dir }}
+
+  volumes:
+    - name: samba-share
+      hostPath:
+        path: {{ samba_deploy_host_data_dir }}
+        type: DirectoryOrCreate

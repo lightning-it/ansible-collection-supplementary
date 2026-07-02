@@ -1,0 +1,60 @@
+---
+- name: Fully deploy Samba lifecycle on Incus host
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    samba_deploy_install_packages: false
+    samba_deploy_pod_name: samba-heavy
+    samba_deploy_container_name: samba
+    samba_deploy_image: docker.io/dperson/samba:latest
+    samba_deploy_host_ip: 127.0.0.1
+    samba_deploy_netbios_port: 1139
+    samba_deploy_smb_port: 1445
+    samba_deploy_workgroup: MOLECULE
+    samba_deploy_server_string: Molecule Samba Server
+    samba_deploy_share_name: public
+    samba_deploy_host_data_dir: /srv/samba/public
+    samba_deploy_share_comment: Molecule Public Share
+    samba_deploy_share_guest_ok: true
+    samba_deploy_share_read_only: false
+    samba_config_skip_apply: true
+    samba_validate_strict: true
+    samba_validate_use_testparm: false
+    samba_validate_host: 127.0.0.1
+    samba_validate_smb_port: 1445
+    samba_validate_share_name: public
+    samba_ops_action: status
+    samba_ops_pod_name: samba-heavy
+    samba_ops_container_name: samba-heavy-samba
+    samba_backup_restore_action: backup
+    samba_backup_restore_execute: true
+    samba_backup_restore_backup_dir: /srv/samba/backups
+    samba_backup_restore_file: /srv/samba/backups/samba-heavy.tar.gz
+    samba_upgrade_execute: false
+    samba_destroy_execute: false
+    samba_preflight_check_packages: true
+    samba_preflight_check_systemd: false
+    samba_preflight_check_ports: true
+    samba_run_ops: true
+    samba_run_backup_restore: true
+    samba_run_upgrade: false
+    samba_run_destroy: false
+  pre_tasks:
+    - name: Create test file in Samba share source
+      ansible.builtin.copy:
+        dest: /tmp/samba-molecule-test.txt
+        content: |
+          samba molecule heavy test
+        mode: "0644"
+  roles:
+    - role: samba
+  post_tasks:
+    - name: Copy test file into Samba share
+      ansible.builtin.copy:
+        src: /tmp/samba-molecule-test.txt
+        dest: /srv/samba/public/samba-molecule-test.txt
+        remote_src: true
+        owner: nobody
+        group: nogroup
+        mode: "0664"

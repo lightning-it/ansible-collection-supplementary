@@ -1,0 +1,79 @@
+---
+- name: Verify heavy Samba lifecycle deployment
+  hosts: all
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Check Samba pod exists
+      ansible.builtin.command:
+        argv:
+          - podman
+          - pod
+          - exists
+          - samba-heavy
+      changed_when: false
+
+    - name: Check Samba container is running
+      ansible.builtin.command:
+        argv:
+          - podman
+          - inspect
+          - --format
+          - "{{ '{{' }} .State.Status {{ '}}' }}"
+          - samba-heavy-samba
+      register: samba_molecule_container_status
+      changed_when: false
+
+    - name: Check Samba port 1445
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 1445
+        timeout: 10
+        state: started
+
+    - name: List Samba shares
+      ansible.builtin.command:
+        argv:
+          - smbclient
+          - -L
+          - //127.0.0.1
+          - -p
+          - "1445"
+          - -N
+          - -m
+          - SMB3
+      register: samba_molecule_share_list
+      changed_when: false
+
+    - name: Read test file through Samba
+      ansible.builtin.command:
+        argv:
+          - smbclient
+          - //127.0.0.1/public
+          - -p
+          - "1445"
+          - -N
+          - -m
+          - SMB3
+          - -c
+          - "get samba-molecule-test.txt /tmp/samba-molecule-read.txt"
+      changed_when: false
+
+    - name: Read downloaded Samba test file
+      ansible.builtin.slurp:
+        src: /tmp/samba-molecule-read.txt
+      register: samba_molecule_read_file
+
+    - name: Check Samba backup file
+      ansible.builtin.stat:
+        path: /srv/samba/backups/samba-heavy.tar.gz
+      register: samba_molecule_backup
+
+    - name: Assert Samba heavy verification
+      ansible.builtin.assert:
+        that:
+          - samba_molecule_container_status.stdout == 'running'
+          - "'public' in samba_molecule_share_list.stdout"
+          - "'samba molecule heavy test' in (samba_molecule_read_file.content | b64decode)"
+          - samba_molecule_backup.stat.exists
+          - samba_molecule_backup.stat.size | int > 0

@@ -1,0 +1,9 @@
+---
+samba_validate_strict: true
+samba_validate_config_path: "{{ samba_deploy_config_path | default('/etc/samba/smb.conf', true) }}"
+samba_validate_use_testparm: false
+samba_validate_host: "127.0.0.1"
+samba_validate_smb_port: "{{ samba_deploy_smb_port | default(445, true) }}"
+samba_validate_share_name: "{{ samba_deploy_share_name | default('public', true) }}"
+samba_validate_use_smbclient: true
+samba_validate_timeout: 10

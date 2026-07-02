@@ -9,6 +9,8 @@
           'status',
           'sync_hub_password',
           'rotate_password',
+          'eda_diagnostics',
+          'local_diagnostics',
           'backup',
           'restore',
           'certs'

@@ -1,0 +1,20 @@
+---
+aap_bootstrap_local_execution_user: svc_ansible
+aap_bootstrap_local_execution_ssh_key_src: ""
+aap_bootstrap_local_execution_ssh_key_dest: /appl/aap-local/secrets/svc_ansible_aap
+aap_bootstrap_local_execution_packages:
+  - podman
+  - git
+  - openssl
+  - python3
+  - sudo
+aap_bootstrap_local_execution_directories:
+  - { path: /appl/tmp, mode: "1777" }
+  - { path: /appl/ansible-tmp, mode: "1777" }
+  - { path: /appl/home, mode: "0755" }
+  - { path: /appl/podman, mode: "0755" }
+  - { path: /appl/aap-local/etc, mode: "0750" }
+  - { path: /appl/aap-local/secrets, mode: "0750" }
+  - { path: /appl/aap-local/artifacts, mode: "0750" }
+  - { path: /appl/aap-local/inbox, mode: "0750" }
+  - { path: /appl/aap-local/src, mode: "0750" }

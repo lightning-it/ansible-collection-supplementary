@@ -1,0 +1,16 @@
+---
+galaxy_info:
+  role_name: postgres_backup_restore
+  author: LIT
+  description: Back up and restore PostgreSQL databases.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+    - name: Ubuntu
+      versions:
+        - "jammy"
+        - "noble"
+dependencies: []

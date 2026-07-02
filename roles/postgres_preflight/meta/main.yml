@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: postgres_preflight
+  author: LIT
+  description: Preflight checks for PostgreSQL deployment.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

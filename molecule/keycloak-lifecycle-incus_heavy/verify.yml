@@ -27,3 +27,21 @@
     - name: Inspect PostgreSQL pod
       ansible.builtin.command: podman pod exists keycloak-heavy-postgres
       changed_when: false
+
+    - name: Check Keycloak realm backup file
+      ansible.builtin.stat:
+        path: /srv/keycloak-heavy/backups/keycloak-master-realm.json
+      register: keycloak_heavy_realm_backup
+
+    - name: Check PostgreSQL backup file
+      ansible.builtin.stat:
+        path: /srv/keycloak-heavy/backups/keycloak-postgres.dump
+      register: keycloak_heavy_postgres_backup
+
+    - name: Assert backup files were created
+      ansible.builtin.assert:
+        that:
+          - keycloak_heavy_realm_backup.stat.exists
+          - keycloak_heavy_realm_backup.stat.size | int > 0
+          - keycloak_heavy_postgres_backup.stat.exists
+          - keycloak_heavy_postgres_backup.stat.size | int > 0

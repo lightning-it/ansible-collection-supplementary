@@ -1,0 +1,12 @@
+---
+- name: Validate Samba preflight variables
+  ansible.builtin.assert:
+    that:
+      - samba_preflight_strict is boolean
+      - samba_preflight_check_packages is boolean
+      - samba_preflight_check_systemd is boolean
+      - samba_preflight_check_ports is boolean
+      - samba_preflight_required_ports is sequence
+      - samba_preflight_required_ports is not string
+    fail_msg: "Samba preflight variables are missing or invalid."
+  tags: always

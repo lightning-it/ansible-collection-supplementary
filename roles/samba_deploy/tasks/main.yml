@@ -1,0 +1,84 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip Samba deployment in check mode
+  ansible.builtin.debug:
+    msg: "Samba container deployment skipped in check mode."
+  when:
+    - ansible_check_mode
+    - not samba_deploy_skip_runtime | bool
+    - not samba_deploy_skip_deploy | bool
+  tags: always
+
+- name: Deploy Samba container runtime
+  when:
+    - not samba_deploy_skip_runtime | bool
+    - not samba_deploy_skip_deploy | bool
+    - not ansible_check_mode
+  block:
+    - name: Install Samba container runtime packages
+      ansible.builtin.package:
+        name: "{{ samba_deploy_packages }}"
+        state: present
+      when: samba_deploy_install_packages | bool
+      tags:
+        - install
+
+    - name: Ensure Samba container directories exist
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner | default('root') }}"
+        group: "{{ item.group | default('root') }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ samba_deploy_host_data_dir }}"
+          owner: "{{ samba_deploy_share_owner }}"
+          group: "{{ samba_deploy_share_group }}"
+          mode: "{{ samba_deploy_share_mode }}"
+        - path: "{{ samba_deploy_pod_manifest_path | dirname }}"
+          mode: "0755"
+      tags:
+        - deployment
+
+    - name: Render Samba Pod manifest
+      ansible.builtin.template:
+        src: samba-pod.yml.j2
+        dest: "{{ samba_deploy_pod_manifest_path }}"
+        mode: "0644"
+      register: samba_deploy_manifest_render
+      tags:
+        - deployment
+
+    - name: Remove existing Samba pod when manifest changed
+      when:
+        - samba_deploy_manifest_render.changed
+        - samba_deploy_kubeplay_remove | bool
+      tags:
+        - deployment
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps:
+          - name: samba_remove
+            tasks: apps/podman_kube_play.yml
+            vars:
+              kubeplay_action: remove
+              kubeplay_pod_name: "{{ samba_deploy_pod_name }}"
+
+    - name: Run Samba pod with kubeplay
+      when: samba_deploy_kubeplay_run | bool
+      tags:
+        - deployment
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps:
+          - name: samba_run
+            tasks: apps/podman_kube_play.yml
+            vars:
+              kubeplay_action: run
+              kubeplay_pod_name: "{{ samba_deploy_pod_name }}"
+              kubeplay_pod_manifest_path: "{{ samba_deploy_pod_manifest_path }}"

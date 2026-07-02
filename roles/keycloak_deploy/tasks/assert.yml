@@ -20,7 +20,10 @@
       - keycloak_deploy_db_name | default('', true) | trim | length > 0
       - keycloak_deploy_db_user | default('', true) | trim | length > 0
       - keycloak_deploy_db_host | default('', true) | trim | length > 0
+      - keycloak_deploy_db_wait_host | default('', true) | trim | length > 0
       - keycloak_deploy_db_port | int > 0
+      - keycloak_deploy_postgres_port | int > 0
+      - keycloak_deploy_db_wait_port | int > 0
       - keycloak_deploy_postgres_wait_timeout | int > 0
       - keycloak_deploy_postgres_wait_delay | int >= 0
       - keycloak_deploy_prestart_health_timeout | int > 0

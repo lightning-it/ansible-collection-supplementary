@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: postgres_ops
+  author: LIT
+  description: Day-2 PostgreSQL operations.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []
