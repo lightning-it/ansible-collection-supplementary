@@ -347,6 +347,7 @@ aap_deploy_envoy_http_port: 80
 aap_deploy_envoy_https_port: 443
 aap_deploy_envoy_disable_https: false
 aap_deploy_hub_upload_readiness_url: ""
+aap_deploy_hub_container_registry_url: ""
 
 aap_deploy_tls_gateway_host_default: >-
   {{

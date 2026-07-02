@@ -25,5 +25,7 @@
       ansible.builtin.apt:
         name:
           - curl
+          - ldap-utils
+          - podman
           - postgresql-client
         state: present

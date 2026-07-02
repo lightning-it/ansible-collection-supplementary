@@ -1,0 +1,55 @@
+#!/bin/sh
+set -eu
+
+ensure_group() {
+  group_name="$1"
+  group_description="$2"
+
+  if samba-tool group show "$group_name" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [ -n "$group_description" ]; then
+    samba-tool group add "$group_name" --description="$group_description"
+  else
+    samba-tool group add "$group_name"
+  fi
+}
+
+ensure_user() {
+  user_name="$1"
+  user_password="$2"
+  given_name="$3"
+  surname="$4"
+
+  if samba-tool user show "$user_name" >/dev/null 2>&1; then
+    samba-tool user setpassword "$user_name" --newpassword="$user_password"
+    return 0
+  fi
+
+  samba-tool user create "$user_name" "$user_password" \
+    --given-name="$given_name" \
+    --surname="$surname"
+}
+
+ensure_group_member() {
+  group_name="$1"
+  user_name="$2"
+
+  if samba-tool group listmembers "$group_name" | grep -Fx "$user_name" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  samba-tool group addmembers "$group_name" "$user_name"
+}
+
+{% for group in samba_deploy_ad_dc_groups %}
+ensure_group {{ group.name | quote }} {{ group.description | default('') | quote }}
+{% endfor %}
+
+{% for user in samba_deploy_ad_dc_users %}
+ensure_user {{ user.name | quote }} {{ user.password | quote }} {{ user.given_name | default(user.name) | quote }} {{ user.surname | default('User') | quote }}
+{% for group in user.groups | default([]) %}
+ensure_group_member {{ group | quote }} {{ user.name | quote }}
+{% endfor %}
+{% endfor %}

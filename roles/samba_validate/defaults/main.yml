@@ -4,6 +4,11 @@ samba_validate_config_path: "{{ samba_deploy_config_path | default('/etc/samba/s
 samba_validate_use_testparm: false
 samba_validate_host: "127.0.0.1"
 samba_validate_smb_port: "{{ samba_deploy_smb_port | default(445, true) }}"
+samba_validate_ldap_port: "{{ samba_deploy_ldap_port | default(389, true) }}"
+samba_validate_ldaps_port: "{{ samba_deploy_ldaps_port | default(636, true) }}"
+samba_validate_mode: "{{ samba_deploy_mode | default('share', true) }}"
 samba_validate_share_name: "{{ samba_deploy_share_name | default('public', true) }}"
 samba_validate_use_smbclient: true
-samba_validate_timeout: 10
+samba_validate_check_ldap: "{{ samba_validate_mode == 'ad_dc' }}"
+samba_validate_check_ldaps: "{{ samba_validate_mode == 'ad_dc' }}"
+samba_validate_timeout: "{{ 30 if samba_validate_mode == 'ad_dc' else 10 }}"

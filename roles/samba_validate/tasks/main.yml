@@ -28,6 +28,35 @@
   failed_when:
     - samba_validate_strict | bool
     - samba_validate_port is failed
+  when: samba_validate_mode == 'share'
+  tags:
+    - validate
+
+- name: Check Samba LDAP port
+  ansible.builtin.wait_for:
+    host: "{{ samba_validate_host }}"
+    port: "{{ samba_validate_ldap_port | int }}"
+    timeout: "{{ samba_validate_timeout | int }}"
+    state: started
+  register: samba_validate_ldap_port_result
+  failed_when:
+    - samba_validate_strict | bool
+    - samba_validate_ldap_port_result is failed
+  when: samba_validate_check_ldap | bool
+  tags:
+    - validate
+
+- name: Check Samba LDAPS port
+  ansible.builtin.wait_for:
+    host: "{{ samba_validate_host }}"
+    port: "{{ samba_validate_ldaps_port | int }}"
+    timeout: "{{ samba_validate_timeout | int }}"
+    state: started
+  register: samba_validate_ldaps_port_result
+  failed_when:
+    - samba_validate_strict | bool
+    - samba_validate_ldaps_port_result is failed
+  when: samba_validate_check_ldaps | bool
   tags:
     - validate
 
@@ -47,7 +76,9 @@
   failed_when:
     - samba_validate_strict | bool
     - samba_validate_smbclient.rc != 0
-  when: samba_validate_use_smbclient | bool
+  when:
+    - samba_validate_mode == 'share'
+    - samba_validate_use_smbclient | bool
   tags:
     - validate
 
@@ -65,5 +96,13 @@
 - name: Report Samba validation status
   ansible.builtin.debug:
     msg: "Samba validation completed for //{{ samba_validate_host }}:{{ samba_validate_smb_port }}/{{ samba_validate_share_name }}."
+  when: samba_validate_mode == 'share'
+  tags:
+    - validate
+
+- name: Report Samba AD DC validation status
+  ansible.builtin.debug:
+    msg: "Samba AD DC validation completed for {{ samba_validate_host }}:{{ samba_validate_ldaps_port }}."
+  when: samba_validate_mode == 'ad_dc'
   tags:
     - validate

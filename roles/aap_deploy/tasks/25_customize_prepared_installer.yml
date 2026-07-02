@@ -26,3 +26,15 @@
     - upload_collections.yml
     - upload_images.yml
   when: aap_deploy_hub_upload_readiness_url | trim | length > 0
+
+- name: Patch prepared Hub container registry upload URL
+  ansible.builtin.replace:
+    path: >-
+      {{
+        aap_setup_prep_setup_dir
+      }}/collections/ansible_collections/ansible/containerized_installer/roles/automationhub/tasks/upload_images.yml
+    regexp: >-
+      __dest_url: '\{\{ hostvars\[groups\["automationgateway"\]\[0\]\]\["_gateway_proxy_url"\] \}\}'
+    replace: >-
+      {% raw %}__dest_url: '{{ hub_container_registry_url | default(hostvars[groups["automationgateway"][0]]["_gateway_proxy_url"], true) }}'{% endraw %}
+  when: aap_deploy_hub_container_registry_url | trim | length > 0

@@ -7,6 +7,7 @@
       - samba_deploy_install_packages is boolean
       - samba_deploy_skip_runtime is boolean
       - samba_deploy_skip_deploy is boolean
+      - samba_deploy_mode in ['share', 'ad_dc']
       - samba_deploy_pod_name | default('', true) | trim | length > 0
       - samba_deploy_container_name | default('', true) | trim | length > 0
       - samba_deploy_image | default('', true) | trim | length > 0
@@ -27,5 +28,52 @@
       - samba_deploy_share_browseable is boolean
       - samba_deploy_extra_args is sequence
       - samba_deploy_extra_args is not string
+      - samba_deploy_ad_dc_image | default('', true) | trim | length > 0
+      - samba_deploy_ad_dc_realm | default('', true) | trim | length > 0
+      - samba_deploy_ad_dc_domain | default('', true) | trim | length > 0
+      - samba_deploy_ad_dc_admin_password | default('', true) | trim | length > 0
+      - samba_deploy_ad_dc_insecure_ldap is boolean
+      - samba_deploy_ad_dc_insecure_passwordsettings is boolean
+      - samba_deploy_ad_dc_server_services | default('', true) | trim | length > 0
+      - samba_deploy_ldap_port | int > 0
+      - samba_deploy_ldaps_port | int > 0
+      - samba_deploy_container_ldap_port | int > 0
+      - samba_deploy_container_ldaps_port | int > 0
+      - samba_deploy_ad_dc_data_dir | default('', true) | trim | length > 0
+      - samba_deploy_ad_dc_config_dir | default('', true) | trim | length > 0
+      - samba_deploy_ad_dc_cache_dir | default('', true) | trim | length > 0
+      - samba_deploy_ad_dc_log_dir | default('', true) | trim | length > 0
+      - samba_deploy_ad_dc_entrypoint_dir | default('', true) | trim | length > 0
+      - samba_deploy_ad_dc_keycloak_bind_user | default('', true) | trim | length > 0
+      - samba_deploy_ad_dc_keycloak_bind_password | default('', true) | trim | length > 0
+      - samba_deploy_ad_dc_groups is sequence
+      - samba_deploy_ad_dc_groups is not string
+      - samba_deploy_ad_dc_users is sequence
+      - samba_deploy_ad_dc_users is not string
     fail_msg: "Samba deploy variables are missing or invalid."
+  tags: always
+
+- name: Validate Samba AD DC default groups
+  ansible.builtin.assert:
+    that:
+      - item.name | default('', true) | trim | length > 0
+    fail_msg: "Each Samba AD DC default group requires a non-empty name."
+  loop: "{{ samba_deploy_ad_dc_groups }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed') }}"
+  when: samba_deploy_mode == 'ad_dc'
+  tags: always
+
+- name: Validate Samba AD DC default users
+  ansible.builtin.assert:
+    that:
+      - item.name | default('', true) | trim | length > 0
+      - item.password | default('', true) | trim | length > 0
+      - item.groups | default([]) is sequence
+      - item.groups | default([]) is not string
+    fail_msg: "Each Samba AD DC default user requires name, password, and a groups list."
+  loop: "{{ samba_deploy_ad_dc_users }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed') }}"
+  when: samba_deploy_mode == 'ad_dc'
   tags: always

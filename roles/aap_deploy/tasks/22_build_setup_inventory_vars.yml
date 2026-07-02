@@ -72,6 +72,14 @@
               ),
               recursive=true
             )
+          | combine(
+              (
+                {'hub_container_registry_url': "'" ~ aap_deploy_hub_container_registry_url ~ "'"}
+                if (aap_deploy_hub_container_registry_url | trim | length > 0)
+                else {}
+              ),
+              recursive=true
+            )
           | combine(aap_deploy_tls_inventory_vars | default({}, true), recursive=true)
         }}
     aap_deploy_setup_prep_inv_secrets: {}

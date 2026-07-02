@@ -7,8 +7,13 @@
       - not samba_validate_use_testparm | bool or samba_validate_config_path | default('', true) | trim | length > 0
       - samba_validate_host | default('', true) | trim | length > 0
       - samba_validate_smb_port | int > 0
+      - samba_validate_ldap_port | int > 0
+      - samba_validate_ldaps_port | int > 0
+      - samba_validate_mode in ['share', 'ad_dc']
       - samba_validate_share_name | default('', true) | trim | length > 0
       - samba_validate_use_smbclient is boolean
+      - samba_validate_check_ldap is boolean
+      - samba_validate_check_ldaps is boolean
       - samba_validate_timeout | int > 0
     fail_msg: "Samba validate variables are missing or invalid."
   tags: always

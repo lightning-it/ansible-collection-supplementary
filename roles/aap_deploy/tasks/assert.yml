@@ -87,6 +87,7 @@
       - aap_deploy_gateway_nginx_https_port | int <= 65535
       - aap_deploy_gateway_nginx_disable_https is boolean
       - aap_deploy_hub_upload_readiness_url is string
+      - aap_deploy_hub_container_registry_url is string
       - aap_deploy_envoy_http_port | int > 0
       - aap_deploy_envoy_http_port | int <= 65535
       - aap_deploy_envoy_https_port | int > 0

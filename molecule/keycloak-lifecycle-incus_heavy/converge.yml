@@ -1,4 +1,41 @@
 ---
+- name: Deploy Samba AD DC for Keycloak LDAPS auth source
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    samba_deploy_install_packages: false
+    samba_deploy_mode: ad_dc
+    samba_deploy_pod_name: samba-keycloak-heavy
+    samba_deploy_container_name: samba
+    samba_deploy_host_ip: 127.0.0.1
+    samba_deploy_ldap_port: 1389
+    samba_deploy_ldaps_port: 1636
+    samba_deploy_ad_dc_realm: SAMDOM.EXAMPLE.COM
+    samba_deploy_ad_dc_domain: SAMDOM
+    samba_deploy_ad_dc_admin_password: MoleculeAdminPassw0rd
+    samba_deploy_ad_dc_keycloak_bind_user: keycloak
+    samba_deploy_ad_dc_keycloak_bind_password: KeycloakBindPassw0rd
+    samba_deploy_ad_dc_data_dir: /srv/samba-keycloak-heavy/data
+    samba_deploy_ad_dc_config_dir: /srv/samba-keycloak-heavy/config
+    samba_deploy_ad_dc_cache_dir: /srv/samba-keycloak-heavy/cache
+    samba_deploy_ad_dc_log_dir: /srv/samba-keycloak-heavy/log
+    samba_deploy_ad_dc_entrypoint_dir: /srv/samba-keycloak-heavy/entrypoint.d
+    samba_validate_mode: ad_dc
+    samba_validate_host: 127.0.0.1
+    samba_validate_ldap_port: 1389
+    samba_validate_ldaps_port: 1636
+    samba_validate_use_smbclient: false
+    samba_config_skip_apply: true
+    samba_run_ops: true
+    samba_ops_pod_name: samba-keycloak-heavy
+    samba_ops_container_name: samba-keycloak-heavy-samba
+    samba_run_backup_restore: false
+    samba_run_upgrade: false
+    samba_run_destroy: false
+  roles:
+    - role: samba
+
 - name: Fully deploy Keycloak lifecycle on Incus
   hosts: all
   gather_facts: true
@@ -49,6 +86,33 @@
     keycloak_cac_admin_user: admin
     keycloak_cac_admin_password: molecule-admin-password
     keycloak_cac_samba_ldap_enabled: true
+    keycloak_cac_samba_ldap_provider:
+      name: samba-ldaps
+      enabled: true
+      priority: 0
+      connection_url: ldaps://host.containers.internal:1636
+      users_dn: CN=Users,DC=samdom,DC=example,DC=com
+      bind_dn: CN=Administrator,CN=Users,DC=samdom,DC=example,DC=com
+      bind_credential: MoleculeAdminPassw0rd
+      vendor: ad
+      edit_mode: READ_ONLY
+      import_enabled: true
+      username_ldap_attribute: sAMAccountName
+      rdn_ldap_attribute: cn
+      uuid_ldap_attribute: objectGUID
+      user_object_classes: person, organizationalPerson, user
+      search_scope: "1"
+      use_truststore_spi: never
+      start_tls: false
+      connection_pooling: true
+      pagination: true
+      sync_registrations: false
+      trust_email: false
+      validate_password_policy: false
+      full_sync_period: 86400
+      changed_sync_period: 3600
+      cache_policy: DEFAULT
+      batch_size_for_sync: 1000
     keycloak_validate_strict: true
     keycloak_validate_url: "http://127.0.0.1:18080"
     keycloak_validate_realm: master

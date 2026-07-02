@@ -40,6 +40,45 @@
           mode: "{{ samba_deploy_share_mode }}"
         - path: "{{ samba_deploy_pod_manifest_path | dirname }}"
           mode: "0755"
+        - path: "{{ samba_deploy_ad_dc_data_dir }}"
+          mode: "0750"
+        - path: "{{ samba_deploy_ad_dc_config_dir }}"
+          mode: "0750"
+        - path: "{{ samba_deploy_ad_dc_cache_dir }}"
+          mode: "0750"
+        - path: "{{ samba_deploy_ad_dc_log_dir }}"
+          mode: "0750"
+        - path: "{{ samba_deploy_ad_dc_entrypoint_dir }}"
+          mode: "0750"
+      when:
+        - item.path | default('', true) | trim | length > 0
+        - samba_deploy_mode == 'ad_dc' or item.path not in [
+            samba_deploy_ad_dc_data_dir,
+            samba_deploy_ad_dc_config_dir,
+            samba_deploy_ad_dc_cache_dir,
+            samba_deploy_ad_dc_log_dir,
+            samba_deploy_ad_dc_entrypoint_dir
+          ]
+      tags:
+        - deployment
+
+    - name: Render Samba AD DC Keycloak bind user bootstrap
+      ansible.builtin.template:
+        src: keycloak-bind-user.sh.j2
+        dest: "{{ samba_deploy_ad_dc_entrypoint_dir }}/20-keycloak-bind-user.sh"
+        mode: "0750"
+      register: samba_deploy_bind_user_render
+      when: samba_deploy_mode == 'ad_dc'
+      tags:
+        - deployment
+
+    - name: Render Samba AD DC default principals bootstrap
+      ansible.builtin.template:
+        src: default-principals.sh.j2
+        dest: "{{ samba_deploy_ad_dc_entrypoint_dir }}/30-default-principals.sh"
+        mode: "0750"
+      register: samba_deploy_default_principals_render
+      when: samba_deploy_mode == 'ad_dc'
       tags:
         - deployment
 
@@ -54,7 +93,7 @@
 
     - name: Remove existing Samba pod when manifest changed
       when:
-        - samba_deploy_manifest_render.changed
+        - samba_deploy_manifest_render.changed or samba_deploy_bind_user_render.changed | default(false) or samba_deploy_default_principals_render.changed | default(false)
         - samba_deploy_kubeplay_remove | bool
       tags:
         - deployment
