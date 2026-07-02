@@ -3,12 +3,10 @@ samba_destroy_execute: false
 samba_destroy_remove_packages: false
 samba_destroy_remove_data: false
 samba_destroy_remove_config: false
-samba_destroy_manage_systemd: "{{ samba_deploy_manage_systemd | default(true) }}"
-samba_destroy_packages: "{{ samba_deploy_packages | default(['samba', 'smbclient'], true) }}"
-samba_destroy_services:
-  - "{{ samba_deploy_smbd_service | default('smbd', true) }}"
-  - "{{ samba_deploy_nmbd_service | default('nmbd', true) }}"
+samba_destroy_remove_pod: true
+samba_destroy_pod_name: "{{ samba_deploy_pod_name | default('samba', true) }}"
+samba_destroy_packages: "{{ samba_deploy_packages | default(['podman'], true) }}"
 samba_destroy_data_paths:
-  - "{{ samba_deploy_share_path | default('/srv/samba/public', true) }}"
+  - "{{ samba_deploy_host_data_dir | default('/srv/samba/public', true) }}"
 samba_destroy_config_paths:
-  - "{{ samba_deploy_config_path | default('/etc/samba/smb.conf', true) }}"
+  - "{{ samba_deploy_pod_manifest_path | default('/etc/podman/pods/samba.yml', true) }}"

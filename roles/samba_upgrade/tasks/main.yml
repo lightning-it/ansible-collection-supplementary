@@ -5,7 +5,7 @@
 
 - name: Report Samba upgrade dry run
   ansible.builtin.debug:
-    msg: "Samba upgrade prepared. Set samba_upgrade_execute=true to apply package updates."
+    msg: "Samba upgrade prepared. Set samba_upgrade_execute=true to redeploy with image {{ samba_upgrade_image }}."
   when: not samba_upgrade_execute | bool
   tags:
     - upgrade
@@ -22,13 +22,15 @@
     - upgrade
     - backup
 
-- name: Upgrade Samba packages
-  ansible.builtin.package:
-    name: "{{ samba_deploy_packages | default(['samba', 'smbclient'], true) }}"
-    state: "{{ samba_upgrade_package_state }}"
+- name: Redeploy Samba container image
+  ansible.builtin.include_role:
+    name: samba_deploy
+  vars:
+    samba_deploy_image: "{{ samba_upgrade_image }}"
   when: samba_upgrade_execute | bool
   tags:
     - upgrade
+    - deployment
 
 - name: Validate Samba after upgrade
   ansible.builtin.include_role:

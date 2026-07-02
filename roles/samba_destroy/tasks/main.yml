@@ -5,38 +5,29 @@
 
 - name: Report Samba destroy dry run
   ansible.builtin.debug:
-    msg: "Samba destroy is disabled. Set samba_destroy_execute=true to remove runtime resources."
+    msg: "Samba destroy is disabled. Set samba_destroy_execute=true to remove container runtime resources."
   when: not samba_destroy_execute | bool
   tags:
     - destroy
 
-- name: Stop Samba services through systemd
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    state: stopped
-    enabled: false
-  loop: "{{ samba_destroy_services }}"
-  when:
-    - samba_destroy_execute | bool
-    - samba_destroy_manage_systemd | bool
-  tags:
-    - destroy
-
-- name: Stop Samba daemons directly
-  ansible.builtin.command: "pkill -x {{ item }}"
-  loop:
-    - smbd
-    - nmbd
-  register: samba_destroy_stop_direct
-  changed_when: samba_destroy_stop_direct.rc == 0
+- name: Remove Samba pod
+  ansible.builtin.command:
+    argv:
+      - podman
+      - pod
+      - rm
+      - -f
+      - "{{ samba_destroy_pod_name }}"
+  register: samba_destroy_remove_pod_result
+  changed_when: samba_destroy_remove_pod_result.rc == 0
   failed_when: false
   when:
     - samba_destroy_execute | bool
-    - not samba_destroy_manage_systemd | bool
+    - samba_destroy_remove_pod | bool
   tags:
     - destroy
 
-- name: Remove Samba packages
+- name: Remove Samba container runtime packages
   ansible.builtin.package:
     name: "{{ samba_destroy_packages }}"
     state: absent

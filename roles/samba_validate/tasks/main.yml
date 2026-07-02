@@ -14,13 +14,14 @@
   failed_when:
     - samba_validate_strict | bool
     - samba_validate_testparm.rc != 0
+  when: samba_validate_use_testparm | bool
   tags:
     - validate
 
 - name: Check Samba TCP port
   ansible.builtin.wait_for:
     host: "{{ samba_validate_host }}"
-    port: 445
+    port: "{{ samba_validate_smb_port | int }}"
     timeout: "{{ samba_validate_timeout | int }}"
     state: started
   register: samba_validate_port
@@ -36,6 +37,8 @@
       - smbclient
       - -L
       - "//{{ samba_validate_host }}"
+      - -p
+      - "{{ samba_validate_smb_port | string }}"
       - -N
       - -m
       - SMB3
@@ -61,6 +64,6 @@
 
 - name: Report Samba validation status
   ansible.builtin.debug:
-    msg: "Samba validation completed for //{{ samba_validate_host }}/{{ samba_validate_share_name }}."
+    msg: "Samba validation completed for //{{ samba_validate_host }}:{{ samba_validate_smb_port }}/{{ samba_validate_share_name }}."
   tags:
     - validate

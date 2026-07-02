@@ -1,8 +1,8 @@
 ---
 samba_preflight_strict: true
 samba_preflight_check_packages: true
-samba_preflight_check_systemd: "{{ samba_deploy_manage_systemd | default(true) }}"
+samba_preflight_check_systemd: false
 samba_preflight_check_ports: true
 samba_preflight_required_ports:
-  - 139
-  - 445
+  - "{{ samba_deploy_netbios_port | default(139, true) }}"
+  - "{{ samba_deploy_smb_port | default(445, true) }}"

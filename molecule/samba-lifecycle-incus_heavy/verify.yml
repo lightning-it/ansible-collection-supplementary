@@ -4,22 +4,30 @@
   gather_facts: false
   become: false
   tasks:
-    - name: Validate Samba configuration
+    - name: Check Samba pod exists
       ansible.builtin.command:
         argv:
-          - testparm
-          - -s
-          - /etc/samba/smb.conf
+          - podman
+          - pod
+          - exists
+          - samba-heavy
       changed_when: false
 
-    - name: Check smbd is running
-      ansible.builtin.command: pgrep -x smbd
+    - name: Check Samba container is running
+      ansible.builtin.command:
+        argv:
+          - podman
+          - inspect
+          - --format
+          - "{{ '{{' }} .State.Status {{ '}}' }}"
+          - samba-heavy-samba
+      register: samba_molecule_container_status
       changed_when: false
 
-    - name: Check Samba port 445
+    - name: Check Samba port 1445
       ansible.builtin.wait_for:
         host: 127.0.0.1
-        port: 445
+        port: 1445
         timeout: 10
         state: started
 
@@ -29,6 +37,8 @@
           - smbclient
           - -L
           - //127.0.0.1
+          - -p
+          - "1445"
           - -N
           - -m
           - SMB3
@@ -40,6 +50,8 @@
         argv:
           - smbclient
           - //127.0.0.1/public
+          - -p
+          - "1445"
           - -N
           - -m
           - SMB3
@@ -60,6 +72,7 @@
     - name: Assert Samba heavy verification
       ansible.builtin.assert:
         that:
+          - samba_molecule_container_status.stdout == 'running'
           - "'public' in samba_molecule_share_list.stdout"
           - "'samba molecule heavy test' in (samba_molecule_read_file.content | b64decode)"
           - samba_molecule_backup.stat.exists

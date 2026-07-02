@@ -21,6 +21,11 @@
       when: item.rc != 0
       changed_when: true
 
+    - name: Apply Incus instance config
+      ansible.builtin.command: "incus config set {{ item.0.name }} {{ item.1.key }}={{ item.1.value }}"
+      loop: "{{ samba_molecule_incus_instances | subelements('config', skip_missing=True) }}"
+      changed_when: true
+
     - name: Start Incus instances
       ansible.builtin.command: "incus start {{ item.name }}"
       loop: "{{ samba_molecule_incus_instances }}"

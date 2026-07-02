@@ -5,6 +5,6 @@
       - samba_upgrade_execute is boolean
       - samba_upgrade_run_backup is boolean
       - samba_upgrade_run_validate is boolean
-      - samba_upgrade_package_state in ['present', 'latest']
+      - samba_upgrade_image | default('', true) | trim | length > 0
     fail_msg: "Samba upgrade variables are missing or invalid."
   tags: always

@@ -5,17 +5,27 @@
       - samba_deploy_packages is sequence
       - samba_deploy_packages is not string
       - samba_deploy_install_packages is boolean
-      - samba_deploy_manage_systemd is boolean
       - samba_deploy_skip_runtime is boolean
       - samba_deploy_skip_deploy is boolean
+      - samba_deploy_pod_name | default('', true) | trim | length > 0
+      - samba_deploy_container_name | default('', true) | trim | length > 0
+      - samba_deploy_image | default('', true) | trim | length > 0
+      - samba_deploy_pod_manifest_path | default('', true) | trim | length > 0
+      - samba_deploy_kubeplay_remove is boolean
+      - samba_deploy_kubeplay_run is boolean
+      - samba_deploy_host_ip | default('', true) | trim | length > 0
+      - samba_deploy_netbios_port | int > 0
+      - samba_deploy_smb_port | int > 0
+      - samba_deploy_container_netbios_port | int > 0
+      - samba_deploy_container_smb_port | int > 0
       - samba_deploy_workgroup | default('', true) | trim | length > 0
-      - samba_deploy_config_path | default('', true) | trim | length > 0
       - samba_deploy_share_name | default('', true) | trim | length > 0
-      - samba_deploy_share_path | default('', true) | trim | length > 0
+      - samba_deploy_host_data_dir | default('', true) | trim | length > 0
+      - samba_deploy_container_share_dir | default('', true) | trim | length > 0
       - samba_deploy_share_guest_ok is boolean
       - samba_deploy_share_read_only is boolean
       - samba_deploy_share_browseable is boolean
-      - samba_deploy_extra_global_options is mapping
-      - samba_deploy_extra_share_options is mapping
+      - samba_deploy_extra_args is sequence
+      - samba_deploy_extra_args is not string
     fail_msg: "Samba deploy variables are missing or invalid."
   tags: always

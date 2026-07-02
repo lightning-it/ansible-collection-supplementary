@@ -3,8 +3,6 @@ samba_ops_action: "status"
 samba_ops_allowed_actions:
   - status
   - restart
-samba_ops_use_systemd: "{{ samba_deploy_manage_systemd | default(true) }}"
-samba_ops_smbd_service: "{{ samba_deploy_smbd_service | default('smbd', true) }}"
-samba_ops_nmbd_service: "{{ samba_deploy_nmbd_service | default('nmbd', true) }}"
-samba_ops_smbd_path: "{{ samba_deploy_smbd_path | default('/usr/sbin/smbd', true) }}"
-samba_ops_nmbd_path: "{{ samba_deploy_nmbd_path | default('/usr/sbin/nmbd', true) }}"
+samba_ops_pod_name: "{{ samba_deploy_pod_name | default('samba', true) }}"
+samba_ops_container_name: >-
+  {{ samba_ops_pod_name }}-{{ samba_deploy_container_name | default('samba', true) }}

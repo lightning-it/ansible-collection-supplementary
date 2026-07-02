@@ -15,6 +15,11 @@ platforms:
     dns_servers:
       - 1.1.1.1
       - 8.8.8.8
+    config:
+      - key: security.nesting
+        value: "true"
+      - key: security.privileged
+        value: "true"
 
 provisioner:
   name: ansible

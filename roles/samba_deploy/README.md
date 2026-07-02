@@ -1,4 +1,4 @@
 # samba_deploy
 
-Install Samba, render `smb.conf`, create a share directory, and start Samba
-through systemd or direct daemon mode.
+Deploy Samba as a Podman container from a rendered pod manifest and expose a
+host-mounted share directory.
