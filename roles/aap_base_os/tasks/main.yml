@@ -194,6 +194,7 @@
   ansible.builtin.command:
     argv:
       - pgrep
+      - -a
       - -u
       - "{{ aap_runbook_install_user_effective }}"
   register: aap_runbook_install_user_processes
@@ -208,15 +209,24 @@
     - os_prep
     - runtime
 
-- name: Terminate stale install-user session
-  ansible.builtin.command:
-    argv:
-      - loginctl
-      - terminate-user
-      - "{{ aap_runbook_install_user_effective }}"
-  register: aap_runbook_loginctl_terminate
-  changed_when: aap_runbook_loginctl_terminate.rc == 0
-  failed_when: false
+- name: Classify install-user runtime processes
+  ansible.builtin.set_fact:
+    aap_runbook_install_user_runtime_lines: >-
+      {{ aap_runbook_install_user_processes.stdout_lines | default([]) }}
+    aap_runbook_install_user_ignored_runtime_lines: >-
+      {{
+        aap_runbook_install_user_processes.stdout_lines
+        | default([])
+        | select('search', aap_runbook_install_user_ignored_runtime_regex | default('(/usr/lib/systemd/systemd --user|\\(sd-pam\\))', true))
+        | list
+      }}
+    aap_runbook_install_user_unexpected_runtime_lines: >-
+      {{
+        aap_runbook_install_user_processes.stdout_lines
+        | default([])
+        | reject('search', aap_runbook_install_user_ignored_runtime_regex | default('(/usr/lib/systemd/systemd --user|\\(sd-pam\\))', true))
+        | list
+      }}
   when:
     - aap_runbook_cleanup_stale_install_user_runtime | default(true) | bool
     - not (aap_runbook_installed_marker.stat.exists | default(false))
@@ -227,52 +237,37 @@
     - os_prep
     - runtime
 
-- name: Kill stale install-user processes
-  ansible.builtin.command:
-    argv:
-      - pkill
-      - -u
-      - "{{ aap_runbook_install_user_effective }}"
-  register: aap_runbook_pkill_install_user
-  changed_when: aap_runbook_pkill_install_user.rc == 0
-  failed_when: false
+- name: Report partial install-user runtime handoff
+  ansible.builtin.debug:
+    msg: >-
+      Install-user runtime exists before the install marker is present.
+      Leaving it for aap_deploy partial-install reset because
+      aap_deploy_reset_partial_install_enabled=true.
   when:
     - aap_runbook_cleanup_stale_install_user_runtime | default(true) | bool
     - not (aap_runbook_installed_marker.stat.exists | default(false))
     - aap_runbook_install_user_processes.rc | default(1) == 0
+    - (aap_runbook_install_user_unexpected_runtime_lines | default([])) | length > 0
+    - aap_deploy_reset_partial_install_enabled | default(false) | bool
   tags:
     - aap
     - aap_base_os
     - os_prep
     - runtime
 
-- name: Wait after install-user runtime cleanup
-  ansible.builtin.pause:
-    seconds: 2
+- name: Fail when unexpected install-user runtime exists before first install
+  ansible.builtin.fail:
+    msg: >-
+      Install user {{ aap_runbook_install_user_effective }} has runtime
+      processes before the AAP install marker exists. Stop those processes or
+      enable aap_deploy_reset_partial_install_enabled for partial-install
+      recovery before running base/preflight again.
   when:
     - aap_runbook_cleanup_stale_install_user_runtime | default(true) | bool
     - not (aap_runbook_installed_marker.stat.exists | default(false))
     - aap_runbook_install_user_processes.rc | default(1) == 0
-  tags:
-    - aap
-    - aap_base_os
-    - os_prep
-    - runtime
-
-- name: Verify stale install-user runtime is gone
-  ansible.builtin.command:
-    argv:
-      - pgrep
-      - -a
-      - -u
-      - "{{ aap_runbook_install_user_effective }}"
-  register: aap_runbook_install_user_processes_after_cleanup
-  changed_when: false
-  failed_when: aap_runbook_install_user_processes_after_cleanup.rc == 0
-  when:
-    - aap_runbook_cleanup_stale_install_user_runtime | default(true) | bool
-    - not (aap_runbook_installed_marker.stat.exists | default(false))
-    - aap_runbook_install_user_processes.rc | default(1) == 0
+    - (aap_runbook_install_user_unexpected_runtime_lines | default([])) | length > 0
+    - not (aap_deploy_reset_partial_install_enabled | default(false) | bool)
   tags:
     - aap
     - aap_base_os

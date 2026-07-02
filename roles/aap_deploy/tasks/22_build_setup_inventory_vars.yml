@@ -54,6 +54,9 @@
             'envoy_https_port': (aap_deploy_envoy_https_port | int),
             'envoy_disable_https': (aap_deploy_envoy_disable_https | bool),
             'bundle_install': true,
+            'hub_seed_execution_environment_images': (
+              aap_deploy_hub_seed_execution_environment_images | bool
+            ),
             'bundle_dir': aap_deploy_bundle_dir_effective
           }
           | combine(
@@ -76,6 +79,14 @@
               (
                 {'hub_container_registry_url': "'" ~ aap_deploy_hub_container_registry_url ~ "'"}
                 if (aap_deploy_hub_container_registry_url | trim | length > 0)
+                else {}
+              ),
+              recursive=true
+            )
+          | combine(
+              (
+                {'automationeda_api_url': "'" ~ aap_deploy_eda_api_url ~ "'"}
+                if (aap_deploy_eda_api_url | trim | length > 0)
                 else {}
               ),
               recursive=true

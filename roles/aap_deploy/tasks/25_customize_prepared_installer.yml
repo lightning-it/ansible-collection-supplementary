@@ -38,3 +38,88 @@
     replace: >-
       {% raw %}__dest_url: '{{ hub_container_registry_url | default(hostvars[groups["automationgateway"][0]]["_gateway_proxy_url"], true) }}'{% endraw %}
   when: aap_deploy_hub_container_registry_url | trim | length > 0
+
+- name: Patch prepared Hub container registry upload username
+  ansible.builtin.replace:
+    path: >-
+      {{
+        aap_setup_prep_setup_dir
+      }}/collections/ansible_collections/ansible/containerized_installer/roles/automationhub/tasks/upload_images.yml
+    regexp: >-
+      username: '(\{\{ gateway_admin_user \| default\("admin"\) \}\}|admin)'
+    replace: >-
+      {% raw %}username: '{{ automationhub_admin_user | default(gateway_admin_user | default("admin"), true) }}'{% endraw %}
+  when: aap_deploy_hub_container_registry_url | trim | length > 0
+
+- name: Patch prepared Hub container registry upload password
+  ansible.builtin.replace:
+    path: >-
+      {{
+        aap_setup_prep_setup_dir
+      }}/collections/ansible_collections/ansible/containerized_installer/roles/automationhub/tasks/upload_images.yml
+    regexp: >-
+      password: '\{\{ gateway_admin_password \}\}'
+    replace: >-
+      {% raw %}password: '{{ automationhub_admin_password | default(gateway_admin_password, true) }}'{% endraw %}
+  when: aap_deploy_hub_container_registry_url | trim | length > 0
+
+- name: Make prepared EE and DE image upload optional
+  ansible.builtin.replace:
+    path: "{{ aap_setup_prep_setup_dir }}/collections/ansible_collections/ansible/containerized_installer/playbooks/install.yml"
+    regexp: >-
+      ^(\s*)when: groups\.get\('automationhub', \[\]\) \| length > 0$
+    replace: "\\1when:\n\\1  - groups.get('automationhub', []) | length > 0\n\\1  - hub_seed_execution_environment_images | default(true) | bool"
+
+- name: Make prepared EDA readiness check tolerate transient non-JSON responses
+  ansible.builtin.replace:
+    path: "{{ aap_setup_prep_setup_dir }}/collections/ansible_collections/ansible/containerized_installer/roles/automationeda/tasks/decision_environment.yml"
+    regexp: >-
+      ^(\s*)- \(_eda_ready\.content \| from_json\)\.status == 'good'$
+    replace: "\\1- (_eda_ready.content | trim).startswith('{') and (_eda_ready.content | from_json).status == 'good'"
+
+- name: Give prepared EDA readiness check enough startup time
+  ansible.builtin.replace:
+    path: "{{ aap_setup_prep_setup_dir }}/collections/ansible_collections/ansible/containerized_installer/roles/automationeda/tasks/decision_environment.yml"
+    regexp: >-
+      ^(\s*)retries: 5$
+    replace: "\\1retries: 20"
+
+- name: Patch prepared EDA readiness URL
+  ansible.builtin.replace:
+    path: "{{ aap_setup_prep_setup_dir }}/collections/ansible_collections/ansible/containerized_installer/roles/automationeda/tasks/decision_environment.yml"
+    regexp: >-
+      url: '\{\{ hostvars\[groups\["automationgateway"\]\[0\]\]\["_gateway_proxy_url"\] \}\}/api/eda/v1/status/'
+    replace: >-
+      {% raw %}url: '{{ automationeda_api_url | default(hostvars[groups["automationgateway"][0]]["_gateway_proxy_url"], true) }}/api/eda/v1/status/'{% endraw %}
+
+- name: Patch prepared EDA API URL references
+  ansible.builtin.replace:
+    path: "{{ aap_setup_prep_setup_dir }}/collections/ansible_collections/ansible/containerized_installer/roles/automationeda/tasks/decision_environment.yml"
+    regexp: >-
+      '\{\{ hostvars\[groups\["automationgateway"\]\[0\]\]\["_gateway_proxy_url"\] \}\}'
+    replace: >-
+      {% raw %}'{{ automationeda_api_url | default(hostvars[groups["automationgateway"][0]]["_gateway_proxy_url"], true) }}'{% endraw %}
+
+- name: Patch prepared EDA Hub registry URL reference
+  ansible.builtin.replace:
+    path: "{{ aap_setup_prep_setup_dir }}/collections/ansible_collections/ansible/containerized_installer/roles/automationeda/tasks/decision_environment.yml"
+    regexp: >-
+      __dest_url: '\{\{ automationeda_api_url \| default\(hostvars\[groups\["automationgateway"\]\[0\]\]\["_gateway_proxy_url"\], true\) \}\}'
+    replace: >-
+      {% raw %}__dest_url: '{{ hub_container_registry_url | default(hostvars[groups["automationgateway"][0]]["_gateway_proxy_url"], true) }}'{% endraw %}
+
+- name: Make prepared default EDA decision environments optional
+  ansible.builtin.replace:
+    path: "{{ aap_setup_prep_setup_dir }}/collections/ansible_collections/ansible/containerized_installer/roles/automationeda/tasks/decision_environment.yml"
+    regexp: >-
+      ^(\s*)loop: '\{\{ _default_de \| union\(_de_extra_images \| default\(\[\]\)\) \}\}'$
+    replace: |-
+      {% raw %}\1loop: '{{ _default_de | union(_de_extra_images | default([])) }}'
+      \1when: hub_seed_execution_environment_images | default(true) | bool{% endraw %}
+
+- name: Make prepared EDA Hub resources optional with Hub image seeding
+  ansible.builtin.replace:
+    path: "{{ aap_setup_prep_setup_dir }}/collections/ansible_collections/ansible/containerized_installer/roles/automationeda/tasks/decision_environment.yml"
+    regexp: >-
+      ^(\s*)when: groups\.get\('automationhub', \[\]\) \| length > 0$
+    replace: "\\1when:\n\\1  - groups.get('automationhub', []) | length > 0\n\\1  - hub_seed_execution_environment_images | default(true) | bool"
