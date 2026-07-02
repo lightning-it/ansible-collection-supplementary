@@ -48,7 +48,8 @@
         aap_cac_created_token:
           id: "{{ __aap_cac_token_create.json.id | default('') | string }}"
           token: "{{ __aap_cac_token_create.json.token | default('') | string }}"
-        aap_token: "{{ __aap_cac_token_value }}"
+        ansible_facts:
+          aap_token: "{{ __aap_cac_token_value }}"
         aap_cac_auth_token: "{{ __aap_cac_token_value }}"
       vars:
         __aap_cac_token_value: >-

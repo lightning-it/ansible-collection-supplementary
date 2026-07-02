@@ -95,7 +95,10 @@
 
 - name: Report Samba validation status
   ansible.builtin.debug:
-    msg: "Samba validation completed for //{{ samba_validate_host }}:{{ samba_validate_smb_port }}/{{ samba_validate_share_name }}."
+    msg: >-
+      Samba validation completed for //{{ samba_validate_host }}:{{
+        samba_validate_smb_port
+      }}/{{ samba_validate_share_name }}.
   when: samba_validate_mode == 'share'
   tags:
     - validate

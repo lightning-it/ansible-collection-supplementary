@@ -1,5 +1,8 @@
 ---
 minor_changes:
   - Added Keycloak CaC support for LDAP user federation providers, including default Samba LDAPS provider values.
-  - Added Samba AD/LDAPS mode with default application groups/users and wired the Keycloak heavy Molecule scenario to use Samba as a live LDAPS auth source.
+  - >-
+    Added Samba AD/LDAPS mode with default application groups/users and wired
+    the Keycloak heavy Molecule scenario to use Samba as a live LDAPS auth
+    source.
   - Delegated AAP TLS asset staging to the foundational tls_assets helper role.

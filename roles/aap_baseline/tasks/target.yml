@@ -197,6 +197,7 @@
       - -l
       - +100%FREE
       - "{{ aap_baseline_root_lv_result.stdout | trim }}"
+  changed_when: true
   when:
     - aap_baseline_action == 'prepare'
     - aap_baseline_manage_storage | default(false) | bool

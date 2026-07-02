@@ -3,7 +3,7 @@ vault_address: "{{ '{{' }} lookup('ansible.builtin.env', 'VAULT_ADDR') | default
 vault_engine_mount_point: "{{ '{{' }} lookup('ansible.builtin.env', 'VAULT_ENGINE_MOUNT_POINT') | default('{{ vault_engine_mount_point | default('', true) }}', true) {{ '}}' }}"
 vault_validate_certs: false
 
-aap_vault_host_key: "{{ '{{' }} lookup('ansible.builtin.env', 'AAP_VAULT_HOST_KEY') | default('{{ aap_vault_host_key | default(aap_effective_shortname, true) }}', true) {{ '}}' }}"
+aap_vault_host_key: "{{ '{{' }} lookup('ansible.builtin.env', 'AAP_VAULT_HOST_KEY') | default('{{ aap_vault_host_key | default(aap_local_execution_effective_shortname, true) }}', true) {{ '}}' }}"
 hc_vault_aap_admin_passwords_kv_path: "{{ '{{' }} lookup('ansible.builtin.env', 'AAP_VAULT_ADMIN_PASSWORDS_KV_PATH') | default(aap_vault_host_key ~ '/aap/deploy/admin_passwords', true) {{ '}}' }}"
 hc_vault_defaults_kv_path: "{{ '{{' }} lookup('ansible.builtin.env', 'AAP_VAULT_DEFAULTS_KV_PATH') | default('{{ aap_vault_defaults_kv_path | default('', true) }}', true) {{ '}}' }}"
 

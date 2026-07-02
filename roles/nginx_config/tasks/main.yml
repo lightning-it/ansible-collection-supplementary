@@ -901,25 +901,25 @@
 - name: Check nginx container exists
   ansible.builtin.command:
     cmd: "podman inspect {{ nginx_deploy_container_name }}"
-  register: nginx_deploy_container_exists
+  register: nginx_config_nginx_deploy_container_exists
   changed_when: false
   failed_when: false
   when:
-    - nginx_reload_requested | default(false)
+    - nginx_config_nginx_reload_requested | default(false)
     - not nginx_deploy_skip_runtime | bool
   tags:
     - config
 
 - name: Reload nginx
   ansible.builtin.command: "podman exec {{ nginx_deploy_container_name }} nginx -s reload"
-  register: nginx_deploy_reload
-  changed_when: nginx_deploy_reload.rc == 0
-  failed_when: nginx_deploy_reload.rc != 0
+  register: nginx_config_nginx_deploy_reload
+  changed_when: nginx_config_nginx_deploy_reload.rc == 0
+  failed_when: nginx_config_nginx_deploy_reload.rc != 0
   when:
-    - nginx_reload_requested | default(false)
+    - nginx_config_nginx_reload_requested | default(false)
     - not nginx_deploy_skip_runtime | bool
     - not ansible_check_mode
-    - nginx_deploy_container_exists is defined
-    - nginx_deploy_container_exists.rc == 0
+    - nginx_config_nginx_deploy_container_exists is defined
+    - nginx_config_nginx_deploy_container_exists.rc == 0
   tags:
     - config

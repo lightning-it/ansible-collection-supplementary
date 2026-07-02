@@ -4,12 +4,14 @@
     url: "{{ vault_deploy_health_url }}"
     method: GET
     validate_certs: "{{ vault_deploy_vault_validate_certs }}"
-  register: vault_deploy_health
-  until: vault_deploy_health.status in [200, 429, 472, 473, 501, 503]
+  register: vault_bootstrap_vault_deploy_health
+  until: vault_bootstrap_vault_deploy_health.status in [200, 429, 472, 473, 501, 503]
   retries: 30
   delay: 5
   changed_when: false
-  failed_when: vault_deploy_health is failed and vault_deploy_health.status not in [200, 429, 472, 473, 501, 503]
+  failed_when: >-
+    vault_bootstrap_vault_deploy_health is failed
+    and vault_bootstrap_vault_deploy_health.status not in [200, 429, 472, 473, 501, 503]
   tags:
     - bootstrap
     - api
@@ -19,16 +21,17 @@
     url: "{{ vault_deploy_api_url }}/v1/sys/init"
     method: GET
     validate_certs: "{{ vault_deploy_vault_validate_certs }}"
-  register: vault_deploy_init_status
+  register: vault_bootstrap_vault_deploy_init_status
   changed_when: false
-  failed_when: vault_deploy_init_status.status not in [200]
+  failed_when: vault_bootstrap_vault_deploy_init_status.status not in [200]
   tags:
     - init
     - bootstrap
 
 - name: Set Vault initialized flag
   ansible.builtin.set_fact:
-    vault_deploy_initialized: "{{ vault_deploy_init_status.json.initialized | default(false) }}"
+    vault_bootstrap_vault_deploy_initialized: >-
+      {{ vault_bootstrap_vault_deploy_init_status.json.initialized | default(false) }}
   changed_when: false
   tags:
     - init
@@ -36,11 +39,11 @@
 
 - name: Enable bootstrap init automatically for first run
   ansible.builtin.set_fact:
-    vault_deploy_bootstrap_init: true
+    vault_bootstrap_vault_deploy_bootstrap_init: true
   changed_when: false
   when:
-    - not vault_deploy_initialized | bool
-    - not vault_deploy_bootstrap_init | bool
+    - not vault_bootstrap_vault_deploy_initialized | bool
+    - not vault_bootstrap_vault_deploy_bootstrap_init | bool
     - vault_deploy_bootstrap_auto_init | bool
   tags:
     - init
@@ -48,10 +51,10 @@
 
 - name: Fail when Vault is not initialized and bootstrap is disabled
   ansible.builtin.fail:
-    msg: "Vault is not initialized; set vault_deploy_bootstrap_init=true to initialize."
+    msg: "Vault is not initialized; set vault_bootstrap_vault_deploy_bootstrap_init=true to initialize."
   when:
-    - not vault_deploy_initialized | bool
-    - not vault_deploy_bootstrap_init | bool
+    - not vault_bootstrap_vault_deploy_initialized | bool
+    - not vault_bootstrap_vault_deploy_bootstrap_init | bool
     - not vault_deploy_bootstrap_auto_init | bool
   tags:
     - init
@@ -94,10 +97,10 @@
 
 - name: Load Vault init payload from persisted init file
   when:
-    - vault_deploy_initialized | bool
+    - vault_bootstrap_vault_deploy_initialized | bool
     - vault_bootstrap_init_file.stat.exists | default(false)
-    - vault_token | default('', true) | trim | length == 0
-    - (vault_init | default({}, true)).root_token | default('', true) | trim | length == 0
+    - vault_bootstrap_vault_token | default('', true) | trim | length == 0
+    - (vault_bootstrap_vault_init | default({}, true)).root_token | default('', true) | trim | length == 0
   no_log: true
   tags:
     - init
@@ -208,23 +211,42 @@
 
     - name: Expose persisted Vault init payload as runtime facts
       ansible.builtin.set_fact:
-        vault_init: "{{ vault_bootstrap_existing_init_payload.vault_init | default({}, true) }}"
-        vault_deploy_init: "{{ vault_bootstrap_existing_init_payload.vault_init | default({}, true) }}"
-        vault_deploy_unseal_keys: >-
+        vault_bootstrap_vault_init: >-
+          {{ vault_bootstrap_existing_init_payload.vault_bootstrap_vault_init | default({}, true) }}
+        vault_bootstrap_vault_deploy_init: >-
+          {{ vault_bootstrap_existing_init_payload.vault_bootstrap_vault_init | default({}, true) }}
+        vault_bootstrap_vault_deploy_unseal_keys: >-
           {{
-            (vault_bootstrap_existing_init_payload.vault_init.unseal_keys_b64 | default([]))
-            if (vault_bootstrap_existing_init_payload.vault_init.unseal_keys_b64 | default([]) | length > 0)
-            else (vault_bootstrap_existing_init_payload.vault_init.unseal_keys_hex | default([]))
+            (
+              vault_bootstrap_existing_init_payload
+              .vault_bootstrap_vault_init.unseal_keys_b64
+              | default([])
+            )
+            if (
+              vault_bootstrap_existing_init_payload
+              .vault_bootstrap_vault_init.unseal_keys_b64
+              | default([])
+              | length > 0
+            )
+            else (
+              vault_bootstrap_existing_init_payload
+              .vault_bootstrap_vault_init.unseal_keys_hex
+              | default([])
+            )
           }}
         vault_bootstrap_token: >-
-          {{ vault_bootstrap_existing_init_payload.vault_init.root_token | default('', true) | trim }}
-        vault_token: >-
-          {{ vault_bootstrap_existing_init_payload.vault_init.root_token | default('', true) | trim }}
+          {{ vault_bootstrap_existing_init_payload.vault_bootstrap_vault_init.root_token | default('', true) | trim }}
+        vault_bootstrap_vault_token: >-
+          {{ vault_bootstrap_existing_init_payload.vault_bootstrap_vault_init.root_token | default('', true) | trim }}
       changed_when: false
       when:
         - vault_bootstrap_existing_init_payload is defined
-        - vault_bootstrap_existing_init_payload.vault_init is defined
-        - vault_bootstrap_existing_init_payload.vault_init.root_token | default('', true) | trim | length > 0
+        - vault_bootstrap_existing_init_payload.vault_bootstrap_vault_init is defined
+        - >-
+          vault_bootstrap_existing_init_payload.vault_bootstrap_vault_init.root_token
+          | default('', true)
+          | trim
+          | length > 0
 
     - name: Cleanup controller temp dir for init read
       delegate_to: localhost
@@ -242,24 +264,24 @@
     -key-shares {{ vault_deploy_bootstrap_key_shares }}
     -key-threshold {{ vault_deploy_bootstrap_key_threshold }}
     -tls-skip-verify
-  register: vault_deploy_init_result
+  register: vault_bootstrap_vault_deploy_init_result
   changed_when: true
   no_log: true
   when:
-    - not vault_deploy_initialized | bool
-    - vault_deploy_bootstrap_init | bool
+    - not vault_bootstrap_vault_deploy_initialized | bool
+    - vault_bootstrap_vault_deploy_bootstrap_init | bool
   tags:
     - init
     - bootstrap
 
 - name: Parse Vault init payload
   ansible.builtin.set_fact:
-    vault_deploy_init_payload: "{{ vault_deploy_init_result.stdout | from_json }}"
+    vault_bootstrap_vault_deploy_init_payload: "{{ vault_bootstrap_vault_deploy_init_result.stdout | from_json }}"
   changed_when: false
   no_log: true
   when:
-    - vault_deploy_init_result is defined
-    - vault_deploy_init_result.stdout | default('') | length > 0
+    - vault_bootstrap_vault_deploy_init_result is defined
+    - vault_bootstrap_vault_deploy_init_result.stdout | default('') | length > 0
   tags:
     - init
     - bootstrap
@@ -269,22 +291,23 @@
     vault_bootstrap_did_init: true
   changed_when: false
   when:
-    - vault_deploy_init_result is defined
-    - vault_deploy_init_result.stdout | default('') | length > 0
+    - vault_bootstrap_vault_deploy_init_result is defined
+    - vault_bootstrap_vault_deploy_init_result.stdout | default('') | length > 0
   tags:
     - init
     - bootstrap
 
 - name: Expose Vault init payload as runtime facts (init run)
   ansible.builtin.set_fact:
-    vault_init: "{{ vault_deploy_init_payload }}"
-    vault_deploy_init: "{{ vault_deploy_init_payload }}"
-    vault_deploy_unseal_keys: "{{ vault_deploy_init_payload.unseal_keys_b64 | default([]) }}"
+    vault_bootstrap_vault_init: "{{ vault_bootstrap_vault_deploy_init_payload }}"
+    vault_bootstrap_vault_deploy_init: "{{ vault_bootstrap_vault_deploy_init_payload }}"
+    vault_bootstrap_vault_deploy_unseal_keys: >-
+      {{ vault_bootstrap_vault_deploy_init_payload.unseal_keys_b64 | default([]) }}
   changed_when: false
   no_log: true
   when:
     - vault_bootstrap_did_init | default(false) | bool
-    - vault_deploy_init_payload is defined
+    - vault_bootstrap_vault_deploy_init_payload is defined
   tags:
     - init
     - bootstrap
@@ -293,25 +316,25 @@
   ansible.builtin.set_fact:
     vault_bootstrap_token: >-
       {{
-        (vault_deploy_init_payload.root_token | default('', true) | trim)
+        (vault_bootstrap_vault_deploy_init_payload.root_token | default('', true) | trim)
         if (vault_bootstrap_did_init | default(false) | bool)
         else (
           (vault_bootstrap_token | default('', true) | trim)
           if (vault_bootstrap_token | default('', true) | trim | length > 0)
-          else (vault_deploy_init_payload.root_token | default('', true) | trim)
+          else (vault_bootstrap_vault_deploy_init_payload.root_token | default('', true) | trim)
         )
       }}
   changed_when: false
   no_log: true
   when:
-    - vault_deploy_init_payload is defined
+    - vault_bootstrap_vault_deploy_init_payload is defined
   tags:
     - init
     - bootstrap
 
-- name: Expose vault_bootstrap_token as vault_token for follow-on roles
+- name: Expose vault_bootstrap_token as vault_bootstrap_vault_token for follow-on roles
   ansible.builtin.set_fact:
-    vault_token: >-
+    vault_bootstrap_vault_token: >-
       {{
         (vault_bootstrap_token | default('', true) | trim)
         if (
@@ -319,8 +342,8 @@
           and (vault_bootstrap_token | default('', true) | trim | length > 0)
         )
         else (
-          (vault_token | default('', true) | trim)
-          if (vault_token | default('', true) | trim | length > 0)
+          (vault_bootstrap_vault_token | default('', true) | trim)
+          if (vault_bootstrap_vault_token | default('', true) | trim | length > 0)
           else (vault_bootstrap_token | default('', true) | trim)
         )
       }}
@@ -355,7 +378,7 @@
 - name: Write encrypted init output
   when:
     - vault_bootstrap_should_write_init_file | bool
-    - vault_deploy_init_payload is defined
+    - vault_bootstrap_vault_deploy_init_payload is defined
   no_log: true
   tags:
     - init
@@ -387,41 +410,47 @@
           # - Only store encrypted
           # -----------------------------------------------------------------------------
 
-          vault_init:
+          vault_bootstrap_vault_init:
             unseal_keys_b64:
-          {% for key in (vault_deploy_init_payload.unseal_keys_b64 | default([])) %}
+          {% for key in (vault_bootstrap_vault_deploy_init_payload.unseal_keys_b64 | default([])) %}
               - "{{ key }}"
           {% endfor %}
 
             unseal_keys_hex:
-          {% for key in (vault_deploy_init_payload.unseal_keys_hex | default([])) %}
+          {% for key in (vault_bootstrap_vault_deploy_init_payload.unseal_keys_hex | default([])) %}
               - "{{ key }}"
           {% endfor %}
 
-            unseal_shares: {{ vault_deploy_init_payload.unseal_shares | default(0) }}
-            unseal_threshold: {{ vault_deploy_init_payload.unseal_threshold | default(0) }}
+            unseal_shares: {{ vault_bootstrap_vault_deploy_init_payload.unseal_shares | default(0) }}
+            unseal_threshold: {{ vault_bootstrap_vault_deploy_init_payload.unseal_threshold | default(0) }}
 
-          {% if (vault_deploy_init_payload.recovery_keys_b64 | default([])) | length > 0 %}
+          {% if (vault_bootstrap_vault_deploy_init_payload.recovery_keys_b64 | default([])) | length > 0 %}
             recovery_keys_b64:
-          {% for key in vault_deploy_init_payload.recovery_keys_b64 %}
+          {% for key in vault_bootstrap_vault_deploy_init_payload.recovery_keys_b64 %}
               - "{{ key }}"
           {% endfor %}
           {% else %}
             recovery_keys_b64: []
           {% endif %}
 
-          {% if (vault_deploy_init_payload.recovery_keys_hex | default([])) | length > 0 %}
+          {% if (vault_bootstrap_vault_deploy_init_payload.recovery_keys_hex | default([])) | length > 0 %}
             recovery_keys_hex:
-          {% for key in vault_deploy_init_payload.recovery_keys_hex %}
+          {% for key in vault_bootstrap_vault_deploy_init_payload.recovery_keys_hex %}
               - "{{ key }}"
           {% endfor %}
           {% else %}
             recovery_keys_hex: []
           {% endif %}
-            recovery_keys_shares: {{ vault_deploy_init_payload.recovery_keys_shares | default(0) }}
-            recovery_keys_threshold: {{ vault_deploy_init_payload.recovery_keys_threshold | default(0) }}
+            recovery_keys_shares: {{
+              vault_bootstrap_vault_deploy_init_payload.recovery_keys_shares
+              | default(0)
+            }}
+            recovery_keys_threshold: {{
+              vault_bootstrap_vault_deploy_init_payload.recovery_keys_threshold
+              | default(0)
+            }}
 
-            root_token: "{{ vault_deploy_init_payload.root_token | default('') }}"
+            root_token: "{{ vault_bootstrap_vault_deploy_init_payload.root_token | default('') }}"
         mode: "0600"
 
     - name: Create temporary vault password file (controller temp dir)

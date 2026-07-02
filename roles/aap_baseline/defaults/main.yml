@@ -5,24 +5,24 @@ aap_baseline_allowed_actions:
   - verify
   - prepare
   - check
-machine_a_effective_appl_root: >-
+aap_baseline_machine_a_effective_appl_root: >-
   {{ machine_a_appl_root
      | default(lookup('ansible.builtin.env', 'HOME') ~ '/aap-work', true) }}
-machine_a_effective_secrets_dir: >-
+aap_baseline_machine_a_effective_secrets_dir: >-
   {{ machine_a_secrets_dir
-     | default(machine_a_effective_appl_root ~ '/secrets', true) }}
-machine_a_effective_ssh_key: >-
+     | default(aap_baseline_machine_a_effective_appl_root ~ '/secrets', true) }}
+aap_baseline_machine_a_effective_ssh_key: >-
   {{ machine_a_ssh_key
-     | default(machine_a_effective_secrets_dir ~ '/svc_ansible_aap', true) }}
-machine_a_effective_known_hosts: >-
+     | default(aap_baseline_machine_a_effective_secrets_dir ~ '/svc_ansible_aap', true) }}
+aap_baseline_machine_a_effective_known_hosts: >-
   {{ machine_a_known_hosts
-     | default(machine_a_effective_secrets_dir ~ '/known_hosts', true) }}
-machine_a_effective_export_root: >-
+     | default(aap_baseline_machine_a_effective_secrets_dir ~ '/known_hosts', true) }}
+aap_baseline_machine_a_effective_export_root: >-
   {{ machine_a_export_root
      | default(lookup('ansible.builtin.env', 'HOME') ~ '/aap-export', true) }}
-machine_a_effective_automation_dir: >-
+aap_baseline_machine_a_effective_automation_dir: >-
   {{ machine_a_automation_dir
-     | default(machine_a_effective_export_root ~ '/src/modulix-automation', true) }}
+     | default(aap_baseline_machine_a_effective_export_root ~ '/src/modulix-automation', true) }}
 aap_baseline_effective_repo_url: >-
   {{ automation_repo_url
      | default('https://github.com/lightning-it/modulix-automation.git', true) }}
@@ -45,7 +45,7 @@ aap_baseline_effective_install_user: >-
   {{ aap_install_user | default('svc_aap', true) }}
 aap_baseline_effective_remote_tmp: >-
   {{ ansible_remote_tmp | default('~/.ansible/tmp', true) }}
-aap_effective_appl_root: "{{ aap_appl_root | default('/appl/aap-local', true) }}"
+aap_baseline_effective_appl_root: "{{ aap_appl_root | default('/appl/aap-local', true) }}"
 aap_baseline_login_user: "{{ ansible_user }}"
 aap_baseline_required_commands:
   - sudo
@@ -70,18 +70,25 @@ aap_baseline_storage_packages:
 aap_baseline_grow_partition_disk: /dev/sda
 aap_baseline_grow_partition_number: 3
 aap_baseline_owned_directories:
-  - "{{ aap_effective_appl_root }}"
-  - "{{ aap_effective_appl_root }}/etc"
-  - "{{ aap_effective_appl_root }}/secrets"
-  - "{{ aap_effective_appl_root }}/artifacts"
-  - "{{ aap_effective_appl_root }}/inbox"
-  - "{{ aap_effective_appl_root }}/scripts"
-  - "{{ aap_effective_appl_root }}/src"
+  - "{{ aap_baseline_effective_appl_root }}"
+  - "{{ aap_baseline_effective_appl_root }}/etc"
+  - "{{ aap_baseline_effective_appl_root }}/secrets"
+  - "{{ aap_baseline_effective_appl_root }}/artifacts"
+  - "{{ aap_baseline_effective_appl_root }}/inbox"
+  - "{{ aap_baseline_effective_appl_root }}/scripts"
+  - "{{ aap_baseline_effective_appl_root }}/src"
 aap_baseline_root_directories:
-  - { path: /appl, mode: "0755" }
-  - { path: /appl/tmp, mode: "1777" }
-  - { path: /appl/ansible-tmp, mode: "1777" }
-  - { path: /appl/home, mode: "0755" }
-  - { path: /appl/podman, mode: "0755" }
-  - { path: /appl/podman/root-storage, mode: "0755" }
-  - { path: /appl/podman/root-run, mode: "0755" }
+  - path: /appl
+    mode: "0755"
+  - path: /appl/tmp
+    mode: "1777"
+  - path: /appl/ansible-tmp
+    mode: "1777"
+  - path: /appl/home
+    mode: "0755"
+  - path: /appl/podman
+    mode: "0755"
+  - path: /appl/podman/root-storage
+    mode: "0755"
+  - path: /appl/podman/root-run
+    mode: "0755"

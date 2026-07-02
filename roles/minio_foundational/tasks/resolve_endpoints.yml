@@ -1,15 +1,16 @@
 ---
 - name: Resolve MinIO endpoint defaults (runtime)
   ansible.builtin.set_fact:
-    minio_deploy_api_scheme_effective: "{{ minio_deploy_api_scheme | default('http', true) }}"
-    minio_deploy_port_effective: "{{ (minio_deploy_port | default(9000, true)) | int }}"
-    minio_deploy_console_port_effective: "{{ (minio_deploy_console_port | default(9001, true)) | int }}"
-    minio_deploy_host_ip_effective: >-
+    minio_foundational_minio_deploy_api_scheme_effective: "{{ minio_deploy_api_scheme | default('http', true) }}"
+    minio_foundational_minio_deploy_port_effective: "{{ (minio_deploy_port | default(9000, true)) | int }}"
+    minio_foundational_minio_deploy_console_port_effective: >-
+      {{ (minio_deploy_console_port | default(9001, true)) | int }}
+    minio_foundational_minio_deploy_host_ip_effective: >-
       {{
         minio_deploy_host_ip
           | default(ansible_default_ipv4.address | default('127.0.0.1', true), true)
       }}
-    minio_deploy_api_url_effective: >-
+    minio_foundational_minio_deploy_api_url_effective: >-
       {{
         minio_deploy_api_url
           if (minio_deploy_api_url | default('', true) | length > 0)
@@ -21,7 +22,7 @@
             ~ ((minio_deploy_port | default(9000, true)) | int)
           )
       }}
-    minio_deploy_console_url_effective: >-
+    minio_foundational_minio_deploy_console_url_effective: >-
       {{
         minio_deploy_console_url
           if (minio_deploy_console_url | default('', true) | length > 0)
@@ -33,13 +34,13 @@
             ~ ((minio_deploy_console_port | default(9001, true)) | int)
           )
       }}
-    minio_deploy_health_url_effective: >-
+    minio_foundational_minio_deploy_health_url_effective: >-
       {{
         minio_deploy_health_url
           if (minio_deploy_health_url | default('', true) | length > 0)
           else (
             (
-              minio_deploy_api_url_effective
+              minio_foundational_minio_deploy_api_url_effective
                 | default(
                   (minio_deploy_api_scheme | default('http', true))
                   ~ '://'

@@ -51,13 +51,13 @@
 - name: Check if default interface config exists
   ansible.builtin.stat:
     path: >-
-      /etc/sysconfig/network-scripts/ifcfg-{{ ansible_default_ipv4.interface }}
-  register: ifcfg
+      /etc/sysconfig/network-scripts/openvpn_ifcfg-{{ ansible_default_ipv4.interface }}
+  register: openvpn_ifcfg
 
-- name: Persist default interface in ifcfg file
+- name: Persist default interface in openvpn_ifcfg file
   ansible.builtin.lineinfile:
     path: >-
-      /etc/sysconfig/network-scripts/ifcfg-{{ ansible_default_ipv4.interface }}
+      /etc/sysconfig/network-scripts/openvpn_ifcfg-{{ ansible_default_ipv4.interface }}
     regexp: "^ZONE="
     line: "ZONE={{ openvpn_firewalld_default_interface_zone }}"
-  when: ifcfg.stat.exists
+  when: openvpn_ifcfg.stat.exists

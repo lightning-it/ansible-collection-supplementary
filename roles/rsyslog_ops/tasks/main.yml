@@ -19,7 +19,9 @@
 
 - name: Report rsyslog service status
   ansible.builtin.debug:
-    msg: "rsyslog service {{ rsyslog_ops_service_name }} status: {{ rsyslog_ops_status.stdout | default('unknown', true) }}"
+    msg: >-
+      rsyslog service {{ rsyslog_ops_service_name }} status:
+      {{ rsyslog_ops_status.stdout | default('unknown', true) }}
   when: rsyslog_ops_action == 'status'
   tags:
     - ops

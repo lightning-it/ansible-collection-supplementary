@@ -6,7 +6,7 @@
     password: "{{ manage_esxi_password }}"
     validate_certs: "{{ manage_esxi_validate_certs }}"
   delegate_to: localhost
-  register: esxi_login_current
+  register: manage_esxi_esxi_login_current
   failed_when: false
 
 - name: Check if bootstrap is necessary (initial password)
@@ -16,19 +16,20 @@
     password: "{{ manage_esxi_initial_password }}"
     validate_certs: "{{ manage_esxi_validate_certs }}"
   delegate_to: localhost
-  register: esxi_login_initial
+  register: manage_esxi_esxi_login_initial
   failed_when: false
   when:
-    - esxi_login_current is failed
+    - manage_esxi_esxi_login_current is failed
 
 - name: Track current and initial authentication status
   ansible.builtin.set_fact:
-    manage_esxi_current_auth_ok: "{{ esxi_login_current is not failed }}"
-    manage_esxi_initial_auth_ok: "{{ esxi_login_initial is defined and esxi_login_initial is not failed }}"
+    manage_esxi_current_auth_ok: "{{ manage_esxi_esxi_login_current is not failed }}"
+    manage_esxi_initial_auth_ok: >-
+      {{ manage_esxi_esxi_login_initial is defined and manage_esxi_esxi_login_initial is not failed }}
 
 - name: Set bootstrap variable when only initial password works
   ansible.builtin.set_fact:
-    need_bootstrap: true
+    manage_esxi_need_bootstrap: true
   when:
     - not manage_esxi_current_auth_ok
     - manage_esxi_initial_auth_ok
@@ -53,7 +54,7 @@
     override_user_password: true
     state: present
   delegate_to: localhost
-  when: need_bootstrap | default(false)
+  when: manage_esxi_need_bootstrap | default(false)
 
 - name: Configure DNS for ESXi host (direct connection to ESXi host)
   community.vmware.vmware_host_dns:

@@ -93,7 +93,10 @@
 
     - name: Remove existing Samba pod when manifest changed
       when:
-        - samba_deploy_manifest_render.changed or samba_deploy_bind_user_render.changed | default(false) or samba_deploy_default_principals_render.changed | default(false)
+        - >-
+          samba_deploy_manifest_render.changed
+          or samba_deploy_bind_user_render.changed | default(false)
+          or samba_deploy_default_principals_render.changed | default(false)
         - samba_deploy_kubeplay_remove | bool
       tags:
         - deployment

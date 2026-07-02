@@ -21,7 +21,9 @@
 
 - name: Report Samba container status
   ansible.builtin.debug:
-    msg: "Samba container {{ samba_ops_container_name }} status: {{ samba_ops_status.stdout | default('missing', true) }}"
+    msg: >-
+      Samba container {{ samba_ops_container_name }} status:
+      {{ samba_ops_status.stdout | default('missing', true) }}
   when: samba_ops_action == 'status'
   tags:
     - ops
