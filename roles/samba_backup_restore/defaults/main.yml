@@ -1,0 +1,15 @@
+---
+samba_backup_restore_action: "none"
+samba_backup_restore_allowed_actions:
+  - none
+  - backup
+  - restore
+samba_backup_restore_execute: false
+samba_backup_restore_backup_dir: "/srv/samba/backups"
+samba_backup_restore_file: >-
+  {{ samba_backup_restore_backup_dir }}/samba-{{ ansible_date_time.iso8601_basic_short | default('manual') }}.tar.gz
+samba_backup_restore_restore_source: "{{ samba_backup_restore_file }}"
+samba_backup_restore_restore_confirm: ""
+samba_backup_restore_paths:
+  - "{{ samba_deploy_host_data_dir | default('/srv/samba/public', true) }}"
+samba_backup_restore_retention_keep_last: 14

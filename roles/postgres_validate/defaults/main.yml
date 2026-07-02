@@ -1,0 +1,8 @@
+---
+postgres_validate_strict: true
+postgres_validate_db_name: "{{ postgres_deploy_db_name | default('postgres', true) }}"
+postgres_validate_db_user: "{{ postgres_deploy_db_user | default('postgres', true) }}"
+postgres_validate_db_password: "{{ postgres_deploy_db_password | default('', true) }}"
+postgres_validate_db_host: "{{ postgres_deploy_host_ip | default('127.0.0.1', true) }}"
+postgres_validate_db_port: "{{ postgres_deploy_port | default(5432, true) }}"
+postgres_validate_query: "select 1"

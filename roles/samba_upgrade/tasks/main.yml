@@ -1,0 +1,43 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Report Samba upgrade dry run
+  ansible.builtin.debug:
+    msg: "Samba upgrade prepared. Set samba_upgrade_execute=true to redeploy with image {{ samba_upgrade_image }}."
+  when: not samba_upgrade_execute | bool
+  tags:
+    - upgrade
+
+- name: Back up Samba before upgrade
+  ansible.builtin.include_role:
+    name: samba_backup_restore
+  vars:
+    samba_backup_restore_action: backup
+  when:
+    - samba_upgrade_execute | bool
+    - samba_upgrade_run_backup | bool
+  tags:
+    - upgrade
+    - backup
+
+- name: Redeploy Samba container image
+  ansible.builtin.include_role:
+    name: samba_deploy
+  vars:
+    samba_deploy_image: "{{ samba_upgrade_image }}"
+  when: samba_upgrade_execute | bool
+  tags:
+    - upgrade
+    - deployment
+
+- name: Validate Samba after upgrade
+  ansible.builtin.include_role:
+    name: samba_validate
+  when:
+    - samba_upgrade_execute | bool
+    - samba_upgrade_run_validate | bool
+  tags:
+    - upgrade
+    - validate

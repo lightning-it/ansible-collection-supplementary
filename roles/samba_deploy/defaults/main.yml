@@ -1,0 +1,33 @@
+---
+samba_deploy_packages:
+  - podman
+samba_deploy_install_packages: true
+samba_deploy_skip_runtime: false
+samba_deploy_skip_deploy: false
+
+samba_deploy_pod_name: "samba"
+samba_deploy_container_name: "samba"
+samba_deploy_image: "docker.io/dperson/samba:latest"
+samba_deploy_pod_manifest_path: "/etc/podman/pods/samba.yml"
+samba_deploy_kubeplay_remove: true
+samba_deploy_kubeplay_run: true
+
+samba_deploy_host_ip: "127.0.0.1"
+samba_deploy_netbios_port: 139
+samba_deploy_smb_port: 445
+samba_deploy_container_netbios_port: 139
+samba_deploy_container_smb_port: 445
+
+samba_deploy_workgroup: "WORKGROUP"
+samba_deploy_server_string: "Samba Server"
+samba_deploy_share_name: "public"
+samba_deploy_host_data_dir: "/srv/samba/public"
+samba_deploy_container_share_dir: "/share"
+samba_deploy_share_comment: "Public Samba Share"
+samba_deploy_share_guest_ok: true
+samba_deploy_share_read_only: false
+samba_deploy_share_browseable: true
+samba_deploy_share_owner: "nobody"
+samba_deploy_share_group: "nogroup"
+samba_deploy_share_mode: "0775"
+samba_deploy_extra_args: []

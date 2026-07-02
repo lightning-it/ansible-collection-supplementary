@@ -1,0 +1,15 @@
+---
+- name: Validate PostgreSQL destroy variables
+  ansible.builtin.assert:
+    that:
+      - postgres_destroy_execute is boolean
+      - postgres_destroy_pod_name | default('', true) | trim | length > 0
+      - postgres_destroy_pod_manifest_path | default('', true) | trim | length > 0
+      - postgres_destroy_remove_data is boolean
+      - postgres_destroy_remove_secrets is boolean
+      - postgres_destroy_data_paths is sequence
+      - postgres_destroy_data_paths is not string
+      - postgres_destroy_secret_paths is sequence
+      - postgres_destroy_secret_paths is not string
+    fail_msg: "PostgreSQL destroy variables are missing or invalid."
+  tags: always

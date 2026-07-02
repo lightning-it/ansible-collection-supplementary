@@ -1,0 +1,8 @@
+---
+samba_ops_action: "status"
+samba_ops_allowed_actions:
+  - status
+  - restart
+samba_ops_pod_name: "{{ samba_deploy_pod_name | default('samba', true) }}"
+samba_ops_container_name: >-
+  {{ samba_ops_pod_name }}-{{ samba_deploy_container_name | default('samba', true) }}

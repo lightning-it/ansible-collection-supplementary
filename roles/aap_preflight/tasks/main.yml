@@ -204,12 +204,16 @@
     - runtime
 
 - name: Check install-user runtime processes
-  ansible.builtin.command:
-    argv:
-      - pgrep
-      - -a
-      - -u
-      - "{{ aap_preflight_install_user }}"
+  ansible.builtin.shell: |
+    set -o pipefail
+    pgrep -a -u {{ aap_preflight_install_user | quote }} |
+      grep -Ev '^[0-9]+[[:space:]]+catatonit -P$' |
+      grep -Ev '^[0-9]+[[:space:]]+/usr/lib/systemd/systemd --user$' |
+      grep -Ev '^[0-9]+[[:space:]]+\(sd-pam\)$' |
+      grep -Ev '^[0-9]+[[:space:]]+/usr/bin/dbus-broker-launch --scope user$' |
+      grep -Ev '^[0-9]+[[:space:]]+dbus-broker '
+  args:
+    executable: /bin/bash
   register: aap_preflight_install_user_processes
   changed_when: false
   failed_when: false

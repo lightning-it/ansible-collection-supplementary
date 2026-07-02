@@ -1,0 +1,10 @@
+---
+postgres_destroy_execute: false
+postgres_destroy_pod_name: "{{ postgres_deploy_pod_name | default('postgres', true) }}"
+postgres_destroy_pod_manifest_path: "{{ postgres_deploy_pod_manifest_path | default('/etc/podman/pods/postgres.yml', true) }}"
+postgres_destroy_remove_data: false
+postgres_destroy_remove_secrets: false
+postgres_destroy_data_paths:
+  - "{{ postgres_deploy_host_data_dir | default('/srv/postgres/data', true) }}"
+postgres_destroy_secret_paths:
+  - "{{ postgres_deploy_secrets_file | default('/srv/postgres/config/postgres-secrets.yml', true) }}"

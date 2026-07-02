@@ -1,0 +1,52 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Check podman availability
+  ansible.builtin.command: podman --version
+  register: postgres_preflight_podman
+  changed_when: false
+  failed_when:
+    - postgres_preflight_strict | bool
+    - postgres_preflight_podman.rc != 0
+  when: postgres_preflight_check_podman | bool
+  tags:
+    - preflight
+
+- name: Check systemd availability
+  ansible.builtin.command: systemctl --version
+  register: postgres_preflight_systemd
+  changed_when: false
+  failed_when:
+    - postgres_preflight_strict | bool
+    - postgres_preflight_systemd.rc != 0
+  when: postgres_preflight_check_systemd | bool
+  tags:
+    - preflight
+
+- name: Check PostgreSQL ports
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ item }}"
+    state: stopped
+    timeout: 1
+  loop: "{{ postgres_preflight_required_ports }}"
+  register: postgres_preflight_ports
+  failed_when:
+    - postgres_preflight_strict | bool
+    - postgres_preflight_ports is failed
+  when: postgres_preflight_check_ports | bool
+  tags:
+    - preflight
+
+- name: Validate Vault auth inputs when requested
+  ansible.builtin.assert:
+    that:
+      - postgres_deploy_vault_address | default('', true) | trim | length > 0
+      - postgres_deploy_vault_auth_ok | default(false) | bool
+    fail_msg: "Vault auth inputs are required for PostgreSQL secret storage."
+  when: postgres_preflight_check_vault_auth | bool
+  no_log: true
+  tags:
+    - preflight

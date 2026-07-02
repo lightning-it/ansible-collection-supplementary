@@ -1,0 +1,43 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Inspect Samba container status
+  ansible.builtin.command:
+    argv:
+      - podman
+      - inspect
+      - --format
+      - "{{ '{{' }} .State.Status {{ '}}' }}"
+      - "{{ samba_ops_container_name }}"
+  register: samba_ops_status
+  changed_when: false
+  failed_when: false
+  when: samba_ops_action == 'status'
+  tags:
+    - ops
+    - status
+
+- name: Report Samba container status
+  ansible.builtin.debug:
+    msg: "Samba container {{ samba_ops_container_name }} status: {{ samba_ops_status.stdout | default('missing', true) }}"
+  when: samba_ops_action == 'status'
+  tags:
+    - ops
+    - status
+
+- name: Restart Samba container
+  ansible.builtin.include_role:
+    name: lit.foundational.kubeplay
+  vars:
+    kubeplay_apps:
+      - name: samba_restart
+        tasks: apps/podman_kube_play.yml
+        vars:
+          kubeplay_action: restart
+          kubeplay_pod_name: "{{ samba_ops_pod_name }}"
+  when: samba_ops_action == 'restart'
+  tags:
+    - ops
+    - restart

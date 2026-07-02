@@ -354,7 +354,7 @@
     postgres_deploy_container_name: "{{ keycloak_deploy_postgres_container_name }}"
     postgres_deploy_host_data_dir: "{{ keycloak_deploy_postgres_data_dir }}"
     postgres_deploy_container_data_dir: "{{ keycloak_deploy_container_postgres_data_dir }}"
-    postgres_deploy_port: "{{ keycloak_deploy_db_port }}"
+    postgres_deploy_port: "{{ keycloak_deploy_postgres_port }}"
     postgres_deploy_host_ip: "{{ keycloak_deploy_postgres_host_ip }}"
     postgres_deploy_db_name: "{{ keycloak_deploy_db_name }}"
     postgres_deploy_db_user: "{{ keycloak_deploy_db_user }}"
@@ -372,8 +372,8 @@
 
 - name: Wait until dedicated Keycloak PostgreSQL is reachable
   ansible.builtin.wait_for:
-    host: "{{ keycloak_deploy_db_host }}"
-    port: "{{ keycloak_deploy_db_port }}"
+    host: "{{ keycloak_deploy_db_wait_host }}"
+    port: "{{ keycloak_deploy_db_wait_port }}"
     delay: "{{ keycloak_deploy_postgres_wait_delay }}"
     timeout: "{{ keycloak_deploy_postgres_wait_timeout }}"
     state: started

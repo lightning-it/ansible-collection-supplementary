@@ -1,0 +1,53 @@
+---
+dependency:
+  name: shell
+  command: "mkdir -p /tmp/codex-samba-collections/ansible_collections/lit && ln -sfn /home/rene/sources/ansible-collection-supplementary /tmp/codex-samba-collections/ansible_collections/lit/supplementary && ln -sfn /home/rene/sources/ansible-collection-foundational /tmp/codex-samba-collections/ansible_collections/lit/foundational"
+
+driver:
+  name: default
+
+platforms:
+  - name: lit-samba-lifecycle-heavy-ct
+    image: images:ubuntu/24.04
+    type: container
+    ipv4_address: 10.248.82.51/24
+    ipv4_gateway: 10.248.82.1
+    dns_servers:
+      - 1.1.1.1
+      - 8.8.8.8
+    config:
+      - key: security.nesting
+        value: "true"
+      - key: security.privileged
+        value: "true"
+
+provisioner:
+  name: ansible
+  inventory:
+    host_vars:
+      lit-samba-lifecycle-heavy-ct:
+        ansible_connection: community.general.incus
+        ansible_python_interpreter: /usr/bin/python3
+  env:
+    ANSIBLE_COLLECTIONS_PATH: "/tmp/codex-samba-collections:/home/rene/sources/modulix-automation/ansible/collections:/home/rene/.ansible/collections:/usr/share/ansible/collections"
+    ANSIBLE_ROLES_PATH: "/home/rene/sources/ansible-collection-supplementary/roles:/home/rene/sources/ansible-collection-foundational/roles:/home/rene/.ansible/roles:/usr/share/ansible/roles:/etc/ansible/roles"
+  playbooks:
+    create: create.yml
+    prepare: prepare.yml
+    converge: converge.yml
+    verify: verify.yml
+    destroy: destroy.yml
+
+scenario:
+  name: samba-lifecycle-incus_heavy
+  test_sequence:
+    - dependency
+    - syntax
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy
+
+verifier:
+  name: ansible

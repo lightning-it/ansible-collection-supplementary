@@ -79,6 +79,26 @@
       changed_when: false
       when: aap_ops_service_state is not defined
 
+- name: Collect EDA diagnostics
+  ansible.builtin.import_tasks: eda_diagnostics.yml
+  when:
+    - aap_ops_enabled | bool
+    - aap_ops_action == 'eda_diagnostics'
+  tags:
+    - ops
+    - diagnostics
+    - eda
+
+- name: Collect local execution diagnostics
+  ansible.builtin.import_tasks: local_diagnostics.yml
+  when:
+    - aap_ops_enabled | bool
+    - aap_ops_action == 'local_diagnostics'
+  tags:
+    - ops
+    - diagnostics
+    - local_execution
+
     - name: Report AAP service state
       ansible.builtin.debug:
         msg: >-

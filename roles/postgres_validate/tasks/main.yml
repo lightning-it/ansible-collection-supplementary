@@ -1,0 +1,49 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Check PostgreSQL TCP reachability
+  ansible.builtin.wait_for:
+    host: "{{ postgres_validate_db_host }}"
+    port: "{{ postgres_validate_db_port }}"
+    timeout: 5
+    state: started
+  register: postgres_validate_port_result
+  failed_when:
+    - postgres_validate_strict | bool
+    - postgres_validate_port_result is failed
+  tags:
+    - validate
+
+- name: Check PostgreSQL query
+  ansible.builtin.command:
+    argv:
+      - psql
+      - --host
+      - "{{ postgres_validate_db_host }}"
+      - --port
+      - "{{ postgres_validate_db_port | string }}"
+      - --username
+      - "{{ postgres_validate_db_user }}"
+      - --dbname
+      - "{{ postgres_validate_db_name }}"
+      - --tuples-only
+      - --command
+      - "{{ postgres_validate_query }}"
+  environment:
+    PGPASSWORD: "{{ postgres_validate_db_password }}"
+  register: postgres_validate_query_result
+  changed_when: false
+  failed_when:
+    - postgres_validate_strict | bool
+    - postgres_validate_query_result.rc != 0
+  no_log: "{{ postgres_validate_db_password | default('', true) | length > 0 }}"
+  tags:
+    - validate
+
+- name: Report PostgreSQL validation status
+  ansible.builtin.debug:
+    msg: "PostgreSQL validation completed for {{ postgres_validate_db_host }}:{{ postgres_validate_db_port }}/{{ postgres_validate_db_name }}."
+  tags:
+    - validate

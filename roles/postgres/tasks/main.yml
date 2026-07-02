@@ -1,0 +1,57 @@
+---
+- name: Run PostgreSQL preflight
+  ansible.builtin.include_role:
+    name: postgres_preflight
+  when: postgres_run_preflight | bool
+  tags:
+    - preflight
+
+- name: Deploy PostgreSQL
+  ansible.builtin.include_role:
+    name: postgres_deploy
+  when: postgres_run_deploy | bool
+  tags:
+    - deployment
+
+- name: Configure PostgreSQL runtime
+  ansible.builtin.include_role:
+    name: postgres_config
+  when: postgres_run_config | bool
+  tags:
+    - config
+
+- name: Validate PostgreSQL
+  ansible.builtin.include_role:
+    name: postgres_validate
+  when: postgres_run_validate | bool
+  tags:
+    - validate
+
+- name: Run PostgreSQL operations
+  ansible.builtin.include_role:
+    name: postgres_ops
+  when: postgres_run_ops | bool
+  tags:
+    - ops
+
+- name: Run PostgreSQL backup or restore
+  ansible.builtin.include_role:
+    name: postgres_backup_restore
+  when: postgres_run_backup_restore | bool
+  tags:
+    - backup
+    - restore
+
+- name: Upgrade PostgreSQL
+  ansible.builtin.include_role:
+    name: postgres_upgrade
+  when: postgres_run_upgrade | bool
+  tags:
+    - upgrade
+
+- name: Destroy PostgreSQL
+  ansible.builtin.include_role:
+    name: postgres_destroy
+  when: postgres_run_destroy | bool
+  tags:
+    - destroy

@@ -1,0 +1,26 @@
+---
+- name: Validate Samba backup/restore variables
+  ansible.builtin.assert:
+    that:
+      - samba_backup_restore_action in samba_backup_restore_allowed_actions
+      - samba_backup_restore_allowed_actions is sequence
+      - samba_backup_restore_allowed_actions is not string
+      - samba_backup_restore_execute is boolean
+      - samba_backup_restore_backup_dir | default('', true) | trim | length > 0
+      - samba_backup_restore_file | default('', true) | trim | length > 0
+      - samba_backup_restore_restore_source | default('', true) | trim | length > 0
+      - samba_backup_restore_paths is sequence
+      - samba_backup_restore_paths is not string
+      - samba_backup_restore_retention_keep_last | int >= 0
+    fail_msg: "Samba backup/restore variables are missing or invalid."
+  tags: always
+
+- name: Validate Samba restore confirmation
+  ansible.builtin.assert:
+    that:
+      - samba_backup_restore_restore_confirm == 'YES_RESTORE'
+    fail_msg: "Set samba_backup_restore_restore_confirm=YES_RESTORE for Samba restore."
+  when:
+    - samba_backup_restore_execute | bool
+    - samba_backup_restore_action == 'restore'
+  tags: always

@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: aap_base_os
+  namespace: lit
+  author: René Osorio
+  description: AAP base os automation.
+  company: Lightning IT
+  license: MIT
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "all"
+  galaxy_tags:
+    - aap
+    - automation
+
+dependencies: []

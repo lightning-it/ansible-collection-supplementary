@@ -1,0 +1,17 @@
+---
+aap_tls_selfsigned_enabled: true
+aap_tls_selfsigned_output_dir: "{{ lookup('ansible.builtin.env', 'PWD') }}/files/tls"
+aap_tls_selfsigned_ca_key_path: "{{ aap_tls_selfsigned_output_dir }}/aap-selfsigned-ca.key"
+aap_tls_selfsigned_ca_csr_path: "{{ aap_tls_selfsigned_output_dir }}/aap-selfsigned-ca.csr"
+aap_tls_selfsigned_ca_cert_path: "{{ aap_tls_selfsigned_output_dir }}/aap-selfsigned-ca.crt"
+aap_tls_selfsigned_key_path: "{{ aap_tls_selfsigned_output_dir }}/aap.key"
+aap_tls_selfsigned_csr_path: "{{ aap_tls_selfsigned_output_dir }}/aap.csr"
+aap_tls_selfsigned_cert_path: "{{ aap_tls_selfsigned_output_dir }}/aap.crt"
+aap_tls_selfsigned_ca_common_name: "AAP Self-Signed CA"
+aap_tls_selfsigned_common_name: "{{ ansible_host | default(inventory_hostname) }}"
+aap_tls_selfsigned_dns_names:
+  - "{{ ansible_host | default(inventory_hostname) }}"
+aap_tls_selfsigned_ca_days: 3650
+aap_tls_selfsigned_cert_days: 825
+aap_tls_selfsigned_key_size: 4096
+aap_tls_selfsigned_force: false

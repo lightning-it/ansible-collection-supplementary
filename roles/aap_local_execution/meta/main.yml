@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: aap_local_execution
+  namespace: lit
+  author: René Osorio
+  description: AAP local execution automation.
+  company: Lightning IT
+  license: MIT
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "all"
+  galaxy_tags:
+    - aap
+    - automation
+
+dependencies: []

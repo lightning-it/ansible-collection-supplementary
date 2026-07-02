@@ -1,0 +1,284 @@
+---
+- name: Wait for SSH
+  ansible.builtin.wait_for_connection:
+    timeout: "{{ aap_baseline_wait_for_connection_timeout | default(120) }}"
+    sleep: 5
+
+- name: Resolve login user primary group
+  ansible.builtin.command:
+    argv:
+      - id
+      - -gn
+      - "{{ aap_baseline_login_user }}"
+  become: false
+  register: aap_baseline_login_group_result
+  changed_when: false
+
+- name: Record login user primary group
+  ansible.builtin.set_fact:
+    aap_baseline_login_group: "{{ aap_baseline_login_group_result.stdout | trim }}"
+
+- name: Resolve login user home directory
+  ansible.builtin.command:
+    argv:
+      - getent
+      - passwd
+      - "{{ aap_baseline_login_user }}"
+  register: aap_baseline_login_passwd_result
+  changed_when: false
+
+- name: Record login user home directory
+  ansible.builtin.set_fact:
+    aap_baseline_login_home: "{{ aap_baseline_login_passwd_result.stdout.split(':')[5] }}"
+
+- name: Verify target hostname
+  ansible.builtin.command:
+    argv:
+      - hostname
+      - -f
+  changed_when: false
+  become: false
+  when: aap_baseline_action in ['verify', 'check']
+
+- name: Verify login user
+  ansible.builtin.command:
+    argv:
+      - whoami
+  changed_when: false
+  become: false
+  when: aap_baseline_action in ['verify', 'check']
+
+- name: Read Red Hat release
+  ansible.builtin.command:
+    argv:
+      - cat
+      - /etc/redhat-release
+  register: aap_baseline_redhat_release_result
+  changed_when: false
+  when: aap_baseline_action in ['verify', 'check']
+
+- name: Assert expected Red Hat major release
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('release ' ~ (aap_baseline_expected_rhel_major | string) ~ '.') in
+        (aap_baseline_redhat_release_result.stdout | default(''))
+    fail_msg: >-
+      Expected RHEL {{ aap_baseline_expected_rhel_major }}, got:
+      {{ aap_baseline_redhat_release_result.stdout | default('unknown') }}
+    quiet: true
+  when:
+    - aap_baseline_action in ['verify', 'check']
+    - aap_baseline_expected_rhel_major | default('', true) | string | trim | length > 0
+
+- name: Verify passwordless root escalation
+  ansible.builtin.command:
+    argv:
+      - whoami
+  changed_when: false
+  when: aap_baseline_action in ['verify', 'check']
+
+- name: Verify required commands exist
+  ansible.builtin.shell: "command -v {{ item | quote }}"
+  args:
+    executable: /bin/bash
+  changed_when: false
+  loop: >-
+    {{
+      aap_baseline_bootstrap_required_commands
+      if (aap_baseline_manage_packages | default(false) | bool)
+      else aap_baseline_required_commands
+    }}
+  when: aap_baseline_action in ['verify', 'check']
+
+- name: Verify Podman version
+  ansible.builtin.command:
+    argv:
+      - podman
+      - --version
+  changed_when: false
+  when:
+    - aap_baseline_action in ['verify', 'check']
+    - not (aap_baseline_manage_packages | default(false) | bool) or aap_baseline_action == 'check'
+
+- name: Show enabled repositories
+  ansible.builtin.command:
+    argv:
+      - dnf
+      - repolist
+      - --enabled
+  changed_when: false
+  when: aap_baseline_action == 'verify'
+
+- name: Show RHSM identity when available
+  ansible.builtin.command:
+    argv:
+      - subscription-manager
+      - identity
+  changed_when: false
+  failed_when: false
+  when: aap_baseline_action == 'verify'
+
+- name: Install baseline packages when explicitly managed
+  ansible.builtin.dnf:
+    name: >-
+      {{
+        aap_baseline_required_packages
+        + (
+          aap_baseline_storage_packages
+          if (aap_baseline_manage_storage | default(false) | bool)
+          else []
+        )
+      }}
+    state: present
+  when:
+    - aap_baseline_action == 'prepare'
+    - aap_baseline_manage_packages | default(false) | bool
+
+- name: Grow baseline disk partition when explicitly managed
+  ansible.builtin.command:
+    argv:
+      - growpart
+      - "{{ aap_baseline_grow_partition_disk }}"
+      - "{{ aap_baseline_grow_partition_number | string }}"
+  register: aap_baseline_growpart_result
+  changed_when: aap_baseline_growpart_result.rc == 0
+  failed_when:
+    - aap_baseline_growpart_result.rc != 0
+    - "'NOCHANGE' not in (aap_baseline_growpart_result.stdout ~ aap_baseline_growpart_result.stderr)"
+  when:
+    - aap_baseline_action == 'prepare'
+    - aap_baseline_manage_storage | default(false) | bool
+
+- name: Resize baseline LVM physical volume when explicitly managed
+  ansible.builtin.command:
+    argv:
+      - pvresize
+      - "{{ aap_baseline_grow_partition_disk }}{{ aap_baseline_grow_partition_number }}"
+  register: aap_baseline_pvresize_result
+  changed_when: "'changed' in aap_baseline_pvresize_result.stdout"
+  when:
+    - aap_baseline_action == 'prepare'
+    - aap_baseline_manage_storage | default(false) | bool
+
+- name: Resolve root filesystem logical volume
+  ansible.builtin.command:
+    argv:
+      - findmnt
+      - -n
+      - -o
+      - SOURCE
+      - /
+  register: aap_baseline_root_lv_result
+  changed_when: false
+  when:
+    - aap_baseline_action == 'prepare'
+    - aap_baseline_manage_storage | default(false) | bool
+
+- name: Check free LVM extents after disk growth
+  ansible.builtin.command:
+    argv:
+      - vgs
+      - --noheadings
+      - -o
+      - vg_free_count
+  register: aap_baseline_vg_free_count_result
+  changed_when: false
+  when:
+    - aap_baseline_action == 'prepare'
+    - aap_baseline_manage_storage | default(false) | bool
+
+- name: Extend root filesystem into free LVM space when explicitly managed
+  ansible.builtin.command:
+    argv:
+      - lvextend
+      - -r
+      - -l
+      - +100%FREE
+      - "{{ aap_baseline_root_lv_result.stdout | trim }}"
+  when:
+    - aap_baseline_action == 'prepare'
+    - aap_baseline_manage_storage | default(false) | bool
+    - (aap_baseline_vg_free_count_result.stdout | trim | int) > 0
+
+- name: Ensure setup user SSH directory exists
+  ansible.builtin.file:
+    path: "{{ aap_baseline_login_home }}/.ssh"
+    state: directory
+    owner: "{{ aap_baseline_login_user }}"
+    group: "{{ aap_baseline_login_group }}"
+    mode: "0700"
+  when:
+    - aap_baseline_action == 'prepare'
+    - aap_baseline_setup_public_key | default('', true) | string | trim | length > 0
+
+- name: Authorize setup key for execution environment self-connection
+  ansible.builtin.lineinfile:
+    path: "{{ aap_baseline_login_home }}/.ssh/authorized_keys"
+    line: "{{ aap_baseline_setup_public_key }}"
+    create: true
+    owner: "{{ aap_baseline_login_user }}"
+    group: "{{ aap_baseline_login_group }}"
+    mode: "0600"
+  when:
+    - aap_baseline_action == 'prepare'
+    - aap_baseline_setup_public_key | default('', true) | string | trim | length > 0
+
+- name: Ensure AAP owned directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ aap_baseline_login_user }}"
+    group: "{{ aap_baseline_login_group }}"
+    mode: "0750"
+  loop: "{{ aap_baseline_owned_directories }}"
+  when: aap_baseline_action == 'prepare'
+
+- name: Ensure AAP root-owned substrate directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop: "{{ aap_baseline_root_directories }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: aap_baseline_action == 'prepare'
+
+- name: Check prepared AAP directories
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: aap_baseline_directory_checks
+  loop: >-
+    {{
+      aap_baseline_owned_directories
+      + (aap_baseline_root_directories | map(attribute='path') | list)
+    }}
+  when: aap_baseline_action == 'check'
+
+- name: Assert prepared AAP directories exist
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists | default(false)
+      - item.stat.isdir | default(false)
+    fail_msg: "Required AAP baseline directory is missing: {{ item.item }}"
+    quiet: true
+  loop: "{{ aap_baseline_directory_checks.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: aap_baseline_action == 'check'
+
+- name: Show AAP filesystem usage
+  ansible.builtin.command:
+    argv:
+      - df
+      - -hT
+      - /appl
+      - /appl/tmp
+      - /appl/ansible-tmp
+      - /appl/home
+      - /appl/podman
+  changed_when: false
+  failed_when: false
+  when: aap_baseline_action in ['verify', 'check']

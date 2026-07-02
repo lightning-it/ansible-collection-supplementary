@@ -1,0 +1,11 @@
+---
+- name: Validate PostgreSQL ops variables
+  ansible.builtin.assert:
+    that:
+      - postgres_ops_action in postgres_ops_allowed_actions
+      - postgres_ops_allowed_actions is sequence
+      - postgres_ops_allowed_actions is not string
+      - postgres_ops_container_name | default('', true) | trim | length > 0
+      - postgres_ops_use_systemd is boolean
+    fail_msg: "PostgreSQL ops variables are missing or invalid."
+  tags: always

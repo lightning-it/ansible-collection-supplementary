@@ -1,0 +1,8 @@
+---
+- name: Run AAP baseline controller tasks
+  ansible.builtin.include_tasks: controller.yml
+  when: inventory_hostname == 'localhost'
+
+- name: Run AAP baseline target tasks
+  ansible.builtin.include_tasks: target.yml
+  when: inventory_hostname != 'localhost'

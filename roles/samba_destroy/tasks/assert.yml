@@ -1,0 +1,18 @@
+---
+- name: Validate Samba destroy variables
+  ansible.builtin.assert:
+    that:
+      - samba_destroy_execute is boolean
+      - samba_destroy_remove_packages is boolean
+      - samba_destroy_remove_data is boolean
+      - samba_destroy_remove_config is boolean
+      - samba_destroy_remove_pod is boolean
+      - samba_destroy_pod_name | default('', true) | trim | length > 0
+      - samba_destroy_packages is sequence
+      - samba_destroy_packages is not string
+      - samba_destroy_data_paths is sequence
+      - samba_destroy_data_paths is not string
+      - samba_destroy_config_paths is sequence
+      - samba_destroy_config_paths is not string
+    fail_msg: "Samba destroy variables are missing or invalid."
+  tags: always
