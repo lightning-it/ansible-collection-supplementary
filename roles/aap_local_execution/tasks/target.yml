@@ -1,7 +1,9 @@
 ---
 - name: End remote play when no remote action was requested
   ansible.builtin.meta: end_play
-  when: aap_local_action not in ['transfer_payload', 'stage_runtime'] and aap_local_action not in aap_local_remote_playbooks
+  when:
+    - aap_local_action not in ['transfer_payload', 'stage_runtime']
+    - aap_local_action not in aap_local_remote_playbooks
 
 - name: Wait for AAP target connection
   ansible.builtin.wait_for_connection:
@@ -27,20 +29,50 @@
     group: "{{ item.group | default(omit) }}"
     mode: "{{ item.mode }}"
   loop:
-    - { path: /appl, owner: root, group: root, mode: "0755" }
-    - { path: "{{ aap_effective_appl_root }}", owner: "{{ ansible_user }}", group: "{{ aap_local_remote_login_group.stdout | default(omit) }}", mode: "0750" }
-    - { path: "{{ aap_effective_appl_root }}/etc", owner: "{{ ansible_user }}", group: "{{ aap_local_remote_login_group.stdout | default(omit) }}", mode: "0750" }
-    - { path: "{{ aap_effective_appl_root }}/secrets", owner: "{{ ansible_user }}", group: "{{ aap_local_remote_login_group.stdout | default(omit) }}", mode: "0750" }
-    - { path: "{{ aap_effective_appl_root }}/artifacts", owner: "{{ ansible_user }}", group: "{{ aap_local_remote_login_group.stdout | default(omit) }}", mode: "0750" }
-    - { path: "{{ aap_effective_appl_root }}/inbox", owner: "{{ ansible_user }}", group: "{{ aap_local_remote_login_group.stdout | default(omit) }}", mode: "0750" }
-    - { path: "{{ aap_effective_appl_root }}/scripts", owner: "{{ ansible_user }}", group: "{{ aap_local_remote_login_group.stdout | default(omit) }}", mode: "0750" }
-    - { path: "{{ aap_effective_appl_root }}/src", owner: "{{ ansible_user }}", group: "{{ aap_local_remote_login_group.stdout | default(omit) }}", mode: "0750" }
-    - { path: /appl/tmp, mode: "1777" }
-    - { path: /appl/ansible-tmp, mode: "1777" }
-    - { path: /appl/home, mode: "0755" }
-    - { path: /appl/podman, mode: "0755" }
-    - { path: /appl/podman/root-storage, mode: "0755" }
-    - { path: /appl/podman/root-run, mode: "0755" }
+    - path: /appl
+      owner: root
+      group: root
+      mode: "0755"
+    - path: "{{ aap_effective_appl_root }}"
+      owner: "{{ ansible_user }}"
+      group: "{{ aap_local_remote_login_group.stdout | default(omit) }}"
+      mode: "0750"
+    - path: "{{ aap_effective_appl_root }}/etc"
+      owner: "{{ ansible_user }}"
+      group: "{{ aap_local_remote_login_group.stdout | default(omit) }}"
+      mode: "0750"
+    - path: "{{ aap_effective_appl_root }}/secrets"
+      owner: "{{ ansible_user }}"
+      group: "{{ aap_local_remote_login_group.stdout | default(omit) }}"
+      mode: "0750"
+    - path: "{{ aap_effective_appl_root }}/artifacts"
+      owner: "{{ ansible_user }}"
+      group: "{{ aap_local_remote_login_group.stdout | default(omit) }}"
+      mode: "0750"
+    - path: "{{ aap_effective_appl_root }}/inbox"
+      owner: "{{ ansible_user }}"
+      group: "{{ aap_local_remote_login_group.stdout | default(omit) }}"
+      mode: "0750"
+    - path: "{{ aap_effective_appl_root }}/scripts"
+      owner: "{{ ansible_user }}"
+      group: "{{ aap_local_remote_login_group.stdout | default(omit) }}"
+      mode: "0750"
+    - path: "{{ aap_effective_appl_root }}/src"
+      owner: "{{ ansible_user }}"
+      group: "{{ aap_local_remote_login_group.stdout | default(omit) }}"
+      mode: "0750"
+    - path: /appl/tmp
+      mode: "1777"
+    - path: /appl/ansible-tmp
+      mode: "1777"
+    - path: /appl/home
+      mode: "0755"
+    - path: /appl/podman
+      mode: "0755"
+    - path: /appl/podman/root-storage
+      mode: "0755"
+    - path: /appl/podman/root-run
+      mode: "0755"
   loop_control:
     label: "{{ item.path }}"
   when: aap_local_action == 'transfer_payload'
@@ -192,12 +224,20 @@
   when: aap_local_action == 'stage_runtime'
 
 - name: Move transferred AAP artifacts into automation artifact directory
-  ansible.builtin.command:
-    argv:
-      - mv
-      - -f
-      - "{{ item.path }}"
-      - "{{ aap_effective_artifact_dir }}/"
+  ansible.builtin.copy:
+    src: "{{ item.path }}"
+    dest: "{{ aap_effective_artifact_dir }}/{{ item.path | basename }}"
+    remote_src: true
+    mode: "0640"
+  loop: "{{ aap_remote_inbox_artifacts.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  when: aap_local_action == 'stage_runtime'
+
+- name: Remove transferred AAP artifacts from inbox
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
   loop: "{{ aap_remote_inbox_artifacts.files | default([]) }}"
   loop_control:
     label: "{{ item.path | basename }}"
@@ -206,9 +246,8 @@
 - name: Check Podman command before staging execution environment
   ansible.builtin.command:
     argv:
-      - /bin/bash
-      - -lc
-      - command -v podman
+      - which
+      - podman
   register: aap_stage_runtime_podman_check
   changed_when: false
   failed_when: false
@@ -232,6 +271,8 @@
       - load
       - -i
       - "{{ aap_effective_ee_archive_path }}"
+  register: aap_remote_ee_load_result
+  changed_when: "'Loaded image:' in (aap_remote_ee_load_result.stdout ~ aap_remote_ee_load_result.stderr)"
   environment:
     CONTAINERS_STORAGE_CONF: "{{ aap_podman_storage_conf_effective }}"
     TMPDIR: "{{ aap_podman_tmpdir_effective }}"
@@ -245,6 +286,11 @@
       - podman
       - pull
       - "{{ modulix_run_ee_image }}"
+  register: aap_remote_ee_pull_result
+  changed_when: >-
+    'Copying blob' in (aap_remote_ee_pull_result.stdout ~ aap_remote_ee_pull_result.stderr)
+    or 'Writing manifest' in (aap_remote_ee_pull_result.stdout ~ aap_remote_ee_pull_result.stderr)
+    or 'Storing signatures' in (aap_remote_ee_pull_result.stdout ~ aap_remote_ee_pull_result.stderr)
   environment:
     CONTAINERS_STORAGE_CONF: "{{ aap_podman_storage_conf_effective }}"
     TMPDIR: "{{ aap_podman_tmpdir_effective }}"

@@ -114,19 +114,59 @@
     - aap_bootstrap
     - ssh
 
-- name: Verify Podman and local-execution substrate
-  ansible.builtin.shell: |
-    set -euo pipefail
-    command -v podman
-    podman --version
-    test -d /appl/tmp
-    test -d /appl/ansible-tmp
-    test -d /appl/home
-    test -d /appl/podman
-    test -s "{{ aap_bootstrap_local_execution_ssh_key_dest }}"
-  args:
-    executable: /bin/bash
+- name: Verify Podman command
+  ansible.builtin.command:
+    argv:
+      - podman
+      - --version
   changed_when: false
+  tags:
+    - aap
+    - aap_bootstrap
+    - verify
+
+- name: Inspect local-execution substrate paths
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  register: aap_bootstrap_substrate_path_stats
+  loop:
+    - path: /appl/tmp
+      type: directory
+    - path: /appl/ansible-tmp
+      type: directory
+    - path: /appl/home
+      type: directory
+    - path: /appl/podman
+      type: directory
+    - path: "{{ aap_bootstrap_local_execution_ssh_key_dest }}"
+      type: file
+  loop_control:
+    label: "{{ item.path }}"
+  tags:
+    - aap
+    - aap_bootstrap
+    - verify
+
+- name: Assert local-execution substrate paths exist
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists | default(false)
+      - >-
+        (
+          item.item.type == 'directory'
+          and item.stat.isdir | default(false)
+        )
+        or
+        (
+          item.item.type == 'file'
+          and item.stat.isreg | default(false)
+        )
+      - item.item.type == 'directory' or (item.stat.size | default(0) | int) > 0
+    fail_msg: "Required AAP bootstrap path is not ready: {{ item.item.path }}"
+    quiet: true
+  loop: "{{ aap_bootstrap_substrate_path_stats.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.path }}"
   tags:
     - aap
     - aap_bootstrap

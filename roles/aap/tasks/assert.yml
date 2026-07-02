@@ -28,188 +28,7 @@
   when: aap_enabled | bool
   tags: always
 
-- name: Ensure aap variables are valid
-  vars:
-    _aap_admin_input_valid: >-
-        {{
-          (
-            (aap_admin_password_input is string)
-            and (aap_admin_password_input | trim | length > 0)
-          )
-          or (
-            (aap_admin_password_input is mapping)
-            and (
-              (
-                aap_admin_password_input.get(aap_password_active_slot, '')
-                | string
-                | trim
-                | length
-              ) > 0
-              or (
-                aap_admin_password_input.get('value', '')
-                | string
-                | trim
-                | length
-              ) > 0
-              or (
-                aap_admin_password_input.get('password', '')
-                | string
-                | trim
-                | length
-              ) > 0
-            )
-          )
-        }}
-    _aap_gateway_input_valid: >-
-        {{
-          (
-            (aap_gateway_admin_password_input is string)
-            and (aap_gateway_admin_password_input | trim | length > 0)
-          )
-          or (
-            (aap_gateway_admin_password_input is mapping)
-            and (
-              (
-                aap_gateway_admin_password_input.get(aap_password_active_slot, '')
-                | string
-                | trim
-                | length
-              ) > 0
-              or (
-                aap_gateway_admin_password_input.get('value', '')
-                | string
-                | trim
-                | length
-              ) > 0
-              or (
-                aap_gateway_admin_password_input.get('password', '')
-                | string
-                | trim
-                | length
-              ) > 0
-            )
-          )
-        }}
-    _aap_controller_input_valid: >-
-        {{
-          (
-            (aap_controller_admin_password_input is string)
-            and (aap_controller_admin_password_input | trim | length > 0)
-          )
-          or (
-            (aap_controller_admin_password_input is mapping)
-            and (
-              (
-                aap_controller_admin_password_input.get(aap_password_active_slot, '')
-                | string
-                | trim
-                | length
-              ) > 0
-              or (
-                aap_controller_admin_password_input.get('value', '')
-                | string
-                | trim
-                | length
-              ) > 0
-              or (
-                aap_controller_admin_password_input.get('password', '')
-                | string
-                | trim
-                | length
-              ) > 0
-            )
-          )
-        }}
-    _aap_hub_input_valid: >-
-        {{
-          (
-            (aap_hub_admin_password_input is string)
-            and (aap_hub_admin_password_input | trim | length > 0)
-          )
-          or (
-            (aap_hub_admin_password_input is mapping)
-            and (
-              (
-                aap_hub_admin_password_input.get(aap_password_active_slot, '')
-                | string
-                | trim
-                | length
-              ) > 0
-              or (
-                aap_hub_admin_password_input.get('value', '')
-                | string
-                | trim
-                | length
-              ) > 0
-              or (
-                aap_hub_admin_password_input.get('password', '')
-                | string
-                | trim
-                | length
-              ) > 0
-            )
-          )
-        }}
-    _aap_eda_input_valid: >-
-        {{
-          (
-            (aap_eda_admin_password_input is string)
-            and (aap_eda_admin_password_input | trim | length > 0)
-          )
-          or (
-            (aap_eda_admin_password_input is mapping)
-            and (
-              (
-                aap_eda_admin_password_input.get(aap_password_active_slot, '')
-                | string
-                | trim
-                | length
-              ) > 0
-              or (
-                aap_eda_admin_password_input.get('value', '')
-                | string
-                | trim
-                | length
-              ) > 0
-              or (
-                aap_eda_admin_password_input.get('password', '')
-                | string
-                | trim
-                | length
-              ) > 0
-            )
-          )
-        }}
-    _aap_postgresql_input_valid: >-
-        {{
-          (
-            (aap_postgresql_admin_password_input is string)
-            and (aap_postgresql_admin_password_input | trim | length > 0)
-          )
-          or (
-            (aap_postgresql_admin_password_input is mapping)
-            and (
-              (
-                aap_postgresql_admin_password_input.get(aap_password_active_slot, '')
-                | string
-                | trim
-                | length
-              ) > 0
-              or (
-                aap_postgresql_admin_password_input.get('value', '')
-                | string
-                | trim
-                | length
-              ) > 0
-              or (
-                aap_postgresql_admin_password_input.get('password', '')
-                | string
-                | trim
-                | length
-              ) > 0
-            )
-          )
-        }}
+- name: Validate base aap variables
   ansible.builtin.assert:
     that:
       - aap_enabled is boolean
@@ -234,34 +53,112 @@
       - aap_password_disallow_unresolved_references is boolean
       - aap_password_reference_regex | default('', true) | trim | length > 0
       - (aap_admin_password_input is string) or (aap_admin_password_input is mapping)
-      - (aap_gateway_admin_password_input is string) or (aap_gateway_admin_password_input is mapping)
-      - (aap_controller_admin_password_input is string) or (aap_controller_admin_password_input is mapping)
-      - (aap_hub_admin_password_input is string) or (aap_hub_admin_password_input is mapping)
-      - (aap_eda_admin_password_input is string) or (aap_eda_admin_password_input is mapping)
-      - (aap_postgresql_admin_password_input is string) or (aap_postgresql_admin_password_input is mapping)
+    fail_msg: >-
+      aap variables are missing or invalid. Use supported RHEL major versions,
+      valid package/service switches, and password inputs as strings or mappings.
+    quiet: true
+  when: aap_enabled | bool
+  tags: always
+
+- name: Validate shared AAP password input
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (aap_resolve_admin_passwords | bool)
+        or (aap_password_require_component_inputs | bool)
+        or _aap_shared_input_has_value
+    fail_msg: >-
+      aap_admin_password_input must be a non-empty string or a mapping with one
+      of {{ aap_password_active_slot }}, value, or password when shared password
+      fallback is enabled.
+    quiet: true
+  vars:
+    _aap_shared_input_has_value: >-
+      {{
+        (
+          (aap_admin_password_input is string)
+          and (aap_admin_password_input | trim | length > 0)
+        )
+        or (
+          (aap_admin_password_input is mapping)
+          and (
+            (aap_admin_password_input.get(aap_password_active_slot, '') | string | trim | length > 0)
+            or (aap_admin_password_input.get('value', '') | string | trim | length > 0)
+            or (aap_admin_password_input.get('password', '') | string | trim | length > 0)
+          )
+        )
+      }}
+  when: aap_enabled | bool
+  tags: always
+
+- name: Validate component AAP password inputs
+  ansible.builtin.assert:
+    that:
+      - (item.value is string) or (item.value is mapping)
       - >-
         (not (aap_resolve_admin_passwords | bool))
         or (not (aap_password_require_component_inputs | bool))
-        or (
-          _aap_gateway_input_valid
-          and _aap_controller_input_valid
-          and _aap_hub_input_valid
-          and _aap_eda_input_valid
-          and _aap_postgresql_input_valid
-        )
+        or _aap_component_input_has_value
       - >-
         (not (aap_resolve_admin_passwords | bool))
         or (aap_password_require_component_inputs | bool)
-        or (
-          (_aap_gateway_input_valid or _aap_admin_input_valid)
-          and (_aap_controller_input_valid or _aap_admin_input_valid)
-          and (_aap_hub_input_valid or _aap_admin_input_valid)
-          and (_aap_eda_input_valid or _aap_admin_input_valid)
-          and (_aap_postgresql_input_valid or _aap_admin_input_valid)
-        )
+        or _aap_component_input_has_value
+        or _aap_shared_input_has_value
     fail_msg: >-
-      aap variables are missing or invalid.
-      Provide password inputs in inventory (string or structured mapping).
-      Use aap_password_active_slot (or aap_password_active alias) to select the active key.
+      {{ item.var_name }} must be a non-empty string or a mapping with one of
+      {{ aap_password_active_slot }}, value, or password. If
+      aap_password_require_component_inputs=false, a non-empty
+      aap_admin_password_input may be used as fallback.
     quiet: true
+  vars:
+    _aap_component_input_has_value: >-
+      {{
+        (
+          (item.value is string)
+          and (item.value | trim | length > 0)
+        )
+        or (
+          (item.value is mapping)
+          and (
+            (item.value.get(aap_password_active_slot, '') | string | trim | length > 0)
+            or (item.value.get('value', '') | string | trim | length > 0)
+            or (item.value.get('password', '') | string | trim | length > 0)
+          )
+        )
+      }}
+    _aap_shared_input_has_value: >-
+      {{
+        (
+          (aap_admin_password_input is string)
+          and (aap_admin_password_input | trim | length > 0)
+        )
+        or (
+          (aap_admin_password_input is mapping)
+          and (
+            (aap_admin_password_input.get(aap_password_active_slot, '') | string | trim | length > 0)
+            or (aap_admin_password_input.get('value', '') | string | trim | length > 0)
+            or (aap_admin_password_input.get('password', '') | string | trim | length > 0)
+          )
+        )
+      }}
+  loop:
+    - name: gateway
+      var_name: aap_gateway_admin_password_input
+      value: "{{ aap_gateway_admin_password_input }}"
+    - name: controller
+      var_name: aap_controller_admin_password_input
+      value: "{{ aap_controller_admin_password_input }}"
+    - name: hub
+      var_name: aap_hub_admin_password_input
+      value: "{{ aap_hub_admin_password_input }}"
+    - name: eda
+      var_name: aap_eda_admin_password_input
+      value: "{{ aap_eda_admin_password_input }}"
+    - name: postgresql
+      var_name: aap_postgresql_admin_password_input
+      value: "{{ aap_postgresql_admin_password_input }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: "{{ aap_admin_passwords_no_log }}"
+  when: aap_enabled | bool
   tags: always

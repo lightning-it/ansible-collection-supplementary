@@ -76,62 +76,22 @@
     state: directory
     mode: "{{ item.mode }}"
   loop:
-    - { path: "{{ machine_a_effective_appl_root }}/etc", mode: "0750" }
-    - { path: "{{ machine_a_effective_secrets_dir }}", mode: "0750" }
-    - { path: "{{ machine_a_effective_appl_root }}/artifacts", mode: "0750" }
-    - { path: "{{ machine_a_effective_export_root }}/src", mode: "0750" }
-    - { path: "{{ machine_a_effective_artifact_dir }}", mode: "0750" }
+    - path: "{{ machine_a_effective_appl_root }}/etc"
+      mode: "0750"
+    - path: "{{ machine_a_effective_secrets_dir }}"
+      mode: "0750"
+    - path: "{{ machine_a_effective_appl_root }}/artifacts"
+      mode: "0750"
+    - path: "{{ machine_a_effective_export_root }}/src"
+      mode: "0750"
+    - path: "{{ machine_a_effective_artifact_dir }}"
+      mode: "0750"
 
 - name: Write AAP local env file from inventory values
-  ansible.builtin.copy:
+  ansible.builtin.template:
+    src: aap-local/aap-local.env.j2
     dest: "{{ machine_a_effective_env_file }}"
     mode: "{{ aap_local_env_mode }}"
-    content: |
-      export AAP_FQDN="{{ aap_fqdn }}"
-      export AAP_ANSIBLE_HOST="{{ aap_effective_ansible_host }}"
-      export AAP_SHORTNAME="{{ aap_effective_shortname }}"
-      export AAP_INVENTORY_HOST="{{ aap_effective_inventory_host }}"
-      export AAP_SETUP_USER="{{ aap_effective_setup_user }}"
-      export AAP_BOOTSTRAP_USER="{{ aap_effective_bootstrap_user }}"
-      export AAP_USER="{{ aap_effective_user }}"
-      export AAP_INSTALL_USER="{{ aap_effective_install_user }}"
-      export AAP_ANSIBLE_BECOME_FLAGS="{{ aap_ansible_become_flags | default('', true) }}"
-      export AAP_SSH_KEY_AUTH_ENABLED={{ aap_ssh_key_auth_enabled | default(true) | bool | ternary('true', 'false') }}
-      export AAP_REMOTE_TMP_BOOTSTRAP_RAW={{ aap_remote_tmp_bootstrap_raw | default(true) | bool | ternary('true', 'false') }}
-
-      export MACHINE_A_APPL_ROOT="{{ machine_a_effective_appl_root }}"
-      export MACHINE_A_EXPORT_ROOT="{{ machine_a_effective_export_root }}"
-      export MACHINE_A_ENV_FILE="{{ machine_a_effective_env_file }}"
-      export MACHINE_A_SECRETS_DIR="{{ machine_a_effective_secrets_dir }}"
-      export MACHINE_A_BOOTSTRAP_KNOWN_HOSTS="{{ machine_a_effective_bootstrap_known_hosts }}"
-
-      export VAULT_ADDR="{{ vault_addr | default('', true) }}"
-      export VAULT_SKIP_VERIFY={{ vault_skip_verify | default(false) | bool | ternary('true', 'false') }}
-      export VAULT_TOKEN="${VAULT_TOKEN:-}"
-      export VAULT_ENGINE_MOUNT_POINT="{{ vault_engine_mount_point | default('', true) }}"
-      export AAP_VAULT_HOST_KEY="{{ aap_vault_host_key | default(aap_effective_shortname, true) }}"
-      export AAP_VAULT_ADMIN_PASSWORDS_KV_PATH="{{ aap_vault_admin_passwords_kv_path | default((aap_vault_host_key | default(aap_effective_shortname, true)) ~ '/aap/deploy/admin_passwords', true) }}"
-      export AAP_VAULT_DEFAULTS_KV_PATH="{{ aap_vault_defaults_kv_path | default((aap_vault_host_key | default(aap_effective_shortname, true)) ~ '/aap/deploy/defaults', true) }}"
-
-      export AUTOMATION_REPO_URL="{{ automation_repo_url_effective }}"
-      export INVENTORY_NAME="{{ inventory_name | default('corp', true) }}"
-      export MODULIX_RUN_EE_IMAGE="{{ modulix_run_ee_image }}"
-      export AAP_EE_TRANSFER_ENABLED={{ aap_effective_ee_transfer_enabled | ternary('true', 'false') }}
-      export AAP_AUTOMATION_SOURCE_DIR="{{ aap_automation_source_dir_effective }}"
-
-      export AAP_BUNDLE_FILENAME="{{ aap_bundle_filename | default('ansible-automation-platform-containerized-setup-bundle-2.7-1.2-x86_64.tar.gz', true) }}"
-      export AAP_BUNDLE_SHA256="{{ aap_bundle_sha256 | default('', true) }}"
-      export AAP_BUNDLE_MIN_SIZE_BYTES="{{ aap_bundle_min_size_bytes | default('100000000', true) }}"
-      export AAP_BUNDLE_URL="{{ aap_bundle_url | default('', true) }}"
-      export AAP_MANIFEST_FILENAME="{{ aap_manifest_filename | default('manifest.zip', true) }}"
-      export AAP_MANIFEST_SHA256="{{ aap_manifest_sha256 | default('', true) }}"
-      export AAP_MANIFEST_URL="{{ aap_manifest_url | default('', true) }}"
-
-      export AAP_APPL_ROOT="{{ aap_effective_appl_root }}"
-      export AAP_ENV_FILE="{{ aap_effective_env_file }}"
-      export AAP_SECRETS_DIR="{{ aap_effective_secrets_dir }}"
-      export AUTOMATION_DIR="{{ aap_effective_automation_dir }}"
-      export AUTOMATION_ANSIBLE_DIR="{{ aap_effective_automation_ansible_dir }}"
 
 - name: Validate Machine A automation checkout
   ansible.builtin.stat:
@@ -165,7 +125,11 @@
 - name: Download AAP setup bundle when URL is provided
   ansible.builtin.get_url:
     url: "{{ aap_bundle_url }}"
-    dest: "{{ machine_a_effective_artifact_dir }}/{{ aap_bundle_filename | default('ansible-automation-platform-containerized-setup-bundle-2.7-1.2-x86_64.tar.gz', true) }}"
+    dest: >-
+      {{ machine_a_effective_artifact_dir }}/{{
+        aap_bundle_filename
+        | default('ansible-automation-platform-containerized-setup-bundle-2.7-1.2-x86_64.tar.gz', true)
+      }}
     checksum: "{{ aap_effective_bundle_checksum if (aap_effective_bundle_checksum | trim | length > 0) else omit }}"
     mode: "0640"
     force: "{{ aap_artifact_download_force | default(false) | bool }}"
@@ -314,6 +278,7 @@
     argv:
       - rsync
       - -a
+      - --itemize-changes
       - --delete
       - --exclude=.git
       - --exclude=.artifacts
@@ -327,6 +292,8 @@
       - --exclude=packaging/rpm/dist
       - "{{ aap_automation_source_dir_effective }}/"
       - "{{ machine_a_effective_export_root }}/src/modulix-automation/"
+  register: aap_local_mirror_source
+  changed_when: aap_local_mirror_source.stdout | trim | length > 0
   when:
     - aap_local_action in ['prepare_machine_a', 'transfer_payload']
     - aap_automation_source_dir_effective | length > 0
@@ -528,10 +495,23 @@
       - podman
       - pull
       - "{{ modulix_run_ee_image }}"
+  register: aap_local_ee_pull_result
+  changed_when: >-
+    'Copying blob' in (aap_local_ee_pull_result.stdout ~ aap_local_ee_pull_result.stderr)
+    or 'Writing manifest' in (aap_local_ee_pull_result.stdout ~ aap_local_ee_pull_result.stderr)
+    or 'Storing signatures' in (aap_local_ee_pull_result.stdout ~ aap_local_ee_pull_result.stderr)
   when:
     - aap_local_action == 'transfer_payload'
     - aap_effective_ee_transfer_enabled | bool
     - aap_ee_pull_force | default(false) | bool or aap_local_ee_image_exists.rc != 0
+
+- name: Check execution environment archive on Machine A
+  ansible.builtin.stat:
+    path: "{{ machine_a_effective_ee_archive_path }}"
+  register: aap_local_ee_archive_stat
+  when:
+    - aap_local_action == 'transfer_payload'
+    - aap_effective_ee_transfer_enabled | bool
 
 - name: Save execution environment archive when transfer is enabled
   ansible.builtin.command:
@@ -543,9 +523,18 @@
       - -o
       - "{{ machine_a_effective_ee_archive_path }}"
       - "{{ modulix_run_ee_image }}"
+  register: aap_local_ee_archive_save
+  changed_when: true
   when:
     - aap_local_action == 'transfer_payload'
     - aap_effective_ee_transfer_enabled | bool
+    - aap_ee_archive_force | bool or not (aap_local_ee_archive_stat.stat.exists | default(false))
+
+- name: Check automation source archive
+  ansible.builtin.stat:
+    path: "{{ machine_a_effective_source_archive_path }}"
+  register: aap_local_source_archive_stat
+  when: aap_local_action == 'transfer_payload'
 
 - name: Create automation source archive
   ansible.builtin.command:
@@ -567,7 +556,11 @@
       - -czf
       - "{{ machine_a_effective_source_archive_path }}"
       - modulix-automation
-  when: aap_local_action == 'transfer_payload'
+  register: aap_local_source_archive_create
+  changed_when: true
+  when:
+    - aap_local_action == 'transfer_payload'
+    - aap_source_archive_force | bool or not (aap_local_source_archive_stat.stat.exists | default(false))
 
 - name: Check optional Machine A Vault token file
   ansible.builtin.stat:
@@ -594,7 +587,15 @@
     ansible_connection: ssh
     ansible_become: true
     ansible_become_method: sudo
-    ansible_become_flags: "{{ aap_local_become_flags | default(aap_ansible_become_flags | default('--preserve-env=SSH_AUTH_SOCK -i', true), true) }}"
+    ansible_become_flags: >-
+      {{
+        aap_local_become_flags
+        | default(
+            aap_ansible_become_flags
+            | default('--preserve-env=SSH_AUTH_SOCK -i', true),
+            true
+          )
+      }}
     ansible_ssh_common_args: >-
       -A
       -o UserKnownHostsFile={{ machine_a_effective_bootstrap_known_hosts }}
