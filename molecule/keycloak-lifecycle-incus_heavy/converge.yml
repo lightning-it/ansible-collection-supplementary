@@ -48,6 +48,7 @@
     keycloak_cac_realm: master
     keycloak_cac_admin_user: admin
     keycloak_cac_admin_password: molecule-admin-password
+    keycloak_cac_samba_ldap_enabled: true
     keycloak_validate_strict: true
     keycloak_validate_url: "http://127.0.0.1:18080"
     keycloak_validate_realm: master
