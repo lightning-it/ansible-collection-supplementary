@@ -17,7 +17,7 @@ driver:
   name: default
 
 platforms:
-  - name: lit-atlas-observability-heavy-ct
+  - name: atlas-observability-heavy-ct
     image: images:ubuntu/24.04
     type: container
     ipv4_address: 10.248.82.54/24
@@ -35,7 +35,7 @@ provisioner:
   name: ansible
   inventory:
     host_vars:
-      lit-atlas-observability-heavy-ct:
+      atlas-observability-heavy-ct:
         ansible_connection: community.general.incus
         ansible_python_interpreter: /usr/bin/python3
   env:

@@ -10,7 +10,7 @@ aap_deploy_tls_dir: "{{ '{{' }} aap_deploy_install_dir {{ '}}' }}/tls"
 aap_deploy_installed_marker_path: "{{ '{{' }} aap_deploy_install_dir {{ '}}' }}/.aap_containerized_installed"
 aap_deploy_gateway_main_url: "https://{{ aap_fqdn }}:8446"
 aap_deploy_gateway_verify_url: "{{ '{{' }} aap_deploy_gateway_main_url {{ '}}' }}"
-aap_deploy_hub_upload_readiness_url: "https://127.0.0.1:8444/api/galaxy/pulp/api/v3/status/"
+aap_deploy_hub_upload_readiness_url: "https://{{ aap_inventory_host }}:8444/api/galaxy/pulp/api/v3/status/"
 
 aap_deploy_install_user: {{ aap_effective_install_user }}
 aap_deploy_install_user_home: /appl/home/{{ aap_effective_install_user }}
