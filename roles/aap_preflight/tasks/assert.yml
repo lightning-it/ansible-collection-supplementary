@@ -10,6 +10,7 @@
       - aap_preflight_check_paths is boolean
       - aap_preflight_check_podman is boolean
       - aap_preflight_check_runtime is boolean
+      - aap_preflight_allow_partial_install_runtime is boolean
       - aap_preflight_check_artifacts is boolean
       - aap_preflight_check_vault is boolean
       - aap_preflight_check_ansible_vault is boolean

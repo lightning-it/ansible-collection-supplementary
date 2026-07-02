@@ -8,10 +8,25 @@ aap_deploy_install_dir: /appl/aap
 aap_deploy_setup_dir: "{{ '{{' }} aap_deploy_install_dir {{ '}}' }}/setup"
 aap_deploy_tls_dir: "{{ '{{' }} aap_deploy_install_dir {{ '}}' }}/tls"
 aap_deploy_installed_marker_path: "{{ '{{' }} aap_deploy_install_dir {{ '}}' }}/.aap_containerized_installed"
+aap_deploy_gateway_main_url: "https://{{ aap_fqdn }}:8446"
+aap_deploy_gateway_verify_url: "{{ '{{' }} aap_deploy_gateway_main_url {{ '}}' }}"
 
 aap_deploy_install_user: {{ aap_effective_install_user }}
 aap_deploy_install_user_home: /appl/home/{{ aap_effective_install_user }}
 aap_deploy_install_user_shell: /bin/bash
+
+aap_deploy_growth_gateway_host: {{ aap_inventory_host | to_json }}
+aap_deploy_growth_controller_host: {{ aap_inventory_host | to_json }}
+aap_deploy_growth_hub_host: {{ aap_inventory_host | to_json }}
+aap_deploy_growth_eda_host: {{ aap_inventory_host | to_json }}
+aap_deploy_growth_automationmetrics_host: {{ aap_inventory_host | to_json }}
+aap_deploy_growth_postgresql_host: {{ aap_inventory_host | to_json }}
+aap_deploy_gateway_pg_host: {{ (aap_ansible_host | default(aap_fqdn, true)) | to_json }}
+aap_deploy_controller_pg_host: {{ (aap_ansible_host | default(aap_fqdn, true)) | to_json }}
+aap_deploy_hub_pg_host: {{ (aap_ansible_host | default(aap_fqdn, true)) | to_json }}
+aap_deploy_eda_pg_host: {{ (aap_ansible_host | default(aap_fqdn, true)) | to_json }}
+aap_deploy_automationmetrics_pg_host: {{ (aap_ansible_host | default(aap_fqdn, true)) | to_json }}
+aap_deploy_automationmetrics_controller_read_pg_host: {{ (aap_ansible_host | default(aap_fqdn, true)) | to_json }}
 
 aap_runbook_manage_rhsm: false
 aap_runbook_manage_repos: false

@@ -229,6 +229,7 @@
     that:
       - >-
         (aap_preflight_installed_marker.stat.exists | default(false))
+        or (aap_preflight_allow_partial_install_runtime | bool)
         or (aap_preflight_install_user_processes.rc | default(1) != 0)
     fail_msg: >-
       Stop stale {{ aap_preflight_install_user }} processes before first
