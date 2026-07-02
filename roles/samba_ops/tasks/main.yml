@@ -28,12 +28,15 @@
     - status
 
 - name: Restart Samba container
-  ansible.builtin.command:
-    argv:
-      - podman
-      - restart
-      - "{{ samba_ops_container_name }}"
-  changed_when: true
+  ansible.builtin.include_role:
+    name: lit.foundational.kubeplay
+  vars:
+    kubeplay_apps:
+      - name: samba_restart
+        tasks: apps/podman_kube_play.yml
+        vars:
+          kubeplay_action: restart
+          kubeplay_pod_name: "{{ samba_ops_pod_name }}"
   when: samba_ops_action == 'restart'
   tags:
     - ops

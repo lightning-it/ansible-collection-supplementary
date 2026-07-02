@@ -367,6 +367,12 @@ For service/application lifecycle roles, prefer this role family layout:
 Use only applicable roles. For databases such as PostgreSQL, omit `_cac` by default unless there is real declarative
 object reconciliation.
 
+For containerized service/application lifecycle roles, use `lit.foundational.kubeplay` as the default execution path
+for Podman kube actions (`run`, `recreate`, `restart`, and `remove`). Deploy, ops, upgrade, and destroy roles SHOULD
+render pod manifests and call kubeplay with explicit `kubeplay_apps` entries. Direct `podman kube play`, `podman pod
+restart`, or `podman pod rm` commands are allowed only as documented compatibility exceptions or inside the
+`lit.foundational.kubeplay` implementation itself.
+
 ## 4. Role Structure and Prechecks
 
 ### 4.0 Role Responsibility Boundaries

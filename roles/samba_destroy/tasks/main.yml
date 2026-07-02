@@ -11,16 +11,15 @@
     - destroy
 
 - name: Remove Samba pod
-  ansible.builtin.command:
-    argv:
-      - podman
-      - pod
-      - rm
-      - -f
-      - "{{ samba_destroy_pod_name }}"
-  register: samba_destroy_remove_pod_result
-  changed_when: samba_destroy_remove_pod_result.rc == 0
-  failed_when: false
+  ansible.builtin.include_role:
+    name: lit.foundational.kubeplay
+  vars:
+    kubeplay_apps:
+      - name: samba_destroy_remove
+        tasks: apps/podman_kube_play.yml
+        vars:
+          kubeplay_action: remove
+          kubeplay_pod_name: "{{ samba_destroy_pod_name }}"
   when:
     - samba_destroy_execute | bool
     - samba_destroy_remove_pod | bool

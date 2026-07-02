@@ -58,53 +58,27 @@
         - samba_deploy_kubeplay_remove | bool
       tags:
         - deployment
-      block:
-        - name: Run Samba kubeplay remove
-          ansible.builtin.include_role:
-            name: lit.foundational.kubeplay
-          vars:
-            kubeplay_apps: []
-            kubeplay_action: remove
-            kubeplay_pod_name: "{{ samba_deploy_pod_name }}"
-            kubeplay_app_name: samba_remove
-      rescue:
-        - name: Ignore Samba kubeplay remove failure
-          ansible.builtin.debug:
-            msg: "Skipping kubeplay remove failure."
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps:
+          - name: samba_remove
+            tasks: apps/podman_kube_play.yml
+            vars:
+              kubeplay_action: remove
+              kubeplay_pod_name: "{{ samba_deploy_pod_name }}"
 
     - name: Run Samba pod with kubeplay
       when: samba_deploy_kubeplay_run | bool
       tags:
         - deployment
-      block:
-        - name: Run Samba kubeplay run
-          ansible.builtin.include_role:
-            name: lit.foundational.kubeplay
-          vars:
-            kubeplay_apps: []
-            kubeplay_action: run
-            kubeplay_pod_name: "{{ samba_deploy_pod_name }}"
-            kubeplay_pod_manifest_path: "{{ samba_deploy_pod_manifest_path }}"
-            kubeplay_app_name: samba_run
-      rescue:
-        - name: Ignore Samba kubeplay run failure
-          ansible.builtin.debug:
-            msg: "Skipping kubeplay run failure."
-
-    - name: Check Samba pod after kubeplay run
-      ansible.builtin.command: "podman pod exists {{ samba_deploy_pod_name }}"
-      register: samba_deploy_pod_exists_after_kubeplay
-      changed_when: false
-      failed_when: false
-      when: samba_deploy_kubeplay_run | bool
-      tags:
-        - deployment
-
-    - name: Run Samba pod directly when kubeplay did not start it
-      ansible.builtin.command: "podman kube play {{ samba_deploy_pod_manifest_path }}"
-      changed_when: true
-      when:
-        - samba_deploy_kubeplay_run | bool
-        - samba_deploy_pod_exists_after_kubeplay.rc | default(1) != 0
-      tags:
-        - deployment
+      ansible.builtin.include_role:
+        name: lit.foundational.kubeplay
+      vars:
+        kubeplay_apps:
+          - name: samba_run
+            tasks: apps/podman_kube_play.yml
+            vars:
+              kubeplay_action: run
+              kubeplay_pod_name: "{{ samba_deploy_pod_name }}"
+              kubeplay_pod_manifest_path: "{{ samba_deploy_pod_manifest_path }}"
