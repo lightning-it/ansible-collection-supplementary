@@ -25,5 +25,6 @@
       ansible.builtin.apt:
         name:
           - curl
+          - netcat-openbsd
           - podman
         state: present

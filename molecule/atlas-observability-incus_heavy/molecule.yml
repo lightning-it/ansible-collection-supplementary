@@ -10,6 +10,8 @@ dependency:
     /tmp/codex-atlas-obs/ansible_collections/lit/foundational
     && ln -sfn /home/rene/sources/modulix-automation/ansible/collections/ansible_collections/community/general
     /tmp/codex-atlas-obs/ansible_collections/community/general
+    && ln -sfn /home/rene/sources/modulix-automation/ansible/collections/ansible_collections/community/hashi_vault
+    /tmp/codex-atlas-obs/ansible_collections/community/hashi_vault
 
 driver:
   name: default

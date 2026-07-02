@@ -2,37 +2,30 @@
 - name: Manage Checkmk systemd unit
   when:
     - checkmk_deploy_manage_systemd | bool
-    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+    - ansible_facts.service_mgr | default('') == 'systemd'
     - not ansible_check_mode
   tags:
     - systemd
   block:
-    - name: Escape kube play manifest path
-      ansible.builtin.command:
-        cmd: "systemd-escape {{ checkmk_deploy_pod_manifest_path }}"
-      register: checkmk_deploy_systemd_name
-      changed_when: false
-
-    - name: Ensure podman-kube drop-in directory exists
-      ansible.builtin.file:
-        path: "/etc/systemd/system/podman-kube@{{ checkmk_deploy_systemd_name.stdout }}.service.d"
-        state: directory
-        mode: '0755'
-
-    - name: Enable and start Podman kube systemd unit
-      ansible.builtin.systemd:
-        name: "podman-kube@{{ checkmk_deploy_systemd_name.stdout }}.service"
-        enabled: true
-        state: >-
+    - name: Manage Checkmk persistent container service
+      ansible.builtin.include_role:
+        name: lit.foundational.podman_systemd
+      vars:
+        podman_systemd_action: >-
           {{
             'restarted'
             if (
               checkmk_deploy_kubeplay_remove | default(false) | bool
               or checkmk_deploy_kubeplay_run | default(false) | bool
             )
-            else 'started'
+            else 'present'
           }}
-        daemon_reload: true
+        podman_systemd_unit_name: "{{ checkmk_deploy_systemd_unit_name }}"
+        podman_systemd_description: "{{ checkmk_deploy_systemd_description }}"
+        podman_systemd_manifest_path: "{{ checkmk_deploy_pod_manifest_path }}"
+        podman_systemd_scope: "{{ checkmk_deploy_systemd_scope }}"
+        podman_systemd_quadlet_dir: "{{ checkmk_deploy_quadlet_dir }}"
+        podman_systemd_enabled: "{{ checkmk_deploy_systemd_enabled }}"
 
     - name: Wait until Checkmk endpoint is reachable
       ansible.builtin.uri:

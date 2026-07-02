@@ -3,19 +3,23 @@ galaxy_info:
   role_name: grafana_deploy
   namespace: lit
   author: Lightning IT
-  description: Deploy Grafana for Loki log exploration.
+  description: Deploy Grafana with Podman Quadlet for Loki log exploration.
   company: Lightning IT
   license: MIT
   min_ansible_version: "2.18"
   platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
     - name: EL
       versions:
         - "9"
   galaxy_tags:
     - modulix
-    - kubeplay
     - grafana
     - logging
     - podman
+    - quadlet
 
 dependencies: []

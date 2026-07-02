@@ -21,7 +21,7 @@
     regexp: >-
       url: '\{\{ hostvars\[groups\["automationgateway"\]\[0\]\]\["_gateway_proxy_url"\] \}\}/pulp/api/v3/status/'
     replace: >-
-      url: '{{ "{{ hub_upload_readiness_url | default(hostvars[groups[\"automationgateway\"][0]][\"_gateway_proxy_url\"] ~ \"/pulp/api/v3/status/\", true) }}" }}'
+      {% raw %}url: '{{ hub_upload_readiness_url | default(hostvars[groups["automationgateway"][0]]["_gateway_proxy_url"] ~ "/pulp/api/v3/status/", true) }}'{% endraw %}
   loop:
     - upload_collections.yml
     - upload_images.yml

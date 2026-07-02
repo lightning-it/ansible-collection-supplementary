@@ -58,14 +58,12 @@ grafana_deploy_vault_auth_ok: >-
 
 grafana_deploy_install_packages: true
 grafana_deploy_manage_systemd: true
+grafana_deploy_systemd_enabled: true
+grafana_deploy_systemd_unit_name: "{{ grafana_deploy_pod_name }}"
+grafana_deploy_systemd_description: "Grafana container service"
+grafana_deploy_systemd_scope: "system"
+grafana_deploy_quadlet_dir: "/etc/containers/systemd"
 grafana_deploy_skip_runtime: false
 grafana_deploy_skip_deploy: false
 grafana_deploy_kubeplay_remove: false
 grafana_deploy_kubeplay_run: false
-
-grafana_deploy_systemd_unit_name: >-
-  {{
-    'podman-kube@'
-    ~ (grafana_deploy_pod_manifest_path | basename | regex_replace('\\.ya?ml$', ''))
-    ~ '.service'
-  }}
