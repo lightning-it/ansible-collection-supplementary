@@ -1,0 +1,155 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Report disabled Keycloak backup/restore
+  ansible.builtin.debug:
+    msg: "Keycloak realm backup/restore disabled."
+  when: keycloak_backup_restore_action == 'none'
+  tags:
+    - backup
+    - restore
+
+- name: Ensure Keycloak realm backup directory exists
+  ansible.builtin.file:
+    path: "{{ keycloak_backup_restore_file | dirname }}"
+    state: directory
+    mode: '0750'
+  when:
+    - keycloak_backup_restore_execute | bool
+    - keycloak_backup_restore_action in ['backup', 'restore']
+  tags:
+    - backup
+    - restore
+
+- name: Report backup/restore dry run
+  ansible.builtin.debug:
+    msg: >-
+      Keycloak realm {{ keycloak_backup_restore_action }} prepared but not executed.
+      Set keycloak_backup_restore_execute=true to call the Keycloak Admin API.
+  when:
+    - not keycloak_backup_restore_execute | bool
+    - keycloak_backup_restore_action in ['backup', 'restore']
+  tags:
+    - backup
+    - restore
+
+- name: Get Keycloak admin token
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_backup_restore_url }}/realms/{{ keycloak_backup_restore_admin_realm }}/protocol/openid-connect/token
+    method: POST
+    body_format: form-urlencoded
+    body:
+      grant_type: password
+      client_id: "{{ keycloak_backup_restore_token_client_id }}"
+      username: "{{ keycloak_backup_restore_admin_user }}"
+      password: "{{ keycloak_backup_restore_admin_password }}"
+    validate_certs: "{{ keycloak_backup_restore_validate_certs }}"
+    timeout: "{{ keycloak_backup_restore_request_timeout | int }}"
+    status_code: 200
+  register: keycloak_backup_restore_token
+  changed_when: false
+  no_log: true
+  when:
+    - keycloak_backup_restore_execute | bool
+    - keycloak_backup_restore_action in ['backup', 'restore']
+  tags:
+    - backup
+    - restore
+
+- name: Export Keycloak realm
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_backup_restore_url }}/admin/realms/{{ keycloak_backup_restore_realm }}/partial-export
+    method: POST
+    headers:
+      Authorization: "Bearer {{ keycloak_backup_restore_token.json.access_token }}"
+    body_format: json
+    body:
+      exportClients: "{{ keycloak_backup_restore_export_clients | bool }}"
+      exportGroupsAndRoles: "{{ keycloak_backup_restore_export_groups_and_roles | bool }}"
+    validate_certs: "{{ keycloak_backup_restore_validate_certs }}"
+    timeout: "{{ keycloak_backup_restore_request_timeout | int }}"
+    status_code: 200
+  register: keycloak_backup_restore_export
+  no_log: true
+  when:
+    - keycloak_backup_restore_execute | bool
+    - keycloak_backup_restore_action == 'backup'
+  tags:
+    - backup
+
+- name: Write Keycloak realm backup file
+  ansible.builtin.copy:
+    dest: "{{ keycloak_backup_restore_file }}"
+    content: "{{ keycloak_backup_restore_export.json | to_nice_json }}\n"
+    mode: '0600'
+  when:
+    - keycloak_backup_restore_execute | bool
+    - keycloak_backup_restore_action == 'backup'
+  tags:
+    - backup
+
+- name: Prune old Keycloak realm backups
+  when:
+    - keycloak_backup_restore_execute | bool
+    - keycloak_backup_restore_action == 'backup'
+    - keycloak_backup_restore_retention_keep_last | int > 0
+  tags:
+    - backup
+    - retention
+  block:
+    - name: Find Keycloak realm backup files
+      ansible.builtin.find:
+        paths: "{{ keycloak_backup_restore_dir }}"
+        patterns: "keycloak-realm-*.json"
+        file_type: file
+      register: keycloak_backup_restore_files
+
+    - name: Remove old Keycloak realm backup files
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: >-
+        {{
+          (keycloak_backup_restore_files.files | sort(attribute='mtime') | reverse)
+          [keycloak_backup_restore_retention_keep_last | int:]
+        }}
+      when: keycloak_backup_restore_files.files | length > keycloak_backup_restore_retention_keep_last | int
+
+- name: Read Keycloak realm restore file
+  ansible.builtin.slurp:
+    src: "{{ keycloak_backup_restore_file }}"
+  register: keycloak_backup_restore_import_file
+  when:
+    - keycloak_backup_restore_execute | bool
+    - keycloak_backup_restore_action == 'restore'
+  tags:
+    - restore
+
+- name: Restore Keycloak realm objects
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_backup_restore_url }}/admin/realms/{{ keycloak_backup_restore_realm }}/partialImport
+    method: POST
+    headers:
+      Authorization: "Bearer {{ keycloak_backup_restore_token.json.access_token }}"
+    body_format: json
+    body: >-
+      {{
+        (keycloak_backup_restore_import_file.content | b64decode | from_json)
+        | combine({'ifResourceExists': keycloak_backup_restore_restore_if_resource_exists})
+      }}
+    validate_certs: "{{ keycloak_backup_restore_validate_certs }}"
+    timeout: "{{ keycloak_backup_restore_request_timeout | int }}"
+    status_code:
+      - 200
+      - 201
+  no_log: true
+  when:
+    - keycloak_backup_restore_execute | bool
+    - keycloak_backup_restore_action == 'restore'
+  tags:
+    - restore

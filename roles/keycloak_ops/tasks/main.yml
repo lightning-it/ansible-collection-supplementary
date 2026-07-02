@@ -1,0 +1,45 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Inspect Keycloak container status
+  ansible.builtin.command: "podman inspect {{ keycloak_ops_container_name }} --format {{ '{{.State.Status}}' }}"
+  register: keycloak_ops_container_status
+  changed_when: false
+  failed_when: false
+  when: keycloak_ops_action == 'status'
+  tags:
+    - ops
+    - status
+
+- name: Report Keycloak container status
+  ansible.builtin.debug:
+    msg: "Keycloak container {{ keycloak_ops_container_name }} status: {{ keycloak_ops_container_status.stdout | default('unknown') | trim }}"
+  when: keycloak_ops_action == 'status'
+  tags:
+    - ops
+    - status
+
+- name: Restart Keycloak through systemd
+  ansible.builtin.systemd:
+    name: "{{ keycloak_ops_systemd_unit_name }}"
+    state: restarted
+    daemon_reload: true
+  when:
+    - keycloak_ops_action == 'restart'
+    - keycloak_ops_use_systemd | bool
+    - keycloak_ops_systemd_unit_name | trim | length > 0
+  tags:
+    - ops
+    - restart
+
+- name: Restart Keycloak container directly
+  ansible.builtin.command: "podman restart {{ keycloak_ops_container_name }}"
+  changed_when: true
+  when:
+    - keycloak_ops_action == 'restart'
+    - not keycloak_ops_use_systemd | bool
+  tags:
+    - ops
+    - restart

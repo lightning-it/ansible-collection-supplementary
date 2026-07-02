@@ -1,0 +1,11 @@
+---
+- name: Validate Samba ops variables
+  ansible.builtin.assert:
+    that:
+      - samba_ops_action in samba_ops_allowed_actions
+      - samba_ops_allowed_actions is sequence
+      - samba_ops_allowed_actions is not string
+      - samba_ops_pod_name | default('', true) | trim | length > 0
+      - samba_ops_container_name | default('', true) | trim | length > 0
+    fail_msg: "Samba ops variables are missing or invalid."
+  tags: always

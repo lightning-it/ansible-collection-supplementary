@@ -1,0 +1,8 @@
+---
+keycloak_config_skip_apply: true
+keycloak_config_runtime_env: {}
+keycloak_config_extra_start_args: []
+keycloak_config_hostname: "{{ keycloak_deploy_hostname | default('', true) }}"
+keycloak_config_proxy_headers: "{{ keycloak_deploy_proxy_headers | default('', true) }}"
+keycloak_config_http_relative_path: "{{ keycloak_deploy_http_relative_path | default('', true) }}"
+keycloak_config_restart_on_change: true

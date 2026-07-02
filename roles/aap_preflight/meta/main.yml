@@ -1,0 +1,19 @@
+---
+galaxy_info:
+  role_name: aap_preflight
+  namespace: lit
+  author: Rene Osorio
+  description: Validate AAP setup prerequisites before prepare or deploy.
+  company: Lightning IT
+  license: MIT
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "all"
+  galaxy_tags:
+    - modulix
+    - aap
+    - preflight
+
+dependencies: []

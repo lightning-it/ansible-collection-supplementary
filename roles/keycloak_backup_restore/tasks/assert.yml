@@ -1,0 +1,47 @@
+---
+- name: Validate Keycloak backup/restore variables
+  ansible.builtin.assert:
+    that:
+      - keycloak_backup_restore_action in keycloak_backup_restore_allowed_actions
+      - keycloak_backup_restore_allowed_actions is sequence
+      - keycloak_backup_restore_allowed_actions is not string
+      - keycloak_backup_restore_execute is boolean
+      - keycloak_backup_restore_dir | default('', true) | trim | length > 0
+      - keycloak_backup_restore_file | default('', true) | trim | length > 0
+      - keycloak_backup_restore_url | default('', true) | trim | length > 0
+      - keycloak_backup_restore_validate_certs is boolean
+      - keycloak_backup_restore_request_timeout | int > 0
+      - keycloak_backup_restore_admin_realm | default('', true) | trim | length > 0
+      - keycloak_backup_restore_realm | default('', true) | trim | length > 0
+      - keycloak_backup_restore_admin_user | default('', true) | trim | length > 0
+      - keycloak_backup_restore_token_client_id | default('', true) | trim | length > 0
+      - keycloak_backup_restore_export_clients is boolean
+      - keycloak_backup_restore_export_groups_and_roles is boolean
+      - keycloak_backup_restore_restore_if_resource_exists in ['FAIL', 'SKIP', 'OVERWRITE']
+      - keycloak_backup_restore_retention_keep_last | int >= 0
+    fail_msg: "Keycloak backup/restore variables are missing or invalid."
+  tags: always
+
+- name: Validate Keycloak API secret when execution is enabled
+  ansible.builtin.assert:
+    that:
+      - keycloak_backup_restore_admin_password | default('', true) | trim | length > 0
+    fail_msg: "Set keycloak_backup_restore_admin_password when keycloak_backup_restore_execute=true."
+  when:
+    - keycloak_backup_restore_execute | bool
+    - keycloak_backup_restore_action in ['backup', 'restore']
+  no_log: true
+  tags: always
+
+- name: Validate Keycloak restore confirmation
+  ansible.builtin.assert:
+    that:
+      - keycloak_backup_restore_restore_confirm == 'YES_RESTORE'
+      - keycloak_backup_restore_file | default('', true) | trim | length > 0
+    fail_msg: >-
+      Set keycloak_backup_restore_restore_confirm=YES_RESTORE and
+      keycloak_backup_restore_file for Keycloak realm restore.
+  when:
+    - keycloak_backup_restore_execute | bool
+    - keycloak_backup_restore_action == 'restore'
+  tags: always

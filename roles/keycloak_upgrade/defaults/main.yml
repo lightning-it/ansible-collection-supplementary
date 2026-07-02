@@ -1,0 +1,5 @@
+---
+keycloak_upgrade_execute: false
+keycloak_upgrade_target_image: "{{ keycloak_deploy_image | default('', true) }}"
+keycloak_upgrade_run_backup: true
+keycloak_upgrade_run_validate: true

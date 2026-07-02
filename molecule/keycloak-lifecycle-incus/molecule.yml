@@ -1,0 +1,42 @@
+---
+dependency:
+  name: shell
+  command: "mkdir -p /tmp/codex-keycloak-collections/ansible_collections/lit && ln -sfn /home/rene/sources/ansible-collection-supplementary /tmp/codex-keycloak-collections/ansible_collections/lit/supplementary && ln -sfn /home/rene/sources/ansible-collection-foundational /tmp/codex-keycloak-collections/ansible_collections/lit/foundational"
+
+driver:
+  name: default
+
+platforms:
+  - name: lit-keycloak-lifecycle-ct
+    image: images:ubuntu/24.04
+    type: container
+
+provisioner:
+  name: ansible
+  inventory:
+    host_vars:
+      lit-keycloak-lifecycle-ct:
+        ansible_connection: community.general.incus
+        ansible_python_interpreter: /usr/bin/python3
+  env:
+    ANSIBLE_COLLECTIONS_PATH: "/tmp/codex-keycloak-collections:/home/rene/sources/modulix-automation/ansible/collections:/home/rene/.ansible/collections:/usr/share/ansible/collections"
+    ANSIBLE_ROLES_PATH: "/home/rene/sources/ansible-collection-supplementary/roles:/home/rene/.ansible/roles:/usr/share/ansible/roles:/etc/ansible/roles"
+  playbooks:
+    create: create.yml
+    converge: converge.yml
+    verify: verify.yml
+    destroy: destroy.yml
+
+scenario:
+  name: keycloak-lifecycle-incus
+  test_sequence:
+    - dependency
+    - syntax
+    - create
+    - converge
+    - idempotence
+    - verify
+    - destroy
+
+verifier:
+  name: ansible

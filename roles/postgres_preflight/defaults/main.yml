@@ -1,0 +1,8 @@
+---
+postgres_preflight_strict: true
+postgres_preflight_check_podman: true
+postgres_preflight_check_systemd: "{{ postgres_deploy_manage_systemd | default(true) }}"
+postgres_preflight_check_ports: true
+postgres_preflight_required_ports:
+  - "{{ postgres_deploy_port | default(5432) }}"
+postgres_preflight_check_vault_auth: false

@@ -1,0 +1,31 @@
+---
+postgres_backup_restore_action: "none"
+postgres_backup_restore_allowed_actions:
+  - none
+  - backup
+  - restore
+postgres_backup_restore_execute: false
+
+postgres_backup_restore_backup_dir: "/srv/postgres/backups"
+postgres_backup_restore_file: >-
+  {{ postgres_backup_restore_backup_dir }}/postgres-{{ postgres_backup_restore_db_name }}-{{ ansible_date_time.iso8601_basic_short | default('manual') }}.dump
+postgres_backup_restore_restore_source: "{{ postgres_backup_restore_file }}"
+postgres_backup_restore_restore_confirm: ""
+postgres_backup_restore_retention_keep_last: 14
+
+postgres_backup_restore_db_name: "{{ postgres_deploy_db_name | default('postgres', true) }}"
+postgres_backup_restore_db_user: "{{ postgres_deploy_db_user | default('postgres', true) }}"
+postgres_backup_restore_db_password: "{{ postgres_deploy_db_password | default('', true) }}"
+postgres_backup_restore_db_host: "{{ postgres_deploy_host_ip | default('127.0.0.1', true) }}"
+postgres_backup_restore_db_port: "{{ postgres_deploy_port | default(5432, true) }}"
+
+# custom uses pg_dump -Fc and pg_restore. plain uses SQL and psql.
+postgres_backup_restore_format: "custom"
+postgres_backup_restore_execution_mode: "client"
+postgres_backup_restore_container_name: "{{ postgres_deploy_container_name | default('postgres', true) }}"
+postgres_backup_restore_clean: true
+postgres_backup_restore_if_exists: true
+postgres_backup_restore_create_db: false
+postgres_backup_restore_extra_pg_dump_args: []
+postgres_backup_restore_extra_pg_restore_args: []
+postgres_backup_restore_extra_psql_args: []

@@ -1,0 +1,47 @@
+---
+- name: Verify heavy Keycloak lifecycle deployment
+  hosts: all
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Check Keycloak master realm endpoint
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/realms/master
+        method: GET
+        status_code: 200
+        timeout: 30
+      changed_when: false
+
+    - name: Check Keycloak OIDC discovery endpoint
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/realms/master/.well-known/openid-configuration
+        method: GET
+        status_code: 200
+        timeout: 30
+      changed_when: false
+
+    - name: Inspect Keycloak pod
+      ansible.builtin.command: podman pod exists keycloak-heavy
+      changed_when: false
+
+    - name: Inspect PostgreSQL pod
+      ansible.builtin.command: podman pod exists keycloak-heavy-postgres
+      changed_when: false
+
+    - name: Check Keycloak realm backup file
+      ansible.builtin.stat:
+        path: /srv/keycloak-heavy/backups/keycloak-master-realm.json
+      register: keycloak_heavy_realm_backup
+
+    - name: Check PostgreSQL backup file
+      ansible.builtin.stat:
+        path: /srv/keycloak-heavy/backups/keycloak-postgres.dump
+      register: keycloak_heavy_postgres_backup
+
+    - name: Assert backup files were created
+      ansible.builtin.assert:
+        that:
+          - keycloak_heavy_realm_backup.stat.exists
+          - keycloak_heavy_realm_backup.stat.size | int > 0
+          - keycloak_heavy_postgres_backup.stat.exists
+          - keycloak_heavy_postgres_backup.stat.size | int > 0

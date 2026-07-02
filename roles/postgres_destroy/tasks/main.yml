@@ -1,0 +1,56 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Report PostgreSQL destroy dry run
+  ansible.builtin.debug:
+    msg: "PostgreSQL destroy is disabled. Set postgres_destroy_execute=true to remove runtime resources."
+  when: not postgres_destroy_execute | bool
+  tags:
+    - destroy
+
+- name: Remove PostgreSQL pod with kubeplay
+  ansible.builtin.include_role:
+    name: lit.foundational.kubeplay
+  vars:
+    kubeplay_apps: []
+    kubeplay_action: remove
+    kubeplay_pod_name: "{{ postgres_destroy_pod_name }}"
+    kubeplay_app_name: postgres_remove
+  when: postgres_destroy_execute | bool
+  tags:
+    - destroy
+
+- name: Remove PostgreSQL pod manifest
+  ansible.builtin.file:
+    path: "{{ postgres_destroy_pod_manifest_path }}"
+    state: absent
+  when: postgres_destroy_execute | bool
+  tags:
+    - destroy
+
+- name: Remove PostgreSQL data paths
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ postgres_destroy_data_paths }}"
+  when:
+    - postgres_destroy_execute | bool
+    - postgres_destroy_remove_data | bool
+  tags:
+    - destroy
+    - data
+
+- name: Remove PostgreSQL secret paths
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ postgres_destroy_secret_paths }}"
+  when:
+    - postgres_destroy_execute | bool
+    - postgres_destroy_remove_secrets | bool
+  no_log: true
+  tags:
+    - destroy
+    - secrets

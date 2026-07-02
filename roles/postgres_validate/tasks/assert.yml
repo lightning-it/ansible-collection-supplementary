@@ -1,0 +1,12 @@
+---
+- name: Validate PostgreSQL validate variables
+  ansible.builtin.assert:
+    that:
+      - postgres_validate_strict is boolean
+      - postgres_validate_db_name | default('', true) | trim | length > 0
+      - postgres_validate_db_user | default('', true) | trim | length > 0
+      - postgres_validate_db_host | default('', true) | trim | length > 0
+      - postgres_validate_db_port | int > 0
+      - postgres_validate_query | default('', true) | trim | length > 0
+    fail_msg: "PostgreSQL validate variables are missing or invalid."
+  tags: always

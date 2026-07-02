@@ -1,0 +1,10 @@
+---
+# Orchestrator switches for the PostgreSQL lifecycle.
+postgres_run_preflight: true
+postgres_run_deploy: true
+postgres_run_config: true
+postgres_run_validate: true
+postgres_run_ops: false
+postgres_run_backup_restore: false
+postgres_run_upgrade: false
+postgres_run_destroy: false

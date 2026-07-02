@@ -1,0 +1,41 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Check package manager availability
+  ansible.builtin.command: sh -c 'command -v apt-get || command -v dnf || command -v yum'
+  register: samba_preflight_package_manager
+  changed_when: false
+  failed_when:
+    - samba_preflight_strict | bool
+    - samba_preflight_package_manager.rc != 0
+  when: samba_preflight_check_packages | bool
+  tags:
+    - preflight
+
+- name: Check systemd availability
+  ansible.builtin.command: systemctl --version
+  register: samba_preflight_systemd
+  changed_when: false
+  failed_when:
+    - samba_preflight_strict | bool
+    - samba_preflight_systemd.rc != 0
+  when: samba_preflight_check_systemd | bool
+  tags:
+    - preflight
+
+- name: Check Samba ports are free
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ item }}"
+    state: stopped
+    timeout: 1
+  loop: "{{ samba_preflight_required_ports }}"
+  register: samba_preflight_ports
+  failed_when:
+    - samba_preflight_strict | bool
+    - samba_preflight_ports is failed
+  when: samba_preflight_check_ports | bool
+  tags:
+    - preflight

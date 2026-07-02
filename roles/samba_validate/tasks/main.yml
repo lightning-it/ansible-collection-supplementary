@@ -1,0 +1,69 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Validate Samba configuration with testparm
+  ansible.builtin.command:
+    argv:
+      - testparm
+      - -s
+      - "{{ samba_validate_config_path }}"
+  register: samba_validate_testparm
+  changed_when: false
+  failed_when:
+    - samba_validate_strict | bool
+    - samba_validate_testparm.rc != 0
+  when: samba_validate_use_testparm | bool
+  tags:
+    - validate
+
+- name: Check Samba TCP port
+  ansible.builtin.wait_for:
+    host: "{{ samba_validate_host }}"
+    port: "{{ samba_validate_smb_port | int }}"
+    timeout: "{{ samba_validate_timeout | int }}"
+    state: started
+  register: samba_validate_port
+  failed_when:
+    - samba_validate_strict | bool
+    - samba_validate_port is failed
+  tags:
+    - validate
+
+- name: List Samba shares with smbclient
+  ansible.builtin.command:
+    argv:
+      - smbclient
+      - -L
+      - "//{{ samba_validate_host }}"
+      - -p
+      - "{{ samba_validate_smb_port | string }}"
+      - -N
+      - -m
+      - SMB3
+  register: samba_validate_smbclient
+  changed_when: false
+  failed_when:
+    - samba_validate_strict | bool
+    - samba_validate_smbclient.rc != 0
+  when: samba_validate_use_smbclient | bool
+  tags:
+    - validate
+
+- name: Assert expected Samba share is listed
+  ansible.builtin.assert:
+    that:
+      - samba_validate_share_name in samba_validate_smbclient.stdout
+    fail_msg: "Samba share {{ samba_validate_share_name }} was not listed by smbclient."
+  when:
+    - samba_validate_use_smbclient | bool
+    - samba_validate_strict | bool
+  tags:
+    - validate
+
+- name: Report Samba validation status
+  ansible.builtin.debug:
+    msg: "Samba validation completed for //{{ samba_validate_host }}:{{ samba_validate_smb_port }}/{{ samba_validate_share_name }}."
+  tags:
+    - validate

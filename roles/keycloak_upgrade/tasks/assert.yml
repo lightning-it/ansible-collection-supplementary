@@ -1,0 +1,10 @@
+---
+- name: Validate Keycloak upgrade variables
+  ansible.builtin.assert:
+    that:
+      - keycloak_upgrade_execute is boolean
+      - keycloak_upgrade_target_image | default('', true) | trim | length > 0
+      - keycloak_upgrade_run_backup is boolean
+      - keycloak_upgrade_run_validate is boolean
+    fail_msg: "Keycloak upgrade variables are missing or invalid."
+  tags: always

@@ -1,0 +1,45 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Report PostgreSQL upgrade dry run
+  ansible.builtin.debug:
+    msg: >-
+      PostgreSQL upgrade prepared for image {{ postgres_upgrade_target_image }}.
+      Set postgres_upgrade_execute=true to apply.
+  when: not postgres_upgrade_execute | bool
+  tags:
+    - upgrade
+
+- name: Back up PostgreSQL before upgrade
+  ansible.builtin.include_role:
+    name: postgres_backup_restore
+  vars:
+    postgres_backup_restore_action: backup
+  when:
+    - postgres_upgrade_execute | bool
+    - postgres_upgrade_run_backup | bool
+  tags:
+    - upgrade
+    - backup
+
+- name: Apply PostgreSQL target image
+  ansible.builtin.include_role:
+    name: postgres_deploy
+  vars:
+    postgres_deploy_image: "{{ postgres_upgrade_target_image }}"
+  when: postgres_upgrade_execute | bool
+  tags:
+    - upgrade
+    - deployment
+
+- name: Validate PostgreSQL after upgrade
+  ansible.builtin.include_role:
+    name: postgres_validate
+  when:
+    - postgres_upgrade_execute | bool
+    - postgres_upgrade_run_validate | bool
+  tags:
+    - upgrade
+    - validate

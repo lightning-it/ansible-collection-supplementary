@@ -74,7 +74,7 @@ repos:
           then echo "ERROR: Docker API is required for renovate-config-validator in CI." >&2; exit 1; fi;
           echo "Skipping renovate config validation because Docker API is unavailable locally." >&2; exit 0; fi;
           docker run --rm -v "$WUNDER_DEVTOOLS_HOST_WORKSPACE":/repo -w /repo
-          renovate/renovate:latest renovate-config-validator'
+          docker.io/renovate/renovate:latest renovate-config-validator'
 
       # -------------------------------------------------------------------
       # ansible-collection smoke test (via ee-wunder-devtools-ubi9)

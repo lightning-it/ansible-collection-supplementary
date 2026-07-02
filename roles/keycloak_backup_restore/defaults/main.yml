@@ -1,0 +1,27 @@
+---
+keycloak_backup_restore_action: "backup"
+keycloak_backup_restore_allowed_actions:
+  - none
+  - backup
+  - restore
+keycloak_backup_restore_execute: false
+keycloak_backup_restore_dir: "/srv/keycloak/realm-backups"
+keycloak_backup_restore_file: >-
+  {{ keycloak_backup_restore_dir }}/keycloak-realm-{{ keycloak_backup_restore_realm }}-{{ ansible_date_time.iso8601_basic_short | default('manual') }}.json
+
+# Keycloak Admin API access
+keycloak_backup_restore_url: "{{ keycloak_deploy_api_url_effective | default('http://127.0.0.1:8080', true) }}"
+keycloak_backup_restore_validate_certs: "{{ keycloak_deploy_validate_certs | default(false, true) }}"
+keycloak_backup_restore_request_timeout: 30
+keycloak_backup_restore_admin_realm: "master"
+keycloak_backup_restore_realm: "{{ keycloak_validate_realm | default('master', true) }}"
+keycloak_backup_restore_admin_user: "{{ keycloak_deploy_admin_user | default('admin', true) }}"
+keycloak_backup_restore_admin_password: "{{ keycloak_deploy_admin_password | default('', true) }}"
+keycloak_backup_restore_token_client_id: "admin-cli"
+
+# Realm export/import controls
+keycloak_backup_restore_export_clients: true
+keycloak_backup_restore_export_groups_and_roles: true
+keycloak_backup_restore_restore_if_resource_exists: "OVERWRITE"
+keycloak_backup_restore_restore_confirm: ""
+keycloak_backup_restore_retention_keep_last: 14

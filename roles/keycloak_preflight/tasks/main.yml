@@ -1,0 +1,54 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Check podman availability
+  ansible.builtin.command: podman --version
+  register: keycloak_preflight_podman
+  changed_when: false
+  failed_when:
+    - keycloak_preflight_strict | bool
+    - keycloak_preflight_podman.rc != 0
+  when: keycloak_preflight_check_podman | bool
+  tags:
+    - preflight
+    - runtime
+
+- name: Check systemd availability
+  ansible.builtin.assert:
+    that:
+      - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+    fail_msg: "Keycloak systemd management requires a systemd host."
+  when:
+    - keycloak_preflight_check_systemd | bool
+    - keycloak_preflight_strict | bool
+  tags:
+    - preflight
+    - systemd
+
+- name: Check Keycloak ports
+  ansible.builtin.wait_for:
+    host: "{{ keycloak_deploy_host_ip | default('127.0.0.1') }}"
+    port: "{{ item | int }}"
+    state: stopped
+    timeout: 1
+  loop: "{{ keycloak_preflight_required_ports }}"
+  when: keycloak_preflight_check_ports | bool
+  tags:
+    - preflight
+    - network
+
+- name: Validate Vault auth inputs when requested
+  ansible.builtin.assert:
+    that:
+      - keycloak_deploy_vault_address | default('', true) | trim | length > 0
+      - keycloak_deploy_vault_auth_ok | default(false) | bool
+    fail_msg: "Keycloak Vault-backed secrets require Vault address and valid auth inputs."
+  when:
+    - keycloak_preflight_check_vault_auth | bool
+    - keycloak_preflight_strict | bool
+  no_log: true
+  tags:
+    - preflight
+    - secrets

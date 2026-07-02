@@ -1,0 +1,13 @@
+---
+- name: Validate Keycloak preflight variables
+  ansible.builtin.assert:
+    that:
+      - keycloak_preflight_strict is boolean
+      - keycloak_preflight_check_podman is boolean
+      - keycloak_preflight_check_systemd is boolean
+      - keycloak_preflight_check_ports is boolean
+      - keycloak_preflight_required_ports is sequence
+      - keycloak_preflight_required_ports is not string
+      - keycloak_preflight_check_vault_auth is boolean
+    fail_msg: "Keycloak preflight variables are missing or invalid."
+  tags: always

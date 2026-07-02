@@ -1,0 +1,11 @@
+---
+- name: Validate Keycloak config variables
+  ansible.builtin.assert:
+    that:
+      - keycloak_config_skip_apply is boolean
+      - keycloak_config_runtime_env is mapping
+      - keycloak_config_extra_start_args is sequence
+      - keycloak_config_extra_start_args is not string
+      - keycloak_config_restart_on_change is boolean
+    fail_msg: "Keycloak config variables are missing or invalid."
+  tags: always

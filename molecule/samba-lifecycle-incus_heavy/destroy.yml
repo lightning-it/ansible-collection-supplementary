@@ -1,0 +1,14 @@
+---
+- name: Destroy Incus instances for heavy Samba lifecycle Molecule
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    samba_molecule_incus_instances: "{{ molecule_yml.platforms }}"
+  tasks:
+    - name: Delete Incus instances
+      ansible.builtin.command: "incus delete -f {{ item.name }}"
+      loop: "{{ samba_molecule_incus_instances }}"
+      register: samba_molecule_incus_delete
+      changed_when: samba_molecule_incus_delete.rc == 0
+      failed_when: false

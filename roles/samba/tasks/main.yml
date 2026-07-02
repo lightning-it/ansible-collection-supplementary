@@ -1,0 +1,57 @@
+---
+- name: Run Samba preflight
+  ansible.builtin.include_role:
+    name: samba_preflight
+  when: samba_run_preflight | bool
+  tags:
+    - preflight
+
+- name: Deploy Samba
+  ansible.builtin.include_role:
+    name: samba_deploy
+  when: samba_run_deploy | bool
+  tags:
+    - deployment
+
+- name: Configure Samba
+  ansible.builtin.include_role:
+    name: samba_config
+  when: samba_run_config | bool
+  tags:
+    - config
+
+- name: Validate Samba
+  ansible.builtin.include_role:
+    name: samba_validate
+  when: samba_run_validate | bool
+  tags:
+    - validate
+
+- name: Run Samba operations
+  ansible.builtin.include_role:
+    name: samba_ops
+  when: samba_run_ops | bool
+  tags:
+    - ops
+
+- name: Run Samba backup or restore
+  ansible.builtin.include_role:
+    name: samba_backup_restore
+  when: samba_run_backup_restore | bool
+  tags:
+    - backup
+    - restore
+
+- name: Upgrade Samba
+  ansible.builtin.include_role:
+    name: samba_upgrade
+  when: samba_run_upgrade | bool
+  tags:
+    - upgrade
+
+- name: Destroy Samba
+  ansible.builtin.include_role:
+    name: samba_destroy
+  when: samba_run_destroy | bool
+  tags:
+    - destroy

@@ -1,0 +1,15 @@
+---
+- name: Validate Keycloak validate variables
+  ansible.builtin.assert:
+    that:
+      - keycloak_validate_strict is boolean
+      - keycloak_validate_url | default('', true) | trim | length > 0
+      - keycloak_validate_realm | default('', true) | trim | length > 0
+      - keycloak_validate_validate_certs is boolean
+      - keycloak_validate_request_timeout | int > 0
+      - keycloak_validate_expected_realms is sequence
+      - keycloak_validate_expected_realms is not string
+      - keycloak_validate_expected_clients is sequence
+      - keycloak_validate_expected_clients is not string
+    fail_msg: "Keycloak validate variables are missing or invalid."
+  tags: always

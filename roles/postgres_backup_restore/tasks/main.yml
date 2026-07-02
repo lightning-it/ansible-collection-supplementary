@@ -1,0 +1,222 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Report disabled PostgreSQL backup/restore
+  ansible.builtin.debug:
+    msg: "PostgreSQL backup/restore disabled."
+  when: postgres_backup_restore_action == 'none'
+  tags:
+    - backup
+    - restore
+
+- name: Ensure PostgreSQL backup directory exists
+  ansible.builtin.file:
+    path: >-
+      {{
+        postgres_backup_restore_file | dirname
+        if postgres_backup_restore_action == 'backup'
+        else postgres_backup_restore_backup_dir
+      }}
+    state: directory
+    mode: '0750'
+  when:
+    - postgres_backup_restore_action in ['backup', 'restore']
+    - postgres_backup_restore_execute | bool
+  tags:
+    - backup
+    - restore
+
+- name: Report PostgreSQL backup/restore dry run
+  ansible.builtin.debug:
+    msg: >-
+      PostgreSQL {{ postgres_backup_restore_action }} prepared but not executed.
+      Set postgres_backup_restore_execute=true to run database commands.
+  when:
+    - postgres_backup_restore_action in ['backup', 'restore']
+    - not postgres_backup_restore_execute | bool
+  tags:
+    - backup
+    - restore
+
+- name: Run PostgreSQL backup
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [
+          'pg_dump',
+          '--host', postgres_backup_restore_db_host,
+          '--port', postgres_backup_restore_db_port | string,
+          '--username', postgres_backup_restore_db_user,
+          '--file', postgres_backup_restore_file
+        ]
+        + (['--format', 'custom'] if postgres_backup_restore_format == 'custom' else ['--format', 'plain'])
+        + postgres_backup_restore_extra_pg_dump_args
+        + [postgres_backup_restore_db_name]
+      }}
+  environment:
+    PGPASSWORD: "{{ postgres_backup_restore_db_password }}"
+  no_log: "{{ postgres_backup_restore_db_password | default('', true) | length > 0 }}"
+  changed_when: true
+  when:
+    - postgres_backup_restore_execute | bool
+    - postgres_backup_restore_action == 'backup'
+    - postgres_backup_restore_execution_mode == 'client'
+  tags:
+    - backup
+
+- name: Run PostgreSQL backup inside Podman container
+  ansible.builtin.shell: >-
+    podman exec
+    -e PGPASSWORD={{ postgres_backup_restore_db_password | quote }}
+    {{ postgres_backup_restore_container_name | quote }}
+    pg_dump
+    --host {{ postgres_backup_restore_db_host | quote }}
+    --port {{ postgres_backup_restore_db_port | string | quote }}
+    --username {{ postgres_backup_restore_db_user | quote }}
+    --format {{ ('custom' if postgres_backup_restore_format == 'custom' else 'plain') | quote }}
+    {{ postgres_backup_restore_extra_pg_dump_args | map('quote') | join(' ') }}
+    {{ postgres_backup_restore_db_name | quote }}
+    > {{ postgres_backup_restore_file | quote }}
+  no_log: "{{ postgres_backup_restore_db_password | default('', true) | length > 0 }}"
+  changed_when: true
+  when:
+    - postgres_backup_restore_execute | bool
+    - postgres_backup_restore_action == 'backup'
+    - postgres_backup_restore_execution_mode == 'podman'
+  tags:
+    - backup
+
+- name: Prune old PostgreSQL backups
+  when:
+    - postgres_backup_restore_execute | bool
+    - postgres_backup_restore_action == 'backup'
+    - postgres_backup_restore_retention_keep_last | int > 0
+  tags:
+    - backup
+    - retention
+  block:
+    - name: Find PostgreSQL backup files
+      ansible.builtin.find:
+        paths: "{{ postgres_backup_restore_backup_dir }}"
+        patterns:
+          - "postgres-*.dump"
+          - "postgres-*.sql"
+        file_type: file
+      register: postgres_backup_restore_files
+
+    - name: Remove old PostgreSQL backup files
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: >-
+        {{
+          (postgres_backup_restore_files.files | sort(attribute='mtime') | reverse)
+          [postgres_backup_restore_retention_keep_last | int:]
+        }}
+      when: postgres_backup_restore_files.files | length > postgres_backup_restore_retention_keep_last | int
+
+- name: Restore PostgreSQL custom-format backup
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [
+          'pg_restore',
+          '--host', postgres_backup_restore_db_host,
+          '--port', postgres_backup_restore_db_port | string,
+          '--username', postgres_backup_restore_db_user,
+          '--dbname', postgres_backup_restore_db_name
+        ]
+        + (['--clean'] if postgres_backup_restore_clean | bool else [])
+        + (['--if-exists'] if postgres_backup_restore_if_exists | bool else [])
+        + (['--create'] if postgres_backup_restore_create_db | bool else [])
+        + postgres_backup_restore_extra_pg_restore_args
+        + [postgres_backup_restore_restore_source]
+      }}
+  environment:
+    PGPASSWORD: "{{ postgres_backup_restore_db_password }}"
+  no_log: "{{ postgres_backup_restore_db_password | default('', true) | length > 0 }}"
+  changed_when: true
+  when:
+    - postgres_backup_restore_execute | bool
+    - postgres_backup_restore_action == 'restore'
+    - postgres_backup_restore_format == 'custom'
+    - postgres_backup_restore_execution_mode == 'client'
+  tags:
+    - restore
+
+- name: Restore PostgreSQL custom-format backup inside Podman container
+  ansible.builtin.shell: >-
+    podman exec
+    -i
+    -e PGPASSWORD={{ postgres_backup_restore_db_password | quote }}
+    {{ postgres_backup_restore_container_name | quote }}
+    pg_restore
+    --host {{ postgres_backup_restore_db_host | quote }}
+    --port {{ postgres_backup_restore_db_port | string | quote }}
+    --username {{ postgres_backup_restore_db_user | quote }}
+    --dbname {{ postgres_backup_restore_db_name | quote }}
+    {% if postgres_backup_restore_clean | bool %}--clean{% endif %}
+    {% if postgres_backup_restore_if_exists | bool %}--if-exists{% endif %}
+    {% if postgres_backup_restore_create_db | bool %}--create{% endif %}
+    {{ postgres_backup_restore_extra_pg_restore_args | map('quote') | join(' ') }}
+    < {{ postgres_backup_restore_restore_source | quote }}
+  no_log: "{{ postgres_backup_restore_db_password | default('', true) | length > 0 }}"
+  changed_when: true
+  when:
+    - postgres_backup_restore_execute | bool
+    - postgres_backup_restore_action == 'restore'
+    - postgres_backup_restore_format == 'custom'
+    - postgres_backup_restore_execution_mode == 'podman'
+  tags:
+    - restore
+
+- name: Restore PostgreSQL plain SQL backup
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [
+          'psql',
+          '--host', postgres_backup_restore_db_host,
+          '--port', postgres_backup_restore_db_port | string,
+          '--username', postgres_backup_restore_db_user,
+          '--dbname', postgres_backup_restore_db_name,
+          '--file', postgres_backup_restore_restore_source
+        ]
+        + postgres_backup_restore_extra_psql_args
+      }}
+  environment:
+    PGPASSWORD: "{{ postgres_backup_restore_db_password }}"
+  no_log: "{{ postgres_backup_restore_db_password | default('', true) | length > 0 }}"
+  changed_when: true
+  when:
+    - postgres_backup_restore_execute | bool
+    - postgres_backup_restore_action == 'restore'
+    - postgres_backup_restore_format == 'plain'
+    - postgres_backup_restore_execution_mode == 'client'
+  tags:
+    - restore
+
+- name: Restore PostgreSQL plain SQL backup inside Podman container
+  ansible.builtin.shell: >-
+    podman exec
+    -i
+    -e PGPASSWORD={{ postgres_backup_restore_db_password | quote }}
+    {{ postgres_backup_restore_container_name | quote }}
+    psql
+    --host {{ postgres_backup_restore_db_host | quote }}
+    --port {{ postgres_backup_restore_db_port | string | quote }}
+    --username {{ postgres_backup_restore_db_user | quote }}
+    --dbname {{ postgres_backup_restore_db_name | quote }}
+    {{ postgres_backup_restore_extra_psql_args | map('quote') | join(' ') }}
+    < {{ postgres_backup_restore_restore_source | quote }}
+  no_log: "{{ postgres_backup_restore_db_password | default('', true) | length > 0 }}"
+  changed_when: true
+  when:
+    - postgres_backup_restore_execute | bool
+    - postgres_backup_restore_action == 'restore'
+    - postgres_backup_restore_format == 'plain'
+    - postgres_backup_restore_execution_mode == 'podman'
+  tags:
+    - restore

@@ -1,0 +1,45 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Report Keycloak upgrade dry run
+  ansible.builtin.debug:
+    msg: >-
+      Keycloak upgrade prepared for image {{ keycloak_upgrade_target_image }}.
+      Set keycloak_upgrade_execute=true to apply.
+  when: not keycloak_upgrade_execute | bool
+  tags:
+    - upgrade
+
+- name: Back up Keycloak before upgrade
+  ansible.builtin.include_role:
+    name: keycloak_backup_restore
+  vars:
+    keycloak_backup_restore_action: backup
+  when:
+    - keycloak_upgrade_execute | bool
+    - keycloak_upgrade_run_backup | bool
+  tags:
+    - upgrade
+    - backup
+
+- name: Apply Keycloak target image
+  ansible.builtin.include_role:
+    name: keycloak_deploy
+  vars:
+    keycloak_deploy_image: "{{ keycloak_upgrade_target_image }}"
+  when: keycloak_upgrade_execute | bool
+  tags:
+    - upgrade
+    - deployment
+
+- name: Validate Keycloak after upgrade
+  ansible.builtin.include_role:
+    name: keycloak_validate
+  when:
+    - keycloak_upgrade_execute | bool
+    - keycloak_upgrade_run_validate | bool
+  tags:
+    - upgrade
+    - validate

@@ -1,0 +1,15 @@
+---
+- name: Validate Keycloak destroy variables
+  ansible.builtin.assert:
+    that:
+      - keycloak_destroy_execute is boolean
+      - keycloak_destroy_remove_data is boolean
+      - keycloak_destroy_remove_secrets is boolean
+      - keycloak_destroy_pod_name | default('', true) | trim | length > 0
+      - keycloak_destroy_pod_manifest_path | default('', true) | trim | length > 0
+      - keycloak_destroy_data_paths is sequence
+      - keycloak_destroy_data_paths is not string
+      - keycloak_destroy_secret_paths is sequence
+      - keycloak_destroy_secret_paths is not string
+    fail_msg: "Keycloak destroy variables are missing or invalid."
+  tags: always

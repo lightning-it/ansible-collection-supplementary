@@ -1,0 +1,8 @@
+---
+keycloak_validate_strict: "{{ keycloak_deploy_validate_mode | default('strict') != 'report' }}"
+keycloak_validate_url: "{{ keycloak_deploy_api_url_effective | default('http://127.0.0.1:8080', true) }}"
+keycloak_validate_realm: "{{ keycloak_cac_realm | default('master', true) }}"
+keycloak_validate_validate_certs: "{{ keycloak_deploy_validate_certs | default(false) }}"
+keycloak_validate_request_timeout: 30
+keycloak_validate_expected_realms: []
+keycloak_validate_expected_clients: []

@@ -1,0 +1,9 @@
+---
+samba_run_preflight: true
+samba_run_deploy: true
+samba_run_config: true
+samba_run_validate: true
+samba_run_ops: false
+samba_run_backup_restore: false
+samba_run_upgrade: false
+samba_run_destroy: false
