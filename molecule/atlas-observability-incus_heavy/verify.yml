@@ -1,0 +1,69 @@
+---
+- name: Verify Atlas observability Incus deployment
+  hosts: all
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Check Prometheus systemd service is active
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - prometheus-heavy.service
+      register: atlas_molecule_prometheus_service_status
+      changed_when: false
+
+    - name: Check Alertmanager systemd service is active
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - alertmanager-heavy.service
+      register: atlas_molecule_alertmanager_service_status
+      changed_when: false
+
+    - name: Check expected files exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/containers/systemd/prometheus-heavy.kube
+        - /etc/containers/systemd/alertmanager-heavy.kube
+        - /srv/atlas-observability/quadlet/prometheus.yml
+        - /srv/atlas-observability/quadlet/alertmanager.yml
+        - /srv/atlas-observability/prometheus/config/prometheus.yml
+        - /srv/atlas-observability/prometheus/config/rules/atlas.rules.yml
+        - /srv/atlas-observability/alertmanager/config/alertmanager.yml
+      register: atlas_molecule_expected_files
+
+    - name: Check Prometheus port
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 9090
+        timeout: 10
+        state: started
+
+    - name: Check Alertmanager port
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 9093
+        timeout: 10
+        state: started
+
+    - name: Check Podman runtime
+      ansible.builtin.command:
+        argv:
+          - podman
+          - ps
+          - --format
+          - json
+      register: atlas_molecule_podman_ps
+      changed_when: false
+
+    - name: Assert Atlas observability verification
+      ansible.builtin.assert:
+        that:
+          - atlas_molecule_prometheus_service_status.stdout == 'active'
+          - atlas_molecule_alertmanager_service_status.stdout == 'active'
+          - atlas_molecule_expected_files.results | map(attribute='stat.exists') | min
+          - "'prometheus' in atlas_molecule_podman_ps.stdout"
+          - "'alertmanager' in atlas_molecule_podman_ps.stdout"

@@ -1,0 +1,114 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip Prometheus deployment in check mode
+  ansible.builtin.debug:
+    msg: "Prometheus container deployment skipped in check mode."
+  when:
+    - ansible_check_mode
+    - not prometheus_deploy_skip_runtime | bool
+    - not prometheus_deploy_skip_deploy | bool
+  tags: always
+
+- name: Deploy Prometheus container runtime
+  when:
+    - not prometheus_deploy_skip_runtime | bool
+    - not prometheus_deploy_skip_deploy | bool
+    - not ansible_check_mode
+  block:
+    - name: Install Prometheus container runtime packages
+      ansible.builtin.package:
+        name: "{{ prometheus_deploy_packages }}"
+        state: present
+      when: prometheus_deploy_install_packages | bool
+      tags:
+        - install
+
+    - name: Ensure Prometheus directories exist
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner | default(omit) }}"
+        group: "{{ item.group | default(omit) }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ prometheus_deploy_config_dir }}"
+          mode: "{{ prometheus_deploy_dir_mode }}"
+        - path: "{{ prometheus_deploy_rules_dir }}"
+          mode: "{{ prometheus_deploy_dir_mode }}"
+        - path: "{{ prometheus_deploy_data_dir }}"
+          owner: "{{ prometheus_deploy_data_owner }}"
+          group: "{{ prometheus_deploy_data_group }}"
+          mode: "{{ prometheus_deploy_dir_mode }}"
+        - path: "{{ prometheus_deploy_pod_manifest_path | dirname }}"
+          mode: "0755"
+      tags:
+        - deployment
+
+    - name: Render Prometheus configuration
+      ansible.builtin.template:
+        src: prometheus.yml.j2
+        dest: "{{ prometheus_deploy_config_path }}"
+        mode: "{{ prometheus_deploy_config_mode }}"
+      register: prometheus_deploy_config_render
+      tags:
+        - config
+
+    - name: Render Prometheus alerting rules
+      ansible.builtin.template:
+        src: atlas.rules.yml.j2
+        dest: "{{ prometheus_deploy_rules_path }}"
+        mode: "{{ prometheus_deploy_config_mode }}"
+      register: prometheus_deploy_rules_render
+      tags:
+        - config
+
+    - name: Render Prometheus Pod manifest
+      ansible.builtin.template:
+        src: prometheus-pod.yml.j2
+        dest: "{{ prometheus_deploy_pod_manifest_path }}"
+        mode: "0644"
+      register: prometheus_deploy_manifest_render
+      tags:
+        - deployment
+
+    - name: Manage Prometheus persistent container service
+      ansible.builtin.include_role:
+        name: lit.foundational.podman_systemd
+      vars:
+        podman_systemd_action: >-
+          {{
+            'restarted'
+            if (
+              prometheus_deploy_config_render.changed
+              or prometheus_deploy_rules_render.changed
+              or prometheus_deploy_manifest_render.changed
+            )
+            else 'present'
+          }}
+        podman_systemd_unit_name: "{{ prometheus_deploy_systemd_unit_name }}"
+        podman_systemd_description: "{{ prometheus_deploy_systemd_description }}"
+        podman_systemd_manifest_path: "{{ prometheus_deploy_pod_manifest_path }}"
+        podman_systemd_scope: "{{ prometheus_deploy_systemd_scope }}"
+        podman_systemd_quadlet_dir: "{{ prometheus_deploy_quadlet_dir }}"
+        podman_systemd_enabled: "{{ prometheus_deploy_systemd_enabled }}"
+      tags:
+        - deployment
+
+    - name: Wait until Prometheus readiness endpoint is reachable
+      ansible.builtin.uri:
+        url: "{{ prometheus_deploy_ready_url }}"
+        method: GET
+        validate_certs: "{{ prometheus_deploy_validate_certs }}"
+      register: prometheus_deploy_health
+      until: prometheus_deploy_health.status == 200
+      retries: 30
+      delay: 5
+      changed_when: false
+      failed_when: prometheus_deploy_health is failed or prometheus_deploy_health.status != 200
+      when:
+        - prometheus_deploy_systemd_enabled | bool
+      tags:
+        - verify

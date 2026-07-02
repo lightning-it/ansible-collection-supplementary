@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    Introduce LIT Atlas observability support with new Prometheus and
+    Alertmanager deploy roles for Podman/Quadlet-managed container services.

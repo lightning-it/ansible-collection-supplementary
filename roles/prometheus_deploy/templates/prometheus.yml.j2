@@ -1,0 +1,25 @@
+global:
+  scrape_interval: {{ prometheus_deploy_global_scrape_interval }}
+  evaluation_interval: {{ prometheus_deploy_global_evaluation_interval }}
+{% if prometheus_deploy_external_labels | length > 0 %}
+  external_labels:
+{% for label_name, label_value in prometheus_deploy_external_labels | dictsort %}
+    {{ label_name }}: {{ label_value | string | to_json }}
+{% endfor %}
+{% endif %}
+
+rule_files:
+  - {{ prometheus_deploy_container_rules_dir }}/atlas.rules.yml
+
+{% if prometheus_deploy_alertmanager_targets | length > 0 %}
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+{% for target in prometheus_deploy_alertmanager_targets %}
+            - {{ target | to_json }}
+{% endfor %}
+
+{% endif %}
+scrape_configs:
+{{ prometheus_deploy_scrape_configs | to_nice_yaml(indent=2) | indent(2, true) }}

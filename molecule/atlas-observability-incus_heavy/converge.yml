@@ -1,0 +1,36 @@
+---
+- name: Deploy Atlas observability components on Incus host
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    atlas_molecule_base_dir: /srv/atlas-observability
+  roles:
+    - role: prometheus_deploy
+      vars:
+        prometheus_deploy_install_packages: false
+        prometheus_deploy_pod_name: prometheus-heavy
+        prometheus_deploy_container_name: prometheus
+        prometheus_deploy_host_ip: 127.0.0.1
+        prometheus_deploy_port: 9090
+        prometheus_deploy_config_dir: "{{ atlas_molecule_base_dir }}/prometheus/config"
+        prometheus_deploy_data_dir: "{{ atlas_molecule_base_dir }}/prometheus/data"
+        prometheus_deploy_pod_manifest_path: "{{ atlas_molecule_base_dir }}/quadlet/prometheus.yml"
+        prometheus_deploy_quadlet_dir: /etc/containers/systemd
+        prometheus_deploy_systemd_unit_name: prometheus-heavy
+        prometheus_deploy_systemd_description: Molecule Prometheus container service
+        prometheus_deploy_alertmanager_targets:
+          - "127.0.0.1:9093"
+    - role: alertmanager_deploy
+      vars:
+        alertmanager_deploy_install_packages: false
+        alertmanager_deploy_pod_name: alertmanager-heavy
+        alertmanager_deploy_container_name: alertmanager
+        alertmanager_deploy_host_ip: 127.0.0.1
+        alertmanager_deploy_port: 9093
+        alertmanager_deploy_config_dir: "{{ atlas_molecule_base_dir }}/alertmanager/config"
+        alertmanager_deploy_data_dir: "{{ atlas_molecule_base_dir }}/alertmanager/data"
+        alertmanager_deploy_pod_manifest_path: "{{ atlas_molecule_base_dir }}/quadlet/alertmanager.yml"
+        alertmanager_deploy_quadlet_dir: /etc/containers/systemd
+        alertmanager_deploy_systemd_unit_name: alertmanager-heavy
+        alertmanager_deploy_systemd_description: Molecule Alertmanager container service

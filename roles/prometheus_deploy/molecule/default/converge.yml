@@ -1,0 +1,10 @@
+---
+- name: Converge prometheus_deploy
+  hosts: all
+  gather_facts: true
+  connection: local
+  roles:
+    - role: lit.supplementary.prometheus_deploy
+      vars:
+        prometheus_deploy_skip_runtime: true
+

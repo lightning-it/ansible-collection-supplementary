@@ -11,3 +11,18 @@
         'True' if aap_deploy_eda_service_backed_sso_enabled | bool else 'False'
       }}
   when: aap_deploy_eda_service_backed_sso_enabled is boolean
+
+- name: Patch prepared Hub upload readiness URL
+  ansible.builtin.replace:
+    path: >-
+      {{
+        aap_setup_prep_setup_dir
+      }}/collections/ansible_collections/ansible/containerized_installer/roles/automationhub/tasks/{{ item }}
+    regexp: >-
+      url: '\{\{ hostvars\[groups\["automationgateway"\]\[0\]\]\["_gateway_proxy_url"\] \}\}/pulp/api/v3/status/'
+    replace: >-
+      url: '{{ "{{ hub_upload_readiness_url | default(hostvars[groups[\"automationgateway\"][0]][\"_gateway_proxy_url\"] ~ \"/pulp/api/v3/status/\", true) }}" }}'
+  loop:
+    - upload_collections.yml
+    - upload_images.yml
+  when: aap_deploy_hub_upload_readiness_url | trim | length > 0

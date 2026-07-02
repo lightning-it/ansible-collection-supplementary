@@ -1,0 +1,54 @@
+---
+prometheus_deploy_packages:
+  - podman
+prometheus_deploy_install_packages: true
+prometheus_deploy_skip_runtime: false
+prometheus_deploy_skip_deploy: false
+
+prometheus_deploy_pod_name: "prometheus"
+prometheus_deploy_container_name: "prometheus"
+prometheus_deploy_image: "docker.io/prom/prometheus:v3.5.0"
+prometheus_deploy_pod_manifest_path: "/etc/podman/pods/prometheus.yml"
+prometheus_deploy_systemd_enabled: true
+prometheus_deploy_systemd_unit_name: "{{ prometheus_deploy_pod_name }}"
+prometheus_deploy_systemd_description: "Prometheus container service"
+prometheus_deploy_systemd_scope: "system"
+prometheus_deploy_quadlet_dir: "/etc/containers/systemd"
+
+prometheus_deploy_host_ip: "127.0.0.1"
+prometheus_deploy_port: 9090
+prometheus_deploy_container_port: 9090
+prometheus_deploy_ready_url: "http://{{ prometheus_deploy_host_ip }}:{{ prometheus_deploy_port }}/-/ready"
+prometheus_deploy_validate_certs: true
+
+prometheus_deploy_config_dir: "/srv/prometheus/config"
+prometheus_deploy_config_path: "{{ prometheus_deploy_config_dir }}/prometheus.yml"
+prometheus_deploy_rules_dir: "{{ prometheus_deploy_config_dir }}/rules"
+prometheus_deploy_rules_path: "{{ prometheus_deploy_rules_dir }}/atlas.rules.yml"
+prometheus_deploy_data_dir: "/srv/prometheus/data"
+prometheus_deploy_container_config_path: "/etc/prometheus/prometheus.yml"
+prometheus_deploy_container_rules_dir: "/etc/prometheus/rules"
+prometheus_deploy_container_data_dir: "/prometheus"
+prometheus_deploy_dir_mode: "0755"
+prometheus_deploy_data_owner: "65534"
+prometheus_deploy_data_group: "65534"
+prometheus_deploy_config_mode: "0644"
+
+prometheus_deploy_global_scrape_interval: "15s"
+prometheus_deploy_global_evaluation_interval: "15s"
+prometheus_deploy_external_labels: {}
+prometheus_deploy_alertmanager_targets:
+  - "127.0.0.1:9093"
+prometheus_deploy_scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - "127.0.0.1:9090"
+  - job_name: alloy
+    metrics_path: "/metrics"
+    static_configs:
+      - targets:
+          - "127.0.0.1:12345"
+prometheus_deploy_rule_groups: []
+prometheus_deploy_extra_args: []
+prometheus_deploy_env_extra: {}
