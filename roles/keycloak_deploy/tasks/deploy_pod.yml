@@ -467,3 +467,24 @@
     - name: Ignore kubeplay run failure
       ansible.builtin.debug:
         msg: "Skipping kubeplay run failure."
+
+- name: Check Keycloak pod after kubeplay run
+  ansible.builtin.command: "podman pod exists {{ keycloak_deploy_pod_name }}"
+  register: keycloak_deploy_pod_exists_after_kubeplay
+  changed_when: false
+  failed_when: false
+  when:
+    - keycloak_deploy_kubeplay_run | default(false)
+    - not keycloak_deploy_skip_runtime | bool
+  tags:
+    - deployment
+
+- name: Run Keycloak pod directly when kubeplay did not start it
+  ansible.builtin.command: "podman kube play {{ keycloak_deploy_pod_manifest_path }}"
+  changed_when: true
+  when:
+    - keycloak_deploy_kubeplay_run | default(false)
+    - not keycloak_deploy_skip_runtime | bool
+    - keycloak_deploy_pod_exists_after_kubeplay.rc | default(1) != 0
+  tags:
+    - deployment

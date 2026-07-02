@@ -49,9 +49,10 @@
         ip addr add {{ item.ipv4_address }} dev eth0 2>/dev/null || true
         ip route replace default via {{ item.ipv4_gateway }} dev eth0
         rm -f /etc/resolv.conf
-        cat > /etc/resolv.conf <<'RESOLV'
-        {{ 'nameserver ' ~ (item.dns_servers | join('\nnameserver ')) }}
-        RESOLV
+        : > /etc/resolv.conf
+        {% for dns_server in item.dns_servers %}
+        echo 'nameserver {{ dns_server }}' >> /etc/resolv.conf
+        {% endfor %}
         EOF
       loop: "{{ keycloak_molecule_incus_instances }}"
       when:

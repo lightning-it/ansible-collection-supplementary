@@ -16,10 +16,13 @@
     keycloak_deploy_admin_user: admin
     keycloak_deploy_admin_password: molecule-admin-password
     keycloak_deploy_host_ip: 127.0.0.1
-    keycloak_deploy_postgres_host_ip: 127.0.0.1
-    keycloak_deploy_db_host: 127.0.0.1
+    keycloak_deploy_postgres_host_ip: 0.0.0.0
+    keycloak_deploy_db_host: host.containers.internal
     keycloak_deploy_port: 18080
     keycloak_deploy_db_port: 15432
+    keycloak_deploy_container_name: keycloak
+    keycloak_deploy_env_extra:
+      KC_HTTP_PORT: "18080"
     keycloak_deploy_health_url: "http://127.0.0.1:18080/realms/master"
     keycloak_deploy_api_url: "http://127.0.0.1:18080"
     keycloak_deploy_pod_name: keycloak-heavy
