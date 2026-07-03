@@ -1,2 +1,5 @@
+---
 minor_changes:
-  - Added PostgreSQL lifecycle roles for orchestration, preflight, config, validation, operations, upgrade, and protected destroy.
+  - >-
+    Added PostgreSQL lifecycle roles for orchestration, preflight, config,
+    validation, operations, upgrade, and protected destroy.

@@ -67,7 +67,15 @@
         trustEmail:
           - "{{ (keycloak_cac_ldap_provider.trust_email | default(false) | bool) | ternary('true', 'false') }}"
         validatePasswordPolicy:
-          - "{{ (keycloak_cac_ldap_provider.validate_password_policy | default(false) | bool) | ternary('true', 'false') }}"
+          - >-
+            {{
+              (
+                keycloak_cac_ldap_provider.validate_password_policy
+                | default(false)
+                | bool
+              )
+              | ternary('true', 'false')
+            }}
         batchSizeForSync:
           - "{{ keycloak_cac_ldap_provider.batch_size_for_sync | default(1000) | string }}"
   no_log: true

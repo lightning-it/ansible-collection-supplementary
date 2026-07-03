@@ -26,25 +26,25 @@
 - name: Check whether cloudflared service is already installed
   ansible.builtin.stat:
     path: "/etc/systemd/system/{{ cloudflared_service_name }}.service"
-  register: _cf_service_unit
+  register: cloudflared_cf_service_unit
   when: cloudflared_manage_service | bool
 
 - name: Install cloudflared service for this tunnel (token)
   ansible.builtin.command:
     cmd: "cloudflared service install {{ cloudflared_tunnel_token }}"
-  register: _svc_install
+  register: cloudflared_svc_install
   changed_when: >-
-    'Installed' in (_svc_install.stdout | default('')) or
-    'installed' in (_svc_install.stderr | default(''))
+    'Installed' in (cloudflared_svc_install.stdout | default('')) or
+    'installed' in (cloudflared_svc_install.stderr | default(''))
   no_log: "{{ cloudflared_no_log | bool }}"
   when:
     - cloudflared_manage_service | bool
-    - not _cf_service_unit.stat.exists
+    - not cloudflared_cf_service_unit.stat.exists
 
 - name: Ensure cloudflared service is enabled and started
   ansible.builtin.systemd:
     name: "{{ cloudflared_service_name }}"
     enabled: true
     state: started
-  register: _cf_systemd
+  register: cloudflared_cf_systemd
   when: cloudflared_manage_service | bool

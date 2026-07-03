@@ -116,8 +116,16 @@
     tls_assets_vault_pki_addr: "{{ hc_vault_addr }}"
     tls_assets_vault_pki_auth_method: "{{ hc_vault_auth_method }}"
     tls_assets_vault_pki_token: "{{ hc_vault_token | default('', true) }}"
-    tls_assets_vault_pki_role_id: "{{ aap_deploy_tls_vault_pki_role_id | default(hc_vault_role_id | default('', true), true) }}"
-    tls_assets_vault_pki_secret_id: "{{ aap_deploy_tls_vault_pki_secret_id | default(hc_vault_secret_id | default('', true), true) }}"
+    tls_assets_vault_pki_role_id: >-
+      {{
+        aap_deploy_tls_vault_pki_role_id
+        | default(hc_vault_role_id | default('', true), true)
+      }}
+    tls_assets_vault_pki_secret_id: >-
+      {{
+        aap_deploy_tls_vault_pki_secret_id
+        | default(hc_vault_secret_id | default('', true), true)
+      }}
     tls_assets_vault_pki_approle_path: "{{ aap_deploy_tls_vault_pki_approle_path }}"
     tls_assets_vault_pki_approle_kv_mount_point: "{{ aap_deploy_tls_vault_kv_mount_point }}"
     tls_assets_vault_pki_approle_read_token: "{{ aap_deploy_tls_vault_read_token }}"

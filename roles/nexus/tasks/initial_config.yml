@@ -31,8 +31,8 @@
     validate_certs: "{{ nexus_validate_certs }}"
     headers: "{{ nexus_api_headers }}"
   delegate_to: "{{ nexus_api_delegate_to }}"
-  register: result
-  until: result.status == 200
+  register: nexus_result
+  until: nexus_result.status == 200
   retries: 30
   delay: 10
   tags:
@@ -41,7 +41,7 @@
 - name: Check if initial admin password file exists
   ansible.builtin.stat:
     path: "{{ nexus_nexus_data_dir }}/admin.password"
-  register: admin_pwd_file_stat
+  register: nexus_admin_pwd_file_stat
   tags:
     - sonatype_nexus_config
 
@@ -57,7 +57,7 @@
 
 - name: Set target admin password on first boot
   when: nexus_target_admin_password is not defined and
-        admin_pwd_file_stat.stat.exists
+        nexus_admin_pwd_file_stat.stat.exists
   ansible.builtin.set_fact:
     nexus_target_admin_password: "{{ lookup('community.general.random_string', length=32) }}"
   no_log: true
@@ -96,19 +96,19 @@
 - name: Bootstrap admin password on first boot (using initial password file)
   when:
     - nexus_admin_auth_check.status | default(0) != 200
-    - admin_pwd_file_stat.stat.exists
+    - nexus_admin_pwd_file_stat.stat.exists
   tags:
     - sonatype_nexus_config
   block:
     - name: Read generated admin password
       ansible.builtin.slurp:
         src: "{{ nexus_nexus_data_dir }}/admin.password"
-      register: admin_pwd_file
+      register: nexus_admin_pwd_file
       no_log: true
 
     - name: Set fact
       ansible.builtin.set_fact:
-        nexus_nexus_initial_admin_password: "{{ admin_pwd_file['content'] | b64decode | trim }}"
+        nexus_nexus_initial_admin_password: "{{ nexus_admin_pwd_file['content'] | b64decode | trim }}"
       no_log: true
 
     - name: Set new admin password

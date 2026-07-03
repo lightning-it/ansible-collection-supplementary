@@ -335,7 +335,11 @@
     aap_preflight_vault_mount_effective: >-
       {{
         hc_vault_engine_mount_point
-        | default(vault_engine_mount_point | default(lookup('ansible.builtin.env', 'VAULT_ENGINE_MOUNT_POINT'), true), true)
+        | default(
+            vault_engine_mount_point
+            | default(lookup('ansible.builtin.env', 'VAULT_ENGINE_MOUNT_POINT'), true),
+            true
+          )
         | string
         | trim
       }}
@@ -438,8 +442,16 @@
   become: false
   no_log: true
   loop:
-    - "{{ hc_vault_defaults_kv_path | default(lookup('ansible.builtin.env', 'AAP_VAULT_DEFAULTS_KV_PATH'), true) }}"
-    - "{{ hc_vault_aap_admin_passwords_kv_path | default(lookup('ansible.builtin.env', 'AAP_VAULT_ADMIN_PASSWORDS_KV_PATH'), true) }}"
+    - >-
+      {{
+        hc_vault_defaults_kv_path
+        | default(lookup('ansible.builtin.env', 'AAP_VAULT_DEFAULTS_KV_PATH'), true)
+      }}
+    - >-
+      {{
+        hc_vault_aap_admin_passwords_kv_path
+        | default(lookup('ansible.builtin.env', 'AAP_VAULT_ADMIN_PASSWORDS_KV_PATH'), true)
+      }}
   when:
     - aap_preflight_enabled | bool
     - aap_preflight_check_vault | bool

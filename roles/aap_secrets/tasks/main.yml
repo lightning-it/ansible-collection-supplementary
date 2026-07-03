@@ -25,14 +25,16 @@
     engine_mount_point: "{{ aap_password_seed_vault_kv_mount }}"
     path: "{{ aap_password_seed_vault_kv_path }}"
     token: "{{ aap_password_seed_vault_token }}"
-  register: aap_password_seed_vault_read
+  register: aap_secrets_password_seed_vault_read
   failed_when: false
   no_log: "{{ aap_admin_passwords_no_log | default(true) }}"
 
 - name: Fail when AAP Vault read failed for non-missing-secret reasons
   ansible.builtin.assert:
     that:
-      - not (_aap_seed_read_failed | bool) or (_aap_seed_read_missing | bool)
+      - >-
+        not (_aap_seed_read_failed | from_yaml | bool)
+        or (_aap_seed_read_missing | from_yaml | bool)
     fail_msg: >-
       Failed reading AAP admin passwords from Vault path
       {{ aap_password_seed_vault_kv_mount }}/data/{{ aap_password_seed_vault_kv_path }}:
@@ -41,22 +43,22 @@
   vars:
     _aap_seed_read_has_payload: >-
       {{
-        (aap_password_seed_vault_read.raw is defined)
-        or (aap_password_seed_vault_read.secret is defined)
+        (aap_secrets_password_seed_vault_read.raw is defined)
+        or (aap_secrets_password_seed_vault_read.secret is defined)
         or (
-          aap_password_seed_vault_read.data is defined
-          and aap_password_seed_vault_read.data.data is defined
+          aap_secrets_password_seed_vault_read.data is defined
+          and aap_secrets_password_seed_vault_read.data.data is defined
         )
       }}
     _aap_seed_read_failed: >-
       {{
-        (aap_password_seed_vault_read.failed | default(false) | bool)
+        (aap_secrets_password_seed_vault_read.failed | default(false) | bool)
         or (
-          not (_aap_seed_read_has_payload | bool)
+          not (_aap_seed_read_has_payload | from_yaml | bool)
           and (_aap_seed_read_msg | trim | length > 0)
         )
       }}
-    _aap_seed_read_msg: "{{ aap_password_seed_vault_read.msg | default('unknown Vault read error') | string }}"
+    _aap_seed_read_msg: "{{ aap_secrets_password_seed_vault_read.msg | default('unknown Vault read error') | string }}"
     _aap_seed_read_missing: >-
       {{
         ("doesn't seem to exist" in (_aap_seed_read_msg | lower))
@@ -77,14 +79,16 @@
     engine_mount_point: "{{ aap_password_seed_vault_kv_mount }}"
     path: "{{ aap_defaults_seed_vault_kv_path }}"
     token: "{{ aap_password_seed_vault_token }}"
-  register: aap_defaults_seed_vault_read
+  register: aap_secrets_defaults_seed_vault_read
   failed_when: false
   no_log: "{{ aap_admin_passwords_no_log | default(true) }}"
 
 - name: Fail when RH offline token Vault read failed for non-missing-secret reasons
   ansible.builtin.assert:
     that:
-      - not (_aap_defaults_read_failed | bool) or (_aap_defaults_read_missing | bool)
+      - >-
+        not (_aap_defaults_read_failed | from_yaml | bool)
+        or (_aap_defaults_read_missing | from_yaml | bool)
     fail_msg: >-
       Failed reading RH offline token from Vault path
       {{ aap_password_seed_vault_kv_mount }}/data/{{ aap_defaults_seed_vault_kv_path }}:
@@ -93,22 +97,23 @@
   vars:
     _aap_defaults_read_has_payload: >-
       {{
-        (aap_defaults_seed_vault_read.raw is defined)
-        or (aap_defaults_seed_vault_read.secret is defined)
+        (aap_secrets_defaults_seed_vault_read.raw is defined)
+        or (aap_secrets_defaults_seed_vault_read.secret is defined)
         or (
-          aap_defaults_seed_vault_read.data is defined
-          and aap_defaults_seed_vault_read.data.data is defined
+          aap_secrets_defaults_seed_vault_read.data is defined
+          and aap_secrets_defaults_seed_vault_read.data.data is defined
         )
       }}
     _aap_defaults_read_failed: >-
       {{
-        (aap_defaults_seed_vault_read.failed | default(false) | bool)
+        (aap_secrets_defaults_seed_vault_read.failed | default(false) | bool)
         or (
-          not (_aap_defaults_read_has_payload | bool)
+          not (_aap_defaults_read_has_payload | from_yaml | bool)
           and (_aap_defaults_read_msg | trim | length > 0)
         )
       }}
-    _aap_defaults_read_msg: "{{ aap_defaults_seed_vault_read.msg | default('unknown Vault read error') | string }}"
+    _aap_defaults_read_msg: >-
+      {{ aap_secrets_defaults_seed_vault_read.msg | default('unknown Vault read error') | string }}
     _aap_defaults_read_missing: >-
       {{
         ("doesn't seem to exist" in (_aap_defaults_read_msg | lower))
@@ -121,12 +126,12 @@
 
 - name: Initialize AAP password seed state
   ansible.builtin.set_fact:
-    aap_password_seed_existing: "{{ _aap_password_seed_secret }}"
-    aap_password_seed_effective: {}
-    aap_password_seed_missing_keys: []
-    aap_rh_offline_token_vault_keys_checked: "{{ _aap_rh_offline_token_keys_checked }}"
-    aap_rh_offline_token_source_key: "{{ _aap_rh_offline_token_source_key }}"
-    aap_rh_offline_token_effective: >-
+    aap_secrets_password_seed_existing: "{{ _aap_password_seed_secret }}"
+    aap_secrets_password_seed_effective: {}
+    aap_secrets_password_seed_missing_keys: []
+    aap_secrets_rh_offline_token_vault_keys_checked: "{{ _aap_rh_offline_token_keys_checked }}"
+    aap_secrets_rh_offline_token_source_key: "{{ _aap_rh_offline_token_source_key }}"
+    aap_secrets_rh_offline_token_effective: >-
       {{
         (
           rh_offline_token
@@ -189,13 +194,13 @@
   vars:
     _aap_password_seed_secret: >-
       {{
-        aap_password_seed_vault_read.secret
-        | default(aap_password_seed_vault_read.data.data | default({}), true)
+        aap_secrets_password_seed_vault_read.secret
+        | default(aap_secrets_password_seed_vault_read.data.data | default({}), true)
       }}
     _aap_defaults_seed_secret: >-
       {{
-        aap_defaults_seed_vault_read.secret
-        | default(aap_defaults_seed_vault_read.data.data | default({}), true)
+        aap_secrets_defaults_seed_vault_read.secret
+        | default(aap_secrets_defaults_seed_vault_read.data.data | default({}), true)
       }}
     _aap_rh_offline_token_primary_key: >-
       {{
@@ -267,11 +272,11 @@
 - name: Assert RH offline token is available for AAP bundle download
   ansible.builtin.assert:
     that:
-      - aap_rh_offline_token_effective | default('', true) | trim | length > 0
+      - aap_secrets_rh_offline_token_effective | default('', true) | trim | length > 0
     fail_msg: >-
       Missing RH offline token for AAP download flow.
       Provide rh_offline_token in inventory or store one of the keys
-      {{ aap_rh_offline_token_vault_keys_checked | default(['rh_offline_token'], true) | join(', ') }}
+      {{ aap_secrets_rh_offline_token_vault_keys_checked | default(['rh_offline_token'], true) | join(', ') }}
       in Vault path {{ aap_password_seed_vault_kv_mount }}/data/{{ aap_defaults_seed_vault_kv_path }}.
       Available keys at that path:
       {{ _aap_defaults_available_keys | join(', ') if (_aap_defaults_available_keys | length > 0) else '[none]' }}.
@@ -280,8 +285,8 @@
     _aap_defaults_available_keys: >-
       {{
         (
-          aap_defaults_seed_vault_read.secret
-          | default(aap_defaults_seed_vault_read.data.data | default({}), true)
+          aap_secrets_defaults_seed_vault_read.secret
+          | default(aap_secrets_defaults_seed_vault_read.data.data | default({}), true)
           | dict2items
           | map(attribute='key')
           | list
@@ -294,14 +299,14 @@
 
 - name: Resolve AAP password values from Vault payload
   ansible.builtin.set_fact:
-    aap_password_seed_effective: "{{ aap_password_seed_effective | combine({ item: _value }) }}"
-    aap_password_seed_missing_keys: >-
+    aap_secrets_password_seed_effective: "{{ aap_secrets_password_seed_effective | combine({item: _value}) }}"
+    aap_secrets_password_seed_missing_keys: >-
       {{
-        aap_password_seed_missing_keys
+        aap_secrets_password_seed_missing_keys
         + (([item] if (_value | length == 0) else []))
       }}
   vars:
-    _value: "{{ aap_password_seed_existing.get(item, '') | string | trim }}"
+    _value: "{{ aap_secrets_password_seed_existing.get(item, '') | string | trim }}"
   loop:
     - gateway_admin_password
     - controller_admin_password
@@ -315,11 +320,11 @@
 - name: Fail when AAP Vault passwords are missing and auto-create is disabled
   ansible.builtin.assert:
     that:
-      - aap_password_seed_missing_keys | length == 0
+      - aap_secrets_password_seed_missing_keys | length == 0
     fail_msg: >-
       Missing AAP admin passwords in Vault path
       {{ aap_password_seed_vault_kv_mount }}/data/{{ aap_password_seed_vault_kv_path }}:
-      {{ aap_password_seed_missing_keys | join(', ') }}.
+      {{ aap_secrets_password_seed_missing_keys | join(', ') }}.
       Enable aap_password_seed_get_or_create=true to create them automatically.
     quiet: true
   when: not (aap_password_seed_get_or_create | default(false) | bool)
@@ -327,9 +332,9 @@
 
 - name: Generate missing AAP admin passwords
   ansible.builtin.set_fact:
-    aap_password_seed_effective: >-
+    aap_secrets_password_seed_effective: >-
       {{
-        aap_password_seed_effective
+        aap_secrets_password_seed_effective
         | combine({
             item: lookup(
               'password',
@@ -339,11 +344,11 @@
             )
           })
       }}
-  loop: "{{ aap_password_seed_missing_keys }}"
+  loop: "{{ aap_secrets_password_seed_missing_keys }}"
   changed_when: false
   when:
     - aap_password_seed_get_or_create | default(false) | bool
-    - aap_password_seed_missing_keys | length > 0
+    - aap_secrets_password_seed_missing_keys | length > 0
   no_log: "{{ aap_admin_passwords_no_log | default(true) }}"
 
 - name: Persist generated AAP admin passwords to Vault KV2
@@ -357,21 +362,21 @@
     engine_mount_point: "{{ aap_password_seed_vault_kv_mount }}"
     path: "{{ aap_password_seed_vault_kv_path }}"
     token: "{{ aap_password_seed_vault_token }}"
-    data: "{{ aap_password_seed_existing | combine(aap_password_seed_effective, recursive=True) }}"
+    data: "{{ aap_secrets_password_seed_existing | combine(aap_secrets_password_seed_effective, recursive=True) }}"
   when:
     - aap_password_seed_get_or_create | default(false) | bool
-    - aap_password_seed_missing_keys | length > 0
+    - aap_secrets_password_seed_missing_keys | length > 0
   no_log: "{{ aap_admin_passwords_no_log | default(true) }}"
 
 - name: Assert AAP password seed produced required values
   ansible.builtin.assert:
     that:
-      - aap_password_seed_effective.gateway_admin_password | default('', true) | trim | length > 0
-      - aap_password_seed_effective.controller_admin_password | default('', true) | trim | length > 0
-      - aap_password_seed_effective.hub_admin_password | default('', true) | trim | length > 0
-      - aap_password_seed_effective.eda_admin_password | default('', true) | trim | length > 0
-      - aap_password_seed_effective.postgresql_admin_password | default('', true) | trim | length > 0
-      - aap_password_seed_effective.breakglass_password | default('', true) | trim | length > 0
+      - aap_secrets_password_seed_effective.gateway_admin_password | default('', true) | trim | length > 0
+      - aap_secrets_password_seed_effective.controller_admin_password | default('', true) | trim | length > 0
+      - aap_secrets_password_seed_effective.hub_admin_password | default('', true) | trim | length > 0
+      - aap_secrets_password_seed_effective.eda_admin_password | default('', true) | trim | length > 0
+      - aap_secrets_password_seed_effective.postgresql_admin_password | default('', true) | trim | length > 0
+      - aap_secrets_password_seed_effective.breakglass_password | default('', true) | trim | length > 0
     fail_msg: >-
       Failed to resolve AAP admin passwords from Vault seed flow.
     quiet: true
@@ -379,13 +384,21 @@
 
 - name: Publish AAP password inputs from Vault seed flow
   ansible.builtin.set_fact:
-    aap_gateway_admin_password_input: "{{ aap_password_seed_effective.gateway_admin_password }}"
-    aap_controller_admin_password_input: "{{ aap_password_seed_effective.controller_admin_password }}"
-    aap_hub_admin_password_input: "{{ aap_password_seed_effective.hub_admin_password }}"
-    aap_eda_admin_password_input: "{{ aap_password_seed_effective.eda_admin_password }}"
-    aap_postgresql_admin_password_input: "{{ aap_password_seed_effective.postgresql_admin_password }}"
-    aap_breakglass_password_input: "{{ aap_password_seed_effective.breakglass_password }}"
-    aap_admin_password_input: "{{ aap_password_seed_effective.gateway_admin_password }}"
-    rh_offline_token: "{{ aap_rh_offline_token_effective }}"
+    ansible_facts:
+      aap_gateway_admin_password_input: >-
+        {{ aap_secrets_password_seed_effective.gateway_admin_password }}
+      aap_controller_admin_password_input: >-
+        {{ aap_secrets_password_seed_effective.controller_admin_password }}
+      aap_hub_admin_password_input: >-
+        {{ aap_secrets_password_seed_effective.hub_admin_password }}
+      aap_eda_admin_password_input: >-
+        {{ aap_secrets_password_seed_effective.eda_admin_password }}
+      aap_postgresql_admin_password_input: >-
+        {{ aap_secrets_password_seed_effective.postgresql_admin_password }}
+      aap_breakglass_password_input: >-
+        {{ aap_secrets_password_seed_effective.breakglass_password }}
+      aap_admin_password_input: >-
+        {{ aap_secrets_password_seed_effective.gateway_admin_password }}
+      rh_offline_token: "{{ aap_secrets_rh_offline_token_effective }}"
   changed_when: false
   no_log: "{{ aap_admin_passwords_no_log | default(true) }}"

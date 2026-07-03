@@ -2,8 +2,8 @@
 - name: End remote play when no remote action was requested
   ansible.builtin.meta: end_play
   when:
-    - aap_local_action not in ['transfer_payload', 'stage_runtime']
-    - aap_local_action not in aap_local_remote_playbooks
+    - aap_local_execution_action not in ['transfer_payload', 'stage_runtime']
+    - aap_local_execution_action not in aap_local_execution_remote_playbooks
 
 - name: Wait for AAP target connection
   ansible.builtin.wait_for_connection:
@@ -17,9 +17,9 @@
       - -gn
       - "{{ ansible_user }}"
   become: false
-  register: aap_local_remote_login_group
+  register: aap_local_execution_remote_login_group
   changed_when: false
-  when: aap_local_action == 'transfer_payload'
+  when: aap_local_execution_action == 'transfer_payload'
 
 - name: Ensure remote landing zone exists
   ansible.builtin.file:
@@ -33,33 +33,33 @@
       owner: root
       group: root
       mode: "0755"
-    - path: "{{ aap_effective_appl_root }}"
+    - path: "{{ aap_local_execution_effective_appl_root }}"
       owner: "{{ ansible_user }}"
-      group: "{{ aap_local_remote_login_group.stdout | default(omit) }}"
+      group: "{{ aap_local_execution_remote_login_group.stdout | default(omit) }}"
       mode: "0750"
-    - path: "{{ aap_effective_appl_root }}/etc"
+    - path: "{{ aap_local_execution_effective_appl_root }}/etc"
       owner: "{{ ansible_user }}"
-      group: "{{ aap_local_remote_login_group.stdout | default(omit) }}"
+      group: "{{ aap_local_execution_remote_login_group.stdout | default(omit) }}"
       mode: "0750"
-    - path: "{{ aap_effective_appl_root }}/secrets"
+    - path: "{{ aap_local_execution_effective_appl_root }}/secrets"
       owner: "{{ ansible_user }}"
-      group: "{{ aap_local_remote_login_group.stdout | default(omit) }}"
+      group: "{{ aap_local_execution_remote_login_group.stdout | default(omit) }}"
       mode: "0750"
-    - path: "{{ aap_effective_appl_root }}/artifacts"
+    - path: "{{ aap_local_execution_effective_appl_root }}/artifacts"
       owner: "{{ ansible_user }}"
-      group: "{{ aap_local_remote_login_group.stdout | default(omit) }}"
+      group: "{{ aap_local_execution_remote_login_group.stdout | default(omit) }}"
       mode: "0750"
-    - path: "{{ aap_effective_appl_root }}/inbox"
+    - path: "{{ aap_local_execution_effective_appl_root }}/inbox"
       owner: "{{ ansible_user }}"
-      group: "{{ aap_local_remote_login_group.stdout | default(omit) }}"
+      group: "{{ aap_local_execution_remote_login_group.stdout | default(omit) }}"
       mode: "0750"
-    - path: "{{ aap_effective_appl_root }}/scripts"
+    - path: "{{ aap_local_execution_effective_appl_root }}/scripts"
       owner: "{{ ansible_user }}"
-      group: "{{ aap_local_remote_login_group.stdout | default(omit) }}"
+      group: "{{ aap_local_execution_remote_login_group.stdout | default(omit) }}"
       mode: "0750"
-    - path: "{{ aap_effective_appl_root }}/src"
+    - path: "{{ aap_local_execution_effective_appl_root }}/src"
       owner: "{{ ansible_user }}"
-      group: "{{ aap_local_remote_login_group.stdout | default(omit) }}"
+      group: "{{ aap_local_execution_remote_login_group.stdout | default(omit) }}"
       mode: "0750"
     - path: /appl/tmp
       mode: "1777"
@@ -75,194 +75,202 @@
       mode: "0755"
   loop_control:
     label: "{{ item.path }}"
-  when: aap_local_action == 'transfer_payload'
+  when: aap_local_execution_action == 'transfer_payload'
 
 - name: Transfer local env file
   ansible.builtin.copy:
-    src: "{{ machine_a_effective_env_file }}"
-    dest: "{{ aap_effective_appl_root }}/inbox/aap-local.env"
+    src: "{{ aap_local_execution_machine_a_effective_env_file }}"
+    dest: "{{ aap_local_execution_effective_appl_root }}/inbox/aap-local.env"
     mode: "0600"
   become: false
-  when: aap_local_action == 'transfer_payload'
+  when: aap_local_execution_action == 'transfer_payload'
 
 - name: Transfer automation source archive
   ansible.builtin.copy:
-    src: "{{ machine_a_effective_source_archive_path }}"
-    dest: "{{ aap_effective_appl_root }}/inbox/modulix-automation.tar.gz"
+    src: "{{ aap_local_execution_machine_a_effective_source_archive_path }}"
+    dest: "{{ aap_local_execution_effective_appl_root }}/inbox/modulix-automation.tar.gz"
     mode: "0640"
   become: false
-  when: aap_local_action == 'transfer_payload'
+  when: aap_local_execution_action == 'transfer_payload'
 
 - name: Transfer AAP setup bundle
   ansible.builtin.copy:
-    src: "{{ aap_local_bundle_path }}"
-    dest: "{{ aap_effective_appl_root }}/inbox/{{ aap_local_bundle_path | basename }}"
+    src: "{{ aap_local_execution_bundle_path }}"
+    dest: "{{ aap_local_execution_effective_appl_root }}/inbox/{{ aap_local_execution_bundle_path | basename }}"
     mode: "0640"
   become: false
-  when: aap_local_action == 'transfer_payload'
+  when: aap_local_execution_action == 'transfer_payload'
 
 - name: Transfer AAP manifest
   ansible.builtin.copy:
-    src: "{{ aap_local_manifest_path }}"
-    dest: "{{ aap_effective_appl_root }}/inbox/{{ aap_local_manifest_path | basename }}"
+    src: "{{ aap_local_execution_manifest_path }}"
+    dest: "{{ aap_local_execution_effective_appl_root }}/inbox/{{ aap_local_execution_manifest_path | basename }}"
     mode: "0640"
   become: false
-  when: aap_local_action == 'transfer_payload'
+  when: aap_local_execution_action == 'transfer_payload'
 
 - name: Transfer execution environment archive when enabled
   ansible.builtin.copy:
-    src: "{{ machine_a_effective_ee_archive_path }}"
-    dest: "{{ aap_effective_appl_root }}/inbox/{{ modulix_run_ee_archive }}"
+    src: "{{ aap_local_execution_machine_a_effective_ee_archive_path }}"
+    dest: "{{ aap_local_execution_effective_appl_root }}/inbox/{{ aap_local_execution_modulix_run_ee_archive }}"
     mode: "0640"
   become: false
   when:
-    - aap_local_action == 'transfer_payload'
-    - aap_effective_ee_transfer_enabled | bool
+    - aap_local_execution_action == 'transfer_payload'
+    - aap_local_execution_effective_ee_transfer_enabled | bool
 
 - name: Transfer Vault token file when present
   ansible.builtin.copy:
-    src: "{{ machine_a_effective_secrets_dir }}/.vault-token"
-    dest: "{{ aap_effective_appl_root }}/inbox/.vault-token"
+    src: "{{ aap_local_execution_machine_a_effective_secrets_dir }}/.vault-token"
+    dest: "{{ aap_local_execution_effective_appl_root }}/inbox/.vault-token"
     mode: "0600"
   become: false
   when:
-    - aap_local_action == 'transfer_payload'
-    - aap_effective_secret_backend == 'hashicorp_vault'
+    - aap_local_execution_action == 'transfer_payload'
+    - aap_local_execution_effective_secret_backend == 'hashicorp_vault'
     - aap_local_machine_a_vault_token_exists | bool
 
 - name: Transfer SSH key file when key auth is enabled
   ansible.builtin.copy:
-    src: "{{ machine_a_effective_ssh_key }}"
-    dest: "{{ aap_effective_appl_root }}/inbox/{{ machine_a_effective_ssh_key | basename }}"
+    src: "{{ aap_local_execution_machine_a_effective_ssh_key }}"
+    dest: >-
+      {{ aap_local_execution_effective_appl_root }}/inbox/{{
+        aap_local_execution_machine_a_effective_ssh_key | basename
+      }}
     mode: "0600"
   become: false
   when:
-    - aap_local_action == 'transfer_payload'
+    - aap_local_execution_action == 'transfer_payload'
     - aap_ssh_key_auth_enabled | bool
     - aap_local_machine_a_ssh_key_exists | bool
 
 - name: Install transferred payload into remote staging paths
   ansible.builtin.copy:
-    src: "{{ aap_effective_appl_root }}/inbox/aap-local.env"
-    dest: "{{ aap_effective_env_file }}"
+    src: "{{ aap_local_execution_effective_appl_root }}/inbox/aap-local.env"
+    dest: "{{ aap_local_execution_effective_env_file }}"
     remote_src: true
     mode: "0600"
-  when: aap_local_action == 'transfer_payload'
+  when: aap_local_execution_action == 'transfer_payload'
 
 - name: Install transferred SSH key when key auth is enabled
   ansible.builtin.copy:
-    src: "{{ aap_effective_appl_root }}/inbox/{{ machine_a_effective_ssh_key | basename }}"
-    dest: "{{ aap_effective_secrets_dir }}/svc_ansible_aap"
+    src: >-
+      {{ aap_local_execution_effective_appl_root }}/inbox/{{
+        aap_local_execution_machine_a_effective_ssh_key | basename
+      }}
+    dest: "{{ aap_local_execution_effective_secrets_dir }}/svc_ansible_aap"
     remote_src: true
     mode: "0600"
   when:
-    - aap_local_action == 'transfer_payload'
+    - aap_local_execution_action == 'transfer_payload'
     - aap_ssh_key_auth_enabled | bool
     - aap_local_machine_a_ssh_key_exists | bool
 
 - name: Install transferred Vault token when present
   ansible.builtin.copy:
-    src: "{{ aap_effective_appl_root }}/inbox/.vault-token"
-    dest: "{{ aap_effective_secrets_dir }}/.vault-token"
+    src: "{{ aap_local_execution_effective_appl_root }}/inbox/.vault-token"
+    dest: "{{ aap_local_execution_effective_secrets_dir }}/.vault-token"
     remote_src: true
     mode: "0600"
   when:
-    - aap_local_action == 'transfer_payload'
-    - aap_effective_secret_backend == 'hashicorp_vault'
+    - aap_local_execution_action == 'transfer_payload'
+    - aap_local_execution_effective_secret_backend == 'hashicorp_vault'
     - aap_local_machine_a_vault_token_exists | bool
 
 - name: Install transferred execution environment archive when enabled
   ansible.builtin.copy:
-    src: "{{ aap_effective_appl_root }}/inbox/{{ modulix_run_ee_archive }}"
-    dest: "{{ aap_effective_ee_archive_path }}"
+    src: "{{ aap_local_execution_effective_appl_root }}/inbox/{{ aap_local_execution_modulix_run_ee_archive }}"
+    dest: "{{ aap_local_execution_effective_ee_archive_path }}"
     remote_src: true
     mode: "0640"
   when:
-    - aap_local_action == 'transfer_payload'
-    - aap_effective_ee_transfer_enabled | bool
+    - aap_local_execution_action == 'transfer_payload'
+    - aap_local_execution_effective_ee_transfer_enabled | bool
 
 - name: Install transferred automation source archive
   ansible.builtin.copy:
-    src: "{{ aap_effective_appl_root }}/inbox/modulix-automation.tar.gz"
-    dest: "{{ aap_effective_appl_root }}/artifacts/modulix-automation.tar.gz"
+    src: "{{ aap_local_execution_effective_appl_root }}/inbox/modulix-automation.tar.gz"
+    dest: "{{ aap_local_execution_effective_appl_root }}/artifacts/modulix-automation.tar.gz"
     remote_src: true
     mode: "0640"
-  when: aap_local_action == 'transfer_payload'
+  when: aap_local_execution_action == 'transfer_payload'
 
 - name: Prepare Podman storage configuration
   ansible.builtin.include_tasks: podman_storage.yml
-  when: aap_local_action in ['stage_runtime'] or aap_local_action in aap_local_remote_playbooks
+  when: >-
+    aap_local_execution_action in ['stage_runtime']
+    or aap_local_execution_action in aap_local_execution_remote_playbooks
 
 - name: Check remote automation checkout
   ansible.builtin.stat:
-    path: "{{ aap_effective_automation_ansible_dir }}/ansible.cfg"
-  register: aap_remote_automation_checkout
-  when: aap_local_action == 'stage_runtime'
+    path: "{{ aap_local_execution_effective_automation_ansible_dir }}/ansible.cfg"
+  register: aap_local_execution_remote_automation_checkout
+  when: aap_local_execution_action == 'stage_runtime'
 
 - name: Unpack automation source archive
   ansible.builtin.unarchive:
-    src: "{{ aap_effective_appl_root }}/artifacts/modulix-automation.tar.gz"
-    dest: "{{ aap_effective_appl_root }}/src"
+    src: "{{ aap_local_execution_effective_appl_root }}/artifacts/modulix-automation.tar.gz"
+    dest: "{{ aap_local_execution_effective_appl_root }}/src"
     remote_src: true
-  when: aap_local_action == 'stage_runtime'
+  when: aap_local_execution_action == 'stage_runtime'
 
 - name: Ensure remote AAP artifact directory exists
   ansible.builtin.file:
-    path: "{{ aap_effective_artifact_dir }}"
+    path: "{{ aap_local_execution_effective_artifact_dir }}"
     state: directory
     mode: "0750"
-  when: aap_local_action == 'stage_runtime'
+  when: aap_local_execution_action == 'stage_runtime'
 
 - name: Find transferred AAP artifact files
   ansible.builtin.find:
-    paths: "{{ aap_effective_appl_root }}/inbox"
+    paths: "{{ aap_local_execution_effective_appl_root }}/inbox"
     patterns:
       - "ansible-automation-platform-containerized-setup-bundle-*-x86_64.tar.gz"
       - "manifest*.zip"
     file_type: file
-  register: aap_remote_inbox_artifacts
-  when: aap_local_action == 'stage_runtime'
+  register: aap_local_execution_remote_inbox_artifacts
+  when: aap_local_execution_action == 'stage_runtime'
 
 - name: Move transferred AAP artifacts into automation artifact directory
   ansible.builtin.copy:
     src: "{{ item.path }}"
-    dest: "{{ aap_effective_artifact_dir }}/{{ item.path | basename }}"
+    dest: "{{ aap_local_execution_effective_artifact_dir }}/{{ item.path | basename }}"
     remote_src: true
     mode: "0640"
-  loop: "{{ aap_remote_inbox_artifacts.files | default([]) }}"
+  loop: "{{ aap_local_execution_remote_inbox_artifacts.files | default([]) }}"
   loop_control:
     label: "{{ item.path | basename }}"
-  when: aap_local_action == 'stage_runtime'
+  when: aap_local_execution_action == 'stage_runtime'
 
 - name: Remove transferred AAP artifacts from inbox
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: absent
-  loop: "{{ aap_remote_inbox_artifacts.files | default([]) }}"
+  loop: "{{ aap_local_execution_remote_inbox_artifacts.files | default([]) }}"
   loop_control:
     label: "{{ item.path | basename }}"
-  when: aap_local_action == 'stage_runtime'
+  when: aap_local_execution_action == 'stage_runtime'
 
 - name: Check Podman command before staging execution environment
   ansible.builtin.command:
     argv:
       - which
       - podman
-  register: aap_stage_runtime_podman_check
+  register: aap_local_execution_stage_runtime_podman_check
   changed_when: false
   failed_when: false
-  when: aap_local_action == 'stage_runtime'
+  when: aap_local_execution_action == 'stage_runtime'
 
 - name: Assert Podman is available before staging execution environment
   ansible.builtin.assert:
     that:
-      - aap_stage_runtime_podman_check.rc == 0
+      - aap_local_execution_stage_runtime_podman_check.rc == 0
     fail_msg: >-
       Podman is required before aap_action=stage_runtime can load or pull
       the execution environment. Run the RHEL/AAP baseline preparation, or
       have the customer-provided package baseline install podman first.
     quiet: true
-  when: aap_local_action == 'stage_runtime'
+  when: aap_local_execution_action == 'stage_runtime'
 
 - name: Load execution environment archive when transfer is enabled
   ansible.builtin.command:
@@ -270,15 +278,19 @@
       - podman
       - load
       - -i
-      - "{{ aap_effective_ee_archive_path }}"
-  register: aap_remote_ee_load_result
-  changed_when: "'Loaded image:' in (aap_remote_ee_load_result.stdout ~ aap_remote_ee_load_result.stderr)"
+      - "{{ aap_local_execution_effective_ee_archive_path }}"
+  register: aap_local_execution_remote_ee_load_result
+  changed_when: >-
+    'Loaded image:' in (
+      aap_local_execution_remote_ee_load_result.stdout
+      ~ aap_local_execution_remote_ee_load_result.stderr
+    )
   environment:
-    CONTAINERS_STORAGE_CONF: "{{ aap_podman_storage_conf_effective }}"
-    TMPDIR: "{{ aap_podman_tmpdir_effective }}"
+    CONTAINERS_STORAGE_CONF: "{{ aap_local_execution_podman_storage_conf_effective }}"
+    TMPDIR: "{{ aap_local_execution_podman_tmpdir_effective }}"
   when:
-    - aap_local_action == 'stage_runtime'
-    - aap_effective_ee_transfer_enabled | bool
+    - aap_local_execution_action == 'stage_runtime'
+    - aap_local_execution_effective_ee_transfer_enabled | bool
 
 - name: Pull execution environment from registry when transfer is disabled
   ansible.builtin.command:
@@ -286,17 +298,26 @@
       - podman
       - pull
       - "{{ modulix_run_ee_image }}"
-  register: aap_remote_ee_pull_result
+  register: aap_local_execution_remote_ee_pull_result
   changed_when: >-
-    'Copying blob' in (aap_remote_ee_pull_result.stdout ~ aap_remote_ee_pull_result.stderr)
-    or 'Writing manifest' in (aap_remote_ee_pull_result.stdout ~ aap_remote_ee_pull_result.stderr)
-    or 'Storing signatures' in (aap_remote_ee_pull_result.stdout ~ aap_remote_ee_pull_result.stderr)
+    'Copying blob' in (
+      aap_local_execution_remote_ee_pull_result.stdout
+      ~ aap_local_execution_remote_ee_pull_result.stderr
+    )
+    or 'Writing manifest' in (
+      aap_local_execution_remote_ee_pull_result.stdout
+      ~ aap_local_execution_remote_ee_pull_result.stderr
+    )
+    or 'Storing signatures' in (
+      aap_local_execution_remote_ee_pull_result.stdout
+      ~ aap_local_execution_remote_ee_pull_result.stderr
+    )
   environment:
-    CONTAINERS_STORAGE_CONF: "{{ aap_podman_storage_conf_effective }}"
-    TMPDIR: "{{ aap_podman_tmpdir_effective }}"
+    CONTAINERS_STORAGE_CONF: "{{ aap_local_execution_podman_storage_conf_effective }}"
+    TMPDIR: "{{ aap_local_execution_podman_tmpdir_effective }}"
   when:
-    - aap_local_action == 'stage_runtime'
-    - not (aap_effective_ee_transfer_enabled | bool)
+    - aap_local_execution_action == 'stage_runtime'
+    - not (aap_local_execution_effective_ee_transfer_enabled | bool)
 
 - name: Verify execution environment exists
   ansible.builtin.command:
@@ -306,16 +327,16 @@
       - exists
       - "{{ modulix_run_ee_image }}"
   environment:
-    CONTAINERS_STORAGE_CONF: "{{ aap_podman_storage_conf_effective }}"
-    TMPDIR: "{{ aap_podman_tmpdir_effective }}"
+    CONTAINERS_STORAGE_CONF: "{{ aap_local_execution_podman_storage_conf_effective }}"
+    TMPDIR: "{{ aap_local_execution_podman_tmpdir_effective }}"
   changed_when: false
-  when: aap_local_action == 'stage_runtime'
+  when: aap_local_execution_action == 'stage_runtime'
 
 - name: Check Ansible vault password file
   ansible.builtin.stat:
-    path: "{{ ansible_vault_password_file_effective }}"
-  register: aap_remote_vault_password_file
-  when: aap_local_action == 'stage_runtime'
+    path: "{{ aap_local_execution_ansible_vault_password_file_effective }}"
+  register: aap_local_execution_remote_vault_password_file
+  when: aap_local_execution_action == 'stage_runtime'
 
 - name: Generate Ansible vault password when missing
   ansible.builtin.command:
@@ -324,36 +345,40 @@
       - rand
       - -base64
       - "32"
-  register: aap_remote_generated_vault_password
+  register: aap_local_execution_remote_generated_vault_password
   changed_when: false
   no_log: true
   when:
-    - aap_local_action == 'stage_runtime'
-    - not (aap_remote_vault_password_file.stat.exists | default(false))
+    - aap_local_execution_action == 'stage_runtime'
+    - not (aap_local_execution_remote_vault_password_file.stat.exists | default(false))
 
 - name: Create Ansible vault password file when missing
   ansible.builtin.copy:
-    dest: "{{ ansible_vault_password_file_effective }}"
-    content: "{{ aap_remote_generated_vault_password.stdout }}\n"
+    dest: "{{ aap_local_execution_ansible_vault_password_file_effective }}"
+    content: "{{ aap_local_execution_remote_generated_vault_password.stdout }}\n"
     mode: "0600"
   no_log: true
   when:
-    - aap_local_action == 'stage_runtime'
-    - not (aap_remote_vault_password_file.stat.exists | default(false))
+    - aap_local_execution_action == 'stage_runtime'
+    - not (aap_local_execution_remote_vault_password_file.stat.exists | default(false))
 
 - name: Ensure Ansible vault password file mode
   ansible.builtin.file:
-    path: "{{ ansible_vault_password_file_effective }}"
+    path: "{{ aap_local_execution_ansible_vault_password_file_effective }}"
     mode: "0600"
-  when: aap_local_action == 'stage_runtime'
+  when: aap_local_execution_action == 'stage_runtime'
 
 - name: Write AAP inventory from templates
   ansible.builtin.include_tasks: aap_inventory.yml
-  when: aap_local_action == 'stage_runtime' or aap_local_action in aap_local_remote_playbooks
+  when: >-
+    aap_local_execution_action == 'stage_runtime'
+    or aap_local_execution_action in aap_local_execution_remote_playbooks
 
 - name: Resolve staged AAP artifacts
   ansible.builtin.include_tasks: resolve_artifacts.yml
-  when: aap_local_action == 'stage_runtime' or aap_local_action in aap_local_remote_playbooks
+  when: >-
+    aap_local_execution_action == 'stage_runtime'
+    or aap_local_execution_action in aap_local_execution_remote_playbooks
 
 - name: Verify execution environment command
   ansible.builtin.include_tasks: run_ee.yml
@@ -361,14 +386,14 @@
     aap_ee_command:
       - ansible-playbook
       - --version
-  when: aap_local_action == 'stage_runtime'
+  when: aap_local_execution_action == 'stage_runtime'
 
 - name: Show staged AAP artifact paths
   ansible.builtin.debug:
     msg:
-      - "AAP bundle: {{ aap_bundle_remote_src }}"
-      - "AAP manifest: {{ aap_manifest_remote_src }}"
-  when: aap_local_action == 'stage_runtime'
+      - "AAP bundle: {{ aap_local_execution_bundle_remote_src }}"
+      - "AAP manifest: {{ aap_local_execution_manifest_remote_src }}"
+  when: aap_local_execution_action == 'stage_runtime'
 
 - name: Run AAP playbooks on target host
   ansible.builtin.include_tasks: run_ee.yml
@@ -376,9 +401,9 @@
     aap_ee_command: >-
       {{
         ['ansible-playbook']
-        + (aap_local_remote_playbooks[aap_local_action] | default([]))
-        + ['-i', aap_effective_inventory_rel, '--limit', aap_effective_inventory_host]
-        + (['-e', 'aap_ops_action=status'] if aap_local_action == 'status' else [])
-        + aap_local_run_playbook_args
+        + (aap_local_execution_remote_playbooks[aap_local_execution_action] | default([]))
+        + ['-i', aap_local_execution_effective_inventory_rel, '--limit', aap_local_execution_effective_inventory_host]
+        + (['-e', 'aap_ops_action=status'] if aap_local_execution_action == 'status' else [])
+        + aap_local_execution_run_playbook_args
       }}
-  when: aap_local_action in aap_local_remote_playbooks
+  when: aap_local_execution_action in aap_local_execution_remote_playbooks

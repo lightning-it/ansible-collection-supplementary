@@ -5,7 +5,9 @@
 
 - name: Report rsyslog upgrade dry run
   ansible.builtin.debug:
-    msg: "rsyslog upgrade prepared. Set rsyslog_upgrade_execute=true to redeploy with image {{ rsyslog_upgrade_image }}."
+    msg: >-
+      rsyslog upgrade prepared. Set rsyslog_upgrade_execute=true to redeploy
+      with image {{ rsyslog_upgrade_image }}.
   when: not rsyslog_upgrade_execute | bool
   tags:
     - upgrade

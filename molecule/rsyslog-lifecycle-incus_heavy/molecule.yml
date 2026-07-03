@@ -1,7 +1,15 @@
 ---
 dependency:
   name: shell
-  command: "mkdir -p /tmp/codex-rsyslog-collections/ansible_collections/lit && ln -sfn /home/rene/sources/ansible-collection-supplementary /tmp/codex-rsyslog-collections/ansible_collections/lit/supplementary && ln -sfn /home/rene/sources/ansible-collection-foundational /tmp/codex-rsyslog-collections/ansible_collections/lit/foundational"
+  command: |-
+    set -e
+    mkdir -p /tmp/codex-rsyslog-collections/ansible_collections/lit
+    ln -sfn \
+      /home/rene/sources/ansible-collection-supplementary \
+      /tmp/codex-rsyslog-collections/ansible_collections/lit/supplementary
+    ln -sfn \
+      /home/rene/sources/ansible-collection-foundational \
+      /tmp/codex-rsyslog-collections/ansible_collections/lit/foundational
 
 driver:
   name: default
