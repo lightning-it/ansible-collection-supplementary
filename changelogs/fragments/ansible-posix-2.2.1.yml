@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Update the CI collection preparation requirements to use ansible.posix
+    2.2.1.
