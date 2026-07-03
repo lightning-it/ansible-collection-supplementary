@@ -2,6 +2,10 @@
 
 Deploy Grafana as the UI for Loki log exploration.
 
+The role renders a Podman pod manifest and manages it through systemd Quadlet
+when `grafana_deploy_manage_systemd` is enabled. Non-systemd deployments can
+still use the existing kubeplay path.
+
 The role provisions Loki as the default datasource and stores the local admin
 password in HC Vault when Vault access is configured. Without HC Vault, provide
 `grafana_deploy_admin_password` from Ansible Vault encrypted inventory.

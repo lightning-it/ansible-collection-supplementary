@@ -36,10 +36,10 @@
         cp
         {{ (minio_bootstrap_mc_insecure | bool) | ternary('--insecure', '') }}
         {{ minio_bootstrap_tfstate_file.path }}
-        {{ minio_bootstrap_mc_alias }}/{{ tfstate_bucket }}/{{ minio_bootstrap_tfstate_object_key }}
+        {{ minio_bootstrap_mc_alias }}/{{ minio_bootstrap_tfstate_bucket }}/{{ minio_bootstrap_tfstate_object_key }}
       vars:
         _prefix: >-
-          {{ (tfstate_key_prefix | default('', true) | trim)
+          {{ (minio_bootstrap_tfstate_key_prefix | default('', true) | trim)
              | regex_replace('^/+', '')
              | regex_replace('/+$', '') }}
         minio_bootstrap_tfstate_object_key: >-

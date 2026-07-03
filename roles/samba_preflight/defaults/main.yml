@@ -3,6 +3,15 @@ samba_preflight_strict: true
 samba_preflight_check_packages: true
 samba_preflight_check_systemd: false
 samba_preflight_check_ports: true
-samba_preflight_required_ports:
-  - "{{ samba_deploy_netbios_port | default(139, true) }}"
-  - "{{ samba_deploy_smb_port | default(445, true) }}"
+samba_preflight_required_ports: >-
+  {{
+    [
+      samba_deploy_ldap_port | default(389, true),
+      samba_deploy_ldaps_port | default(636, true)
+    ]
+    if (samba_deploy_mode | default('share', true)) == 'ad_dc'
+    else [
+      samba_deploy_netbios_port | default(139, true),
+      samba_deploy_smb_port | default(445, true)
+    ]
+  }}

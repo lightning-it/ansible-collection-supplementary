@@ -42,24 +42,24 @@
 - name: Register server ca key
   ansible.builtin.slurp:
     src: "{{ openvpn_key_dir }}/ca.crt"
-  register: ca_cert
+  register: openvpn_ca_cert
 
 - name: Register tls-auth key
   ansible.builtin.slurp:
     src: "{{ openvpn_key_dir }}/ta.key"
-  register: tls_auth
+  register: openvpn_tls_auth
 
 - name: Register client certs
   ansible.builtin.slurp:
     src: "{{ openvpn_key_dir }}/{{ item }}.crt"
   loop: "{{ openvpn_clients | default([]) }}"
-  register: client_certs
+  register: openvpn_client_certs
 
 - name: Register client keys
   ansible.builtin.slurp:
     src: "{{ openvpn_key_dir }}/{{ item }}.key"
   loop: "{{ openvpn_clients | default([]) }}"
-  register: client_keys
+  register: openvpn_client_keys
 
 - name: Generate client config
   no_log: "{{ openvpn_client_config_no_log }}"
@@ -72,8 +72,8 @@
     mode: "0400"
   loop: >-
     {{
-      (client_certs.results | default([]))
-      | zip(client_keys.results | default([]))
+      (openvpn_client_certs.results | default([]))
+      | zip(openvpn_client_keys.results | default([]))
       | list
     }}
   loop_control:

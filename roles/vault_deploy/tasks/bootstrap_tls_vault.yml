@@ -34,7 +34,7 @@
     token: "{{ vault_deploy_token }}"
     validate_certs: "{{ vault_deploy_vault_validate_certs }}"
     path: "{{ inventory_hostname }}/vault/certificate"
-  register: existing_cert
+  register: vault_deploy_existing_cert
   failed_when: false
   no_log: true
   when:
@@ -69,7 +69,7 @@
 
 - name: Create tmp selfsigned certificate
   when:
-    - existing_cert is not defined or existing_cert.data is not defined
+    - vault_deploy_existing_cert is not defined or vault_deploy_existing_cert.data is not defined
     - not vault_deploy_bootstrap_cert_present | bool
     - not ansible_check_mode
   block:
@@ -104,7 +104,7 @@
           - "DNS:{{ vault_deploy_vault_hostname }}"
           - "DNS:localhost"
           - "DNS:vault"
-      register: csr
+      register: vault_deploy_csr
       delegate_to: localhost
       no_log: true
       tags:
@@ -114,7 +114,7 @@
       community.crypto.x509_certificate:
         path: "{{ vault_deploy_tls_tmp.path }}/vault.crt"
         privatekey_path: "{{ vault_deploy_tls_tmp.path }}/vault.key"
-        csr_content: "{{ csr.csr }}"
+        csr_content: "{{ vault_deploy_csr.vault_deploy_csr }}"
         provider: selfsigned
       delegate_to: localhost
       no_log: true

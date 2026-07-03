@@ -2,29 +2,30 @@
 - name: Manage Alloy systemd unit
   when:
     - alloy_deploy_manage_systemd | bool
-    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+    - ansible_facts.service_mgr | default('') == 'systemd'
     - not ansible_check_mode
   tags:
     - systemd
   block:
-    - name: Escape kube play manifest path
-      ansible.builtin.command:
-        cmd: "systemd-escape {{ alloy_deploy_pod_manifest_path }}"
-      register: alloy_deploy_systemd_name
-      changed_when: false
-
-    - name: Ensure podman-kube drop-in directory exists
-      ansible.builtin.file:
-        path: "/etc/systemd/system/podman-kube@{{ alloy_deploy_systemd_name.stdout }}.service.d"
-        state: directory
-        mode: '0755'
-
-    - name: Enable and start Podman kube systemd unit
-      ansible.builtin.systemd:
-        name: "podman-kube@{{ alloy_deploy_systemd_name.stdout }}.service"
-        enabled: true
-        state: started
-        daemon_reload: true
+    - name: Manage Alloy persistent container service
+      ansible.builtin.include_role:
+        name: lit.foundational.podman_systemd
+      vars:
+        podman_systemd_action: >-
+          {{
+            'restarted'
+            if (
+              alloy_deploy_kubeplay_remove | default(false) | bool
+              or alloy_deploy_kubeplay_run | default(false) | bool
+            )
+            else 'present'
+          }}
+        podman_systemd_unit_name: "{{ alloy_deploy_systemd_unit_name }}"
+        podman_systemd_description: "{{ alloy_deploy_systemd_description }}"
+        podman_systemd_manifest_path: "{{ alloy_deploy_pod_manifest_path }}"
+        podman_systemd_scope: "{{ alloy_deploy_systemd_scope }}"
+        podman_systemd_quadlet_dir: "{{ alloy_deploy_quadlet_dir }}"
+        podman_systemd_enabled: "{{ alloy_deploy_systemd_enabled }}"
 
     - name: Wait until Alloy readiness endpoint is reachable
       ansible.builtin.uri:

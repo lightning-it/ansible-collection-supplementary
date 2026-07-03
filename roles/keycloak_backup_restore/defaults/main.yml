@@ -7,7 +7,9 @@ keycloak_backup_restore_allowed_actions:
 keycloak_backup_restore_execute: false
 keycloak_backup_restore_dir: "/srv/keycloak/realm-backups"
 keycloak_backup_restore_file: >-
-  {{ keycloak_backup_restore_dir }}/keycloak-realm-{{ keycloak_backup_restore_realm }}-{{ ansible_date_time.iso8601_basic_short | default('manual') }}.json
+  {{ keycloak_backup_restore_dir }}/keycloak-realm-{{ keycloak_backup_restore_realm }}-{{
+    ansible_date_time.iso8601_basic_short | default('manual')
+  }}.json
 
 # Keycloak Admin API access
 keycloak_backup_restore_url: "{{ keycloak_deploy_api_url_effective | default('http://127.0.0.1:8080', true) }}"

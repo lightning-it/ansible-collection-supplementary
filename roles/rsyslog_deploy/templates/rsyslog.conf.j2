@@ -1,0 +1,9 @@
+global(workDirectory="/tmp")
+
+module(load="imtcp")
+module(load="imudp")
+
+input(type="imtcp" port="{{ rsyslog_deploy_container_tcp_port }}")
+input(type="imudp" port="{{ rsyslog_deploy_container_udp_port }}")
+
+*.* {{ rsyslog_deploy_container_log_dir }}/{{ rsyslog_deploy_log_file }}

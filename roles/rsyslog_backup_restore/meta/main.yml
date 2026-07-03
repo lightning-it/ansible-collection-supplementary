@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: rsyslog_backup_restore
+  author: LIT
+  description: Back up and restore rsyslog data.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

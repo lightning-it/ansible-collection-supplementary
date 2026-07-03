@@ -17,7 +17,7 @@
       - 204
       - 404
     return_content: false
-  register: __t_token
+  register: aap_cac_token_delete
   changed_when: false
   no_log: true
   when:

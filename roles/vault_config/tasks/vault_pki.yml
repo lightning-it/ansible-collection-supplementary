@@ -90,7 +90,7 @@
     secret_id: "{{ vault_config_secret_id | default(omit, true) }}"
     validate_certs: "{{ vault_config_vault_validate_certs }}"
     path: "{{ inventory_hostname }}/vault/certificate"
-  register: existing_cert
+  register: vault_config_existing_cert
   failed_when: false
   no_log: "{{ vault_config_pki_no_log }}"
   tags:
@@ -99,9 +99,9 @@
 - name: Normalize existing certificate data
   ansible.builtin.set_fact:
     vault_config_existing_cert_data: >-
-      {{ (existing_cert.data | default({})).data | default({}) }}
+      {{ (vault_config_existing_cert.data | default({})).data | default({}) }}
     vault_config_existing_cert_in_vault: >-
-      {{ (existing_cert.data.data.certificate | default('', true) | length) > 0 }}
+      {{ (vault_config_existing_cert.data.data.certificate | default('', true) | length) > 0 }}
   changed_when: false
   tags:
     - vault_config_pki
@@ -109,7 +109,7 @@
 - name: Parse expiry of existing certificate (Vault KV)
   community.crypto.x509_certificate_info:
     content: "{{ vault_config_existing_cert_data.certificate }}"
-  register: cert_info
+  register: vault_config_cert_info
   when: vault_config_existing_cert_in_vault | bool
   delegate_to: "{{ vault_config_api_delegate_to }}"
   become: false
@@ -136,7 +136,7 @@
 - name: Parse expiry of existing certificate (local)
   community.crypto.x509_certificate_info:
     content: "{{ vault_config_local_cert_slurp.content | b64decode }}"
-  register: local_cert_info
+  register: vault_config_local_cert_info
   when:
     - vault_config_local_cert_slurp.data is defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
@@ -148,16 +148,16 @@
   ansible.builtin.set_fact:
     vault_config_existing_cert_info: >-
       {{
-        cert_info
-        if cert_info is defined
-        else local_cert_info
-        if local_cert_info is defined
+        vault_config_cert_info
+        if vault_config_cert_info is defined
+        else vault_config_local_cert_info
+        if vault_config_local_cert_info is defined
         else {}
       }}
     vault_config_existing_cert_present: >-
       {{
-        (cert_info is defined)
-        or (local_cert_info is defined)
+        (vault_config_cert_info is defined)
+        or (vault_config_local_cert_info is defined)
       }}
   changed_when: false
   tags:
@@ -165,7 +165,7 @@
 
 - name: Set reference datetime (now + 30 days)
   ansible.builtin.set_fact:
-    cert_check_time: "{{ (ansible_date_time.epoch | int) + (30 * 24 * 60 * 60) }}"
+    vault_config_cert_check_time: "{{ (ansible_date_time.epoch | int) + (30 * 24 * 60 * 60) }}"
   changed_when: false
   delegate_to: "{{ vault_config_api_delegate_to }}"
   become: false
@@ -174,7 +174,7 @@
 
 - name: Get certificate expiry if exists
   ansible.builtin.set_fact:
-    cert_expiry: >-
+    vault_config_cert_expiry: >-
       {{
         (vault_config_existing_cert_info.not_after
           | regex_replace('Z$', '')
@@ -190,7 +190,7 @@
 
 - name: Set default certificate expiry (current time)
   ansible.builtin.set_fact:
-    cert_expiry: "{{ ansible_date_time.epoch | int }}"
+    vault_config_cert_expiry: "{{ ansible_date_time.epoch | int }}"
   changed_when: false
   when: vault_config_existing_cert_info.not_after is not defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
@@ -216,7 +216,7 @@
   when:
     - vault_config_pki_role_exists | default(false) | bool
     - not (vault_config_existing_cert_present | default(false) | bool)
-      or (cert_expiry | int) < (cert_check_time | int)
+      or (vault_config_cert_expiry | int) < (vault_config_cert_check_time | int)
   no_log: "{{ vault_config_pki_no_log }}"
   notify:
     - Recreate vault pod
@@ -235,7 +235,7 @@
 - name: Parse expiry of newly generated certificate
   community.crypto.x509_certificate_info:
     content: "{{ vault_config_pki_cert.data.data.certificate }}"
-  register: new_cert_info
+  register: vault_config_new_cert_info
   when: vault_config_pki_cert.data is defined
   delegate_to: "{{ vault_config_api_delegate_to }}"
   become: false
@@ -258,7 +258,7 @@
       certificate: "{{ vault_config_pki_cert.data.data.certificate }}"
       private_key: "{{ vault_config_pki_cert.data.data.private_key }}"
       issuing_ca: "{{ vault_config_pki_cert.data.data.issuing_ca }}"
-      not_after: "{{ new_cert_info.not_after }}"
+      not_after: "{{ vault_config_new_cert_info.not_after }}"
   when: vault_config_pki_cert.data is defined
   no_log: "{{ vault_config_pki_no_log }}"
   notify:

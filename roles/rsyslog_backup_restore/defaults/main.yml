@@ -1,0 +1,16 @@
+---
+rsyslog_backup_restore_action: "none"
+rsyslog_backup_restore_allowed_actions:
+  - none
+  - backup
+  - restore
+rsyslog_backup_restore_execute: false
+rsyslog_backup_restore_backup_dir: "/srv/rsyslog/backups"
+rsyslog_backup_restore_file: >-
+  {{ rsyslog_backup_restore_backup_dir }}/rsyslog-{{ ansible_date_time.iso8601_basic_short | default('manual') }}.tar.gz
+rsyslog_backup_restore_restore_source: "{{ rsyslog_backup_restore_file }}"
+rsyslog_backup_restore_restore_confirm: ""
+rsyslog_backup_restore_paths:
+  - "{{ rsyslog_deploy_config_dir | default('/srv/rsyslog/config', true) }}"
+  - "{{ rsyslog_deploy_log_dir | default('/srv/rsyslog/log', true) }}"
+rsyslog_backup_restore_retention_keep_last: 14

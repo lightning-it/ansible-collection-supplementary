@@ -1,0 +1,39 @@
+---
+- name: Fully deploy rsyslog lifecycle on Incus host
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    rsyslog_deploy_install_packages: false
+    rsyslog_deploy_pod_name: rsyslog-heavy
+    rsyslog_deploy_container_name: rsyslog
+    rsyslog_deploy_host_ip: 127.0.0.1
+    rsyslog_deploy_tcp_port: 1514
+    rsyslog_deploy_udp_port: 1514
+    rsyslog_deploy_config_dir: /srv/rsyslog/config
+    rsyslog_deploy_log_dir: /srv/rsyslog/log
+    rsyslog_deploy_log_dir_mode: "0777"
+    rsyslog_deploy_systemd_unit_name: rsyslog-heavy
+    rsyslog_deploy_systemd_description: Molecule rsyslog container service
+    rsyslog_deploy_quadlet_dir: /etc/containers/systemd
+    rsyslog_config_skip_apply: true
+    rsyslog_validate_strict: true
+    rsyslog_validate_host: 127.0.0.1
+    rsyslog_validate_tcp_port: 1514
+    rsyslog_validate_check_log_file: false
+    rsyslog_ops_action: status
+    rsyslog_ops_service_name: rsyslog-heavy.service
+    rsyslog_backup_restore_action: backup
+    rsyslog_backup_restore_execute: true
+    rsyslog_backup_restore_backup_dir: /srv/rsyslog/backups
+    rsyslog_backup_restore_file: /srv/rsyslog/backups/rsyslog-heavy.tar.gz
+    rsyslog_upgrade_execute: false
+    rsyslog_destroy_execute: false
+    rsyslog_preflight_check_packages: true
+    rsyslog_preflight_check_ports: true
+    rsyslog_run_ops: true
+    rsyslog_run_backup_restore: true
+    rsyslog_run_upgrade: false
+    rsyslog_run_destroy: false
+  roles:
+    - role: rsyslog

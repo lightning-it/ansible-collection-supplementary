@@ -16,7 +16,7 @@
   environment:
     CONTAINERS_STORAGE_CONF: "{{ aap_ops_podman_storage_conf_effective }}"
     TMPDIR: "{{ aap_ops_podman_tmpdir_effective }}"
-  register: aap_local_diagnostics_image
+  register: aap_ops_local_diagnostics_image
   changed_when: false
   failed_when: false
 
@@ -32,7 +32,7 @@
   environment:
     CONTAINERS_STORAGE_CONF: "{{ aap_ops_podman_storage_conf_effective }}"
     TMPDIR: "{{ aap_ops_podman_tmpdir_effective }}"
-  register: aap_local_diagnostics_image_inspect
+  register: aap_ops_local_diagnostics_image_inspect
   changed_when: false
   failed_when: false
 
@@ -46,7 +46,7 @@
       - /appl/ansible-tmp
       - /appl/home
       - /appl/podman
-  register: aap_local_diagnostics_df
+  register: aap_ops_local_diagnostics_df
   changed_when: false
   failed_when: false
 
@@ -60,16 +60,22 @@
       - "*.yaml"
     contains: "/appl/(ansible-tmp|tmp|podman|home|aap)"
     read_whole_file: true
-  register: aap_local_diagnostics_inventory_paths
+  register: aap_ops_local_diagnostics_inventory_paths
   failed_when: false
 
 - name: Show local execution diagnostics
   ansible.builtin.debug:
     msg:
-      image_exists_rc: "{{ aap_local_diagnostics_image.rc | default('unavailable') }}"
-      image_exists_error: "{{ aap_local_diagnostics_image.stderr_lines | default([]) }}"
-      image_inspect: "{{ aap_local_diagnostics_image_inspect.stdout_lines | default([]) }}"
-      image_inspect_error: "{{ aap_local_diagnostics_image_inspect.stderr_lines | default([]) }}"
-      filesystems: "{{ aap_local_diagnostics_df.stdout_lines | default([]) }}"
+      image_exists_rc: "{{ aap_ops_local_diagnostics_image.rc | default('unavailable') }}"
+      image_exists_error: "{{ aap_ops_local_diagnostics_image.stderr_lines | default([]) }}"
+      image_inspect: "{{ aap_ops_local_diagnostics_image_inspect.stdout_lines | default([]) }}"
+      image_inspect_error: "{{ aap_ops_local_diagnostics_image_inspect.stderr_lines | default([]) }}"
+      filesystems: "{{ aap_ops_local_diagnostics_df.stdout_lines | default([]) }}"
       inventory_path_files: >-
         {{
+          aap_ops_local_diagnostics_inventory_paths.files
+          | default([])
+          | map(attribute='path')
+          | sort
+          | list
+        }}

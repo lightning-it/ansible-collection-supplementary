@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+if samba-tool user show "{{ samba_deploy_ad_dc_keycloak_bind_user }}" >/dev/null 2>&1; then
+  samba-tool user setpassword "{{ samba_deploy_ad_dc_keycloak_bind_user }}" \
+    --newpassword="{{ samba_deploy_ad_dc_keycloak_bind_password }}"
+else
+  samba-tool user create "{{ samba_deploy_ad_dc_keycloak_bind_user }}" \
+    "{{ samba_deploy_ad_dc_keycloak_bind_password }}" \
+    --given-name="{{ samba_deploy_ad_dc_keycloak_bind_given_name }}" \
+    --surname="{{ samba_deploy_ad_dc_keycloak_bind_surname }}"
+fi

@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: rsyslog
+  author: LIT
+  description: Orchestrate the rsyslog lifecycle roles.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

@@ -1,0 +1,146 @@
+---
+- name: Validate Keycloak LDAP provider definition
+  ansible.builtin.assert:
+    that:
+      - keycloak_cac_ldap_provider is mapping
+      - keycloak_cac_ldap_provider.name | default('', true) | trim | length > 0
+      - keycloak_cac_ldap_provider.connection_url | default('', true) | trim | length > 0
+      - keycloak_cac_ldap_provider.users_dn | default('', true) | trim | length > 0
+      - keycloak_cac_ldap_provider.bind_dn | default('', true) | trim | length > 0
+    fail_msg: "Keycloak LDAP provider definition is missing required values."
+  no_log: true
+
+- name: Build Keycloak LDAP provider component payload
+  ansible.builtin.set_fact:
+    keycloak_cac_ldap_component_payload:
+      name: "{{ keycloak_cac_ldap_provider.name }}"
+      providerId: "ldap"
+      providerType: "org.keycloak.storage.UserStorageProvider"
+      parentId: "{{ keycloak_cac_ldap_realm.json.id | default(keycloak_cac_realm, true) }}"
+      config:
+        enabled:
+          - "{{ (keycloak_cac_ldap_provider.enabled | default(true) | bool) | ternary('true', 'false') }}"
+        priority:
+          - "{{ keycloak_cac_ldap_provider.priority | default(0) | string }}"
+        fullSyncPeriod:
+          - "{{ keycloak_cac_ldap_provider.full_sync_period | default(86400) | string }}"
+        changedSyncPeriod:
+          - "{{ keycloak_cac_ldap_provider.changed_sync_period | default(3600) | string }}"
+        cachePolicy:
+          - "{{ keycloak_cac_ldap_provider.cache_policy | default('DEFAULT') }}"
+        editMode:
+          - "{{ keycloak_cac_ldap_provider.edit_mode | default('READ_ONLY') }}"
+        syncRegistrations:
+          - "{{ (keycloak_cac_ldap_provider.sync_registrations | default(false) | bool) | ternary('true', 'false') }}"
+        vendor:
+          - "{{ keycloak_cac_ldap_provider.vendor | default('ad') }}"
+        usernameLDAPAttribute:
+          - "{{ keycloak_cac_ldap_provider.username_ldap_attribute | default('sAMAccountName') }}"
+        rdnLDAPAttribute:
+          - "{{ keycloak_cac_ldap_provider.rdn_ldap_attribute | default('cn') }}"
+        uuidLDAPAttribute:
+          - "{{ keycloak_cac_ldap_provider.uuid_ldap_attribute | default('objectGUID') }}"
+        userObjectClasses:
+          - "{{ keycloak_cac_ldap_provider.user_object_classes | default('person, organizationalPerson, user') }}"
+        connectionUrl:
+          - "{{ keycloak_cac_ldap_provider.connection_url }}"
+        usersDn:
+          - "{{ keycloak_cac_ldap_provider.users_dn }}"
+        authType:
+          - "{{ keycloak_cac_ldap_provider.auth_type | default('simple') }}"
+        bindDn:
+          - "{{ keycloak_cac_ldap_provider.bind_dn }}"
+        bindCredential:
+          - "{{ keycloak_cac_ldap_provider.bind_credential | default('') }}"
+        searchScope:
+          - "{{ keycloak_cac_ldap_provider.search_scope | default('1') | string }}"
+        useTruststoreSpi:
+          - "{{ keycloak_cac_ldap_provider.use_truststore_spi | default('never') }}"
+        startTls:
+          - "{{ (keycloak_cac_ldap_provider.start_tls | default(false) | bool) | ternary('true', 'false') }}"
+        connectionPooling:
+          - "{{ (keycloak_cac_ldap_provider.connection_pooling | default(true) | bool) | ternary('true', 'false') }}"
+        pagination:
+          - "{{ (keycloak_cac_ldap_provider.pagination | default(true) | bool) | ternary('true', 'false') }}"
+        importEnabled:
+          - "{{ (keycloak_cac_ldap_provider.import_enabled | default(true) | bool) | ternary('true', 'false') }}"
+        trustEmail:
+          - "{{ (keycloak_cac_ldap_provider.trust_email | default(false) | bool) | ternary('true', 'false') }}"
+        validatePasswordPolicy:
+          - >-
+            {{
+              (
+                keycloak_cac_ldap_provider.validate_password_policy
+                | default(false)
+                | bool
+              )
+              | ternary('true', 'false')
+            }}
+        batchSizeForSync:
+          - "{{ keycloak_cac_ldap_provider.batch_size_for_sync | default(1000) | string }}"
+  no_log: true
+
+- name: Read existing Keycloak LDAP provider component
+  ansible.builtin.uri:
+    url: >-
+      {{
+        keycloak_cac_url ~ '/admin/realms/' ~ keycloak_cac_realm ~
+        '/components?type=org.keycloak.storage.UserStorageProvider&name=' ~
+        (keycloak_cac_ldap_provider.name | urlencode)
+      }}
+    method: GET
+    validate_certs: "{{ keycloak_cac_validate_certs }}"
+    timeout: "{{ keycloak_cac_request_timeout | int }}"
+    headers:
+      Authorization: "Bearer {{ keycloak_cac_ldap_token.json.access_token }}"
+    status_code: 200
+  register: keycloak_cac_existing_ldap_components
+  changed_when: false
+
+- name: Set existing Keycloak LDAP provider component
+  ansible.builtin.set_fact:
+    keycloak_cac_existing_ldap_component: >-
+      {{
+        (
+          keycloak_cac_existing_ldap_components.json
+          | selectattr('name', 'equalto', keycloak_cac_ldap_provider.name)
+          | list
+          | first
+        )
+        | default({}, true)
+      }}
+  no_log: true
+
+- name: Create Keycloak LDAP provider component
+  ansible.builtin.uri:
+    url: "{{ keycloak_cac_url }}/admin/realms/{{ keycloak_cac_realm }}/components"
+    method: POST
+    validate_certs: "{{ keycloak_cac_validate_certs }}"
+    timeout: "{{ keycloak_cac_request_timeout | int }}"
+    headers:
+      Authorization: "Bearer {{ keycloak_cac_ldap_token.json.access_token }}"
+    body_format: json
+    body: "{{ keycloak_cac_ldap_component_payload }}"
+    status_code:
+      - 201
+      - 204
+  when: keycloak_cac_existing_ldap_component.id | default('', true) | length == 0
+
+- name: Update Keycloak LDAP provider component
+  ansible.builtin.uri:
+    url: >-
+      {{
+        keycloak_cac_url ~ '/admin/realms/' ~ keycloak_cac_realm ~
+        '/components/' ~ keycloak_cac_existing_ldap_component.id
+      }}
+    method: PUT
+    validate_certs: "{{ keycloak_cac_validate_certs }}"
+    timeout: "{{ keycloak_cac_request_timeout | int }}"
+    headers:
+      Authorization: "Bearer {{ keycloak_cac_ldap_token.json.access_token }}"
+    body_format: json
+    body: "{{ keycloak_cac_ldap_component_payload | combine({'id': keycloak_cac_existing_ldap_component.id}) }}"
+    status_code:
+      - 200
+      - 204
+  when: keycloak_cac_existing_ldap_component.id | default('', true) | length > 0

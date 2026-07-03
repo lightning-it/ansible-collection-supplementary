@@ -78,7 +78,7 @@
 - name: List client config directory
   ansible.builtin.command: >-
     ls -1 {{ openvpn_base_dir }}/{{ openvpn_client_config_dir }}
-  register: __ccd_contents
+  register: openvpn_ccd_contents
   changed_when: false
   when: openvpn_client_config
 
@@ -89,7 +89,7 @@
   when:
     - item not in openvpn_client_configs.keys() | list
     - openvpn_client_config
-  loop: "{{ __ccd_contents.stdout_lines | default([]) }}"
+  loop: "{{ openvpn_ccd_contents.stdout_lines | default([]) }}"
 
 - name: Delete client config directory
   ansible.builtin.file:
