@@ -1,6 +1,0 @@
----
-bugfixes:
-  - >-
-    Install the foundational collection from the v1.26.0 release artifact during
-    collection preparation so CI can satisfy the declared ``lit.foundational``
-    dependency before the matching Galaxy version is available.
