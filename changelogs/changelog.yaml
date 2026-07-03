@@ -75,3 +75,10 @@ releases:
       - rsyslog-lifecycle-roles.yml
       - samba-lifecycle-roles.yml
     release_date: '2026-07-03'
+  1.37.0:
+    changes:
+      bugfixes:
+        - Update the CI collection preparation requirements to use ansible.posix 2.2.1.
+    fragments:
+      - ansible-posix-2.2.1.yml
+    release_date: '2026-07-03'
