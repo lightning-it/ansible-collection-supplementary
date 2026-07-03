@@ -68,7 +68,7 @@
   block:
     - name: Read CoreDNS container running state
       ansible.builtin.command: "podman inspect {{ coredns_deploy_container_name }} --format {{ '{{.State.Running}}' }}"
-      register: coredns_deploy_container_running
+      register: coredns_ops_coredns_deploy_container_running
       changed_when: false
       failed_when: false
 
@@ -77,15 +77,15 @@
         url: "{{ coredns_deploy_health_url_effective }}"
         method: GET
         validate_certs: "{{ coredns_deploy_validate_certs }}"
-      register: coredns_deploy_health
+      register: coredns_ops_coredns_deploy_health
       changed_when: false
       failed_when: false
 
     - name: Report CoreDNS container state
       ansible.builtin.debug:
         msg: >-
-          health={{ coredns_deploy_health.status | default('unknown') }},
-          running={{ coredns_deploy_container_running.stdout | default('unknown') | trim }}
+          health={{ coredns_ops_coredns_deploy_health.status | default('unknown') }},
+          running={{ coredns_ops_coredns_deploy_container_running.stdout | default('unknown') | trim }}
 
 - name: Upgrade CoreDNS image
   when: coredns_ops_action == 'upgrade'
@@ -101,7 +101,7 @@
 
     - name: Set CoreDNS image override
       ansible.builtin.set_fact:
-        coredns_deploy_image: "{{ coredns_ops_target_image }}"
+        coredns_ops_coredns_deploy_image: "{{ coredns_ops_target_image }}"
       changed_when: false
 
     - name: Redeploy CoreDNS with new image

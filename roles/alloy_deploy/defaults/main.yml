@@ -75,14 +75,12 @@ alloy_deploy_extra_log_paths: []
 
 alloy_deploy_install_packages: true
 alloy_deploy_manage_systemd: true
+alloy_deploy_systemd_enabled: true
+alloy_deploy_systemd_unit_name: "{{ alloy_deploy_pod_name }}"
+alloy_deploy_systemd_description: "Alloy container service"
+alloy_deploy_systemd_scope: "system"
+alloy_deploy_quadlet_dir: "/etc/containers/systemd"
 alloy_deploy_skip_runtime: false
 alloy_deploy_skip_deploy: false
 alloy_deploy_kubeplay_remove: false
 alloy_deploy_kubeplay_run: false
-
-alloy_deploy_systemd_unit_name: >-
-  {{
-    'podman-kube@'
-    ~ (alloy_deploy_pod_manifest_path | basename | regex_replace('\\.ya?ml$', ''))
-    ~ '.service'
-  }}

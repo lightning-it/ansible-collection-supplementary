@@ -1,0 +1,33 @@
+---
+rsyslog_deploy_packages:
+  - podman
+rsyslog_deploy_install_packages: true
+rsyslog_deploy_skip_runtime: false
+rsyslog_deploy_skip_deploy: false
+
+rsyslog_deploy_pod_name: "rsyslog"
+rsyslog_deploy_container_name: "rsyslog"
+rsyslog_deploy_image: "docker.io/rsyslog/syslog_appliance_alpine:latest"
+rsyslog_deploy_pod_manifest_path: "/etc/podman/pods/rsyslog.yml"
+rsyslog_deploy_systemd_enabled: true
+rsyslog_deploy_systemd_unit_name: "{{ rsyslog_deploy_pod_name }}"
+rsyslog_deploy_systemd_description: "rsyslog container service"
+rsyslog_deploy_systemd_scope: "system"
+rsyslog_deploy_quadlet_dir: "/etc/containers/systemd"
+
+rsyslog_deploy_host_ip: "127.0.0.1"
+rsyslog_deploy_tcp_port: 1514
+rsyslog_deploy_udp_port: 1514
+rsyslog_deploy_container_tcp_port: 514
+rsyslog_deploy_container_udp_port: 514
+
+rsyslog_deploy_config_dir: "/srv/rsyslog/config"
+rsyslog_deploy_config_path: "{{ rsyslog_deploy_config_dir }}/rsyslog.conf"
+rsyslog_deploy_log_dir: "/srv/rsyslog/log"
+rsyslog_deploy_container_config_path: "/etc/rsyslog.conf"
+rsyslog_deploy_container_log_dir: "/var/log/remote"
+rsyslog_deploy_log_file: "remote.log"
+rsyslog_deploy_dir_mode: "0750"
+rsyslog_deploy_log_dir_mode: "0775"
+rsyslog_deploy_config_mode: "0644"
+rsyslog_deploy_extra_args: []

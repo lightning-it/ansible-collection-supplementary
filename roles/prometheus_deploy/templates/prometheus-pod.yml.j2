@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ prometheus_deploy_pod_name }}
+  labels:
+    app: {{ prometheus_deploy_pod_name }}
+spec:
+  containers:
+    - name: {{ prometheus_deploy_container_name }}
+      image: {{ prometheus_deploy_image }}
+      args:
+        - "--config.file={{ prometheus_deploy_container_config_path }}"
+        - "--storage.tsdb.path={{ prometheus_deploy_container_data_dir }}"
+        - "--web.listen-address=0.0.0.0:{{ prometheus_deploy_container_port }}"
+{% for arg in prometheus_deploy_extra_args %}
+        - "{{ arg }}"
+{% endfor %}
+{% if prometheus_deploy_env_extra | length > 0 %}
+      env:
+{% for env_name, env_value in prometheus_deploy_env_extra | dictsort %}
+        - name: {{ env_name }}
+          value: {{ env_value | string | to_json }}
+{% endfor %}
+{% endif %}
+      ports:
+        - containerPort: {{ prometheus_deploy_container_port }}
+          hostPort: {{ prometheus_deploy_port }}
+          hostIP: {{ prometheus_deploy_host_ip }}
+          protocol: TCP
+      volumeMounts:
+        - name: prometheus-config
+          mountPath: {{ prometheus_deploy_container_config_path }}
+        - name: prometheus-rules
+          mountPath: {{ prometheus_deploy_container_rules_dir }}
+        - name: prometheus-data
+          mountPath: {{ prometheus_deploy_container_data_dir }}
+
+  volumes:
+    - name: prometheus-config
+      hostPath:
+        path: {{ prometheus_deploy_config_path }}
+        type: File
+    - name: prometheus-rules
+      hostPath:
+        path: {{ prometheus_deploy_rules_dir }}
+        type: Directory
+    - name: prometheus-data
+      hostPath:
+        path: {{ prometheus_deploy_data_dir }}
+        type: DirectoryOrCreate

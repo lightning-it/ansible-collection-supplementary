@@ -1,2 +1,0 @@
-minor_changes:
-  - Added container-based Samba lifecycle roles and a protected heavy Incus scenario that validates a real SMB share through Podman.

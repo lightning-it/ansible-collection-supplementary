@@ -42,9 +42,9 @@
   block:
     - name: Reload Nginx inside container
       ansible.builtin.command: "podman exec {{ nginx_deploy_container_name }} nginx -s reload"
-      register: nginx_deploy_reload
-      changed_when: nginx_deploy_reload.rc == 0
-      failed_when: nginx_deploy_reload.rc != 0
+      register: nginx_ops_nginx_deploy_reload
+      changed_when: nginx_ops_nginx_deploy_reload.rc == 0
+      failed_when: nginx_ops_nginx_deploy_reload.rc != 0
       when: not ansible_check_mode
 
 - name: Report Nginx status
@@ -55,7 +55,7 @@
   block:
     - name: Read Nginx container running state
       ansible.builtin.command: "podman inspect {{ nginx_deploy_container_name }} --format {{ '{{.State.Running}}' }}"
-      register: nginx_deploy_container_running
+      register: nginx_ops_nginx_deploy_container_running
       changed_when: false
       failed_when: false
 
@@ -64,15 +64,15 @@
         url: "{{ nginx_deploy_health_url_effective }}"
         method: GET
         validate_certs: "{{ nginx_deploy_validate_certs }}"
-      register: nginx_deploy_health
+      register: nginx_ops_nginx_deploy_health
       changed_when: false
       failed_when: false
 
     - name: Report Nginx container state
       ansible.builtin.debug:
         msg: >-
-          health={{ nginx_deploy_health.status | default('unknown') }},
-          running={{ nginx_deploy_container_running.stdout | default('unknown') | trim }}
+          health={{ nginx_ops_nginx_deploy_health.status | default('unknown') }},
+          running={{ nginx_ops_nginx_deploy_container_running.stdout | default('unknown') | trim }}
 
 - name: Upgrade Nginx image
   when: nginx_ops_action == 'upgrade'
@@ -88,7 +88,7 @@
 
     - name: Set Nginx image override
       ansible.builtin.set_fact:
-        nginx_deploy_image: "{{ nginx_ops_target_image }}"
+        nginx_ops_nginx_deploy_image: "{{ nginx_ops_target_image }}"
       changed_when: false
 
     - name: Redeploy Nginx with new image

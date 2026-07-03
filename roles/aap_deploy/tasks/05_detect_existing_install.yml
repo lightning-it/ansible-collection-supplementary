@@ -18,6 +18,11 @@
           (aap_deploy_skip_if_runtime_active | bool)
           and (aap_deploy_install_marker_precheck.stat.exists | default(false))
         )
+        or
+        (
+          (aap_deploy_reset_partial_install_enabled | bool)
+          and not (aap_deploy_install_marker_precheck.stat.exists | default(false))
+        )
       }}
   changed_when: false
 
@@ -60,6 +65,72 @@
         else []
       }}
   changed_when: false
+
+- name: Detect partial AAP runtime without install marker
+  ansible.builtin.set_fact:
+    aap_deploy_partial_install_runtime_detected: >-
+      {{
+        (aap_deploy_reset_partial_install_enabled | bool)
+        and not (aap_deploy_install_marker_precheck.stat.exists | default(false))
+        and (aap_deploy_runtime_probe_available | default(false))
+        and (
+          (aap_deploy_runtime_matching_containers | length)
+          >= (aap_deploy_runtime_min_matching_containers | int)
+        )
+      }}
+  changed_when: false
+
+- name: Reset partial AAP runtime when install marker is absent
+  when: aap_deploy_partial_install_runtime_detected | bool
+  block:
+    - name: Stop and remove partial AAP containers
+      ansible.builtin.command:
+        argv: "{{ ['podman', 'rm', '-f'] + aap_deploy_runtime_matching_containers }}"
+      become: true
+      become_user: "{{ aap_deploy_install_user }}"
+      register: aap_deploy_partial_container_reset
+      changed_when: aap_deploy_partial_container_reset.rc == 0
+
+    - name: Remove partial AAP Podman volumes
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          volumes="$(podman volume ls -q)"
+          if [ -n "${volumes}" ]; then
+            podman volume rm -f ${volumes}
+          fi
+        executable: /bin/bash
+      become: true
+      become_user: "{{ aap_deploy_install_user }}"
+      register: aap_deploy_partial_volume_reset
+      changed_when: aap_deploy_partial_volume_reset.stdout | trim | length > 0
+
+    - name: Remove partial installer workspace
+      ansible.builtin.file:
+        path: "{{ aap_deploy_setup_dir }}"
+        state: absent
+      when: aap_deploy_reset_partial_install_remove_setup | bool
+
+    - name: Remove partial installer logs
+      ansible.builtin.file:
+        path: "{{ aap_deploy_installer_log_dir }}"
+        state: absent
+      when: aap_deploy_reset_partial_install_remove_logs | bool
+
+    - name: Recreate setup directory after partial reset
+      ansible.builtin.file:
+        path: "{{ aap_deploy_setup_dir }}"
+        state: directory
+        owner: "{{ aap_deploy_install_user }}"
+        group: "{{ aap_deploy_install_user }}"
+        mode: '0755'
+
+    - name: Clear runtime detection facts after partial reset
+      ansible.builtin.set_fact:
+        aap_deploy_runtime_probe_available: false
+        aap_deploy_runtime_matching_containers: []
+        aap_deploy_partial_install_runtime_detected: false
+      changed_when: false
 
 - name: Compute marker-based skip decision
   ansible.builtin.set_fact:

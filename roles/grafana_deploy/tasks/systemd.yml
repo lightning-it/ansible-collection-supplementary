@@ -2,37 +2,30 @@
 - name: Manage Grafana systemd unit
   when:
     - grafana_deploy_manage_systemd | bool
-    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+    - ansible_facts.service_mgr | default('') == 'systemd'
     - not ansible_check_mode
   tags:
     - systemd
   block:
-    - name: Escape kube play manifest path
-      ansible.builtin.command:
-        cmd: "systemd-escape {{ grafana_deploy_pod_manifest_path }}"
-      register: grafana_deploy_systemd_name
-      changed_when: false
-
-    - name: Ensure podman-kube drop-in directory exists
-      ansible.builtin.file:
-        path: "/etc/systemd/system/podman-kube@{{ grafana_deploy_systemd_name.stdout }}.service.d"
-        state: directory
-        mode: '0755'
-
-    - name: Enable and start Podman kube systemd unit
-      ansible.builtin.systemd:
-        name: "podman-kube@{{ grafana_deploy_systemd_name.stdout }}.service"
-        enabled: true
-        state: >-
+    - name: Manage Grafana persistent container service
+      ansible.builtin.include_role:
+        name: lit.foundational.podman_systemd
+      vars:
+        podman_systemd_action: >-
           {{
             'restarted'
             if (
               grafana_deploy_kubeplay_remove | default(false) | bool
               or grafana_deploy_kubeplay_run | default(false) | bool
             )
-            else 'started'
+            else 'present'
           }}
-        daemon_reload: true
+        podman_systemd_unit_name: "{{ grafana_deploy_systemd_unit_name }}"
+        podman_systemd_description: "{{ grafana_deploy_systemd_description }}"
+        podman_systemd_manifest_path: "{{ grafana_deploy_pod_manifest_path }}"
+        podman_systemd_scope: "{{ grafana_deploy_systemd_scope }}"
+        podman_systemd_quadlet_dir: "{{ grafana_deploy_quadlet_dir }}"
+        podman_systemd_enabled: "{{ grafana_deploy_systemd_enabled }}"
 
     - name: Wait until Grafana health endpoint is reachable
       ansible.builtin.uri:

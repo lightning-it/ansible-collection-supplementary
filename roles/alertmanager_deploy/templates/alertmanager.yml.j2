@@ -1,0 +1,19 @@
+{% if alertmanager_deploy_global | length > 0 %}
+global:
+{{ alertmanager_deploy_global | to_nice_yaml(indent=2) | indent(2, true) }}
+{% endif %}
+route:
+{{ alertmanager_deploy_route | to_nice_yaml(indent=2) | indent(2, true) }}
+
+receivers:
+{{ alertmanager_deploy_receivers | to_nice_yaml(indent=2) | indent(2, true) }}
+{% if alertmanager_deploy_inhibit_rules | length > 0 %}
+
+inhibit_rules:
+{{ alertmanager_deploy_inhibit_rules | to_nice_yaml(indent=2) | indent(2, true) }}
+{% endif %}
+{% if alertmanager_deploy_time_intervals | length > 0 %}
+
+time_intervals:
+{{ alertmanager_deploy_time_intervals | to_nice_yaml(indent=2) | indent(2, true) }}
+{% endif %}

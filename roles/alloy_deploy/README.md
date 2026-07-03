@@ -1,6 +1,10 @@
 # alloy_deploy
 
-Deploy Grafana Alloy as a local log collector with Podman kube play.
+Deploy Grafana Alloy as a local log collector with Podman Quadlet.
+
+The role renders a Podman pod manifest and manages it through systemd Quadlet
+when `alloy_deploy_manage_systemd` is enabled. Non-systemd deployments can
+still use the existing kubeplay path.
 
 By default Alloy ships journald, container logs, and common service log paths
 under `/srv` to Loki. Vault audit logs are intentionally disabled by default;

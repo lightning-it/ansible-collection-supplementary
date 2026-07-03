@@ -1,0 +1,195 @@
+---
+- name: Verify Atlas observability Incus deployment
+  hosts: all
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Check Loki systemd service is active
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - loki-heavy.service
+      register: atlas_molecule_loki_service_status
+      changed_when: false
+
+    - name: Check rsyslog systemd service is active
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - rsyslog-heavy.service
+      register: atlas_molecule_rsyslog_service_status
+      changed_when: false
+
+    - name: Check Alloy systemd service is active
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - alloy-heavy.service
+      register: atlas_molecule_alloy_service_status
+      changed_when: false
+
+    - name: Check Prometheus systemd service is active
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - prometheus-heavy.service
+      register: atlas_molecule_prometheus_service_status
+      changed_when: false
+
+    - name: Check Alertmanager systemd service is active
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - alertmanager-heavy.service
+      register: atlas_molecule_alertmanager_service_status
+      changed_when: false
+
+    - name: Check Grafana systemd service is active
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - grafana-heavy.service
+      register: atlas_molecule_grafana_service_status
+      changed_when: false
+
+    - name: Check Checkmk systemd service is active
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - checkmk-heavy.service
+      register: atlas_molecule_checkmk_service_status
+      changed_when: false
+
+    - name: Check expected files exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/containers/systemd/loki-heavy.kube
+        - /etc/containers/systemd/rsyslog-heavy.kube
+        - /etc/containers/systemd/alloy-heavy.kube
+        - /etc/containers/systemd/prometheus-heavy.kube
+        - /etc/containers/systemd/alertmanager-heavy.kube
+        - /etc/containers/systemd/grafana-heavy.kube
+        - /etc/containers/systemd/checkmk-heavy.kube
+        - /srv/atlas-observability/quadlet/loki.yml
+        - /srv/atlas-observability/quadlet/rsyslog.yml
+        - /srv/atlas-observability/quadlet/alloy.yml
+        - /srv/atlas-observability/quadlet/prometheus.yml
+        - /srv/atlas-observability/quadlet/alertmanager.yml
+        - /srv/atlas-observability/quadlet/grafana.yml
+        - /srv/atlas-observability/quadlet/checkmk.yml
+        - /srv/atlas-observability/loki/config/local-config.yaml
+        - /srv/atlas-observability/rsyslog/config/rsyslog.conf
+        - /srv/atlas-observability/alloy/config/config.alloy
+        - /srv/atlas-observability/prometheus/config/prometheus.yml
+        - /srv/atlas-observability/prometheus/config/rules/atlas.rules.yml
+        - /srv/atlas-observability/alertmanager/config/alertmanager.yml
+        - /srv/atlas-observability/grafana/config/provisioning/datasources/loki.yml
+        - /srv/atlas-observability/checkmk/config/monitoring-targets.yml
+      register: atlas_molecule_expected_files
+
+    - name: Check Loki port
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 3100
+        timeout: 10
+        state: started
+
+    - name: Check rsyslog port
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 1514
+        timeout: 10
+        state: started
+
+    - name: Check Alloy port
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 12345
+        timeout: 10
+        state: started
+
+    - name: Check Prometheus port
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 9090
+        timeout: 10
+        state: started
+
+    - name: Check Alertmanager port
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 9093
+        timeout: 10
+        state: started
+
+    - name: Check Grafana port
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 3000
+        timeout: 10
+        state: started
+
+    - name: Check Checkmk port
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 5000
+        timeout: 10
+        state: started
+
+    - name: Send test syslog message
+      ansible.builtin.shell: |
+        set -o pipefail
+        printf '<14>molecule atlas syslog test\n' | nc -w 2 127.0.0.1 1514
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Wait for rsyslog test message in log file
+      ansible.builtin.command:
+        argv:
+          - grep
+          - -F
+          - molecule atlas syslog test
+          - /srv/atlas-observability/rsyslog/log/remote.log
+      register: atlas_molecule_rsyslog_log_message
+      retries: 10
+      delay: 1
+      until: atlas_molecule_rsyslog_log_message.rc == 0
+      changed_when: false
+
+    - name: Check Podman runtime
+      ansible.builtin.command:
+        argv:
+          - podman
+          - ps
+          - --format
+          - json
+      register: atlas_molecule_podman_ps
+      changed_when: false
+
+    - name: Assert Atlas observability verification
+      ansible.builtin.assert:
+        that:
+          - atlas_molecule_loki_service_status.stdout == 'active'
+          - atlas_molecule_rsyslog_service_status.stdout == 'active'
+          - atlas_molecule_alloy_service_status.stdout == 'active'
+          - atlas_molecule_prometheus_service_status.stdout == 'active'
+          - atlas_molecule_alertmanager_service_status.stdout == 'active'
+          - atlas_molecule_grafana_service_status.stdout == 'active'
+          - atlas_molecule_checkmk_service_status.stdout == 'active'
+          - atlas_molecule_expected_files.results | map(attribute='stat.exists') | min
+          - "'loki' in atlas_molecule_podman_ps.stdout"
+          - "'rsyslog' in atlas_molecule_podman_ps.stdout"
+          - "'alloy' in atlas_molecule_podman_ps.stdout"
+          - "'prometheus' in atlas_molecule_podman_ps.stdout"
+          - "'alertmanager' in atlas_molecule_podman_ps.stdout"
+          - "'grafana' in atlas_molecule_podman_ps.stdout"
+          - "'checkmk' in atlas_molecule_podman_ps.stdout"

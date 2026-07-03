@@ -1,0 +1,11 @@
+---
+- name: Validate rsyslog ops variables
+  ansible.builtin.assert:
+    that:
+      - rsyslog_ops_action in rsyslog_ops_allowed_actions
+      - rsyslog_ops_allowed_actions is sequence
+      - rsyslog_ops_allowed_actions is not string
+      - rsyslog_ops_systemd_scope in ['system', 'user']
+      - rsyslog_ops_service_name | default('', true) | trim | length > 0
+    fail_msg: "rsyslog ops variables are missing or invalid."
+  tags: always

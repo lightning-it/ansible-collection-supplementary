@@ -1,0 +1,99 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Skip Alertmanager deployment in check mode
+  ansible.builtin.debug:
+    msg: "Alertmanager container deployment skipped in check mode."
+  when:
+    - ansible_check_mode
+    - not alertmanager_deploy_skip_runtime | bool
+    - not alertmanager_deploy_skip_deploy | bool
+  tags: always
+
+- name: Deploy Alertmanager container runtime
+  when:
+    - not alertmanager_deploy_skip_runtime | bool
+    - not alertmanager_deploy_skip_deploy | bool
+    - not ansible_check_mode
+  block:
+    - name: Install Alertmanager container runtime packages
+      ansible.builtin.package:
+        name: "{{ alertmanager_deploy_packages }}"
+        state: present
+      when: alertmanager_deploy_install_packages | bool
+      tags:
+        - install
+
+    - name: Ensure Alertmanager directories exist
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner | default(omit) }}"
+        group: "{{ item.group | default(omit) }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ alertmanager_deploy_config_dir }}"
+          mode: "{{ alertmanager_deploy_dir_mode }}"
+        - path: "{{ alertmanager_deploy_data_dir }}"
+          owner: "{{ alertmanager_deploy_data_owner }}"
+          group: "{{ alertmanager_deploy_data_group }}"
+          mode: "{{ alertmanager_deploy_dir_mode }}"
+        - path: "{{ alertmanager_deploy_pod_manifest_path | dirname }}"
+          mode: "0755"
+      tags:
+        - deployment
+
+    - name: Render Alertmanager configuration
+      ansible.builtin.template:
+        src: alertmanager.yml.j2
+        dest: "{{ alertmanager_deploy_config_path }}"
+        mode: "{{ alertmanager_deploy_config_mode }}"
+      register: alertmanager_deploy_config_render
+      tags:
+        - config
+
+    - name: Render Alertmanager Pod manifest
+      ansible.builtin.template:
+        src: alertmanager-pod.yml.j2
+        dest: "{{ alertmanager_deploy_pod_manifest_path }}"
+        mode: "0644"
+      register: alertmanager_deploy_manifest_render
+      tags:
+        - deployment
+
+    - name: Manage Alertmanager persistent container service
+      ansible.builtin.include_role:
+        name: lit.foundational.podman_systemd
+      vars:
+        podman_systemd_action: >-
+          {{
+            'restarted'
+            if (alertmanager_deploy_config_render.changed or alertmanager_deploy_manifest_render.changed)
+            else 'present'
+          }}
+        podman_systemd_unit_name: "{{ alertmanager_deploy_systemd_unit_name }}"
+        podman_systemd_description: "{{ alertmanager_deploy_systemd_description }}"
+        podman_systemd_manifest_path: "{{ alertmanager_deploy_pod_manifest_path }}"
+        podman_systemd_scope: "{{ alertmanager_deploy_systemd_scope }}"
+        podman_systemd_quadlet_dir: "{{ alertmanager_deploy_quadlet_dir }}"
+        podman_systemd_enabled: "{{ alertmanager_deploy_systemd_enabled }}"
+      tags:
+        - deployment
+
+    - name: Wait until Alertmanager readiness endpoint is reachable
+      ansible.builtin.uri:
+        url: "{{ alertmanager_deploy_ready_url }}"
+        method: GET
+        validate_certs: "{{ alertmanager_deploy_validate_certs }}"
+      register: alertmanager_deploy_health
+      until: alertmanager_deploy_health.status == 200
+      retries: 30
+      delay: 5
+      changed_when: false
+      failed_when: alertmanager_deploy_health is failed or alertmanager_deploy_health.status != 200
+      when:
+        - alertmanager_deploy_systemd_enabled | bool
+      tags:
+        - verify

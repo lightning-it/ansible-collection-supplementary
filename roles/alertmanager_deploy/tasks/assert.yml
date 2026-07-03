@@ -1,0 +1,30 @@
+---
+- name: Validate alertmanager_deploy variables
+  ansible.builtin.assert:
+    that:
+      - alertmanager_deploy_packages is sequence
+      - alertmanager_deploy_packages is not string
+      - alertmanager_deploy_pod_name | default('', true) | trim | length > 0
+      - alertmanager_deploy_container_name | default('', true) | trim | length > 0
+      - alertmanager_deploy_image | default('', true) | trim | length > 0
+      - alertmanager_deploy_pod_manifest_path | default('', true) | trim | length > 0
+      - alertmanager_deploy_systemd_unit_name | default('', true) | trim | length > 0
+      - alertmanager_deploy_systemd_scope in ['system', 'user']
+      - alertmanager_deploy_host_ip | default('', true) | trim | length > 0
+      - alertmanager_deploy_port | int > 0
+      - alertmanager_deploy_container_port | int > 0
+      - alertmanager_deploy_config_dir | default('', true) | trim | length > 0
+      - alertmanager_deploy_data_dir | default('', true) | trim | length > 0
+      - alertmanager_deploy_global is mapping
+      - alertmanager_deploy_route is mapping
+      - alertmanager_deploy_receivers is sequence
+      - alertmanager_deploy_receivers is not string
+      - alertmanager_deploy_inhibit_rules is sequence
+      - alertmanager_deploy_inhibit_rules is not string
+      - alertmanager_deploy_time_intervals is sequence
+      - alertmanager_deploy_time_intervals is not string
+      - alertmanager_deploy_extra_args is sequence
+      - alertmanager_deploy_extra_args is not string
+      - alertmanager_deploy_env_extra is mapping
+    fail_msg: "alertmanager_deploy variables are missing or invalid."
+  tags: always

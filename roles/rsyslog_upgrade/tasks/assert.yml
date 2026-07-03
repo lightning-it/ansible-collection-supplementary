@@ -1,0 +1,10 @@
+---
+- name: Validate rsyslog upgrade variables
+  ansible.builtin.assert:
+    that:
+      - rsyslog_upgrade_execute is boolean
+      - rsyslog_upgrade_run_backup is boolean
+      - rsyslog_upgrade_run_validate is boolean
+      - rsyslog_upgrade_image | default('', true) | trim | length > 0
+    fail_msg: "rsyslog upgrade variables are missing or invalid."
+  tags: always

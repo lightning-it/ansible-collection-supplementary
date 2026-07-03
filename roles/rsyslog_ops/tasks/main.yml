@@ -1,0 +1,38 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Inspect rsyslog service status
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - "{{ rsyslog_ops_service_name }}"
+  register: rsyslog_ops_status
+  changed_when: false
+  failed_when: false
+  when: rsyslog_ops_action == 'status'
+  tags:
+    - ops
+    - status
+
+- name: Report rsyslog service status
+  ansible.builtin.debug:
+    msg: >-
+      rsyslog service {{ rsyslog_ops_service_name }} status:
+      {{ rsyslog_ops_status.stdout | default('unknown', true) }}
+  when: rsyslog_ops_action == 'status'
+  tags:
+    - ops
+    - status
+
+- name: Restart rsyslog service
+  ansible.builtin.systemd:
+    name: "{{ rsyslog_ops_service_name }}"
+    state: restarted
+    scope: "{{ rsyslog_ops_systemd_scope }}"
+  when: rsyslog_ops_action == 'restart'
+  tags:
+    - ops
+    - restart

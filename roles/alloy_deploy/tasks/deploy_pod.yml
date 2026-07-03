@@ -51,6 +51,7 @@
   when:
     - alloy_deploy_kubeplay_remove | default(false)
     - not alloy_deploy_skip_runtime | bool
+    - not alloy_deploy_manage_systemd | bool
   tags:
     - deployment
   block:
@@ -71,6 +72,7 @@
   when:
     - alloy_deploy_kubeplay_run | default(false)
     - not alloy_deploy_skip_runtime | bool
+    - not alloy_deploy_manage_systemd | bool
   tags:
     - deployment
   block:

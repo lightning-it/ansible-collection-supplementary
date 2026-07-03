@@ -1,0 +1,30 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Check package manager availability
+  ansible.builtin.command: sh -c 'command -v apt-get || command -v dnf || command -v yum'
+  register: rsyslog_preflight_package_manager
+  changed_when: false
+  failed_when:
+    - rsyslog_preflight_strict | bool
+    - rsyslog_preflight_package_manager.rc != 0
+  when: rsyslog_preflight_check_packages | bool
+  tags:
+    - preflight
+
+- name: Check rsyslog TCP ports are free
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ item }}"
+    state: stopped
+    timeout: 1
+  loop: "{{ rsyslog_preflight_required_tcp_ports }}"
+  register: rsyslog_preflight_ports
+  failed_when:
+    - rsyslog_preflight_strict | bool
+    - rsyslog_preflight_ports is failed
+  when: rsyslog_preflight_check_ports | bool
+  tags:
+    - preflight

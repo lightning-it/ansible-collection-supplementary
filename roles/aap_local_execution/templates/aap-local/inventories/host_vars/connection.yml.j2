@@ -1,6 +1,6 @@
 ---
-ansible_host: {{ aap_effective_ansible_host }}
-ansible_user: {{ aap_effective_user }}
+ansible_host: {{ aap_local_execution_effective_ansible_host }}
+ansible_user: {{ aap_local_execution_effective_user }}
 ansible_connection: ssh
 ansible_become: true
 ansible_become_method: sudo
@@ -9,7 +9,7 @@ ansible_ssh_common_args: >-
   -o StrictHostKeyChecking=accept-new
 {% if aap_ssh_key_auth_enabled | bool %}
   -o IdentitiesOnly=yes
-ansible_ssh_private_key_file: {{ aap_ssh_key_container }}
+ansible_ssh_private_key_file: {{ aap_local_execution_ssh_key_container }}
 {% endif %}
 {% if aap_ansible_become_flags | default('', true) | string | trim | length > 0 %}
 ansible_become_flags: "{{ aap_ansible_become_flags }}"

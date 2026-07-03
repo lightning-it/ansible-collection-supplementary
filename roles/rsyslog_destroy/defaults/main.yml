@@ -1,0 +1,16 @@
+---
+rsyslog_destroy_execute: false
+rsyslog_destroy_remove_packages: false
+rsyslog_destroy_remove_data: false
+rsyslog_destroy_remove_config: false
+rsyslog_destroy_remove_systemd: true
+rsyslog_destroy_systemd_unit_name: "{{ rsyslog_deploy_systemd_unit_name | default('rsyslog', true) }}"
+rsyslog_destroy_systemd_scope: "{{ rsyslog_deploy_systemd_scope | default('system', true) }}"
+rsyslog_destroy_quadlet_dir: "{{ rsyslog_deploy_quadlet_dir | default('/etc/containers/systemd', true) }}"
+rsyslog_destroy_manifest_path: "{{ rsyslog_deploy_pod_manifest_path | default('/etc/podman/pods/rsyslog.yml', true) }}"
+rsyslog_destroy_packages: "{{ rsyslog_deploy_packages | default(['podman'], true) }}"
+rsyslog_destroy_data_paths:
+  - "{{ rsyslog_deploy_log_dir | default('/srv/rsyslog/log', true) }}"
+rsyslog_destroy_config_paths:
+  - "{{ rsyslog_deploy_config_dir | default('/srv/rsyslog/config', true) }}"
+  - "{{ rsyslog_deploy_pod_manifest_path | default('/etc/podman/pods/rsyslog.yml', true) }}"

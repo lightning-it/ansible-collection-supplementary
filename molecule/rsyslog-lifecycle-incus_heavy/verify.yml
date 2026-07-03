@@ -1,0 +1,63 @@
+---
+- name: Verify heavy rsyslog lifecycle deployment
+  hosts: all
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Check rsyslog systemd service is active
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - rsyslog-heavy.service
+      register: rsyslog_molecule_service_status
+      changed_when: false
+
+    - name: Check rsyslog pod exists
+      ansible.builtin.command:
+        argv:
+          - podman
+          - pod
+          - exists
+          - rsyslog-heavy
+      changed_when: false
+
+    - name: Check rsyslog port 1514
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 1514
+        timeout: 10
+        state: started
+
+    - name: Send test syslog message
+      ansible.builtin.shell: |
+        set -o pipefail
+        printf '<14>molecule rsyslog heavy test\n' | nc -w 2 127.0.0.1 1514
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Wait for rsyslog test message in log file
+      ansible.builtin.command:
+        argv:
+          - grep
+          - -F
+          - molecule rsyslog heavy test
+          - /srv/rsyslog/log/remote.log
+      register: rsyslog_molecule_log_message
+      retries: 10
+      delay: 1
+      until: rsyslog_molecule_log_message.rc == 0
+      changed_when: false
+
+    - name: Check rsyslog backup file
+      ansible.builtin.stat:
+        path: /srv/rsyslog/backups/rsyslog-heavy.tar.gz
+      register: rsyslog_molecule_backup
+
+    - name: Assert rsyslog heavy verification
+      ansible.builtin.assert:
+        that:
+          - rsyslog_molecule_service_status.stdout == 'active'
+          - rsyslog_molecule_backup.stat.exists
+          - rsyslog_molecule_backup.stat.size | int > 0

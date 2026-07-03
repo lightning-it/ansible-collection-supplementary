@@ -1,0 +1,9 @@
+---
+rsyslog_run_preflight: true
+rsyslog_run_deploy: true
+rsyslog_run_config: true
+rsyslog_run_validate: true
+rsyslog_run_ops: false
+rsyslog_run_backup_restore: false
+rsyslog_run_upgrade: false
+rsyslog_run_destroy: false

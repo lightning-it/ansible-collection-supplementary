@@ -1,0 +1,39 @@
+---
+- name: Resolve AAP deploy host aliases
+  ansible.builtin.set_fact:
+    aap_deploy_host_aliases_effective: >-
+      {{
+        aap_deploy_host_aliases
+        | default([], true)
+        | map('string')
+        | map('trim')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+  changed_when: false
+
+- name: Validate AAP deploy host alias address
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_host_alias_address | default('', true) | trim | length > 0
+    fail_msg: >-
+      aap_deploy_host_alias_address must be set when
+      aap_deploy_manage_host_aliases=true and host aliases are configured.
+  when:
+    - aap_deploy_manage_host_aliases | bool
+    - aap_deploy_host_aliases_effective | length > 0
+
+- name: Manage AAP installer host aliases
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    create: true
+    owner: root
+    group: root
+    mode: '0644'
+    marker: "# {mark} ANSIBLE MANAGED BLOCK lit.supplementary.aap_deploy"
+    block: "{{ aap_deploy_host_alias_address | trim }} {{ aap_deploy_host_aliases_effective | join(' ') }}"
+  when:
+    - aap_deploy_manage_host_aliases | bool
+    - aap_deploy_host_aliases_effective | length > 0
+  become: true

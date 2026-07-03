@@ -39,9 +39,12 @@
     state: directory
     mode: "{{ item.mode }}"
   loop:
-    - { path: "{{ machine_a_effective_appl_root }}/etc", mode: "0750" }
-    - { path: "{{ machine_a_effective_secrets_dir }}", mode: "0750" }
-    - { path: "{{ machine_a_effective_export_root }}/src", mode: "0750" }
+    - path: "{{ aap_baseline_machine_a_effective_appl_root }}/etc"
+      mode: "0750"
+    - path: "{{ aap_baseline_machine_a_effective_secrets_dir }}"
+      mode: "0750"
+    - path: "{{ aap_baseline_machine_a_effective_export_root }}/src"
+      mode: "0750"
   when: aap_baseline_action == 'local_setup'
 
 - name: Check optional local automation source
@@ -58,7 +61,7 @@
       - --delete
       - "--exclude=.git"
       - "{{ aap_baseline_effective_source_dir }}/"
-      - "{{ machine_a_effective_automation_dir }}/"
+      - "{{ aap_baseline_machine_a_effective_automation_dir }}/"
   changed_when: true
   when:
     - aap_baseline_action == 'local_setup'
@@ -67,7 +70,7 @@
 - name: Clone or update automation source from Git
   ansible.builtin.git:
     repo: "{{ aap_baseline_effective_repo_url }}"
-    dest: "{{ machine_a_effective_automation_dir }}"
+    dest: "{{ aap_baseline_machine_a_effective_automation_dir }}"
     version: "{{ aap_baseline_effective_repo_version }}"
     force: true
   when:
@@ -80,13 +83,13 @@
 
 - name: Ensure local known-hosts directory exists
   ansible.builtin.file:
-    path: "{{ machine_a_effective_secrets_dir }}"
+    path: "{{ aap_baseline_machine_a_effective_secrets_dir }}"
     state: directory
     mode: "0750"
 
 - name: Check Machine A setup SSH key
   ansible.builtin.stat:
-    path: "{{ machine_a_effective_ssh_key }}"
+    path: "{{ aap_baseline_machine_a_effective_ssh_key }}"
   register: aap_baseline_machine_a_ssh_key_file
   when: aap_ssh_key_auth_enabled | default(true) | bool
 
@@ -96,7 +99,7 @@
       - ssh-keygen
       - -y
       - -f
-      - "{{ machine_a_effective_ssh_key }}"
+      - "{{ aap_baseline_machine_a_effective_ssh_key }}"
   register: aap_baseline_machine_a_ssh_public_key
   changed_when: false
   when:
@@ -115,7 +118,7 @@
     ansible_become_flags: "{{ aap_baseline_effective_become_flags }}"
     ansible_ssh_common_args: >-
       -A
-      -o UserKnownHostsFile={{ machine_a_effective_known_hosts }}
+      -o UserKnownHostsFile={{ aap_baseline_machine_a_effective_known_hosts }}
       -o StrictHostKeyChecking=accept-new
     ansible_remote_tmp: "{{ aap_baseline_effective_remote_tmp }}"
     aap_baseline_setup_public_key: >-

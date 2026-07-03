@@ -1,0 +1,34 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Check rsyslog TCP port
+  ansible.builtin.wait_for:
+    host: "{{ rsyslog_validate_host }}"
+    port: "{{ rsyslog_validate_tcp_port | int }}"
+    timeout: "{{ rsyslog_validate_timeout | int }}"
+    state: started
+  register: rsyslog_validate_port
+  failed_when:
+    - rsyslog_validate_strict | bool
+    - rsyslog_validate_port is failed
+  tags:
+    - validate
+
+- name: Check rsyslog log file
+  ansible.builtin.stat:
+    path: "{{ rsyslog_validate_log_path }}"
+  register: rsyslog_validate_log_file
+  failed_when:
+    - rsyslog_validate_strict | bool
+    - not rsyslog_validate_log_file.stat.exists
+  when: rsyslog_validate_check_log_file | bool
+  tags:
+    - validate
+
+- name: Report rsyslog validation status
+  ansible.builtin.debug:
+    msg: "rsyslog validation completed for {{ rsyslog_validate_host }}:{{ rsyslog_validate_tcp_port }}."
+  tags:
+    - validate

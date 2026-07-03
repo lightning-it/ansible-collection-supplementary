@@ -3,6 +3,9 @@ postgres_ops_action: "status"
 postgres_ops_allowed_actions:
   - status
   - restart
-postgres_ops_container_name: "{{ postgres_deploy_pod_name | default('postgres') }}-{{ postgres_deploy_container_name | default('postgres') }}"
+postgres_ops_container_name: >-
+  {{ postgres_deploy_pod_name | default('postgres') }}-{{
+    postgres_deploy_container_name | default('postgres')
+  }}
 postgres_ops_use_systemd: "{{ postgres_deploy_manage_systemd | default(true) }}"
 postgres_ops_systemd_unit_name: "{{ postgres_deploy_systemd_unit_name | default('') }}"

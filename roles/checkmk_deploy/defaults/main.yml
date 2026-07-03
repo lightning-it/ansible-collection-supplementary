@@ -64,14 +64,12 @@ checkmk_deploy_monitoring_targets: []
 
 checkmk_deploy_install_packages: true
 checkmk_deploy_manage_systemd: true
+checkmk_deploy_systemd_enabled: true
+checkmk_deploy_systemd_unit_name: "{{ checkmk_deploy_pod_name }}"
+checkmk_deploy_systemd_description: "Checkmk container service"
+checkmk_deploy_systemd_scope: "system"
+checkmk_deploy_quadlet_dir: "/etc/containers/systemd"
 checkmk_deploy_skip_runtime: false
 checkmk_deploy_skip_deploy: false
 checkmk_deploy_kubeplay_remove: false
 checkmk_deploy_kubeplay_run: false
-
-checkmk_deploy_systemd_unit_name: >-
-  {{
-    'podman-kube@'
-    ~ (checkmk_deploy_pod_manifest_path | regex_replace('^/', '-') | regex_replace('/', '-'))
-    ~ '.service'
-  }}
