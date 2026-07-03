@@ -14,3 +14,40 @@ keycloak_cac_realm: "master"
 keycloak_cac_realms: []
 keycloak_cac_clients: []
 keycloak_cac_users: []
+
+# Optional Samba AD/LDAPS user federation provider.
+keycloak_cac_samba_ldap_enabled: false
+keycloak_cac_samba_ldap_provider:
+  name: "samba-ldaps"
+  enabled: true
+  priority: 0
+  connection_url: "ldaps://samba:636"
+  users_dn: "CN=Users,DC=corp,DC=example,DC=com"
+  bind_dn: "CN=keycloak,CN=Users,DC=corp,DC=example,DC=com"
+  bind_credential: ""
+  vendor: "ad"
+  edit_mode: "READ_ONLY"
+  import_enabled: true
+  username_ldap_attribute: "sAMAccountName"
+  rdn_ldap_attribute: "cn"
+  uuid_ldap_attribute: "objectGUID"
+  user_object_classes: "person, organizationalPerson, user"
+  search_scope: "1"
+  use_truststore_spi: "never"
+  start_tls: false
+  connection_pooling: true
+  pagination: true
+  sync_registrations: false
+  trust_email: false
+  validate_password_policy: false
+  full_sync_period: 86400
+  changed_sync_period: 3600
+  cache_policy: "DEFAULT"
+  batch_size_for_sync: 1000
+
+keycloak_cac_ldap_providers: >-
+  {{
+    [keycloak_cac_samba_ldap_provider]
+    if (keycloak_cac_samba_ldap_enabled | bool)
+    else []
+  }}

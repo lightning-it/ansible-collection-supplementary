@@ -31,7 +31,7 @@
 
 - name: Verify Nexus pod is running
   ansible.builtin.command: podman pod ps --filter name={{ nexus_pod_name }}
-  register: pod_status
+  register: nexus_pod_status
   changed_when: false
   tags:
     - systemd

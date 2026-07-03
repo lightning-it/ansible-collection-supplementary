@@ -15,7 +15,9 @@
 
 - name: Report PostgreSQL container status
   ansible.builtin.debug:
-    msg: "PostgreSQL container {{ postgres_ops_container_name }} status: {{ postgres_ops_container_status.stdout | default('unknown') | trim }}"
+    msg: >-
+      PostgreSQL container {{ postgres_ops_container_name }} status:
+      {{ postgres_ops_container_status.stdout | default('unknown') | trim }}
   when: postgres_ops_action == 'status'
   tags:
     - ops

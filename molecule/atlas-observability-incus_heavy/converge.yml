@@ -1,0 +1,133 @@
+---
+- name: Deploy Atlas observability components on Incus host
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    atlas_molecule_base_dir: /srv/atlas-observability
+  roles:
+    - role: loki_deploy
+      vars:
+        loki_deploy_install_packages: false
+        loki_deploy_pod_name: loki-heavy
+        loki_deploy_container_name: loki
+        loki_deploy_host_ip: 127.0.0.1
+        loki_deploy_port: 3100
+        loki_deploy_host_data_dir: "{{ atlas_molecule_base_dir }}/loki/data"
+        loki_deploy_config_dir: "{{ atlas_molecule_base_dir }}/loki/config"
+        loki_deploy_pod_manifest_path: "{{ atlas_molecule_base_dir }}/quadlet/loki.yml"
+        loki_deploy_quadlet_dir: /etc/containers/systemd
+        loki_deploy_systemd_unit_name: loki-heavy
+        loki_deploy_systemd_description: Molecule Loki container service
+    - role: rsyslog_deploy
+      vars:
+        rsyslog_deploy_install_packages: false
+        rsyslog_deploy_pod_name: rsyslog-heavy
+        rsyslog_deploy_container_name: rsyslog
+        rsyslog_deploy_host_ip: 127.0.0.1
+        rsyslog_deploy_tcp_port: 1514
+        rsyslog_deploy_udp_port: 1514
+        rsyslog_deploy_config_dir: "{{ atlas_molecule_base_dir }}/rsyslog/config"
+        rsyslog_deploy_log_dir: "{{ atlas_molecule_base_dir }}/rsyslog/log"
+        rsyslog_deploy_log_dir_mode: "0777"
+        rsyslog_deploy_pod_manifest_path: "{{ atlas_molecule_base_dir }}/quadlet/rsyslog.yml"
+        rsyslog_deploy_quadlet_dir: /etc/containers/systemd
+        rsyslog_deploy_systemd_unit_name: rsyslog-heavy
+        rsyslog_deploy_systemd_description: Molecule rsyslog container service
+    - role: alloy_deploy
+      vars:
+        alloy_deploy_install_packages: false
+        alloy_deploy_pod_name: alloy-heavy
+        alloy_deploy_container_name: alloy
+        alloy_deploy_host_ip: 127.0.0.1
+        alloy_deploy_port: 12345
+        alloy_deploy_config_dir: "{{ atlas_molecule_base_dir }}/alloy/config"
+        alloy_deploy_data_dir: "{{ atlas_molecule_base_dir }}/alloy/data"
+        alloy_deploy_pod_manifest_path: "{{ atlas_molecule_base_dir }}/quadlet/alloy.yml"
+        alloy_deploy_quadlet_dir: /etc/containers/systemd
+        alloy_deploy_systemd_unit_name: alloy-heavy
+        alloy_deploy_systemd_description: Molecule Alloy container service
+        alloy_deploy_loki_url: http://127.0.0.1:3100/loki/api/v1/push
+        alloy_deploy_collect_journald: false
+        alloy_deploy_collect_container_logs: false
+        alloy_deploy_collect_nginx_logs: false
+        alloy_deploy_collect_vault_logs: false
+        alloy_deploy_collect_keycloak_logs: false
+        alloy_deploy_collect_nexus_logs: false
+        alloy_deploy_collect_forgejo_logs: false
+        alloy_deploy_extra_log_paths:
+          - name: atlas_rsyslog
+            service: rsyslog
+            paths:
+              - "{{ atlas_molecule_base_dir }}/rsyslog/log/*.log"
+    - role: prometheus_deploy
+      vars:
+        prometheus_deploy_install_packages: false
+        prometheus_deploy_pod_name: prometheus-heavy
+        prometheus_deploy_container_name: prometheus
+        prometheus_deploy_host_ip: 127.0.0.1
+        prometheus_deploy_port: 9090
+        prometheus_deploy_config_dir: "{{ atlas_molecule_base_dir }}/prometheus/config"
+        prometheus_deploy_data_dir: "{{ atlas_molecule_base_dir }}/prometheus/data"
+        prometheus_deploy_pod_manifest_path: "{{ atlas_molecule_base_dir }}/quadlet/prometheus.yml"
+        prometheus_deploy_quadlet_dir: /etc/containers/systemd
+        prometheus_deploy_systemd_unit_name: prometheus-heavy
+        prometheus_deploy_systemd_description: Molecule Prometheus container service
+        prometheus_deploy_alertmanager_targets:
+          - "127.0.0.1:9093"
+        prometheus_deploy_scrape_configs:
+          - job_name: prometheus
+            static_configs:
+              - targets:
+                  - "127.0.0.1:9090"
+          - job_name: alloy
+            metrics_path: /metrics
+            static_configs:
+              - targets:
+                  - "127.0.0.1:12345"
+    - role: alertmanager_deploy
+      vars:
+        alertmanager_deploy_install_packages: false
+        alertmanager_deploy_pod_name: alertmanager-heavy
+        alertmanager_deploy_container_name: alertmanager
+        alertmanager_deploy_host_ip: 127.0.0.1
+        alertmanager_deploy_port: 9093
+        alertmanager_deploy_config_dir: "{{ atlas_molecule_base_dir }}/alertmanager/config"
+        alertmanager_deploy_data_dir: "{{ atlas_molecule_base_dir }}/alertmanager/data"
+        alertmanager_deploy_pod_manifest_path: "{{ atlas_molecule_base_dir }}/quadlet/alertmanager.yml"
+        alertmanager_deploy_quadlet_dir: /etc/containers/systemd
+        alertmanager_deploy_systemd_unit_name: alertmanager-heavy
+        alertmanager_deploy_systemd_description: Molecule Alertmanager container service
+    - role: grafana_deploy
+      vars:
+        grafana_deploy_install_packages: false
+        grafana_deploy_pod_name: grafana-heavy
+        grafana_deploy_container_name: grafana
+        grafana_deploy_host_ip: 127.0.0.1
+        grafana_deploy_port: 3000
+        grafana_deploy_host_data_dir: "{{ atlas_molecule_base_dir }}/grafana/data"
+        grafana_deploy_config_dir: "{{ atlas_molecule_base_dir }}/grafana/config"
+        grafana_deploy_pod_manifest_path: "{{ atlas_molecule_base_dir }}/quadlet/grafana.yml"
+        grafana_deploy_quadlet_dir: /etc/containers/systemd
+        grafana_deploy_systemd_unit_name: grafana-heavy
+        grafana_deploy_systemd_description: Molecule Grafana container service
+        grafana_deploy_public_fqdn: grafana.example.invalid
+        grafana_deploy_root_url: http://127.0.0.1:3000
+        grafana_deploy_loki_url: http://127.0.0.1:3100
+        grafana_deploy_admin_password: molecule-grafana-admin-password
+    - role: checkmk_deploy
+      vars:
+        checkmk_deploy_install_packages: false
+        checkmk_deploy_pod_name: checkmk-heavy
+        checkmk_deploy_container_name: checkmk
+        checkmk_deploy_host_ip: 127.0.0.1
+        checkmk_deploy_port: 5000
+        checkmk_deploy_host_data_dir: "{{ atlas_molecule_base_dir }}/checkmk/data"
+        checkmk_deploy_config_dir: "{{ atlas_molecule_base_dir }}/checkmk/config"
+        checkmk_deploy_pod_manifest_path: "{{ atlas_molecule_base_dir }}/quadlet/checkmk.yml"
+        checkmk_deploy_quadlet_dir: /etc/containers/systemd
+        checkmk_deploy_systemd_unit_name: checkmk-heavy
+        checkmk_deploy_systemd_description: Molecule Checkmk container service
+        checkmk_deploy_public_fqdn: checkmk.example.invalid
+        checkmk_deploy_public_url: http://127.0.0.1:5000
+        checkmk_deploy_admin_password: molecule-checkmk-admin-password

@@ -1,0 +1,5 @@
+---
+rsyslog_upgrade_execute: false
+rsyslog_upgrade_run_backup: true
+rsyslog_upgrade_run_validate: true
+rsyslog_upgrade_image: "{{ rsyslog_deploy_image | default('docker.io/rsyslog/syslog_appliance_alpine:latest', true) }}"

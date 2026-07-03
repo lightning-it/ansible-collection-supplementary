@@ -1,0 +1,6 @@
+---
+rsyslog_preflight_strict: true
+rsyslog_preflight_check_packages: true
+rsyslog_preflight_check_ports: true
+rsyslog_preflight_required_tcp_ports:
+  - "{{ rsyslog_deploy_tcp_port | default(1514, true) }}"

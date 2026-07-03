@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: rsyslog_preflight
+  author: LIT
+  description: Validate rsyslog deployment prerequisites.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

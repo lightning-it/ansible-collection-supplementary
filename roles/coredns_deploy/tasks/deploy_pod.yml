@@ -19,7 +19,7 @@
 
 - name: Detect SELinux status
   ansible.builtin.command: getenforce
-  register: selinux_status
+  register: coredns_deploy_selinux_status
   changed_when: false
   failed_when: false
   when:
@@ -52,8 +52,8 @@
   when:
     - ansible_distribution in ['RedHat', 'CentOS']
     - coredns_deploy_selinux_relabel | bool
-    - selinux_status.stdout is defined
-    - selinux_status.stdout != 'Disabled'
+    - coredns_deploy_selinux_status.stdout is defined
+    - coredns_deploy_selinux_status.stdout != 'Disabled'
     - item | length > 0
 
 - name: Apply SELinux context
@@ -69,8 +69,8 @@
   when:
     - ansible_distribution in ['RedHat', 'CentOS']
     - coredns_deploy_selinux_relabel | bool
-    - selinux_status.stdout is defined
-    - selinux_status.stdout != 'Disabled'
+    - coredns_deploy_selinux_status.stdout is defined
+    - coredns_deploy_selinux_status.stdout != 'Disabled'
     - coredns_deploy_selinux_contexts is defined
     - coredns_deploy_selinux_contexts.results is defined
     - coredns_deploy_selinux_relabel_targets | length > 0

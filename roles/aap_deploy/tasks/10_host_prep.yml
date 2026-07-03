@@ -63,9 +63,10 @@
     state: started
 
 - name: Validate required AAP deploy commands are available
-  ansible.builtin.shell:
-    cmd: "command -v {{ item | quote }}"
-    executable: /bin/bash
+  ansible.builtin.command:
+    argv:
+      - which
+      - "{{ item }}"
   become: true
   become_user: "{{ aap_deploy_install_user }}"
   loop: "{{ aap_deploy_required_commands }}"

@@ -12,13 +12,14 @@
 
 - name: Set init file content facts
   ansible.builtin.set_fact:
-    vault_deploy_init_file_content: "{{ vault_foundational_init_file_clean }}"
-    vault_deploy_init_file_first_char: "{{ vault_foundational_init_file_first_char }}"
-    vault_deploy_init_file_is_vault: "{{ vault_foundational_init_file_clean is match('^\\$ANSIBLE_VAULT;') }}"
-    vault_deploy_init_file_is_legacy: >-
+    vault_foundational_vault_deploy_init_file_content: "{{ vault_foundational_init_file_clean }}"
+    vault_foundational_vault_deploy_init_file_first_char: "{{ vault_foundational_init_file_first_char }}"
+    vault_foundational_vault_deploy_init_file_is_vault: >-
+      {{ vault_foundational_init_file_clean is match('^\\$ANSIBLE_VAULT;') }}
+    vault_foundational_vault_deploy_init_file_is_legacy: >-
       {{ vault_foundational_init_file_clean
          is search('vault_deploy_unseal_keys_encrypted:') }}
-    vault_deploy_init_file_is_yaml: >-
+    vault_foundational_vault_deploy_init_file_is_yaml: >-
       {{
         vault_foundational_init_file_clean
           is search('(^|\\n)\\s*vault_init:')

@@ -1,0 +1,48 @@
+---
+alertmanager_deploy_packages:
+  - podman
+alertmanager_deploy_install_packages: true
+alertmanager_deploy_skip_runtime: false
+alertmanager_deploy_skip_deploy: false
+
+alertmanager_deploy_pod_name: "alertmanager"
+alertmanager_deploy_container_name: "alertmanager"
+alertmanager_deploy_image: "docker.io/prom/alertmanager:v0.28.1"
+alertmanager_deploy_pod_manifest_path: "/etc/podman/pods/alertmanager.yml"
+alertmanager_deploy_systemd_enabled: true
+alertmanager_deploy_systemd_unit_name: "{{ alertmanager_deploy_pod_name }}"
+alertmanager_deploy_systemd_description: "Alertmanager container service"
+alertmanager_deploy_systemd_scope: "system"
+alertmanager_deploy_quadlet_dir: "/etc/containers/systemd"
+
+alertmanager_deploy_host_ip: "127.0.0.1"
+alertmanager_deploy_port: 9093
+alertmanager_deploy_container_port: 9093
+alertmanager_deploy_cluster_port: 9094
+alertmanager_deploy_ready_url: "http://{{ alertmanager_deploy_host_ip }}:{{ alertmanager_deploy_port }}/-/ready"
+alertmanager_deploy_validate_certs: true
+
+alertmanager_deploy_config_dir: "/srv/alertmanager/config"
+alertmanager_deploy_config_path: "{{ alertmanager_deploy_config_dir }}/alertmanager.yml"
+alertmanager_deploy_data_dir: "/srv/alertmanager/data"
+alertmanager_deploy_container_config_path: "/etc/alertmanager/alertmanager.yml"
+alertmanager_deploy_container_data_dir: "/alertmanager"
+alertmanager_deploy_dir_mode: "0755"
+alertmanager_deploy_data_owner: "65534"
+alertmanager_deploy_data_group: "65534"
+alertmanager_deploy_config_mode: "0644"
+
+alertmanager_deploy_global: {}
+alertmanager_deploy_route:
+  receiver: "default"
+  group_by:
+    - "alertname"
+  group_wait: "30s"
+  group_interval: "5m"
+  repeat_interval: "4h"
+alertmanager_deploy_receivers:
+  - name: "default"
+alertmanager_deploy_inhibit_rules: []
+alertmanager_deploy_time_intervals: []
+alertmanager_deploy_extra_args: []
+alertmanager_deploy_env_extra: {}

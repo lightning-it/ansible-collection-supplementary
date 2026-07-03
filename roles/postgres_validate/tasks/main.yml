@@ -44,6 +44,9 @@
 
 - name: Report PostgreSQL validation status
   ansible.builtin.debug:
-    msg: "PostgreSQL validation completed for {{ postgres_validate_db_host }}:{{ postgres_validate_db_port }}/{{ postgres_validate_db_name }}."
+    msg: >-
+      PostgreSQL validation completed for {{ postgres_validate_db_host }}:{{
+        postgres_validate_db_port
+      }}/{{ postgres_validate_db_name }}.
   tags:
     - validate

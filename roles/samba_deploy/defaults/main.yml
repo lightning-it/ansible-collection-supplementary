@@ -5,9 +5,15 @@ samba_deploy_install_packages: true
 samba_deploy_skip_runtime: false
 samba_deploy_skip_deploy: false
 
+samba_deploy_mode: "share"
 samba_deploy_pod_name: "samba"
 samba_deploy_container_name: "samba"
-samba_deploy_image: "docker.io/dperson/samba:latest"
+samba_deploy_image: >-
+  {{
+    samba_deploy_ad_dc_image
+    if samba_deploy_mode == 'ad_dc'
+    else 'docker.io/dperson/samba:latest'
+  }}
 samba_deploy_pod_manifest_path: "/etc/podman/pods/samba.yml"
 samba_deploy_kubeplay_remove: true
 samba_deploy_kubeplay_run: true
@@ -31,3 +37,52 @@ samba_deploy_share_owner: "nobody"
 samba_deploy_share_group: "nogroup"
 samba_deploy_share_mode: "0775"
 samba_deploy_extra_args: []
+
+# Samba AD DC / LDAPS mode. This lightweight Samba AD-LDS style image is suited
+# for app-auth and Molecule validation while preserving LDAP/LDAPS semantics.
+samba_deploy_ad_dc_image: "docker.io/smblds/smblds:latest"
+samba_deploy_ad_dc_realm: "SAMDOM.EXAMPLE.COM"
+samba_deploy_ad_dc_domain: "SAMDOM"
+samba_deploy_ad_dc_admin_password: "Passw0rd"
+samba_deploy_ad_dc_insecure_ldap: false
+samba_deploy_ad_dc_insecure_passwordsettings: false
+samba_deploy_ad_dc_server_services: "ldap cldap"
+samba_deploy_ldap_port: 389
+samba_deploy_ldaps_port: 636
+samba_deploy_container_ldap_port: 389
+samba_deploy_container_ldaps_port: 636
+samba_deploy_ad_dc_data_dir: "/srv/samba/ad-dc/data"
+samba_deploy_ad_dc_config_dir: "/srv/samba/ad-dc/config"
+samba_deploy_ad_dc_cache_dir: "/srv/samba/ad-dc/cache"
+samba_deploy_ad_dc_log_dir: "/srv/samba/ad-dc/log"
+samba_deploy_ad_dc_entrypoint_dir: "/srv/samba/ad-dc/entrypoint.d"
+samba_deploy_ad_dc_keycloak_bind_user: "keycloak"
+samba_deploy_ad_dc_keycloak_bind_password: "KeycloakBindPassw0rd"
+samba_deploy_ad_dc_keycloak_bind_given_name: "Keycloak"
+samba_deploy_ad_dc_keycloak_bind_surname: "Bind"
+samba_deploy_ad_dc_groups:
+  - name: "admins"
+    description: "Application administrators"
+  - name: "managers"
+    description: "Application managers"
+  - name: "viewers"
+    description: "Application viewers"
+samba_deploy_ad_dc_users:
+  - name: "alice.admin"
+    password: "SambaUserPassw0rd1"
+    given_name: "Alice"
+    surname: "Admin"
+    groups:
+      - "admins"
+  - name: "maya.manager"
+    password: "SambaUserPassw0rd1"
+    given_name: "Maya"
+    surname: "Manager"
+    groups:
+      - "managers"
+  - name: "victor.viewer"
+    password: "SambaUserPassw0rd1"
+    given_name: "Victor"
+    surname: "Viewer"
+    groups:
+      - "viewers"

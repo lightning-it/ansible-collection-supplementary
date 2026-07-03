@@ -11,6 +11,10 @@
       - keycloak_cac_clients is not string
       - keycloak_cac_users is sequence
       - keycloak_cac_users is not string
+      - keycloak_cac_samba_ldap_enabled is boolean
+      - keycloak_cac_samba_ldap_provider is mapping
+      - keycloak_cac_ldap_providers is sequence
+      - keycloak_cac_ldap_providers is not string
     fail_msg: "Keycloak CaC variables are missing or invalid."
   tags: always
 

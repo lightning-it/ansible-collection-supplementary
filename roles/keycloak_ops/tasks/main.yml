@@ -15,7 +15,9 @@
 
 - name: Report Keycloak container status
   ansible.builtin.debug:
-    msg: "Keycloak container {{ keycloak_ops_container_name }} status: {{ keycloak_ops_container_status.stdout | default('unknown') | trim }}"
+    msg: >-
+      Keycloak container {{ keycloak_ops_container_name }} status:
+      {{ keycloak_ops_container_status.stdout | default('unknown') | trim }}
   when: keycloak_ops_action == 'status'
   tags:
     - ops

@@ -1,0 +1,28 @@
+---
+galaxy_info:
+  role_name: prometheus_deploy
+  namespace: lit
+  author: Lightning IT
+  description: Deploy Prometheus as a Podman Quadlet-managed container service.
+  company: Lightning IT
+  license: MIT
+  min_ansible_version: "2.18"
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+    - name: EL
+      versions:
+        - "9"
+
+  galaxy_tags:
+    - atlas
+    - monitoring
+    - observability
+    - podman
+    - prometheus
+    - quadlet
+
+dependencies: []

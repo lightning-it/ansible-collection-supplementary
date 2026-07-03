@@ -1,0 +1,53 @@
+---
+- name: Resolve Hub container registry trust target
+  ansible.builtin.set_fact:
+    aap_deploy_hub_registry_trust_hostport: >-
+      {{
+        (
+          (aap_deploy_hub_container_registry_url | urlsplit('hostname'))
+          ~ ':'
+          ~ (
+            aap_deploy_hub_container_registry_url
+            | urlsplit('port')
+            | default(
+                443
+                if (aap_deploy_hub_container_registry_url | urlsplit('scheme')) == 'https'
+                else 80,
+                true
+              )
+            | string
+          )
+        )
+      }}
+  changed_when: false
+
+- name: Ensure Hub registry CA trust directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: '0755'
+  loop:
+    - path: "{{ aap_deploy_hub_registry_trust_system_dir }}/{{ aap_deploy_hub_registry_trust_hostport }}"
+      owner: root
+      group: root
+    - path: "{{ aap_deploy_hub_registry_trust_user_dir }}/{{ aap_deploy_hub_registry_trust_hostport }}"
+      owner: "{{ aap_deploy_install_user }}"
+      group: "{{ aap_deploy_install_user }}"
+
+- name: Trust staged AAP CA for Hub registry
+  ansible.builtin.copy:
+    src: "{{ aap_deploy_tls_ca_cert_path }}"
+    dest: "{{ item.dest }}"
+    remote_src: true
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: '0644'
+  loop:
+    - dest: "{{ aap_deploy_hub_registry_trust_system_dir }}/{{ aap_deploy_hub_registry_trust_hostport }}/ca.crt"
+      owner: root
+      group: root
+    - dest: "{{ aap_deploy_hub_registry_trust_user_dir }}/{{ aap_deploy_hub_registry_trust_hostport }}/ca.crt"
+      owner: "{{ aap_deploy_install_user }}"
+      group: "{{ aap_deploy_install_user }}"

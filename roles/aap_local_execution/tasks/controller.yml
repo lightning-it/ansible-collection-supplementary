@@ -2,38 +2,38 @@
 - name: Validate requested local AAP action
   ansible.builtin.assert:
     that:
-      - aap_local_action in aap_local_allowed_actions
+      - aap_local_execution_action in aap_local_execution_allowed_actions
     fail_msg: >-
-      Unsupported aap_local_action={{ aap_local_action }}. Supported values:
-      {{ aap_local_allowed_actions | join(', ') }}.
+      Unsupported aap_local_execution_action={{ aap_local_execution_action }}. Supported values:
+      {{ aap_local_execution_allowed_actions | join(', ') }}.
     quiet: true
 
 - name: Validate requested AAP secret backend
   ansible.builtin.assert:
     that:
-      - aap_effective_secret_backend in aap_local_secret_backends
+      - aap_local_execution_effective_secret_backend in aap_local_execution_secret_backends
     fail_msg: >-
-      Unsupported aap_secret_backend={{ aap_effective_secret_backend }}.
-      Supported values: {{ aap_local_secret_backends | join(', ') }}.
+      Unsupported aap_secret_backend={{ aap_local_execution_effective_secret_backend }}.
+      Supported values: {{ aap_local_execution_secret_backends | join(', ') }}.
     quiet: true
 
 - name: Validate HashiCorp-only local action
   ansible.builtin.assert:
     that:
-      - aap_effective_secret_backend == 'hashicorp_vault'
+      - aap_local_execution_effective_secret_backend == 'hashicorp_vault'
     fail_msg: >-
       aap_action=seed_rh_offline_token is only for
       aap_secret_backend=hashicorp_vault. For aap_secret_backend=ansible_vault,
       store rh_offline_token in the encrypted Ansible inventory.
     quiet: true
-  when: aap_local_action == 'seed_rh_offline_token'
+  when: aap_local_execution_action == 'seed_rh_offline_token'
 
 - name: Validate required AAP local inventory values
   ansible.builtin.assert:
     that:
       - aap_fqdn | default('', true) | string | trim | length > 0
-      - aap_effective_bootstrap_user | string | trim | length > 0
-      - aap_effective_user | string | trim | length > 0
+      - aap_local_execution_effective_bootstrap_user | string | trim | length > 0
+      - aap_local_execution_effective_user | string | trim | length > 0
       - modulix_run_ee_image | default('', true) | string | trim | length > 0
     fail_msg: >-
       AAP local execution requires aap_fqdn and modulix_run_ee_image in
@@ -43,16 +43,16 @@
 - name: Validate AAP setup and runtime accounts
   ansible.builtin.assert:
     that:
-      - aap_effective_setup_user == 'svc_ansible'
-      - aap_effective_bootstrap_user == aap_effective_setup_user
-      - aap_effective_user == aap_effective_setup_user
-      - aap_effective_install_user == 'svc_aap'
-      - aap_effective_user != aap_effective_install_user
+      - aap_local_execution_effective_setup_user == 'svc_ansible'
+      - aap_local_execution_effective_bootstrap_user == aap_local_execution_effective_setup_user
+      - aap_local_execution_effective_user == aap_local_execution_effective_setup_user
+      - aap_local_execution_effective_install_user == 'svc_aap'
+      - aap_local_execution_effective_user != aap_local_execution_effective_install_user
     fail_msg: >-
       AAP setup/runbooks must execute through svc_ansible, while AAP
       runtime must use svc_aap. Current values: aap_bootstrap_user={{
-      aap_effective_bootstrap_user }}, aap_user={{ aap_effective_user }},
-      aap_install_user={{ aap_effective_install_user }}.
+      aap_local_execution_effective_bootstrap_user }}, aap_user={{ aap_local_execution_effective_user }},
+      aap_install_user={{ aap_local_execution_effective_install_user }}.
     quiet: true
 
 - name: Validate Ansible Vault secret values for rollout actions
@@ -64,11 +64,11 @@
       {{ item }} must be set in the encrypted Ansible inventory when
       aap_secret_backend=ansible_vault.
     quiet: true
-  loop: "{{ aap_ansible_vault_required_secret_vars }}"
+  loop: "{{ aap_local_execution_ansible_vault_required_secret_vars }}"
   no_log: true
   when:
-    - aap_effective_secret_backend == 'ansible_vault'
-    - aap_local_action != 'prepare_machine_a'
+    - aap_local_execution_effective_secret_backend == 'ansible_vault'
+    - aap_local_execution_action != 'prepare_machine_a'
 
 - name: Ensure Machine A local directories exist
   ansible.builtin.file:
@@ -76,79 +76,39 @@
     state: directory
     mode: "{{ item.mode }}"
   loop:
-    - { path: "{{ machine_a_effective_appl_root }}/etc", mode: "0750" }
-    - { path: "{{ machine_a_effective_secrets_dir }}", mode: "0750" }
-    - { path: "{{ machine_a_effective_appl_root }}/artifacts", mode: "0750" }
-    - { path: "{{ machine_a_effective_export_root }}/src", mode: "0750" }
-    - { path: "{{ machine_a_effective_artifact_dir }}", mode: "0750" }
+    - path: "{{ aap_local_execution_machine_a_effective_appl_root }}/etc"
+      mode: "0750"
+    - path: "{{ aap_local_execution_machine_a_effective_secrets_dir }}"
+      mode: "0750"
+    - path: "{{ aap_local_execution_machine_a_effective_appl_root }}/artifacts"
+      mode: "0750"
+    - path: "{{ aap_local_execution_machine_a_effective_export_root }}/src"
+      mode: "0750"
+    - path: "{{ aap_local_execution_machine_a_effective_artifact_dir }}"
+      mode: "0750"
 
 - name: Write AAP local env file from inventory values
-  ansible.builtin.copy:
-    dest: "{{ machine_a_effective_env_file }}"
-    mode: "{{ aap_local_env_mode }}"
-    content: |
-      export AAP_FQDN="{{ aap_fqdn }}"
-      export AAP_ANSIBLE_HOST="{{ aap_effective_ansible_host }}"
-      export AAP_SHORTNAME="{{ aap_effective_shortname }}"
-      export AAP_INVENTORY_HOST="{{ aap_effective_inventory_host }}"
-      export AAP_SETUP_USER="{{ aap_effective_setup_user }}"
-      export AAP_BOOTSTRAP_USER="{{ aap_effective_bootstrap_user }}"
-      export AAP_USER="{{ aap_effective_user }}"
-      export AAP_INSTALL_USER="{{ aap_effective_install_user }}"
-      export AAP_ANSIBLE_BECOME_FLAGS="{{ aap_ansible_become_flags | default('', true) }}"
-      export AAP_SSH_KEY_AUTH_ENABLED={{ aap_ssh_key_auth_enabled | default(true) | bool | ternary('true', 'false') }}
-      export AAP_REMOTE_TMP_BOOTSTRAP_RAW={{ aap_remote_tmp_bootstrap_raw | default(true) | bool | ternary('true', 'false') }}
-
-      export MACHINE_A_APPL_ROOT="{{ machine_a_effective_appl_root }}"
-      export MACHINE_A_EXPORT_ROOT="{{ machine_a_effective_export_root }}"
-      export MACHINE_A_ENV_FILE="{{ machine_a_effective_env_file }}"
-      export MACHINE_A_SECRETS_DIR="{{ machine_a_effective_secrets_dir }}"
-      export MACHINE_A_BOOTSTRAP_KNOWN_HOSTS="{{ machine_a_effective_bootstrap_known_hosts }}"
-
-      export VAULT_ADDR="{{ vault_addr | default('', true) }}"
-      export VAULT_SKIP_VERIFY={{ vault_skip_verify | default(false) | bool | ternary('true', 'false') }}
-      export VAULT_TOKEN="${VAULT_TOKEN:-}"
-      export VAULT_ENGINE_MOUNT_POINT="{{ vault_engine_mount_point | default('', true) }}"
-      export AAP_VAULT_HOST_KEY="{{ aap_vault_host_key | default(aap_effective_shortname, true) }}"
-      export AAP_VAULT_ADMIN_PASSWORDS_KV_PATH="{{ aap_vault_admin_passwords_kv_path | default((aap_vault_host_key | default(aap_effective_shortname, true)) ~ '/aap/deploy/admin_passwords', true) }}"
-      export AAP_VAULT_DEFAULTS_KV_PATH="{{ aap_vault_defaults_kv_path | default((aap_vault_host_key | default(aap_effective_shortname, true)) ~ '/aap/deploy/defaults', true) }}"
-
-      export AUTOMATION_REPO_URL="{{ automation_repo_url_effective }}"
-      export INVENTORY_NAME="{{ inventory_name | default('corp', true) }}"
-      export MODULIX_RUN_EE_IMAGE="{{ modulix_run_ee_image }}"
-      export AAP_EE_TRANSFER_ENABLED={{ aap_effective_ee_transfer_enabled | ternary('true', 'false') }}
-      export AAP_AUTOMATION_SOURCE_DIR="{{ aap_automation_source_dir_effective }}"
-
-      export AAP_BUNDLE_FILENAME="{{ aap_bundle_filename | default('ansible-automation-platform-containerized-setup-bundle-2.7-1.2-x86_64.tar.gz', true) }}"
-      export AAP_BUNDLE_SHA256="{{ aap_bundle_sha256 | default('', true) }}"
-      export AAP_BUNDLE_MIN_SIZE_BYTES="{{ aap_bundle_min_size_bytes | default('100000000', true) }}"
-      export AAP_BUNDLE_URL="{{ aap_bundle_url | default('', true) }}"
-      export AAP_MANIFEST_FILENAME="{{ aap_manifest_filename | default('manifest.zip', true) }}"
-      export AAP_MANIFEST_SHA256="{{ aap_manifest_sha256 | default('', true) }}"
-      export AAP_MANIFEST_URL="{{ aap_manifest_url | default('', true) }}"
-
-      export AAP_APPL_ROOT="{{ aap_effective_appl_root }}"
-      export AAP_ENV_FILE="{{ aap_effective_env_file }}"
-      export AAP_SECRETS_DIR="{{ aap_effective_secrets_dir }}"
-      export AUTOMATION_DIR="{{ aap_effective_automation_dir }}"
-      export AUTOMATION_ANSIBLE_DIR="{{ aap_effective_automation_ansible_dir }}"
+  ansible.builtin.template:
+    src: aap-local/aap-local.env.j2
+    dest: "{{ aap_local_execution_machine_a_effective_env_file }}"
+    mode: "{{ aap_local_execution_env_mode }}"
 
 - name: Validate Machine A automation checkout
   ansible.builtin.stat:
-    path: "{{ machine_a_effective_export_root }}/src/modulix-automation/ansible/ansible.cfg"
-  register: aap_local_automation_checkout
-  when: aap_local_action in ['validate', 'transfer_payload']
+    path: "{{ aap_local_execution_machine_a_effective_export_root }}/src/modulix-automation/ansible/ansible.cfg"
+  register: aap_local_execution_automation_checkout
+  when: aap_local_execution_action in ['validate', 'transfer_payload']
 
 - name: Validate Machine A automation checkout exists
   ansible.builtin.assert:
     that:
-      - aap_local_automation_checkout.stat.exists | default(false)
+      - aap_local_execution_automation_checkout.stat.exists | default(false)
     fail_msg: >-
       Automation checkout is missing below {{
-      machine_a_effective_export_root }}/src/modulix-automation. Run
-      aap_local_action=prepare_machine_a first.
+      aap_local_execution_machine_a_effective_export_root }}/src/modulix-automation. Run
+      aap_local_execution_action=prepare_machine_a first.
     quiet: true
-  when: aap_local_action in ['validate', 'transfer_payload']
+  when: aap_local_execution_action in ['validate', 'transfer_payload']
 
 - name: Check Vault health from Machine A
   ansible.builtin.uri:
@@ -156,114 +116,133 @@
     method: GET
     validate_certs: "{{ not (vault_skip_verify | default(false) | bool) }}"
     status_code: [200, 429, 472, 473]
-  register: aap_local_vault_health
+  register: aap_local_execution_vault_health
   when:
-    - aap_local_action == 'validate'
-    - aap_effective_secret_backend == 'hashicorp_vault'
+    - aap_local_execution_action == 'validate'
+    - aap_local_execution_effective_secret_backend == 'hashicorp_vault'
     - vault_addr | default('', true) | string | trim | length > 0
 
 - name: Download AAP setup bundle when URL is provided
   ansible.builtin.get_url:
     url: "{{ aap_bundle_url }}"
-    dest: "{{ machine_a_effective_artifact_dir }}/{{ aap_bundle_filename | default('ansible-automation-platform-containerized-setup-bundle-2.7-1.2-x86_64.tar.gz', true) }}"
-    checksum: "{{ aap_effective_bundle_checksum if (aap_effective_bundle_checksum | trim | length > 0) else omit }}"
+    dest: >-
+      {{ aap_local_execution_machine_a_effective_artifact_dir }}/{{
+        aap_bundle_filename
+        | default('ansible-automation-platform-containerized-setup-bundle-2.7-1.2-x86_64.tar.gz', true)
+      }}
+    checksum: >-
+      {{
+        aap_local_execution_effective_bundle_checksum
+        if (aap_local_execution_effective_bundle_checksum | trim | length > 0)
+        else omit
+      }}
     mode: "0640"
     force: "{{ aap_artifact_download_force | default(false) | bool }}"
   when:
-    - aap_local_action in ['validate', 'transfer_payload']
+    - aap_local_execution_action in ['validate', 'transfer_payload']
     - aap_bundle_url | default('', true) | string | trim | length > 0
 
 - name: Download AAP manifest when URL is provided
   ansible.builtin.get_url:
     url: "{{ aap_manifest_url }}"
-    dest: "{{ machine_a_effective_artifact_dir }}/{{ aap_manifest_filename | default('manifest.zip', true) }}"
-    checksum: "{{ aap_effective_manifest_checksum if (aap_effective_manifest_checksum | trim | length > 0) else omit }}"
+    dest: >-
+      {{ aap_local_execution_machine_a_effective_artifact_dir }}/{{
+        aap_manifest_filename | default('manifest.zip', true)
+      }}
+    checksum: >-
+      {{
+        aap_local_execution_effective_manifest_checksum
+        if (aap_local_execution_effective_manifest_checksum | trim | length > 0)
+        else omit
+      }}
     mode: "0640"
     force: "{{ aap_artifact_download_force | default(false) | bool }}"
   when:
-    - aap_local_action in ['validate', 'transfer_payload']
+    - aap_local_execution_action in ['validate', 'transfer_payload']
     - aap_manifest_url | default('', true) | string | trim | length > 0
 
 - name: Find AAP setup bundle on Machine A
   ansible.builtin.find:
-    paths: "{{ machine_a_effective_artifact_dir }}"
+    paths: "{{ aap_local_execution_machine_a_effective_artifact_dir }}"
     patterns: "ansible-automation-platform-containerized-setup-bundle-*-x86_64.tar.gz"
     file_type: any
     follow: true
-  register: aap_local_bundle_find
-  when: aap_local_action in ['validate', 'transfer_payload']
+  register: aap_local_execution_bundle_find
+  when: aap_local_execution_action in ['validate', 'transfer_payload']
 
 - name: Find AAP manifest on Machine A
   ansible.builtin.find:
-    paths: "{{ machine_a_effective_artifact_dir }}"
+    paths: "{{ aap_local_execution_machine_a_effective_artifact_dir }}"
     patterns: "manifest*.zip"
     file_type: any
     follow: true
-  register: aap_local_manifest_find
-  when: aap_local_action in ['validate', 'transfer_payload']
+  register: aap_local_execution_manifest_find
+  when: aap_local_execution_action in ['validate', 'transfer_payload']
 
 - name: Validate exactly one AAP bundle and manifest are available
   ansible.builtin.assert:
     that:
-      - (aap_local_bundle_find.files | default([]) | length) == 1
-      - (aap_local_manifest_find.files | default([]) | length) == 1
+      - (aap_local_execution_bundle_find.files | default([]) | length) == 1
+      - (aap_local_execution_manifest_find.files | default([]) | length) == 1
     fail_msg: >-
       Expected exactly one AAP setup bundle and one manifest in {{
-      machine_a_effective_artifact_dir }}.
+      aap_local_execution_machine_a_effective_artifact_dir }}.
     quiet: true
-  when: aap_local_action in ['validate', 'transfer_payload']
+  when: aap_local_execution_action in ['validate', 'transfer_payload']
 
 - name: Record selected local AAP artifacts
   ansible.builtin.set_fact:
-    aap_local_bundle_path: "{{ (aap_local_bundle_find.files | sort(attribute='path') | last).path }}"
-    aap_local_manifest_path: "{{ (aap_local_manifest_find.files | sort(attribute='path') | last).path }}"
-  when: aap_local_action in ['validate', 'transfer_payload']
+    aap_local_execution_bundle_path: >-
+      {{ (aap_local_execution_bundle_find.files | sort(attribute='path') | last).path }}
+    aap_local_execution_manifest_path: >-
+      {{ (aap_local_execution_manifest_find.files | sort(attribute='path') | last).path }}
+  when: aap_local_execution_action in ['validate', 'transfer_payload']
 
 - name: Inspect selected local AAP setup bundle
   ansible.builtin.stat:
-    path: "{{ aap_local_bundle_path }}"
+    path: "{{ aap_local_execution_bundle_path }}"
     follow: true
     checksum_algorithm: sha256
-  register: aap_local_bundle_stat
-  when: aap_local_action in ['validate', 'transfer_payload']
+  register: aap_local_execution_bundle_stat
+  when: aap_local_execution_action in ['validate', 'transfer_payload']
 
 - name: Inspect selected local AAP manifest
   ansible.builtin.stat:
-    path: "{{ aap_local_manifest_path }}"
+    path: "{{ aap_local_execution_manifest_path }}"
     follow: true
     checksum_algorithm: sha256
-  register: aap_local_manifest_stat
-  when: aap_local_action in ['validate', 'transfer_payload']
+  register: aap_local_execution_manifest_stat
+  when: aap_local_execution_action in ['validate', 'transfer_payload']
 
 - name: Validate selected artifact sizes
   ansible.builtin.assert:
     that:
-      - aap_local_bundle_stat.stat.size | int >= (aap_bundle_min_size_bytes | default(100000000) | int)
-      - aap_local_manifest_stat.stat.size | int > 0
+      - aap_local_execution_bundle_stat.stat.size | int >= (aap_bundle_min_size_bytes | default(100000000) | int)
+      - aap_local_execution_manifest_stat.stat.size | int > 0
     fail_msg: >-
       AAP setup bundle or manifest is too small. Check the selected files
-      in {{ machine_a_effective_artifact_dir }}.
+      in {{ aap_local_execution_machine_a_effective_artifact_dir }}.
     quiet: true
-  when: aap_local_action in ['validate', 'transfer_payload']
+  when: aap_local_execution_action in ['validate', 'transfer_payload']
 
 - name: Assert AAP bundle checksum
   ansible.builtin.assert:
     that:
-      - aap_local_bundle_stat.stat.checksum == (aap_bundle_sha256 | regex_replace('^sha256:', ''))
+      - aap_local_execution_bundle_stat.stat.checksum == (aap_bundle_sha256 | regex_replace('^sha256:', ''))
     fail_msg: "AAP setup bundle checksum does not match inventory."
     quiet: true
   when:
-    - aap_local_action in ['validate', 'transfer_payload']
+    - aap_local_execution_action in ['validate', 'transfer_payload']
     - aap_bundle_sha256 | default('', true) | string | trim | length > 0
 
 - name: Assert AAP manifest checksum
   ansible.builtin.assert:
     that:
-      - aap_local_manifest_stat.stat.checksum == (aap_manifest_sha256 | regex_replace('^sha256:', ''))
+      - aap_local_execution_manifest_stat.stat.checksum == (aap_manifest_sha256 | regex_replace('^sha256:', ''))
     fail_msg: "AAP manifest checksum does not match inventory."
     quiet: true
   when:
-    - aap_local_action in ['validate', 'transfer_payload']
+    - aap_local_execution_action in ['validate', 'transfer_payload']
     - aap_manifest_sha256 | default('', true) | string | trim | length > 0
 
 - name: Validate AAP bundle archive is readable
@@ -271,9 +250,9 @@
     argv:
       - tar
       - -tzf
-      - "{{ aap_local_bundle_path }}"
+      - "{{ aap_local_execution_bundle_path }}"
   changed_when: false
-  when: aap_local_action in ['validate', 'transfer_payload']
+  when: aap_local_execution_action in ['validate', 'transfer_payload']
 
 - name: Validate AAP manifest zip is readable
   ansible.builtin.command:
@@ -285,35 +264,36 @@
         z = zipfile.ZipFile(sys.argv[1]);
         bad = z.testzip();
         raise SystemExit(1 if bad else 0)
-      - "{{ aap_local_manifest_path }}"
+      - "{{ aap_local_execution_manifest_path }}"
   changed_when: false
-  when: aap_local_action in ['validate', 'transfer_payload']
+  when: aap_local_execution_action in ['validate', 'transfer_payload']
 
 - name: Validate configured automation source checkout
   ansible.builtin.stat:
-    path: "{{ aap_automation_source_dir_effective }}/ansible/ansible.cfg"
-  register: aap_local_source_checkout
+    path: "{{ aap_local_execution_automation_source_dir_effective }}/ansible/ansible.cfg"
+  register: aap_local_execution_source_checkout
   when:
-    - aap_local_action in ['prepare_machine_a', 'transfer_payload']
-    - aap_automation_source_dir_effective | length > 0
+    - aap_local_execution_action in ['prepare_machine_a', 'transfer_payload']
+    - aap_local_execution_automation_source_dir_effective | length > 0
 
 - name: Assert configured automation source checkout is usable
   ansible.builtin.assert:
     that:
-      - aap_local_source_checkout.stat.exists | default(false)
+      - aap_local_execution_source_checkout.stat.exists | default(false)
     fail_msg: >-
       aap_automation_source_dir must point at a modulix-automation checkout
       containing ansible/ansible.cfg.
     quiet: true
   when:
-    - aap_local_action in ['prepare_machine_a', 'transfer_payload']
-    - aap_automation_source_dir_effective | length > 0
+    - aap_local_execution_action in ['prepare_machine_a', 'transfer_payload']
+    - aap_local_execution_automation_source_dir_effective | length > 0
 
 - name: Mirror configured automation source checkout
   ansible.builtin.command:
     argv:
       - rsync
       - -a
+      - --itemize-changes
       - --delete
       - --exclude=.git
       - --exclude=.artifacts
@@ -325,78 +305,80 @@
       - --exclude=ansible/manifest*.zip
       - --exclude=packaging/rpm/.rpmbuild
       - --exclude=packaging/rpm/dist
-      - "{{ aap_automation_source_dir_effective }}/"
-      - "{{ machine_a_effective_export_root }}/src/modulix-automation/"
+      - "{{ aap_local_execution_automation_source_dir_effective }}/"
+      - "{{ aap_local_execution_machine_a_effective_export_root }}/src/modulix-automation/"
+  register: aap_local_execution_mirror_source
+  changed_when: aap_local_execution_mirror_source.stdout | trim | length > 0
   when:
-    - aap_local_action in ['prepare_machine_a', 'transfer_payload']
-    - aap_automation_source_dir_effective | length > 0
+    - aap_local_execution_action in ['prepare_machine_a', 'transfer_payload']
+    - aap_local_execution_automation_source_dir_effective | length > 0
 
 - name: Clone or update automation checkout
   ansible.builtin.git:
-    repo: "{{ automation_repo_url_effective }}"
-    dest: "{{ machine_a_effective_export_root }}/src/modulix-automation"
+    repo: "{{ aap_local_execution_automation_repo_url_effective }}"
+    dest: "{{ aap_local_execution_machine_a_effective_export_root }}/src/modulix-automation"
     version: "{{ automation_repo_version | default('main', true) }}"
     update: true
   when:
-    - aap_local_action == 'prepare_machine_a'
-    - aap_automation_source_dir_effective | length == 0
+    - aap_local_execution_action == 'prepare_machine_a'
+    - aap_local_execution_automation_source_dir_effective | length == 0
 
 - name: Check Machine A Vault token source
   ansible.builtin.stat:
     path: "{{ lookup('ansible.builtin.env', 'HOME') }}/.vault-token"
-  register: aap_local_home_vault_token
+  register: aap_local_execution_home_vault_token
   when:
-    - aap_local_action == 'prepare_machine_a'
-    - aap_effective_secret_backend == 'hashicorp_vault'
+    - aap_local_execution_action == 'prepare_machine_a'
+    - aap_local_execution_effective_secret_backend == 'hashicorp_vault'
 
 - name: Store Vault token from environment for transfer
   ansible.builtin.copy:
-    dest: "{{ machine_a_effective_secrets_dir }}/.vault-token"
-    content: "{{ vault_token_effective }}\n"
+    dest: "{{ aap_local_execution_machine_a_effective_secrets_dir }}/.vault-token"
+    content: "{{ aap_local_execution_vault_token_effective }}\n"
     mode: "0600"
   no_log: true
   when:
-    - aap_local_action == 'prepare_machine_a'
-    - aap_effective_secret_backend == 'hashicorp_vault'
-    - vault_token_effective | length > 0
+    - aap_local_execution_action == 'prepare_machine_a'
+    - aap_local_execution_effective_secret_backend == 'hashicorp_vault'
+    - aap_local_execution_vault_token_effective | length > 0
 
 - name: Store Vault token from local token file for transfer
   ansible.builtin.copy:
     src: "{{ lookup('ansible.builtin.env', 'HOME') }}/.vault-token"
-    dest: "{{ machine_a_effective_secrets_dir }}/.vault-token"
+    dest: "{{ aap_local_execution_machine_a_effective_secrets_dir }}/.vault-token"
     mode: "0600"
   no_log: true
   when:
-    - aap_local_action == 'prepare_machine_a'
-    - aap_effective_secret_backend == 'hashicorp_vault'
-    - vault_token_effective | length == 0
-    - aap_local_home_vault_token.stat.exists | default(false)
+    - aap_local_execution_action == 'prepare_machine_a'
+    - aap_local_execution_effective_secret_backend == 'hashicorp_vault'
+    - aap_local_execution_vault_token_effective | length == 0
+    - aap_local_execution_home_vault_token.stat.exists | default(false)
 
 - name: Check Machine A SSH key
   ansible.builtin.stat:
-    path: "{{ machine_a_effective_ssh_key }}"
-  register: aap_local_machine_a_prepare_ssh_key
+    path: "{{ aap_local_execution_machine_a_effective_ssh_key }}"
+  register: aap_local_execution_machine_a_prepare_ssh_key
   when:
-    - aap_local_action == 'prepare_machine_a'
+    - aap_local_execution_action == 'prepare_machine_a'
     - aap_ssh_key_auth_enabled | default(true) | bool
 
 - name: Copy baseline SSH key into Machine A staging when provided
   ansible.builtin.copy:
     src: "{{ aap_baseline_ssh_key }}"
-    dest: "{{ machine_a_effective_ssh_key }}"
+    dest: "{{ aap_local_execution_machine_a_effective_ssh_key }}"
     mode: "0600"
   when:
-    - aap_local_action == 'prepare_machine_a'
+    - aap_local_execution_action == 'prepare_machine_a'
     - aap_ssh_key_auth_enabled | default(true) | bool
-    - not (aap_local_machine_a_prepare_ssh_key.stat.exists | default(false))
+    - not (aap_local_execution_machine_a_prepare_ssh_key.stat.exists | default(false))
     - aap_baseline_ssh_key | default('', true) | string | trim | length > 0
 
 - name: Check Machine A SSH key after baseline copy
   ansible.builtin.stat:
-    path: "{{ machine_a_effective_ssh_key }}"
-  register: aap_local_machine_a_prepare_ssh_key_after_copy
+    path: "{{ aap_local_execution_machine_a_effective_ssh_key }}"
+  register: aap_local_execution_machine_a_prepare_ssh_key_after_copy
   when:
-    - aap_local_action == 'prepare_machine_a'
+    - aap_local_execution_action == 'prepare_machine_a'
     - aap_ssh_key_auth_enabled | default(true) | bool
 
 - name: Generate Machine A SSH key when key auth is enabled
@@ -406,43 +388,44 @@
       - -t
       - ed25519
       - -f
-      - "{{ machine_a_effective_ssh_key }}"
+      - "{{ aap_local_execution_machine_a_effective_ssh_key }}"
       - -N
       - ""
+  changed_when: true
   when:
-    - aap_local_action == 'prepare_machine_a'
+    - aap_local_execution_action == 'prepare_machine_a'
     - aap_ssh_key_auth_enabled | default(true) | bool
-    - not (aap_local_machine_a_prepare_ssh_key_after_copy.stat.exists | default(false))
+    - not (aap_local_execution_machine_a_prepare_ssh_key_after_copy.stat.exists | default(false))
 
 - name: Ensure Machine A SSH key mode
   ansible.builtin.file:
-    path: "{{ machine_a_effective_ssh_key }}"
+    path: "{{ aap_local_execution_machine_a_effective_ssh_key }}"
     mode: "0600"
   when:
-    - aap_local_action == 'prepare_machine_a'
+    - aap_local_execution_action == 'prepare_machine_a'
     - aap_ssh_key_auth_enabled | default(true) | bool
 
 - name: Prompt for Red Hat offline token
   ansible.builtin.pause:
     prompt: Red Hat offline token
     echo: false
-  register: aap_local_rh_offline_token_prompt
+  register: aap_local_execution_rh_offline_token_prompt
   no_log: true
   when:
-    - aap_local_action == 'seed_rh_offline_token'
+    - aap_local_execution_action == 'seed_rh_offline_token'
     - rh_offline_token | default('', true) | string | trim | length == 0
 
 - name: Resolve Red Hat offline token input
   ansible.builtin.set_fact:
-    aap_local_effective_rh_offline_token: >-
+    aap_local_execution_effective_rh_offline_token: >-
       {{
         rh_offline_token
-        | default(aap_local_rh_offline_token_prompt.user_input | default('', true), true)
+        | default(aap_local_execution_rh_offline_token_prompt.user_input | default('', true), true)
         | string
         | trim
       }}
   no_log: true
-  when: aap_local_action == 'seed_rh_offline_token'
+  when: aap_local_execution_action == 'seed_rh_offline_token'
 
 - name: Validate Red Hat offline token Vault inputs
   ansible.builtin.assert:
@@ -450,14 +433,14 @@
       - vault_addr | default('', true) | string | trim | length > 0
       - vault_engine_mount_point | default('', true) | string | trim | length > 0
       - aap_vault_defaults_kv_path | default('', true) | string | trim | length > 0
-      - aap_local_effective_rh_offline_token | default('', true) | string | trim | length > 0
+      - aap_local_execution_effective_rh_offline_token | default('', true) | string | trim | length > 0
       - lookup('ansible.builtin.env', 'VAULT_TOKEN') | string | trim | length > 0
     fail_msg: >-
       Seeding rh_offline_token requires vault_addr, vault_engine_mount_point,
       aap_vault_defaults_kv_path, VAULT_TOKEN, and a non-empty token.
     quiet: true
   no_log: true
-  when: aap_local_action == 'seed_rh_offline_token'
+  when: aap_local_execution_action == 'seed_rh_offline_token'
 
 - name: Read existing Vault defaults secret
   ansible.builtin.uri:
@@ -467,9 +450,9 @@
       X-Vault-Token: "{{ lookup('ansible.builtin.env', 'VAULT_TOKEN') | string | trim }}"
     validate_certs: "{{ not (vault_skip_verify | default(false) | bool) }}"
     status_code: [200, 404]
-  register: aap_local_vault_defaults_get
+  register: aap_local_execution_vault_defaults_get
   no_log: true
-  when: aap_local_action == 'seed_rh_offline_token'
+  when: aap_local_execution_action == 'seed_rh_offline_token'
 
 - name: Store Red Hat offline token in Vault defaults
   ansible.builtin.uri:
@@ -482,16 +465,16 @@
       data: >-
         {{
           (
-            aap_local_vault_defaults_get.json.data.data
-            if (aap_local_vault_defaults_get.status | default(0) | int == 200)
+            aap_local_execution_vault_defaults_get.json.data.data
+            if (aap_local_execution_vault_defaults_get.status | default(0) | int == 200)
             else {}
           )
-          | combine({'rh_offline_token': aap_local_effective_rh_offline_token})
+          | combine({'rh_offline_token': aap_local_execution_effective_rh_offline_token})
         }}
     validate_certs: "{{ not (vault_skip_verify | default(false) | bool) }}"
     status_code: [200, 204]
   no_log: true
-  when: aap_local_action == 'seed_rh_offline_token'
+  when: aap_local_execution_action == 'seed_rh_offline_token'
 
 - name: Verify Red Hat offline token exists in Vault defaults
   ansible.builtin.uri:
@@ -501,12 +484,12 @@
       X-Vault-Token: "{{ lookup('ansible.builtin.env', 'VAULT_TOKEN') | string | trim }}"
     validate_certs: "{{ not (vault_skip_verify | default(false) | bool) }}"
     status_code: [200]
-  register: aap_local_vault_defaults_verify
+  register: aap_local_execution_vault_defaults_verify
   failed_when: >-
-    aap_local_vault_defaults_verify.json.data.data.rh_offline_token
+    aap_local_execution_vault_defaults_verify.json.data.data.rh_offline_token
     | default('', true) | string | trim | length == 0
   no_log: true
-  when: aap_local_action == 'seed_rh_offline_token'
+  when: aap_local_execution_action == 'seed_rh_offline_token'
 
 - name: Ensure execution environment image exists locally when transfer is enabled
   ansible.builtin.command:
@@ -515,12 +498,12 @@
       - image
       - exists
       - "{{ modulix_run_ee_image }}"
-  register: aap_local_ee_image_exists
+  register: aap_local_execution_ee_image_exists
   changed_when: false
   failed_when: false
   when:
-    - aap_local_action == 'transfer_payload'
-    - aap_effective_ee_transfer_enabled | bool
+    - aap_local_execution_action == 'transfer_payload'
+    - aap_local_execution_effective_ee_transfer_enabled | bool
 
 - name: Pull execution environment image when needed
   ansible.builtin.command:
@@ -528,10 +511,23 @@
       - podman
       - pull
       - "{{ modulix_run_ee_image }}"
+  register: aap_local_execution_ee_pull_result
+  changed_when: >-
+    'Copying blob' in (aap_local_execution_ee_pull_result.stdout ~ aap_local_execution_ee_pull_result.stderr)
+    or 'Writing manifest' in (aap_local_execution_ee_pull_result.stdout ~ aap_local_execution_ee_pull_result.stderr)
+    or 'Storing signatures' in (aap_local_execution_ee_pull_result.stdout ~ aap_local_execution_ee_pull_result.stderr)
   when:
-    - aap_local_action == 'transfer_payload'
-    - aap_effective_ee_transfer_enabled | bool
-    - aap_ee_pull_force | default(false) | bool or aap_local_ee_image_exists.rc != 0
+    - aap_local_execution_action == 'transfer_payload'
+    - aap_local_execution_effective_ee_transfer_enabled | bool
+    - aap_ee_pull_force | default(false) | bool or aap_local_execution_ee_image_exists.rc != 0
+
+- name: Check execution environment archive on Machine A
+  ansible.builtin.stat:
+    path: "{{ aap_local_execution_machine_a_effective_ee_archive_path }}"
+  register: aap_local_execution_ee_archive_stat
+  when:
+    - aap_local_execution_action == 'transfer_payload'
+    - aap_local_execution_effective_ee_transfer_enabled | bool
 
 - name: Save execution environment archive when transfer is enabled
   ansible.builtin.command:
@@ -541,18 +537,29 @@
       - --format
       - oci-archive
       - -o
-      - "{{ machine_a_effective_ee_archive_path }}"
+      - "{{ aap_local_execution_machine_a_effective_ee_archive_path }}"
       - "{{ modulix_run_ee_image }}"
+  register: aap_local_execution_ee_archive_save
+  changed_when: true
   when:
-    - aap_local_action == 'transfer_payload'
-    - aap_effective_ee_transfer_enabled | bool
+    - aap_local_execution_action == 'transfer_payload'
+    - aap_local_execution_effective_ee_transfer_enabled | bool
+    - >-
+      aap_local_execution_ee_archive_force | bool
+      or not (aap_local_execution_ee_archive_stat.stat.exists | default(false))
+
+- name: Check automation source archive
+  ansible.builtin.stat:
+    path: "{{ aap_local_execution_machine_a_effective_source_archive_path }}"
+  register: aap_local_execution_source_archive_stat
+  when: aap_local_execution_action == 'transfer_payload'
 
 - name: Create automation source archive
   ansible.builtin.command:
     argv:
       - tar
       - -C
-      - "{{ machine_a_effective_export_root }}/src"
+      - "{{ aap_local_execution_machine_a_effective_export_root }}/src"
       - "--exclude=modulix-automation/.git"
       - "--exclude=modulix-automation/.artifacts"
       - "--exclude=modulix-automation/ansible/.artifacts"
@@ -565,87 +572,111 @@
       - "--exclude=modulix-automation/packaging/rpm/.rpmbuild"
       - "--exclude=modulix-automation/packaging/rpm/dist"
       - -czf
-      - "{{ machine_a_effective_source_archive_path }}"
+      - "{{ aap_local_execution_machine_a_effective_source_archive_path }}"
       - modulix-automation
-  when: aap_local_action == 'transfer_payload'
+  register: aap_local_execution_source_archive_create
+  changed_when: true
+  when:
+    - aap_local_execution_action == 'transfer_payload'
+    - >-
+      aap_local_execution_source_archive_force | bool
+      or not (aap_local_execution_source_archive_stat.stat.exists | default(false))
 
 - name: Check optional Machine A Vault token file
   ansible.builtin.stat:
-    path: "{{ machine_a_effective_secrets_dir }}/.vault-token"
-  register: aap_local_machine_a_vault_token_file
+    path: "{{ aap_local_execution_machine_a_effective_secrets_dir }}/.vault-token"
+  register: aap_local_execution_machine_a_vault_token_file
   when:
-    - aap_local_action == 'transfer_payload'
-    - aap_effective_secret_backend == 'hashicorp_vault'
+    - aap_local_execution_action == 'transfer_payload'
+    - aap_local_execution_effective_secret_backend == 'hashicorp_vault'
 
 - name: Check optional Machine A SSH key file
   ansible.builtin.stat:
-    path: "{{ machine_a_effective_ssh_key }}"
-  register: aap_local_machine_a_ssh_key_file
+    path: "{{ aap_local_execution_machine_a_effective_ssh_key }}"
+  register: aap_local_execution_machine_a_ssh_key_file
   when:
-    - aap_local_action == 'transfer_payload'
+    - aap_local_execution_action == 'transfer_payload'
     - aap_ssh_key_auth_enabled | default(true) | bool
 
 - name: Add AAP local-execution target
   ansible.builtin.add_host:
     name: aap_local_target
     groups: aap_local_targets
-    ansible_host: "{{ aap_effective_ansible_host }}"
-    ansible_user: "{{ aap_effective_bootstrap_user }}"
+    ansible_host: "{{ aap_local_execution_effective_ansible_host }}"
+    ansible_user: "{{ aap_local_execution_effective_bootstrap_user }}"
     ansible_connection: ssh
     ansible_become: true
     ansible_become_method: sudo
-    ansible_become_flags: "{{ aap_local_become_flags | default(aap_ansible_become_flags | default('--preserve-env=SSH_AUTH_SOCK -i', true), true) }}"
+    ansible_become_flags: >-
+      {{
+        aap_local_become_flags
+        | default(
+            aap_ansible_become_flags
+            | default('--preserve-env=SSH_AUTH_SOCK -i', true),
+            true
+          )
+      }}
     ansible_ssh_common_args: >-
       -A
-      -o UserKnownHostsFile={{ machine_a_effective_bootstrap_known_hosts }}
+      -o UserKnownHostsFile={{
+        aap_local_execution_machine_a_effective_bootstrap_known_hosts
+      }}
       -o StrictHostKeyChecking=accept-new
     ansible_remote_tmp: "{{ ansible_remote_tmp | default('/appl/ansible-tmp', true) }}"
-    aap_local_action: "{{ aap_local_action }}"
-    aap_local_bundle_path: "{{ aap_local_bundle_path | default('', true) }}"
-    aap_local_manifest_path: "{{ aap_local_manifest_path | default('', true) }}"
-    machine_a_effective_env_file: "{{ machine_a_effective_env_file }}"
-    machine_a_effective_source_archive_path: "{{ machine_a_effective_source_archive_path }}"
-    machine_a_effective_ee_archive_path: "{{ machine_a_effective_ee_archive_path }}"
-    machine_a_effective_secrets_dir: "{{ machine_a_effective_secrets_dir }}"
-    machine_a_effective_ssh_key: "{{ machine_a_effective_ssh_key }}"
-    aap_local_machine_a_vault_token_exists: "{{ aap_local_machine_a_vault_token_file.stat.exists | default(false) }}"
-    aap_local_machine_a_ssh_key_exists: "{{ aap_local_machine_a_ssh_key_file.stat.exists | default(false) }}"
-    aap_effective_appl_root: "{{ aap_effective_appl_root }}"
-    aap_effective_env_file: "{{ aap_effective_env_file }}"
-    aap_effective_secrets_dir: "{{ aap_effective_secrets_dir }}"
-    aap_effective_automation_dir: "{{ aap_effective_automation_dir }}"
-    aap_effective_automation_ansible_dir: "{{ aap_effective_automation_ansible_dir }}"
-    aap_effective_artifact_dir: "{{ aap_effective_artifact_dir }}"
-    aap_effective_inventory_name: "{{ aap_effective_inventory_name }}"
-    aap_effective_inventory_rel: "{{ aap_effective_inventory_rel }}"
-    aap_effective_inventory_file: "{{ aap_effective_inventory_file }}"
-    aap_effective_ee_archive_path: "{{ aap_effective_ee_archive_path }}"
-    aap_effective_ee_transfer_enabled: "{{ aap_effective_ee_transfer_enabled }}"
+    aap_local_execution_action: "{{ aap_local_execution_action }}"
+    aap_local_execution_bundle_path: "{{ aap_local_execution_bundle_path | default('', true) }}"
+    aap_local_execution_manifest_path: "{{ aap_local_execution_manifest_path | default('', true) }}"
+    aap_local_execution_machine_a_effective_env_file: "{{ aap_local_execution_machine_a_effective_env_file }}"
+    aap_local_execution_machine_a_effective_source_archive_path: >-
+      {{ aap_local_execution_machine_a_effective_source_archive_path }}
+    aap_local_execution_machine_a_effective_ee_archive_path: >-
+      {{ aap_local_execution_machine_a_effective_ee_archive_path }}
+    aap_local_execution_machine_a_effective_secrets_dir: "{{ aap_local_execution_machine_a_effective_secrets_dir }}"
+    aap_local_execution_machine_a_effective_ssh_key: "{{ aap_local_execution_machine_a_effective_ssh_key }}"
+    aap_local_machine_a_vault_token_exists: >-
+      {{ aap_local_execution_machine_a_vault_token_file.stat.exists | default(false) }}
+    aap_local_machine_a_ssh_key_exists: "{{ aap_local_execution_machine_a_ssh_key_file.stat.exists | default(false) }}"
+    aap_local_execution_effective_appl_root: "{{ aap_local_execution_effective_appl_root }}"
+    aap_local_execution_effective_env_file: "{{ aap_local_execution_effective_env_file }}"
+    aap_local_execution_effective_secrets_dir: "{{ aap_local_execution_effective_secrets_dir }}"
+    aap_local_execution_effective_automation_dir: "{{ aap_local_execution_effective_automation_dir }}"
+    aap_local_execution_effective_automation_ansible_dir: "{{ aap_local_execution_effective_automation_ansible_dir }}"
+    aap_local_execution_effective_artifact_dir: "{{ aap_local_execution_effective_artifact_dir }}"
+    aap_local_execution_effective_inventory_name: "{{ aap_local_execution_effective_inventory_name }}"
+    aap_local_execution_effective_inventory_rel: "{{ aap_local_execution_effective_inventory_rel }}"
+    aap_local_execution_effective_inventory_file: "{{ aap_local_execution_effective_inventory_file }}"
+    aap_local_execution_effective_ee_archive_path: "{{ aap_local_execution_effective_ee_archive_path }}"
+    aap_local_execution_effective_ee_transfer_enabled: "{{ aap_local_execution_effective_ee_transfer_enabled }}"
     modulix_run_ee_image: "{{ modulix_run_ee_image }}"
-    modulix_run_ee_archive: "{{ modulix_run_ee_archive }}"
-    ansible_toolbox_runtime_mode_effective: "{{ ansible_toolbox_runtime_mode_effective }}"
-    ansible_collections_path_effective: "{{ ansible_collections_path_effective }}"
-    ansible_vault_password_file_effective: "{{ ansible_vault_password_file_effective }}"
-    aap_podman_storage_conf_effective: "{{ aap_podman_storage_conf_effective }}"
-    aap_podman_root_graphroot_effective: "{{ aap_podman_root_graphroot_effective }}"
-    aap_podman_root_runroot_effective: "{{ aap_podman_root_runroot_effective }}"
-    aap_podman_tmpdir_effective: "{{ aap_podman_tmpdir_effective }}"
-    aap_effective_install_user: "{{ aap_effective_install_user }}"
-    aap_effective_setup_user: "{{ aap_effective_setup_user }}"
-    aap_effective_user: "{{ aap_effective_user }}"
-    aap_effective_inventory_host: "{{ aap_effective_inventory_host }}"
-    aap_effective_ansible_host: "{{ aap_effective_ansible_host }}"
-    aap_effective_shortname: "{{ aap_effective_shortname }}"
-    aap_effective_secret_backend: "{{ aap_effective_secret_backend }}"
-    aap_ssh_key_container: "{{ aap_ssh_key_container }}"
+    aap_local_execution_modulix_run_ee_archive: "{{ aap_local_execution_modulix_run_ee_archive }}"
+    aap_local_execution_ansible_toolbox_runtime_mode_effective: >-
+      {{ aap_local_execution_ansible_toolbox_runtime_mode_effective }}
+    aap_local_execution_ansible_collections_path_effective: >-
+      {{ aap_local_execution_ansible_collections_path_effective }}
+    aap_local_execution_ansible_vault_password_file_effective: >-
+      {{ aap_local_execution_ansible_vault_password_file_effective }}
+    aap_local_execution_podman_storage_conf_effective: "{{ aap_local_execution_podman_storage_conf_effective }}"
+    aap_local_execution_podman_root_graphroot_effective: "{{ aap_local_execution_podman_root_graphroot_effective }}"
+    aap_local_execution_podman_root_runroot_effective: "{{ aap_local_execution_podman_root_runroot_effective }}"
+    aap_local_execution_podman_tmpdir_effective: "{{ aap_local_execution_podman_tmpdir_effective }}"
+    aap_local_execution_effective_install_user: "{{ aap_local_execution_effective_install_user }}"
+    aap_local_execution_effective_setup_user: "{{ aap_local_execution_effective_setup_user }}"
+    aap_local_execution_effective_user: "{{ aap_local_execution_effective_user }}"
+    aap_local_execution_effective_inventory_host: "{{ aap_local_execution_effective_inventory_host }}"
+    aap_local_execution_effective_ansible_host: "{{ aap_local_execution_effective_ansible_host }}"
+    aap_local_execution_effective_shortname: "{{ aap_local_execution_effective_shortname }}"
+    aap_local_execution_effective_secret_backend: "{{ aap_local_execution_effective_secret_backend }}"
+    aap_local_execution_ssh_key_container: "{{ aap_local_execution_ssh_key_container }}"
     vault_addr: "{{ vault_addr | default('', true) }}"
     vault_skip_verify: "{{ vault_skip_verify | default(false) | bool }}"
     vault_engine_mount_point: "{{ vault_engine_mount_point | default('', true) }}"
-    vault_token_effective: "{{ vault_token_effective }}"
-    aap_vault_host_key: "{{ aap_vault_host_key_effective }}"
-    aap_vault_admin_passwords_kv_path: "{{ aap_vault_admin_passwords_kv_path_effective }}"
-    aap_vault_defaults_kv_path: "{{ aap_vault_defaults_kv_path_effective }}"
+    aap_local_execution_vault_token_effective: "{{ aap_local_execution_vault_token_effective }}"
+    aap_vault_host_key: "{{ aap_local_execution_vault_host_key_effective }}"
+    aap_vault_admin_passwords_kv_path: "{{ aap_local_execution_vault_admin_passwords_kv_path_effective }}"
+    aap_vault_defaults_kv_path: "{{ aap_local_execution_vault_defaults_kv_path_effective }}"
     aap_ssh_key_auth_enabled: "{{ aap_ssh_key_auth_enabled | default(true) | bool }}"
-    aap_local_remote_playbooks: "{{ aap_local_remote_playbooks }}"
-    aap_local_run_playbook_args: "{{ aap_local_run_playbook_args }}"
-  when: aap_local_action in ['transfer_payload', 'stage_runtime'] or aap_local_action in aap_local_remote_playbooks
+    aap_local_execution_remote_playbooks: "{{ aap_local_execution_remote_playbooks }}"
+    aap_local_execution_run_playbook_args: "{{ aap_local_execution_run_playbook_args }}"
+  when: >-
+    aap_local_execution_action in ['transfer_payload', 'stage_runtime']
+    or aap_local_execution_action in aap_local_execution_remote_playbooks

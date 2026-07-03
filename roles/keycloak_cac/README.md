@@ -19,6 +19,16 @@ Key variables:
 - `keycloak_cac_realm`
 - `keycloak_cac_admin_user`
 - `keycloak_cac_admin_password`
+- `keycloak_cac_samba_ldap_enabled`
+- `keycloak_cac_samba_ldap_provider`
+- `keycloak_cac_ldap_providers`
+
+## Samba LDAPS user federation
+
+Set `keycloak_cac_samba_ldap_enabled: true` to create a default Samba AD/LDAPS
+LDAP provider in the target realm. Override `keycloak_cac_samba_ldap_provider`
+for site-specific DNs, bind credentials, and connection URLs. Additional LDAP
+providers can be supplied through `keycloak_cac_ldap_providers`.
 
 ## Dependencies
 

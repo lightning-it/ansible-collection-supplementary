@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ rsyslog_deploy_pod_name }}
+  labels:
+    app: {{ rsyslog_deploy_pod_name }}
+spec:
+  containers:
+    - name: {{ rsyslog_deploy_container_name }}
+      image: {{ rsyslog_deploy_image }}
+      command:
+        - rsyslogd
+      args:
+        - "-n"
+        - "-f"
+        - "{{ rsyslog_deploy_container_config_path }}"
+{% for arg in rsyslog_deploy_extra_args %}
+        - "{{ arg }}"
+{% endfor %}
+      ports:
+        - containerPort: {{ rsyslog_deploy_container_tcp_port }}
+          hostPort: {{ rsyslog_deploy_tcp_port }}
+          hostIP: {{ rsyslog_deploy_host_ip }}
+          protocol: TCP
+        - containerPort: {{ rsyslog_deploy_container_udp_port }}
+          hostPort: {{ rsyslog_deploy_udp_port }}
+          hostIP: {{ rsyslog_deploy_host_ip }}
+          protocol: UDP
+      volumeMounts:
+        - name: rsyslog-config
+          mountPath: {{ rsyslog_deploy_container_config_path }}
+        - name: rsyslog-log
+          mountPath: {{ rsyslog_deploy_container_log_dir }}
+
+  volumes:
+    - name: rsyslog-config
+      hostPath:
+        path: {{ rsyslog_deploy_config_path }}
+        type: File
+    - name: rsyslog-log
+      hostPath:
+        path: {{ rsyslog_deploy_log_dir }}
+        type: DirectoryOrCreate

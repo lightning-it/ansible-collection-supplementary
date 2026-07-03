@@ -1,0 +1,59 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Report disabled rsyslog backup/restore
+  ansible.builtin.debug:
+    msg: "rsyslog backup/restore disabled."
+  when: rsyslog_backup_restore_action == 'none'
+  tags:
+    - backup
+    - restore
+
+- name: Ensure rsyslog backup directory exists
+  ansible.builtin.file:
+    path: "{{ rsyslog_backup_restore_file | dirname }}"
+    state: directory
+    mode: "0750"
+  when:
+    - rsyslog_backup_restore_execute | bool
+    - rsyslog_backup_restore_action in ['backup', 'restore']
+  tags:
+    - backup
+    - restore
+
+- name: Report rsyslog backup/restore dry run
+  ansible.builtin.debug:
+    msg: >-
+      rsyslog {{ rsyslog_backup_restore_action }} prepared but not executed.
+      Set rsyslog_backup_restore_execute=true to run filesystem backup/restore.
+  when:
+    - not rsyslog_backup_restore_execute | bool
+    - rsyslog_backup_restore_action in ['backup', 'restore']
+  tags:
+    - backup
+    - restore
+
+- name: Create rsyslog backup archive
+  community.general.archive:
+    path: "{{ rsyslog_backup_restore_paths }}"
+    dest: "{{ rsyslog_backup_restore_file }}"
+    format: gz
+    mode: "0600"
+  when:
+    - rsyslog_backup_restore_execute | bool
+    - rsyslog_backup_restore_action == 'backup'
+  tags:
+    - backup
+
+- name: Restore rsyslog backup archive
+  ansible.builtin.unarchive:
+    src: "{{ rsyslog_backup_restore_restore_source }}"
+    dest: /
+    remote_src: true
+  when:
+    - rsyslog_backup_restore_execute | bool
+    - rsyslog_backup_restore_action == 'restore'
+  tags:
+    - restore

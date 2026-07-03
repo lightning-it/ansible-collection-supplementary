@@ -1,0 +1,30 @@
+---
+- name: Validate prometheus_deploy variables
+  ansible.builtin.assert:
+    that:
+      - prometheus_deploy_packages is sequence
+      - prometheus_deploy_packages is not string
+      - prometheus_deploy_pod_name | default('', true) | trim | length > 0
+      - prometheus_deploy_container_name | default('', true) | trim | length > 0
+      - prometheus_deploy_image | default('', true) | trim | length > 0
+      - prometheus_deploy_pod_manifest_path | default('', true) | trim | length > 0
+      - prometheus_deploy_systemd_unit_name | default('', true) | trim | length > 0
+      - prometheus_deploy_systemd_scope in ['system', 'user']
+      - prometheus_deploy_host_ip | default('', true) | trim | length > 0
+      - prometheus_deploy_port | int > 0
+      - prometheus_deploy_container_port | int > 0
+      - prometheus_deploy_config_dir | default('', true) | trim | length > 0
+      - prometheus_deploy_data_dir | default('', true) | trim | length > 0
+      - prometheus_deploy_global_scrape_interval | default('', true) | trim | length > 0
+      - prometheus_deploy_global_evaluation_interval | default('', true) | trim | length > 0
+      - prometheus_deploy_alertmanager_targets is sequence
+      - prometheus_deploy_alertmanager_targets is not string
+      - prometheus_deploy_scrape_configs is sequence
+      - prometheus_deploy_scrape_configs is not string
+      - prometheus_deploy_rule_groups is sequence
+      - prometheus_deploy_rule_groups is not string
+      - prometheus_deploy_extra_args is sequence
+      - prometheus_deploy_extra_args is not string
+      - prometheus_deploy_env_extra is mapping
+    fail_msg: "prometheus_deploy variables are missing or invalid."
+  tags: always

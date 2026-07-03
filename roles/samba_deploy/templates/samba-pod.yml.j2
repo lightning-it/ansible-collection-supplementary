@@ -8,6 +8,7 @@ spec:
   containers:
     - name: {{ samba_deploy_container_name }}
       image: {{ samba_deploy_image }}
+{% if samba_deploy_mode == 'share' %}
       args:
         - "-w"
         - "{{ samba_deploy_workgroup }}"
@@ -17,19 +18,81 @@ spec:
 {% for arg in samba_deploy_extra_args %}
         - "{{ arg }}"
 {% endfor %}
+{% else %}
+      env:
+        - name: REALM
+          value: "{{ samba_deploy_ad_dc_realm }}"
+        - name: DOMAIN
+          value: "{{ samba_deploy_ad_dc_domain }}"
+        - name: ADMINPASS
+          value: "{{ samba_deploy_ad_dc_admin_password }}"
+        - name: INSECURE_LDAP
+          value: "{{ 'true' if samba_deploy_ad_dc_insecure_ldap | bool else 'false' }}"
+        - name: INSECURE_PASSWORDSETTINGS
+          value: "{{ 'true' if samba_deploy_ad_dc_insecure_passwordsettings | bool else 'false' }}"
+        - name: SERVER_SERVICES
+          value: "{{ samba_deploy_ad_dc_server_services }}"
+{% endif %}
       ports:
+{% if samba_deploy_mode == 'share' %}
         - containerPort: {{ samba_deploy_container_netbios_port }}
           hostPort: {{ samba_deploy_netbios_port }}
           hostIP: {{ samba_deploy_host_ip }}
         - containerPort: {{ samba_deploy_container_smb_port }}
           hostPort: {{ samba_deploy_smb_port }}
           hostIP: {{ samba_deploy_host_ip }}
+{% else %}
+        - containerPort: {{ samba_deploy_container_ldap_port }}
+          hostPort: {{ samba_deploy_ldap_port }}
+          hostIP: {{ samba_deploy_host_ip }}
+          protocol: TCP
+        - containerPort: {{ samba_deploy_container_ldaps_port }}
+          hostPort: {{ samba_deploy_ldaps_port }}
+          hostIP: {{ samba_deploy_host_ip }}
+          protocol: TCP
+{% endif %}
       volumeMounts:
+{% if samba_deploy_mode == 'share' %}
         - name: samba-share
           mountPath: {{ samba_deploy_container_share_dir }}
+{% else %}
+        - name: samba-entrypoint
+          mountPath: /entrypoint.d
+        - name: samba-config
+          mountPath: /etc/samba
+        - name: samba-cache
+          mountPath: /var/cache/samba
+        - name: samba-data
+          mountPath: /var/lib/samba
+        - name: samba-log
+          mountPath: /var/log/samba
+{% endif %}
 
   volumes:
+{% if samba_deploy_mode == 'share' %}
     - name: samba-share
       hostPath:
         path: {{ samba_deploy_host_data_dir }}
         type: DirectoryOrCreate
+{% else %}
+    - name: samba-entrypoint
+      hostPath:
+        path: {{ samba_deploy_ad_dc_entrypoint_dir }}
+        type: DirectoryOrCreate
+    - name: samba-config
+      hostPath:
+        path: {{ samba_deploy_ad_dc_config_dir }}
+        type: DirectoryOrCreate
+    - name: samba-cache
+      hostPath:
+        path: {{ samba_deploy_ad_dc_cache_dir }}
+        type: DirectoryOrCreate
+    - name: samba-data
+      hostPath:
+        path: {{ samba_deploy_ad_dc_data_dir }}
+        type: DirectoryOrCreate
+    - name: samba-log
+      hostPath:
+        path: {{ samba_deploy_ad_dc_log_dir }}
+        type: DirectoryOrCreate
+{% endif %}

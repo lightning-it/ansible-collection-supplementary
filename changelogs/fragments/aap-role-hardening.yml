@@ -1,0 +1,13 @@
+---
+minor_changes:
+  - >-
+    Hardened AAP local execution by templating the generated local environment,
+    improving idempotent change detection for source mirroring, Podman image
+    handling, and remote artifact staging.
+  - >-
+    Simplified shared AAP admin password validation and added Molecule coverage
+    for shared fallback plus per-component password overrides.
+  - >-
+    Kept prepared Hub collection seeding independent from execution environment
+    image seeding for deployments that already provide container images from a
+    registry.

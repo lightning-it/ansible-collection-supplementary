@@ -1,0 +1,9 @@
+---
+- name: Converge alertmanager_deploy
+  hosts: all
+  gather_facts: true
+  connection: local
+  roles:
+    - role: lit.supplementary.alertmanager_deploy
+      vars:
+        alertmanager_deploy_skip_runtime: true

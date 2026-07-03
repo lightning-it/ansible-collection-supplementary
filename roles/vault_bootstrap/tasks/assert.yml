@@ -8,7 +8,7 @@
 - name: Ensure vault bootstrap variables are valid
   ansible.builtin.assert:
     that:
-      - vault_deploy_bootstrap_init is boolean
+      - vault_bootstrap_vault_deploy_bootstrap_init is boolean
       - vault_deploy_bootstrap_auto_init is boolean
       - vault_deploy_bootstrap_write_init_output is boolean
       - vault_deploy_bootstrap_key_shares | int > 0
