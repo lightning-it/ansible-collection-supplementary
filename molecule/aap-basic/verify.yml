@@ -6,14 +6,27 @@
   vars:
     aap_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-coverage-mode
+    aap_molecule_resolution_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-resolution.yml
   tasks:
     - name: Read lit.supplementary.aap coverage marker
       ansible.builtin.slurp:
         src: "{{ aap_molecule_marker_path }}"
       register: aap_molecule_marker
 
-    - name: Assert lit.supplementary.aap coverage stub ran
+    - name: Read resolved lit.supplementary.aap password facts
+      ansible.builtin.include_vars:
+        file: "{{ aap_molecule_resolution_path }}"
+        name: aap_molecule_resolution
+
+    - name: Assert lit.supplementary.aap password resolution ran
       ansible.builtin.assert:
         that:
-          - aap_molecule_marker.content | b64decode | trim == 'syntax_stub'
+          - aap_molecule_marker.content | b64decode | trim == 'password_resolution'
+          - aap_molecule_resolution.aap_gateway_admin_password_effective == 'shared-admin-password'
+          - aap_molecule_resolution.aap_controller_admin_password_effective == 'controller-admin-password'
+          - aap_molecule_resolution.aap_hub_admin_password_effective == 'hub-admin-password'
+          - aap_molecule_resolution.aap_eda_admin_password_effective == 'shared-admin-password'
+          - aap_molecule_resolution.aap_postgresql_admin_password_effective == 'shared-admin-password'
+          - aap_molecule_resolution.aap_deploy_controller_admin_password_effective == 'controller-admin-password'
         quiet: true

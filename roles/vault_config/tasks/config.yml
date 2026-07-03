@@ -51,18 +51,18 @@
     - terragrunt_apply
     - vault_data
 
-- name: Refresh Vault token from vault_token or vault_init root token when lookup fails
+- name: Refresh Vault token from vault_config_vault_token or vault_init root token when lookup fails
   ansible.builtin.set_fact:
     vault_config_token: >-
       {{
-        (vault_token | default('', true) | trim)
-        if ((vault_token | default('', true) | trim) | length > 0)
+        (vault_config_vault_token | default('', true) | trim)
+        if ((vault_config_vault_token | default('', true) | trim) | length > 0)
         else (vault_init.root_token | default('', true) | trim)
       }}
-    vault_token: >-
+    vault_config_vault_token: >-
       {{
-        (vault_token | default('', true) | trim)
-        if ((vault_token | default('', true) | trim) | length > 0)
+        (vault_config_vault_token | default('', true) | trim)
+        if ((vault_config_vault_token | default('', true) | trim) | length > 0)
         else (vault_init.root_token | default('', true) | trim)
       }}
   changed_when: false
@@ -71,7 +71,7 @@
     - vault_config_token_lookup.status | default(0) | int != 200
     - >-
       (
-        (vault_token | default('', true) | trim | length > 0)
+        (vault_config_vault_token | default('', true) | trim | length > 0)
         or
         (vault_init.root_token | default('', true) | trim | length > 0)
       )
@@ -110,7 +110,7 @@
     msg: >-
       vault_config_token is invalid for {{ vault_config_api_url }} (lookup-self status
       {{ _vault_config_token_lookup_status }}). This usually means stale Vault token data or
-      endpoint mismatch (DNS pointing to another Vault instance). Ensure vault_token or
+      endpoint mismatch (DNS pointing to another Vault instance). Ensure vault_config_vault_token or
       vault_init.root_token belongs to this Vault instance.
   vars:
     _vault_config_token_lookup_status: >-
@@ -453,9 +453,9 @@
 
 - name: Mark Vault tfstate dir as pending migration (handled by minio_bootstrap)
   ansible.builtin.set_fact:
-    tfstate_pending_dirs: >-
+    vault_config_tfstate_pending_dirs: >-
       {{
-        ((tfstate_pending_dirs | default([])) + [vault_config_terraform_state_dir])
+        ((vault_config_tfstate_pending_dirs | default([])) + [vault_config_terraform_state_dir])
         | unique
         | list
       }}

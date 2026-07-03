@@ -6,7 +6,8 @@
   block:
     - name: Set organizations for gateway organization taskset
       ansible.builtin.set_fact:
-        aap_organizations: "{{ aap_cac_controller_organizations }}"
+        ansible_facts:
+          aap_organizations: "{{ aap_cac_controller_organizations }}"
       changed_when: false
 
     - name: Configure Gateway organizations

@@ -53,6 +53,7 @@
   when:
     - loki_deploy_kubeplay_remove | default(false)
     - not loki_deploy_skip_runtime | bool
+    - not loki_deploy_manage_systemd | bool
   tags:
     - deployment
   block:
@@ -73,6 +74,7 @@
   when:
     - loki_deploy_kubeplay_run | default(false)
     - not loki_deploy_skip_runtime | bool
+    - not loki_deploy_manage_systemd | bool
   tags:
     - deployment
   block:

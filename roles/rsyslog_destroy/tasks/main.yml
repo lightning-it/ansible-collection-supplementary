@@ -1,0 +1,61 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Report rsyslog destroy dry run
+  ansible.builtin.debug:
+    msg: "rsyslog destroy is disabled. Set rsyslog_destroy_execute=true to remove container runtime resources."
+  when: not rsyslog_destroy_execute | bool
+  tags:
+    - destroy
+
+- name: Remove rsyslog persistent service
+  ansible.builtin.include_role:
+    name: lit.foundational.podman_systemd
+  vars:
+    podman_systemd_action: absent
+    podman_systemd_unit_name: "{{ rsyslog_destroy_systemd_unit_name }}"
+    podman_systemd_description: "rsyslog container service"
+    podman_systemd_manifest_path: "{{ rsyslog_destroy_manifest_path }}"
+    podman_systemd_scope: "{{ rsyslog_destroy_systemd_scope }}"
+    podman_systemd_quadlet_dir: "{{ rsyslog_destroy_quadlet_dir }}"
+  when:
+    - rsyslog_destroy_execute | bool
+    - rsyslog_destroy_remove_systemd | bool
+  tags:
+    - destroy
+
+- name: Remove rsyslog container runtime packages
+  ansible.builtin.package:
+    name: "{{ rsyslog_destroy_packages }}"
+    state: absent
+  when:
+    - rsyslog_destroy_execute | bool
+    - rsyslog_destroy_remove_packages | bool
+  tags:
+    - destroy
+
+- name: Remove rsyslog data paths
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ rsyslog_destroy_data_paths }}"
+  when:
+    - rsyslog_destroy_execute | bool
+    - rsyslog_destroy_remove_data | bool
+  tags:
+    - destroy
+    - data
+
+- name: Remove rsyslog config paths
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ rsyslog_destroy_config_paths }}"
+  when:
+    - rsyslog_destroy_execute | bool
+    - rsyslog_destroy_remove_config | bool
+  tags:
+    - destroy
+    - config

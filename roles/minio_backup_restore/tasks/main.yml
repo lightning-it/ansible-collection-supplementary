@@ -65,7 +65,7 @@
         paths: "{{ minio_backup_restore_backup_dir }}"
         patterns: "minio-data-*.tar.gz"
         file_type: file
-      register: minio_backup_files
+      register: minio_backup_restore_minio_backup_files
 
     - name: Remove older backups
       ansible.builtin.file:
@@ -73,10 +73,10 @@
         state: absent
       loop: >-
         {{
-          (minio_backup_files.files | sort(attribute='mtime') | reverse)
+          (minio_backup_restore_minio_backup_files.files | sort(attribute='mtime') | reverse)
           [minio_backup_restore_retention_keep_last | int:]
         }}
-      when: minio_backup_files.files | length > minio_backup_restore_retention_keep_last | int
+      when: minio_backup_restore_minio_backup_files.files | length > minio_backup_restore_retention_keep_last | int
 
 - name: Move existing data directory aside
   ansible.builtin.command: >-

@@ -1,6 +1,10 @@
 # checkmk_deploy
 
-Deploy Checkmk as a monitoring service with Podman kube play.
+Deploy Checkmk as a monitoring service with Podman Quadlet.
+
+The role renders a Podman pod manifest and manages it through systemd Quadlet
+when `checkmk_deploy_manage_systemd` is enabled. Non-systemd deployments can
+still use the existing kubeplay path.
 
 This first implementation deploys Checkmk and writes a documented monitoring
 target hook file at `{{ checkmk_deploy_config_dir }}/monitoring-targets.yml`.

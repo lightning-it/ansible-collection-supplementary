@@ -126,14 +126,14 @@
 - name: Check if certificate revocation list database exists
   ansible.builtin.stat:
     path: "{{ openvpn_key_dir }}/index.txt"
-  register: file_result
+  register: openvpn_file_result
 
 - name: Create certificate revocation list database if required
   ansible.builtin.file:
     path: "{{ openvpn_key_dir }}/index.txt"
     state: touch
     mode: "0644"
-  when: not file_result.stat.exists
+  when: not openvpn_file_result.stat.exists
 
 - name: Set up certificate revocation list
   ansible.builtin.command: sh revoke.sh
@@ -151,9 +151,9 @@
 
 # This should eventually be switched to use a systemd timer
 # eg /usr/local/lib/systemd/system/openvpn-crl.timer
-- name: Check for crontab
-  ansible.builtin.command: which crontab
-  register: crontab
+- name: Check for openvpn_crontab
+  ansible.builtin.command: which openvpn_crontab
+  register: openvpn_crontab
   check_mode: false
   changed_when: false
   failed_when: false
@@ -164,7 +164,7 @@
     state: present
   when:
     - ansible_os_family == "RedHat"
-    - crontab.rc != 0
+    - openvpn_crontab.rc != 0
 
 - name: Add cron to check every Saturday if the CRL needs to be renewed
   ansible.builtin.cron:

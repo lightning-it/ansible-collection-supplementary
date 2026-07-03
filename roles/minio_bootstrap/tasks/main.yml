@@ -11,7 +11,7 @@
   changed_when: false
   when:
     - minio_bootstrap_tfstate_auto_detect | default(true) | bool
-    - (tfstate_pending_dirs | default([], true) | length) == 0
+    - (minio_bootstrap_tfstate_pending_dirs | default([], true) | length) == 0
     - (minio_bootstrap_tfstate_auto_dirs | default([], true) | length) > 0
   tags:
     - tfstate
@@ -31,16 +31,16 @@
   changed_when: false
   when:
     - minio_bootstrap_tfstate_auto_detect | default(true) | bool
-    - (tfstate_pending_dirs | default([], true) | length) == 0
+    - (minio_bootstrap_tfstate_pending_dirs | default([], true) | length) == 0
     - item.stat.exists | default(false) | bool
     - item.stat.isdir | default(false) | bool
   tags:
     - tfstate
     - tfstate_migrate
 
-- name: Set tfstate_pending_dirs from auto-detect
+- name: Set minio_bootstrap_tfstate_pending_dirs from auto-detect
   ansible.builtin.set_fact:
-    tfstate_pending_dirs: >-
+    minio_bootstrap_tfstate_pending_dirs: >-
       {{
         (
           minio_bootstrap_tfstate_dir_finds.results
@@ -55,7 +55,7 @@
   changed_when: false
   when:
     - minio_bootstrap_tfstate_auto_detect | default(true) | bool
-    - (tfstate_pending_dirs | default([], true) | length) == 0
+    - (minio_bootstrap_tfstate_pending_dirs | default([], true) | length) == 0
     - (minio_bootstrap_tfstate_dir_finds.results | default([]) | length) > 0
     - >-
       (minio_bootstrap_tfstate_dir_finds.results | default([]) | selectattr('matched', 'defined')
@@ -161,7 +161,7 @@
 
 - name: Publish tfstate backend facts from Vault
   ansible.builtin.set_fact:
-    tfstate_backend_ready: >-
+    minio_bootstrap_tfstate_backend_ready: >-
       {{
         (_tfstate_creds.access_key | default('') | length > 0)
         and (_tfstate_creds.secret_key | default('') | length > 0)
@@ -169,20 +169,20 @@
           (_tfstate_creds.bucket | default(minio_bootstrap_tfstate_bucket, true) | trim) | length > 0
         )
       }}
-    tfstate_s3_endpoint: >-
+    minio_bootstrap_tfstate_s3_endpoint: >-
       {{
         _tfstate_creds.endpoint
           | default(minio_bootstrap_api_url_effective, true)
       }}
-    tfstate_bucket: >-
+    minio_bootstrap_tfstate_bucket: >-
       {{
         _tfstate_creds.bucket
           | default(minio_bootstrap_tfstate_bucket, true)
       }}
-    tfstate_access_key: "{{ _tfstate_creds.access_key | default('') }}"
-    tfstate_secret_key: "{{ _tfstate_creds.secret_key | default('') }}"
-    tfstate_region: "{{ _tfstate_creds.region | default('') }}"
-    tfstate_key_prefix: "{{ _tfstate_creds.key_prefix | default('') }}"
+    minio_bootstrap_tfstate_access_key: "{{ _tfstate_creds.access_key | default('') }}"
+    minio_bootstrap_tfstate_secret_key: "{{ _tfstate_creds.secret_key | default('') }}"
+    minio_bootstrap_tfstate_region: "{{ _tfstate_creds.region | default('') }}"
+    minio_bootstrap_tfstate_key_prefix: "{{ _tfstate_creds.key_prefix | default('') }}"
   vars:
     _tfstate_creds: "{{ minio_bootstrap_tfstate_creds_read.data.data | default({}) }}"
   no_log: true
@@ -197,10 +197,10 @@
 - name: Assert tfstate backend credentials are available
   ansible.builtin.assert:
     that:
-      - tfstate_s3_endpoint | default('', true) | trim | length > 0
-      - tfstate_bucket | default('', true) | trim | length > 0
-      - tfstate_access_key | default('', true) | trim | length > 0
-      - tfstate_secret_key | default('', true) | trim | length > 0
+      - minio_bootstrap_tfstate_s3_endpoint | default('', true) | trim | length > 0
+      - minio_bootstrap_tfstate_bucket | default('', true) | trim | length > 0
+      - minio_bootstrap_tfstate_access_key | default('', true) | trim | length > 0
+      - minio_bootstrap_tfstate_secret_key | default('', true) | trim | length > 0
     fail_msg: >-
       Missing tfstate backend credentials. Ensure the Vault secret
       {{ minio_bootstrap_tfstate_vault_kv_mount }}/data/{{ minio_bootstrap_tfstate_vault_path }}
@@ -218,7 +218,7 @@
     {{ minio_bootstrap_mc_path }} alias set
     {{ minio_bootstrap_mc_alias }}
     {{ minio_bootstrap_tfstate_migration_endpoint }}
-    {{ tfstate_access_key }} {{ tfstate_secret_key }}
+    {{ minio_bootstrap_tfstate_access_key }} {{ minio_bootstrap_tfstate_secret_key }}
     {{ (minio_bootstrap_mc_insecure | bool) | ternary('--insecure', '') }}
   register: minio_bootstrap_mc_alias_tfstate
   changed_when: false
@@ -236,11 +236,11 @@
   when:
     - not minio_bootstrap_skip | bool
     - minio_bootstrap_migrate_tfstate | bool
-    - tfstate_bucket | default('', true) | length > 0
-    - tfstate_pending_dirs is defined
-    - tfstate_pending_dirs | length > 0
+    - minio_bootstrap_tfstate_bucket | default('', true) | length > 0
+    - minio_bootstrap_tfstate_pending_dirs is defined
+    - minio_bootstrap_tfstate_pending_dirs | length > 0
     - not ansible_check_mode
-  loop: "{{ tfstate_pending_dirs }}"
+  loop: "{{ minio_bootstrap_tfstate_pending_dirs }}"
   loop_control:
     loop_var: minio_bootstrap_pending_dir
   tags:

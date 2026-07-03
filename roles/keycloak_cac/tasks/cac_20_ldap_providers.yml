@@ -1,0 +1,45 @@
+---
+- name: Skip Keycloak LDAP provider reconciliation when none are defined
+  ansible.builtin.debug:
+    msg: "No Keycloak LDAP providers defined."
+  when: keycloak_cac_ldap_providers | length == 0
+  changed_when: false
+
+- name: Reconcile Keycloak LDAP providers
+  when: keycloak_cac_ldap_providers | length > 0
+  block:
+    - name: Request Keycloak admin token for LDAP provider reconciliation
+      ansible.builtin.uri:
+        url: "{{ keycloak_cac_url }}/realms/{{ keycloak_cac_realm }}/protocol/openid-connect/token"
+        method: POST
+        validate_certs: "{{ keycloak_cac_validate_certs }}"
+        timeout: "{{ keycloak_cac_request_timeout | int }}"
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: admin-cli
+          username: "{{ keycloak_cac_admin_user }}"
+          password: "{{ keycloak_cac_admin_password }}"
+        status_code: 200
+      register: keycloak_cac_ldap_token
+      no_log: true
+      changed_when: false
+
+    - name: Read Keycloak realm representation for LDAP parent id
+      ansible.builtin.uri:
+        url: "{{ keycloak_cac_url }}/admin/realms/{{ keycloak_cac_realm }}"
+        method: GET
+        validate_certs: "{{ keycloak_cac_validate_certs }}"
+        timeout: "{{ keycloak_cac_request_timeout | int }}"
+        headers:
+          Authorization: "Bearer {{ keycloak_cac_ldap_token.json.access_token }}"
+        status_code: 200
+      register: keycloak_cac_ldap_realm
+      changed_when: false
+
+    - name: Reconcile Keycloak LDAP provider entries
+      ansible.builtin.include_tasks: ldap_provider.yml
+      loop: "{{ keycloak_cac_ldap_providers }}"
+      loop_control:
+        loop_var: keycloak_cac_ldap_provider
+        label: "{{ keycloak_cac_ldap_provider.name | default('unnamed') }}"

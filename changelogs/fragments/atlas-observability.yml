@@ -1,0 +1,9 @@
+---
+minor_changes:
+  - >-
+    Introduce LIT Atlas observability support with new Prometheus and
+    Alertmanager deploy roles for Podman/Quadlet-managed container services.
+  - >-
+    Convert Grafana, Loki, Alloy, and Checkmk deploy roles to the shared
+    Podman/Quadlet systemd management path and add an Incus heavy scenario
+    covering the complete Atlas observability stack.

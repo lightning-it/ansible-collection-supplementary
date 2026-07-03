@@ -34,14 +34,12 @@ loki_deploy_validate_certs: true
 
 loki_deploy_install_packages: true
 loki_deploy_manage_systemd: true
+loki_deploy_systemd_enabled: true
+loki_deploy_systemd_unit_name: "{{ loki_deploy_pod_name }}"
+loki_deploy_systemd_description: "Loki container service"
+loki_deploy_systemd_scope: "system"
+loki_deploy_quadlet_dir: "/etc/containers/systemd"
 loki_deploy_skip_runtime: false
 loki_deploy_skip_deploy: false
 loki_deploy_kubeplay_remove: false
 loki_deploy_kubeplay_run: false
-
-loki_deploy_systemd_unit_name: >-
-  {{
-    'podman-kube@'
-    ~ (loki_deploy_pod_manifest_path | basename | regex_replace('\\.ya?ml$', ''))
-    ~ '.service'
-  }}

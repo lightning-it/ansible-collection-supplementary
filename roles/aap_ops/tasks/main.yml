@@ -79,6 +79,15 @@
       changed_when: false
       when: aap_ops_service_state is not defined
 
+    - name: Report AAP service state
+      ansible.builtin.debug:
+        msg: >-
+          health={{ aap_ops_health.status | default('unknown') }},
+          service={{
+            aap_ops_service_state.state
+            | default((aap_ops_manage_systemd | bool) | ternary('unknown', 'not-managed'))
+          }}
+
 - name: Collect EDA diagnostics
   ansible.builtin.import_tasks: eda_diagnostics.yml
   when:
@@ -98,15 +107,6 @@
     - ops
     - diagnostics
     - local_execution
-
-    - name: Report AAP service state
-      ansible.builtin.debug:
-        msg: >-
-          health={{ aap_ops_health.status | default('unknown') }},
-          service={{
-            aap_ops_service_state.state
-            | default((aap_ops_manage_systemd | bool) | ternary('unknown', 'not-managed'))
-          }}
 
 - name: Sync automation hub admin password in aap-config.yml
   when:

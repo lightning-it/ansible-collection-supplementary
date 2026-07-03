@@ -1,0 +1,33 @@
+---
+- name: Validate rsyslog deploy variables
+  ansible.builtin.assert:
+    that:
+      - rsyslog_deploy_packages is sequence
+      - rsyslog_deploy_packages is not string
+      - rsyslog_deploy_install_packages is boolean
+      - rsyslog_deploy_skip_runtime is boolean
+      - rsyslog_deploy_skip_deploy is boolean
+      - rsyslog_deploy_pod_name | default('', true) | trim | length > 0
+      - rsyslog_deploy_container_name | default('', true) | trim | length > 0
+      - rsyslog_deploy_image | default('', true) | trim | length > 0
+      - rsyslog_deploy_pod_manifest_path | default('', true) | trim | length > 0
+      - rsyslog_deploy_systemd_enabled is boolean
+      - rsyslog_deploy_systemd_unit_name | default('', true) | trim | length > 0
+      - rsyslog_deploy_systemd_description | default('', true) | trim | length > 0
+      - rsyslog_deploy_systemd_scope in ['system', 'user']
+      - rsyslog_deploy_quadlet_dir | default('', true) | trim | length > 0
+      - rsyslog_deploy_host_ip | default('', true) | trim | length > 0
+      - rsyslog_deploy_tcp_port | int > 0
+      - rsyslog_deploy_udp_port | int > 0
+      - rsyslog_deploy_container_tcp_port | int > 0
+      - rsyslog_deploy_container_udp_port | int > 0
+      - rsyslog_deploy_config_path | default('', true) | trim | length > 0
+      - rsyslog_deploy_log_dir | default('', true) | trim | length > 0
+      - rsyslog_deploy_container_config_path | default('', true) | trim | length > 0
+      - rsyslog_deploy_container_log_dir | default('', true) | trim | length > 0
+      - rsyslog_deploy_log_file | default('', true) | trim | length > 0
+      - rsyslog_deploy_log_dir_mode | default('', true) | trim | length > 0
+      - rsyslog_deploy_extra_args is sequence
+      - rsyslog_deploy_extra_args is not string
+    fail_msg: "rsyslog deploy variables are missing or invalid."
+  tags: always

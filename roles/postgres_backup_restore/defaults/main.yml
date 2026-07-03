@@ -8,7 +8,9 @@ postgres_backup_restore_execute: false
 
 postgres_backup_restore_backup_dir: "/srv/postgres/backups"
 postgres_backup_restore_file: >-
-  {{ postgres_backup_restore_backup_dir }}/postgres-{{ postgres_backup_restore_db_name }}-{{ ansible_date_time.iso8601_basic_short | default('manual') }}.dump
+  {{ postgres_backup_restore_backup_dir }}/postgres-{{ postgres_backup_restore_db_name }}-{{
+    ansible_date_time.iso8601_basic_short | default('manual')
+  }}.dump
 postgres_backup_restore_restore_source: "{{ postgres_backup_restore_file }}"
 postgres_backup_restore_restore_confirm: ""
 postgres_backup_restore_retention_keep_last: 14

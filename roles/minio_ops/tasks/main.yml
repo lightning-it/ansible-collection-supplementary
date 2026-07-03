@@ -68,7 +68,7 @@
 
     - name: Set MinIO image override
       ansible.builtin.set_fact:
-        minio_deploy_image: "{{ minio_ops_target_image }}"
+        minio_ops_minio_deploy_image: "{{ minio_ops_target_image }}"
       changed_when: false
 
     - name: Redeploy MinIO with new image

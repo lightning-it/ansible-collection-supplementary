@@ -11,15 +11,15 @@
 
 - name: Build Keycloak deploy overrides from config role
   ansible.builtin.set_fact:
-    keycloak_deploy_env_extra: >-
+    keycloak_config_keycloak_deploy_env_extra: >-
       {{
-        keycloak_deploy_env_extra | default({})
+        keycloak_config_keycloak_deploy_env_extra | default({})
         | combine(keycloak_config_runtime_env, recursive=True)
       }}
-    keycloak_deploy_extra_start_args: "{{ keycloak_config_extra_start_args }}"
-    keycloak_deploy_hostname: "{{ keycloak_config_hostname }}"
-    keycloak_deploy_proxy_headers: "{{ keycloak_config_proxy_headers }}"
-    keycloak_deploy_http_relative_path: "{{ keycloak_config_http_relative_path }}"
+    keycloak_config_keycloak_deploy_extra_start_args: "{{ keycloak_config_extra_start_args }}"
+    keycloak_config_keycloak_deploy_hostname: "{{ keycloak_config_hostname }}"
+    keycloak_config_keycloak_deploy_proxy_headers: "{{ keycloak_config_proxy_headers }}"
+    keycloak_config_keycloak_deploy_http_relative_path: "{{ keycloak_config_http_relative_path }}"
   when: not keycloak_config_skip_apply | bool
   changed_when: false
   tags:

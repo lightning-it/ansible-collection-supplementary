@@ -3,19 +3,23 @@ galaxy_info:
   role_name: alloy_deploy
   namespace: lit
   author: Lightning IT
-  description: Deploy Grafana Alloy log collection with Podman kube play.
+  description: Deploy Grafana Alloy log collection with Podman Quadlet.
   company: Lightning IT
   license: MIT
   min_ansible_version: "2.18"
   platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
     - name: EL
       versions:
         - "9"
   galaxy_tags:
     - modulix
-    - kubeplay
     - alloy
     - logging
     - podman
+    - quadlet
 
 dependencies: []

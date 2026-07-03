@@ -237,6 +237,7 @@
   when:
     - grafana_deploy_kubeplay_remove | default(false)
     - not grafana_deploy_skip_runtime | bool
+    - not grafana_deploy_manage_systemd | bool
   tags:
     - deployment
   block:
@@ -257,6 +258,7 @@
   when:
     - grafana_deploy_kubeplay_run | default(false)
     - not grafana_deploy_skip_runtime | bool
+    - not grafana_deploy_manage_systemd | bool
   tags:
     - deployment
   block:

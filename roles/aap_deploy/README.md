@@ -321,6 +321,8 @@ Installer admin password behavior:
 Installer TLS behavior:
 - When enabled, the role stages TLS assets under `aap_deploy_tls_dir` on the managed host.
 - The upstream installer receives only remote file paths (`*_tls_cert`, `*_tls_key`, `custom_ca_cert`).
+- TLS staging and Vault PKI issuing are delegated to `lit.foundational.tls_assets`;
+  this role only maps the staged paths into AAP installer inventory variables.
 - Default layout is separate cert/key pairs for gateway, controller, hub, and EDA, plus one shared CA file.
 - `customer_files` copies controller-side files to the target before installer prep.
 - `vault_pki` generates separate leaf certs per service/FQDN from HashiCorp Vault PKI and reuses one shared CA bundle.

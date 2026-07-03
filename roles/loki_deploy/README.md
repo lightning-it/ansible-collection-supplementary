@@ -1,6 +1,10 @@
 # loki_deploy
 
-Deploy Loki as an internal technical logging backend with Podman kube play.
+Deploy Loki as an internal technical logging backend with Podman Quadlet.
+
+The role renders a Podman pod manifest and manages it through systemd Quadlet
+when `loki_deploy_manage_systemd` is enabled. Non-systemd deployments can still
+use the existing kubeplay path.
 
 Loki binds to `127.0.0.1:3100` by default and is not exposed through NGINX
 unless a caller explicitly changes the host binding and proxy configuration.

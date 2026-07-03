@@ -4,21 +4,47 @@
   connection: local
   gather_facts: false
   vars:
-    aap_molecule_execute_role: false
+    ansible_distribution: RedHat
+    ansible_distribution_major_version: "9"
+    aap_molecule_execute_role: true
     aap_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-coverage-mode
+    aap_molecule_resolution_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-resolution.yml
+    aap_resolve_admin_passwords: true
+    aap_admin_passwords_no_log: false
+    aap_password_require_component_inputs: false
+    aap_admin_password_input:
+      active: shared-admin-password
+      next: shared-admin-password-next
+    aap_controller_admin_password_input:
+      value: controller-admin-password
+    aap_hub_admin_password_input:
+      password: hub-admin-password
   tasks:
-    - name: Import lit.supplementary.aap for syntax coverage
+    - name: Import lit.supplementary.aap for password resolution coverage
       ansible.builtin.import_role:
         name: lit.supplementary.aap
       when: aap_molecule_execute_role | bool
 
     - name: Record lit.supplementary.aap Molecule coverage mode
       ansible.builtin.set_fact:
-        aap_molecule_coverage_mode: syntax_stub
+        aap_molecule_coverage_mode: password_resolution
 
     - name: Persist lit.supplementary.aap Molecule coverage mode
       ansible.builtin.copy:
         dest: "{{ aap_molecule_marker_path }}"
-        content: "syntax_stub\n"
+        content: "password_resolution\n"
         mode: "0644"
+
+    - name: Persist resolved lit.supplementary.aap password facts
+      ansible.builtin.copy:
+        dest: "{{ aap_molecule_resolution_path }}"
+        mode: "0600"
+        content: |
+          aap_gateway_admin_password_effective: "{{ aap_gateway_admin_password_effective }}"
+          aap_controller_admin_password_effective: "{{ aap_controller_admin_password_effective }}"
+          aap_hub_admin_password_effective: "{{ aap_hub_admin_password_effective }}"
+          aap_eda_admin_password_effective: "{{ aap_eda_admin_password_effective }}"
+          aap_postgresql_admin_password_effective: "{{ aap_postgresql_admin_password_effective }}"
+          aap_deploy_controller_admin_password_effective: "{{ aap_deploy_controller_admin_password_effective }}"

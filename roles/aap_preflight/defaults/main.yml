@@ -3,7 +3,11 @@ aap_preflight_enabled: true
 
 aap_preflight_expected_ansible_user: svc_ansible
 aap_preflight_install_user: "{{ aap_deploy_install_user | default('svc_aap', true) }}"
-aap_preflight_installed_marker_path: "{{ aap_deploy_installed_marker_path | default('/appl/aap/.aap_containerized_installed', true) }}"
+aap_preflight_installed_marker_path: >-
+  {{
+    aap_deploy_installed_marker_path
+    | default('/appl/aap/.aap_containerized_installed', true)
+  }}
 
 aap_preflight_wait_for_connection_timeout: 120
 aap_preflight_check_expected_users: true
@@ -12,6 +16,7 @@ aap_preflight_check_commands: true
 aap_preflight_check_paths: true
 aap_preflight_check_podman: true
 aap_preflight_check_runtime: true
+aap_preflight_allow_partial_install_runtime: false
 aap_preflight_check_artifacts: true
 aap_preflight_check_vault: "{{ (aap_secret_backend | default('hashicorp_vault', true)) == 'hashicorp_vault' }}"
 aap_preflight_check_ansible_vault: "{{ (aap_secret_backend | default('hashicorp_vault', true)) == 'ansible_vault' }}"
