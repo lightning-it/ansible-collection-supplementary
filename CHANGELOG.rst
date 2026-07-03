@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v1.37.0
+=======
+
+Bugfixes
+--------
+
+- Update the CI collection preparation requirements to use ansible.posix 2.2.1.
+
 v1.36.0
 =======
 
