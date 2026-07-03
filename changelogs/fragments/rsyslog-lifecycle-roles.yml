@@ -1,3 +1,0 @@
----
-minor_changes:
-  - Added container-based rsyslog lifecycle roles using podman_systemd for persistent Quadlet/systemd startup.
