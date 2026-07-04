@@ -21,7 +21,7 @@ on:
       publish_galaxy:
         description: Publish to Ansible Galaxy.
         required: false
-        default: "false"
+        default: "true"
         type: choice
         options: ["true", "false"]
 
@@ -123,6 +123,15 @@ jobs:
           ansible-galaxy collection build --force
           tarball="$(ls ./*.tar.gz)"
 
+          if [ "$CREATE_GITHUB_RELEASE" = "true" ] && [ "$PUBLISH_GALAXY" != "true" ]; then
+            echo "::error::Collection releases must publish to Ansible Galaxy when creating a GitHub Release."
+            exit 1
+          fi
+          if [ "$PUBLISH_GALAXY" = "true" ] && [ -z "${GALAXY_API_TOKEN:-}" ]; then
+            echo "::error::GALAXY_API_TOKEN is required when publish_galaxy is true."
+            exit 1
+          fi
+
           notes="$(mktemp)"
           if [ ! -f CHANGELOG.rst ]; then
             echo "::error::CHANGELOG.rst is required for collection GitHub Release notes."
@@ -146,9 +155,5 @@ jobs:
           fi
 
           if [ "$PUBLISH_GALAXY" = "true" ]; then
-            if [ -z "${GALAXY_API_TOKEN:-}" ]; then
-              echo "::error::GALAXY_API_TOKEN is required when publish_galaxy is true."
-              exit 1
-            fi
             ansible-galaxy collection publish "$tarball" --api-key "$GALAXY_API_TOKEN"
           fi
