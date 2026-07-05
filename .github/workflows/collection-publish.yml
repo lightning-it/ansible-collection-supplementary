@@ -110,9 +110,11 @@ jobs:
                 && contains(github.event.pull_request.body, 'Galaxy publishing: `true`')
               )
             }}
-          GALAXY_API_TOKEN: ${{ secrets.GALAXY_API_TOKEN || secrets.ANSIBLE_GALAXY_API_KEY }}
+          GALAXY_API_TOKEN: ${{ secrets.GALAXY_API_TOKEN }}
+          ANSIBLE_GALAXY_API_KEY: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
         run: |
           set -euo pipefail
+          GALAXY_API_TOKEN="${GALAXY_API_TOKEN:-${ANSIBLE_GALAXY_API_KEY:-}}"
 
           version="$(python - <<'PY'
           import yaml
