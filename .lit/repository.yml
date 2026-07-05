@@ -1,0 +1,44 @@
+schema_version: 1
+managed_by: lightning-it/shared-assets
+repository: ansible-collection-supplementary
+visibility: public
+repository_type: ansible_collection
+release_type: ansible_galaxy
+artifact_type: ansible_collection_tarball
+test_profiles:
+- pre-commit
+- lint
+- light
+- molecule-light
+- molecule-heavy-incus
+- release-validation
+os_matrix:
+- ubuntu-latest
+- rhel-9
+- rhel-10
+product_matrix:
+- ansible-core
+- keycloak-rhbk
+- aap-2.6
+- aap-2.7
+- incus
+publishing_targets:
+- github-release
+- ansible-galaxy
+galaxy_publish: true
+quay_publish: false
+release_evidence: true
+heavy_incus_required: true
+readme_badges:
+- ci
+- pre-commit
+- ansible-lint
+- molecule
+- release
+- galaxy
+- license
+workflows:
+  ci: collection-ci.yml
+  release: collection-publish.yml
+  promote: promote-develop-to-main.yml
+  backmerge: release-back-sync.yml
