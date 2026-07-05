@@ -4,7 +4,7 @@ name: Prepare collection release
 
 on:
   push:
-    branches: ["main"]
+    branches: ["develop"]
   workflow_dispatch:
     inputs:
       version:
@@ -13,13 +13,13 @@ on:
         required: false
         default: ""
       base_branch:
-        description: Base branch. Leave empty to prefer develop, then main.
+        description: Base branch. Leave empty to use develop.
         required: false
         default: ""
       target_branch:
-        description: Release PR target branch. Must be main.
+        description: Release PR target branch. Must be develop.
         required: false
-        default: main
+        default: develop
       create_github_release:
         description: Create a GitHub release after merge.
         required: false
@@ -116,12 +116,12 @@ jobs:
           case "$VERSION" in
             v*) VERSION="${VERSION#v}" ;;
           esac
-          TARGET_BRANCH="${TARGET_BRANCH_INPUT:-main}"
+          TARGET_BRANCH="${TARGET_BRANCH_INPUT:-develop}"
           CREATE_GITHUB_RELEASE="${CREATE_GITHUB_RELEASE_INPUT:-true}"
           PUBLISH_GALAXY="${PUBLISH_GALAXY_INPUT:-true}"
 
           if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
-            BASE_BRANCH="main"
+            BASE_BRANCH="develop"
           elif [ -n "$BASE_BRANCH_INPUT" ]; then
             BASE_BRANCH="$BASE_BRANCH_INPUT"
           elif git ls-remote --exit-code --heads origin develop >/dev/null 2>&1; then
@@ -129,8 +129,8 @@ jobs:
           else
             BASE_BRANCH="$TARGET_BRANCH"
           fi
-          if [ "$TARGET_BRANCH" != "main" ]; then
-            echo "::error::Collection release PRs must target main."
+          if [ "$TARGET_BRANCH" != "develop" ]; then
+            echo "::error::Collection release PRs must target develop."
             exit 1
           fi
 

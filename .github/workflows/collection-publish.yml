@@ -5,7 +5,7 @@ name: Publish collection release
 on:
   pull_request:
     types: [closed]
-    branches: ["main"]
+    branches: ["develop"]
     paths:
       - galaxy.yml
       - CHANGELOG.rst
@@ -72,10 +72,10 @@ jobs:
           fi
           echo "value=${{ github.token }}" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout main
+      - name: Checkout develop
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: develop
           token: ${{ steps.token.outputs.value }}
           fetch-depth: 0
 
@@ -150,9 +150,9 @@ jobs:
             if gh release view "$tag" >/dev/null 2>&1; then
               echo "GitHub release $tag already exists; leaving it unchanged."
             else
-              gh release create "$tag" "$tarball" --target main --title "$tag" --notes-file "$notes"
+              gh release create "$tag" "$tarball" --target develop --title "$tag" --notes-file "$notes"
             fi
-            gh workflow run release-back-sync.yml --ref main -f tag="$tag"
+            echo "Release published from develop; release back-sync is not required."
           else
             echo "GitHub release creation disabled for this release."
           fi
