@@ -2,6 +2,7 @@
 
 <!-- BEGIN LIT_SHARED_RELEASE_MODEL -->
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lightning-it/ansible-collection-supplementary/badge)](https://scorecard.dev/viewer/?uri=github.com/lightning-it/ansible-collection-supplementary)
 [![CI](https://github.com/lightning-it/ansible-collection-supplementary/actions/workflows/collection-ci.yml/badge.svg?branch=develop)](https://github.com/lightning-it/ansible-collection-supplementary/actions/workflows/collection-ci.yml)
 [![Release](https://github.com/lightning-it/ansible-collection-supplementary/actions/workflows/collection-publish.yml/badge.svg?branch=main)](https://github.com/lightning-it/ansible-collection-supplementary/actions/workflows/collection-publish.yml)
 [![Ansible Galaxy](https://img.shields.io/badge/galaxy-lit.supplementary-blue)](https://galaxy.ansible.com/ui/repo/published/lit/supplementary/)
