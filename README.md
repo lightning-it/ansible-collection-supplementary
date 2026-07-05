@@ -1,12 +1,16 @@
 # lit.supplementary
 
-<!-- BEGIN LIT_SHARED_RELEASE_MODEL -->
+<!-- BEGIN LIT_QUALITY_BADGES -->
 
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lightning-it/ansible-collection-supplementary/badge)](https://scorecard.dev/viewer/?uri=github.com/lightning-it/ansible-collection-supplementary)
 [![CI](https://github.com/lightning-it/ansible-collection-supplementary/actions/workflows/collection-ci.yml/badge.svg?branch=develop)](https://github.com/lightning-it/ansible-collection-supplementary/actions/workflows/collection-ci.yml)
-[![Release](https://github.com/lightning-it/ansible-collection-supplementary/actions/workflows/collection-publish.yml/badge.svg?branch=main)](https://github.com/lightning-it/ansible-collection-supplementary/actions/workflows/collection-publish.yml)
-[![Ansible Galaxy](https://img.shields.io/badge/galaxy-lit.supplementary-blue)](https://galaxy.ansible.com/ui/repo/published/lit/supplementary/)
+[![Latest Release](https://img.shields.io/github/v/release/lightning-it/ansible-collection-supplementary?sort=semver)](https://github.com/lightning-it/ansible-collection-supplementary/releases/latest)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lightning-it/ansible-collection-supplementary/badge)](https://scorecard.dev/viewer/?uri=github.com/lightning-it/ansible-collection-supplementary)
+[![Ansible Galaxy](https://img.shields.io/ansible/collection/v/lit/supplementary?label=Ansible%20Galaxy)](https://galaxy.ansible.com/ui/repo/published/lit/supplementary/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
+<!-- END LIT_QUALITY_BADGES -->
+
+<!-- BEGIN LIT_SHARED_RELEASE_MODEL -->
 
 ## Release and Quality Model
 
@@ -24,6 +28,19 @@ See [RELEASE.md](./RELEASE.md) for:
 Repository classification: **Ansible Collection**.
 Required test profiles: `pre-commit, lint, light, molecule-light, molecule-heavy-incus, release-validation`.
 Publishing targets: `github-release, ansible-galaxy`.
+
+## Supported and Tested Platforms
+
+| Platform / Product | Status | Validation |
+|---|---:|---|
+| ubuntu-latest | Supported | Molecule / Incus |
+| rhel-9 | Supported | Molecule / Incus |
+| rhel-10 | Supported | Molecule / Incus |
+| ansible-core | Tested where applicable | Molecule / Incus |
+| keycloak-rhbk | Tested where applicable | Molecule / Incus |
+| aap-2.6 | Tested where applicable | Molecule / Incus |
+| aap-2.7 | Tested where applicable | Molecule / Incus |
+| incus | Tested where applicable | Molecule / Incus |
 
 <!-- END LIT_SHARED_RELEASE_MODEL -->
 
