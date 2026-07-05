@@ -21,7 +21,7 @@ on:
       publish_galaxy:
         description: Publish to Ansible Galaxy.
         required: false
-        default: "false"
+        default: "true"
         type: choice
         options: ["true", "false"]
 
@@ -39,6 +39,7 @@ jobs:
       )
     name: Publish collection release
     runs-on: ubuntu-latest
+    environment: ansible-collections
     env:
       RELEASE_BOT_APP_ID: ${{ secrets.RELEASE_BOT_APP_ID }}
       RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
@@ -110,8 +111,10 @@ jobs:
               )
             }}
           GALAXY_API_TOKEN: ${{ secrets.GALAXY_API_TOKEN }}
+          ANSIBLE_GALAXY_API_KEY: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
         run: |
           set -euo pipefail
+          GALAXY_API_TOKEN="${GALAXY_API_TOKEN:-${ANSIBLE_GALAXY_API_KEY:-}}"
 
           version="$(python - <<'PY'
           import yaml
@@ -122,6 +125,15 @@ jobs:
 
           ansible-galaxy collection build --force
           tarball="$(ls ./*.tar.gz)"
+
+          if [ "$CREATE_GITHUB_RELEASE" = "true" ] && [ "$PUBLISH_GALAXY" != "true" ]; then
+            echo "::error::Collection releases must publish to Ansible Galaxy when creating a GitHub Release."
+            exit 1
+          fi
+          if [ "$PUBLISH_GALAXY" = "true" ] && [ -z "${GALAXY_API_TOKEN:-}" ]; then
+            echo "::error::GALAXY_API_TOKEN is required when publish_galaxy is true."
+            exit 1
+          fi
 
           notes="$(mktemp)"
           if [ ! -f CHANGELOG.rst ]; then
@@ -146,9 +158,5 @@ jobs:
           fi
 
           if [ "$PUBLISH_GALAXY" = "true" ]; then
-            if [ -z "${GALAXY_API_TOKEN:-}" ]; then
-              echo "::error::GALAXY_API_TOKEN is required when publish_galaxy is true."
-              exit 1
-            fi
             ansible-galaxy collection publish "$tarball" --api-key "$GALAXY_API_TOKEN"
           fi
