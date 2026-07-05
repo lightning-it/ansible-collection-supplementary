@@ -13,11 +13,11 @@ test_profiles:
   - molecule-light
   - molecule-heavy-incus
   - release-validation
-os_matrix:
+os_matrix: &id001
   - ubuntu-latest
   - rhel-9
   - rhel-10
-product_matrix:
+product_matrix: &id002
   - ansible-core
   - keycloak-rhbk
   - aap-2.6
@@ -43,3 +43,20 @@ workflows:
   release: collection-publish.yml
   promote: promote-develop-to-main.yml
   backmerge: release-back-sync.yml
+collection_namespace: lit
+collection_name: supplementary
+collection_version_source: galaxy.yml
+supported_platforms: *id001
+supported_products: *id002
+molecule_scenarios: &id003
+  - molecule-light
+light_test_scenarios: *id003
+heavy_incus_scenarios:
+  - molecule-heavy-incus
+release_validation_scenarios:
+  - collection-sanity
+  - galaxy-build
+  - molecule-light
+  - molecule-heavy-incus
+required_secrets:
+  - GALAXY_API_TOKEN

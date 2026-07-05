@@ -10,39 +10,51 @@
 
 <!-- END LIT_QUALITY_BADGES -->
 
-<!-- BEGIN LIT_SHARED_RELEASE_MODEL -->
+<!-- BEGIN LIT_COMPATIBILITY_MATRIX -->
+
+## Compatibility Matrix
+
+| Collection Version | Role/Scenario | Platform | Product | Test Type | Validation |
+|---|---|---|---|---|---|
+| Current release | collection-sanity | ubuntu-latest | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Collection sanity | See GitHub Release evidence |
+| Current release | molecule-light | ubuntu-latest | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Molecule light | See GitHub Release evidence |
+| Current release | molecule-heavy-incus | ubuntu-latest | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Heavy Incus | See GitHub Release evidence |
+| Current release | galaxy-build | ubuntu-latest | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Galaxy build/publish | See GitHub Release evidence |
+| Current release | collection-sanity | rhel-9 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Collection sanity | See GitHub Release evidence |
+| Current release | molecule-light | rhel-9 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Molecule light | See GitHub Release evidence |
+| Current release | molecule-heavy-incus | rhel-9 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Heavy Incus | See GitHub Release evidence |
+| Current release | galaxy-build | rhel-9 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Galaxy build/publish | See GitHub Release evidence |
+| Current release | collection-sanity | rhel-10 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Collection sanity | See GitHub Release evidence |
+| Current release | molecule-light | rhel-10 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Molecule light | See GitHub Release evidence |
+| Current release | molecule-heavy-incus | rhel-10 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Heavy Incus | See GitHub Release evidence |
+| Current release | galaxy-build | rhel-10 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Galaxy build/publish | See GitHub Release evidence |
+
+Validation proof for each released version is stored in the corresponding GitHub Release evidence.
+
+<!-- END LIT_COMPATIBILITY_MATRIX -->
+
+<!-- BEGIN LIT_RELEASE_QUALITY_MODEL -->
 
 ## Release and Quality Model
 
 This repository follows the Lightning IT shared release and quality model.
+The README shows the current supported and tested matrix.
+Exact per-version proof is stored with every GitHub Release as `release-evidence.md` and `release-evidence.json`.
 
-See [RELEASE.md](./RELEASE.md) for:
+See:
 
-- branch and release flow
-- required quality checks
-- test matrix
-- release evidence
-- artifact publishing
-- supported repository-specific release behavior
+- [RELEASE.md](./RELEASE.md)
+- [TESTING.md](./TESTING.md)
+- [GitHub Releases](../../releases)
 
 Repository classification: **Ansible Collection**.
 Required test profiles: `pre-commit, lint, light, molecule-light, molecule-heavy-incus, release-validation`.
 Publishing targets: `github-release, ansible-galaxy`.
 
-## Supported and Tested Platforms
+Release evidence records the exact GitHub Actions run, validated matrix rows, built artifacts, publish result, and security status for each release.
 
-| Platform / Product | Status | Validation |
-|---|---:|---|
-| ubuntu-latest | Supported | Molecule / Incus |
-| rhel-9 | Supported | Molecule / Incus |
-| rhel-10 | Supported | Molecule / Incus |
-| ansible-core | Tested where applicable | Molecule / Incus |
-| keycloak-rhbk | Tested where applicable | Molecule / Incus |
-| aap-2.6 | Tested where applicable | Molecule / Incus |
-| aap-2.7 | Tested where applicable | Molecule / Incus |
-| incus | Tested where applicable | Molecule / Incus |
+<!-- END LIT_RELEASE_QUALITY_MODEL -->
 
-<!-- END LIT_SHARED_RELEASE_MODEL -->
 
 ## Wunderbox Identity Stack PoC
 
