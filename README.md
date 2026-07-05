@@ -10,52 +10,6 @@
 
 <!-- END LIT_QUALITY_BADGES -->
 
-<!-- BEGIN LIT_COMPATIBILITY_MATRIX -->
-
-## Compatibility Matrix
-
-| Collection Version | Role/Scenario | Platform | Product | Test Type | Validation |
-|---|---|---|---|---|---|
-| Current release | collection-sanity | ubuntu-latest | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Collection sanity | See GitHub Release evidence |
-| Current release | molecule-light | ubuntu-latest | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Molecule light | See GitHub Release evidence |
-| Current release | molecule-heavy-incus | ubuntu-latest | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Heavy Incus | See GitHub Release evidence |
-| Current release | galaxy-build | ubuntu-latest | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Galaxy build/publish | See GitHub Release evidence |
-| Current release | collection-sanity | rhel-9 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Collection sanity | See GitHub Release evidence |
-| Current release | molecule-light | rhel-9 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Molecule light | See GitHub Release evidence |
-| Current release | molecule-heavy-incus | rhel-9 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Heavy Incus | See GitHub Release evidence |
-| Current release | galaxy-build | rhel-9 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Galaxy build/publish | See GitHub Release evidence |
-| Current release | collection-sanity | rhel-10 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Collection sanity | See GitHub Release evidence |
-| Current release | molecule-light | rhel-10 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Molecule light | See GitHub Release evidence |
-| Current release | molecule-heavy-incus | rhel-10 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Heavy Incus | See GitHub Release evidence |
-| Current release | galaxy-build | rhel-10 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | Galaxy build/publish | See GitHub Release evidence |
-
-Validation proof for each released version is stored in the corresponding GitHub Release evidence.
-
-<!-- END LIT_COMPATIBILITY_MATRIX -->
-
-<!-- BEGIN LIT_RELEASE_QUALITY_MODEL -->
-
-## Release and Quality Model
-
-This repository follows the Lightning IT shared release and quality model.
-The README shows the current supported and tested matrix.
-Exact per-version proof is stored with every GitHub Release as `release-evidence.md` and `release-evidence.json`.
-
-See:
-
-- [RELEASE.md](./RELEASE.md)
-- [TESTING.md](./TESTING.md)
-- [GitHub Releases](../../releases)
-
-Repository classification: **Ansible Collection**.
-Required test profiles: `pre-commit, lint, light, molecule-light, molecule-heavy-incus, release-validation`.
-Publishing targets: `github-release, ansible-galaxy`.
-
-Release evidence records the exact GitHub Actions run, validated matrix rows, built artifacts, publish result, and security status for each release.
-
-<!-- END LIT_RELEASE_QUALITY_MODEL -->
-
-
 ## Wunderbox Identity Stack PoC
 
 This repository now includes production-like PoC artifacts for a single-node
@@ -102,11 +56,11 @@ sudo cp -f bootstrap/keycloak-bootstrap.sh "$IDENTITY_ROOT/bootstrap/keycloak-bo
 sudo chmod 0755 "$IDENTITY_ROOT/bootstrap/keycloak-bootstrap.sh"
 
 printf '%s\n' '<set-a-local-directory-manager-password>' \
-  | sudo tee "$IDENTITY_ROOT/secrets/ds_dm_password" >/dev/null
+  | sudo install -m 0600 /dev/stdin "$IDENTITY_ROOT/secrets/ds_dm_password"
 printf '%s\n' '<set-a-local-postgres-password>' \
-  | sudo tee "$IDENTITY_ROOT/secrets/postgres_password" >/dev/null
+  | sudo install -m 0600 /dev/stdin "$IDENTITY_ROOT/secrets/postgres_password"
 printf '%s\n' '<set-a-local-keycloak-admin-password>' \
-  | sudo tee "$IDENTITY_ROOT/secrets/keycloak_admin_password" >/dev/null
+  | sudo install -m 0600 /dev/stdin "$IDENTITY_ROOT/secrets/keycloak_admin_password"
 
 sudo chmod 0600 "$IDENTITY_ROOT/secrets/"*
 ```
@@ -477,3 +431,71 @@ Use this smoke test whenever you want to verify that the collection is:
 - buildable,
 - installable,
 - and usable via FQCN (`lit.supplementary.keycloak_cac`) before pushing or tagging a release.
+
+## Security
+
+See [SECURITY.md](./SECURITY.md) for supported versions and vulnerability reporting.
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution and review expectations.
+
+## License
+
+See [LICENSE](./LICENSE).
+
+<!-- BEGIN LIT_RELEASE_QUALITY_MODEL -->
+
+## Release and Quality Model
+
+This repository follows the Lightning IT shared release and quality model.
+The README shows the current supported and tested matrix.
+Exact per-version validation proof is stored with each GitHub Release as `release-evidence.md` and `release-evidence.json`.
+Releases are created from the protected `main` branch after a reviewed `develop -> main` release promotion.
+Collection releases validate collection sanity, Molecule scenarios, build integrity, and Ansible Galaxy publishing where enabled.
+
+See:
+
+- [RELEASE.md](./RELEASE.md)
+- [TESTING.md](./TESTING.md)
+- [GitHub Releases](../../releases)
+
+Repository classification: **Ansible Collection**.
+Required test profiles: `pre-commit, lint, light, molecule-light, molecule-heavy-incus, release-validation`.
+Publishing targets: `github-release, ansible-galaxy`.
+
+<!-- END LIT_RELEASE_QUALITY_MODEL -->
+
+<!-- BEGIN LIT_COMPATIBILITY_MATRIX -->
+
+## Compatibility Matrix
+
+| Collection Version | Platform | Product | Validation |
+|---|---|---|---|
+| Latest release | ubuntu-latest | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | See release evidence |
+| Latest release | rhel-9 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | See release evidence |
+| Latest release | rhel-10 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | See release evidence |
+
+| Scenario | Test Type | Validation |
+|---|---|---|
+| collection-sanity | Collection sanity | See release evidence |
+| molecule-light | Molecule light | See release evidence |
+| molecule-heavy-incus | Heavy Incus | See release evidence |
+| galaxy-build | Galaxy build/publish | See release evidence |
+
+Validation proof for each released version is stored in the corresponding GitHub Release evidence.
+
+<!-- END LIT_COMPATIBILITY_MATRIX -->
+
+## Release Evidence
+
+Every released version includes immutable release evidence attached to the corresponding GitHub Release.
+The evidence records:
+
+- tested matrix combinations
+- GitHub Actions run links
+- artifact references
+- publish status
+- security scan status
+
+See [GitHub Releases](../../releases), [RELEASE.md](./RELEASE.md), and [TESTING.md](./TESTING.md) for the release process and validation model.
