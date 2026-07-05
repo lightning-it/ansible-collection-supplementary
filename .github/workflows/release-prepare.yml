@@ -29,7 +29,7 @@ on:
       publish_galaxy:
         description: Publish to Ansible Galaxy after merge.
         required: false
-        default: "false"
+        default: "true"
         type: choice
         options: ["true", "false"]
 
@@ -118,7 +118,7 @@ jobs:
           esac
           TARGET_BRANCH="${TARGET_BRANCH_INPUT:-main}"
           CREATE_GITHUB_RELEASE="${CREATE_GITHUB_RELEASE_INPUT:-true}"
-          PUBLISH_GALAXY="${PUBLISH_GALAXY_INPUT:-false}"
+          PUBLISH_GALAXY="${PUBLISH_GALAXY_INPUT:-true}"
 
           if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
             BASE_BRANCH="main"
