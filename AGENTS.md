@@ -51,6 +51,7 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    14. `scripts/devtools-galaxy-verify.sh`
    15. `scripts/devtools-galaxy.sh`
    16. `scripts/devtools-molecule.sh`
+   17. `.github/workflows/shared-assets-guarded-automerge.yml`
 5. Repo-local exceptions MUST be explicit in the sync workflow and documented in the repository.
 
 ## 2. Repository Baseline (This Repo)

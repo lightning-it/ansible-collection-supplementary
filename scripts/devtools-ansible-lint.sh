@@ -52,10 +52,14 @@ else:
 PY
 )}"
 
-# This script runs ansible-lint inside ee-wunder-devtools-ubi9. Do not infer
-# skip behavior from the host Python environment; the image still carries
-# ansible-lint 6.x unless CI deliberately overrides this value.
-ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION:-6.22.2}"
+ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION:-$(python3 - <<'PY'
+try:
+    import ansiblelint  # type: ignore
+    print(getattr(ansiblelint, "__version__", ""))
+except Exception:
+    print("")
+PY
+)}"
 
 ANSIBLE_LINT_SKIP_META_RUNTIME=0
 if [ -n "${REQUIRES_ANSIBLE:-}" ]; then
