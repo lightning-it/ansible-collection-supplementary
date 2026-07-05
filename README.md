@@ -72,11 +72,11 @@ sudo cp -f bootstrap/seed.ldif "$IDENTITY_ROOT/bootstrap/seed.ldif"
 sudo cp -f bootstrap/keycloak-bootstrap.sh "$IDENTITY_ROOT/bootstrap/keycloak-bootstrap.sh"
 sudo chmod 0755 "$IDENTITY_ROOT/bootstrap/keycloak-bootstrap.sh"
 
-printf '%s\n' 'DirectoryManagerPassw0rd!' \
+printf '%s\n' '<set-a-local-directory-manager-password>' \
   | sudo tee "$IDENTITY_ROOT/secrets/ds_dm_password" >/dev/null
-printf '%s\n' 'PostgresPassw0rd!' \
+printf '%s\n' '<set-a-local-postgres-password>' \
   | sudo tee "$IDENTITY_ROOT/secrets/postgres_password" >/dev/null
-printf '%s\n' 'KeycloakAdminPassw0rd!' \
+printf '%s\n' '<set-a-local-keycloak-admin-password>' \
   | sudo tee "$IDENTITY_ROOT/secrets/keycloak_admin_password" >/dev/null
 
 sudo chmod 0600 "$IDENTITY_ROOT/secrets/"*
@@ -142,7 +142,7 @@ TOKEN="$(
     -d grant_type=password \
     -d client_id=demo \
     -d username=alice \
-    -d password='AlicePassw0rd!' \
+    -d password='<alice-demo-password>' \
     "http://127.0.0.1:8080/realms/wunderbox/protocol/openid-connect/token" \
   | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p'
 )"
