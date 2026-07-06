@@ -21,7 +21,7 @@ on:
       publish_galaxy:
         description: Publish to Ansible Galaxy.
         required: false
-        default: "true"
+        default: "false"
         type: choice
         options: ["true", "false"]
 
@@ -39,7 +39,6 @@ jobs:
       )
     name: Publish collection release
     runs-on: ubuntu-latest
-    environment: ansible-collections
     env:
       RELEASE_BOT_APP_ID: ${{ secrets.RELEASE_BOT_APP_ID }}
       RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
@@ -111,10 +110,8 @@ jobs:
               )
             }}
           GALAXY_API_TOKEN: ${{ secrets.GALAXY_API_TOKEN }}
-          ANSIBLE_GALAXY_API_KEY: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
         run: |
           set -euo pipefail
-          GALAXY_API_TOKEN="${GALAXY_API_TOKEN:-${ANSIBLE_GALAXY_API_KEY:-}}"
 
           version="$(python - <<'PY'
           import yaml
@@ -125,15 +122,6 @@ jobs:
 
           ansible-galaxy collection build --force
           tarball="$(ls ./*.tar.gz)"
-
-          if [ "$CREATE_GITHUB_RELEASE" = "true" ] && [ "$PUBLISH_GALAXY" != "true" ]; then
-            echo "::error::Collection releases must publish to Ansible Galaxy when creating a GitHub Release."
-            exit 1
-          fi
-          if [ "$PUBLISH_GALAXY" = "true" ] && [ -z "${GALAXY_API_TOKEN:-}" ]; then
-            echo "::error::GALAXY_API_TOKEN is required when publish_galaxy is true."
-            exit 1
-          fi
 
           notes="$(mktemp)"
           if [ ! -f CHANGELOG.rst ]; then
@@ -158,5 +146,51 @@ jobs:
           fi
 
           if [ "$PUBLISH_GALAXY" = "true" ]; then
+            if [ -z "${GALAXY_API_TOKEN:-}" ]; then
+              echo "::error::GALAXY_API_TOKEN is required when publish_galaxy is true."
+              exit 1
+            fi
             ansible-galaxy collection publish "$tarball" --api-key "$GALAXY_API_TOKEN"
           fi
+
+          TESTED_MATRIX="ansible-core,molecule,collection-build" \
+          PASSED_JOBS="Publish collection release" \
+          BUILT_ARTIFACTS="$tarball" \
+          PUBLISHED_ARTIFACTS="$(
+            if [ "$CREATE_GITHUB_RELEASE" = "true" ]; then
+              printf 'github-release:%s' "$tag"
+            fi
+            if [ "$PUBLISH_GALAXY" = "true" ]; then
+              printf ',ansible-galaxy:lit.%s:%s' "$(python - <<'PY'
+          import yaml
+          print(yaml.safe_load(open("galaxy.yml"))["name"])
+          PY
+          )" "$version"
+            fi
+          )" \
+          ANSIBLE_GALAXY_ARTIFACT="lit.$(python - <<'PY'
+          import yaml
+          print(yaml.safe_load(open("galaxy.yml"))["name"])
+          PY
+          ):${version}" \
+          RELEASE_TAG="$tag" \
+          RELEASE_VERSION="$version" \
+          CHANGELOG_URL="https://github.com/${{ github.repository }}/blob/main/CHANGELOG.rst" \
+          python scripts/generate-release-evidence.py
+
+          if [ "$CREATE_GITHUB_RELEASE" = "true" ]; then
+            gh release upload "$tag" \
+              dist/release-evidence.json \
+              dist/release-evidence.md \
+              --clobber
+          fi
+
+      - name: Upload release evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: release-evidence
+          path: |
+            dist/release-evidence.json
+            dist/release-evidence.md
+          if-no-files-found: ignore
