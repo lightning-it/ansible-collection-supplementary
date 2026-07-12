@@ -25,6 +25,12 @@ vault_bootstrap_persist_dir: >-
 vault_bootstrap_init_file_path: >-
   {{ vault_deploy_init_file_path | default(vault_bootstrap_persist_dir ~ '/vault-init.yml.vault', true) }}
 
+# Optional strict topology-neutral controller escrow. The controller document is
+# authoritative; vault_bootstrap_init_file_path is a ciphertext-only secondary copy.
+vault_bootstrap_require_controller_escrow: false
+vault_bootstrap_controller_escrow_root_path: ""
+vault_bootstrap_controller_init_file_path: ""
+
 # Prefer the controller's existing password-file integration. The plaintext fallback
 # remains for compatibility with inventories that still provide vault_ansible_vault_pw.
 vault_bootstrap_ansible_vault_password_file: "{{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') | default('', true) }}"

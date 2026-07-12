@@ -1,0 +1,49 @@
+---
+- name: Read the authoritative controller escrow ciphertext signature
+  ansible.builtin.slurp:
+    src: "{{ vault_bootstrap_controller_init_file_path }}"
+  register: vault_bootstrap_controller_init_ciphertext
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Require an Ansible Vault ciphertext controller escrow
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          vault_bootstrap_controller_init_ciphertext.content
+          | b64decode
+          | string
+          | regex_replace('^\\ufeff', '')
+          | trim
+        ) is match('^\\$ANSIBLE_VAULT;')
+    fail_msg: "The authoritative controller init escrow is not Ansible Vault ciphertext."
+    quiet: true
+  no_log: true
+
+- name: Load the authoritative controller init escrow in memory
+  ansible.builtin.include_vars:
+    file: "{{ vault_bootstrap_controller_init_file_path }}"
+    name: vault_bootstrap_controller_init_document
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: Require the canonical controller init document schema
+  ansible.builtin.assert:
+    that:
+      - vault_bootstrap_controller_init_document is mapping
+      - vault_bootstrap_controller_init_document | length == 1
+      - "'vault_init' in vault_bootstrap_controller_init_document"
+      - vault_bootstrap_controller_init_document.vault_init is mapping
+    fail_msg: "The authoritative controller init escrow does not use the canonical vault_init schema."
+    quiet: true
+  no_log: true
+
+- name: Normalize the controller init escrow for unseal handoff
+  ansible.builtin.include_tasks: normalize_init_payload.yml
+  vars:
+    vault_bootstrap_init_payload_source: "{{ vault_bootstrap_controller_init_document }}"
+  no_log: true

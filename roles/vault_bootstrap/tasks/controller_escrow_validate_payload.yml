@@ -1,0 +1,63 @@
+---
+- name: Require canonical strict init payload types
+  ansible.builtin.assert:
+    that:
+      - vault_bootstrap_controller_init_document is mapping
+      - vault_bootstrap_controller_init_document | length == 1
+      - "'vault_init' in vault_bootstrap_controller_init_document"
+      - vault_bootstrap_init_payload is mapping
+      - vault_bootstrap_init_payload.unseal_shares is integer
+      - vault_bootstrap_init_payload.unseal_shares is not boolean
+      - vault_bootstrap_init_payload.unseal_threshold is integer
+      - vault_bootstrap_init_payload.unseal_threshold is not boolean
+      - vault_bootstrap_init_payload.unseal_keys_b64 is sequence
+      - vault_bootstrap_init_payload.unseal_keys_b64 is not string
+      - vault_bootstrap_init_payload.unseal_keys_b64 is not mapping
+      - vault_bootstrap_init_payload.root_token is string
+      - vault_bootstrap_unseal_keys is sequence
+      - vault_bootstrap_unseal_keys is not string
+      - vault_bootstrap_unseal_keys is not mapping
+      - vault_bootstrap_token is string
+    fail_msg: "Strict bootstrap init material has invalid or incomplete canonical types."
+    quiet: true
+  no_log: true
+
+- name: Require strict init share counts and string keys to match configuration exactly
+  ansible.builtin.assert:
+    that:
+      - vault_bootstrap_init_payload.unseal_shares | int == vault_bootstrap_key_shares | int
+      - vault_bootstrap_init_payload.unseal_threshold | int == vault_bootstrap_key_threshold | int
+      - vault_bootstrap_init_payload.unseal_keys_b64 | length == vault_bootstrap_key_shares | int
+      - >-
+        vault_bootstrap_init_payload.unseal_keys_b64
+        | select('string') | list | length == vault_bootstrap_key_shares | int
+      - vault_bootstrap_unseal_keys | list == vault_bootstrap_init_payload.unseal_keys_b64 | list
+    fail_msg: "Strict bootstrap init shares, threshold, or key list do not match the configured contract."
+    quiet: true
+  no_log: true
+
+- name: Require unique nonempty strict init keys and root token
+  ansible.builtin.assert:
+    that:
+      - >-
+        vault_bootstrap_unseal_keys
+        | map('trim') | reject('equalto', '') | list | length == vault_bootstrap_key_shares | int
+      - vault_bootstrap_unseal_keys | unique | list | length == vault_bootstrap_key_shares | int
+      - vault_bootstrap_token | trim | length > 0
+      - "'\r' not in vault_bootstrap_token"
+      - "'\n' not in vault_bootstrap_token"
+    fail_msg: "Strict bootstrap init keys and root token must be unique, nonempty strings without line breaks."
+    quiet: true
+  no_log: true
+
+- name: Require strict init keys without carriage returns or newlines
+  ansible.builtin.assert:
+    that:
+      - "'\r' not in item"
+      - "'\n' not in item"
+    fail_msg: "Strict bootstrap unseal keys must not contain carriage returns or newlines."
+    quiet: true
+  loop: "{{ vault_bootstrap_unseal_keys }}"
+  loop_control:
+    label: redacted-unseal-key
+  no_log: true

@@ -6,12 +6,21 @@
       - vault_bootstrap_auto_init is boolean
       - vault_bootstrap_write_init_output is boolean
       - vault_bootstrap_write_init_file_on_init is boolean
+      - vault_bootstrap_require_controller_escrow is boolean
       - vault_bootstrap_validate_certs is boolean
       - vault_bootstrap_key_shares | int > 0
       - vault_bootstrap_key_threshold | int > 0
       - vault_bootstrap_key_threshold | int <= vault_bootstrap_key_shares | int
       - vault_bootstrap_persist_dir | default('', true) | trim | length > 0
       - vault_bootstrap_init_file_path | default('', true) | trim | length > 0
+      - vault_bootstrap_controller_escrow_root_path is string
+      - vault_bootstrap_controller_init_file_path is string
+      - >-
+        not (vault_bootstrap_require_controller_escrow | bool)
+        or (
+          vault_bootstrap_controller_escrow_root_path.startswith('/')
+          and vault_bootstrap_controller_init_file_path.startswith('/')
+        )
       - vault_bootstrap_container_name | default('', true) | trim | length > 0
       - vault_bootstrap_api_url | default('', true) | trim | length > 0
       - vault_bootstrap_health_url | default('', true) | trim | length > 0

@@ -6,6 +6,14 @@
   vars:
     vault_bootstrap_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-bootstrap-coverage-mode
+    vault_bootstrap_molecule_strict_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/strict-controller-escrow
+    vault_bootstrap_molecule_strict_marker: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/strict-controller-escrow-complete
+    vault_bootstrap_molecule_controller_file: >-
+      {{ vault_bootstrap_molecule_strict_root }}/controller/vault-init.yml.vault
+    vault_bootstrap_molecule_target_file: >-
+      {{ vault_bootstrap_molecule_strict_root }}/target/vault-init.yml.vault
   tasks:
     - name: Read lit.supplementary.vault_bootstrap coverage marker
       ansible.builtin.slurp:
@@ -36,4 +44,114 @@
           - "'-tls-skip-verify' not in vault_bootstrap_init_source"
           - "'VAULT_CACERT=' in vault_bootstrap_init_source"
           - "'vault_bootstrap_cli_ca_cert_path' in vault_bootstrap_init_source"
+        quiet: true
+
+    - name: Read strict controller escrow completion marker
+      ansible.builtin.slurp:
+        src: "{{ vault_bootstrap_molecule_strict_marker }}"
+      register: vault_bootstrap_molecule_strict_marker_content
+
+    - name: Inspect authoritative and target-secondary ciphertext copies
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+        get_checksum: true
+        checksum_algorithm: sha256
+      loop:
+        - "{{ vault_bootstrap_molecule_controller_file }}"
+        - "{{ vault_bootstrap_molecule_target_file }}"
+      register: vault_bootstrap_molecule_escrow_files
+      changed_when: false
+      no_log: true
+
+    - name: Require exact secure strict escrow copies
+      ansible.builtin.assert:
+        that:
+          - >-
+            vault_bootstrap_molecule_strict_marker_content.content
+            | b64decode | trim == 'strict-controller-escrow-verified'
+          - vault_bootstrap_molecule_escrow_files.results | length == 2
+          - vault_bootstrap_molecule_escrow_files.results[0].stat.isreg | default(false)
+          - vault_bootstrap_molecule_escrow_files.results[1].stat.isreg | default(false)
+          - vault_bootstrap_molecule_escrow_files.results[0].stat.mode == '0600'
+          - vault_bootstrap_molecule_escrow_files.results[1].stat.mode == '0600'
+          - >-
+            vault_bootstrap_molecule_escrow_files.results[0].stat.checksum
+            == vault_bootstrap_molecule_escrow_files.results[1].stat.checksum
+        quiet: true
+      no_log: true
+
+    - name: Read strict controller escrow implementation sources
+      ansible.builtin.set_fact:
+        vault_bootstrap_strict_init_source: >-
+          {{
+            lookup(
+              'ansible.builtin.file',
+              lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              ~ '/roles/vault_bootstrap/tasks/init_controller_escrow.yml'
+            )
+          }}
+        vault_bootstrap_strict_load_source: >-
+          {{
+            lookup(
+              'ansible.builtin.file',
+              lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              ~ '/roles/vault_bootstrap/tasks/controller_escrow_load.yml'
+            )
+          }}
+        vault_bootstrap_strict_sync_source: >-
+          {{
+            lookup(
+              'ansible.builtin.file',
+              lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              ~ '/roles/vault_bootstrap/tasks/controller_escrow_sync.yml'
+            )
+          }}
+        vault_bootstrap_strict_payload_validation_source: >-
+          {{
+            lookup(
+              'ansible.builtin.file',
+              lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              ~ '/roles/vault_bootstrap/tasks/controller_escrow_validate_payload.yml'
+            )
+          }}
+        vault_bootstrap_dispatch_source: >-
+          {{
+            lookup(
+              'ansible.builtin.file',
+              lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              ~ '/roles/vault_bootstrap/tasks/bootstrap.yml'
+            )
+          }}
+      changed_when: false
+
+    - name: Require an in-memory leak-resistant strict branch
+      ansible.builtin.assert:
+        that:
+          - >-
+            vault_bootstrap_strict_init_source.split('\n')[1]
+            == '- name: Require strict TLS verification before any Vault API request'
+          - >-
+            vault_bootstrap_strict_init_source.find(
+              'Require strict TLS verification before any Vault API request'
+            ) < vault_bootstrap_strict_init_source.find('ansible.builtin.uri')
+          - "'vault_bootstrap_validate_certs | bool' in vault_bootstrap_strict_init_source"
+          - >-
+            'vault_bootstrap_ca_cert_path_effective == vault_bootstrap_ca_cert_path'
+            in vault_bootstrap_strict_init_source
+          - "'lit.foundational.ansible_vault_document' in vault_bootstrap_strict_init_source"
+          - "'ansible.builtin.include_vars' in vault_bootstrap_strict_load_source"
+          - "'$ANSIBLE_VAULT;' in vault_bootstrap_strict_load_source"
+          - "'ansible-vault' not in vault_bootstrap_strict_init_source"
+          - "'ansible-vault' not in vault_bootstrap_strict_load_source"
+          - "'ansible.builtin.tempfile' not in vault_bootstrap_strict_init_source"
+          - "'ansible.builtin.tempfile' not in vault_bootstrap_strict_load_source"
+          - "'decrypt: false' in vault_bootstrap_strict_sync_source"
+          - "'force: false' in vault_bootstrap_strict_sync_source"
+          - "'not (vault_bootstrap_auto_init | bool)' in vault_bootstrap_strict_init_source"
+          - "'vault_bootstrap_init_requested | bool' in vault_bootstrap_strict_init_source"
+          - "'unseal_shares' in vault_bootstrap_strict_payload_validation_source"
+          - "'unseal_threshold' in vault_bootstrap_strict_payload_validation_source"
+          - "'vault_bootstrap_require_controller_escrow | bool' in vault_bootstrap_dispatch_source"
+          - "'not (vault_bootstrap_require_controller_escrow | bool)' in vault_bootstrap_dispatch_source"
         quiet: true

@@ -6,6 +6,20 @@
   vars:
     vault_bootstrap_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-bootstrap-coverage-mode
+    vault_bootstrap_molecule_strict_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/strict-controller-escrow
+    vault_bootstrap_molecule_strict_marker: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/strict-controller-escrow-complete
+    vault_bootstrap_molecule_controller_root: >-
+      {{ vault_bootstrap_molecule_strict_root }}/controller
+    vault_bootstrap_molecule_controller_file: >-
+      {{ vault_bootstrap_molecule_controller_root }}/vault-init.yml.vault
+    vault_bootstrap_molecule_missing_controller_file: >-
+      {{ vault_bootstrap_molecule_controller_root }}/missing-vault-init.yml.vault
+    vault_bootstrap_molecule_target_dir: >-
+      {{ vault_bootstrap_molecule_strict_root }}/target
+    vault_bootstrap_molecule_target_file: >-
+      {{ vault_bootstrap_molecule_target_dir }}/vault-init.yml.vault
   tasks:
     - name: Normalize canonical persisted init payload
       ansible.builtin.include_role:
@@ -47,4 +61,341 @@
       ansible.builtin.copy:
         dest: "{{ vault_bootstrap_molecule_marker_path }}"
         content: "normalized_handoff\n"
+        mode: "0644"
+
+    - name: Inspect strict controller escrow completion marker
+      ansible.builtin.stat:
+        path: "{{ vault_bootstrap_molecule_strict_marker }}"
+      register: vault_bootstrap_molecule_strict_marker_stat
+      changed_when: false
+
+    - name: Reset incomplete strict controller escrow fixtures
+      ansible.builtin.file:
+        path: "{{ vault_bootstrap_molecule_strict_root }}"
+        state: absent
+      when: not (vault_bootstrap_molecule_strict_marker_stat.stat.exists | default(false))
+
+    - name: Initialize strict controller escrow refusal coverage facts
+      ansible.builtin.set_fact:
+        vault_bootstrap_molecule_invalid_path_refused: false
+        vault_bootstrap_molecule_missing_escrow_refused: false
+        vault_bootstrap_molecule_stale_escrow_refused: false
+        vault_bootstrap_molecule_password_fallback_refused: false
+        vault_bootstrap_molecule_plaintext_header_refused: false
+        vault_bootstrap_molecule_payload_drift_refused: false
+        vault_bootstrap_molecule_key_linebreak_refused: false
+        vault_bootstrap_molecule_target_drift_refused: false
+      changed_when: false
+
+    - name: Ensure the approved test controller escrow root exists
+      ansible.builtin.file:
+        path: "{{ vault_bootstrap_molecule_controller_root }}"
+        state: directory
+        mode: "0700"
+
+    - name: Exercise non-normalized controller path refusal
+      block:
+        - name: Run strict preflight with a non-normalized controller path
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_bootstrap
+            tasks_from: controller_escrow_preflight
+          vars:
+            vault_bootstrap_require_controller_escrow: true
+            vault_bootstrap_write_init_output: true
+            vault_bootstrap_write_init_file_on_init: true
+            vault_bootstrap_ansible_vault_password_file: >-
+              {{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') }}
+            vault_bootstrap_ansible_vault_password: ""
+            vault_bootstrap_init_payload: {}
+            vault_bootstrap_controller_escrow_root_path: "{{ vault_bootstrap_molecule_controller_root }}"
+            vault_bootstrap_controller_init_file_path: >-
+              {{ vault_bootstrap_molecule_strict_root }}/controller/../invalid.vault.yml
+            vault_bootstrap_persist_dir: "{{ vault_bootstrap_molecule_target_dir }}"
+            vault_bootstrap_init_file_path: "{{ vault_bootstrap_molecule_target_file }}"
+            vault_bootstrap_initialized: false
+
+      rescue:
+        - name: Record non-normalized path refusal
+          ansible.builtin.set_fact:
+            vault_bootstrap_molecule_invalid_path_refused: true
+          changed_when: false
+
+    - name: Exercise initialized Vault without controller escrow refusal
+      block:
+        - name: Run strict preflight with missing controller escrow
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_bootstrap
+            tasks_from: controller_escrow_preflight
+          vars:
+            vault_bootstrap_require_controller_escrow: true
+            vault_bootstrap_write_init_output: true
+            vault_bootstrap_write_init_file_on_init: true
+            vault_bootstrap_ansible_vault_password_file: >-
+              {{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') }}
+            vault_bootstrap_ansible_vault_password: ""
+            vault_bootstrap_init_payload: {}
+            vault_bootstrap_controller_escrow_root_path: "{{ vault_bootstrap_molecule_controller_root }}"
+            vault_bootstrap_controller_init_file_path: "{{ vault_bootstrap_molecule_missing_controller_file }}"
+            vault_bootstrap_persist_dir: "{{ vault_bootstrap_molecule_target_dir }}"
+            vault_bootstrap_init_file_path: "{{ vault_bootstrap_molecule_target_file }}"
+            vault_bootstrap_initialized: true
+
+      rescue:
+        - name: Record missing controller escrow refusal
+          ansible.builtin.set_fact:
+            vault_bootstrap_molecule_missing_escrow_refused: true
+          changed_when: false
+
+    - name: Persist the synthetic authoritative controller init escrow
+      lit.foundational.ansible_vault_document:
+        path: "{{ vault_bootstrap_molecule_controller_file }}"
+        document:
+          vault_init:
+            unseal_keys_b64: [unit-test-share-one, unit-test-share-two]
+            unseal_shares: 2
+            unseal_threshold: 2
+            root_token: unit-test-root-token
+      register: vault_bootstrap_molecule_controller_escrow_result
+      no_log: true
+
+    - name: Synchronize the synthetic ciphertext-only target secondary
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_bootstrap
+        tasks_from: controller_escrow_sync
+      vars:
+        vault_bootstrap_controller_init_file_path: "{{ vault_bootstrap_molecule_controller_file }}"
+        vault_bootstrap_persist_dir: "{{ vault_bootstrap_molecule_target_dir }}"
+        vault_bootstrap_init_file_path: "{{ vault_bootstrap_molecule_target_file }}"
+        vault_bootstrap_controller_escrow_result: "{{ vault_bootstrap_molecule_controller_escrow_result }}"
+      no_log: true
+
+    - name: Load the synthetic authoritative controller init escrow in memory
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_bootstrap
+        tasks_from: controller_escrow_load
+      vars:
+        vault_bootstrap_controller_init_file_path: "{{ vault_bootstrap_molecule_controller_file }}"
+      no_log: true
+
+    - name: Require the in-memory strict controller escrow handoff
+      ansible.builtin.assert:
+        that:
+          - vault_bootstrap_unseal_keys == ['unit-test-share-one', 'unit-test-share-two']
+          - vault_bootstrap_token == 'unit-test-root-token'
+        quiet: true
+      no_log: true
+
+    - name: Validate the exact synthetic share and threshold contract
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_bootstrap
+        tasks_from: controller_escrow_validate_payload
+      vars:
+        vault_bootstrap_key_shares: 2
+        vault_bootstrap_key_threshold: 2
+      no_log: true
+
+    - name: Exercise strict payload threshold drift refusal
+      block:
+        - name: Validate a synthetic init payload with threshold drift
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_bootstrap
+            tasks_from: controller_escrow_validate_payload
+          vars:
+            vault_bootstrap_key_shares: 2
+            vault_bootstrap_key_threshold: 2
+            vault_bootstrap_controller_init_document:
+              vault_init:
+                unseal_keys_b64: [unit-test-share-one, unit-test-share-two]
+                unseal_shares: 2
+                unseal_threshold: 1
+                root_token: unit-test-root-token
+            vault_bootstrap_init_payload: "{{ vault_bootstrap_controller_init_document.vault_init }}"
+            vault_bootstrap_unseal_keys: "{{ vault_bootstrap_init_payload.unseal_keys_b64 }}"
+            vault_bootstrap_token: "{{ vault_bootstrap_init_payload.root_token }}"
+          no_log: true
+      rescue:
+        - name: Record strict payload threshold drift refusal
+          ansible.builtin.set_fact:
+            vault_bootstrap_molecule_payload_drift_refused: true
+          changed_when: false
+
+    - name: Exercise plaintext controller document signature refusal once
+      when: not (vault_bootstrap_molecule_strict_marker_stat.stat.exists | default(false))
+      block:
+        - name: Write a synthetic plaintext controller document
+          ansible.builtin.copy:
+            dest: "{{ vault_bootstrap_molecule_controller_root }}/plaintext-init.yml"
+            content: |-
+              vault_init:
+                unseal_keys_b64: [unit-test-share-one, unit-test-share-two]
+                unseal_shares: 2
+                unseal_threshold: 2
+                root_token: unit-test-root-token
+            mode: "0600"
+          no_log: true
+
+        - name: Attempt to load the synthetic plaintext controller document
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_bootstrap
+            tasks_from: controller_escrow_load
+          vars:
+            vault_bootstrap_controller_init_file_path: >-
+              {{ vault_bootstrap_molecule_controller_root }}/plaintext-init.yml
+          no_log: true
+      rescue:
+        - name: Record plaintext controller document signature refusal
+          ansible.builtin.set_fact:
+            vault_bootstrap_molecule_plaintext_header_refused: true
+          changed_when: false
+      always:
+        - name: Remove the synthetic plaintext controller document
+          ansible.builtin.file:
+            path: "{{ vault_bootstrap_molecule_controller_root }}/plaintext-init.yml"
+            state: absent
+          no_log: true
+
+    - name: Exercise strict unseal-key line-break refusal
+      block:
+        - name: Validate a synthetic init payload with an injected key line break
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_bootstrap
+            tasks_from: controller_escrow_validate_payload
+          vars:
+            vault_bootstrap_key_shares: 2
+            vault_bootstrap_key_threshold: 2
+            vault_bootstrap_controller_init_document:
+              vault_init:
+                unseal_keys_b64: ["unit-test-share-one\ninjected", unit-test-share-two]
+                unseal_shares: 2
+                unseal_threshold: 2
+                root_token: unit-test-root-token
+            vault_bootstrap_init_payload: "{{ vault_bootstrap_controller_init_document.vault_init }}"
+            vault_bootstrap_unseal_keys: "{{ vault_bootstrap_init_payload.unseal_keys_b64 }}"
+            vault_bootstrap_token: "{{ vault_bootstrap_init_payload.root_token }}"
+          no_log: true
+      rescue:
+        - name: Record strict unseal-key line-break refusal
+          ansible.builtin.set_fact:
+            vault_bootstrap_molecule_key_linebreak_refused: true
+          changed_when: false
+
+    - name: Exercise uninitialized Vault with stale controller escrow refusal
+      block:
+        - name: Run strict preflight with stale controller escrow
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_bootstrap
+            tasks_from: controller_escrow_preflight
+          vars:
+            vault_bootstrap_require_controller_escrow: true
+            vault_bootstrap_write_init_output: true
+            vault_bootstrap_write_init_file_on_init: true
+            vault_bootstrap_ansible_vault_password_file: >-
+              {{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') }}
+            vault_bootstrap_ansible_vault_password: ""
+            vault_bootstrap_init_payload: {}
+            vault_bootstrap_controller_escrow_root_path: "{{ vault_bootstrap_molecule_controller_root }}"
+            vault_bootstrap_controller_init_file_path: "{{ vault_bootstrap_molecule_controller_file }}"
+            vault_bootstrap_persist_dir: "{{ vault_bootstrap_molecule_target_dir }}"
+            vault_bootstrap_init_file_path: "{{ vault_bootstrap_molecule_target_file }}"
+            vault_bootstrap_initialized: false
+
+      rescue:
+        - name: Record stale controller escrow refusal
+          ansible.builtin.set_fact:
+            vault_bootstrap_molecule_stale_escrow_refused: true
+          changed_when: false
+
+    - name: Exercise plaintext password fallback refusal
+      block:
+        - name: Run strict preflight with a plaintext password fallback
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_bootstrap
+            tasks_from: controller_escrow_preflight
+          vars:
+            vault_bootstrap_require_controller_escrow: true
+            vault_bootstrap_write_init_output: true
+            vault_bootstrap_write_init_file_on_init: true
+            vault_bootstrap_ansible_vault_password_file: >-
+              {{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') }}
+            vault_bootstrap_ansible_vault_password: unit-test-only-rejected-password
+            vault_bootstrap_init_payload: {}
+            vault_bootstrap_controller_escrow_root_path: "{{ vault_bootstrap_molecule_controller_root }}"
+            vault_bootstrap_controller_init_file_path: "{{ vault_bootstrap_molecule_controller_file }}"
+            vault_bootstrap_persist_dir: "{{ vault_bootstrap_molecule_target_dir }}"
+            vault_bootstrap_init_file_path: "{{ vault_bootstrap_molecule_target_file }}"
+            vault_bootstrap_initialized: true
+
+      rescue:
+        - name: Record plaintext password fallback refusal
+          ansible.builtin.set_fact:
+            vault_bootstrap_molecule_password_fallback_refused: true
+          changed_when: false
+
+    - name: Exercise target secondary ciphertext drift refusal once
+      when: not (vault_bootstrap_molecule_strict_marker_stat.stat.exists | default(false))
+      block:
+        - name: Replace the target secondary with synthetic drift
+          ansible.builtin.copy:
+            dest: "{{ vault_bootstrap_molecule_target_file }}"
+            content: "unit-test-only-ciphertext-drift\n"
+            owner: root
+            group: root
+            mode: "0600"
+          no_log: true
+
+        - name: Run target secondary synchronization against drift
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_bootstrap
+            tasks_from: controller_escrow_sync
+          vars:
+            vault_bootstrap_controller_init_file_path: "{{ vault_bootstrap_molecule_controller_file }}"
+            vault_bootstrap_persist_dir: "{{ vault_bootstrap_molecule_target_dir }}"
+            vault_bootstrap_init_file_path: "{{ vault_bootstrap_molecule_target_file }}"
+            vault_bootstrap_controller_escrow_result: "{{ vault_bootstrap_molecule_controller_escrow_result }}"
+          no_log: true
+
+      rescue:
+        - name: Record target ciphertext drift refusal
+          ansible.builtin.set_fact:
+            vault_bootstrap_molecule_target_drift_refused: true
+          changed_when: false
+      always:
+        - name: Remove the synthetic drift target
+          ansible.builtin.file:
+            path: "{{ vault_bootstrap_molecule_target_file }}"
+            state: absent
+          no_log: true
+
+        - name: Restore the exact ciphertext-only target secondary
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_bootstrap
+            tasks_from: controller_escrow_sync
+          vars:
+            vault_bootstrap_controller_init_file_path: "{{ vault_bootstrap_molecule_controller_file }}"
+            vault_bootstrap_persist_dir: "{{ vault_bootstrap_molecule_target_dir }}"
+            vault_bootstrap_init_file_path: "{{ vault_bootstrap_molecule_target_file }}"
+            vault_bootstrap_controller_escrow_result: "{{ vault_bootstrap_molecule_controller_escrow_result }}"
+          no_log: true
+
+    - name: Require strict path, password, state, and drift gates
+      ansible.builtin.assert:
+        that:
+          - vault_bootstrap_molecule_invalid_path_refused | bool
+          - vault_bootstrap_molecule_missing_escrow_refused | bool
+          - vault_bootstrap_molecule_stale_escrow_refused | bool
+          - vault_bootstrap_molecule_password_fallback_refused | bool
+          - vault_bootstrap_molecule_payload_drift_refused | bool
+          - vault_bootstrap_molecule_key_linebreak_refused | bool
+          - >-
+            vault_bootstrap_molecule_plaintext_header_refused | bool
+            or vault_bootstrap_molecule_strict_marker_stat.stat.exists | default(false)
+          - >-
+            vault_bootstrap_molecule_target_drift_refused | bool
+            or vault_bootstrap_molecule_strict_marker_stat.stat.exists | default(false)
+        quiet: true
+
+    - name: Persist strict controller escrow completion marker
+      ansible.builtin.copy:
+        dest: "{{ vault_bootstrap_molecule_strict_marker }}"
+        content: "strict-controller-escrow-verified\n"
         mode: "0644"
