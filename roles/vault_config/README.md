@@ -10,19 +10,23 @@ None.
 ## Variables
 
 Required for configuration:
+
 - `vault_config_url`
 - `vault_config_terraform_source`
 
 Token handling:
+
 - `vault_config_token` (required)
 
 If `vault_config_token` is not set and `vault_config_init.root_token` is provided,
-the role will set `vault_config_token` from that init payload. When `vault_token`
-is provided, it is mapped into `vault_config_token` for this role.
+the role sets `vault_config_token` from that init payload. A preceding `vault_bootstrap`
+run is mapped through `vault_bootstrap_init_payload` and `vault_bootstrap_token` so the
+first configuration run does not require a separate token injection.
 
 See `roles/vault_config/defaults/main.yml` for shared variables.
 
 Terraform state migration:
+
 - Terragrunt writes local state on the controller under `vault_config_terraform_state_dir_local`
   (default `/tmp/vault/bootstrap`) and the tfstate files are copied to
   `/srv/vault/bootstrap` on the target.

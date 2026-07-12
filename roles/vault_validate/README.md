@@ -8,10 +8,12 @@ None.
 
 ## Variables
 
-See `roles/vault_deploy/defaults/main.yml`.
+See `roles/vault_validate/defaults/main.yml`.
 
 Key variables:
-- `vault_deploy_validate_mode`: `fail` (default) or `report`.
+
+- `vault_validate_mode`: `fail` (default) or `report`.
+- `vault_validate_strict`: derived from the mode. Strict validation requires Vault to be both initialized and unsealed.
 
 ## Dependencies
 

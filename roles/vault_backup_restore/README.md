@@ -8,14 +8,16 @@ None.
 
 ## Variables
 
-See `roles/vault_deploy/defaults/main.yml`.
+See `roles/vault_backup_restore/defaults/main.yml`.
 
 Key variables:
-- `vault_deploy_backup_action`: `backup`, `restore`, or `none`.
-- `vault_deploy_backup_dir`
-- `vault_deploy_backup_retention_keep_last`
-- `vault_deploy_restore_source`
-- `vault_deploy_restore_confirm` (must be `YES_RESTORE`)
+
+- `vault_backup_restore_action`: `backup`, `restore`, or `none`.
+- `vault_backup_restore_dir`
+- `vault_backup_restore_retention_keep_last`
+- `vault_backup_restore_source`
+- `vault_backup_restore_confirm` (must be `YES_RESTORE`)
+- `vault_backup_restore_pod_manifest_path`: resolves the same actual `podman-kube@` unit used by deploy.
 
 ## Dependencies
 
