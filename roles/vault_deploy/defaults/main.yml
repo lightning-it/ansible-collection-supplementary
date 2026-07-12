@@ -34,6 +34,18 @@ vault_deploy_host_ip: >-
     ansible_default_ipv4.address
       | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
   }}
+# TLS trust paths are scoped to where each API client runs. The API path must
+# exist on vault_deploy_api_delegate_to (normally the controller); the target
+# path must exist on the managed Vault host; and the container path must be
+# visible inside the Vault container.
+vault_deploy_api_ca_cert_path: ""
+vault_deploy_target_ca_cert_path: "{{ vault_deploy_cert_dir }}/ca.crt"
+vault_deploy_container_ca_cert_path: "/vault/certs/ca.crt"
+vault_deploy_container_api_url: "https://127.0.0.1:{{ vault_deploy_port }}"
+vault_deploy_api_ca_cert_path_effective: >-
+  {{ vault_deploy_api_ca_cert_path if (vault_deploy_vault_validate_certs | bool) else '' }}
+vault_deploy_target_ca_cert_path_effective: >-
+  {{ vault_deploy_target_ca_cert_path if (vault_deploy_vault_validate_certs | bool) else '' }}
 
 # Vault Hostname + PKI
 vault_deploy_vault_hostname: "{{ vault_hostname | default(inventory_hostname, true) }}"

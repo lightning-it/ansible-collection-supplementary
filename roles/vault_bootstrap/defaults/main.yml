@@ -5,6 +5,15 @@ vault_bootstrap_health_url: >-
   {{ vault_deploy_health_url | default(vault_bootstrap_api_url ~ '/v1/sys/health', true) }}
 vault_bootstrap_validate_certs: "{{ vault_deploy_vault_validate_certs | default(true, true) }}"
 vault_bootstrap_container_name: "{{ vault_deploy_container_name | default('vault-vault', true) }}"
+vault_bootstrap_api_delegate_to: "{{ inventory_hostname }}"
+vault_bootstrap_ca_cert_path: >-
+  {{ vault_deploy_target_ca_cert_path | default('', true) }}
+vault_bootstrap_cli_api_url: >-
+  {{ vault_deploy_container_api_url | default('https://127.0.0.1:8200', true) }}
+vault_bootstrap_cli_ca_cert_path: >-
+  {{ vault_deploy_container_ca_cert_path | default('/vault/certs/ca.crt', true) }}
+vault_bootstrap_ca_cert_path_effective: >-
+  {{ vault_bootstrap_ca_cert_path if (vault_bootstrap_validate_certs | bool) else '' }}
 
 vault_bootstrap_init_requested: "{{ vault_deploy_bootstrap_init | default(false, true) }}"
 vault_bootstrap_auto_init: "{{ vault_deploy_bootstrap_auto_init | default(true, true) }}"

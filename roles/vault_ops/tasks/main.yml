@@ -50,6 +50,7 @@
         vault_validate_api_url: "{{ vault_ops_api_url }}"
         vault_validate_health_url: "{{ vault_ops_health_url }}"
         vault_validate_validate_certs: "{{ vault_ops_validate_certs }}"
+        vault_validate_ca_cert_path: "{{ vault_ops_target_ca_cert_path_effective }}"
       when: not ansible_check_mode
 
 - name: Report Vault status
@@ -63,6 +64,7 @@
         url: "{{ vault_ops_health_url }}"
         method: GET
         validate_certs: "{{ vault_ops_validate_certs }}"
+        ca_path: "{{ vault_ops_api_ca_cert_path_effective | default(omit, true) }}"
       register: vault_ops_health
       changed_when: false
       failed_when: false
@@ -74,6 +76,7 @@
         url: "{{ vault_ops_api_url }}/v1/sys/init"
         method: GET
         validate_certs: "{{ vault_ops_validate_certs }}"
+        ca_path: "{{ vault_ops_api_ca_cert_path_effective | default(omit, true) }}"
       register: vault_ops_init_status
       changed_when: false
       failed_when: false
@@ -85,6 +88,7 @@
         url: "{{ vault_ops_api_url }}/v1/sys/seal-status"
         method: GET
         validate_certs: "{{ vault_ops_validate_certs }}"
+        ca_path: "{{ vault_ops_api_ca_cert_path_effective | default(omit, true) }}"
       register: vault_ops_seal_status
       changed_when: false
       failed_when: false

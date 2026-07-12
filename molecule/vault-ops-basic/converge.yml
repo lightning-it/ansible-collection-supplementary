@@ -43,6 +43,32 @@
         quiet: true
       no_log: true
 
+    - name: Select the Vault unseal threshold share set
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_ops
+        tasks_from: select_unseal_shares
+      vars:
+        vault_ops_seal_status:
+          json:
+            t: 3
+            progress: 0
+        vault_ops_unseal_keys:
+          - test-share-one
+          - test-share-two
+          - test-share-three
+          - unused-share-four
+          - unused-share-five
+
+    - name: Assert only the exact Vault threshold share count is selected
+      ansible.builtin.assert:
+        that:
+          - vault_ops_unseal_threshold | int == 3
+          - vault_ops_unseal_keys_selected | length == 3
+          - vault_ops_unseal_keys_selected[-1] == 'test-share-three'
+          - "'unused-share-four' not in vault_ops_unseal_keys_selected"
+        quiet: true
+      no_log: true
+
     - name: Persist Vault ops coverage result
       ansible.builtin.copy:
         dest: "{{ vault_ops_molecule_marker_path }}"

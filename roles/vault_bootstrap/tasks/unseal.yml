@@ -13,6 +13,9 @@
     vault_ops_init: "{{ vault_bootstrap_init_payload }}"
     vault_ops_unseal_keys: "{{ vault_bootstrap_unseal_keys }}"
     vault_ops_token: "{{ vault_bootstrap_token }}"
+    vault_ops_api_delegate_to: "{{ vault_bootstrap_api_delegate_to }}"
+    vault_ops_api_ca_cert_path: "{{ vault_bootstrap_ca_cert_path }}"
+    vault_ops_target_ca_cert_path: "{{ vault_bootstrap_ca_cert_path }}"
   tags:
     - vault
     - vault_bootstrap

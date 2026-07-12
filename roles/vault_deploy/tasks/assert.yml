@@ -14,5 +14,14 @@
       - vault_deploy_skip_config is boolean
       - vault_deploy_vault_validate_certs is boolean
       - vault_deploy_port | int > 0
+      - vault_deploy_api_ca_cert_path is string
+      - >-
+        vault_deploy_api_ca_cert_path | length == 0
+        or vault_deploy_api_ca_cert_path.startswith('/')
+      - vault_deploy_target_ca_cert_path is string
+      - vault_deploy_target_ca_cert_path.startswith('/')
+      - vault_deploy_container_ca_cert_path is string
+      - vault_deploy_container_ca_cert_path.startswith('/')
+      - vault_deploy_container_api_url is match('^https://')
     quiet: true
   tags: always

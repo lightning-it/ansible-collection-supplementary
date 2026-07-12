@@ -13,6 +13,7 @@
     url: "{{ vault_bootstrap_health_url }}"
     method: GET
     validate_certs: "{{ vault_bootstrap_validate_certs }}"
+    ca_path: "{{ vault_bootstrap_ca_cert_path_effective | default(omit, true) }}"
   register: vault_bootstrap_health
   until: vault_bootstrap_health.status in [200, 429, 472, 473, 501, 503]
   retries: 30
@@ -21,6 +22,8 @@
   failed_when: >-
     vault_bootstrap_health is failed
     and vault_bootstrap_health.status not in [200, 429, 472, 473, 501, 503]
+  delegate_to: "{{ vault_bootstrap_api_delegate_to }}"
+  become: false
   tags:
     - bootstrap
     - api
@@ -30,9 +33,12 @@
     url: "{{ vault_bootstrap_api_url }}/v1/sys/init"
     method: GET
     validate_certs: "{{ vault_bootstrap_validate_certs }}"
+    ca_path: "{{ vault_bootstrap_ca_cert_path_effective | default(omit, true) }}"
   register: vault_bootstrap_init_status
   changed_when: false
   failed_when: vault_bootstrap_init_status.status not in [200]
+  delegate_to: "{{ vault_bootstrap_api_delegate_to }}"
+  become: false
   tags:
     - init
     - bootstrap
@@ -290,7 +296,8 @@
       - exec
       - "{{ vault_bootstrap_container_name }}"
       - env
-      - VAULT_ADDR=https://127.0.0.1:8200
+      - "VAULT_ADDR={{ vault_bootstrap_cli_api_url }}"
+      - "VAULT_CACERT={{ vault_bootstrap_cli_ca_cert_path }}"
       - vault
       - operator
       - init
@@ -299,7 +306,6 @@
       - "{{ vault_bootstrap_key_shares | string }}"
       - -key-threshold
       - "{{ vault_bootstrap_key_threshold | string }}"
-      - -tls-skip-verify
   register: vault_bootstrap_init_result
   changed_when: true
   no_log: true

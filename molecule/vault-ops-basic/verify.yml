@@ -17,3 +17,25 @@
         that:
           - vault_ops_molecule_marker.content | b64decode | trim == 'normalized_handoff'
         quiet: true
+
+    - name: Read Vault unseal implementation source
+      ansible.builtin.set_fact:
+        vault_ops_unseal_source: >-
+          {{
+            lookup(
+              'ansible.builtin.file',
+              lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              ~ '/roles/vault_ops/tasks/unseal.yml'
+            )
+          }}
+      changed_when: false
+
+    - name: Assert unseal shares use protected strict-TLS request bodies
+      ansible.builtin.assert:
+        that:
+          - "'-tls-skip-verify' not in vault_ops_unseal_source"
+          - "'method: POST' in vault_ops_unseal_source"
+          - "'key:' in vault_ops_unseal_source"
+          - "'vault_ops_unseal_keys_selected' in vault_ops_unseal_source"
+          - "'no_log: true' in vault_ops_unseal_source"
+        quiet: true

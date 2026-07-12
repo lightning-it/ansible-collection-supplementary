@@ -6,6 +6,14 @@
       - vault_ops_api_delegate_to | default('', true) | trim | length > 0
       - vault_ops_manage_systemd is boolean
       - vault_ops_validate_certs is boolean
+      - vault_ops_api_ca_cert_path is string
+      - >-
+        vault_ops_api_ca_cert_path | length == 0
+        or vault_ops_api_ca_cert_path.startswith('/')
+      - vault_ops_target_ca_cert_path is string
+      - >-
+        vault_ops_target_ca_cert_path | length == 0
+        or vault_ops_target_ca_cert_path.startswith('/')
       - vault_ops_init is mapping
       - vault_ops_unseal_keys is sequence
       - vault_ops_unseal_keys is not string

@@ -17,3 +17,23 @@
         that:
           - vault_bootstrap_molecule_marker.content | b64decode | trim == 'normalized_handoff'
         quiet: true
+
+    - name: Read Vault initialization implementation source
+      ansible.builtin.set_fact:
+        vault_bootstrap_init_source: >-
+          {{
+            lookup(
+              'ansible.builtin.file',
+              lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              ~ '/roles/vault_bootstrap/tasks/init.yml'
+            )
+          }}
+      changed_when: false
+
+    - name: Assert Vault initialization uses explicit strict TLS trust
+      ansible.builtin.assert:
+        that:
+          - "'-tls-skip-verify' not in vault_bootstrap_init_source"
+          - "'VAULT_CACERT=' in vault_bootstrap_init_source"
+          - "'vault_bootstrap_cli_ca_cert_path' in vault_bootstrap_init_source"
+        quiet: true

@@ -21,9 +21,15 @@ Key variables:
 - `vault_bootstrap_ansible_vault_password_file`: controller password file; defaults to
   `ANSIBLE_VAULT_PASSWORD_FILE` and is preferred over copying a plaintext password.
 - `vault_bootstrap_ansible_vault_password`: compatibility fallback mapped from `vault_ansible_vault_pw`.
+- `vault_bootstrap_ca_cert_path`: trusted CA bundle on `vault_bootstrap_api_delegate_to` for HTTPS API checks.
+- `vault_bootstrap_cli_api_url` and `vault_bootstrap_cli_ca_cert_path`: the verified in-container API URL and CA
+  bundle used by `vault operator init`.
 
 New init documents persist the canonical `vault_init` key. Reads remain compatible with the interim
 `vault_bootstrap_vault_init` and `vault_ops_vault_init` keys.
+
+Initialization never disables TLS verification. The in-container CLI receives `VAULT_CACERT`, and follow-on unseal
+requests use the protected HTTPS request-body flow from `vault_ops`.
 
 ## Dependencies
 

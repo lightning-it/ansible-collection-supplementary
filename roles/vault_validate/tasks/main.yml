@@ -187,6 +187,7 @@
     url: "{{ vault_validate_health_url }}"
     method: GET
     validate_certs: "{{ vault_validate_validate_certs }}"
+    ca_path: "{{ vault_validate_ca_cert_path_effective | default(omit, true) }}"
   register: vault_validate_vault_deploy_health
   changed_when: false
   failed_when: false
@@ -217,6 +218,7 @@
     url: "{{ vault_validate_api_url }}/v1/sys/init"
     method: GET
     validate_certs: "{{ vault_validate_validate_certs }}"
+    ca_path: "{{ vault_validate_ca_cert_path_effective | default(omit, true) }}"
   register: vault_validate_init_status
   changed_when: false
   failed_when: false
@@ -229,6 +231,7 @@
     url: "{{ vault_validate_api_url }}/v1/sys/seal-status"
     method: GET
     validate_certs: "{{ vault_validate_validate_certs }}"
+    ca_path: "{{ vault_validate_ca_cert_path_effective | default(omit, true) }}"
   register: vault_validate_seal_status
   changed_when: false
   failed_when: false

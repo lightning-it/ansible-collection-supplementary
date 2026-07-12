@@ -7,11 +7,72 @@
     vault_deploy_molecule_execute_role: false
     vault_deploy_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-deploy-coverage-mode
+    vault_deploy_cert_dir: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-deploy-tls
+    vault_deploy_target_ca_cert_path: "{{ vault_deploy_cert_dir }}/ca.crt"
+    vault_deploy_host_ip: "127.0.0.1"
+    vault_deploy_vault_hostname: "vault.test.invalid"
+    vault_deploy_run_as_user: "{{ lookup('ansible.builtin.pipe', 'id -u') | int }}"
+    vault_deploy_run_as_group: "{{ lookup('ansible.builtin.pipe', 'id -g') | int }}"
   tasks:
     - name: Import lit.supplementary.vault_deploy for syntax coverage
       ansible.builtin.import_role:
         name: lit.supplementary.vault_deploy
       when: vault_deploy_molecule_execute_role | bool
+
+    - name: Ensure Vault TLS test directory exists
+      ansible.builtin.file:
+        path: "{{ vault_deploy_cert_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Generate Vault bootstrap TLS assets on the target
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_deploy
+        tasks_from: generate_bootstrap_tls
+
+    - name: Read the bootstrap key before trust reconciliation testing
+      ansible.builtin.stat:
+        path: "{{ vault_deploy_cert_dir }}/vault.key"
+        checksum_algorithm: sha256
+      register: vault_deploy_key_before_reconcile
+
+    - name: Check whether missing-trust reconciliation was already tested
+      ansible.builtin.stat:
+        path: "{{ vault_deploy_cert_dir }}/.trust-reconciled"
+      register: vault_deploy_trust_reconcile_marker
+
+    - name: Remove pinned trust certificate for first-pass reconciliation coverage
+      ansible.builtin.file:
+        path: "{{ vault_deploy_target_ca_cert_path }}"
+        state: absent
+      when: not vault_deploy_trust_reconcile_marker.stat.exists
+
+    - name: Reconcile existing Vault bootstrap trust without regenerating its key
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_deploy
+        tasks_from: reconcile_bootstrap_trust
+
+    - name: Read the bootstrap key after trust reconciliation testing
+      ansible.builtin.stat:
+        path: "{{ vault_deploy_cert_dir }}/vault.key"
+        checksum_algorithm: sha256
+      register: vault_deploy_key_after_reconcile
+
+    - name: Assert trust reconciliation preserved the bootstrap private key
+      ansible.builtin.assert:
+        that:
+          - >-
+            vault_deploy_key_before_reconcile.stat.checksum
+            == vault_deploy_key_after_reconcile.stat.checksum
+        quiet: true
+      no_log: true
+
+    - name: Record completed missing-trust reconciliation coverage
+      ansible.builtin.copy:
+        dest: "{{ vault_deploy_cert_dir }}/.trust-reconciled"
+        content: "tested\n"
+        mode: "0600"
 
     - name: Record lit.supplementary.vault_deploy Molecule coverage mode
       ansible.builtin.set_fact:

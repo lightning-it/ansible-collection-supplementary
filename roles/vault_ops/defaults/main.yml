@@ -5,6 +5,12 @@ vault_ops_api_delegate_to: "{{ vault_deploy_api_delegate_to | default('localhost
 vault_ops_api_url: "{{ vault_deploy_api_url | default('', true) }}"
 vault_ops_health_url: "{{ vault_deploy_health_url | default(vault_ops_api_url ~ '/v1/sys/health', true) }}"
 vault_ops_validate_certs: "{{ vault_deploy_vault_validate_certs | default(true, true) }}"
+vault_ops_api_ca_cert_path: "{{ vault_deploy_api_ca_cert_path | default('', true) }}"
+vault_ops_target_ca_cert_path: "{{ vault_deploy_target_ca_cert_path | default('', true) }}"
+vault_ops_api_ca_cert_path_effective: >-
+  {{ vault_ops_api_ca_cert_path if (vault_ops_validate_certs | bool) else '' }}
+vault_ops_target_ca_cert_path_effective: >-
+  {{ vault_ops_target_ca_cert_path if (vault_ops_validate_certs | bool) else '' }}
 vault_ops_container_name: "{{ vault_deploy_container_name | default('vault-vault', true) }}"
 vault_ops_manage_systemd: "{{ vault_deploy_manage_systemd | default(true, true) }}"
 vault_ops_pod_name: "{{ vault_deploy_pod_name | default('vault', true) }}"

@@ -9,6 +9,10 @@
       - vault_validate_api_url | default('', true) | trim | length > 0
       - vault_validate_health_url | default('', true) | trim | length > 0
       - vault_validate_validate_certs is boolean
+      - vault_validate_ca_cert_path is string
+      - >-
+        vault_validate_ca_cert_path | length == 0
+        or vault_validate_ca_cert_path.startswith('/')
     fail_msg: "vault_validate variables are missing or invalid."
     quiet: true
   tags: always

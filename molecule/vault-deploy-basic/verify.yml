@@ -6,6 +6,8 @@
   vars:
     vault_deploy_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-deploy-coverage-mode
+    vault_deploy_cert_dir: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-deploy-tls
   tasks:
     - name: Read lit.supplementary.vault_deploy coverage marker
       ansible.builtin.slurp:
@@ -16,4 +18,50 @@
       ansible.builtin.assert:
         that:
           - vault_deploy_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true
+
+    - name: Read generated Vault TLS file state
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - "{{ vault_deploy_cert_dir }}/vault.key"
+        - "{{ vault_deploy_cert_dir }}/vault.crt"
+        - "{{ vault_deploy_cert_dir }}/ca.crt"
+      register: vault_deploy_tls_files
+
+    - name: Inspect generated Vault bootstrap certificate
+      community.crypto.x509_certificate_info:
+        path: "{{ vault_deploy_cert_dir }}/vault.crt"
+      register: vault_deploy_tls_cert_info
+
+    - name: Read Vault bootstrap TLS generation source
+      ansible.builtin.set_fact:
+        vault_deploy_tls_generation_source: >-
+          {{
+            lookup(
+              'ansible.builtin.file',
+              lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              ~ '/roles/vault_deploy/tasks/generate_bootstrap_tls.yml'
+            )
+          }}
+      changed_when: false
+
+    - name: Assert target-generated TLS assets and pinned trust certificate
+      ansible.builtin.assert:
+        that:
+          - >-
+            vault_deploy_tls_files.results
+            | map(attribute='stat.exists')
+            | list == [true, true, true]
+          - vault_deploy_tls_files.results[0].stat.mode == '0600'
+          - vault_deploy_tls_files.results[1].stat.mode == '0644'
+          - vault_deploy_tls_files.results[2].stat.mode == '0644'
+          - >-
+            vault_deploy_tls_files.results[1].stat.checksum
+            == vault_deploy_tls_files.results[2].stat.checksum
+          - "'IP:127.0.0.1' in vault_deploy_tls_cert_info.subject_alt_name"
+          - "'DNS:vault.test.invalid' in vault_deploy_tls_cert_info.subject_alt_name"
+          - "'delegate_to:' not in vault_deploy_tls_generation_source"
+          - "'tempfile:' not in vault_deploy_tls_generation_source"
         quiet: true

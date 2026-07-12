@@ -1,0 +1,26 @@
+---
+- name: Derive the exact number of unseal shares required by Vault
+  ansible.builtin.set_fact:
+    vault_ops_unseal_threshold: "{{ vault_ops_seal_status.json.t | default(0) | int }}"
+    vault_ops_unseal_progress: "{{ vault_ops_seal_status.json.progress | default(0) | int }}"
+  changed_when: false
+  no_log: true
+
+- name: Require a fresh threshold-complete unseal share set
+  ansible.builtin.assert:
+    that:
+      - vault_ops_unseal_threshold | int > 0
+      - vault_ops_unseal_progress | int == 0
+      - (vault_ops_unseal_keys | length) >= (vault_ops_unseal_threshold | int)
+    fail_msg: >-
+      Vault unseal requires a complete threshold share set and zero existing
+      progress. Reset a partial unseal explicitly before retrying.
+    quiet: true
+  no_log: true
+
+- name: Select only the threshold number of Vault unseal shares
+  ansible.builtin.set_fact:
+    vault_ops_unseal_keys_selected: >-
+      {{ vault_ops_unseal_keys[0 : (vault_ops_unseal_threshold | int)] }}
+  changed_when: false
+  no_log: true

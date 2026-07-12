@@ -16,6 +16,7 @@
     url: "{{ vault_deploy_health_url }}"
     method: GET
     validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+    ca_path: "{{ vault_deploy_api_ca_cert_path_effective | default(omit, true) }}"
   register: vault_deploy_health_probe
   failed_when: false
   changed_when: false
@@ -33,6 +34,7 @@
     auth_method: token
     token: "{{ vault_deploy_token }}"
     validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+    ca_cert: "{{ vault_deploy_api_ca_cert_path_effective | default(omit, true) }}"
     path: "{{ inventory_hostname }}/vault/certificate"
   register: vault_deploy_existing_cert
   failed_when: false
@@ -67,79 +69,20 @@
   tags:
     - init
 
-- name: Create tmp selfsigned certificate
+- name: Reconcile existing self-signed bootstrap trust
+  ansible.builtin.include_tasks: reconcile_bootstrap_trust.yml
+  when: vault_deploy_bootstrap_cert_present | bool
+  tags:
+    - init
+
+- name: Create self-signed bootstrap certificate
   when:
     - vault_deploy_existing_cert is not defined or vault_deploy_existing_cert.data is not defined
     - not vault_deploy_bootstrap_cert_present | bool
     - not ansible_check_mode
-  block:
-    - name: Create controller temp dir for Vault TLS artifacts
-      ansible.builtin.tempfile:
-        state: directory
-        prefix: vault-tls-
-      delegate_to: localhost
-      register: vault_deploy_tls_tmp
-      changed_when: false
-      no_log: true
-      tags:
-        - init
-
-    - name: Create private key (RSA, 4096 bits) (controller)
-      community.crypto.openssl_privatekey:
-        path: "{{ vault_deploy_tls_tmp.path }}/vault.key"
-      delegate_to: localhost
-      no_log: true
-      tags:
-        - init
-
-    - name: Create certificate signing request (CSR) for self-signed certificate (controller)
-      community.crypto.openssl_csr_pipe:
-        privatekey_path: "{{ vault_deploy_tls_tmp.path }}/vault.key"
-        common_name: "{{ inventory_hostname }}"
-        organization_name: Ansible, Inc.
-        subject_alt_name:
-          - "IP:127.0.0.1"
-          - "IP:{{ vault_deploy_host_ip }}"
-          - "DNS:{{ inventory_hostname }}"
-          - "DNS:{{ vault_deploy_vault_hostname }}"
-          - "DNS:localhost"
-          - "DNS:vault"
-      register: vault_deploy_csr
-      delegate_to: localhost
-      no_log: true
-      tags:
-        - init
-
-    - name: Generate Vault server certificate signed by self-signed CA (controller)
-      community.crypto.x509_certificate:
-        path: "{{ vault_deploy_tls_tmp.path }}/vault.crt"
-        privatekey_path: "{{ vault_deploy_tls_tmp.path }}/vault.key"
-        csr_content: "{{ vault_deploy_csr.vault_deploy_csr }}"
-        provider: selfsigned
-      delegate_to: localhost
-      no_log: true
-      tags:
-        - init
-
-    - name: Copy generated Vault keypair to target
-      ansible.builtin.copy:
-        src: "{{ item.src }}"
-        dest: "{{ item.dest }}"
-        owner: "{{ vault_deploy_run_as_user | default(100) }}"
-        group: "{{ vault_deploy_run_as_group | default(1000) }}"
-        mode: "{{ item.mode }}"
-      loop:
-        - src: "{{ vault_deploy_tls_tmp.path }}/vault.key"
-          dest: "{{ vault_deploy_cert_dir }}/vault.key"
-          mode: "0600"
-        - src: "{{ vault_deploy_tls_tmp.path }}/vault.crt"
-          dest: "{{ vault_deploy_cert_dir }}/vault.crt"
-          mode: "0644"
-      loop_control:
-        label: "{{ item.dest }}"
-      no_log: true
-      tags:
-        - init
+  ansible.builtin.include_tasks: generate_bootstrap_tls.yml
+  tags:
+    - init
 
 - name: Read local Vault keypair file state
   ansible.builtin.stat:
@@ -162,19 +105,5 @@
   loop_control:
     label: "{{ item.stat.path | default('') }}"
   when: item.stat.exists | default(false)
-  tags:
-    - init
-
-- name: Remove controller temp dir for Vault TLS artifacts
-  ansible.builtin.file:
-    path: "{{ vault_deploy_tls_tmp.path }}"
-    state: absent
-  delegate_to: localhost
-  changed_when: false
-  no_log: true
-  when:
-    - vault_deploy_tls_tmp is defined
-    - vault_deploy_tls_tmp.path is defined
-    - vault_deploy_tls_tmp.path | length > 0
   tags:
     - init

@@ -15,6 +15,13 @@
       - vault_bootstrap_container_name | default('', true) | trim | length > 0
       - vault_bootstrap_api_url | default('', true) | trim | length > 0
       - vault_bootstrap_health_url | default('', true) | trim | length > 0
+      - vault_bootstrap_api_delegate_to | default('', true) | trim | length > 0
+      - vault_bootstrap_ca_cert_path is string
+      - >-
+        vault_bootstrap_ca_cert_path | length == 0
+        or vault_bootstrap_ca_cert_path.startswith('/')
+      - vault_bootstrap_cli_api_url is match('^https://')
+      - vault_bootstrap_cli_ca_cert_path.startswith('/')
       - vault_bootstrap_init_payload is mapping
       - vault_bootstrap_unseal_keys is sequence
       - vault_bootstrap_unseal_keys is not string

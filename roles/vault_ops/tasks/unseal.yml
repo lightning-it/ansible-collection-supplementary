@@ -10,6 +10,7 @@
     url: "{{ vault_ops_health_url }}"
     method: GET
     validate_certs: "{{ vault_ops_validate_certs }}"
+    ca_path: "{{ vault_ops_api_ca_cert_path_effective | default(omit, true) }}"
   register: vault_ops_health
   until: vault_ops_health.status in [200, 429, 472, 473, 501, 503]
   retries: 30
@@ -26,6 +27,7 @@
     url: "{{ vault_ops_api_url }}/v1/sys/seal-status"
     method: GET
     validate_certs: "{{ vault_ops_validate_certs }}"
+    ca_path: "{{ vault_ops_api_ca_cert_path_effective | default(omit, true) }}"
   register: vault_ops_seal_status
   changed_when: false
   failed_when: vault_ops_seal_status.status not in [200]
@@ -179,25 +181,28 @@
     - vault_ops_sealed | bool
     - vault_ops_unseal_keys | default([]) | length == 0
 
-- name: Unseal Vault
-  ansible.builtin.command:
-    argv:
-      - podman
-      - exec
-      - "{{ vault_ops_container_name }}"
-      - env
-      - VAULT_ADDR=https://127.0.0.1:8200
-      - vault
-      - operator
-      - unseal
-      - -tls-skip-verify
-      - "{{ item }}"
+- name: Select the exact threshold number of unseal shares
+  ansible.builtin.include_tasks: select_unseal_shares.yml
+  when: vault_ops_sealed | bool
+
+- name: Submit the threshold number of Vault unseal shares over trusted HTTPS
+  ansible.builtin.uri:
+    url: "{{ vault_ops_api_url }}/v1/sys/unseal"
+    method: POST
+    body_format: json
+    body:
+      key: "{{ item }}"
+    status_code: 200
+    validate_certs: "{{ vault_ops_validate_certs }}"
+    ca_path: "{{ vault_ops_api_ca_cert_path_effective | default(omit, true) }}"
+    return_content: false
   register: vault_ops_unseal_result
   changed_when: true
-  until: vault_ops_unseal_result.rc == 0
-  retries: 5
-  delay: 2
-  loop: "{{ vault_ops_unseal_keys }}"
+  loop: "{{ vault_ops_unseal_keys_selected }}"
+  loop_control:
+    label: "protected-unseal-share"
+  delegate_to: "{{ vault_ops_api_delegate_to }}"
+  become: false
   no_log: true
   when: vault_ops_sealed | bool
 
@@ -206,6 +211,7 @@
     url: "{{ vault_ops_api_url }}/v1/sys/seal-status"
     method: GET
     validate_certs: "{{ vault_ops_validate_certs }}"
+    ca_path: "{{ vault_ops_api_ca_cert_path_effective | default(omit, true) }}"
   register: vault_ops_seal_status_after
   changed_when: false
   failed_when: vault_ops_seal_status_after.status not in [200]
