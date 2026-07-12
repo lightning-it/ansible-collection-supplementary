@@ -14,6 +14,42 @@
       - vault_deploy_skip_config is boolean
       - vault_deploy_vault_validate_certs is boolean
       - vault_deploy_port | int > 0
+      - vault_deploy_port | int <= 65535
+      - vault_deploy_cluster_port | int > 0
+      - vault_deploy_cluster_port | int <= 65535
+      - vault_deploy_cluster_port | int != vault_deploy_port | int
+      - vault_deploy_storage_backend is string
+      - vault_deploy_storage_backend in ['file', 'raft']
+      - vault_deploy_listener_address is string
+      - vault_deploy_listener_address | default('', true) | trim | length > 0
+      - >-
+        vault_deploy_listener_address
+        is search(':' ~ (vault_deploy_port | string) ~ '$')
+      - vault_deploy_api_addr is string
+      - vault_deploy_api_addr is match('^https://')
+      - vault_deploy_container_api_url is string
+      - vault_deploy_container_api_url == vault_deploy_api_addr
+      - vault_deploy_container_api_url is not search('^https://(0\.0\.0\.0|\[?::\]?)[:/]')
+      - vault_deploy_cluster_listener_address is string
+      - vault_deploy_cluster_addr is string
+      - vault_deploy_raft_node_id is string
+      - >-
+        vault_deploy_storage_backend != 'raft'
+        or vault_deploy_cluster_listener_address | default('', true) | trim | length > 0
+      - >-
+        vault_deploy_storage_backend != 'raft'
+        or vault_deploy_cluster_listener_address
+        is search(':' ~ (vault_deploy_cluster_port | string) ~ '$')
+      - >-
+        vault_deploy_storage_backend != 'raft'
+        or vault_deploy_cluster_addr is match('^https://')
+      - >-
+        vault_deploy_storage_backend != 'raft'
+        or vault_deploy_cluster_addr
+        is search(':' ~ (vault_deploy_cluster_port | string) ~ '/?$')
+      - >-
+        vault_deploy_storage_backend != 'raft'
+        or vault_deploy_raft_node_id | default('', true) | trim | length > 0
       - vault_deploy_api_ca_cert_path is string
       - >-
         vault_deploy_api_ca_cert_path | length == 0
