@@ -7,15 +7,12 @@
   tags:
     - systemd
   block:
-    - name: Escape kube play manifest path
-      ansible.builtin.command:
-        cmd: "systemd-escape {{ vault_deploy_pod_manifest_path }}"
-      register: vault_deploy_systemd_name
-      changed_when: false
+    - name: Resolve Vault systemd unit for deployment
+      ansible.builtin.include_tasks: resolve_systemd_unit.yml
 
     - name: Enable and start Podman kube systemd unit
       ansible.builtin.systemd:
-        name: "podman-kube@{{ vault_deploy_systemd_name.stdout }}.service"
+        name: "{{ vault_deploy_systemd_unit_name_effective }}"
         enabled: true
         state: started
 

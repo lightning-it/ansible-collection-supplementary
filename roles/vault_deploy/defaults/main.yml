@@ -80,13 +80,9 @@ vault_deploy_inventory_root: >-
 vault_deploy_bootstrap_persist_dir: "/srv/vault/bootstrap"
 vault_deploy_init_file_path: "{{ vault_deploy_bootstrap_persist_dir }}/vault-init.yml.vault"
 
-# Systemd
-vault_deploy_systemd_unit_name: >-
-  {{
-    'podman-kube@'
-    ~ (vault_deploy_pod_manifest_path | basename | regex_replace('\\.yml$', ''))
-    ~ '.service'
-  }}
+# Optional systemd unit override. When empty, the deploy/ops/backup roles resolve
+# the actual podman-kube template instance from the full manifest path.
+vault_deploy_systemd_unit_name: ""
 vault_deploy_manage_systemd: true
 vault_deploy_skip_runtime: false
 vault_deploy_skip_deploy: false

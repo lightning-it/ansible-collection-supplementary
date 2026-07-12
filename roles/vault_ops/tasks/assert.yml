@@ -1,20 +1,67 @@
 ---
-- name: Import Vault deploy prechecks
-  ansible.builtin.import_role:
-    name: vault_deploy
-    tasks_from: assert
-  tags: always
-
-- name: Ensure vault ops variables are valid
+- name: Ensure Vault ops action and basic inputs are valid
   ansible.builtin.assert:
     that:
       - vault_ops_action in ['none', 'restart', 'status', 'upgrade', 'unseal']
       - vault_ops_api_delegate_to | default('', true) | trim | length > 0
-      - vault_deploy_api_url | default('', true) | trim | length > 0
-      - vault_deploy_health_url | default('', true) | trim | length > 0
-      - vault_deploy_systemd_unit_name | default('', true) | trim | length > 0
-      - vault_deploy_pod_name | default('', true) | trim | length > 0
-      - vault_deploy_manage_systemd is boolean
-    fail_msg: "vault_ops variables are missing or invalid."
+      - vault_ops_manage_systemd is boolean
+      - vault_ops_validate_certs is boolean
+      - vault_ops_init is mapping
+      - vault_ops_unseal_keys is sequence
+      - vault_ops_unseal_keys is not string
+    fail_msg: "vault_ops inputs are missing or invalid."
     quiet: true
+  tags: always
+
+- name: Ensure Vault restart inputs are valid for systemd mode
+  ansible.builtin.assert:
+    that:
+      - >-
+        (vault_ops_systemd_unit_name | default('', true) | trim | length > 0)
+        or (vault_ops_pod_manifest_path | default('', true) | trim | length > 0)
+    fail_msg: "vault_ops needs a systemd unit override or pod manifest path for restart."
+    quiet: true
+  when:
+    - vault_ops_action == 'restart'
+    - vault_ops_manage_systemd | bool
+  tags: always
+
+- name: Ensure Vault restart inputs are valid for pod mode
+  ansible.builtin.assert:
+    that:
+      - vault_ops_pod_name | default('', true) | trim | length > 0
+    fail_msg: "vault_ops_pod_name is required for a non-systemd restart."
+    quiet: true
+  when:
+    - vault_ops_action == 'restart'
+    - not vault_ops_manage_systemd | bool
+  tags: always
+
+- name: Ensure Vault API inputs are valid for requested action
+  ansible.builtin.assert:
+    that:
+      - vault_ops_api_url | default('', true) | trim | length > 0
+      - vault_ops_health_url | default('', true) | trim | length > 0
+    fail_msg: "vault_ops API and health URLs are required for this action."
+    quiet: true
+  when: vault_ops_action in ['status', 'unseal']
+  tags: always
+
+- name: Ensure Vault unseal inputs are valid
+  ansible.builtin.assert:
+    that:
+      - vault_ops_container_name | default('', true) | trim | length > 0
+      - vault_ops_init_file_path | default('', true) | trim | length > 0
+    fail_msg: "vault_ops container name and init file path are required for unseal."
+    quiet: true
+  when: vault_ops_action == 'unseal'
+  tags: always
+
+- name: Ensure Vault upgrade image is provided
+  ansible.builtin.assert:
+    that:
+      - vault_ops_target_image | default('', true) | trim | length > 0
+    fail_msg: "vault_ops_target_image must be set for upgrade."
+    quiet: true
+  when: vault_ops_action == 'upgrade'
   tags: always

@@ -1,13 +1,45 @@
 ---
-# Always write an encrypted init file when this role performs the initial `vault operator init`.
-# Set to false only if you explicitly do NOT want to persist the init output (not recommended).
+# Runtime inputs mapped from the deploy role/inventory into the bootstrap role interface.
+vault_bootstrap_api_url: "{{ vault_deploy_api_url | default('', true) }}"
+vault_bootstrap_health_url: >-
+  {{ vault_deploy_health_url | default(vault_bootstrap_api_url ~ '/v1/sys/health', true) }}
+vault_bootstrap_validate_certs: "{{ vault_deploy_vault_validate_certs | default(true, true) }}"
+vault_bootstrap_container_name: "{{ vault_deploy_container_name | default('vault-vault', true) }}"
+
+vault_bootstrap_init_requested: "{{ vault_deploy_bootstrap_init | default(false, true) }}"
+vault_bootstrap_auto_init: "{{ vault_deploy_bootstrap_auto_init | default(true, true) }}"
+vault_bootstrap_write_init_output: "{{ vault_deploy_bootstrap_write_init_output | default(true, true) }}"
+vault_bootstrap_key_shares: "{{ vault_deploy_bootstrap_key_shares | default(5, true) }}"
+vault_bootstrap_key_threshold: "{{ vault_deploy_bootstrap_key_threshold | default(3, true) }}"
+vault_bootstrap_persist_dir: >-
+  {{ vault_deploy_bootstrap_persist_dir | default('/srv/vault/bootstrap', true) }}
+vault_bootstrap_init_file_path: >-
+  {{ vault_deploy_init_file_path | default(vault_bootstrap_persist_dir ~ '/vault-init.yml.vault', true) }}
+
+# Prefer the controller's existing password-file integration. The plaintext fallback
+# remains for compatibility with inventories that still provide vault_ansible_vault_pw.
+vault_bootstrap_ansible_vault_password_file: "{{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') | default('', true) }}"
+vault_bootstrap_ansible_vault_password: >-
+  {{ vault_deploy_ansible_vault_pw | default(vault_ansible_vault_pw | default('', true), true) }}
+
+# Initial payloads supplied by an operator or a preceding role invocation.
+vault_bootstrap_init_payload: "{{ vault_init | default({}, true) }}"
+vault_bootstrap_unseal_keys: >-
+  {{
+    (vault_bootstrap_init_payload.unseal_keys_b64 | default([]))
+    if (vault_bootstrap_init_payload.unseal_keys_b64 | default([]) | length > 0)
+    else (vault_bootstrap_init_payload.unseal_keys_hex | default([]))
+  }}
+vault_bootstrap_input_token: "{{ vault_token | default('', true) }}"
+
+# Always write an encrypted init file when this role performs `vault operator init`.
 vault_bootstrap_write_init_file_on_init: true
 
-# Token used by bootstrap/config steps when a Vault token is needed.
-# Prefer the init/root token when present; otherwise fall back to vault_token.
+# Token exposed to explicit unseal/config handoffs. A newly generated root token or
+# a root token loaded from the encrypted init document takes precedence.
 vault_bootstrap_token: >-
   {{
-    ((vault_init | default({})).root_token | default('', true) | trim)
-    if (((vault_init | default({})).root_token | default('', true) | trim) | length > 0)
-    else (vault_token | default('', true) | trim)
+    (vault_bootstrap_init_payload.root_token | default('', true) | trim)
+    if (vault_bootstrap_init_payload.root_token | default('', true) | trim | length > 0)
+    else (vault_bootstrap_input_token | default('', true) | trim)
   }}

@@ -22,7 +22,7 @@
     vault_foundational_vault_deploy_init_file_is_yaml: >-
       {{
         vault_foundational_init_file_clean
-          is search('(^|\\n)\\s*vault_init:')
+          is search('(^|\\n)\\s*(vault_init|vault_bootstrap_vault_init|vault_ops_vault_init):')
       }}
   vars:
     vault_foundational_init_file_decoded: >-

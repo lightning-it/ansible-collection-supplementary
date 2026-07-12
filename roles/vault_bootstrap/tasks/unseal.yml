@@ -10,6 +10,9 @@
         - unseal
   vars:
     vault_ops_action: unseal
+    vault_ops_init: "{{ vault_bootstrap_init_payload }}"
+    vault_ops_unseal_keys: "{{ vault_bootstrap_unseal_keys }}"
+    vault_ops_token: "{{ vault_bootstrap_token }}"
   tags:
     - vault
     - vault_bootstrap

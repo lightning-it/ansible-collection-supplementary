@@ -1,24 +1,50 @@
 ---
-- name: Converge vault ops syntax coverage
+- name: Converge Vault ops payload normalization coverage
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
-    vault_ops_molecule_execute_role: false
     vault_ops_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-ops-coverage-mode
   tasks:
-    - name: Import lit.supplementary.vault_ops for syntax coverage
-      ansible.builtin.import_role:
+    - name: Normalize canonical persisted init payload for ops
+      ansible.builtin.include_role:
         name: lit.supplementary.vault_ops
-      when: vault_ops_molecule_execute_role | bool
+        tasks_from: normalize_init_payload
+      vars:
+        vault_ops_init_payload_source:
+          vault_init:
+            unseal_keys_b64: [test-key-one]
+            root_token: test-root-token
 
-    - name: Record lit.supplementary.vault_ops Molecule coverage mode
-      ansible.builtin.set_fact:
-        vault_ops_molecule_coverage_mode: syntax_stub
+    - name: Assert canonical ops payload handoff
+      ansible.builtin.assert:
+        that:
+          - vault_ops_unseal_keys == ['test-key-one']
+          - vault_ops_token == 'test-root-token'
+        quiet: true
+      no_log: true
 
-    - name: Persist lit.supplementary.vault_ops Molecule coverage mode
+    - name: Normalize ops-key legacy persisted payload
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_ops
+        tasks_from: normalize_init_payload
+      vars:
+        vault_ops_init_payload_source:
+          vault_ops_vault_init:
+            unseal_keys_hex: [legacy-test-key]
+            root_token: legacy-test-token
+
+    - name: Assert legacy ops payload handoff
+      ansible.builtin.assert:
+        that:
+          - vault_ops_unseal_keys == ['legacy-test-key']
+          - vault_ops_token == 'legacy-test-token'
+        quiet: true
+      no_log: true
+
+    - name: Persist Vault ops coverage result
       ansible.builtin.copy:
         dest: "{{ vault_ops_molecule_marker_path }}"
-        content: "syntax_stub\n"
+        content: "normalized_handoff\n"
         mode: "0644"

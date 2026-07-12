@@ -1,24 +1,50 @@
 ---
-- name: Converge vault bootstrap syntax coverage
+- name: Converge Vault bootstrap payload normalization coverage
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
-    vault_bootstrap_molecule_execute_role: false
     vault_bootstrap_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-bootstrap-coverage-mode
   tasks:
-    - name: Import lit.supplementary.vault_bootstrap for syntax coverage
-      ansible.builtin.import_role:
+    - name: Normalize canonical persisted init payload
+      ansible.builtin.include_role:
         name: lit.supplementary.vault_bootstrap
-      when: vault_bootstrap_molecule_execute_role | bool
+        tasks_from: normalize_init_payload
+      vars:
+        vault_bootstrap_init_payload_source:
+          vault_init:
+            unseal_keys_b64: [test-key-one, test-key-two]
+            root_token: test-root-token
 
-    - name: Record lit.supplementary.vault_bootstrap Molecule coverage mode
-      ansible.builtin.set_fact:
-        vault_bootstrap_molecule_coverage_mode: syntax_stub
+    - name: Assert canonical payload handoff
+      ansible.builtin.assert:
+        that:
+          - vault_bootstrap_unseal_keys == ['test-key-one', 'test-key-two']
+          - vault_bootstrap_token == 'test-root-token'
+        quiet: true
+      no_log: true
 
-    - name: Persist lit.supplementary.vault_bootstrap Molecule coverage mode
+    - name: Normalize interim legacy persisted init payload
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_bootstrap
+        tasks_from: normalize_init_payload
+      vars:
+        vault_bootstrap_init_payload_source:
+          vault_bootstrap_vault_init:
+            unseal_keys_hex: [legacy-test-key]
+            root_token: legacy-test-token
+
+    - name: Assert legacy payload handoff
+      ansible.builtin.assert:
+        that:
+          - vault_bootstrap_unseal_keys == ['legacy-test-key']
+          - vault_bootstrap_token == 'legacy-test-token'
+        quiet: true
+      no_log: true
+
+    - name: Persist Vault bootstrap coverage result
       ansible.builtin.copy:
         dest: "{{ vault_bootstrap_molecule_marker_path }}"
-        content: "syntax_stub\n"
+        content: "normalized_handoff\n"
         mode: "0644"

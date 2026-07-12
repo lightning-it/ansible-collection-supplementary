@@ -40,12 +40,15 @@ vault_config_terraform_state_path: >-
     vault_config_terraform_state_dir ~ '/' ~ (vault_config_terraform_state_path_local | basename)
   }}
 vault_config_terraformstate_baseurl: ""
-vault_config_init: "{{ vault_init | default({}, true) }}"
+vault_config_init: >-
+  {{ vault_bootstrap_init_payload | default(vault_init | default({}, true), true) }}
+vault_config_vault_token: >-
+  {{ vault_bootstrap_token | default(vault_token | default('', true), true) }}
 vault_config_token: >-
   {{
     ((vault_config_init | default({}, true)).root_token | default('', true) | trim)
     if (((vault_config_init | default({}, true)).root_token | default('', true) | trim | length) > 0)
-    else (vault_token | default('', true) | trim)
+    else (vault_config_vault_token | default('', true) | trim)
   }}
 
 vault_config_vault_address: "{{ vault_config_url }}"

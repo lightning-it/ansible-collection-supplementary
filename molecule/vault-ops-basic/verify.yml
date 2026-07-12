@@ -1,5 +1,5 @@
 ---
-- name: Verify vault ops syntax coverage
+- name: Verify Vault ops payload normalization coverage
   hosts: localhost
   connection: local
   gather_facts: false
@@ -12,8 +12,8 @@
         src: "{{ vault_ops_molecule_marker_path }}"
       register: vault_ops_molecule_marker
 
-    - name: Assert lit.supplementary.vault_ops coverage stub ran
+    - name: Assert Vault ops normalization and handoff ran
       ansible.builtin.assert:
         that:
-          - vault_ops_molecule_marker.content | b64decode | trim == 'syntax_stub'
+          - vault_ops_molecule_marker.content | b64decode | trim == 'normalized_handoff'
         quiet: true

@@ -1,4 +1,10 @@
 ---
+- name: Normalize Vault token from bootstrap and inventory inputs
+  ansible.builtin.include_tasks: normalize_token.yml
+  tags:
+    - vault_config
+    - api
+
 - name: Check Vault seal status
   ansible.builtin.uri:
     url: "{{ vault_config_api_url }}/v1/sys/seal-status"
@@ -51,19 +57,19 @@
     - terragrunt_apply
     - vault_data
 
-- name: Refresh Vault token from vault_config_vault_token or vault_init root token when lookup fails
+- name: Refresh Vault token from init root token or role token input when lookup fails
   ansible.builtin.set_fact:
     vault_config_token: >-
       {{
-        (vault_config_vault_token | default('', true) | trim)
-        if ((vault_config_vault_token | default('', true) | trim) | length > 0)
-        else (vault_init.root_token | default('', true) | trim)
+        (vault_config_init.root_token | default('', true) | trim)
+        if (vault_config_init.root_token | default('', true) | trim | length > 0)
+        else (vault_config_vault_token | default('', true) | trim)
       }}
     vault_config_vault_token: >-
       {{
-        (vault_config_vault_token | default('', true) | trim)
-        if ((vault_config_vault_token | default('', true) | trim) | length > 0)
-        else (vault_init.root_token | default('', true) | trim)
+        (vault_config_init.root_token | default('', true) | trim)
+        if (vault_config_init.root_token | default('', true) | trim | length > 0)
+        else (vault_config_vault_token | default('', true) | trim)
       }}
   changed_when: false
   no_log: true
@@ -71,9 +77,9 @@
     - vault_config_token_lookup.status | default(0) | int != 200
     - >-
       (
-        (vault_config_vault_token | default('', true) | trim | length > 0)
+        (vault_config_init.root_token | default('', true) | trim | length > 0)
         or
-        (vault_init.root_token | default('', true) | trim | length > 0)
+        (vault_config_vault_token | default('', true) | trim | length > 0)
       )
   tags:
     - vault_config
@@ -111,7 +117,7 @@
       vault_config_token is invalid for {{ vault_config_api_url }} (lookup-self status
       {{ _vault_config_token_lookup_status }}). This usually means stale Vault token data or
       endpoint mismatch (DNS pointing to another Vault instance). Ensure vault_config_vault_token or
-      vault_init.root_token belongs to this Vault instance.
+      vault_config_init.root_token belongs to this Vault instance.
   vars:
     _vault_config_token_lookup_status: >-
       {{

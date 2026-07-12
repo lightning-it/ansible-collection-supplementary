@@ -1,24 +1,31 @@
 ---
-- name: Converge vault config syntax coverage
+- name: Converge Vault config first-run token coverage
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
-    vault_config_molecule_execute_role: false
     vault_config_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-config-coverage-mode
   tasks:
-    - name: Import lit.supplementary.vault_config for syntax coverage
-      ansible.builtin.import_role:
+    - name: Normalize first-run root token for config
+      ansible.builtin.include_role:
         name: lit.supplementary.vault_config
-      when: vault_config_molecule_execute_role | bool
+        tasks_from: normalize_token
+      vars:
+        vault_config_token: ""
+        vault_config_vault_token: fallback-test-token
+        vault_config_init:
+          root_token: first-run-test-token
 
-    - name: Record lit.supplementary.vault_config Molecule coverage mode
-      ansible.builtin.set_fact:
-        vault_config_molecule_coverage_mode: syntax_stub
+    - name: Assert first-run root token wins
+      ansible.builtin.assert:
+        that:
+          - vault_config_token == 'first-run-test-token'
+        quiet: true
+      no_log: true
 
-    - name: Persist lit.supplementary.vault_config Molecule coverage mode
+    - name: Persist Vault config coverage result
       ansible.builtin.copy:
         dest: "{{ vault_config_molecule_marker_path }}"
-        content: "syntax_stub\n"
+        content: "first_run_token_mapped\n"
         mode: "0644"

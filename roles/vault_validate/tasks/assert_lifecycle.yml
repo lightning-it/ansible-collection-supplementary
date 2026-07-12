@@ -1,0 +1,11 @@
+---
+- name: Assert Vault is initialized and unsealed
+  ansible.builtin.assert:
+    that:
+      - vault_validate_init_status.status | default(0) | int == 200
+      - vault_validate_init_status.json.initialized | default(false) | bool
+      - vault_validate_seal_status.status | default(0) | int == 200
+      - not (vault_validate_seal_status.json.sealed | default(true) | bool)
+    fail_msg: "Strict Vault validation requires an initialized and unsealed Vault instance."
+    quiet: true
+  when: vault_validate_strict | bool
