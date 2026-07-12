@@ -7,6 +7,8 @@
     aap_deploy_molecule_execute_role: false
     aap_deploy_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-deploy-coverage-mode
+    aap_deploy_molecule_fixture_dir: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/prepared-installer
   tasks:
     - name: Import lit.supplementary.aap_deploy for syntax coverage
       ansible.builtin.import_role:
@@ -16,6 +18,80 @@
     - name: Record lit.supplementary.aap_deploy Molecule coverage mode
       ansible.builtin.set_fact:
         aap_deploy_molecule_coverage_mode: syntax_stub
+
+    - name: Create prepared installer fixture directories
+      ansible.builtin.file:
+        path: "{{ aap_deploy_molecule_fixture_dir }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - collections/ansible_collections/ansible/containerized_installer/playbooks
+        - collections/ansible_collections/ansible/containerized_installer/roles/automationeda/tasks
+        - collections/ansible_collections/ansible/containerized_installer/roles/automationeda/templates
+
+    - name: Create prepared installer playbook fixture
+      ansible.builtin.copy:
+        dest: >-
+          {{ aap_deploy_molecule_fixture_dir
+          }}/collections/ansible_collections/ansible/containerized_installer/playbooks/install.yml
+        force: false
+        mode: "0644"
+        content: |-
+          ---
+          - name: Seed automation hub
+            hosts: localhost
+            gather_facts: false
+            tasks: []
+            when: groups.get('automationhub', []) | length > 0
+
+    - name: Create prepared EDA settings fixture
+      ansible.builtin.copy:
+        dest: >-
+          {{ aap_deploy_molecule_fixture_dir
+          }}/collections/ansible_collections/ansible/containerized_installer/roles/automationeda/templates/settings.yaml.j2
+        force: false
+        mode: "0644"
+        content: |-
+          ---
+          ENABLE_SERVICE_BACKED_SSO: False
+
+    - name: Create prepared EDA task fixture
+      ansible.builtin.copy:
+        dest: >-
+          {{ aap_deploy_molecule_fixture_dir
+          }}/collections/ansible_collections/ansible/containerized_installer/roles/automationeda/tasks/decision_environment.yml
+        force: false
+        mode: "0644"
+        content: !unsafe |-
+          ---
+          - name: Ensure automation eda is ready
+            ansible.builtin.uri:
+              url: '{{ hostvars[groups["automationgateway"][0]]["_gateway_proxy_url"] }}/api/eda/v1/status/'
+            register: _eda_ready
+            until:
+              - _eda_ready.content != ""
+              - _eda_ready.content != "no healthy upstream"
+              - (_eda_ready.content | from_json).status == 'good'
+            retries: 5
+            delay: 60
+
+          - name: Create automation eda decision environments
+            ansible.containerized_installer.eda_decision_environment:
+              eda_server_url: '{{ hostvars[groups["automationgateway"][0]]["_gateway_proxy_url"] }}'
+            loop: '{{ _default_de | union(_de_extra_images | default([])) }}'
+
+          - name: Create eda resources for Automation Hub
+            when: groups.get('automationhub', []) | length > 0
+            vars:
+              __dest_url: '{{ hostvars[groups["automationgateway"][0]]["_gateway_proxy_url"] }}'
+            block: []
+
+    - name: Exercise prepared installer customizations
+      ansible.builtin.include_role:
+        name: lit.supplementary.aap_deploy
+        tasks_from: 25_customize_prepared_installer.yml
+      vars:
+        aap_setup_prep_setup_dir: "{{ aap_deploy_molecule_fixture_dir }}"
 
     - name: Persist lit.supplementary.aap_deploy Molecule coverage mode
       ansible.builtin.copy:
