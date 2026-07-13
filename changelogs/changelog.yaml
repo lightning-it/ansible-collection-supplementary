@@ -82,3 +82,15 @@ releases:
     fragments:
       - ansible-posix-2.2.1.yml
     release_date: '2026-07-03'
+  1.38.0:
+    changes:
+      minor_changes:
+        - docs - Apply the shared enterprise README structure.
+        - docs - Consolidate generated governance metadata and license policy on shared-assets-lit.
+        - release_model - Add managed compatibility matrix documentation and structured
+          release evidence fields.
+    fragments:
+      - compatibility-release-evidence.yml
+      - enterprise-readme-standard.yml
+      - shared-assets-lit-governance.yml
+    release_date: '2026-07-07'
