@@ -6,6 +6,9 @@
   vars:
     aap_deploy_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-deploy-coverage-mode
+    aap_deploy_molecule_eda_task_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY')
+      }}/prepared-installer/collections/ansible_collections/ansible/containerized_installer/roles/automationeda/tasks/decision_environment.yml
   tasks:
     - name: Read lit.supplementary.aap_deploy coverage marker
       ansible.builtin.slurp:
@@ -16,4 +19,24 @@
       ansible.builtin.assert:
         that:
           - aap_deploy_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true
+
+    - name: Read customized prepared EDA tasks
+      ansible.builtin.slurp:
+        src: "{{ aap_deploy_molecule_eda_task_path }}"
+      register: aap_deploy_molecule_eda_task_file
+
+    - name: Parse customized prepared EDA tasks as YAML
+      ansible.builtin.set_fact:
+        aap_deploy_molecule_eda_tasks: >-
+          {{ aap_deploy_molecule_eda_task_file.content | b64decode | from_yaml }}
+
+    - name: Assert the EDA readiness condition remains valid YAML
+      ansible.builtin.assert:
+        that:
+          - aap_deploy_molecule_eda_tasks[0].retries == 20
+          - aap_deploy_molecule_eda_tasks[0].until | length == 3
+          - >-
+            aap_deploy_molecule_eda_tasks[0].until[2]
+            == "(_eda_ready.content | trim).startswith('{') and (_eda_ready.content | from_json).status == 'good'"
         quiet: true
