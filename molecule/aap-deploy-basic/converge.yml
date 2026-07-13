@@ -9,6 +9,7 @@
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-deploy-coverage-mode
     aap_deploy_molecule_fixture_dir: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/prepared-installer
+    aap_setup_prep_setup_dir: "{{ aap_deploy_molecule_fixture_dir }}"
   tasks:
     - name: Import lit.supplementary.aap_deploy for syntax coverage
       ansible.builtin.import_role:
@@ -90,8 +91,6 @@
       ansible.builtin.include_role:
         name: lit.supplementary.aap_deploy
         tasks_from: 25_customize_prepared_installer.yml
-      vars:
-        aap_setup_prep_setup_dir: "{{ aap_deploy_molecule_fixture_dir }}"
 
     - name: Persist lit.supplementary.aap_deploy Molecule coverage mode
       ansible.builtin.copy:
