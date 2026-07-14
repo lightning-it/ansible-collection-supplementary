@@ -1,0 +1,3 @@
+---
+- name: Prepare Keycloak Tiny target
+  ansible.builtin.import_playbook: ../shared/keycloak/prepare.yml

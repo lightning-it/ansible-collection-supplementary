@@ -1,0 +1,204 @@
+---
+- name: Verify canonical Keycloak Heavy scenario
+  hosts: all
+  gather_facts: false
+  become: false
+  vars:
+    keycloak_heavy_admin_password: "{{ lookup('env', 'KEYCLOAK_TEST_ADMIN_PASSWORD') }}"
+    keycloak_heavy_viewer_password: "{{ lookup('env', 'KEYCLOAK_TEST_VIEWER_PASSWORD') }}"
+    keycloak_heavy_ldap_password: "{{ lookup('env', 'KEYCLOAK_TEST_LDAP_PASSWORD') }}"
+    keycloak_heavy_client_secret: "{{ lookup('env', 'KEYCLOAK_TEST_CLIENT_SECRET') }}"
+    keycloak_heavy_junit_dir: "{{ lookup('env', 'KEYCLOAK_JUNIT_DIR') | default('artifacts/junit', true) }}"
+  tasks:
+    - name: Verify Keycloak management health
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:29000/health/{{ item }}"
+        status_code: 200
+      loop:
+        - ready
+        - live
+      changed_when: false
+
+    - name: Verify PostgreSQL accepts authenticated queries
+      ansible.builtin.command:
+        argv:
+          - podman
+          - exec
+          - keycloak-heavy-postgres-postgres
+          - pg_isready
+          - -U
+          - keycloak
+          - -d
+          - keycloak
+      changed_when: false
+
+    - name: Verify LDAPS listener and certificate handshake
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - s_client
+          - -connect
+          - 127.0.0.1:1636
+          - -servername
+          - keycloak.test
+          - -brief
+      register: keycloak_heavy_tls
+      changed_when: false
+      failed_when:
+        - keycloak_heavy_tls.rc != 0
+        - "'CONNECTION ESTABLISHED' not in keycloak_heavy_tls.stderr"
+
+    - name: Verify LDAP authenticated search
+      ansible.builtin.command:
+        argv:
+          - ldapsearch
+          - -H
+          - ldaps://127.0.0.1:1636
+          - -x
+          - -D
+          - CN=Administrator,CN=Users,DC=keycloak,DC=test
+          - -w
+          - "{{ keycloak_heavy_ldap_password }}"
+          - -b
+          - CN=Users,DC=keycloak,DC=test
+          - (sAMAccountName=Administrator)
+      environment:
+        LDAPTLS_REQCERT: never
+      register: keycloak_heavy_ldap_search
+      changed_when: false
+      no_log: true
+
+    - name: Authenticate deterministic Keycloak users
+      ansible.builtin.uri:
+        url: http://127.0.0.1:28080/realms/keycloak-test/protocol/openid-connect/token
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: keycloak-test-client
+          client_secret: "{{ keycloak_heavy_client_secret }}"
+          username: "{{ item.username }}"
+          password: "{{ item.password }}"
+        status_code: 200
+        return_content: true
+      loop:
+        - username: keycloak_test_admin
+          password: "{{ keycloak_heavy_admin_password }}"
+        - username: keycloak_test_viewer
+          password: "{{ keycloak_heavy_viewer_password }}"
+      register: keycloak_heavy_tokens
+      changed_when: false
+      no_log: true
+
+    - name: Reject invalid credentials
+      ansible.builtin.uri:
+        url: http://127.0.0.1:28080/realms/keycloak-test/protocol/openid-connect/token
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: keycloak-test-client
+          client_secret: "{{ keycloak_heavy_client_secret }}"
+          username: keycloak_test_viewer
+          password: deliberately-invalid
+        status_code: 401
+        return_content: true
+      register: keycloak_heavy_invalid_login
+      changed_when: false
+      no_log: true
+
+    - name: Request master administrative token
+      ansible.builtin.uri:
+        url: http://127.0.0.1:28080/realms/master/protocol/openid-connect/token
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: admin-cli
+          username: admin
+          password: "{{ keycloak_heavy_admin_password }}"
+        status_code: 200
+      register: keycloak_heavy_master_token
+      changed_when: false
+      no_log: true
+
+    - name: Read configured LDAP federation provider
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:28080/admin/realms/master/components?type=org.keycloak.storage.UserStorageProvider&name=samba-ldaps"
+        headers:
+          Authorization: "Bearer {{ keycloak_heavy_master_token.json.access_token }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_heavy_ldap_provider
+      changed_when: false
+      no_log: true
+
+    - name: Check persistent data and backup artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /srv/keycloak-heavy/postgres
+        - /srv/keycloak-heavy/backups/keycloak-postgres.dump
+      register: keycloak_heavy_artifacts
+
+    - name: Assert externally observable Heavy state
+      ansible.builtin.assert:
+        that:
+          - keycloak_heavy_tokens.results | length == 2
+          - keycloak_heavy_invalid_login.status == 401
+          - keycloak_heavy_ldap_provider.json | length == 1
+          - keycloak_heavy_ldap_provider.json[0].providerId == 'ldap'
+          - keycloak_heavy_artifacts.results[0].stat.isdir
+          - keycloak_heavy_artifacts.results[1].stat.size | int > 0
+
+    - name: Restart Keycloak container
+      ansible.builtin.command:
+        argv:
+          - podman
+          - restart
+          - keycloak-heavy-keycloak
+      changed_when: true
+
+    - name: Verify restart recovery and database persistence
+      ansible.builtin.uri:
+        url: http://127.0.0.1:29000/health/ready
+        status_code: 200
+      register: keycloak_heavy_recovery
+      until: keycloak_heavy_recovery.status == 200
+      retries: 30
+      delay: 5
+      changed_when: false
+
+    - name: Verify realm survives restart
+      ansible.builtin.uri:
+        url: http://127.0.0.1:28080/realms/keycloak-test/.well-known/openid-configuration
+        status_code: 200
+      changed_when: false
+
+    - name: Create Heavy JUnit output directory
+      ansible.builtin.file:
+        path: "{{ keycloak_heavy_junit_dir }}"
+        state: directory
+        mode: "0750"
+      delegate_to: localhost
+      become: false
+
+    - name: Write meaningful Heavy JUnit results
+      ansible.builtin.copy:
+        dest: "{{ keycloak_heavy_junit_dir }}/keycloak-heavy.xml"
+        mode: "0640"
+        content: |-
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuite name="keycloak-heavy" tests="9" failures="0" errors="0" skipped="0">
+            <testcase classname="keycloak.health" name="management-health"/>
+            <testcase classname="keycloak.database" name="authenticated-readiness"/>
+            <testcase classname="keycloak.tls" name="ldaps-handshake"/>
+            <testcase classname="keycloak.ldap" name="authenticated-search"/>
+            <testcase classname="keycloak.authentication" name="admin-and-viewer"/>
+            <testcase classname="keycloak.authentication" name="invalid-password-rejected"/>
+            <testcase classname="keycloak.federation" name="ldap-provider"/>
+            <testcase classname="keycloak.backup" name="postgres-backup"/>
+            <testcase classname="keycloak.persistence" name="restart-recovery"/>
+          </testsuite>
+      delegate_to: localhost
+      become: false

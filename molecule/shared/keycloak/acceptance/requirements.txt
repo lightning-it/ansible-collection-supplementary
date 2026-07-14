@@ -1,0 +1,8 @@
+allure-pytest==2.15.0
+Authlib==1.6.4
+Flask==3.1.2
+gunicorn==23.0.0
+httpx==0.28.1
+playwright==1.55.0
+pytest==8.4.2
+pytest-playwright==0.7.1

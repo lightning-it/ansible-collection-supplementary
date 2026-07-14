@@ -1,0 +1,3 @@
+---
+- name: Destroy Keycloak Application Acceptance target
+  ansible.builtin.import_playbook: ../shared/keycloak/destroy.yml

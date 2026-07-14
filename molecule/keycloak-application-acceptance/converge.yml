@@ -1,0 +1,137 @@
+---
+- name: Deploy the shared Keycloak Heavy foundation
+  ansible.builtin.import_playbook: ../keycloak-heavy/converge.yml
+
+- name: Deploy the test-only Keycloak OIDC authorization target
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    keycloak_acceptance_root: /opt/keycloak-acceptance
+    keycloak_acceptance_issuer: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_ISSUER') }}"
+    keycloak_acceptance_client_id: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_CLIENT_ID') }}"
+    keycloak_acceptance_client_secret: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_CLIENT_SECRET') }}"
+    keycloak_acceptance_session_secret: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_SESSION_SECRET') }}"
+  tasks:
+    - name: Require ephemeral acceptance application credentials
+      ansible.builtin.assert:
+        that:
+          - keycloak_acceptance_issuer | length > 0
+          - keycloak_acceptance_client_id | length > 0
+          - keycloak_acceptance_client_secret | length >= 16
+          - keycloak_acceptance_session_secret | length >= 32
+        fail_msg: >-
+          KEYCLOAK_TEST_ISSUER, KEYCLOAK_TEST_CLIENT_ID, KEYCLOAK_TEST_CLIENT_SECRET, and
+          KEYCLOAK_TEST_SESSION_SECRET are mandatory runtime inputs.
+      no_log: true
+
+    - name: Install acceptance test operating system prerequisites
+      ansible.builtin.package:
+        name:
+          - python3
+          - python3-pip
+        state: present
+
+    - name: Install Debian Python virtual environment support
+      ansible.builtin.package:
+        name: python3-venv
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Create acceptance application directory
+      ansible.builtin.file:
+        path: "{{ keycloak_acceptance_root }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copy pinned acceptance requirements
+      ansible.builtin.copy:
+        src: ../shared/keycloak/acceptance/requirements.txt
+        dest: "{{ keycloak_acceptance_root }}/requirements.txt"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Copy test-only OIDC application
+      ansible.builtin.copy:
+        src: ../shared/keycloak/acceptance/protected_app.py
+        dest: "{{ keycloak_acceptance_root }}/protected_app.py"
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart acceptance application
+
+    - name: Install pinned acceptance Python environment
+      ansible.builtin.pip:
+        requirements: "{{ keycloak_acceptance_root }}/requirements.txt"
+        virtualenv: "{{ keycloak_acceptance_root }}/venv"
+        virtualenv_command: python3 -m venv
+
+    - name: Write private acceptance application environment
+      ansible.builtin.copy:
+        dest: "{{ keycloak_acceptance_root }}/application.env"
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          OIDC_ISSUER={{ keycloak_acceptance_issuer }}
+          OIDC_CLIENT_ID={{ keycloak_acceptance_client_id }}
+          OIDC_CLIENT_SECRET={{ keycloak_acceptance_client_secret }}
+          OIDC_SESSION_SECRET={{ keycloak_acceptance_session_secret }}
+          OIDC_COOKIE_SECURE=false
+      no_log: true
+      notify: Restart acceptance application
+
+    - name: Install acceptance application service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/keycloak-acceptance.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Test-only Keycloak OIDC acceptance target
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=nobody
+          Group=nogroup
+          WorkingDirectory={{ keycloak_acceptance_root }}
+          EnvironmentFile={{ keycloak_acceptance_root }}/application.env
+          ExecStart={{ keycloak_acceptance_root }}/venv/bin/gunicorn --bind 127.0.0.1:8081 --workers 1 protected_app:app
+          NoNewPrivileges=true
+          PrivateTmp=true
+          ProtectHome=true
+          ProtectSystem=strict
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart acceptance application
+
+    - name: Enable and start acceptance application
+      ansible.builtin.systemd_service:
+        name: keycloak-acceptance.service
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Wait for acceptance application health
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8081/healthz
+        status_code: 200
+      register: keycloak_acceptance_health
+      retries: 20
+      delay: 2
+      until: keycloak_acceptance_health.status == 200
+
+  handlers:
+    - name: Restart acceptance application
+      ansible.builtin.systemd_service:
+        name: keycloak-acceptance.service
+        state: restarted
+        daemon_reload: true

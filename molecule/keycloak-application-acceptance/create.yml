@@ -1,0 +1,3 @@
+---
+- name: Create Keycloak Application Acceptance target
+  ansible.builtin.import_playbook: ../shared/keycloak/create.yml

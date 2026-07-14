@@ -1,0 +1,3 @@
+---
+- name: Destroy Keycloak Heavy target
+  ansible.builtin.import_playbook: ../shared/keycloak/destroy.yml

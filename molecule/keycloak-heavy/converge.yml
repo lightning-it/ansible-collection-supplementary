@@ -1,0 +1,234 @@
+---
+- name: Deploy the Heavy LDAP dependency
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    keycloak_heavy_ldap_password: "{{ lookup('env', 'KEYCLOAK_TEST_LDAP_PASSWORD') }}"
+    samba_deploy_install_packages: false
+    samba_deploy_mode: ad_dc
+    samba_deploy_pod_name: keycloak-heavy-ldap
+    samba_deploy_container_name: samba
+    samba_deploy_host_ip: 127.0.0.1
+    samba_deploy_ldap_port: 1389
+    samba_deploy_ldaps_port: 1636
+    samba_deploy_ad_dc_realm: KEYCLOAK.TEST
+    samba_deploy_ad_dc_domain: KEYCLOAK
+    samba_deploy_ad_dc_admin_password: "{{ keycloak_heavy_ldap_password }}"
+    samba_deploy_ad_dc_keycloak_bind_user: keycloak
+    samba_deploy_ad_dc_keycloak_bind_password: "{{ keycloak_heavy_ldap_password }}"
+    samba_deploy_ad_dc_data_dir: /srv/keycloak-heavy/ldap/data
+    samba_deploy_ad_dc_config_dir: /srv/keycloak-heavy/ldap/config
+    samba_deploy_ad_dc_cache_dir: /srv/keycloak-heavy/ldap/cache
+    samba_deploy_ad_dc_log_dir: /srv/keycloak-heavy/ldap/log
+    samba_deploy_ad_dc_entrypoint_dir: /srv/keycloak-heavy/ldap/entrypoint.d
+    samba_validate_mode: ad_dc
+    samba_validate_host: 127.0.0.1
+    samba_validate_ldap_port: 1389
+    samba_validate_ldaps_port: 1636
+    samba_validate_use_smbclient: false
+    samba_config_skip_apply: true
+    samba_run_ops: true
+    samba_run_backup_restore: false
+    samba_run_upgrade: false
+    samba_run_destroy: false
+  pre_tasks:
+    - name: Require an ephemeral LDAP test secret
+      ansible.builtin.assert:
+        that:
+          - keycloak_heavy_ldap_password | length >= 16
+        fail_msg: Set KEYCLOAK_TEST_LDAP_PASSWORD to an ephemeral value of at least 16 characters.
+      no_log: true
+  roles:
+    - role: lit.supplementary.samba
+
+- name: Converge canonical Keycloak Heavy scenario
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    keycloak_heavy_db_password: "{{ lookup('env', 'KEYCLOAK_TEST_DB_PASSWORD') }}"
+    keycloak_heavy_admin_password: "{{ lookup('env', 'KEYCLOAK_TEST_ADMIN_PASSWORD') }}"
+    keycloak_heavy_viewer_password: "{{ lookup('env', 'KEYCLOAK_TEST_VIEWER_PASSWORD') }}"
+    keycloak_heavy_unauthorized_password: "{{ lookup('env', 'KEYCLOAK_TEST_UNAUTHORIZED_PASSWORD') }}"
+    keycloak_heavy_client_secret: "{{ lookup('env', 'KEYCLOAK_TEST_CLIENT_SECRET') }}"
+    keycloak_heavy_ldap_password: "{{ lookup('env', 'KEYCLOAK_TEST_LDAP_PASSWORD') }}"
+    keycloak_deploy_image: quay.io/keycloak/keycloak:26.5.4
+    keycloak_deploy_start_command: start
+    keycloak_deploy_manage_postgres: true
+    keycloak_deploy_manage_systemd: false
+    keycloak_deploy_generate_secrets: false
+    keycloak_deploy_store_generated_secrets: false
+    keycloak_deploy_db_password: "{{ keycloak_heavy_db_password }}"
+    keycloak_deploy_admin_password: "{{ keycloak_heavy_admin_password }}"
+    keycloak_deploy_host_ip: 127.0.0.1
+    keycloak_deploy_postgres_host_ip: 0.0.0.0
+    keycloak_deploy_db_host: host.containers.internal
+    keycloak_deploy_db_port: 25432
+    keycloak_deploy_db_wait_host: 127.0.0.1
+    keycloak_deploy_db_wait_port: 25432
+    keycloak_deploy_postgres_port: 25432
+    keycloak_deploy_port: 28080
+    keycloak_deploy_management_port: 29000
+    keycloak_deploy_api_url: http://127.0.0.1:28080
+    keycloak_deploy_health_url: http://127.0.0.1:29000/health/ready
+    keycloak_deploy_liveness_url: http://127.0.0.1:29000/health/live
+    keycloak_deploy_hostname: 127.0.0.1
+    keycloak_deploy_env_extra:
+      KC_HTTP_PORT: "28080"
+      KC_HTTP_MANAGEMENT_PORT: "29000"
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+    keycloak_deploy_pod_name: keycloak-heavy
+    keycloak_deploy_postgres_pod_name: keycloak-heavy-postgres
+    keycloak_deploy_pod_manifest_path: /etc/podman/pods/keycloak-heavy.yml
+    keycloak_deploy_postgres_pod_manifest_path: /etc/podman/pods/keycloak-heavy-postgres.yml
+    keycloak_deploy_host_data_dir: /srv/keycloak-heavy/keycloak
+    keycloak_deploy_postgres_data_dir: /srv/keycloak-heavy/postgres
+    keycloak_deploy_config_dir: /srv/keycloak-heavy/config
+    keycloak_cac_skip_apply: false
+    keycloak_cac_url: http://127.0.0.1:28080
+    keycloak_cac_admin_password: "{{ keycloak_heavy_admin_password }}"
+    keycloak_cac_realms:
+      - realm: keycloak-test
+        enabled: true
+        brute_force_protected: true
+        registration_allowed: false
+        state: present
+    keycloak_cac_clients:
+      - realm: keycloak-test
+        client_id: keycloak-test-client
+        public_client: false
+        secret: "{{ keycloak_heavy_client_secret }}"
+        direct_access_grants_enabled: true
+        standard_flow_enabled: true
+        redirect_uris:
+          - http://127.0.0.1:8081/callback
+        protocol_mappers:
+          - name: groups
+            protocol: openid-connect
+            protocolMapper: oidc-group-membership-mapper
+            config:
+              access.token.claim: "true"
+              claim.name: groups
+              full.path: "false"
+              id.token.claim: "true"
+          - name: audience
+            protocol: openid-connect
+            protocolMapper: oidc-audience-mapper
+            config:
+              included.client.audience: keycloak-test-client
+              access.token.claim: "true"
+        state: present
+    keycloak_cac_groups:
+      - realm: keycloak-test
+        name: administrators
+        state: present
+      - realm: keycloak-test
+        name: viewers
+        state: present
+    keycloak_cac_roles:
+      - realm: keycloak-test
+        name: admin
+        state: present
+      - realm: keycloak-test
+        name: viewer
+        state: present
+    keycloak_cac_users:
+      - realm: keycloak-test
+        username: keycloak_test_admin
+        enabled: true
+        email: admin@example.invalid
+        email_verified: true
+        groups:
+          - name: administrators
+            state: present
+        credentials:
+          - type: password
+            value: "{{ keycloak_heavy_admin_password }}"
+            temporary: false
+        state: present
+      - realm: keycloak-test
+        username: keycloak_test_viewer
+        enabled: true
+        email: viewer@example.invalid
+        email_verified: true
+        groups:
+          - name: viewers
+            state: present
+        credentials:
+          - type: password
+            value: "{{ keycloak_heavy_viewer_password }}"
+            temporary: false
+        state: present
+      - realm: keycloak-test
+        username: keycloak_test_unauthorized
+        enabled: true
+        email: unauthorized@example.invalid
+        email_verified: true
+        credentials:
+          - type: password
+            value: "{{ keycloak_heavy_unauthorized_password }}"
+            temporary: false
+        state: present
+    keycloak_cac_user_role_mappings:
+      - realm: keycloak-test
+        target_username: keycloak_test_admin
+        roles:
+          - name: admin
+        state: present
+      - realm: keycloak-test
+        target_username: keycloak_test_viewer
+        roles:
+          - name: viewer
+        state: present
+    keycloak_cac_samba_ldap_enabled: true
+    keycloak_cac_samba_ldap_provider:
+      name: samba-ldaps
+      connection_url: ldaps://host.containers.internal:1636
+      users_dn: CN=Users,DC=keycloak,DC=test
+      bind_dn: CN=Administrator,CN=Users,DC=keycloak,DC=test
+      bind_credential: "{{ keycloak_heavy_ldap_password }}"
+      vendor: ad
+      edit_mode: READ_ONLY
+      username_ldap_attribute: sAMAccountName
+      rdn_ldap_attribute: cn
+      uuid_ldap_attribute: objectGUID
+      user_object_classes: person, organizationalPerson, user
+      search_scope: "1"
+      use_truststore_spi: never
+  pre_tasks:
+    - name: Require ephemeral Heavy test secrets
+      ansible.builtin.assert:
+        that:
+          - keycloak_heavy_db_password | length >= 16
+          - keycloak_heavy_admin_password | length >= 16
+          - keycloak_heavy_viewer_password | length >= 16
+          - keycloak_heavy_unauthorized_password | length >= 16
+          - keycloak_heavy_client_secret | length >= 16
+          - keycloak_heavy_ldap_password | length >= 16
+        fail_msg: Set all documented KEYCLOAK_TEST_* password variables to ephemeral values.
+      no_log: true
+  roles:
+    - role: lit.supplementary.keycloak_deploy
+    - role: lit.supplementary.keycloak_cac
+
+- name: Create Heavy database backup evidence
+  hosts: all
+  gather_facts: false
+  become: false
+  vars:
+    postgres_backup_restore_action: backup
+    postgres_backup_restore_execute: true
+    postgres_backup_restore_backup_dir: /srv/keycloak-heavy/backups
+    postgres_backup_restore_file: /srv/keycloak-heavy/backups/keycloak-postgres.dump
+    postgres_backup_restore_db_name: keycloak
+    postgres_backup_restore_db_user: keycloak
+    postgres_backup_restore_db_password: "{{ lookup('env', 'KEYCLOAK_TEST_DB_PASSWORD') }}"
+    postgres_backup_restore_db_host: 127.0.0.1
+    postgres_backup_restore_db_port: 5432
+    postgres_backup_restore_format: custom
+    postgres_backup_restore_execution_mode: podman
+    postgres_backup_restore_container_name: keycloak-heavy-postgres-postgres
+  roles:
+    - role: lit.supplementary.postgres_backup_restore

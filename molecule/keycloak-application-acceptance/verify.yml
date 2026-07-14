@@ -1,0 +1,94 @@
+---
+- name: Run Keycloak browser and protocol acceptance tests
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    keycloak_acceptance_root: /opt/keycloak-acceptance
+    keycloak_acceptance_artifacts_remote: /var/tmp/keycloak-acceptance-artifacts
+    keycloak_acceptance_artifacts_local: >-
+      {{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_ARTIFACTS') | default('artifacts', true) }}
+    keycloak_acceptance_required_environment:
+      KEYCLOAK_TEST_ISSUER: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_ISSUER') }}"
+      KEYCLOAK_TEST_CLIENT_ID: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_CLIENT_ID') }}"
+      KEYCLOAK_TEST_CLIENT_SECRET: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_CLIENT_SECRET') }}"
+      KEYCLOAK_TEST_APP_URL: http://127.0.0.1:8081
+      KEYCLOAK_TEST_ADMIN_USERNAME: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_ADMIN_USERNAME') }}"
+      KEYCLOAK_TEST_ADMIN_PASSWORD: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_ADMIN_PASSWORD') }}"
+      KEYCLOAK_TEST_VIEWER_USERNAME: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_VIEWER_USERNAME') }}"
+      KEYCLOAK_TEST_VIEWER_PASSWORD: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_VIEWER_PASSWORD') }}"
+      KEYCLOAK_TEST_UNAUTHORIZED_USERNAME: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_UNAUTHORIZED_USERNAME') }}"
+      KEYCLOAK_TEST_UNAUTHORIZED_PASSWORD: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_UNAUTHORIZED_PASSWORD') }}"
+      KEYCLOAK_TEST_INVALID_USERNAME: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_INVALID_USERNAME') }}"
+      KEYCLOAK_TEST_INVALID_PASSWORD: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_INVALID_PASSWORD') }}"
+      KEYCLOAK_TEST_ARTIFACTS: "{{ keycloak_acceptance_artifacts_remote }}"
+  tasks:
+    - name: Require all deterministic test identities and ephemeral secrets
+      ansible.builtin.assert:
+        that:
+          - item.value | length > 0
+        fail_msg: "Required acceptance input {{ item.key }} is missing."
+      loop: "{{ keycloak_acceptance_required_environment | dict2items }}"
+      no_log: true
+
+    - name: Copy acceptance pytest resources
+      ansible.builtin.copy:
+        src: "../shared/keycloak/acceptance/{{ item }}"
+        dest: "{{ keycloak_acceptance_root }}/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - conftest.py
+        - test_acceptance.py
+
+    - name: Create private acceptance artifact directories
+      ansible.builtin.file:
+        path: "{{ keycloak_acceptance_artifacts_remote }}/{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      loop:
+        - junit
+        - allure-results
+        - screenshots
+        - playwright-traces
+        - browser-diagnostics
+
+    - name: Install pinned Chromium managed by Playwright
+      ansible.builtin.command:
+        cmd: "{{ keycloak_acceptance_root }}/venv/bin/playwright install --with-deps chromium"
+        creates: /root/.cache/ms-playwright
+
+    - name: Execute browser and protocol acceptance suite
+      ansible.builtin.command:
+        argv:
+          - "{{ keycloak_acceptance_root }}/venv/bin/pytest"
+          - -ra
+          - --strict-markers
+          - --browser
+          - chromium
+          - --junitxml
+          - "{{ keycloak_acceptance_artifacts_remote }}/junit/keycloak-application-acceptance.xml"
+          - --alluredir
+          - "{{ keycloak_acceptance_artifacts_remote }}/allure-results"
+          - "{{ keycloak_acceptance_root }}/test_acceptance.py"
+      environment: "{{ keycloak_acceptance_required_environment }}"
+      no_log: true
+      changed_when: false
+
+    - name: Package acceptance evidence without secret-bearing runtime inputs
+      community.general.archive:
+        path: "{{ keycloak_acceptance_artifacts_remote }}"
+        dest: /var/tmp/keycloak-application-acceptance-evidence.tar.gz
+        format: gz
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Fetch acceptance evidence to the controller
+      ansible.builtin.fetch:
+        src: /var/tmp/keycloak-application-acceptance-evidence.tar.gz
+        dest: "{{ keycloak_acceptance_artifacts_local }}/keycloak-application-acceptance-evidence.tar.gz"
+        flat: true

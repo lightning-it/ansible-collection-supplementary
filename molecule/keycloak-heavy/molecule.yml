@@ -1,0 +1,40 @@
+---
+dependency:
+  name: shell
+  command: ":"
+driver:
+  name: default
+platforms:
+  - name: "${KEYCLOAK_TEST_INSTANCE:-lit-keycloak-heavy-local}"
+    image: "${KEYCLOAK_TEST_IMAGE:-images:ubuntu/24.04}"
+    type: "${KEYCLOAK_TEST_INSTANCE_TYPE:-container}"
+    config:
+      - key: security.nesting
+        value: "true"
+provisioner:
+  name: ansible
+  inventory:
+    host_vars:
+      "${KEYCLOAK_TEST_INSTANCE:-lit-keycloak-heavy-local}":
+        ansible_connection: community.general.incus
+        ansible_python_interpreter: /usr/bin/python3
+  playbooks:
+    create: create.yml
+    prepare: prepare.yml
+    converge: converge.yml
+    verify: verify.yml
+    destroy: destroy.yml
+scenario:
+  name: keycloak-heavy
+  test_sequence:
+    - dependency
+    - destroy
+    - syntax
+    - create
+    - prepare
+    - converge
+    - idempotence
+    - verify
+    - destroy
+verifier:
+  name: ansible
