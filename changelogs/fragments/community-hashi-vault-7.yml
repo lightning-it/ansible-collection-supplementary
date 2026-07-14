@@ -1,5 +1,0 @@
----
-minor_changes:
-  - >-
-    Align the collection dependency contract with community.hashi_vault 7.1.0 and lit.foundational 1.30.0 or newer
-    so collection installation and Modulix execution-environment resolution use one supported version.
