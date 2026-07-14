@@ -1,0 +1,165 @@
+---
+- name: Validate Vault restore archive before stopping the runtime
+  ansible.builtin.include_tasks: validate_restore_archive.yml
+
+- name: Inspect Vault runtime before restore
+  ansible.builtin.include_tasks: inspect_runtime.yml
+
+- name: Prevent an online Vault file-storage restore
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (vault_backup_restore_runtime_was_running | bool)
+        or (vault_backup_restore_stop_service | bool)
+    fail_msg: >-
+      Vault is running. File-storage restore requires vault_backup_restore_stop_service=true
+      or an already stopped runtime.
+    quiet: true
+
+- name: Initialize Vault restore transaction state
+  ansible.builtin.set_fact:
+    vault_backup_restore_rollback_path: >-
+      {{
+        vault_backup_restore_host_data_dir
+        ~ '.bak.'
+        ~ now(utc=true, fmt='%Y%m%dT%H%M%SZ')
+      }}
+    vault_backup_restore_original_moved: false
+    vault_backup_restore_restore_started: false
+    vault_backup_restore_data_ready: false
+  changed_when: false
+
+- name: Inspect Vault restore rollback path
+  ansible.builtin.stat:
+    path: "{{ vault_backup_restore_rollback_path }}"
+  register: vault_backup_restore_rollback_stat
+  changed_when: false
+
+- name: Require an unused Vault restore rollback path
+  ansible.builtin.assert:
+    that:
+      - not (vault_backup_restore_rollback_stat.stat.exists | default(false))
+    fail_msg: "Vault restore rollback path already exists; retry after the timestamp changes or clean it explicitly."
+    quiet: true
+
+- name: Inspect current Vault data directory before restore
+  ansible.builtin.stat:
+    path: "{{ vault_backup_restore_host_data_dir }}"
+  register: vault_backup_restore_data_stat
+  changed_when: false
+
+- name: Restore Vault data with rollback protection
+  block:
+    - name: Stop running Vault runtime before restore
+      ansible.builtin.include_tasks: stop_runtime.yml
+      when:
+        - vault_backup_restore_stop_service | bool
+        - vault_backup_restore_runtime_was_running | bool
+
+    - name: Move existing Vault data directory to rollback path
+      ansible.builtin.command:
+        argv:
+          - mv
+          - "{{ vault_backup_restore_host_data_dir }}"
+          - "{{ vault_backup_restore_rollback_path }}"
+      register: vault_backup_restore_data_move
+      changed_when: vault_backup_restore_data_move.rc == 0
+      when: vault_backup_restore_data_stat.stat.exists | default(false)
+
+    - name: Record moved Vault data directory
+      ansible.builtin.set_fact:
+        vault_backup_restore_original_moved: >-
+          {{ vault_backup_restore_data_stat.stat.exists | default(false) | bool }}
+        vault_backup_restore_restore_started: true
+      changed_when: false
+
+    - name: Restore backup archive
+      ansible.builtin.unarchive:
+        src: "{{ vault_backup_restore_source }}"
+        dest: "{{ vault_backup_restore_host_data_dir | dirname }}"
+        remote_src: true
+
+    - name: Ensure Vault data directory ownership and mode after restore
+      ansible.builtin.file:
+        path: "{{ vault_backup_restore_host_data_dir }}"
+        state: directory
+        owner: "{{ vault_backup_restore_expected_uid }}"
+        group: "{{ vault_backup_restore_expected_gid }}"
+        mode: "{{ vault_backup_restore_expected_mode }}"
+        recurse: true
+
+    - name: Relabel Vault data directory after restore
+      ansible.builtin.import_role:
+        name: vault_deploy
+        tasks_from: selinux_relabel
+      when: vault_backup_restore_selinux_relabel | bool
+
+    - name: Mark restored Vault data ready for startup
+      ansible.builtin.set_fact:
+        vault_backup_restore_data_ready: true
+      changed_when: false
+
+  rescue:
+    - name: Remove incomplete restored Vault data
+      ansible.builtin.file:
+        path: "{{ vault_backup_restore_host_data_dir }}"
+        state: absent
+      when: vault_backup_restore_restore_started | bool
+
+    - name: Move previous Vault data back after restore failure
+      ansible.builtin.command:
+        argv:
+          - mv
+          - "{{ vault_backup_restore_rollback_path }}"
+          - "{{ vault_backup_restore_host_data_dir }}"
+      register: vault_backup_restore_data_rollback
+      changed_when: vault_backup_restore_data_rollback.rc == 0
+      when: vault_backup_restore_original_moved | bool
+
+    - name: Record successful Vault restore rollback
+      ansible.builtin.set_fact:
+        vault_backup_restore_original_moved: false
+        vault_backup_restore_data_ready: true
+      changed_when: false
+      when: vault_backup_restore_original_moved | bool
+
+    - name: Report failed Vault restore after rollback
+      ansible.builtin.fail:
+        msg: >-
+          Vault restore failed. The previous data directory was restored when one existed;
+          inspect the preceding failure before retrying.
+
+  always:
+    - name: Restart Vault after restore attempt when data is safe
+      ansible.builtin.include_tasks: start_runtime.yml
+      when:
+        - vault_backup_restore_runtime_was_running | bool
+        - vault_backup_restore_runtime_stopped | bool
+        - vault_backup_restore_data_ready | bool
+
+    - name: Restore Vault lifecycle after restore attempt
+      ansible.builtin.include_tasks: unseal_runtime.yml
+      when:
+        - vault_backup_restore_runtime_was_running | bool
+        - vault_backup_restore_data_ready | bool
+        - vault_backup_restore_unseal_after_start | bool
+
+- name: Validate restored Vault lifecycle
+  ansible.builtin.include_role:
+    name: vault_validate
+  vars:
+    vault_validate_expected_lifecycle: "{{ vault_backup_restore_expected_lifecycle }}"
+    vault_validate_lifecycle_retries: "{{ vault_backup_restore_validate_lifecycle_retries }}"
+    vault_validate_lifecycle_delay: "{{ vault_backup_restore_validate_lifecycle_delay }}"
+    vault_validate_container_name: "{{ vault_backup_restore_container_name }}"
+    vault_validate_host_data_dir: "{{ vault_backup_restore_host_data_dir }}"
+    vault_validate_expected_uid: "{{ vault_backup_restore_expected_uid }}"
+    vault_validate_expected_gid: "{{ vault_backup_restore_expected_gid }}"
+    vault_validate_expected_mode: "{{ vault_backup_restore_expected_mode }}"
+    vault_validate_api_url: "{{ vault_backup_restore_api_url }}"
+    vault_validate_health_url: "{{ vault_backup_restore_health_url }}"
+    vault_validate_validate_certs: "{{ vault_backup_restore_validate_certs }}"
+    vault_validate_ca_cert_path: "{{ vault_backup_restore_target_ca_cert_path_effective }}"
+  when:
+    - vault_backup_restore_runtime_was_running | bool
+    - vault_backup_restore_validate_after_restore | bool

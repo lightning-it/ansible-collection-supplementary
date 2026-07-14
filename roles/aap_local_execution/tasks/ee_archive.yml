@@ -1,0 +1,159 @@
+---
+- name: Ensure execution environment image exists locally
+  ansible.builtin.command:
+    argv:
+      - podman
+      - image
+      - exists
+      - "{{ aap_local_execution_modulix_run_ee_runtime_image }}"
+  register: aap_local_execution_ee_image_exists
+  changed_when: false
+  failed_when: false
+
+- name: Pull execution environment image when needed
+  ansible.builtin.command:
+    argv:
+      - podman
+      - pull
+      - "{{ aap_local_execution_modulix_run_ee_runtime_image }}"
+  register: aap_local_execution_ee_pull_result
+  changed_when: >-
+    'Copying blob' in (aap_local_execution_ee_pull_result.stdout ~ aap_local_execution_ee_pull_result.stderr)
+    or 'Writing manifest' in (aap_local_execution_ee_pull_result.stdout ~ aap_local_execution_ee_pull_result.stderr)
+    or 'Storing signatures' in (aap_local_execution_ee_pull_result.stdout ~ aap_local_execution_ee_pull_result.stderr)
+  when:
+    - aap_ee_pull_force | default(false) | bool or aap_local_execution_ee_image_exists.rc != 0
+
+- name: Inspect execution environment archive cache
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  loop:
+    - "{{ aap_local_execution_machine_a_effective_ee_archive_path }}"
+    - "{{ aap_local_execution_machine_a_effective_ee_archive_reference_path }}"
+  register: aap_local_execution_ee_archive_cache_stats
+
+- name: Require a regular execution environment archive cache
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (item.stat.exists | default(false))
+        or (
+          item.stat.isreg | default(false)
+          and not (item.stat.islnk | default(false))
+          and item.stat.nlink | int == 1
+        )
+    fail_msg: >-
+      Refusing an execution environment archive cache path that is not a
+      regular single-link file.
+    quiet: true
+  loop: "{{ aap_local_execution_ee_archive_cache_stats.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Read cached execution environment image identity
+  ansible.builtin.slurp:
+    src: "{{ aap_local_execution_machine_a_effective_ee_archive_reference_path }}"
+  register: aap_local_execution_ee_archive_reference
+  when:
+    - aap_local_execution_ee_archive_cache_stats.results[1].stat.exists | default(false)
+
+- name: Decide whether execution environment archive cache must be refreshed
+  ansible.builtin.set_fact:
+    aap_local_execution_ee_archive_refresh_required: >-
+      {{
+        aap_local_execution_ee_archive_force | bool
+        or not (
+          aap_local_execution_ee_archive_cache_stats.results[0].stat.exists
+          | default(false)
+        )
+        or not (
+          aap_local_execution_ee_archive_cache_stats.results[1].stat.exists
+          | default(false)
+        )
+        or (
+          aap_local_execution_ee_archive_cache_stats.results[0].stat.size
+          | default(0)
+          | int
+        ) <= 0
+        or (
+          aap_local_execution_ee_archive_reference.content
+          | default('')
+          | b64decode
+          | trim
+        ) != aap_local_execution_modulix_run_ee_runtime_image
+      }}
+  changed_when: false
+
+- name: Refresh execution environment archive cache atomically
+  when: aap_local_execution_ee_archive_refresh_required | bool
+  block:
+    - name: Allocate temporary execution environment archive
+      ansible.builtin.tempfile:
+        state: file
+        path: "{{ aap_local_execution_machine_a_effective_ee_archive_path | dirname }}"
+        prefix: ".{{ aap_local_execution_machine_a_effective_ee_archive_path | basename }}."
+        suffix: .tmp
+      register: aap_local_execution_ee_archive_temporary
+
+    - name: Save exact execution environment image to temporary archive
+      ansible.builtin.command:
+        argv:
+          - podman
+          - save
+          - --format
+          - oci-archive
+          - -o
+          - "{{ aap_local_execution_ee_archive_temporary.path }}"
+          - "{{ aap_local_execution_modulix_run_ee_runtime_image }}"
+      register: aap_local_execution_ee_archive_save
+      changed_when: true
+
+    - name: Inspect temporary execution environment archive
+      ansible.builtin.stat:
+        path: "{{ aap_local_execution_ee_archive_temporary.path }}"
+        follow: false
+        get_attributes: false
+        get_checksum: false
+        get_mime: false
+      register: aap_local_execution_ee_archive_temporary_stat
+
+    - name: Require a nonempty temporary execution environment archive
+      ansible.builtin.assert:
+        that:
+          - aap_local_execution_ee_archive_temporary_stat.stat.isreg | default(false)
+          - not (aap_local_execution_ee_archive_temporary_stat.stat.islnk | default(false))
+          - aap_local_execution_ee_archive_temporary_stat.stat.nlink | int == 1
+          - aap_local_execution_ee_archive_temporary_stat.stat.size | int > 0
+        fail_msg: "Podman did not produce a safe nonempty execution environment archive."
+        quiet: true
+
+    - name: Enforce protected temporary execution environment archive mode
+      ansible.builtin.file:
+        path: "{{ aap_local_execution_ee_archive_temporary.path }}"
+        mode: "0640"
+
+    - name: Atomically publish execution environment archive
+      ansible.builtin.command:
+        argv:
+          - mv
+          - --
+          - "{{ aap_local_execution_ee_archive_temporary.path }}"
+          - "{{ aap_local_execution_machine_a_effective_ee_archive_path }}"
+      changed_when: true
+
+    - name: Persist exact execution environment archive image identity
+      ansible.builtin.copy:
+        dest: "{{ aap_local_execution_machine_a_effective_ee_archive_reference_path }}"
+        content: "{{ aap_local_execution_modulix_run_ee_runtime_image }}\n"
+        mode: "0640"
+
+  always:
+    - name: Remove incomplete temporary execution environment archive
+      ansible.builtin.file:
+        path: "{{ aap_local_execution_ee_archive_temporary.path }}"
+        state: absent
+      when: aap_local_execution_ee_archive_temporary.path is defined

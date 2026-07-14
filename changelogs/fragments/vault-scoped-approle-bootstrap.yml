@@ -1,0 +1,12 @@
+---
+minor_changes:
+  - >-
+    Add vault_scoped_approle for certificate-validated least-privilege batch-token AppRole bootstrap, immutable
+    controller Ansible Vault escrow, exact capability validation, and gated initial-root-token revocation.
+bugfixes:
+  - >-
+    Persist the scoped AppRole schema version as a native integer and immediately prove initial-root-token
+    revocation after the least-privilege AppRole passes its exact policy and capability gates.
+  - >-
+    Correct the existing-escrow bounded-token policy assertion so resumable validation uses the configured
+    scoped policy name.

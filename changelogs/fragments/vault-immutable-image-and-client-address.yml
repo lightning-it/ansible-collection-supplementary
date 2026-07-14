@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    vault_deploy can now require an immutable OCI digest, separate the advertised API address from the in-container
+    client URL, and explicitly control mlock for loopback-only production topologies.

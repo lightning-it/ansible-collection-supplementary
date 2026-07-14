@@ -1,0 +1,151 @@
+---
+- name: Verify Vault Raft snapshot escrow
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vault_raft_snapshot_molecule_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-raft-snapshot
+    vault_raft_snapshot_molecule_document_path: >-
+      {{ vault_raft_snapshot_molecule_root }}/vault-raft-fixed.vault.yml
+  tasks:
+    - name: Inspect Vault Raft snapshot TLS fixture SAN
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - x509
+          - -in
+          - "{{ vault_raft_snapshot_molecule_root }}/ca.crt"
+          - -noout
+          - -ext
+          - subjectAltName
+      register: vault_raft_snapshot_molecule_tls_san
+      changed_when: false
+
+    - name: Require a DNS-only localhost TLS fixture
+      ansible.builtin.assert:
+        that:
+          - "'DNS:localhost' in vault_raft_snapshot_molecule_tls_san.stdout"
+          - "'IP Address:127.0.0.1' not in vault_raft_snapshot_molecule_tls_san.stdout"
+        quiet: true
+
+    - name: Inspect encrypted Vault Raft snapshot document
+      ansible.builtin.stat:
+        path: "{{ vault_raft_snapshot_molecule_document_path }}"
+        get_checksum: true
+        checksum_algorithm: sha256
+      register: vault_raft_snapshot_molecule_document_stat
+
+    - name: Read Vault Raft snapshot ciphertext signature
+      ansible.builtin.command:
+        argv:
+          - head
+          - -c
+          - "15"
+          - "{{ vault_raft_snapshot_molecule_document_path }}"
+      register: vault_raft_snapshot_molecule_signature
+      changed_when: false
+      no_log: true
+
+    - name: Load encrypted Vault Raft snapshot document
+      ansible.builtin.include_vars:
+        file: "{{ vault_raft_snapshot_molecule_document_path }}"
+        name: vault_raft_snapshot_molecule_document
+      no_log: true
+
+    - name: Read executable Vault Raft restore request log
+      ansible.builtin.slurp:
+        src: "{{ vault_raft_snapshot_molecule_root }}/requests.log"
+      register: vault_raft_snapshot_molecule_requests_raw
+
+    - name: Read executable Vault Raft restore Podman log
+      ansible.builtin.slurp:
+        src: "{{ vault_raft_snapshot_molecule_root }}/podman.log"
+      register: vault_raft_snapshot_molecule_podman_raw
+
+    - name: Read Vault Raft API implementation sources
+      ansible.builtin.slurp:
+        src: "{{ lookup('ansible.builtin.env', 'MOLECULE_PROJECT_DIRECTORY') }}/{{ item }}"
+      loop:
+        - roles/vault_raft_snapshot/tasks/authenticate.yml
+        - roles/vault_raft_snapshot/tasks/backup.yml
+        - roles/vault_raft_snapshot/tasks/restore_drill.yml
+      register: vault_raft_snapshot_molecule_api_sources_raw
+
+    - name: Inspect cleaned Vault Raft restore artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /run/lit-vault-raft-molecule
+        - "{{ vault_raft_snapshot_molecule_root }}/container-state"
+      register: vault_raft_snapshot_molecule_restore_artifacts
+
+    - name: Require exact encrypted Vault Raft recovery proof
+      vars:
+        vault_raft_snapshot_molecule_requests: >-
+          {{ vault_raft_snapshot_molecule_requests_raw.content | b64decode }}
+        vault_raft_snapshot_molecule_podman: >-
+          {{ vault_raft_snapshot_molecule_podman_raw.content | b64decode }}
+        vault_raft_snapshot_molecule_api_sources: >-
+          {{
+            (vault_raft_snapshot_molecule_api_sources_raw.results[0].content | b64decode)
+            ~ (vault_raft_snapshot_molecule_api_sources_raw.results[1].content | b64decode)
+            ~ (vault_raft_snapshot_molecule_api_sources_raw.results[2].content | b64decode)
+          }}
+      ansible.builtin.assert:
+        that:
+          - vault_raft_snapshot_molecule_document_stat.stat.isreg
+          - vault_raft_snapshot_molecule_document_stat.stat.mode in ['0400', '0600']
+          - vault_raft_snapshot_molecule_document_stat.stat.checksum is match('^[0-9a-f]{64}$')
+          - vault_raft_snapshot_molecule_signature.stdout == '$ANSIBLE_VAULT;'
+          - vault_raft_snapshot_molecule_document.schema_version is integer
+          - vault_raft_snapshot_molecule_document.schema_version == 1
+          - vault_raft_snapshot_molecule_document.subject == 'vault.molecule.invalid'
+          - vault_raft_snapshot_molecule_document.storage_backend == 'raft'
+          - vault_raft_snapshot_molecule_document.cluster_id == 'molecule-cluster-id'
+          - vault_raft_snapshot_molecule_document.snapshot_sha256 is match('^[0-9a-f]{64}$')
+          - vault_raft_snapshot_molecule_document.snapshot_size_bytes is integer
+          - vault_raft_snapshot_molecule_document.snapshot_size_bytes > 0
+          - vault_raft_snapshot_molecule_document.verification_records | length == 1
+          - "'POST /v1/sys/init' in vault_raft_snapshot_molecule_requests"
+          - >-
+            'POST /v1/sys/storage/raft/snapshot-force'
+            in vault_raft_snapshot_molecule_requests
+          - "'POST /v1/sys/unseal' in vault_raft_snapshot_molecule_requests"
+          - "'POST /v1/auth/approle/login' in vault_raft_snapshot_molecule_requests"
+          - >-
+            'GET /v1/stage-2c/data/recovery/sentinel'
+            in vault_raft_snapshot_molecule_requests
+          - vault_raft_snapshot_molecule_podman is search('argv=run ')
+          - vault_raft_snapshot_molecule_podman is search('argv=restart ')
+          - vault_raft_snapshot_molecule_podman is search('argv=rm ')
+          - >-
+            vault_raft_snapshot_molecule_api_sources
+            | regex_findall('ansible\\.builtin\\.uri:')
+            | length == 13
+          - >-
+            vault_raft_snapshot_molecule_api_sources
+            | regex_findall('use_proxy: false')
+            | length == 13
+          - >-
+            vault_raft_snapshot_molecule_restore_artifacts.results
+            | selectattr('stat.exists')
+            | list
+            | length == 0
+        quiet: true
+      no_log: true
+
+    - name: Read Vault Raft snapshot fake API process ID
+      ansible.builtin.slurp:
+        src: "{{ vault_raft_snapshot_molecule_root }}/server.pid"
+      register: vault_raft_snapshot_molecule_server_pid
+      failed_when: false
+
+    - name: Stop Vault Raft snapshot fake API
+      ansible.builtin.command:
+        argv:
+          - kill
+          - "{{ vault_raft_snapshot_molecule_server_pid.content | b64decode | trim }}"
+      changed_when: true
+      failed_when: false
+      when: vault_raft_snapshot_molecule_server_pid.content | default('') | length > 0

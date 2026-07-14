@@ -1,0 +1,43 @@
+---
+- name: Resolve canonical Vault Raft snapshot controller paths
+  ansible.builtin.set_fact:
+    _vault_raft_snapshot_escrow_root: >-
+      {{ vault_raft_snapshot_controller_escrow_root_path | realpath }}
+    _vault_raft_snapshot_document_path: >-
+      {{ vault_raft_snapshot_controller_document_path | normpath }}
+    _vault_raft_snapshot_document_canonical: >-
+      {{ vault_raft_snapshot_controller_document_path | realpath }}
+    _vault_raft_snapshot_controller_ca_path: >-
+      {{ vault_raft_snapshot_controller_ca_cert_path | normpath }}
+    _vault_raft_snapshot_controller_uid: >-
+      {{ lookup('ansible.builtin.pipe', 'id -u') | int }}
+    _vault_raft_snapshot_restore_api_url: >-
+      https://{{ vault_raft_snapshot_restore_tls_hostname }}:{{
+        vault_raft_snapshot_restore_api_port
+      }}
+    _vault_raft_snapshot_restore_cluster_url: >-
+      https://{{ vault_raft_snapshot_restore_tls_hostname }}:{{
+        vault_raft_snapshot_restore_cluster_port
+      }}
+  changed_when: false
+  no_log: true
+
+- name: Require Raft snapshot document below the exact escrow root
+  ansible.builtin.assert:
+    that:
+      - _vault_raft_snapshot_escrow_root | length > 1
+      - >-
+        _vault_raft_snapshot_document_path
+        == vault_raft_snapshot_controller_document_path
+      - _vault_raft_snapshot_document_canonical != _vault_raft_snapshot_escrow_root
+      - >-
+        _vault_raft_snapshot_document_canonical.startswith(
+          _vault_raft_snapshot_escrow_root ~ '/'
+        )
+      - >-
+        _vault_raft_snapshot_controller_ca_path
+        == vault_raft_snapshot_controller_ca_cert_path
+      - _vault_raft_snapshot_document_path != _vault_raft_snapshot_controller_ca_path
+    fail_msg: "Raft snapshot escrow must be a normalized file below the controller escrow root."
+    quiet: true
+  no_log: true

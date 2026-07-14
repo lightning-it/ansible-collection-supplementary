@@ -1,0 +1,9 @@
+---
+bugfixes:
+  - >-
+    Generate Vault bootstrap private keys only on the managed host, plumb explicit
+    trusted CA paths through lifecycle HTTPS clients, and remove TLS skip-verify
+    from initialization and unseal operations.
+  - >-
+    Submit only the Vault-reported threshold number of unseal shares in protected
+    HTTPS request bodies instead of exposing shares in process arguments.

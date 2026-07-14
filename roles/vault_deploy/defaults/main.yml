@@ -6,11 +6,15 @@ vault_deploy_host_data_dir: "/srv/vault/data"
 vault_deploy_cert_dir: "/srv/vault/certs"
 vault_deploy_config_dir: "/srv/vault/config"
 vault_deploy_image: "docker.io/hashicorp/vault:1.21"
+# Production consumers can require an immutable OCI manifest digest while the
+# compatibility default continues to accept a tag for existing inventories.
+vault_deploy_require_immutable_image: false
 vault_deploy_run_as_user: 100
 vault_deploy_run_as_group: 1000
 vault_deploy_run_as_non_root: true
 vault_deploy_skip_setcap: true
 vault_deploy_add_ipc_lock_cap: false
+vault_deploy_disable_mlock: true
 vault_deploy_container_name: "{{ vault_deploy_pod_name }}-vault"
 vault_deploy_container_data_dir: "/vault/data"
 vault_deploy_expected_uid: "{{ vault_deploy_run_as_user }}"
@@ -18,8 +22,14 @@ vault_deploy_expected_gid: "{{ vault_deploy_run_as_group }}"
 vault_deploy_expected_mode: "0700"
 vault_deploy_selinux_relabel: true
 
+# Storage. File remains the compatibility default. Raft requires an explicit,
+# inventory-owned node ID and advertised cluster address.
+vault_deploy_storage_backend: "file"
+vault_deploy_raft_node_id: ""
+
 # Network
 vault_deploy_port: 8200
+vault_deploy_cluster_port: 8201
 vault_deploy_addr: "http://127.0.0.1:{{ vault_deploy_port }}"
 vault_deploy_api_scheme: "https"
 vault_deploy_api_url: >-
@@ -34,6 +44,25 @@ vault_deploy_host_ip: >-
     ansible_default_ipv4.address
       | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
   }}
+vault_deploy_listener_address: "0.0.0.0:{{ vault_deploy_port }}"
+vault_deploy_cluster_listener_address: "0.0.0.0:{{ vault_deploy_cluster_port }}"
+vault_deploy_api_addr: "https://127.0.0.1:{{ vault_deploy_port }}"
+vault_deploy_cluster_addr: ""
+# TLS trust paths are scoped to where each API client runs. The API path must
+# exist on vault_deploy_api_delegate_to (normally the controller); the target
+# path must exist on the managed Vault host; and the container path must be
+# visible inside the Vault container.
+vault_deploy_api_ca_cert_path: "{{ vault_api_ca_cert_path | default('', true) }}"
+vault_deploy_target_ca_cert_path: "{{ vault_deploy_cert_dir }}/ca.crt"
+vault_deploy_container_ca_cert_path: "/vault/certs/ca.crt"
+# This client URL is deliberately independent from Vault's advertised API
+# address. A loopback-only service can advertise its stable service identity
+# while local CLI calls use a certificate-validated loopback endpoint.
+vault_deploy_container_api_url: "{{ vault_deploy_api_addr }}"
+vault_deploy_api_ca_cert_path_effective: >-
+  {{ vault_deploy_api_ca_cert_path if (vault_deploy_vault_validate_certs | bool) else '' }}
+vault_deploy_target_ca_cert_path_effective: >-
+  {{ vault_deploy_target_ca_cert_path if (vault_deploy_vault_validate_certs | bool) else '' }}
 
 # Vault Hostname + PKI
 vault_deploy_vault_hostname: "{{ vault_hostname | default(inventory_hostname, true) }}"
@@ -80,13 +109,9 @@ vault_deploy_inventory_root: >-
 vault_deploy_bootstrap_persist_dir: "/srv/vault/bootstrap"
 vault_deploy_init_file_path: "{{ vault_deploy_bootstrap_persist_dir }}/vault-init.yml.vault"
 
-# Systemd
-vault_deploy_systemd_unit_name: >-
-  {{
-    'podman-kube@'
-    ~ (vault_deploy_pod_manifest_path | basename | regex_replace('\\.yml$', ''))
-    ~ '.service'
-  }}
+# Optional systemd unit override. When empty, the deploy/ops/backup roles resolve
+# the actual podman-kube template instance from the full manifest path.
+vault_deploy_systemd_unit_name: ""
 vault_deploy_manage_systemd: true
 vault_deploy_skip_runtime: false
 vault_deploy_skip_deploy: false

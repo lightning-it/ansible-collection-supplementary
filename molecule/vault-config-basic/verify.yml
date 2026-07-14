@@ -1,5 +1,5 @@
 ---
-- name: Verify vault config syntax coverage
+- name: Verify Vault config first-run token coverage
   hosts: localhost
   connection: local
   gather_facts: false
@@ -12,8 +12,8 @@
         src: "{{ vault_config_molecule_marker_path }}"
       register: vault_config_molecule_marker
 
-    - name: Assert lit.supplementary.vault_config coverage stub ran
+    - name: Assert Vault config first-run token mapping ran
       ansible.builtin.assert:
         that:
-          - vault_config_molecule_marker.content | b64decode | trim == 'syntax_stub'
+          - vault_config_molecule_marker.content | b64decode | trim == 'first_run_token_mapped'
         quiet: true

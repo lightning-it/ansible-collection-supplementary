@@ -1,22 +1,39 @@
 ---
-- name: Import Vault deploy prechecks
-  ansible.builtin.import_role:
-    name: vault_deploy
-    tasks_from: assert
-  tags: always
-
 - name: Ensure vault bootstrap variables are valid
   ansible.builtin.assert:
     that:
-      - vault_bootstrap_vault_deploy_bootstrap_init is boolean
-      - vault_deploy_bootstrap_auto_init is boolean
-      - vault_deploy_bootstrap_write_init_output is boolean
-      - vault_deploy_bootstrap_key_shares | int > 0
-      - vault_deploy_bootstrap_key_threshold | int > 0
-      - vault_deploy_bootstrap_persist_dir | default('', true) | trim | length > 0
-      - vault_deploy_init_file_path | default('', true) | trim | length > 0
-      - vault_deploy_container_name | default('', true) | trim | length > 0
-      - vault_deploy_api_url | default('', true) | trim | length > 0
+      - vault_bootstrap_init_requested is boolean
+      - vault_bootstrap_auto_init is boolean
+      - vault_bootstrap_write_init_output is boolean
+      - vault_bootstrap_write_init_file_on_init is boolean
+      - vault_bootstrap_require_controller_escrow is boolean
+      - vault_bootstrap_validate_certs is boolean
+      - vault_bootstrap_key_shares | int > 0
+      - vault_bootstrap_key_threshold | int > 0
+      - vault_bootstrap_key_threshold | int <= vault_bootstrap_key_shares | int
+      - vault_bootstrap_persist_dir | default('', true) | trim | length > 0
+      - vault_bootstrap_init_file_path | default('', true) | trim | length > 0
+      - vault_bootstrap_controller_escrow_root_path is string
+      - vault_bootstrap_controller_init_file_path is string
+      - >-
+        not (vault_bootstrap_require_controller_escrow | bool)
+        or (
+          vault_bootstrap_controller_escrow_root_path.startswith('/')
+          and vault_bootstrap_controller_init_file_path.startswith('/')
+        )
+      - vault_bootstrap_container_name | default('', true) | trim | length > 0
+      - vault_bootstrap_api_url | default('', true) | trim | length > 0
+      - vault_bootstrap_health_url | default('', true) | trim | length > 0
+      - vault_bootstrap_api_delegate_to | default('', true) | trim | length > 0
+      - vault_bootstrap_ca_cert_path is string
+      - >-
+        vault_bootstrap_ca_cert_path | length == 0
+        or vault_bootstrap_ca_cert_path.startswith('/')
+      - vault_bootstrap_cli_api_url is match('^https://')
+      - vault_bootstrap_cli_ca_cert_path.startswith('/')
+      - vault_bootstrap_init_payload is mapping
+      - vault_bootstrap_unseal_keys is sequence
+      - vault_bootstrap_unseal_keys is not string
     fail_msg: "vault_bootstrap variables are missing or invalid."
     quiet: true
   tags: always

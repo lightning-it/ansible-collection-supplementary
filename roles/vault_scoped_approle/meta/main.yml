@@ -1,0 +1,9 @@
+---
+galaxy_info:
+  author: Lightning IT
+  description: Bootstrap one least-privilege Vault AppRole with immutable controller escrow
+  license: MIT
+  min_ansible_version: "2.18"
+  role_name: vault_scoped_approle
+  namespace: lit
+dependencies: []

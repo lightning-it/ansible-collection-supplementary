@@ -1,0 +1,10 @@
+---
+bugfixes:
+  - >-
+    Correct Vault bootstrap init-payload persistence and handoff so first-run unseal and configuration consume
+    the newly generated keys and root token, while retaining read compatibility with interim payload keys.
+  - >-
+    Resolve the actual Podman kube systemd template instance consistently for Vault deploy, operations, and backup.
+  - >-
+    Make strict Vault validation require an initialized and unsealed instance, and guarantee cleanup of protected
+    controller temporary files used for init-document encryption and decryption.

@@ -1,19 +1,190 @@
 ---
-- name: Verify vault ops syntax coverage
+- name: Verify Vault ops payload normalization coverage
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
     vault_ops_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-ops-coverage-mode
+    vault_ops_molecule_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-ops-runtime
+    vault_ops_molecule_api_url: "http://127.0.0.1:18211"
+    vault_ops_molecule_path: >-
+      {{ vault_ops_molecule_root }}/bin:{{ lookup('env', 'PATH') }}
+  environment:
+    PATH: "{{ vault_ops_molecule_path }}"
+    FAKE_PODMAN_LOG: "{{ vault_ops_molecule_root }}/podman.log"
+    FAKE_PODMAN_RUNTIME_STATE: "{{ vault_ops_molecule_root }}/runtime-state"
+    FAKE_VAULT_STATE: "{{ vault_ops_molecule_root }}/state.json"
   tasks:
     - name: Read lit.supplementary.vault_ops coverage marker
       ansible.builtin.slurp:
         src: "{{ vault_ops_molecule_marker_path }}"
       register: vault_ops_molecule_marker
 
-    - name: Assert lit.supplementary.vault_ops coverage stub ran
+    - name: Assert Vault ops normalization and handoff ran
       ansible.builtin.assert:
         that:
-          - vault_ops_molecule_marker.content | b64decode | trim == 'syntax_stub'
+          - vault_ops_molecule_marker.content | b64decode | trim == 'normalized_handoff'
         quiet: true
+
+    - name: Read Vault unseal implementation source
+      ansible.builtin.set_fact:
+        vault_ops_unseal_source: >-
+          {{
+            lookup(
+              'ansible.builtin.file',
+              lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              ~ '/roles/vault_ops/tasks/unseal.yml'
+            )
+          }}
+      changed_when: false
+
+    - name: Assert unseal shares use protected strict-TLS request bodies
+      ansible.builtin.assert:
+        that:
+          - "'-tls-skip-verify' not in vault_ops_unseal_source"
+          - "'method: POST' in vault_ops_unseal_source"
+          - "'key:' in vault_ops_unseal_source"
+          - "'vault_ops_unseal_keys_selected' in vault_ops_unseal_source"
+          - "'no_log: true' in vault_ops_unseal_source"
+        quiet: true
+
+    - name: Reset the fake Vault to sealed for bootstrap handoff coverage
+      ansible.builtin.copy:
+        dest: "{{ vault_ops_molecule_root }}/state.json"
+        content: >-
+          {"initialized": true, "sealed": true, "threshold": 2, "progress": 0}
+        mode: "0600"
+
+    - name: Reset fake Vault requests for bootstrap handoff coverage
+      ansible.builtin.copy:
+        dest: "{{ vault_ops_molecule_root }}/requests.log"
+        content: ""
+        mode: "0600"
+
+    - name: Exercise the bootstrap-to-ops unseal handoff
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_bootstrap
+        tasks_from: unseal
+      vars:
+        vault_bootstrap_init_payload: {}
+        vault_bootstrap_unseal_keys: [test-share-one, test-share-two]
+        vault_bootstrap_token: test-root-token
+        vault_bootstrap_api_delegate_to: localhost
+        vault_bootstrap_api_url: "{{ vault_ops_molecule_api_url }}"
+        vault_bootstrap_health_url: "{{ vault_ops_molecule_api_url }}/v1/sys/health"
+        vault_bootstrap_validate_certs: false
+        vault_bootstrap_ca_cert_path: ""
+        vault_bootstrap_container_name: vault-vault
+        vault_bootstrap_init_file_path: "{{ vault_ops_molecule_root }}/unused-init.yml.vault"
+      no_log: true
+
+    - name: Read fake Vault state after the bootstrap unseal handoff
+      ansible.builtin.slurp:
+        src: "{{ vault_ops_molecule_root }}/state.json"
+      register: vault_ops_molecule_bootstrap_handoff_state
+
+    - name: Read fake Vault requests after the bootstrap unseal handoff
+      ansible.builtin.slurp:
+        src: "{{ vault_ops_molecule_root }}/requests.log"
+      register: vault_ops_molecule_bootstrap_handoff_requests
+
+    - name: Require the bootstrap handoff to unseal Vault
+      ansible.builtin.assert:
+        that:
+          - >-
+            not (
+              (vault_ops_molecule_bootstrap_handoff_state.content | b64decode | from_json).sealed
+              | bool
+            )
+          - >-
+            (
+              vault_ops_molecule_bootstrap_handoff_requests.content
+              | b64decode
+              | regex_findall('POST /v1/sys/unseal')
+              | length
+            ) == 2
+        quiet: true
+
+    - name: Reset the fake Vault to sealed for restart recovery coverage
+      ansible.builtin.copy:
+        dest: "{{ vault_ops_molecule_root }}/state.json"
+        content: >-
+          {"initialized": true, "sealed": true, "threshold": 2, "progress": 0}
+        mode: "0600"
+
+    - name: Reset fake Vault requests for restart recovery coverage
+      ansible.builtin.copy:
+        dest: "{{ vault_ops_molecule_root }}/requests.log"
+        content: ""
+        mode: "0600"
+
+    - name: Exercise Shamir restart lifecycle recovery
+      block:
+        - name: Inspect fake Vault ops data directory ownership
+          ansible.builtin.stat:
+            path: "{{ vault_ops_molecule_root }}/data"
+          register: vault_ops_molecule_data_stat
+
+        - name: Restart, unseal, and validate fake Vault
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_ops
+          vars:
+            vault_ops_action: restart
+            vault_ops_restart_expected_lifecycle: ready
+            vault_ops_unseal_after_restart: true
+            vault_ops_validate_after_restart: true
+            vault_ops_validate_lifecycle_retries: 2
+            vault_ops_validate_lifecycle_delay: 0
+            vault_ops_manage_systemd: false
+            vault_ops_pod_name: vault
+            vault_ops_container_name: vault-vault
+            vault_ops_host_data_dir: "{{ vault_ops_molecule_root }}/data"
+            vault_ops_expected_uid: "{{ vault_ops_molecule_data_stat.stat.uid }}"
+            vault_ops_expected_gid: "{{ vault_ops_molecule_data_stat.stat.gid }}"
+            vault_ops_expected_mode: "0700"
+            vault_ops_api_delegate_to: localhost
+            vault_ops_api_url: "{{ vault_ops_molecule_api_url }}"
+            vault_ops_health_url: "{{ vault_ops_molecule_api_url }}/v1/sys/health"
+            vault_ops_validate_certs: false
+            vault_ops_init_file_path: "{{ vault_ops_molecule_root }}/unused-init.yml.vault"
+            vault_ops_init: {}
+            vault_ops_unseal_keys:
+              - test-share-one
+              - test-share-two
+
+        - name: Read fake Vault ops state after restart
+          ansible.builtin.slurp:
+            src: "{{ vault_ops_molecule_root }}/state.json"
+          register: vault_ops_molecule_state
+
+        - name: Read fake Vault ops request log
+          ansible.builtin.slurp:
+            src: "{{ vault_ops_molecule_root }}/requests.log"
+          register: vault_ops_molecule_requests
+
+        - name: Assert restart completed the Shamir lifecycle
+          ansible.builtin.assert:
+            that:
+              - not ((vault_ops_molecule_state.content | b64decode | from_json).sealed | bool)
+              - >-
+                (vault_ops_molecule_requests.content | b64decode
+                | regex_findall('POST /v1/sys/unseal') | length) == 2
+            quiet: true
+
+      always:
+        - name: Read fake Vault ops API process ID
+          ansible.builtin.slurp:
+            src: "{{ vault_ops_molecule_root }}/server.pid"
+          register: vault_ops_molecule_server_pid
+          failed_when: false
+
+        - name: Stop fake Vault ops API
+          ansible.builtin.command:
+            argv:
+              - kill
+              - "{{ vault_ops_molecule_server_pid.content | b64decode | trim }}"
+          changed_when: true
+          failed_when: false
+          when: vault_ops_molecule_server_pid.content | default('') | length > 0

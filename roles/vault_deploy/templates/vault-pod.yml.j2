@@ -14,9 +14,14 @@ spec:
         - containerPort: {{ vault_deploy_port }}
           hostPort: {{ vault_deploy_port }}
           hostIP: {{ vault_deploy_host_ip }}
+{% if vault_deploy_storage_backend == 'raft' %}
+        - containerPort: {{ vault_deploy_cluster_port }}
+          hostPort: {{ vault_deploy_cluster_port }}
+          hostIP: {{ vault_deploy_host_ip }}
+{% endif %}
       env:
         - name: VAULT_ADDR
-          value: "https://0.0.0.0:{{ vault_deploy_port }}"
+          value: "{{ vault_deploy_container_api_url }}"
 {% if vault_deploy_skip_setcap | bool %}
         - name: SKIP_SETCAP
           value: "1"

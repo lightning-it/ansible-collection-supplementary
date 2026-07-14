@@ -1,0 +1,38 @@
+---
+dependency:
+  name: shell
+  command: >-
+    rm -rf "${MOLECULE_EPHEMERAL_DIRECTORY}/vault-scoped-approle";
+    umask 077 && openssl rand -hex 32
+    > /tmp/molecule-vault-scoped-approle-password
+
+driver:
+  name: default
+
+platforms:
+  - name: localhost
+    managed: false
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_VAULT_PASSWORD_FILE: /tmp/molecule-vault-scoped-approle-password
+  inventory:
+    host_vars:
+      localhost:
+        ansible_connection: local
+  playbooks:
+    converge: converge.yml
+    verify: verify.yml
+
+scenario:
+  name: vault-scoped-approle-basic
+  test_sequence:
+    - dependency
+    - syntax
+    - converge
+    - idempotence
+    - verify
+
+verifier:
+  name: ansible

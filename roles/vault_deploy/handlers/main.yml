@@ -20,8 +20,11 @@
 
 - name: Escape kube play manifest path (systemd)
   ansible.builtin.command:
-    cmd: "systemd-escape {{ vault_deploy_pod_manifest_path }}"
-  register: vault_deploy_systemd_name
+    argv:
+      - systemd-escape
+      - --template=podman-kube@.service
+      - "{{ vault_deploy_pod_manifest_path }}"
+  register: vault_deploy_handler_systemd_unit
   changed_when: false
   listen:
     - Recreate vault pod
@@ -33,7 +36,12 @@
 
 - name: Restart Podman kube systemd unit
   ansible.builtin.systemd:
-    name: "podman-kube@{{ vault_deploy_systemd_name.stdout }}.service"
+    name: >-
+      {{
+        vault_deploy_systemd_unit_name
+        if (vault_deploy_systemd_unit_name | default('', true) | trim | length > 0)
+        else (vault_deploy_handler_systemd_unit.stdout | trim)
+      }}
     enabled: true
     state: restarted
     daemon_reload: true

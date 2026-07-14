@@ -4,7 +4,7 @@
   tags: always
 
 - name: Check Vault container running state
-  ansible.builtin.command: "podman inspect {{ vault_deploy_container_name }} --format {{ '{{.State.Running}}' }}"
+  ansible.builtin.command: "podman inspect {{ vault_validate_container_name }} --format {{ '{{.State.Running}}' }}"
   register: vault_validate_vault_deploy_container_running
   changed_when: false
   failed_when: false
@@ -14,7 +14,7 @@
 
 - name: Fail when Vault container is not running
   ansible.builtin.fail:
-    msg: "Vault container {{ vault_deploy_container_name }} is not running."
+    msg: "Vault container {{ vault_validate_container_name }} is not running."
   when:
     - vault_validate_strict | bool
     - vault_validate_vault_deploy_container_running.stdout | default('') | trim != 'true'
@@ -34,7 +34,7 @@
 
 - name: Read Vault data dir stats
   ansible.builtin.stat:
-    path: "{{ vault_deploy_host_data_dir }}"
+    path: "{{ vault_validate_host_data_dir }}"
   register: vault_validate_vault_deploy_data_stat
   tags:
     - validate
@@ -44,13 +44,13 @@
   ansible.builtin.assert:
     that:
       - vault_validate_vault_deploy_data_stat.stat.exists
-      - vault_validate_vault_deploy_data_stat.stat.uid == (vault_deploy_expected_uid | int)
-      - vault_validate_vault_deploy_data_stat.stat.gid == (vault_deploy_expected_gid | int)
-      - vault_validate_vault_deploy_data_stat.stat.mode == (vault_deploy_expected_mode | string)
+      - vault_validate_vault_deploy_data_stat.stat.uid == (vault_validate_expected_uid | int)
+      - vault_validate_vault_deploy_data_stat.stat.gid == (vault_validate_expected_gid | int)
+      - vault_validate_vault_deploy_data_stat.stat.mode == (vault_validate_expected_mode | string)
     fail_msg: >-
-      Vault data dir {{ vault_deploy_host_data_dir }} expected
-      {{ vault_deploy_expected_uid }}:{{ vault_deploy_expected_gid }}
-      mode {{ vault_deploy_expected_mode }}, got
+      Vault data dir {{ vault_validate_host_data_dir }} expected
+      {{ vault_validate_expected_uid }}:{{ vault_validate_expected_gid }}
+      mode {{ vault_validate_expected_mode }}, got
       {{ vault_validate_vault_deploy_data_stat.stat.uid }}:{{ vault_validate_vault_deploy_data_stat.stat.gid }}
       mode {{ vault_validate_vault_deploy_data_stat.stat.mode }}.
   when: vault_validate_strict | bool
@@ -61,7 +61,7 @@
 - name: Report Vault data dir ownership and mode
   ansible.builtin.debug:
     msg: >-
-      Vault data dir {{ vault_deploy_host_data_dir }}:
+      Vault data dir {{ vault_validate_host_data_dir }}:
       uid={{ vault_validate_vault_deploy_data_stat.stat.uid }},
       gid={{ vault_validate_vault_deploy_data_stat.stat.gid }},
       mode={{ vault_validate_vault_deploy_data_stat.stat.mode }}
@@ -75,18 +75,18 @@
   register: vault_validate_vault_deploy_selinux_status
   changed_when: false
   failed_when: false
-  when: ansible_distribution in ['RedHat', 'CentOS']
+  when: ansible_distribution | default('') in ['RedHat', 'CentOS']
   tags:
     - validate
     - selinux
 
 - name: Read Vault container mount label
-  ansible.builtin.command: "podman inspect {{ vault_deploy_container_name }} --format {{ '{{.MountLabel}}' }}"
+  ansible.builtin.command: "podman inspect {{ vault_validate_container_name }} --format {{ '{{.MountLabel}}' }}"
   register: vault_validate_vault_deploy_mount_label
   changed_when: false
   failed_when: false
   when:
-    - ansible_distribution in ['RedHat', 'CentOS']
+    - ansible_distribution | default('') in ['RedHat', 'CentOS']
     - vault_validate_vault_deploy_selinux_status.stdout is defined
     - vault_validate_vault_deploy_selinux_status.stdout != 'Disabled'
   tags:
@@ -117,12 +117,12 @@
     - selinux
 
 - name: Read current SELinux label for Vault data dir
-  ansible.builtin.command: "stat -c %C {{ vault_deploy_host_data_dir }}"
+  ansible.builtin.command: "stat -c %C {{ vault_validate_host_data_dir }}"
   register: vault_validate_vault_deploy_mount_label_current
   changed_when: false
   failed_when: false
   when:
-    - ansible_distribution in ['RedHat', 'CentOS']
+    - ansible_distribution | default('') in ['RedHat', 'CentOS']
     - vault_validate_vault_deploy_selinux_status.stdout is defined
     - vault_validate_vault_deploy_selinux_status.stdout != 'Disabled'
   tags:
@@ -184,10 +184,14 @@
 
 - name: Check Vault health endpoint
   ansible.builtin.uri:
-    url: "{{ vault_deploy_health_url }}"
+    url: "{{ vault_validate_health_url }}"
     method: GET
-    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+    validate_certs: "{{ vault_validate_validate_certs }}"
+    ca_path: "{{ vault_validate_ca_cert_path_effective | default(omit, true) }}"
   register: vault_validate_vault_deploy_health
+  until: vault_validate_vault_deploy_health.status in [200, 429, 472, 473, 501, 503]
+  retries: "{{ vault_validate_lifecycle_retries if (vault_validate_strict | bool) else 1 }}"
+  delay: "{{ vault_validate_lifecycle_delay }}"
   changed_when: false
   failed_when: false
   tags:
@@ -214,10 +218,14 @@
 
 - name: Read Vault init status
   ansible.builtin.uri:
-    url: "{{ vault_deploy_api_url }}/v1/sys/init"
+    url: "{{ vault_validate_api_url }}/v1/sys/init"
     method: GET
-    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
-  register: vault_validate_vault_deploy_init_status
+    validate_certs: "{{ vault_validate_validate_certs }}"
+    ca_path: "{{ vault_validate_ca_cert_path_effective | default(omit, true) }}"
+  register: vault_validate_init_status
+  until: vault_validate_init_status.status | default(0) | int == 200
+  retries: "{{ vault_validate_lifecycle_retries if (vault_validate_strict | bool) else 1 }}"
+  delay: "{{ vault_validate_lifecycle_delay }}"
   changed_when: false
   failed_when: false
   tags:
@@ -226,12 +234,34 @@
 
 - name: Read Vault seal status
   ansible.builtin.uri:
-    url: "{{ vault_deploy_api_url }}/v1/sys/seal-status"
+    url: "{{ vault_validate_api_url }}/v1/sys/seal-status"
     method: GET
-    validate_certs: "{{ vault_deploy_vault_validate_certs }}"
-  register: vault_validate_vault_deploy_seal_status
+    validate_certs: "{{ vault_validate_validate_certs }}"
+    ca_path: "{{ vault_validate_ca_cert_path_effective | default(omit, true) }}"
+  register: vault_validate_seal_status
+  until: >-
+    vault_validate_seal_status.status | default(0) | int == 200
+    and (
+      vault_validate_expected_lifecycle not in ['ready', 'sealed']
+      or (
+        vault_validate_expected_lifecycle == 'ready'
+        and not (vault_validate_seal_status.json.sealed | default(true) | bool)
+      )
+      or (
+        vault_validate_expected_lifecycle == 'sealed'
+        and (vault_validate_seal_status.json.sealed | default(false) | bool)
+      )
+    )
+  retries: "{{ vault_validate_lifecycle_retries if (vault_validate_strict | bool) else 1 }}"
+  delay: "{{ vault_validate_lifecycle_delay }}"
   changed_when: false
   failed_when: false
+  tags:
+    - validate
+    - api
+
+- name: Enforce strict Vault lifecycle state
+  ansible.builtin.include_tasks: assert_lifecycle.yml
   tags:
     - validate
     - api
@@ -239,8 +269,9 @@
 - name: Report Vault init and seal status
   ansible.builtin.debug:
     msg: >-
-      init={{ vault_validate_vault_deploy_init_status.json.initialized | default('unknown') }},
-      sealed={{ vault_validate_vault_deploy_seal_status.json.sealed | default('unknown') }}
+      expected={{ vault_validate_expected_lifecycle }},
+      init={{ vault_validate_init_status.json.initialized | default('unknown') }},
+      sealed={{ vault_validate_seal_status.json.sealed | default('unknown') }}
   tags:
     - validate
     - api

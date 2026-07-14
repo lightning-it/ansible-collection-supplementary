@@ -315,8 +315,6 @@ Example playbook:
 - `galaxy.yml` defines the collection metadata (namespace `lit`, name
   `supplementary`, license `MIT`).
 - Core collection dependencies are declared in `galaxy.yml`.
-- Optional dependency overlays:
-  - `collections/requirements.yml`
 - Red Hat/AAP extension collections (for example `ansible.platform`,
   `infra.*`) are intentionally not pinned in this collection `galaxy.yml`;
   install them via consumer runtime overlays (for example

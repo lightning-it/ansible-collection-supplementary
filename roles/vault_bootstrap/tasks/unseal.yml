@@ -10,6 +10,18 @@
         - unseal
   vars:
     vault_ops_action: unseal
+    vault_ops_init: "{{ vault_bootstrap_init_payload }}"
+    vault_ops_unseal_keys: "{{ vault_bootstrap_unseal_keys }}"
+    vault_ops_token: "{{ vault_bootstrap_token }}"
+    vault_ops_api_delegate_to: "{{ vault_bootstrap_api_delegate_to }}"
+    vault_ops_api_url: "{{ vault_bootstrap_api_url }}"
+    vault_ops_health_url: "{{ vault_bootstrap_health_url }}"
+    vault_ops_validate_certs: "{{ vault_bootstrap_validate_certs }}"
+    vault_ops_api_ca_cert_path: "{{ vault_bootstrap_ca_cert_path }}"
+    vault_ops_target_ca_cert_path: "{{ vault_bootstrap_ca_cert_path }}"
+    vault_ops_container_name: "{{ vault_bootstrap_container_name }}"
+    vault_ops_init_file_path: "{{ vault_bootstrap_init_file_path }}"
+  no_log: true
   tags:
     - vault
     - vault_bootstrap

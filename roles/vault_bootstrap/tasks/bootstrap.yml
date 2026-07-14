@@ -1,6 +1,14 @@
 ---
-- name: Initialize Vault
+- name: Initialize Vault with strict controller escrow
+  ansible.builtin.include_tasks: init_controller_escrow.yml
+  when: vault_bootstrap_require_controller_escrow | bool
+  tags:
+    - bootstrap
+    - init
+
+- name: Initialize Vault with the legacy persistence workflow
   ansible.builtin.include_tasks: init.yml
+  when: not (vault_bootstrap_require_controller_escrow | bool)
   tags:
     - bootstrap
     - init

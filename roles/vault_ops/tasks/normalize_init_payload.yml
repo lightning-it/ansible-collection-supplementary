@@ -1,0 +1,35 @@
+---
+- name: Normalize Vault ops init payload document
+  ansible.builtin.set_fact:
+    vault_ops_init: >-
+      {{
+        vault_ops_init_payload_source.vault_init
+        | default(
+            vault_ops_init_payload_source.vault_bootstrap_vault_init
+            | default(
+                vault_ops_init_payload_source.vault_ops_vault_init
+                | default(vault_ops_init_payload_source, true),
+                true
+              ),
+            true
+          )
+      }}
+  changed_when: false
+  no_log: true
+
+- name: Build Vault ops init handoff facts
+  ansible.builtin.set_fact:
+    vault_ops_unseal_keys: >-
+      {{
+        (vault_ops_init.unseal_keys_b64 | default([]))
+        if (vault_ops_init.unseal_keys_b64 | default([]) | length > 0)
+        else (vault_ops_init.unseal_keys_hex | default([]))
+      }}
+    vault_ops_token: >-
+      {{
+        (vault_ops_init.root_token | default('', true) | trim)
+        if (vault_ops_init.root_token | default('', true) | trim | length > 0)
+        else (vault_ops_token | default('', true) | trim)
+      }}
+  changed_when: false
+  no_log: true

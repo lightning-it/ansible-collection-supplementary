@@ -284,8 +284,8 @@ aap_deploy_growth_inventory_hostvars_extra: ""
 aap_deploy_manage_host_aliases: true
 aap_deploy_host_alias_address: >-
   {{
-    aap_ansible_host
-    | default(ansible_host | default(ansible_default_ipv4.address | default('', true), true), true)
+    ansible_default_ipv4.address
+    | default(aap_ansible_host | default(ansible_host | default('', true), true), true)
   }}
 aap_deploy_host_aliases: >-
   {{

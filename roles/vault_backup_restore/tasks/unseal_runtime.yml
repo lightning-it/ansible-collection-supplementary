@@ -1,0 +1,18 @@
+---
+- name: Unseal Vault after file-storage maintenance
+  ansible.builtin.include_role:
+    name: vault_ops
+  vars:
+    vault_ops_action: unseal
+    vault_ops_api_delegate_to: "{{ vault_backup_restore_api_delegate_to }}"
+    vault_ops_api_url: "{{ vault_backup_restore_api_url }}"
+    vault_ops_health_url: "{{ vault_backup_restore_health_url }}"
+    vault_ops_validate_certs: "{{ vault_backup_restore_validate_certs }}"
+    vault_ops_api_ca_cert_path: "{{ vault_backup_restore_api_ca_cert_path_effective }}"
+    vault_ops_container_name: "{{ vault_backup_restore_container_name }}"
+    vault_ops_init_file_path: "{{ vault_backup_restore_init_file_path }}"
+    vault_ops_ansible_vault_password_file: "{{ vault_backup_restore_ansible_vault_password_file }}"
+    vault_ops_ansible_vault_password: "{{ vault_backup_restore_ansible_vault_password }}"
+    vault_ops_init: "{{ vault_backup_restore_init }}"
+    vault_ops_unseal_keys: "{{ vault_backup_restore_unseal_keys }}"
+  no_log: true
