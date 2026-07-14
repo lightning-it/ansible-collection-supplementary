@@ -326,12 +326,13 @@ Example playbook:
   - [docs/testing/aap.md](docs/testing/aap.md)
 - Canonical role sources live in `roles/`; build with `ansible-galaxy
   collection build`.
-- Molecule scenario `keycloak-deploy-basic` validates role wiring for Keycloak
-  deployment including PostgreSQL role integration.
-- Molecule scenario `keycloak-cac-basic` validates the Keycloak CaC role in
-  skip mode.
-- Molecule scenario `keycloak-basic` is kept as a legacy compatibility
-  scenario and also validates `keycloak_cac` in skip mode.
+- Molecule scenario `keycloak-tiny` performs fast, real deployment and
+  technical verification suitable for pull requests.
+- Molecule scenario `keycloak-heavy` validates production-like PostgreSQL,
+  LDAP, persistence, restart, backup/restore, TLS, and authorization behavior.
+- Molecule scenario `keycloak-application-acceptance` validates browser login,
+  sessions, OIDC claims, and positive and negative authorization. See
+  [Keycloak testing](docs/testing/keycloak.md) for commands and evidence.
 - Molecule scenario `forgejo-deploy-basic` validates role wiring for Forgejo
   deployment including PostgreSQL role integration.
 - Molecule scenario `forgejo-cac-basic` validates the Forgejo CaC role in

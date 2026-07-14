@@ -50,6 +50,10 @@ bash scripts/wunder-devtools-ee.sh true
 
 Heavy Incus tests require an Ubuntu host or runner with Incus available, suitable images, and repository-specific scenario configuration. Heavy tests must use sanitized inputs and must not rely on private inventory values.
 
+Keycloak uses the mandatory Tiny, Heavy, and Application Acceptance profiles.
+See [the Keycloak test architecture](docs/testing/keycloak.md) for direct commands,
+the supported Incus matrix, evidence, and failure reproduction.
+
 ## Interpreting GitHub Actions
 
 The GitHub Actions matrix is the primary dashboard. Job names should expose the repository class, OS/runtime, and profile, for example `ansible / rhel9 / molecule-heavy-incus` or `container / ubuntu / build-smoke`.

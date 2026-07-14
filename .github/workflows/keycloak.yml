@@ -1,0 +1,414 @@
+# yamllint disable rule:truthy
+---
+name: Keycloak
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/keycloak.yml"
+      - "molecule/keycloak-**"
+      - "molecule/shared/keycloak/**"
+      - "roles/keycloak*/**"
+      - "scripts/keycloak-**"
+  push:
+    branches: [develop, main]
+    tags: ["v*"]
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      release_validation:
+        description: Require release-grade signing and long-term archival
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.11"
+  KEYCLOAK_EVIDENCE_ROOT: artifacts/evidence
+
+jobs:
+  lint-sanity:
+    name: Keycloak / Lint and Sanity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run repository preflight
+        run: |
+          set -euo pipefail
+          pre-commit run --all-files
+          bash scripts/devtools-collection-smoke.sh
+      - name: Validate Keycloak evidence utility
+        run: python3 -m py_compile scripts/keycloak-evidence.py
+
+  tiny:
+    name: Keycloak / Tiny
+    needs: lint-sanity
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: ubuntu-24.04
+            image: images:ubuntu/24.04
+          - target: rhel-9
+            image: ${{ vars.KEYCLOAK_RHEL9_INCUS_IMAGE }}
+          - target: rhel-10
+            image: ${{ vars.KEYCLOAK_RHEL10_INCUS_IMAGE }}
+    runs-on: [self-hosted, linux, x64, incus, keycloak-test]
+    concurrency:
+      group: keycloak-tiny-${{ github.repository }}-${{ github.ref }}-${{ matrix.target }}
+      cancel-in-progress: true
+    env:
+      KEYCLOAK_TEST_INSTANCE: kc-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.target }}-tiny
+      KEYCLOAK_TEST_OWNER: ${{ github.repository }}-${{ github.run_id }}-${{ github.run_attempt }}
+      KEYCLOAK_TEST_TARGET: ${{ matrix.target }}
+      KEYCLOAK_TEST_IMAGE: ${{ matrix.image }}
+      MOLECULE_RUN_PROTECTED: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify Incus runner
+        run: |
+          set -euo pipefail
+          incus version
+          test "$(df -Pk . | awk 'NR == 2 {print $4}')" -ge 10485760
+          test "$(awk '/MemAvailable/ {print $2}' /proc/meminfo)" -ge 4194304
+      - name: Generate ephemeral test secrets
+        run: |
+          set -euo pipefail
+          for name in DB ADMIN VIEWER LDAP CLIENT SESSION UNAUTHORIZED INVALID; do
+            value="$(openssl rand -hex 32)"
+            echo "::add-mask::$value"
+            {
+              echo "KEYCLOAK_TEST_${name}_PASSWORD=$value"
+              if [ "$name" = CLIENT ]; then echo "KEYCLOAK_TEST_CLIENT_SECRET=$value"; fi
+              if [ "$name" = SESSION ]; then echo "KEYCLOAK_TEST_SESSION_SECRET=$value"; fi
+            } >> "$GITHUB_ENV"
+          done
+          {
+            echo 'KEYCLOAK_TEST_CLIENT_ID=keycloak-test-client'
+            echo 'KEYCLOAK_TEST_ISSUER=http://127.0.0.1:28080/realms/keycloak-test'
+            echo 'KEYCLOAK_TEST_ADMIN_USERNAME=keycloak_test_admin'
+            echo 'KEYCLOAK_TEST_VIEWER_USERNAME=keycloak_test_viewer'
+            echo 'KEYCLOAK_TEST_UNAUTHORIZED_USERNAME=keycloak_test_unauthorized'
+            echo 'KEYCLOAK_TEST_INVALID_USERNAME=keycloak_test_invalid'
+          } >> "$GITHUB_ENV"
+      - name: Run Tiny
+        run: molecule test -s keycloak-tiny 2>&1 | tee artifacts-molecule-tiny.log
+      - name: Remove owned Tiny resources
+        if: always()
+        run: molecule destroy -s keycloak-tiny
+      - name: Upload Tiny evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: keycloak-tiny-${{ matrix.target }}-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            artifacts/junit/keycloak-tiny.xml
+            artifacts-molecule-tiny.log
+
+  heavy:
+    name: Keycloak / Heavy
+    if: github.event_name != 'pull_request'
+    needs: tiny
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: ubuntu-24.04
+            image: images:ubuntu/24.04
+          - target: rhel-9
+            image: ${{ vars.KEYCLOAK_RHEL9_INCUS_IMAGE }}
+          - target: rhel-10
+            image: ${{ vars.KEYCLOAK_RHEL10_INCUS_IMAGE }}
+    runs-on: [self-hosted, linux, x64, incus, keycloak-test]
+    concurrency:
+      group: keycloak-heavy-${{ github.repository }}-${{ matrix.target }}
+      cancel-in-progress: false
+    env:
+      KEYCLOAK_TEST_INSTANCE: kc-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.target }}-heavy
+      KEYCLOAK_TEST_OWNER: ${{ github.repository }}-${{ github.run_id }}-${{ github.run_attempt }}
+      KEYCLOAK_TEST_TARGET: ${{ matrix.target }}
+      KEYCLOAK_TEST_IMAGE: ${{ matrix.image }}
+      MOLECULE_RUN_PROTECTED: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify Incus runner
+        run: |
+          set -euo pipefail
+          incus version
+          test "$(df -Pk . | awk 'NR == 2 {print $4}')" -ge 20971520
+          test "$(awk '/MemAvailable/ {print $2}' /proc/meminfo)" -ge 8388608
+      - name: Generate ephemeral test secrets
+        run: |
+          set -euo pipefail
+          for name in DB ADMIN VIEWER LDAP CLIENT SESSION UNAUTHORIZED INVALID; do
+            value="$(openssl rand -hex 32)"
+            echo "::add-mask::$value"
+            {
+              echo "KEYCLOAK_TEST_${name}_PASSWORD=$value"
+              if [ "$name" = CLIENT ]; then echo "KEYCLOAK_TEST_CLIENT_SECRET=$value"; fi
+              if [ "$name" = SESSION ]; then echo "KEYCLOAK_TEST_SESSION_SECRET=$value"; fi
+            } >> "$GITHUB_ENV"
+          done
+          {
+            echo 'KEYCLOAK_TEST_CLIENT_ID=keycloak-test-client'
+            echo 'KEYCLOAK_TEST_ISSUER=http://127.0.0.1:28080/realms/keycloak-test'
+            echo 'KEYCLOAK_TEST_ADMIN_USERNAME=keycloak_test_admin'
+            echo 'KEYCLOAK_TEST_VIEWER_USERNAME=keycloak_test_viewer'
+            echo 'KEYCLOAK_TEST_UNAUTHORIZED_USERNAME=keycloak_test_unauthorized'
+            echo 'KEYCLOAK_TEST_INVALID_USERNAME=keycloak_test_invalid'
+          } >> "$GITHUB_ENV"
+      - name: Run Heavy
+        run: molecule test -s keycloak-heavy 2>&1 | tee artifacts-molecule-heavy.log
+      - name: Remove owned Heavy resources
+        if: always()
+        run: molecule destroy -s keycloak-heavy
+      - name: Upload Heavy evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: keycloak-heavy-${{ matrix.target }}-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            artifacts/**
+            artifacts-molecule-heavy.log
+
+  acceptance:
+    name: Keycloak / Application Acceptance
+    if: github.event_name != 'pull_request'
+    needs: heavy
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: ubuntu-24.04
+            image: images:ubuntu/24.04
+          - target: rhel-9
+            image: ${{ vars.KEYCLOAK_RHEL9_INCUS_IMAGE }}
+          - target: rhel-10
+            image: ${{ vars.KEYCLOAK_RHEL10_INCUS_IMAGE }}
+    runs-on: [self-hosted, linux, x64, incus, keycloak-test]
+    concurrency:
+      group: keycloak-acceptance-${{ github.repository }}-${{ matrix.target }}
+      cancel-in-progress: false
+    env:
+      KEYCLOAK_TEST_INSTANCE: kc-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.target }}-accept
+      KEYCLOAK_TEST_OWNER: ${{ github.repository }}-${{ github.run_id }}-${{ github.run_attempt }}
+      KEYCLOAK_TEST_TARGET: ${{ matrix.target }}
+      KEYCLOAK_TEST_IMAGE: ${{ matrix.image }}
+      MOLECULE_RUN_PROTECTED: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Generate ephemeral test secrets
+        run: |
+          set -euo pipefail
+          for name in DB ADMIN VIEWER LDAP CLIENT SESSION UNAUTHORIZED INVALID; do
+            value="$(openssl rand -hex 32)"
+            echo "::add-mask::$value"
+            {
+              echo "KEYCLOAK_TEST_${name}_PASSWORD=$value"
+              if [ "$name" = CLIENT ]; then echo "KEYCLOAK_TEST_CLIENT_SECRET=$value"; fi
+              if [ "$name" = SESSION ]; then echo "KEYCLOAK_TEST_SESSION_SECRET=$value"; fi
+            } >> "$GITHUB_ENV"
+          done
+          {
+            echo 'KEYCLOAK_TEST_CLIENT_ID=keycloak-test-client'
+            echo 'KEYCLOAK_TEST_ISSUER=http://127.0.0.1:28080/realms/keycloak-test'
+            echo 'KEYCLOAK_TEST_ADMIN_USERNAME=keycloak_test_admin'
+            echo 'KEYCLOAK_TEST_VIEWER_USERNAME=keycloak_test_viewer'
+            echo 'KEYCLOAK_TEST_UNAUTHORIZED_USERNAME=keycloak_test_unauthorized'
+            echo 'KEYCLOAK_TEST_INVALID_USERNAME=keycloak_test_invalid'
+          } >> "$GITHUB_ENV"
+      - name: Run Application Acceptance
+        run: molecule test -s keycloak-application-acceptance 2>&1 | tee artifacts-molecule-application-acceptance.log
+      - name: Remove owned acceptance resources
+        if: always()
+        run: molecule destroy -s keycloak-application-acceptance
+      - name: Upload acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: keycloak-acceptance-${{ matrix.target }}-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            artifacts/**
+            artifacts-molecule-application-acceptance.log
+
+  evidence:
+    name: Keycloak / Evidence
+    if: always() && github.event_name != 'pull_request'
+    needs: [tiny, heavy, acceptance]
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: keycloak-*-${{ github.sha }}
+          path: artifacts/downloaded
+          merge-multiple: true
+      - name: Normalize scenario results
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/junit artifacts/allure-results artifacts/allure-report
+          mkdir -p artifacts/downloaded/extracted
+          while IFS= read -r -d '' archive; do
+            tar -xzf "$archive" -C artifacts/downloaded/extracted
+          done < <(find artifacts/downloaded -type f -name '*evidence.tar.gz' -print0)
+          find artifacts/downloaded -type f -name 'keycloak-*.xml' -exec cp {} artifacts/junit/ \;
+          find artifacts/downloaded -type f -path '*/allure-results/*' -exec cp {} artifacts/allure-results/ \;
+          find artifacts/downloaded -type f -path '*/allure-report/*' -exec cp -R {} artifacts/allure-report/ \;
+      - name: Generate human-readable Allure report
+        run: npx --yes allure-commandline@2.34.1 generate artifacts/allure-results --clean -o artifacts/allure-report
+      - name: Assemble evidence
+        run: mkdir -p artifacts/evidence/security
+      - name: Generate collection SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: artifacts/evidence/security/sbom.cdx.json
+          upload-artifact: false
+      - name: Scan source and dependencies for vulnerabilities
+        uses: anchore/scan-action@v7
+        with:
+          path: .
+          output-format: json
+          output-file: artifacts/evidence/security/vulnerability-report.json
+          fail-build: true
+          severity-cutoff: high
+      - name: Scan evidence inputs for committed secrets
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check detect-secrets==1.5.0
+          detect-secrets scan --all-files > artifacts/evidence/security/secret-scan-summary.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("artifacts/evidence/security/secret-scan-summary.json").read_text())
+          findings = sum(len(items) for items in report.get("results", {}).values())
+          if findings:
+              raise SystemExit(f"secret scan found {findings} potential secrets")
+          PY
+      - name: Record provenance
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path("artifacts/evidence/security/provenance.json").write_text(json.dumps({
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "commit_sha": os.environ["GITHUB_SHA"],
+              "workflow": os.environ["GITHUB_WORKFLOW"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+          }, indent=2) + "\n")
+          PY
+      - name: Assemble checksums and validate
+        env:
+          KEYCLOAK_EVIDENCE_ARCHIVE_STATUS: >-
+            ${{ vars.KEYCLOAK_EVIDENCE_S3_BUCKET != '' && 'configured' || 'not-configured' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/keycloak-evidence.py assemble
+          python3 scripts/keycloak-evidence.py validate
+      - name: Create evidence archive
+        run: tar -czf keycloak-evidence-${{ github.sha }}.tar.gz artifacts/evidence
+      - name: Attest SBOM provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: artifacts/evidence/security/sbom.cdx.json
+      - name: Attest evidence archive provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: keycloak-evidence-${{ github.sha }}.tar.gz
+      - name: Install Cosign for release-grade signing
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_validation
+        uses: sigstore/cosign-installer@v4
+      - name: Sign evidence archive with GitHub OIDC
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_validation
+        run: >-
+          cosign sign-blob --yes
+          --bundle "keycloak-evidence-${GITHUB_SHA}.sigstore.json"
+          "keycloak-evidence-${GITHUB_SHA}.tar.gz"
+      - name: Upload long-term evidence when configured
+        if: vars.KEYCLOAK_EVIDENCE_S3_BUCKET != ''
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.KEYCLOAK_EVIDENCE_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.KEYCLOAK_EVIDENCE_AWS_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL: ${{ vars.KEYCLOAK_EVIDENCE_S3_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          archive_prefix="ansible-collection-supplementary/keycloak/${COLLECTION_VERSION:-unknown}"
+          archive_uri="s3://${{ vars.KEYCLOAK_EVIDENCE_S3_BUCKET }}/${archive_prefix}/${GITHUB_SHA}/${GITHUB_RUN_ID}/"
+          aws s3 cp --sse AES256 "keycloak-evidence-${GITHUB_SHA}.tar.gz" \
+            "$archive_uri"
+      - name: Require long-term archive for release validation
+        if: inputs.release_validation && vars.KEYCLOAK_EVIDENCE_S3_BUCKET == ''
+        run: |
+          echo "Release validation requires KEYCLOAK_EVIDENCE_S3_BUCKET." >&2
+          exit 1
+      - name: Upload evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: keycloak-evidence-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            artifacts/evidence/**
+            keycloak-evidence-${{ github.sha }}.tar.gz
+            keycloak-evidence-${{ github.sha }}.sigstore.json
+
+  release-validation:
+    name: Keycloak / Release Validation
+    if: always() && github.event_name != 'pull_request'
+    needs: [lint-sanity, tiny, heavy, acceptance, evidence]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/download-artifact@v7
+        with:
+          name: keycloak-evidence-${{ github.sha }}
+          path: .
+      - name: Enforce exact tested commit and evidence eligibility
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          python3 scripts/keycloak-evidence.py validate
+      - name: Install Cosign for signature verification
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_validation
+        uses: sigstore/cosign-installer@v4
+      - name: Verify keyless evidence signature
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_validation
+        run: |
+          set -euo pipefail
+          cosign verify-blob \
+            --bundle "keycloak-evidence-${GITHUB_SHA}.sigstore.json" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/keycloak.yml@" \
+            "keycloak-evidence-${GITHUB_SHA}.tar.gz"
+      - name: Release summary
+        env:
+          LINT_RESULT: ${{ needs.lint-sanity.result }}
+          TINY_RESULT: ${{ needs.tiny.result }}
+          HEAVY_RESULT: ${{ needs.heavy.result }}
+          ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          EVIDENCE_RESULT: ${{ needs.evidence.result }}
+        run: |
+          set -euo pipefail
+          printf '%-32s %s\n' 'Lint and Sanity' "$LINT_RESULT" 'Tiny' "$TINY_RESULT" 'Heavy' "$HEAVY_RESULT" \
+            'Application Acceptance' "$ACCEPTANCE_RESULT" 'Evidence' "$EVIDENCE_RESULT"
+          test "$LINT_RESULT:$TINY_RESULT:$HEAVY_RESULT:$ACCEPTANCE_RESULT:$EVIDENCE_RESULT" = \
+            "success:success:success:success:success"
