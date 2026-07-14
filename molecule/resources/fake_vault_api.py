@@ -382,6 +382,7 @@ def main() -> None:
     server.request_log_path = arguments.request_log  # type: ignore[attr-defined]
     if arguments.cert and arguments.key:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
         context.load_cert_chain(arguments.cert, arguments.key)
         server.socket = context.wrap_socket(server.socket, server_side=True)
     arguments.pid_file.write_text(str(os.getpid()), encoding="utf-8")
