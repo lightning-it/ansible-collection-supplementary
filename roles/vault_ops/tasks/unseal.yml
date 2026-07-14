@@ -4,6 +4,7 @@
   vars:
     vault_ops_init_payload_source: "{{ vault_ops_init }}"
   when: vault_ops_init | default({}, true) | length > 0
+  no_log: true
 
 - name: Wait until Vault API is reachable via HTTPS
   ansible.builtin.uri:
@@ -184,6 +185,7 @@
 - name: Select the exact threshold number of unseal shares
   ansible.builtin.include_tasks: select_unseal_shares.yml
   when: vault_ops_sealed | bool
+  no_log: true
 
 - name: Submit the threshold number of Vault unseal shares over trusted HTTPS
   ansible.builtin.uri:

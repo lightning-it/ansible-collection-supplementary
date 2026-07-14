@@ -529,6 +529,18 @@
           - path: stage-2c/data/molecule/item
             capabilities: [read]
 
+    - name: Inspect scoped AppRole fixture paths
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_scoped_approle
+        tasks_from: preflight
+      vars:
+        vault_scoped_approle_api_delegate_to: localhost
+        vault_scoped_approle_ca_cert_path: "{{ vault_bootstrap_molecule_scoped_ca_file }}"
+        vault_scoped_approle_controller_escrow_root_path: >-
+          {{ vault_bootstrap_molecule_controller_root }}
+        vault_scoped_approle_controller_document_path: >-
+          {{ vault_bootstrap_molecule_scoped_document }}
+
     - name: Require the inventory-rendered numeric string gate to pass safely
       ansible.builtin.assert:
         that:

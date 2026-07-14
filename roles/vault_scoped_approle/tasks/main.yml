@@ -3,6 +3,10 @@
   ansible.builtin.import_tasks: assert.yml
   tags: always
 
+- name: Inspect scoped AppRole controller prerequisites
+  ansible.builtin.import_tasks: preflight.yml
+  tags: always
+
 - name: Wait for the certificate-validated Vault API
   ansible.builtin.uri:
     url: "{{ vault_scoped_approle_health_url }}"
@@ -271,6 +275,70 @@
     - name: Build the exact scoped AppRole controller document
       ansible.builtin.include_tasks: build_document.yml
 
+    - name: Read back the exact scoped Vault policy before root revocation
+      ansible.builtin.uri:
+        url: >-
+          {{ vault_scoped_approle_api_url }}/v1/sys/policies/acl/{{ vault_scoped_approle_policy_name }}
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+        validate_certs: true
+        ca_path: "{{ _vault_scoped_approle_ca_path }}"
+        status_code: 200
+        timeout: "{{ vault_scoped_approle_timeout }}"
+      register: _vault_scoped_approle_policy_readback
+      delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+      become: false
+      changed_when: false
+
+    - name: Read back the exact scoped Vault AppRole before root revocation
+      ansible.builtin.uri:
+        url: >-
+          {{ vault_scoped_approle_api_url }}/v1/auth/{{ vault_scoped_approle_auth_mount_point
+          }}/role/{{ vault_scoped_approle_role_name }}
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+        validate_certs: true
+        ca_path: "{{ _vault_scoped_approle_ca_path }}"
+        status_code: 200
+        timeout: "{{ vault_scoped_approle_timeout }}"
+      register: _vault_scoped_approle_role_readback
+      delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+      become: false
+      changed_when: false
+
+    - name: Require exact scoped policy and AppRole readback before root revocation
+      ansible.builtin.assert:
+        that:
+          - >-
+            _vault_scoped_approle_policy_readback.json.data.policy | trim
+            == vault_scoped_approle_policy | trim
+          - >-
+            _vault_scoped_approle_role_readback.json.data.token_policies | sort
+            == [vault_scoped_approle_policy_name]
+          - >-
+            _vault_scoped_approle_role_readback.json.data.token_type
+            == vault_scoped_approle_token_type
+          - _vault_scoped_approle_role_readback.json.data.token_no_default_policy | bool
+          - >-
+            _vault_scoped_approle_role_readback.json.data.token_ttl | int
+            == vault_scoped_approle_token_ttl_seconds | int
+          - >-
+            _vault_scoped_approle_role_readback.json.data.token_max_ttl | int
+            == vault_scoped_approle_token_max_ttl_seconds | int
+          - >-
+            _vault_scoped_approle_role_readback.json.data.token_num_uses | int
+            == vault_scoped_approle_token_num_uses | int
+          - >-
+            _vault_scoped_approle_role_readback.json.data.secret_id_ttl | int
+            == vault_scoped_approle_secret_id_ttl | int
+          - >-
+            _vault_scoped_approle_role_readback.json.data.secret_id_num_uses | int
+            == vault_scoped_approle_secret_id_num_uses | int
+        fail_msg: "Scoped Vault policy or AppRole differs from the exact requested contract."
+        quiet: true
+
     - name: Persist immutable scoped AppRole controller escrow
       lit.foundational.ansible_vault_document:
         path: "{{ _vault_scoped_approle_document_path }}"
@@ -301,73 +369,6 @@
 
 - name: Require a bounded scoped Vault token
   ansible.builtin.include_tasks: validate_bounded_token.yml
-  no_log: true
-
-- name: Read back the exact scoped Vault policy
-  ansible.builtin.uri:
-    url: >-
-      {{ vault_scoped_approle_api_url }}/v1/sys/policies/acl/{{ vault_scoped_approle_policy_name }}
-    method: GET
-    headers:
-      X-Vault-Token: "{{ _vault_scoped_approle_login.json.auth.client_token }}"
-    validate_certs: true
-    ca_path: "{{ _vault_scoped_approle_ca_path }}"
-    status_code: 200
-    timeout: "{{ vault_scoped_approle_timeout }}"
-  register: _vault_scoped_approle_policy_readback
-  delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
-  become: false
-  changed_when: false
-  no_log: true
-
-- name: Read back the exact scoped Vault AppRole
-  ansible.builtin.uri:
-    url: >-
-      {{ vault_scoped_approle_api_url }}/v1/auth/{{ vault_scoped_approle_auth_mount_point
-      }}/role/{{ vault_scoped_approle_role_name }}
-    method: GET
-    headers:
-      X-Vault-Token: "{{ _vault_scoped_approle_login.json.auth.client_token }}"
-    validate_certs: true
-    ca_path: "{{ _vault_scoped_approle_ca_path }}"
-    status_code: 200
-    timeout: "{{ vault_scoped_approle_timeout }}"
-  register: _vault_scoped_approle_role_readback
-  delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
-  become: false
-  changed_when: false
-  no_log: true
-
-- name: Require exact scoped policy and AppRole readback
-  ansible.builtin.assert:
-    that:
-      - >-
-        _vault_scoped_approle_policy_readback.json.data.policy | trim
-        == vault_scoped_approle_policy | trim
-      - >-
-        _vault_scoped_approle_role_readback.json.data.token_policies | sort
-        == [vault_scoped_approle_policy_name]
-      - >-
-        _vault_scoped_approle_role_readback.json.data.token_type
-        == vault_scoped_approle_token_type
-      - _vault_scoped_approle_role_readback.json.data.token_no_default_policy | bool
-      - >-
-        _vault_scoped_approle_role_readback.json.data.token_ttl | int
-        == vault_scoped_approle_token_ttl_seconds | int
-      - >-
-        _vault_scoped_approle_role_readback.json.data.token_max_ttl | int
-        == vault_scoped_approle_token_max_ttl_seconds | int
-      - >-
-        _vault_scoped_approle_role_readback.json.data.token_num_uses | int
-        == vault_scoped_approle_token_num_uses | int
-      - >-
-        _vault_scoped_approle_role_readback.json.data.secret_id_ttl | int
-        == vault_scoped_approle_secret_id_ttl | int
-      - >-
-        _vault_scoped_approle_role_readback.json.data.secret_id_num_uses | int
-        == vault_scoped_approle_secret_id_num_uses | int
-    fail_msg: "Scoped Vault policy or AppRole settings drifted from the exact requested contract."
-    quiet: true
   no_log: true
 
 - name: Probe exact scoped Vault token capabilities

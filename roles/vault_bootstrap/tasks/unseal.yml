@@ -21,6 +21,7 @@
     vault_ops_target_ca_cert_path: "{{ vault_bootstrap_ca_cert_path }}"
     vault_ops_container_name: "{{ vault_bootstrap_container_name }}"
     vault_ops_init_file_path: "{{ vault_bootstrap_init_file_path }}"
+  no_log: true
   tags:
     - vault
     - vault_bootstrap

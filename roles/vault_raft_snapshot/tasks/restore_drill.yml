@@ -83,14 +83,16 @@
           'verification_records'
         ]
       - >-
-        _vault_raft_snapshot_document.schema_version
-        == vault_raft_snapshot_document_schema_version
+        _vault_raft_snapshot_document.schema_version is integer
+        and _vault_raft_snapshot_document.schema_version
+            == vault_raft_snapshot_document_schema_version
       - _vault_raft_snapshot_document.subject == vault_raft_snapshot_document_subject
       - _vault_raft_snapshot_document.storage_backend == 'raft'
       - _vault_raft_snapshot_document.image == vault_raft_snapshot_image
       - _vault_raft_snapshot_document.cluster_id | length > 0
       - _vault_raft_snapshot_document.snapshot_sha256 is match('^[0-9a-f]{64}$')
-      - _vault_raft_snapshot_document.snapshot_size_bytes | int > 0
+      - _vault_raft_snapshot_document.snapshot_size_bytes is integer
+      - _vault_raft_snapshot_document.snapshot_size_bytes > 0
       - >-
         _vault_raft_snapshot_document.snapshot_size_bytes | int
         <= vault_raft_snapshot_max_raw_bytes | int
@@ -154,8 +156,8 @@
       group: "{{ vault_raft_snapshot_restore_run_as_group }}"
       mode: "0700"
     - path: "{{ vault_raft_snapshot_restore_work_root }}/config"
-      owner: root
-      group: root
+      owner: "{{ vault_raft_snapshot_restore_run_as_user }}"
+      group: "{{ vault_raft_snapshot_restore_run_as_group }}"
       mode: "0700"
   no_log: true
 
@@ -221,8 +223,8 @@
           }
           ui = false
           disable_mlock = false
-          api_addr = "https://127.0.0.1:8200"
-          cluster_addr = "https://127.0.0.1:8201"
+          api_addr = "{{ _vault_raft_snapshot_restore_api_url }}"
+          cluster_addr = "{{ _vault_raft_snapshot_restore_cluster_url }}"
 
     - name: Require the exact production Vault image locally
       ansible.builtin.command:
@@ -273,20 +275,19 @@
           - --env
           - SKIP_SETCAP=1
           - --env
-          - VAULT_ADDR=https://127.0.0.1:8200
+          - "VAULT_ADDR={{ _vault_raft_snapshot_restore_api_url }}"
           - --env
           - VAULT_CACERT=/vault/certs/ca.crt
           - "{{ vault_raft_snapshot_image }}"
           - server
-          - -config=/vault/config/vault.hcl
       changed_when: true
 
     - name: Wait for isolated uninitialized Vault API
       ansible.builtin.uri:
-        url: >-
-          https://127.0.0.1:{{ vault_raft_snapshot_restore_api_port }}/v1/sys/init
+        url: "{{ _vault_raft_snapshot_restore_api_url }}/v1/sys/init"
         method: GET
         validate_certs: true
+        use_proxy: false
         ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
         status_code: 200
         timeout: "{{ vault_raft_snapshot_timeout }}"
@@ -300,14 +301,14 @@
 
     - name: Initialize ephemeral Vault restore target
       ansible.builtin.uri:
-        url: >-
-          https://127.0.0.1:{{ vault_raft_snapshot_restore_api_port }}/v1/sys/init
+        url: "{{ _vault_raft_snapshot_restore_api_url }}/v1/sys/init"
         method: POST
         body_format: json
         body:
           secret_shares: 1
           secret_threshold: 1
         validate_certs: true
+        use_proxy: false
         ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
         status_code: 200
         timeout: "{{ vault_raft_snapshot_timeout }}"
@@ -315,13 +316,13 @@
 
     - name: Unseal ephemeral Vault restore target
       ansible.builtin.uri:
-        url: >-
-          https://127.0.0.1:{{ vault_raft_snapshot_restore_api_port }}/v1/sys/unseal
+        url: "{{ _vault_raft_snapshot_restore_api_url }}/v1/sys/unseal"
         method: POST
         body_format: json
         body:
           key: "{{ _vault_raft_snapshot_restore_ephemeral_init.json.keys_base64[0] }}"
         validate_certs: true
+        use_proxy: false
         ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
         status_code: 200
         timeout: "{{ vault_raft_snapshot_timeout }}"
@@ -329,8 +330,7 @@
     - name: Restore production Raft snapshot into isolated Vault
       ansible.builtin.uri:
         url: >-
-          https://127.0.0.1:{{ vault_raft_snapshot_restore_api_port
-          }}/v1/sys/storage/raft/snapshot-force
+          {{ _vault_raft_snapshot_restore_api_url }}/v1/sys/storage/raft/snapshot-force
         method: POST
         headers:
           X-Vault-Token: "{{ _vault_raft_snapshot_restore_ephemeral_init.json.root_token }}"
@@ -338,6 +338,7 @@
         src: "{{ vault_raft_snapshot_restore_work_root }}/vault.snap"
         remote_src: true
         validate_certs: true
+        use_proxy: false
         ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
         status_code: [200, 204]
         timeout: "{{ vault_raft_snapshot_timeout }}"
@@ -352,10 +353,10 @@
 
     - name: Wait for restored sealed Vault lifecycle
       ansible.builtin.uri:
-        url: >-
-          https://127.0.0.1:{{ vault_raft_snapshot_restore_api_port }}/v1/sys/seal-status
+        url: "{{ _vault_raft_snapshot_restore_api_url }}/v1/sys/seal-status"
         method: GET
         validate_certs: true
+        use_proxy: false
         ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
         status_code: 200
         timeout: "{{ vault_raft_snapshot_timeout }}"
@@ -380,13 +381,13 @@
 
     - name: Unseal isolated restored Vault with exact threshold shares
       ansible.builtin.uri:
-        url: >-
-          https://127.0.0.1:{{ vault_raft_snapshot_restore_api_port }}/v1/sys/unseal
+        url: "{{ _vault_raft_snapshot_restore_api_url }}/v1/sys/unseal"
         method: POST
         body_format: json
         body:
           key: "{{ item }}"
         validate_certs: true
+        use_proxy: false
         ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
         status_code: 200
         timeout: "{{ vault_raft_snapshot_timeout }}"
@@ -401,10 +402,10 @@
 
     - name: Require restored production cluster identity and ready lifecycle
       ansible.builtin.uri:
-        url: >-
-          https://127.0.0.1:{{ vault_raft_snapshot_restore_api_port }}/v1/sys/health
+        url: "{{ _vault_raft_snapshot_restore_api_url }}/v1/sys/health"
         method: GET
         validate_certs: true
+        use_proxy: false
         ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
         status_code: 200
         timeout: "{{ vault_raft_snapshot_timeout }}"
@@ -424,9 +425,7 @@
     - name: Authenticate scoped AppRole against isolated restored Vault
       ansible.builtin.uri:
         url: >-
-          https://127.0.0.1:{{
-            vault_raft_snapshot_restore_api_port
-          }}/v1/auth/{{
+          {{ _vault_raft_snapshot_restore_api_url }}/v1/auth/{{
             vault_raft_snapshot_auth_mount_point
           }}/login
         method: POST
@@ -435,6 +434,7 @@
           role_id: "{{ vault_raft_snapshot_role_id }}"
           secret_id: "{{ vault_raft_snapshot_secret_id }}"
         validate_certs: true
+        use_proxy: false
         ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
         status_code: 200
         timeout: "{{ vault_raft_snapshot_timeout }}"
@@ -444,12 +444,13 @@
     - name: Read restored KV verification documents
       ansible.builtin.uri:
         url: >-
-          https://127.0.0.1:{{ vault_raft_snapshot_restore_api_port }}/v1/{{
+          {{ _vault_raft_snapshot_restore_api_url }}/v1/{{
           item.mount_point }}/data/{{ item.path }}
         method: GET
         headers:
           X-Vault-Token: "{{ _vault_raft_snapshot_restore_login.json.auth.client_token }}"
         validate_certs: true
+        use_proxy: false
         ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
         status_code: 200
         timeout: "{{ vault_raft_snapshot_timeout }}"

@@ -40,14 +40,12 @@
         content: >-
           {"initialized": true, "sealed": true, "threshold": 2, "progress": 0}
         mode: "0600"
-        force: false
 
     - name: Initialize fake Podman runtime state
       ansible.builtin.copy:
         dest: "{{ vault_validate_molecule_root }}/runtime-state"
         content: "running\n"
         mode: "0600"
-        force: false
 
     - name: Probe fake Vault validation API
       ansible.builtin.uri:

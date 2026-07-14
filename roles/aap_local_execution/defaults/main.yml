@@ -85,9 +85,8 @@ aap_local_execution_automation_source_dir_effective: >-
 
 aap_local_execution_effective_ee_transfer_enabled: >-
   {{ aap_ee_transfer_enabled | default(true) | bool }}
-aap_local_execution_ee_archive_force: false
-aap_local_execution_modulix_run_ee_archive: >-
-  {{ (modulix_run_ee_image | regex_replace('^.*/', '') | regex_replace(':', '-')) ~ '.tar' }}
+aap_local_execution_ee_archive_force: >-
+  {{ aap_ee_archive_force | default(false) | bool }}
 aap_local_execution_modulix_run_ee_digest_effective: >-
   {{ modulix_run_ee_digest | default('', true) | string | trim }}
 aap_local_execution_modulix_run_ee_repository: >-
@@ -101,6 +100,14 @@ aap_local_execution_modulix_run_ee_runtime_image: >-
     if (aap_local_execution_modulix_run_ee_digest_effective | length > 0)
     else modulix_run_ee_image
   }}
+aap_local_execution_modulix_run_ee_archive: >-
+  {{
+    (
+      aap_local_execution_modulix_run_ee_runtime_image
+      | regex_replace('^.*/', '')
+      | regex_replace('[^A-Za-z0-9._-]', '-')
+    ) ~ '.tar'
+  }}
 aap_local_execution_machine_a_effective_ee_archive_path: >-
   {{ machine_a_modulix_run_ee_archive_path
      | default(
@@ -109,6 +116,8 @@ aap_local_execution_machine_a_effective_ee_archive_path: >-
          ~ aap_local_execution_modulix_run_ee_archive,
          true
        ) }}
+aap_local_execution_machine_a_effective_ee_archive_reference_path: >-
+  {{ aap_local_execution_machine_a_effective_ee_archive_path }}.image-ref
 aap_local_execution_effective_ee_archive_path: >-
   {{ aap_local_execution_effective_appl_root }}/artifacts/{{
     aap_local_execution_modulix_run_ee_archive
@@ -140,7 +149,8 @@ aap_local_execution_podman_root_graphroot_effective: >-
 aap_local_execution_podman_root_runroot_effective: >-
   {{ aap_podman_root_runroot | default('/appl/podman/root-run', true) }}
 aap_local_execution_podman_tmpdir_effective: "{{ aap_podman_tmpdir | default('/appl/tmp', true) }}"
-aap_local_execution_source_archive_force: true
+aap_local_execution_source_archive_force: >-
+  {{ aap_source_archive_force | default(true) | bool }}
 aap_local_execution_ssh_key_container: >-
   {{
     ''
@@ -149,10 +159,14 @@ aap_local_execution_ssh_key_container: >-
   }}
 aap_local_execution_vault_token_effective: >-
   {{
-    vault_token
-    | default(lookup('ansible.builtin.env', 'VAULT_TOKEN') | string | trim, true)
-    | string
-    | trim
+    (
+      vault_token
+      | default(lookup('ansible.builtin.env', 'VAULT_TOKEN') | string | trim, true)
+      | string
+      | trim
+    )
+    if (aap_local_execution_effective_secret_backend == 'hashicorp_vault')
+    else ''
   }}
 aap_local_execution_vault_validate_certs_effective: >-
   {{

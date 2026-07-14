@@ -8,6 +8,7 @@
     url: "{{ vault_raft_snapshot_health_url }}"
     method: GET
     validate_certs: true
+    use_proxy: false
     ca_path: "{{ _vault_raft_snapshot_controller_ca_path }}"
     status_code: 200
     timeout: "{{ vault_raft_snapshot_timeout }}"
@@ -25,6 +26,7 @@
     headers:
       X-Vault-Token: "{{ _vault_raft_snapshot_login.json.auth.client_token }}"
     validate_certs: true
+    use_proxy: false
     ca_path: "{{ _vault_raft_snapshot_controller_ca_path }}"
     status_code: 200
     timeout: "{{ vault_raft_snapshot_timeout }}"
@@ -70,6 +72,7 @@
   register: _vault_raft_snapshot_tempdir
   delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
   become: false
+  changed_when: false
   no_log: true
 
 - name: Capture and escrow the production Raft snapshot
@@ -82,6 +85,7 @@
         mode: "0700"
       delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
       become: false
+      changed_when: false
 
     - name: Download the production Vault Raft snapshot
       ansible.builtin.uri:
@@ -90,6 +94,7 @@
         headers:
           X-Vault-Token: "{{ _vault_raft_snapshot_login.json.auth.client_token }}"
         validate_certs: true
+        use_proxy: false
         ca_path: "{{ _vault_raft_snapshot_controller_ca_path }}"
         status_code: 200
         timeout: "{{ vault_raft_snapshot_timeout }}"
@@ -97,6 +102,7 @@
         return_content: false
       delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
       become: false
+      changed_when: false
 
     - name: Enforce owner-only raw snapshot mode
       ansible.builtin.file:
@@ -105,6 +111,7 @@
         mode: "0600"
       delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
       become: false
+      changed_when: false
 
     - name: Calculate raw Raft snapshot identity
       ansible.builtin.stat:
@@ -147,16 +154,23 @@
 
     - name: Build the encrypted Raft snapshot escrow document
       ansible.builtin.set_fact:
-        _vault_raft_snapshot_document:
-          schema_version: "{{ vault_raft_snapshot_document_schema_version | int }}"
-          subject: "{{ vault_raft_snapshot_document_subject }}"
-          storage_backend: raft
-          image: "{{ vault_raft_snapshot_image }}"
-          cluster_id: "{{ _vault_raft_snapshot_health.json.cluster_id }}"
-          snapshot_sha256: "{{ _vault_raft_snapshot_raw_stat.stat.checksum }}"
-          snapshot_size_bytes: "{{ _vault_raft_snapshot_raw_stat.stat.size | int }}"
-          snapshot_b64: "{{ _vault_raft_snapshot_raw.content }}"
-          verification_records: "{{ _vault_raft_snapshot_verification_records }}"
+        # Build the whole mapping in one native expression. Templating a
+        # dynamic scalar inside a YAML mapping stringifies it on controllers
+        # that disable Jinja native types.
+        _vault_raft_snapshot_document: >-
+          {{
+            {
+              'schema_version': 1,
+              'subject': vault_raft_snapshot_document_subject,
+              'storage_backend': 'raft',
+              'image': vault_raft_snapshot_image,
+              'cluster_id': _vault_raft_snapshot_health.json.cluster_id,
+              'snapshot_sha256': _vault_raft_snapshot_raw_stat.stat.checksum,
+              'snapshot_size_bytes': _vault_raft_snapshot_raw_stat.stat.size | int,
+              'snapshot_b64': _vault_raft_snapshot_raw.content,
+              'verification_records': _vault_raft_snapshot_verification_records
+            }
+          }}
       changed_when: false
 
     - name: Persist immutable encrypted off-host Raft snapshot escrow
@@ -242,4 +256,5 @@
         state: absent
       delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
       become: false
+      changed_when: false
       no_log: true

@@ -5,8 +5,11 @@ bugfixes:
     retaining stale artifacts, preserving TLS assets, enforcing verified SSH
     host keys and CA trust, and using a dedicated Ansible config that avoids
     unrelated Ansible Vault password files when HashiCorp Vault is selected.
+  - >-
+    Make execution environment archives digest-specific and identity-checked,
+    publish them atomically, and honor the documented archive refresh controls
+    so digest rotation cannot reuse a stale Machine A payload.
 minor_changes:
   - >-
-    Add optional digest-pinned execution environment references for target-side
-    pulls and runs while retaining the configured image tag for Machine A
-    export operations.
+    Add optional digest-pinned execution environment references for Machine A
+    pulls and exports, target-side staging, and execution environment runs.

@@ -150,6 +150,7 @@
     - aap_local_execution_action == 'transfer_payload'
     - aap_local_execution_effective_secret_backend == 'hashicorp_vault'
     - aap_local_machine_a_vault_token_exists | bool
+  no_log: true
 
 - name: Transfer SSH key file when key auth is enabled
   ansible.builtin.copy:
@@ -164,6 +165,7 @@
     - aap_local_execution_action == 'transfer_payload'
     - aap_ssh_key_auth_enabled | bool
     - aap_local_machine_a_ssh_key_exists | bool
+  no_log: true
 
 - name: Transfer verified SSH known hosts file
   ansible.builtin.copy:
@@ -194,6 +196,7 @@
     - aap_local_execution_action == 'transfer_payload'
     - aap_ssh_key_auth_enabled | bool
     - aap_local_machine_a_ssh_key_exists | bool
+  no_log: true
 
 - name: Install verified SSH known hosts file
   ansible.builtin.copy:
@@ -213,6 +216,7 @@
     - aap_local_execution_action == 'transfer_payload'
     - aap_local_execution_effective_secret_backend == 'hashicorp_vault'
     - aap_local_machine_a_vault_token_exists | bool
+  no_log: true
 
 - name: Find stale runtime payload archives
   ansible.builtin.find:

@@ -14,10 +14,12 @@ and select `aap_action`; this role performs validation, local artifact handling,
 payload transfer, runtime staging, inventory generation, and execution
 environment command assembly.
 
-## Supported Platforms
+## Requirements
 
 - Machine A: Linux host with Ansible, SSH, tar, and optionally Podman.
 - AAP target: Red Hat Enterprise Linux 9 or 10 prepared for AAP local execution.
+- Podman on Machine A when `aap_ee_transfer_enabled` is `true`, and on the AAP
+  target for staging or running the execution environment.
 
 The target setup account must be `svc_ansible` and the AAP runtime/install user
 must be `svc_aap`.
@@ -34,7 +36,7 @@ must be `svc_aap`.
 - `artifacts`, `base_preflight`, `tls`, `deploy`, `status`: run the matching AAP
   runbooks inside the configured execution environment.
 
-## Key Variables
+## Variables
 
 - `aap_action` / `aap_local_action`: selected action.
 - `aap_fqdn`: public AAP FQDN used for URLs and TLS.
@@ -46,16 +48,21 @@ must be `svc_aap`.
   `~/aap-export`.
 - `aap_appl_root`: remote local-execution root, defaults to `/appl/aap-local`.
 - `modulix_run_ee_image`: execution environment image.
-- `modulix_run_ee_digest`: optional `sha256:...` digest. Machine A still pulls
-  and exports `modulix_run_ee_image`; target-side pulls and EE runs use the
-  immutable `repository@digest` reference (without a tag) when this value is
-  set.
+- `modulix_run_ee_digest`: optional `sha256:...` digest. Machine A pulls and
+  exports, target-side staging verifies, and EE runs use the immutable
+  `repository@digest` reference (without a tag) when this value is set.
 - `aap_ee_transfer_enabled`: copy the EE image from Machine A when `true`; pull
   it from the target-side registry when `false`.
 - `aap_ee_archive_force`: recreate the local EE archive even when it already
-  exists.
+  exists. The role otherwise reuses it only when its protected identity sidecar
+  exactly matches the requested immutable runtime reference.
 - `aap_source_archive_force`: recreate the source archive during payload
   transfer. Defaults to `true` to preserve current rollout behavior.
+
+The default EE archive filename includes the complete requested digest. A
+caller-provided fixed archive path remains safe because the role compares its
+image-reference sidecar, saves to a temporary file, and atomically publishes a
+replacement whenever the digest changes.
 
 ## Security
 
@@ -79,7 +86,12 @@ must be `svc_aap`.
 - The execution environment receives only the environment variables needed for
   the runbook action.
 
-## Example
+## Dependencies
+
+Collection-level dependencies are declared in `galaxy.yml`. The role itself
+uses Ansible builtins and the host tools listed under Requirements.
+
+## Example Playbook
 
 ```yaml
 - name: Prepare Machine A
@@ -106,12 +118,24 @@ The role creates or updates:
 
 ## Molecule Coverage
 
-Top-level Molecule scenarios cover the shared AAP roles. Heavy product install
-coverage is intentionally handled by runbook-level integration tests because it
-requires a real RHEL host, AAP bundle, manifest, registry access, and secrets.
+`molecule/aap-local-execution-basic` exercises the side-effect-free assertion
+entrypoint, both supported secret backends, exact execution-environment command
+isolation, digest rotation with a fixed archive path, atomic cache identity,
+target-side image verification, and unchanged-digest idempotence using fake
+Podman. Heavy product installation remains in runbook-level integration tests
+because it requires a real RHEL host, AAP bundle, manifest, registry access, and
+secrets.
 
 ## Known Limitations
 
 - Full AAP installation is not simulated in lightweight Molecule scenarios.
 - `transfer_payload` intentionally keeps source archive recreation enabled by
   default so copied source changes are not missed during active development.
+
+## License
+
+MIT
+
+## Author
+
+Lightning IT

@@ -1,15 +1,21 @@
 ---
-- name: Validate Vault Raft snapshot inputs
+- name: Validate Vault Raft snapshot action
+  ansible.builtin.assert:
+    that:
+      - vault_raft_snapshot_action is string
+      - vault_raft_snapshot_action in ['none', 'backup', 'restore_drill']
+    fail_msg: "vault_raft_snapshot_action must be none, backup, or restore_drill."
+    quiet: true
+
+- name: Validate active Vault Raft snapshot inputs
   ansible.builtin.assert:
     that:
       - not ansible_check_mode
-      - vault_raft_snapshot_action in ['none', 'backup', 'restore_drill']
       - vault_raft_snapshot_api_url is match('^https://[^/]+$')
       - vault_raft_snapshot_health_url == vault_raft_snapshot_api_url ~ '/v1/sys/health'
       - vault_raft_snapshot_api_delegate_to == 'localhost'
       - vault_raft_snapshot_validate_certs is sameas true
       - vault_raft_snapshot_controller_ca_cert_path is match('^/')
-      - vault_raft_snapshot_target_ca_cert_path is match('^/')
       - vault_raft_snapshot_timeout is integer
       - vault_raft_snapshot_timeout | int > 0
       - vault_raft_snapshot_auth_mount_point is match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
@@ -31,18 +37,6 @@
       - >-
         vault_raft_snapshot_image
         is match('^[^@\s]+@sha256:[0-9a-f]{64}$')
-      - vault_raft_snapshot_production_cert_dir is match('^/')
-      - vault_raft_snapshot_restore_bind_address == '127.0.0.1'
-      - vault_raft_snapshot_restore_api_port | int > 1024
-      - vault_raft_snapshot_restore_api_port | int <= 65535
-      - vault_raft_snapshot_restore_cluster_port | int > 1024
-      - vault_raft_snapshot_restore_cluster_port | int <= 65535
-      - >-
-        vault_raft_snapshot_restore_api_port | int
-        != vault_raft_snapshot_restore_cluster_port | int
-      - vault_raft_snapshot_restore_work_root is match('^/run/[A-Za-z0-9._-]+$')
-      - vault_raft_snapshot_restore_container_name is match('^[A-Za-z0-9][A-Za-z0-9._-]+$')
-      - vault_raft_snapshot_restore_node_id is match('^[A-Za-z0-9][A-Za-z0-9._-]+$')
       - lookup('ansible.builtin.env', 'ANSIBLE_VAULT_PASSWORD_FILE') | length > 0
       - lookup('ansible.builtin.env', 'VAULT_ADDR') | length == 0
       - lookup('ansible.builtin.env', 'VAULT_TOKEN') | length == 0
@@ -52,6 +46,7 @@
       immutable controller ciphertext, a digest-pinned image, an isolated /run
       restore target, and no exported Vault credentials.
     quiet: true
+  when: vault_raft_snapshot_action != 'none'
   no_log: true
 
 - name: Validate Vault Raft snapshot KV verification paths
@@ -64,46 +59,26 @@
     fail_msg: "Every Raft snapshot KV verification path must be exact and relative."
     quiet: true
   loop: "{{ vault_raft_snapshot_verification_kv_paths }}"
-  no_log: true
-
-- name: Resolve canonical Vault Raft snapshot controller paths
-  ansible.builtin.set_fact:
-    _vault_raft_snapshot_escrow_root: >-
-      {{ vault_raft_snapshot_controller_escrow_root_path | realpath }}
-    _vault_raft_snapshot_document_path: >-
-      {{ vault_raft_snapshot_controller_document_path | normpath }}
-    _vault_raft_snapshot_document_canonical: >-
-      {{ vault_raft_snapshot_controller_document_path | realpath }}
-    _vault_raft_snapshot_controller_ca_path: >-
-      {{ vault_raft_snapshot_controller_ca_cert_path | normpath }}
-    _vault_raft_snapshot_controller_uid: >-
-      {{ lookup('ansible.builtin.pipe', 'id -u') | int }}
-  changed_when: false
-  no_log: true
-
-- name: Require Raft snapshot document below the exact escrow root
-  ansible.builtin.assert:
-    that:
-      - _vault_raft_snapshot_escrow_root | length > 1
-      - >-
-        _vault_raft_snapshot_document_path
-        == vault_raft_snapshot_controller_document_path
-      - _vault_raft_snapshot_document_canonical != _vault_raft_snapshot_escrow_root
-      - >-
-        _vault_raft_snapshot_document_canonical.startswith(
-          _vault_raft_snapshot_escrow_root ~ '/'
-        )
-      - >-
-        _vault_raft_snapshot_controller_ca_path
-        == vault_raft_snapshot_controller_ca_cert_path
-      - _vault_raft_snapshot_document_path != _vault_raft_snapshot_controller_ca_path
-    fail_msg: "Raft snapshot escrow must be a normalized file below the controller escrow root."
-    quiet: true
+  when: vault_raft_snapshot_action != 'none'
   no_log: true
 
 - name: Require exact production unseal material for a restore drill
   ansible.builtin.assert:
     that:
+      - vault_raft_snapshot_target_ca_cert_path is match('^/')
+      - vault_raft_snapshot_production_cert_dir is match('^/')
+      - vault_raft_snapshot_restore_bind_address == '127.0.0.1'
+      - vault_raft_snapshot_restore_tls_hostname == 'localhost'
+      - vault_raft_snapshot_restore_api_port | int > 1024
+      - vault_raft_snapshot_restore_api_port | int <= 65535
+      - vault_raft_snapshot_restore_cluster_port | int > 1024
+      - vault_raft_snapshot_restore_cluster_port | int <= 65535
+      - >-
+        vault_raft_snapshot_restore_api_port | int
+        != vault_raft_snapshot_restore_cluster_port | int
+      - vault_raft_snapshot_restore_work_root is match('^/run/[A-Za-z0-9._-]+$')
+      - vault_raft_snapshot_restore_container_name is match('^[A-Za-z0-9][A-Za-z0-9._-]+$')
+      - vault_raft_snapshot_restore_node_id is match('^[A-Za-z0-9][A-Za-z0-9._-]+$')
       - >-
         vault_raft_snapshot_expected_ciphertext_sha256
         is match('^[0-9a-f]{64}$')
@@ -117,7 +92,9 @@
       - >-
         vault_raft_snapshot_restore_unseal_keys | unique | length
         == vault_raft_snapshot_restore_unseal_keys | length
-    fail_msg: "Restore drill requires unique production unseal keys and the exact positive threshold."
+    fail_msg: >-
+      Restore drill requires the literal localhost TLS identity, loopback-only
+      ports, unique production unseal keys, and the exact positive threshold.
     quiet: true
   when: vault_raft_snapshot_action == 'restore_drill'
   no_log: true

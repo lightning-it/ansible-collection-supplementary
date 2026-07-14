@@ -1,0 +1,39 @@
+---
+dependency:
+  name: shell
+  command: >-
+    rm -rf "${MOLECULE_EPHEMERAL_DIRECTORY}/vault-raft-snapshot";
+    rm -rf /run/lit-vault-raft-molecule;
+    umask 077 && openssl rand -hex 32
+    > /tmp/molecule-vault-raft-snapshot-password
+
+driver:
+  name: default
+
+platforms:
+  - name: localhost
+    managed: false
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_VAULT_PASSWORD_FILE: /tmp/molecule-vault-raft-snapshot-password
+  inventory:
+    host_vars:
+      localhost:
+        ansible_connection: local
+  playbooks:
+    converge: converge.yml
+    verify: verify.yml
+
+scenario:
+  name: vault-raft-snapshot-basic
+  test_sequence:
+    - dependency
+    - syntax
+    - converge
+    - idempotence
+    - verify
+
+verifier:
+  name: ansible

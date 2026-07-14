@@ -10,7 +10,8 @@ The role is intentionally strict:
 - `VAULT_ADDR`, `VAULT_TOKEN`, and `VAULT_SKIP_VERIFY` must be absent from the environment.
 - First configuration requires an in-memory initial root-token handoff.
 - Existing controller ciphertext is immutable and must authenticate successfully.
-- A rerun validates the stored AppRole, policy, role settings, and exact capability probes without needing root.
+- First configuration reads back the exact policy and role settings before revoking root.
+- A rerun authenticates the stored AppRole and validates its bounded token and exact capabilities without root.
 - All credential-bearing tasks use `no_log`.
 
 See `defaults/main.yml` for the complete variable contract. The caller owns the policy text, KV mount, role name,

@@ -22,7 +22,10 @@ vault_raft_snapshot_verification_kv_paths: []
 
 vault_raft_snapshot_image: ""
 vault_raft_snapshot_production_cert_dir: "/srv/vault/certs"
+# Both values are fail-closed invariants: the listener stays on 127.0.0.1 and
+# every TLS URL uses the operational certificate's DNS:localhost identity.
 vault_raft_snapshot_restore_bind_address: 127.0.0.1
+vault_raft_snapshot_restore_tls_hostname: localhost
 vault_raft_snapshot_restore_api_port: 18201
 vault_raft_snapshot_restore_cluster_port: 18202
 vault_raft_snapshot_restore_work_root: /run/lit-vault-restore-drill

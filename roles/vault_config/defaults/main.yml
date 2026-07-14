@@ -104,4 +104,6 @@ vault_config_cert_dir: "/srv/vault/certs"
 vault_config_pod_name: "vault"
 vault_config_pod_manifest_path: "/etc/podman/pods/vault.yml"
 vault_config_skip_runtime: false
+# Retained for inventory compatibility. PKI credentials and private-key tasks
+# always enforce no_log and cannot be made verbose.
 vault_config_pki_no_log: true

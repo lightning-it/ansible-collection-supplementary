@@ -84,15 +84,21 @@
           if (aap_local_execution_effective_secret_backend == 'ansible_vault')
           else []
         )
+        + (
+          [
+            '-e', 'VAULT_ADDR',
+            '-e', 'VAULT_SKIP_VERIFY',
+            '-e', 'VAULT_VALIDATE_CERTS',
+            '-e', 'VAULT_TOKEN',
+            '-e', 'VAULT_ENGINE_MOUNT_POINT',
+            '-e', 'AAP_VAULT_HOST_KEY',
+            '-e', 'AAP_VAULT_ADMIN_PASSWORDS_KV_PATH',
+            '-e', 'AAP_VAULT_DEFAULTS_KV_PATH'
+          ]
+          if (aap_local_execution_effective_secret_backend == 'hashicorp_vault')
+          else []
+        )
         + [
-          '-e', 'VAULT_ADDR',
-          '-e', 'VAULT_SKIP_VERIFY',
-          '-e', 'VAULT_VALIDATE_CERTS',
-          '-e', 'VAULT_TOKEN',
-          '-e', 'VAULT_ENGINE_MOUNT_POINT',
-          '-e', 'AAP_VAULT_HOST_KEY',
-          '-e', 'AAP_VAULT_ADMIN_PASSWORDS_KV_PATH',
-          '-e', 'AAP_VAULT_DEFAULTS_KV_PATH',
           '-e', 'AAP_ARTIFACT_DIR',
           '-e', 'AAP_BUNDLE_REMOTE_SRC',
           '-e', 'AAP_MANIFEST_REMOTE_SRC',
@@ -127,12 +133,22 @@
     ANSIBLE_TOOLBOX_RUNTIME_MODE: "{{ aap_local_execution_ansible_toolbox_runtime_mode_effective }}"
     ANSIBLE_COLLECTIONS_PATH: "{{ aap_local_execution_ansible_collections_path_effective }}"
     ANSIBLE_REMOTE_TEMP: "{{ ansible_remote_tmp | default('/appl/ansible-tmp', true) }}"
-    VAULT_ADDR: "{{ vault_addr | default('', true) }}"
+    VAULT_ADDR: >-
+      {{
+        vault_addr | default('', true)
+        if (aap_local_execution_effective_secret_backend == 'hashicorp_vault')
+        else ''
+      }}
     VAULT_SKIP_VERIFY: >-
       {{ (not (aap_local_execution_vault_validate_certs_effective | bool)) | ternary('true', 'false') }}
     VAULT_VALIDATE_CERTS: >-
       {{ aap_local_execution_vault_validate_certs_effective | bool | ternary('true', 'false') }}
-    VAULT_TOKEN: "{{ aap_local_execution_vault_token_effective }}"
+    VAULT_TOKEN: >-
+      {{
+        aap_local_execution_vault_token_effective
+        if (aap_local_execution_effective_secret_backend == 'hashicorp_vault')
+        else ''
+      }}
     VAULT_ENGINE_MOUNT_POINT: "{{ vault_engine_mount_point | default('', true) }}"
     AAP_VAULT_HOST_KEY: "{{ aap_vault_host_key | default(aap_local_execution_effective_shortname, true) }}"
     AAP_VAULT_ADMIN_PASSWORDS_KV_PATH: "{{ aap_vault_admin_passwords_kv_path }}"
@@ -145,3 +161,4 @@
     TMPDIR: "{{ aap_local_execution_podman_tmpdir_effective }}"
   register: aap_local_execution_ee_command_result
   changed_when: false
+  no_log: true

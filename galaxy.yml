@@ -23,9 +23,9 @@ dependencies:
   community.crypto: '>=3.2.2,<4.0.0'
   ansible.posix: '>=2.2.0'
   community.vmware: 5.10.0
-  lit.foundational: '>=1.27.0'
+  lit.foundational: '>=1.30.0'
   lit.rhel: '>=1.17.1'
-  community.hashi_vault: '>=6.2.1,<7.0.0'
+  community.hashi_vault: 7.1.0
 build_ignore:
   - .ansible
   - extensions/molecule

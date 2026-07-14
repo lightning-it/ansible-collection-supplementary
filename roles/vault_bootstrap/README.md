@@ -56,7 +56,7 @@ contain a nonempty root token.
 
 ## Dependencies
 
-`lit.foundational` 1.27.0 or newer for `ansible_vault_document`.
+`lit.foundational` 1.30.0 or newer for `ansible_vault_document`.
 
 ## Example Playbook
 

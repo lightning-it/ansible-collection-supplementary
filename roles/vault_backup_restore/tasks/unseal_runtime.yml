@@ -15,3 +15,4 @@
     vault_ops_ansible_vault_password: "{{ vault_backup_restore_ansible_vault_password }}"
     vault_ops_init: "{{ vault_backup_restore_init }}"
     vault_ops_unseal_keys: "{{ vault_backup_restore_unseal_keys }}"
+  no_log: true
