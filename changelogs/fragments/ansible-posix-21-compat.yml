@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    dependency - Lower the ``ansible.posix`` minimum to 2.1.0 and require ``lit.foundational`` 1.31.0 or newer,
+    restoring a resolvable graph with ``fedora.linux_system_roles`` 1.127.2 and its
+    ``ansible.posix >=2.1.0,<2.2.0`` constraint while leaving the Supplementary maximum uncapped for other consumers.
