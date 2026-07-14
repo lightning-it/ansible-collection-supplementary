@@ -1,0 +1,7 @@
+---
+minor_changes:
+  - >-
+    release_model - Route collection publishing through a protected main-branch
+    dispatch with the standard Galaxy environment credential, ignore generated
+    local collection and Python cache trees, and use the managed execution
+    environment's ansible-lint version.
