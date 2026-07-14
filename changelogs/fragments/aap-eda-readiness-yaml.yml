@@ -1,3 +1,0 @@
----
-bugfixes:
-  - aap_deploy - Preserve valid YAML indentation when hardening the prepared EDA readiness condition.

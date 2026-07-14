@@ -1,9 +1,0 @@
----
-minor_changes:
-  - >-
-    Add inventory-driven Vault listener and advertised address settings, retain
-    file storage as the compatibility default, and support validated single-node
-    integrated Raft storage with explicit cluster address and node ID inputs.
-  - >-
-    Keep the Vault container VAULT_ADDR aligned with the advertised API address
-    and publish the cluster port only when Raft storage is selected.
