@@ -7,7 +7,7 @@ COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE:-lit}"
 
 if [ -z "${COLLECTION_NAME:-}" ]; then
   if [ -f galaxy.yml ]; then
-    COLLECTION_NAME="$(scripts/devtools-galaxy.sh value name galaxy.yml || true)"
+    COLLECTION_NAME="$(scripts/devtools-galaxy.sh value name galaxy.yml)"
   fi
   if [ -z "${COLLECTION_NAME:-}" ]; then
     echo "ERROR: COLLECTION_NAME not set and galaxy.yml missing 'name'." >&2
@@ -19,6 +19,7 @@ echo "Using collection: ${COLLECTION_NAMESPACE}.${COLLECTION_NAME}"
 
 COLLECTION_NAMESPACE="$COLLECTION_NAMESPACE" \
 COLLECTION_NAME="$COLLECTION_NAME" \
+WUNDER_DEVTOOLS_NETWORK=bridge \
 CONTAINER_HOME=/tmp/wunder \
 bash scripts/wunder-devtools-ee.sh bash -c '
   set -euo pipefail

@@ -1,0 +1,48 @@
+---
+- name: Capture Keycloak Tiny evidence before destruction
+  ansible.builtin.import_playbook: ../shared/incus/cleanup.yml
+  vars:
+    molecule_incus_owner_label: user.keycloak-test-owner
+    molecule_incus_owner_override: >-
+      {{
+        lookup('ansible.builtin.env', 'KEYCLOAK_TEST_OWNER')
+        | default(lookup('ansible.builtin.env', 'MOLECULE_TEST_OWNER'), true)
+      }}
+    molecule_incus_evidence_root_override: >-
+      {{
+        lookup('ansible.builtin.env', 'KEYCLOAK_TEST_ARTIFACTS')
+        | default(lookup('ansible.builtin.env', 'MOLECULE_TEST_ARTIFACTS'), true)
+      }}
+    molecule_incus_evidence_secret_env_names_override:
+      - KEYCLOAK_TEST_ADMIN_PASSWORD
+      - KEYCLOAK_TEST_DB_PASSWORD
+    molecule_incus_evidence_log_commands_override:
+      - name: os-release
+        argv:
+          - cat
+          - /etc/os-release
+      - name: kernel
+        argv:
+          - uname
+          - -a
+      - name: podman-inventory
+        argv:
+          - podman
+          - ps
+          - --all
+          - --format
+          - json
+      - name: keycloak
+        argv:
+          - podman
+          - logs
+          - --tail
+          - "500"
+          - keycloak-tiny-keycloak
+      - name: postgres
+        argv:
+          - podman
+          - logs
+          - --tail
+          - "500"
+          - keycloak-tiny-postgres-postgres

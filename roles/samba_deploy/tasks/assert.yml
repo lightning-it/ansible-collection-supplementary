@@ -20,18 +20,21 @@
       - samba_deploy_container_netbios_port | int > 0
       - samba_deploy_container_smb_port | int > 0
       - samba_deploy_workgroup | default('', true) | trim | length > 0
+      - samba_deploy_server_string | default('', true) | trim | length > 0
       - samba_deploy_share_name | default('', true) | trim | length > 0
       - samba_deploy_host_data_dir | default('', true) | trim | length > 0
       - samba_deploy_container_share_dir | default('', true) | trim | length > 0
+      - samba_deploy_share_comment is string
       - samba_deploy_share_guest_ok is boolean
       - samba_deploy_share_read_only is boolean
       - samba_deploy_share_browseable is boolean
+      - samba_deploy_share_mode is string
+      - samba_deploy_share_mode is match('^[0-7]{4}$')
       - samba_deploy_extra_args is sequence
       - samba_deploy_extra_args is not string
       - samba_deploy_ad_dc_image | default('', true) | trim | length > 0
       - samba_deploy_ad_dc_realm | default('', true) | trim | length > 0
       - samba_deploy_ad_dc_domain | default('', true) | trim | length > 0
-      - samba_deploy_ad_dc_admin_password | default('', true) | trim | length > 0
       - samba_deploy_ad_dc_insecure_ldap is boolean
       - samba_deploy_ad_dc_insecure_passwordsettings is boolean
       - samba_deploy_ad_dc_server_services | default('', true) | trim | length > 0
@@ -45,12 +48,59 @@
       - samba_deploy_ad_dc_log_dir | default('', true) | trim | length > 0
       - samba_deploy_ad_dc_entrypoint_dir | default('', true) | trim | length > 0
       - samba_deploy_ad_dc_keycloak_bind_user | default('', true) | trim | length > 0
-      - samba_deploy_ad_dc_keycloak_bind_password | default('', true) | trim | length > 0
       - samba_deploy_ad_dc_groups is sequence
       - samba_deploy_ad_dc_groups is not string
       - samba_deploy_ad_dc_users is sequence
       - samba_deploy_ad_dc_users is not string
     fail_msg: "Samba deploy variables are missing or invalid."
+  tags: always
+
+- name: Require explicit Samba AD DC credentials
+  ansible.builtin.assert:
+    that:
+      - samba_deploy_ad_dc_admin_password | default('', true) | trim | length >= 16
+      - samba_deploy_ad_dc_keycloak_bind_password | default('', true) | trim | length >= 16
+    fail_msg: >-
+      Samba AD DC mode requires explicit administrator and bind credentials of
+      at least 16 characters; the role never deploys credential defaults.
+  when: samba_deploy_mode == 'ad_dc'
+  no_log: true
+  tags: always
+
+- name: Validate Samba share account selection
+  ansible.builtin.assert:
+    that:
+      - samba_deploy_share_owner | default('', true) | trim | length > 0
+      - samba_deploy_share_group | default('', true) | trim | length > 0
+    fail_msg: >-
+      A Samba share owner and group are required. Gather operating system facts
+      on Debian or Red Hat family hosts to use the portable defaults, or set
+      samba_deploy_share_owner and samba_deploy_share_group explicitly to
+      existing least-privilege accounts.
+  when:
+    - samba_deploy_mode == 'share'
+    - not samba_deploy_skip_runtime | bool
+    - not samba_deploy_skip_deploy | bool
+  tags: always
+
+- name: Verify the Samba share owner exists
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ samba_deploy_share_owner }}"
+  when:
+    - samba_deploy_mode == 'share'
+    - not samba_deploy_skip_runtime | bool
+    - not samba_deploy_skip_deploy | bool
+  tags: always
+
+- name: Verify the Samba share group exists
+  ansible.builtin.getent:
+    database: group
+    key: "{{ samba_deploy_share_group }}"
+  when:
+    - samba_deploy_mode == 'share'
+    - not samba_deploy_skip_runtime | bool
+    - not samba_deploy_skip_deploy | bool
   tags: always
 
 - name: Validate Samba AD DC default groups
@@ -76,4 +126,5 @@
   loop_control:
     label: "{{ item.name | default('unnamed') }}"
   when: samba_deploy_mode == 'ad_dc'
+  no_log: true
   tags: always

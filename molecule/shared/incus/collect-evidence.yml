@@ -1,0 +1,269 @@
+---
+- name: Resolve the private evidence directory for the owned instance
+  ansible.builtin.set_fact:
+    molecule_incus_instance_evidence_directory: >-
+      {{
+        molecule_incus_evidence_root_effective
+        ~ '/logs/' ~ molecule_incus_identity_effective.scenario
+        ~ '/' ~ molecule_incus_identity_effective.target
+        ~ '/' ~ molecule_incus_evidence_timestamp.stdout
+        ~ '-' ~ molecule_incus_owned_instance.item.name
+      }}
+
+- name: Create the private instance evidence directory
+  ansible.builtin.file:
+    path: "{{ molecule_incus_instance_evidence_directory }}"
+    state: directory
+    mode: "0750"
+
+- name: Read the owned instance state
+  ansible.builtin.command:
+    argv:
+      - incus
+      - list
+      - "{{ molecule_incus_owned_instance.item.name }}"
+      - --format
+      - csv
+      - -c
+      - s
+  register: molecule_incus_evidence_instance_state
+  changed_when: false
+  failed_when: false
+
+- name: Read the owned instance CPU limit
+  ansible.builtin.command:
+    argv:
+      - incus
+      - config
+      - get
+      - "{{ molecule_incus_owned_instance.item.name }}"
+      - limits.cpu
+  register: molecule_incus_evidence_cpu_limit
+  changed_when: false
+  failed_when: false
+
+- name: Read the owned instance memory limit
+  ansible.builtin.command:
+    argv:
+      - incus
+      - config
+      - get
+      - "{{ molecule_incus_owned_instance.item.name }}"
+      - limits.memory
+  register: molecule_incus_evidence_memory_limit
+  changed_when: false
+  failed_when: false
+
+- name: Record the sanitized Incus environment metadata
+  ansible.builtin.copy:
+    dest: "{{ molecule_incus_instance_evidence_directory }}/environment.json"
+    mode: "0640"
+    content: |-
+      {
+        "schema_version": 1,
+        "captured_at": {{ molecule_incus_evidence_timestamp.stdout | to_json }},
+        "repository": {{ molecule_incus_identity_effective.repository | to_json }},
+        "run_id": {{ molecule_incus_identity_effective.run_id | to_json }},
+        "attempt": {{ molecule_incus_identity_effective.attempt | to_json }},
+        "scenario": {{ molecule_incus_identity_effective.scenario | to_json }},
+        "target": {{ molecule_incus_identity_effective.target | to_json }},
+        "instance": {{ molecule_incus_owned_instance.item.name | to_json }},
+        "requested_image": {{
+          molecule_incus_owned_instance.item.image | default('') | to_json
+        }},
+        "requested_type": {{
+          molecule_incus_owned_instance.item.type | default('container') | to_json
+        }},
+        "owner_label": {{ molecule_incus_owner_label | to_json }},
+        "exact_owner_match": true,
+        "state": {{
+          molecule_incus_evidence_instance_state.stdout
+          | default('unknown', true) | trim | to_json
+        }},
+        "resources": {
+          "cpu": {{
+            molecule_incus_evidence_cpu_limit.stdout
+            | default('', true) | trim | to_json
+          }},
+          "memory": {{
+            molecule_incus_evidence_memory_limit.stdout
+            | default('', true) | trim | to_json
+          }},
+          "disk": {{
+            (molecule_incus_owned_instance.item.resources | default({})).disk
+            | default('') | to_json
+          }}
+        },
+        "incus_version": {{ molecule_incus_evidence_version.stdout_lines | to_json }}
+      }
+
+- name: Create the private dependency evidence directory
+  ansible.builtin.file:
+    path: >-
+      {{
+        molecule_incus_evidence_root_effective
+        ~ '/dependencies/' ~ molecule_incus_identity_effective.scenario
+        ~ '/' ~ molecule_incus_identity_effective.target
+      }}
+    state: directory
+    mode: "0750"
+
+- name: Read the owned instance base-image fingerprint
+  ansible.builtin.command:
+    argv:
+      - incus
+      - config
+      - get
+      - "{{ molecule_incus_owned_instance.item.name }}"
+      - volatile.base_image
+  register: molecule_incus_evidence_base_image
+  changed_when: false
+  failed_when: false
+
+- name: Read exact in-target container image identities and digests
+  ansible.builtin.command:
+    argv:
+      - incus
+      - exec
+      - "{{ molecule_incus_owned_instance.item.name }}"
+      - --
+      - podman
+      - images
+      - --digests
+      - --no-trunc
+      - --format
+      - json
+  register: molecule_incus_evidence_container_images_raw
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Redact exact in-target container image identities
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['python3', molecule_incus_evidence_sanitizer]
+        + (
+          molecule_incus_evidence_secret_env_names_effective
+          | map('regex_replace', '^(.+)$', '--secret-env=\\1')
+          | list
+        )
+      }}
+    stdin: "{{ molecule_incus_evidence_container_images_raw.stdout }}"
+    stdin_add_newline: false
+  register: molecule_incus_evidence_container_images_redacted
+  changed_when: false
+  no_log: true
+  when: molecule_incus_evidence_container_images_raw.rc == 0
+
+- name: Parse the redacted in-target container image inventory
+  ansible.builtin.set_fact:
+    molecule_incus_evidence_container_images: >-
+      {{ molecule_incus_evidence_container_images_redacted.stdout | from_json }}
+  no_log: true
+  when:
+    - molecule_incus_evidence_container_images_raw.rc == 0
+    - molecule_incus_evidence_container_images_redacted.rc == 0
+
+- name: Record exact sanitized image dependency identities
+  ansible.builtin.copy:
+    dest: >-
+      {{
+        molecule_incus_evidence_root_effective
+        ~ '/dependencies/' ~ molecule_incus_identity_effective.scenario
+        ~ '/' ~ molecule_incus_identity_effective.target
+        ~ '/' ~ molecule_incus_owned_instance.item.name
+        ~ '-container-image-digests.json'
+      }}
+    mode: "0640"
+    content: |-
+      {
+        "schema_version": 1,
+        "scenario": {{ molecule_incus_identity_effective.scenario | to_json }},
+        "target": {{ molecule_incus_identity_effective.target | to_json }},
+        "instance": {{ molecule_incus_owned_instance.item.name | to_json }},
+        "requested_image": {{ molecule_incus_owned_instance.item.image | to_json }},
+        "incus_base_image_fingerprint": {{
+          molecule_incus_evidence_base_image.stdout
+          | default('', true) | trim | to_json
+        }},
+        "container_inventory_available": {{
+          (molecule_incus_evidence_container_images_raw.rc == 0) | bool | to_json
+        }},
+        "images": {{
+          molecule_incus_evidence_container_images | default([]) | to_json
+        }}
+      }
+  no_log: true
+
+- name: Capture configured application and environment log streams
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['incus', 'exec', molecule_incus_owned_instance.item.name, '--']
+        + molecule_incus_evidence_command.argv
+      }}
+  loop: "{{ molecule_incus_evidence_log_commands_effective }}"
+  loop_control:
+    loop_var: molecule_incus_evidence_command
+    label: "{{ molecule_incus_evidence_command.name }}"
+  register: molecule_incus_evidence_raw_logs
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Redact captured application and environment log streams
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['python3', molecule_incus_evidence_sanitizer]
+        + (
+          molecule_incus_evidence_secret_env_names_effective
+          | map('regex_replace', '^(.+)$', '--secret-env=\\1')
+          | list
+        )
+      }}
+    stdin: |-
+      {{ item.stdout | default('') }}
+      {{ item.stderr | default('') }}
+    stdin_add_newline: false
+  loop: "{{ molecule_incus_evidence_raw_logs.results }}"
+  loop_control:
+    label: "{{ item.molecule_incus_evidence_command.name }}"
+  register: molecule_incus_evidence_sanitized_logs
+  changed_when: false
+  no_log: true
+
+- name: Write sanitized application and environment log streams
+  ansible.builtin.copy:
+    dest: >-
+      {{
+        molecule_incus_instance_evidence_directory
+        ~ '/' ~ item.item.molecule_incus_evidence_command.name ~ '.log'
+      }}
+    content: "{{ item.stdout }}"
+    mode: "0640"
+  loop: "{{ molecule_incus_evidence_sanitized_logs.results }}"
+  loop_control:
+    label: "{{ item.item.molecule_incus_evidence_command.name }}"
+  no_log: true
+
+- name: Record application and environment log collection status
+  ansible.builtin.copy:
+    dest: >-
+      {{
+        molecule_incus_instance_evidence_directory
+        ~ '/' ~ item.molecule_incus_evidence_command.name ~ '.json'
+      }}
+    mode: "0640"
+    content: |-
+      {
+        "schema_version": 1,
+        "captured_at": {{ molecule_incus_evidence_timestamp.stdout | to_json }},
+        "stream": {{ item.molecule_incus_evidence_command.name | to_json }},
+        "exit_code": {{ item.rc | int }},
+        "available": {{ (item.rc == 0) | bool | to_json }}
+      }
+  loop: "{{ molecule_incus_evidence_raw_logs.results }}"
+  loop_control:
+    label: "{{ item.molecule_incus_evidence_command.name }}"

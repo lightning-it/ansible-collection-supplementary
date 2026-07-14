@@ -19,18 +19,13 @@ Repository classification: **Ansible Collection**.
 Required test profiles: `pre-commit, lint, light, molecule-light, molecule-heavy-incus, release-validation`.
 Publishing targets: `github-release, ansible-galaxy`.
 
-## Supported and Tested Platforms
+## Supported and tested platforms
 
-| Platform / Product | Status | Validation |
-|---|---:|---|
-| ubuntu-latest | Supported | Molecule / Incus |
-| rhel-9 | Supported | Molecule / Incus |
-| rhel-10 | Supported | Molecule / Incus |
-| ansible-core | Tested where applicable | Molecule / Incus |
-| keycloak-rhbk | Tested where applicable | Molecule / Incus |
-| aap-2.6 | Tested where applicable | Molecule / Incus |
-| aap-2.7 | Tested where applicable | Molecule / Incus |
-| incus | Tested where applicable | Molecule / Incus |
+Support is role- and profile-specific; there is no collection-wide platform
+claim. [`meta/role-coverage.yml`](meta/role-coverage.yml) is authoritative, and
+the generated [role coverage table](docs/testing/role-coverage.md) separates
+proven targets from candidate platforms and external blockers. A platform is
+supported only when every mandatory registry cell passes for the exact commit.
 
 <!-- END LIT_SHARED_RELEASE_MODEL -->
 
@@ -63,9 +58,10 @@ identity stack on a Wunderbox host:
 
 Pinned images:
 
-- `389ds/dirsrv:3.1` (via custom wrapper image build)
-- `quay.io/keycloak/keycloak:26.5.4`
-- `docker.io/library/postgres:16`
+- `docker.io/389ds/dirsrv:3.1@sha256:af99ccf42c1cd02799d674ffdee3612a1bbd426c1a8a636da67ea349659ee5e0`
+  (via the local wrapper image build)
+- `quay.io/keycloak/keycloak:26.5.4@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4`
+- `docker.io/library/postgres:16@sha256:eb4759788a2182f08257135e61a34f2cfc3c2914079f3465d64ee62350f4d081`
 
 ### Files
 
@@ -296,7 +292,7 @@ Install directly from the repo/branch:
 
 ```bash
 ansible-galaxy collection install \
-  git+https://github.com/lightning-it/ansible-collection-supplementary.git,ro/role-keycloak
+  git+https://github.com/lightning-it/ansible-collection-supplementary.git,develop
 ```
 
 Example playbook:
@@ -315,10 +311,17 @@ Example playbook:
 - `galaxy.yml` defines the collection metadata (namespace `lit`, name
   `supplementary`, license `MIT`).
 - Core collection dependencies are declared in `galaxy.yml`.
-- Red Hat/AAP extension collections (for example `ansible.platform`,
-  `infra.*`) are intentionally not pinned in this collection `galaxy.yml`;
-  install them via consumer runtime overlays (for example
-  `modulix-automation/ansible/collections/requirements-rh.yml`).
+- Red Hat/AAP extension collections are intentionally excluded from the core
+  `galaxy.yml` dependency graph. The authoritative, exactly pinned AAP overlay
+  is [`collections/requirements-rh.yml`](collections/requirements-rh.yml):
+  `ansible.controller`, `ansible.platform`, `infra.aap_configuration`,
+  `infra.aap_utilities`, `infra.controller_configuration`, and
+  `infra.ee_utilities`. Install that complete overlay from configured Galaxy
+  and Automation Hub sources in the protected AAP execution environment.
+- Shipped role image defaults are tag-and-digest pinned and inventoried in
+  [`meta/source-dependencies.yml`](meta/source-dependencies.yml); validation and
+  SBOM behavior are documented under
+  [shipped source dependencies](docs/testing/source-dependencies.md).
 - AAP development and testing uses Ansible-managed Incus VMs. Incus instance
   lifecycle is owned by `lit.ubuntu.incus_instance`; this collection only owns
   AAP role behavior:
@@ -327,49 +330,25 @@ Example playbook:
 - Canonical role sources live in `roles/`; build with `ansible-galaxy
   collection build`.
 - Molecule scenario `keycloak-tiny` performs fast, real deployment and
-  technical verification suitable for pull requests.
-- Molecule scenario `keycloak-heavy` validates production-like PostgreSQL,
-  LDAP, persistence, restart, backup/restore, TLS, and authorization behavior.
+  technical verification on isolated self-hosted runtime jobs. Exact
+  same-repository pull-request heads require release-team environment approval;
+  fork heads fail closed, and every protected SHA is tested again after merge.
+- Molecule scenario `keycloak-heavy` validates PostgreSQL, LDAP integration,
+  persistence, restart, backup creation, and authorization behavior. Restore,
+  upgrade, and trusted TLS remain explicit limitations until proved.
 - Molecule scenario `keycloak-application-acceptance` validates browser login,
   sessions, OIDC claims, and positive and negative authorization. See
   [Keycloak testing](docs/testing/keycloak.md) for commands and evidence.
-- Molecule scenario `forgejo-deploy-basic` validates role wiring for Forgejo
-  deployment including PostgreSQL role integration.
-- Molecule scenario `forgejo-cac-basic` validates the Forgejo CaC role in
-  skip mode.
-- Molecule scenario `postgres-deploy-basic` validates role wiring for the
-  dedicated PostgreSQL deployment role.
-- Molecule scenario `semaphore-deploy-basic` validates role wiring for
-  Semaphore deployment including PostgreSQL role integration.
-- Molecule scenario `semaphore-cac-basic` validates the Semaphore CaC role in
-  skip mode.
-- Molecule scenario `nessus-deploy-basic` validates role wiring for Nessus
-  deployment.
-- Molecule scenario `nessus-cac-basic` validates the Nessus CaC role in skip
-  mode.
-- Molecule scenario `wunderbox-monitoring-logging-basic` validates syntax
-  wiring for the generic Checkmk, Loki, Alloy, and Grafana deploy roles. Runtime
-  container startup is intentionally skipped in CI because Checkmk and Grafana
-  are heavyweight service containers.
-- Molecule scenario `vault-basic` runs the vault role with a stub terragrunt role
-  to validate basics locally.
-- Molecule scenario `openvpn-basic` runs the openvpn role without standing up a
-  server to validate role wiring and defaults.
-- Molecule scenario `cloudflared-basic` runs the cloudflared role with install
-  steps disabled to validate role wiring and defaults.
-- Molecule scenario `cloudflare-warp-basic` renders a headless WARP `mdm.xml`
-  profile with install/service steps disabled to validate role wiring and
-  defaults.
-- Molecule scenario `gitlab-runner-basic` runs the gitlab_runner stub role
-  (acknowledging experimental status) to keep lint/test coverage green.
-  It uses the repo's roles path to source the role locally.
-- Molecule scenario `nexus-basic` runs the nexus stub role (acknowledging
-  experimental status) to keep coverage green.
-- Molecule scenario `manage-esxi-basic` uses a stub manage_esxi role so tests stay
-  green without vCenter/ESXi access.
-- Protected AAP Incus scenarios are intentionally not implemented in this
-  collection right now. Recreate them through `lit.ubuntu.incus_instance`
-  instead of shell helpers.
+- All other Basic and legacy Heavy scenarios have an explicit registry
+  disposition. Stub/Skip-mode, fake-runtime, and partial scenarios remain useful
+  development checks but are not production Tiny, Heavy, or Application
+  Acceptance passes.
+- AAP, Nessus, Cloudflare, and ESXi profiles retain explicit licence, service,
+  or infrastructure blockers rather than reporting an unavailable integration
+  as success.
+- `gitlab_runner` is deprecated while it remains an acknowledged stub. Nexus
+  and the remaining incomplete implementations are experimental until their
+  mandatory profiles are real and green.
 
 ## Local checks
 
@@ -391,12 +370,9 @@ Molecule, etc.).
 
 ### 2. Run all linters locally
 
-To run all configured linters (YAML, ansible-lint, Molecule keycloak-deploy-basic,
-keycloak-cac-basic, keycloak-basic, forgejo-deploy-basic, forgejo-cac-basic,
-postgres-deploy-basic, semaphore-deploy-basic, semaphore-cac-basic,
-nessus-deploy-basic, nessus-cac-basic, openvpn-basic, cloudflared-basic,
-gitlab-runner-basic, nexus-basic, manage-esxi-basic, vault-basic, GitHub Actions
-lint, Renovate config validation):
+Run every configured repository hook, including policy generation, Python,
+YAML, Ansible, Markdown, shell, workflow, collection-smoke, and discoverable
+root-level Molecule checks:
 
 ```bash
 pre-commit run --all-files
@@ -423,21 +399,15 @@ podman run --rm -it \
   -e GIT_CONFIG_COUNT=1 \
   -e GIT_CONFIG_KEY_0=safe.directory \
   -e GIT_CONFIG_VALUE_0="$PWD" \
-  quay.io/l-it/ee-wunder-devtools-ubi9:v1.8.7 \
+  quay.io/l-it/ee-wunder-devtools-ubi9:v1.9.2 \
   pre-commit run --all-files
 ```
 
-This will:
-
-- run `yamllint` inside the `ee-wunder-devtools-ubi9` container,
-- run `ansible-lint` inside the devtools container (after building the collection),
-- run the `keycloak-deploy-basic`, `keycloak-cac-basic`, `keycloak-basic`,
-  `forgejo-deploy-basic`, `forgejo-cac-basic`, `postgres-deploy-basic`,
-  `semaphore-deploy-basic`, `semaphore-cac-basic`, `nessus-deploy-basic`,
-  `nessus-cac-basic`, `openvpn-basic`, `gitlab-runner-basic`, `nexus-basic`,
-  `manage-esxi-basic`, and `vault-basic` Molecule scenarios,
-- lint `.github/workflows/*.yml` via `actionlint` (Docker),
-- validate `renovate.json` via `renovate-config-validator` (Docker), if present.
+The Molecule hook discovers scenarios under `molecule/`. Registry disposition,
+not successful execution of an experimental Basic scenario, determines whether
+a result is a production support claim. Protected Incus scenarios require an
+explicit opt-in and the resources documented in
+[Keycloak testing](docs/testing/keycloak.md).
 
 ### 3. Run the collection smoke test
 
@@ -479,11 +449,12 @@ See [LICENSE](./LICENSE).
 
 <!-- BEGIN LIT_RELEASE_QUALITY_MODEL -->
 
-## Release and Quality Model
+## Managed release metadata
 
 This repository follows the Lightning IT shared release and quality model.
-The README shows the current supported and tested matrix.
-Exact per-version validation proof is stored with each GitHub Release as `release-evidence.md` and `release-evidence.json`.
+The generated role coverage report shows the current supported and candidate
+matrix. Releases produced under the enterprise role-quality architecture store
+exact per-version proof as `release-evidence.md` and `release-evidence.json`.
 Releases are created from the protected `main` branch after a reviewed `develop -> main` release promotion.
 Collection releases validate collection sanity, Molecule scenarios, build integrity, and Ansible Galaxy publishing where enabled.
 
@@ -491,7 +462,7 @@ See:
 
 - [RELEASE.md](./RELEASE.md)
 - [TESTING.md](./TESTING.md)
-- [GitHub Releases](../../releases)
+- [GitHub Releases](https://github.com/lightning-it/ansible-collection-supplementary/releases)
 
 Repository classification: **Ansible Collection**.
 Required test profiles: `pre-commit, lint, light, molecule-light, molecule-heavy-incus, release-validation`.
@@ -501,28 +472,123 @@ Publishing targets: `github-release, ansible-galaxy`.
 
 <!-- BEGIN LIT_COMPATIBILITY_MATRIX -->
 
-## Compatibility Matrix
+## Compatibility matrix
 
-| Collection Version | Platform | Product | Validation |
-|---|---|---|---|
-| Latest release | ubuntu-latest | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | See release evidence |
-| Latest release | rhel-9 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | See release evidence |
-| Latest release | rhel-10 | ansible-core, keycloak-rhbk, aap-2.6, aap-2.7, incus | See release evidence |
+The generated [role coverage report](docs/testing/role-coverage.md) is the
+current matrix. Release attachments contain the executed role/profile/target
+matrix for that exact version; configured or candidate cells are never
+synthesized as passes.
 
-| Scenario | Test Type | Validation |
-|---|---|---|
-| collection-sanity | Collection sanity | See release evidence |
-| molecule-light | Molecule light | See release evidence |
-| molecule-heavy-incus | Heavy Incus | See release evidence |
-| galaxy-build | Galaxy build/publish | See release evidence |
+<!-- role-coverage-table:start -->
 
-Validation proof for each released version is stored in the corresponding GitHub Release evidence.
+| Role | Maturity | Supported targets | Tiny | Heavy | Application Acceptance |
+|---|---|---|---|---|---|
+| aap | experimental | — | experimental | blocked-external-license | blocked-external-license |
+| aap_base_os | experimental | — | experimental | blocked-external-license | not-applicable |
+| aap_baseline | experimental | — | experimental | blocked-external-license | not-applicable |
+| aap_bootstrap | experimental | — | experimental | blocked-external-license | not-applicable |
+| aap_cac | experimental | — | experimental | blocked-external-license | blocked-external-license |
+| aap_deploy | experimental | — | experimental | blocked-external-license | blocked-external-license |
+| aap_destroy | experimental | — | experimental | blocked-external-license | blocked-external-license |
+| aap_local_execution | experimental | — | experimental | blocked-external-license | blocked-external-license |
+| aap_ops | experimental | — | experimental | blocked-external-license | blocked-external-license |
+| aap_preflight | experimental | — | experimental | blocked-external-license | not-applicable |
+| aap_prepare | experimental | — | experimental | blocked-external-license | not-applicable |
+| aap_secrets | experimental | — | experimental | blocked-external-license | not-applicable |
+| aap_tls | experimental | — | experimental | blocked-external-license | not-applicable |
+| alertmanager_deploy | experimental | — | experimental | experimental | experimental |
+| alloy_deploy | experimental | — | experimental | experimental | experimental |
+| artifacts | experimental | — | experimental | experimental | experimental |
+| checkmk_deploy | experimental | — | experimental | experimental | experimental |
+| cloudflare_warp | experimental | — | experimental | blocked-external-service | blocked-external-service |
+| cloudflared | experimental | — | experimental | blocked-external-service | blocked-external-service |
+| coredns_config | experimental | — | experimental | experimental | experimental |
+| coredns_deploy | experimental | — | experimental | experimental | experimental |
+| coredns_ops | experimental | — | experimental | experimental | experimental |
+| coredns_validate | experimental | — | experimental | experimental | not-applicable |
+| dhcp_deploy | experimental | — | experimental | experimental | experimental |
+| forgejo_cac | experimental | — | experimental | experimental | experimental |
+| forgejo_deploy | experimental | — | experimental | experimental | experimental |
+| gitlab_runner | deprecated | — | deprecated | deprecated | deprecated |
+| grafana_deploy | experimental | — | experimental | experimental | experimental |
+| incus_esxi_image | experimental | — | experimental | blocked-external-license | blocked-external-license |
+| incus_nested_esxi | experimental | — | experimental | blocked-external-infrastructure | blocked-external-infrastructure |
+| keycloak | experimental | — | experimental | experimental | experimental |
+| keycloak_backup_restore | experimental | — | experimental | experimental | experimental |
+| keycloak_cac | production | ubuntu-24.04 | supported | supported | supported |
+| keycloak_config | experimental | — | experimental | experimental | experimental |
+| keycloak_deploy | production | ubuntu-24.04 | supported | supported | supported |
+| keycloak_destroy | experimental | — | experimental | experimental | experimental |
+| keycloak_ops | experimental | — | experimental | experimental | experimental |
+| keycloak_preflight | experimental | — | experimental | experimental | not-applicable |
+| keycloak_upgrade | experimental | — | experimental | experimental | experimental |
+| keycloak_validate | experimental | — | experimental | experimental | not-applicable |
+| loki_deploy | experimental | — | experimental | experimental | experimental |
+| manage_esxi | experimental | — | experimental | blocked-external-infrastructure | blocked-external-infrastructure |
+| minio_backup_restore | experimental | — | experimental | experimental | experimental |
+| minio_bootstrap | experimental | — | experimental | experimental | experimental |
+| minio_config | experimental | — | experimental | experimental | experimental |
+| minio_deploy | experimental | — | experimental | experimental | experimental |
+| minio_foundational | experimental | — | experimental | experimental | not-applicable |
+| minio_ops | experimental | — | experimental | experimental | experimental |
+| minio_validate | experimental | — | experimental | experimental | not-applicable |
+| nessus_cac | experimental | — | experimental | blocked-external-license | blocked-external-license |
+| nessus_deploy | experimental | — | experimental | blocked-external-license | blocked-external-license |
+| nexus | experimental | — | experimental | experimental | experimental |
+| nginx_config | experimental | — | experimental | experimental | experimental |
+| nginx_deploy | experimental | — | experimental | experimental | experimental |
+| nginx_ops | experimental | — | experimental | experimental | experimental |
+| nginx_validate | experimental | — | experimental | experimental | not-applicable |
+| openvpn | experimental | — | experimental | experimental | experimental |
+| postgres | experimental | — | experimental | experimental | experimental |
+| postgres_backup_restore | experimental | — | experimental | experimental | experimental |
+| postgres_config | experimental | — | experimental | experimental | experimental |
+| postgres_deploy | experimental | — | experimental | experimental | experimental |
+| postgres_destroy | experimental | — | experimental | experimental | experimental |
+| postgres_ops | experimental | — | experimental | experimental | experimental |
+| postgres_preflight | experimental | — | experimental | experimental | not-applicable |
+| postgres_upgrade | experimental | — | experimental | experimental | experimental |
+| postgres_validate | experimental | — | experimental | experimental | not-applicable |
+| prometheus_deploy | experimental | — | experimental | experimental | experimental |
+| rsyslog | experimental | — | experimental | experimental | experimental |
+| rsyslog_backup_restore | experimental | — | experimental | experimental | experimental |
+| rsyslog_config | experimental | — | experimental | experimental | experimental |
+| rsyslog_deploy | experimental | — | experimental | experimental | experimental |
+| rsyslog_destroy | experimental | — | experimental | experimental | experimental |
+| rsyslog_ops | experimental | — | experimental | experimental | experimental |
+| rsyslog_preflight | experimental | — | experimental | experimental | not-applicable |
+| rsyslog_upgrade | experimental | — | experimental | experimental | experimental |
+| rsyslog_validate | experimental | — | experimental | experimental | not-applicable |
+| samba | experimental | — | experimental | experimental | experimental |
+| samba_backup_restore | experimental | — | experimental | experimental | experimental |
+| samba_config | experimental | — | experimental | experimental | experimental |
+| samba_deploy | experimental | — | experimental | experimental | experimental |
+| samba_destroy | experimental | — | experimental | experimental | experimental |
+| samba_ops | experimental | — | experimental | experimental | experimental |
+| samba_preflight | experimental | — | experimental | experimental | not-applicable |
+| samba_upgrade | experimental | — | experimental | experimental | experimental |
+| samba_validate | experimental | — | experimental | experimental | not-applicable |
+| semaphore_cac | experimental | — | experimental | experimental | experimental |
+| semaphore_deploy | experimental | — | experimental | experimental | experimental |
+| vault_backup_restore | experimental | — | experimental | experimental | experimental |
+| vault_bootstrap | experimental | — | experimental | experimental | experimental |
+| vault_config | experimental | — | experimental | experimental | experimental |
+| vault_deploy | experimental | — | experimental | experimental | experimental |
+| vault_foundational | experimental | — | experimental | experimental | not-applicable |
+| vault_ops | experimental | — | experimental | experimental | experimental |
+| vault_raft_snapshot | experimental | — | experimental | experimental | experimental |
+| vault_scoped_approle | experimental | — | experimental | experimental | experimental |
+| vault_validate | experimental | — | experimental | experimental | not-applicable |
+
+<!-- role-coverage-table:end -->
 
 <!-- END LIT_COMPATIBILITY_MATRIX -->
 
 ## Release Evidence
 
-Every released version includes immutable release evidence attached to the corresponding GitHub Release.
+Releases produced by the enterprise role-quality workflow include immutable
+evidence attached to the corresponding GitHub Release. Historical releases are
+not retroactively described as having evidence they did not produce.
 The evidence records:
 
 - tested matrix combinations
@@ -531,4 +597,5 @@ The evidence records:
 - publish status
 - security scan status
 
-See [GitHub Releases](../../releases), [RELEASE.md](./RELEASE.md), and [TESTING.md](./TESTING.md) for the release process and validation model.
+See [GitHub Releases](https://github.com/lightning-it/ansible-collection-supplementary/releases),
+[RELEASE.md](./RELEASE.md), and [TESTING.md](./TESTING.md) for the release process and validation model.

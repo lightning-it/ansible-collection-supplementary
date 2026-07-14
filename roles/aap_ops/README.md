@@ -4,7 +4,9 @@ Operate AAP host install (restart, status, sync_hub_password, rotate_password, b
 
 ## Requirements
 
-None.
+Install the authoritative `collections/requirements-rh.yml` overlay. Backup,
+restore, and certificate actions invoke its pinned `infra.aap_utilities`
+roles; local restart/status actions do not invoke those vendor roles.
 
 ## Variables
 
@@ -27,7 +29,8 @@ Password input behavior:
 
 ## Dependencies
 
-None.
+Conditional dependency: `infra.aap_utilities` from the exactly pinned
+`collections/requirements-rh.yml` overlay for `backup`, `restore`, and `certs`.
 
 ## Example Playbook
 

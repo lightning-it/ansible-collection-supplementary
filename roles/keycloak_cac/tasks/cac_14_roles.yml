@@ -16,4 +16,5 @@
   loop_control:
     loop_var: keycloak_cac_role_definition
     label: "{{ keycloak_cac_role_definition.name | default('unnamed') }}"
+  register: keycloak_cac_role_reconciliation
   no_log: true

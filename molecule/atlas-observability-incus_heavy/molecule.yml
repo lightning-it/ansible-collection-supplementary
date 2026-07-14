@@ -1,30 +1,22 @@
 ---
 dependency:
   name: shell
-  command: >-
-    mkdir -p /tmp/codex-atlas-obs/ansible_collections/lit
-    /tmp/codex-atlas-obs/ansible_collections/community
-    && ln -sfn /home/rene/sources/ansible-collection-supplementary
-    /tmp/codex-atlas-obs/ansible_collections/lit/supplementary
-    && ln -sfn /home/rene/sources/ansible-collection-foundational
-    /tmp/codex-atlas-obs/ansible_collections/lit/foundational
-    && ln -sfn /home/rene/sources/modulix-automation/ansible/collections/ansible_collections/community/general
-    /tmp/codex-atlas-obs/ansible_collections/community/general
-    && ln -sfn /home/rene/sources/modulix-automation/ansible/collections/ansible_collections/community/hashi_vault
-    /tmp/codex-atlas-obs/ansible_collections/community/hashi_vault
+  command: ":"
 
 driver:
   name: default
 
 platforms:
-  - name: atlas-observability-heavy-ct
-    image: images:ubuntu/24.04
-    type: container
-    ipv4_address: 10.248.82.54/24
-    ipv4_gateway: 10.248.82.1
-    dns_servers:
-      - 1.1.1.1
-      - 8.8.8.8
+  - name: "${MOLECULE_TEST_INSTANCE:-atlas-observability-heavy-ct}"
+    image: "${MOLECULE_TEST_IMAGE:-images:ubuntu/24.04}"
+    type: "${MOLECULE_TEST_INSTANCE_TYPE:-container}"
+    identity:
+      scenario: atlas-observability-incus_heavy
+      target: "${MOLECULE_TEST_TARGET:-ubuntu-24.04}"
+    resources:
+      cpu: "${MOLECULE_TEST_CPU_LIMIT:-4}"
+      memory: "${MOLECULE_TEST_MEMORY_LIMIT:-8GiB}"
+      disk: "${MOLECULE_TEST_DISK_LIMIT:-30GiB}"
     config:
       - key: security.nesting
         value: "true"
@@ -35,17 +27,17 @@ provisioner:
   name: ansible
   inventory:
     host_vars:
-      atlas-observability-heavy-ct:
+      "${MOLECULE_TEST_INSTANCE:-atlas-observability-heavy-ct}":
         ansible_connection: community.general.incus
         ansible_python_interpreter: /usr/bin/python3
   env:
-    ANSIBLE_COLLECTIONS_PATH: "/tmp/codex-atlas-obs:/home/rene/.ansible/collections:/usr/share/ansible/collections"
-    ANSIBLE_ROLES_PATH: "/home/rene/sources/ansible-collection-supplementary/roles:/home/rene/.ansible/roles"
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/roles:${HOME}/.ansible/roles:/usr/share/ansible/roles"
   playbooks:
     create: create.yml
     prepare: prepare.yml
     converge: converge.yml
     verify: verify.yml
+    cleanup: cleanup.yml
     destroy: destroy.yml
 
 scenario:
@@ -58,6 +50,7 @@ scenario:
     - converge
     - idempotence
     - verify
+    - cleanup
     - destroy
 
 verifier:

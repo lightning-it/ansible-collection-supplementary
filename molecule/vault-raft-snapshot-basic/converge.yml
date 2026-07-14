@@ -59,6 +59,11 @@
     vault_raft_snapshot_restore_cluster_port: 18222
     vault_raft_snapshot_restore_work_root: /run/lit-vault-raft-molecule
     vault_raft_snapshot_restore_container_name: molecule-vault-raft-restore
+    # This scenario exercises the role locally inside the capability-minimized
+    # devtools container. Keep its fake runtime directories owned by the
+    # invoking container user; production targets retain the role defaults.
+    vault_raft_snapshot_restore_run_as_user: 0
+    vault_raft_snapshot_restore_run_as_group: 0
     vault_raft_snapshot_production_cert_dir: "{{ vault_raft_snapshot_molecule_root }}"
     vault_raft_snapshot_restore_node_id: molecule-restore
     vault_raft_snapshot_restore_unseal_keys:

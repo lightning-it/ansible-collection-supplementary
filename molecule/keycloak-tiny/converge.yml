@@ -6,7 +6,8 @@
   vars:
     keycloak_tiny_db_password: "{{ lookup('env', 'KEYCLOAK_TEST_DB_PASSWORD') }}"
     keycloak_tiny_admin_password: "{{ lookup('env', 'KEYCLOAK_TEST_ADMIN_PASSWORD') }}"
-    keycloak_deploy_image: quay.io/keycloak/keycloak:26.5.4
+    keycloak_deploy_image: >-
+      quay.io/keycloak/keycloak:26.5.4@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4
     keycloak_deploy_start_command: start
     keycloak_deploy_manage_postgres: true
     keycloak_deploy_manage_systemd: false

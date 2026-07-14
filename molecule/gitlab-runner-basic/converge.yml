@@ -1,24 +1,34 @@
 ---
-- name: Converge gitlab runner syntax coverage
+- name: Converge GitLab Runner deprecation contract
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
-    gitlab_runner_molecule_execute_role: false
     gitlab_runner_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/gitlab-runner-coverage-mode
   tasks:
-    - name: Import lit.supplementary.gitlab_runner for syntax coverage
-      ansible.builtin.import_role:
-        name: lit.supplementary.gitlab_runner
-      when: gitlab_runner_molecule_execute_role | bool
-
-    - name: Record lit.supplementary.gitlab_runner Molecule coverage mode
+    - name: Initialize deprecation refusal result
       ansible.builtin.set_fact:
-        gitlab_runner_molecule_coverage_mode: syntax_stub
+        gitlab_runner_molecule_deprecation_refused: false
 
-    - name: Persist lit.supplementary.gitlab_runner Molecule coverage mode
+    - name: Exercise deprecated GitLab Runner role
+      block:
+        - name: Invoke deprecated role
+          ansible.builtin.include_role:
+            name: lit.supplementary.gitlab_runner
+      rescue:
+        - name: Record fail-closed deprecation refusal
+          ansible.builtin.set_fact:
+            gitlab_runner_molecule_deprecation_refused: true
+
+    - name: Require fail-closed deprecation refusal
+      ansible.builtin.assert:
+        that:
+          - gitlab_runner_molecule_deprecation_refused | bool
+        quiet: true
+
+    - name: Persist GitLab Runner Molecule coverage mode
       ansible.builtin.copy:
         dest: "{{ gitlab_runner_molecule_marker_path }}"
-        content: "syntax_stub\n"
+        content: "deprecated_refusal\n"
         mode: "0644"

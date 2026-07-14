@@ -2,7 +2,14 @@
 minio_bootstrap_skip: "{{ minio_deploy_skip_bootstrap | default(false, true) | bool }}"
 minio_bootstrap_buckets: "{{ minio_deploy_bootstrap_buckets | default([], true) }}"
 
-minio_bootstrap_mc_image: "{{ minio_deploy_mc_image | default('quay.io/minio/mc:latest', true) }}"
+minio_bootstrap_mc_image: >-
+  {{
+    minio_deploy_mc_image
+    | default(
+        'quay.io/minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727',
+        true
+      )
+  }}
 minio_bootstrap_mc_config_dir: "{{ minio_deploy_mc_config_dir | default('/root/.mc', true) }}"
 minio_bootstrap_mc_path: >-
   podman run --rm --network host --user 0:0 --entrypoint mc

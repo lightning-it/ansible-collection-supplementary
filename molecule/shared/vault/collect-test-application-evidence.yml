@@ -1,0 +1,59 @@
+---
+- name: Preserve versioned fake Vault API request evidence
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vault_test_application_scenario: "{{ molecule_yml.scenario.name | default('') }}"
+    vault_test_application_ephemeral_directories:
+      vault-backup-restore-basic: vault-backup-restore-runtime
+      vault-ops-basic: vault-ops-runtime
+      vault-raft-snapshot-basic: vault-raft-snapshot
+      vault-scoped-approle-basic: vault-scoped-approle
+      vault-validate-basic: vault-validate-runtime
+    vault_test_application_artifact_root: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_TEST_ARTIFACTS')
+         | default('artifacts/evidence', true) }}
+    vault_test_application_source: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY')
+         ~ '/' ~ vault_test_application_ephemeral_directories[vault_test_application_scenario]
+         ~ '/requests.log' }}
+    vault_test_application_destination_directory: >-
+      {{ vault_test_application_artifact_root
+         ~ '/test-applications/' ~ vault_test_application_scenario }}
+    vault_test_application_destination: >-
+      {{ vault_test_application_destination_directory
+         ~ '/MoleculeVault-1.0-requests.log' }}
+  tasks:
+    - name: Validate the declared fake Vault evidence scenario
+      ansible.builtin.assert:
+        that:
+          - vault_test_application_scenario in vault_test_application_ephemeral_directories
+          - vault_test_application_scenario is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$')
+        fail_msg: Refusing to collect fake Vault evidence for an unknown scenario.
+
+    - name: Inspect the fake Vault API request log
+      ansible.builtin.stat:
+        path: "{{ vault_test_application_source }}"
+      register: vault_test_application_request_log
+
+    - name: Require exercised fake Vault API request evidence
+      ansible.builtin.assert:
+        that:
+          - vault_test_application_request_log.stat.isreg | default(false)
+          - vault_test_application_request_log.stat.size | default(0) | int > 0
+        fail_msg: >-
+          The declared MoleculeVault/1.0 dependency has no non-empty request log.
+
+    - name: Create the private test-application evidence directory
+      ansible.builtin.file:
+        path: "{{ vault_test_application_destination_directory }}"
+        state: directory
+        mode: "0750"
+
+    - name: Preserve the sanitized fake Vault API request log
+      ansible.builtin.copy:
+        src: "{{ vault_test_application_source }}"
+        dest: "{{ vault_test_application_destination }}"
+        remote_src: true
+        mode: "0640"

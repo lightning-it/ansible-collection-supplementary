@@ -43,14 +43,23 @@
       changed_when: false
       no_log: true
 
-    - name: Decode viewer access token claims
+    - name: Decode the unpadded base64url viewer access token claims
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - >-
+            import base64, sys;
+            segment = sys.stdin.read().strip().split('.')[1];
+            print(base64.urlsafe_b64decode(segment + '=' * (-len(segment) % 4)).decode())
+        stdin: "{{ keycloak_tiny_token.json.access_token }}"
+      register: keycloak_tiny_decoded_claims
+      changed_when: false
+      no_log: true
+
+    - name: Parse viewer access token claims
       ansible.builtin.set_fact:
-        keycloak_tiny_claims: >-
-          {{
-            keycloak_tiny_token.json.access_token.split('.')[1]
-            | b64decode
-            | from_json
-          }}
+        keycloak_tiny_claims: "{{ keycloak_tiny_decoded_claims.stdout | from_json }}"
       no_log: true
 
     - name: Assert externally observable Tiny state
@@ -83,7 +92,9 @@
     - name: Assert runtime version and manifest permissions
       ansible.builtin.assert:
         that:
-          - keycloak_tiny_image.stdout == 'quay.io/keycloak/keycloak:26.5.4'
+          - >-
+            keycloak_tiny_image.stdout ==
+            'quay.io/keycloak/keycloak:26.5.4@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4'
           - keycloak_tiny_manifest.stat.mode == '0600'
           - keycloak_tiny_manifest.stat.pw_name == 'root'
 
@@ -102,12 +113,12 @@
         content: |-
           <?xml version="1.0" encoding="UTF-8"?>
           <testsuite name="keycloak-tiny" tests="6" failures="0" errors="0" skipped="0">
-            <testcase classname="keycloak.health" name="readiness"/>
-            <testcase classname="keycloak.health" name="liveness"/>
-            <testcase classname="keycloak.oidc" name="discovery"/>
-            <testcase classname="keycloak.oidc" name="viewer-token"/>
-            <testcase classname="keycloak.runtime" name="version"/>
-            <testcase classname="keycloak.security" name="manifest-permissions"/>
+            <testcase classname="keycloak.health" name="readiness" role="keycloak_deploy"/>
+            <testcase classname="keycloak.health" name="liveness" role="keycloak_deploy"/>
+            <testcase classname="keycloak.oidc" name="discovery" role="keycloak_cac"/>
+            <testcase classname="keycloak.oidc" name="viewer-token" role="keycloak_cac"/>
+            <testcase classname="keycloak.runtime" name="version" role="keycloak_deploy"/>
+            <testcase classname="keycloak.security" name="manifest-permissions" role="keycloak_deploy"/>
           </testsuite>
       delegate_to: localhost
       become: false

@@ -12,6 +12,14 @@
     keycloak_acceptance_client_id: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_CLIENT_ID') }}"
     keycloak_acceptance_client_secret: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_CLIENT_SECRET') }}"
     keycloak_acceptance_session_secret: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_SESSION_SECRET') }}"
+    keycloak_acceptance_service_user: nobody
+    keycloak_acceptance_service_group: >-
+      {{
+        {
+          'Debian': 'nogroup',
+          'RedHat': 'nobody'
+        }.get((ansible_facts | default({})).get('os_family', ''), '')
+      }}
   tasks:
     - name: Require ephemeral acceptance application credentials
       ansible.builtin.assert:
@@ -25,6 +33,26 @@
           KEYCLOAK_TEST_SESSION_SECRET are mandatory runtime inputs.
       no_log: true
 
+    - name: Require a supported acceptance service identity
+      ansible.builtin.assert:
+        that:
+          - (ansible_facts | default({})).get('os_family', '') in ['Debian', 'RedHat']
+          - keycloak_acceptance_service_user | trim | length > 0
+          - keycloak_acceptance_service_group | trim | length > 0
+        fail_msg: >-
+          The acceptance service requires gathered Debian or Red Hat family
+          facts and a non-root service account and group.
+
+    - name: Verify the acceptance service account exists
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ keycloak_acceptance_service_user }}"
+
+    - name: Verify the acceptance service group exists
+      ansible.builtin.getent:
+        database: group
+        key: "{{ keycloak_acceptance_service_group }}"
+
     - name: Install acceptance test operating system prerequisites
       ansible.builtin.package:
         name:
@@ -36,7 +64,7 @@
       ansible.builtin.package:
         name: python3-venv
         state: present
-      when: ansible_os_family == 'Debian'
+      when: ansible_facts['os_family'] == 'Debian'
 
     - name: Create acceptance application directory
       ansible.builtin.file:
@@ -98,15 +126,22 @@
 
           [Service]
           Type=simple
-          User=nobody
-          Group=nogroup
+          User={{ keycloak_acceptance_service_user }}
+          Group={{ keycloak_acceptance_service_group }}
           WorkingDirectory={{ keycloak_acceptance_root }}
           EnvironmentFile={{ keycloak_acceptance_root }}/application.env
           ExecStart={{ keycloak_acceptance_root }}/venv/bin/gunicorn --bind 127.0.0.1:8081 --workers 1 protected_app:app
           NoNewPrivileges=true
           PrivateTmp=true
+          ProtectProc=invisible
+          ProcSubset=pid
           ProtectHome=true
           ProtectSystem=strict
+          UMask=0077
+          LimitCORE=0
+          CapabilityBoundingSet=
+          AmbientCapabilities=
+          RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
           Restart=on-failure
 
           [Install]

@@ -1,0 +1,24 @@
+---
+- name: Reject the retired after-start static-network lifecycle
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    molecule_incus_static_network_instances: "{{ molecule_yml.platforms | default([]) }}"
+  tasks:
+    - name: Require migration to the isolated managed bridge
+      ansible.builtin.assert:
+        that:
+          - item.ipv4_address is not defined
+          - item.ipv4_gateway is not defined
+          - item.dns_servers is not defined
+        fail_msg: >-
+          Guest-side static networking after instance start is retired because it
+          is not concurrency-safe. Import shared/incus/create.yml and use the
+          exact-owned per-run managed bridge.
+      loop: "{{ molecule_incus_static_network_instances }}"
+      loop_control:
+        label: "{{ item.name | default('<unnamed>') }}"
+
+- name: Create exactly owned targets after static-network migration validation
+  ansible.builtin.import_playbook: create.yml

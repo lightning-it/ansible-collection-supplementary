@@ -2,12 +2,14 @@
 # Pod basics
 keycloak_deploy_pod_name: "keycloak"
 keycloak_deploy_pod_manifest_path: "/etc/podman/pods/keycloak.yml"
-keycloak_deploy_image: "quay.io/keycloak/keycloak:26.5.4"
+keycloak_deploy_image: >-
+  quay.io/keycloak/keycloak:26.5.4@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4
 
 # Dedicated PostgreSQL service defaults used by keycloak_deploy
 # Default is shared PostgreSQL managed outside this role.
 keycloak_deploy_manage_postgres: false
-keycloak_deploy_postgres_image: "docker.io/library/postgres:16"
+keycloak_deploy_postgres_image: >-
+  docker.io/library/postgres:16@sha256:eb4759788a2182f08257135e61a34f2cfc3c2914079f3465d64ee62350f4d081
 keycloak_deploy_postgres_pod_name: "{{ keycloak_deploy_pod_name }}-postgres"
 keycloak_deploy_postgres_pod_manifest_path: >-
   /etc/podman/pods/{{ keycloak_deploy_postgres_pod_name }}.yml

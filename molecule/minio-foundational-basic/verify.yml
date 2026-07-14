@@ -1,19 +1,31 @@
 ---
-- name: Verify minio foundational syntax coverage
+- name: Verify MinIO foundational endpoint and credential coverage
   hosts: localhost
   connection: local
-  gather_facts: false
+  gather_facts: true
   vars:
-    minio_foundational_molecule_marker_path: >-
-      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/minio-foundational-coverage-mode
+    minio_deploy_root_user: molecule-root-user
+    minio_deploy_root_password: molecule-placeholder-not-a-real-secret
+    minio_deploy_generate_root_credentials: false
+    minio_deploy_store_root_credentials: false
+    minio_deploy_vault_address: ''
+    minio_deploy_vault_auth_ok: false
+    minio_deploy_host_ip: 127.0.0.1
+    minio_deploy_api_scheme: http
+    minio_deploy_port: 9000
+    minio_deploy_console_port: 9001
+  roles:
+    - role: lit.supplementary.minio_foundational
   tasks:
-    - name: Read lit.supplementary.minio_foundational coverage marker
-      ansible.builtin.slurp:
-        src: "{{ minio_foundational_molecule_marker_path }}"
-      register: minio_foundational_molecule_marker
-
-    - name: Assert lit.supplementary.minio_foundational coverage stub ran
+    - name: Require exact MinIO foundational endpoint resolution
       ansible.builtin.assert:
         that:
-          - minio_foundational_molecule_marker.content | b64decode | trim == 'syntax_stub'
+          - minio_foundational_minio_deploy_api_url_effective == 'http://127.0.0.1:9000'
+          - minio_foundational_minio_deploy_console_url_effective == 'http://127.0.0.1:9001'
+          - >-
+            minio_foundational_minio_deploy_health_url_effective
+            == 'http://127.0.0.1:9000/minio/health/ready'
+          - minio_foundational_minio_deploy_root_user_effective == 'molecule-root-user'
+          - minio_foundational_minio_deploy_root_credentials_source == 'provided'
         quiet: true
+      no_log: true

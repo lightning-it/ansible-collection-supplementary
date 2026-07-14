@@ -1,0 +1,3186 @@
+---
+schema_version: 1
+allowed_profile_states:
+  - "supported"
+  - "experimental"
+  - "not-applicable"
+  - "blocked-external-service"
+  - "blocked-external-license"
+  - "blocked-external-infrastructure"
+  - "deprecated"
+targets:
+  rhel-8:
+    family: "RedHat"
+    version: "8"
+    image_variable: "RHEL8_INCUS_IMAGE"
+    instance_type: "container"
+    runner:
+      - "self-hosted"
+      - "linux"
+      - "x64"
+      - "incus"
+  rhel-9:
+    family: "RedHat"
+    version: "9"
+    image_variable: "KEYCLOAK_RHEL9_INCUS_IMAGE"
+    instance_type: "container"
+    runner:
+      - "self-hosted"
+      - "linux"
+      - "x64"
+      - "incus"
+      - "keycloak-test"
+  rhel-10:
+    family: "RedHat"
+    version: "10"
+    image_variable: "KEYCLOAK_RHEL10_INCUS_IMAGE"
+    instance_type: "container"
+    runner:
+      - "self-hosted"
+      - "linux"
+      - "x64"
+      - "incus"
+      - "keycloak-test"
+  ubuntu-22.04:
+    family: "Debian"
+    version: "22.04"
+    image: "images:ubuntu/22.04"
+    instance_type: "container"
+    runner:
+      - "self-hosted"
+      - "linux"
+      - "x64"
+      - "incus"
+  ubuntu-24.04:
+    family: "Debian"
+    version: "24.04"
+    image: "images:ubuntu/24.04"
+    instance_type: "container"
+    runner:
+      - "self-hosted"
+      - "linux"
+      - "x64"
+      - "incus"
+      - "keycloak-test"
+roles:
+  aap:
+    component: "aap"
+    classification: "orchestrator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "blocked-external-license"
+    acceptance_surface: "browser_api_and_real_automation_job"
+    dependencies: []
+    external_dependencies:
+      - "Red Hat Ansible Automation Platform entitlement and installer artifacts"
+      - "Red Hat subscription-backed RHEL test targets"
+    known_limitations:
+      - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "aap-basic"
+      heavy: []
+      application_acceptance: []
+  aap_base_os:
+    component: "aap"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_infrastructure"
+    dependencies:
+      - "aap_preflight"
+      - "lit.foundational.ansible_remote_tmp"
+      - "lit.rhel.rhsm"
+      - "lit.rhel.repos"
+      - "lit.rhel.users"
+      - "lit.rhel.podman"
+    external_dependencies:
+      - "Red Hat Ansible Automation Platform entitlement and installer artifacts"
+      - "Red Hat subscription-backed RHEL test targets"
+    known_limitations:
+      - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  aap_baseline:
+    component: "aap"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_infrastructure"
+    dependencies: []
+    external_dependencies:
+      - "Red Hat Ansible Automation Platform entitlement and installer artifacts"
+      - "Red Hat subscription-backed RHEL test targets"
+    known_limitations:
+      - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  aap_bootstrap:
+    component: "aap"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_infrastructure"
+    dependencies:
+      - "lit.foundational.ansible_remote_tmp"
+    external_dependencies:
+      - "Red Hat Ansible Automation Platform entitlement and installer artifacts"
+      - "Red Hat subscription-backed RHEL test targets"
+    known_limitations:
+      - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  aap_cac:
+    component: "aap"
+    classification: "configuration_as_code"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "blocked-external-license"
+    acceptance_surface: "apply_query_reconcile_and_delete_api_objects"
+    dependencies:
+      - "infra.aap_configuration"
+      - "infra.controller_configuration"
+      - "infra.ee_utilities"
+    external_dependencies:
+      - "Red Hat Ansible Automation Platform entitlement and installer artifacts"
+      - "Red Hat subscription-backed RHEL test targets"
+    known_limitations:
+      - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "aap-cac-basic"
+      heavy: []
+      application_acceptance: []
+  aap_deploy:
+    component: "aap"
+    classification: "web_application"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "blocked-external-license"
+    acceptance_surface: "browser_api_and_real_automation_job"
+    dependencies:
+      - "aap"
+      - "infra.aap_utilities.aap_setup_prepare"
+      - "lit.foundational.tls_assets"
+    external_dependencies:
+      - "Red Hat Ansible Automation Platform entitlement and installer artifacts"
+      - "Red Hat subscription-backed RHEL test targets"
+    known_limitations:
+      - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "aap-deploy-basic"
+      heavy: []
+      application_acceptance: []
+  aap_destroy:
+    component: "aap"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "blocked-external-license"
+    acceptance_surface: "safe_teardown_and_absence"
+    dependencies:
+      - "infra.aap_utilities.aap_remove"
+    external_dependencies:
+      - "Red Hat Ansible Automation Platform entitlement and installer artifacts"
+      - "Red Hat subscription-backed RHEL test targets"
+    known_limitations:
+      - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "aap-destroy-basic"
+      heavy: []
+      application_acceptance: []
+  aap_local_execution:
+    component: "aap"
+    classification: "runner"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "blocked-external-license"
+    acceptance_surface: "execute_a_real_automation_workload"
+    dependencies: []
+    external_dependencies:
+      - "Red Hat Ansible Automation Platform entitlement and installer artifacts"
+      - "Red Hat subscription-backed RHEL test targets"
+    known_limitations:
+      - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "aap-local-execution-basic"
+      heavy: []
+      application_acceptance: []
+  aap_ops:
+    component: "aap"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "blocked-external-license"
+    acceptance_surface: "restart_backup_restore_and_health"
+    dependencies:
+      - "aap"
+      - "infra.aap_utilities.aap_backup"
+      - "infra.aap_utilities.aap_restore"
+      - "infra.aap_utilities.aap_certs"
+    external_dependencies:
+      - "Red Hat Ansible Automation Platform entitlement and installer artifacts"
+      - "Red Hat subscription-backed RHEL test targets"
+    known_limitations:
+      - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "aap-ops-basic"
+      heavy: []
+      application_acceptance: []
+  aap_preflight:
+    component: "aap"
+    classification: "validator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_validation"
+    dependencies: []
+    external_dependencies:
+      - "Red Hat Ansible Automation Platform entitlement and installer artifacts"
+      - "Red Hat subscription-backed RHEL test targets"
+    known_limitations:
+      - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  aap_prepare:
+    component: "aap"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_artifact_staging"
+    dependencies:
+      - "artifacts"
+    external_dependencies:
+      - "Red Hat Ansible Automation Platform entitlement and installer artifacts"
+      - "Red Hat subscription-backed RHEL test targets"
+    known_limitations:
+      - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "aap-prepare-basic"
+      heavy: []
+      application_acceptance: []
+  aap_secrets:
+    component: "aap"
+    classification: "secret_management"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_secret_resolution"
+    dependencies: []
+    external_dependencies:
+      - "Red Hat Ansible Automation Platform entitlement and installer artifacts"
+      - "Red Hat subscription-backed RHEL test targets"
+    known_limitations:
+      - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  aap_tls:
+    component: "aap"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_tls_bootstrap"
+    dependencies: []
+    external_dependencies:
+      - "Red Hat Ansible Automation Platform entitlement and installer artifacts"
+      - "Red Hat subscription-backed RHEL test targets"
+    known_limitations:
+      - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  alertmanager_deploy:
+    component: "observability"
+    classification: "monitoring_service"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "deliver_and_verify_a_real_alert"
+    dependencies:
+      - "lit.foundational.podman_systemd"
+    external_dependencies: []
+    known_limitations:
+      - "Current Incus scenario verifies service and port state, not alert delivery."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "atlas-observability-incus_heavy"
+      application_acceptance: []
+  alloy_deploy:
+    component: "observability"
+    classification: "agent"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "generate_deliver_and_query_source_data"
+    dependencies:
+      - "lit.foundational.kubeplay"
+      - "lit.foundational.podman_systemd"
+      - "loki_deploy"
+    external_dependencies: []
+    known_limitations:
+      - "Current Incus scenario does not query delivered data from Loki."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "wunderbox-monitoring-logging-basic"
+      heavy:
+        - "atlas-observability-incus_heavy"
+      application_acceptance: []
+  artifacts:
+    component: "artifacts"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "stage_verify_and_consume_a_real_artifact"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Current scenario covers only a local source, not URL or managed-host sources."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "artifacts-basic"
+      heavy: []
+      application_acceptance: []
+  checkmk_deploy:
+    component: "observability"
+    classification: "monitoring_service"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "discover_target_collect_state_and_query_result"
+    dependencies:
+      - "lit.foundational.kubeplay"
+      - "lit.foundational.podman_systemd"
+    external_dependencies: []
+    known_limitations:
+      - "Current Incus scenario verifies service and port state only."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "wunderbox-monitoring-logging-basic"
+      heavy:
+        - "atlas-observability-incus_heavy"
+      application_acceptance: []
+  cloudflare_warp:
+    component: "cloudflare"
+    classification: "network_service"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "blocked-external-service"
+    application_acceptance: "blocked-external-service"
+    acceptance_surface: "establish_tunnel_and_transfer_allowed_and_denied_traffic"
+    dependencies: []
+    external_dependencies:
+      - "Cloudflare Zero Trust account and device enrollment"
+    known_limitations:
+      - >-
+        The scenario executes the real role and verifies secure MDM rendering,
+        but package installation, service lifecycle, and an external tunnel are not exercised.
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "cloudflare-warp-basic"
+      heavy: []
+      application_acceptance: []
+  cloudflared:
+    component: "cloudflare"
+    classification: "network_service"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "blocked-external-service"
+    application_acceptance: "blocked-external-service"
+    acceptance_surface: "establish_tunnel_and_transfer_allowed_and_denied_traffic"
+    dependencies: []
+    external_dependencies:
+      - "Cloudflare Tunnel account and tunnel token"
+    known_limitations:
+      - "Only RHEL package flow is implemented; current scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "cloudflared-basic"
+      heavy: []
+      application_acceptance: []
+  coredns_config:
+    component: "coredns"
+    classification: "configuration_as_code"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "apply_reconcile_and_verify_real_dns_answers"
+    dependencies:
+      - "coredns_deploy"
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "Production DNS query and reconciliation behavior is not proven by the experimental contract scenario."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "coredns-config-basic"
+      heavy: []
+      application_acceptance: []
+  coredns_deploy:
+    component: "coredns"
+    classification: "network_service"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "perform_real_dns_queries"
+    dependencies:
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "Production DNS service lifecycle, persistence, and recovery are not proven by the experimental scenario."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "coredns-deploy-basic"
+      heavy: []
+      application_acceptance: []
+  coredns_ops:
+    component: "coredns"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "restart_reload_and_verify_dns_answers"
+    dependencies:
+      - "coredns_deploy"
+      - "coredns_validate"
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "Production operational workflows and negative paths are not proven by the experimental scenario."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "coredns-ops-basic"
+      heavy: []
+      application_acceptance: []
+  coredns_validate:
+    component: "coredns"
+    classification: "validator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_validation"
+    dependencies:
+      - "coredns_deploy"
+    external_dependencies: []
+    known_limitations:
+      - "Validation has only an experimental contract and no independent consumer acceptance surface."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "coredns-validate-basic"
+      heavy: []
+      application_acceptance: []
+  dhcp_deploy:
+    component: "dhcp"
+    classification: "network_service"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "obtain_and_verify_a_real_network_lease"
+    dependencies:
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "Current scenario is render-only and disables runtime, package, systemd, and validation paths."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "dhcp-deploy-basic"
+      heavy: []
+      application_acceptance: []
+  forgejo_cac:
+    component: "forgejo"
+    classification: "configuration_as_code"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "apply_query_reconcile_and_delete_api_objects"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "CaC reconciliation and deletion are not proven against a production-supported Forgejo deployment."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "forgejo-cac-basic"
+      heavy: []
+      application_acceptance: []
+  forgejo_deploy:
+    component: "forgejo"
+    classification: "web_application"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "browser_and_authenticated_api"
+    dependencies:
+      - "postgres_deploy"
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "Production persistence, TLS, restart, and browser/API workflows are not yet proven."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "forgejo-deploy-basic"
+      heavy: []
+      application_acceptance: []
+  gitlab_runner:
+    component: "gitlab_runner"
+    classification: "runner"
+    maturity: "deprecated"
+    supported_targets: []
+    candidate_targets: []
+    tiny: "deprecated"
+    heavy: "deprecated"
+    application_acceptance: "deprecated"
+    acceptance_surface: "register_runner_and_execute_a_real_workload"
+    dependencies: []
+    external_dependencies:
+      - "GitLab service and runner registration token"
+    known_limitations:
+      - "Role is intentionally fail-closed and retained only to report its deprecated contract."
+    deprecation_state: "deprecated"
+    scenario_support:
+      tiny:
+        - "gitlab-runner-basic"
+      heavy: []
+      application_acceptance: []
+  grafana_deploy:
+    component: "observability"
+    classification: "web_application"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "browser_and_authenticated_api"
+    dependencies:
+      - "lit.foundational.kubeplay"
+      - "lit.foundational.podman_systemd"
+      - "loki_deploy"
+    external_dependencies: []
+    known_limitations:
+      - "Current Incus scenario has no browser or authenticated API workflow."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "wunderbox-monitoring-logging-basic"
+      heavy:
+        - "atlas-observability-incus_heavy"
+      application_acceptance: []
+  incus_esxi_image:
+    component: "esxi"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "blocked-external-license"
+    acceptance_surface: "import_publish_use_and_cleanup_a_real_image"
+    dependencies: []
+    external_dependencies:
+      - "Privately licensed VMware ESXi image artifacts"
+    known_limitations:
+      - "Current scenario uses a fake Incus CLI and fake artifacts."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "incus-esxi-image-basic"
+      heavy: []
+      application_acceptance: []
+  incus_nested_esxi:
+    component: "esxi"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "blocked-external-infrastructure"
+    application_acceptance: "blocked-external-infrastructure"
+    acceptance_surface: "launch_query_and_destroy_a_real_nested_esxi_vm"
+    dependencies: []
+    external_dependencies:
+      - "Nested-virtualization-capable Incus host"
+      - "Privately licensed VMware ESXi image"
+    known_limitations:
+      - "No root Molecule scenario exists."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  keycloak:
+    component: "keycloak"
+    classification: "orchestrator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "browser_and_authenticated_oidc_api"
+    dependencies:
+      - "keycloak_preflight"
+      - "keycloak_deploy"
+      - "keycloak_config"
+      - "keycloak_cac"
+      - "keycloak_validate"
+      - "keycloak_ops"
+      - "keycloak_backup_restore"
+      - "keycloak_upgrade"
+      - "keycloak_destroy"
+    external_dependencies: []
+    known_limitations:
+      - "Canonical scenarios do not invoke the orchestrator role directly."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  keycloak_backup_restore:
+    component: "keycloak"
+    classification: "backup_component"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "create_backup_modify_state_restore_and_verify"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Canonical Heavy creates a PostgreSQL backup but does not execute this realm backup/restore role."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  keycloak_cac:
+    component: "keycloak"
+    classification: "configuration_as_code"
+    maturity: "production"
+    supported_targets:
+      - "ubuntu-24.04"
+    candidate_targets:
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "supported"
+    heavy: "supported"
+    application_acceptance: "supported"
+    acceptance_surface: "apply_query_and_idempotently_reconcile_api_objects"
+    dependencies:
+      - "keycloak_deploy"
+      - "community.general"
+    external_dependencies: []
+    known_limitations:
+      - "Current scenarios do not prove deletion reconciliation for every managed object type."
+      - "RHEL 9 and RHEL 10 remain candidate targets until the complete exact-commit matrix passes on approved images."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "keycloak-tiny"
+      heavy:
+        - "keycloak-heavy"
+      application_acceptance:
+        - "keycloak-application-acceptance"
+  keycloak_config:
+    component: "keycloak"
+    classification: "configuration_as_code"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "apply_query_and_reconcile_runtime_configuration"
+    dependencies:
+      - "keycloak_deploy"
+    external_dependencies: []
+    known_limitations:
+      - "No direct scenario coverage."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  keycloak_deploy:
+    component: "keycloak"
+    classification: "web_application"
+    maturity: "production"
+    supported_targets:
+      - "ubuntu-24.04"
+    candidate_targets:
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "supported"
+    heavy: "supported"
+    application_acceptance: "supported"
+    acceptance_surface: "browser_and_authenticated_oidc_api"
+    dependencies:
+      - "postgres_deploy"
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - >-
+        Heavy scopes its destructive PostgreSQL restore drill to an isolated
+        probe table; whole-database disaster recovery is not claimed.
+      - "No supported-version upgrade path is currently claimed by this deployment role."
+      - >-
+        Heavy proves LDAP CA and hostname validation with an independent client;
+        Keycloak JVM truststore enforcement is not separately claimed.
+      - "RHEL 9 and RHEL 10 remain candidate targets until the complete exact-commit matrix passes on approved images."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "keycloak-tiny"
+      heavy:
+        - "keycloak-heavy"
+      application_acceptance:
+        - "keycloak-application-acceptance"
+  keycloak_destroy:
+    component: "keycloak"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "safe_teardown_and_absence"
+    dependencies:
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "No direct scenario coverage."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  keycloak_ops:
+    component: "keycloak"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "restart_recovery_and_health"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Canonical Heavy restarts the container directly rather than through this role."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  keycloak_preflight:
+    component: "keycloak"
+    classification: "validator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_validation"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "No direct scenario coverage."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  keycloak_upgrade:
+    component: "keycloak"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "supported_upgrade_and_post_upgrade_workflow"
+    dependencies:
+      - "keycloak_backup_restore"
+      - "keycloak_deploy"
+      - "keycloak_validate"
+    external_dependencies: []
+    known_limitations:
+      - "No direct scenario coverage."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  keycloak_validate:
+    component: "keycloak"
+    classification: "validator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+      - "rhel-9"
+      - "rhel-10"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_validation"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Canonical scenarios validate directly instead of invoking this role."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  loki_deploy:
+    component: "observability"
+    classification: "logging_service"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "generate_transport_ingest_and_query_logs"
+    dependencies:
+      - "lit.foundational.kubeplay"
+      - "lit.foundational.podman_systemd"
+    external_dependencies: []
+    known_limitations:
+      - "Current Incus scenario verifies service and port state only."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "wunderbox-monitoring-logging-basic"
+      heavy:
+        - "atlas-observability-incus_heavy"
+      application_acceptance: []
+  manage_esxi:
+    component: "esxi"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "blocked-external-infrastructure"
+    application_acceptance: "blocked-external-infrastructure"
+    acceptance_surface: "perform_and_verify_a_safe_esxi_operation"
+    dependencies: []
+    external_dependencies:
+      - "Licensed vCenter and ESXi integration lab"
+    known_limitations:
+      - "Current scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "manage-esxi-basic"
+      heavy: []
+      application_acceptance: []
+  minio_backup_restore:
+    component: "minio"
+    classification: "backup_component"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "create_backup_modify_state_restore_and_verify"
+    dependencies:
+      - "minio_validate"
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "Current root scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "minio-backup-restore-basic"
+      heavy: []
+      application_acceptance: []
+  minio_bootstrap:
+    component: "minio"
+    classification: "configuration_as_code"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "create_bucket_write_object_and_query_state"
+    dependencies:
+      - "minio_foundational"
+    external_dependencies: []
+    known_limitations:
+      - "Current root scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "minio-bootstrap-basic"
+      heavy: []
+      application_acceptance: []
+  minio_config:
+    component: "minio"
+    classification: "configuration_as_code"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "apply_query_reconcile_and_delete_api_objects"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Current root scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "minio-config-basic"
+      heavy: []
+      application_acceptance: []
+  minio_deploy:
+    component: "minio"
+    classification: "api_service"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "authenticated_object_api_workflow"
+    dependencies:
+      - "minio_foundational"
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "Current root scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "minio-deploy-basic"
+      heavy: []
+      application_acceptance: []
+  minio_foundational:
+    component: "minio"
+    classification: "helper"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_helper"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - >-
+        The scenario executes real endpoint and provided-credential resolution,
+        but does not exercise Vault-backed credential read/write or a MinIO runtime.
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "minio-foundational-basic"
+      heavy: []
+      application_acceptance: []
+  minio_ops:
+    component: "minio"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "restart_upgrade_and_recovery"
+    dependencies:
+      - "minio_deploy"
+      - "minio_validate"
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "Current root scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "minio-ops-basic"
+      heavy: []
+      application_acceptance: []
+  minio_validate:
+    component: "minio"
+    classification: "validator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_validation"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Current root scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "minio-validate-basic"
+      heavy: []
+      application_acceptance: []
+  nessus_cac:
+    component: "nessus"
+    classification: "configuration_as_code"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "blocked-external-license"
+    acceptance_surface: "apply_query_reconcile_and_delete_api_objects"
+    dependencies: []
+    external_dependencies:
+      - "Tenable Nessus activation and license"
+    known_limitations:
+      - "Current scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "nessus-cac-basic"
+      heavy: []
+      application_acceptance: []
+  nessus_deploy:
+    component: "nessus"
+    classification: "web_application"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "blocked-external-license"
+    application_acceptance: "blocked-external-license"
+    acceptance_surface: "browser_and_authenticated_api"
+    dependencies:
+      - "lit.foundational.kubeplay"
+    external_dependencies:
+      - "Tenable Nessus activation and license"
+    known_limitations:
+      - "Current scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "nessus-deploy-basic"
+      heavy: []
+      application_acceptance: []
+  nexus:
+    component: "nexus"
+    classification: "web_application"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "browser_and_authenticated_repository_api"
+    dependencies:
+      - "lit.foundational.kubeplay"
+    external_dependencies:
+      - "HashiCorp Vault when Vault PKI integration is enabled"
+    known_limitations:
+      - "Current root scenario is a syntax stub; README calls the role a template."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "nexus-basic"
+      heavy: []
+      application_acceptance: []
+  nginx_config:
+    component: "nginx"
+    classification: "configuration_as_code"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "apply_reconcile_and_verify_http"
+    dependencies:
+      - "nginx_deploy"
+    external_dependencies: []
+    known_limitations:
+      - "Current root scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "nginx-config-basic"
+      heavy: []
+      application_acceptance: []
+  nginx_deploy:
+    component: "nginx"
+    classification: "web_service"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "real_http_and_tls_workflow"
+    dependencies:
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "Current root scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "nginx-deploy-basic"
+      heavy: []
+      application_acceptance: []
+  nginx_ops:
+    component: "nginx"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "restart_reload_and_verify_http"
+    dependencies:
+      - "nginx_deploy"
+      - "nginx_validate"
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "Current root scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "nginx-ops-basic"
+      heavy: []
+      application_acceptance: []
+  nginx_validate:
+    component: "nginx"
+    classification: "validator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_validation"
+    dependencies:
+      - "nginx_deploy"
+    external_dependencies: []
+    known_limitations:
+      - "Current root scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "nginx-validate-basic"
+      heavy: []
+      application_acceptance: []
+  openvpn:
+    component: "openvpn"
+    classification: "network_service"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "establish_tunnel_and_transfer_allowed_and_denied_traffic"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Current scenario is a syntax stub; retained operational notes are unvalidated."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "openvpn-basic"
+      heavy: []
+      application_acceptance: []
+  postgres:
+    component: "postgres"
+    classification: "orchestrator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "real_client_transaction_permissions_persistence_and_restore"
+    dependencies:
+      - "postgres_preflight"
+      - "postgres_deploy"
+      - "postgres_config"
+      - "postgres_validate"
+      - "postgres_ops"
+      - "postgres_backup_restore"
+      - "postgres_upgrade"
+      - "postgres_destroy"
+    external_dependencies: []
+    known_limitations:
+      - "Orchestrator is not directly exercised."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  postgres_backup_restore:
+    component: "postgres"
+    classification: "backup_component"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "create_backup_modify_state_restore_and_verify"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Keycloak Heavy proves exact restoration of an isolated probe table, not whole-database disaster recovery."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  postgres_config:
+    component: "postgres"
+    classification: "configuration_as_code"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "apply_query_reconcile_and_delete_configuration"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Implementation only sets and reports override facts."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  postgres_deploy:
+    component: "postgres"
+    classification: "database"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "real_client_transaction_permissions_persistence_and_restore"
+    dependencies:
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "Root scenario is a syntax stub; Keycloak exercises deployment only indirectly."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "postgres-deploy-basic"
+      heavy: []
+      application_acceptance: []
+  postgres_destroy:
+    component: "postgres"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "safe_teardown_and_absence"
+    dependencies:
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "No direct scenario coverage."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  postgres_ops:
+    component: "postgres"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "restart_recovery_and_query"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "No direct scenario coverage."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  postgres_preflight:
+    component: "postgres"
+    classification: "validator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_validation"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "No direct scenario coverage."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  postgres_upgrade:
+    component: "postgres"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "supported_upgrade_and_post_upgrade_query"
+    dependencies:
+      - "postgres_backup_restore"
+      - "postgres_deploy"
+      - "postgres_validate"
+    external_dependencies: []
+    known_limitations:
+      - "No direct scenario coverage."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  postgres_validate:
+    component: "postgres"
+    classification: "validator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_validation"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "No direct scenario coverage."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  prometheus_deploy:
+    component: "observability"
+    classification: "monitoring_service"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "discover_or_register_target_collect_and_query"
+    dependencies:
+      - "lit.foundational.podman_systemd"
+      - "alertmanager_deploy"
+    external_dependencies: []
+    known_limitations:
+      - "Current Incus scenario does not query a scraped target."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "atlas-observability-incus_heavy"
+      application_acceptance: []
+  rsyslog:
+    component: "rsyslog"
+    classification: "orchestrator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "generate_transport_ingest_and_query_logs"
+    dependencies:
+      - "rsyslog_preflight"
+      - "rsyslog_deploy"
+      - "rsyslog_config"
+      - "rsyslog_validate"
+      - "rsyslog_ops"
+      - "rsyslog_backup_restore"
+      - "rsyslog_upgrade"
+      - "rsyslog_destroy"
+    external_dependencies: []
+    known_limitations:
+      - "Heavy scenario omits idempotence and restore."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "rsyslog-lifecycle-incus_heavy"
+      application_acceptance: []
+  rsyslog_backup_restore:
+    component: "rsyslog"
+    classification: "backup_component"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "create_backup_modify_state_restore_and_verify"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Heavy scenario creates backup only."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "rsyslog-lifecycle-incus_heavy"
+      application_acceptance: []
+  rsyslog_config:
+    component: "rsyslog"
+    classification: "configuration_as_code"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "apply_query_reconcile_and_delete_configuration"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Role is an explicit placeholder and Heavy skips apply."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "rsyslog-lifecycle-incus_heavy"
+      application_acceptance: []
+  rsyslog_deploy:
+    component: "rsyslog"
+    classification: "logging_service"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "generate_transport_ingest_and_query_logs"
+    dependencies:
+      - "lit.foundational.podman_systemd"
+    external_dependencies: []
+    known_limitations:
+      - "Incus scenarios do not prove a complete Alloy-to-Loki query path."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "atlas-observability-incus_heavy"
+        - "rsyslog-lifecycle-incus_heavy"
+      application_acceptance: []
+  rsyslog_destroy:
+    component: "rsyslog"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "safe_teardown_and_absence"
+    dependencies:
+      - "lit.foundational.podman_systemd"
+    external_dependencies: []
+    known_limitations:
+      - "Disabled in current Heavy scenario."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  rsyslog_ops:
+    component: "rsyslog"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "restart_recovery_and_log_delivery"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Current Heavy executes status only."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "rsyslog-lifecycle-incus_heavy"
+      application_acceptance: []
+  rsyslog_preflight:
+    component: "rsyslog"
+    classification: "validator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_validation"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Coverage is shared with an experimental lifecycle scenario; standalone production support is not proven."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "rsyslog-lifecycle-incus_heavy"
+      application_acceptance: []
+  rsyslog_upgrade:
+    component: "rsyslog"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "supported_upgrade_and_log_delivery"
+    dependencies:
+      - "rsyslog_backup_restore"
+      - "rsyslog_deploy"
+      - "rsyslog_validate"
+    external_dependencies: []
+    known_limitations:
+      - "Disabled in current Heavy scenario."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  rsyslog_validate:
+    component: "rsyslog"
+    classification: "validator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_validation"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Coverage is shared with an experimental lifecycle scenario; standalone production support is not proven."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "rsyslog-lifecycle-incus_heavy"
+      application_acceptance: []
+  samba:
+    component: "samba"
+    classification: "orchestrator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "real_smb_or_ldap_client_workflow"
+    dependencies:
+      - "samba_preflight"
+      - "samba_deploy"
+      - "samba_config"
+      - "samba_validate"
+      - "samba_ops"
+      - "samba_backup_restore"
+      - "samba_upgrade"
+      - "samba_destroy"
+    external_dependencies: []
+    known_limitations:
+      - "Heavy scenario omits idempotence and restore."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "samba-lifecycle-incus_heavy"
+      application_acceptance: []
+  samba_backup_restore:
+    component: "samba"
+    classification: "backup_component"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "create_backup_modify_state_restore_and_verify"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Heavy scenario creates backup only."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "samba-lifecycle-incus_heavy"
+      application_acceptance: []
+  samba_config:
+    component: "samba"
+    classification: "configuration_as_code"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "apply_query_reconcile_and_delete_configuration"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Implementation only reports overrides and Heavy skips apply."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "samba-lifecycle-incus_heavy"
+      application_acceptance: []
+  samba_deploy:
+    component: "samba"
+    classification: "network_service"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "real_smb_or_ldap_client_workflow"
+    dependencies:
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "The experimental lifecycle does not yet prove every production upgrade and recovery path."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "samba-lifecycle-incus_heavy"
+      application_acceptance: []
+  samba_destroy:
+    component: "samba"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "safe_teardown_and_absence"
+    dependencies:
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "Disabled in current Heavy scenario."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  samba_ops:
+    component: "samba"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "restart_recovery_and_real_client_workflow"
+    dependencies:
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "Current Heavy executes status only."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "samba-lifecycle-incus_heavy"
+      application_acceptance: []
+  samba_preflight:
+    component: "samba"
+    classification: "validator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_validation"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Coverage is shared with an experimental lifecycle scenario; standalone production support is not proven."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "samba-lifecycle-incus_heavy"
+      application_acceptance: []
+  samba_upgrade:
+    component: "samba"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "supported_upgrade_and_real_client_workflow"
+    dependencies:
+      - "samba_backup_restore"
+      - "samba_deploy"
+      - "samba_validate"
+    external_dependencies: []
+    known_limitations:
+      - "Disabled in current Heavy scenario."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  samba_validate:
+    component: "samba"
+    classification: "validator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_validation"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Coverage is shared with an experimental lifecycle scenario; standalone production support is not proven."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy:
+        - "samba-lifecycle-incus_heavy"
+      application_acceptance: []
+  semaphore_cac:
+    component: "semaphore"
+    classification: "configuration_as_code"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "apply_query_reconcile_and_delete_api_objects"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Current scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "semaphore-cac-basic"
+      heavy: []
+      application_acceptance: []
+  semaphore_deploy:
+    component: "semaphore"
+    classification: "web_application"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "browser_and_authenticated_api"
+    dependencies:
+      - "postgres_deploy"
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "Current scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "semaphore-deploy-basic"
+      heavy: []
+      application_acceptance: []
+  vault_backup_restore:
+    component: "vault"
+    classification: "backup_component"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "create_backup_modify_state_restore_and_verify"
+    dependencies:
+      - "vault_deploy"
+      - "vault_ops"
+      - "vault_validate"
+    external_dependencies: []
+    known_limitations:
+      - "Current scenario uses a fake runtime rather than real Vault."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "vault-backup-restore-basic"
+      heavy: []
+      application_acceptance: []
+  vault_bootstrap:
+    component: "vault"
+    classification: "secret_management"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "initialize_authenticate_and_use_real_test_identity"
+    dependencies:
+      - "vault_foundational"
+      - "vault_ops"
+    external_dependencies: []
+    known_limitations:
+      - "Current scenarios focus on local escrow contracts and a fake Vault API."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "vault-bootstrap-basic"
+        - "vault-ops-basic"
+      heavy: []
+      application_acceptance: []
+  vault_config:
+    component: "vault"
+    classification: "configuration_as_code"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "apply_query_reconcile_and_delete_secret_configuration"
+    dependencies:
+      - "vault_bootstrap"
+      - "lit.foundational.terragrunt"
+    external_dependencies: []
+    known_limitations:
+      - "Current scenario only validates token normalization."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "vault-config-basic"
+      heavy: []
+      application_acceptance: []
+  vault_deploy:
+    component: "vault"
+    classification: "secret_management"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "authenticate_write_read_deny_audit_and_persist"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Current scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "vault-deploy-basic"
+      heavy: []
+      application_acceptance: []
+  vault_foundational:
+    component: "vault"
+    classification: "helper"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_helper"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Current scenario is a syntax stub."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "vault-foundational-basic"
+      heavy: []
+      application_acceptance: []
+  vault_ops:
+    component: "vault"
+    classification: "infrastructure"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "restart_unseal_recovery_and_authenticated_read"
+    dependencies:
+      - "vault_deploy"
+      - "vault_validate"
+      - "lit.foundational.kubeplay"
+    external_dependencies: []
+    known_limitations:
+      - "Current scenario uses fake Podman and a fake Vault API."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "vault-ops-basic"
+      heavy: []
+      application_acceptance: []
+  vault_raft_snapshot:
+    component: "vault"
+    classification: "backup_component"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "snapshot_modify_restore_and_verify_exact_state"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Current scenario uses a fake Vault API rather than an integrated-Raft cluster."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "vault-raft-snapshot-basic"
+        - "vault-security-lifecycle-basic"
+      heavy: []
+      application_acceptance: []
+  vault_scoped_approle:
+    component: "vault"
+    classification: "secret_management"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "authenticate_positive_and_negative_policy_workflows"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Current scenario uses a fake Vault API."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "vault-bootstrap-basic"
+        - "vault-scoped-approle-basic"
+        - "vault-security-lifecycle-basic"
+      heavy: []
+      application_acceptance: []
+  vault_validate:
+    component: "vault"
+    classification: "validator"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "not-applicable"
+    acceptance_surface: "parent_component_validation"
+    dependencies: []
+    external_dependencies: []
+    known_limitations:
+      - "Current scenario uses fake Podman and a fake Vault API."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "vault-validate-basic"
+      heavy: []
+      application_acceptance: []
+scenarios:
+  aap-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "aap"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario exercises controller-side role behavior without deploying an independently versioned
+        application.
+      dependencies: []
+  aap-cac-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "aap_cac"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  aap-deploy-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "aap_deploy"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  aap-destroy-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "aap_destroy"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  aap-local-execution-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "aap_local_execution"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario exercises controller-side role behavior without deploying an independently versioned
+        application.
+      dependencies: []
+  aap-ops-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "aap_ops"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  aap-prepare-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "aap_prepare"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  artifacts-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "artifacts"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario exercises controller-side role behavior without deploying an independently versioned
+        application.
+      dependencies: []
+  atlas-observability-incus_heavy:
+    profile: "heavy"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "alertmanager_deploy"
+      - "alloy_deploy"
+      - "checkmk_deploy"
+      - "grafana_deploy"
+      - "loki_deploy"
+      - "prometheus_deploy"
+      - "rsyslog_deploy"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "runtime-container"
+      reason: >-
+        Scenario exercises real service containers and must report immutable runtime digests when enabled.
+      dependencies: []
+  cloudflare-warp-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "cloudflare_warp"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  cloudflared-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "cloudflared"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  coredns-config-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "coredns_config"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  coredns-deploy-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "coredns_deploy"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  coredns-ops-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "coredns_ops"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  coredns-validate-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "coredns_validate"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  dhcp-deploy-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "dhcp_deploy"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario exercises controller-side role behavior without deploying an independently versioned
+        application.
+      dependencies: []
+  forgejo-cac-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "forgejo_cac"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  forgejo-deploy-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "forgejo_deploy"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  gitlab-runner-basic:
+    profile: "tiny"
+    state: "deprecated"
+    implementation: "deprecation-contract"
+    roles:
+      - "gitlab_runner"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario enforces a deprecation contract and intentionally does not deploy an independently versioned
+        application.
+      dependencies: []
+  incus-esxi-image-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "incus_esxi_image"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario exercises controller-side role behavior without deploying an independently versioned
+        application.
+      dependencies: []
+  keycloak-application-acceptance:
+    profile: "application_acceptance"
+    state: "supported"
+    implementation: "real"
+    roles:
+      - "keycloak_cac"
+      - "keycloak_deploy"
+    exercised_dependencies:
+      - "postgres_backup_restore"
+      - "samba"
+    junit: true
+    allure: true
+    evidence: true
+    test_application:
+      mode: "runtime-container"
+      reason: >-
+        Scenario deploys and verifies independently versioned application containers; immutable runtime digests
+        are mandatory.
+      dependencies: []
+  keycloak-heavy:
+    profile: "heavy"
+    state: "supported"
+    implementation: "real"
+    roles:
+      - "keycloak_cac"
+      - "keycloak_deploy"
+    exercised_dependencies:
+      - "postgres_backup_restore"
+      - "samba"
+    junit: true
+    allure: true
+    evidence: true
+    test_application:
+      mode: "runtime-container"
+      reason: >-
+        Scenario deploys and verifies independently versioned application containers; immutable runtime digests
+        are mandatory.
+      dependencies: []
+  keycloak-tiny:
+    profile: "tiny"
+    state: "supported"
+    implementation: "real"
+    roles:
+      - "keycloak_cac"
+      - "keycloak_deploy"
+    exercised_dependencies: []
+    junit: true
+    allure: true
+    evidence: true
+    test_application:
+      mode: "runtime-container"
+      reason: >-
+        Scenario deploys and verifies independently versioned application containers; immutable runtime digests
+        are mandatory.
+      dependencies: []
+  manage-esxi-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "manage_esxi"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  minio-backup-restore-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "minio_backup_restore"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  minio-bootstrap-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "minio_bootstrap"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  minio-config-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "minio_config"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  minio-deploy-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "minio_deploy"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  minio-foundational-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "minio_foundational"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  minio-ops-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "minio_ops"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  minio-validate-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "minio_validate"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  nessus-cac-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "nessus_cac"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  nessus-deploy-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "nessus_deploy"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  nexus-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "nexus"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  nginx-config-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "nginx_config"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  nginx-deploy-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "nginx_deploy"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  nginx-ops-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "nginx_ops"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  nginx-validate-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "nginx_validate"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  openvpn-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "openvpn"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  postgres-deploy-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "postgres_deploy"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  rsyslog-lifecycle-incus_heavy:
+    profile: "heavy"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "rsyslog"
+      - "rsyslog_backup_restore"
+      - "rsyslog_config"
+      - "rsyslog_deploy"
+      - "rsyslog_ops"
+      - "rsyslog_preflight"
+      - "rsyslog_validate"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "runtime-container"
+      reason: >-
+        Scenario exercises real service containers and must report immutable runtime digests when enabled.
+      dependencies: []
+  samba-lifecycle-incus_heavy:
+    profile: "heavy"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "samba"
+      - "samba_backup_restore"
+      - "samba_config"
+      - "samba_deploy"
+      - "samba_ops"
+      - "samba_preflight"
+      - "samba_validate"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "runtime-container"
+      reason: >-
+        Scenario exercises real service containers and must report immutable runtime digests when enabled.
+      dependencies: []
+  semaphore-cac-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "semaphore_cac"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  semaphore-deploy-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "semaphore_deploy"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  vault-backup-restore-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "vault_backup_restore"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "declared-evidence"
+      reason: >-
+        Scenario exercises the versioned in-repository MoleculeVault/1.0 API test double; request evidence must
+        bind the declared dependency.
+      dependencies:
+        - type: "external-api"
+          name: "MoleculeVault"
+          version: "1.0"
+          evidence_path: "test-applications/vault-backup-restore-basic/MoleculeVault-1.0-requests.log"
+  vault-bootstrap-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "vault_bootstrap"
+      - "vault_scoped_approle"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario exercises controller-side role behavior without deploying an independently versioned
+        application.
+      dependencies: []
+  vault-config-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "vault_config"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario exercises controller-side role behavior without deploying an independently versioned
+        application.
+      dependencies: []
+  vault-deploy-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "vault_deploy"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  vault-foundational-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "vault_foundational"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []
+  vault-ops-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "vault_bootstrap"
+      - "vault_ops"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "declared-evidence"
+      reason: >-
+        Scenario exercises the versioned in-repository MoleculeVault/1.0 API test double; request evidence must
+        bind the declared dependency.
+      dependencies:
+        - type: "external-api"
+          name: "MoleculeVault"
+          version: "1.0"
+          evidence_path: "test-applications/vault-ops-basic/MoleculeVault-1.0-requests.log"
+  vault-raft-snapshot-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "vault_raft_snapshot"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "declared-evidence"
+      reason: >-
+        Scenario exercises the versioned in-repository MoleculeVault/1.0 API test double; request evidence must
+        bind the declared dependency.
+      dependencies:
+        - type: "external-api"
+          name: "MoleculeVault"
+          version: "1.0"
+          evidence_path: "test-applications/vault-raft-snapshot-basic/MoleculeVault-1.0-requests.log"
+  vault-scoped-approle-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "vault_scoped_approle"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "declared-evidence"
+      reason: >-
+        Scenario exercises the versioned in-repository MoleculeVault/1.0 API test double; request evidence must
+        bind the declared dependency.
+      dependencies:
+        - type: "external-api"
+          name: "MoleculeVault"
+          version: "1.0"
+          evidence_path: "test-applications/vault-scoped-approle-basic/MoleculeVault-1.0-requests.log"
+  vault-security-lifecycle-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "vault_raft_snapshot"
+      - "vault_scoped_approle"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario exercises controller-side role behavior without deploying an independently versioned
+        application.
+      dependencies: []
+  vault-validate-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "vault_validate"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "declared-evidence"
+      reason: >-
+        Scenario exercises the versioned in-repository MoleculeVault/1.0 API test double; request evidence must
+        bind the declared dependency.
+      dependencies:
+        - type: "external-api"
+          name: "MoleculeVault"
+          version: "1.0"
+          evidence_path: "test-applications/vault-validate-basic/MoleculeVault-1.0-requests.log"
+  wunderbox-monitoring-logging-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "alloy_deploy"
+      - "checkmk_deploy"
+      - "grafana_deploy"
+      - "loki_deploy"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
+        application.
+      dependencies: []

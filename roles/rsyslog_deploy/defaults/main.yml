@@ -7,7 +7,8 @@ rsyslog_deploy_skip_deploy: false
 
 rsyslog_deploy_pod_name: "rsyslog"
 rsyslog_deploy_container_name: "rsyslog"
-rsyslog_deploy_image: "docker.io/rsyslog/syslog_appliance_alpine:latest"
+rsyslog_deploy_image: >-
+  docker.io/rsyslog/syslog_appliance_alpine:latest@sha256:c0dd7cad9ff3234967ff59879590175b7590e8a5f5621ec49a85aff546b44a3b
 rsyslog_deploy_pod_manifest_path: "/etc/podman/pods/rsyslog.yml"
 rsyslog_deploy_systemd_enabled: true
 rsyslog_deploy_systemd_unit_name: "{{ rsyslog_deploy_pod_name }}"

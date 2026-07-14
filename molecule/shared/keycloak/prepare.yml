@@ -1,35 +1,27 @@
 ---
+# Compatibility entry point. New scenarios import ../incus/prepare.yml directly.
 - name: Prepare Keycloak Incus targets
-  hosts: all
-  gather_facts: true
-  become: true
-  tasks:
-    - name: Assert the selected target is supported
-      ansible.builtin.assert:
-        that:
-          - >-
-            (ansible_distribution == 'Ubuntu' and ansible_distribution_version is version('24.04', '=='))
-            or (ansible_os_family == 'RedHat' and ansible_distribution_major_version in ['9', '10'])
-        fail_msg: >-
-          Unsupported Keycloak test target {{ ansible_distribution }} {{ ansible_distribution_version }}.
-
-    - name: Install test runtime packages on Debian family targets
-      ansible.builtin.apt:
-        name:
-          - ca-certificates
-          - curl
-          - podman
-          - python3
-        state: present
-        update_cache: true
-      when: ansible_os_family == 'Debian'
-
-    - name: Install test runtime packages on Red Hat family targets
-      ansible.builtin.dnf:
-        name:
-          - ca-certificates
-          - curl
-          - podman
-          - python3
-        state: present
-      when: ansible_os_family == 'RedHat'
+  ansible.builtin.import_playbook: ../incus/prepare.yml
+  vars:
+    molecule_incus_prepare_target_supported: >-
+      {{
+        (ansible_facts['distribution'] == 'Ubuntu'
+          and ansible_facts['distribution_version'] is version('24.04', '=='))
+        or (ansible_facts['os_family'] == 'RedHat'
+          and ansible_facts['distribution_major_version'] in ['9', '10'])
+      }}
+    molecule_incus_prepare_packages:
+      Debian:
+        - ca-certificates
+        - curl
+        - ldap-utils
+        - openssl
+        - podman
+        - python3
+      RedHat:
+        - ca-certificates
+        - curl
+        - openldap-clients
+        - openssl
+        - podman
+        - python3

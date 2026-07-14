@@ -4,7 +4,8 @@ Execute vendor AAP removal role `infra.aap_utilities.aap_remove`.
 
 ## Requirements
 
-`infra.aap_utilities` collection installed.
+Install the authoritative `collections/requirements-rh.yml` overlay; this
+role's vendor teardown path requires its pinned `infra.aap_utilities` entry.
 
 ## Variables
 

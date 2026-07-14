@@ -5,9 +5,16 @@ dependency:
 driver:
   name: default
 platforms:
-  - name: "${KEYCLOAK_TEST_INSTANCE:-lit-keycloak-acceptance-local}"
+  - name: "${KEYCLOAK_TEST_INSTANCE:-lit-supplementary-local-1-kc-accept-ubuntu-24.04}"
     image: "${KEYCLOAK_TEST_IMAGE:-images:ubuntu/24.04}"
     type: "${KEYCLOAK_TEST_INSTANCE_TYPE:-container}"
+    identity:
+      scenario: keycloak-application-acceptance
+      target: "${KEYCLOAK_TEST_TARGET:-ubuntu-24.04}"
+    resources:
+      cpu: "${KEYCLOAK_TEST_CPU_LIMIT:-4}"
+      memory: "${KEYCLOAK_TEST_MEMORY_LIMIT:-8GiB}"
+      disk: "${KEYCLOAK_TEST_DISK_LIMIT:-20GiB}"
     config:
       - key: security.nesting
         value: "true"
@@ -15,7 +22,7 @@ provisioner:
   name: ansible
   inventory:
     host_vars:
-      "${KEYCLOAK_TEST_INSTANCE:-lit-keycloak-acceptance-local}":
+      "${KEYCLOAK_TEST_INSTANCE:-lit-supplementary-local-1-kc-accept-ubuntu-24.04}":
         ansible_connection: community.general.incus
         ansible_python_interpreter: /usr/bin/python3
   playbooks:
@@ -23,6 +30,7 @@ provisioner:
     prepare: prepare.yml
     converge: converge.yml
     verify: verify.yml
+    cleanup: cleanup.yml
     destroy: destroy.yml
 scenario:
   name: keycloak-application-acceptance
@@ -35,6 +43,7 @@ scenario:
     - converge
     - idempotence
     - verify
+    - cleanup
     - destroy
 verifier:
   name: ansible

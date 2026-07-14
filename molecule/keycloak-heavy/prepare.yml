@@ -1,3 +1,26 @@
 ---
 - name: Prepare Keycloak Heavy target
-  ansible.builtin.import_playbook: ../shared/keycloak/prepare.yml
+  ansible.builtin.import_playbook: ../shared/incus/prepare.yml
+  vars:
+    molecule_incus_prepare_target_supported: >-
+      {{
+        (ansible_facts['distribution'] == 'Ubuntu'
+          and ansible_facts['distribution_version'] is version('24.04', '=='))
+        or (ansible_facts['os_family'] == 'RedHat'
+          and ansible_facts['distribution_major_version'] in ['9', '10'])
+      }}
+    molecule_incus_prepare_packages:
+      Debian:
+        - ca-certificates
+        - curl
+        - ldap-utils
+        - openssl
+        - podman
+        - python3
+      RedHat:
+        - ca-certificates
+        - curl
+        - openldap-clients
+        - openssl
+        - podman
+        - python3
