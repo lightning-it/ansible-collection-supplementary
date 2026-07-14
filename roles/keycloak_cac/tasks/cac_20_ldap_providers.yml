@@ -36,6 +36,7 @@
         status_code: 200
       register: keycloak_cac_ldap_realm
       changed_when: false
+      no_log: true
 
     - name: Reconcile Keycloak LDAP provider entries
       ansible.builtin.include_tasks: ldap_provider.yml

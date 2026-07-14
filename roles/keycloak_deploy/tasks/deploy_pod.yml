@@ -415,7 +415,10 @@
   ansible.builtin.template:
     src: keycloak-pod.yml.j2
     dest: "{{ keycloak_deploy_pod_manifest_path }}"
-    mode: '0644'
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
   notify:
     - Recreate keycloak pod
     - Run keycloak pod

@@ -96,6 +96,7 @@
     status_code: 200
   register: keycloak_cac_existing_ldap_components
   changed_when: false
+  no_log: true
 
 - name: Set existing Keycloak LDAP provider component
   ansible.builtin.set_fact:
@@ -109,6 +110,27 @@
         )
         | default({}, true)
       }}
+  no_log: true
+
+- name: Detect Keycloak LDAP provider drift
+  ansible.builtin.set_fact:
+    keycloak_cac_ldap_component_drift: >-
+      {{
+        keycloak_cac_existing_ldap_component.name | default('') != keycloak_cac_ldap_component_payload.name
+        or (
+          keycloak_cac_ldap_component_payload.config
+          | dict2items
+          | rejectattr('key', 'equalto', 'bindCredential')
+          | list
+          | difference(
+              keycloak_cac_existing_ldap_component.config
+              | default({})
+              | dict2items
+            )
+          | length > 0
+        )
+      }}
+  changed_when: false
   no_log: true
 
 - name: Create Keycloak LDAP provider component
@@ -143,4 +165,9 @@
     status_code:
       - 200
       - 204
-  when: keycloak_cac_existing_ldap_component.id | default('', true) | length > 0
+  when:
+    - keycloak_cac_existing_ldap_component.id | default('', true) | length > 0
+    - >-
+      keycloak_cac_ldap_component_drift | bool
+      or keycloak_cac_ldap_provider.force_update | default(false) | bool
+  no_log: true
