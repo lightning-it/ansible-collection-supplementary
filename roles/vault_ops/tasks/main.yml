@@ -43,15 +43,31 @@
         - not vault_ops_manage_systemd | bool
         - not ansible_check_mode
 
+    - name: Unseal Shamir Vault after restart
+      ansible.builtin.include_tasks: unseal.yml
+      when:
+        - vault_ops_unseal_after_restart | bool
+        - not ansible_check_mode
+
     - name: Validate Vault after restart
       ansible.builtin.include_role:
         name: vault_validate
       vars:
+        vault_validate_expected_lifecycle: "{{ vault_ops_restart_expected_lifecycle }}"
+        vault_validate_lifecycle_retries: "{{ vault_ops_validate_lifecycle_retries }}"
+        vault_validate_lifecycle_delay: "{{ vault_ops_validate_lifecycle_delay }}"
+        vault_validate_container_name: "{{ vault_ops_container_name }}"
+        vault_validate_host_data_dir: "{{ vault_ops_host_data_dir }}"
+        vault_validate_expected_uid: "{{ vault_ops_expected_uid }}"
+        vault_validate_expected_gid: "{{ vault_ops_expected_gid }}"
+        vault_validate_expected_mode: "{{ vault_ops_expected_mode }}"
         vault_validate_api_url: "{{ vault_ops_api_url }}"
         vault_validate_health_url: "{{ vault_ops_health_url }}"
         vault_validate_validate_certs: "{{ vault_ops_validate_certs }}"
         vault_validate_ca_cert_path: "{{ vault_ops_target_ca_cert_path_effective }}"
-      when: not ansible_check_mode
+      when:
+        - vault_ops_validate_after_restart | bool
+        - not ansible_check_mode
 
 - name: Report Vault status
   when: vault_ops_action == 'status'

@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    Add vault_raft_snapshot for append-only encrypted off-host Raft snapshot escrow with explicit ciphertext checks
+    and a digest-pinned, loopback-only, isolated restore drill that validates cluster identity and exact KV hashes.

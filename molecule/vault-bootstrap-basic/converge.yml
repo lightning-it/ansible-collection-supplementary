@@ -9,17 +9,23 @@
     vault_bootstrap_molecule_strict_root: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/strict-controller-escrow
     vault_bootstrap_molecule_strict_marker: >-
-      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/strict-controller-escrow-complete
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/strict-controller-escrow-v2-complete
     vault_bootstrap_molecule_controller_root: >-
       {{ vault_bootstrap_molecule_strict_root }}/controller
+    vault_bootstrap_molecule_controller_dir: >-
+      {{ vault_bootstrap_molecule_controller_root }}/hetzner-baremetal/vault
     vault_bootstrap_molecule_controller_file: >-
-      {{ vault_bootstrap_molecule_controller_root }}/vault-init.yml.vault
+      {{ vault_bootstrap_molecule_controller_dir }}/vault-init.yml.vault
     vault_bootstrap_molecule_missing_controller_file: >-
-      {{ vault_bootstrap_molecule_controller_root }}/missing-vault-init.yml.vault
+      {{ vault_bootstrap_molecule_controller_dir }}/missing-vault-init.yml.vault
     vault_bootstrap_molecule_target_dir: >-
       {{ vault_bootstrap_molecule_strict_root }}/target
     vault_bootstrap_molecule_target_file: >-
       {{ vault_bootstrap_molecule_target_dir }}/vault-init.yml.vault
+    vault_bootstrap_molecule_scoped_ca_file: >-
+      {{ vault_bootstrap_molecule_controller_root }}/scoped-ca.pem
+    vault_bootstrap_molecule_scoped_document: >-
+      {{ vault_bootstrap_molecule_controller_dir }}/scoped-approle.vault.yml
   tasks:
     - name: Normalize canonical persisted init payload
       ansible.builtin.include_role:
@@ -69,11 +75,21 @@
       register: vault_bootstrap_molecule_strict_marker_stat
       changed_when: false
 
+    - name: Inspect the expected strict controller escrow fixture
+      ansible.builtin.stat:
+        path: "{{ vault_bootstrap_molecule_controller_file }}"
+        follow: false
+      register: vault_bootstrap_molecule_controller_file_stat
+      changed_when: false
+      no_log: true
+
     - name: Reset incomplete strict controller escrow fixtures
       ansible.builtin.file:
         path: "{{ vault_bootstrap_molecule_strict_root }}"
         state: absent
-      when: not (vault_bootstrap_molecule_strict_marker_stat.stat.exists | default(false))
+      when: >-
+        not (vault_bootstrap_molecule_strict_marker_stat.stat.exists | default(false))
+        or not (vault_bootstrap_molecule_controller_file_stat.stat.exists | default(false))
 
     - name: Initialize strict controller escrow refusal coverage facts
       ansible.builtin.set_fact:
@@ -85,13 +101,43 @@
         vault_bootstrap_molecule_payload_drift_refused: false
         vault_bootstrap_molecule_key_linebreak_refused: false
         vault_bootstrap_molecule_target_drift_refused: false
+        vault_bootstrap_molecule_sibling_prefix_refused: false
       changed_when: false
 
-    - name: Ensure the approved test controller escrow root exists
+    - name: Ensure the approved test controller escrow hierarchy exists
       ansible.builtin.file:
-        path: "{{ vault_bootstrap_molecule_controller_root }}"
+        path: "{{ item }}"
         state: directory
         mode: "0700"
+      loop:
+        - "{{ vault_bootstrap_molecule_controller_root }}"
+        - "{{ vault_bootstrap_molecule_controller_dir }}"
+
+    - name: Exercise the real pre-init controller escrow encryption probe
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_bootstrap
+        tasks_from: controller_escrow_probe
+      vars:
+        vault_bootstrap_controller_escrow_root_path: "{{ vault_bootstrap_molecule_controller_root }}"
+
+    - name: Find residual controller escrow encryption probe artifacts
+      ansible.builtin.find:
+        paths: "{{ vault_bootstrap_molecule_controller_root }}"
+        patterns: .vault-bootstrap-encryption-probe-*
+        file_type: any
+        hidden: true
+        recurse: false
+      register: vault_bootstrap_molecule_probe_artifacts
+      changed_when: false
+
+    - name: Require a successful clean controller escrow encryption probe
+      ansible.builtin.assert:
+        that:
+          - vault_bootstrap_controller_escrow_probe.created | default(false)
+          - vault_bootstrap_controller_escrow_probe.exists | default(false)
+          - vault_bootstrap_molecule_probe_artifacts.matched | int == 0
+        quiet: true
+      no_log: true
 
     - name: Exercise non-normalized controller path refusal
       block:
@@ -120,6 +166,33 @@
             vault_bootstrap_molecule_invalid_path_refused: true
           changed_when: false
 
+    - name: Exercise sibling-prefix controller path refusal
+      block:
+        - name: Run strict preflight with a sibling-prefix controller path
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_bootstrap
+            tasks_from: controller_escrow_preflight
+          vars:
+            vault_bootstrap_require_controller_escrow: true
+            vault_bootstrap_write_init_output: true
+            vault_bootstrap_write_init_file_on_init: true
+            vault_bootstrap_ansible_vault_password_file: >-
+              {{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') }}
+            vault_bootstrap_ansible_vault_password: ""
+            vault_bootstrap_init_payload: {}
+            vault_bootstrap_controller_escrow_root_path: "{{ vault_bootstrap_molecule_controller_root }}"
+            vault_bootstrap_controller_init_file_path: >-
+              {{ vault_bootstrap_molecule_controller_root }}-sibling/vault-init.yml.vault
+            vault_bootstrap_persist_dir: "{{ vault_bootstrap_molecule_target_dir }}"
+            vault_bootstrap_init_file_path: "{{ vault_bootstrap_molecule_target_file }}"
+            vault_bootstrap_initialized: false
+
+      rescue:
+        - name: Record sibling-prefix path refusal
+          ansible.builtin.set_fact:
+            vault_bootstrap_molecule_sibling_prefix_refused: true
+          changed_when: false
+
     - name: Exercise initialized Vault without controller escrow refusal
       block:
         - name: Run strict preflight with missing controller escrow
@@ -145,6 +218,25 @@
           ansible.builtin.set_fact:
             vault_bootstrap_molecule_missing_escrow_refused: true
           changed_when: false
+
+    - name: Accept a normalized nested controller escrow path before initialization
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_bootstrap
+        tasks_from: controller_escrow_preflight
+      vars:
+        vault_bootstrap_require_controller_escrow: true
+        vault_bootstrap_write_init_output: true
+        vault_bootstrap_write_init_file_on_init: true
+        vault_bootstrap_ansible_vault_password_file: >-
+          {{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') }}
+        vault_bootstrap_ansible_vault_password: ""
+        vault_bootstrap_init_payload: {}
+        vault_bootstrap_controller_escrow_root_path: "{{ vault_bootstrap_molecule_controller_root }}"
+        vault_bootstrap_controller_init_file_path: "{{ vault_bootstrap_molecule_controller_file }}"
+        vault_bootstrap_persist_dir: "{{ vault_bootstrap_molecule_target_dir }}"
+        vault_bootstrap_init_file_path: "{{ vault_bootstrap_molecule_target_file }}"
+        vault_bootstrap_initialized: false
+      when: not (vault_bootstrap_molecule_controller_file_stat.stat.exists | default(false))
 
     - name: Persist the synthetic authoritative controller init escrow
       lit.foundational.ansible_vault_document:
@@ -381,6 +473,7 @@
       ansible.builtin.assert:
         that:
           - vault_bootstrap_molecule_invalid_path_refused | bool
+          - vault_bootstrap_molecule_sibling_prefix_refused | bool
           - vault_bootstrap_molecule_missing_escrow_refused | bool
           - vault_bootstrap_molecule_stale_escrow_refused | bool
           - vault_bootstrap_molecule_password_fallback_refused | bool
@@ -393,6 +486,107 @@
             vault_bootstrap_molecule_target_drift_refused | bool
             or vault_bootstrap_molecule_strict_marker_stat.stat.exists | default(false)
         quiet: true
+
+    - name: Persist a harmless scoped AppRole CA metadata fixture
+      ansible.builtin.copy:
+        dest: "{{ vault_bootstrap_molecule_scoped_ca_file }}"
+        content: "unit-test-only-ca-metadata-fixture\n"
+        mode: "0644"
+
+    - name: Accept canonical inventory-rendered numeric strings
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_scoped_approle
+        tasks_from: assert
+      vars:
+        vault_scoped_approle_api_url: https://127.0.0.1:18200
+        vault_scoped_approle_health_url: https://127.0.0.1:18200/v1/sys/health
+        vault_scoped_approle_api_delegate_to: localhost
+        vault_scoped_approle_validate_certs: true
+        vault_scoped_approle_ca_cert_path: "{{ vault_bootstrap_molecule_scoped_ca_file }}"
+        vault_scoped_approle_timeout: "10"
+        vault_scoped_approle_revoke_admin_token: true
+        vault_scoped_approle_kv_mount_point: stage-2c
+        vault_scoped_approle_auth_mount_point: approle
+        vault_scoped_approle_role_name: molecule-automation
+        vault_scoped_approle_policy_name: molecule-automation
+        vault_scoped_approle_policy: >-
+          path "stage-2c/data/molecule/*" { capabilities = ["read"] }
+        vault_scoped_approle_token_type: batch
+        vault_scoped_approle_token_ttl: 20m
+        vault_scoped_approle_token_ttl_seconds: "1200"
+        vault_scoped_approle_token_max_ttl: 1h
+        vault_scoped_approle_token_max_ttl_seconds: "3600"
+        vault_scoped_approle_token_num_uses: "0"
+        vault_scoped_approle_secret_id_ttl: "0"
+        vault_scoped_approle_secret_id_num_uses: "0"
+        vault_scoped_approle_controller_escrow_root_path: >-
+          {{ vault_bootstrap_molecule_controller_root }}
+        vault_scoped_approle_controller_document_path: >-
+          {{ vault_bootstrap_molecule_scoped_document }}
+        vault_scoped_approle_document_schema_version: "1"
+        vault_scoped_approle_document_subject: molecule-automation
+        vault_scoped_approle_capability_probes:
+          - path: stage-2c/data/molecule/item
+            capabilities: [read]
+
+    - name: Require the inventory-rendered numeric string gate to pass safely
+      ansible.builtin.assert:
+        that:
+          - not (_vault_scoped_approle_document_exists | bool)
+        quiet: true
+
+    - name: Seed harmless scoped AppRole response fixtures
+      ansible.builtin.set_fact:
+        _vault_scoped_approle_role_id_response:
+          json:
+            data:
+              role_id: molecule-role-id-fixture
+        _vault_scoped_approle_secret_id_response:
+          json:
+            data:
+              secret_id: molecule-secret-id-fixture
+      changed_when: false
+      no_log: true
+
+    - name: Build a scoped AppRole document from inventory-rendered inputs
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_scoped_approle
+        tasks_from: build_document
+      vars:
+        vault_scoped_approle_document_schema_version: "1"
+        vault_scoped_approle_document_subject: molecule-automation
+      no_log: true
+
+    - name: Require a native integer in the persisted AppRole schema contract
+      ansible.builtin.assert:
+        that:
+          - _vault_scoped_approle_document.schema_version is integer
+          - _vault_scoped_approle_document.schema_version == 1
+          - _vault_scoped_approle_document.subject == 'molecule-automation'
+          - _vault_scoped_approle_document.auth_method == 'approle'
+        quiet: true
+      no_log: true
+
+    - name: Seed harmless bounded scoped token response metadata
+      ansible.builtin.set_fact:
+        _vault_scoped_approle_login:
+          json:
+            auth:
+              client_token: molecule-batch-token-fixture
+              token_policies:
+                - molecule-automation
+              lease_duration: 1200
+      changed_when: false
+      no_log: true
+
+    - name: Exercise the exact bounded scoped token policy gate
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_scoped_approle
+        tasks_from: validate_bounded_token
+      vars:
+        vault_scoped_approle_policy_name: molecule-automation
+        vault_scoped_approle_token_max_ttl_seconds: "3600"
+      no_log: true
 
     - name: Persist strict controller escrow completion marker
       ansible.builtin.copy:

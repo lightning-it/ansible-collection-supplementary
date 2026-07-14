@@ -1,0 +1,229 @@
+---
+- name: Validate scoped Vault AppRole inputs
+  ansible.builtin.assert:
+    that:
+      - not ansible_check_mode
+      - vault_scoped_approle_api_url is match('^https://[^/]+$')
+      - vault_scoped_approle_health_url == vault_scoped_approle_api_url ~ '/v1/sys/health'
+      - vault_scoped_approle_api_delegate_to == 'localhost'
+      - vault_scoped_approle_validate_certs is sameas true
+      - vault_scoped_approle_ca_cert_path is match('^/')
+      - >-
+        vault_scoped_approle_timeout is integer
+        or (
+          vault_scoped_approle_timeout is string
+          and vault_scoped_approle_timeout is match('^[1-9][0-9]*$')
+        )
+      - vault_scoped_approle_timeout | int > 0
+      - vault_scoped_approle_revoke_admin_token is boolean
+      - vault_scoped_approle_kv_mount_point is match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
+      - vault_scoped_approle_auth_mount_point is match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
+      - vault_scoped_approle_role_name is match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
+      - vault_scoped_approle_policy_name is match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
+      - vault_scoped_approle_policy | trim | length > 0
+      - vault_scoped_approle_token_type == 'batch'
+      - vault_scoped_approle_token_ttl | string | trim | length > 0
+      - >-
+        vault_scoped_approle_token_ttl_seconds is integer
+        or (
+          vault_scoped_approle_token_ttl_seconds is string
+          and vault_scoped_approle_token_ttl_seconds is match('^[1-9][0-9]*$')
+        )
+      - vault_scoped_approle_token_ttl_seconds | int > 0
+      - vault_scoped_approle_token_max_ttl | string | trim | length > 0
+      - >-
+        vault_scoped_approle_token_max_ttl_seconds is integer
+        or (
+          vault_scoped_approle_token_max_ttl_seconds is string
+          and vault_scoped_approle_token_max_ttl_seconds
+          is match('^(0|[1-9][0-9]*)$')
+        )
+      - >-
+        vault_scoped_approle_token_max_ttl_seconds | int
+        >= vault_scoped_approle_token_ttl_seconds | int
+      - >-
+        vault_scoped_approle_token_num_uses is integer
+        or (
+          vault_scoped_approle_token_num_uses is string
+          and vault_scoped_approle_token_num_uses is match('^(0|[1-9][0-9]*)$')
+        )
+      - vault_scoped_approle_token_num_uses | int >= 0
+      - >-
+        vault_scoped_approle_secret_id_ttl is integer
+        or (
+          vault_scoped_approle_secret_id_ttl is string
+          and vault_scoped_approle_secret_id_ttl is match('^(0|[1-9][0-9]*)$')
+        )
+      - vault_scoped_approle_secret_id_ttl | int >= 0
+      - >-
+        vault_scoped_approle_secret_id_num_uses is integer
+        or (
+          vault_scoped_approle_secret_id_num_uses is string
+          and vault_scoped_approle_secret_id_num_uses
+          is match('^(0|[1-9][0-9]*)$')
+        )
+      - vault_scoped_approle_secret_id_num_uses | int >= 0
+      - vault_scoped_approle_controller_escrow_root_path is match('^/')
+      - vault_scoped_approle_controller_document_path is match('^/')
+      - >-
+        vault_scoped_approle_document_schema_version is integer
+        or (
+          vault_scoped_approle_document_schema_version is string
+          and vault_scoped_approle_document_schema_version
+          is match('^(0|[1-9][0-9]*)$')
+        )
+      - vault_scoped_approle_document_schema_version | int == 1
+      - >-
+        vault_scoped_approle_document_subject
+        is match('^[a-z0-9][a-z0-9._-]{2,127}$')
+      - vault_scoped_approle_capability_probes is sequence
+      - vault_scoped_approle_capability_probes is not string
+      - vault_scoped_approle_capability_probes | length > 0
+      - lookup('ansible.builtin.env', 'ANSIBLE_VAULT_PASSWORD_FILE') | length > 0
+      - lookup('ansible.builtin.env', 'VAULT_ADDR') | length == 0
+      - lookup('ansible.builtin.env', 'VAULT_TOKEN') | length == 0
+      - lookup('ansible.builtin.env', 'VAULT_SKIP_VERIFY') | length == 0
+    fail_msg: >-
+      Scoped AppRole bootstrap requires exact HTTPS, certificate validation,
+      bounded role settings, immutable controller escrow, capability probes,
+      and no exported Vault credentials.
+    quiet: true
+  no_log: true
+
+- name: Validate scoped Vault AppRole capability probes
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.keys() | list | sort == ['capabilities', 'path']
+      - item.path is string
+      - item.path is match('^[^/].*[^/]$')
+      - item.capabilities is sequence
+      - item.capabilities is not string
+      - item.capabilities | length > 0
+      - item.capabilities | unique | length == item.capabilities | length
+      - >-
+        item.capabilities
+        | difference(['create', 'list', 'patch', 'read', 'sudo', 'update'])
+        | length == 0
+    fail_msg: "Every scoped AppRole capability probe must be exact and valid."
+    quiet: true
+  loop: "{{ vault_scoped_approle_capability_probes }}"
+  no_log: true
+
+- name: Resolve canonical scoped AppRole controller paths
+  ansible.builtin.set_fact:
+    _vault_scoped_approle_escrow_root: >-
+      {{ vault_scoped_approle_controller_escrow_root_path | realpath }}
+    _vault_scoped_approle_document_path: >-
+      {{ vault_scoped_approle_controller_document_path | normpath }}
+    _vault_scoped_approle_document_canonical: >-
+      {{ vault_scoped_approle_controller_document_path | realpath }}
+    _vault_scoped_approle_ca_path: >-
+      {{ vault_scoped_approle_ca_cert_path | normpath }}
+    _vault_scoped_approle_controller_uid: >-
+      {{ lookup('ansible.builtin.pipe', 'id -u') | int }}
+  no_log: true
+
+- name: Require scoped AppRole material below the controller escrow root
+  ansible.builtin.assert:
+    that:
+      - _vault_scoped_approle_escrow_root | length > 1
+      - _vault_scoped_approle_document_path == vault_scoped_approle_controller_document_path
+      - _vault_scoped_approle_document_canonical != _vault_scoped_approle_escrow_root
+      - >-
+        _vault_scoped_approle_document_canonical.startswith(
+          _vault_scoped_approle_escrow_root ~ '/'
+        )
+      - _vault_scoped_approle_ca_path == vault_scoped_approle_ca_cert_path
+      - _vault_scoped_approle_ca_path != _vault_scoped_approle_document_path
+    fail_msg: >-
+      The scoped AppRole document must be a normalized file below the exact
+      controller escrow root and separate from the CA bundle.
+    quiet: true
+  no_log: true
+
+- name: Inspect the scoped AppRole CA and optional controller document
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: false
+    get_checksum: "{{ item.checksum }}"
+    checksum_algorithm: sha256
+    get_attributes: false
+    get_mime: false
+  loop:
+    - path: "{{ _vault_scoped_approle_ca_path }}"
+      checksum: true
+    - path: "{{ _vault_scoped_approle_document_path }}"
+      checksum: true
+  register: _vault_scoped_approle_controller_files
+  delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Require a safe pinned Vault CA
+  ansible.builtin.assert:
+    that:
+      - _vault_scoped_approle_controller_files.results[0].stat.exists | default(false)
+      - _vault_scoped_approle_controller_files.results[0].stat.isreg | default(false)
+      - not (_vault_scoped_approle_controller_files.results[0].stat.islnk | default(false))
+      - _vault_scoped_approle_controller_files.results[0].stat.nlink | default(0) | int == 1
+      - >-
+        _vault_scoped_approle_controller_files.results[0].stat.uid | default(-1) | int
+        in [0, _vault_scoped_approle_controller_uid | int]
+      - _vault_scoped_approle_controller_files.results[0].stat.size | default(0) | int > 0
+      - _vault_scoped_approle_controller_files.results[0].stat.size | default(0) | int <= 1048576
+      - >-
+        _vault_scoped_approle_controller_files.results[0].stat.mode
+        in ['0400', '0444', '0600', '0644']
+    fail_msg: "The scoped AppRole bootstrap CA must be a safe pinned regular file."
+    quiet: true
+  no_log: true
+
+- name: Record whether scoped AppRole escrow already exists
+  ansible.builtin.set_fact:
+    _vault_scoped_approle_document_exists: >-
+      {{ _vault_scoped_approle_controller_files.results[1].stat.exists | default(false) | bool }}
+  changed_when: false
+  no_log: true
+
+- name: Require a safe existing scoped AppRole escrow
+  ansible.builtin.assert:
+    that:
+      - _vault_scoped_approle_controller_files.results[1].stat.isreg | default(false)
+      - not (_vault_scoped_approle_controller_files.results[1].stat.islnk | default(false))
+      - _vault_scoped_approle_controller_files.results[1].stat.nlink | default(0) | int == 1
+      - >-
+        _vault_scoped_approle_controller_files.results[1].stat.uid | default(-1) | int
+        in [0, _vault_scoped_approle_controller_uid | int]
+      - _vault_scoped_approle_controller_files.results[1].stat.mode in ['0400', '0600']
+      - _vault_scoped_approle_controller_files.results[1].stat.size | int > 0
+      - _vault_scoped_approle_controller_files.results[1].stat.size | int <= 1048576
+    fail_msg: "Existing scoped AppRole escrow is not a safe owner-only regular file."
+    quiet: true
+  when: _vault_scoped_approle_document_exists | bool
+  no_log: true
+
+- name: Read only the existing scoped AppRole ciphertext signature
+  ansible.builtin.command:
+    argv:
+      - head
+      - -c
+      - "15"
+      - "{{ _vault_scoped_approle_document_path }}"
+  register: _vault_scoped_approle_ciphertext_signature
+  delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+  become: false
+  changed_when: false
+  check_mode: false
+  when: _vault_scoped_approle_document_exists | bool
+  no_log: true
+
+- name: Require Ansible Vault ciphertext for existing AppRole escrow
+  ansible.builtin.assert:
+    that:
+      - _vault_scoped_approle_ciphertext_signature.stdout == '$ANSIBLE_VAULT;'
+    fail_msg: "Existing scoped AppRole escrow is not Ansible Vault ciphertext."
+    quiet: true
+  when: _vault_scoped_approle_document_exists | bool
+  no_log: true

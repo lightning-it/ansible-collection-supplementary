@@ -11,7 +11,8 @@
     - init
 
 - name: Check Vault health for cert lookup
-  delegate_to: localhost
+  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  become: false
   ansible.builtin.uri:
     url: "{{ vault_deploy_health_url }}"
     method: GET
@@ -24,7 +25,8 @@
     - vault_deploy_pki
 
 - name: Try to read existing certificate from Vault
-  delegate_to: localhost
+  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  become: false
   community.hashi_vault.vault_kv2_get:
     url: "{{ vault_deploy_vault_address }}"
     engine_mount_point: "{{ vault_deploy_engine_mount_point }}"
@@ -107,3 +109,22 @@
   when: item.stat.exists | default(false)
   tags:
     - init
+
+- name: Inspect trusted Vault CA before API delegate synchronization
+  ansible.builtin.stat:
+    path: "{{ vault_deploy_target_ca_cert_path }}"
+  register: vault_deploy_target_ca_cert_stat
+  changed_when: false
+  tags:
+    - init
+    - vault_deploy_pki
+
+- name: Synchronize trusted Vault CA to the API delegate
+  ansible.builtin.include_tasks: sync_api_trust.yml
+  when:
+    - vault_deploy_vault_validate_certs | bool
+    - vault_deploy_api_ca_cert_path | default('', true) | trim | length > 0
+    - vault_deploy_target_ca_cert_stat.stat.exists | default(false)
+  tags:
+    - init
+    - vault_deploy_pki

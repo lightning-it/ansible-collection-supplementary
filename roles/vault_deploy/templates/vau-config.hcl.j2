@@ -15,7 +15,7 @@ listener "tcp" {
 }
 
 ui            = true
-disable_mlock = true
+disable_mlock = {{ vault_deploy_disable_mlock | bool | ternary('true', 'false') }}
 api_addr      = "{{ vault_deploy_api_addr }}"
 {% if vault_deploy_storage_backend == 'raft' %}
 cluster_addr  = "{{ vault_deploy_cluster_addr }}"

@@ -1,19 +1,91 @@
 ---
-- name: Verify vault validate syntax coverage
+- name: Verify Vault lifecycle validation at runtime
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
-    vault_validate_molecule_marker_path: >-
-      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-validate-coverage-mode
+    vault_validate_molecule_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-validate-runtime
+    vault_validate_molecule_api_url: "http://127.0.0.1:18210"
+    vault_validate_molecule_path: >-
+      {{ vault_validate_molecule_root }}/bin:{{ lookup('env', 'PATH') }}
+  environment:
+    PATH: "{{ vault_validate_molecule_path }}"
+    FAKE_PODMAN_LOG: "{{ vault_validate_molecule_root }}/podman.log"
+    FAKE_PODMAN_RUNTIME_STATE: "{{ vault_validate_molecule_root }}/runtime-state"
+    FAKE_VAULT_STATE: "{{ vault_validate_molecule_root }}/state.json"
   tasks:
-    - name: Read lit.supplementary.vault_validate coverage marker
-      ansible.builtin.slurp:
-        src: "{{ vault_validate_molecule_marker_path }}"
-      register: vault_validate_molecule_marker
+    - name: Exercise explicit Vault lifecycle expectations
+      block:
+        - name: Inspect fake Vault data directory ownership
+          ansible.builtin.stat:
+            path: "{{ vault_validate_molecule_root }}/data"
+          register: vault_validate_molecule_data_stat
 
-    - name: Assert lit.supplementary.vault_validate coverage stub ran
-      ansible.builtin.assert:
-        that:
-          - vault_validate_molecule_marker.content | b64decode | trim == 'syntax_stub'
-        quiet: true
+        - name: Validate an intentionally sealed Vault
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_validate
+          vars:
+            vault_validate_expected_lifecycle: sealed
+            vault_validate_lifecycle_retries: 1
+            vault_validate_lifecycle_delay: 0
+            vault_validate_container_name: vault-vault
+            vault_validate_host_data_dir: "{{ vault_validate_molecule_root }}/data"
+            vault_validate_expected_uid: "{{ vault_validate_molecule_data_stat.stat.uid }}"
+            vault_validate_expected_gid: "{{ vault_validate_molecule_data_stat.stat.gid }}"
+            vault_validate_expected_mode: "0700"
+            vault_validate_api_url: "{{ vault_validate_molecule_api_url }}"
+            vault_validate_health_url: "{{ vault_validate_molecule_api_url }}/v1/sys/health"
+            vault_validate_validate_certs: false
+
+        - name: Change fake Vault to ready lifecycle state
+          ansible.builtin.copy:
+            dest: "{{ vault_validate_molecule_root }}/state.json"
+            content: >-
+              {"initialized": true, "sealed": false, "threshold": 2, "progress": 0}
+            mode: "0600"
+
+        - name: Validate a ready Vault
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_validate
+          vars:
+            vault_validate_expected_lifecycle: ready
+            vault_validate_lifecycle_retries: 1
+            vault_validate_lifecycle_delay: 0
+            vault_validate_container_name: vault-vault
+            vault_validate_host_data_dir: "{{ vault_validate_molecule_root }}/data"
+            vault_validate_expected_uid: "{{ vault_validate_molecule_data_stat.stat.uid }}"
+            vault_validate_expected_gid: "{{ vault_validate_molecule_data_stat.stat.gid }}"
+            vault_validate_expected_mode: "0700"
+            vault_validate_api_url: "{{ vault_validate_molecule_api_url }}"
+            vault_validate_health_url: "{{ vault_validate_molecule_api_url }}/v1/sys/health"
+            vault_validate_validate_certs: false
+
+        - name: Read fake Vault request log
+          ansible.builtin.slurp:
+            src: "{{ vault_validate_molecule_root }}/requests.log"
+          register: vault_validate_molecule_requests
+
+        - name: Assert runtime lifecycle endpoints were validated
+          ansible.builtin.assert:
+            that:
+              - "'GET /v1/sys/health' in (vault_validate_molecule_requests.content | b64decode)"
+              - "'GET /v1/sys/init' in (vault_validate_molecule_requests.content | b64decode)"
+              - "'GET /v1/sys/seal-status' in (vault_validate_molecule_requests.content | b64decode)"
+            quiet: true
+
+      always:
+        - name: Read fake Vault validation API process ID
+          ansible.builtin.slurp:
+            src: "{{ vault_validate_molecule_root }}/server.pid"
+          register: vault_validate_molecule_server_pid
+          failed_when: false
+
+        - name: Stop fake Vault validation API
+          ansible.builtin.command:
+            argv:
+              - kill
+              - "{{ vault_validate_molecule_server_pid.content | b64decode | trim }}"
+          changed_when: true
+          failed_when: false
+          when: vault_validate_molecule_server_pid.content | default('') | length > 0

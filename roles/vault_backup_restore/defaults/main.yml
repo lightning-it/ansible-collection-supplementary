@@ -9,6 +9,11 @@ vault_backup_restore_source: "{{ vault_deploy_restore_source | default('', true)
 vault_backup_restore_confirm: "{{ vault_deploy_restore_confirm | default('', true) }}"
 vault_backup_restore_validate_after_restore: >-
   {{ vault_deploy_backup_validate_after_restore | default(true, true) }}
+vault_backup_restore_expected_lifecycle: "ready"
+vault_backup_restore_unseal_after_start: >-
+  {{ not (vault_deploy_auto_unseal | default(false, true) | bool) }}
+vault_backup_restore_validate_lifecycle_retries: 12
+vault_backup_restore_validate_lifecycle_delay: 5
 vault_backup_restore_host_data_dir: "{{ vault_deploy_host_data_dir | default('/srv/vault/data', true) }}"
 vault_backup_restore_expected_uid: "{{ vault_deploy_expected_uid | default(100, true) }}"
 vault_backup_restore_expected_gid: "{{ vault_deploy_expected_gid | default(1000, true) }}"
@@ -22,4 +27,30 @@ vault_backup_restore_systemd_unit_name: >-
   {{
     vault_deploy_systemd_unit_name_effective
     | default(vault_deploy_systemd_unit_name | default('', true), true)
+  }}
+vault_backup_restore_api_delegate_to: "{{ vault_deploy_api_delegate_to | default('localhost', true) }}"
+vault_backup_restore_api_url: "{{ vault_deploy_api_url | default('', true) }}"
+vault_backup_restore_health_url: >-
+  {{ vault_deploy_health_url | default(vault_backup_restore_api_url ~ '/v1/sys/health', true) }}
+vault_backup_restore_validate_certs: "{{ vault_deploy_vault_validate_certs | default(true, true) }}"
+vault_backup_restore_api_ca_cert_path: "{{ vault_deploy_api_ca_cert_path | default('', true) }}"
+vault_backup_restore_target_ca_cert_path: "{{ vault_deploy_target_ca_cert_path | default('', true) }}"
+vault_backup_restore_api_ca_cert_path_effective: >-
+  {{ vault_backup_restore_api_ca_cert_path if (vault_backup_restore_validate_certs | bool) else '' }}
+vault_backup_restore_target_ca_cert_path_effective: >-
+  {{ vault_backup_restore_target_ca_cert_path if (vault_backup_restore_validate_certs | bool) else '' }}
+vault_backup_restore_container_name: "{{ vault_deploy_container_name | default('vault-vault', true) }}"
+vault_backup_restore_init_file_path: >-
+  {{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault', true) }}
+vault_backup_restore_ansible_vault_password_file: >-
+  {{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') | default('', true) }}
+vault_backup_restore_ansible_vault_password: >-
+  {{ vault_deploy_ansible_vault_pw | default(vault_ansible_vault_pw | default('', true), true) }}
+vault_backup_restore_init: >-
+  {{ vault_bootstrap_init_payload | default(vault_deploy_init | default(vault_init | default({}, true), true), true) }}
+vault_backup_restore_unseal_keys: >-
+  {{
+    (vault_backup_restore_init.unseal_keys_b64 | default([]))
+    if (vault_backup_restore_init.unseal_keys_b64 | default([]) | length > 0)
+    else (vault_backup_restore_init.unseal_keys_hex | default([]))
   }}

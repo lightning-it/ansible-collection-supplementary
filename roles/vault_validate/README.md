@@ -13,7 +13,11 @@ See `roles/vault_validate/defaults/main.yml`.
 Key variables:
 
 - `vault_validate_mode`: `fail` (default) or `report`.
-- `vault_validate_strict`: derived from the mode. Strict validation requires Vault to be both initialized and unsealed.
+- `vault_validate_strict`: derived from the mode.
+- `vault_validate_expected_lifecycle`: expected strict lifecycle state. `ready` (default) requires initialized and
+  unsealed; `sealed` requires initialized and sealed; `initialized` accepts either seal state; `uninitialized` and
+  `any` support bootstrap and reporting workflows.
+- `vault_validate_lifecycle_retries` and `vault_validate_lifecycle_delay`: bound startup and auto-unseal polling.
 - `vault_validate_ca_cert_path`: optional trusted CA bundle on the managed host for all Vault HTTPS checks.
 
 TLS certificate validation remains enabled by default.

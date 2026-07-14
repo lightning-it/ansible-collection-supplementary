@@ -42,7 +42,14 @@
       - vault_bootstrap_controller_init_file_normalized.startswith('/')
       - vault_bootstrap_controller_init_file_normalized == vault_bootstrap_controller_init_file_path
       - vault_bootstrap_controller_init_file_canonical == vault_bootstrap_controller_init_file_path
-      - (vault_bootstrap_controller_init_file_normalized | dirname) == vault_bootstrap_controller_escrow_root_normalized
+      - >-
+        vault_bootstrap_controller_init_file_normalized.startswith(
+          vault_bootstrap_controller_escrow_root_normalized ~ '/'
+        )
+      - >-
+        vault_bootstrap_controller_init_file_canonical.startswith(
+          vault_bootstrap_controller_escrow_root_canonical ~ '/'
+        )
       - vault_bootstrap_target_persist_dir_normalized.startswith('/')
       - vault_bootstrap_target_persist_dir_normalized == vault_bootstrap_persist_dir
       - vault_bootstrap_target_init_file_normalized.startswith('/')
@@ -51,7 +58,8 @@
       - vault_bootstrap_controller_init_file_path != vault_bootstrap_ansible_vault_password_file
       - vault_bootstrap_controller_init_file_path != vault_bootstrap_init_file_path
     fail_msg: >-
-      Strict controller escrow requires normalized absolute paths, the already-loaded
+      Strict controller escrow requires normalized absolute paths, a controller init file
+      contained beneath the approved escrow root, the already-loaded
       ANSIBLE_VAULT_PASSWORD_FILE identity, no plaintext password fallback or operator payload,
       and distinct controller-authoritative and target-secondary files.
     quiet: true

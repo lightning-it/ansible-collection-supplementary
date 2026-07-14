@@ -40,6 +40,21 @@
       inventory. The default setup account is svc_ansible.
     quiet: true
 
+- name: Validate optional execution environment digest
+  ansible.builtin.assert:
+    that:
+      - >-
+        aap_local_execution_modulix_run_ee_digest_effective | length == 0
+        or aap_local_execution_modulix_run_ee_digest_effective
+        is match('^sha256:[0-9a-f]{64}$')
+      - >-
+        aap_local_execution_modulix_run_ee_digest_effective | length == 0
+        or '@' not in modulix_run_ee_image
+    fail_msg: >-
+      modulix_run_ee_digest must be empty or a SHA-256 digest in the form
+      sha256:<64 lowercase hexadecimal characters>.
+    quiet: true
+
 - name: Validate AAP setup and runtime accounts
   ansible.builtin.assert:
     that:
@@ -114,7 +129,7 @@
   ansible.builtin.uri:
     url: "{{ vault_addr }}/v1/sys/health"
     method: GET
-    validate_certs: "{{ not (vault_skip_verify | default(false) | bool) }}"
+    validate_certs: "{{ aap_local_execution_vault_validate_certs_effective }}"
     status_code: [200, 429, 472, 473]
   register: aap_local_execution_vault_health
   when:
@@ -448,7 +463,7 @@
     method: GET
     headers:
       X-Vault-Token: "{{ lookup('ansible.builtin.env', 'VAULT_TOKEN') | string | trim }}"
-    validate_certs: "{{ not (vault_skip_verify | default(false) | bool) }}"
+    validate_certs: "{{ aap_local_execution_vault_validate_certs_effective }}"
     status_code: [200, 404]
   register: aap_local_execution_vault_defaults_get
   no_log: true
@@ -471,7 +486,7 @@
           )
           | combine({'rh_offline_token': aap_local_execution_effective_rh_offline_token})
         }}
-    validate_certs: "{{ not (vault_skip_verify | default(false) | bool) }}"
+    validate_certs: "{{ aap_local_execution_vault_validate_certs_effective }}"
     status_code: [200, 204]
   no_log: true
   when: aap_local_execution_action == 'seed_rh_offline_token'
@@ -482,7 +497,7 @@
     method: GET
     headers:
       X-Vault-Token: "{{ lookup('ansible.builtin.env', 'VAULT_TOKEN') | string | trim }}"
-    validate_certs: "{{ not (vault_skip_verify | default(false) | bool) }}"
+    validate_certs: "{{ aap_local_execution_vault_validate_certs_effective }}"
     status_code: [200]
   register: aap_local_execution_vault_defaults_verify
   failed_when: >-
@@ -598,6 +613,24 @@
     - aap_local_execution_action == 'transfer_payload'
     - aap_ssh_key_auth_enabled | default(true) | bool
 
+- name: Check verified Machine A SSH known hosts file
+  ansible.builtin.stat:
+    path: "{{ aap_local_execution_machine_a_effective_bootstrap_known_hosts }}"
+  register: aap_local_execution_machine_a_known_hosts_file
+  when: aap_local_execution_action == 'transfer_payload'
+
+- name: Validate Machine A SSH known hosts file
+  ansible.builtin.assert:
+    that:
+      - aap_local_execution_machine_a_known_hosts_file.stat.exists
+      - aap_local_execution_machine_a_known_hosts_file.stat.isreg
+      - aap_local_execution_machine_a_known_hosts_file.stat.size | int > 0
+    fail_msg: >-
+      The verified SSH known hosts file is missing or empty: {{
+      aap_local_execution_machine_a_effective_bootstrap_known_hosts }}.
+    quiet: true
+  when: aap_local_execution_action == 'transfer_payload'
+
 - name: Add AAP local-execution target
   ansible.builtin.add_host:
     name: aap_local_target
@@ -621,12 +654,14 @@
       -o UserKnownHostsFile={{
         aap_local_execution_machine_a_effective_bootstrap_known_hosts
       }}
-      -o StrictHostKeyChecking=accept-new
+      -o StrictHostKeyChecking=yes
     ansible_remote_tmp: "{{ ansible_remote_tmp | default('/appl/ansible-tmp', true) }}"
     aap_local_execution_action: "{{ aap_local_execution_action }}"
     aap_local_execution_bundle_path: "{{ aap_local_execution_bundle_path | default('', true) }}"
     aap_local_execution_manifest_path: "{{ aap_local_execution_manifest_path | default('', true) }}"
     aap_local_execution_machine_a_effective_env_file: "{{ aap_local_execution_machine_a_effective_env_file }}"
+    aap_local_execution_machine_a_effective_bootstrap_known_hosts: >-
+      {{ aap_local_execution_machine_a_effective_bootstrap_known_hosts }}
     aap_local_execution_machine_a_effective_source_archive_path: >-
       {{ aap_local_execution_machine_a_effective_source_archive_path }}
     aap_local_execution_machine_a_effective_ee_archive_path: >-
@@ -639,6 +674,8 @@
     aap_local_execution_effective_appl_root: "{{ aap_local_execution_effective_appl_root }}"
     aap_local_execution_effective_env_file: "{{ aap_local_execution_effective_env_file }}"
     aap_local_execution_effective_secrets_dir: "{{ aap_local_execution_effective_secrets_dir }}"
+    aap_local_execution_effective_known_hosts_file: "{{ aap_local_execution_effective_known_hosts_file }}"
+    aap_local_execution_known_hosts_container: "{{ aap_local_execution_known_hosts_container }}"
     aap_local_execution_effective_automation_dir: "{{ aap_local_execution_effective_automation_dir }}"
     aap_local_execution_effective_automation_ansible_dir: "{{ aap_local_execution_effective_automation_ansible_dir }}"
     aap_local_execution_effective_artifact_dir: "{{ aap_local_execution_effective_artifact_dir }}"
@@ -648,6 +685,10 @@
     aap_local_execution_effective_ee_archive_path: "{{ aap_local_execution_effective_ee_archive_path }}"
     aap_local_execution_effective_ee_transfer_enabled: "{{ aap_local_execution_effective_ee_transfer_enabled }}"
     modulix_run_ee_image: "{{ modulix_run_ee_image }}"
+    aap_local_execution_modulix_run_ee_digest_effective: >-
+      {{ aap_local_execution_modulix_run_ee_digest_effective }}
+    aap_local_execution_modulix_run_ee_runtime_image: >-
+      {{ aap_local_execution_modulix_run_ee_runtime_image }}
     aap_local_execution_modulix_run_ee_archive: "{{ aap_local_execution_modulix_run_ee_archive }}"
     aap_local_execution_ansible_toolbox_runtime_mode_effective: >-
       {{ aap_local_execution_ansible_toolbox_runtime_mode_effective }}
@@ -655,6 +696,8 @@
       {{ aap_local_execution_ansible_collections_path_effective }}
     aap_local_execution_ansible_vault_password_file_effective: >-
       {{ aap_local_execution_ansible_vault_password_file_effective }}
+    aap_local_execution_host_ca_trust_dir_effective: "{{ aap_local_execution_host_ca_trust_dir_effective }}"
+    aap_local_execution_requests_ca_bundle_effective: "{{ aap_local_execution_requests_ca_bundle_effective }}"
     aap_local_execution_podman_storage_conf_effective: "{{ aap_local_execution_podman_storage_conf_effective }}"
     aap_local_execution_podman_root_graphroot_effective: "{{ aap_local_execution_podman_root_graphroot_effective }}"
     aap_local_execution_podman_root_runroot_effective: "{{ aap_local_execution_podman_root_runroot_effective }}"
@@ -669,6 +712,8 @@
     aap_local_execution_ssh_key_container: "{{ aap_local_execution_ssh_key_container }}"
     vault_addr: "{{ vault_addr | default('', true) }}"
     vault_skip_verify: "{{ vault_skip_verify | default(false) | bool }}"
+    aap_local_execution_vault_validate_certs_effective: >-
+      {{ aap_local_execution_vault_validate_certs_effective }}
     vault_engine_mount_point: "{{ vault_engine_mount_point | default('', true) }}"
     aap_local_execution_vault_token_effective: "{{ aap_local_execution_vault_token_effective }}"
     aap_vault_host_key: "{{ aap_local_execution_vault_host_key_effective }}"

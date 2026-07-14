@@ -1,0 +1,23 @@
+---
+- name: Start Vault systemd unit after maintenance
+  ansible.builtin.systemd:
+    name: "{{ vault_backup_restore_systemd_unit_name_effective }}"
+    state: started
+    enabled: true
+  when: vault_backup_restore_manage_systemd | bool
+
+- name: Start Vault pod after maintenance without systemd
+  ansible.builtin.command:
+    argv:
+      - podman
+      - pod
+      - start
+      - "{{ vault_backup_restore_pod_name }}"
+  register: vault_backup_restore_pod_start
+  changed_when: vault_backup_restore_pod_start.rc == 0
+  when: not vault_backup_restore_manage_systemd | bool
+
+- name: Record restarted Vault runtime
+  ansible.builtin.set_fact:
+    vault_backup_restore_runtime_stopped: false
+  changed_when: false

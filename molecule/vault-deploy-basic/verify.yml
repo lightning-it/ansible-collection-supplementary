@@ -10,6 +10,8 @@
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-deploy-tls
     vault_deploy_runtime_template_dir: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-deploy-runtime
+    vault_deploy_api_ca_cert_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-deploy-api-trust/ca.crt
   tasks:
     - name: Read lit.supplementary.vault_deploy coverage marker
       ansible.builtin.slurp:
@@ -30,6 +32,7 @@
         - "{{ vault_deploy_cert_dir }}/vault.key"
         - "{{ vault_deploy_cert_dir }}/vault.crt"
         - "{{ vault_deploy_cert_dir }}/ca.crt"
+        - "{{ vault_deploy_api_ca_cert_path }}"
       register: vault_deploy_tls_files
 
     - name: Inspect generated Vault bootstrap certificate
@@ -55,13 +58,17 @@
           - >-
             vault_deploy_tls_files.results
             | map(attribute='stat.exists')
-            | list == [true, true, true]
+            | list == [true, true, true, true]
           - vault_deploy_tls_files.results[0].stat.mode == '0600'
           - vault_deploy_tls_files.results[1].stat.mode == '0644'
           - vault_deploy_tls_files.results[2].stat.mode == '0644'
+          - vault_deploy_tls_files.results[3].stat.mode == '0644'
           - >-
             vault_deploy_tls_files.results[1].stat.checksum
             == vault_deploy_tls_files.results[2].stat.checksum
+          - >-
+            vault_deploy_tls_files.results[2].stat.checksum
+            == vault_deploy_tls_files.results[3].stat.checksum
           - "'IP:127.0.0.1' in vault_deploy_tls_cert_info.subject_alt_name"
           - "'DNS:vault.test.invalid' in vault_deploy_tls_cert_info.subject_alt_name"
           - "'delegate_to:' not in vault_deploy_tls_generation_source"
@@ -103,7 +110,7 @@
           - vault_deploy_file_pod.spec.containers[0].ports | length == 1
           - >-
             vault_deploy_file_pod.spec.containers[0].env[0].value
-            == 'https://vault-file.test.invalid:8200'
+            == 'https://127.0.0.1:8200'
         quiet: true
 
     - name: Assert single-node Raft HCL and pod address coherence
@@ -120,5 +127,5 @@
             | list == [8200, 8201]
           - >-
             vault_deploy_raft_pod.spec.containers[0].env[0].value
-            == 'https://vault-raft.test.invalid:8200'
+            == 'https://127.0.0.1:8200'
         quiet: true

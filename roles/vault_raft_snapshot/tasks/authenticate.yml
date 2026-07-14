@@ -1,0 +1,32 @@
+---
+- name: Authenticate the scoped AppRole for Raft snapshot operations
+  ansible.builtin.uri:
+    url: >-
+      {{ vault_raft_snapshot_api_url }}/v1/auth/{{ vault_raft_snapshot_auth_mount_point }}/login
+    method: POST
+    body_format: json
+    body:
+      role_id: "{{ vault_raft_snapshot_role_id }}"
+      secret_id: "{{ vault_raft_snapshot_secret_id }}"
+    validate_certs: true
+    ca_path: "{{ _vault_raft_snapshot_controller_ca_path }}"
+    status_code: 200
+    timeout: "{{ vault_raft_snapshot_timeout }}"
+  register: _vault_raft_snapshot_login
+  delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Require a valid scoped Raft snapshot token
+  ansible.builtin.assert:
+    that:
+      - _vault_raft_snapshot_login.json.auth.client_token is match('^[^\r\n]{16,4096}$')
+      - >-
+        'root' not in (
+          _vault_raft_snapshot_login.json.auth.token_policies
+          | default(_vault_raft_snapshot_login.json.auth.policies | default([]))
+        )
+    fail_msg: "Raft snapshot AppRole login did not return a scoped non-root token."
+    quiet: true
+  no_log: true

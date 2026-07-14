@@ -53,6 +53,7 @@
     auth_method: "token"
     token: "{{ vault_config_token }}"
     validate_certs: "{{ vault_config_vault_validate_certs }}"
+    ca_cert: "{{ vault_config_api_ca_cert_path_effective | default(omit, true) }}"
     path: "{{ vault_config_pki_role_path }}"
   register: vault_config_pki_role_read
   failed_when: false
@@ -89,6 +90,7 @@
     role_id: "{{ vault_config_role_id | default(omit, true) }}"
     secret_id: "{{ vault_config_secret_id | default(omit, true) }}"
     validate_certs: "{{ vault_config_vault_validate_certs }}"
+    ca_cert: "{{ vault_config_api_ca_cert_path_effective | default(omit, true) }}"
     path: "{{ inventory_hostname }}/vault/certificate"
   register: vault_config_existing_cert
   failed_when: false
@@ -206,6 +208,7 @@
     role_id: "{{ vault_config_role_id | default(omit, true) }}"
     secret_id: "{{ vault_config_secret_id | default(omit, true) }}"
     validate_certs: "{{ vault_config_vault_validate_certs }}"
+    ca_cert: "{{ vault_config_api_ca_cert_path_effective | default(omit, true) }}"
     path: "{{ vault_config_pki_path }}/{{ vault_config_pki_role }}"
     data:
       common_name: "{{ vault_config_vault_hostname }}"
@@ -253,6 +256,7 @@
     role_id: "{{ vault_config_role_id | default(omit, true) }}"
     secret_id: "{{ vault_config_secret_id | default(omit, true) }}"
     validate_certs: "{{ vault_config_vault_validate_certs }}"
+    ca_cert: "{{ vault_config_api_ca_cert_path_effective | default(omit, true) }}"
     path: "{{ inventory_hostname }}/vault/certificate"
     data:
       certificate: "{{ vault_config_pki_cert.data.data.certificate }}"

@@ -1,0 +1,80 @@
+---
+- name: Inspect the Vault API delegate trust directory
+  ansible.builtin.stat:
+    path: "{{ vault_deploy_api_ca_cert_path | dirname }}"
+    follow: false
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  register: vault_deploy_api_trust_dir
+  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  become: false
+  changed_when: false
+
+- name: Create the Vault API delegate trust directory when absent
+  ansible.builtin.file:
+    path: "{{ vault_deploy_api_ca_cert_path | dirname }}"
+    state: directory
+    mode: "0700"
+  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  become: false
+  when: not (vault_deploy_api_trust_dir.stat.exists | default(false))
+
+- name: Re-inspect the Vault API delegate trust directory
+  ansible.builtin.stat:
+    path: "{{ vault_deploy_api_ca_cert_path | dirname }}"
+    follow: false
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  register: vault_deploy_api_trust_dir_effective
+  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  become: false
+  changed_when: false
+
+- name: Require a safe Vault API delegate trust directory
+  ansible.builtin.assert:
+    that:
+      - vault_deploy_api_trust_dir_effective.stat.exists | default(false)
+      - vault_deploy_api_trust_dir_effective.stat.isdir | default(false)
+      - not (vault_deploy_api_trust_dir_effective.stat.islnk | default(false))
+    fail_msg: "The Vault API delegate CA parent must be a real directory."
+    quiet: true
+
+- name: Inspect the Vault API delegate CA destination
+  ansible.builtin.stat:
+    path: "{{ vault_deploy_api_ca_cert_path }}"
+    follow: false
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  register: vault_deploy_api_ca_destination
+  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  become: false
+  changed_when: false
+
+- name: Refuse an unsafe existing Vault API delegate CA destination
+  ansible.builtin.assert:
+    that:
+      - vault_deploy_api_ca_destination.stat.isreg | default(false)
+      - not (vault_deploy_api_ca_destination.stat.islnk | default(false))
+    fail_msg: "The existing Vault API delegate CA destination must be a regular non-linked file."
+    quiet: true
+  when: vault_deploy_api_ca_destination.stat.exists | default(false)
+
+- name: Read the trusted Vault CA from the managed host
+  ansible.builtin.slurp:
+    src: "{{ vault_deploy_target_ca_cert_path }}"
+  register: vault_deploy_target_ca_cert
+  changed_when: false
+  no_log: true
+
+- name: Pin the trusted Vault CA on the API delegate
+  ansible.builtin.copy:
+    dest: "{{ vault_deploy_api_ca_cert_path }}"
+    content: "{{ vault_deploy_target_ca_cert.content | b64decode }}"
+    mode: "0644"
+  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  become: false
+  diff: false
+  no_log: true

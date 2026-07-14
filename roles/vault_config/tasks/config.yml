@@ -10,9 +10,12 @@
     url: "{{ vault_config_api_url }}/v1/sys/seal-status"
     method: GET
     validate_certs: "{{ vault_config_vault_validate_certs }}"
+    ca_path: "{{ vault_config_api_ca_cert_path_effective | default(omit, true) }}"
   register: vault_config_seal_status
   changed_when: false
   failed_when: vault_config_seal_status.status not in [200]
+  delegate_to: "{{ vault_config_api_delegate_to }}"
+  become: false
   tags:
     - vault_config
     - api
@@ -41,6 +44,7 @@
     url: "{{ vault_config_api_url }}/v1/auth/token/lookup-self"
     method: GET
     validate_certs: "{{ vault_config_vault_validate_certs }}"
+    ca_path: "{{ vault_config_api_ca_cert_path_effective | default(omit, true) }}"
     headers:
       X-Vault-Token: "{{ vault_config_token }}"
   register: vault_config_token_lookup
@@ -61,15 +65,15 @@
   ansible.builtin.set_fact:
     vault_config_token: >-
       {{
-        (vault_config_init.root_token | default('', true) | trim)
-        if (vault_config_init.root_token | default('', true) | trim | length > 0)
-        else (vault_config_vault_token | default('', true) | trim)
+        (vault_config_vault_token | default('', true) | trim)
+        if (vault_config_vault_token | default('', true) | trim | length > 0)
+        else (vault_config_init.root_token | default('', true) | trim)
       }}
     vault_config_vault_token: >-
       {{
-        (vault_config_init.root_token | default('', true) | trim)
-        if (vault_config_init.root_token | default('', true) | trim | length > 0)
-        else (vault_config_vault_token | default('', true) | trim)
+        (vault_config_vault_token | default('', true) | trim)
+        if (vault_config_vault_token | default('', true) | trim | length > 0)
+        else (vault_config_init.root_token | default('', true) | trim)
       }}
   changed_when: false
   no_log: true
@@ -93,6 +97,7 @@
     url: "{{ vault_config_api_url }}/v1/auth/token/lookup-self"
     method: GET
     validate_certs: "{{ vault_config_vault_validate_certs }}"
+    ca_path: "{{ vault_config_api_ca_cert_path_effective | default(omit, true) }}"
     headers:
       X-Vault-Token: "{{ vault_config_token }}"
   register: vault_config_token_lookup_after_refresh
@@ -413,6 +418,7 @@
   community.hashi_vault.vault_kv2_get:
     url: "{{ vault_config_vault_address }}"
     validate_certs: "{{ vault_config_vault_validate_certs }}"
+    ca_cert: "{{ vault_config_api_ca_cert_path_effective | default(omit, true) }}"
     engine_mount_point: "{{ vault_config_tfstate_vault_kv_mount }}"
     path: "{{ vault_config_tfstate_vault_path }}"
     token: "{{ vault_config_token }}"

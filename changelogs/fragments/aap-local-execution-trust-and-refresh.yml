@@ -1,0 +1,12 @@
+---
+bugfixes:
+  - >-
+    Harden aap_local_execution by refreshing staged automation source without
+    retaining stale artifacts, preserving TLS assets, enforcing verified SSH
+    host keys and CA trust, and using a dedicated Ansible config that avoids
+    unrelated Ansible Vault password files when HashiCorp Vault is selected.
+minor_changes:
+  - >-
+    Add optional digest-pinned execution environment references for target-side
+    pulls and runs while retaining the configured image tag for Machine A
+    export operations.

@@ -13,14 +13,31 @@
         tasks_from: normalize_token
       vars:
         vault_config_token: ""
-        vault_config_vault_token: fallback-test-token
+        vault_config_vault_token: ""
         vault_config_init:
           root_token: first-run-test-token
 
-    - name: Assert first-run root token wins
+    - name: Assert first-run root token handoff works without an operational token
       ansible.builtin.assert:
         that:
           - vault_config_token == 'first-run-test-token'
+        quiet: true
+      no_log: true
+
+    - name: Normalize day-2 operational token with stale root escrow present
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_config
+        tasks_from: normalize_token
+      vars:
+        vault_config_token: ""
+        vault_config_vault_token: day-two-operational-token
+        vault_config_init:
+          root_token: revoked-initial-root-token
+
+    - name: Assert day-2 operational token wins over stale root escrow
+      ansible.builtin.assert:
+        that:
+          - vault_config_token == 'day-two-operational-token'
         quiet: true
       no_log: true
 

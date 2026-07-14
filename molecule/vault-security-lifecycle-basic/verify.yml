@@ -1,0 +1,19 @@
+---
+- name: Verify strict Vault security lifecycle contracts
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vault_security_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-security-lifecycle/verified
+  tasks:
+    - name: Read Vault security lifecycle verification marker
+      ansible.builtin.slurp:
+        src: "{{ vault_security_molecule_marker_path }}"
+      register: vault_security_molecule_marker
+
+    - name: Require completed Vault security lifecycle assertions
+      ansible.builtin.assert:
+        that:
+          - vault_security_molecule_marker.content | b64decode | trim == 'verified'
+        quiet: true

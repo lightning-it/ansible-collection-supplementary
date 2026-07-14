@@ -44,6 +44,11 @@ decrypted only through Ansible's in-process loader. New material is passed direc
 `lit.foundational.ansible_vault_document`; only its immutable ciphertext is copied to the target secondary path, and
 an existing target copy must match exactly or the role refuses to overwrite it.
 
+Before `vault operator init`, strict mode creates an isolated probe below the approved escrow root and performs a
+real `lit.foundational.ansible_vault_document` encrypt/decrypt validation with the already-loaded controller Vault
+identity. The harmless probe is always removed. Check mode is intentionally not used because it does not exercise
+encryption for an absent path.
+
 Strict mode also requires `vault_bootstrap_auto_init: false`. An uninitialized Vault is changed only when
 `vault_bootstrap_init_requested: true` is explicitly supplied. Persisted and newly generated init payloads must report
 the configured share count and threshold exactly, contain exactly that many unique nonempty base64 unseal keys, and

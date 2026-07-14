@@ -6,6 +6,10 @@
   vars:
     vault_ops_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-ops-coverage-mode
+    vault_ops_molecule_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-ops-runtime
+    vault_ops_molecule_port: 18211
+    vault_ops_molecule_api_url: "http://127.0.0.1:{{ vault_ops_molecule_port }}"
   tasks:
     - name: Normalize canonical persisted init payload for ops
       ansible.builtin.include_role:
@@ -74,3 +78,79 @@
         dest: "{{ vault_ops_molecule_marker_path }}"
         content: "normalized_handoff\n"
         mode: "0644"
+
+    - name: Create Vault ops runtime test directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ vault_ops_molecule_root }}"
+          mode: "0750"
+        - path: "{{ vault_ops_molecule_root }}/bin"
+          mode: "0750"
+        - path: "{{ vault_ops_molecule_root }}/data"
+          mode: "0700"
+
+    - name: Install fake Vault API for ops coverage
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/resources/fake_vault_api.py"
+        dest: "{{ vault_ops_molecule_root }}/fake_vault_api.py"
+        mode: "0750"
+
+    - name: Install fake Podman for ops coverage
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/resources/fake-podman"
+        dest: "{{ vault_ops_molecule_root }}/bin/podman"
+        mode: "0750"
+
+    - name: Initialize sealed fake Vault ops state
+      ansible.builtin.copy:
+        dest: "{{ vault_ops_molecule_root }}/state.json"
+        content: >-
+          {"initialized": true, "sealed": true, "threshold": 2, "progress": 0}
+        mode: "0600"
+        force: false
+
+    - name: Initialize fake Vault ops runtime state
+      ansible.builtin.copy:
+        dest: "{{ vault_ops_molecule_root }}/runtime-state"
+        content: "running\n"
+        mode: "0600"
+        force: false
+
+    - name: Probe fake Vault ops API
+      ansible.builtin.uri:
+        url: "{{ vault_ops_molecule_api_url }}/v1/sys/health"
+        status_code: [200, 503]
+      register: vault_ops_molecule_api_probe
+      changed_when: false
+      failed_when: false
+
+    - name: Start fake Vault ops API
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ vault_ops_molecule_root }}/fake_vault_api.py"
+          - --port
+          - "{{ vault_ops_molecule_port | string }}"
+          - --state
+          - "{{ vault_ops_molecule_root }}/state.json"
+          - --request-log
+          - "{{ vault_ops_molecule_root }}/requests.log"
+          - --pid-file
+          - "{{ vault_ops_molecule_root }}/server.pid"
+      async: 3600
+      poll: 0
+      changed_when: true
+      when: vault_ops_molecule_api_probe.status | default(0) not in [200, 503]
+
+    - name: Wait for fake Vault ops API
+      ansible.builtin.uri:
+        url: "{{ vault_ops_molecule_api_url }}/v1/sys/health"
+        status_code: [200, 503]
+      register: vault_ops_molecule_api_ready
+      until: vault_ops_molecule_api_ready.status in [200, 503]
+      retries: 20
+      delay: 1
+      changed_when: false

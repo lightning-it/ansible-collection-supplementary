@@ -1,11 +1,32 @@
 ---
-- name: Assert Vault is initialized and unsealed
+- name: Assert Vault matches the requested lifecycle state
   ansible.builtin.assert:
     that:
       - vault_validate_init_status.status | default(0) | int == 200
-      - vault_validate_init_status.json.initialized | default(false) | bool
       - vault_validate_seal_status.status | default(0) | int == 200
-      - not (vault_validate_seal_status.json.sealed | default(true) | bool)
-    fail_msg: "Strict Vault validation requires an initialized and unsealed Vault instance."
+      - >-
+        vault_validate_expected_lifecycle == 'any'
+        or (
+          vault_validate_expected_lifecycle == 'uninitialized'
+          and not (vault_validate_init_status.json.initialized | default(true) | bool)
+        )
+        or (
+          vault_validate_expected_lifecycle == 'initialized'
+          and (vault_validate_init_status.json.initialized | default(false) | bool)
+        )
+        or (
+          vault_validate_expected_lifecycle == 'ready'
+          and (vault_validate_init_status.json.initialized | default(false) | bool)
+          and not (vault_validate_seal_status.json.sealed | default(true) | bool)
+        )
+        or (
+          vault_validate_expected_lifecycle == 'sealed'
+          and (vault_validate_init_status.json.initialized | default(false) | bool)
+          and (vault_validate_seal_status.json.sealed | default(false) | bool)
+        )
+    fail_msg: >-
+      Vault lifecycle does not match expected state {{ vault_validate_expected_lifecycle }}:
+      initialized={{ vault_validate_init_status.json.initialized | default('unknown') }},
+      sealed={{ vault_validate_seal_status.json.sealed | default('unknown') }}.
     quiet: true
   when: vault_validate_strict | bool

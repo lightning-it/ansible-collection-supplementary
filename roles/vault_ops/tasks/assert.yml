@@ -3,6 +3,15 @@
   ansible.builtin.assert:
     that:
       - vault_ops_action in ['none', 'restart', 'status', 'upgrade', 'unseal']
+      - vault_ops_restart_expected_lifecycle in ['any', 'initialized', 'ready', 'sealed', 'uninitialized']
+      - vault_ops_unseal_after_restart is boolean
+      - vault_ops_validate_after_restart is boolean
+      - vault_ops_validate_lifecycle_retries is integer
+      - vault_ops_validate_lifecycle_retries is not boolean
+      - vault_ops_validate_lifecycle_retries | int > 0
+      - vault_ops_validate_lifecycle_delay is integer
+      - vault_ops_validate_lifecycle_delay is not boolean
+      - vault_ops_validate_lifecycle_delay | int >= 0
       - vault_ops_api_delegate_to | default('', true) | trim | length > 0
       - vault_ops_manage_systemd is boolean
       - vault_ops_validate_certs is boolean
@@ -52,7 +61,16 @@
       - vault_ops_health_url | default('', true) | trim | length > 0
     fail_msg: "vault_ops API and health URLs are required for this action."
     quiet: true
-  when: vault_ops_action in ['status', 'unseal']
+  when:
+    - >-
+      vault_ops_action in ['status', 'unseal']
+      or (
+        vault_ops_action == 'restart'
+        and (
+          vault_ops_unseal_after_restart | bool
+          or vault_ops_validate_after_restart | bool
+        )
+      )
   tags: always
 
 - name: Ensure Vault unseal inputs are valid
@@ -62,7 +80,26 @@
       - vault_ops_init_file_path | default('', true) | trim | length > 0
     fail_msg: "vault_ops container name and init file path are required for unseal."
     quiet: true
-  when: vault_ops_action == 'unseal'
+  when:
+    - >-
+      vault_ops_action == 'unseal'
+      or (
+        vault_ops_action == 'restart'
+        and vault_ops_unseal_after_restart | bool
+      )
+  tags: always
+
+- name: Ensure Vault restart validation inputs are valid
+  ansible.builtin.assert:
+    that:
+      - vault_ops_container_name | default('', true) | trim | length > 0
+      - vault_ops_host_data_dir | default('', true) | trim | length > 0
+      - vault_ops_expected_mode | string | length > 0
+    fail_msg: "vault_ops restart validation inputs are missing or invalid."
+    quiet: true
+  when:
+    - vault_ops_action == 'restart'
+    - vault_ops_validate_after_restart | bool
   tags: always
 
 - name: Ensure Vault upgrade image is provided

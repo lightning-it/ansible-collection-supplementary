@@ -62,18 +62,11 @@
       and explicitly set vault_bootstrap_init_requested=true for an uninitialized Vault.
     quiet: true
 
-- name: Verify the loaded Ansible Vault identity before possible initialization
-  lit.foundational.ansible_vault_document:
-    path: "{{ vault_bootstrap_controller_init_file_path }}"
-    document:
-      schema_version: 1
-      subject: vault-bootstrap-controller-identity-preflight
-  check_mode: true
-  changed_when: false
-  delegate_to: localhost
-  become: false
-  no_log: true
-  when: not (vault_bootstrap_initialized | bool)
+- name: Validate real controller escrow encryption before possible initialization
+  ansible.builtin.include_tasks: controller_escrow_probe.yml
+  when:
+    - not (vault_bootstrap_initialized | bool)
+    - vault_bootstrap_init_effective | bool
 
 - name: Fail when strict bootstrap initialization is disabled
   ansible.builtin.fail:

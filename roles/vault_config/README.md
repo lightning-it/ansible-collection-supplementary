@@ -16,12 +16,17 @@ Required for configuration:
 
 Token handling:
 
-- `vault_config_token` (required)
+- `vault_config_token` (required effective token)
+- `vault_config_vault_token` (preferred day-2 operational token input)
 
-If `vault_config_token` is not set and `vault_config_init.root_token` is provided,
-the role sets `vault_config_token` from that init payload. A preceding `vault_bootstrap`
-run is mapped through `vault_bootstrap_init_payload` and `vault_bootstrap_token` so the
-first configuration run does not require a separate token injection.
+An explicit operational token is preferred over `vault_config_init.root_token`, so a revoked
+initial root token in long-lived escrow cannot override valid day-2 credentials. If no operational
+token is available, a newly initialized Vault still hands its root token directly from
+`vault_bootstrap_init_payload`/`vault_bootstrap_token` into the first configuration run.
+
+API TLS verification is enabled by default. `vault_config_api_ca_cert_path` is the absolute
+CA path on `vault_config_api_delegate_to`; it inherits the controller-accessible path prepared by
+`vault_deploy`. The role applies it to URI checks and every `community.hashi_vault` request.
 
 See `roles/vault_config/defaults/main.yml` for shared variables.
 

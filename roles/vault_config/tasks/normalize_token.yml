@@ -6,9 +6,9 @@
         (vault_config_token | default('', true) | trim)
         if (vault_config_token | default('', true) | trim | length > 0)
         else (
-          (vault_config_init.root_token | default('', true) | trim)
-          if (vault_config_init.root_token | default('', true) | trim | length > 0)
-          else (vault_config_vault_token | default('', true) | trim)
+          (vault_config_vault_token | default('', true) | trim)
+          if (vault_config_vault_token | default('', true) | trim | length > 0)
+          else (vault_config_init.root_token | default('', true) | trim)
         )
       }}
   changed_when: false

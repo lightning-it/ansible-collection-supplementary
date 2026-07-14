@@ -75,7 +75,7 @@
   register: vault_validate_vault_deploy_selinux_status
   changed_when: false
   failed_when: false
-  when: ansible_distribution in ['RedHat', 'CentOS']
+  when: ansible_distribution | default('') in ['RedHat', 'CentOS']
   tags:
     - validate
     - selinux
@@ -86,7 +86,7 @@
   changed_when: false
   failed_when: false
   when:
-    - ansible_distribution in ['RedHat', 'CentOS']
+    - ansible_distribution | default('') in ['RedHat', 'CentOS']
     - vault_validate_vault_deploy_selinux_status.stdout is defined
     - vault_validate_vault_deploy_selinux_status.stdout != 'Disabled'
   tags:
@@ -122,7 +122,7 @@
   changed_when: false
   failed_when: false
   when:
-    - ansible_distribution in ['RedHat', 'CentOS']
+    - ansible_distribution | default('') in ['RedHat', 'CentOS']
     - vault_validate_vault_deploy_selinux_status.stdout is defined
     - vault_validate_vault_deploy_selinux_status.stdout != 'Disabled'
   tags:
@@ -189,6 +189,9 @@
     validate_certs: "{{ vault_validate_validate_certs }}"
     ca_path: "{{ vault_validate_ca_cert_path_effective | default(omit, true) }}"
   register: vault_validate_vault_deploy_health
+  until: vault_validate_vault_deploy_health.status in [200, 429, 472, 473, 501, 503]
+  retries: "{{ vault_validate_lifecycle_retries if (vault_validate_strict | bool) else 1 }}"
+  delay: "{{ vault_validate_lifecycle_delay }}"
   changed_when: false
   failed_when: false
   tags:
@@ -220,6 +223,9 @@
     validate_certs: "{{ vault_validate_validate_certs }}"
     ca_path: "{{ vault_validate_ca_cert_path_effective | default(omit, true) }}"
   register: vault_validate_init_status
+  until: vault_validate_init_status.status | default(0) | int == 200
+  retries: "{{ vault_validate_lifecycle_retries if (vault_validate_strict | bool) else 1 }}"
+  delay: "{{ vault_validate_lifecycle_delay }}"
   changed_when: false
   failed_when: false
   tags:
@@ -233,6 +239,21 @@
     validate_certs: "{{ vault_validate_validate_certs }}"
     ca_path: "{{ vault_validate_ca_cert_path_effective | default(omit, true) }}"
   register: vault_validate_seal_status
+  until: >-
+    vault_validate_seal_status.status | default(0) | int == 200
+    and (
+      vault_validate_expected_lifecycle not in ['ready', 'sealed']
+      or (
+        vault_validate_expected_lifecycle == 'ready'
+        and not (vault_validate_seal_status.json.sealed | default(true) | bool)
+      )
+      or (
+        vault_validate_expected_lifecycle == 'sealed'
+        and (vault_validate_seal_status.json.sealed | default(false) | bool)
+      )
+    )
+  retries: "{{ vault_validate_lifecycle_retries if (vault_validate_strict | bool) else 1 }}"
+  delay: "{{ vault_validate_lifecycle_delay }}"
   changed_when: false
   failed_when: false
   tags:
@@ -248,6 +269,7 @@
 - name: Report Vault init and seal status
   ansible.builtin.debug:
     msg: >-
+      expected={{ vault_validate_expected_lifecycle }},
       init={{ vault_validate_init_status.json.initialized | default('unknown') }},
       sealed={{ vault_validate_seal_status.json.sealed | default('unknown') }}
   tags:

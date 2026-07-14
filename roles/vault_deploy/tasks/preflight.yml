@@ -1,6 +1,7 @@
 ---
 - name: Preflight | Check Vault health for token validation (best effort)
-  delegate_to: localhost
+  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  become: false
   ansible.builtin.uri:
     url: "{{ vault_deploy_health_url }}"
     method: GET
@@ -14,7 +15,8 @@
   tags: always
 
 - name: Preflight | Check Vault token can login (lookup-self)
-  delegate_to: localhost
+  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  become: false
   ansible.builtin.uri:
     url: "{{ vault_deploy_api_url }}/v1/auth/token/lookup-self"
     method: GET
@@ -49,7 +51,8 @@
   tags: always
 
 - name: Preflight | Check token access to AppRole credential secret (best effort)
-  delegate_to: localhost
+  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  become: false
   ansible.builtin.uri:
     url: >-
       {{
