@@ -1,0 +1,475 @@
+---
+- name: Validate scoped AppRole bootstrap inputs
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Inspect scoped AppRole controller prerequisites
+  ansible.builtin.import_tasks: preflight.yml
+  tags: always
+
+- name: Wait for the certificate-validated Vault API
+  ansible.builtin.uri:
+    url: "{{ vault_scoped_approle_health_url }}"
+    method: GET
+    validate_certs: true
+    ca_path: "{{ _vault_scoped_approle_ca_path }}"
+    status_code: [200, 429, 472, 473, 501, 503]
+    timeout: "{{ vault_scoped_approle_timeout }}"
+  register: _vault_scoped_approle_health
+  until: _vault_scoped_approle_health.status in [200, 429, 472, 473, 501, 503]
+  retries: 12
+  delay: 5
+  delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+  become: false
+  changed_when: false
+
+- name: Load existing immutable scoped AppRole escrow
+  ansible.builtin.include_vars:
+    file: "{{ _vault_scoped_approle_document_path }}"
+    name: _vault_scoped_approle_document
+  delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+  become: false
+  when: _vault_scoped_approle_document_exists | bool
+  no_log: true
+
+- name: Validate existing scoped AppRole escrow schema
+  ansible.builtin.assert:
+    that:
+      - _vault_scoped_approle_document is mapping
+      - >-
+        _vault_scoped_approle_document.keys() | list | sort
+        == ['auth_method', 'role_id', 'schema_version', 'secret_id', 'subject']
+      - >-
+        _vault_scoped_approle_document.schema_version is integer
+      - >-
+        _vault_scoped_approle_document.schema_version
+        == vault_scoped_approle_document_schema_version | int
+      - >-
+        _vault_scoped_approle_document.subject
+        == vault_scoped_approle_document_subject
+      - _vault_scoped_approle_document.auth_method == 'approle'
+      - _vault_scoped_approle_document.role_id is match('^[^\r\n]{16,4096}$')
+      - _vault_scoped_approle_document.secret_id is match('^[^\r\n]{16,4096}$')
+    fail_msg: "Existing scoped AppRole controller escrow has an invalid exact schema."
+    quiet: true
+  when: _vault_scoped_approle_document_exists | bool
+  no_log: true
+
+- name: Require the in-memory initial root token for first configuration
+  ansible.builtin.assert:
+    that:
+      - vault_scoped_approle_admin_token is string
+      - vault_scoped_approle_admin_token is match('^[^\r\n]{16,4096}$')
+    fail_msg: >-
+      First scoped AppRole configuration requires the initial root token as an
+      in-memory role input. No controller AppRole escrow exists yet.
+    quiet: true
+  when: not (_vault_scoped_approle_document_exists | bool)
+  no_log: true
+
+- name: Configure Vault KV and scoped AppRole with the initial root token
+  when: not (_vault_scoped_approle_document_exists | bool)
+  no_log: true
+  block:
+    - name: Validate the initial Vault root token
+      ansible.builtin.uri:
+        url: "{{ vault_scoped_approle_api_url }}/v1/auth/token/lookup-self"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+        validate_certs: true
+        ca_path: "{{ _vault_scoped_approle_ca_path }}"
+        status_code: 200
+        timeout: "{{ vault_scoped_approle_timeout }}"
+      register: _vault_scoped_approle_admin_lookup
+      delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+      become: false
+      changed_when: false
+
+    - name: Require the actual initial root token
+      ansible.builtin.assert:
+        that:
+          - "'root' in (_vault_scoped_approle_admin_lookup.json.data.policies | default([]))"
+        fail_msg: "First scoped AppRole configuration requires the initial root token."
+        quiet: true
+
+    - name: Read configured Vault secret engines
+      ansible.builtin.uri:
+        url: "{{ vault_scoped_approle_api_url }}/v1/sys/mounts"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+        validate_certs: true
+        ca_path: "{{ _vault_scoped_approle_ca_path }}"
+        status_code: 200
+        timeout: "{{ vault_scoped_approle_timeout }}"
+      register: _vault_scoped_approle_mounts
+      delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+      become: false
+      changed_when: false
+
+    - name: Refuse a conflicting Vault KV mount
+      ansible.builtin.assert:
+        that:
+          - >-
+            (vault_scoped_approle_kv_mount_point ~ '/')
+            not in _vault_scoped_approle_mounts.json.data
+            or (
+              _vault_scoped_approle_mounts.json.data[
+                vault_scoped_approle_kv_mount_point ~ '/'
+              ].type == 'kv'
+              and _vault_scoped_approle_mounts.json.data[
+                vault_scoped_approle_kv_mount_point ~ '/'
+              ].options.version | default('') | string == '2'
+            )
+        fail_msg: "The requested Vault KV mount exists with a conflicting type or version."
+        quiet: true
+
+    - name: Enable the absent Vault KV v2 mount
+      ansible.builtin.uri:
+        url: >-
+          {{ vault_scoped_approle_api_url }}/v1/sys/mounts/{{ vault_scoped_approle_kv_mount_point }}
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+        body_format: json
+        body:
+          type: kv
+          options:
+            version: "2"
+        validate_certs: true
+        ca_path: "{{ _vault_scoped_approle_ca_path }}"
+        status_code: 204
+        timeout: "{{ vault_scoped_approle_timeout }}"
+      delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+      become: false
+      when: >-
+        (vault_scoped_approle_kv_mount_point ~ '/')
+        not in _vault_scoped_approle_mounts.json.data
+
+    - name: Read configured Vault authentication methods
+      ansible.builtin.uri:
+        url: "{{ vault_scoped_approle_api_url }}/v1/sys/auth"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+        validate_certs: true
+        ca_path: "{{ _vault_scoped_approle_ca_path }}"
+        status_code: 200
+        timeout: "{{ vault_scoped_approle_timeout }}"
+      register: _vault_scoped_approle_auth_methods
+      delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+      become: false
+      changed_when: false
+
+    - name: Refuse a conflicting Vault AppRole auth mount
+      ansible.builtin.assert:
+        that:
+          - >-
+            (vault_scoped_approle_auth_mount_point ~ '/')
+            not in _vault_scoped_approle_auth_methods.json.data
+            or _vault_scoped_approle_auth_methods.json.data[
+              vault_scoped_approle_auth_mount_point ~ '/'
+            ].type == 'approle'
+        fail_msg: "The requested Vault AppRole auth mount has a conflicting type."
+        quiet: true
+
+    - name: Enable the absent Vault AppRole auth mount
+      ansible.builtin.uri:
+        url: >-
+          {{ vault_scoped_approle_api_url }}/v1/sys/auth/{{ vault_scoped_approle_auth_mount_point }}
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+        body_format: json
+        body:
+          type: approle
+        validate_certs: true
+        ca_path: "{{ _vault_scoped_approle_ca_path }}"
+        status_code: 204
+        timeout: "{{ vault_scoped_approle_timeout }}"
+      delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+      become: false
+      when: >-
+        (vault_scoped_approle_auth_mount_point ~ '/')
+        not in _vault_scoped_approle_auth_methods.json.data
+
+    - name: Install the exact least-privilege Vault policy
+      ansible.builtin.uri:
+        url: >-
+          {{ vault_scoped_approle_api_url }}/v1/sys/policies/acl/{{ vault_scoped_approle_policy_name }}
+        method: PUT
+        headers:
+          X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+        body_format: json
+        body:
+          policy: "{{ vault_scoped_approle_policy }}"
+        validate_certs: true
+        ca_path: "{{ _vault_scoped_approle_ca_path }}"
+        status_code: 204
+        timeout: "{{ vault_scoped_approle_timeout }}"
+      delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+      become: false
+
+    - name: Install the exact scoped Vault AppRole
+      ansible.builtin.uri:
+        url: >-
+          {{ vault_scoped_approle_api_url }}/v1/auth/{{ vault_scoped_approle_auth_mount_point
+          }}/role/{{ vault_scoped_approle_role_name }}
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+        body_format: json
+        body:
+          token_type: "{{ vault_scoped_approle_token_type }}"
+          token_policies:
+            - "{{ vault_scoped_approle_policy_name }}"
+          token_ttl: "{{ vault_scoped_approle_token_ttl }}"
+          token_max_ttl: "{{ vault_scoped_approle_token_max_ttl }}"
+          token_num_uses: "{{ vault_scoped_approle_token_num_uses | int }}"
+          token_no_default_policy: true
+          secret_id_ttl: "{{ vault_scoped_approle_secret_id_ttl | int }}"
+          secret_id_num_uses: "{{ vault_scoped_approle_secret_id_num_uses | int }}"
+        validate_certs: true
+        ca_path: "{{ _vault_scoped_approle_ca_path }}"
+        status_code: 204
+        timeout: "{{ vault_scoped_approle_timeout }}"
+      delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+      become: false
+
+    - name: Read the scoped Vault AppRole ID
+      ansible.builtin.uri:
+        url: >-
+          {{ vault_scoped_approle_api_url }}/v1/auth/{{ vault_scoped_approle_auth_mount_point
+          }}/role/{{ vault_scoped_approle_role_name }}/role-id
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+        validate_certs: true
+        ca_path: "{{ _vault_scoped_approle_ca_path }}"
+        status_code: 200
+        timeout: "{{ vault_scoped_approle_timeout }}"
+      register: _vault_scoped_approle_role_id_response
+      delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+      become: false
+      changed_when: false
+
+    - name: Generate the initial scoped Vault AppRole Secret ID
+      ansible.builtin.uri:
+        url: >-
+          {{ vault_scoped_approle_api_url }}/v1/auth/{{ vault_scoped_approle_auth_mount_point
+          }}/role/{{ vault_scoped_approle_role_name }}/secret-id
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+        body_format: json
+        body: {}
+        validate_certs: true
+        ca_path: "{{ _vault_scoped_approle_ca_path }}"
+        status_code: 200
+        timeout: "{{ vault_scoped_approle_timeout }}"
+      register: _vault_scoped_approle_secret_id_response
+      delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+      become: false
+
+    - name: Build the exact scoped AppRole controller document
+      ansible.builtin.include_tasks: build_document.yml
+
+    - name: Read back the exact scoped Vault policy before root revocation
+      ansible.builtin.uri:
+        url: >-
+          {{ vault_scoped_approle_api_url }}/v1/sys/policies/acl/{{ vault_scoped_approle_policy_name }}
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+        validate_certs: true
+        ca_path: "{{ _vault_scoped_approle_ca_path }}"
+        status_code: 200
+        timeout: "{{ vault_scoped_approle_timeout }}"
+      register: _vault_scoped_approle_policy_readback
+      delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+      become: false
+      changed_when: false
+
+    - name: Read back the exact scoped Vault AppRole before root revocation
+      ansible.builtin.uri:
+        url: >-
+          {{ vault_scoped_approle_api_url }}/v1/auth/{{ vault_scoped_approle_auth_mount_point
+          }}/role/{{ vault_scoped_approle_role_name }}
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+        validate_certs: true
+        ca_path: "{{ _vault_scoped_approle_ca_path }}"
+        status_code: 200
+        timeout: "{{ vault_scoped_approle_timeout }}"
+      register: _vault_scoped_approle_role_readback
+      delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+      become: false
+      changed_when: false
+
+    - name: Require exact scoped policy and AppRole readback before root revocation
+      ansible.builtin.assert:
+        that:
+          - >-
+            _vault_scoped_approle_policy_readback.json.data.policy | trim
+            == vault_scoped_approle_policy | trim
+          - >-
+            _vault_scoped_approle_role_readback.json.data.token_policies | sort
+            == [vault_scoped_approle_policy_name]
+          - >-
+            _vault_scoped_approle_role_readback.json.data.token_type
+            == vault_scoped_approle_token_type
+          - _vault_scoped_approle_role_readback.json.data.token_no_default_policy | bool
+          - >-
+            _vault_scoped_approle_role_readback.json.data.token_ttl | int
+            == vault_scoped_approle_token_ttl_seconds | int
+          - >-
+            _vault_scoped_approle_role_readback.json.data.token_max_ttl | int
+            == vault_scoped_approle_token_max_ttl_seconds | int
+          - >-
+            _vault_scoped_approle_role_readback.json.data.token_num_uses | int
+            == vault_scoped_approle_token_num_uses | int
+          - >-
+            _vault_scoped_approle_role_readback.json.data.secret_id_ttl | int
+            == vault_scoped_approle_secret_id_ttl | int
+          - >-
+            _vault_scoped_approle_role_readback.json.data.secret_id_num_uses | int
+            == vault_scoped_approle_secret_id_num_uses | int
+        fail_msg: "Scoped Vault policy or AppRole differs from the exact requested contract."
+        quiet: true
+
+    - name: Persist immutable scoped AppRole controller escrow
+      lit.foundational.ansible_vault_document:
+        path: "{{ _vault_scoped_approle_document_path }}"
+        document: "{{ _vault_scoped_approle_document }}"
+      register: _vault_scoped_approle_escrow_result
+      delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+      become: false
+      no_log: true
+
+- name: Authenticate with the immutable scoped Vault AppRole
+  ansible.builtin.uri:
+    url: >-
+      {{ vault_scoped_approle_api_url }}/v1/auth/{{ vault_scoped_approle_auth_mount_point }}/login
+    method: POST
+    body_format: json
+    body:
+      role_id: "{{ _vault_scoped_approle_document.role_id }}"
+      secret_id: "{{ _vault_scoped_approle_document.secret_id }}"
+    validate_certs: true
+    ca_path: "{{ _vault_scoped_approle_ca_path }}"
+    status_code: 200
+    timeout: "{{ vault_scoped_approle_timeout }}"
+  register: _vault_scoped_approle_login
+  delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Require a bounded scoped Vault token
+  ansible.builtin.include_tasks: validate_bounded_token.yml
+  no_log: true
+
+- name: Probe exact scoped Vault token capabilities
+  ansible.builtin.uri:
+    url: "{{ vault_scoped_approle_api_url }}/v1/sys/capabilities-self"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ _vault_scoped_approle_login.json.auth.client_token }}"
+    body_format: json
+    body:
+      paths: "{{ vault_scoped_approle_capability_probes | map(attribute='path') | list }}"
+    validate_certs: true
+    ca_path: "{{ _vault_scoped_approle_ca_path }}"
+    status_code: 200
+    timeout: "{{ vault_scoped_approle_timeout }}"
+  register: _vault_scoped_approle_capabilities
+  delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Require exact scoped Vault capabilities
+  ansible.builtin.assert:
+    that:
+      - item.path in _vault_scoped_approle_capabilities.json
+      - >-
+        _vault_scoped_approle_capabilities.json[item.path] | sort
+        == item.capabilities | sort
+    fail_msg: "Scoped Vault token capabilities do not exactly match the approved policy probes."
+    quiet: true
+  loop: "{{ vault_scoped_approle_capability_probes }}"
+  no_log: true
+
+- name: Re-check a supplied initial root token before revocation
+  ansible.builtin.uri:
+    url: "{{ vault_scoped_approle_api_url }}/v1/auth/token/lookup-self"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+    validate_certs: true
+    ca_path: "{{ _vault_scoped_approle_ca_path }}"
+    status_code: [200, 403]
+    timeout: "{{ vault_scoped_approle_timeout }}"
+  register: _vault_scoped_approle_admin_recheck
+  delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+  become: false
+  changed_when: false
+  when:
+    - vault_scoped_approle_revoke_admin_token | bool
+    - vault_scoped_approle_admin_token | default('', true) | length > 0
+  no_log: true
+
+- name: Require root identity before revoking a supplied token
+  ansible.builtin.assert:
+    that:
+      - "'root' in (_vault_scoped_approle_admin_recheck.json.data.policies | default([]))"
+    fail_msg: "Refusing to revoke a supplied Vault token that is not the initial root token."
+    quiet: true
+  when:
+    - _vault_scoped_approle_admin_recheck.status | default(403) | int == 200
+  no_log: true
+
+- name: Revoke the initial Vault root token after scoped validation
+  ansible.builtin.uri:
+    url: "{{ vault_scoped_approle_api_url }}/v1/auth/token/revoke-self"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+    body_format: json
+    body: {}
+    validate_certs: true
+    ca_path: "{{ _vault_scoped_approle_ca_path }}"
+    status_code: 204
+    timeout: "{{ vault_scoped_approle_timeout }}"
+  delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+  become: false
+  when:
+    - vault_scoped_approle_revoke_admin_token | bool
+    - _vault_scoped_approle_admin_recheck.status | default(403) | int == 200
+  no_log: true
+
+- name: Prove the supplied initial root token is revoked
+  ansible.builtin.uri:
+    url: "{{ vault_scoped_approle_api_url }}/v1/auth/token/lookup-self"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ vault_scoped_approle_admin_token }}"
+    validate_certs: true
+    ca_path: "{{ _vault_scoped_approle_ca_path }}"
+    status_code: 403
+    timeout: "{{ vault_scoped_approle_timeout }}"
+  delegate_to: "{{ vault_scoped_approle_api_delegate_to }}"
+  become: false
+  changed_when: false
+  when:
+    - vault_scoped_approle_revoke_admin_token | bool
+    - vault_scoped_approle_admin_token | default('', true) | length > 0
+  no_log: true
+
+- name: Record successful scoped Vault AppRole lifecycle
+  ansible.builtin.set_fact:
+    vault_scoped_approle_configured: true
+  changed_when: false
+  no_log: true

@@ -1,0 +1,21 @@
+---
+- name: Require the fixed scoped AppRole document schema
+  ansible.builtin.assert:
+    that:
+      - vault_scoped_approle_document_schema_version | int == 1
+    fail_msg: "The scoped AppRole controller document supports only schema version 1."
+    quiet: true
+  no_log: true
+
+- name: Build the exact scoped AppRole controller document in memory
+  ansible.builtin.set_fact:
+    _vault_scoped_approle_document:
+      # Keep this a YAML integer literal. Quoted Jinja-only action arguments
+      # can become AnsibleUnsafeText and must not change the persisted schema.
+      schema_version: 1
+      subject: "{{ vault_scoped_approle_document_subject }}"
+      auth_method: approle
+      role_id: "{{ _vault_scoped_approle_role_id_response.json.data.role_id }}"
+      secret_id: "{{ _vault_scoped_approle_secret_id_response.json.data.secret_id }}"
+  changed_when: false
+  no_log: true

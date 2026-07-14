@@ -1,0 +1,55 @@
+---
+- name: Prove controller escrow encryption before irreversible initialization
+  no_log: true
+  block:
+    - name: Create an isolated controller escrow encryption probe directory
+      ansible.builtin.tempfile:
+        state: directory
+        path: "{{ vault_bootstrap_controller_escrow_root_path }}"
+        prefix: .vault-bootstrap-encryption-probe-
+      register: vault_bootstrap_controller_escrow_probe_tmp
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Enforce controller escrow encryption probe directory permissions
+      ansible.builtin.file:
+        path: "{{ vault_bootstrap_controller_escrow_probe_tmp.path }}"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Encrypt and validate a harmless controller escrow probe document
+      lit.foundational.ansible_vault_document:
+        path: "{{ vault_bootstrap_controller_escrow_probe_tmp.path }}/probe.vault.yml"
+        document:
+          schema_version: 1
+          subject: vault-bootstrap-controller-encryption-preflight
+      register: vault_bootstrap_controller_escrow_probe
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      no_log: true
+
+    - name: Require a complete controller escrow encryption round trip
+      ansible.builtin.assert:
+        that:
+          - vault_bootstrap_controller_escrow_probe.created | default(false)
+          - vault_bootstrap_controller_escrow_probe.exists | default(false)
+          - vault_bootstrap_controller_escrow_probe.ciphertext_sha256 | default('', true) | length == 64
+        fail_msg: "The controller Ansible Vault identity failed the escrow encryption round trip."
+        quiet: true
+      no_log: true
+
+  always:
+    - name: Remove the controller escrow encryption probe directory
+      ansible.builtin.file:
+        path: "{{ vault_bootstrap_controller_escrow_probe_tmp.path }}"
+        state: absent
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      no_log: true
+      when: vault_bootstrap_controller_escrow_probe_tmp.path | default('', true) | length > 0

@@ -1,0 +1,85 @@
+---
+- name: Converge strict Vault security lifecycle contracts
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vault_security_molecule_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-security-lifecycle
+    vault_security_molecule_ca_path: "{{ vault_security_molecule_root }}/ca.crt"
+    vault_security_molecule_marker_path: "{{ vault_security_molecule_root }}/verified"
+    vault_security_molecule_digest: >-
+      docker.io/hashicorp/vault@sha256:6c77f568e6b6310d5bc68befb5711b9215c574de7da489e7c24332581176888b
+  tasks:
+    - name: Create Vault security lifecycle test directory
+      ansible.builtin.file:
+        path: "{{ vault_security_molecule_root }}"
+        state: directory
+        mode: "0700"
+
+    - name: Create non-secret Vault CA contract fixture
+      ansible.builtin.copy:
+        dest: "{{ vault_security_molecule_ca_path }}"
+        content: "molecule-ca-contract-only\n"
+        mode: "0600"
+
+    - name: Validate scoped AppRole assertion contract
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_scoped_approle
+        tasks_from: assert
+      vars:
+        vault_scoped_approle_api_url: https://127.0.0.1:18200
+        vault_scoped_approle_health_url: https://127.0.0.1:18200/v1/sys/health
+        vault_scoped_approle_api_delegate_to: localhost
+        vault_scoped_approle_validate_certs: true
+        vault_scoped_approle_ca_cert_path: "{{ vault_security_molecule_ca_path }}"
+        vault_scoped_approle_kv_mount_point: stage-2c
+        vault_scoped_approle_auth_mount_point: approle
+        vault_scoped_approle_role_name: molecule-automation
+        vault_scoped_approle_policy_name: molecule-automation
+        vault_scoped_approle_policy: |
+          path "molecule/data/*" {
+            capabilities = ["read"]
+          }
+        vault_scoped_approle_token_type: batch
+        vault_scoped_approle_controller_escrow_root_path: >-
+          {{ vault_security_molecule_root }}
+        vault_scoped_approle_controller_document_path: >-
+          {{ vault_security_molecule_root }}/controller-approle.vault.yml
+        vault_scoped_approle_document_subject: molecule-automation
+        vault_scoped_approle_capability_probes:
+          - path: molecule/data/example
+            capabilities:
+              - read
+
+    - name: Validate Raft snapshot assertion contract
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_raft_snapshot
+        tasks_from: assert
+      vars:
+        vault_raft_snapshot_action: none
+        vault_raft_snapshot_api_url: https://127.0.0.1:18200
+        vault_raft_snapshot_health_url: https://127.0.0.1:18200/v1/sys/health
+        vault_raft_snapshot_api_delegate_to: localhost
+        vault_raft_snapshot_validate_certs: true
+        vault_raft_snapshot_controller_ca_cert_path: "{{ vault_security_molecule_ca_path }}"
+        vault_raft_snapshot_target_ca_cert_path: /srv/vault/certs/ca.crt
+        vault_raft_snapshot_auth_mount_point: approle
+        vault_raft_snapshot_role_id: 00000000-0000-0000-0000-000000000000
+        vault_raft_snapshot_secret_id: 11111111-1111-1111-1111-111111111111
+        vault_raft_snapshot_controller_escrow_root_path: >-
+          {{ vault_security_molecule_root }}
+        vault_raft_snapshot_controller_document_path: >-
+          {{ vault_security_molecule_root }}/vault-raft-20260713T000000000000Z.vault.yml
+        vault_raft_snapshot_document_subject: vault.test.invalid
+        vault_raft_snapshot_verification_kv_paths:
+          - mount_point: stage-2c
+            path: molecule/example
+        vault_raft_snapshot_image: "{{ vault_security_molecule_digest }}"
+        vault_raft_snapshot_restore_node_id: vault-molecule
+
+    - name: Record successful Vault security lifecycle assertions
+      ansible.builtin.copy:
+        dest: "{{ vault_security_molecule_marker_path }}"
+        content: "verified\n"
+        mode: "0600"

@@ -1,0 +1,22 @@
+---
+- name: Stop Vault systemd unit for maintenance
+  ansible.builtin.systemd:
+    name: "{{ vault_backup_restore_systemd_unit_name_effective }}"
+    state: stopped
+  when: vault_backup_restore_manage_systemd | bool
+
+- name: Stop Vault pod for maintenance without systemd
+  ansible.builtin.command:
+    argv:
+      - podman
+      - pod
+      - stop
+      - "{{ vault_backup_restore_pod_name }}"
+  register: vault_backup_restore_pod_stop
+  changed_when: vault_backup_restore_pod_stop.rc == 0
+  when: not vault_backup_restore_manage_systemd | bool
+
+- name: Record stopped Vault runtime
+  ansible.builtin.set_fact:
+    vault_backup_restore_runtime_stopped: true
+  changed_when: false

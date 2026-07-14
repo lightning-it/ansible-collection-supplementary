@@ -1,0 +1,36 @@
+---
+vault_scoped_approle_api_url: ""
+vault_scoped_approle_api_delegate_to: localhost
+vault_scoped_approle_validate_certs: true
+vault_scoped_approle_ca_cert_path: ""
+vault_scoped_approle_health_url: "{{ vault_scoped_approle_api_url }}/v1/sys/health"
+vault_scoped_approle_timeout: 10
+
+# The initial root token is accepted only as an in-memory handoff from the
+# bootstrap role or an encrypted controller init document. It is revoked only
+# after the scoped AppRole has authenticated and passed every policy probe.
+vault_scoped_approle_admin_token: ""
+vault_scoped_approle_revoke_admin_token: true
+
+vault_scoped_approle_kv_mount_point: ""
+vault_scoped_approle_auth_mount_point: approle
+vault_scoped_approle_role_name: ""
+vault_scoped_approle_policy_name: ""
+vault_scoped_approle_policy: ""
+vault_scoped_approle_token_type: batch
+vault_scoped_approle_token_ttl: 20m
+vault_scoped_approle_token_ttl_seconds: 1200
+vault_scoped_approle_token_max_ttl: 1h
+vault_scoped_approle_token_max_ttl_seconds: 3600
+vault_scoped_approle_token_num_uses: 0
+vault_scoped_approle_secret_id_ttl: 0
+vault_scoped_approle_secret_id_num_uses: 0
+
+vault_scoped_approle_controller_escrow_root_path: ""
+vault_scoped_approle_controller_document_path: ""
+vault_scoped_approle_document_schema_version: 1
+vault_scoped_approle_document_subject: ""
+
+# Each entry contains an exact Vault API path and the capabilities that the
+# new token must have there. Extra capabilities are not accepted.
+vault_scoped_approle_capability_probes: []

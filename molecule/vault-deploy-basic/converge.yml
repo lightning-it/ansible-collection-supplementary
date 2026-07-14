@@ -7,11 +7,244 @@
     vault_deploy_molecule_execute_role: false
     vault_deploy_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-deploy-coverage-mode
+    vault_deploy_cert_dir: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-deploy-tls
+    vault_deploy_target_ca_cert_path: "{{ vault_deploy_cert_dir }}/ca.crt"
+    vault_deploy_api_ca_cert_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-deploy-api-trust/ca.crt
+    vault_deploy_api_delegate_to: localhost
+    vault_deploy_host_ip: "127.0.0.1"
+    vault_deploy_vault_hostname: "vault.test.invalid"
+    vault_deploy_run_as_user: "{{ lookup('ansible.builtin.pipe', 'id -u') | int }}"
+    vault_deploy_run_as_group: "{{ lookup('ansible.builtin.pipe', 'id -g') | int }}"
+    vault_deploy_runtime_template_dir: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-deploy-runtime
+    vault_deploy_runtime_cases:
+      - name: file
+        storage_backend: file
+        api_addr: "https://vault-file.test.invalid:8200"
+        cluster_addr: ""
+        node_id: ""
+      - name: raft
+        storage_backend: raft
+        api_addr: "https://vault-raft.test.invalid:8200"
+        cluster_addr: "https://vault-raft.test.invalid:8201"
+        node_id: "vault-raft-01"
+    vault_deploy_pod_name: vault
+    vault_deploy_image: "docker.io/hashicorp/vault:test"
+    vault_deploy_require_immutable_image: false
+    vault_deploy_port: 8200
+    vault_deploy_cluster_port: 8201
+    vault_deploy_listener_address: "127.0.0.1:8200"
+    vault_deploy_cluster_listener_address: "127.0.0.1:8201"
+    vault_deploy_container_data_dir: "/vault/data"
+    vault_deploy_skip_setcap: true
+    vault_deploy_run_as_non_root: true
+    vault_deploy_add_ipc_lock_cap: false
+    vault_deploy_host_data_dir: "/srv/vault/data"
+    vault_deploy_config_dir: "/srv/vault/config"
   tasks:
     - name: Import lit.supplementary.vault_deploy for syntax coverage
       ansible.builtin.import_role:
         name: lit.supplementary.vault_deploy
       when: vault_deploy_molecule_execute_role | bool
+
+    - name: Ensure Vault TLS test directory exists
+      ansible.builtin.file:
+        path: "{{ vault_deploy_cert_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Generate Vault bootstrap TLS assets on the target
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_deploy
+        tasks_from: generate_bootstrap_tls
+
+    - name: Synchronize bootstrap trust to the Vault API delegate
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_deploy
+        tasks_from: sync_api_trust
+
+    - name: Read the bootstrap key before trust reconciliation testing
+      ansible.builtin.stat:
+        path: "{{ vault_deploy_cert_dir }}/vault.key"
+        checksum_algorithm: sha256
+      register: vault_deploy_key_before_reconcile
+
+    - name: Check whether missing-trust reconciliation was already tested
+      ansible.builtin.stat:
+        path: "{{ vault_deploy_cert_dir }}/.trust-reconciled"
+      register: vault_deploy_trust_reconcile_marker
+
+    - name: Remove pinned trust certificate for first-pass reconciliation coverage
+      ansible.builtin.file:
+        path: "{{ vault_deploy_target_ca_cert_path }}"
+        state: absent
+      when: not vault_deploy_trust_reconcile_marker.stat.exists
+
+    - name: Reconcile existing Vault bootstrap trust without regenerating its key
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_deploy
+        tasks_from: reconcile_bootstrap_trust
+
+    - name: Read the bootstrap key after trust reconciliation testing
+      ansible.builtin.stat:
+        path: "{{ vault_deploy_cert_dir }}/vault.key"
+        checksum_algorithm: sha256
+      register: vault_deploy_key_after_reconcile
+
+    - name: Assert trust reconciliation preserved the bootstrap private key
+      ansible.builtin.assert:
+        that:
+          - >-
+            vault_deploy_key_before_reconcile.stat.checksum
+            == vault_deploy_key_after_reconcile.stat.checksum
+        quiet: true
+      no_log: true
+
+    - name: Record completed missing-trust reconciliation coverage
+      ansible.builtin.copy:
+        dest: "{{ vault_deploy_cert_dir }}/.trust-reconciled"
+        content: "tested\n"
+        mode: "0600"
+
+    - name: Ensure Vault runtime template test directory exists
+      ansible.builtin.file:
+        path: "{{ vault_deploy_runtime_template_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Render Vault HCL storage and address cases
+      ansible.builtin.template:
+        src: >-
+          {{
+            lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+            ~ '/roles/vault_deploy/templates/vau-config.hcl.j2'
+          }}
+        dest: "{{ vault_deploy_runtime_template_dir }}/{{ item.name }}.hcl"
+        mode: "0644"
+      loop: "{{ vault_deploy_runtime_cases }}"
+      loop_control:
+        label: "{{ item.name }}"
+      vars:
+        vault_deploy_storage_backend: "{{ item.storage_backend }}"
+        vault_deploy_api_addr: "{{ item.api_addr }}"
+        vault_deploy_container_api_url: "https://127.0.0.1:8200"
+        vault_deploy_cluster_addr: "{{ item.cluster_addr }}"
+        vault_deploy_raft_node_id: "{{ item.node_id }}"
+
+    - name: Render Vault pod storage and address cases
+      ansible.builtin.template:
+        src: >-
+          {{
+            lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+            ~ '/roles/vault_deploy/templates/vault-pod.yml.j2'
+          }}
+        dest: "{{ vault_deploy_runtime_template_dir }}/{{ item.name }}-pod.yml"
+        mode: "0644"
+      loop: "{{ vault_deploy_runtime_cases }}"
+      loop_control:
+        label: "{{ item.name }}"
+      vars:
+        vault_deploy_storage_backend: "{{ item.storage_backend }}"
+        vault_deploy_api_addr: "{{ item.api_addr }}"
+        vault_deploy_container_api_url: "https://127.0.0.1:8200"
+        vault_deploy_cluster_addr: "{{ item.cluster_addr }}"
+        vault_deploy_raft_node_id: "{{ item.node_id }}"
+
+    - name: Validate the file storage compatibility contract
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_deploy
+        tasks_from: assert
+      vars:
+        vault_deploy_storage_backend: file
+        vault_deploy_api_addr: "https://vault-file.test.invalid:8200"
+        vault_deploy_container_api_url: "https://vault-file.test.invalid:8200"
+        vault_deploy_cluster_addr: ""
+        vault_deploy_raft_node_id: ""
+
+    - name: Validate the complete single-node Raft contract
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_deploy
+        tasks_from: assert
+      vars:
+        vault_deploy_storage_backend: raft
+        vault_deploy_api_addr: "https://vault-raft.test.invalid:8200"
+        vault_deploy_container_api_url: "https://127.0.0.1:8200"
+        vault_deploy_cluster_addr: "https://vault-raft.test.invalid:8201"
+        vault_deploy_raft_node_id: "vault-raft-01"
+
+    - name: Initialize incomplete Raft rejection result
+      ansible.builtin.set_fact:
+        vault_deploy_raft_missing_cluster_rejected: false
+
+    - name: Prove Raft rejects an absent advertised cluster address
+      block:
+        - name: Validate an incomplete Raft contract
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_deploy
+            tasks_from: assert
+          vars:
+            vault_deploy_storage_backend: raft
+            vault_deploy_api_addr: "https://vault-raft.test.invalid:8200"
+            vault_deploy_container_api_url: "https://vault-raft.test.invalid:8200"
+            vault_deploy_cluster_addr: ""
+            vault_deploy_raft_node_id: "vault-raft-01"
+
+      rescue:
+        - name: Record rejected incomplete Raft contract
+          ansible.builtin.set_fact:
+            vault_deploy_raft_missing_cluster_rejected: true
+
+    - name: Assert incomplete Raft contract was rejected
+      ansible.builtin.assert:
+        that:
+          - vault_deploy_raft_missing_cluster_rejected | default(false) | bool
+        quiet: true
+
+    - name: Validate an immutable production image reference
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_deploy
+        tasks_from: assert
+      vars:
+        vault_deploy_image: >-
+          docker.io/hashicorp/vault@sha256:6c77f568e6b6310d5bc68befb5711b9215c574de7da489e7c24332581176888b
+        vault_deploy_require_immutable_image: true
+        vault_deploy_storage_backend: raft
+        vault_deploy_api_addr: "https://vault-raft.test.invalid:8200"
+        vault_deploy_container_api_url: "https://127.0.0.1:8200"
+        vault_deploy_cluster_addr: "https://127.0.0.1:8201"
+        vault_deploy_raft_node_id: "vault-raft-01"
+
+    - name: Initialize mutable production image rejection result
+      ansible.builtin.set_fact:
+        vault_deploy_mutable_image_rejected: false
+
+    - name: Prove immutable image enforcement rejects a tag
+      block:
+        - name: Validate a mutable production image reference
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_deploy
+            tasks_from: assert
+          vars:
+            vault_deploy_image: "docker.io/hashicorp/vault:1.21.4"
+            vault_deploy_require_immutable_image: true
+            vault_deploy_storage_backend: file
+            vault_deploy_api_addr: "https://vault-file.test.invalid:8200"
+            vault_deploy_container_api_url: "https://127.0.0.1:8200"
+            vault_deploy_cluster_addr: ""
+            vault_deploy_raft_node_id: ""
+
+      rescue:
+        - name: Record rejected mutable production image
+          ansible.builtin.set_fact:
+            vault_deploy_mutable_image_rejected: true
+
+    - name: Assert mutable production image was rejected
+      ansible.builtin.assert:
+        that:
+          - vault_deploy_mutable_image_rejected | default(false) | bool
+        quiet: true
 
     - name: Record lit.supplementary.vault_deploy Molecule coverage mode
       ansible.builtin.set_fact:

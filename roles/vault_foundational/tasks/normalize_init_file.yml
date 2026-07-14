@@ -6,75 +6,115 @@
 - name: Inspect init file
   ansible.builtin.include_tasks: inspect_init_file.yml
 
-- name: Fail when raw init output is present but vault password missing
-  ansible.builtin.fail:
-    msg: >-
-      Plain init output detected in {{ vault_foundational_init_file_path_effective }};
-      vault_deploy_ansible_vault_pw is required to re-encrypt.
+- name: Inspect controller Ansible Vault password file for normalization
+  ansible.builtin.stat:
+    path: "{{ vault_foundational_ansible_vault_password_file }}"
+  register: vault_foundational_password_file_stat
+  delegate_to: localhost
+  become: false
+  changed_when: false
   when:
     - not vault_foundational_vault_deploy_init_file_is_vault | bool
     - not vault_foundational_vault_deploy_init_file_is_legacy | bool
     - vault_foundational_vault_deploy_init_file_is_yaml | bool
-    - vault_deploy_ansible_vault_pw | default('') | length == 0
+    - vault_foundational_ansible_vault_password_file | default('', true) | trim | length > 0
+
+- name: Fail when raw init output is present but encryption credential is missing
+  ansible.builtin.assert:
+    that:
+      - >-
+        (vault_foundational_password_file_stat.stat.exists | default(false))
+        or (vault_foundational_ansible_vault_password | default('', true) | string | length > 0)
+    fail_msg: >-
+      Plain init output was detected, but neither ANSIBLE_VAULT_PASSWORD_FILE nor
+      vault_foundational_ansible_vault_password is available for re-encryption.
+    quiet: true
+  no_log: true
+  when:
+    - not vault_foundational_vault_deploy_init_file_is_vault | bool
+    - not vault_foundational_vault_deploy_init_file_is_legacy | bool
+    - vault_foundational_vault_deploy_init_file_is_yaml | bool
 
 - name: Re-encrypt raw init output on controller
   when:
     - not vault_foundational_vault_deploy_init_file_is_vault | bool
     - not vault_foundational_vault_deploy_init_file_is_legacy | bool
     - vault_foundational_vault_deploy_init_file_is_yaml | bool
-    - vault_deploy_ansible_vault_pw | default('') | length > 0
   no_log: true
   block:
-    - name: Create controller bootstrap temp dir
-      delegate_to: localhost
-      ansible.builtin.tempfile:
-        state: directory
-        prefix: vault-bootstrap-
-      register: vault_foundational_tmp
+    - name: Encrypt normalized init output
+      block:
+        - name: Create controller temporary directory for normalization
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: vault-foundational-
+          register: vault_foundational_tmp
+          delegate_to: localhost
+          become: false
 
-    - name: Create controller ansible config (empty)
-      delegate_to: localhost
-      ansible.builtin.copy:
-        dest: "{{ vault_foundational_tmp.path }}/ansible.cfg"
-        content: ""
-        mode: "0600"
+        - name: Enforce controller temporary directory permissions for normalization
+          ansible.builtin.file:
+            path: "{{ vault_foundational_tmp.path }}"
+            state: directory
+            mode: "0700"
+          delegate_to: localhost
+          become: false
+          changed_when: false
 
-    - name: Write raw init output to controller temp dir
-      delegate_to: localhost
-      ansible.builtin.copy:
-        dest: "{{ vault_foundational_tmp.path }}/vault-init.yml"
-        content: "{{ vault_foundational_vault_deploy_init_file_content }}"
-        mode: "0600"
+        - name: Write raw init output to controller temporary directory
+          ansible.builtin.copy:
+            dest: "{{ vault_foundational_tmp.path }}/vault-init.yml"
+            content: "{{ vault_foundational_vault_deploy_init_file_content }}"
+            mode: "0600"
+          delegate_to: localhost
+          become: false
 
-    - name: Write vault password file to controller temp dir
-      delegate_to: localhost
-      ansible.builtin.copy:
-        dest: "{{ vault_foundational_tmp.path }}/.vault_deploy_pass"
-        content: "{{ vault_deploy_ansible_vault_pw }}"
-        mode: "0600"
+        - name: Create compatibility password file for normalization
+          ansible.builtin.copy:
+            dest: "{{ vault_foundational_tmp.path }}/.vault-password"
+            content: "{{ vault_foundational_ansible_vault_password }}"
+            mode: "0600"
+          delegate_to: localhost
+          become: false
+          when:
+            - vault_foundational_ansible_vault_password_file | default('', true) | trim | length == 0
+            - vault_foundational_ansible_vault_password | default('', true) | string | length > 0
 
-    - name: Encrypt raw init output on controller
-      delegate_to: localhost
-      ansible.builtin.command: >-
-        ansible-vault encrypt {{ vault_foundational_tmp.path }}/vault-init.yml
-        --output {{ vault_foundational_tmp.path }}/vault-init.yml.vault
-      changed_when: true
-      environment:
-        ANSIBLE_CONFIG: "{{ vault_foundational_tmp.path }}/ansible.cfg"
-        ANSIBLE_VAULT_PASSWORD_FILE: "{{ vault_foundational_tmp.path }}/.vault_deploy_pass"
+        - name: Encrypt raw init output on controller
+          ansible.builtin.command:
+            argv:
+              - ansible-vault
+              - encrypt
+              - "{{ vault_foundational_tmp.path }}/vault-init.yml"
+              - --output
+              - "{{ vault_foundational_tmp.path }}/vault-init.yml.vault"
+          changed_when: true
+          delegate_to: localhost
+          become: false
+          environment:
+            ANSIBLE_VAULT_PASSWORD_FILE: >-
+              {{
+                vault_foundational_ansible_vault_password_file
+                if (vault_foundational_ansible_vault_password_file | default('', true) | trim | length > 0)
+                else (vault_foundational_tmp.path ~ '/.vault-password')
+              }}
 
-    - name: Copy re-encrypted init file to target
-      ansible.builtin.copy:
-        src: "{{ vault_foundational_tmp.path }}/vault-init.yml.vault"
-        dest: "{{ vault_foundational_init_file_path_effective }}"
-        owner: root
-        group: root
-        mode: "0600"
-        force: true
-        decrypt: false
+        - name: Copy re-encrypted init file to target
+          ansible.builtin.copy:
+            src: "{{ vault_foundational_tmp.path }}/vault-init.yml.vault"
+            dest: "{{ vault_foundational_init_file_path_effective }}"
+            owner: root
+            group: root
+            mode: "0600"
+            force: true
+            decrypt: false
 
-    - name: Cleanup controller temp dir
-      delegate_to: localhost
-      ansible.builtin.file:
-        path: "{{ vault_foundational_tmp.path }}"
-        state: absent
+      always:
+        - name: Remove controller temporary directory after normalization
+          ansible.builtin.file:
+            path: "{{ vault_foundational_tmp.path }}"
+            state: absent
+          delegate_to: localhost
+          become: false
+          changed_when: false
+          when: vault_foundational_tmp.path | default('', true) | length > 0

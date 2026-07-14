@@ -1,0 +1,58 @@
+---
+- name: Inspect requested Vault restore archive
+  ansible.builtin.stat:
+    path: "{{ vault_backup_restore_source }}"
+  register: vault_backup_restore_source_stat
+  changed_when: false
+
+- name: Require a regular Vault restore archive
+  ansible.builtin.assert:
+    that:
+      - vault_backup_restore_source_stat.stat.exists | default(false)
+      - vault_backup_restore_source_stat.stat.isreg | default(false)
+    fail_msg: "Vault restore source must be an existing regular file on the managed host."
+    quiet: true
+
+- name: List Vault restore archive entries before maintenance
+  ansible.builtin.command:
+    argv:
+      - tar
+      - --list
+      - --gzip
+      - --file
+      - "{{ vault_backup_restore_source }}"
+  register: vault_backup_restore_archive_listing
+  changed_when: false
+
+- name: Record Vault restore archive entries
+  ansible.builtin.set_fact:
+    vault_backup_restore_archive_entries: >-
+      {{ vault_backup_restore_archive_listing.stdout_lines | reject('equalto', '') | list }}
+  changed_when: false
+
+- name: Require a safe Vault data archive layout
+  ansible.builtin.assert:
+    that:
+      - vault_backup_restore_archive_entries | length > 0
+      - >-
+        vault_backup_restore_archive_entries
+        | select(
+            'match',
+            '^(\\./)?'
+            ~ (vault_backup_restore_host_data_dir | basename | regex_escape)
+            ~ '(/|$)'
+          )
+        | list
+        | length > 0
+      - >-
+        vault_backup_restore_archive_entries
+        | select('match', '^/')
+        | list
+        | length == 0
+      - >-
+        vault_backup_restore_archive_entries
+        | select('search', '(^|/)\\.\\.(/|$)')
+        | list
+        | length == 0
+    fail_msg: "Vault restore archive has an unexpected or unsafe path layout."
+    quiet: true

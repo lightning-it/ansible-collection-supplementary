@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${FAKE_PODMAN_LOG:?FAKE_PODMAN_LOG is required}"
+: "${FAKE_PODMAN_STATE:?FAKE_PODMAN_STATE is required}"
+
+{
+  printf 'argv='
+  printf '%q ' "$@"
+  printf '\n'
+  if [ -n "${VAULT_TOKEN:-}" ]; then
+    printf 'vault_token_set=true\n'
+  else
+    printf 'vault_token_set=false\n'
+  fi
+  if [ -n "${VAULT_ADDR:-}" ]; then
+    printf 'vault_addr_set=true\n'
+  else
+    printf 'vault_addr_set=false\n'
+  fi
+} >> "${FAKE_PODMAN_LOG}"
+
+case "${1:-}" in
+  image)
+    if [ "${2:-}" != "exists" ]; then
+      exit 2
+    fi
+    if [ "${FAKE_PODMAN_REQUIRE_LOADED:-false}" = "true" ]; then
+      test -f "${FAKE_PODMAN_STATE}"
+      test "$(< "${FAKE_PODMAN_STATE}")" = "${3:-}"
+    fi
+    ;;
+  pull)
+    printf 'Image is current\n'
+    ;;
+  save)
+    output=''
+    image=''
+    shift
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        -o)
+          output="${2:-}"
+          shift 2
+          ;;
+        --format)
+          shift 2
+          ;;
+        *)
+          image="$1"
+          shift
+          ;;
+      esac
+    done
+    test -n "${output}"
+    test -n "${image}"
+    printf '%s\n' "${image}" > "${output}"
+    ;;
+  load)
+    test "${2:-}" = "-i"
+    test -s "${3:-}"
+    cp -- "${3}" "${FAKE_PODMAN_STATE}"
+    printf 'Loaded image: %s\n' "$(< "${FAKE_PODMAN_STATE}")"
+    ;;
+  run)
+    ;;
+  *)
+    printf 'unsupported fake podman command: %s\n' "${1:-<empty>}" >&2
+    exit 2
+    ;;
+esac

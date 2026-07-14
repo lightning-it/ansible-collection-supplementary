@@ -1,24 +1,156 @@
 ---
-- name: Converge vault ops syntax coverage
+- name: Converge Vault ops payload normalization coverage
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
-    vault_ops_molecule_execute_role: false
     vault_ops_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-ops-coverage-mode
+    vault_ops_molecule_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-ops-runtime
+    vault_ops_molecule_port: 18211
+    vault_ops_molecule_api_url: "http://127.0.0.1:{{ vault_ops_molecule_port }}"
   tasks:
-    - name: Import lit.supplementary.vault_ops for syntax coverage
-      ansible.builtin.import_role:
+    - name: Normalize canonical persisted init payload for ops
+      ansible.builtin.include_role:
         name: lit.supplementary.vault_ops
-      when: vault_ops_molecule_execute_role | bool
+        tasks_from: normalize_init_payload
+      vars:
+        vault_ops_init_payload_source:
+          vault_init:
+            unseal_keys_b64: [test-key-one]
+            root_token: test-root-token
 
-    - name: Record lit.supplementary.vault_ops Molecule coverage mode
-      ansible.builtin.set_fact:
-        vault_ops_molecule_coverage_mode: syntax_stub
+    - name: Assert canonical ops payload handoff
+      ansible.builtin.assert:
+        that:
+          - vault_ops_unseal_keys == ['test-key-one']
+          - vault_ops_token == 'test-root-token'
+        quiet: true
+      no_log: true
 
-    - name: Persist lit.supplementary.vault_ops Molecule coverage mode
+    - name: Normalize ops-key legacy persisted payload
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_ops
+        tasks_from: normalize_init_payload
+      vars:
+        vault_ops_init_payload_source:
+          vault_ops_vault_init:
+            unseal_keys_hex: [legacy-test-key]
+            root_token: legacy-test-token
+
+    - name: Assert legacy ops payload handoff
+      ansible.builtin.assert:
+        that:
+          - vault_ops_unseal_keys == ['legacy-test-key']
+          - vault_ops_token == 'legacy-test-token'
+        quiet: true
+      no_log: true
+
+    - name: Select the Vault unseal threshold share set
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_ops
+        tasks_from: select_unseal_shares
+      vars:
+        vault_ops_seal_status:
+          json:
+            t: 3
+            progress: 0
+        vault_ops_unseal_keys:
+          - test-share-one
+          - test-share-two
+          - test-share-three
+          - unused-share-four
+          - unused-share-five
+
+    - name: Assert only the exact Vault threshold share count is selected
+      ansible.builtin.assert:
+        that:
+          - vault_ops_unseal_threshold | int == 3
+          - vault_ops_unseal_keys_selected | length == 3
+          - vault_ops_unseal_keys_selected[-1] == 'test-share-three'
+          - "'unused-share-four' not in vault_ops_unseal_keys_selected"
+        quiet: true
+      no_log: true
+
+    - name: Persist Vault ops coverage result
       ansible.builtin.copy:
         dest: "{{ vault_ops_molecule_marker_path }}"
-        content: "syntax_stub\n"
+        content: "normalized_handoff\n"
         mode: "0644"
+
+    - name: Create Vault ops runtime test directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ vault_ops_molecule_root }}"
+          mode: "0750"
+        - path: "{{ vault_ops_molecule_root }}/bin"
+          mode: "0750"
+        - path: "{{ vault_ops_molecule_root }}/data"
+          mode: "0700"
+
+    - name: Install fake Vault API for ops coverage
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/resources/fake_vault_api.py"
+        dest: "{{ vault_ops_molecule_root }}/fake_vault_api.py"
+        mode: "0750"
+
+    - name: Install fake Podman for ops coverage
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/resources/fake-podman"
+        dest: "{{ vault_ops_molecule_root }}/bin/podman"
+        mode: "0750"
+
+    - name: Initialize sealed fake Vault ops state
+      ansible.builtin.copy:
+        dest: "{{ vault_ops_molecule_root }}/state.json"
+        content: >-
+          {"initialized": true, "sealed": true, "threshold": 2, "progress": 0}
+        mode: "0600"
+        force: false
+
+    - name: Initialize fake Vault ops runtime state
+      ansible.builtin.copy:
+        dest: "{{ vault_ops_molecule_root }}/runtime-state"
+        content: "running\n"
+        mode: "0600"
+        force: false
+
+    - name: Probe fake Vault ops API
+      ansible.builtin.uri:
+        url: "{{ vault_ops_molecule_api_url }}/v1/sys/health"
+        status_code: [200, 503]
+      register: vault_ops_molecule_api_probe
+      changed_when: false
+      failed_when: false
+
+    - name: Start fake Vault ops API
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ vault_ops_molecule_root }}/fake_vault_api.py"
+          - --port
+          - "{{ vault_ops_molecule_port | string }}"
+          - --state
+          - "{{ vault_ops_molecule_root }}/state.json"
+          - --request-log
+          - "{{ vault_ops_molecule_root }}/requests.log"
+          - --pid-file
+          - "{{ vault_ops_molecule_root }}/server.pid"
+      async: 3600
+      poll: 0
+      changed_when: true
+      when: vault_ops_molecule_api_probe.status | default(0) not in [200, 503]
+
+    - name: Wait for fake Vault ops API
+      ansible.builtin.uri:
+        url: "{{ vault_ops_molecule_api_url }}/v1/sys/health"
+        status_code: [200, 503]
+      register: vault_ops_molecule_api_ready
+      until: vault_ops_molecule_api_ready.status in [200, 503]
+      retries: 20
+      delay: 1
+      changed_when: false

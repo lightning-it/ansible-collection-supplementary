@@ -1,0 +1,64 @@
+---
+- name: Verify AAP local-execution trust and archive contracts
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_local_execution_molecule_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-local-execution
+    aap_local_execution_molecule_digest_two: >-
+      sha256:2222222222222222222222222222222222222222222222222222222222222222
+    aap_local_execution_molecule_runtime_image: >-
+      registry.example.invalid/platform/ee-aap@{{ aap_local_execution_molecule_digest_two }}
+  tasks:
+    - name: Read AAP local-execution fake Podman log
+      ansible.builtin.slurp:
+        src: "{{ aap_local_execution_molecule_root }}/podman.log"
+      register: aap_local_execution_molecule_log_raw
+
+    - name: Read AAP local-execution archive identity
+      ansible.builtin.slurp:
+        src: "{{ aap_local_execution_molecule_root }}/fixed-ee.tar.image-ref"
+      register: aap_local_execution_molecule_archive_identity_raw
+
+    - name: Inspect AAP local-execution archive
+      ansible.builtin.stat:
+        path: "{{ aap_local_execution_molecule_root }}/fixed-ee.tar"
+        follow: false
+      register: aap_local_execution_molecule_archive
+
+    - name: Require safe digest rotation and backend environment isolation
+      vars:
+        aap_local_execution_molecule_log: >-
+          {{ aap_local_execution_molecule_log_raw.content | b64decode }}
+        aap_local_execution_molecule_archive_identity: >-
+          {{ aap_local_execution_molecule_archive_identity_raw.content | b64decode | trim }}
+      ansible.builtin.assert:
+        that:
+          - aap_local_execution_molecule_archive.stat.isreg | default(false)
+          - not (aap_local_execution_molecule_archive.stat.islnk | default(false))
+          - aap_local_execution_molecule_archive.stat.mode == '0640'
+          - >-
+            aap_local_execution_molecule_archive_identity
+            == aap_local_execution_molecule_runtime_image
+          - >-
+            aap_local_execution_molecule_log
+            | regex_findall('argv=save .*')
+            | length == 3
+          - >-
+            aap_local_execution_molecule_log
+            is search('argv=run .*\\-e VAULT_TOKEN .*runbooks/molecule\\.yml')
+          - >-
+            aap_local_execution_molecule_log
+            is search('argv=run .*ANSIBLE_VAULT_PASSWORD_FILE=/runner/secrets/\\.vault-pass\\.txt')
+          - >-
+            aap_local_execution_molecule_log
+            | regex_findall('vault_token_set=true')
+            | length >= 1
+          - >-
+            aap_local_execution_molecule_log
+            | regex_findall('vault_token_set=false')
+            | length >= 1
+          - "'molecule-sensitive-token' not in aap_local_execution_molecule_log"
+        quiet: true
+      no_log: true

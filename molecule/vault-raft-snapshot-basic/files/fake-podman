@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${FAKE_PODMAN_LOG:?FAKE_PODMAN_LOG is required}"
+: "${FAKE_PODMAN_CONTAINER_STATE:?FAKE_PODMAN_CONTAINER_STATE is required}"
+
+{
+  printf 'argv='
+  printf '%q ' "$@"
+  printf '\n'
+} >> "${FAKE_PODMAN_LOG}"
+
+case "${1:-}" in
+  inspect)
+    test -f "${FAKE_PODMAN_CONTAINER_STATE}"
+    printf '{}\n'
+    ;;
+  image)
+    test "${2:-}" = "exists"
+    ;;
+  run)
+    printf '%s\n' "${*: -2:1}" > "${FAKE_PODMAN_CONTAINER_STATE}"
+    printf 'molecule-vault-restore-container\n'
+    ;;
+  restart)
+    test -f "${FAKE_PODMAN_CONTAINER_STATE}"
+    printf '%s\n' "${2:-}"
+    ;;
+  rm)
+    rm -f -- "${FAKE_PODMAN_CONTAINER_STATE}"
+    ;;
+  *)
+    printf 'unsupported fake podman command: %s\n' "${1:-<empty>}" >&2
+    exit 2
+    ;;
+esac

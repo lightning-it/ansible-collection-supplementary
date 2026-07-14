@@ -1,0 +1,497 @@
+---
+- name: Inspect encrypted off-host Raft snapshot escrow
+  ansible.builtin.stat:
+    path: "{{ _vault_raft_snapshot_document_path }}"
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_attributes: false
+    get_mime: false
+  register: _vault_raft_snapshot_restore_ciphertext_stat
+  delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Read only the restore-drill ciphertext signature
+  ansible.builtin.command:
+    argv:
+      - head
+      - -c
+      - "15"
+      - "{{ _vault_raft_snapshot_document_path }}"
+  register: _vault_raft_snapshot_restore_ciphertext_signature
+  delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+  become: false
+  changed_when: false
+  check_mode: false
+  when: _vault_raft_snapshot_restore_ciphertext_stat.stat.exists | default(false)
+  no_log: true
+
+- name: Require safe Ansible Vault ciphertext before restore drill
+  ansible.builtin.assert:
+    that:
+      - _vault_raft_snapshot_restore_ciphertext_stat.stat.exists | default(false)
+      - _vault_raft_snapshot_restore_ciphertext_stat.stat.isreg | default(false)
+      - not (_vault_raft_snapshot_restore_ciphertext_stat.stat.islnk | default(false))
+      - _vault_raft_snapshot_restore_ciphertext_stat.stat.nlink | int == 1
+      - >-
+        _vault_raft_snapshot_restore_ciphertext_stat.stat.uid | int
+        in [0, _vault_raft_snapshot_controller_uid | int]
+      - _vault_raft_snapshot_restore_ciphertext_stat.stat.mode in ['0400', '0600']
+      - _vault_raft_snapshot_restore_ciphertext_stat.stat.size | int > 0
+      - >-
+        _vault_raft_snapshot_restore_ciphertext_stat.stat.size | int
+        <= vault_raft_snapshot_max_raw_bytes | int * 4
+      - >-
+        _vault_raft_snapshot_restore_ciphertext_stat.stat.checksum
+        is match('^[0-9a-f]{64}$')
+      - >-
+        _vault_raft_snapshot_restore_ciphertext_stat.stat.checksum
+        == vault_raft_snapshot_expected_ciphertext_sha256
+      - >-
+        _vault_raft_snapshot_restore_ciphertext_signature.stdout
+        == '$ANSIBLE_VAULT;'
+    fail_msg: >-
+      Restore drill requires safe owner-only Ansible Vault ciphertext.
+    quiet: true
+  no_log: true
+
+- name: Load encrypted off-host Raft snapshot escrow in memory
+  ansible.builtin.include_vars:
+    file: "{{ _vault_raft_snapshot_document_path }}"
+    name: _vault_raft_snapshot_document
+  delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+  become: false
+  no_log: true
+
+- name: Validate the exact encrypted Raft snapshot document
+  ansible.builtin.assert:
+    that:
+      - _vault_raft_snapshot_document is mapping
+      - >-
+        _vault_raft_snapshot_document.keys() | list | sort
+        == [
+          'cluster_id',
+          'image',
+          'schema_version',
+          'snapshot_b64',
+          'snapshot_sha256',
+          'snapshot_size_bytes',
+          'storage_backend',
+          'subject',
+          'verification_records'
+        ]
+      - >-
+        _vault_raft_snapshot_document.schema_version is integer
+        and _vault_raft_snapshot_document.schema_version
+            == vault_raft_snapshot_document_schema_version
+      - _vault_raft_snapshot_document.subject == vault_raft_snapshot_document_subject
+      - _vault_raft_snapshot_document.storage_backend == 'raft'
+      - _vault_raft_snapshot_document.image == vault_raft_snapshot_image
+      - _vault_raft_snapshot_document.cluster_id | length > 0
+      - _vault_raft_snapshot_document.snapshot_sha256 is match('^[0-9a-f]{64}$')
+      - _vault_raft_snapshot_document.snapshot_size_bytes is integer
+      - _vault_raft_snapshot_document.snapshot_size_bytes > 0
+      - >-
+        _vault_raft_snapshot_document.snapshot_size_bytes | int
+        <= vault_raft_snapshot_max_raw_bytes | int
+      - _vault_raft_snapshot_document.snapshot_b64 | length > 0
+      - >-
+        _vault_raft_snapshot_document.verification_records | length
+        == vault_raft_snapshot_verification_kv_paths | length
+    fail_msg: "Encrypted Raft snapshot escrow has an invalid exact schema or identity."
+    quiet: true
+  no_log: true
+
+- name: Inspect isolated Vault restore-drill container
+  ansible.builtin.command:
+    argv:
+      - podman
+      - inspect
+      - "{{ vault_raft_snapshot_restore_container_name }}"
+  register: _vault_raft_snapshot_restore_container_preflight
+  changed_when: false
+  failed_when: false
+
+- name: Inspect isolated Vault restore-drill work root
+  ansible.builtin.stat:
+    path: "{{ vault_raft_snapshot_restore_work_root }}"
+    follow: false
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  register: _vault_raft_snapshot_restore_root_preflight
+  changed_when: false
+
+- name: Require a clean isolated Vault restore-drill target
+  ansible.builtin.assert:
+    that:
+      - _vault_raft_snapshot_restore_container_preflight.rc != 0
+      - not (_vault_raft_snapshot_restore_root_preflight.stat.exists | default(false))
+      - vault_raft_snapshot_restore_work_root != '/srv/vault'
+      - >-
+        not vault_raft_snapshot_restore_work_root.startswith(
+          vault_raft_snapshot_production_cert_dir ~ '/'
+        )
+    fail_msg: >-
+      The isolated restore-drill container or work root already exists. Refusing
+      to replace it or touch any production Vault path.
+    quiet: true
+
+- name: Create isolated Vault restore-drill directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ vault_raft_snapshot_restore_work_root }}"
+      owner: root
+      group: root
+      mode: "0700"
+    - path: "{{ vault_raft_snapshot_restore_work_root }}/data"
+      owner: "{{ vault_raft_snapshot_restore_run_as_user }}"
+      group: "{{ vault_raft_snapshot_restore_run_as_group }}"
+      mode: "0700"
+    - path: "{{ vault_raft_snapshot_restore_work_root }}/config"
+      owner: "{{ vault_raft_snapshot_restore_run_as_user }}"
+      group: "{{ vault_raft_snapshot_restore_run_as_group }}"
+      mode: "0700"
+  no_log: true
+
+- name: Run the isolated Vault Raft restore drill
+  no_log: true
+  block:
+    - name: Decode raw Raft snapshot only inside protected target runtime storage
+      ansible.builtin.command:
+        argv:
+          - /bin/bash
+          - -c
+          - >-
+            umask 077;
+            base64 --decode > "$1"
+          - lit-vault-raft-restore
+          - "{{ vault_raft_snapshot_restore_work_root }}/vault.snap"
+        stdin: "{{ _vault_raft_snapshot_document.snapshot_b64 }}"
+        stdin_add_newline: false
+      changed_when: true
+
+    - name: Verify decoded isolated Raft snapshot identity
+      ansible.builtin.stat:
+        path: "{{ vault_raft_snapshot_restore_work_root }}/vault.snap"
+        follow: false
+        get_checksum: true
+        checksum_algorithm: sha256
+        get_attributes: false
+        get_mime: false
+      register: _vault_raft_snapshot_restore_raw_stat
+      changed_when: false
+
+    - name: Require exact decoded Raft snapshot identity
+      ansible.builtin.assert:
+        that:
+          - _vault_raft_snapshot_restore_raw_stat.stat.isreg | default(false)
+          - not (_vault_raft_snapshot_restore_raw_stat.stat.islnk | default(false))
+          - _vault_raft_snapshot_restore_raw_stat.stat.mode == '0600'
+          - >-
+            _vault_raft_snapshot_restore_raw_stat.stat.size | int
+            == _vault_raft_snapshot_document.snapshot_size_bytes | int
+          - >-
+            _vault_raft_snapshot_restore_raw_stat.stat.checksum
+            == _vault_raft_snapshot_document.snapshot_sha256
+        fail_msg: "Decoded isolated Raft snapshot does not match encrypted escrow metadata."
+        quiet: true
+
+    - name: Render isolated Vault restore-drill configuration
+      ansible.builtin.copy:
+        dest: "{{ vault_raft_snapshot_restore_work_root }}/config/vault.hcl"
+        owner: "{{ vault_raft_snapshot_restore_run_as_user }}"
+        group: "{{ vault_raft_snapshot_restore_run_as_group }}"
+        mode: "0600"
+        content: |
+          storage "raft" {
+            path = "/vault/data"
+            node_id = "{{ vault_raft_snapshot_restore_node_id }}"
+          }
+          listener "tcp" {
+            address = "0.0.0.0:8200"
+            cluster_address = "0.0.0.0:8201"
+            tls_cert_file = "/vault/certs/vault.crt"
+            tls_key_file = "/vault/certs/vault.key"
+          }
+          ui = false
+          disable_mlock = false
+          api_addr = "{{ _vault_raft_snapshot_restore_api_url }}"
+          cluster_addr = "{{ _vault_raft_snapshot_restore_cluster_url }}"
+
+    - name: Require the exact production Vault image locally
+      ansible.builtin.command:
+        argv:
+          - podman
+          - image
+          - exists
+          - "{{ vault_raft_snapshot_image }}"
+      changed_when: false
+
+    - name: Start isolated empty Vault restore-drill container
+      ansible.builtin.command:
+        argv:
+          - podman
+          - run
+          - --detach
+          - --pull=never
+          - --name
+          - "{{ vault_raft_snapshot_restore_container_name }}"
+          - --publish
+          - >-
+            {{ vault_raft_snapshot_restore_bind_address }}:{{
+              vault_raft_snapshot_restore_api_port
+            }}:8200
+          - --publish
+          - >-
+            {{ vault_raft_snapshot_restore_bind_address }}:{{
+              vault_raft_snapshot_restore_cluster_port
+            }}:8201
+          - --volume
+          - "{{ vault_raft_snapshot_restore_work_root }}/data:/vault/data"
+          - --volume
+          - "{{ vault_raft_snapshot_restore_work_root }}/config:/vault/config:ro"
+          - --volume
+          - "{{ vault_raft_snapshot_production_cert_dir }}:/vault/certs:ro"
+          - --user
+          - >-
+            {{ vault_raft_snapshot_restore_run_as_user }}:{{
+              vault_raft_snapshot_restore_run_as_group
+            }}
+          - --cap-add
+          - IPC_LOCK
+          - --security-opt
+          - no-new-privileges
+          - --read-only
+          - --tmpfs
+          - /tmp:rw,noexec,nosuid,nodev,size=64m
+          - --env
+          - SKIP_SETCAP=1
+          - --env
+          - "VAULT_ADDR={{ _vault_raft_snapshot_restore_api_url }}"
+          - --env
+          - VAULT_CACERT=/vault/certs/ca.crt
+          - "{{ vault_raft_snapshot_image }}"
+          - server
+      changed_when: true
+
+    - name: Wait for isolated uninitialized Vault API
+      ansible.builtin.uri:
+        url: "{{ _vault_raft_snapshot_restore_api_url }}/v1/sys/init"
+        method: GET
+        validate_certs: true
+        use_proxy: false
+        ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
+        status_code: 200
+        timeout: "{{ vault_raft_snapshot_timeout }}"
+      register: _vault_raft_snapshot_restore_init_probe
+      until:
+        - _vault_raft_snapshot_restore_init_probe.status == 200
+        - not (_vault_raft_snapshot_restore_init_probe.json.initialized | default(true) | bool)
+      retries: 20
+      delay: 1
+      changed_when: false
+
+    - name: Initialize ephemeral Vault restore target
+      ansible.builtin.uri:
+        url: "{{ _vault_raft_snapshot_restore_api_url }}/v1/sys/init"
+        method: POST
+        body_format: json
+        body:
+          secret_shares: 1
+          secret_threshold: 1
+        validate_certs: true
+        use_proxy: false
+        ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
+        status_code: 200
+        timeout: "{{ vault_raft_snapshot_timeout }}"
+      register: _vault_raft_snapshot_restore_ephemeral_init
+
+    - name: Unseal ephemeral Vault restore target
+      ansible.builtin.uri:
+        url: "{{ _vault_raft_snapshot_restore_api_url }}/v1/sys/unseal"
+        method: POST
+        body_format: json
+        body:
+          key: "{{ _vault_raft_snapshot_restore_ephemeral_init.json.keys_base64[0] }}"
+        validate_certs: true
+        use_proxy: false
+        ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
+        status_code: 200
+        timeout: "{{ vault_raft_snapshot_timeout }}"
+
+    - name: Restore production Raft snapshot into isolated Vault
+      ansible.builtin.uri:
+        url: >-
+          {{ _vault_raft_snapshot_restore_api_url }}/v1/sys/storage/raft/snapshot-force
+        method: POST
+        headers:
+          X-Vault-Token: "{{ _vault_raft_snapshot_restore_ephemeral_init.json.root_token }}"
+          Content-Type: application/octet-stream
+        src: "{{ vault_raft_snapshot_restore_work_root }}/vault.snap"
+        remote_src: true
+        validate_certs: true
+        use_proxy: false
+        ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
+        status_code: [200, 204]
+        timeout: "{{ vault_raft_snapshot_timeout }}"
+
+    - name: Restart isolated Vault after Raft restore
+      ansible.builtin.command:
+        argv:
+          - podman
+          - restart
+          - "{{ vault_raft_snapshot_restore_container_name }}"
+      changed_when: true
+
+    - name: Wait for restored sealed Vault lifecycle
+      ansible.builtin.uri:
+        url: "{{ _vault_raft_snapshot_restore_api_url }}/v1/sys/seal-status"
+        method: GET
+        validate_certs: true
+        use_proxy: false
+        ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
+        status_code: 200
+        timeout: "{{ vault_raft_snapshot_timeout }}"
+      register: _vault_raft_snapshot_restore_seal_status
+      until:
+        - _vault_raft_snapshot_restore_seal_status.status == 200
+        - _vault_raft_snapshot_restore_seal_status.json.initialized | default(false) | bool
+        - _vault_raft_snapshot_restore_seal_status.json.sealed | default(false) | bool
+      retries: 20
+      delay: 1
+      changed_when: false
+
+    - name: Require restored production Shamir threshold
+      ansible.builtin.assert:
+        that:
+          - >-
+            _vault_raft_snapshot_restore_seal_status.json.t | int
+            == vault_raft_snapshot_restore_key_threshold | int
+          - _vault_raft_snapshot_restore_seal_status.json.progress | int == 0
+        fail_msg: "Restored Vault does not report the production Shamir threshold at zero progress."
+        quiet: true
+
+    - name: Unseal isolated restored Vault with exact threshold shares
+      ansible.builtin.uri:
+        url: "{{ _vault_raft_snapshot_restore_api_url }}/v1/sys/unseal"
+        method: POST
+        body_format: json
+        body:
+          key: "{{ item }}"
+        validate_certs: true
+        use_proxy: false
+        ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
+        status_code: 200
+        timeout: "{{ vault_raft_snapshot_timeout }}"
+      loop: >-
+        {{
+          vault_raft_snapshot_restore_unseal_keys[
+            0:vault_raft_snapshot_restore_key_threshold | int
+          ]
+        }}
+      loop_control:
+        label: "production-unseal-share"
+
+    - name: Require restored production cluster identity and ready lifecycle
+      ansible.builtin.uri:
+        url: "{{ _vault_raft_snapshot_restore_api_url }}/v1/sys/health"
+        method: GET
+        validate_certs: true
+        use_proxy: false
+        ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
+        status_code: 200
+        timeout: "{{ vault_raft_snapshot_timeout }}"
+      register: _vault_raft_snapshot_restore_health
+      changed_when: false
+
+    - name: Require exact restored Vault cluster identity
+      ansible.builtin.assert:
+        that:
+          - not (_vault_raft_snapshot_restore_health.json.sealed | default(true) | bool)
+          - >-
+            _vault_raft_snapshot_restore_health.json.cluster_id
+            == _vault_raft_snapshot_document.cluster_id
+        fail_msg: "Restored isolated Vault is not ready with the production cluster identity."
+        quiet: true
+
+    - name: Authenticate scoped AppRole against isolated restored Vault
+      ansible.builtin.uri:
+        url: >-
+          {{ _vault_raft_snapshot_restore_api_url }}/v1/auth/{{
+            vault_raft_snapshot_auth_mount_point
+          }}/login
+        method: POST
+        body_format: json
+        body:
+          role_id: "{{ vault_raft_snapshot_role_id }}"
+          secret_id: "{{ vault_raft_snapshot_secret_id }}"
+        validate_certs: true
+        use_proxy: false
+        ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
+        status_code: 200
+        timeout: "{{ vault_raft_snapshot_timeout }}"
+      register: _vault_raft_snapshot_restore_login
+      changed_when: false
+
+    - name: Read restored KV verification documents
+      ansible.builtin.uri:
+        url: >-
+          {{ _vault_raft_snapshot_restore_api_url }}/v1/{{
+          item.mount_point }}/data/{{ item.path }}
+        method: GET
+        headers:
+          X-Vault-Token: "{{ _vault_raft_snapshot_restore_login.json.auth.client_token }}"
+        validate_certs: true
+        use_proxy: false
+        ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
+        status_code: 200
+        timeout: "{{ vault_raft_snapshot_timeout }}"
+      loop: "{{ _vault_raft_snapshot_document.verification_records }}"
+      register: _vault_raft_snapshot_restore_kv_documents
+      changed_when: false
+
+    - name: Require exact restored KV document identities
+      ansible.builtin.assert:
+        that:
+          - >-
+            item.json.data.data
+            | to_json(sort_keys=true, separators=[',', ':'])
+            | hash('sha256')
+            == item.item.document_sha256
+        fail_msg: "A restored Vault KV document differs from its pre-snapshot identity."
+        quiet: true
+      loop: "{{ _vault_raft_snapshot_restore_kv_documents.results }}"
+
+    - name: Record successful isolated Raft restore proof
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_restore_verified: true
+        vault_raft_snapshot_restore_sha256: >-
+          {{ _vault_raft_snapshot_document.snapshot_sha256 }}
+      changed_when: false
+
+  always:
+    - name: Remove isolated Vault restore-drill container
+      ansible.builtin.command:
+        argv:
+          - podman
+          - rm
+          - --force
+          - "{{ vault_raft_snapshot_restore_container_name }}"
+      register: _vault_raft_snapshot_restore_container_cleanup
+      changed_when: _vault_raft_snapshot_restore_container_cleanup.rc == 0
+      failed_when: false
+      no_log: true
+
+    - name: Remove every isolated raw restore-drill artifact
+      ansible.builtin.file:
+        path: "{{ vault_raft_snapshot_restore_work_root }}"
+        state: absent
+      no_log: true

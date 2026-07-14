@@ -1,0 +1,22 @@
+---
+- name: Inspect existing local bootstrap certificate
+  community.crypto.x509_certificate_info:
+    path: "{{ vault_deploy_cert_dir }}/vault.crt"
+  register: vault_deploy_bootstrap_cert_info
+  changed_when: false
+  tags:
+    - init
+
+- name: Reconcile pinned self-signed bootstrap trust certificate
+  ansible.builtin.copy:
+    src: "{{ vault_deploy_cert_dir }}/vault.crt"
+    dest: "{{ vault_deploy_target_ca_cert_path }}"
+    remote_src: true
+    owner: "{{ vault_deploy_run_as_user | default(100) }}"
+    group: "{{ vault_deploy_run_as_group | default(1000) }}"
+    mode: "0644"
+  when:
+    - vault_deploy_bootstrap_cert_info.subject == vault_deploy_bootstrap_cert_info.issuer
+    - vault_deploy_target_ca_cert_path != vault_deploy_cert_dir ~ '/vault.crt'
+  tags:
+    - init

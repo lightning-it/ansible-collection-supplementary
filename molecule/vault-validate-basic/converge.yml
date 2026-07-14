@@ -1,24 +1,84 @@
 ---
-- name: Converge vault validate syntax coverage
+- name: Prepare Vault validate runtime coverage
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
-    vault_validate_molecule_execute_role: false
-    vault_validate_molecule_marker_path: >-
-      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-validate-coverage-mode
+    vault_validate_molecule_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-validate-runtime
+    vault_validate_molecule_port: 18210
+    vault_validate_molecule_api_url: "http://127.0.0.1:{{ vault_validate_molecule_port }}"
   tasks:
-    - name: Import lit.supplementary.vault_validate for syntax coverage
-      ansible.builtin.import_role:
-        name: lit.supplementary.vault_validate
-      when: vault_validate_molecule_execute_role | bool
+    - name: Create Vault validate test directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ vault_validate_molecule_root }}"
+          mode: "0750"
+        - path: "{{ vault_validate_molecule_root }}/bin"
+          mode: "0750"
+        - path: "{{ vault_validate_molecule_root }}/data"
+          mode: "0700"
 
-    - name: Record lit.supplementary.vault_validate Molecule coverage mode
-      ansible.builtin.set_fact:
-        vault_validate_molecule_coverage_mode: syntax_stub
-
-    - name: Persist lit.supplementary.vault_validate Molecule coverage mode
+    - name: Install fake Vault API for validation coverage
       ansible.builtin.copy:
-        dest: "{{ vault_validate_molecule_marker_path }}"
-        content: "syntax_stub\n"
-        mode: "0644"
+        src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/resources/fake_vault_api.py"
+        dest: "{{ vault_validate_molecule_root }}/fake_vault_api.py"
+        mode: "0750"
+
+    - name: Install fake Podman for validation coverage
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/resources/fake-podman"
+        dest: "{{ vault_validate_molecule_root }}/bin/podman"
+        mode: "0750"
+
+    - name: Initialize sealed fake Vault lifecycle state
+      ansible.builtin.copy:
+        dest: "{{ vault_validate_molecule_root }}/state.json"
+        content: >-
+          {"initialized": true, "sealed": true, "threshold": 2, "progress": 0}
+        mode: "0600"
+
+    - name: Initialize fake Podman runtime state
+      ansible.builtin.copy:
+        dest: "{{ vault_validate_molecule_root }}/runtime-state"
+        content: "running\n"
+        mode: "0600"
+
+    - name: Probe fake Vault validation API
+      ansible.builtin.uri:
+        url: "{{ vault_validate_molecule_api_url }}/v1/sys/health"
+        status_code: [200, 503]
+      register: vault_validate_molecule_api_probe
+      changed_when: false
+      failed_when: false
+
+    - name: Start fake Vault validation API
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ vault_validate_molecule_root }}/fake_vault_api.py"
+          - --port
+          - "{{ vault_validate_molecule_port | string }}"
+          - --state
+          - "{{ vault_validate_molecule_root }}/state.json"
+          - --request-log
+          - "{{ vault_validate_molecule_root }}/requests.log"
+          - --pid-file
+          - "{{ vault_validate_molecule_root }}/server.pid"
+      async: 3600
+      poll: 0
+      changed_when: true
+      when: vault_validate_molecule_api_probe.status | default(0) not in [200, 503]
+
+    - name: Wait for fake Vault validation API
+      ansible.builtin.uri:
+        url: "{{ vault_validate_molecule_api_url }}/v1/sys/health"
+        status_code: [200, 503]
+      register: vault_validate_molecule_api_ready
+      until: vault_validate_molecule_api_ready.status in [200, 503]
+      retries: 20
+      delay: 1
+      changed_when: false

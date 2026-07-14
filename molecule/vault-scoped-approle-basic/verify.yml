@@ -1,0 +1,65 @@
+---
+- name: Verify scoped Vault AppRole lifecycle
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vault_scoped_approle_molecule_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-scoped-approle
+  tasks:
+    - name: Inspect scoped AppRole encrypted document
+      ansible.builtin.stat:
+        path: "{{ vault_scoped_approle_molecule_root }}/controller-approle.vault.yml"
+        get_checksum: true
+        checksum_algorithm: sha256
+      register: vault_scoped_approle_molecule_document
+
+    - name: Read scoped AppRole fake Vault state
+      ansible.builtin.slurp:
+        src: "{{ vault_scoped_approle_molecule_root }}/state.json"
+      register: vault_scoped_approle_molecule_state_raw
+      no_log: true
+
+    - name: Read scoped AppRole ciphertext signature
+      ansible.builtin.command:
+        argv:
+          - head
+          - -c
+          - "15"
+          - "{{ vault_scoped_approle_molecule_root }}/controller-approle.vault.yml"
+      register: vault_scoped_approle_molecule_signature
+      changed_when: false
+      no_log: true
+
+    - name: Require immutable scoped AppRole and revoked root token
+      vars:
+        vault_scoped_approle_molecule_state: >-
+          {{ vault_scoped_approle_molecule_state_raw.content | b64decode | from_json }}
+      ansible.builtin.assert:
+        that:
+          - vault_scoped_approle_molecule_document.stat.isreg
+          - vault_scoped_approle_molecule_document.stat.mode == '0600'
+          - vault_scoped_approle_molecule_document.stat.checksum is match('^[0-9a-f]{64}$')
+          - vault_scoped_approle_molecule_signature.stdout == '$ANSIBLE_VAULT;'
+          - not (vault_scoped_approle_molecule_state.root_token_active | bool)
+          - "'stage-2c/' in vault_scoped_approle_molecule_state.mounts"
+          - "'approle/' in vault_scoped_approle_molecule_state.auth_methods"
+          - "'molecule-automation' in vault_scoped_approle_molecule_state.policies"
+          - "'molecule-automation' in vault_scoped_approle_molecule_state.roles"
+        quiet: true
+      no_log: true
+
+    - name: Read scoped AppRole fake Vault API process ID
+      ansible.builtin.slurp:
+        src: "{{ vault_scoped_approle_molecule_root }}/server.pid"
+      register: vault_scoped_approle_molecule_server_pid
+      failed_when: false
+
+    - name: Stop scoped AppRole fake Vault API
+      ansible.builtin.command:
+        argv:
+          - kill
+          - "{{ vault_scoped_approle_molecule_server_pid.content | b64decode | trim }}"
+      changed_when: true
+      failed_when: false
+      when: vault_scoped_approle_molecule_server_pid.content | default('') | length > 0

@@ -31,12 +31,15 @@
         url: "{{ vault_deploy_health_url }}"
         method: GET
         validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+        ca_path: "{{ vault_deploy_api_ca_cert_path_effective | default(omit, true) }}"
       register: vault_deploy_health
       until: vault_deploy_health.status in [200, 429, 472, 473, 501, 503]
       retries: 30
       delay: 5
       changed_when: false
       failed_when: vault_deploy_health is failed and vault_deploy_health.status not in [200, 429, 472, 473, 501, 503]
+      delegate_to: "{{ vault_deploy_api_delegate_to }}"
+      become: false
       when: not vault_deploy_manage_systemd | bool
       tags:
         - deployment

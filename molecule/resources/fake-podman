@@ -1,0 +1,55 @@
+#!/usr/bin/env sh
+set -eu
+
+if [ -n "${FAKE_PODMAN_LOG:-}" ]; then
+  printf '%s\n' "$*" >> "${FAKE_PODMAN_LOG}"
+fi
+
+set_vault_sealed() {
+  if [ -n "${FAKE_VAULT_STATE:-}" ] && [ -f "${FAKE_VAULT_STATE}" ]; then
+    python3 - "${FAKE_VAULT_STATE}" <<'PY'
+import json
+import pathlib
+import sys
+
+state_path = pathlib.Path(sys.argv[1])
+state = json.loads(state_path.read_text(encoding="utf-8"))
+state["sealed"] = True
+state["progress"] = 0
+state_path.write_text(json.dumps(state), encoding="utf-8")
+PY
+  fi
+}
+
+if [ "${1:-}" = "inspect" ]; then
+  printf '%s\n' 'true'
+  exit 0
+fi
+
+if [ "${1:-}" = "pod" ] && [ "${2:-}" = "inspect" ]; then
+  if [ -f "${FAKE_PODMAN_RUNTIME_STATE:-}" ]; then
+    cat "${FAKE_PODMAN_RUNTIME_STATE}"
+  else
+    printf '%s\n' 'running'
+  fi
+  exit 0
+fi
+
+if [ "${1:-}" = "pod" ] && [ "${2:-}" = "stop" ]; then
+  printf '%s\n' 'stopped' > "${FAKE_PODMAN_RUNTIME_STATE}"
+  exit 0
+fi
+
+if [ "${1:-}" = "pod" ] && { [ "${2:-}" = "start" ] || [ "${2:-}" = "restart" ]; }; then
+  printf '%s\n' 'running' > "${FAKE_PODMAN_RUNTIME_STATE}"
+  set_vault_sealed
+  exit 0
+fi
+
+if [ "${1:-}" = "kube" ] && [ "${2:-}" = "play" ]; then
+  printf '%s\n' 'running' > "${FAKE_PODMAN_RUNTIME_STATE}"
+  set_vault_sealed
+  exit 0
+fi
+
+exit 0

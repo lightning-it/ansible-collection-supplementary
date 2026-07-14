@@ -5,3 +5,7 @@ vault_foundational_init_file_path_effective: >-
     vault_foundational_init_file_path
     | default(vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault'), true)
   }}
+vault_foundational_ansible_vault_password_file: >-
+  {{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') | default('', true) }}
+vault_foundational_ansible_vault_password: >-
+  {{ vault_deploy_ansible_vault_pw | default(vault_ansible_vault_pw | default('', true), true) }}

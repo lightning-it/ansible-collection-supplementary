@@ -1,4 +1,7 @@
 ---
+- name: Validate AAP local-execution inputs
+  ansible.builtin.import_tasks: assert.yml
+
 - name: Run AAP local-execution controller tasks
   ansible.builtin.include_tasks: controller.yml
   when: inventory_hostname == 'localhost'

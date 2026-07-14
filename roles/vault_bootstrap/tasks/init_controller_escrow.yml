@@ -1,0 +1,146 @@
+---
+- name: Require strict TLS verification before any Vault API request
+  ansible.builtin.assert:
+    that:
+      - vault_bootstrap_validate_certs is boolean
+      - vault_bootstrap_validate_certs | bool
+      - vault_bootstrap_ca_cert_path is string
+      - vault_bootstrap_ca_cert_path | length > 0
+      - vault_bootstrap_ca_cert_path.startswith('/')
+      - (vault_bootstrap_ca_cert_path | normpath) == vault_bootstrap_ca_cert_path
+      - vault_bootstrap_ca_cert_path_effective == vault_bootstrap_ca_cert_path
+    fail_msg: >-
+      Strict controller escrow requires certificate validation and an exact normalized
+      absolute CA path before contacting the Vault API.
+    quiet: true
+
+- name: Wait until Vault API is reachable via HTTPS for strict bootstrap
+  ansible.builtin.uri:
+    url: "{{ vault_bootstrap_health_url }}"
+    method: GET
+    validate_certs: "{{ vault_bootstrap_validate_certs }}"
+    ca_path: "{{ vault_bootstrap_ca_cert_path_effective | default(omit, true) }}"
+  register: vault_bootstrap_health
+  until: vault_bootstrap_health.status in [200, 429, 472, 473, 501, 503]
+  retries: 30
+  delay: 5
+  changed_when: false
+  failed_when: >-
+    vault_bootstrap_health is failed
+    and vault_bootstrap_health.status not in [200, 429, 472, 473, 501, 503]
+  delegate_to: "{{ vault_bootstrap_api_delegate_to }}"
+  become: false
+
+- name: Check Vault initialization status for strict bootstrap
+  ansible.builtin.uri:
+    url: "{{ vault_bootstrap_api_url }}/v1/sys/init"
+    method: GET
+    validate_certs: "{{ vault_bootstrap_validate_certs }}"
+    ca_path: "{{ vault_bootstrap_ca_cert_path_effective | default(omit, true) }}"
+  register: vault_bootstrap_init_status
+  changed_when: false
+  failed_when: vault_bootstrap_init_status.status not in [200]
+  delegate_to: "{{ vault_bootstrap_api_delegate_to }}"
+  become: false
+
+- name: Set strict Vault initialization facts
+  ansible.builtin.set_fact:
+    vault_bootstrap_initialized: "{{ vault_bootstrap_init_status.json.initialized | default(false) }}"
+    vault_bootstrap_init_effective: "{{ vault_bootstrap_init_requested | bool }}"
+  changed_when: false
+
+- name: Apply strict controller escrow preflight and state gates
+  ansible.builtin.include_tasks: controller_escrow_preflight.yml
+
+- name: Require explicit authorization for strict Vault initialization
+  ansible.builtin.assert:
+    that:
+      - not (vault_bootstrap_auto_init | bool)
+      - vault_bootstrap_initialized | bool or vault_bootstrap_init_requested | bool
+    fail_msg: >-
+      Strict controller escrow disables automatic initialization. Set vault_bootstrap_auto_init=false
+      and explicitly set vault_bootstrap_init_requested=true for an uninitialized Vault.
+    quiet: true
+
+- name: Validate real controller escrow encryption before possible initialization
+  ansible.builtin.include_tasks: controller_escrow_probe.yml
+  when:
+    - not (vault_bootstrap_initialized | bool)
+    - vault_bootstrap_init_effective | bool
+
+- name: Fail when strict bootstrap initialization is disabled
+  ansible.builtin.fail:
+    msg: "Vault is not initialized; explicitly enable initialization before strict bootstrap."
+  when:
+    - not (vault_bootstrap_initialized | bool)
+    - not (vault_bootstrap_init_effective | bool)
+
+- name: Load an existing authoritative controller init escrow
+  ansible.builtin.include_tasks: controller_escrow_load.yml
+  when: vault_bootstrap_initialized | bool
+
+- name: Initialize Vault for strict controller escrow
+  ansible.builtin.command:
+    argv:
+      - podman
+      - exec
+      - "{{ vault_bootstrap_container_name }}"
+      - env
+      - "VAULT_ADDR={{ vault_bootstrap_cli_api_url }}"
+      - "VAULT_CACERT={{ vault_bootstrap_cli_ca_cert_path }}"
+      - vault
+      - operator
+      - init
+      - -format=json
+      - -key-shares
+      - "{{ vault_bootstrap_key_shares | string }}"
+      - -key-threshold
+      - "{{ vault_bootstrap_key_threshold | string }}"
+  register: vault_bootstrap_init_result
+  changed_when: true
+  no_log: true
+  when:
+    - not (vault_bootstrap_initialized | bool)
+    - vault_bootstrap_init_effective | bool
+
+- name: Parse newly generated strict Vault init payload
+  ansible.builtin.set_fact:
+    vault_bootstrap_new_init_payload: "{{ vault_bootstrap_init_result.stdout | from_json }}"
+    vault_bootstrap_did_init: true
+  changed_when: false
+  no_log: true
+  when:
+    - vault_bootstrap_init_result is defined
+    - vault_bootstrap_init_result.stdout | default('') | length > 0
+
+- name: Normalize newly generated strict Vault init payload
+  ansible.builtin.include_tasks: normalize_init_payload.yml
+  vars:
+    vault_bootstrap_init_payload_source: "{{ vault_bootstrap_new_init_payload }}"
+  when: vault_bootstrap_did_init | default(false) | bool
+  no_log: true
+
+- name: Build the canonical newly generated controller init document
+  ansible.builtin.set_fact:
+    vault_bootstrap_controller_init_document:
+      vault_init: "{{ vault_bootstrap_init_payload }}"
+  changed_when: false
+  no_log: true
+  when: vault_bootstrap_did_init | default(false) | bool
+
+- name: Require complete strict init material before persistence or unseal
+  ansible.builtin.include_tasks: controller_escrow_validate_payload.yml
+  no_log: true
+
+- name: Persist or validate the immutable authoritative controller init escrow
+  lit.foundational.ansible_vault_document:
+    path: "{{ vault_bootstrap_controller_init_file_path }}"
+    document: "{{ vault_bootstrap_controller_init_document }}"
+  register: vault_bootstrap_controller_escrow_result
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: Synchronize ciphertext-only target secondary escrow
+  ansible.builtin.include_tasks: controller_escrow_sync.yml
+  no_log: true

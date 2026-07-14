@@ -1,4 +1,59 @@
 ---
 vault_ops_action: "none"
 vault_ops_target_image: ""
-vault_ops_api_delegate_to: localhost
+vault_ops_restart_expected_lifecycle: "ready"
+vault_ops_unseal_after_restart: >-
+  {{ not (vault_deploy_auto_unseal | default(false, true) | bool) }}
+vault_ops_validate_after_restart: true
+vault_ops_validate_lifecycle_retries: 12
+vault_ops_validate_lifecycle_delay: 5
+vault_ops_api_delegate_to: "{{ vault_deploy_api_delegate_to | default('localhost', true) }}"
+vault_ops_api_url: "{{ vault_deploy_api_url | default('', true) }}"
+vault_ops_health_url: "{{ vault_deploy_health_url | default(vault_ops_api_url ~ '/v1/sys/health', true) }}"
+vault_ops_validate_certs: "{{ vault_deploy_vault_validate_certs | default(true, true) }}"
+vault_ops_api_ca_cert_path: "{{ vault_deploy_api_ca_cert_path | default('', true) }}"
+vault_ops_target_ca_cert_path: "{{ vault_deploy_target_ca_cert_path | default('', true) }}"
+vault_ops_api_ca_cert_path_effective: >-
+  {{ vault_ops_api_ca_cert_path if (vault_ops_validate_certs | bool) else '' }}
+vault_ops_target_ca_cert_path_effective: >-
+  {{ vault_ops_target_ca_cert_path if (vault_ops_validate_certs | bool) else '' }}
+vault_ops_container_name: "{{ vault_deploy_container_name | default('vault-vault', true) }}"
+vault_ops_host_data_dir: "{{ vault_deploy_host_data_dir | default('/srv/vault/data', true) }}"
+vault_ops_expected_uid: "{{ vault_deploy_expected_uid | default(100, true) }}"
+vault_ops_expected_gid: "{{ vault_deploy_expected_gid | default(1000, true) }}"
+vault_ops_expected_mode: "{{ vault_deploy_expected_mode | default('0700', true) }}"
+vault_ops_manage_systemd: "{{ vault_deploy_manage_systemd | default(true, true) }}"
+vault_ops_pod_name: "{{ vault_deploy_pod_name | default('vault', true) }}"
+vault_ops_pod_manifest_path: >-
+  {{ vault_deploy_pod_manifest_path | default('/etc/podman/pods/vault.yml', true) }}
+vault_ops_systemd_unit_name: >-
+  {{
+    vault_deploy_systemd_unit_name_effective
+    | default(vault_deploy_systemd_unit_name | default('', true), true)
+  }}
+vault_ops_init_file_path: >-
+  {{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault', true) }}
+vault_ops_ansible_vault_password_file: "{{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') | default('', true) }}"
+vault_ops_ansible_vault_password: >-
+  {{ vault_deploy_ansible_vault_pw | default(vault_ansible_vault_pw | default('', true), true) }}
+vault_ops_init: >-
+  {{
+    vault_bootstrap_init_payload
+    | default(vault_deploy_init | default(vault_init | default({}, true), true), true)
+  }}
+vault_ops_unseal_keys: >-
+  {{
+    (vault_ops_init.unseal_keys_b64 | default([]))
+    if (vault_ops_init.unseal_keys_b64 | default([]) | length > 0)
+    else (vault_ops_init.unseal_keys_hex | default([]))
+  }}
+vault_ops_token: >-
+  {{
+    (vault_bootstrap_token | default('', true) | trim)
+    if (vault_bootstrap_token | default('', true) | trim | length > 0)
+    else (
+      (vault_ops_init.root_token | default('', true) | trim)
+      if (vault_ops_init.root_token | default('', true) | trim | length > 0)
+      else (vault_token | default('', true) | trim)
+    )
+  }}

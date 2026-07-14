@@ -1,0 +1,47 @@
+---
+- name: Initialize Vault runtime state
+  ansible.builtin.set_fact:
+    vault_backup_restore_runtime_was_running: false
+    vault_backup_restore_runtime_stopped: false
+  changed_when: false
+
+- name: Inspect Vault systemd unit state
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - "{{ vault_backup_restore_systemd_unit_name_effective }}"
+  register: vault_backup_restore_systemd_state
+  changed_when: false
+  failed_when: false
+  when:
+    - vault_backup_restore_manage_systemd | bool
+    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
+
+- name: Inspect Vault pod state without systemd
+  ansible.builtin.command:
+    argv:
+      - podman
+      - pod
+      - inspect
+      - "{{ vault_backup_restore_pod_name }}"
+      - --format
+      - "{{ '{{.State}}' }}"
+  register: vault_backup_restore_pod_state
+  changed_when: false
+  failed_when: false
+  when: not vault_backup_restore_manage_systemd | bool
+
+- name: Record whether Vault was running before maintenance
+  ansible.builtin.set_fact:
+    vault_backup_restore_runtime_was_running: >-
+      {{
+        (
+          vault_backup_restore_systemd_state.stdout | default('') | trim == 'active'
+        )
+        if (vault_backup_restore_manage_systemd | bool)
+        else (
+          vault_backup_restore_pod_state.stdout | default('') | trim | lower == 'running'
+        )
+      }}
+  changed_when: false
