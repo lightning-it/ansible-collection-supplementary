@@ -13,6 +13,11 @@
 *.swp
 *.swo
 
+# Python bytecode and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
 # Node tooling for semantic-release
 node_modules/
 npm-debug.log
@@ -20,6 +25,7 @@ npm-debug.log
 # Local collection installs from tests/hooks
 collections/**
 !collections/requirements.yml
+/ansible_collections/
 .ansible/
 
 # Ansible logs

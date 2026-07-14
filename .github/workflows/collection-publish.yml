@@ -30,18 +30,61 @@ permissions:
   contents: write
 
 jobs:
-  publish:
+  dispatch:
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event.pull_request.merged == true &&
-        startsWith(github.event.pull_request.head.ref, 'release/v')
-      )
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      startsWith(github.event.pull_request.head.ref, 'release/v')
+    name: Dispatch collection publish from main
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Derive release publishing settings
+        id: settings
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+
+          create_github_release=false
+          publish_galaxy=false
+          github_release_marker="GitHub release creation: \`true\`"
+          galaxy_publish_marker="Galaxy publishing: \`true\`"
+
+          if [[ "$PR_BODY" == *"$github_release_marker"* ]]; then
+            create_github_release=true
+          fi
+          if [[ "$PR_BODY" == *"$galaxy_publish_marker"* ]]; then
+            publish_galaxy=true
+          fi
+
+          echo "create_github_release=$create_github_release" >> "$GITHUB_OUTPUT"
+          echo "publish_galaxy=$publish_galaxy" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch publish workflow on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CREATE_GITHUB_RELEASE: ${{ steps.settings.outputs.create_github_release }}
+          PUBLISH_GALAXY: ${{ steps.settings.outputs.publish_galaxy }}
+        run: |
+          set -euo pipefail
+
+          gh workflow run collection-publish.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f create_github_release="$CREATE_GITHUB_RELEASE" \
+            -f publish_galaxy="$PUBLISH_GALAXY"
+
+  publish:
+    if: github.event_name == 'workflow_dispatch'
     name: Publish collection release
     runs-on: ubuntu-latest
+    environment: ansible-collections
     env:
       RELEASE_BOT_APP_ID: ${{ secrets.RELEASE_BOT_APP_ID }}
       RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+      GALAXY_API_TOKEN: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
 
     steps:
       - name: Create GitHub App token
@@ -91,25 +134,8 @@ jobs:
       - name: Build and publish
         env:
           GH_TOKEN: ${{ steps.token.outputs.value }}
-          CREATE_GITHUB_RELEASE: >-
-            ${{
-              github.event_name == 'workflow_dispatch'
-              && inputs.create_github_release == 'true'
-              || (
-                github.event_name == 'pull_request'
-                && contains(github.event.pull_request.body, 'GitHub release creation: `true`')
-              )
-            }}
-          PUBLISH_GALAXY: >-
-            ${{
-              github.event_name == 'workflow_dispatch'
-              && inputs.publish_galaxy == 'true'
-              || (
-                github.event_name == 'pull_request'
-                && contains(github.event.pull_request.body, 'Galaxy publishing: `true`')
-              )
-            }}
-          GALAXY_API_TOKEN: ${{ secrets.GALAXY_API_TOKEN }}
+          CREATE_GITHUB_RELEASE: ${{ inputs.create_github_release }}
+          PUBLISH_GALAXY: ${{ inputs.publish_galaxy }}
         run: |
           set -euo pipefail
 

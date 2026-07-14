@@ -52,14 +52,10 @@ else:
 PY
 )}"
 
-ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION:-$(python3 - <<'PY'
-try:
-    import ansiblelint  # type: ignore
-    print(getattr(ansiblelint, "__version__", ""))
-except Exception:
-    print("")
-PY
-)}"
+# The lint process runs inside the managed devtools image, so a host-side
+# ansible-lint installation is not authoritative. CI supplies the image version;
+# local callers leave it empty and the compatibility branch below fails safe.
+ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION:-}"
 
 ANSIBLE_LINT_SKIP_META_RUNTIME=0
 if [ -n "${REQUIRES_ANSIBLE:-}" ]; then
