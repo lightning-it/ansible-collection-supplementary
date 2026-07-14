@@ -1,6 +1,0 @@
----
-minor_changes:
-  - >-
-    Add an opt-in strict ``vault_bootstrap`` controller-authoritative init escrow branch using the immutable
-    ``lit.foundational.ansible_vault_document`` action, in-memory Ansible Vault loading, fail-closed lifecycle state
-    gates, and ciphertext-only drift-protected target synchronization.

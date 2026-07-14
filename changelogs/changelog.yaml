@@ -94,3 +94,82 @@ releases:
       - enterprise-readme-standard.yml
       - shared-assets-lit-governance.yml
     release_date: '2026-07-07'
+  1.39.0:
+    changes:
+      bugfixes:
+        - Correct Vault bootstrap init-payload persistence and handoff so first-run
+          unseal and configuration consume the newly generated keys and root token,
+          while retaining read compatibility with interim payload keys.
+        - Correct the existing-escrow bounded-token policy assertion so resumable
+          validation uses the configured scoped policy name.
+        - Fail closed every Raft snapshot Vault API request against controller proxies,
+          require the literal localhost TLS identity for restore, and retain 127.0.0.1-only
+          port publishing so credentials, snapshots, and destructive recovery calls
+          cannot reach an unintended endpoint.
+        - Generate Vault bootstrap private keys only on the managed host, plumb explicit
+          trusted CA paths through lifecycle HTTPS clients, and remove TLS skip-verify
+          from initialization and unseal operations.
+        - Harden aap_local_execution by refreshing staged automation source without
+          retaining stale artifacts, preserving TLS assets, enforcing verified SSH
+          host keys and CA trust, and using a dedicated Ansible config that avoids
+          unrelated Ansible Vault password files when HashiCorp Vault is selected.
+        - Make execution environment archives digest-specific and identity-checked,
+          publish them atomically, and honor the documented archive refresh controls
+          so digest rotation cannot reuse a stale Machine A payload.
+        - Make strict Vault validation require an initialized and unsealed instance,
+          and guarantee cleanup of protected controller temporary files used for init-document
+          encryption and decryption.
+        - Persist the scoped AppRole schema version as a native integer and immediately
+          prove initial-root-token revocation after the least-privilege AppRole passes
+          its exact policy and capability gates.
+        - Prevent Vault AppRole credentials, Vault tokens, generated PKI private keys,
+          staged SSH private keys, and AAP execution-environment secret context from
+          appearing in Ansible task output.
+        - Resolve the actual Podman kube systemd template instance consistently for
+          Vault deploy, operations, and backup.
+        - Submit only the Vault-reported threshold number of unseal shares in protected
+          HTTPS request bodies instead of exposing shares in process arguments.
+        - aap_deploy - Preserve valid YAML indentation when hardening the prepared
+          EDA readiness condition.
+      minor_changes:
+        - Add an opt-in strict ``vault_bootstrap`` controller-authoritative init escrow
+          branch using the immutable ``lit.foundational.ansible_vault_document`` action,
+          in-memory Ansible Vault loading, fail-closed lifecycle state gates, and
+          ciphertext-only drift-protected target synchronization.
+        - Add inventory-driven Vault listener and advertised address settings, retain
+          file storage as the compatibility default, and support validated single-node
+          integrated Raft storage with explicit cluster address and node ID inputs.
+        - Add optional digest-pinned execution environment references for Machine
+          A pulls and exports, target-side staging, and execution environment runs.
+        - Add vault_raft_snapshot for append-only encrypted off-host Raft snapshot
+          escrow with explicit ciphertext checks and a digest-pinned, loopback-only,
+          isolated restore drill that validates cluster identity and exact KV hashes.
+        - Add vault_scoped_approle for certificate-validated least-privilege batch-token
+          AppRole bootstrap, immutable controller Ansible Vault escrow, exact capability
+          validation, and gated initial-root-token revocation.
+        - Align the collection dependency contract with community.hashi_vault 7.1.0
+          and lit.foundational 1.30.0 or newer so collection installation and Modulix
+          execution-environment resolution use one supported version.
+        - Keep the Vault container VAULT_ADDR aligned with the advertised API address
+          and publish the cluster port only when Raft storage is selected.
+        - release_model - Route collection publishing through a protected main-branch
+          dispatch with the standard Galaxy environment credential, ignore generated
+          local collection and Python cache trees, and use the managed execution environment's
+          ansible-lint version.
+        - vault_deploy can now require an immutable OCI digest, separate the advertised
+          API address from the in-container client URL, and explicitly control mlock
+          for loopback-only production topologies.
+    fragments:
+      - aap-eda-readiness-yaml.yml
+      - aap-local-execution-trust-and-refresh.yml
+      - community-hashi-vault-7.yml
+      - shared-assets-release-tooling.yml
+      - vault-controller-init-escrow.yml
+      - vault-immutable-image-and-client-address.yml
+      - vault-lifecycle-handoff.yml
+      - vault-raft-snapshot-escrow.yml
+      - vault-scoped-approle-bootstrap.yml
+      - vault-secret-redaction.yml
+      - vault-storage-address-contract.yml
+      - vault-strict-tls-bootstrap.yml
+    release_date: '2026-07-14'
