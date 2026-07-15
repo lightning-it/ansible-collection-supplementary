@@ -25,6 +25,7 @@
     that:
       - vault_backup_restore_dir | default('', true) | trim | length > 0
       - vault_backup_restore_host_data_dir | default('', true) | trim | length > 0
+      - vault_backup_restore_podman_executable | default('', true) | trim | length > 0
       - vault_backup_restore_pod_name | default('', true) | trim | length > 0
       - >-
         not (vault_backup_restore_manage_systemd | bool)

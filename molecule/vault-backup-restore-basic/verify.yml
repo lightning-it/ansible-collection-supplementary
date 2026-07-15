@@ -13,6 +13,8 @@
     vault_backup_restore_retention_keep_last: 5
     vault_backup_restore_stop_service: true
     vault_backup_restore_manage_systemd: false
+    vault_backup_restore_podman_executable: >-
+      {{ vault_backup_restore_molecule_root }}/bin/podman
     vault_backup_restore_pod_name: vault
     vault_backup_restore_container_name: vault-vault
     vault_backup_restore_unseal_after_start: true

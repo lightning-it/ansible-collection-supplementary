@@ -11,9 +11,16 @@
       vault-raft-snapshot-basic: vault-raft-snapshot
       vault-scoped-approle-basic: vault-scoped-approle
       vault-validate-basic: vault-validate-runtime
+    vault_test_application_artifact_override: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_TEST_ARTIFACTS') | trim }}
+    vault_test_application_project_directory: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_PROJECT_DIRECTORY') | trim }}
     vault_test_application_artifact_root: >-
-      {{ lookup('ansible.builtin.env', 'MOLECULE_TEST_ARTIFACTS')
-         | default('artifacts/evidence', true) }}
+      {{ vault_test_application_artifact_override
+         | default(
+             vault_test_application_project_directory ~ '/artifacts/evidence',
+             true
+           ) }}
     vault_test_application_source: >-
       {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY')
          ~ '/' ~ vault_test_application_ephemeral_directories[vault_test_application_scenario]
@@ -31,6 +38,16 @@
           - vault_test_application_scenario in vault_test_application_ephemeral_directories
           - vault_test_application_scenario is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$')
         fail_msg: Refusing to collect fake Vault evidence for an unknown scenario.
+
+    - name: Require an explicit fake Vault evidence output root
+      ansible.builtin.assert:
+        that:
+          - >-
+            vault_test_application_artifact_override | trim | length > 0
+            or vault_test_application_project_directory | trim | length > 0
+        fail_msg: >-
+          Set MOLECULE_TEST_ARTIFACTS or MOLECULE_PROJECT_DIRECTORY; refusing
+          to write fake Vault evidence outside a declared artifact root.
 
     - name: Inspect the fake Vault API request log
       ansible.builtin.stat:

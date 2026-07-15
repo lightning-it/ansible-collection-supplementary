@@ -31,5 +31,6 @@ collections/**
 # Ansible logs
 roles/ansible-navigator.log
 
-# Per-run Molecule evidence is uploaded by CI and must not enter source control
+# Per-run evidence is uploaded by CI and must not enter source control
+/artifacts/
 /molecule/shared/**/artifacts/

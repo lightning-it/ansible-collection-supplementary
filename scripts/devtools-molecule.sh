@@ -46,10 +46,13 @@ if [ -n "${SCENARIO_FILTER}" ]; then
   echo "Scenario filter: ${SCENARIO_FILTER}"
 fi
 
-# For Molecule (Docker + delegated etc.) we run as root inside the container
-export WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0
+# Molecule writes cleanup evidence into the read-write checkout. Use the
+# wrapper's guarded ownership mapping so Docker-created files remain writable
+# by the runner; rootless Podman retains its explicit root-in-user-namespace
+# mapping inside the container.
+export WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1
 
-WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0 \
+WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1 \
 WUNDER_DEVTOOLS_DOCKER_SOCKET=required \
 WUNDER_DEVTOOLS_NETWORK=bridge \
 WUNDER_DEVTOOLS_WORKSPACE_MODE=rw \

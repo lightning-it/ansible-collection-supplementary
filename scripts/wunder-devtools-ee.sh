@@ -4,12 +4,18 @@ set -euo pipefail
 IMAGE="quay.io/l-it/ee-wunder-devtools-ubi9:v1.9.2@sha256:58d5d45f7ea7405394edb00d4a77bf3e5d770532377fba6d80e8f641d27576b0"
 CONTAINER_HOME="${CONTAINER_HOME:-/tmp/wunder}"
 WORKSPACE_MODE="${WUNDER_DEVTOOLS_WORKSPACE_MODE:-ro}"
+RUN_AS_HOST_UID_POLICY="${WUNDER_DEVTOOLS_RUN_AS_HOST_UID:-0}"
 NETWORK_MODE="${WUNDER_DEVTOOLS_NETWORK:-none}"
 SOCKET_POLICY="${WUNDER_DEVTOOLS_DOCKER_SOCKET:-disabled}"
 SOURCE_ROOT_POLICY="${WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT:-disabled}"
 CAPABILITY_POLICY="${WUNDER_DEVTOOLS_CAP_ADD:-}"
 VAGRANT_SSH_POLICY="${WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH:-disabled}"
 case "$WORKSPACE_MODE" in ro|rw) ;; *) echo "Error: unsupported workspace mode: $WORKSPACE_MODE" >&2; exit 1 ;; esac
+case "$RUN_AS_HOST_UID_POLICY" in 0|1) ;; *) echo "Error: unsupported host UID policy: $RUN_AS_HOST_UID_POLICY" >&2; exit 1 ;; esac
+if [ "$RUN_AS_HOST_UID_POLICY" = "1" ] && [ "$WORKSPACE_MODE" != rw ]; then
+  echo "Error: host UID mapping requires a read-write workspace" >&2
+  exit 1
+fi
 case "$SOCKET_POLICY" in disabled|required|auto) ;; *) echo "Error: unsupported socket policy: $SOCKET_POLICY" >&2; exit 1 ;; esac
 case "$SOURCE_ROOT_POLICY" in disabled|enabled) ;; *) echo "Error: unsupported source-root policy: $SOURCE_ROOT_POLICY" >&2; exit 1 ;; esac
 case "$CAPABILITY_POLICY" in ""|CHOWN,FOWNER) ;; *) echo "Error: unsupported capability policy: $CAPABILITY_POLICY" >&2; exit 1 ;; esac
@@ -88,11 +94,8 @@ esac
 
 if [ "${WUNDER_DEVTOOLS_PRIVILEGED:-0}" = "1" ]; then
   DOCKER_ARGS+=(--privileged)
-elif [ -n "$CAPABILITY_POLICY" ]; then
-  IFS=',' read -r -a CAPABILITY_ADDITIONS <<< "$CAPABILITY_POLICY"
-  for capability in "${CAPABILITY_ADDITIONS[@]}"; do
-    DOCKER_ARGS+=(--cap-add "$capability")
-  done
+elif [ "$CAPABILITY_POLICY" = "CHOWN,FOWNER" ]; then
+  DOCKER_ARGS+=(--cap-add CHOWN --cap-add FOWNER)
 fi
 
 if [ "$CONTAINER_BIN" = "podman" ] && [ "$(uname -s)" = "Linux" ]; then
@@ -248,6 +251,17 @@ if [ "$VAGRANT_SSH_POLICY" = enabled ]; then
   done
 fi
 
+if [ "$RUN_AS_HOST_UID_POLICY" = "1" ]; then
+  if [ "$CONTAINER_BIN" = "podman" ] && [ "$PODMAN_ROOTLESS" = "1" ]; then
+    # Rootless Podman maps container UID/GID 0 to the invoking host user. Keep
+    # that mapping explicit so a mode-0755 bind-mounted checkout is writable.
+    DOCKER_ARGS+=(--user 0:0)
+  else
+    # Hosted Docker preserves numeric ownership on bind mounts.
+    DOCKER_ARGS+=(--user "$(id -u):$(id -g)")
+  fi
+fi
+
 if [ -n "$DOCKER_SOCKET" ]; then
   DOCKER_SOCKET_REAL="$DOCKER_SOCKET"
   if command -v python3 >/dev/null 2>&1; then
@@ -271,26 +285,27 @@ PY
     -e no_proxy=
   )
 
-  if [ "${WUNDER_DEVTOOLS_RUN_AS_HOST_UID:-0}" = "1" ]; then
-    DOCKER_ARGS+=(--user "$(id -u):$(id -g)")
+  if [ "$RUN_AS_HOST_UID_POLICY" = "1" ]; then
     DOCKER_ARGS+=(--group-add 0)
 
-    if socket_gid="$(stat -c %g "$DOCKER_SOCKET_REAL" 2>/dev/null)"; then
-      :
-    elif socket_gid="$(stat -f %g "$DOCKER_SOCKET_REAL" 2>/dev/null)"; then
-      :
-    else
-      echo "Error: cannot determine Docker-compatible socket group" >&2
-      exit 1
-    fi
-    if [ -n "${socket_gid:-}" ]; then
-      DOCKER_ARGS+=(--group-add "$socket_gid")
+    if [ "$CONTAINER_BIN" != "podman" ] || [ "$PODMAN_ROOTLESS" != "1" ]; then
+      if socket_gid="$(stat -c %g "$DOCKER_SOCKET_REAL" 2>/dev/null)"; then
+        :
+      elif socket_gid="$(stat -f %g "$DOCKER_SOCKET_REAL" 2>/dev/null)"; then
+        :
+      else
+        echo "Error: cannot determine Docker-compatible socket group" >&2
+        exit 1
+      fi
+      if [ -n "${socket_gid:-}" ]; then
+        DOCKER_ARGS+=(--group-add "$socket_gid")
+      fi
     fi
   else
     DOCKER_ARGS+=(--user 0:0)
     DOCKER_ARGS+=(--group-add 0)
   fi
-elif [ "${PODMAN_ROOTLESS}" = "1" ]; then
+elif [ "$RUN_AS_HOST_UID_POLICY" = "0" ] && [ "${PODMAN_ROOTLESS}" = "1" ]; then
   DOCKER_ARGS+=(--user 0:0)
 fi
 

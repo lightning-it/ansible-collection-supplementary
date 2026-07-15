@@ -8,7 +8,7 @@
 - name: Stop Vault pod for maintenance without systemd
   ansible.builtin.command:
     argv:
-      - podman
+      - "{{ vault_backup_restore_podman_executable }}"
       - pod
       - stop
       - "{{ vault_backup_restore_pod_name }}"
