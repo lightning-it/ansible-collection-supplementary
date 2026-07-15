@@ -359,6 +359,41 @@ class QualityEvidenceTests(unittest.TestCase):
         with patch.dict(os.environ, self._environment(), clear=False):
             self.assertEqual(evidence.validate(self.evidence_root), 0)
 
+    def test_scan_findings_are_projected_without_storing_finding_content(self) -> None:
+        self._registry()
+        self._junit()
+        self._release_security("a" * 40)
+        summary_path = self.evidence_root / "security" / "secret-scan-summary.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary["results"] = {
+            "configuration/example.yml": [
+                {
+                    "type": "KeywordDetector",
+                    "detail": "password=do-not-persist-in-public-evidence",
+                }
+            ]
+        }
+        summary_path.write_text(json.dumps(summary) + "\n", encoding="utf-8")
+
+        with patch.dict(os.environ, self._environment(), clear=False):
+            result = evidence.assemble(
+                self.evidence_root,
+                input_roots=[self.artifacts],
+                registry_path=self.repository / "meta" / "role-coverage.yml",
+                repository_root=self.repository,
+            )
+
+        self.assertEqual(result, 1)
+        manifest_text = (self.evidence_root / "manifest.json").read_text(encoding="utf-8")
+        manifest = json.loads(manifest_text)
+        self.assertEqual(manifest["security_evidence"]["external_secret_findings"], 1)
+        self.assertTrue(any("external secret scan" in blocker for blocker in manifest["blockers"]))
+        self.assertNotIn("do-not-persist-in-public-evidence", manifest_text)
+        self.assertNotIn(
+            "do-not-persist-in-public-evidence",
+            summary_path.read_text(encoding="utf-8"),
+        )
+
     def test_candidate_evidence_passes_execution_but_is_never_release_eligible(self) -> None:
         registry_path = self._registry()
         registry = json.loads(registry_path.read_text(encoding="utf-8"))

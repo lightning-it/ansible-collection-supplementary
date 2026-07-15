@@ -181,8 +181,7 @@ def _actual_images(files: dict[PurePosixPath, bytes]) -> set[tuple[str, PurePosi
             path == INVENTORY_PATH
             or not _is_shipped_source_path(path)
             or (
-                path.suffix.lower() not in DEPENDENCY_TEXT_SUFFIXES
-                and path.name not in {"Containerfile", "Dockerfile"}
+                path.suffix.lower() not in DEPENDENCY_TEXT_SUFFIXES and path.name not in {"Containerfile", "Dockerfile"}
             )
             or path.parts[:1] == ("docs",)
         ):
@@ -340,10 +339,9 @@ def _external_products(inventory: dict[str, Any]) -> tuple[list[dict[str, Any]],
         ):
             raise SourceDependencyError(f"unsafe external product dependency: {name!r}")
         parsed_collections = [str(value) for value in collections]
-        if (
-            any(COLLECTION_NAME.fullmatch(value) is None for value in parsed_collections)
-            or parsed_collections != sorted(set(parsed_collections))
-        ):
+        if any(
+            COLLECTION_NAME.fullmatch(value) is None for value in parsed_collections
+        ) or parsed_collections != sorted(set(parsed_collections)):
             raise SourceDependencyError(f"unsafe provided collection list: {name}")
         parsed_locations = [_safe_relative_path(value) for value in locations]
         if parsed_locations != sorted(set(parsed_locations)):
@@ -410,13 +408,17 @@ def validate_source_dependencies(
     if len(inventory_bytes) > 2 * 1024 * 1024:
         raise SourceDependencyError("source dependency inventory exceeds the size limit")
     inventory = _yaml_mapping(inventory_bytes, inventory_path)
-    if set(inventory) != {
-        "schema_version",
-        "container_images",
-        "derived_images",
-        "collections",
-        "external_products",
-    } or inventory.get("schema_version") != 1:
+    if (
+        set(inventory)
+        != {
+            "schema_version",
+            "container_images",
+            "derived_images",
+            "collections",
+            "external_products",
+        }
+        or inventory.get("schema_version") != 1
+    ):
         raise SourceDependencyError("source dependency inventory schema is malformed")
 
     files = source_files if candidate is None else _candidate_files(candidate)
@@ -440,8 +442,7 @@ def validate_source_dependencies(
         missing = sorted(f"{path}: {reference}" for reference, path in actual_images - all_declared_images)
         stale = sorted(f"{path}: {reference}" for reference, path in all_declared_images - actual_images)
         raise SourceDependencyError(
-            "container dependency inventory differs from shipped source; "
-            f"missing={missing!r}, stale={stale!r}"
+            f"container dependency inventory differs from shipped source; missing={missing!r}, stale={stale!r}"
         )
     for image in derived_images:
         build_file = PurePosixPath(image["build_file"])
@@ -455,11 +456,7 @@ def validate_source_dependencies(
         raise SourceDependencyError("collection dependency inventory differs from shipped requirements")
 
     products, provided_collections = _external_products(inventory)
-    product_locations = {
-        _safe_relative_path(location)
-        for product in products
-        for location in product["locations"]
-    }
+    product_locations = {_safe_relative_path(location) for product in products for location in product["locations"]}
     for location in product_locations:
         _required_file(files, location)
     for product in products:
@@ -469,9 +466,7 @@ def validate_source_dependencies(
         )
         for provided in product["provides_collections"]:
             if f"{provided}." not in product_content:
-                raise SourceDependencyError(
-                    f"external product provides an unreferenced collection: {provided}"
-                )
+                raise SourceDependencyError(f"external product provides an unreferenced collection: {provided}")
     aap_default = _required_file(files, PurePosixPath("roles/aap_deploy/defaults/main.yml")).decode()
     if re.search(r'(?m)^aap_deploy_setup_download_version:\s*["\']?2\.7["\']?\s*$', aap_default) is None:
         raise SourceDependencyError("AAP product inventory differs from the shipped role version")

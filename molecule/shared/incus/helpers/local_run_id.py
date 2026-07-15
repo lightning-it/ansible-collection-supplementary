@@ -19,12 +19,7 @@ def _process(pid: int) -> tuple[int, int, list[str]] | None:
         fields = stat[stat.rfind(")") + 2 :].split()
         parent_pid = int(fields[1])
         start_time = int(fields[19])
-        command_line = (
-            Path(f"/proc/{pid}/cmdline")
-            .read_bytes()
-            .decode("utf-8", errors="replace")
-            .split("\0")
-        )
+        command_line = Path(f"/proc/{pid}/cmdline").read_bytes().decode("utf-8", errors="replace").split("\0")
     except (FileNotFoundError, IndexError, OSError, ValueError):
         return None
     return parent_pid, start_time, [item for item in command_line if item]
@@ -61,9 +56,7 @@ def _read_state(path: Path) -> str:
         if not stat.S_ISREG(metadata.st_mode):
             raise RuntimeError(f"local run identity is not a regular file: {path}")
         if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o600:
-            raise RuntimeError(
-                f"local run identity has unsafe ownership or mode: {path}"
-            )
+            raise RuntimeError(f"local run identity has unsafe ownership or mode: {path}")
         content = os.read(descriptor, 257)
     finally:
         os.close(descriptor)
@@ -80,11 +73,7 @@ def persistent_run_id(path: Path) -> str:
 
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     parent = path.parent.stat(follow_symlinks=False)
-    if (
-        not stat.S_ISDIR(parent.st_mode)
-        or parent.st_uid != os.getuid()
-        or stat.S_IMODE(parent.st_mode) & 0o022
-    ):
+    if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.getuid() or stat.S_IMODE(parent.st_mode) & 0o022:
         raise RuntimeError(f"local run identity directory is unsafe: {path.parent}")
     try:
         return _read_state(path)
@@ -120,11 +109,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = _parser().parse_args()
-    print(
-        persistent_run_id(args.state_file)
-        if args.state_file is not None
-        else _new_run_id()
-    )
+    print(persistent_run_id(args.state_file) if args.state_file is not None else _new_run_id())
     return 0
 
 

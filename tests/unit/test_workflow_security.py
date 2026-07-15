@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
@@ -426,6 +429,48 @@ class WorkflowSecurityTests(unittest.TestCase):
         molecule = (ROOT / "scripts" / "devtools-molecule.sh").read_text(encoding="utf-8")
         self.assertIn("Docker is required for Molecule tests", molecule)
         self.assertNotIn("Skipping Molecule tests because Docker", molecule)
+
+    def test_devtools_capability_policy_expands_to_individual_docker_arguments(self) -> None:
+        wrapper = ROOT / "scripts" / "wunder-devtools-ee.sh"
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary = Path(temporary_directory)
+            fake_bin = temporary / "bin"
+            fake_bin.mkdir()
+            fake_docker = fake_bin / "docker"
+            fake_docker.write_text(
+                '#!/usr/bin/env bash\nset -euo pipefail\nprintf "%s\\n" "$@" >"${WUNDER_DEVTOOLS_ARGV:?}"\n',
+                encoding="utf-8",
+            )
+            fake_docker.chmod(0o700)
+            captured_arguments = temporary / "docker-arguments"
+            environment = os.environ.copy()
+            environment.update(
+                {
+                    "PATH": f"{fake_bin}:{environment['PATH']}",
+                    "WUNDER_CONTAINER_ENGINE": "docker",
+                    "WUNDER_DEVTOOLS_ARGV": str(captured_arguments),
+                    "WUNDER_DEVTOOLS_CAP_ADD": "CHOWN,FOWNER",
+                    "WUNDER_DEVTOOLS_DOCKER_SOCKET": "disabled",
+                }
+            )
+
+            subprocess.run(  # noqa: S603 -- execute the repository-owned wrapper under test.
+                ["/usr/bin/bash", str(wrapper), "true"],
+                cwd=ROOT,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            arguments = captured_arguments.read_text(encoding="utf-8").splitlines()
+            capability_indices = [index for index, argument in enumerate(arguments) if argument == "--cap-add"]
+            self.assertEqual(["CHOWN", "FOWNER"], [arguments[index + 1] for index in capability_indices])
+            self.assertNotIn("CHOWN,FOWNER", arguments)
+            capability_drop_index = arguments.index("--cap-drop")
+            self.assertEqual("ALL", arguments[capability_drop_index + 1])
+            self.assertNotIn("--privileged", arguments)
 
 
 if __name__ == "__main__":

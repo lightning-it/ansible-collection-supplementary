@@ -15,9 +15,7 @@ def bounded_identity(value: str, *, maximum: int, owner: bool = False) -> str:
     sanitized = re.sub(allowed, "-", value)
     if not sanitized or not sanitized[0].isalnum():
         raise ValueError("identity must begin with an alphanumeric character")
-    digest = hashlib.sha256(
-        (("owner" if owner else "instance") + "\0" + value).encode()
-    ).hexdigest()[:24]
+    digest = hashlib.sha256((("owner" if owner else "instance") + "\0" + value).encode()).hexdigest()[:24]
     prefix = sanitized[: maximum - len(digest) - 1].rstrip("-._/")
     if not prefix:
         raise ValueError("identity has no safe readable prefix")

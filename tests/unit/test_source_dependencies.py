@@ -50,8 +50,7 @@ class SourceDependencyTests(unittest.TestCase):
         runtime_managers = [
             manager
             for manager in config.get("customManagers", [])
-            if manager.get("description")
-            == "Digest-pinned shipped role, test, and source-inventory images"
+            if manager.get("description") == "Digest-pinned shipped role, test, and source-inventory images"
         ]
         self.assertEqual(len(runtime_managers), 1)
         patterns = runtime_managers[0].get("managerFilePatterns", [])

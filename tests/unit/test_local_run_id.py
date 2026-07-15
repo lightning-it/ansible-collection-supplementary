@@ -11,14 +11,7 @@ from pathlib import Path
 from types import ModuleType
 from unittest import mock
 
-MODULE_PATH = (
-    Path(__file__).parents[2]
-    / "molecule"
-    / "shared"
-    / "incus"
-    / "helpers"
-    / "local_run_id.py"
-)
+MODULE_PATH = Path(__file__).parents[2] / "molecule" / "shared" / "incus" / "helpers" / "local_run_id.py"
 
 
 def load_module() -> ModuleType:
@@ -68,15 +61,13 @@ class LocalRunIdentityTests(unittest.TestCase):
             path.symlink_to(target)
             with self.assertRaises(OSError):
                 self.module.persistent_run_id(path)
-            self.assertEqual(
-                "local-tester-111-222\n", target.read_text(encoding="utf-8")
-            )
+            self.assertEqual("local-tester-111-222\n", target.read_text(encoding="utf-8"))
 
     def test_state_directory_must_not_be_group_writable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             private = Path(temporary_directory) / "private"
             private.mkdir(mode=0o770)
-            os.chmod(private, 0o770)
+            os.chmod(private, 0o770)  # noqa: S103 -- exercise the unsafe mode guard.
             with self.assertRaisesRegex(RuntimeError, "directory is unsafe"):
                 self.module.persistent_run_id(private / "scenario.run-id")
 

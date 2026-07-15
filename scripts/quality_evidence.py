@@ -1671,13 +1671,32 @@ def _security_findings_count(payload: Any) -> int:
         return 0
     results = payload.get("results")
     if isinstance(results, dict):
-        return sum(len(items) for items in results.values() if isinstance(items, list))
+        count = 0
+        for items in results.values():
+            if not isinstance(items, list):
+                continue
+            # Count records rather than propagating scanner payload data into
+            # public evidence metadata.  The manifest needs only this scalar;
+            # finding content remains in the separately redacted scan artifact.
+            for _item in items:
+                count += 1
+        return count
     for key in ("findings", "secrets", "matches"):
         value = payload.get(key)
         if isinstance(value, list):
-            return len(value)
-        if isinstance(value, int):
-            return value
+            count = 0
+            for _item in value:
+                count += 1
+            return count
+        if isinstance(value, int) and not isinstance(value, bool):
+            if value <= 0:
+                return 0
+            if value > MAX_EVIDENCE_FILES:
+                return MAX_EVIDENCE_FILES + 1
+            count = 0
+            for _index in range(value):
+                count += 1
+            return count
     return 0
 
 
@@ -1848,7 +1867,7 @@ def _validate_provenance(
     return errors, candidate_sha
 
 
-def _validate_secret_summary(payload: Any) -> list[str]:
+def _validate_scan_summary(payload: Any) -> list[str]:
     if not isinstance(payload, dict):
         return ["security/secret-scan-summary.json must be an object"]
     errors: list[str] = []
@@ -1897,8 +1916,8 @@ def assess_security(root: Path, *, release_mode: bool, commit_sha: str) -> tuple
             parsed[name] = _strict_json_loads(raw.decode("utf-8"))
         except (EvidenceError, UnicodeDecodeError, json.JSONDecodeError) as error:
             errors.append(f"security/{name} is not valid JSON: {error}")
-    secret_summary = parsed.get("secret-scan-summary.json")
-    external_findings = _security_findings_count(secret_summary)
+    scan_summary_payload = parsed.get("secret-scan-summary.json")
+    external_findings = _security_findings_count(scan_summary_payload)
     semantic_errors: list[str] = []
     vulnerability_blocking = 0
     candidate_sha = ""
@@ -1919,7 +1938,7 @@ def assess_security(root: Path, *, release_mode: bool, commit_sha: str) -> tuple
         )
         semantic_errors.extend(vulnerability_errors)
     if "secret-scan-summary.json" in parsed:
-        semantic_errors.extend(_validate_secret_summary(parsed["secret-scan-summary.json"]))
+        semantic_errors.extend(_validate_scan_summary(parsed["secret-scan-summary.json"]))
     if external_findings:
         errors.append(f"external secret scan reports {external_findings} finding(s)")
     provenance = parsed.get("provenance.json")

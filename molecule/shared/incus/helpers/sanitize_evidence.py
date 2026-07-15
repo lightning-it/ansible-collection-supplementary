@@ -24,7 +24,7 @@ KEY_VALUE_SECRET = re.compile(
     r"(?i)(\b(?:password|passwd|passphrase|secret|token|api[_-]?key|"
     r"private[_-]?key|credential|authorization|cookie|session(?:_secret)?|"
     r"client[_-]?secret|bind[_-]?credential)\b\s*[=:]\s*)"
-    r"(?:\"(?:\\.|[^\"])*\"|'(?:\\.|[^'])*'|[^\s,;]+)",
+    r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s,;]+)",
 )
 PROSE_SECRET = re.compile(
     r"(?i)(\b(?:password|passwd|passphrase|secret|token|credential)\b"

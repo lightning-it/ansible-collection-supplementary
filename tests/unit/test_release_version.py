@@ -63,9 +63,7 @@ class ReleaseVersionTests(unittest.TestCase):
             base_sha=base_sha,
             workflow_run_id="98765",
             workflow_attempt="2",
-            workflow_ref=(
-                f"{repository}/.github/workflows/release-prepare.yml@refs/heads/main"
-            ),
+            workflow_ref=(f"{repository}/.github/workflows/release-prepare.yml@refs/heads/main"),
             workflow_event="workflow_dispatch",
             workflow_actor="release-operator",
         )

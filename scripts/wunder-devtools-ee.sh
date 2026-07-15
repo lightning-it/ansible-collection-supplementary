@@ -89,7 +89,10 @@ esac
 if [ "${WUNDER_DEVTOOLS_PRIVILEGED:-0}" = "1" ]; then
   DOCKER_ARGS+=(--privileged)
 elif [ -n "$CAPABILITY_POLICY" ]; then
-  DOCKER_ARGS+=(--cap-add "$CAPABILITY_POLICY")
+  IFS=',' read -r -a CAPABILITY_ADDITIONS <<< "$CAPABILITY_POLICY"
+  for capability in "${CAPABILITY_ADDITIONS[@]}"; do
+    DOCKER_ARGS+=(--cap-add "$capability")
+  done
 fi
 
 if [ "$CONTAINER_BIN" = "podman" ] && [ "$(uname -s)" = "Linux" ]; then

@@ -59,6 +59,13 @@ class SanitizeEvidenceTests(unittest.TestCase):
         self.assertNotIn("exact-environment-secret", result)
         self.assertGreaterEqual(result.count("[REDACTED]"), 3)
 
+    def test_redacts_long_escaped_quoted_values_without_backtracking(self) -> None:
+        source = 'password="' + (r"\!" * 4096) + "\nclient_secret='" + (r"\&" * 4096) + "\n"
+
+        result = SANITIZER.sanitize(source, [])
+
+        self.assertEqual(result, "password=[REDACTED]\nclient_secret=[REDACTED]\n")
+
 
 if __name__ == "__main__":
     unittest.main()
