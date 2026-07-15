@@ -35,6 +35,21 @@
   tasks:
     - name: Exercise Vault backup, restore, and rollback recovery
       block:
+        - name: Probe the fake Podman launcher before lifecycle testing
+          ansible.builtin.command:
+            argv:
+              - "{{ vault_backup_restore_podman_executable }}"
+              - pod
+              - inspect
+              - "{{ vault_backup_restore_pod_name }}"
+              - --format
+              - "{{ '{{.State}}' }}"
+          register: vault_backup_restore_molecule_podman_probe
+          changed_when: false
+          failed_when:
+            - vault_backup_restore_molecule_podman_probe.rc != 0
+              or vault_backup_restore_molecule_podman_probe.stdout | trim != 'running'
+
         - name: Inspect fake Vault data ownership
           ansible.builtin.stat:
             path: "{{ vault_backup_restore_molecule_root }}/data"

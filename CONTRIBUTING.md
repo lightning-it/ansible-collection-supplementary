@@ -183,6 +183,11 @@ Collections assume the following tooling:
   read-only workspace without an engine socket or sibling-source mounts;
   Molecule explicitly opts into only its required workspace, network, and
   nested-container access.
+- The devtools `HOME` is a fresh engine-managed tmpfs for every invocation. It
+  is explicitly mounted `exec` for identical Docker and Podman behavior because
+  Molecule stages executable test shims below `HOME`; `nosuid`, `nodev`,
+  `no-new-privileges`, and capability dropping retain the surrounding
+  isolation. No persistent whole-home cache is mounted.
 - **ee-wunder-devtools-ubi9** container as the canonical dev/CI environment:
   - Terraform, tflint, terraform-docs,
   - ansible-core, ansible-lint, Molecule,

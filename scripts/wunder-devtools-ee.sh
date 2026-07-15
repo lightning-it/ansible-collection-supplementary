@@ -34,7 +34,9 @@ esac
 WORKSPACE_MOUNT="${PWD}:/workspace:${WORKSPACE_MODE}"
 # Never bind a host home directory here. A fresh tmpfs prevents one invocation
 # or repository from supplying Ansible plugins/configuration to a later run.
-HOME_TMPFS_MOUNT="${CONTAINER_HOME}:rw,nosuid,nodev,size=1g,mode=1777"
+# Molecule stages executable shims below HOME, so make exec explicit while
+# retaining nosuid/nodev for identical Docker and Podman behavior.
+HOME_TMPFS_MOUNT="${CONTAINER_HOME}:rw,exec,nosuid,nodev,size=1g,mode=1777"
 DOCKER_ARGS=(
   -w /workspace
   -e HOME="${CONTAINER_HOME}"

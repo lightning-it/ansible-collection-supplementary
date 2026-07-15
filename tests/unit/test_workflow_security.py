@@ -425,6 +425,13 @@ class WorkflowSecurityTests(unittest.TestCase):
         )
         self.assertNotIn("${VAGRANT_SSH_KEY:+-e VAGRANT_SSH_KEY}", devtools)
         self.assertIn('if [ "$VAGRANT_SSH_POLICY" = enabled ]', devtools)
+        self.assertIn(
+            'HOME_TMPFS_MOUNT="${CONTAINER_HOME}:rw,exec,nosuid,nodev,size=1g,mode=1777"',
+            devtools,
+        )
+        contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        self.assertIn("explicitly mounted `exec`", contributing)
+        self.assertIn("No persistent whole-home cache is mounted", contributing)
 
         molecule = (ROOT / "scripts" / "devtools-molecule.sh").read_text(encoding="utf-8")
         self.assertIn("Docker is required for Molecule tests", molecule)
@@ -446,9 +453,11 @@ class WorkflowSecurityTests(unittest.TestCase):
             )
             fake_docker.chmod(0o700)
             captured_arguments = temporary / "docker-arguments"
+            container_home = temporary / "container-home"
             environment = os.environ.copy()
             environment.update(
                 {
+                    "CONTAINER_HOME": str(container_home),
                     "PATH": f"{fake_bin}:{environment['PATH']}",
                     "WUNDER_CONTAINER_ENGINE": "docker",
                     "WUNDER_DEVTOOLS_ARGV": str(captured_arguments),
@@ -474,6 +483,10 @@ class WorkflowSecurityTests(unittest.TestCase):
             capability_drop_index = arguments.index("--cap-drop")
             self.assertEqual("ALL", arguments[capability_drop_index + 1])
             self.assertNotIn("--privileged", arguments)
+            self.assertIn(
+                f"{container_home}:rw,exec,nosuid,nodev,size=1g,mode=1777",
+                arguments,
+            )
 
 
 if __name__ == "__main__":

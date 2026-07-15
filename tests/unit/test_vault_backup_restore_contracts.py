@@ -34,6 +34,7 @@ class VaultBackupRestoreContractTests(unittest.TestCase):
             "vault_backup_restore_podman_executable: >-\n      {{ vault_backup_restore_molecule_root }}/bin/podman",
             verify,
         )
+        self.assertIn("Probe the fake Podman launcher before lifecycle testing", verify)
         self.assertIn("'pod stop vault' in", verify)
         self.assertIn("'pod start vault' in", verify)
         self.assertIn("vault_backup_restore_molecule_runtime_state.content", verify)
