@@ -1,9 +1,10 @@
 ---
 # Runtime inputs mapped from the deploy role/inventory into the bootstrap role interface.
+vault_bootstrap_flavour: "{{ vault_deploy_flavour | default('vault', true) }}"
 vault_bootstrap_api_url: "{{ vault_deploy_api_url | default('', true) }}"
 vault_bootstrap_health_url: >-
   {{ vault_deploy_health_url | default(vault_bootstrap_api_url ~ '/v1/sys/health', true) }}
-vault_bootstrap_validate_certs: "{{ vault_deploy_vault_validate_certs | default(true, true) }}"
+vault_bootstrap_validate_certs: "{{ vault_deploy_vault_validate_certs }}"
 vault_bootstrap_container_name: "{{ vault_deploy_container_name | default('vault-vault', true) }}"
 vault_bootstrap_api_delegate_to: >-
   {{ vault_deploy_api_delegate_to | default(inventory_hostname, true) }}
@@ -22,7 +23,7 @@ vault_bootstrap_ca_cert_path: >-
 vault_bootstrap_cli_api_url: >-
   {{ vault_deploy_container_api_url | default('https://127.0.0.1:8200', true) }}
 vault_bootstrap_cli_ca_cert_path: >-
-  {{ vault_deploy_container_ca_cert_path | default('/vault/certs/ca.crt', true) }}
+  {{ vault_deploy_container_ca_cert_path | default('/' ~ vault_deploy_flavour ~ '/certs/ca.crt', true) }}
 vault_bootstrap_ca_cert_path_effective: >-
   {{ vault_bootstrap_ca_cert_path if (vault_bootstrap_validate_certs | bool) else '' }}
 
@@ -32,7 +33,7 @@ vault_bootstrap_write_init_output: "{{ vault_deploy_bootstrap_write_init_output 
 vault_bootstrap_key_shares: "{{ vault_deploy_bootstrap_key_shares | default(5, true) }}"
 vault_bootstrap_key_threshold: "{{ vault_deploy_bootstrap_key_threshold | default(3, true) }}"
 vault_bootstrap_persist_dir: >-
-  {{ vault_deploy_bootstrap_persist_dir | default('/srv/vault/bootstrap', true) }}
+  {{ vault_deploy_bootstrap_persist_dir | default('/srv/' ~ vault_deploy_flavour ~ '/bootstrap', true) }}
 vault_bootstrap_init_file_path: >-
   {{ vault_deploy_init_file_path | default(vault_bootstrap_persist_dir ~ '/vault-init.yml.vault', true) }}
 

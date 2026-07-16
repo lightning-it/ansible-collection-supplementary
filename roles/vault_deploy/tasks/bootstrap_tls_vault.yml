@@ -37,7 +37,7 @@
     token: "{{ vault_deploy_token }}"
     validate_certs: "{{ vault_deploy_vault_validate_certs }}"
     ca_cert: "{{ vault_deploy_api_ca_cert_path_effective | default(omit, true) }}"
-    path: "{{ inventory_hostname }}/vault/certificate"
+    path: "{{ inventory_hostname }}/{{ vault_deploy_flavour }}/certificate"
   register: vault_deploy_existing_cert
   failed_when: false
   no_log: true

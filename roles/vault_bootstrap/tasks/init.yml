@@ -298,7 +298,7 @@
       - env
       - "VAULT_ADDR={{ vault_bootstrap_cli_api_url }}"
       - "VAULT_CACERT={{ vault_bootstrap_cli_ca_cert_path }}"
-      - vault
+      - "{%- if vault_bootstrap_flavour == 'openbao' %}bao{%- else %}vault{%- endif %}"
       - operator
       - init
       - -format=json

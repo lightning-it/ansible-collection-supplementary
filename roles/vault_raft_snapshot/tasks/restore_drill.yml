@@ -129,7 +129,7 @@
     that:
       - _vault_raft_snapshot_restore_container_preflight.rc != 0
       - not (_vault_raft_snapshot_restore_root_preflight.stat.exists | default(false))
-      - vault_raft_snapshot_restore_work_root != '/srv/vault'
+      - vault_raft_snapshot_restore_work_root != '/srv/' ~ vault_deploy_flavour
       - >-
         not vault_raft_snapshot_restore_work_root.startswith(
           vault_raft_snapshot_production_cert_dir ~ '/'
@@ -212,14 +212,14 @@
         mode: "0600"
         content: |
           storage "raft" {
-            path = "/vault/data"
+            path = "/{{ vault_deploy_flavour }}/data"
             node_id = "{{ vault_raft_snapshot_restore_node_id }}"
           }
           listener "tcp" {
             address = "0.0.0.0:8200"
             cluster_address = "0.0.0.0:8201"
-            tls_cert_file = "/vault/certs/vault.crt"
-            tls_key_file = "/vault/certs/vault.key"
+            tls_cert_file = "/{{ vault_deploy_flavour }}/certs/vault.crt"
+            tls_key_file = "/{{ vault_deploy_flavour }}/certs/vault.key"
           }
           ui = false
           disable_mlock = false
@@ -255,11 +255,11 @@
               vault_raft_snapshot_restore_cluster_port
             }}:8201
           - --volume
-          - "{{ vault_raft_snapshot_restore_work_root }}/data:/vault/data"
+          - "{{ vault_raft_snapshot_restore_work_root }}/data:/{{ vault_deploy_flavour }}/data"
           - --volume
-          - "{{ vault_raft_snapshot_restore_work_root }}/config:/vault/config:ro"
+          - "{{ vault_raft_snapshot_restore_work_root }}/config:/{{ vault_deploy_flavour }}/config:ro"
           - --volume
-          - "{{ vault_raft_snapshot_production_cert_dir }}:/vault/certs:ro"
+          - "{{ vault_raft_snapshot_production_cert_dir }}:/{{ vault_deploy_flavour }}/certs:ro"
           - --user
           - >-
             {{ vault_raft_snapshot_restore_run_as_user }}:{{
@@ -277,7 +277,7 @@
           - --env
           - "VAULT_ADDR={{ _vault_raft_snapshot_restore_api_url }}"
           - --env
-          - VAULT_CACERT=/vault/certs/ca.crt
+          - VAULT_CACERT=/{{ vault_deploy_flavour }}/certs/ca.crt
           - "{{ vault_raft_snapshot_image }}"
           - server
       changed_when: true

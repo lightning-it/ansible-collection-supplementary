@@ -103,7 +103,7 @@ inputs = {
   vault_config_approle_secrets,
   "key",
   ["role_name", "token_policy"],
-  ["namespace", "backend", "kv_mount", "credential_path", "token_type", "token_ttl", "token_max_ttl", "token_period"],
+  ["namespace", "backend", "kv_mount", "credential_path", "token_type", "token_ttl", "token_max_ttl", "token_period", "secret_id_ttl", "secret_id_num_uses"],
   {
     "kv_mount": vault_config_engine_mount_point,
     "credential_path": inventory_hostname ~ "/vault/approle"
@@ -157,7 +157,7 @@ inputs = {
 ) }}
 
 {{ macros.render_block(
-  "transit_secret_backend_key",
+  "transit_secret_backend_keys",
   vault_config_transit_secret_backend_keys,
   "key",
   ["name", "backend"],
