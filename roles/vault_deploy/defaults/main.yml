@@ -1,10 +1,11 @@
 ---
 # Vault Pod Basis
+vault_deploy_flavour: "vault"
 vault_deploy_pod_name: "vault"
 vault_deploy_pod_manifest_path: "/etc/podman/pods/vault.yml"
-vault_deploy_host_data_dir: "/srv/vault/data"
-vault_deploy_cert_dir: "/srv/vault/certs"
-vault_deploy_config_dir: "/srv/vault/config"
+vault_deploy_host_data_dir: "/srv/{{ vault_deploy_flavour }}/data"
+vault_deploy_cert_dir: "/srv/{{ vault_deploy_flavour }}/certs"
+vault_deploy_config_dir: "/srv/{{ vault_deploy_flavour }}/config"
 vault_deploy_image: "docker.io/hashicorp/vault:1.21"
 # Production consumers can require an immutable OCI manifest digest while the
 # compatibility default continues to accept a tag for existing inventories.
@@ -16,7 +17,7 @@ vault_deploy_skip_setcap: true
 vault_deploy_add_ipc_lock_cap: false
 vault_deploy_disable_mlock: true
 vault_deploy_container_name: "{{ vault_deploy_pod_name }}-vault"
-vault_deploy_container_data_dir: "/vault/data"
+vault_deploy_container_data_dir: "/{{ vault_deploy_flavour }}/data"
 vault_deploy_expected_uid: "{{ vault_deploy_run_as_user }}"
 vault_deploy_expected_gid: "{{ vault_deploy_run_as_group }}"
 vault_deploy_expected_mode: "0700"
@@ -54,7 +55,7 @@ vault_deploy_cluster_addr: ""
 # visible inside the Vault container.
 vault_deploy_api_ca_cert_path: "{{ vault_api_ca_cert_path | default('', true) }}"
 vault_deploy_target_ca_cert_path: "{{ vault_deploy_cert_dir }}/ca.crt"
-vault_deploy_container_ca_cert_path: "/vault/certs/ca.crt"
+vault_deploy_container_ca_cert_path: "/{{ vault_deploy_flavour }}/certs/ca.crt"
 # This client URL is deliberately independent from Vault's advertised API
 # address. A loopback-only service can advertise its stable service identity
 # while local CLI calls use a certificate-validated loopback endpoint.
@@ -106,7 +107,7 @@ vault_deploy_inventory_root: >-
           )
       )
   }}
-vault_deploy_bootstrap_persist_dir: "/srv/vault/bootstrap"
+vault_deploy_bootstrap_persist_dir: "/srv/{{ vault_deploy_flavour }}/bootstrap"
 vault_deploy_init_file_path: "{{ vault_deploy_bootstrap_persist_dir }}/vault-init.yml.vault"
 
 # Optional systemd unit override. When empty, the deploy/ops/backup roles resolve
@@ -193,7 +194,7 @@ vault_deploy_validate_mode: "fail"
 
 # Backup/Restore
 vault_deploy_backup_action: "none"
-vault_deploy_backup_dir: "/srv/vault/backups"
+vault_deploy_backup_dir: "/srv/{{ vault_deploy_flavour }}/backups"
 vault_deploy_backup_retention_keep_last: 14
 vault_deploy_backup_stop_service_for_file_backend: true
 vault_deploy_restore_source: ""
