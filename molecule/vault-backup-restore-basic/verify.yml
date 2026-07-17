@@ -1,19 +1,212 @@
 ---
-- name: Verify vault backup restore syntax coverage
+- name: Verify Vault backup and restore recovery at runtime
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
-    vault_backup_restore_molecule_marker_path: >-
-      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-backup-restore-coverage-mode
+    vault_backup_restore_molecule_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-backup-restore-runtime
+    vault_backup_restore_molecule_api_url: "http://127.0.0.1:18212"
+    vault_backup_restore_molecule_path: >-
+      {{ vault_backup_restore_molecule_root }}/bin:{{ lookup('env', 'PATH') }}
+    vault_backup_restore_dir: "{{ vault_backup_restore_molecule_root }}/backups"
+    vault_backup_restore_retention_keep_last: 5
+    vault_backup_restore_stop_service: true
+    vault_backup_restore_manage_systemd: false
+    vault_backup_restore_pod_name: vault
+    vault_backup_restore_container_name: vault-vault
+    vault_backup_restore_unseal_after_start: true
+    vault_backup_restore_api_delegate_to: localhost
+    vault_backup_restore_api_url: "{{ vault_backup_restore_molecule_api_url }}"
+    vault_backup_restore_health_url: "{{ vault_backup_restore_molecule_api_url }}/v1/sys/health"
+    vault_backup_restore_validate_certs: false
+    vault_backup_restore_init_file_path: "{{ vault_backup_restore_molecule_root }}/unused-init.yml.vault"
+    vault_backup_restore_init: {}
+    vault_backup_restore_unseal_keys:
+      - test-share-one
+      - test-share-two
+  environment:
+    PATH: "{{ vault_backup_restore_molecule_path }}"
+    FAKE_PODMAN_LOG: "{{ vault_backup_restore_molecule_root }}/podman.log"
+    FAKE_PODMAN_RUNTIME_STATE: "{{ vault_backup_restore_molecule_root }}/runtime-state"
+    FAKE_VAULT_STATE: "{{ vault_backup_restore_molecule_root }}/state.json"
   tasks:
-    - name: Read lit.supplementary.vault_backup_restore coverage marker
-      ansible.builtin.slurp:
-        src: "{{ vault_backup_restore_molecule_marker_path }}"
-      register: vault_backup_restore_molecule_marker
+    - name: Exercise Vault backup, restore, and rollback recovery
+      block:
+        - name: Inspect fake Vault data ownership
+          ansible.builtin.stat:
+            path: "{{ vault_backup_restore_molecule_root }}/data"
+          register: vault_backup_restore_molecule_data_stat
 
-    - name: Assert lit.supplementary.vault_backup_restore coverage stub ran
-      ansible.builtin.assert:
-        that:
-          - vault_backup_restore_molecule_marker.content | b64decode | trim == 'syntax_stub'
-        quiet: true
+        - name: Create a runtime Vault backup
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_backup_restore
+          vars:
+            vault_backup_restore_action: backup
+            vault_backup_restore_host_data_dir: "{{ vault_backup_restore_molecule_root }}/data"
+
+        - name: Find runtime Vault backup archive
+          ansible.builtin.find:
+            paths: "{{ vault_backup_restore_molecule_root }}/backups"
+            patterns: "vault-data-*.tar.gz"
+            file_type: file
+          register: vault_backup_restore_molecule_archives
+
+        - name: Require one runtime Vault backup archive
+          ansible.builtin.assert:
+            that:
+              - vault_backup_restore_molecule_archives.files | length > 0
+            quiet: true
+
+        - name: Change active Vault data before restore
+          ansible.builtin.copy:
+            dest: "{{ vault_backup_restore_molecule_root }}/data/sentinel"
+            content: "changed-after-backup\n"
+            mode: "0600"
+
+        - name: Restore and validate the runtime Vault backup
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_backup_restore
+          vars:
+            vault_backup_restore_action: restore
+            vault_backup_restore_host_data_dir: "{{ vault_backup_restore_molecule_root }}/data"
+            vault_backup_restore_source: >-
+              {{ (vault_backup_restore_molecule_archives.files | sort(attribute='mtime') | last).path }}
+            vault_backup_restore_confirm: YES_RESTORE
+            vault_backup_restore_validate_after_restore: true
+            vault_backup_restore_expected_lifecycle: ready
+            vault_backup_restore_validate_lifecycle_retries: 2
+            vault_backup_restore_validate_lifecycle_delay: 0
+            vault_backup_restore_expected_uid: "{{ vault_backup_restore_molecule_data_stat.stat.uid }}"
+            vault_backup_restore_expected_gid: "{{ vault_backup_restore_molecule_data_stat.stat.gid }}"
+            vault_backup_restore_expected_mode: "0700"
+            vault_backup_restore_selinux_relabel: false
+
+        - name: Read restored Vault data sentinel
+          ansible.builtin.slurp:
+            src: "{{ vault_backup_restore_molecule_root }}/data/sentinel"
+          register: vault_backup_restore_molecule_restored_sentinel
+
+        - name: Assert successful restore replaced active data
+          ansible.builtin.assert:
+            that:
+              - >-
+                vault_backup_restore_molecule_restored_sentinel.content
+                | b64decode
+                | trim == 'original-data'
+            quiet: true
+
+        - name: Create malformed runtime restore payload
+          ansible.builtin.copy:
+            dest: "{{ vault_backup_restore_molecule_root }}/rollback-payload"
+            content: "not-a-directory\n"
+            mode: "0600"
+
+        - name: Archive malformed runtime restore payload with expected name
+          ansible.builtin.command:
+            argv:
+              - tar
+              - --create
+              - --gzip
+              - --file
+              - "{{ vault_backup_restore_molecule_root }}/rollback-invalid.tar.gz"
+              - --transform
+              - s/rollback-payload/rollback-data/
+              - --directory
+              - "{{ vault_backup_restore_molecule_root }}"
+              - rollback-payload
+          changed_when: true
+
+        - name: Attempt restore that must roll back
+          block:
+            - name: Run malformed Vault restore
+              ansible.builtin.include_role:
+                name: lit.supplementary.vault_backup_restore
+              vars:
+                vault_backup_restore_action: restore
+                vault_backup_restore_host_data_dir: "{{ vault_backup_restore_molecule_root }}/rollback-data"
+                vault_backup_restore_source: "{{ vault_backup_restore_molecule_root }}/rollback-invalid.tar.gz"
+                vault_backup_restore_confirm: YES_RESTORE
+                vault_backup_restore_validate_after_restore: false
+                vault_backup_restore_expected_uid: "{{ vault_backup_restore_molecule_data_stat.stat.uid }}"
+                vault_backup_restore_expected_gid: "{{ vault_backup_restore_molecule_data_stat.stat.gid }}"
+                vault_backup_restore_expected_mode: "0700"
+                vault_backup_restore_selinux_relabel: false
+
+            - name: Fail when malformed Vault restore unexpectedly succeeds
+              ansible.builtin.fail:
+                msg: "Malformed Vault restore unexpectedly succeeded."
+
+          rescue:
+            - name: Record expected Vault restore rollback failure
+              ansible.builtin.set_fact:
+                vault_backup_restore_molecule_rollback_observed: true
+
+        - name: Read rolled-back Vault data sentinel
+          ansible.builtin.slurp:
+            src: "{{ vault_backup_restore_molecule_root }}/rollback-data/sentinel"
+          register: vault_backup_restore_molecule_rollback_sentinel
+
+        - name: Attempt backup failure with runtime recovery
+          block:
+            - name: Run Vault backup with missing data path
+              ansible.builtin.include_role:
+                name: lit.supplementary.vault_backup_restore
+              vars:
+                vault_backup_restore_action: backup
+                vault_backup_restore_host_data_dir: "{{ vault_backup_restore_molecule_root }}/missing-data"
+
+            - name: Fail when missing-data Vault backup unexpectedly succeeds
+              ansible.builtin.fail:
+                msg: "Missing-data Vault backup unexpectedly succeeded."
+
+          rescue:
+            - name: Record expected Vault backup failure
+              ansible.builtin.set_fact:
+                vault_backup_restore_molecule_backup_failure_observed: true
+
+        - name: Read fake Podman maintenance log
+          ansible.builtin.slurp:
+            src: "{{ vault_backup_restore_molecule_root }}/podman.log"
+          register: vault_backup_restore_molecule_podman_log
+
+        - name: Read fake Vault lifecycle state after recovery tests
+          ansible.builtin.slurp:
+            src: "{{ vault_backup_restore_molecule_root }}/state.json"
+          register: vault_backup_restore_molecule_state
+
+        - name: Read fake Podman runtime state after recovery tests
+          ansible.builtin.slurp:
+            src: "{{ vault_backup_restore_molecule_root }}/runtime-state"
+          register: vault_backup_restore_molecule_runtime_state
+
+        - name: Assert backup and restore failures recovered runtime and data
+          ansible.builtin.assert:
+            that:
+              - vault_backup_restore_molecule_rollback_observed | default(false) | bool
+              - vault_backup_restore_molecule_backup_failure_observed | default(false) | bool
+              - >-
+                vault_backup_restore_molecule_rollback_sentinel.content
+                | b64decode
+                | trim == 'rollback-original'
+              - vault_backup_restore_molecule_runtime_state.content | b64decode | trim == 'running'
+              - not ((vault_backup_restore_molecule_state.content | b64decode | from_json).sealed | bool)
+              - "'pod stop vault' in (vault_backup_restore_molecule_podman_log.content | b64decode)"
+              - "'pod start vault' in (vault_backup_restore_molecule_podman_log.content | b64decode)"
+            quiet: true
+
+      always:
+        - name: Read fake Vault backup API process ID
+          ansible.builtin.slurp:
+            src: "{{ vault_backup_restore_molecule_root }}/server.pid"
+          register: vault_backup_restore_molecule_server_pid
+          failed_when: false
+
+        - name: Stop fake Vault backup API
+          ansible.builtin.command:
+            argv:
+              - kill
+              - "{{ vault_backup_restore_molecule_server_pid.content | b64decode | trim }}"
+          changed_when: true
+          failed_when: false
+          when: vault_backup_restore_molecule_server_pid.content | default('') | length > 0

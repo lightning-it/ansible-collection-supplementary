@@ -87,8 +87,9 @@
     regexp: >-
       ^(\s*)- \(_eda_ready\.content \| from_json\)\.status == 'good'$
     replace: |-
-      \1- (_eda_ready.content | trim).startswith('{')
-      and (_eda_ready.content | from_json).status == 'good'
+      \1- >-
+      \1  (_eda_ready.content | trim).startswith('{')
+      \1  and (_eda_ready.content | from_json).status == 'good'
 
 - name: Give prepared EDA readiness check enough startup time
   ansible.builtin.replace:

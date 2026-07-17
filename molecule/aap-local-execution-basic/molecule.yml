@@ -1,0 +1,34 @@
+---
+dependency:
+  name: shell
+  command: >-
+    rm -rf "${MOLECULE_EPHEMERAL_DIRECTORY}/aap-local-execution"
+
+driver:
+  name: default
+
+platforms:
+  - name: localhost
+    managed: false
+
+provisioner:
+  name: ansible
+  inventory:
+    host_vars:
+      localhost:
+        ansible_connection: local
+  playbooks:
+    converge: converge.yml
+    verify: verify.yml
+
+scenario:
+  name: aap-local-execution-basic
+  test_sequence:
+    - dependency
+    - syntax
+    - converge
+    - idempotence
+    - verify
+
+verifier:
+  name: ansible

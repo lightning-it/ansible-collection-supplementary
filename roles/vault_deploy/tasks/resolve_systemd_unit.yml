@@ -1,0 +1,20 @@
+---
+- name: Resolve Vault Podman kube systemd unit
+  ansible.builtin.command:
+    argv:
+      - systemd-escape
+      - --template=podman-kube@.service
+      - "{{ vault_deploy_pod_manifest_path }}"
+  register: vault_deploy_systemd_unit_resolved
+  changed_when: false
+  when: vault_deploy_systemd_unit_name | default('', true) | trim | length == 0
+
+- name: Set effective Vault systemd unit
+  ansible.builtin.set_fact:
+    vault_deploy_systemd_unit_name_effective: >-
+      {{
+        vault_deploy_systemd_unit_name
+        if (vault_deploy_systemd_unit_name | default('', true) | trim | length > 0)
+        else (vault_deploy_systemd_unit_resolved.stdout | trim)
+      }}
+  changed_when: false

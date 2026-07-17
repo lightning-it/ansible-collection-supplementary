@@ -1,0 +1,260 @@
+---
+- name: Authenticate for the production Raft snapshot
+  ansible.builtin.include_tasks: authenticate.yml
+  no_log: true
+
+- name: Read production Vault cluster identity
+  ansible.builtin.uri:
+    url: "{{ vault_raft_snapshot_health_url }}"
+    method: GET
+    validate_certs: true
+    use_proxy: false
+    ca_path: "{{ _vault_raft_snapshot_controller_ca_path }}"
+    status_code: 200
+    timeout: "{{ vault_raft_snapshot_timeout }}"
+  register: _vault_raft_snapshot_health
+  delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Read production KV documents selected for restore proof
+  ansible.builtin.uri:
+    url: >-
+      {{ vault_raft_snapshot_api_url }}/v1/{{ item.mount_point }}/data/{{ item.path }}
+    method: GET
+    headers:
+      X-Vault-Token: "{{ _vault_raft_snapshot_login.json.auth.client_token }}"
+    validate_certs: true
+    use_proxy: false
+    ca_path: "{{ _vault_raft_snapshot_controller_ca_path }}"
+    status_code: 200
+    timeout: "{{ vault_raft_snapshot_timeout }}"
+  loop: "{{ vault_raft_snapshot_verification_kv_paths }}"
+  register: _vault_raft_snapshot_kv_documents
+  delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Initialize Raft snapshot verification records
+  ansible.builtin.set_fact:
+    _vault_raft_snapshot_verification_records: []
+  changed_when: false
+  no_log: true
+
+- name: Build non-secret Raft snapshot KV identities
+  ansible.builtin.set_fact:
+    _vault_raft_snapshot_verification_records: >-
+      {{
+        _vault_raft_snapshot_verification_records
+        + [
+            {
+              'mount_point': item.item.mount_point,
+              'path': item.item.path,
+              'document_sha256': (
+                item.json.data.data
+                | to_json(sort_keys=true, separators=[',', ':'])
+                | hash('sha256')
+              )
+            }
+          ]
+      }}
+  loop: "{{ _vault_raft_snapshot_kv_documents.results }}"
+  changed_when: false
+  no_log: true
+
+- name: Allocate a protected controller Raft snapshot directory
+  ansible.builtin.tempfile:
+    state: directory
+    path: /tmp
+    prefix: lit-vault-raft-snapshot-
+  register: _vault_raft_snapshot_tempdir
+  delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Capture and escrow the production Raft snapshot
+  no_log: true
+  block:
+    - name: Enforce owner-only controller snapshot directory mode
+      ansible.builtin.file:
+        path: "{{ _vault_raft_snapshot_tempdir.path }}"
+        state: directory
+        mode: "0700"
+      delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+      become: false
+      changed_when: false
+
+    - name: Download the production Vault Raft snapshot
+      ansible.builtin.uri:
+        url: "{{ vault_raft_snapshot_api_url }}/v1/sys/storage/raft/snapshot"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ _vault_raft_snapshot_login.json.auth.client_token }}"
+        validate_certs: true
+        use_proxy: false
+        ca_path: "{{ _vault_raft_snapshot_controller_ca_path }}"
+        status_code: 200
+        timeout: "{{ vault_raft_snapshot_timeout }}"
+        dest: "{{ _vault_raft_snapshot_tempdir.path }}/vault.snap"
+        return_content: false
+      delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+      become: false
+      changed_when: false
+
+    - name: Enforce owner-only raw snapshot mode
+      ansible.builtin.file:
+        path: "{{ _vault_raft_snapshot_tempdir.path }}/vault.snap"
+        state: file
+        mode: "0600"
+      delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+      become: false
+      changed_when: false
+
+    - name: Calculate raw Raft snapshot identity
+      ansible.builtin.stat:
+        path: "{{ _vault_raft_snapshot_tempdir.path }}/vault.snap"
+        follow: false
+        get_checksum: true
+        checksum_algorithm: sha256
+        get_attributes: false
+        get_mime: false
+      register: _vault_raft_snapshot_raw_stat
+      delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+      become: false
+      changed_when: false
+
+    - name: Require a bounded owner-only raw Raft snapshot
+      ansible.builtin.assert:
+        that:
+          - _vault_raft_snapshot_raw_stat.stat.exists | default(false)
+          - _vault_raft_snapshot_raw_stat.stat.isreg | default(false)
+          - not (_vault_raft_snapshot_raw_stat.stat.islnk | default(false))
+          - _vault_raft_snapshot_raw_stat.stat.nlink | int == 1
+          - _vault_raft_snapshot_raw_stat.stat.mode == '0600'
+          - _vault_raft_snapshot_raw_stat.stat.size | int > 0
+          - >-
+            _vault_raft_snapshot_raw_stat.stat.size | int
+            <= vault_raft_snapshot_max_raw_bytes | int
+          - >-
+            _vault_raft_snapshot_raw_stat.stat.checksum
+            is match('^[0-9a-f]{64}$')
+        fail_msg: "Raw Vault Raft snapshot is missing, unsafe, empty, or over the approved limit."
+        quiet: true
+
+    - name: Read the raw Raft snapshot into protected Ansible memory
+      ansible.builtin.slurp:
+        src: "{{ _vault_raft_snapshot_tempdir.path }}/vault.snap"
+      register: _vault_raft_snapshot_raw
+      delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+      become: false
+      changed_when: false
+
+    - name: Build the encrypted Raft snapshot escrow document
+      ansible.builtin.set_fact:
+        # Build the whole mapping in one native expression. Templating a
+        # dynamic scalar inside a YAML mapping stringifies it on controllers
+        # that disable Jinja native types.
+        _vault_raft_snapshot_document: >-
+          {{
+            {
+              'schema_version': 1,
+              'subject': vault_raft_snapshot_document_subject,
+              'storage_backend': 'raft',
+              'image': vault_raft_snapshot_image,
+              'cluster_id': _vault_raft_snapshot_health.json.cluster_id,
+              'snapshot_sha256': _vault_raft_snapshot_raw_stat.stat.checksum,
+              'snapshot_size_bytes': _vault_raft_snapshot_raw_stat.stat.size | int,
+              'snapshot_b64': _vault_raft_snapshot_raw.content,
+              'verification_records': _vault_raft_snapshot_verification_records
+            }
+          }}
+      changed_when: false
+
+    - name: Persist immutable encrypted off-host Raft snapshot escrow
+      lit.foundational.ansible_vault_document:
+        path: "{{ _vault_raft_snapshot_document_path }}"
+        document: "{{ _vault_raft_snapshot_document }}"
+      register: _vault_raft_snapshot_escrow_result
+      delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+      become: false
+      no_log: true
+
+    - name: Revalidate exact encrypted off-host Raft snapshot escrow
+      lit.foundational.ansible_vault_document:
+        path: "{{ _vault_raft_snapshot_document_path }}"
+        document: "{{ _vault_raft_snapshot_document }}"
+      delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+      become: false
+      no_log: true
+
+    - name: Inspect encrypted off-host Raft snapshot escrow
+      ansible.builtin.stat:
+        path: "{{ _vault_raft_snapshot_document_path }}"
+        follow: false
+        get_checksum: true
+        checksum_algorithm: sha256
+        get_attributes: false
+        get_mime: false
+      register: _vault_raft_snapshot_ciphertext_stat
+      delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+      become: false
+      changed_when: false
+
+    - name: Read only the Raft snapshot ciphertext signature
+      ansible.builtin.command:
+        argv:
+          - head
+          - -c
+          - "15"
+          - "{{ _vault_raft_snapshot_document_path }}"
+      register: _vault_raft_snapshot_ciphertext_signature
+      delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+      become: false
+      changed_when: false
+      check_mode: false
+
+    - name: Require safe Ansible Vault ciphertext for Raft snapshot escrow
+      ansible.builtin.assert:
+        that:
+          - _vault_raft_snapshot_ciphertext_stat.stat.exists | default(false)
+          - _vault_raft_snapshot_ciphertext_stat.stat.isreg | default(false)
+          - not (_vault_raft_snapshot_ciphertext_stat.stat.islnk | default(false))
+          - _vault_raft_snapshot_ciphertext_stat.stat.nlink | int == 1
+          - >-
+            _vault_raft_snapshot_ciphertext_stat.stat.uid | int
+            in [0, _vault_raft_snapshot_controller_uid | int]
+          - _vault_raft_snapshot_ciphertext_stat.stat.mode in ['0400', '0600']
+          - _vault_raft_snapshot_ciphertext_stat.stat.size | int > 0
+          - >-
+            _vault_raft_snapshot_ciphertext_stat.stat.size | int
+            <= vault_raft_snapshot_max_raw_bytes | int * 4
+          - >-
+            _vault_raft_snapshot_ciphertext_stat.stat.checksum
+            is match('^[0-9a-f]{64}$')
+          - _vault_raft_snapshot_ciphertext_signature.stdout == '$ANSIBLE_VAULT;'
+        fail_msg: >-
+          Raft snapshot escrow is not safe owner-only Ansible Vault ciphertext.
+        quiet: true
+
+    - name: Record safe Raft snapshot escrow identity
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_escrow_verified: true
+        vault_raft_snapshot_escrow_path: "{{ _vault_raft_snapshot_document_path }}"
+        vault_raft_snapshot_escrow_ciphertext_sha256: >-
+          {{ _vault_raft_snapshot_ciphertext_stat.stat.checksum }}
+        vault_raft_snapshot_raw_sha256: "{{ _vault_raft_snapshot_raw_stat.stat.checksum }}"
+        vault_raft_snapshot_raw_size_bytes: "{{ _vault_raft_snapshot_raw_stat.stat.size | int }}"
+      changed_when: false
+
+  always:
+    - name: Remove every raw controller Raft snapshot artifact
+      ansible.builtin.file:
+        path: "{{ _vault_raft_snapshot_tempdir.path }}"
+        state: absent
+      delegate_to: "{{ vault_raft_snapshot_api_delegate_to }}"
+      become: false
+      changed_when: false
+      no_log: true

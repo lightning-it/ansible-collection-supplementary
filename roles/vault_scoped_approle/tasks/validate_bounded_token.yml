@@ -1,0 +1,23 @@
+---
+- name: Require the exact bounded scoped Vault token contract
+  ansible.builtin.assert:
+    that:
+      - _vault_scoped_approle_login.json.auth.client_token is match('^[^\r\n]{16,4096}$')
+      - >-
+        vault_scoped_approle_policy_name
+        in (
+          _vault_scoped_approle_login.json.auth.token_policies
+          | default(_vault_scoped_approle_login.json.auth.policies | default([]))
+        )
+      - >-
+        'default' not in (
+          _vault_scoped_approle_login.json.auth.token_policies
+          | default(_vault_scoped_approle_login.json.auth.policies | default([]))
+        )
+      - _vault_scoped_approle_login.json.auth.lease_duration | int > 0
+      - >-
+        _vault_scoped_approle_login.json.auth.lease_duration | int
+        <= vault_scoped_approle_token_max_ttl_seconds | int
+    fail_msg: "Scoped Vault AppRole login did not return the exact bounded policy token."
+    quiet: true
+  no_log: true

@@ -1,0 +1,59 @@
+---
+- name: Inspect Vault runtime before backup
+  ansible.builtin.include_tasks: inspect_runtime.yml
+
+- name: Create Vault backup with guaranteed runtime recovery
+  block:
+    - name: Stop running Vault runtime before backup
+      ansible.builtin.include_tasks: stop_runtime.yml
+      when:
+        - vault_backup_restore_stop_service | bool
+        - vault_backup_restore_runtime_was_running | bool
+
+    - name: Create backup archive
+      community.general.archive:
+        path: "{{ vault_backup_restore_host_data_dir }}"
+        dest: >-
+          {{
+            vault_backup_restore_dir
+            ~ '/vault-data-'
+            ~ now(utc=true, fmt='%Y%m%dT%H%M%SZ')
+            ~ '.tar.gz'
+          }}
+        format: gz
+        mode: "0600"
+      register: vault_backup_restore_archive
+
+    - name: Find backup files
+      ansible.builtin.find:
+        paths: "{{ vault_backup_restore_dir }}"
+        patterns: "vault-data-*.tar.gz"
+        file_type: file
+      register: vault_backup_restore_files
+      when: vault_backup_restore_retention_keep_last | int > 0
+
+    - name: Remove older backups
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: >-
+        {{
+          (vault_backup_restore_files.files | sort(attribute='mtime') | reverse)
+          [vault_backup_restore_retention_keep_last | int:]
+        }}
+      when:
+        - vault_backup_restore_retention_keep_last | int > 0
+        - vault_backup_restore_files.files | length > vault_backup_restore_retention_keep_last | int
+
+  always:
+    - name: Restart Vault after backup attempt
+      ansible.builtin.include_tasks: start_runtime.yml
+      when:
+        - vault_backup_restore_runtime_was_running | bool
+        - vault_backup_restore_runtime_stopped | bool
+
+    - name: Restore Vault lifecycle after backup attempt
+      ansible.builtin.include_tasks: unseal_runtime.yml
+      when:
+        - vault_backup_restore_runtime_was_running | bool
+        - vault_backup_restore_unseal_after_start | bool

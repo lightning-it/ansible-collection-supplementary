@@ -1,10 +1,4 @@
 ---
-- name: Ensure required Vault deploy vars are defined
-  ansible.builtin.import_role:
-    name: vault_deploy
-    tasks_from: assert
-  tags: always
-
 - name: Ensure required Vault config vars are defined
   ansible.builtin.import_tasks: assert_config.yml
   tags: always
@@ -18,6 +12,10 @@
       - vault_config_terraform_state_dir_local | default('', true) | trim | length > 0
       - vault_config_api_delegate_to | default('', true) | trim | length > 0
       - vault_config_vault_validate_certs is boolean
+      - vault_config_api_ca_cert_path is string
+      - >-
+        vault_config_api_ca_cert_path | length == 0
+        or vault_config_api_ca_cert_path.startswith('/')
     fail_msg: "vault_config variables are missing or invalid."
     quiet: true
   tags: always

@@ -1,10 +1,12 @@
 ---
 - name: Preflight | Check Vault health for token validation (best effort)
-  delegate_to: localhost
+  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  become: false
   ansible.builtin.uri:
     url: "{{ vault_deploy_health_url }}"
     method: GET
     validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+    ca_path: "{{ vault_deploy_api_ca_cert_path_effective | default(omit, true) }}"
   register: vault_deploy_token_health
   failed_when: false
   changed_when: false
@@ -13,13 +15,15 @@
   tags: always
 
 - name: Preflight | Check Vault token can login (lookup-self)
-  delegate_to: localhost
+  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  become: false
   ansible.builtin.uri:
     url: "{{ vault_deploy_api_url }}/v1/auth/token/lookup-self"
     method: GET
     headers:
       X-Vault-Token: "{{ vault_deploy_token }}"
     validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+    ca_path: "{{ vault_deploy_api_ca_cert_path_effective | default(omit, true) }}"
     return_content: false
   register: vault_deploy_token_lookup_self
   failed_when: false
@@ -47,7 +51,8 @@
   tags: always
 
 - name: Preflight | Check token access to AppRole credential secret (best effort)
-  delegate_to: localhost
+  delegate_to: "{{ vault_deploy_api_delegate_to }}"
+  become: false
   ansible.builtin.uri:
     url: >-
       {{
@@ -62,6 +67,7 @@
     headers:
       X-Vault-Token: "{{ vault_deploy_token }}"
     validate_certs: "{{ vault_deploy_vault_validate_certs }}"
+    ca_path: "{{ vault_deploy_api_ca_cert_path_effective | default(omit, true) }}"
     return_content: false
   register: vault_deploy_token_approle_secret_read
   failed_when: false

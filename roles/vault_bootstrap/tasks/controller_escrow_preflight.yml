@@ -1,0 +1,193 @@
+---
+- name: Resolve strict controller escrow paths
+  ansible.builtin.set_fact:
+    vault_bootstrap_controller_password_file_env: >-
+      {{ lookup('ansible.builtin.env', 'ANSIBLE_VAULT_PASSWORD_FILE') }}
+    vault_bootstrap_controller_password_file_normalized: >-
+      {{ vault_bootstrap_ansible_vault_password_file | normpath }}
+    vault_bootstrap_controller_password_file_canonical: >-
+      {{ vault_bootstrap_ansible_vault_password_file | realpath }}
+    vault_bootstrap_controller_escrow_root_normalized: >-
+      {{ vault_bootstrap_controller_escrow_root_path | normpath }}
+    vault_bootstrap_controller_escrow_root_canonical: >-
+      {{ vault_bootstrap_controller_escrow_root_path | realpath }}
+    vault_bootstrap_controller_init_file_normalized: >-
+      {{ vault_bootstrap_controller_init_file_path | normpath }}
+    vault_bootstrap_controller_init_file_canonical: >-
+      {{ vault_bootstrap_controller_init_file_path | realpath }}
+    vault_bootstrap_target_init_file_normalized: >-
+      {{ vault_bootstrap_init_file_path | normpath }}
+    vault_bootstrap_target_persist_dir_normalized: >-
+      {{ vault_bootstrap_persist_dir | normpath }}
+  changed_when: false
+  no_log: true
+
+- name: Require the strict controller escrow contract
+  ansible.builtin.assert:
+    that:
+      - vault_bootstrap_require_controller_escrow | bool
+      - vault_bootstrap_write_init_output | bool
+      - vault_bootstrap_write_init_file_on_init | bool
+      - vault_bootstrap_ansible_vault_password | default('', true) | string | length == 0
+      - vault_bootstrap_init_payload | default({}, true) | length == 0
+      - vault_bootstrap_controller_password_file_env | length > 0
+      - vault_bootstrap_ansible_vault_password_file == vault_bootstrap_controller_password_file_env
+      - vault_bootstrap_controller_password_file_normalized.startswith('/')
+      - vault_bootstrap_controller_password_file_normalized == vault_bootstrap_ansible_vault_password_file
+      - vault_bootstrap_controller_password_file_canonical == vault_bootstrap_ansible_vault_password_file
+      - vault_bootstrap_controller_escrow_root_normalized.startswith('/')
+      - vault_bootstrap_controller_escrow_root_normalized | length > 1
+      - vault_bootstrap_controller_escrow_root_normalized == vault_bootstrap_controller_escrow_root_path
+      - vault_bootstrap_controller_escrow_root_canonical == vault_bootstrap_controller_escrow_root_path
+      - vault_bootstrap_controller_init_file_normalized.startswith('/')
+      - vault_bootstrap_controller_init_file_normalized == vault_bootstrap_controller_init_file_path
+      - vault_bootstrap_controller_init_file_canonical == vault_bootstrap_controller_init_file_path
+      - >-
+        vault_bootstrap_controller_init_file_normalized.startswith(
+          vault_bootstrap_controller_escrow_root_normalized ~ '/'
+        )
+      - >-
+        vault_bootstrap_controller_init_file_canonical.startswith(
+          vault_bootstrap_controller_escrow_root_canonical ~ '/'
+        )
+      - vault_bootstrap_target_persist_dir_normalized.startswith('/')
+      - vault_bootstrap_target_persist_dir_normalized == vault_bootstrap_persist_dir
+      - vault_bootstrap_target_init_file_normalized.startswith('/')
+      - vault_bootstrap_target_init_file_normalized == vault_bootstrap_init_file_path
+      - (vault_bootstrap_target_init_file_normalized | dirname) == vault_bootstrap_target_persist_dir_normalized
+      - vault_bootstrap_controller_init_file_path != vault_bootstrap_ansible_vault_password_file
+      - vault_bootstrap_controller_init_file_path != vault_bootstrap_init_file_path
+    fail_msg: >-
+      Strict controller escrow requires normalized absolute paths, a controller init file
+      contained beneath the approved escrow root, the already-loaded
+      ANSIBLE_VAULT_PASSWORD_FILE identity, no plaintext password fallback or operator payload,
+      and distinct controller-authoritative and target-secondary files.
+    quiet: true
+  no_log: true
+
+- name: Inspect the effective controller process identity
+  ansible.builtin.stat:
+    path: /proc/self
+    follow: true
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  register: vault_bootstrap_controller_process_stat
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Inspect the controller Ansible Vault password file securely
+  ansible.builtin.stat:
+    path: "{{ vault_bootstrap_ansible_vault_password_file }}"
+    follow: false
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  register: vault_bootstrap_controller_password_file_stat
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Inspect the approved controller escrow root
+  ansible.builtin.stat:
+    path: "{{ vault_bootstrap_controller_escrow_root_path }}"
+    follow: false
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  register: vault_bootstrap_controller_escrow_root_stat
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Require a secure controller Ansible Vault password file
+  ansible.builtin.assert:
+    that:
+      - vault_bootstrap_controller_process_stat.stat.exists | default(false)
+      - vault_bootstrap_controller_password_file_stat.stat.exists | default(false)
+      - vault_bootstrap_controller_password_file_stat.stat.isreg | default(false)
+      - vault_bootstrap_controller_password_file_stat.stat.readable | default(false)
+      - not (vault_bootstrap_controller_password_file_stat.stat.islnk | default(false))
+      - vault_bootstrap_controller_password_file_stat.stat.mode | default('') in ['0400', '0600']
+      - >-
+        vault_bootstrap_controller_password_file_stat.stat.uid | default(-1) | int
+        == vault_bootstrap_controller_process_stat.stat.uid | default(-2) | int
+      - vault_bootstrap_controller_password_file_stat.stat.nlink | default(0) | int == 1
+      - vault_bootstrap_controller_password_file_stat.stat.size | default(0) | int > 0
+      - vault_bootstrap_controller_password_file_stat.stat.size | default(0) | int <= 4096
+    fail_msg: >-
+      ANSIBLE_VAULT_PASSWORD_FILE must be a readable, non-linked, owner-only regular file
+      owned by the effective controller user and no larger than 4096 bytes.
+    quiet: true
+  no_log: true
+
+- name: Require a protected approved controller escrow root
+  ansible.builtin.assert:
+    that:
+      - vault_bootstrap_controller_escrow_root_stat.stat.exists | default(false)
+      - vault_bootstrap_controller_escrow_root_stat.stat.isdir | default(false)
+      - vault_bootstrap_controller_escrow_root_stat.stat.readable | default(false)
+      - vault_bootstrap_controller_escrow_root_stat.stat.writeable | default(false)
+      - not (vault_bootstrap_controller_escrow_root_stat.stat.islnk | default(false))
+      - vault_bootstrap_controller_escrow_root_stat.stat.mode | default('') == '0700'
+      - >-
+        vault_bootstrap_controller_escrow_root_stat.stat.uid | default(-1) | int
+        == vault_bootstrap_controller_process_stat.stat.uid | default(-2) | int
+    fail_msg: >-
+      The approved controller escrow root must already exist as a non-linked mode-0700
+      directory owned by the effective controller user.
+    quiet: true
+  no_log: true
+
+- name: Inspect the authoritative controller init escrow
+  ansible.builtin.stat:
+    path: "{{ vault_bootstrap_controller_init_file_path }}"
+    follow: false
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  register: vault_bootstrap_controller_init_file_stat
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Require secure metadata for an existing controller init escrow
+  ansible.builtin.assert:
+    that:
+      - vault_bootstrap_controller_init_file_stat.stat.isreg | default(false)
+      - vault_bootstrap_controller_init_file_stat.stat.readable | default(false)
+      - not (vault_bootstrap_controller_init_file_stat.stat.islnk | default(false))
+      - vault_bootstrap_controller_init_file_stat.stat.mode | default('') in ['0400', '0600']
+      - >-
+        vault_bootstrap_controller_init_file_stat.stat.uid | default(-1) | int
+        == vault_bootstrap_controller_process_stat.stat.uid | default(-2) | int
+      - vault_bootstrap_controller_init_file_stat.stat.nlink | default(0) | int == 1
+      - vault_bootstrap_controller_init_file_stat.stat.size | default(0) | int > 0
+      - vault_bootstrap_controller_init_file_stat.stat.size | default(0) | int <= 64 * 1024 * 1024
+    fail_msg: "The existing authoritative controller init escrow has unsafe metadata."
+    quiet: true
+  when: vault_bootstrap_controller_init_file_stat.stat.exists | default(false)
+  no_log: true
+
+- name: Refuse stale controller escrow for an uninitialized Vault
+  ansible.builtin.fail:
+    msg: >-
+      Vault is uninitialized but the authoritative controller init escrow already exists;
+      refuse to reuse or replace stale recovery material.
+  when:
+    - not (vault_bootstrap_initialized | bool)
+    - vault_bootstrap_controller_init_file_stat.stat.exists | default(false)
+
+- name: Refuse an initialized Vault without controller escrow
+  ansible.builtin.fail:
+    msg: >-
+      Vault is initialized but the authoritative controller init escrow is missing;
+      recover the escrow explicitly before any bootstrap operation.
+  when:
+    - vault_bootstrap_initialized | bool
+    - not (vault_bootstrap_controller_init_file_stat.stat.exists | default(false))

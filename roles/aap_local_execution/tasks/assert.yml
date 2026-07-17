@@ -1,0 +1,86 @@
+---
+- name: Validate requested local AAP action
+  ansible.builtin.assert:
+    that:
+      - aap_local_execution_action in aap_local_execution_allowed_actions
+    fail_msg: >-
+      Unsupported aap_local_execution_action={{ aap_local_execution_action }}. Supported values:
+      {{ aap_local_execution_allowed_actions | join(', ') }}.
+    quiet: true
+
+- name: Validate requested AAP secret backend
+  ansible.builtin.assert:
+    that:
+      - aap_local_execution_effective_secret_backend in aap_local_execution_secret_backends
+    fail_msg: >-
+      Unsupported aap_secret_backend={{ aap_local_execution_effective_secret_backend }}.
+      Supported values: {{ aap_local_execution_secret_backends | join(', ') }}.
+    quiet: true
+
+- name: Validate HashiCorp-only local action
+  ansible.builtin.assert:
+    that:
+      - aap_local_execution_effective_secret_backend == 'hashicorp_vault'
+    fail_msg: >-
+      aap_action=seed_rh_offline_token is only for
+      aap_secret_backend=hashicorp_vault. For aap_secret_backend=ansible_vault,
+      store rh_offline_token in the encrypted Ansible inventory.
+    quiet: true
+  when: aap_local_execution_action == 'seed_rh_offline_token'
+
+- name: Validate required AAP local inventory values
+  ansible.builtin.assert:
+    that:
+      - aap_fqdn | default('', true) | string | trim | length > 0
+      - aap_local_execution_effective_bootstrap_user | string | trim | length > 0
+      - aap_local_execution_effective_user | string | trim | length > 0
+      - modulix_run_ee_image | default('', true) | string | trim | length > 0
+    fail_msg: >-
+      AAP local execution requires aap_fqdn and modulix_run_ee_image in
+      inventory. The default setup account is svc_ansible.
+    quiet: true
+
+- name: Validate optional execution environment digest
+  ansible.builtin.assert:
+    that:
+      - >-
+        aap_local_execution_modulix_run_ee_digest_effective | length == 0
+        or aap_local_execution_modulix_run_ee_digest_effective
+        is match('^sha256:[0-9a-f]{64}$')
+      - >-
+        aap_local_execution_modulix_run_ee_digest_effective | length == 0
+        or '@' not in modulix_run_ee_image
+    fail_msg: >-
+      modulix_run_ee_digest must be empty or a SHA-256 digest in the form
+      sha256:<64 lowercase hexadecimal characters>.
+    quiet: true
+
+- name: Validate AAP setup and runtime accounts
+  ansible.builtin.assert:
+    that:
+      - aap_local_execution_effective_setup_user == 'svc_ansible'
+      - aap_local_execution_effective_bootstrap_user == aap_local_execution_effective_setup_user
+      - aap_local_execution_effective_user == aap_local_execution_effective_setup_user
+      - aap_local_execution_effective_install_user == 'svc_aap'
+      - aap_local_execution_effective_user != aap_local_execution_effective_install_user
+    fail_msg: >-
+      AAP setup/runbooks must execute through svc_ansible, while AAP
+      runtime must use svc_aap. Current values: aap_bootstrap_user={{
+      aap_local_execution_effective_bootstrap_user }}, aap_user={{ aap_local_execution_effective_user }},
+      aap_install_user={{ aap_local_execution_effective_install_user }}.
+    quiet: true
+
+- name: Validate Ansible Vault secret values for rollout actions
+  ansible.builtin.assert:
+    that:
+      - lookup('ansible.builtin.vars', item, default='') | string | trim | length > 0
+      - lookup('ansible.builtin.vars', item, default='') | string | trim != 'CHANGE_ME_USE_ANSIBLE_VAULT'
+    fail_msg: >-
+      {{ item }} must be set in the encrypted Ansible inventory when
+      aap_secret_backend=ansible_vault.
+    quiet: true
+  loop: "{{ aap_local_execution_ansible_vault_required_secret_vars }}"
+  no_log: true
+  when:
+    - aap_local_execution_effective_secret_backend == 'ansible_vault'
+    - aap_local_execution_action != 'prepare_machine_a'

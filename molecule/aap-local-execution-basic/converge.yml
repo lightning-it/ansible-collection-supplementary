@@ -1,0 +1,211 @@
+---
+- name: Converge AAP local-execution trust and archive contracts
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_local_execution_molecule_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-local-execution
+    aap_local_execution_molecule_bin: "{{ aap_local_execution_molecule_root }}/bin"
+    aap_local_execution_molecule_log: "{{ aap_local_execution_molecule_root }}/podman.log"
+    aap_local_execution_molecule_state: "{{ aap_local_execution_molecule_root }}/loaded-image"
+    aap_local_execution_molecule_archive: "{{ aap_local_execution_molecule_root }}/fixed-ee.tar"
+    aap_local_execution_molecule_rotation_marker: >-
+      {{ aap_local_execution_molecule_root }}/rotation-complete
+    aap_local_execution_molecule_image: registry.example.invalid/platform/ee-aap:v1.21.2
+    aap_local_execution_molecule_digest_one: >-
+      sha256:1111111111111111111111111111111111111111111111111111111111111111
+    aap_local_execution_molecule_digest_two: >-
+      sha256:2222222222222222222222222222222222222222222222222222222222222222
+    aap_fqdn: aap03.example.invalid
+    aap_action: prepare_machine_a
+    aap_secret_backend: hashicorp_vault
+    vault_addr: https://vault.example.invalid
+    vault_token: molecule-sensitive-token
+    aap_ee_archive_force: false
+    aap_source_archive_force: false
+    modulix_run_ee_image: "{{ aap_local_execution_molecule_image }}"
+    modulix_run_ee_digest: "{{ aap_local_execution_molecule_digest_two }}"
+    machine_a_modulix_run_ee_archive_path: "{{ aap_local_execution_molecule_archive }}"
+    aap_automation_ansible_dir: "{{ aap_local_execution_molecule_root }}/automation/ansible"
+    aap_secrets_dir: "{{ aap_local_execution_molecule_root }}/secrets"
+    aap_known_hosts_file: "{{ aap_local_execution_molecule_root }}/secrets/known_hosts"
+    aap_host_ca_trust_dir: "{{ aap_local_execution_molecule_root }}/ca-trust"
+    aap_requests_ca_bundle: "{{ aap_local_execution_molecule_root }}/ca-trust/ca-bundle.crt"
+    aap_vault_admin_passwords_kv_path: aap03/aap/deploy/admin_passwords
+    aap_vault_defaults_kv_path: aap03/aap/deploy/defaults
+    aap_vault_host_key: aap03
+    aap_ee_command:
+      - ansible-playbook
+      - runbooks/molecule.yml
+  environment:
+    PATH: >-
+      {{ aap_local_execution_molecule_bin }}:{{ lookup('ansible.builtin.env', 'PATH') }}
+    FAKE_PODMAN_LOG: "{{ aap_local_execution_molecule_log }}"
+    FAKE_PODMAN_STATE: "{{ aap_local_execution_molecule_state }}"
+  tasks:
+    - name: Create AAP local-execution test directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ aap_local_execution_molecule_bin }}"
+          mode: "0750"
+        - path: "{{ aap_local_execution_molecule_root }}/automation/ansible"
+          mode: "0750"
+        - path: "{{ aap_local_execution_molecule_root }}/secrets"
+          mode: "0700"
+        - path: "{{ aap_local_execution_molecule_root }}/ca-trust"
+          mode: "0755"
+
+    - name: Install fake Podman for AAP local-execution coverage
+      ansible.builtin.copy:
+        src: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_DIRECTORY') }}/files/fake-podman"
+        dest: "{{ aap_local_execution_molecule_bin }}/podman"
+        mode: "0750"
+
+    - name: Create non-secret AAP local-execution trust fixtures
+      ansible.builtin.copy:
+        dest: "{{ item.path }}"
+        content: "{{ item.content }}\n"
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ aap_local_execution_molecule_root }}/automation/ansible/aap-local.cfg"
+          content: "[defaults]"
+          mode: "0644"
+        - path: "{{ aap_local_execution_molecule_root }}/secrets/known_hosts"
+          content: "aap03.example.invalid ssh-ed25519 molecule-key"
+          mode: "0600"
+        - path: "{{ aap_local_execution_molecule_root }}/ca-trust/ca-bundle.crt"
+          content: "molecule-ca-metadata"
+          mode: "0644"
+
+    - name: Validate HashiCorp AAP local-execution inputs
+      ansible.builtin.include_role:
+        name: lit.supplementary.aap_local_execution
+        tasks_from: assert
+        public: true
+
+    - name: Validate Ansible Vault AAP local-execution inputs
+      ansible.builtin.include_role:
+        name: lit.supplementary.aap_local_execution
+        tasks_from: assert
+      vars:
+        aap_local_execution_effective_secret_backend: ansible_vault
+
+    - name: Require public archive and force-variable contracts
+      ansible.builtin.assert:
+        that:
+          - not (aap_local_execution_ee_archive_force | bool)
+          - not (aap_local_execution_source_archive_force | bool)
+          - >-
+            aap_local_execution_modulix_run_ee_archive
+            == 'ee-aap-sha256-2222222222222222222222222222222222222222222222222222222222222222.tar'
+        quiet: true
+
+    - name: Inspect completed execution environment digest rotation
+      ansible.builtin.stat:
+        path: "{{ aap_local_execution_molecule_rotation_marker }}"
+      register: aap_local_execution_molecule_rotation
+
+    - name: Exercise execution environment archive digest rotation
+      when: not (aap_local_execution_molecule_rotation.stat.exists | default(false))
+      block:
+        - name: Create initial digest-specific execution environment archive
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_local_execution
+            tasks_from: ee_archive
+          vars:
+            aap_local_execution_modulix_run_ee_digest_effective: >-
+              {{ aap_local_execution_molecule_digest_one }}
+
+        - name: Revalidate unchanged initial execution environment digest
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_local_execution
+            tasks_from: ee_archive
+          vars:
+            aap_local_execution_modulix_run_ee_digest_effective: >-
+              {{ aap_local_execution_molecule_digest_one }}
+
+        - name: Create a zero-byte execution environment cache fixture
+          ansible.builtin.copy:
+            dest: "{{ aap_local_execution_molecule_archive }}"
+            content: ""
+            mode: "0640"
+
+        - name: Repair the zero-byte execution environment cache atomically
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_local_execution
+            tasks_from: ee_archive
+          vars:
+            aap_local_execution_modulix_run_ee_digest_effective: >-
+              {{ aap_local_execution_molecule_digest_one }}
+
+        - name: Rotate execution environment archive to the new digest
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_local_execution
+            tasks_from: ee_archive
+          vars:
+            aap_local_execution_modulix_run_ee_digest_effective: >-
+              {{ aap_local_execution_molecule_digest_two }}
+
+        - name: Revalidate unchanged rotated execution environment digest
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_local_execution
+            tasks_from: ee_archive
+          vars:
+            aap_local_execution_modulix_run_ee_digest_effective: >-
+              {{ aap_local_execution_molecule_digest_two }}
+
+        - name: Load rotated execution environment archive on the target fixture
+          ansible.builtin.command:
+            argv:
+              - podman
+              - load
+              - -i
+              - "{{ aap_local_execution_molecule_archive }}"
+          changed_when: false
+
+        - name: Require exact rotated execution environment digest on target fixture
+          ansible.builtin.command:
+            argv:
+              - podman
+              - image
+              - exists
+              - >-
+                registry.example.invalid/platform/ee-aap@{{
+                  aap_local_execution_molecule_digest_two
+                }}
+          environment:
+            FAKE_PODMAN_REQUIRE_LOADED: "true"
+          changed_when: false
+
+        - name: Record completed execution environment digest rotation
+          ansible.builtin.copy:
+            dest: "{{ aap_local_execution_molecule_rotation_marker }}"
+            content: "complete\n"
+            mode: "0600"
+
+    - name: Revalidate final execution environment archive identity
+      ansible.builtin.include_role:
+        name: lit.supplementary.aap_local_execution
+        tasks_from: ee_archive
+      vars:
+        aap_local_execution_modulix_run_ee_digest_effective: >-
+          {{ aap_local_execution_molecule_digest_two }}
+
+    - name: Run HashiCorp-backed execution environment command
+      ansible.builtin.include_role:
+        name: lit.supplementary.aap_local_execution
+        tasks_from: run_ee
+      vars:
+        aap_local_execution_effective_secret_backend: hashicorp_vault
+        aap_local_execution_vault_token_effective: molecule-sensitive-token
+
+    - name: Run Ansible-Vault-backed execution environment command
+      ansible.builtin.include_role:
+        name: lit.supplementary.aap_local_execution
+        tasks_from: run_ee
+      vars:
+        aap_local_execution_effective_secret_backend: ansible_vault

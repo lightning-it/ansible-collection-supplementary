@@ -1,0 +1,37 @@
+---
+dependency:
+  name: shell
+  command: >-
+    umask 077 && openssl rand -hex 32
+    > /tmp/molecule-vault-password-not-read
+
+driver:
+  name: default
+
+platforms:
+  - name: localhost
+    managed: false
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_VAULT_PASSWORD_FILE: /tmp/molecule-vault-password-not-read
+  inventory:
+    host_vars:
+      localhost:
+        ansible_connection: local
+  playbooks:
+    converge: converge.yml
+    verify: verify.yml
+
+scenario:
+  name: vault-security-lifecycle-basic
+  test_sequence:
+    - dependency
+    - syntax
+    - converge
+    - idempotence
+    - verify
+
+verifier:
+  name: ansible

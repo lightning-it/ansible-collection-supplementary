@@ -1,4 +1,53 @@
 ---
+- name: Check host CA bundle for execution environment
+  ansible.builtin.stat:
+    path: "{{ aap_local_execution_requests_ca_bundle_effective }}"
+  register: aap_local_execution_host_ca_bundle
+
+- name: Validate host CA bundle for execution environment
+  ansible.builtin.assert:
+    that:
+      - aap_local_execution_host_ca_bundle.stat.exists
+      - aap_local_execution_host_ca_bundle.stat.isreg
+      - aap_local_execution_host_ca_bundle.stat.readable
+    fail_msg: >-
+      The RHEL host CA bundle must be readable before starting the execution
+      environment: {{ aap_local_execution_requests_ca_bundle_effective }}.
+    quiet: true
+
+- name: Check verified SSH known hosts file for execution environment
+  ansible.builtin.stat:
+    path: "{{ aap_local_execution_effective_known_hosts_file }}"
+  register: aap_local_execution_known_hosts_file
+
+- name: Validate verified SSH known hosts file for execution environment
+  ansible.builtin.assert:
+    that:
+      - aap_local_execution_known_hosts_file.stat.exists
+      - aap_local_execution_known_hosts_file.stat.isreg
+      - aap_local_execution_known_hosts_file.stat.size | int > 0
+    fail_msg: >-
+      The verified SSH known hosts file must exist before starting the
+      execution environment: {{ aap_local_execution_effective_known_hosts_file }}.
+    quiet: true
+
+- name: Check dedicated AAP Ansible config
+  ansible.builtin.stat:
+    path: "{{ aap_local_execution_effective_automation_ansible_dir }}/aap-local.cfg"
+  register: aap_local_execution_ansible_config
+
+- name: Validate dedicated AAP Ansible config
+  ansible.builtin.assert:
+    that:
+      - aap_local_execution_ansible_config.stat.exists
+      - aap_local_execution_ansible_config.stat.isreg
+      - aap_local_execution_ansible_config.stat.readable
+    fail_msg: >-
+      The dedicated AAP Ansible config must be readable before starting the
+      execution environment:
+      {{ aap_local_execution_effective_automation_ansible_dir }}/aap-local.cfg.
+    quiet: true
+
 - name: Read remote SSH_AUTH_SOCK
   ansible.builtin.command:
     argv:
@@ -23,24 +72,43 @@
           '--network=host',
           '--security-opt', 'label=disable',
           '--user', '0',
-          '-e', 'ANSIBLE_CONFIG=/runner/project/ansible.cfg',
+          '-e', 'ANSIBLE_CONFIG=/runner/project/aap-local.cfg',
+          '-e', 'ANSIBLE_HOST_KEY_CHECKING=true',
           '-e', 'ANSIBLE_LOCAL_TEMP=/appl/tmp/.ansible/tmp',
           '-e', 'ANSIBLE_REMOTE_TEMP',
           '-e', 'ANSIBLE_TOOLBOX_RUNTIME_MODE',
-          '-e', 'ANSIBLE_COLLECTIONS_PATH',
-          '-e', 'ANSIBLE_VAULT_PASSWORD_FILE=/runner/secrets/.vault-pass.txt',
-          '-e', 'VAULT_ADDR',
-          '-e', 'VAULT_SKIP_VERIFY',
-          '-e', 'VAULT_TOKEN',
-          '-e', 'VAULT_ENGINE_MOUNT_POINT',
-          '-e', 'AAP_VAULT_HOST_KEY',
-          '-e', 'AAP_VAULT_ADMIN_PASSWORDS_KV_PATH',
-          '-e', 'AAP_VAULT_DEFAULTS_KV_PATH',
+          '-e', 'ANSIBLE_COLLECTIONS_PATH'
+        ]
+        + (
+          ['-e', 'ANSIBLE_VAULT_PASSWORD_FILE=/runner/secrets/.vault-pass.txt']
+          if (aap_local_execution_effective_secret_backend == 'ansible_vault')
+          else []
+        )
+        + (
+          [
+            '-e', 'VAULT_ADDR',
+            '-e', 'VAULT_SKIP_VERIFY',
+            '-e', 'VAULT_VALIDATE_CERTS',
+            '-e', 'VAULT_TOKEN',
+            '-e', 'VAULT_ENGINE_MOUNT_POINT',
+            '-e', 'AAP_VAULT_HOST_KEY',
+            '-e', 'AAP_VAULT_ADMIN_PASSWORDS_KV_PATH',
+            '-e', 'AAP_VAULT_DEFAULTS_KV_PATH'
+          ]
+          if (aap_local_execution_effective_secret_backend == 'hashicorp_vault')
+          else []
+        )
+        + [
           '-e', 'AAP_ARTIFACT_DIR',
           '-e', 'AAP_BUNDLE_REMOTE_SRC',
           '-e', 'AAP_MANIFEST_REMOTE_SRC',
+          '-e', 'REQUESTS_CA_BUNDLE',
           '-v', aap_local_execution_effective_automation_ansible_dir ~ ':/runner/project',
           '-v', aap_local_execution_effective_secrets_dir ~ ':/runner/secrets:ro',
+          '-v', (
+            aap_local_execution_host_ca_trust_dir_effective
+            ~ ':' ~ aap_local_execution_host_ca_trust_dir_effective ~ ':ro'
+          ),
           '-v', '/appl/tmp:/appl/tmp'
         ]
         + (
@@ -53,7 +121,7 @@
         )
         + [
           '-w', '/runner/project',
-          modulix_run_ee_image
+          aap_local_execution_modulix_run_ee_runtime_image
         ]
         + aap_ee_command
       }}
@@ -65,9 +133,22 @@
     ANSIBLE_TOOLBOX_RUNTIME_MODE: "{{ aap_local_execution_ansible_toolbox_runtime_mode_effective }}"
     ANSIBLE_COLLECTIONS_PATH: "{{ aap_local_execution_ansible_collections_path_effective }}"
     ANSIBLE_REMOTE_TEMP: "{{ ansible_remote_tmp | default('/appl/ansible-tmp', true) }}"
-    VAULT_ADDR: "{{ vault_addr | default('', true) }}"
-    VAULT_SKIP_VERIFY: "{{ vault_skip_verify | default(false) | bool | ternary('true', 'false') }}"
-    VAULT_TOKEN: "{{ aap_local_execution_vault_token_effective }}"
+    VAULT_ADDR: >-
+      {{
+        vault_addr | default('', true)
+        if (aap_local_execution_effective_secret_backend == 'hashicorp_vault')
+        else ''
+      }}
+    VAULT_SKIP_VERIFY: >-
+      {{ (not (aap_local_execution_vault_validate_certs_effective | bool)) | ternary('true', 'false') }}
+    VAULT_VALIDATE_CERTS: >-
+      {{ aap_local_execution_vault_validate_certs_effective | bool | ternary('true', 'false') }}
+    VAULT_TOKEN: >-
+      {{
+        aap_local_execution_vault_token_effective
+        if (aap_local_execution_effective_secret_backend == 'hashicorp_vault')
+        else ''
+      }}
     VAULT_ENGINE_MOUNT_POINT: "{{ vault_engine_mount_point | default('', true) }}"
     AAP_VAULT_HOST_KEY: "{{ aap_vault_host_key | default(aap_local_execution_effective_shortname, true) }}"
     AAP_VAULT_ADMIN_PASSWORDS_KV_PATH: "{{ aap_vault_admin_passwords_kv_path }}"
@@ -75,7 +156,9 @@
     AAP_ARTIFACT_DIR: "{{ aap_local_execution_effective_artifact_dir }}"
     AAP_BUNDLE_REMOTE_SRC: "{{ aap_local_execution_bundle_remote_src | default('', true) }}"
     AAP_MANIFEST_REMOTE_SRC: "{{ aap_local_execution_manifest_remote_src | default('', true) }}"
+    REQUESTS_CA_BUNDLE: "{{ aap_local_execution_requests_ca_bundle_effective }}"
     CONTAINERS_STORAGE_CONF: "{{ aap_local_execution_podman_storage_conf_effective }}"
     TMPDIR: "{{ aap_local_execution_podman_tmpdir_effective }}"
   register: aap_local_execution_ee_command_result
   changed_when: false
+  no_log: true

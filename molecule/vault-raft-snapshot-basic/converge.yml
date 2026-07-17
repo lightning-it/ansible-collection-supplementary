@@ -1,0 +1,353 @@
+---
+- name: Converge Vault Raft snapshot escrow
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vault_raft_snapshot_molecule_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-raft-snapshot
+    vault_raft_snapshot_molecule_port: 18221
+    vault_raft_snapshot_molecule_api_url: >-
+      https://localhost:{{ vault_raft_snapshot_molecule_port }}
+    vault_raft_snapshot_molecule_ca_path: "{{ vault_raft_snapshot_molecule_root }}/ca.crt"
+    vault_raft_snapshot_molecule_key_path: "{{ vault_raft_snapshot_molecule_root }}/ca.key"
+    vault_raft_snapshot_molecule_state_path: "{{ vault_raft_snapshot_molecule_root }}/state.json"
+    vault_raft_snapshot_molecule_document_path: >-
+      {{ vault_raft_snapshot_molecule_root }}/vault-raft-fixed.vault.yml
+    vault_raft_snapshot_molecule_image: >-
+      docker.io/hashicorp/vault@sha256:6c77f568e6b6310d5bc68befb5711b9215c574de7da489e7c24332581176888b
+    vault_raft_snapshot_molecule_bin: "{{ vault_raft_snapshot_molecule_root }}/bin"
+    vault_raft_snapshot_molecule_podman_log: >-
+      {{ vault_raft_snapshot_molecule_root }}/podman.log
+    vault_raft_snapshot_molecule_container_state: >-
+      {{ vault_raft_snapshot_molecule_root }}/container-state
+    vault_raft_snapshot_molecule_restore_marker: >-
+      {{ vault_raft_snapshot_molecule_root }}/restore-complete
+    vault_raft_snapshot_molecule_snapshot_state:
+      initialized: true
+      sealed: true
+      threshold: 1
+      progress: 0
+      cluster_id: molecule-cluster-id
+      root_token: molecule-root-token-fixture
+      root_token_active: true
+      policy_name: molecule-recovery
+      role_id: molecule-role-id-fixture
+      secret_id: molecule-secret-id-fixture
+      scoped_token: molecule-scoped-token-fixture
+      kv_documents:
+        stage-2c/data/recovery/sentinel:
+          purpose: restore-proof
+          revision: 1
+    vault_raft_snapshot_action: restore_drill
+    vault_raft_snapshot_api_url: https://vault.molecule.invalid
+    vault_raft_snapshot_controller_ca_cert_path: "{{ vault_raft_snapshot_molecule_ca_path }}"
+    vault_raft_snapshot_target_ca_cert_path: "{{ vault_raft_snapshot_molecule_ca_path }}"
+    vault_raft_snapshot_role_id: molecule-role-id-fixture
+    vault_raft_snapshot_secret_id: molecule-secret-id-fixture
+    vault_raft_snapshot_controller_escrow_root_path: "{{ vault_raft_snapshot_molecule_root }}"
+    vault_raft_snapshot_controller_document_path: "{{ vault_raft_snapshot_molecule_document_path }}"
+    vault_raft_snapshot_expected_ciphertext_sha256: >-
+      aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    vault_raft_snapshot_document_subject: vault.molecule.invalid
+    vault_raft_snapshot_verification_kv_paths:
+      - mount_point: stage-2c
+        path: recovery/sentinel
+    vault_raft_snapshot_image: "{{ vault_raft_snapshot_molecule_image }}"
+    vault_raft_snapshot_restore_tls_hostname: localhost
+    vault_raft_snapshot_restore_api_port: "{{ vault_raft_snapshot_molecule_port }}"
+    vault_raft_snapshot_restore_cluster_port: 18222
+    vault_raft_snapshot_restore_work_root: /run/lit-vault-raft-molecule
+    vault_raft_snapshot_restore_container_name: molecule-vault-raft-restore
+    vault_raft_snapshot_production_cert_dir: "{{ vault_raft_snapshot_molecule_root }}"
+    vault_raft_snapshot_restore_node_id: molecule-restore
+    vault_raft_snapshot_restore_unseal_keys:
+      - molecule-unseal-key-fixture
+    vault_raft_snapshot_restore_key_threshold: 1
+  environment:
+    PATH: >-
+      {{ vault_raft_snapshot_molecule_bin }}:{{ lookup('ansible.builtin.env', 'PATH') }}
+    FAKE_PODMAN_LOG: "{{ vault_raft_snapshot_molecule_podman_log }}"
+    FAKE_PODMAN_CONTAINER_STATE: "{{ vault_raft_snapshot_molecule_container_state }}"
+    HTTPS_PROXY: http://127.0.0.1:9
+    HTTP_PROXY: http://127.0.0.1:9
+    NO_PROXY: ""
+    https_proxy: http://127.0.0.1:9
+    http_proxy: http://127.0.0.1:9
+    no_proxy: ""
+  tasks:
+    - name: Exercise the Vault Raft snapshot no-op action
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_raft_snapshot
+      vars:
+        vault_raft_snapshot_action: none
+
+    - name: Validate the DNS restore-drill assertion contract
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_raft_snapshot
+        tasks_from: assert
+      no_log: true
+
+    - name: Initialize numeric restore TLS hostname refusal
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_numeric_hostname_refused: false
+
+    - name: Reject a numeric restore TLS hostname
+      block:
+        - name: Exercise the numeric restore TLS hostname gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_tls_hostname: 127.0.0.1
+          no_log: true
+      rescue:
+        - name: Record numeric restore TLS hostname refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_numeric_hostname_refused: true
+
+    - name: Require numeric restore TLS hostname refusal
+      ansible.builtin.assert:
+        that:
+          - vault_raft_snapshot_molecule_numeric_hostname_refused | bool
+        quiet: true
+
+    - name: Initialize non-local restore TLS hostname refusal
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_nonlocal_hostname_refused: false
+
+    - name: Reject a non-local restore TLS hostname
+      block:
+        - name: Exercise the non-local restore TLS hostname gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_tls_hostname: vault.example.invalid
+          no_log: true
+      rescue:
+        - name: Record non-local restore TLS hostname refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_nonlocal_hostname_refused: true
+
+    - name: Require non-local restore TLS hostname refusal
+      ansible.builtin.assert:
+        that:
+          - vault_raft_snapshot_molecule_nonlocal_hostname_refused | bool
+        quiet: true
+
+    - name: Create Vault Raft snapshot test directory
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0700"
+      loop:
+        - "{{ vault_raft_snapshot_molecule_root }}"
+        - "{{ vault_raft_snapshot_molecule_bin }}"
+
+    - name: Install fake Podman for Vault Raft restore coverage
+      ansible.builtin.copy:
+        src: "{{ lookup('ansible.builtin.env', 'MOLECULE_SCENARIO_DIRECTORY') }}/files/fake-podman"
+        dest: "{{ vault_raft_snapshot_molecule_bin }}/podman"
+        mode: "0750"
+
+    - name: Install Vault Raft snapshot fake API
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/resources/fake_vault_api.py"
+        dest: "{{ vault_raft_snapshot_molecule_root }}/fake_vault_api.py"
+        mode: "0750"
+
+    - name: Create Vault Raft snapshot TLS fixture
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -x509
+          - -newkey
+          - rsa:2048
+          - -sha256
+          - -nodes
+          - -days
+          - "2"
+          - -subj
+          - /CN=localhost
+          - -addext
+          - subjectAltName=DNS:localhost
+          - -keyout
+          - "{{ vault_raft_snapshot_molecule_key_path }}"
+          - -out
+          - "{{ vault_raft_snapshot_molecule_ca_path }}"
+        creates: "{{ vault_raft_snapshot_molecule_ca_path }}"
+      no_log: true
+
+    - name: Enforce Vault Raft snapshot TLS fixture permissions
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ vault_raft_snapshot_molecule_key_path }}"
+          mode: "0600"
+        - path: "{{ vault_raft_snapshot_molecule_ca_path }}"
+          mode: "0644"
+
+    - name: Initialize Vault Raft snapshot fake state
+      ansible.builtin.copy:
+        dest: "{{ vault_raft_snapshot_molecule_state_path }}"
+        content: >-
+          {{
+            vault_raft_snapshot_molecule_snapshot_state
+            | combine(
+                {
+                  'sealed': false,
+                  'snapshot_b64': (
+                    vault_raft_snapshot_molecule_snapshot_state
+                    | to_json
+                    | b64encode
+                  )
+                }
+              )
+            | to_nice_json
+          }}
+        mode: "0600"
+        force: false
+      no_log: true
+
+    - name: Probe Vault Raft snapshot fake API
+      ansible.builtin.uri:
+        url: "{{ vault_raft_snapshot_molecule_api_url }}/v1/sys/health"
+        validate_certs: true
+        ca_path: "{{ vault_raft_snapshot_molecule_ca_path }}"
+        status_code: 200
+        use_proxy: false
+      register: vault_raft_snapshot_molecule_api_probe
+      changed_when: false
+      failed_when: false
+
+    - name: Start Vault Raft snapshot fake API
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ vault_raft_snapshot_molecule_root }}/fake_vault_api.py"
+          - --port
+          - "{{ vault_raft_snapshot_molecule_port | string }}"
+          - --state
+          - "{{ vault_raft_snapshot_molecule_state_path }}"
+          - --request-log
+          - "{{ vault_raft_snapshot_molecule_root }}/requests.log"
+          - --pid-file
+          - "{{ vault_raft_snapshot_molecule_root }}/server.pid"
+          - --cert
+          - "{{ vault_raft_snapshot_molecule_ca_path }}"
+          - --key
+          - "{{ vault_raft_snapshot_molecule_key_path }}"
+      async: 3600
+      poll: 0
+      changed_when: true
+      when: vault_raft_snapshot_molecule_api_probe.status | default(0) != 200
+
+    - name: Wait for Vault Raft snapshot fake API
+      ansible.builtin.uri:
+        url: "{{ vault_raft_snapshot_molecule_api_url }}/v1/sys/health"
+        validate_certs: true
+        ca_path: "{{ vault_raft_snapshot_molecule_ca_path }}"
+        status_code: 200
+        use_proxy: false
+      register: vault_raft_snapshot_molecule_api_ready
+      until: vault_raft_snapshot_molecule_api_ready.status == 200
+      retries: 20
+      delay: 1
+      changed_when: false
+
+    - name: Create immutable encrypted Vault Raft snapshot escrow
+      ansible.builtin.include_role:
+        name: lit.supplementary.vault_raft_snapshot
+      vars:
+        vault_raft_snapshot_action: backup
+        vault_raft_snapshot_api_url: "{{ vault_raft_snapshot_molecule_api_url }}"
+        vault_raft_snapshot_controller_ca_cert_path: "{{ vault_raft_snapshot_molecule_ca_path }}"
+        vault_raft_snapshot_role_id: molecule-role-id-fixture
+        vault_raft_snapshot_secret_id: molecule-secret-id-fixture
+        vault_raft_snapshot_controller_escrow_root_path: "{{ vault_raft_snapshot_molecule_root }}"
+        vault_raft_snapshot_controller_document_path: "{{ vault_raft_snapshot_molecule_document_path }}"
+        vault_raft_snapshot_document_subject: vault.molecule.invalid
+        vault_raft_snapshot_verification_kv_paths:
+          - mount_point: stage-2c
+            path: recovery/sentinel
+        vault_raft_snapshot_image: "{{ vault_raft_snapshot_molecule_image }}"
+        vault_raft_snapshot_restore_tls_hostname: localhost
+        vault_raft_snapshot_restore_api_port: "{{ vault_raft_snapshot_molecule_port }}"
+      no_log: true
+
+    - name: Require the DNS-validated isolated restore API URL
+      ansible.builtin.assert:
+        that:
+          - >-
+            _vault_raft_snapshot_restore_api_url
+            == vault_raft_snapshot_molecule_api_url
+        quiet: true
+
+    - name: Probe the fake Vault through the derived restore API URL
+      ansible.builtin.uri:
+        url: "{{ _vault_raft_snapshot_restore_api_url }}/v1/sys/health"
+        validate_certs: true
+        ca_path: "{{ vault_raft_snapshot_molecule_ca_path }}"
+        status_code: 200
+        use_proxy: false
+      changed_when: false
+
+    - name: Inspect encrypted Vault Raft snapshot for restore proof
+      ansible.builtin.stat:
+        path: "{{ vault_raft_snapshot_molecule_document_path }}"
+        follow: false
+        get_checksum: true
+        checksum_algorithm: sha256
+      register: vault_raft_snapshot_molecule_ciphertext
+
+    - name: Record exact encrypted Vault Raft snapshot identity
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_expected_ciphertext_sha256: >-
+          {{ vault_raft_snapshot_molecule_ciphertext.stat.checksum }}
+
+    - name: Inspect completed executable Vault Raft restore proof
+      ansible.builtin.stat:
+        path: "{{ vault_raft_snapshot_molecule_restore_marker }}"
+      register: vault_raft_snapshot_molecule_restore_proof
+
+    - name: Exercise isolated Vault Raft restore lifecycle through an invalid proxy
+      when: not (vault_raft_snapshot_molecule_restore_proof.stat.exists | default(false))
+      block:
+        - name: Reset fake Vault to an isolated uninitialized lifecycle
+          ansible.builtin.copy:
+            dest: "{{ vault_raft_snapshot_molecule_state_path }}"
+            content: >-
+              {{
+                {
+                  'initialized': false,
+                  'sealed': true,
+                  'threshold': 1,
+                  'progress': 0
+                }
+                | to_nice_json
+              }}
+            mode: "0600"
+          no_log: true
+
+        - name: Run executable Vault Raft restore proof
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+          vars:
+            vault_raft_snapshot_action: restore_drill
+          no_log: true
+
+        - name: Require executable Vault Raft restore proof result
+          ansible.builtin.assert:
+            that:
+              - vault_raft_snapshot_restore_verified | default(false) | bool
+              - vault_raft_snapshot_restore_sha256 is match('^[0-9a-f]{64}$')
+            quiet: true
+
+        - name: Record completed executable Vault Raft restore proof
+          ansible.builtin.copy:
+            dest: "{{ vault_raft_snapshot_molecule_restore_marker }}"
+            content: "complete\n"
+            mode: "0600"

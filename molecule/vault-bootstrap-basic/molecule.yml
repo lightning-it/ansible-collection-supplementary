@@ -1,7 +1,14 @@
 ---
 dependency:
   name: shell
-  command: ":"
+  command: |-
+    set -euo pipefail
+    install -d -m 0700 "${MOLECULE_EPHEMERAL_DIRECTORY}"
+    if [ ! -s "${MOLECULE_EPHEMERAL_DIRECTORY}/ansible-vault-password" ]; then
+      umask 077
+      head -c 48 /dev/urandom | base64 > "${MOLECULE_EPHEMERAL_DIRECTORY}/ansible-vault-password"
+    fi
+    chmod 0600 "${MOLECULE_EPHEMERAL_DIRECTORY}/ansible-vault-password"
 
 driver:
   name: default
@@ -12,6 +19,8 @@ platforms:
 
 provisioner:
   name: ansible
+  env:
+    ANSIBLE_VAULT_PASSWORD_FILE: "${MOLECULE_EPHEMERAL_DIRECTORY}/ansible-vault-password"
   inventory:
     host_vars:
       localhost:

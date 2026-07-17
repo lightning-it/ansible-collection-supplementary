@@ -1,13 +1,22 @@
-storage "file" {
+storage "{{ vault_deploy_storage_backend }}" {
   path = "{{ vault_deploy_container_data_dir }}"
+{% if vault_deploy_storage_backend == 'raft' %}
+  node_id = "{{ vault_deploy_raft_node_id }}"
+{% endif %}
 }
 
 listener "tcp" {
-  address     = "0.0.0.0:{{ vault_deploy_port }}"
+  address       = "{{ vault_deploy_listener_address }}"
+{% if vault_deploy_storage_backend == 'raft' %}
+  cluster_address = "{{ vault_deploy_cluster_listener_address }}"
+{% endif %}
   tls_cert_file = "/vault/certs/vault.crt"
   tls_key_file  = "/vault/certs/vault.key"
 }
 
 ui            = true
-disable_mlock = true
-api_addr      = "https://127.0.0.1:{{ vault_deploy_port }}"
+disable_mlock = {{ vault_deploy_disable_mlock | bool | ternary('true', 'false') }}
+api_addr      = "{{ vault_deploy_api_addr }}"
+{% if vault_deploy_storage_backend == 'raft' %}
+cluster_addr  = "{{ vault_deploy_cluster_addr }}"
+{% endif %}

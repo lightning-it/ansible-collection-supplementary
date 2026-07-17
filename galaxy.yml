@@ -1,7 +1,7 @@
 ---
 namespace: lit
 name: supplementary
-version: 1.35.0
+version: 1.40.0
 readme: README.md
 description: 'Supplementary Ansible collection for ModuLix, providing configuration
   and integration roles for platform services and Terraform-backed workflows.
@@ -21,11 +21,11 @@ tags:
 dependencies:
   community.general: '>=11.4.9,<12.0.0'
   community.crypto: '>=3.2.2,<4.0.0'
-  ansible.posix: '>=2.2.0'
+  ansible.posix: '>=2.1.0'
   community.vmware: 5.10.0
-  lit.foundational: '>=1.25.0'
+  lit.foundational: '>=1.31.0'
   lit.rhel: '>=1.17.1'
-  community.hashi_vault: '*'
+  community.hashi_vault: 7.1.0
 build_ignore:
   - .ansible
   - extensions/molecule

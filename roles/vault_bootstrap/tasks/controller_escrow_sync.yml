@@ -1,0 +1,103 @@
+---
+- name: Inspect the target secondary escrow directory
+  ansible.builtin.stat:
+    path: "{{ vault_bootstrap_persist_dir }}"
+    follow: false
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  register: vault_bootstrap_target_persist_dir_stat
+  changed_when: false
+  no_log: true
+
+- name: Require secure metadata for an existing target secondary directory
+  ansible.builtin.assert:
+    that:
+      - vault_bootstrap_target_persist_dir_stat.stat.isdir | default(false)
+      - not (vault_bootstrap_target_persist_dir_stat.stat.islnk | default(false))
+      - vault_bootstrap_target_persist_dir_stat.stat.uid | default(-1) | int == 0
+      - vault_bootstrap_target_persist_dir_stat.stat.gid | default(-1) | int == 0
+      - vault_bootstrap_target_persist_dir_stat.stat.mode | default('') == '0700'
+    fail_msg: "The existing target secondary escrow directory has unsafe metadata."
+    quiet: true
+  when: vault_bootstrap_target_persist_dir_stat.stat.exists | default(false)
+  no_log: true
+
+- name: Create the target secondary escrow directory when absent
+  ansible.builtin.file:
+    path: "{{ vault_bootstrap_persist_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: not (vault_bootstrap_target_persist_dir_stat.stat.exists | default(false))
+  no_log: true
+
+- name: Inspect the target secondary init ciphertext
+  ansible.builtin.stat:
+    path: "{{ vault_bootstrap_init_file_path }}"
+    follow: false
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  register: vault_bootstrap_target_init_file_stat
+  changed_when: false
+  no_log: true
+
+- name: Refuse unsafe target secondary ciphertext metadata
+  ansible.builtin.assert:
+    that:
+      - vault_bootstrap_target_init_file_stat.stat.isreg | default(false)
+      - not (vault_bootstrap_target_init_file_stat.stat.islnk | default(false))
+      - vault_bootstrap_target_init_file_stat.stat.uid | default(-1) | int == 0
+      - vault_bootstrap_target_init_file_stat.stat.gid | default(-1) | int == 0
+      - vault_bootstrap_target_init_file_stat.stat.mode | default('') == '0600'
+      - vault_bootstrap_target_init_file_stat.stat.nlink | default(0) | int == 1
+      - vault_bootstrap_target_init_file_stat.stat.size | default(0) | int > 0
+      - vault_bootstrap_target_init_file_stat.stat.size | default(0) | int <= 64 * 1024 * 1024
+    fail_msg: >-
+      The target secondary init ciphertext exists with unsafe metadata and will not be overwritten.
+    quiet: true
+  when: vault_bootstrap_target_init_file_stat.stat.exists | default(false)
+  no_log: true
+
+- name: Copy controller ciphertext to the absent target secondary path
+  ansible.builtin.copy:
+    src: "{{ vault_bootstrap_controller_init_file_path }}"
+    dest: "{{ vault_bootstrap_init_file_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+    force: false
+    decrypt: false
+  when: not (vault_bootstrap_target_init_file_stat.stat.exists | default(false))
+  no_log: true
+
+- name: Verify the target secondary init ciphertext after synchronization
+  ansible.builtin.stat:
+    path: "{{ vault_bootstrap_init_file_path }}"
+    follow: false
+    get_attributes: false
+    get_checksum: true
+    checksum_algorithm: sha256
+    get_mime: false
+  register: vault_bootstrap_target_init_file_verified
+  changed_when: false
+  no_log: true
+
+- name: Require an exact secure target secondary ciphertext copy
+  ansible.builtin.assert:
+    that:
+      - vault_bootstrap_target_init_file_verified.stat.exists | default(false)
+      - vault_bootstrap_target_init_file_verified.stat.isreg | default(false)
+      - not (vault_bootstrap_target_init_file_verified.stat.islnk | default(false))
+      - vault_bootstrap_target_init_file_verified.stat.uid | default(-1) | int == 0
+      - vault_bootstrap_target_init_file_verified.stat.gid | default(-1) | int == 0
+      - vault_bootstrap_target_init_file_verified.stat.mode | default('') == '0600'
+      - vault_bootstrap_target_init_file_verified.stat.nlink | default(0) | int == 1
+      - >-
+        vault_bootstrap_target_init_file_verified.stat.checksum | default('')
+        == vault_bootstrap_controller_escrow_result.ciphertext_sha256
+    fail_msg: "The target secondary init ciphertext did not verify exactly after synchronization."
+    quiet: true
+  no_log: true

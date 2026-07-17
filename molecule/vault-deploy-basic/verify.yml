@@ -6,6 +6,12 @@
   vars:
     vault_deploy_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-deploy-coverage-mode
+    vault_deploy_cert_dir: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-deploy-tls
+    vault_deploy_runtime_template_dir: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-deploy-runtime
+    vault_deploy_api_ca_cert_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-deploy-api-trust/ca.crt
   tasks:
     - name: Read lit.supplementary.vault_deploy coverage marker
       ansible.builtin.slurp:
@@ -16,4 +22,110 @@
       ansible.builtin.assert:
         that:
           - vault_deploy_molecule_marker.content | b64decode | trim == 'syntax_stub'
+        quiet: true
+
+    - name: Read generated Vault TLS file state
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - "{{ vault_deploy_cert_dir }}/vault.key"
+        - "{{ vault_deploy_cert_dir }}/vault.crt"
+        - "{{ vault_deploy_cert_dir }}/ca.crt"
+        - "{{ vault_deploy_api_ca_cert_path }}"
+      register: vault_deploy_tls_files
+
+    - name: Inspect generated Vault bootstrap certificate
+      community.crypto.x509_certificate_info:
+        path: "{{ vault_deploy_cert_dir }}/vault.crt"
+      register: vault_deploy_tls_cert_info
+
+    - name: Read Vault bootstrap TLS generation source
+      ansible.builtin.set_fact:
+        vault_deploy_tls_generation_source: >-
+          {{
+            lookup(
+              'ansible.builtin.file',
+              lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+              ~ '/roles/vault_deploy/tasks/generate_bootstrap_tls.yml'
+            )
+          }}
+      changed_when: false
+
+    - name: Assert target-generated TLS assets and pinned trust certificate
+      ansible.builtin.assert:
+        that:
+          - >-
+            vault_deploy_tls_files.results
+            | map(attribute='stat.exists')
+            | list == [true, true, true, true]
+          - vault_deploy_tls_files.results[0].stat.mode == '0600'
+          - vault_deploy_tls_files.results[1].stat.mode == '0644'
+          - vault_deploy_tls_files.results[2].stat.mode == '0644'
+          - vault_deploy_tls_files.results[3].stat.mode == '0644'
+          - >-
+            vault_deploy_tls_files.results[1].stat.checksum
+            == vault_deploy_tls_files.results[2].stat.checksum
+          - >-
+            vault_deploy_tls_files.results[2].stat.checksum
+            == vault_deploy_tls_files.results[3].stat.checksum
+          - "'IP:127.0.0.1' in vault_deploy_tls_cert_info.subject_alt_name"
+          - "'DNS:vault.test.invalid' in vault_deploy_tls_cert_info.subject_alt_name"
+          - "'delegate_to:' not in vault_deploy_tls_generation_source"
+          - "'tempfile:' not in vault_deploy_tls_generation_source"
+        quiet: true
+
+    - name: Read rendered Vault HCL cases
+      ansible.builtin.slurp:
+        src: "{{ vault_deploy_runtime_template_dir }}/{{ item }}.hcl"
+      loop:
+        - file
+        - raft
+      register: vault_deploy_rendered_hcl
+
+    - name: Read rendered Vault pod cases
+      ansible.builtin.slurp:
+        src: "{{ vault_deploy_runtime_template_dir }}/{{ item }}-pod.yml"
+      loop:
+        - file
+        - raft
+      register: vault_deploy_rendered_pods
+
+    - name: Normalize rendered Vault runtime cases
+      ansible.builtin.set_fact:
+        vault_deploy_file_hcl: "{{ vault_deploy_rendered_hcl.results[0].content | b64decode }}"
+        vault_deploy_raft_hcl: "{{ vault_deploy_rendered_hcl.results[1].content | b64decode }}"
+        vault_deploy_file_pod: "{{ vault_deploy_rendered_pods.results[0].content | b64decode | from_yaml }}"
+        vault_deploy_raft_pod: "{{ vault_deploy_rendered_pods.results[1].content | b64decode | from_yaml }}"
+      changed_when: false
+
+    - name: Assert file storage HCL and pod address coherence
+      ansible.builtin.assert:
+        that:
+          - "'storage \"file\" {' in vault_deploy_file_hcl"
+          - "'storage \"raft\" {' not in vault_deploy_file_hcl"
+          - "'address       = \"127.0.0.1:8200\"' in vault_deploy_file_hcl"
+          - "'api_addr      = \"https://vault-file.test.invalid:8200\"' in vault_deploy_file_hcl"
+          - "'cluster_addr' not in vault_deploy_file_hcl"
+          - vault_deploy_file_pod.spec.containers[0].ports | length == 1
+          - >-
+            vault_deploy_file_pod.spec.containers[0].env[0].value
+            == 'https://127.0.0.1:8200'
+        quiet: true
+
+    - name: Assert single-node Raft HCL and pod address coherence
+      ansible.builtin.assert:
+        that:
+          - "'storage \"raft\" {' in vault_deploy_raft_hcl"
+          - "'node_id = \"vault-raft-01\"' in vault_deploy_raft_hcl"
+          - "'cluster_address = \"127.0.0.1:8201\"' in vault_deploy_raft_hcl"
+          - "'api_addr      = \"https://vault-raft.test.invalid:8200\"' in vault_deploy_raft_hcl"
+          - "'cluster_addr  = \"https://vault-raft.test.invalid:8201\"' in vault_deploy_raft_hcl"
+          - >-
+            vault_deploy_raft_pod.spec.containers[0].ports
+            | map(attribute='containerPort')
+            | list == [8200, 8201]
+          - >-
+            vault_deploy_raft_pod.spec.containers[0].env[0].value
+            == 'https://127.0.0.1:8200'
         quiet: true

@@ -14,6 +14,7 @@
     vault_config_role_id: "{{ ansible_hashi_vault_role_id | default(omit, true) }}"
     vault_config_secret_id: "{{ ansible_hashi_vault_secret_id | default(omit, true) }}"
   changed_when: false
+  no_log: true
   tags:
     - vault_config_pki
 
@@ -29,6 +30,7 @@
     fail_msg: >-
       Vault PKI requires approle credentials (ansible_hashi_vault_role_id/secret_id)
       or a Vault token (vault_config_token).
+  no_log: true
   tags:
     - vault_config_pki
 
@@ -53,10 +55,11 @@
     auth_method: "token"
     token: "{{ vault_config_token }}"
     validate_certs: "{{ vault_config_vault_validate_certs }}"
+    ca_cert: "{{ vault_config_api_ca_cert_path_effective | default(omit, true) }}"
     path: "{{ vault_config_pki_role_path }}"
   register: vault_config_pki_role_read
   failed_when: false
-  no_log: "{{ vault_config_pki_no_log }}"
+  no_log: true
   tags:
     - vault_config_pki
 
@@ -89,10 +92,11 @@
     role_id: "{{ vault_config_role_id | default(omit, true) }}"
     secret_id: "{{ vault_config_secret_id | default(omit, true) }}"
     validate_certs: "{{ vault_config_vault_validate_certs }}"
+    ca_cert: "{{ vault_config_api_ca_cert_path_effective | default(omit, true) }}"
     path: "{{ inventory_hostname }}/vault/certificate"
   register: vault_config_existing_cert
   failed_when: false
-  no_log: "{{ vault_config_pki_no_log }}"
+  no_log: true
   tags:
     - vault_config_pki
 
@@ -103,6 +107,7 @@
     vault_config_existing_cert_in_vault: >-
       {{ (vault_config_existing_cert.data.data.certificate | default('', true) | length) > 0 }}
   changed_when: false
+  no_log: true
   tags:
     - vault_config_pki
 
@@ -206,6 +211,7 @@
     role_id: "{{ vault_config_role_id | default(omit, true) }}"
     secret_id: "{{ vault_config_secret_id | default(omit, true) }}"
     validate_certs: "{{ vault_config_vault_validate_certs }}"
+    ca_cert: "{{ vault_config_api_ca_cert_path_effective | default(omit, true) }}"
     path: "{{ vault_config_pki_path }}/{{ vault_config_pki_role }}"
     data:
       common_name: "{{ vault_config_vault_hostname }}"
@@ -217,7 +223,7 @@
     - vault_config_pki_role_exists | default(false) | bool
     - not (vault_config_existing_cert_present | default(false) | bool)
       or (vault_config_cert_expiry | int) < (vault_config_cert_check_time | int)
-  no_log: "{{ vault_config_pki_no_log }}"
+  no_log: true
   notify:
     - Recreate vault pod
     - Run vault pod
@@ -253,6 +259,7 @@
     role_id: "{{ vault_config_role_id | default(omit, true) }}"
     secret_id: "{{ vault_config_secret_id | default(omit, true) }}"
     validate_certs: "{{ vault_config_vault_validate_certs }}"
+    ca_cert: "{{ vault_config_api_ca_cert_path_effective | default(omit, true) }}"
     path: "{{ inventory_hostname }}/vault/certificate"
     data:
       certificate: "{{ vault_config_pki_cert.data.data.certificate }}"
@@ -260,7 +267,7 @@
       issuing_ca: "{{ vault_config_pki_cert.data.data.issuing_ca }}"
       not_after: "{{ vault_config_new_cert_info.not_after }}"
   when: vault_config_pki_cert.data is defined
-  no_log: "{{ vault_config_pki_no_log }}"
+  no_log: true
   notify:
     - Recreate vault pod
     - Run vault pod
@@ -290,7 +297,7 @@
         {{ vault_config_pki_cert.data.data.issuing_ca
            | default(vault_config_existing_cert_data.issuing_ca) }}
       mode: "0644"
-  no_log: "{{ vault_config_pki_no_log }}"
+  no_log: true
   notify:
     - Recreate vault pod
     - Run vault pod

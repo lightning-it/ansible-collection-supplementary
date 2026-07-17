@@ -1,19 +1,25 @@
 ---
-- name: Import Vault deploy prechecks
-  ansible.builtin.import_role:
-    name: vault_deploy
-    tasks_from: assert
-  tags: always
-
-- name: Ensure vault validate variables are valid
+- name: Ensure Vault validation variables are valid
   ansible.builtin.assert:
     that:
-      - vault_deploy_validate_mode in ['fail', 'report']
-      - vault_deploy_container_name | default('', true) | trim | length > 0
-      - vault_deploy_host_data_dir | default('', true) | trim | length > 0
-      - vault_deploy_api_url | default('', true) | trim | length > 0
-      - vault_deploy_health_url | default('', true) | trim | length > 0
-      - vault_deploy_vault_validate_certs is boolean
+      - vault_validate_mode in ['fail', 'report']
+      - vault_validate_strict is boolean
+      - vault_validate_expected_lifecycle in ['any', 'initialized', 'ready', 'sealed', 'uninitialized']
+      - vault_validate_lifecycle_retries is integer
+      - vault_validate_lifecycle_retries is not boolean
+      - vault_validate_lifecycle_retries | int > 0
+      - vault_validate_lifecycle_delay is integer
+      - vault_validate_lifecycle_delay is not boolean
+      - vault_validate_lifecycle_delay | int >= 0
+      - vault_validate_container_name | default('', true) | trim | length > 0
+      - vault_validate_host_data_dir | default('', true) | trim | length > 0
+      - vault_validate_api_url | default('', true) | trim | length > 0
+      - vault_validate_health_url | default('', true) | trim | length > 0
+      - vault_validate_validate_certs is boolean
+      - vault_validate_ca_cert_path is string
+      - >-
+        vault_validate_ca_cert_path | length == 0
+        or vault_validate_ca_cert_path.startswith('/')
     fail_msg: "vault_validate variables are missing or invalid."
     quiet: true
   tags: always
