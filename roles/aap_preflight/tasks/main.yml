@@ -19,14 +19,32 @@
     - aap_preflight
     - ssh
 
-- name: Gather minimal facts
+- name: Gather host facts
   ansible.builtin.setup:
     gather_subset:
-      - min
+      - all
   when: aap_preflight_enabled | bool
   tags:
     - aap_preflight
     - facts
+
+- name: Validate customer-prepared host contract
+  ansible.builtin.include_tasks: prepared_host.yml
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_prepared_host | bool
+  tags:
+    - aap_preflight
+    - prepared_host
+
+- name: Validate immutable execution environment
+  ansible.builtin.include_tasks: execution_environment.yml
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_execution_environment | bool
+  tags:
+    - aap_preflight
+    - execution_environment
 
 - name: Verify automation login user
   ansible.builtin.set_fact:
@@ -204,16 +222,12 @@
     - runtime
 
 - name: Check install-user runtime processes
-  ansible.builtin.shell: |
-    set -o pipefail
-    pgrep -a -u {{ aap_preflight_install_user | quote }} |
-      grep -Ev '^[0-9]+[[:space:]]+catatonit -P$' |
-      grep -Ev '^[0-9]+[[:space:]]+/usr/lib/systemd/systemd --user$' |
-      grep -Ev '^[0-9]+[[:space:]]+\(sd-pam\)$' |
-      grep -Ev '^[0-9]+[[:space:]]+/usr/bin/dbus-broker-launch --scope user$' |
-      grep -Ev '^[0-9]+[[:space:]]+dbus-broker '
-  args:
-    executable: /bin/bash
+  ansible.builtin.command:
+    argv:
+      - pgrep
+      - -a
+      - -u
+      - "{{ aap_preflight_install_user }}"
   register: aap_preflight_install_user_processes
   changed_when: false
   failed_when: false
@@ -230,7 +244,17 @@
       - >-
         (aap_preflight_installed_marker.stat.exists | default(false))
         or (aap_preflight_allow_partial_install_runtime | bool)
-        or (aap_preflight_install_user_processes.rc | default(1) != 0)
+        or (
+          aap_preflight_install_user_processes.stdout_lines
+          | default([])
+          | reject(
+              'search',
+              '^[0-9]+ (catatonit -P|/usr/lib/systemd/systemd --user|'
+              ~ '\\(sd-pam\\)|/usr/bin/dbus-broker-launch --scope user|dbus-broker )'
+            )
+          | list
+          | length == 0
+        )
     fail_msg: >-
       Stop stale {{ aap_preflight_install_user }} processes before first
       install: {{ aap_preflight_install_user_processes.stdout_lines | default([]) }}
@@ -252,7 +276,24 @@
       - info
       - --format
       - "{{ '{{' }} .Store.GraphRoot {{ '}}' }}"
+  register: aap_preflight_runtime_graphroot
   changed_when: false
+  when:
+    - aap_preflight_enabled | bool
+    - aap_preflight_check_podman | bool
+  tags:
+    - aap_preflight
+    - podman
+
+- name: Validate runtime user rootless Podman storage
+  ansible.builtin.assert:
+    that:
+      - aap_preflight_runtime_graphroot.stdout | trim == aap_preflight_expected_rootless_graphroot
+    fail_msg: >-
+      {{ aap_preflight_install_user }} Podman graphroot must be {{
+      aap_preflight_expected_rootless_graphroot }}, got {{
+      aap_preflight_runtime_graphroot.stdout | default('unavailable') | trim }}.
+    quiet: true
   when:
     - aap_preflight_enabled | bool
     - aap_preflight_check_podman | bool
@@ -307,7 +348,10 @@
       {{ item }} must be set as a real encrypted Ansible Vault value before
       AAP deploy.
     quiet: true
-  loop: "{{ aap_preflight_ansible_vault_required_secret_vars }}"
+  loop: >-
+    {{ aap_preflight_ansible_vault_required_secret_vars
+       + (aap_preflight_registry_secret_vars
+          if aap_configure_registry_ee | default(false) | bool else []) }}
   no_log: true
   when:
     - aap_preflight_enabled | bool

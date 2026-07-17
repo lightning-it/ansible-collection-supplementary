@@ -63,6 +63,20 @@
   no_log: true
   when: aap_local_execution_effective_secret_backend | default('hashicorp_vault', true) == 'ansible_vault'
 
+- name: Encrypt generated Ansible Vault AAP group vars
+  ansible.builtin.command:
+    argv:
+      - ansible-vault
+      - encrypt
+      - --vault-password-file
+      - "{{ aap_local_execution_ansible_vault_password_file_effective }}"
+      - >-
+        {{ aap_local_execution_effective_automation_ansible_dir }}/inventories/{{
+        aap_local_execution_effective_inventory_name }}/group_vars/aaps/aap_ansible_vault.yml
+  changed_when: true
+  no_log: true
+  when: aap_local_execution_effective_secret_backend | default('hashicorp_vault', true) == 'ansible_vault'
+
 - name: Remove stale HashiCorp Vault group vars when using Ansible Vault
   ansible.builtin.file:
     path: >-

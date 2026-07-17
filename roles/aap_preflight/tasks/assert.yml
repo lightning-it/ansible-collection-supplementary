@@ -14,6 +14,9 @@
       - aap_preflight_check_artifacts is boolean
       - aap_preflight_check_vault is boolean
       - aap_preflight_check_ansible_vault is boolean
+      - aap_preflight_check_prepared_host is boolean
+      - aap_preflight_check_execution_environment is boolean
+      - aap_preflight_ee_validate_certs is boolean
       - aap_preflight_required_commands is sequence
       - aap_preflight_required_commands is not string
       - aap_preflight_required_paths is sequence
@@ -22,6 +25,12 @@
       - aap_preflight_remote_artifacts is not string
       - aap_preflight_ansible_vault_required_secret_vars is sequence
       - aap_preflight_ansible_vault_required_secret_vars is not string
+      - aap_preflight_registry_secret_vars is sequence
+      - aap_preflight_registry_secret_vars is not string
+      - aap_preflight_temporary_paths is sequence
+      - aap_preflight_required_packages is sequence
+      - aap_preflight_subid_users is sequence
+      - aap_preflight_required_repository_labels is sequence
     fail_msg: "Invalid configuration for lit.supplementary.aap_preflight."
     quiet: true
   changed_when: false
