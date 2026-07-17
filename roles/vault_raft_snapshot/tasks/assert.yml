@@ -79,6 +79,11 @@
       - vault_raft_snapshot_restore_work_root is match('^/run/[A-Za-z0-9._-]+$')
       - vault_raft_snapshot_restore_container_name is match('^[A-Za-z0-9][A-Za-z0-9._-]+$')
       - vault_raft_snapshot_restore_node_id is match('^[A-Za-z0-9][A-Za-z0-9._-]+$')
+      - vault_raft_snapshot_restore_timeout is integer
+      - >-
+        vault_raft_snapshot_restore_timeout | int
+        > vault_raft_snapshot_timeout | int
+      - vault_raft_snapshot_restore_timeout | int <= 3600
       - >-
         vault_raft_snapshot_expected_ciphertext_sha256
         is match('^[0-9a-f]{64}$')
@@ -94,7 +99,8 @@
         == vault_raft_snapshot_restore_unseal_keys | length
     fail_msg: >-
       Restore drill requires the literal localhost TLS identity, loopback-only
-      ports, unique production unseal keys, and the exact positive threshold.
+      ports, a bounded long-running restore timeout, unique production unseal
+      keys, and the exact positive threshold.
     quiet: true
   when: vault_raft_snapshot_action == 'restore_drill'
   no_log: true

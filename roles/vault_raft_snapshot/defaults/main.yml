@@ -7,6 +7,7 @@ vault_raft_snapshot_validate_certs: true
 vault_raft_snapshot_controller_ca_cert_path: ""
 vault_raft_snapshot_target_ca_cert_path: ""
 vault_raft_snapshot_timeout: 30
+vault_raft_snapshot_restore_timeout: 600
 
 vault_raft_snapshot_auth_mount_point: approle
 vault_raft_snapshot_role_id: ""

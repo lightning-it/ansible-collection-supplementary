@@ -34,6 +34,15 @@ See `defaults/main.yml` for the full interface. Set `vault_raft_snapshot_action`
 provide the role-prefixed API, CA, AppRole, controller escrow, image digest, document identity, and KV verification
 inputs for active operations. Restore-only inputs are validated only for `restore_drill`.
 
+`vault_raft_snapshot_restore_timeout` defaults to 600 seconds, must be longer than the ordinary API timeout, and is
+hard-capped at 3600 seconds. Only the large `snapshot-force` upload uses this timeout; health, authentication, and
+lifecycle probes retain the ordinary fail-fast timeout. The isolated listener uses the same bounded duration for
+request reads and processing, and derives its request-size ceiling from the approved raw snapshot limit plus a fixed
+1 MiB HTTP envelope. The isolated container's `/tmp` tmpfs uses the same tightly derived ceiling because Vault stages
+the uploaded snapshot there before restoring Raft. Production listener settings are never changed. Restore failures
+expose only a bounded HTTP status and safe failure class; response bodies, tokens, and request data remain under
+`no_log`.
+
 The controller document path is immutable. For restore, pin its SHA-256 digest with
 `vault_raft_snapshot_expected_ciphertext_sha256` before the role decrypts it.
 `vault_raft_snapshot_restore_tls_hostname` and `vault_raft_snapshot_restore_bind_address` are fail-closed to
@@ -78,7 +87,8 @@ The dedicated `molecule/vault-raft-snapshot-basic` scenario exercises first-run 
 TLS fake Vault API, verifies native integer schema values, exact KV and cluster identities, ciphertext-only escrow,
 owner-only modes, and zero retained raw snapshot artifacts. Its fake-Podman executable restore path covers container
 startup, initialization, snapshot force-restore, restart, production-threshold unseal, AppRole authentication, exact
-KV verification, proxy refusal, and unconditional container/raw-artifact cleanup.
+KV verification, the dedicated bounded restore timeout, proxy refusal, and unconditional container/raw-artifact
+cleanup.
 
 ## License
 
