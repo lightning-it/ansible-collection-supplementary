@@ -1,4 +1,8 @@
 ---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
 - name: Bootstrap custom Ansible remote tmp
   ansible.builtin.include_role:
     name: lit.foundational.ansible_remote_tmp
@@ -10,7 +14,7 @@
     - ansible_remote_tmp | default('', true) | trim | length > 0
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - ansible_remote_tmp
     - always
 
@@ -21,10 +25,10 @@
   ansible.builtin.wait_for_connection:
     timeout: "{{ aap_runbook_wait_for_connection_timeout | default(300) }}"
     sleep: 5
-  register: aap_base_os_wait_result
+  register: aap_host_prepare_wait_result
   retries: "{{ aap_runbook_wait_retries | default(6) }}"
   delay: "{{ aap_runbook_wait_delay | default(10) }}"
-  until: aap_base_os_wait_result is succeeded
+  until: aap_host_prepare_wait_result is succeeded
 
 - name: Gather facts after SSH stabilization
   ansible.builtin.setup:
@@ -33,12 +37,12 @@
   ansible.builtin.include_role:
     name: lit.rhel.rhsm
     apply:
-      tags: [aap, aap_base_os, os_prep, rhsm]
+      tags: [aap, aap_host_prepare, os_prep, rhsm]
   when:
     - aap_runbook_manage_rhsm | default(false) | bool
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - os_prep
     - rhsm
 
@@ -46,12 +50,12 @@
   ansible.builtin.include_role:
     name: lit.rhel.repos
     apply:
-      tags: [aap, aap_base_os, os_prep, repos]
+      tags: [aap, aap_host_prepare, os_prep, repos]
   when:
     - aap_runbook_manage_repos | default(false) | bool
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - os_prep
     - repos
 
@@ -88,7 +92,7 @@
       ) | length > 0
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - os_prep
     - packages
 
@@ -115,7 +119,7 @@
     label: "{{ item.path }}"
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - os_prep
     - filesystem
 
@@ -123,23 +127,23 @@
   ansible.builtin.include_role:
     name: lit.rhel.users
     apply:
-      tags: [aap, aap_base_os, os_prep, users]
+      tags: [aap, aap_host_prepare, os_prep, users]
   vars:
     users_accounts:
-      - name: "{{ aap_base_os_install_user_effective }}"
-        gid: "{{ aap_base_os_install_user_effective }}"
+      - name: "{{ aap_host_prepare_install_user_effective }}"
+        gid: "{{ aap_host_prepare_install_user_effective }}"
         groups:
-          - "{{ aap_base_os_install_user_effective }}"
+          - "{{ aap_host_prepare_install_user_effective }}"
           - wheel
-        home: "{{ aap_base_os_install_user_home_effective }}"
-        shell: "{{ aap_base_os_install_user_shell_effective }}"
+        home: "{{ aap_host_prepare_install_user_home_effective }}"
+        shell: "{{ aap_host_prepare_install_user_shell_effective }}"
         create_home: true
         passwordless_sudo: true
   when:
     - aap_runbook_manage_install_user | default(true) | bool
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - os_prep
     - users
 
@@ -153,15 +157,15 @@
     group: root
     mode: '0440'
     content: |
-      {{ ansible_user }} ALL=({{ aap_base_os_install_user_effective }}) NOPASSWD: ALL
+      {{ ansible_user }} ALL=({{ aap_host_prepare_install_user_effective }}) NOPASSWD: ALL
     validate: /usr/sbin/visudo -cf %s
   when:
     - aap_runbook_allow_ansible_user_sudo_to_install_user | default(false) | bool
     - ansible_user | default('', true) | trim | length > 0
-    - ansible_user != aap_base_os_install_user_effective
+    - ansible_user != aap_host_prepare_install_user_effective
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - os_prep
     - sudoers
 
@@ -169,24 +173,24 @@
   ansible.builtin.include_role:
     name: lit.rhel.podman
     apply:
-      tags: [aap, aap_base_os, os_prep, podman]
+      tags: [aap, aap_host_prepare, os_prep, podman]
   when:
     - aap_runbook_manage_podman | default(true) | bool
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - os_prep
     - podman
 
 - name: Check AAP installed marker
   ansible.builtin.stat:
     path: "{{ aap_deploy_installed_marker_path | default('/appl/aap/.aap_containerized_installed', true) }}"
-  register: aap_base_os_installed_marker
+  register: aap_host_prepare_installed_marker
   when:
     - aap_runbook_cleanup_stale_install_user_runtime | default(true) | bool
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - os_prep
     - runtime
 
@@ -196,26 +200,26 @@
       - pgrep
       - -a
       - -u
-      - "{{ aap_base_os_install_user_effective }}"
-  register: aap_base_os_install_user_processes
+      - "{{ aap_host_prepare_install_user_effective }}"
+  register: aap_host_prepare_install_user_processes
   changed_when: false
   failed_when: false
   when:
     - aap_runbook_cleanup_stale_install_user_runtime | default(true) | bool
-    - not (aap_base_os_installed_marker.stat.exists | default(false))
+    - not (aap_host_prepare_installed_marker.stat.exists | default(false))
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - os_prep
     - runtime
 
 - name: Classify install-user runtime processes
   ansible.builtin.set_fact:
-    aap_base_os_install_user_runtime_lines: >-
-      {{ aap_base_os_install_user_processes.stdout_lines | default([]) }}
-    aap_base_os_install_user_ignored_runtime_lines: >-
+    aap_host_prepare_install_user_runtime_lines: >-
+      {{ aap_host_prepare_install_user_processes.stdout_lines | default([]) }}
+    aap_host_prepare_install_user_ignored_runtime_lines: >-
       {{
-        aap_base_os_install_user_processes.stdout_lines
+        aap_host_prepare_install_user_processes.stdout_lines
         | default([])
         | select(
             'search',
@@ -224,9 +228,9 @@
           )
         | list
       }}
-    aap_base_os_install_user_unexpected_runtime_lines: >-
+    aap_host_prepare_install_user_unexpected_runtime_lines: >-
       {{
-        aap_base_os_install_user_processes.stdout_lines
+        aap_host_prepare_install_user_processes.stdout_lines
         | default([])
         | reject(
             'search',
@@ -237,11 +241,11 @@
       }}
   when:
     - aap_runbook_cleanup_stale_install_user_runtime | default(true) | bool
-    - not (aap_base_os_installed_marker.stat.exists | default(false))
-    - aap_base_os_install_user_processes.rc | default(1) == 0
+    - not (aap_host_prepare_installed_marker.stat.exists | default(false))
+    - aap_host_prepare_install_user_processes.rc | default(1) == 0
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - os_prep
     - runtime
 
@@ -253,36 +257,36 @@
       aap_deploy_reset_partial_install_enabled=true.
   when:
     - aap_runbook_cleanup_stale_install_user_runtime | default(true) | bool
-    - not (aap_base_os_installed_marker.stat.exists | default(false))
-    - aap_base_os_install_user_processes.rc | default(1) == 0
-    - (aap_base_os_install_user_unexpected_runtime_lines | default([])) | length > 0
+    - not (aap_host_prepare_installed_marker.stat.exists | default(false))
+    - aap_host_prepare_install_user_processes.rc | default(1) == 0
+    - (aap_host_prepare_install_user_unexpected_runtime_lines | default([])) | length > 0
     - aap_deploy_reset_partial_install_enabled | default(false) | bool
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - os_prep
     - runtime
 
 - name: Fail when unexpected install-user runtime exists before first install
   ansible.builtin.fail:
     msg: >-
-      Install user {{ aap_base_os_install_user_effective }} has runtime
+      Install user {{ aap_host_prepare_install_user_effective }} has runtime
       processes before the AAP install marker exists. Stop those processes or
       enable aap_deploy_reset_partial_install_enabled for partial-install
       recovery before running base/preflight again.
   when:
     - aap_runbook_cleanup_stale_install_user_runtime | default(true) | bool
-    - not (aap_base_os_installed_marker.stat.exists | default(false))
-    - aap_base_os_install_user_processes.rc | default(1) == 0
-    - (aap_base_os_install_user_unexpected_runtime_lines | default([])) | length > 0
+    - not (aap_host_prepare_installed_marker.stat.exists | default(false))
+    - aap_host_prepare_install_user_processes.rc | default(1) == 0
+    - (aap_host_prepare_install_user_unexpected_runtime_lines | default([])) | length > 0
     - not (aap_deploy_reset_partial_install_enabled | default(false) | bool)
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - os_prep
     - runtime
 
-- name: Verify required AAP base OS commands
+- name: Verify required AAP host commands
   ansible.builtin.command:
     argv:
       - which
@@ -296,7 +300,7 @@
   changed_when: false
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - verify
 
 - name: Verify Podman version
@@ -307,10 +311,10 @@
   changed_when: false
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - verify
 
-- name: Check required AAP base OS paths
+- name: Check required AAP host paths
   ansible.builtin.stat:
     path: "{{ item }}"
   loop:
@@ -318,32 +322,32 @@
     - /appl/ansible-tmp
     - /appl/home
     - /appl/podman
-  register: aap_base_os_path_stats
+  register: aap_host_prepare_path_stats
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - verify
 
-- name: Assert required AAP base OS paths exist
+- name: Assert required AAP host paths exist
   ansible.builtin.assert:
     that:
       - item.stat.exists | default(false)
       - item.stat.isdir | default(false)
-    fail_msg: "Required AAP base OS path is missing or not a directory: {{ item.item }}"
+    fail_msg: "Required AAP host path is missing or not a directory: {{ item.item }}"
     quiet: true
-  loop: "{{ aap_base_os_path_stats.results }}"
+  loop: "{{ aap_host_prepare_path_stats.results }}"
   loop_control:
     label: "{{ item.item }}"
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
     - verify
 
-- name: Run AAP preflight after base OS preparation
+- name: Run AAP preflight after AAP-owned host preparation
   ansible.builtin.include_role:
     name: lit.supplementary.aap_preflight
     apply:
-      tags: [aap, aap_base_os, aap_preflight, verify]
+      tags: [aap, aap_host_prepare, aap_preflight, verify]
   vars:
     aap_preflight_check_artifacts: false
     aap_preflight_check_vault: false
@@ -352,6 +356,16 @@
     aap_preflight_check_podman: false
   tags:
     - aap
-    - aap_base_os
+    - aap_host_prepare
+    - aap_preflight
+    - verify
+
+- name: Report AAP host preparation and preflight success
+  ansible.builtin.debug:
+    msg: AAP_HOST_PREPARE_AND_PREFLIGHT_OK
+  changed_when: false
+  tags:
+    - aap
+    - aap_host_prepare
     - aap_preflight
     - verify
