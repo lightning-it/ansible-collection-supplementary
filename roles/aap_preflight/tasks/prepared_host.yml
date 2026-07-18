@@ -172,7 +172,7 @@
         is search('(?m)^' ~ (item | regex_escape) ~ ':[0-9]+:[1-9][0-9]*$')
     fail_msg: >-
       {{ item }} requires valid entries in both /etc/subuid and /etc/subgid.
-      The MHB host owner must correct the prepared-host baseline.
+      The host owner must correct the prepared-host baseline.
     quiet: true
   loop: "{{ aap_preflight_subid_users }}"
 
