@@ -69,11 +69,13 @@
     label: "{{ item.path }}"
   register: aap_preflight_temporary_capacity
   changed_when: false
-  failed_when: aap_preflight_temporary_capacity.rc != 0 or aap_preflight_temporary_capacity.stdout_lines | length < 2
+  failed_when: false
 
 - name: Validate temporary-path capacity
   ansible.builtin.assert:
     that:
+      - item.rc == 0
+      - item.stdout_lines | length >= 2
       - item.stdout_lines[-1] | trim | int >= item.item.minimum_free_mb | int
     fail_msg: >-
       {{ item.item.path }} requires at least {{ item.item.minimum_free_mb }} MiB free.
