@@ -3,7 +3,6 @@ dependency:
   name: shell
   command: >-
     rm -rf "${MOLECULE_EPHEMERAL_DIRECTORY}/vault-raft-snapshot";
-    rm -rf /run/lit-vault-raft-molecule;
     umask 077 && openssl rand -hex 32
     > /tmp/molecule-vault-raft-snapshot-password
 

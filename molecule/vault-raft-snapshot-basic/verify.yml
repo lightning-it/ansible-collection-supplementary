@@ -76,7 +76,7 @@
       ansible.builtin.stat:
         path: "{{ item }}"
       loop:
-        - /run/lit-vault-raft-molecule
+        - "{{ vault_raft_snapshot_molecule_root }}/restore-work"
         - "{{ vault_raft_snapshot_molecule_root }}/container-state"
       register: vault_raft_snapshot_molecule_restore_artifacts
 
