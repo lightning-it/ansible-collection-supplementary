@@ -25,6 +25,7 @@ postgres_deploy_host_ip: >-
     ansible_default_ipv4.address
       | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
   }}
+postgres_deploy_host_network: false
 
 # Database config
 postgres_deploy_db_name: "postgres"

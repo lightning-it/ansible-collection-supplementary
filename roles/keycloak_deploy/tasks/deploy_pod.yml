@@ -356,6 +356,7 @@
     postgres_deploy_container_data_dir: "{{ keycloak_deploy_container_postgres_data_dir }}"
     postgres_deploy_port: "{{ keycloak_deploy_postgres_port }}"
     postgres_deploy_host_ip: "{{ keycloak_deploy_postgres_host_ip }}"
+    postgres_deploy_host_network: "{{ keycloak_deploy_postgres_host_network }}"
     postgres_deploy_db_name: "{{ keycloak_deploy_db_name }}"
     postgres_deploy_db_user: "{{ keycloak_deploy_db_user }}"
     postgres_deploy_db_password: "{{ keycloak_deploy_db_password_effective }}"

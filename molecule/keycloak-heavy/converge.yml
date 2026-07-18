@@ -229,11 +229,12 @@
     keycloak_deploy_host_ip: 127.0.0.1
     keycloak_deploy_postgres_host_ip: 0.0.0.0
     keycloak_deploy_host_network: true
+    keycloak_deploy_postgres_host_network: true
     keycloak_deploy_db_host: 127.0.0.1
-    keycloak_deploy_db_port: 25432
+    keycloak_deploy_db_port: 5432
     keycloak_deploy_db_wait_host: 127.0.0.1
-    keycloak_deploy_db_wait_port: 25432
-    keycloak_deploy_postgres_port: 25432
+    keycloak_deploy_db_wait_port: 5432
+    keycloak_deploy_postgres_port: 5432
     keycloak_deploy_port: 28080
     keycloak_deploy_management_port: 29000
     keycloak_deploy_api_url: http://127.0.0.1:28080

@@ -64,6 +64,9 @@ argument_specs:
       keycloak_deploy_postgres_host_ip:
         description: Host address on which the dedicated PostgreSQL port is published.
         type: str
+      keycloak_deploy_postgres_host_network:
+        description: Run the managed PostgreSQL pod in the host network namespace.
+        type: bool
       keycloak_deploy_api_scheme:
         description: URL scheme used to derive Keycloak API and health endpoints.
         type: str

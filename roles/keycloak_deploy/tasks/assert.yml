@@ -33,6 +33,7 @@
       - keycloak_deploy_host_ip | default('', true) | trim | length > 0
       - keycloak_deploy_host_network is boolean
       - keycloak_deploy_postgres_host_ip | default('', true) | trim | length > 0
+      - keycloak_deploy_postgres_host_network is boolean
       - keycloak_deploy_admin_user | default('', true) | trim | length > 0
       - keycloak_deploy_start_command in ['start', 'start-dev']
       - keycloak_deploy_run_user_uid | default('', true) | trim | length > 0

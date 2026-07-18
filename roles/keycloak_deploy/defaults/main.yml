@@ -41,6 +41,7 @@ keycloak_deploy_postgres_host_ip: >-
     postgres_deploy_host_ip
     | default(keycloak_deploy_host_ip)
   }}
+keycloak_deploy_postgres_host_network: false
 keycloak_deploy_api_scheme: "http"
 keycloak_deploy_api_url: ""
 keycloak_deploy_api_url_effective: >-
