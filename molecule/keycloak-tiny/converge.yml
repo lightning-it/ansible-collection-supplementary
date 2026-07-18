@@ -18,7 +18,8 @@
     keycloak_deploy_admin_password: "{{ keycloak_tiny_admin_password }}"
     keycloak_deploy_host_ip: 127.0.0.1
     keycloak_deploy_postgres_host_ip: 0.0.0.0
-    keycloak_deploy_db_host: host.containers.internal
+    # Nested Podman kube uses this deterministic bridge gateway for host ports.
+    keycloak_deploy_db_host: 10.89.0.1
     keycloak_deploy_db_port: 15432
     keycloak_deploy_db_wait_host: 127.0.0.1
     keycloak_deploy_db_wait_port: 15432
