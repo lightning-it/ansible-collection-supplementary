@@ -63,6 +63,24 @@
   no_log: true
   when: aap_local_execution_effective_secret_backend | default('hashicorp_vault', true) == 'ansible_vault'
 
+- name: Check Ansible Vault password file for inventory encryption
+  ansible.builtin.stat:
+    path: "{{ aap_local_execution_ansible_vault_password_file_effective }}"
+  register: aap_local_execution_vault_password_file
+  when: aap_local_execution_effective_secret_backend | default('hashicorp_vault', true) == 'ansible_vault'
+
+- name: Validate Ansible Vault password file for inventory encryption
+  ansible.builtin.assert:
+    that:
+      - aap_local_execution_vault_password_file.stat.exists
+      - aap_local_execution_vault_password_file.stat.isreg
+      - aap_local_execution_vault_password_file.stat.size | int > 0
+    fail_msg: >-
+      The Ansible Vault password file must exist and be non-empty before encrypting generated inventory:
+      {{ aap_local_execution_ansible_vault_password_file_effective }}.
+    quiet: true
+  when: aap_local_execution_effective_secret_backend | default('hashicorp_vault', true) == 'ansible_vault'
+
 - name: Encrypt generated Ansible Vault AAP group vars
   ansible.builtin.command:
     argv:
