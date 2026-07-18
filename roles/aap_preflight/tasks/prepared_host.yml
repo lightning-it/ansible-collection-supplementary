@@ -3,9 +3,7 @@
   ansible.builtin.package_facts:
     manager: auto
 
-- name: Gather service facts
-  ansible.builtin.service_facts:
-
+# NOTE: service_facts removed (not used by prepared_host gate).
 - name: Validate prepared RHEL host identity and capacity
   ansible.builtin.assert:
     that:
