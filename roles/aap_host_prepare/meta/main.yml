@@ -1,9 +1,9 @@
 ---
 galaxy_info:
-  role_name: aap_base_os
+  role_name: aap_host_prepare
   namespace: lit
   author: René Osorio
-  description: AAP base os automation.
+  description: AAP-owned host preparation after the OS baseline.
   company: Lightning IT
   license: MIT
   min_ansible_version: "2.18"
