@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Select protected quality profiles from the reviewed Git change set."""
 
 from __future__ import annotations

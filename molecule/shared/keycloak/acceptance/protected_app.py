@@ -27,7 +27,8 @@ class ServerSideSession(CallbackDict[str, Any], SessionMixin):
     """Mutable server-side state identified by an opaque browser cookie."""
 
     def __init__(self, initial: dict[str, Any] | None, sid: str, *, new: bool) -> None:
-        def on_update(_: CallbackDict[str, Any]) -> None:
+        def on_update(updated_session: CallbackDict[str, Any]) -> None:
+            del updated_session
             self.modified = True
 
         super().__init__(initial, on_update)
@@ -50,7 +51,7 @@ class BoundedMemorySessionInterface(SessionInterface):
         return secrets.token_urlsafe(32)
 
     def _purge(self, now: float) -> None:
-        expired = [sid for sid, (deadline, _) in self._sessions.items() if deadline <= now]
+        expired = [sid for sid, (deadline, session_data) in self._sessions.items() if deadline <= now]
         for sid in expired:
             self._sessions.pop(sid, None)
         while len(self._sessions) >= self._maximum_sessions:
@@ -65,7 +66,8 @@ class BoundedMemorySessionInterface(SessionInterface):
             stored = self._sessions.get(sid) if SESSION_ID.fullmatch(sid) else None
             if stored is None:
                 return ServerSideSession({}, self._new_sid(), new=True)
-            _, data = stored
+            stored_deadline, data = stored
+            del stored_deadline
             return ServerSideSession(dict(data), sid, new=False)
 
     def rotate(self, current: ServerSideSession) -> None:

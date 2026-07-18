@@ -141,10 +141,11 @@ def _extract_json_document(text: str) -> Any:
         if character not in "[{":
             continue
         try:
-            document, _ = decoder.raw_decode(cleaned, index)
+            document, end_index = decoder.raw_decode(cleaned, index)
         except json.JSONDecodeError:
             continue
-        return document
+        if end_index > index:
+            return document
     raise ValueError("input does not contain a valid JSON document")
 
 
