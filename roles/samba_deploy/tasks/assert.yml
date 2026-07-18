@@ -48,6 +48,7 @@
       - samba_deploy_ad_dc_cache_dir | default('', true) | trim | length > 0
       - samba_deploy_ad_dc_log_dir | default('', true) | trim | length > 0
       - samba_deploy_ad_dc_entrypoint_dir | default('', true) | trim | length > 0
+      - samba_deploy_ad_dc_tls_dir | default('', true) | trim | length > 0
       - samba_deploy_ad_dc_keycloak_bind_user | default('', true) | trim | length > 0
       - samba_deploy_ad_dc_groups is sequence
       - samba_deploy_ad_dc_groups is not string

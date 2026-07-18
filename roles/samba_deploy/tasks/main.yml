@@ -65,6 +65,10 @@
           mode: "0750"
           deployment_modes:
             - ad_dc
+        - path: "{{ samba_deploy_ad_dc_tls_dir }}"
+          mode: "0700"
+          deployment_modes:
+            - ad_dc
       when:
         - item.path | default('', true) | trim | length > 0
         - samba_deploy_mode in item.deployment_modes

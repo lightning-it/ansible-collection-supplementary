@@ -13,7 +13,7 @@
     keycloak_heavy_cac_denied_password: "{{ lookup('env', 'KEYCLOAK_TEST_CAC_DENIED_PASSWORD') }}"
     keycloak_heavy_client_secret: "{{ lookup('env', 'KEYCLOAK_TEST_CLIENT_SECRET') }}"
     keycloak_heavy_junit_dir: "{{ lookup('env', 'KEYCLOAK_JUNIT_DIR') | default('artifacts/junit', true) }}"
-    keycloak_heavy_ldap_ca: /srv/keycloak-heavy/ldap/config/tls/ca.crt
+    keycloak_heavy_ldap_ca: /srv/keycloak-heavy/ldap/tls/ca.crt
   tasks:
     - name: Verify Keycloak management health
       ansible.builtin.uri:

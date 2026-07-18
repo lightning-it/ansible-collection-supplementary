@@ -32,7 +32,8 @@
     samba_deploy_ad_dc_cache_dir: /srv/keycloak-heavy/ldap/cache
     samba_deploy_ad_dc_log_dir: /srv/keycloak-heavy/ldap/log
     samba_deploy_ad_dc_entrypoint_dir: /srv/keycloak-heavy/ldap/entrypoint.d
-    keycloak_heavy_ldap_tls_dir: /srv/keycloak-heavy/ldap/entrypoint.d/tls
+    samba_deploy_ad_dc_tls_dir: /srv/keycloak-heavy/ldap/tls
+    keycloak_heavy_ldap_tls_dir: "{{ samba_deploy_ad_dc_tls_dir }}"
     samba_validate_mode: ad_dc
     samba_validate_host: 127.0.0.1
     samba_validate_ldap_port: 1389
@@ -167,19 +168,19 @@
         content: |
           #!/bin/sh
           set -eu
-          test -s /entrypoint.d/tls/ca.crt
-          test -s /entrypoint.d/tls/server.crt
-          test -s /entrypoint.d/tls/server.key
-          if ! grep -Fq 'tls certfile = /entrypoint.d/tls/server.crt' /etc/samba/smb.conf; then
+          test -s /tls/ca.crt
+          test -s /tls/server.crt
+          test -s /tls/server.key
+          if ! grep -Fq 'tls certfile = /tls/server.crt' /etc/samba/smb.conf; then
             temporary="$(mktemp)"
             trap 'rm -f "${temporary}"' EXIT
             awk '
               /^\[global\]$/ && !added {
                 print
                 print "\ttls enabled = yes"
-                print "\ttls cafile = /entrypoint.d/tls/ca.crt"
-                print "\ttls certfile = /entrypoint.d/tls/server.crt"
-                print "\ttls keyfile = /entrypoint.d/tls/server.key"
+                print "\ttls cafile = /tls/ca.crt"
+                print "\ttls certfile = /tls/server.crt"
+                print "\ttls keyfile = /tls/server.key"
                 added = 1
                 next
               }
