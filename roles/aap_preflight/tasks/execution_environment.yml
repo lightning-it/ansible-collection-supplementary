@@ -52,11 +52,26 @@
   ansible.builtin.assert:
     that:
       - >-
-        (aap_preflight_expected_architecture == 'x86_64' and
-         ('"architecture": "amd64"' in aap_preflight_ee_manifest.stdout or
-          '"architecture":"amd64"' in aap_preflight_ee_manifest.stdout)) or
-        ('"architecture"' not in aap_preflight_ee_manifest.stdout)
-    fail_msg: "The approved EE manifest does not expose an amd64/x86_64 image."
+        (
+          (
+            aap_preflight_expected_architecture == 'x86_64'
+            and (
+              '"architecture": "amd64"' in aap_preflight_ee_manifest.stdout
+              or '"architecture":"amd64"' in aap_preflight_ee_manifest.stdout
+            )
+          )
+          or (
+            aap_preflight_expected_architecture in ['aarch64', 'arm64']
+            and (
+              '"architecture": "arm64"' in aap_preflight_ee_manifest.stdout
+              or '"architecture":"arm64"' in aap_preflight_ee_manifest.stdout
+            )
+          )
+          or ('"architecture"' not in aap_preflight_ee_manifest.stdout)
+        )
+    fail_msg: >-
+      The approved EE manifest does not expose an image matching
+      aap_preflight_expected_architecture={{ aap_preflight_expected_architecture }}.
     quiet: true
 
 - name: Report execution-environment gate success
