@@ -129,10 +129,7 @@
       - --
       - podman
       - images
-      - --digests
-      - --no-trunc
-      - --format
-      - json
+      - --format=json
   register: molecule_incus_evidence_container_images_raw
   changed_when: false
   failed_when: false
