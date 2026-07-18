@@ -46,8 +46,8 @@ aap_preflight_check_prepared_host: {{ aap_preflight_check_prepared_host | defaul
 aap_preflight_minimum_distribution_version: {{ aap_preflight_minimum_distribution_version | default('9.6', true) | to_json }}
 aap_preflight_expected_fqdn: {{ aap_fqdn | to_json }}
 aap_preflight_minimum_vcpus: {{ aap_preflight_minimum_vcpus | default(4) }}
-aap_preflight_minimum_memory_mb: {{ aap_preflight_minimum_memory_mb | default(32000) }}
-aap_preflight_appl_minimum_free_mb: {{ aap_preflight_appl_minimum_free_mb | default(80000) }}
+aap_preflight_minimum_memory_mb: {{ aap_preflight_minimum_memory_mb | default(16000) }}
+aap_preflight_appl_minimum_free_mb: {{ aap_preflight_appl_minimum_free_mb | default(50000) }}
 aap_preflight_check_execution_environment: {{ aap_configure_registry_ee | default(false) | bool | lower }}
 aap_preflight_ee_registry: {{ aap_registry_fqdn | default('', true) | to_json }}
 aap_preflight_ee_approved_registry: {{ aap_registry_fqdn | default('', true) | to_json }}
