@@ -29,7 +29,7 @@
     - facts
 
 - name: Validate customer-prepared host contract
-  ansible.builtin.include_tasks: prepared_host.yml
+  ansible.builtin.import_tasks: prepared_host.yml
   when:
     - aap_preflight_enabled | bool
     - aap_preflight_check_prepared_host | bool
@@ -38,7 +38,7 @@
     - prepared_host
 
 - name: Validate immutable execution environment
-  ansible.builtin.include_tasks: execution_environment.yml
+  ansible.builtin.import_tasks: execution_environment.yml
   when:
     - aap_preflight_enabled | bool
     - aap_preflight_check_execution_environment | bool
