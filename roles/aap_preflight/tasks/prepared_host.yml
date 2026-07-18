@@ -74,8 +74,8 @@
   ansible.builtin.assert:
     that:
       - item.rc == 0
-      - item.stdout_lines | length >= 2
-      - item.stdout_lines[-1] | trim | int >= item.item.minimum_free_mb | int
+      - (item.stdout_lines | default([]) | length) >= 2
+      - ((item.stdout_lines | default([]) | last | default('0')) | trim | int) >= (item.item.minimum_free_mb | int)
     fail_msg: >-
       {{ item.item.path }} requires at least {{ item.item.minimum_free_mb }} MiB free.
     quiet: true
