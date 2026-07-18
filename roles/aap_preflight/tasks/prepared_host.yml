@@ -96,8 +96,8 @@
   ansible.builtin.assert:
     that:
       - >-
-        ansible_facts.packages['ansible-core'][0].version
-        is version(aap_preflight_minimum_ansible_core_version, '>=')
+        (ansible_facts.packages.get('ansible-core', []) | length > 0)
+        and (ansible_facts.packages['ansible-core'][0].version is version(aap_preflight_minimum_ansible_core_version, '>='))
     fail_msg: >-
       ansible-core {{ aap_preflight_minimum_ansible_core_version }} or later is
       required for the host bootstrap contract.
