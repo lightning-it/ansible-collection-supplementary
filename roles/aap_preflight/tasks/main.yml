@@ -230,7 +230,7 @@
       - "{{ aap_preflight_install_user }}"
   register: aap_preflight_install_user_processes
   changed_when: false
-  failed_when: false
+  failed_when: aap_preflight_install_user_processes.rc not in [0, 1]
   when:
     - aap_preflight_enabled | bool
     - aap_preflight_check_runtime | bool
