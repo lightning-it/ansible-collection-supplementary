@@ -622,9 +622,7 @@
           - network
           - list
           - --format
-          - csv
-          - -c
-          - n
+          - json
       register: molecule_incus_remaining_network_names
       changed_when: false
 

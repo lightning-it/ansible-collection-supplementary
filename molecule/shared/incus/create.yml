@@ -1147,6 +1147,42 @@
       delay: 2
       changed_when: false
 
+    - name: Bind guest DNS to the exact-owned managed bridge
+      ansible.builtin.command:
+        argv:
+          - incus
+          - exec
+          - "{{ item.name }}"
+          - --
+          - resolvectl
+          - dns
+          - eth0
+          - >-
+            {{
+              (molecule_incus_network_after.stdout | from_yaml).config['ipv4.address']
+              | split('/') | first
+            }}
+      loop: "{{ molecule_incus_instances }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: true
+
+    - name: Make the managed bridge the guest default DNS route
+      ansible.builtin.command:
+        argv:
+          - incus
+          - exec
+          - "{{ item.name }}"
+          - --
+          - resolvectl
+          - default-route
+          - eth0
+          - "yes"
+      loop: "{{ molecule_incus_instances }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: true
+
     - name: Verify guest DNS through the exact-owned bridge
       ansible.builtin.command:
         argv:
