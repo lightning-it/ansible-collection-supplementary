@@ -50,7 +50,7 @@ aap_preflight_time_sync_required: true
 aap_preflight_selinux_enforcing_required: true
 aap_preflight_subid_users:
   - "{{ aap_preflight_install_user }}"
-aap_preflight_minimum_ansible_core_version: "2.14.0"
+aap_preflight_minimum_ansible_core_version: "2.18.0"
 aap_preflight_required_repository_labels:
   - BaseOS
   - AppStream
