@@ -277,7 +277,7 @@
           - --env
           - "VAULT_ADDR={{ _vault_raft_snapshot_restore_api_url }}"
           - --env
-          - VAULT_CACERT=/{{ vault_raft_snapshot_flavour }}/certs/ca.crt
+          - VAULT_CACERT=/{{ vault_deploy_flavour | default('vault', true) }}/certs/ca.crt
           - "{{ vault_raft_snapshot_image }}"
           - server
       changed_when: true
