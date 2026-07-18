@@ -7,37 +7,22 @@ import argparse
 import json
 import re
 import subprocess
+from pathlib import Path
 from pathlib import PurePosixPath
+from typing import TypedDict
+
+import yaml
 
 
 ZERO_SHA = "0" * 40
 SHA = re.compile(r"^[0-9a-f]{40}$")
 
-# First rollout: the registry interface is generic, but only the Keycloak
-# quality family is registered. Other collection roles remain on basic/static
-# gates until their real Tiny/Heavy/Acceptance scenarios are ready.
-KEYCLOAK_PATH_PREFIXES = (
-    ".github/actions/run-quality-profile/",
-    ".github/workflows/collection-ci.yml",
-    ".lit/repository.yml",
-    "containerfiles/ldap/",
-    "docs/testing/evidence-manifest.schema.json",
-    "docs/testing/generated/role-coverage-matrix.json",
-    "meta/role-coverage.yml",
-    "meta/source-dependencies.yml",
-    "molecule/keycloak-",
-    "molecule/shared/incus/",
-    "molecule/shared/keycloak/",
-    "roles/keycloak_",
-    "roles/postgres_backup_restore/",
-    "roles/postgres_deploy/",
-    "roles/samba/",
-    "roles/samba_",
-    "scripts/quality_evidence.py",
-    "scripts/select-quality-impact.py",
-    "scripts/source_dependencies.py",
-    "scripts/validate-role-coverage.py",
-)
+PROFILES = {"tiny", "heavy", "application_acceptance"}
+
+
+class FamilyPolicy(TypedDict):
+    profiles: list[str]
+    path_prefixes: list[str]
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -48,6 +33,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-ref", default="")
     parser.add_argument("--head-ref", default="")
     parser.add_argument("--execution-mode", default="")
+    parser.add_argument("--registry", default="meta/quality-impact.yml")
     parser.add_argument("--changed-file", action="append", default=[])
     return parser
 
@@ -79,11 +65,29 @@ def _git_changed_files(base_sha: str, head_sha: str) -> list[str]:
     return _normalized_paths(result.stdout.splitlines())
 
 
-def _keycloak_affected(path: str) -> bool:
-    return any(path == prefix or path.startswith(prefix) for prefix in KEYCLOAK_PATH_PREFIXES)
+def _registry(path: str) -> dict[str, FamilyPolicy]:
+    payload = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+        raise ValueError("quality impact registry must use schema version 1")
+    families = payload.get("families")
+    if not isinstance(families, dict) or not families:
+        raise ValueError("quality impact registry must declare at least one family")
+    normalized: dict[str, FamilyPolicy] = {}
+    for name, policy in families.items():
+        if not isinstance(name, str) or not isinstance(policy, dict):
+            raise ValueError("quality impact family entries must be mappings")
+        profiles = policy.get("profiles")
+        prefixes = policy.get("path_prefixes")
+        if not isinstance(profiles, list) or set(profiles) - PROFILES:
+            raise ValueError(f"quality impact family {name!r} has unsupported profiles")
+        if not isinstance(prefixes, list) or not prefixes or not all(isinstance(item, str) for item in prefixes):
+            raise ValueError(f"quality impact family {name!r} requires path prefixes")
+        normalized[name] = {"profiles": profiles, "path_prefixes": prefixes}
+    return normalized
 
 
 def select(args: argparse.Namespace) -> dict[str, object]:
+    registry = _registry(args.registry)
     full_matrix = (
         args.event_name == "workflow_dispatch"
         or (
@@ -101,8 +105,20 @@ def select(args: argparse.Namespace) -> dict[str, object]:
     if not changed_files and not full_matrix and not indeterminate_push:
         changed_files = _git_changed_files(args.base_sha, args.head_sha)
 
-    affected_files = [path for path in changed_files if _keycloak_affected(path)]
-    keycloak_required = full_matrix or indeterminate_push or bool(affected_files)
+    affected_by_family = {
+        name: [
+            path
+            for path in changed_files
+            if any(path == prefix or path.startswith(prefix) for prefix in policy["path_prefixes"])
+        ]
+        for name, policy in registry.items()
+    }
+    family_required = {
+        name: full_matrix or indeterminate_push or bool(paths)
+        for name, paths in affected_by_family.items()
+    }
+    keycloak_required = family_required.get("keycloak", False)
+    affected_files = sorted({path for paths in affected_by_family.values() for path in paths})
     if full_matrix:
         reason = "complete protected validation event"
     elif indeterminate_push:
@@ -117,6 +133,7 @@ def select(args: argparse.Namespace) -> dict[str, object]:
         "scope": "keycloak-only",
         "full_matrix": full_matrix or indeterminate_push,
         "keycloak_required": keycloak_required,
+        "families": family_required,
         "profiles": {
             "tiny": keycloak_required,
             "heavy": keycloak_required,

@@ -1,0 +1,30 @@
+---
+schema_version: 1
+families:
+  keycloak:
+    profiles:
+      - tiny
+      - heavy
+      - application_acceptance
+    path_prefixes:
+      - .github/actions/run-quality-profile/
+      - .github/workflows/collection-ci.yml
+      - .lit/repository.yml
+      - containerfiles/ldap/
+      - docs/testing/evidence-manifest.schema.json
+      - docs/testing/generated/role-coverage-matrix.json
+      - meta/quality-impact.yml
+      - meta/role-coverage.yml
+      - meta/source-dependencies.yml
+      - molecule/keycloak-
+      - molecule/shared/incus/
+      - molecule/shared/keycloak/
+      - roles/keycloak_
+      - roles/postgres_backup_restore/
+      - roles/postgres_deploy/
+      - roles/samba/
+      - roles/samba_
+      - scripts/quality_evidence.py
+      - scripts/select-quality-impact.py
+      - scripts/source_dependencies.py
+      - scripts/validate-role-coverage.py

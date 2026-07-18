@@ -5,8 +5,8 @@ import importlib.util
 import unittest
 from pathlib import Path
 
-
 MODULE_PATH = Path(__file__).parents[2] / "scripts" / "select-quality-impact.py"
+REGISTRY_PATH = Path(__file__).parents[2] / "meta" / "quality-impact.yml"
 SPEC = importlib.util.spec_from_file_location("select_quality_impact", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 SELECTOR = importlib.util.module_from_spec(SPEC)
@@ -21,6 +21,7 @@ def arguments(**overrides: object) -> argparse.Namespace:
         "base_ref": "develop",
         "head_ref": "feature/example",
         "execution_mode": "",
+        "registry": str(REGISTRY_PATH),
         "changed_file": [],
     }
     values.update(overrides)
@@ -29,9 +30,7 @@ def arguments(**overrides: object) -> argparse.Namespace:
 
 class SelectQualityImpactTests(unittest.TestCase):
     def test_keycloak_role_requires_every_keycloak_profile(self) -> None:
-        result = SELECTOR.select(
-            arguments(changed_file=["roles/keycloak_deploy/tasks/main.yml"])
-        )
+        result = SELECTOR.select(arguments(changed_file=["roles/keycloak_deploy/tasks/main.yml"]))
 
         self.assertTrue(result["keycloak_required"])
         self.assertEqual(
@@ -63,9 +62,7 @@ class SelectQualityImpactTests(unittest.TestCase):
         self.assertEqual(result["affected_files"], [])
 
     def test_develop_to_main_promotion_runs_complete_registered_matrix(self) -> None:
-        result = SELECTOR.select(
-            arguments(base_ref="main", head_ref="develop", changed_file=["README.md"])
-        )
+        result = SELECTOR.select(arguments(base_ref="main", head_ref="develop", changed_file=["README.md"]))
 
         self.assertTrue(result["full_matrix"])
         self.assertTrue(result["keycloak_required"])

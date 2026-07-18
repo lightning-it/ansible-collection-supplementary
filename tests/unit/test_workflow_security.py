@@ -67,6 +67,7 @@ class WorkflowSecurityTests(unittest.TestCase):
             rules,
         )
         for path in (
+            "/meta/quality-impact.yml",
             "/scripts/quality_cell_identity.py",
             "/scripts/select-quality-impact.py",
             "/scripts/source_dependencies.py",

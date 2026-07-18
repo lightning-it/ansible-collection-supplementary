@@ -16,6 +16,7 @@
 /docs/testing/evidence-manifest.schema.json @lightning-it/ent:release
 /galaxy.yml @lightning-it/ent:release
 /meta/role-coverage.yml @lightning-it/ent:release
+/meta/quality-impact.yml @lightning-it/ent:release
 /scripts/enrich-cyclonedx-sbom.py @lightning-it/ent:release
 /scripts/devtools-*.sh @lightning-it/ent:release
 /scripts/quality_cell_identity.py @lightning-it/ent:release
