@@ -33,7 +33,7 @@ must be `svc_aap`.
 - `transfer_payload`: transfer prepared local payload to the AAP target.
 - `stage_runtime`: unpack source, stage artifacts, configure Podman storage, and
   generate the remote AAP inventory.
-- `artifacts`, `base_preflight`, `tls`, `deploy`, `status`: run the matching AAP
+- `artifacts`, `host_prepare_preflight`, `tls`, `deploy`, `status`: run the matching AAP
   runbooks inside the configured execution environment.
 
 ## Variables

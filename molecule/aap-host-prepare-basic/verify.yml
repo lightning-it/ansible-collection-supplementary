@@ -1,0 +1,21 @@
+---
+- name: Verify AAP host preparation contract coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_host_prepare_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-host-prepare-coverage-mode
+  tasks:
+    - name: Read AAP host preparation coverage marker
+      ansible.builtin.slurp:
+        src: "{{ aap_host_prepare_molecule_marker_path }}"
+      register: aap_host_prepare_molecule_marker
+
+    - name: Require AAP host preparation contract coverage
+      ansible.builtin.assert:
+        that:
+          - >-
+            aap_host_prepare_molecule_marker.content | b64decode | trim
+            == 'syntax_and_action_contract'
+        quiet: true

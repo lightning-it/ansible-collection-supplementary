@@ -1,0 +1,13 @@
+---
+- name: Validate AAP host preparation role inputs
+  ansible.builtin.assert:
+    that:
+      - aap_host_prepare_install_user_effective is string
+      - aap_host_prepare_install_user_effective | trim | length > 0
+      - aap_host_prepare_install_user_home_effective is string
+      - aap_host_prepare_install_user_home_effective is match('^/.+')
+      - aap_host_prepare_install_user_shell_effective is string
+      - aap_host_prepare_install_user_shell_effective is match('^/.+')
+    fail_msg: Invalid configuration for lit.supplementary.aap_host_prepare.
+    quiet: true
+  changed_when: false
