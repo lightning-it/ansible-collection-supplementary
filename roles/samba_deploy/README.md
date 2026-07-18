@@ -1,5 +1,11 @@
 # samba_deploy
 
+`samba_deploy_ad_dc_persistent_storage` defaults to `true` and bind-mounts the
+AD DC database and configuration directories. Set it to `false` only for
+ephemeral test deployments whose backing filesystem cannot provide the POSIX
+ACL semantics required by Samba; the entrypoint bootstrap directory remains
+mounted in either mode.
+
 Deploy Samba as a Podman container from a rendered pod manifest and expose a
 host-mounted share directory.
 

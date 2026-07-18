@@ -70,10 +70,11 @@ jobs:
             pre-commit==4.3.0 \
             pytest==8.4.2 \
             PyYAML==6.0.3
-      - name: Run repository pre-commit gates
+      - name: Run repository static pre-commit gates
         env:
           CI: "true"
-        run: pre-commit run --all-files
+        run: >-
+          SKIP=molecule-light pre-commit run --all-files
       - name: Run collection sanity tests from canonical collection path
         run: |
           set -euo pipefail

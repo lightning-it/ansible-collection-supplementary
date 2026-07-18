@@ -57,6 +57,7 @@ samba_deploy_ad_dc_admin_password: ""
 samba_deploy_ad_dc_insecure_ldap: false
 samba_deploy_ad_dc_insecure_passwordsettings: false
 samba_deploy_ad_dc_server_services: "ldap cldap"
+samba_deploy_ad_dc_persistent_storage: true
 samba_deploy_ldap_port: 389
 samba_deploy_ldaps_port: 636
 samba_deploy_container_ldap_port: 389

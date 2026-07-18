@@ -16,6 +16,7 @@
     samba_deploy_ldaps_port: 1636
     samba_deploy_ad_dc_realm: KEYCLOAK.TEST
     samba_deploy_ad_dc_domain: KEYCLOAK
+    samba_deploy_ad_dc_persistent_storage: false
     samba_deploy_ad_dc_admin_password: "{{ keycloak_heavy_ldap_password }}"
     samba_deploy_ad_dc_keycloak_bind_user: keycloak
     samba_deploy_ad_dc_keycloak_bind_password: "{{ keycloak_heavy_ldap_bind_password }}"
@@ -31,7 +32,7 @@
     samba_deploy_ad_dc_cache_dir: /srv/keycloak-heavy/ldap/cache
     samba_deploy_ad_dc_log_dir: /srv/keycloak-heavy/ldap/log
     samba_deploy_ad_dc_entrypoint_dir: /srv/keycloak-heavy/ldap/entrypoint.d
-    keycloak_heavy_ldap_tls_dir: /srv/keycloak-heavy/ldap/config/tls
+    keycloak_heavy_ldap_tls_dir: /srv/keycloak-heavy/ldap/entrypoint.d/tls
     samba_validate_mode: ad_dc
     samba_validate_host: 127.0.0.1
     samba_validate_ldap_port: 1389
@@ -166,19 +167,19 @@
         content: |
           #!/bin/sh
           set -eu
-          test -s /etc/samba/tls/ca.crt
-          test -s /etc/samba/tls/server.crt
-          test -s /etc/samba/tls/server.key
-          if ! grep -Fq 'tls certfile = /etc/samba/tls/server.crt' /etc/samba/smb.conf; then
+          test -s /entrypoint.d/tls/ca.crt
+          test -s /entrypoint.d/tls/server.crt
+          test -s /entrypoint.d/tls/server.key
+          if ! grep -Fq 'tls certfile = /entrypoint.d/tls/server.crt' /etc/samba/smb.conf; then
             temporary="$(mktemp)"
             trap 'rm -f "${temporary}"' EXIT
             awk '
               /^\[global\]$/ && !added {
                 print
                 print "\ttls enabled = yes"
-                print "\ttls cafile = /etc/samba/tls/ca.crt"
-                print "\ttls certfile = /etc/samba/tls/server.crt"
-                print "\ttls keyfile = /etc/samba/tls/server.key"
+                print "\ttls cafile = /entrypoint.d/tls/ca.crt"
+                print "\ttls certfile = /entrypoint.d/tls/server.crt"
+                print "\ttls keyfile = /entrypoint.d/tls/server.key"
                 added = 1
                 next
               }

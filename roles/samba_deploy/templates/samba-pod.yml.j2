@@ -58,6 +58,7 @@ spec:
 {% else %}
         - name: samba-entrypoint
           mountPath: /entrypoint.d
+{% if samba_deploy_ad_dc_persistent_storage | bool %}
         - name: samba-config
           mountPath: /etc/samba
         - name: samba-cache
@@ -66,6 +67,7 @@ spec:
           mountPath: /var/lib/samba
         - name: samba-log
           mountPath: /var/log/samba
+{% endif %}
 {% endif %}
 
   volumes:
@@ -79,6 +81,7 @@ spec:
       hostPath:
         path: {{ samba_deploy_ad_dc_entrypoint_dir }}
         type: DirectoryOrCreate
+{% if samba_deploy_ad_dc_persistent_storage | bool %}
     - name: samba-config
       hostPath:
         path: {{ samba_deploy_ad_dc_config_dir }}
@@ -95,4 +98,5 @@ spec:
       hostPath:
         path: {{ samba_deploy_ad_dc_log_dir }}
         type: DirectoryOrCreate
+{% endif %}
 {% endif %}

@@ -153,6 +153,7 @@
     stdin_add_newline: false
   register: molecule_incus_evidence_container_images_redacted
   changed_when: false
+  failed_when: false
   no_log: true
   when: molecule_incus_evidence_container_images_raw.rc == 0
 
@@ -188,7 +189,10 @@
           | default('', true) | trim | to_json
         }},
         "container_inventory_available": {{
-          (molecule_incus_evidence_container_images_raw.rc == 0) | bool | to_json
+          (
+            molecule_incus_evidence_container_images_raw.rc == 0
+            and molecule_incus_evidence_container_images_redacted.rc | default(1) == 0
+          ) | bool | to_json
         }},
         "images": {{
           molecule_incus_evidence_container_images | default([]) | to_json

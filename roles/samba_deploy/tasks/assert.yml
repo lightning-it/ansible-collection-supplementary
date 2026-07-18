@@ -36,6 +36,7 @@
       - samba_deploy_ad_dc_realm | default('', true) | trim | length > 0
       - samba_deploy_ad_dc_domain | default('', true) | trim | length > 0
       - samba_deploy_ad_dc_insecure_ldap is boolean
+      - samba_deploy_ad_dc_persistent_storage is boolean
       - samba_deploy_ad_dc_insecure_passwordsettings is boolean
       - samba_deploy_ad_dc_server_services | default('', true) | trim | length > 0
       - samba_deploy_ldap_port | int > 0
