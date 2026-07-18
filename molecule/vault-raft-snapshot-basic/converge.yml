@@ -93,6 +93,30 @@
         tasks_from: assert
       no_log: true
 
+    - name: Initialize oversized raw snapshot limit refusal
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_oversized_limit_refused: false
+
+    - name: Reject a raw snapshot limit above the hard ceiling
+      block:
+        - name: Exercise the raw snapshot limit ceiling
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_max_raw_bytes: 134217729
+          no_log: true
+      rescue:
+        - name: Record oversized raw snapshot limit refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_oversized_limit_refused: true
+
+    - name: Require oversized raw snapshot limit refusal
+      ansible.builtin.assert:
+        that:
+          - vault_raft_snapshot_molecule_oversized_limit_refused | bool
+        quiet: true
+
     - name: Initialize numeric restore TLS hostname refusal
       ansible.builtin.set_fact:
         vault_raft_snapshot_molecule_numeric_hostname_refused: false
