@@ -68,6 +68,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         )
         for path in (
             "/scripts/quality_cell_identity.py",
+            "/scripts/select-quality-impact.py",
             "/scripts/source_dependencies.py",
             "/scripts/validate-role-coverage.py",
         ):
@@ -107,6 +108,10 @@ class WorkflowSecurityTests(unittest.TestCase):
         jobs = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]
         for name in ("tiny-cells", "heavy-cells", "acceptance-cells"):
             guard = jobs[name]["if"]
+            self.assertIn(
+                "needs.quality-matrix.outputs.keycloak_required == 'true'",
+                guard,
+            )
             self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", guard)
             self.assertIn("github.event.pull_request.base.ref == 'develop'", guard)
             self.assertIn("github.event.pull_request.head.ref == 'develop'", guard)
@@ -126,6 +131,10 @@ class WorkflowSecurityTests(unittest.TestCase):
             self.assertIn("ansible-collection-runtime-protected", environment)
         runtime_guard = jobs["runtime-evidence"]["if"]
         self.assertIn("always()", runtime_guard)
+        self.assertIn(
+            "needs.quality-matrix.outputs.keycloak_required == 'true'",
+            runtime_guard,
+        )
         self.assertIn("pull_request.head.repo.full_name == github.repository", runtime_guard)
         self.assertIn(
             "startsWith(github.event.pull_request.head.ref, 'release/v')",
@@ -140,6 +149,17 @@ class WorkflowSecurityTests(unittest.TestCase):
                 'test "$PROFILE_RESULT" = success',
                 jobs[name]["steps"][0]["run"],
             )
+            self.assertIn(
+                'test "$PROFILE_RESULT" = skipped',
+                jobs[name]["steps"][0]["run"],
+            )
+        quality_outputs = jobs["quality-matrix"]["outputs"]
+        self.assertIn("keycloak_required", quality_outputs)
+        self.assertIn("full_matrix", quality_outputs)
+        self.assertIn("selection", quality_outputs)
+        evidence_gate = jobs["evidence"]["steps"][0]["run"]
+        self.assertIn('test "$RUNTIME_EVIDENCE_RESULT" = success', evidence_gate)
+        self.assertIn('test "$RUNTIME_EVIDENCE_RESULT" = skipped', evidence_gate)
         stable_names = {
             jobs[name]["name"]
             for name in (

@@ -36,6 +36,12 @@ env:
   SOURCE_REF: ${{ github.ref }}
   REVIEWED_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
   REVIEWED_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.sha }}
+  COMPARE_BASE_SHA: >-
+    ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha ||
+        github.event_name == 'push' && github.event.before || '' }}
+  COMPARE_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || '' }}
+  COMPARE_HEAD_REF: >-
+    ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
   CANDIDATE_ARTIFACT: >-
     collection-candidate-${{ github.event_name == 'pull_request' &&
       github.event.pull_request.head.sha || github.sha }}
@@ -122,15 +128,45 @@ jobs:
       tiny: ${{ steps.matrix.outputs.tiny }}
       heavy: ${{ steps.matrix.outputs.heavy }}
       acceptance: ${{ steps.matrix.outputs.acceptance }}
+      keycloak_required: ${{ steps.impact.outputs.keycloak_required }}
+      full_matrix: ${{ steps.impact.outputs.full_matrix }}
+      selection: ${{ steps.impact.outputs.selection }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
         with:
           ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install registry parser
         run: python -m pip install --disable-pip-version-check PyYAML==6.0.3
+      - name: Select affected Keycloak quality profiles
+        id: impact
+        env:
+          EXECUTION_MODE: ${{ inputs.execution_mode || '' }}
+        run: |
+          set -euo pipefail
+          selection="$(python scripts/select-quality-impact.py \
+            --event-name "$GITHUB_EVENT_NAME" \
+            --base-sha "$COMPARE_BASE_SHA" \
+            --head-sha "$SOURCE_SHA" \
+            --base-ref "$COMPARE_BASE_REF" \
+            --head-ref "$COMPARE_HEAD_REF" \
+            --execution-mode "$EXECUTION_MODE")"
+          python -c 'import json,sys; json.loads(sys.argv[1])' "$selection"
+          SELECTION="$selection" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          selection = json.loads(os.environ["SELECTION"])
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
+              stream.write(f"keycloak_required={str(selection['keycloak_required']).lower()}\n")
+              stream.write(f"full_matrix={str(selection['full_matrix']).lower()}\n")
+              stream.write(f"selection={json.dumps(selection, separators=(',', ':'))}\n")
+          print(json.dumps(selection, indent=2, sort_keys=True))
+          PY
       - name: Generate compact matrices
         id: matrix
         run: |
@@ -254,7 +290,8 @@ jobs:
   tiny-cells:
     name: Tiny matrix / ${{ matrix.scenario }} / ${{ matrix.target }}
     if: >-
-      (github.event_name == 'pull_request' &&
+      needs.quality-matrix.outputs.keycloak_required == 'true' &&
+      ((github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
        (github.event.pull_request.base.ref == 'develop' ||
         (github.event.pull_request.base.ref == 'main' &&
@@ -264,7 +301,7 @@ jobs:
        (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) ||
       (github.event_name == 'workflow_dispatch' &&
        ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
-        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop')))
+        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
     needs: [build-install, quality-matrix]
     strategy:
       fail-fast: false
@@ -310,15 +347,21 @@ jobs:
         env:
           MATRIX_RESULT: ${{ needs.quality-matrix.result }}
           PROFILE_RESULT: ${{ needs.tiny-cells.result }}
+          REQUIRED: ${{ needs.quality-matrix.outputs.keycloak_required }}
         run: |
           set -euo pipefail
           test "$MATRIX_RESULT" = success
-          test "$PROFILE_RESULT" = success
+          if [ "$REQUIRED" = true ]; then
+            test "$PROFILE_RESULT" = success
+          else
+            test "$PROFILE_RESULT" = skipped
+          fi
 
   heavy-cells:
     name: Heavy matrix / ${{ matrix.scenario }} / ${{ matrix.target }}
     if: >-
-      (github.event_name == 'pull_request' &&
+      needs.quality-matrix.outputs.keycloak_required == 'true' &&
+      ((github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
        (github.event.pull_request.base.ref == 'develop' ||
         (github.event.pull_request.base.ref == 'main' &&
@@ -328,7 +371,7 @@ jobs:
        (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) ||
       (github.event_name == 'workflow_dispatch' &&
        ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
-        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop')))
+        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
     needs: [build-install, quality-matrix]
     strategy:
       fail-fast: false
@@ -374,15 +417,21 @@ jobs:
         env:
           MATRIX_RESULT: ${{ needs.quality-matrix.result }}
           PROFILE_RESULT: ${{ needs.heavy-cells.result }}
+          REQUIRED: ${{ needs.quality-matrix.outputs.keycloak_required }}
         run: |
           set -euo pipefail
           test "$MATRIX_RESULT" = success
-          test "$PROFILE_RESULT" = success
+          if [ "$REQUIRED" = true ]; then
+            test "$PROFILE_RESULT" = success
+          else
+            test "$PROFILE_RESULT" = skipped
+          fi
 
   acceptance-cells:
     name: Application Acceptance matrix / ${{ matrix.scenario }} / ${{ matrix.target }}
     if: >-
-      (github.event_name == 'pull_request' &&
+      needs.quality-matrix.outputs.keycloak_required == 'true' &&
+      ((github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
        (github.event.pull_request.base.ref == 'develop' ||
         (github.event.pull_request.base.ref == 'main' &&
@@ -392,7 +441,7 @@ jobs:
        (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) ||
       (github.event_name == 'workflow_dispatch' &&
        ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
-        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop')))
+        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
     needs: [build-install, quality-matrix]
     strategy:
       fail-fast: false
@@ -438,15 +487,21 @@ jobs:
         env:
           MATRIX_RESULT: ${{ needs.quality-matrix.result }}
           PROFILE_RESULT: ${{ needs.acceptance-cells.result }}
+          REQUIRED: ${{ needs.quality-matrix.outputs.keycloak_required }}
         run: |
           set -euo pipefail
           test "$MATRIX_RESULT" = success
-          test "$PROFILE_RESULT" = success
+          if [ "$REQUIRED" = true ]; then
+            test "$PROFILE_RESULT" = success
+          else
+            test "$PROFILE_RESULT" = skipped
+          fi
 
   runtime-evidence:
     name: Runtime evidence / exact tested SHA
     if: >-
       always() &&
+      needs.quality-matrix.outputs.keycloak_required == 'true' &&
       ((github.event_name == 'pull_request' &&
         github.event.pull_request.head.repo.full_name == github.repository &&
         (github.event.pull_request.base.ref == 'develop' ||
@@ -458,7 +513,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' &&
        ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
         (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
-    needs: [lint-sanity, build-install, role-coverage, tiny, heavy, acceptance]
+    needs: [lint-sanity, build-install, role-coverage, quality-matrix, tiny, heavy, acceptance]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -861,7 +916,7 @@ jobs:
     name: Collection / Evidence
     if: always()
     needs:
-      [lint-sanity, build-install, role-coverage, tiny, heavy, acceptance, runtime-evidence]
+      [lint-sanity, build-install, role-coverage, quality-matrix, tiny, heavy, acceptance, runtime-evidence]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -876,6 +931,7 @@ jobs:
           HEAVY_RESULT: ${{ needs.heavy.result }}
           ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
           RUNTIME_EVIDENCE_RESULT: ${{ needs.runtime-evidence.result }}
+          KEYCLOAK_REQUIRED: ${{ needs.quality-matrix.outputs.keycloak_required }}
         run: |
           set -euo pipefail
           test "$LINT_RESULT" = success
@@ -890,7 +946,11 @@ jobs:
               *) exit 1 ;;
             esac
           fi
-          test "$RUNTIME_EVIDENCE_RESULT" = success
+          if [ "$KEYCLOAK_REQUIRED" = true ]; then
+            test "$RUNTIME_EVIDENCE_RESULT" = success
+          else
+            test "$RUNTIME_EVIDENCE_RESULT" = skipped
+          fi
 
   release-security:
     name: Collection / Release Security

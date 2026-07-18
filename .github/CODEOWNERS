@@ -21,6 +21,7 @@
 /scripts/quality_cell_identity.py @lightning-it/ent:release
 /scripts/quality_evidence.py @lightning-it/ent:release
 /scripts/release-version.py @lightning-it/ent:release
+/scripts/select-quality-impact.py @lightning-it/ent:release
 /scripts/source_dependencies.py @lightning-it/ent:release
 /scripts/validate-role-coverage.py @lightning-it/ent:release
 /scripts/wunder-container-run.sh @lightning-it/ent:release
