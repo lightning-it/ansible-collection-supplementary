@@ -41,6 +41,22 @@ class SanitizeEvidenceTests(unittest.TestCase):
 
         self.assertEqual(result["nested"]["authorization"], "[REDACTED]")
 
+    def test_json_redaction_preserves_valid_escaped_content(self) -> None:
+        source = {
+            "images": [
+                {
+                    "name": "registry.example/keycloak:26",
+                    "annotation": 'token="quoted\\value"',
+                }
+            ]
+        }
+
+        rendered = SANITIZER.sanitize(json.dumps(source), [])
+        result = json.loads(rendered)
+
+        self.assertEqual(result["images"][0]["name"], "registry.example/keycloak:26")
+        self.assertEqual(result["images"][0]["annotation"], "token=[REDACTED]")
+
     def test_redacts_exact_environment_value_and_credential_shapes(self) -> None:
         source = (
             "password=plain-secret\n"

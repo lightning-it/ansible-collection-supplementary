@@ -101,20 +101,46 @@ def _secret_values(explicit_names: list[str]) -> list[str]:
     return sorted(values, key=len, reverse=True)
 
 
-def sanitize(text: str, explicit_names: list[str]) -> str:
-    """Return text with exact and credential-shaped secrets removed."""
+def _sanitize_text_value(value: str, secret_values: list[str]) -> str:
+    """Sanitize one scalar without touching JSON syntax around it."""
 
-    sanitized = _sanitize_json_document(text, explicit_names)
-    sanitized = ANSI_ESCAPE.sub("", sanitized)
-    for value in _secret_values(explicit_names):
-        sanitized = sanitized.replace(value, "[REDACTED]")
-
+    sanitized = ANSI_ESCAPE.sub("", value)
+    for secret_value in secret_values:
+        sanitized = sanitized.replace(secret_value, "[REDACTED]")
     sanitized = PRIVATE_KEY.sub("[REDACTED PRIVATE KEY]", sanitized)
     sanitized = URL_CREDENTIAL.sub(r"\1[REDACTED]\2", sanitized)
     sanitized = BEARER_TOKEN.sub(r"\1[REDACTED]", sanitized)
     sanitized = JWT.sub("[REDACTED JWT]", sanitized)
     sanitized = KEY_VALUE_SECRET.sub(r"\1[REDACTED]", sanitized)
     return PROSE_SECRET.sub(r"\1[REDACTED]", sanitized)
+
+
+def _sanitize_json_strings(value: Any, secret_values: list[str]) -> Any:
+    """Sanitize JSON strings while preserving the document structure."""
+
+    if isinstance(value, list):
+        return [_sanitize_json_strings(item, secret_values) for item in value]
+    if isinstance(value, dict):
+        return {key: _sanitize_json_strings(item, secret_values) for key, item in value.items()}
+    if isinstance(value, str):
+        return _sanitize_text_value(value, secret_values)
+    return value
+
+
+def sanitize(text: str, explicit_names: list[str]) -> str:
+    """Return text with exact and credential-shaped secrets removed."""
+
+    secret_values = _secret_values(explicit_names)
+    try:
+        document = json.loads(text)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return _sanitize_text_value(text, secret_values)
+
+    trailing_newline = text.endswith("\n")
+    document = _sanitize_json(document, explicit_names)
+    document = _sanitize_json_strings(document, secret_values)
+    rendered = json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True)
+    return rendered + ("\n" if trailing_newline else "")
 
 
 def main() -> int:
