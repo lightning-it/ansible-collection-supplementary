@@ -1,0 +1,10 @@
+---
+aap_host_prepare_install_user_effective: >-
+  {{ aap_deploy_install_user | default('svc_aap', true) }}
+aap_host_prepare_install_user_home_effective: >-
+  {{
+    aap_deploy_install_user_home
+    | default('/appl/home/' ~ aap_host_prepare_install_user_effective, true)
+  }}
+aap_host_prepare_install_user_shell_effective: >-
+  {{ aap_deploy_install_user_shell | default('/bin/bash', true) }}
