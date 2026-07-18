@@ -87,7 +87,7 @@
     that:
       - item in ansible_facts.packages
     fail_msg: >-
-      Required package {{ item }} is absent. The MHB host owner must provide it;
+      Required package {{ item }} is absent. The host owner must provide it;
       rollout automation does not manage the customer package baseline.
     quiet: true
   loop: "{{ aap_preflight_required_packages }}"
