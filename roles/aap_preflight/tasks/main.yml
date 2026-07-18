@@ -249,7 +249,7 @@
           | default([])
           | reject(
               'search',
-              '^[0-9]+ (catatonit -P|/usr/lib/systemd/systemd --user|'
+              '^[0-9]+\\s+(catatonit -P|/usr/lib/systemd/systemd --user|'
               ~ '\\(sd-pam\\)|/usr/bin/dbus-broker-launch --scope user|dbus-broker )'
             )
           | list
