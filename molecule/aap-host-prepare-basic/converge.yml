@@ -1,0 +1,37 @@
+---
+- name: Converge AAP host preparation contract coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_host_prepare_molecule_execute_role: false
+    aap_host_prepare_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-host-prepare-coverage-mode
+  tasks:
+    - name: Import lit.supplementary.aap_host_prepare for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.aap_host_prepare
+      when: aap_host_prepare_molecule_execute_role | bool
+
+    - name: Load AAP local-execution defaults for action contract coverage
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/aap_local_execution/defaults/main.yml"
+
+    - name: Require the canonical host preparation action mapping
+      ansible.builtin.assert:
+        that:
+          - "'host_prepare_preflight' in aap_local_execution_allowed_actions"
+          - "'base_preflight' not in aap_local_execution_allowed_actions"
+          - >-
+            aap_local_execution_remote_playbooks.host_prepare_preflight
+            == [
+              'runbooks/50-applications/aap/06-aap-host-prepare.yml',
+              'runbooks/50-applications/aap/07-preflight.yml'
+            ]
+        quiet: true
+
+    - name: Persist AAP host preparation Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ aap_host_prepare_molecule_marker_path }}"
+        content: "syntax_and_action_contract\n"
+        mode: "0644"
