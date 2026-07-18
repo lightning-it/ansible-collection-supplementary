@@ -116,8 +116,7 @@
       - aap_preflight_enabled_repositories.stdout is search('(?i)' ~ (item | regex_escape))
     fail_msg: >-
       No enabled repository matching {{ item }} was reported. Repository
-      enablement remains the responsibility of the MHB host owner.
-    quiet: true
+      enablement remains the responsibility of the host owner.
   loop: "{{ aap_preflight_required_repository_labels }}"
 
 - name: Validate system CA bundle
