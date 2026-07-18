@@ -1147,37 +1147,37 @@
       delay: 2
       changed_when: false
 
-    - name: Bind guest DNS to the exact-owned managed bridge
+    - name: Remove the unusable guest resolver stub
       ansible.builtin.command:
         argv:
           - incus
           - exec
           - "{{ item.name }}"
           - --
-          - resolvectl
-          - dns
-          - eth0
-          - >-
-            {{
-              (molecule_incus_network_after.stdout | from_yaml).config['ipv4.address']
-              | split('/') | first
-            }}
+          - rm
+          - -f
+          - /etc/resolv.conf
       loop: "{{ molecule_incus_instances }}"
       loop_control:
         label: "{{ item.name }}"
       changed_when: true
 
-    - name: Make the managed bridge the guest default DNS route
+    - name: Bind guest DNS directly to the exact-owned managed bridge
       ansible.builtin.command:
         argv:
           - incus
           - exec
           - "{{ item.name }}"
           - --
-          - resolvectl
-          - default-route
-          - eth0
-          - "yes"
+          - tee
+          - /etc/resolv.conf
+        stdin: |-
+          nameserver {{
+            (molecule_incus_network_after.stdout | from_yaml).config['ipv4.address']
+            | split('/') | first
+          }}
+          options timeout:2 attempts:3
+        stdin_add_newline: true
       loop: "{{ molecule_incus_instances }}"
       loop_control:
         label: "{{ item.name }}"
