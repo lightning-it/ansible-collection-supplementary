@@ -17,10 +17,9 @@
       - not (aap_preflight_selinux_enforcing_required | bool) or ansible_facts.selinux.mode == 'enforcing'
     fail_msg: >-
       Customer-prepared host contract failed. Expected {{ aap_preflight_expected_distribution }}
-      {{ aap_preflight_minimum_distribution_version }}+, {{ aap_preflight_expected_architecture }},
       FQDN {{ aap_preflight_expected_fqdn }}, {{ aap_preflight_minimum_vcpus }} vCPUs,
-      {{ aap_preflight_minimum_memory_mb }} MiB RAM, and SELinux enforcing. The MHB host
-      owner must correct the baseline before rollout continues.
+      {{ aap_preflight_minimum_memory_mb }} MiB RAM, and SELinux enforcing. The host owner
+      must correct the baseline before rollout continues.
     quiet: true
 
 - name: Resolve application mount facts
