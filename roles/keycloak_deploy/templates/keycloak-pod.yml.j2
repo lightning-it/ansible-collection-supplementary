@@ -18,6 +18,7 @@ spec:
 {% for arg in keycloak_deploy_extra_start_args | default([]) %}
         - "{{ arg }}"
 {% endfor %}
+{% if not keycloak_deploy_host_network | bool %}
       ports:
         - containerPort: {{ keycloak_deploy_port }}
           hostPort: {{ keycloak_deploy_port }}
@@ -26,6 +27,7 @@ spec:
           containerPort: {{ keycloak_deploy_management_port }}
           hostPort: {{ keycloak_deploy_management_port }}
           hostIP: {{ keycloak_deploy_host_ip }}
+{% endif %}
       env:
         - name: KC_DB
           value: "{{ keycloak_deploy_db_vendor }}"
