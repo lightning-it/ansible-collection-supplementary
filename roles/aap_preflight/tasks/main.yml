@@ -241,6 +241,7 @@
 - name: Assert first-install runtime state
   ansible.builtin.assert:
     that:
+      - aap_preflight_install_user_processes.rc | default(1) in [0, 1]
       - >-
         (aap_preflight_installed_marker.stat.exists | default(false))
         or (aap_preflight_allow_partial_install_runtime | bool)
