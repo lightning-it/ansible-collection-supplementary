@@ -18,7 +18,7 @@ if [ "$RUN_AS_HOST_UID_POLICY" = "1" ] && [ "$WORKSPACE_MODE" != rw ]; then
 fi
 case "$SOCKET_POLICY" in disabled|required|auto) ;; *) echo "Error: unsupported socket policy: $SOCKET_POLICY" >&2; exit 1 ;; esac
 case "$SOURCE_ROOT_POLICY" in disabled|enabled) ;; *) echo "Error: unsupported source-root policy: $SOURCE_ROOT_POLICY" >&2; exit 1 ;; esac
-case "$CAPABILITY_POLICY" in ""|CHOWN,FOWNER) ;; *) echo "Error: unsupported capability policy: $CAPABILITY_POLICY" >&2; exit 1 ;; esac
+case "$CAPABILITY_POLICY" in ""|CHOWN,FOWNER|CHOWN,DAC_OVERRIDE,FOWNER) ;; *) echo "Error: unsupported capability policy: $CAPABILITY_POLICY" >&2; exit 1 ;; esac
 case "$VAGRANT_SSH_POLICY" in disabled|enabled) ;; *) echo "Error: unsupported Vagrant SSH forwarding policy: $VAGRANT_SSH_POLICY" >&2; exit 1 ;; esac
 case "$CONTAINER_HOME" in
   /*) ;;
@@ -96,6 +96,8 @@ esac
 
 if [ "${WUNDER_DEVTOOLS_PRIVILEGED:-0}" = "1" ]; then
   DOCKER_ARGS+=(--privileged)
+elif [ "$CAPABILITY_POLICY" = "CHOWN,DAC_OVERRIDE,FOWNER" ]; then
+  DOCKER_ARGS+=(--cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER)
 elif [ "$CAPABILITY_POLICY" = "CHOWN,FOWNER" ]; then
   DOCKER_ARGS+=(--cap-add CHOWN --cap-add FOWNER)
 fi

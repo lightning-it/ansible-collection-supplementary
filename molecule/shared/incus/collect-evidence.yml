@@ -142,7 +142,7 @@
   ansible.builtin.command:
     argv: >-
       {{
-        ['python3', molecule_incus_evidence_sanitizer]
+        ['python3', molecule_incus_evidence_sanitizer, '--json-document']
         + (
           molecule_incus_evidence_secret_env_names_effective
           | map('regex_replace', '^(.+)$', '--secret-env=\\1')

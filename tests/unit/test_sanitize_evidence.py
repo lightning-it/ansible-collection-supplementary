@@ -57,6 +57,17 @@ class SanitizeEvidenceTests(unittest.TestCase):
         self.assertEqual(result["images"][0]["name"], "registry.example/keycloak:26")
         self.assertEqual(result["images"][0]["annotation"], "token=[REDACTED]")
 
+    def test_json_document_mode_extracts_payload_after_command_diagnostic(self) -> None:
+        source = 'level=warning msg="runtime notice"\n[{"Id":"sha256:abc"}]\n'
+
+        rendered = SANITIZER.sanitize(source, [], require_json=True)
+
+        self.assertEqual(json.loads(rendered), [{"Id": "sha256:abc"}])
+
+    def test_json_document_mode_rejects_non_json_input(self) -> None:
+        with self.assertRaises(ValueError):
+            SANITIZER.sanitize("runtime warning only", [], require_json=True)
+
     def test_redacts_exact_environment_value_and_credential_shapes(self) -> None:
         source = (
             "password=plain-secret\n"

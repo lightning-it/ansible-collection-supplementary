@@ -85,6 +85,11 @@ def _sanitize_json_document(text: str, explicit_names: list[str]) -> str:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--json-document",
+        action="store_true",
+        help="require and extract one JSON document from command output",
+    )
+    parser.add_argument(
         "--secret-env",
         action="append",
         default=[],
@@ -127,13 +132,31 @@ def _sanitize_json_strings(value: Any, secret_values: list[str]) -> Any:
     return value
 
 
-def sanitize(text: str, explicit_names: list[str]) -> str:
+def _extract_json_document(text: str) -> Any:
+    """Extract one JSON value while tolerating non-JSON command diagnostics."""
+
+    cleaned = ANSI_ESCAPE.sub("", text)
+    decoder = json.JSONDecoder()
+    for index, character in enumerate(cleaned):
+        if character not in "[{":
+            continue
+        try:
+            document, _ = decoder.raw_decode(cleaned, index)
+        except json.JSONDecodeError:
+            continue
+        return document
+    raise ValueError("input does not contain a valid JSON document")
+
+
+def sanitize(text: str, explicit_names: list[str], *, require_json: bool = False) -> str:
     """Return text with exact and credential-shaped secrets removed."""
 
     secret_values = _secret_values(explicit_names)
     try:
-        document = json.loads(text)
-    except (json.JSONDecodeError, UnicodeDecodeError):
+        document = _extract_json_document(text) if require_json else json.loads(text)
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        if require_json:
+            raise
         return _sanitize_text_value(text, secret_values)
 
     trailing_newline = text.endswith("\n")
@@ -145,7 +168,16 @@ def sanitize(text: str, explicit_names: list[str]) -> str:
 
 def main() -> int:
     args = _parser().parse_args()
-    sys.stdout.write(sanitize(sys.stdin.read(), args.secret_env))
+    try:
+        rendered = sanitize(
+            sys.stdin.read(),
+            args.secret_env,
+            require_json=args.json_document,
+        )
+    except (UnicodeDecodeError, ValueError) as error:
+        print(f"sanitize-evidence: {error}", file=sys.stderr)
+        return 2
+    sys.stdout.write(rendered)
     return 0
 
 
