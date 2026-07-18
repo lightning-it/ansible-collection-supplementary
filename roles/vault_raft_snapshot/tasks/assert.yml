@@ -30,7 +30,7 @@
         is match('^[a-z0-9][a-z0-9._-]{2,255}$')
       - vault_raft_snapshot_max_raw_bytes is integer
       - vault_raft_snapshot_max_raw_bytes | int > 0
-      - vault_raft_snapshot_max_raw_bytes | int <= 67108864
+      - vault_raft_snapshot_max_raw_bytes | int <= 134217728
       - vault_raft_snapshot_verification_kv_paths is sequence
       - vault_raft_snapshot_verification_kv_paths is not string
       - vault_raft_snapshot_verification_kv_paths | length > 0

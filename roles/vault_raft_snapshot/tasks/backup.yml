@@ -126,7 +126,7 @@
       become: false
       changed_when: false
 
-    - name: Require a bounded owner-only raw Raft snapshot
+    - name: Require a safe owner-only raw Raft snapshot
       ansible.builtin.assert:
         that:
           - _vault_raft_snapshot_raw_stat.stat.exists | default(false)
@@ -136,13 +136,30 @@
           - _vault_raft_snapshot_raw_stat.stat.mode == '0600'
           - _vault_raft_snapshot_raw_stat.stat.size | int > 0
           - >-
-            _vault_raft_snapshot_raw_stat.stat.size | int
-            <= vault_raft_snapshot_max_raw_bytes | int
-          - >-
             _vault_raft_snapshot_raw_stat.stat.checksum
             is match('^[0-9a-f]{64}$')
-        fail_msg: "Raw Vault Raft snapshot is missing, unsafe, empty, or over the approved limit."
+        fail_msg: "Raw Vault Raft snapshot is missing, unsafe, or empty."
         quiet: true
+
+    - name: Report the non-secret raw Raft snapshot size contract
+      ansible.builtin.debug:
+        msg: >-
+          Raw Vault Raft snapshot size is
+          {{ _vault_raft_snapshot_raw_stat.stat.size | int }} bytes; the
+          approved limit is {{ vault_raft_snapshot_max_raw_bytes | int }} bytes.
+      no_log: false
+
+    - name: Require the raw Raft snapshot within the approved size bound
+      ansible.builtin.assert:
+        that:
+          - >-
+            _vault_raft_snapshot_raw_stat.stat.size | int
+            <= vault_raft_snapshot_max_raw_bytes | int
+        fail_msg: >-
+          Raw Vault Raft snapshot exceeds the approved
+          {{ vault_raft_snapshot_max_raw_bytes | int }}-byte limit.
+        quiet: true
+      no_log: false
 
     - name: Read the raw Raft snapshot into protected Ansible memory
       ansible.builtin.slurp:

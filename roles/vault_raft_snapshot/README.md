@@ -34,6 +34,9 @@ See `defaults/main.yml` for the full interface. Set `vault_raft_snapshot_action`
 provide the role-prefixed API, CA, AppRole, controller escrow, image digest, document identity, and KV verification
 inputs for active operations. Restore-only inputs are validated only for `restore_drill`.
 
+`vault_raft_snapshot_max_raw_bytes` defaults to, and is hard-capped at, 128 MiB (134217728 bytes). The raw snapshot
+must remain within this enforced bound before it is read into protected memory or encrypted for off-host escrow.
+
 The controller document path is immutable. For restore, pin its SHA-256 digest with
 `vault_raft_snapshot_expected_ciphertext_sha256` before the role decrypts it.
 `vault_raft_snapshot_restore_tls_hostname` and `vault_raft_snapshot_restore_bind_address` are fail-closed to
