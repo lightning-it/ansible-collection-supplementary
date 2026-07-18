@@ -57,8 +57,7 @@
     vault_raft_snapshot_restore_tls_hostname: localhost
     vault_raft_snapshot_restore_api_port: "{{ vault_raft_snapshot_molecule_port }}"
     vault_raft_snapshot_restore_cluster_port: 18222
-    vault_raft_snapshot_restore_work_root: >-
-      {{ vault_raft_snapshot_molecule_root }}/restore-work
+    vault_raft_snapshot_restore_work_root: /run/lit-vault-raft-molecule
     vault_raft_snapshot_restore_container_name: molecule-vault-raft-restore
     # This scenario exercises the role locally inside the capability-minimized
     # devtools container. Keep its fake runtime directories owned by the

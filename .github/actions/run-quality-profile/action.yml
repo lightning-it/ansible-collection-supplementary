@@ -214,8 +214,29 @@ runs:
         ansible-galaxy collection list --format json \
           > "$dependency_root/collection-dependencies.json"
         incus version > "$dependency_root/incus-version.txt"
-        incus image info "$KEYCLOAK_TEST_IMAGE" --format json \
+        incus_image_fingerprint="$(
+          incus image info "$KEYCLOAK_TEST_IMAGE" |
+            awk -F ': ' '$1 == "Fingerprint" { print $2; exit }'
+        )"
+        test "${#incus_image_fingerprint}" -eq 64
+        case "$incus_image_fingerprint" in
+          *[!0-9a-f]*) exit 1 ;;
+        esac
+        INCUS_IMAGE_FINGERPRINT="$incus_image_fingerprint" python3 - <<'PY' \
           > "$dependency_root/incus-base-image.json"
+        import json
+        import os
+
+        print(
+            json.dumps(
+                {
+                    "fingerprint": os.environ["INCUS_IMAGE_FINGERPRINT"],
+                    "reference": os.environ["KEYCLOAK_TEST_IMAGE"],
+                },
+                sort_keys=True,
+            )
+        )
+        PY
         {
           echo "mode=host-native"
           echo "digest=not-applicable"

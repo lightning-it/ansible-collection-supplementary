@@ -193,9 +193,7 @@
           - incus
           - list
           - --format
-          - csv
-          - -c
-          - n
+          - json
       register: molecule_incus_all_instance_names
       changed_when: false
 
@@ -638,7 +636,13 @@
           - get
           - "{{ item }}"
           - user.lit-molecule-owner
-      loop: "{{ molecule_incus_remaining_network_names.stdout_lines }}"
+      loop: >-
+        {{
+          molecule_incus_remaining_network_names.stdout
+          | from_json
+          | map(attribute='name')
+          | list
+        }}
       loop_control:
         label: "{{ item }}"
       register: molecule_incus_remaining_network_owners
