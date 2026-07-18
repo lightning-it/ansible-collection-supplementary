@@ -64,6 +64,9 @@ argument_specs:
         type: dict
         no_log: true
         options: &keycloak_cac_ldap_provider_options
+          realm:
+            description: Keycloak realm in which the LDAP provider is reconciled.
+            type: str
           name:
             description: Display name of the Keycloak user-federation component.
             type: str

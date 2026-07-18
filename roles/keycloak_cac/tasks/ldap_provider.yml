@@ -10,6 +10,25 @@
     fail_msg: "Keycloak LDAP provider definition is missing required values."
   no_log: true
 
+- name: Derive Keycloak LDAP provider realm
+  ansible.builtin.set_fact:
+    keycloak_cac_ldap_provider_realm: >-
+      {{ keycloak_cac_ldap_provider.realm | default(keycloak_cac_realm, true) }}
+  no_log: true
+
+- name: Read Keycloak realm representation for LDAP parent id
+  ansible.builtin.uri:
+    url: "{{ keycloak_cac_url }}/admin/realms/{{ keycloak_cac_ldap_provider_realm }}"
+    method: GET
+    validate_certs: "{{ keycloak_cac_validate_certs }}"
+    timeout: "{{ keycloak_cac_request_timeout | int }}"
+    headers:
+      Authorization: "Bearer {{ keycloak_cac_ldap_token.json.access_token }}"
+    status_code: 200
+  register: keycloak_cac_ldap_realm
+  changed_when: false
+  no_log: true
+
 - name: Build Keycloak LDAP provider component payload
   ansible.builtin.set_fact:
     keycloak_cac_ldap_component_payload:
@@ -84,7 +103,7 @@
   ansible.builtin.uri:
     url: >-
       {{
-        keycloak_cac_url ~ '/admin/realms/' ~ keycloak_cac_realm ~
+        keycloak_cac_url ~ '/admin/realms/' ~ keycloak_cac_ldap_provider_realm ~
         '/components?type=org.keycloak.storage.UserStorageProvider&name=' ~
         (keycloak_cac_ldap_provider.name | urlencode)
       }}
@@ -135,7 +154,7 @@
 
 - name: Create Keycloak LDAP provider component
   ansible.builtin.uri:
-    url: "{{ keycloak_cac_url }}/admin/realms/{{ keycloak_cac_realm }}/components"
+    url: "{{ keycloak_cac_url }}/admin/realms/{{ keycloak_cac_ldap_provider_realm }}/components"
     method: POST
     validate_certs: "{{ keycloak_cac_validate_certs }}"
     timeout: "{{ keycloak_cac_request_timeout | int }}"
@@ -152,7 +171,7 @@
   ansible.builtin.uri:
     url: >-
       {{
-        keycloak_cac_url ~ '/admin/realms/' ~ keycloak_cac_realm ~
+        keycloak_cac_url ~ '/admin/realms/' ~ keycloak_cac_ldap_provider_realm ~
         '/components/' ~ keycloak_cac_existing_ldap_component.id
       }}
     method: PUT
