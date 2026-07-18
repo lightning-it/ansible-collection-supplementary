@@ -28,9 +28,13 @@
       - aap_preflight_registry_secret_vars is sequence
       - aap_preflight_registry_secret_vars is not string
       - aap_preflight_temporary_paths is sequence
+      - aap_preflight_temporary_paths is not string
       - aap_preflight_required_packages is sequence
+      - aap_preflight_required_packages is not string
       - aap_preflight_subid_users is sequence
+      - aap_preflight_subid_users is not string
       - aap_preflight_required_repository_labels is sequence
+      - aap_preflight_required_repository_labels is not string
     fail_msg: "Invalid configuration for lit.supplementary.aap_preflight."
     quiet: true
   changed_when: false
