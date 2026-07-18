@@ -1,0 +1,24 @@
+---
+- name: Converge aap preflight syntax coverage
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_preflight_molecule_execute_role: false
+    aap_preflight_molecule_marker_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-preflight-coverage-mode
+  tasks:
+    - name: Import lit.supplementary.aap_preflight for syntax coverage
+      ansible.builtin.import_role:
+        name: lit.supplementary.aap_preflight
+      when: aap_preflight_molecule_execute_role | bool
+
+    - name: Record lit.supplementary.aap_preflight Molecule coverage mode
+      ansible.builtin.set_fact:
+        aap_preflight_molecule_coverage_mode: syntax_stub
+
+    - name: Persist lit.supplementary.aap_preflight Molecule coverage mode
+      ansible.builtin.copy:
+        dest: "{{ aap_preflight_molecule_marker_path }}"
+        content: "syntax_stub\n"
+        mode: "0644"
