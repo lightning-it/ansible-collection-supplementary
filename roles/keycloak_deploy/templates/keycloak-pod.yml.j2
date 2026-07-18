@@ -5,6 +5,9 @@ metadata:
   labels:
     app: {{ keycloak_deploy_pod_name }}
 spec:
+{% if keycloak_deploy_host_network | bool %}
+  hostNetwork: true
+{% endif %}
   containers:
     - name: {{ keycloak_deploy_container_name }}
       image: {{ keycloak_deploy_image }}
