@@ -279,11 +279,13 @@ runs:
           DB ADMIN VIEWER LDAP LDAP_BIND LDAP_USER CAC_OPERATOR CAC_DENIED \
           CLIENT SESSION UNAUTHORIZED INVALID
         do
+          value="$(openssl rand -hex 32)"
           # Samba AD enforces character-class complexity for its Administrator
-          # and directory-user passwords. Keep the random entropy while ensuring
-          # every generated test secret contains upper, lower, digit, and symbol
-          # classes so LDAP scenarios cannot enter a container restart loop.
-          value="Aa1-$(openssl rand -hex 32)"
+          # and directory-user passwords. Preserve the proven opaque format for
+          # unrelated services and strengthen only the LDAP credentials.
+          case "$name" in
+            LDAP|LDAP_BIND|LDAP_USER) value="Aa1-$value" ;;
+          esac
           echo "::add-mask::$value"
           echo "KEYCLOAK_TEST_${name}_PASSWORD=$value" >> "$GITHUB_ENV"
           if [ "$name" = CLIENT ]; then
