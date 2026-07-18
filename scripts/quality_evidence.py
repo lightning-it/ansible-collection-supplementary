@@ -1022,6 +1022,15 @@ def _valid_commit(value: str) -> bool:
     return re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", value) is not None
 
 
+def _tested_commit() -> str:
+    """Return the exact source SHA selected and checked out by the workflow."""
+    return (
+        os.getenv("QUALITY_SOURCE_SHA")
+        or os.getenv("SOURCE_SHA")
+        or os.getenv("GITHUB_SHA", "unknown")
+    )
+
+
 def _report_commit(report: dict[str, Any]) -> str:
     return _property(report.get("properties", {}), "commit_sha", "git_commit", "github_sha")
 
@@ -1234,7 +1243,7 @@ def generate_allure_result(
             {"name": "suite", "value": identity.scenario},
             {"name": "host", "value": identity.target},
             {"name": "runAttempt", "value": identity.run_attempt},
-            {"name": "commit_sha", "value": os.getenv("GITHUB_SHA", "unknown")},
+            {"name": "commit_sha", "value": _tested_commit()},
         ],
         "parameters": [
             {"name": "role", "value": identity.role},
@@ -1335,7 +1344,7 @@ def _native_matches(
     matches: list[str] = []
     failures: list[str] = []
     used = used_paths if used_paths is not None else set()
-    expected_commit = str(commit_sha or os.getenv("GITHUB_SHA") or "unknown")
+    expected_commit = str(commit_sha or _tested_commit())
     for case in cases:
         case_name = str(case.get("name", ""))
         candidates: list[tuple[str, dict[str, Any]]] = []
@@ -1419,7 +1428,7 @@ def _annotate_junit(path: Path, identity: Identity, roles: Sequence[str]) -> Non
         ("scenario", identity.scenario),
         ("target", identity.target),
         ("run_attempt", identity.run_attempt),
-        ("commit_sha", os.getenv("GITHUB_SHA", "unknown")),
+        ("commit_sha", _tested_commit()),
         ("workflow_run_id", os.getenv("GITHUB_RUN_ID", "local")),
     )
     for name, value in values:
@@ -1467,7 +1476,7 @@ def _annotate_native_allure(
                 {"name": "suite", "value": identity.scenario},
                 {"name": "host", "value": identity.target},
                 {"name": "runAttempt", "value": identity.run_attempt},
-                {"name": "commit_sha", "value": os.getenv("GITHUB_SHA", "unknown")},
+                {"name": "commit_sha", "value": _tested_commit()},
             ]
         )
         payload["labels"] = labels
@@ -1544,7 +1553,7 @@ def record(
             parse_error = str(error)
         else:
             reported_commit = _report_commit(parsed)
-            current_commit = os.getenv("GITHUB_SHA", "unknown")
+            current_commit = _tested_commit()
             if reported_commit not in {"", "unknown"} and reported_commit != current_commit:
                 parse_error = "source JUnit commit differs from the workflow commit"
                 parsed = None
@@ -1617,7 +1626,7 @@ def record(
         "target": target,
         "run_attempt": attempt,
         "workflow_run_id": os.getenv("GITHUB_RUN_ID", "local"),
-        "commit_sha": os.getenv("GITHUB_SHA", "unknown"),
+        "commit_sha": _tested_commit(),
         "process_exit_code": exit_code,
         "status": "infrastructure-error" if exit_code and parsed["status"] == "passed" else parsed["status"],
         "junit": recorded_junit.relative_to(result_dir).as_posix(),
@@ -1632,7 +1641,7 @@ def record(
         json.dumps(
             {
                 "repository": os.getenv("GITHUB_REPOSITORY", "local"),
-                "commit_sha": os.getenv("GITHUB_SHA", "unknown"),
+                "commit_sha": _tested_commit(),
                 "workflow_run_id": os.getenv("GITHUB_RUN_ID", "local"),
                 "workflow_attempt": attempt,
                 "scenario": scenario,
@@ -3109,7 +3118,7 @@ def assemble(
     registry_path = registry_path or repository_root / "meta" / "role-coverage.yml"
     registry, registry_errors = load_registry(registry_path)
     attempt = str(run_attempt or os.getenv("QUALITY_EVIDENCE_RUN_ATTEMPT") or os.getenv("GITHUB_RUN_ATTEMPT") or "1")
-    commit_sha = os.getenv("GITHUB_SHA", "unknown")
+    commit_sha = _tested_commit()
     expected_commit = expected_commit or os.getenv("QUALITY_EVIDENCE_EXPECTED_COMMIT") or commit_sha
     commit_consistent = _valid_commit(commit_sha) and commit_sha == expected_commit
     stage = _prepare_stage(root)
@@ -4014,7 +4023,7 @@ def validate(
             failures.append("candidate evidence is incorrectly release eligible")
     elif manifest.get("release_eligible") is not True:
         failures.append("release_eligible=false")
-    expected = expected_commit or os.getenv("QUALITY_EVIDENCE_EXPECTED_COMMIT") or os.getenv("GITHUB_SHA")
+    expected = expected_commit or os.getenv("QUALITY_EVIDENCE_EXPECTED_COMMIT") or _tested_commit()
     tested = str(manifest.get("commit_sha", ""))
     if not _valid_commit(tested):
         failures.append("manifest does not identify an exact tested commit")

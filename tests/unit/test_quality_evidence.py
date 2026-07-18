@@ -541,6 +541,18 @@ class QualityEvidenceTests(unittest.TestCase):
         }
         self.assertTrue(expected_blockers.issubset(set(manifest["blockers"])), manifest["blockers"])
 
+    def test_tested_commit_prefers_explicit_workflow_source(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "GITHUB_SHA": "a" * 40,
+                "SOURCE_SHA": "b" * 40,
+                "QUALITY_SOURCE_SHA": "c" * 40,
+            },
+            clear=False,
+        ):
+            self.assertEqual(evidence._tested_commit(), "c" * 40)
+
     def test_checksum_validation_detects_tampering(self) -> None:
         self._registry()
         self._junit()
