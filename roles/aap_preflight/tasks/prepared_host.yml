@@ -147,7 +147,7 @@
   ansible.builtin.assert:
     that:
       - aap_preflight_time_sync.stdout | trim | lower == 'yes'
-    fail_msg: "Time synchronization is not active; the MHB host owner must correct it."
+    fail_msg: "Time synchronization is not active; the host owner must correct it."
     quiet: true
   when: aap_preflight_time_sync_required | bool
 
