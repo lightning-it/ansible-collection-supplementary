@@ -87,7 +87,7 @@ roles:
         - "aap-basic"
       heavy: []
       application_acceptance: []
-  aap_base_os:
+  aap_host_prepare:
     component: "aap"
     classification: "infrastructure"
     maturity: "experimental"
@@ -113,7 +113,8 @@ roles:
       - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
     deprecation_state: "active"
     scenario_support:
-      tiny: []
+      tiny:
+        - "aap-host-prepare-basic"
       heavy: []
       application_acceptance: []
   aap_baseline:
@@ -2321,6 +2322,21 @@ scenarios:
       mode: "not-applicable"
       reason: >-
         Scenario exercises controller-side role behavior without deploying an independently versioned
+        application.
+      dependencies: []
+  aap-host-prepare-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "aap_host_prepare"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario exercises host-preparation role contracts without deploying an independently versioned
         application.
       dependencies: []
   aap-cac-basic:

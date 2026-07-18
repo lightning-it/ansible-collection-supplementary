@@ -50,7 +50,7 @@ class RoleCoverageRegistryTests(unittest.TestCase):
 
     def test_registry_exactly_covers_repository(self) -> None:
         self.assertEqual(96, len(self.registry["roles"]))
-        self.assertEqual(55, len(self.registry["scenarios"]))
+        self.assertEqual(56, len(self.registry["scenarios"]))
         self.assertEqual(
             VALIDATOR.discovered_roles(ROOT),
             set(self.registry["roles"]),
@@ -137,7 +137,7 @@ class RoleCoverageRegistryTests(unittest.TestCase):
             },
             declared,
         )
-        self.assertEqual(44, len(not_applicable))
+        self.assertEqual(45, len(not_applicable))
         self.assertEqual(set(self.registry["scenarios"]), runtime | declared | not_applicable)
         for name in declared:
             self.assertEqual(

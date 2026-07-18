@@ -484,12 +484,12 @@ synthesized as passes.
 | Role | Maturity | Supported targets | Tiny | Heavy | Application Acceptance |
 |---|---|---|---|---|---|
 | aap | experimental | — | experimental | blocked-external-license | blocked-external-license |
-| aap_base_os | experimental | — | experimental | blocked-external-license | not-applicable |
 | aap_baseline | experimental | — | experimental | blocked-external-license | not-applicable |
 | aap_bootstrap | experimental | — | experimental | blocked-external-license | not-applicable |
 | aap_cac | experimental | — | experimental | blocked-external-license | blocked-external-license |
 | aap_deploy | experimental | — | experimental | blocked-external-license | blocked-external-license |
 | aap_destroy | experimental | — | experimental | blocked-external-license | blocked-external-license |
+| aap_host_prepare | experimental | — | experimental | blocked-external-license | not-applicable |
 | aap_local_execution | experimental | — | experimental | blocked-external-license | blocked-external-license |
 | aap_ops | experimental | — | experimental | blocked-external-license | blocked-external-license |
 | aap_preflight | experimental | — | experimental | blocked-external-license | not-applicable |
