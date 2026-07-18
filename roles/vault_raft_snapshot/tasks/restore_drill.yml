@@ -129,7 +129,7 @@
     that:
       - _vault_raft_snapshot_restore_container_preflight.rc != 0
       - not (_vault_raft_snapshot_restore_root_preflight.stat.exists | default(false))
-      - vault_raft_snapshot_restore_work_root != '/srv/' ~ vault_raft_snapshot_flavour
+      - vault_raft_snapshot_restore_work_root != '/srv/' ~ (vault_deploy_flavour | default('vault', true))
       - >-
         not vault_raft_snapshot_restore_work_root.startswith(
           vault_raft_snapshot_production_cert_dir ~ '/'
