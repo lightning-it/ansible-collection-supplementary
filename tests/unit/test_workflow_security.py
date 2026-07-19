@@ -79,10 +79,11 @@ class WorkflowSecurityTests(unittest.TestCase):
         ]
         self.assertEqual(1, len(static_steps))
         static_env = static_steps[0]["env"]
-        self.assertEqual("${{ github.event.pull_request.base.sha }}", static_env["BASE_SHA"])
-        self.assertEqual("${{ github.event.pull_request.head.sha }}", static_env["HEAD_SHA"])
+        self.assertEqual("${{ env.COMPARE_BASE_SHA }}", static_env["BASE_SHA"])
+        self.assertEqual("${{ env.SOURCE_SHA }}", static_env["HEAD_SHA"])
         self.assertEqual(
-            "${{ toJson(github.event.pull_request.labels.*.name) }}",
+            "${{ github.event_name == 'pull_request' && "
+            "toJson(github.event.pull_request.labels.*.name) || '[]' }}",
             static_env["LABELS_JSON"],
         )
         require_fragment = static_env["REQUIRE_FRAGMENT"]

@@ -74,10 +74,12 @@ jobs:
             PyYAML==6.0.3
       - name: Run repository static pre-commit gates
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ env.COMPARE_BASE_SHA }}
           CI: "true"
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
+          HEAD_SHA: ${{ env.SOURCE_SHA }}
+          LABELS_JSON: >-
+            ${{ github.event_name == 'pull_request' &&
+            toJson(github.event.pull_request.labels.*.name) || '[]' }}
           REQUIRE_FRAGMENT: >-
             ${{ !(github.event_name == 'pull_request' &&
             github.event.pull_request.user.login == 'renovate[bot]' &&
