@@ -77,7 +77,7 @@ if [ "$ENGINE" = "docker" ]; then
   if ! docker info >/dev/null 2>&1; then
     if [ -n "${DOCKER_HOST:-}" ]; then
       fail_closed \
-        "docker cannot reach DOCKER_HOST='${DOCKER_HOST}'; fix or unset DOCKER_HOST to allow rootless Podman socket fallback"
+        "docker cannot reach the configured DOCKER_HOST; fix or unset it to allow rootless Podman socket fallback"
     fi
     runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
     podman_sock="${runtime_dir}/podman/podman.sock"
