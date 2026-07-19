@@ -1,5 +1,5 @@
-# Managed by lightning-it/shared-assets-lit.
-# Do not edit downstream copies directly.
+# Repository-local workflow adapted from lightning-it/shared-assets-lit.
+# AGENTS.md requires the supplementary allowlist sync to preserve local workflows.
 # yamllint disable rule:truthy rule:line-length
 ---
 name: Copilot review gate

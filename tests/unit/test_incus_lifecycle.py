@@ -208,6 +208,7 @@ class IncusLifecycleTests(unittest.TestCase):
         action = (ROOT / ".github" / "actions" / "run-quality-profile" / "action.yml").read_text(encoding="utf-8")
 
         self.assertIn("scripts/prune_stale_incus_resources.py", action)
+        self.assertIn("command -v incus", action)
         self.assertLess(
             action.index("command -v incus"),
             action.index("scripts/prune_stale_incus_resources.py"),
