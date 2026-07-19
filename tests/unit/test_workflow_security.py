@@ -51,6 +51,30 @@ def docker_action_image(path: Path) -> str | None:
 
 
 class WorkflowSecurityTests(unittest.TestCase):
+    def test_collection_ci_concurrency_isolated_by_pr_and_exact_head(self) -> None:
+        workflow = load_yaml(WORKFLOWS / "collection-ci.yml")
+        top_group = workflow["concurrency"]["group"]
+        self.assertIn("github.repository", top_group)
+        self.assertIn("github.workflow", top_group)
+        self.assertIn("github.event.pull_request.number || github.ref", top_group)
+        self.assertNotIn("head.sha", top_group)
+        self.assertEqual(
+            "${{ github.event_name == 'pull_request' }}",
+            workflow["concurrency"]["cancel-in-progress"],
+        )
+
+        jobs = workflow["jobs"]
+        groups = [
+            jobs[name]["concurrency"]["group"]
+            for name in ("tiny-cells", "heavy-cells", "acceptance-cells")
+        ]
+        for group in groups:
+            self.assertIn("github.repository", group)
+            self.assertIn("github.workflow", group)
+            self.assertIn("github.event.pull_request.number || github.ref", group)
+            self.assertIn("github.event.pull_request.head.sha || github.sha", group)
+        self.assertNotEqual(groups[0], groups[1])
+
     def test_all_workflows_and_local_actions_require_release_team_review(self) -> None:
         codeowners = (ROOT / ".github" / "CODEOWNERS").read_text(encoding="utf-8")
         rules = {
