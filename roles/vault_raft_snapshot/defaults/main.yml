@@ -7,7 +7,6 @@ vault_raft_snapshot_validate_certs: true
 vault_raft_snapshot_controller_ca_cert_path: ""
 vault_raft_snapshot_target_ca_cert_path: ""
 vault_raft_snapshot_timeout: 30
-
 vault_raft_snapshot_auth_mount_point: approle
 vault_raft_snapshot_role_id: ""
 vault_raft_snapshot_secret_id: ""
@@ -17,7 +16,7 @@ vault_raft_snapshot_controller_document_path: ""
 vault_raft_snapshot_expected_ciphertext_sha256: ""
 vault_raft_snapshot_document_schema_version: 1
 vault_raft_snapshot_document_subject: ""
-vault_raft_snapshot_max_raw_bytes: 67108864
+vault_raft_snapshot_max_raw_bytes: 134217728
 vault_raft_snapshot_verification_kv_paths: []
 
 vault_raft_snapshot_image: ""

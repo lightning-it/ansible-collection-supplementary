@@ -37,8 +37,25 @@ aap_deploy_automationmetrics_controller_read_pg_host: {{ (aap_ansible_host | def
 aap_runbook_manage_rhsm: false
 aap_runbook_manage_repos: false
 aap_runbook_os_prep_enabled: false
-aap_runbook_manage_podman: true
+aap_runbook_manage_host_packages: false
+aap_runbook_manage_install_user: false
+aap_runbook_manage_podman: false
 aap_runbook_allow_ansible_user_sudo_to_install_user: true
+
+aap_preflight_check_prepared_host: {{ aap_preflight_check_prepared_host | default(false) | bool | lower }}
+aap_preflight_minimum_distribution_version: {{ aap_preflight_minimum_distribution_version | default('9.6', true) | to_json }}
+aap_preflight_expected_fqdn: {{ aap_fqdn | to_json }}
+aap_preflight_minimum_vcpus: {{ aap_preflight_minimum_vcpus | default(4) }}
+aap_preflight_minimum_memory_mb: {{ aap_preflight_minimum_memory_mb | default(16000) }}
+aap_preflight_appl_minimum_free_mb: {{ aap_preflight_appl_minimum_free_mb | default(50000) }}
+aap_preflight_check_execution_environment: {{ aap_configure_registry_ee | default(false) | bool | lower }}
+aap_preflight_ee_registry: {{ aap_registry_fqdn | default('', true) | to_json }}
+aap_preflight_ee_approved_registry: {{ aap_registry_fqdn | default('', true) | to_json }}
+aap_preflight_ee_repository: {{ aap_ee_repository | default('', true) | to_json }}
+aap_preflight_ee_approved_repository: {{ aap_ee_repository | default('', true) | to_json }}
+aap_preflight_ee_digest: {{ aap_ee_digest | default('', true) | to_json }}
+aap_preflight_ee_validate_certs: {{ aap_registry_validate_certs | default(true) | bool | lower }}
+aap_preflight_ee_auth_file: {{ aap_registry_auth_file | default('', true) | to_json }}
 
 ansible_remote_tmp: /appl/ansible-tmp
 ansible_remote_tmp_bootstrap_raw: {{ aap_remote_tmp_bootstrap_raw | default(true) | bool | lower }}
@@ -99,3 +116,23 @@ aap_cac_controller_organizations:
 controller_settings:
   - name: TOWER_URL_BASE
     value: "https://{{ aap_fqdn }}"
+
+# The private-registry credential and EE are configured by the canonical CaC
+# roles after AAP is reachable.  The image is intentionally digest-pinned.
+{% if aap_local_execution_configure_registry_ee_effective | bool %}
+controller_credentials:
+  - name: {{ aap_registry_credential_name | default('MHB Container Registry', true) | to_json }}
+    organization: {{ aap_org_primary | default('org-modulix', true) | to_json }}
+    credential_type: Container Registry
+    inputs:
+      host: "https://{{ aap_registry_fqdn }}"
+      username: "{{ '{{' }} aap_registry_username_input {{ '}}' }}"
+      password: "{{ '{{' }} aap_registry_password_input {{ '}}' }}"
+      verify_ssl: true
+
+controller_execution_environments:
+  - name: {{ aap_execution_environment_name | default('ModuLix Certified EE', true) | to_json }}
+    image: "{{ aap_ee_repository }}@{{ aap_ee_digest }}"
+    credential: {{ aap_registry_credential_name | default('MHB Container Registry', true) | to_json }}
+    pull: always
+{% endif %}
