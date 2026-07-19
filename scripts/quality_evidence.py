@@ -1024,11 +1024,7 @@ def _valid_commit(value: str) -> bool:
 
 def _tested_commit() -> str:
     """Return the exact source SHA selected and checked out by the workflow."""
-    return (
-        os.getenv("QUALITY_SOURCE_SHA")
-        or os.getenv("SOURCE_SHA")
-        or os.getenv("GITHUB_SHA", "unknown")
-    )
+    return os.getenv("QUALITY_SOURCE_SHA") or os.getenv("GITHUB_SHA") or "unknown"
 
 
 def _report_commit(report: dict[str, Any]) -> str:

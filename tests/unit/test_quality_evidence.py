@@ -546,7 +546,6 @@ class QualityEvidenceTests(unittest.TestCase):
             os.environ,
             {
                 "GITHUB_SHA": "a" * 40,
-                "SOURCE_SHA": "b" * 40,
                 "QUALITY_SOURCE_SHA": "c" * 40,
             },
             clear=False,
