@@ -202,19 +202,22 @@ class IncusLifecycleTests(unittest.TestCase):
         self.assertIn('echo "MOLECULE_TEST_IMAGE=$TEST_IMAGE"', action)
         self.assertIn("dependencies.mkdir(parents=True, exist_ok=True)", action)
 
-    def test_quality_action_enforces_inotify_capacity_before_network_creation(
+    def test_quality_action_prunes_only_superseded_exact_owned_resources(
         self,
     ) -> None:
-        action = (
-            ROOT / ".github" / "actions" / "run-quality-profile" / "action.yml"
-        ).read_text(encoding="utf-8")
+        action = (ROOT / ".github" / "actions" / "run-quality-profile" / "action.yml").read_text(encoding="utf-8")
 
-        self.assertIn("minimum_inotify_instances=4096", action)
-        self.assertIn("sudo sysctl -w", action)
+        self.assertIn("scripts/prune_stale_incus_resources.py", action)
         self.assertLess(
-            action.index("minimum_inotify_instances=4096"),
+            action.index("scripts/prune_stale_incus_resources.py"),
             action.index("molecule test"),
         )
+
+        helper = (ROOT / "scripts" / "prune_stale_incus_resources.py").read_text(encoding="utf-8")
+        self.assertIn("run_id != current_run_id", helper)
+        self.assertIn("config.get(REPOSITORY_KEY) == repository", helper)
+        self.assertIn("bool(config.get(OWNER_KEY))", helper)
+        self.assertIn("or used_by", helper)
 
     def test_legacy_static_entrypoint_fails_before_create(self) -> None:
         payload = yaml.safe_load((SHARED / "create-static-network.yml").read_text(encoding="utf-8"))
