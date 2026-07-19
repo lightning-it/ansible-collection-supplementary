@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Remove unused Incus resources owned by superseded runs of this repository."""
 
 from __future__ import annotations
