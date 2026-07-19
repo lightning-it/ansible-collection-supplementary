@@ -239,6 +239,30 @@
   changed_when: false
   no_log: true
 
+- name: Redact the populated Podman inventory as a JSON document
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['python3', molecule_incus_evidence_sanitizer, '--json-document']
+        + (
+          molecule_incus_evidence_secret_env_names_effective
+          | map('regex_replace', '^(.+)$', '--secret-env=\\1')
+          | list
+        )
+      }}
+    stdin: "{{ item.stdout }}"
+    stdin_add_newline: false
+  loop: "{{ molecule_incus_evidence_raw_logs.results }}"
+  loop_control:
+    label: "{{ item.molecule_incus_evidence_command.name }}"
+  register: molecule_incus_evidence_runtime_inventory_redacted
+  changed_when: false
+  failed_when: false
+  when:
+    - item.molecule_incus_evidence_command.name == 'podman-inventory'
+    - item.rc == 0
+  no_log: true
+
 - name: Refresh the dependency inventory from the populated Podman evidence stream
   ansible.builtin.copy:
     dest: >-
@@ -265,14 +289,12 @@
         "container_inventory_available": true,
         "images": {{ item.stdout | from_json | to_json }}
       }
-  loop: "{{ molecule_incus_evidence_sanitized_logs.results }}"
+  loop: "{{ molecule_incus_evidence_runtime_inventory_redacted.results }}"
   loop_control:
-    label: "{{ item.item.molecule_incus_evidence_command.name }}"
+    label: "{{ item.item.molecule_incus_evidence_command.name | default('skipped') }}"
   when:
-    - item.item.molecule_incus_evidence_command.name == 'podman-inventory'
-    - item.rc == 0
-    - item.item.rc == 0
-    - item.stdout | trim is match('^\\[')
+    - item.item.molecule_incus_evidence_command.name | default('') == 'podman-inventory'
+    - item.rc | default(1) == 0
   no_log: true
 
 - name: Write sanitized application and environment log streams

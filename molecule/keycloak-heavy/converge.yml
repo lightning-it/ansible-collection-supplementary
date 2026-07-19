@@ -286,7 +286,6 @@
             protocolMapper: oidc-sub-mapper
             config:
               access.token.claim: "true"
-              id.token.claim: "true"
               introspection.token.claim: "true"
           - name: realm roles
             protocol: openid-connect
@@ -296,6 +295,8 @@
               claim.name: realm_access.roles
               id.token.claim: "true"
               introspection.token.claim: "true"
+              jsonType.label: String
+              lightweight.claim: "false"
               multivalued: "true"
               userinfo.token.claim: "true"
           - name: groups
