@@ -289,12 +289,16 @@
         "container_inventory_available": true,
         "images": {{ item.stdout | from_json | to_json }}
       }
-  loop: "{{ molecule_incus_evidence_runtime_inventory_redacted.results }}"
+  loop: >-
+    {{
+      molecule_incus_evidence_runtime_inventory_redacted.results
+      | rejectattr('skipped', 'defined')
+      | selectattr('rc', 'defined')
+      | selectattr('rc', 'equalto', 0)
+      | list
+    }}
   loop_control:
-    label: "{{ item.item.molecule_incus_evidence_command.name | default('skipped') }}"
-  when:
-    - item.item.molecule_incus_evidence_command.name | default('') == 'podman-inventory'
-    - item.rc | default(1) == 0
+    label: "podman-inventory"
   no_log: true
 
 - name: Write sanitized application and environment log streams
