@@ -290,11 +290,11 @@
             protocolMapper: oidc-audience-mapper
             config:
               included.client.audience: keycloak-test-client
-              included.custom.audience: ""
               access.token.claim: "true"
               id.token.claim: "false"
               introspection.token.claim: "true"
               lightweight.claim: "false"
+              userinfo.token.claim: "false"
         state: present
     keycloak_cac_groups:
       - realm: keycloak-test
