@@ -1,4 +1,5 @@
 ---
 bugfixes:
-  - Harden the trusted Renovate and Copilot gates against transient API failures, unsafe major updates, shell
+  - >-
+    Harden the trusted Renovate and Copilot gates against transient API failures, unsafe major updates, shell
     word-splitting, outdated review findings, and best-effort Incus cleanup races.

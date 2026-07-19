@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from functools import lru_cache
 import json
 import re
 import shutil
@@ -18,12 +19,17 @@ REPOSITORY_KEY = "user.lit-molecule-repository"
 RUN_ID_KEY = "user.lit-molecule-run-id"
 
 
-def incus(*arguments: str, capture: bool = True) -> str:
+@lru_cache(maxsize=1)
+def incus_executable() -> str:
     executable = shutil.which("incus")
     if executable is None:
         raise FileNotFoundError("incus is not available on PATH")
+    return executable
+
+
+def incus(*arguments: str, capture: bool = True) -> str:
     result = subprocess.run(  # noqa: S603 - argv is validated and never invokes a shell.
-        [executable, *arguments],
+        [incus_executable(), *arguments],
         check=True,
         capture_output=capture,
         text=True,
