@@ -126,8 +126,24 @@
               kubeplay_action: remove
               kubeplay_pod_name: "{{ samba_deploy_pod_name }}"
 
-    - name: Run Samba pod with kubeplay
+    - name: Check whether the Samba pod already exists
       when: samba_deploy_kubeplay_run | bool
+      ansible.builtin.command:
+        argv:
+          - podman
+          - pod
+          - exists
+          - "{{ samba_deploy_pod_name }}"
+      register: samba_deploy_pod_exists
+      changed_when: false
+      failed_when: samba_deploy_pod_exists.rc not in [0, 1]
+      tags:
+        - deployment
+
+    - name: Run Samba pod with kubeplay
+      when:
+        - samba_deploy_kubeplay_run | bool
+        - samba_deploy_pod_exists.rc == 1
       tags:
         - deployment
       ansible.builtin.include_role:
