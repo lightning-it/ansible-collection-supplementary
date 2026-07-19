@@ -55,6 +55,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         renovate = (WORKFLOWS / "renovate-guarded-automerge.yml").read_text(encoding="utf-8")
         changelog = (WORKFLOWS / "changelog.yml").read_text(encoding="utf-8")
+        collection_ci = (WORKFLOWS / "collection-ci.yml").read_text(encoding="utf-8")
 
         self.assertIn("contains(github.event.pull_request.labels.*.name, 'safe-automerge')", copilot)
         self.assertIn("!contains(github.event.pull_request.labels.*.name, 'breaking-update')", copilot)
@@ -71,6 +72,10 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('index("dependencies") != null', changelog)
         self.assertIn('index("safe-automerge") != null', changelog)
         self.assertIn('index("breaking-update") == null', changelog)
+        self.assertIn("REQUIRE_FRAGMENT: >-", collection_ci)
+        self.assertIn("github.event.pull_request.user.login == 'renovate[bot]'", collection_ci)
+        self.assertIn("contains(github.event.pull_request.labels.*.name, 'safe-automerge')", collection_ci)
+        self.assertIn("!contains(github.event.pull_request.labels.*.name, 'breaking-update')", collection_ci)
 
     def test_collection_ci_concurrency_isolated_by_pr_and_exact_head(self) -> None:
         workflow = load_yaml(WORKFLOWS / "collection-ci.yml")
