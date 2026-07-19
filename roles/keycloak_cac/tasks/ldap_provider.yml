@@ -61,8 +61,6 @@
           - "{{ keycloak_cac_ldap_provider.uuid_ldap_attribute | default('objectGUID') }}"
         userObjectClasses:
           - "{{ keycloak_cac_ldap_provider.user_object_classes | default('person, organizationalPerson, user') }}"
-        customUserSearchFilter:
-          - "{{ keycloak_cac_ldap_provider.custom_user_search_filter | default('') }}"
         connectionUrl:
           - "{{ keycloak_cac_ldap_provider.connection_url }}"
         usersDn:
@@ -99,6 +97,28 @@
             }}
         batchSizeForSync:
           - "{{ keycloak_cac_ldap_provider.batch_size_for_sync | default(1000) | string }}"
+  no_log: true
+
+- name: Add optional Keycloak LDAP custom user search filter
+  ansible.builtin.set_fact:
+    keycloak_cac_ldap_component_payload: >-
+      {{
+        keycloak_cac_ldap_component_payload
+        | combine(
+            {
+              'config': keycloak_cac_ldap_component_payload.config
+              | combine(
+                  {
+                    'customUserSearchFilter': [
+                      keycloak_cac_ldap_provider.custom_user_search_filter
+                    ]
+                  }
+                )
+            }
+          )
+      }}
+  when:
+    - keycloak_cac_ldap_provider.custom_user_search_filter | default('', true) | trim | length > 0
   no_log: true
 
 - name: Read existing Keycloak LDAP provider component
