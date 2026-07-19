@@ -314,6 +314,8 @@
       - realm: keycloak-test
         username: keycloak_test_admin
         enabled: true
+        first_name: Keycloak
+        last_name: Administrator
         email: admin@example.invalid
         email_verified: true
         groups:
@@ -327,6 +329,8 @@
       - realm: keycloak-test
         username: keycloak_test_viewer
         enabled: true
+        first_name: Keycloak
+        last_name: Viewer
         email: viewer@example.invalid
         email_verified: true
         groups:
@@ -340,6 +344,8 @@
       - realm: keycloak-test
         username: keycloak_test_unauthorized
         enabled: true
+        first_name: Keycloak
+        last_name: Unauthorized
         email: unauthorized@example.invalid
         email_verified: true
         credentials:
@@ -350,6 +356,8 @@
       - realm: keycloak-test
         username: keycloak_cac_operator
         enabled: true
+        first_name: CaC
+        last_name: Operator
         email: cac-operator@example.invalid
         email_verified: true
         credentials:
@@ -360,6 +368,8 @@
       - realm: keycloak-test
         username: keycloak_cac_denied
         enabled: true
+        first_name: CaC
+        last_name: Denied
         email: cac-denied@example.invalid
         email_verified: true
         credentials:
