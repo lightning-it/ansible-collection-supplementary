@@ -71,12 +71,21 @@ fi
 if [ "$ENGINE" = "docker" ]; then
   sanitize_docker_host_env
 
-  # Fallback for Docker client environments without docker daemon:
-  # use rootless podman socket if available.
-  if [ -z "${DOCKER_HOST:-}" ]; then
-    podman_sock="/run/user/$(id -u)/podman/podman.sock"
-    if [ -S "$podman_sock" ]; then
-      export DOCKER_HOST="unix://$podman_sock"
+  # Keep a usable Docker daemon authoritative. Only fall back to the rootless
+  # Podman API socket when the Docker client cannot reach its configured
+  # daemon, then prove that the fallback endpoint is live before continuing.
+  if ! docker info >/dev/null 2>&1; then
+    if [ -n "${DOCKER_HOST:-}" ]; then
+      fail_closed "selected docker engine is not usable"
+    fi
+    runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    podman_sock="${runtime_dir}/podman/podman.sock"
+    if [ ! -S "$podman_sock" ]; then
+      fail_closed "selected docker engine is not usable"
+    fi
+    export DOCKER_HOST="unix://$podman_sock"
+    if ! docker info >/dev/null 2>&1; then
+      fail_closed "rootless podman Docker API socket is not usable"
     fi
   fi
 fi

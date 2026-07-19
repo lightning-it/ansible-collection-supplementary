@@ -46,16 +46,17 @@ if [ -n "${SCENARIO_FILTER}" ]; then
   echo "Scenario filter: ${SCENARIO_FILTER}"
 fi
 
-# Molecule writes cleanup evidence into the read-write checkout. Use the
-# wrapper's guarded ownership mapping so Docker-created files remain writable
-# by the runner; rootless Podman retains its explicit root-in-user-namespace
-# mapping inside the container.
-export WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1
+# Molecule exercises ownership transitions that require container UID 0.
+# Rootless Podman maps that UID back to the invoking host user; hosted Docker
+# keeps the checkout read-only so the controller cannot leave root-owned files.
+export WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0
+export WUNDER_DEVTOOLS_PRIVILEGED=0
 
-WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1 \
+WUNDER_DEVTOOLS_PRIVILEGED=0 \
+WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0 \
 WUNDER_DEVTOOLS_DOCKER_SOCKET=required \
 WUNDER_DEVTOOLS_NETWORK=bridge \
-WUNDER_DEVTOOLS_WORKSPACE_MODE=rw \
+WUNDER_DEVTOOLS_WORKSPACE_MODE=ro \
 WUNDER_DEVTOOLS_CAP_ADD=CHOWN,DAC_OVERRIDE,FOWNER \
 COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE}" \
 COLLECTION_NAME="${COLLECTION_NAME}" \
@@ -63,6 +64,7 @@ SCENARIO_FILTER="${SCENARIO_FILTER}" \
 CONTAINER_HOME=/tmp/wunder \
 bash scripts/wunder-devtools-ee.sh env \
   MOLECULE_RUN_PROTECTED="${MOLECULE_RUN_PROTECTED:-false}" \
+  INCUS_MODE="${INCUS_MODE:-}" \
   bash -c '
   set -euo pipefail
 

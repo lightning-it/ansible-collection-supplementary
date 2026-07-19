@@ -46,7 +46,7 @@ DOCKER_ARGS=(
   --security-opt no-new-privileges=true
   --pids-limit 1024
   --tmpfs "/tmp:rw,nosuid,nodev,size=2g"
-  --tmpfs "/run:rw,nosuid,nodev,size=256m,mode=1777"
+  --tmpfs "/run:rw,nosuid,nodev,size=256m"
   --tmpfs "$HOME_TMPFS_MOUNT"
 )
 
@@ -96,10 +96,10 @@ esac
 
 if [ "${WUNDER_DEVTOOLS_PRIVILEGED:-0}" = "1" ]; then
   DOCKER_ARGS+=(--privileged)
-elif [ "$CAPABILITY_POLICY" = "CHOWN,DAC_OVERRIDE,FOWNER" ]; then
-  DOCKER_ARGS+=(--cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER)
 elif [ "$CAPABILITY_POLICY" = "CHOWN,FOWNER" ]; then
   DOCKER_ARGS+=(--cap-add CHOWN --cap-add FOWNER)
+elif [ "$CAPABILITY_POLICY" = "CHOWN,DAC_OVERRIDE,FOWNER" ]; then
+  DOCKER_ARGS+=(--cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER)
 fi
 
 if [ "$CONTAINER_BIN" = "podman" ] && [ "$(uname -s)" = "Linux" ]; then
@@ -223,7 +223,9 @@ fi
 
 PODMAN_ROOTLESS=0
 if [ "$CONTAINER_BIN" = "podman" ]; then
-  podman_rootless="$(podman info --format '{{.Host.Security.Rootless}}')"
+  if ! podman_rootless="$(podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null)"; then
+    fail_closed "selected podman engine is not usable"
+  fi
   if [ "${podman_rootless}" = "true" ]; then
     PODMAN_ROOTLESS=1
   fi
