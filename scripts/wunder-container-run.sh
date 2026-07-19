@@ -76,12 +76,14 @@ if [ "$ENGINE" = "docker" ]; then
   # daemon, then prove that the fallback endpoint is live before continuing.
   if ! docker info >/dev/null 2>&1; then
     if [ -n "${DOCKER_HOST:-}" ]; then
-      fail_closed "selected docker engine is not usable"
+      fail_closed \
+        "docker cannot reach DOCKER_HOST='${DOCKER_HOST}'; fix or unset DOCKER_HOST to allow rootless Podman socket fallback"
     fi
     runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
     podman_sock="${runtime_dir}/podman/podman.sock"
     if [ ! -S "$podman_sock" ]; then
-      fail_closed "selected docker engine is not usable"
+      fail_closed \
+        "docker daemon is unreachable and rootless Podman socket is missing at '${podman_sock}'"
     fi
     export DOCKER_HOST="unix://$podman_sock"
     if ! docker info >/dev/null 2>&1; then
