@@ -169,11 +169,11 @@ jobs:
                   | @tsv' <<<"${response}"
               )"; then
                 echo "Unable to parse review content counts for review ${review_id}; refusing to accept the review." >&2
-                return 2
+                return 3
               fi
               if [[ ! "${content_counts}" =~ ${count_pattern} ]]; then
                 echo "Review ${review_id} returned invalid review content counts; refusing to accept the review." >&2
-                return 2
+                return 3
               fi
               IFS=$'\t' read -r marker_count content_count completed_count <<<"${content_counts}"
               if [ "${marker_count}" -gt 0 ] && [ "${completed_count}" -eq 0 ]; then
@@ -193,7 +193,7 @@ jobs:
               after="$(jq -r '.data.node.comments.pageInfo.endCursor // empty' <<<"${response}")"
               if [ -z "${after}" ]; then
                 echo "Review-comment pagination cursor is missing." >&2
-                return 2
+                return 3
               fi
             done
           }
@@ -266,6 +266,9 @@ jobs:
                     request_failed=true
                     break
                   fi
+                  if [ "${comments_status}" -eq 3 ]; then
+                    exit 1
+                  fi
                   rejected_review_ids["${review_id}"]=1
                 fi
               done <<<"${candidate_review_ids}"
@@ -322,6 +325,7 @@ jobs:
                   pageInfo { hasNextPage endCursor }
                   nodes {
                     isResolved
+                    isOutdated
                     comments(first: 1) {
                       nodes { author { login } }
                     }
@@ -365,7 +369,7 @@ jobs:
                   --arg reviewer "${COPILOT_REVIEWER_LOGIN}" \
                   '[
                     (.data.repository.pullRequest.reviewThreads.nodes // [])[]
-                    | select(.isResolved == false)
+                    | select(.isResolved == false and .isOutdated == false)
                     | select(
                         (.comments.nodes[0].author.login // "") as $login
                         | ($login == $reviewer or $login == ($reviewer + "[bot]"))
