@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+from functools import lru_cache
 import json
 import re
+import shutil
 import subprocess
 from typing import Any
 
@@ -16,9 +18,17 @@ REPOSITORY_KEY = "user.lit-molecule-repository"
 RUN_ID_KEY = "user.lit-molecule-run-id"
 
 
+@lru_cache(maxsize=1)
+def incus_executable() -> str:
+    executable = shutil.which("incus")
+    if executable is None:
+        raise FileNotFoundError("incus is not available on PATH")
+    return executable
+
+
 def incus(*arguments: str, capture: bool = True) -> str:
     result = subprocess.run(  # noqa: S603 - argv is validated and never invokes a shell.
-        ["/usr/bin/incus", *arguments],
+        [incus_executable(), *arguments],
         check=True,
         capture_output=capture,
         text=True,
@@ -37,7 +47,10 @@ def exact_owner(config: dict[str, Any], repository: str, current_run_id: str) ->
 
 
 def revalidate(kind: str, name: str, repository: str, current_run_id: str) -> bool:
-    values = {key: incus(kind, "get", name, key).strip() for key in (REPOSITORY_KEY, RUN_ID_KEY, OWNER_KEY)}
+    try:
+        values = {key: incus(kind, "get", name, key).strip() for key in (REPOSITORY_KEY, RUN_ID_KEY, OWNER_KEY)}
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return False
     return exact_owner(values, repository, current_run_id)
 
 

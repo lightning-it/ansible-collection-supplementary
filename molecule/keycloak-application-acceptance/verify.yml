@@ -126,7 +126,8 @@
           - pip
           - --disable-pip-version-check
           - list
-          - --format=json
+          - --format
+          - json
       register: keycloak_acceptance_python_packages
       changed_when: false
 

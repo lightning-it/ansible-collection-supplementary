@@ -68,6 +68,13 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
             verify.index("Enforce the observed zero-change CaC reconciliation after writing evidence"),
         )
 
+    def test_keycloak_failure_redaction_handles_missing_or_empty_admin_password(self) -> None:
+        for task_name in ("cac_14_roles.yml", "cac_15_users.yml"):
+            source = (ROOT / "roles" / "keycloak_cac" / "tasks" / task_name).read_text(encoding="utf-8")
+            self.assertIn("keycloak_cac_admin_password | default('') | string", source)
+            self.assertIn("failure_secret | length > 0", source)
+            self.assertIn("| string", source)
+
     def test_heavy_proves_exact_restore_tls_trust_and_scoped_denial(self) -> None:
         converge = (ROOT / "molecule" / "keycloak-heavy" / "converge.yml").read_text(encoding="utf-8")
         verify = (ROOT / "molecule" / "keycloak-heavy" / "verify.yml").read_text(encoding="utf-8")
@@ -99,8 +106,14 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         shared = (ROOT / "molecule" / "shared" / "incus" / "collect-evidence.yml").read_text(encoding="utf-8")
         self.assertIn("- images\n      - --all\n      - --format\n      - json", shared)
         self.assertIn("if item.molecule_incus_evidence_command.name == 'podman-inventory'", shared)
+        structured_input = (
+            "item.stdout | default('')\n        if item.molecule_incus_evidence_command.name == 'podman-inventory'"
+        )
+        self.assertIn(structured_input, shared)
         self.assertIn("['--json-document']", shared)
         self.assertIn("selectattr('item.rc', 'equalto', 0)", shared)
+        self.assertIn("Require successful redaction for each available structured inventory stream", shared)
+        self.assertIn("selectattr('rc', 'equalto', 0)", shared)
         self.assertIn("molecule_incus_evidence_runtime_inventory_candidates | length > 0", shared)
         for scenario in ("keycloak-tiny", "keycloak-heavy", "keycloak-application-acceptance"):
             cleanup = (ROOT / "molecule" / scenario / "cleanup.yml").read_text(encoding="utf-8")

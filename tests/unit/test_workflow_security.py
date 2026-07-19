@@ -51,6 +51,19 @@ def docker_action_image(path: Path) -> str | None:
 
 
 class WorkflowSecurityTests(unittest.TestCase):
+    def test_copilot_and_renovate_gates_preserve_safe_update_boundaries(self) -> None:
+        copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
+        renovate = (WORKFLOWS / "renovate-guarded-automerge.yml").read_text(encoding="utf-8")
+
+        self.assertIn("contains(github.event.pull_request.labels.*.name, 'safe-automerge')", copilot)
+        self.assertIn("!contains(github.event.pull_request.labels.*.name, 'breaking-update')", copilot)
+        self.assertIn("for attempt in 1 2 3", copilot)
+        self.assertIn("isOutdated", copilot)
+        self.assertIn(".isResolved == false and .isOutdated == false", copilot)
+        self.assertIn("expected_safe_event=$'labeled\\tsafe-automerge\\trenovate[bot]'", renovate)
+        self.assertIn('[ "$safe_event" = "$expected_safe_event" ]', renovate)
+        self.assertIn('grep -Fq "$breaking_event_pattern"', renovate)
+
     def test_collection_ci_concurrency_isolated_by_pr_and_exact_head(self) -> None:
         workflow = load_yaml(WORKFLOWS / "collection-ci.yml")
         top_group = workflow["concurrency"]["group"]

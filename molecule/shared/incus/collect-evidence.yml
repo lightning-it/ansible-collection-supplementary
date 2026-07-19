@@ -234,15 +234,43 @@
           | list
         )
       }}
-    stdin: |-
-      {{ item.stdout | default('') }}
-      {{ item.stderr | default('') }}
+    stdin: >-
+      {{
+        item.stdout | default('')
+        if item.molecule_incus_evidence_command.name == 'podman-inventory'
+        and (item.rc | default(1)) == 0
+        else (
+          (item.stdout | default(''))
+          ~ '\n'
+          ~ (item.stderr | default(''))
+        )
+      }}
     stdin_add_newline: false
   loop: "{{ molecule_incus_evidence_raw_logs.results }}"
   loop_control:
     label: "{{ item.molecule_incus_evidence_command.name }}"
   register: molecule_incus_evidence_sanitized_logs
   changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Require successful redaction for each available structured inventory stream
+  ansible.builtin.assert:
+    that:
+      - >-
+        molecule_incus_evidence_sanitized_logs.results
+        | selectattr('item.molecule_incus_evidence_command.name', 'equalto', 'podman-inventory')
+        | selectattr('item.rc', 'defined')
+        | selectattr('item.rc', 'equalto', 0)
+        | selectattr('rc', 'defined')
+        | selectattr('rc', 'equalto', 0)
+        | list | length
+        ==
+        molecule_incus_evidence_raw_logs.results
+        | selectattr('molecule_incus_evidence_command.name', 'equalto', 'podman-inventory')
+        | selectattr('rc', 'defined')
+        | selectattr('rc', 'equalto', 0)
+        | list | length
   no_log: true
 
 - name: Refresh the dependency inventory from the populated Podman evidence stream
@@ -299,6 +327,7 @@
   loop: "{{ molecule_incus_evidence_sanitized_logs.results }}"
   loop_control:
     label: "{{ item.item.molecule_incus_evidence_command.name }}"
+  when: item.rc == 0
   no_log: true
 
 - name: Record application and environment log collection status
