@@ -107,8 +107,7 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         self.assertIn("- images\n      - --all\n      - --format=json", shared)
         self.assertIn("if item.molecule_incus_evidence_command.name == 'podman-inventory'", shared)
         structured_input = (
-            "item.stdout | default('')\n"
-            "        if item.molecule_incus_evidence_command.name == 'podman-inventory'"
+            "item.stdout | default('')\n        if item.molecule_incus_evidence_command.name == 'podman-inventory'"
         )
         self.assertIn(structured_input, shared)
         self.assertIn("['--json-document']", shared)
