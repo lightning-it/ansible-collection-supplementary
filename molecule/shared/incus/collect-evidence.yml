@@ -263,7 +263,7 @@
           | default('', true) | trim | to_json
         }},
         "container_inventory_available": true,
-        "images": {{ molecule_incus_evidence_runtime_inventory_sanitized.stdout | from_json | to_json }}
+        "images": {{ molecule_incus_evidence_runtime_inventory_sanitized.stdout | trim }}
       }
   when: (molecule_incus_evidence_runtime_inventory_sanitized.rc | default(1)) == 0
   vars:
