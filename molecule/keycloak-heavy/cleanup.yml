@@ -32,7 +32,7 @@
       - name: podman-inventory
         argv:
           - podman
-          - ps
+          - images
           - --all
           - --format
           - json

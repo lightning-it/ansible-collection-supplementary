@@ -128,7 +128,7 @@
       - "{{ molecule_incus_owned_instance.item.name }}"
       - --
       - podman
-      - ps
+      - images
       - --all
       - --format
       - json

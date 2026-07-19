@@ -6,3 +6,9 @@ bugfixes:
   - >-
     Route the Heavy Keycloak LDAP provider through the loopback endpoint used
     by its host-networked container so LDAPS authentication reaches Samba.
+  - >-
+    Capture Podman image records rather than container process records for
+    immutable runtime dependency evidence in Keycloak quality profiles.
+  - >-
+    Trust the Heavy profile's ephemeral LDAP certificate authority inside
+    Keycloak so the end-to-end LDAPS authentication proof validates TLS.

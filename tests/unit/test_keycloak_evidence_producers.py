@@ -91,6 +91,17 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         self.assertIn("keycloak_deploy_host_network: true", converge)
         self.assertIn("connection_url: ldaps://127.0.0.1:1636", converge)
         self.assertNotIn("connection_url: ldaps://host.containers.internal:1636", converge)
+        self.assertIn("KC_TRUSTSTORE_PATHS: /opt/keycloak/data/trust/ldap-ca.crt", converge)
+        self.assertIn("use_truststore_spi: always", converge)
+        self.assertIn("Install the ephemeral LDAP CA in the Keycloak trust directory", converge)
+
+    def test_keycloak_evidence_collects_immutable_image_inventory(self) -> None:
+        shared = (ROOT / "molecule" / "shared" / "incus" / "collect-evidence.yml").read_text(encoding="utf-8")
+        self.assertIn("- images\n      - --all\n      - --format\n      - json", shared)
+        for scenario in ("keycloak-tiny", "keycloak-heavy", "keycloak-application-acceptance"):
+            cleanup = (ROOT / "molecule" / scenario / "cleanup.yml").read_text(encoding="utf-8")
+            self.assertIn("- images\n          - --all\n          - --format\n          - json", cleanup)
+            self.assertNotIn("- ps\n          - --all\n          - --format\n          - json", cleanup)
 
     def test_acceptance_tests_have_one_supported_role_marker(self) -> None:
         source = (ROOT / "molecule" / "shared" / "keycloak" / "acceptance" / "test_acceptance.py").read_text(

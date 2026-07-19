@@ -246,6 +246,7 @@
       KC_HTTP_MANAGEMENT_PORT: "29000"
       KC_HTTP_ENABLED: "true"
       KC_HOSTNAME_STRICT: "false"
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/data/trust/ldap-ca.crt
     keycloak_deploy_pod_name: keycloak-heavy
     keycloak_deploy_postgres_pod_name: keycloak-heavy-postgres
     keycloak_deploy_pod_manifest_path: /etc/podman/pods/keycloak-heavy.yml
@@ -435,7 +436,7 @@
       uuid_ldap_attribute: objectGUID
       user_object_classes: person, organizationalPerson, user
       search_scope: "1"
-      use_truststore_spi: never
+      use_truststore_spi: always
   pre_tasks:
     - name: Require ephemeral Heavy test secrets
       ansible.builtin.assert:
@@ -451,6 +452,23 @@
           - keycloak_heavy_cac_denied_password | length >= 16
         fail_msg: Set all documented KEYCLOAK_TEST_* password variables to ephemeral values.
       no_log: true
+
+    - name: Create the mounted Keycloak trust directory
+      ansible.builtin.file:
+        path: "{{ keycloak_deploy_host_data_dir }}/trust"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the ephemeral LDAP CA in the Keycloak trust directory
+      ansible.builtin.copy:
+        src: /srv/keycloak-heavy/ldap/tls/ca.crt
+        dest: "{{ keycloak_deploy_host_data_dir }}/trust/ldap-ca.crt"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0444"
   roles:
     - role: lit.supplementary.keycloak_deploy
     - role: lit.supplementary.keycloak_cac
