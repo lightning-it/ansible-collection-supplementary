@@ -46,7 +46,7 @@ DOCKER_ARGS=(
   --security-opt no-new-privileges=true
   --pids-limit 1024
   --tmpfs "/tmp:rw,nosuid,nodev,size=2g"
-  --tmpfs "/run:rw,nosuid,nodev,size=256m"
+  --tmpfs "/run:rw,nosuid,nodev,size=256m,mode=1777"
   --tmpfs "$HOME_TMPFS_MOUNT"
 )
 
