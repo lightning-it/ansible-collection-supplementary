@@ -55,6 +55,9 @@ class IncusLifecycleTests(unittest.TestCase):
         network_argv = str(network_create["ansible.builtin.command"]["argv"])
         self.assertIn("'incus', 'network', 'create'", network_argv)
         self.assertIn("user.lit-molecule-owner=", network_argv)
+        self.assertEqual(3, network_create["retries"])
+        self.assertEqual(10, network_create["delay"])
+        self.assertEqual("molecule_incus_network_create.rc == 0", network_create["until"])
 
         instance_init = task_named(
             tasks,
@@ -197,6 +200,7 @@ class IncusLifecycleTests(unittest.TestCase):
         action = (ROOT / ".github" / "actions" / "run-quality-profile" / "action.yml").read_text(encoding="utf-8")
         self.assertIn('echo "MOLECULE_TEST_INSTANCE=$instance"', action)
         self.assertIn('echo "MOLECULE_TEST_IMAGE=$TEST_IMAGE"', action)
+        self.assertIn("dependencies.mkdir(parents=True, exist_ok=True)", action)
 
     def test_legacy_static_entrypoint_fails_before_create(self) -> None:
         payload = yaml.safe_load((SHARED / "create-static-network.yml").read_text(encoding="utf-8"))

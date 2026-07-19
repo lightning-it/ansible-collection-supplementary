@@ -346,6 +346,7 @@ runs:
 
         root = Path(os.environ["QUALITY_ARTIFACT_ROOT"])
         dependencies = root / "dependencies"
+        dependencies.mkdir(parents=True, exist_ok=True)
         scenario = os.environ["QUALITY_SCENARIO"]
         target = os.environ["QUALITY_TARGET"]
         config = Path("molecule") / scenario / "molecule.yml"

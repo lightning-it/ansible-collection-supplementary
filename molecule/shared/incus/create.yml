@@ -511,6 +511,10 @@
               )
           }}
       when: molecule_incus_network_before.rc != 0
+      register: molecule_incus_network_create
+      until: molecule_incus_network_create.rc == 0
+      retries: 3
+      delay: 10
       changed_when: true
 
     - name: Reconcile configuration only on the exact-owned managed network
