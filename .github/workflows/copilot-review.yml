@@ -169,7 +169,7 @@ jobs:
                 return 2
               fi
               IFS=$'\t' read -r marker_count content_count <<<"${content_counts}"
-              if [ "${marker_count}" -gt 0 ]; then
+              if [ "${marker_count}" -gt 0 ] && [ "${content_count}" -eq "${marker_count}" ]; then
                 return 1
               fi
               if [ "${content_count}" -gt 0 ]; then
