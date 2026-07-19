@@ -106,7 +106,11 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         shared = (ROOT / "molecule" / "shared" / "incus" / "collect-evidence.yml").read_text(encoding="utf-8")
         self.assertIn("- images\n      - --all\n      - --format=json", shared)
         self.assertIn("if item.molecule_incus_evidence_command.name == 'podman-inventory'", shared)
-        self.assertIn("item.stdout | default('')\n        if item.molecule_incus_evidence_command.name == 'podman-inventory'", shared)
+        structured_input = (
+            "item.stdout | default('')\n"
+            "        if item.molecule_incus_evidence_command.name == 'podman-inventory'"
+        )
+        self.assertIn(structured_input, shared)
         self.assertIn("['--json-document']", shared)
         self.assertIn("selectattr('item.rc', 'equalto', 0)", shared)
         self.assertIn("Require successful redaction for each available structured inventory stream", shared)
