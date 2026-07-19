@@ -1,0 +1,168 @@
+---
+argument_specs:
+  main:
+    short_description: Reconcile Keycloak configuration through its API
+    options:
+      keycloak_cac_skip_apply:
+        description: Whether reconciliation is explicitly disabled for this invocation.
+        type: bool
+      keycloak_cac_url:
+        description: Base URL of the Keycloak API to reconcile.
+        type: str
+        required: true
+      keycloak_cac_validate_certs:
+        description: Whether TLS certificates presented by Keycloak are validated.
+        type: bool
+      keycloak_cac_request_timeout:
+        description: Connection timeout in seconds for Keycloak API requests.
+        type: int
+      keycloak_cac_admin_user:
+        description: Administrative username used for Keycloak API authentication.
+        type: str
+      keycloak_cac_admin_password:
+        description: Administrative password used for Keycloak API authentication.
+        type: str
+        no_log: true
+      keycloak_cac_realm:
+        description: Administrative realm used to authenticate Keycloak API requests.
+        type: str
+      keycloak_cac_realms:
+        description: Desired Keycloak realm definitions.
+        type: list
+        elements: dict
+        no_log: true
+      keycloak_cac_clients:
+        description: Desired OpenID Connect or SAML client definitions.
+        type: list
+        elements: dict
+        no_log: true
+      keycloak_cac_users:
+        description: Desired Keycloak user definitions.
+        type: list
+        elements: dict
+        no_log: true
+      keycloak_cac_groups:
+        description: Desired Keycloak group definitions.
+        type: list
+        elements: dict
+        no_log: true
+      keycloak_cac_roles:
+        description: Desired realm and client role definitions.
+        type: list
+        elements: dict
+        no_log: true
+      keycloak_cac_user_role_mappings:
+        description: Desired role mappings for managed Keycloak users.
+        type: list
+        elements: dict
+        no_log: true
+      keycloak_cac_samba_ldap_enabled:
+        description: Whether the Samba Active Directory LDAPS provider is reconciled.
+        type: bool
+      keycloak_cac_samba_ldap_provider:
+        description: Desired Samba Active Directory user-federation provider settings.
+        type: dict
+        no_log: true
+        options: &keycloak_cac_ldap_provider_options
+          realm:
+            description: Keycloak realm in which the LDAP provider is reconciled.
+            type: str
+          name:
+            description: Display name of the Keycloak user-federation component.
+            type: str
+            required: true
+          enabled:
+            description: Whether the LDAP user-federation component is enabled.
+            type: bool
+          priority:
+            description: Keycloak provider priority used when multiple user stores are configured.
+            type: int
+          connection_url:
+            description: LDAP or LDAPS server connection URL.
+            type: str
+            required: true
+          users_dn:
+            description: LDAP distinguished name under which user searches begin.
+            type: str
+            required: true
+          bind_dn:
+            description: LDAP distinguished name used to bind for directory searches.
+            type: str
+            required: true
+          bind_credential:
+            description: Credential used by the LDAP bind identity.
+            type: str
+            no_log: true
+          vendor:
+            description: Keycloak LDAP vendor compatibility mode.
+            type: str
+          edit_mode:
+            description: Keycloak LDAP edit mode controlling directory write behavior.
+            type: str
+            choices:
+              - READ_ONLY
+              - WRITABLE
+              - UNSYNCED
+          import_enabled:
+            description: Whether LDAP users are imported into the Keycloak local store.
+            type: bool
+          username_ldap_attribute:
+            description: LDAP attribute mapped to the Keycloak username.
+            type: str
+          rdn_ldap_attribute:
+            description: LDAP attribute used as the relative distinguished name.
+            type: str
+          uuid_ldap_attribute:
+            description: LDAP attribute containing the stable directory object identifier.
+            type: str
+          user_object_classes:
+            description: Comma-separated LDAP object classes used to identify user entries.
+            type: str
+          search_scope:
+            description: LDAP search-scope value used for user queries.
+            type: str
+          use_truststore_spi:
+            description: Keycloak truststore policy applied to LDAP TLS connections.
+            type: str
+          start_tls:
+            description: Whether LDAP connections are upgraded with StartTLS.
+            type: bool
+          connection_pooling:
+            description: Whether Keycloak pools LDAP connections.
+            type: bool
+          pagination:
+            description: Whether LDAP paged-result controls are used.
+            type: bool
+          sync_registrations:
+            description: Whether new Keycloak registrations are synchronized to LDAP.
+            type: bool
+          trust_email:
+            description: Whether email addresses supplied by LDAP are treated as verified.
+            type: bool
+          validate_password_policy:
+            description: Whether Keycloak validates local password policy for LDAP users.
+            type: bool
+          full_sync_period:
+            description: Interval in seconds between full LDAP synchronization runs.
+            type: int
+          changed_sync_period:
+            description: Interval in seconds between incremental LDAP synchronization runs.
+            type: int
+          cache_policy:
+            description: Keycloak cache policy for LDAP-backed users.
+            type: str
+          batch_size_for_sync:
+            description: Maximum LDAP users processed in one synchronization batch.
+            type: int
+          auth_type:
+            description: Authentication type used when binding to the LDAP server.
+            type: str
+          force_update:
+            description: Whether the provider component is updated even without detected drift.
+            type: bool
+      keycloak_cac_ldap_providers:
+        description: Effective list of LDAP user-federation providers reconciled through the Keycloak API.
+        type: list
+        elements: dict
+        no_log: true
+        options: *keycloak_cac_ldap_provider_options

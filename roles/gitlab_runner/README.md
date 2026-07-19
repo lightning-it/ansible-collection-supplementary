@@ -1,12 +1,14 @@
 # GitLab Runner Role
 
-This role installs and configures GitLab Runner as part of the
-`lit.foundation_services` collection. It currently provides a skeleton
-implementation and is meant to be extended with platform-specific logic.
+This role is deprecated. It never acquired an operational GitLab Runner
+implementation and now fails closed on every invocation. It must not be used as
+deployment or test coverage.
 
 ## Requirements
 
-None.
+A maintained runner deployment path. Re-enabling this role requires a real
+implementation plus Tiny, Heavy, and Application Acceptance scenarios that
+register a runner and execute a harmless workload.
 
 ## Variables
 
@@ -14,7 +16,7 @@ See `defaults/main.yml`.
 
 ## Dependencies
 
-None.
+The role has no runtime dependencies because it does not deploy anything.
 
 ## Example Playbook
 
@@ -24,6 +26,7 @@ None.
   hosts: all
   become: true
   roles:
+    # Do not invoke: the deprecated role fails closed.
     - role: lit.supplementary.gitlab_runner
 ```
 
@@ -39,13 +42,13 @@ Lightning IT
 
 ### Usage Documentation
 
-Refer to the collection-level `README.md` for supported variables, expected
-inventory configuration, and integration details.
+See the collection coverage registry for the `deprecated` disposition.
 
 ### Testing
 
-Execute Molecule before publishing changes:
+The legacy scenario proves only that the deprecation guard rejects invocation;
+it is not deployment coverage:
 
 ```bash
-molecule test -s default
+molecule test -s gitlab-runner-basic
 ```

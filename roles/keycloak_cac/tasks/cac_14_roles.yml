@@ -1,0 +1,38 @@
+---
+- name: Reconcile Keycloak realm and client roles
+  block:
+    - name: Apply Keycloak realm and client role definitions  # noqa args[module]
+      community.general.keycloak_role: >-
+        {{
+          keycloak_cac_role_definition
+          | combine({
+              'auth_keycloak_url': keycloak_cac_url,
+              'auth_realm': keycloak_cac_realm,
+              'auth_username': keycloak_cac_admin_user,
+              'auth_password': keycloak_cac_admin_password,
+              'validate_certs': keycloak_cac_validate_certs,
+              'connection_timeout': keycloak_cac_request_timeout
+            })
+        }}
+      loop: "{{ keycloak_cac_roles }}"
+      loop_control:
+        loop_var: keycloak_cac_role_definition
+        label: "{{ keycloak_cac_role_definition.name | default('unnamed') }}"
+      register: keycloak_cac_role_reconciliation
+      no_log: true
+
+  rescue:
+    - name: Derive a credential-redacted Keycloak role failure
+      ansible.builtin.set_fact:
+        keycloak_cac_role_failure_message: >-
+          {{
+            ansible_failed_result.msg
+            | default('Keycloak role reconciliation failed without a module message.', true)
+            | replace(keycloak_cac_admin_password, '[REDACTED]')
+            | regex_replace('(?i)(Bearer\\s+)[A-Za-z0-9._~+/=-]+', '\\1[REDACTED]')
+          }}
+      no_log: true
+
+    - name: Report the sanitized Keycloak role failure
+      ansible.builtin.fail:
+        msg: "{{ keycloak_cac_role_failure_message }}"

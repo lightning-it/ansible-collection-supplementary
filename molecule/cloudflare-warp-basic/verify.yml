@@ -1,19 +1,40 @@
 ---
-- name: Verify cloudflare warp syntax coverage
+- name: Verify Cloudflare WARP MDM render coverage
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
-    cloudflare_warp_molecule_marker_path: >-
-      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/cloudflare-warp-coverage-mode
+    cloudflare_warp_mdm_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/cloudflare-warp/mdm.xml
   tasks:
-    - name: Read lit.supplementary.cloudflare_warp coverage marker
-      ansible.builtin.slurp:
-        src: "{{ cloudflare_warp_molecule_marker_path }}"
-      register: cloudflare_warp_molecule_marker
+    - name: Inspect rendered Cloudflare WARP MDM profile
+      ansible.builtin.stat:
+        path: "{{ cloudflare_warp_mdm_path }}"
+        follow: false
+        get_attributes: false
+        get_checksum: true
+        checksum_algorithm: sha256
+        get_mime: false
+      register: cloudflare_warp_mdm_stat
 
-    - name: Assert lit.supplementary.cloudflare_warp coverage stub ran
+    - name: Read rendered Cloudflare WARP MDM profile in protected memory
+      ansible.builtin.slurp:
+        src: "{{ cloudflare_warp_mdm_path }}"
+      register: cloudflare_warp_mdm_content
+      no_log: true
+
+    - name: Require secure and exact non-secret MDM rendering
       ansible.builtin.assert:
         that:
-          - cloudflare_warp_molecule_marker.content | b64decode | trim == 'syntax_stub'
+          - cloudflare_warp_mdm_stat.stat.isreg | default(false)
+          - not (cloudflare_warp_mdm_stat.stat.islnk | default(false))
+          - cloudflare_warp_mdm_stat.stat.mode == '0600'
+          - cloudflare_warp_mdm_stat.stat.checksum is match('^[0-9a-f]{64}$')
+          - >-
+            (cloudflare_warp_mdm_content.content | b64decode)
+            is search('<string>molecule-test-team</string>')
+          - >-
+            (cloudflare_warp_mdm_content.content | b64decode)
+            is search('<string>molecule-auth-client-id</string>')
         quiet: true
+      no_log: true

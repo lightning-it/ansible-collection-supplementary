@@ -2,7 +2,8 @@
 # Pod basics
 postgres_deploy_pod_name: "postgres"
 postgres_deploy_pod_manifest_path: "/etc/podman/pods/postgres.yml"
-postgres_deploy_image: "docker.io/library/postgres:16"
+postgres_deploy_image: >-
+  docker.io/library/postgres:16@sha256:eb4759788a2182f08257135e61a34f2cfc3c2914079f3465d64ee62350f4d081
 postgres_deploy_container_name: "postgres"
 
 # Host paths
@@ -24,6 +25,7 @@ postgres_deploy_host_ip: >-
     ansible_default_ipv4.address
       | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
   }}
+postgres_deploy_host_network: false
 
 # Database config
 postgres_deploy_db_name: "postgres"

@@ -12,10 +12,10 @@ RHEL, Satellite, RHSM, and repository configuration can stay outside Modulix;
 this role only checks or prepares the AAP-specific substrate that the later
 runbooks need.
 
-## Supported Platforms
+## Candidate Platforms
 
 - Machine A/controller: Linux with Ansible and SSH.
-- Target: Red Hat Enterprise Linux 9 or 10.
+- Target: Red Hat Enterprise Linux 9 or 10, subject to the licensed AAP matrix.
 
 ## Actions
 
@@ -72,11 +72,13 @@ The role creates or verifies:
 - Optional authorized key for the setup account.
 - Optional package and storage baseline when explicitly enabled.
 
-## Molecule Coverage
+## Development coverage
 
-Baseline behavior is covered through runbook-level local execution scenarios and
-target integration tests. Storage growth is intentionally not exercised by
-lightweight Molecule because it requires a disposable block-device layout.
+There is no direct registered Molecule scenario for this role. It is intended
+for runbook-level local execution and target integration work, but those runs do
+not currently create support evidence. Storage growth is intentionally not
+exercised by lightweight Molecule because it requires a disposable block-device
+layout.
 
 ## Known Limitations
 

@@ -5,20 +5,29 @@ metadata:
   labels:
     app: {{ keycloak_deploy_pod_name }}
 spec:
+{% if keycloak_deploy_host_network | bool %}
+  hostNetwork: true
+{% endif %}
   containers:
     - name: {{ keycloak_deploy_container_name }}
       image: {{ keycloak_deploy_image }}
       command:
         - /opt/keycloak/bin/kc.sh
       args:
-        - start-dev
+        - {{ keycloak_deploy_start_command }}
 {% for arg in keycloak_deploy_extra_start_args | default([]) %}
         - "{{ arg }}"
 {% endfor %}
+{% if not keycloak_deploy_host_network | bool %}
       ports:
         - containerPort: {{ keycloak_deploy_port }}
           hostPort: {{ keycloak_deploy_port }}
           hostIP: {{ keycloak_deploy_host_ip }}
+        - name: management
+          containerPort: {{ keycloak_deploy_management_port }}
+          hostPort: {{ keycloak_deploy_management_port }}
+          hostIP: {{ keycloak_deploy_host_ip }}
+{% endif %}
       env:
         - name: KC_DB
           value: "{{ keycloak_deploy_db_vendor }}"
@@ -37,6 +46,8 @@ spec:
         - name: KEYCLOAK_ADMIN_PASSWORD
           value: "{{ keycloak_deploy_admin_password_effective }}"
         - name: KC_HEALTH_ENABLED
+          value: "true"
+        - name: KC_HTTP_ENABLED
           value: "true"
 {% if keycloak_deploy_hostname | default('', true) | trim | length > 0 %}
         - name: KC_HOSTNAME

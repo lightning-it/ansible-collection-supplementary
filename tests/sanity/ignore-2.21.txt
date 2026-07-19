@@ -1,0 +1,8 @@
+molecule/resources/fake-podman shebang
+molecule/resources/fake_vault_api.py shebang
+molecule/shared/incus/helpers/local_run_id.py shebang
+molecule/shared/incus/helpers/sanitize_evidence.py shebang
+molecule/shared/keycloak/acceptance/protected_app.py shebang
+scripts/keycloak-evidence.py shebang
+scripts/quality_evidence.py shebang
+scripts/validate-role-coverage.py shebang

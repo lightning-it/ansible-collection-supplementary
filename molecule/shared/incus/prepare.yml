@@ -1,0 +1,35 @@
+---
+- name: Prepare Incus Molecule targets
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    molecule_incus_prepare_target_supported: true
+    molecule_incus_prepare_packages:
+      Debian: []
+      RedHat: []
+  tasks:
+    - name: Require a supported target operating system
+      ansible.builtin.assert:
+        that:
+          - molecule_incus_prepare_target_supported | bool
+        fail_msg: >-
+          Unsupported test target {{ ansible_facts['distribution'] }}
+          {{ ansible_facts['distribution_version'] }}.
+
+    - name: Refresh apt metadata for Incus test dependencies
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when:
+        - ansible_facts['os_family'] == 'Debian'
+        - molecule_incus_prepare_packages.get('Debian', []) | length > 0
+
+    - name: Install Incus test runtime packages
+      ansible.builtin.package:
+        name: >-
+          {{ molecule_incus_prepare_packages.get(ansible_facts['os_family'], []) }}
+        state: present
+      when: >-
+        molecule_incus_prepare_packages.get(ansible_facts['os_family'], [])
+        | length > 0

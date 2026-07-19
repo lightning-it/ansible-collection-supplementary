@@ -11,6 +11,7 @@
       - vault_validate_lifecycle_delay is integer
       - vault_validate_lifecycle_delay is not boolean
       - vault_validate_lifecycle_delay | int >= 0
+      - vault_validate_podman_executable | default('', true) | trim | length > 0
       - vault_validate_container_name | default('', true) | trim | length > 0
       - vault_validate_host_data_dir | default('', true) | trim | length > 0
       - vault_validate_api_url | default('', true) | trim | length > 0

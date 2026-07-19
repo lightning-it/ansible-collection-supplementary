@@ -1,9 +1,0 @@
----
-- name: Verify gitlab_runner converge
-  hosts: localhost
-  gather_facts: false
-  tasks:
-    - name: Assert stub ran
-      ansible.builtin.assert:
-        that:
-          - true

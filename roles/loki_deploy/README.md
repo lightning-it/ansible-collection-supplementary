@@ -13,7 +13,7 @@ unless a caller explicitly changes the host binding and proxy configuration.
 
 | Variable | Default | Description |
 |---|---|---|
-| `loki_deploy_image` | `docker.io/grafana/loki:3.4.2` | Loki image. |
+| `loki_deploy_image` | Tag-and-digest reference in `meta/source-dependencies.yml` | Immutable Loki image. |
 | `loki_deploy_host_data_dir` | `/srv/loki/data` | Persistent Loki data. |
 | `loki_deploy_config_dir` | `/srv/loki/config` | Loki config directory. |
 | `loki_deploy_host_ip` | `127.0.0.1` | Host bind address. |

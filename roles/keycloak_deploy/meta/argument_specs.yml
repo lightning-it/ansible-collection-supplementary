@@ -1,0 +1,264 @@
+---
+argument_specs:
+  main:
+    short_description: Deploy Keycloak with a PostgreSQL backend
+    options:
+      keycloak_deploy_pod_name:
+        description: Name assigned to the Keycloak Podman pod.
+        type: str
+      keycloak_deploy_pod_manifest_path:
+        description: Absolute path for the rendered Keycloak Podman kube manifest.
+        type: path
+      keycloak_deploy_image:
+        description: Keycloak container image including an immutable version tag.
+        type: str
+        required: true
+      keycloak_deploy_manage_postgres:
+        description: Whether the role deploys its dedicated PostgreSQL service.
+        type: bool
+      keycloak_deploy_postgres_image:
+        description: PostgreSQL container image used when the dedicated database is managed.
+        type: str
+      keycloak_deploy_postgres_pod_name:
+        description: Name assigned to the dedicated PostgreSQL Podman pod.
+        type: str
+      keycloak_deploy_postgres_pod_manifest_path:
+        description: Absolute path for the rendered PostgreSQL Podman kube manifest.
+        type: path
+      keycloak_deploy_postgres_container_name:
+        description: Container name assigned to the dedicated PostgreSQL service.
+        type: str
+      keycloak_deploy_container_name:
+        description: Container name assigned to the Keycloak service.
+        type: str
+      keycloak_deploy_host_data_dir:
+        description: Host directory holding persistent Keycloak data.
+        type: path
+      keycloak_deploy_postgres_data_dir:
+        description: Host directory holding dedicated PostgreSQL data.
+        type: path
+      keycloak_deploy_config_dir:
+        description: Host directory holding private Keycloak configuration and secret material.
+        type: path
+      keycloak_deploy_secrets_file:
+        description: Local file used for generated secrets when local secret storage is explicitly allowed.
+        type: path
+      keycloak_deploy_container_data_dir:
+        description: Keycloak data directory inside the application container.
+        type: path
+      keycloak_deploy_container_postgres_data_dir:
+        description: PostgreSQL data directory inside the database container.
+        type: path
+      keycloak_deploy_port:
+        description: Host port exposing the Keycloak application endpoint.
+        type: int
+      keycloak_deploy_management_port:
+        description: Host port exposing Keycloak health and management endpoints.
+        type: int
+      keycloak_deploy_host_ip:
+        description: Host address on which the Keycloak application port is published.
+        type: str
+      keycloak_deploy_host_network:
+        description: Run the Keycloak pod in the host network namespace.
+        type: bool
+      keycloak_deploy_postgres_host_ip:
+        description: Host address on which the dedicated PostgreSQL port is published.
+        type: str
+      keycloak_deploy_postgres_host_network:
+        description: Run the managed PostgreSQL pod in the host network namespace.
+        type: bool
+      keycloak_deploy_api_scheme:
+        description: URL scheme used to derive Keycloak API and health endpoints.
+        type: str
+        choices:
+          - http
+          - https
+      keycloak_deploy_api_url:
+        description: Explicit Keycloak API base URL, or an empty string to derive it from network settings.
+        type: str
+      keycloak_deploy_api_url_effective:
+        description: Effective Keycloak API base URL consumed by dependent roles and readiness checks.
+        type: str
+      keycloak_deploy_health_url:
+        description: Explicit Keycloak readiness URL, or an empty string to derive it from network settings.
+        type: str
+      keycloak_deploy_health_url_effective:
+        description: Effective Keycloak readiness URL used by deployment health checks.
+        type: str
+      keycloak_deploy_liveness_url:
+        description: Explicit Keycloak liveness URL, or an empty string to derive it from network settings.
+        type: str
+      keycloak_deploy_liveness_url_effective:
+        description: Effective Keycloak liveness URL used by deployment health checks.
+        type: str
+      keycloak_deploy_admin_user:
+        description: Bootstrap administrator username for Keycloak.
+        type: str
+      keycloak_deploy_start_command:
+        description: Keycloak production or development startup command.
+        type: str
+        choices:
+          - start
+          - start-dev
+      keycloak_deploy_run_user_uid:
+        description: Host user identifier that owns persistent Keycloak data.
+        type: str
+      keycloak_deploy_run_user_gid:
+        description: Host group identifier that owns persistent Keycloak data.
+        type: str
+      keycloak_deploy_env_extra:
+        description: Additional environment variables passed to the Keycloak container.
+        type: dict
+        no_log: true
+      keycloak_deploy_extra_start_args:
+        description: Additional command-line arguments appended to the Keycloak start command.
+        type: list
+        elements: str
+      keycloak_deploy_hostname:
+        description: Optional Keycloak hostname configuration value.
+        type: str
+      keycloak_deploy_proxy_headers:
+        description: Optional Keycloak proxy-header handling mode.
+        type: str
+      keycloak_deploy_http_relative_path:
+        description: Optional relative path under which Keycloak serves HTTP requests.
+        type: str
+      keycloak_deploy_db_vendor:
+        description: Database vendor used by Keycloak.
+        type: str
+        choices:
+          - postgres
+      keycloak_deploy_db_name:
+        description: PostgreSQL database name used by Keycloak.
+        type: str
+      keycloak_deploy_db_user:
+        description: PostgreSQL username used by Keycloak.
+        type: str
+      keycloak_deploy_db_host:
+        description: PostgreSQL hostname or address used by Keycloak.
+        type: str
+      keycloak_deploy_db_port:
+        description: PostgreSQL service port used by Keycloak.
+        type: int
+      keycloak_deploy_db_wait_host:
+        description: PostgreSQL hostname or address used by the pre-start availability check.
+        type: str
+      keycloak_deploy_postgres_port:
+        description: Host port published by the dedicated PostgreSQL service.
+        type: int
+      keycloak_deploy_db_wait_port:
+        description: PostgreSQL port used by the pre-start availability check.
+        type: int
+      keycloak_deploy_postgres_wait_timeout:
+        description: Maximum seconds to wait for PostgreSQL to become reachable.
+        type: int
+      keycloak_deploy_postgres_wait_delay:
+        description: Seconds to delay before checking PostgreSQL availability.
+        type: int
+      keycloak_deploy_prestart_health_timeout:
+        description: Connection timeout in seconds for the Keycloak pre-start health probe.
+        type: int
+      keycloak_deploy_db_password:
+        description: Password used by Keycloak to authenticate to PostgreSQL.
+        type: str
+        no_log: true
+      keycloak_deploy_admin_password:
+        description: Bootstrap password for the Keycloak administrator account.
+        type: str
+        no_log: true
+      keycloak_deploy_generate_secrets:
+        description: Whether missing database and administrator passwords are generated.
+        type: bool
+      keycloak_deploy_store_generated_secrets:
+        description: Whether generated secrets may be persisted through the configured secret backend.
+        type: bool
+      keycloak_deploy_generated_db_password_length:
+        description: Character length of a generated PostgreSQL password.
+        type: int
+      keycloak_deploy_generated_admin_password_length:
+        description: Character length of a generated Keycloak administrator password.
+        type: int
+      keycloak_deploy_allow_local_secret_files:
+        description: Whether generated secrets may be stored in a local protected file.
+        type: bool
+      keycloak_deploy_vault_address:
+        description: HashiCorp Vault server URL used for external secret storage.
+        type: str
+      keycloak_deploy_vault_kv_mount:
+        description: HashiCorp Vault KV version 2 mount containing Keycloak secrets.
+        type: str
+      keycloak_deploy_vault_kv_path:
+        description: Path within the Vault KV mount containing Keycloak secrets.
+        type: str
+      keycloak_deploy_vault_validate_certs:
+        description: Whether TLS certificates presented by HashiCorp Vault are validated.
+        type: bool
+      keycloak_deploy_vault_token:
+        description: HashiCorp Vault token supplied directly by the caller.
+        type: str
+        no_log: true
+      keycloak_deploy_vault_role_id:
+        description: HashiCorp Vault AppRole role identifier supplied by the caller.
+        type: str
+        no_log: true
+      keycloak_deploy_vault_secret_id:
+        description: HashiCorp Vault AppRole secret identifier supplied by the caller.
+        type: str
+        no_log: true
+      keycloak_deploy_vault_read_before_generate:
+        description: Whether existing Vault secrets are read before missing values are generated.
+        type: bool
+      keycloak_deploy_vault_store_generated_secrets:
+        description: Whether newly generated secrets are written to HashiCorp Vault.
+        type: bool
+      keycloak_deploy_vault_remove_local_secret_file:
+        description: Whether a legacy local secret file is removed after Vault persistence succeeds.
+        type: bool
+      keycloak_deploy_vault_auth_token:
+        description: Effective HashiCorp Vault token after role input normalization.
+        type: str
+        no_log: true
+      keycloak_deploy_vault_auth_role_id:
+        description: Effective HashiCorp Vault AppRole role identifier after input normalization.
+        type: str
+        no_log: true
+      keycloak_deploy_vault_auth_secret_id:
+        description: Effective HashiCorp Vault AppRole secret identifier after input normalization.
+        type: str
+        no_log: true
+      keycloak_deploy_vault_use_token:
+        description: Whether the effective Vault authentication input selects token authentication.
+        type: bool
+      keycloak_deploy_vault_auth_method:
+        description: Effective HashiCorp Vault authentication method.
+        type: str
+        choices:
+          - token
+          - approle
+      keycloak_deploy_vault_auth_ok:
+        description: Whether the effective Vault authentication inputs are complete.
+        type: bool
+      keycloak_deploy_install_packages:
+        description: Whether the role installs required operating system packages.
+        type: bool
+      keycloak_deploy_manage_systemd:
+        description: Whether the role manages the Podman systemd unit.
+        type: bool
+      keycloak_deploy_skip_runtime:
+        description: Whether container runtime installation and deployment are skipped.
+        type: bool
+      keycloak_deploy_skip_deploy:
+        description: Whether the Keycloak and PostgreSQL pod deployment tasks are skipped.
+        type: bool
+      keycloak_deploy_validate_certs:
+        description: Whether TLS certificates presented by Keycloak health endpoints are validated.
+        type: bool
+      keycloak_deploy_kubeplay_remove:
+        description: Internal handler flag requesting removal of the current Podman kube workload.
+        type: bool
+      keycloak_deploy_kubeplay_run:
+        description: Internal handler flag requesting execution of the rendered Podman kube workload.
+        type: bool
+      keycloak_deploy_systemd_unit_name:
+        description: Systemd unit name used to manage the Keycloak Podman kube workload.
+        type: str

@@ -1,0 +1,35 @@
+---
+name: Run immutable OpenSSF Scorecard
+description: Run OpenSSF Scorecard with its registry image pinned by digest.
+
+inputs:
+  results_file:
+    description: Path for the generated result.
+    required: true
+  results_format:
+    description: Result format (json or sarif).
+    required: true
+  repo_token:
+    description: GitHub token with repository read access.
+    required: false
+    default: ${{ github.token }}
+  publish_results:
+    description: OpenSSF API publication; kept false until digest invocation is accepted upstream.
+    required: false
+    default: "false"
+  file_mode:
+    description: Method used to fetch repository files.
+    required: false
+    default: archive
+  internal_publish_base_url:
+    description: Scorecard publication endpoint.
+    required: false
+    default: https://api.scorecard.dev
+  internal_default_token:
+    description: Default GitHub token used internally by Scorecard.
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: docker
+  image: docker://ghcr.io/ossf/scorecard-action:v2.4.3@sha256:2dd6a6d60100f78ef24e14a47941d0087a524b4d3642041558239b1c6097c941

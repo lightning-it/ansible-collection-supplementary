@@ -151,6 +151,7 @@
     vault_validate_expected_lifecycle: "{{ vault_backup_restore_expected_lifecycle }}"
     vault_validate_lifecycle_retries: "{{ vault_backup_restore_validate_lifecycle_retries }}"
     vault_validate_lifecycle_delay: "{{ vault_backup_restore_validate_lifecycle_delay }}"
+    vault_validate_podman_executable: "{{ vault_backup_restore_podman_executable }}"
     vault_validate_container_name: "{{ vault_backup_restore_container_name }}"
     vault_validate_host_data_dir: "{{ vault_backup_restore_host_data_dir }}"
     vault_validate_expected_uid: "{{ vault_backup_restore_expected_uid }}"

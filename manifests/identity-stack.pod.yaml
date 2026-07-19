@@ -96,7 +96,7 @@ spec:
         timeoutSeconds: 3
 
     - name: postgres
-      image: docker.io/library/postgres:16
+      image: docker.io/library/postgres:16@sha256:eb4759788a2182f08257135e61a34f2cfc3c2914079f3465d64ee62350f4d081
       imagePullPolicy: IfNotPresent
       env:
         - name: POSTGRES_DB
@@ -131,7 +131,7 @@ spec:
         timeoutSeconds: 5
 
     - name: keycloak
-      image: quay.io/keycloak/keycloak:26.5.4
+      image: quay.io/keycloak/keycloak:26.5.4@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4
       imagePullPolicy: IfNotPresent
       command:
         - /bin/bash

@@ -3,7 +3,8 @@
 This file is the single source of truth for creating and evolving roles, Molecule scenarios,
 and role documentation in `ansible-collection-*` repositories under the `lit.*` namespace.
 
-Scope: role code, defaults, tasks, Molecule tests, role READMEs, and collection packaging hygiene.
+Scope: role code, defaults, tasks, Molecule tests, role READMEs, CI, evidence, governance, release, and collection
+packaging hygiene.
 
 ## 0. Compatibility Baseline
 
@@ -30,29 +31,19 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
 
 1. This repository receives centrally managed baseline files rendered from `lightning-it/shared-assets-lit`.
 2. Do not hand-edit these files in downstream repos unless you also update `shared-assets-lit` and run sync.
-3. Managed default files from `shared-assets-lit/default`:
-   1. `CODE_OF_CONDUCT.md`
-   2. `SECURITY.md`
-   3. `scripts/wunder-devtools-ee.sh`
-4. Managed collection baseline files from `shared-assets-lit/ansible-collection/base`:
-   1. `AGENTS.md`
-   2. `CONTRIBUTING.md`
-   3. `.ansible-lint`
-   4. `ansible.cfg`
-   5. `renovate.json` rendered from `renovate.base.json`
-   6. `changelogs/config.yaml`
-   7. `.yamllint`
-   8. `.gitignore`
-   9. shared block in `.pre-commit-config.yaml`
-   10. `scripts/bump_galaxy_version.py`
-   11. `scripts/devtools-ansible-lint.sh`
-   12. `scripts/devtools-collection-prepare.sh`
-   13. `scripts/devtools-collection-smoke.sh`
-   14. `scripts/devtools-galaxy-verify.sh`
-   15. `scripts/devtools-galaxy.sh`
-   16. `scripts/devtools-molecule.sh`
-   17. `.github/workflows/shared-assets-guarded-automerge.yml`
-5. Repo-local exceptions MUST be explicit in the sync workflow and documented in the repository.
+3. Automated shared-assets synchronization for this repository is allowlist-only. It may update exactly:
+   1. the marked shared block in `.pre-commit-config.yaml`
+   2. `scripts/wunder-container-run.sh`
+   3. the digest-pinned validation-image custom manager in `renovate.json`
+4. The sync MUST preserve every other Renovate setting and all repository-local workflows, scripts, documentation,
+   tests, evidence schemas, and release-model metadata. Generic script/workflow `rsync --delete` and generic release
+   model rendering MUST NOT run against this repository.
+5. Other baseline material may be adopted from `shared-assets-lit` through an ordinary reviewed change, but it is
+   repository-local after adoption and MUST NOT be overwritten by automated synchronization.
+6. Repo-local exceptions MUST be explicit in the central sync workflow, documented here, and covered by regression
+   tests in `shared-assets-lit`.
+7. The role-quality governance block in this file is enforced by `scripts/validate-role-coverage.py` and recorded in
+   `.lit/repository.yml`; a shared-assets sync MUST preserve it.
 
 ## 2. Repository Baseline (This Repo)
 
@@ -603,17 +594,23 @@ Example:
 
 Molecule scenarios MUST live at repository root under `molecule/`.
 
-### 8.2 Naming (Match This Repo)
+### 8.2 Naming and Profiles
 
-1. Existing light scenarios use kebab-case with `-basic` suffix:
-   1. `minio-deploy-basic`, `nginx-config-basic`, `vault-basic`
-2. Do NOT rename existing scenarios.
-3. New heavy scenarios MUST end in `_heavy` so `scripts/devtools-molecule.sh` skips them.
-4. Recommended new heavy pattern: `<role-kebab>-<purpose>_heavy`.
+1. Existing `-basic` and `_heavy` scenarios are legacy scenarios. They may remain while experimental coverage is
+   migrated, but they MUST NOT be represented as production Tiny, Heavy, or Application Acceptance coverage unless
+   their behavior meets the corresponding profile policy below.
+2. New component profile scenarios MUST use:
+   1. `<component>-tiny`
+   2. `<component>-heavy`
+   3. `<component>-application-acceptance`
+3. Closely coupled deploy and CaC roles MAY share one component scenario when every role has separately reported test
+   cases and an explicit registry declaration.
+4. Large playbooks MUST be shared through imported playbooks under `molecule/shared/`; do not use fragile symlinks.
 
 ### 8.3 Execution Behavior
 
-1. `scripts/devtools-molecule.sh` runs all root scenarios except names ending in `_heavy`.
+1. `scripts/devtools-molecule.sh` runs repository-local light and experimental scenarios. The host-native profile
+   runner and CI matrix run protected Incus Tiny, Heavy, and Application Acceptance scenarios.
 2. Scenarios with `.molecule-mode` set to `protected-incus` are skipped unless
    `MOLECULE_RUN_PROTECTED=true` is set and the devtools container has the `incus` CLI.
 3. A single scenario is run with:
@@ -624,22 +621,149 @@ scripts/devtools-molecule.sh minio-config-basic
 
 4. Keep light scenarios runnable in devtools and pre-commit without external infrastructure.
 
-### 8.4 Required Basic Scenario Coverage Per Role (Mandatory)
+### 8.4 Mandatory Role Quality Lifecycle
 
-1. Every role under `roles/` MUST have a corresponding light Molecule scenario that validates the role.
-2. Required naming for new role scenarios: `<role-name-with-dashes>-basic`.
-3. If an existing role uses a legacy scenario name, do not rename it automatically, but you MUST ensure a
-   working light scenario exists for that role.
-4. Missing scenario coverage for any role is a blocker for completion.
-5. Stub scenarios are allowed only when runtime dependencies are unavailable, but the scenario MUST still run
-   through Molecule test sequence successfully.
+<!-- role-quality-governance:start -->
 
-### 8.5 Scenario Quality Gate (Mandatory)
+Every future role and every material role change MUST follow this lifecycle:
+
+```text
+implementation
+-> documentation
+-> linting
+-> Tiny
+-> Heavy
+-> Application Acceptance
+-> evidence
+-> CI integration
+-> release validation
+```
+
+A role is not complete merely because its tasks execute or an Ansible play returns zero.
+
+1. `meta/role-coverage.yml` is the authoritative inventory for every directory under `roles/`, every root Molecule
+   scenario, maturity, platform support, dependencies, blockers, acceptance surface, and profile disposition.
+2. Every role MUST explicitly declare Tiny, Heavy, and Application Acceptance. Profiles MUST never be omitted.
+3. Allowed profile states are `supported`, `experimental`, `not-applicable`, `blocked-external-service`,
+   `blocked-external-license`, `blocked-external-infrastructure`, and `deprecated`.
+4. A blocked, experimental, or deprecated role MUST NOT be described as fully production-tested.
+5. New production roles MUST NOT be empty stubs. A Stub-only or Skip-mode-only scenario is insufficient.
+6. A new or materially changed role MUST update the registry and generated coverage documentation in the same change.
+
+### 8.5 Tiny Policy
+
+Every production-supported role MUST have a fast Tiny scenario that uses the real role and validates, as applicable:
+
+1. variables and argument specifications;
+2. expected packages, images, files, permissions, users, groups, services, containers, or resources;
+3. readiness and basic authenticated API, protocol, database, network, or CLI behavior;
+4. application or component version;
+5. secure permissions and secret safety;
+6. idempotency; and
+7. cleanup.
+
+Tiny MUST NOT pass merely because runtime installation or role execution was disabled.
+
+### 8.6 Heavy Policy
+
+Every production-supported role MUST have a production-like Heavy scenario using the intended deployment path. It
+MUST validate every applicable operational behavior, including dependencies, persistent storage, TLS, networking,
+database or directory integration, authentication, restart recovery, reconciliation, backup and restore, supported
+upgrade behavior, related-role integration, secret handling, and idempotency. A mock or stub is not production Heavy
+coverage.
+
+### 8.7 Application Acceptance Policy
+
+Every production-supported role MUST have a real consumer-facing Application Acceptance scenario. The surface MUST
+match the component: browser and API, authenticated API workflow, database client, log ingestion and query,
+monitoring discovery and query, network connection and traffic, agent data delivery, runner workload, backup and
+restore, configuration reconciliation, or a safe infrastructure operation.
+
+1. Positive and negative behavior are mandatory.
+2. Authorized access MUST succeed and unauthorized or invalid access MUST fail at the API, CLI, protocol, protected
+   endpoint, database, or network layer.
+3. UI visibility, rendered variables, process existence, ignored command failures, skipped installation, or a stub
+   success marker are not acceptance evidence.
+4. CaC roles MUST apply desired state to a real application, query actual state, prove idempotency, reconcile a
+   change, and verify deletion where supported.
+
+### 8.8 Verify, Reporting, and Evidence Policy
+
+1. `verify` is mandatory in every Molecule scenario and MUST test externally observable behavior. Converge alone is
+   never a pass.
+2. Every applicable scenario MUST emit meaningful per-assertion JUnit and Allure results, redacted logs, environment
+   metadata, tool and application versions, commit identity, target parameters, and result status.
+3. Browser failures MUST retain sanitized screenshots, Playwright traces, console logs, and network diagnostics.
+4. Protocol, API, CLI, and database tests MUST retain a redacted operation summary, result, client version, and
+   assertion result.
+5. Heavy and Application Acceptance runs MUST create structured evidence for both success and failure where
+   technically possible. A mandatory skip is not a pass.
+6. Evidence MUST include checksums and an automatically calculated `release_eligible` value derived from actual
+   results; it MUST NOT be a manually edited assertion.
+
+### 8.9 Incus Policy
+
+Incus scenarios MUST use unique repository, run, attempt, component, profile, target, and matrix identity where
+practical. They MUST validate Incus and image availability, validate KVM for VM profiles, declare intentional
+container-versus-VM selection, apply Tiny/Heavy CPU-memory-disk sizing, isolate networks, label owned resources,
+capture evidence before destruction, and delete only resources owned by the current run. Unfiltered or ownerless
+cleanup on a shared runner is forbidden.
+
+### 8.10 Matrix and CI Policy
+
+1. Every role MUST declare candidate and proven platforms. A target is supported only after all mandatory supported
+   profile cells pass on that target.
+2. CI matrices MUST be generated from `meta/role-coverage.yml`, use `fail-fast: false`, and avoid uncontrolled
+   Cartesian products.
+3. Every new role MUST be integrated into the standard workflows.
+4. Stable aggregate checks MUST cover lint and sanity, build and install, Tiny, Heavy, Application Acceptance, role
+   coverage, evidence, and release validation.
+5. Mandatory jobs MUST NOT use `continue-on-error: true`, ignored command failures, or failure suppression.
+
+### 8.11 Secret and Supply-Chain Policy
+
+1. Passwords, tokens, cookies, authorization headers, private keys, activation codes, and recovery material MUST NOT
+   appear in logs, reports, screenshots, traces, inventories, artifacts, or evidence.
+2. Tests MUST use ephemeral generated credentials, narrowly scoped `no_log`, restrictive file permissions, redaction,
+   and a canary test that proves scanner detection before redaction and absence afterward.
+3. Release evidence MUST include an SBOM, provenance, GitHub artifact attestations where supported, SHA-256
+   checksums, and signatures for the collection artifact, SBOM, and evidence archive. All signatures MUST be verified.
+4. Private signing keys MUST NOT be committed. Prefer GitHub OIDC keyless signing.
+5. Optional S3-compatible archival MUST use encryption, least-privilege credentials, checksum verification, and the
+   documented collection/version/SHA/run prefix. If archival is mandatory for release policy, failure MUST block the
+   release.
+
+### 8.12 Fail-Closed Release and Branch Policy
+
+Releases MUST fail closed for a missing or failed mandatory result, mandatory skip, malformed or absent JUnit/Allure,
+missing evidence, secret detection, checksum/SBOM/provenance/attestation/signature failure, unsupported production
+claim, or tested-SHA mismatch. Release flow is:
+
+```text
+feature -> develop PR -> develop -> main PR -> main -> exact-tested-SHA release
+```
+
+Do not bypass branch protection, merge failing work, publish from a feature or develop branch, mutate an existing tag,
+or add unreviewed changes after release-candidate validation. Publishing MUST install and smoke-test the released
+artifact from every configured publication target.
+
+### 8.13 Documentation Policy
+
+Every role's documentation or its authoritative generated coverage entry MUST state purpose, classification,
+maturity, candidate and supported platforms, variables, dependencies, security boundaries, Tiny, Heavy, Application
+Acceptance, local and CI commands, required secrets, evidence, limitations, external blockers, upgrade behavior, and
+backup/restore behavior. Documentation claims MUST match the registry and executed evidence.
+
+<!-- role-quality-governance:end -->
+
+### 8.14 Scenario Quality Gate (Mandatory)
 
 For each new or changed role, and for any newly added scenario:
 
-1. Run the role scenario directly with `scripts/devtools-molecule.sh <scenario>`.
-2. The scenario MUST pass converge, idempotence, and verify (no failed tasks).
+1. Run every affected supported profile directly with `molecule test -s <scenario>` or the host-native profile
+   runner. Run affected experimental light scenarios with `scripts/devtools-molecule.sh <scenario>`.
+2. A supported deployment scenario MUST pass converge, idempotence, and verify. Application Acceptance MAY reuse the
+   identical Heavy deployment foundation, but its acceptance results MUST remain independently identifiable.
 3. `ansible-lint` MUST pass with zero fatal violations for the repository and changed scenario files.
 4. You MUST fix lint issues in scenario files (for example var naming or FQCN issues) instead of suppressing them.
 
@@ -686,3 +810,13 @@ Before finalizing, confirm all items below:
    1. no cross-role raw var assertions in `assert.yml`
    2. no duplicate copy-paste assert blocks
    3. required foreign inputs mapped in `defaults/main.yml` with role prefix
+7. `meta/role-coverage.yml` and all generated coverage/matrix documents are current and pass automated validation.
+8. Every role has an explicit maturity, platform, Tiny, Heavy, Application Acceptance, acceptance-surface, blocker,
+   dependency, limitation, and deprecation disposition.
+9. Every production role has real, green Tiny, Heavy, and Application Acceptance coverage with meaningful verify,
+   positive and negative tests, idempotency, JUnit, Allure, and secret-safe evidence.
+10. Applicable restart, persistence, reconciliation, backup/restore, and upgrade behavior is proven.
+11. Lint, sanity, collection build, clean install, FQCN smoke, evidence schema, canary redaction, SBOM, provenance,
+    attestation, signing, signature verification, and exact-SHA release eligibility gates pass.
+12. CI and release behavior remains fail-closed, and documentation contains no stronger support claim than executed
+    evidence proves.
