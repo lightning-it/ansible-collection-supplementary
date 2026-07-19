@@ -292,7 +292,6 @@
   loop: >-
     {{
       molecule_incus_evidence_runtime_inventory_redacted.results
-      | rejectattr('skipped', 'defined')
       | selectattr('rc', 'defined')
       | selectattr('rc', 'equalto', 0)
       | list
