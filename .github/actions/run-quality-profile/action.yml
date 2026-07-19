@@ -216,7 +216,7 @@ runs:
         incus version > "$dependency_root/incus-version.txt"
         incus_image_fingerprint="$(
           incus image info "$KEYCLOAK_TEST_IMAGE" |
-            awk -F ': ' '$1 == "Fingerprint" { print $2; exit }'
+            awk -F ': ' '$1 == "Fingerprint" { fingerprint = $2 } END { print fingerprint }'
         )"
         test "${#incus_image_fingerprint}" -eq 64
         case "$incus_image_fingerprint" in
