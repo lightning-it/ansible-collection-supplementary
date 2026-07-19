@@ -1091,11 +1091,13 @@
     - name: Wait for Incus execution readiness
       ansible.builtin.command:
         argv:
-          - incus
-          - exec
+          - /bin/sh
+          - -c
+          - >-
+            incus start "$1" >/dev/null 2>&1 || true;
+            incus exec "$1" -- /bin/true
+          - molecule-incus-readiness
           - "{{ item.name }}"
-          - --
-          - /bin/true
       loop: "{{ molecule_incus_instances }}"
       loop_control:
         label: "{{ item.name }}"
