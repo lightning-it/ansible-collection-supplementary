@@ -1142,7 +1142,62 @@
         label: "{{ item.name }}"
       register: molecule_incus_ipv4_ready
       until: molecule_incus_ipv4_ready.stdout | trim | length > 0
-      retries: 60
+      retries: 30
+      delay: 2
+      changed_when: false
+      failed_when: false
+
+    - name: Assign a deterministic isolated IPv4 address when guest DHCP is unavailable
+      ansible.builtin.command:
+        argv:
+          - incus
+          - exec
+          - "{{ item.item.name }}"
+          - --
+          - /bin/sh
+          - -c
+          - >-
+            guest_cidr=$(python3 -c
+            'import ipaddress,sys;
+            net=ipaddress.ip_interface(sys.argv[1]);
+            address=net.network.network_address + int(sys.argv[2]);
+            print(str(address) + "/" + str(net.network.prefixlen))'
+            "$1" "$2") &&
+            gateway=$(python3 -c
+            'import ipaddress,sys; print(ipaddress.ip_interface(sys.argv[1]).ip)'
+            "$1") &&
+            ip link set eth0 up &&
+            ip address replace "$guest_cidr" dev eth0 &&
+            ip route replace default via "$gateway" dev eth0
+          - molecule-incus-static-ipv4
+          - >-
+            {{
+              (molecule_incus_network_after.stdout | from_yaml).config['ipv4.address']
+            }}
+          - "{{ molecule_incus_fallback_index + 10 }}"
+      loop: "{{ molecule_incus_ipv4_ready.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+        index_var: molecule_incus_fallback_index
+      when: item.stdout | default('') | trim | length == 0
+      changed_when: true
+
+    - name: Verify guest IPv4 after DHCP or deterministic fallback
+      ansible.builtin.command:
+        argv:
+          - incus
+          - list
+          - "{{ item.name }}"
+          - --format
+          - csv
+          - -c
+          - "4"
+      loop: "{{ molecule_incus_instances }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: molecule_incus_ipv4_verified
+      until: molecule_incus_ipv4_verified.stdout | trim | length > 0
+      retries: 15
       delay: 2
       changed_when: false
 
