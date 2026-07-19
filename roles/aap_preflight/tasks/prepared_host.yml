@@ -1,0 +1,183 @@
+---
+- name: Gather installed package facts
+  ansible.builtin.package_facts:
+    manager: auto
+
+# NOTE: service_facts removed (not used by prepared_host gate).
+- name: Validate prepared RHEL host identity and capacity
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == aap_preflight_expected_distribution
+      - ansible_facts.distribution_version is version(aap_preflight_minimum_distribution_version, '>=')
+      - ansible_facts.architecture == aap_preflight_expected_architecture
+      - ansible_facts.fqdn == aap_preflight_expected_fqdn
+      - ansible_facts.processor_vcpus | int >= aap_preflight_minimum_vcpus | int
+      - ansible_facts.memtotal_mb | int >= aap_preflight_minimum_memory_mb | int
+      - not (aap_preflight_selinux_enforcing_required | bool) or (ansible_facts.selinux | default({})).status == 'enabled'
+      - not (aap_preflight_selinux_enforcing_required | bool) or (ansible_facts.selinux | default({})).mode == 'enforcing'
+    fail_msg: >-
+      Customer-prepared host contract failed. Expected {{ aap_preflight_expected_distribution }}
+      FQDN {{ aap_preflight_expected_fqdn }}, {{ aap_preflight_minimum_vcpus }} vCPUs,
+      {{ aap_preflight_minimum_memory_mb }} MiB RAM, and SELinux enforcing. The host owner
+      must correct the baseline before rollout continues.
+    quiet: true
+
+- name: Resolve application mount facts
+  ansible.builtin.set_fact:
+    aap_preflight_appl_mount_fact: >-
+      {{ ansible_facts.mounts | selectattr('mount', 'equalto', aap_preflight_appl_mount) | list | first | default({}) }}
+  changed_when: false
+
+- name: Validate application filesystem
+  ansible.builtin.assert:
+    that:
+      - aap_preflight_appl_mount_fact | length > 0
+      - aap_preflight_appl_mount_fact.fstype in aap_preflight_appl_allowed_fstypes
+      - aap_preflight_appl_mount_fact.size_available | int >= (aap_preflight_appl_minimum_free_mb | int * 1048576)
+    fail_msg: >-
+      {{ aap_preflight_appl_mount }} must be a dedicated {{ aap_preflight_appl_allowed_fstypes | join('/') }}
+      filesystem with at least {{ aap_preflight_appl_minimum_free_mb }} MiB free. This is a
+      customer baseline prerequisite.
+    quiet: true
+
+- name: Read application filesystem inode use
+  ansible.builtin.command:
+    argv: [df, --inodes, --output=pcent, "{{ aap_preflight_appl_mount }}"]
+  register: aap_preflight_appl_inode_use
+  changed_when: false
+  failed_when: aap_preflight_appl_inode_use.rc != 0 or aap_preflight_appl_inode_use.stdout_lines | length < 2
+
+- name: Validate application filesystem inode use
+  ansible.builtin.assert:
+    that:
+      - >-
+        aap_preflight_appl_inode_use.stdout_lines[-1]
+        | trim
+        | regex_replace('%$', '')
+        | int < aap_preflight_appl_maximum_inode_use_percent | int
+    fail_msg: >-
+      {{ aap_preflight_appl_mount }} inode use must be below
+      {{ aap_preflight_appl_maximum_inode_use_percent }} percent.
+    quiet: true
+
+- name: Read temporary-path capacity
+  ansible.builtin.command:
+    argv: [df, --output=avail, --block-size=1M, "{{ item.path }}"]
+  loop: "{{ aap_preflight_temporary_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: aap_preflight_temporary_capacity
+  changed_when: false
+  failed_when: false
+
+- name: Validate temporary-path capacity
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - (item.stdout_lines | default([]) | length) >= 2
+      - ((item.stdout_lines | default([]) | last | default('0')) | trim | int) >= (item.item.minimum_free_mb | int)
+    fail_msg: >-
+      {{ item.item.path }} requires at least {{ item.item.minimum_free_mb }} MiB free.
+    quiet: true
+  loop: "{{ aap_preflight_temporary_capacity.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+
+- name: Validate required prepared-host packages
+  ansible.builtin.assert:
+    that:
+      - item in ansible_facts.packages
+    fail_msg: >-
+      Required package {{ item }} is absent. The host owner must provide it;
+      rollout automation does not manage the customer package baseline.
+    quiet: true
+  loop: "{{ aap_preflight_required_packages }}"
+
+- name: Validate supported ansible-core package version
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ansible_facts.packages.get('ansible-core', []) | length > 0)
+        and (ansible_facts.packages['ansible-core'][0].version is version(aap_preflight_minimum_ansible_core_version, '>='))
+    fail_msg: >-
+      ansible-core {{ aap_preflight_minimum_ansible_core_version }} or later is
+      required for the host bootstrap contract.
+    quiet: true
+
+- name: Read enabled repository inventory
+  ansible.builtin.command:
+    argv: [dnf, repolist, --enabled]
+  register: aap_preflight_enabled_repositories
+  changed_when: false
+  failed_when: aap_preflight_enabled_repositories.rc != 0
+
+- name: Validate required repository labels
+  ansible.builtin.assert:
+    that:
+      - aap_preflight_enabled_repositories.stdout is search('(?i)' ~ (item | regex_escape))
+    fail_msg: >-
+      No enabled repository matching {{ item }} was reported. Repository
+      enablement remains the responsibility of the host owner.
+  loop: "{{ aap_preflight_required_repository_labels }}"
+
+- name: Validate system CA bundle
+  ansible.builtin.stat:
+    path: "{{ aap_preflight_ca_bundle_path }}"
+  register: aap_preflight_ca_bundle
+
+- name: Require readable system CA bundle
+  ansible.builtin.assert:
+    that:
+      - aap_preflight_ca_bundle.stat.exists
+      - aap_preflight_ca_bundle.stat.isreg
+      - aap_preflight_ca_bundle.stat.readable
+      - aap_preflight_ca_bundle.stat.size | int > 0
+    fail_msg: >-
+      The system CA bundle is missing or unreadable: {{ aap_preflight_ca_bundle_path }}.
+    quiet: true
+
+- name: Read time synchronization state
+  ansible.builtin.command:
+    argv: [timedatectl, show, --property=NTPSynchronized, --value]
+  register: aap_preflight_time_sync
+  changed_when: false
+  failed_when: aap_preflight_time_sync.rc != 0
+  when: aap_preflight_time_sync_required | bool
+
+- name: Validate time synchronization
+  ansible.builtin.assert:
+    that:
+      - aap_preflight_time_sync.stdout | trim | lower == 'yes'
+    fail_msg: "Time synchronization is not active; the host owner must correct it."
+    quiet: true
+  when: aap_preflight_time_sync_required | bool
+
+- name: Read subordinate UID mappings
+  ansible.builtin.slurp:
+    src: /etc/subuid
+  register: aap_preflight_subuid
+
+- name: Read subordinate GID mappings
+  ansible.builtin.slurp:
+    src: /etc/subgid
+  register: aap_preflight_subgid
+
+- name: Validate subordinate UID and GID mappings
+  ansible.builtin.assert:
+    that:
+      - >-
+        (aap_preflight_subuid.content | b64decode)
+        is search('(?m)^' ~ (item | regex_escape) ~ ':[0-9]+:[1-9][0-9]*$')
+      - >-
+        (aap_preflight_subgid.content | b64decode)
+        is search('(?m)^' ~ (item | regex_escape) ~ ':[0-9]+:[1-9][0-9]*$')
+    fail_msg: >-
+      {{ item }} requires valid entries in both /etc/subuid and /etc/subgid.
+      The host owner must correct the prepared-host baseline.
+    quiet: true
+  loop: "{{ aap_preflight_subid_users }}"
+
+- name: Report prepared-host gate success
+  ansible.builtin.debug:
+    msg: RHEL9_PREPARED_HOST_GATE_OK
+  changed_when: false
