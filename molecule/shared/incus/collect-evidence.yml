@@ -223,6 +223,12 @@
       {{
         ['python3', molecule_incus_evidence_sanitizer]
         + (
+          ['--json-document']
+          if item.molecule_incus_evidence_command.name == 'podman-inventory'
+          and (item.rc | default(1)) == 0
+          else []
+        )
+        + (
           molecule_incus_evidence_secret_env_names_effective
           | map('regex_replace', '^(.+)$', '--secret-env=\\1')
           | list
@@ -263,11 +269,11 @@
           | default('', true) | trim | to_json
         }},
         "container_inventory_available": true,
-        "images": {{ molecule_incus_evidence_runtime_inventory_sanitized.stdout | trim }}
+        "images": {{ (molecule_incus_evidence_runtime_inventory_candidates | first).stdout | trim }}
       }
-  when: (molecule_incus_evidence_runtime_inventory_sanitized.rc | default(1)) == 0
+  when: molecule_incus_evidence_runtime_inventory_candidates | length > 0
   vars:
-    molecule_incus_evidence_runtime_inventory_sanitized: >-
+    molecule_incus_evidence_runtime_inventory_candidates: >-
       {{
         molecule_incus_evidence_sanitized_logs.results
         | selectattr(
@@ -275,7 +281,9 @@
             'equalto',
             'podman-inventory'
           )
-        | first
+        | selectattr('item.rc', 'defined')
+        | selectattr('item.rc', 'equalto', 0)
+        | list
       }}
   no_log: true
 
