@@ -68,6 +68,13 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
             verify.index("Enforce the observed zero-change CaC reconciliation after writing evidence"),
         )
 
+    def test_keycloak_failure_redaction_handles_missing_or_empty_admin_password(self) -> None:
+        for task_name in ("cac_14_roles.yml", "cac_15_users.yml"):
+            source = (ROOT / "roles" / "keycloak_cac" / "tasks" / task_name).read_text(encoding="utf-8")
+            self.assertIn("keycloak_cac_admin_password | default('') | string", source)
+            self.assertIn("failure_secret | length > 0", source)
+            self.assertIn("| string", source)
+
     def test_heavy_proves_exact_restore_tls_trust_and_scoped_denial(self) -> None:
         converge = (ROOT / "molecule" / "keycloak-heavy" / "converge.yml").read_text(encoding="utf-8")
         verify = (ROOT / "molecule" / "keycloak-heavy" / "verify.yml").read_text(encoding="utf-8")

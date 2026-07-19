@@ -25,11 +25,22 @@
       ansible.builtin.set_fact:
         keycloak_cac_user_failure_message: >-
           {{
-            ansible_failed_result.msg
-            | default('Keycloak user reconciliation failed without a module message.', true)
-            | replace(keycloak_cac_admin_password, '[REDACTED]')
+            (
+              keycloak_cac_user_failure_raw_message
+              | replace(keycloak_cac_user_failure_secret, '[REDACTED]')
+              if keycloak_cac_user_failure_secret | length > 0
+              else keycloak_cac_user_failure_raw_message
+            )
             | regex_replace('(?i)(Bearer\\s+)[A-Za-z0-9._~+/=-]+', '\\1[REDACTED]')
           }}
+      vars:
+        keycloak_cac_user_failure_raw_message: >-
+          {{
+            ansible_failed_result.msg
+            | default('Keycloak user reconciliation failed without a module message.', true)
+            | string
+          }}
+        keycloak_cac_user_failure_secret: "{{ keycloak_cac_admin_password | default('') | string }}"
       no_log: true
 
     - name: Report the sanitized Keycloak user failure
