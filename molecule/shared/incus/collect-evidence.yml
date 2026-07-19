@@ -239,36 +239,6 @@
   changed_when: false
   no_log: true
 
-- name: Redact the populated Podman inventory as a JSON document
-  ansible.builtin.command:
-    argv: >-
-      {{
-        ['python3', molecule_incus_evidence_sanitizer, '--json-document']
-        + (
-          molecule_incus_evidence_secret_env_names_effective
-          | map('regex_replace', '^(.+)$', '--secret-env=\\1')
-          | list
-        )
-      }}
-    stdin: "{{ molecule_incus_evidence_runtime_inventory_raw.stdout }}"
-    stdin_add_newline: false
-  register: molecule_incus_evidence_runtime_inventory_redacted
-  changed_when: false
-  failed_when: false
-  when: molecule_incus_evidence_runtime_inventory_raw.rc == 0
-  vars:
-    molecule_incus_evidence_runtime_inventory_raw: >-
-      {{
-        molecule_incus_evidence_raw_logs.results
-        | selectattr(
-            'molecule_incus_evidence_command.name',
-            'equalto',
-            'podman-inventory'
-          )
-        | first
-      }}
-  no_log: true
-
 - name: Refresh the dependency inventory from the populated Podman evidence stream
   ansible.builtin.copy:
     dest: >-
@@ -293,9 +263,20 @@
           | default('', true) | trim | to_json
         }},
         "container_inventory_available": true,
-        "images": {{ molecule_incus_evidence_runtime_inventory_redacted.stdout | from_json | to_json }}
+        "images": {{ molecule_incus_evidence_runtime_inventory_sanitized.stdout | from_json | to_json }}
       }
-  when: molecule_incus_evidence_runtime_inventory_redacted.rc | default(1) == 0
+  when: (molecule_incus_evidence_runtime_inventory_sanitized.rc | default(1)) == 0
+  vars:
+    molecule_incus_evidence_runtime_inventory_sanitized: >-
+      {{
+        molecule_incus_evidence_sanitized_logs.results
+        | selectattr(
+            'item.molecule_incus_evidence_command.name',
+            'equalto',
+            'podman-inventory'
+          )
+        | first
+      }}
   no_log: true
 
 - name: Write sanitized application and environment log streams

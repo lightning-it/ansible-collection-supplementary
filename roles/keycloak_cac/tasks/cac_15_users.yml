@@ -16,4 +16,4 @@
   loop_control:
     loop_var: keycloak_cac_user_definition
     label: "{{ keycloak_cac_user_definition.username | default('unnamed') }}"
-  no_log: "{{ keycloak_cac_user_no_log | bool }}"
+  no_log: true

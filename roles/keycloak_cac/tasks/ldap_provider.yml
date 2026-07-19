@@ -61,6 +61,8 @@
           - "{{ keycloak_cac_ldap_provider.uuid_ldap_attribute | default('objectGUID') }}"
         userObjectClasses:
           - "{{ keycloak_cac_ldap_provider.user_object_classes | default('person, organizationalPerson, user') }}"
+        customUserSearchFilter:
+          - "{{ keycloak_cac_ldap_provider.custom_user_search_filter | default('') }}"
         connectionUrl:
           - "{{ keycloak_cac_ldap_provider.connection_url }}"
         usersDn:
