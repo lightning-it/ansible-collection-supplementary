@@ -1,0 +1,16 @@
+---
+# Compatibility entry point. New scenarios import ../incus/destroy.yml directly.
+- name: Destroy only Incus targets owned by this Keycloak test run
+  ansible.builtin.import_playbook: ../incus/destroy.yml
+  vars:
+    molecule_incus_owner_label: user.keycloak-test-owner
+    molecule_incus_owner_override: >-
+      {{
+        lookup('ansible.builtin.env', 'KEYCLOAK_TEST_OWNER')
+        | default(lookup('ansible.builtin.env', 'MOLECULE_TEST_OWNER'), true)
+      }}
+    molecule_incus_evidence_root_override: >-
+      {{
+        lookup('ansible.builtin.env', 'KEYCLOAK_TEST_ARTIFACTS')
+        | default(lookup('ansible.builtin.env', 'MOLECULE_TEST_ARTIFACTS'), true)
+      }}

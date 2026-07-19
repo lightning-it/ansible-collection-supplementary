@@ -71,7 +71,7 @@ standards as handwritten code and follow the shared agent specification.
 
 Before opening a pull request:
 
-- [ ] Branch from `main`.
+- [ ] Branch from the current `develop` integration branch.
 - [ ] Run `pre-commit install` once per clone, then `pre-commit run --all-files`.
 - [ ] Run `molecule test` for affected roles/scenarios (`devtools-molecule.sh` for
       light scenarios, dedicated `*_heavy` scripts for Vagrant/VM-based tests).
@@ -80,6 +80,10 @@ Before opening a pull request:
 - [ ] Add a changelog fragment for user-visible collection changes.
 - [ ] Update `README.md` and example playbooks when user-facing behaviour changes.
 - [ ] Make sure GitHub Actions are green (Collection CI and changelog checks).
+- [ ] Update `meta/role-coverage.yml` and generated coverage when a role or
+      scenario is added or materially changed.
+- [ ] Run every affected supported Tiny, Heavy, and Application Acceptance
+      profile; do not represent Stub or Skip-mode output as production coverage.
 
 ## Changelog Fragments
 
@@ -148,15 +152,20 @@ sweeps, do them in a separate PR.
 - Release preparation is automatic after feature changes are merged to `main`:
   the **Prepare collection release** workflow opens a `release/vX.Y.Z` PR when
   unreleased changelog fragments exist.
-- The workflow calculates the next feature version by default, creates or
-  updates a `release/vX.Y.Z` branch, runs `antsibull-changelog release`, bumps
-  `galaxy.yml`, builds the collection, and opens a release PR into `main`.
+- The workflow derives patch, minor, or major impact from reviewed changelog
+  fragment categories, requires the exact next stable semantic version, creates
+  or updates a `release/vX.Y.Z` branch, runs `antsibull-changelog release`,
+  bumps `galaxy.yml`, builds the collection, and opens a release PR into
+  `main`.
+- Release PRs must use a merge commit. Squash and rebase merges are prohibited
+  because publication binds the reviewed release head and both merge parents.
 - After the release PR is merged and the GitHub Release is published, automation
   opens a release back-sync PR from `main` to `develop`.
 - `develop` to `main` promotion PRs are opened only when `main` is already an
   ancestor of `develop`; merge release back-sync PRs before promoting more work.
-- Maintainers may still run the workflow manually to choose an explicit version
-  or retry a release preparation.
+- Maintainers may still run the workflow manually to assert the fragment-derived
+  version or retry a release preparation; manual input cannot override reviewed
+  semantic impact.
 - Do **not** push release commits directly to `main`.
 - GitHub Release notes are generated from the repository changelog content after
   the release PR is merged.
@@ -170,6 +179,15 @@ Collections assume the following tooling:
 - **pre-commit** with shared hooks. The collection hooks are devtools-backed
   and intentionally mirror the PR gates: changelog policy, ansible-lint,
   Molecule light scenarios, and collection smoke build/install.
+- Validation containers are tag-and-digest pinned. Non-Molecule hooks receive a
+  read-only workspace without an engine socket or sibling-source mounts;
+  Molecule explicitly opts into only its required workspace, network, and
+  nested-container access.
+- The devtools `HOME` is a fresh engine-managed tmpfs for every invocation. It
+  is explicitly mounted `exec` for identical Docker and Podman behavior because
+  Molecule stages executable test shims below `HOME`; `nosuid`, `nodev`,
+  `no-new-privileges`, and capability dropping retain the surrounding
+  isolation. No persistent whole-home cache is mounted.
 - **ee-wunder-devtools-ubi9** container as the canonical dev/CI environment:
   - Terraform, tflint, terraform-docs,
   - ansible-core, ansible-lint, Molecule,
@@ -192,7 +210,8 @@ so host-installed Ansible tooling must not be treated as authoritative.
 
 ---
 
-_This file is managed centrally for Lightning IT Ansible collections. Downstream
-repositories should not edit their copy directly  - propose changes via the
-shared assets repository or the designated `collection-meta` repo so every
-collection stays aligned._
+_This file is derived from the Lightning IT collection baseline but remains
+repository-local. Automated shared-assets synchronization is intentionally
+limited to the marked pre-commit block, the container and devtool wrappers, and
+the three digest-pinned validation, devtool, and shipped-image Renovate
+managers._

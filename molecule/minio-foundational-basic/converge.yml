@@ -1,24 +1,18 @@
 ---
-- name: Converge minio foundational syntax coverage
+- name: Converge MinIO foundational endpoint and credential coverage
   hosts: localhost
   connection: local
-  gather_facts: false
+  gather_facts: true
   vars:
-    minio_foundational_molecule_execute_role: false
-    minio_foundational_molecule_marker_path: >-
-      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/minio-foundational-coverage-mode
-  tasks:
-    - name: Import lit.supplementary.minio_foundational for syntax coverage
-      ansible.builtin.import_role:
-        name: lit.supplementary.minio_foundational
-      when: minio_foundational_molecule_execute_role | bool
-
-    - name: Record lit.supplementary.minio_foundational Molecule coverage mode
-      ansible.builtin.set_fact:
-        minio_foundational_molecule_coverage_mode: syntax_stub
-
-    - name: Persist lit.supplementary.minio_foundational Molecule coverage mode
-      ansible.builtin.copy:
-        dest: "{{ minio_foundational_molecule_marker_path }}"
-        content: "syntax_stub\n"
-        mode: "0644"
+    minio_deploy_root_user: molecule-root-user
+    minio_deploy_root_password: molecule-placeholder-not-a-real-secret
+    minio_deploy_generate_root_credentials: false
+    minio_deploy_store_root_credentials: false
+    minio_deploy_vault_address: ''
+    minio_deploy_vault_auth_ok: false
+    minio_deploy_host_ip: 127.0.0.1
+    minio_deploy_api_scheme: http
+    minio_deploy_port: 9000
+    minio_deploy_console_port: 9001
+  roles:
+    - role: lit.supplementary.minio_foundational

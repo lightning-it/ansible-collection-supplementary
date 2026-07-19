@@ -6,6 +6,7 @@ vault_validate_strict: "{{ vault_validate_mode != 'report' }}"
 vault_validate_expected_lifecycle: "ready"
 vault_validate_lifecycle_retries: 12
 vault_validate_lifecycle_delay: 5
+vault_validate_podman_executable: "podman"
 vault_validate_container_name: "{{ vault_deploy_container_name | default('vault-vault', true) }}"
 vault_validate_host_data_dir: "{{ vault_deploy_host_data_dir | default('/srv/' ~ vault_deploy_flavour ~ '/data', true) }}"
 vault_validate_expected_uid: "{{ vault_deploy_expected_uid | default(100, true) }}"

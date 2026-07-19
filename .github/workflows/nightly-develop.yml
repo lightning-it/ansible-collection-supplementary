@@ -1,0 +1,43 @@
+# yamllint disable rule:truthy
+---
+name: Dispatch nightly develop validation
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: nightly-develop-dispatch-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Dispatch exact develop workflow
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Dispatch the workflow definition from protected develop
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          develop_sha="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/develop" --jq .object.sha
+          )"
+          [[ "$develop_sha" =~ ^[0-9a-f]{40}$ ]]
+          gh workflow run collection-ci.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref develop \
+            -f execution_mode=nightly-develop
+          {
+            echo "### Nightly develop validation dispatched"
+            echo
+            echo "Requested protected develop SHA: \`$develop_sha\`"
+            echo "The child run re-resolves and tests the selected develop ref."
+          } >> "$GITHUB_STEP_SUMMARY"

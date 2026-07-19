@@ -1,0 +1,216 @@
+# yamllint disable rule:truthy
+---
+name: Candidate platform validation
+
+on:
+  schedule:
+    - cron: "43 3 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: candidate-platform-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.11"
+  ANSIBLE_CORE_VERSION: "2.18.13"
+
+jobs:
+  source:
+    name: Resolve exact candidate source
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      ref: ${{ steps.source.outputs.ref }}
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - name: Resolve protected source without executing repository code
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            source_ref=refs/heads/develop
+            source_sha="$(
+              gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/develop" --jq .object.sha
+            )"
+          else
+            source_ref=refs/heads/main
+            source_sha="$GITHUB_SHA"
+          fi
+          [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]
+          {
+            echo "ref=$source_ref"
+            echo "sha=$source_sha"
+          } >> "$GITHUB_OUTPUT"
+
+  matrix:
+    name: Generate candidate-only matrix
+    needs: source
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      cells: ${{ steps.matrix.outputs.cells }}
+    steps:
+      - name: Checkout exact protected-branch source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install registry parser
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.3
+      - name: Validate registry and generate candidate cells
+        id: matrix
+        run: |
+          set -euo pipefail
+          python scripts/validate-role-coverage.py validate
+          cells="$(python - <<'PY'
+          import json
+          import subprocess
+
+          cells = []
+          for profile in ("tiny", "heavy", "application_acceptance"):
+              output = subprocess.check_output(
+                  [
+                      "python",
+                      "scripts/validate-role-coverage.py",
+                      "matrix",
+                      "--profile",
+                      profile,
+                      "--target-disposition",
+                      "candidate",
+                  ],
+                  text=True,
+              )
+              cells.extend(json.loads(output)["include"])
+          if not cells:
+              raise SystemExit("candidate platform matrix is empty")
+          if any(
+              cell.get("target_disposition") != "candidate"
+              or cell.get("release_required") is not False
+              for cell in cells
+          ):
+              raise SystemExit("candidate platform matrix contains a release-required cell")
+          print(json.dumps({"include": cells}, separators=(",", ":")))
+          PY
+          )"
+          echo "cells=$cells" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build exact candidate-platform source
+    needs: source
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact protected-branch source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install exact build toolchain
+        run: |
+          python -m pip install --disable-pip-version-check \
+            "ansible-core==${ANSIBLE_CORE_VERSION}" \
+            PyYAML==6.0.3
+      - name: Build and checksum exact source
+        run: |
+          set -euo pipefail
+          mkdir -p dist/candidate
+          ansible-galaxy collection build --output-path dist/candidate --force
+          mapfile -t candidates < <(
+            find dist/candidate -maxdepth 1 -type f -name '*.tar.gz' -print
+          )
+          test "${#candidates[@]}" -eq 1
+          python scripts/source_dependencies.py --candidate "${candidates[0]}"
+          (
+            cd dist/candidate
+            sha256sum "$(basename "${candidates[0]}")" > candidate-SHA256SUMS
+            sha256sum --check candidate-SHA256SUMS
+          )
+      - name: Upload exact source artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
+        with:
+          name: candidate-platform-source-${{ needs.source.outputs.sha }}
+          path: dist/candidate/
+          if-no-files-found: error
+          retention-days: 30
+
+  candidate-cells:
+    name: Candidate only / ${{ matrix.profile }} / ${{ matrix.target }}
+    needs: [source, matrix, build]
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.matrix.outputs.cells) }}
+    runs-on: ${{ matrix.runner }}
+    environment: ansible-collection-runtime-protected
+    timeout-minutes: 180
+    concurrency:
+      group: >-
+        candidate-platform-${{ github.repository }}-${{ matrix.component }}-${{ matrix.target }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout exact protected-branch source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+      - name: Execute candidate target without release eligibility
+        uses: ./.github/actions/run-quality-profile
+        with:
+          profile: ${{ matrix.profile }}
+          scenario: ${{ matrix.scenario }}
+          target: ${{ matrix.target }}
+          target-disposition: candidate
+          roles: ${{ join(matrix.roles, ',') }}
+          image: ${{ matrix.image || vars[matrix.image_variable] }}
+          instance-type: ${{ matrix.instance_type }}
+          candidate-artifact: candidate-platform-source-${{ needs.source.outputs.sha }}
+          source-sha: ${{ needs.source.outputs.sha }}
+          junit-required: ${{ matrix.junit }}
+          allure-required: ${{ matrix.allure }}
+          cpu-limit: "4"
+          memory-limit: 8GiB
+          disk-limit: 24GiB
+
+  promotion-input:
+    name: Candidate platform / Promotion input only
+    if: always()
+    needs: [source, matrix, build, candidate-cells]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all candidate cells and state the promotion boundary
+        env:
+          MATRIX_RESULT: ${{ needs.matrix.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          CELLS_RESULT: ${{ needs.candidate-cells.result }}
+          EVENT_NAME: ${{ github.event_name }}
+          SOURCE_REF: ${{ needs.source.outputs.ref }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME:$SOURCE_REF" in
+            schedule:refs/heads/develop|workflow_dispatch:refs/heads/main) ;;
+            *) echo "Candidate validation requires scheduled develop or dispatched main." >&2; exit 1 ;;
+          esac
+          test "$MATRIX_RESULT" = success
+          test "$BUILD_RESULT" = success
+          test "$CELLS_RESULT" = success
+          {
+            echo "### Candidate platform validation passed"
+            echo
+            echo "This run is promotion input only and is not release evidence."
+            echo "Support requires a reviewed role-registry change from candidate to supported."
+            echo "The release matrix will then re-run the target at the exact protected-main SHA."
+          } >> "$GITHUB_STEP_SUMMARY"

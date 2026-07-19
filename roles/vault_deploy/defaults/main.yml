@@ -6,10 +6,10 @@ vault_deploy_pod_manifest_path: "/etc/podman/pods/vault.yml"
 vault_deploy_host_data_dir: "/srv/{{ vault_deploy_flavour }}/data"
 vault_deploy_cert_dir: "/srv/{{ vault_deploy_flavour }}/certs"
 vault_deploy_config_dir: "/srv/{{ vault_deploy_flavour }}/config"
-vault_deploy_image: "docker.io/hashicorp/vault:1.21"
-# Production consumers can require an immutable OCI manifest digest while the
-# compatibility default continues to accept a tag for existing inventories.
-vault_deploy_require_immutable_image: false
+vault_deploy_image: >-
+  docker.io/hashicorp/vault:1.21@sha256:4e33b126a59c0c333b76fb4e894722462659a6bec7c48c9ee8cea56fccfd2569
+# Mutable caller overrides require an explicit compatibility opt-out.
+vault_deploy_require_immutable_image: true
 vault_deploy_run_as_user: 100
 vault_deploy_run_as_group: 1000
 vault_deploy_run_as_non_root: true

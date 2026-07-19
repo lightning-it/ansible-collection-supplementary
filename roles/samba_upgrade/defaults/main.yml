@@ -2,4 +2,11 @@
 samba_upgrade_execute: false
 samba_upgrade_run_backup: true
 samba_upgrade_run_validate: true
-samba_upgrade_image: "{{ samba_deploy_image | default('docker.io/dperson/samba:latest', true) }}"
+samba_upgrade_image: >-
+  {{
+    samba_deploy_image
+    | default(
+        'docker.io/dperson/samba:latest@sha256:66088b78a19810dd1457a8f39340e95e663c728083efa5fe7dc0d40b2478e869',
+        true
+      )
+  }}

@@ -1,5 +1,5 @@
 ---
-- name: Verify gitlab runner syntax coverage
+- name: Verify GitLab Runner deprecation coverage
   hosts: localhost
   connection: local
   gather_facts: false
@@ -12,8 +12,8 @@
         src: "{{ gitlab_runner_molecule_marker_path }}"
       register: gitlab_runner_molecule_marker
 
-    - name: Assert lit.supplementary.gitlab_runner coverage stub ran
+    - name: Assert deprecated role refused execution
       ansible.builtin.assert:
         that:
-          - gitlab_runner_molecule_marker.content | b64decode | trim == 'syntax_stub'
+          - gitlab_runner_molecule_marker.content | b64decode | trim == 'deprecated_refusal'
         quiet: true

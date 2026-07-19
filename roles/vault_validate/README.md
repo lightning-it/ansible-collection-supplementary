@@ -18,6 +18,8 @@ Key variables:
   unsealed; `sealed` requires initialized and sealed; `initialized` accepts either seal state; `uninitialized` and
   `any` support bootstrap and reporting workflows.
 - `vault_validate_lifecycle_retries` and `vault_validate_lifecycle_delay`: bound startup and auto-unseal polling.
+- `vault_validate_podman_executable`: Podman command or absolute executable path used for runtime inspection;
+  defaults to `podman`.
 - `vault_validate_ca_cert_path`: optional trusted CA bundle on the managed host for all Vault HTTPS checks.
 
 TLS certificate validation remains enabled by default.

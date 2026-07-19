@@ -1,0 +1,118 @@
+---
+- name: Converge canonical Keycloak Tiny scenario
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    keycloak_tiny_db_password: "{{ lookup('env', 'KEYCLOAK_TEST_DB_PASSWORD') }}"
+    keycloak_tiny_admin_password: "{{ lookup('env', 'KEYCLOAK_TEST_ADMIN_PASSWORD') }}"
+    keycloak_deploy_image: >-
+      quay.io/keycloak/keycloak:26.5.4@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4
+    keycloak_deploy_start_command: start
+    keycloak_deploy_manage_postgres: true
+    keycloak_deploy_manage_systemd: false
+    keycloak_deploy_install_packages: true
+    keycloak_deploy_generate_secrets: false
+    keycloak_deploy_store_generated_secrets: false
+    keycloak_deploy_db_password: "{{ keycloak_tiny_db_password }}"
+    keycloak_deploy_admin_password: "{{ keycloak_tiny_admin_password }}"
+    keycloak_deploy_host_ip: 127.0.0.1
+    keycloak_deploy_postgres_host_ip: 0.0.0.0
+    keycloak_deploy_host_network: true
+    keycloak_deploy_postgres_host_network: true
+    keycloak_deploy_db_host: 127.0.0.1
+    keycloak_deploy_db_port: 5432
+    keycloak_deploy_db_wait_host: 127.0.0.1
+    keycloak_deploy_db_wait_port: 5432
+    keycloak_deploy_postgres_port: 5432
+    keycloak_deploy_port: 18080
+    keycloak_deploy_management_port: 19000
+    keycloak_deploy_api_url: http://127.0.0.1:18080
+    keycloak_deploy_health_url: http://127.0.0.1:19000/health/ready
+    keycloak_deploy_liveness_url: http://127.0.0.1:19000/health/live
+    keycloak_deploy_env_extra:
+      KC_HTTP_PORT: "18080"
+      KC_HTTP_MANAGEMENT_PORT: "19000"
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+    keycloak_deploy_pod_name: keycloak-tiny
+    keycloak_deploy_postgres_pod_name: keycloak-tiny-postgres
+    keycloak_deploy_pod_manifest_path: /etc/podman/pods/keycloak-tiny.yml
+    keycloak_deploy_postgres_pod_manifest_path: /etc/podman/pods/keycloak-tiny-postgres.yml
+    keycloak_deploy_host_data_dir: /srv/keycloak-tiny/data
+    keycloak_deploy_postgres_data_dir: /srv/keycloak-tiny/postgres
+    keycloak_deploy_config_dir: /srv/keycloak-tiny/config
+    keycloak_cac_skip_apply: false
+    keycloak_cac_url: http://127.0.0.1:18080
+    keycloak_cac_validate_certs: true
+    keycloak_cac_admin_password: "{{ keycloak_tiny_admin_password }}"
+    keycloak_cac_realms:
+      - realm: keycloak-test
+        enabled: true
+        registration_allowed: false
+        state: present
+    keycloak_cac_clients:
+      - realm: keycloak-test
+        client_id: keycloak-test-client
+        name: Keycloak test client
+        public_client: true
+        direct_access_grants_enabled: true
+        standard_flow_enabled: true
+        redirect_uris:
+          - http://127.0.0.1/callback
+        protocol_mappers:
+          - name: groups
+            protocol: openid-connect
+            protocolMapper: oidc-group-membership-mapper
+            config:
+              access.token.claim: "true"
+              claim.name: groups
+              full.path: "false"
+              id.token.claim: "true"
+              userinfo.token.claim: "true"
+        state: present
+    keycloak_cac_groups:
+      - realm: keycloak-test
+        name: viewers
+        state: present
+    keycloak_cac_roles:
+      - realm: keycloak-test
+        name: viewer
+        description: Read-only test role
+        state: present
+    keycloak_cac_users:
+      - realm: keycloak-test
+        username: keycloak_test_viewer
+        first_name: Keycloak
+        last_name: Viewer
+        email: viewer@example.invalid
+        email_verified: true
+        enabled: true
+        required_actions: []
+        groups:
+          - name: viewers
+            state: present
+        credentials:
+          - type: password
+            value: "{{ keycloak_tiny_admin_password }}"
+            temporary: false
+        state: present
+    keycloak_cac_user_role_mappings:
+      - realm: keycloak-test
+        target_username: keycloak_test_viewer
+        roles:
+          - name: viewer
+        state: present
+  pre_tasks:
+    - name: Require ephemeral Tiny test secrets
+      ansible.builtin.assert:
+        that:
+          - keycloak_tiny_db_password | length >= 16
+          - keycloak_tiny_admin_password | length >= 16
+        fail_msg: >-
+          Set KEYCLOAK_TEST_DB_PASSWORD and KEYCLOAK_TEST_ADMIN_PASSWORD to
+          ephemeral values of at least 16 characters.
+      no_log: true
+  roles:
+    - role: lit.supplementary.keycloak_deploy
+    - role: lit.supplementary.keycloak_cac

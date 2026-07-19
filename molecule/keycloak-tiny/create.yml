@@ -1,0 +1,10 @@
+---
+- name: Create Keycloak Tiny target
+  ansible.builtin.import_playbook: ../shared/incus/create.yml
+  vars:
+    molecule_incus_owner_label: user.keycloak-test-owner
+    molecule_incus_owner_override: >-
+      {{
+        lookup('ansible.builtin.env', 'KEYCLOAK_TEST_OWNER')
+        | default(lookup('ansible.builtin.env', 'MOLECULE_TEST_OWNER'), true)
+      }}

@@ -24,6 +24,7 @@ provisioner:
   playbooks:
     converge: converge.yml
     verify: verify.yml
+    cleanup: cleanup.yml
 
 scenario:
   name: vault-scoped-approle-basic
@@ -33,6 +34,7 @@ scenario:
     - converge
     - idempotence
     - verify
+    - cleanup
 
 verifier:
   name: ansible

@@ -1,0 +1,11 @@
+---
+# Compatibility entry point. New scenarios import ../incus/create.yml directly.
+- name: Create owned Incus targets for Keycloak Molecule scenarios
+  ansible.builtin.import_playbook: ../incus/create.yml
+  vars:
+    molecule_incus_owner_label: user.keycloak-test-owner
+    molecule_incus_owner_override: >-
+      {{
+        lookup('ansible.builtin.env', 'KEYCLOAK_TEST_OWNER')
+        | default(lookup('ansible.builtin.env', 'MOLECULE_TEST_OWNER'), true)
+      }}

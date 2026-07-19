@@ -1,0 +1,14 @@
+---
+bugfixes:
+  - >-
+    Isolate UID and GID maps for nested Incus test containers so concurrent
+    Podman workloads do not share and exhaust host per-user kernel key quotas.
+  - >-
+    Route the Heavy Keycloak LDAP provider through the loopback endpoint used
+    by its host-networked container so LDAPS authentication reaches Samba.
+  - >-
+    Capture Podman image records rather than container process records for
+    immutable runtime dependency evidence in Keycloak quality profiles.
+  - >-
+    Trust the Heavy profile's ephemeral LDAP certificate authority inside
+    Keycloak so the end-to-end LDAPS authentication proof validates TLS.

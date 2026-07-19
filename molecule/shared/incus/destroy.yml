@@ -1,0 +1,780 @@
+---
+- name: Capture lifecycle evidence and destroy exactly owned Incus targets
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    molecule_incus_instances: "{{ molecule_yml.platforms | default([]) }}"
+    molecule_incus_owner_label: user.lit-molecule-owner
+    molecule_incus_owner_override: "{{ lookup('ansible.builtin.env', 'MOLECULE_TEST_OWNER') }}"
+    molecule_incus_evidence_root_override: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_TEST_ARTIFACTS') }}
+    molecule_incus_local_state_directory: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}
+    molecule_incus_local_state_file: >-
+      {{
+        molecule_incus_local_state_directory ~ '/lit-incus-lifecycle/'
+        ~ ((
+            molecule_yml.scenario.name | default('unknown')
+            ~ ':' ~ molecule_incus_instances[0].name
+          ) | hash('sha256'))[:24] ~ '.run-id'
+        if molecule_incus_local_state_directory | length > 0
+        else ''
+      }}
+  tasks:
+    - name: Require at least one Incus platform for scoped cleanup
+      ansible.builtin.assert:
+        that:
+          - molecule_incus_instances | length > 0
+        fail_msg: Refusing unscoped Incus cleanup without declared platforms.
+
+    - name: Generate a collision-safe local Molecule invocation identity
+      ansible.builtin.command:
+        argv: >-
+          {{
+            [
+              'python3',
+              lookup(
+                'ansible.builtin.first_found',
+                {
+                  'files': [
+                    playbook_dir ~ '/helpers/local_run_id.py',
+                    playbook_dir ~ '/../shared/incus/helpers/local_run_id.py',
+                    playbook_dir ~ '/../incus/helpers/local_run_id.py'
+                  ]
+                }
+              )
+            ]
+            + (
+                ['--state-file', molecule_incus_local_state_file]
+                if molecule_incus_local_state_file | length > 0
+                else []
+              )
+          }}
+      register: molecule_incus_local_run_identity
+      changed_when: false
+      when:
+        - >-
+          (molecule_incus_instances[0].identity | default({})).run_id
+          | default('', true) | length == 0
+        - lookup('ansible.builtin.env', 'MOLECULE_TEST_RUN_ID') | length == 0
+        - lookup('ansible.builtin.env', 'GITHUB_RUN_ID') | length == 0
+
+    - name: Resolve Molecule cleanup identity
+      ansible.builtin.set_fact:
+        molecule_incus_identity_effective:
+          repository: >-
+            {{
+              (molecule_incus_instances[0].identity | default({})).repository
+              | default(
+                  lookup('ansible.builtin.env', 'MOLECULE_TEST_REPOSITORY')
+                  | default(
+                      lookup('ansible.builtin.env', 'GITHUB_REPOSITORY')
+                      | default('local/ansible-collection-supplementary', true),
+                      true
+                    ),
+                  true
+                )
+            }}
+          run_id: >-
+            {{
+              (molecule_incus_instances[0].identity | default({})).run_id
+              | default(
+                  lookup('ansible.builtin.env', 'MOLECULE_TEST_RUN_ID')
+                  | default(
+                      lookup('ansible.builtin.env', 'GITHUB_RUN_ID')
+                      | default(
+                          molecule_incus_local_run_identity.stdout
+                          | default('local-user', true),
+                          true
+                        ),
+                      true
+                    ),
+                  true
+                )
+            }}
+          attempt: >-
+            {{
+              (molecule_incus_instances[0].identity | default({})).attempt
+              | default(
+                  lookup('ansible.builtin.env', 'MOLECULE_TEST_RUN_ATTEMPT')
+                  | default(
+                      lookup('ansible.builtin.env', 'GITHUB_RUN_ATTEMPT')
+                      | default('1', true),
+                      true
+                    ),
+                  true
+                )
+            }}
+          scenario: >-
+            {{
+              (molecule_incus_instances[0].identity | default({})).scenario
+              | default(molecule_yml.scenario.name | default('unknown'), true)
+            }}
+          target: >-
+            {{
+              (molecule_incus_instances[0].identity | default({})).target
+              | default(
+                  lookup('ansible.builtin.env', 'MOLECULE_TEST_TARGET')
+                  | default('local', true),
+                  true
+                )
+            }}
+
+    - name: Resolve exact cleanup owner and evidence destination
+      ansible.builtin.set_fact:
+        molecule_incus_owner_effective: >-
+          {{
+            molecule_incus_owner_override
+            | default(
+                molecule_incus_identity_effective.repository
+                ~ ':' ~ molecule_incus_identity_effective.run_id
+                ~ ':' ~ molecule_incus_identity_effective.attempt
+                ~ ':' ~ molecule_incus_identity_effective.scenario
+                ~ ':' ~ molecule_incus_identity_effective.target,
+                true
+              )
+          }}
+        molecule_incus_evidence_root_effective: >-
+          {{
+            molecule_incus_evidence_root_override
+            | default('artifacts/evidence', true)
+          }}
+
+    - name: Resolve the deterministic per-run Incus network
+      ansible.builtin.set_fact:
+        molecule_incus_network_effective: >-
+          lit{{ (molecule_incus_owner_effective | hash('sha256'))[:12] }}
+
+    - name: Validate destructive cleanup identity and evidence paths
+      ansible.builtin.assert:
+        that:
+          - item.name | length > 0
+          - item.name | length <= 63
+          - item.name is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+          - molecule_incus_identity_effective.scenario is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$')
+          - molecule_incus_identity_effective.target is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$')
+          - molecule_incus_owner_effective | length > 0
+          - molecule_incus_owner_label is match('^user\.[A-Za-z0-9][A-Za-z0-9._-]{0,127}$')
+          - molecule_incus_network_effective is match('^lit[0-9a-f]{12}$')
+        fail_msg: Refusing unsafe destructive cleanup identity or path inputs.
+      loop: "{{ molecule_incus_instances }}"
+      loop_control:
+        label: "{{ item.name | default('invalid') }}"
+
+    - name: Generate a unique evidence event timestamp
+      ansible.builtin.command:
+        argv:
+          - date
+          - -u
+          - +%Y%m%dT%H%M%S%N
+      register: molecule_incus_evidence_timestamp
+      changed_when: false
+
+    - name: Read exact Incus instance ownership labels
+      ansible.builtin.command:
+        argv:
+          - incus
+          - config
+          - get
+          - "{{ item.name }}"
+          - "{{ molecule_incus_owner_label }}"
+      loop: "{{ molecule_incus_instances }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: molecule_incus_destroy_owners
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: List all Incus instance names for exact-owner cleanup
+      ansible.builtin.command:
+        argv:
+          - incus
+          - list
+          - --format
+          - json
+      register: molecule_incus_all_instance_names
+      changed_when: false
+
+    - name: Read generic ownership labels without exposing foreign values
+      ansible.builtin.command:
+        argv:
+          - incus
+          - config
+          - get
+          - "{{ item }}"
+          - user.lit-molecule-owner
+      loop: "{{ molecule_incus_all_instance_names.stdout_lines }}"
+      loop_control:
+        label: "{{ item }}"
+      register: molecule_incus_all_instance_owners
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Initialize the exact-owned instance deletion set
+      ansible.builtin.set_fact:
+        molecule_incus_exact_owned_instance_names: []
+
+    - name: Select every instance carrying the exact generic owner
+      ansible.builtin.set_fact:
+        molecule_incus_exact_owned_instance_names: >-
+          {{ molecule_incus_exact_owned_instance_names + [item.item] }}
+      loop: "{{ molecule_incus_all_instance_owners.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - item.rc == 0
+        - item.stdout | trim == molecule_incus_owner_effective
+
+    - name: Include declared legacy instances carrying the exact compatible owner
+      ansible.builtin.set_fact:
+        molecule_incus_exact_owned_instance_names: >-
+          {{ molecule_incus_exact_owned_instance_names + [item.item.name] }}
+      loop: "{{ molecule_incus_destroy_owners.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when:
+        - item.rc == 0
+        - item.stdout | trim == molecule_incus_owner_effective
+
+    - name: De-duplicate the exact-owned instance deletion set
+      ansible.builtin.set_fact:
+        molecule_incus_exact_owned_instance_names: >-
+          {{ molecule_incus_exact_owned_instance_names | unique | sort }}
+
+    - name: Inspect deterministic network ownership before cleanup
+      ansible.builtin.command:
+        argv:
+          - incus
+          - network
+          - get
+          - "{{ molecule_incus_network_effective }}"
+          - user.lit-molecule-owner
+      register: molecule_incus_destroy_network_owner
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Inspect exact-owned network state before cleanup
+      ansible.builtin.command:
+        argv:
+          - incus
+          - network
+          - show
+          - "{{ molecule_incus_network_effective }}"
+      register: molecule_incus_destroy_network_before
+      changed_when: false
+      failed_when: false
+      when:
+        - molecule_incus_destroy_network_owner.rc == 0
+        - molecule_incus_destroy_network_owner.stdout | trim == molecule_incus_owner_effective
+
+    - name: Resolve the recorded runtime firewall lifecycle
+      ansible.builtin.set_fact:
+        molecule_incus_recorded_firewall_controller: >-
+          {{
+            (
+              (molecule_incus_destroy_network_before.stdout | from_yaml).config[
+                'user.lit-molecule-firewall-controller'
+              ] | default('incus')
+            )
+            if (
+              molecule_incus_destroy_network_owner.rc == 0
+              and molecule_incus_destroy_network_owner.stdout | trim
+                == molecule_incus_owner_effective
+              and not (molecule_incus_destroy_network_before.skipped | default(false))
+            )
+            else 'unknown'
+          }}
+        molecule_incus_recorded_firewalld_zone: >-
+          {{
+            (
+              (molecule_incus_destroy_network_before.stdout | from_yaml).config[
+                'user.lit-molecule-firewalld-zone'
+              ] | default('none')
+            )
+            if (
+              molecule_incus_destroy_network_owner.rc == 0
+              and molecule_incus_destroy_network_owner.stdout | trim
+                == molecule_incus_owner_effective
+              and not (molecule_incus_destroy_network_before.skipped | default(false))
+            )
+            else 'none'
+          }}
+
+    - name: Validate the recorded runtime firewall lifecycle
+      ansible.builtin.assert:
+        that:
+          - >-
+            molecule_incus_recorded_firewall_controller
+            in ['incus', 'firewalld-runtime', 'unknown']
+          - >-
+            molecule_incus_recorded_firewalld_zone == 'none'
+            or molecule_incus_recorded_firewalld_zone
+              is match('^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$')
+        fail_msg: Refusing malformed runtime firewall ownership metadata.
+
+    - name: Detect an active host firewalld service during destroy
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - firewalld
+      register: molecule_incus_destroy_firewalld_service
+      changed_when: false
+      failed_when: false
+
+    - name: Resolve firewalld activity during destroy
+      ansible.builtin.set_fact:
+        molecule_incus_destroy_firewalld_active: >-
+          {{
+            molecule_incus_destroy_firewalld_service.rc == 0
+            and molecule_incus_destroy_firewalld_service.stdout | trim == 'active'
+          }}
+
+    - name: Create private Incus lifecycle evidence directory
+      ansible.builtin.file:
+        path: >-
+          {{
+            molecule_incus_evidence_root_effective
+            ~ '/incus-lifecycle/' ~ molecule_incus_identity_effective.scenario
+            ~ '/' ~ molecule_incus_identity_effective.target
+          }}
+        state: directory
+        mode: "0750"
+
+    - name: Capture sanitized evidence before destructive cleanup
+      ansible.builtin.copy:
+        dest: >-
+          {{
+            molecule_incus_evidence_root_effective
+            ~ '/incus-lifecycle/' ~ molecule_incus_identity_effective.scenario
+            ~ '/' ~ molecule_incus_identity_effective.target
+            ~ '/' ~ molecule_incus_evidence_timestamp.stdout
+            ~ '-' ~ item.item.name ~ '.json'
+          }}
+        mode: "0640"
+        content: |-
+          {
+            "schema_version": 1,
+            "captured_at": {{ molecule_incus_evidence_timestamp.stdout | to_json }},
+            "repository": {{ molecule_incus_identity_effective.repository | to_json }},
+            "run_id": {{ molecule_incus_identity_effective.run_id | to_json }},
+            "attempt": {{ molecule_incus_identity_effective.attempt | to_json }},
+            "scenario": {{ molecule_incus_identity_effective.scenario | to_json }},
+            "target": {{ molecule_incus_identity_effective.target | to_json }},
+            "instance": {{ item.item.name | to_json }},
+            "requested_type": {{ item.item.type | default('container') | to_json }},
+            "owner_label": {{ molecule_incus_owner_label | to_json }},
+            "instance_observed": {{ (item.rc == 0) | bool | to_json }},
+            "exact_owner_match": {{
+              (item.rc == 0 and item.stdout | trim == molecule_incus_owner_effective)
+              | bool | to_json
+            }},
+            "planned_action": {{
+              ('delete' if
+                item.rc == 0
+                and item.stdout | trim == molecule_incus_owner_effective
+                else 'retain') | to_json
+            }}
+          }
+      loop: "{{ molecule_incus_destroy_owners.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    - name: Revalidate ownership immediately before instance deletion
+      ansible.builtin.command:
+        argv:
+          - incus
+          - config
+          - get
+          - "{{ item }}"
+          - user.lit-molecule-owner
+      loop: "{{ molecule_incus_exact_owned_instance_names }}"
+      loop_control:
+        label: "{{ item }}"
+      register: molecule_incus_instance_owners_at_delete
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Delete only Incus instances owned by this exact test run
+      ansible.builtin.command:
+        argv:
+          - incus
+          - delete
+          - --force
+          - "{{ item.item }}"
+      loop: "{{ molecule_incus_instance_owners_at_delete.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - item.rc == 0
+        - item.stdout | trim == molecule_incus_owner_effective
+      register: molecule_incus_instance_deletions
+      changed_when: true
+      failed_when: false
+
+    - name: Revalidate deterministic network ownership immediately before deletion
+      ansible.builtin.command:
+        argv:
+          - incus
+          - network
+          - get
+          - "{{ molecule_incus_network_effective }}"
+          - user.lit-molecule-owner
+      register: molecule_incus_network_owner_at_delete
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Inspect the exact bridge runtime firewalld binding before removal
+      become: true
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - "--get-zone-of-interface={{ molecule_incus_network_effective }}"
+      register: molecule_incus_destroy_firewalld_zone_before
+      changed_when: false
+      failed_when: molecule_incus_destroy_firewalld_zone_before.rc not in [0, 2]
+      when:
+        - molecule_incus_destroy_firewalld_active | bool
+        - molecule_incus_recorded_firewall_controller == 'firewalld-runtime'
+        - molecule_incus_recorded_firewalld_zone != 'none'
+        - molecule_incus_network_owner_at_delete.rc == 0
+        - molecule_incus_network_owner_at_delete.stdout | trim == molecule_incus_owner_effective
+
+    - name: Refuse to remove a conflicting runtime firewalld binding
+      ansible.builtin.assert:
+        that:
+          - >-
+            molecule_incus_destroy_firewalld_zone_before.rc == 2
+            or molecule_incus_destroy_firewalld_zone_before.stdout | trim
+              == molecule_incus_recorded_firewalld_zone
+        fail_msg: >-
+          The exact-owned bridge is bound to firewalld zone
+          {{ molecule_incus_destroy_firewalld_zone_before.stdout | default('unknown') | trim }},
+          not its recorded runtime zone; refusing to alter foreign firewall state.
+      when:
+        - molecule_incus_destroy_firewalld_active | bool
+        - molecule_incus_recorded_firewall_controller == 'firewalld-runtime'
+        - molecule_incus_recorded_firewalld_zone != 'none'
+        - molecule_incus_network_owner_at_delete.rc == 0
+        - molecule_incus_network_owner_at_delete.stdout | trim == molecule_incus_owner_effective
+
+    - name: Remove only the exact bridge runtime firewalld binding
+      become: true
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - "--zone={{ molecule_incus_recorded_firewalld_zone }}"
+          - "--remove-interface={{ molecule_incus_network_effective }}"
+      register: molecule_incus_destroy_firewalld_removal
+      changed_when: true
+      when:
+        - molecule_incus_destroy_firewalld_active | bool
+        - molecule_incus_recorded_firewall_controller == 'firewalld-runtime'
+        - molecule_incus_recorded_firewalld_zone != 'none'
+        - molecule_incus_network_owner_at_delete.rc == 0
+        - molecule_incus_network_owner_at_delete.stdout | trim == molecule_incus_owner_effective
+        - molecule_incus_destroy_firewalld_zone_before.rc == 0
+        - >-
+          molecule_incus_destroy_firewalld_zone_before.stdout | trim
+          == molecule_incus_recorded_firewalld_zone
+
+    - name: Verify the runtime firewalld binding is absent before network deletion
+      become: true
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - "--get-zone-of-interface={{ molecule_incus_network_effective }}"
+      register: molecule_incus_destroy_firewalld_zone_after
+      changed_when: false
+      failed_when: molecule_incus_destroy_firewalld_zone_after.rc not in [0, 2]
+      when:
+        - molecule_incus_destroy_firewalld_active | bool
+        - molecule_incus_recorded_firewall_controller == 'firewalld-runtime'
+        - molecule_incus_recorded_firewalld_zone != 'none'
+        - molecule_incus_network_owner_at_delete.rc == 0
+        - molecule_incus_network_owner_at_delete.stdout | trim == molecule_incus_owner_effective
+
+    - name: Fail closed when the runtime firewalld binding remains
+      ansible.builtin.assert:
+        that:
+          - molecule_incus_destroy_firewalld_zone_after.rc == 2
+        fail_msg: >-
+          The runtime firewalld binding remains; refusing network deletion until
+          host firewall cleanup is proven.
+      when:
+        - molecule_incus_destroy_firewalld_active | bool
+        - molecule_incus_recorded_firewall_controller == 'firewalld-runtime'
+        - molecule_incus_recorded_firewalld_zone != 'none'
+        - molecule_incus_network_owner_at_delete.rc == 0
+        - molecule_incus_network_owner_at_delete.stdout | trim == molecule_incus_owner_effective
+
+    - name: Delete only the network owned by this exact test run
+      ansible.builtin.command:
+        argv:
+          - incus
+          - network
+          - delete
+          - "{{ molecule_incus_network_effective }}"
+      when:
+        - molecule_incus_network_owner_at_delete.rc == 0
+        - molecule_incus_network_owner_at_delete.stdout | trim == molecule_incus_owner_effective
+      register: molecule_incus_network_deletion
+      changed_when: molecule_incus_network_deletion.rc == 0
+      failed_when: false
+
+    - name: List Incus instance names after exact-owner cleanup
+      ansible.builtin.command:
+        argv:
+          - incus
+          - list
+          - --format
+          - csv
+          - -c
+          - n
+      register: molecule_incus_remaining_instance_names
+      changed_when: false
+
+    - name: Read remaining generic ownership labels without exposing foreign values
+      ansible.builtin.command:
+        argv:
+          - incus
+          - config
+          - get
+          - "{{ item }}"
+          - user.lit-molecule-owner
+      loop: "{{ molecule_incus_remaining_instance_names.stdout_lines }}"
+      loop_control:
+        label: "{{ item }}"
+      register: molecule_incus_remaining_instance_owners
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Read remaining compatible ownership on declared instances
+      ansible.builtin.command:
+        argv:
+          - incus
+          - config
+          - get
+          - "{{ item.name }}"
+          - "{{ molecule_incus_owner_label }}"
+      loop: "{{ molecule_incus_instances }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: molecule_incus_remaining_compatible_owners
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Initialize the remaining exact-owned instance set
+      ansible.builtin.set_fact:
+        molecule_incus_remaining_exact_owned_instances: []
+
+    - name: Select exact-owned instances that survived cleanup
+      ansible.builtin.set_fact:
+        molecule_incus_remaining_exact_owned_instances: >-
+          {{ molecule_incus_remaining_exact_owned_instances + [item.item] }}
+      loop: "{{ molecule_incus_remaining_instance_owners.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - item.rc == 0
+        - item.stdout | trim == molecule_incus_owner_effective
+
+    - name: Select declared legacy instances that survived cleanup
+      ansible.builtin.set_fact:
+        molecule_incus_remaining_exact_owned_instances: >-
+          {{
+            (
+              molecule_incus_remaining_exact_owned_instances + [item.item.name]
+            ) | unique | sort
+          }}
+      loop: "{{ molecule_incus_remaining_compatible_owners.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when:
+        - item.rc == 0
+        - item.stdout | trim == molecule_incus_owner_effective
+
+    - name: Read deterministic network ownership after cleanup
+      ansible.builtin.command:
+        argv:
+          - incus
+          - network
+          - get
+          - "{{ molecule_incus_network_effective }}"
+          - user.lit-molecule-owner
+      register: molecule_incus_remaining_network_owner
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: List all Incus networks after exact-owner cleanup
+      ansible.builtin.command:
+        argv:
+          - incus
+          - network
+          - list
+          - --format
+          - json
+      register: molecule_incus_remaining_network_names
+      changed_when: false
+
+    - name: Read all remaining network owners without exposing foreign values
+      ansible.builtin.command:
+        argv:
+          - incus
+          - network
+          - get
+          - "{{ item }}"
+          - user.lit-molecule-owner
+      loop: >-
+        {{
+          molecule_incus_remaining_network_names.stdout
+          | from_json
+          | map(attribute='name')
+          | list
+        }}
+      loop_control:
+        label: "{{ item }}"
+      register: molecule_incus_remaining_network_owners
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Initialize the remaining exact-owned network set
+      ansible.builtin.set_fact:
+        molecule_incus_remaining_exact_owned_networks: []
+
+    - name: Select every exact-owned network that survived cleanup
+      ansible.builtin.set_fact:
+        molecule_incus_remaining_exact_owned_networks: >-
+          {{ molecule_incus_remaining_exact_owned_networks + [item.item] }}
+      loop: "{{ molecule_incus_remaining_network_owners.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - item.rc == 0
+        - item.stdout | trim == molecule_incus_owner_effective
+
+    - name: Generate the network cleanup completion timestamp
+      ansible.builtin.command:
+        argv:
+          - date
+          - -u
+          - +%Y%m%dT%H%M%S%N
+      register: molecule_incus_network_cleanup_timestamp
+      changed_when: false
+
+    - name: Record network and exact-owner cleanup completion evidence
+      ansible.builtin.copy:
+        dest: >-
+          {{
+            molecule_incus_evidence_root_effective
+            ~ '/incus-lifecycle/' ~ molecule_incus_identity_effective.scenario
+            ~ '/' ~ molecule_incus_identity_effective.target
+            ~ '/' ~ molecule_incus_network_cleanup_timestamp.stdout
+            ~ '-network-destroy.json'
+          }}
+        mode: "0640"
+        content: |-
+          {
+            "schema_version": 1,
+            "captured_at": {{ molecule_incus_network_cleanup_timestamp.stdout | to_json }},
+            "repository": {{ molecule_incus_identity_effective.repository | to_json }},
+            "run_id": {{ molecule_incus_identity_effective.run_id | to_json }},
+            "attempt": {{ molecule_incus_identity_effective.attempt | to_json }},
+            "scenario": {{ molecule_incus_identity_effective.scenario | to_json }},
+            "target": {{ molecule_incus_identity_effective.target | to_json }},
+            "network": {{ molecule_incus_network_effective | to_json }},
+            "owner_label": "user.lit-molecule-owner",
+            "firewall_controller": {{
+              molecule_incus_recorded_firewall_controller | to_json
+            }},
+            "firewalld_runtime_zone": {{
+              molecule_incus_recorded_firewalld_zone | to_json
+            }},
+            "firewalld_active_at_destroy": {{
+              molecule_incus_destroy_firewalld_active | bool | to_json
+            }},
+            "firewalld_binding_absent_before_network_delete": {{
+              (
+                molecule_incus_recorded_firewall_controller != 'firewalld-runtime'
+                or molecule_incus_recorded_firewalld_zone == 'none'
+                or not molecule_incus_destroy_firewalld_active
+                or (
+                  molecule_incus_network_owner_at_delete.rc == 0
+                  and molecule_incus_network_owner_at_delete.stdout | trim
+                    == molecule_incus_owner_effective
+                  and molecule_incus_destroy_firewalld_zone_after.rc | default(0) == 2
+                )
+              ) | bool | to_json
+            }},
+            "network_observed": {{
+              (molecule_incus_destroy_network_owner.rc == 0) | bool | to_json
+            }},
+            "network_exact_owner_match": {{
+              (
+                molecule_incus_destroy_network_owner.rc == 0
+                and molecule_incus_destroy_network_owner.stdout | trim
+                  == molecule_incus_owner_effective
+              ) | bool | to_json
+            }},
+            "network_delete_attempted": {{
+              (
+                molecule_incus_network_owner_at_delete.rc == 0
+                and molecule_incus_network_owner_at_delete.stdout | trim
+                  == molecule_incus_owner_effective
+              ) | bool | to_json
+            }},
+            "network_deleted": {{
+              (
+                molecule_incus_network_deletion.rc | default(1) == 0
+                and molecule_incus_destroy_network_owner.rc == 0
+              ) | bool | to_json
+            }},
+            "exact_owned_instances_selected": {{
+              molecule_incus_exact_owned_instance_names | to_json
+            }},
+            "exact_owned_instances_remaining": {{
+              molecule_incus_remaining_exact_owned_instances | to_json
+            }},
+            "exact_owned_network_remaining": {{
+              (
+                molecule_incus_remaining_network_owner.rc == 0
+                and molecule_incus_remaining_network_owner.stdout | trim
+                  == molecule_incus_owner_effective
+              ) | bool | to_json
+            }},
+            "exact_owned_networks_remaining": {{
+              molecule_incus_remaining_exact_owned_networks | to_json
+            }},
+            "foreign_resources_deleted": false
+          }
+
+    - name: Fail closed when exact-owned Incus resources remain
+      ansible.builtin.assert:
+        that:
+          - molecule_incus_remaining_exact_owned_instances | length == 0
+          - molecule_incus_remaining_exact_owned_networks | length == 0
+          - >-
+            molecule_incus_remaining_network_owner.rc != 0
+            or molecule_incus_remaining_network_owner.stdout | trim
+              != molecule_incus_owner_effective
+        fail_msg: >-
+          Exact-owned Incus resources remain after cleanup. Foreign or unlabelled
+          resources were retained; investigate the lifecycle evidence before retrying.
+
+    - name: Remove persisted local identity only after successful cleanup
+      ansible.builtin.file:
+        path: "{{ molecule_incus_local_state_file }}"
+        state: absent
+      when:
+        - molecule_incus_local_state_file | length > 0
+        - not (molecule_incus_local_run_identity.skipped | default(false))
