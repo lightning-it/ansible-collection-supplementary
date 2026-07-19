@@ -128,6 +128,30 @@
             | regex_findall('use_proxy: false')
             | length == 13
           - >-
+            vault_raft_snapshot_molecule_api_sources
+            | regex_findall(
+                'timeout: "\\{\\{ vault_raft_snapshot_restore_timeout \\}\\}"'
+              )
+            | length == 1
+          - >-
+            vault_raft_snapshot_molecule_api_sources
+            is search(
+              'max_request_size = '
+              ~ '\\{\\{ vault_raft_snapshot_max_raw_bytes \\| int \\+ 1048576 \\}\\}'
+            )
+          - >-
+            vault_raft_snapshot_molecule_api_sources
+            is search(
+              '/tmp:rw,noexec,nosuid,nodev,size='
+              ~ '\\{\\{ vault_raft_snapshot_max_raw_bytes \\| int \\+ 1048576 \\}\\}'
+            )
+          - >-
+            vault_raft_snapshot_molecule_api_sources
+            | regex_findall(
+                '"\\{\\{ vault_raft_snapshot_restore_timeout \\}\\}s"'
+              )
+            | length == 2
+          - >-
             vault_raft_snapshot_molecule_restore_artifacts.results
             | selectattr('stat.exists')
             | list

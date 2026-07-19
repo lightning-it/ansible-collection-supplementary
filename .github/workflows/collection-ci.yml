@@ -1564,7 +1564,7 @@ jobs:
     name: Collection / Release Validation
     if: always()
     needs:
-      [lint-sanity, build-install, role-coverage, tiny, heavy, acceptance, evidence, release-security]
+      [lint-sanity, build-install, role-coverage, quality-matrix, tiny, heavy, acceptance, evidence, release-security]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -1586,7 +1586,8 @@ jobs:
           path: artifacts/candidate
       - name: Download exact base evidence
         if: >-
-          (github.event_name != 'push' || github.ref != 'refs/heads/main')
+          (github.event_name != 'push' || github.ref != 'refs/heads/main') &&
+          needs.quality-matrix.outputs.keycloak_required == 'true'
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7
         with:
           name: collection-evidence-${{ env.SOURCE_SHA }}
@@ -1597,7 +1598,7 @@ jobs:
         with:
           name: collection-release-evidence-${{ env.SOURCE_SHA }}
           path: artifacts/final
-      - name: Validate exact candidate and evidence
+      - name: Validate exact candidate
         if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         run: |
           set -euo pipefail
@@ -1606,6 +1607,12 @@ jobs:
             cd artifacts/candidate
             sha256sum --check candidate-SHA256SUMS
           )
+      - name: Validate exact runtime evidence
+        if: >-
+          (github.event_name != 'push' || github.ref != 'refs/heads/main') &&
+          needs.quality-matrix.outputs.keycloak_required == 'true'
+        run: |
+          set -euo pipefail
           python scripts/quality_evidence.py validate \
             --root artifacts/final/evidence \
             --expected-commit "$SOURCE_SHA" \

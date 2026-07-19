@@ -218,6 +218,9 @@
           listener "tcp" {
             address = "0.0.0.0:8200"
             cluster_address = "0.0.0.0:8201"
+            max_request_size = {{ vault_raft_snapshot_max_raw_bytes | int + 1048576 }}
+            http_read_timeout = "{{ vault_raft_snapshot_restore_timeout }}s"
+            max_request_duration = "{{ vault_raft_snapshot_restore_timeout }}s"
             tls_cert_file = "/{{ vault_deploy_flavour | default('vault') }}/certs/vault.crt"
             tls_key_file = "/{{ vault_deploy_flavour | default('vault') }}/certs/vault.key"
           }
@@ -255,11 +258,20 @@
               vault_raft_snapshot_restore_cluster_port
             }}:8201
           - --volume
-          - "{{ vault_raft_snapshot_restore_work_root }}/data:/{{ vault_deploy_flavour | default('vault', true) }}/data"
+          - >-
+            {{ vault_raft_snapshot_restore_work_root }}/data:/{{
+              vault_deploy_flavour | default('vault', true)
+            }}/data
           - --volume
-          - "{{ vault_raft_snapshot_restore_work_root }}/config:/{{ vault_deploy_flavour | default('vault', true) }}/config:ro"
+          - >-
+            {{ vault_raft_snapshot_restore_work_root }}/config:/{{
+              vault_deploy_flavour | default('vault', true)
+            }}/config:ro
           - --volume
-          - "{{ vault_raft_snapshot_production_cert_dir }}:/{{ vault_deploy_flavour | default('vault', true) }}/certs:ro"
+          - >-
+            {{ vault_raft_snapshot_production_cert_dir }}:/{{
+              vault_deploy_flavour | default('vault', true)
+            }}/certs:ro
           - --user
           - >-
             {{ vault_raft_snapshot_restore_run_as_user }}:{{
@@ -271,7 +283,7 @@
           - no-new-privileges
           - --read-only
           - --tmpfs
-          - /tmp:rw,noexec,nosuid,nodev,size=64m
+          - /tmp:rw,noexec,nosuid,nodev,size={{ vault_raft_snapshot_max_raw_bytes | int + 1048576 }}
           - --env
           - SKIP_SETCAP=1
           - --env
@@ -341,7 +353,41 @@
         use_proxy: false
         ca_path: "{{ vault_raft_snapshot_target_ca_cert_path }}"
         status_code: [200, 204]
-        timeout: "{{ vault_raft_snapshot_timeout }}"
+        timeout: "{{ vault_raft_snapshot_restore_timeout }}"
+        return_content: false
+      register: _vault_raft_snapshot_restore_request
+      failed_when: false
+      no_log: true
+
+    - name: Classify isolated Raft restore request result without response content
+      ansible.builtin.set_fact:
+        _vault_raft_snapshot_restore_http_status: >-
+          {{ _vault_raft_snapshot_restore_request.status | default(-1) | int }}
+        _vault_raft_snapshot_restore_failure_class: >-
+          {% if _vault_raft_snapshot_restore_request.status | default(-1) | int == 413 %}
+          request_too_large
+          {% elif _vault_raft_snapshot_restore_request.status | default(-1) | int in [408, 504] %}
+          request_timeout
+          {% elif _vault_raft_snapshot_restore_request.status | default(-1) | int == -1 %}
+          transport_failure
+          {% elif _vault_raft_snapshot_restore_request.status | default(-1) | int >= 500 %}
+          server_error
+          {% else %}
+          unexpected_status
+          {% endif %}
+      no_log: true
+      changed_when: false
+
+    - name: Require successful isolated Raft snapshot restore request
+      ansible.builtin.assert:
+        that:
+          - _vault_raft_snapshot_restore_http_status | int in [200, 204]
+        fail_msg: >-
+          Isolated Raft snapshot restore failed with HTTP status
+          {{ _vault_raft_snapshot_restore_http_status }} and safe class
+          {{ _vault_raft_snapshot_restore_failure_class | trim }}.
+        quiet: true
+      no_log: false
 
     - name: Restart isolated Vault after Raft restore
       ansible.builtin.command:
