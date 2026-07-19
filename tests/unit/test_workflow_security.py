@@ -480,7 +480,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertNotIn("Skipping Molecule tests because Docker", molecule)
         self.assertIn("WUNDER_DEVTOOLS_WORKSPACE_MODE=ro", molecule)
         self.assertIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0", molecule)
-        self.assertNotIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0", molecule)
+        self.assertNotIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1", molecule)
 
     def test_devtools_capability_policy_expands_to_individual_docker_arguments(self) -> None:
         wrapper = ROOT / "scripts" / "wunder-devtools-ee.sh"
