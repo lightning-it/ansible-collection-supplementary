@@ -34,7 +34,11 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       !(github.event.pull_request.user.login == 'renovate[bot]' &&
         startsWith(github.event.pull_request.head.ref, 'renovate/') &&
-        github.event.pull_request.base.ref == 'develop') &&
+        github.event.pull_request.base.ref == 'develop' &&
+        contains(github.event.pull_request.labels.*.name, 'renovate') &&
+        contains(github.event.pull_request.labels.*.name, 'dependencies') &&
+        contains(github.event.pull_request.labels.*.name, 'safe-automerge') &&
+        !contains(github.event.pull_request.labels.*.name, 'breaking-update')) &&
       !(github.event.pull_request.user.login == 'litreleasebot' &&
         startsWith(github.event.pull_request.head.ref, 'chore/sync-shared-assets-lit-') &&
         github.event.pull_request.base.ref == 'develop' &&
@@ -109,8 +113,17 @@ jobs:
             && [ "${PR_HEAD_REPO}" = "${REPOSITORY}" ] \
             && [[ "${PR_HEAD}" == renovate/* ]] \
             && [ "${PR_BASE}" = "develop" ]; then
-            if live_pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")" \
-              && jq -e \
+            for attempt in 1 2 3; do
+              if live_pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"; then
+                break
+              fi
+              if [ "${attempt}" -eq 3 ]; then
+                echo "Unable to fetch live PR state after ${attempt} attempts." >&2
+                exit 1
+              fi
+              sleep $((attempt * 2))
+            done
+            if jq -e \
               --arg author "${PR_AUTHOR}" \
               --arg base "${PR_BASE}" \
               --arg head "${PR_HEAD}" \
@@ -499,6 +512,7 @@ jobs:
                   pageInfo { hasNextPage endCursor }
                   nodes {
                     isResolved
+                    isOutdated
                     comments(first: 1) {
                       nodes { author { login } }
                     }
@@ -542,7 +556,7 @@ jobs:
                   --arg reviewer "${COPILOT_REVIEWER_LOGIN}" \
                   '[
                     (.data.repository.pullRequest.reviewThreads.nodes // [])[]
-                    | select(.isResolved == false)
+                    | select(.isResolved == false and .isOutdated == false)
                     | select(
                         (.comments.nodes[0].author.login // "") as $login
                         | ($login == $reviewer or $login == ($reviewer + "[bot]"))

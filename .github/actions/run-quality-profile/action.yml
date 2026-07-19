@@ -170,15 +170,16 @@ runs:
       run: |
         set -euo pipefail
 
-        python3 scripts/prune_stale_incus_resources.py \
-          --repository "$GITHUB_REPOSITORY" \
-          --current-run-id "$GITHUB_RUN_ID"
-
         command -v ansible-galaxy
         command -v incus
         command -v molecule
         command -v openssl
         command -v python3
+
+        python3 scripts/prune_stale_incus_resources.py \
+          --repository "$GITHUB_REPOSITORY" \
+          --current-run-id "$GITHUB_RUN_ID"
+
         incus version
 
         available_kib="$(df -Pk "$RUNNER_TEMP" | awk 'NR == 2 {print $4}')"
