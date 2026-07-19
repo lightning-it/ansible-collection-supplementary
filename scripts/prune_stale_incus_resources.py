@@ -60,8 +60,13 @@ def prune(repository: str, current_run_id: str) -> None:
         if NETWORK_RE.fullmatch(name) is None or not isinstance(config, dict) or used_by:
             continue
         if exact_owner(config, repository, current_run_id) and revalidate("network", name, repository, current_run_id):
-            shown = json.loads(incus("network", "show", name, "--format", "json"))
-            if not shown.get("used_by", []):
+            refreshed = json.loads(incus("network", "list", "--format", "json"))
+            current = next((item for item in refreshed if item.get("name") == name), None)
+            if (
+                current is not None
+                and not current.get("used_by", [])
+                and exact_owner(current.get("config", {}), repository, current_run_id)
+            ):
                 incus("network", "delete", name, capture=False)
 
 
