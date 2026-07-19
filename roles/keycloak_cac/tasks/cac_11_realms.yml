@@ -24,7 +24,7 @@
 - name: Reconcile Keycloak realms  # noqa args[module]
   community.general.keycloak_realm: >-
     {{
-      keycloak_cac_realm_definition.item
+      keycloak_cac_realm_definition.keycloak_cac_realm_definition
       | combine({
           'auth_keycloak_url': keycloak_cac_url,
           'auth_realm': keycloak_cac_realm,
@@ -37,15 +37,21 @@
   loop: "{{ keycloak_cac_realm_plan.results | default([]) }}"
   loop_control:
     loop_var: keycloak_cac_realm_definition
-    label: "{{ keycloak_cac_realm_definition.item.realm | default('unnamed') }}"
+    label: >-
+      {{
+        keycloak_cac_realm_definition.keycloak_cac_realm_definition.realm
+        | default('unnamed')
+      }}
   when: >-
     (
-      keycloak_cac_realm_definition.item.state | default('present') == 'absent'
+      keycloak_cac_realm_definition.keycloak_cac_realm_definition.state
+      | default('present') == 'absent'
       and keycloak_cac_realm_definition.existing | default({}) | length > 0
     )
     or
     (
-      keycloak_cac_realm_definition.item.state | default('present') == 'present'
+      keycloak_cac_realm_definition.keycloak_cac_realm_definition.state
+      | default('present') == 'present'
       and (
         keycloak_cac_realm_definition.existing | default({})
         | combine(keycloak_cac_realm_definition.proposed | default({}))
