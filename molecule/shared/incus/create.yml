@@ -1105,6 +1105,26 @@
       delay: 2
       changed_when: false
 
+    - name: Reassert guest DHCP after attaching the isolated network
+      ansible.builtin.command:
+        argv:
+          - incus
+          - exec
+          - "{{ item.name }}"
+          - --
+          - /bin/sh
+          - -c
+          - >-
+            ip link set eth0 up &&
+            (networkctl reconfigure eth0 || true) &&
+            (networkctl renew eth0 || true)
+      loop: "{{ molecule_incus_instances }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: molecule_incus_dhcp_reasserted
+      changed_when: false
+      failed_when: molecule_incus_dhcp_reasserted.rc != 0
+
     - name: Wait for an Incus-managed IPv4 lease
       ansible.builtin.command:
         argv:
