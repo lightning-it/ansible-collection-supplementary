@@ -1,0 +1,308 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lightning-it/ansible-collection-supplementary/evidence-manifest.schema.json",
+  "title": "lit.supplementary quality evidence manifest",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "mode",
+    "repository",
+    "commit_sha",
+    "expected_commit_sha",
+    "commit_consistent",
+    "workflow_run_id",
+    "workflow_attempt",
+    "test_totals",
+    "failures",
+    "skips",
+    "results",
+    "matrix",
+    "security_evidence",
+    "prerequisites",
+    "secret_scan",
+    "checksums",
+    "blockers",
+    "release_eligible"
+  ],
+  "$defs": {
+    "status": {
+      "enum": [
+        "passed",
+        "failed",
+        "skipped-with-approved-justification",
+        "not-applicable",
+        "infrastructure-error",
+        "blocked-external-service",
+        "blocked-external-license",
+        "blocked-external-infrastructure"
+      ]
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tests", "failures", "errors", "skipped"],
+      "properties": {
+        "tests": {"type": "integer", "minimum": 0},
+        "failures": {"type": "integer", "minimum": 0},
+        "errors": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0}
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "role",
+        "profile",
+        "scenario",
+        "target",
+        "run_attempt",
+        "status",
+        "totals",
+        "test_cases",
+        "junit",
+        "allure_results",
+        "meaningful"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "minLength": 1},
+        "profile": {"enum": ["tiny", "heavy", "application-acceptance"]},
+        "scenario": {"type": "string", "minLength": 1},
+        "target": {"type": "string", "minLength": 1},
+        "run_attempt": {"type": "string", "minLength": 1},
+        "target_disposition": {"enum": ["supported", "candidate"]},
+        "release_required": {"type": "boolean"},
+        "status": {"$ref": "#/$defs/status"},
+        "totals": {"$ref": "#/$defs/totals"},
+        "test_cases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["classname", "name", "status", "duration_seconds", "roles"],
+            "properties": {
+              "classname": {"type": "string"},
+              "name": {"type": "string", "minLength": 1},
+              "status": {"enum": ["passed", "failure", "error", "skipped"]},
+              "duration_seconds": {"type": "number", "minimum": 0},
+              "roles": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 1,
+                "uniqueItems": true,
+                "items": {"type": "string", "minLength": 1}
+              }
+            }
+          }
+        },
+        "junit": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "allure_results": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "meaningful": {"type": "boolean"}
+      }
+    },
+    "matrixCell": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "scenario",
+        "profile",
+        "target",
+        "run_attempt",
+        "target_disposition",
+        "release_required",
+        "roles",
+        "status"
+      ],
+      "properties": {
+        "scenario": {"type": "string", "minLength": 1},
+        "profile": {"enum": ["tiny", "heavy", "application-acceptance"]},
+        "target": {"type": "string", "minLength": 1},
+        "run_attempt": {"type": "string", "minLength": 1},
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "status": {"$ref": "#/$defs/status"}
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {"const": 2},
+    "mode": {"enum": ["ci", "candidate", "release"]},
+    "repository": {"type": "string", "minLength": 1},
+    "branch": {"type": "string", "minLength": 1},
+    "commit_sha": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+    "expected_commit_sha": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+    "commit_consistent": {"type": "boolean"},
+    "workflow_run_id": {"type": "string", "minLength": 1},
+    "workflow_attempt": {"type": "string", "minLength": 1},
+    "test_totals": {"$ref": "#/$defs/totals"},
+    "failures": {"type": "integer", "minimum": 0},
+    "skips": {"type": "integer", "minimum": 0},
+    "results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/result"}
+    },
+    "matrix": {
+      "type": "object",
+      "required": ["expected", "actual_count"],
+      "properties": {
+        "expected": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/matrixCell"}
+        },
+        "actual_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "security_evidence": {
+      "type": "object",
+      "required": [
+        "required_for_release",
+        "missing",
+        "external_secret_findings",
+        "vulnerability_blocking_findings",
+        "provenance_commit_sha",
+        "candidate_sha256",
+        "semantic_valid"
+      ],
+      "properties": {
+        "required_for_release": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "missing": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "external_secret_findings": {"type": "integer", "minimum": 0},
+        "vulnerability_blocking_findings": {"type": "integer", "minimum": 0},
+        "provenance_commit_sha": {
+          "type": ["string", "null"],
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "candidate_sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "semantic_valid": {"type": "boolean"}
+      }
+    },
+    "prerequisites": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lint": {"const": "success"},
+        "build": {"const": "success"},
+        "coverage": {"const": "success"},
+        "tiny": {"const": "success"},
+        "heavy": {"const": "success"},
+        "acceptance": {"const": "success"},
+        "cleanup": {"const": "success"},
+        "destroy": {"const": "success"}
+      },
+      "oneOf": [
+        {"maxProperties": 0},
+        {
+          "required": [
+            "lint",
+            "build",
+            "coverage",
+            "tiny",
+            "heavy",
+            "acceptance",
+            "cleanup",
+            "destroy"
+          ]
+        }
+      ]
+    },
+    "secret_scan": {
+      "type": "object",
+      "required": [
+        "canary_detected_before_redaction",
+        "clean",
+        "files_scanned",
+        "archive_members_scanned",
+        "findings",
+        "errors"
+      ],
+      "properties": {
+        "canary_detected_before_redaction": {"const": true},
+        "clean": {"const": true},
+        "files_scanned": {"type": "integer", "minimum": 1},
+        "archive_members_scanned": {"type": "integer", "minimum": 0},
+        "findings": {"type": "array", "maxItems": 0},
+        "errors": {"type": "array", "maxItems": 0}
+      }
+    },
+    "checksums": {
+      "type": "object",
+      "required": ["algorithm", "file", "entry_count"],
+      "properties": {
+        "algorithm": {"const": "sha256"},
+        "file": {"const": "checksums/SHA256SUMS"},
+        "entry_count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "candidate_execution_passed": {"type": "boolean"},
+    "release_eligible": {"type": "boolean"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"mode": {"const": "release"}},
+        "required": ["mode"]
+      },
+      "then": {
+        "properties": {
+          "release_eligible": {"const": true},
+          "security_evidence": {
+            "properties": {
+              "missing": {"maxItems": 0},
+              "vulnerability_blocking_findings": {"const": 0},
+              "provenance_commit_sha": {
+                "type": "string",
+                "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+              },
+              "candidate_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "semantic_valid": {"const": true}
+            }
+          }
+        },
+        "required": ["release_eligible"]
+      }
+    },
+    {
+      "if": {
+        "properties": {"mode": {"const": "candidate"}},
+        "required": ["mode"]
+      },
+      "then": {
+        "properties": {
+          "candidate_execution_passed": {"const": true},
+          "release_eligible": {"const": false}
+        },
+        "required": ["candidate_execution_passed", "release_eligible"]
+      }
+    }
+  ]
+}

@@ -92,9 +92,13 @@ if [ -f /workspace/collections/requirements.yml ]; then
     -p "${COLLECTIONS_DIR}" \
     --force >&2
 elif [ -f /workspace/galaxy.yml ]; then
+  dependency_output="$(
+    bash /workspace/scripts/devtools-galaxy.sh \
+      dependencies /workspace/galaxy.yml
+  )"
   while IFS= read -r dep_spec; do
     dep_specs+=("$dep_spec")
-  done < <(bash /workspace/scripts/devtools-galaxy.sh dependencies /workspace/galaxy.yml || true)
+  done <<< "$dependency_output"
 fi
 
 for dep_spec in "${dep_specs[@]}"; do
@@ -111,7 +115,7 @@ if [ -z "${artifact:-}" ] || [ ! -f "$artifact" ]; then
   echo "ERROR: Collection artifact not found. Build output was:" >&2
   echo "$build_out" >&2
   echo "DEBUG: ${HOME} contents:" >&2
-  ls -la "${HOME}" >&2 || true
+  ls -la "${HOME}" >&2
   exit 1
 fi
 

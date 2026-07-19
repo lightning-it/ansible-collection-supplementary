@@ -35,7 +35,7 @@ fi
 
 REQUIRES_ANSIBLE=""
 if [ -f meta/runtime.yml ]; then
-  REQUIRES_ANSIBLE="$(galaxy_top_level_value "requires_ansible" "meta/runtime.yml" || true)"
+  REQUIRES_ANSIBLE="$(galaxy_top_level_value "requires_ansible" "meta/runtime.yml")"
 fi
 
 ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION:-$(python3 - <<'PY'
@@ -87,6 +87,7 @@ COLLECTION_NAME="$COLLECTION_NAME" \
 ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION}" \
 ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}" \
 ANSIBLE_LINT_SKIP_META_RUNTIME="${ANSIBLE_LINT_SKIP_META_RUNTIME}" \
+WUNDER_DEVTOOLS_NETWORK=bridge \
 CONTAINER_HOME=/tmp/wunder \
 bash scripts/wunder-devtools-ee.sh bash -c '
   set -euo pipefail
@@ -116,7 +117,7 @@ bash scripts/wunder-devtools-ee.sh bash -c '
   if [ ! -d "$coll_root" ]; then
     echo "Collection root not found at $coll_root" >&2
     echo "DEBUG: content of ${COLLECTIONS_DIR}/ansible_collections/${ns}:" >&2
-    ls -la "${COLLECTIONS_DIR}/ansible_collections/${ns}" 2>/dev/null || true
+    ls -la "${COLLECTIONS_DIR}/ansible_collections/${ns}"
     exit 1
   fi
 
@@ -127,11 +128,6 @@ bash scripts/wunder-devtools-ee.sh bash -c '
   if [ -d "$stale_collection_dir" ]; then
     rm -rf "$stale_collection_dir"
   fi
-  workspace_stale_collection_dir="/workspace/.ansible/collections/ansible_collections/${ns}/${name}"
-  if [ -d "$workspace_stale_collection_dir" ]; then
-    rm -rf "$workspace_stale_collection_dir"
-  fi
-
   export ANSIBLE_CONFIG="/workspace/ansible.cfg"
   export ANSIBLE_COLLECTIONS_PATH="${COLLECTIONS_DIR}:/workspace/collections:/usr/share/ansible/collections"
 

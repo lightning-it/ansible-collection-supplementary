@@ -38,27 +38,40 @@
           owner: "{{ samba_deploy_share_owner }}"
           group: "{{ samba_deploy_share_group }}"
           mode: "{{ samba_deploy_share_mode }}"
+          deployment_modes:
+            - share
         - path: "{{ samba_deploy_pod_manifest_path | dirname }}"
           mode: "0755"
+          deployment_modes:
+            - share
+            - ad_dc
         - path: "{{ samba_deploy_ad_dc_data_dir }}"
           mode: "0750"
+          deployment_modes:
+            - ad_dc
         - path: "{{ samba_deploy_ad_dc_config_dir }}"
           mode: "0750"
+          deployment_modes:
+            - ad_dc
         - path: "{{ samba_deploy_ad_dc_cache_dir }}"
           mode: "0750"
+          deployment_modes:
+            - ad_dc
         - path: "{{ samba_deploy_ad_dc_log_dir }}"
           mode: "0750"
+          deployment_modes:
+            - ad_dc
         - path: "{{ samba_deploy_ad_dc_entrypoint_dir }}"
           mode: "0750"
+          deployment_modes:
+            - ad_dc
+        - path: "{{ samba_deploy_ad_dc_tls_dir }}"
+          mode: "0700"
+          deployment_modes:
+            - ad_dc
       when:
         - item.path | default('', true) | trim | length > 0
-        - samba_deploy_mode == 'ad_dc' or item.path not in [
-            samba_deploy_ad_dc_data_dir,
-            samba_deploy_ad_dc_config_dir,
-            samba_deploy_ad_dc_cache_dir,
-            samba_deploy_ad_dc_log_dir,
-            samba_deploy_ad_dc_entrypoint_dir
-          ]
+        - samba_deploy_mode in item.deployment_modes
       tags:
         - deployment
 
@@ -69,6 +82,7 @@
         mode: "0750"
       register: samba_deploy_bind_user_render
       when: samba_deploy_mode == 'ad_dc'
+      no_log: true
       tags:
         - deployment
 
@@ -79,6 +93,7 @@
         mode: "0750"
       register: samba_deploy_default_principals_render
       when: samba_deploy_mode == 'ad_dc'
+      no_log: true
       tags:
         - deployment
 
@@ -88,6 +103,7 @@
         dest: "{{ samba_deploy_pod_manifest_path }}"
         mode: "0644"
       register: samba_deploy_manifest_render
+      no_log: true
       tags:
         - deployment
 
@@ -110,8 +126,24 @@
               kubeplay_action: remove
               kubeplay_pod_name: "{{ samba_deploy_pod_name }}"
 
-    - name: Run Samba pod with kubeplay
+    - name: Check whether the Samba pod already exists
       when: samba_deploy_kubeplay_run | bool
+      ansible.builtin.command:
+        argv:
+          - podman
+          - pod
+          - exists
+          - "{{ samba_deploy_pod_name }}"
+      register: samba_deploy_pod_exists
+      changed_when: false
+      failed_when: samba_deploy_pod_exists.rc not in [0, 1]
+      tags:
+        - deployment
+
+    - name: Run Samba pod with kubeplay
+      when:
+        - samba_deploy_kubeplay_run | bool
+        - samba_deploy_pod_exists.rc == 1
       tags:
         - deployment
       ansible.builtin.include_role:

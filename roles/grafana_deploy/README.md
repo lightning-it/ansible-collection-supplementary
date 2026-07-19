@@ -14,7 +14,7 @@ password in HC Vault when Vault access is configured. Without HC Vault, provide
 
 | Variable | Default | Description |
 |---|---|---|
-| `grafana_deploy_image` | `docker.io/grafana/grafana:11.5.2` | Grafana image. |
+| `grafana_deploy_image` | Tag-and-digest reference in `meta/source-dependencies.yml` | Immutable Grafana image. |
 | `grafana_deploy_host_data_dir` | `/srv/grafana/data` | Persistent data. |
 | `grafana_deploy_port` | `3002` | Host port for the Grafana container. |
 | `grafana_deploy_public_fqdn` | `grafana.{{ inventory_hostname }}` | Reverse proxy hostname. |

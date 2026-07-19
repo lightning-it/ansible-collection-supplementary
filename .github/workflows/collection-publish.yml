@@ -5,7 +5,7 @@ name: Publish collection release
 on:
   pull_request:
     types: [closed]
-    branches: ["main"]
+    branches: [main]
     paths:
       - galaxy.yml
       - CHANGELOG.rst
@@ -13,21 +13,29 @@ on:
   workflow_dispatch:
     inputs:
       create_github_release:
-        description: Create the GitHub Release.
+        description: Create the GitHub Release when repository policy enables it.
         required: false
         default: "true"
         type: choice
         options: ["true", "false"]
       publish_galaxy:
-        description: Publish to Ansible Galaxy.
+        description: Publish to Galaxy when repository policy enables it.
         required: false
-        default: "false"
+        default: "true"
         type: choice
         options: ["true", "false"]
+      release_sha:
+        description: Exact protected-main SHA to release; automated dispatch sets this.
+        required: true
+      reviewed_head_sha:
+        description: Reviewed PR head parent for automated merge-integrity validation.
+        required: true
+      reviewed_base_sha:
+        description: Reviewed PR base parent for automated merge-integrity validation.
+        required: true
 
 permissions:
-  actions: write
-  contents: write
+  contents: read
 
 jobs:
   dispatch:
@@ -38,35 +46,91 @@ jobs:
       startsWith(github.event.pull_request.head.ref, 'release/v')
     name: Dispatch collection publish from main
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
 
     steps:
-      - name: Derive release publishing settings
-        id: settings
+      - name: Verify reviewed merge and derive publishing settings
+        id: release
         env:
+          GH_TOKEN: ${{ github.token }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          REVIEWED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           set -euo pipefail
 
-          create_github_release=false
-          publish_galaxy=false
-          github_release_marker="GitHub release creation: \`true\`"
-          galaxy_publish_marker="Galaxy publishing: \`true\`"
+          test "$MERGE_SHA" != "null"
+          test "$MERGE_SHA" != ""
+          test "$REVIEWED_HEAD_SHA" != ""
+          test "$HEAD_REPOSITORY" = "$GITHUB_REPOSITORY"
 
-          if [[ "$PR_BODY" == *"$github_release_marker"* ]]; then
-            create_github_release=true
+          main_sha="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha'
+          )"
+          test "$main_sha" = "$MERGE_SHA"
+
+          commit_json="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/commits/${MERGE_SHA}"
+          )"
+          mapfile -t parents < <(jq -r '.parents[].sha' <<< "$commit_json")
+          test "${#parents[@]}" -eq 2
+          test "${parents[1]}" = "$REVIEWED_HEAD_SHA"
+
+          merged_galaxy="$RUNNER_TEMP/merged-galaxy.yml"
+          gh api "repos/${GITHUB_REPOSITORY}/contents/galaxy.yml?ref=${MERGE_SHA}" \
+            --jq .content \
+            | base64 --decode > "$merged_galaxy"
+          release_version="$(MERGED_GALAXY="$merged_galaxy" python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          match = re.search(
+              r"(?m)^version:\s*[\"']?([^\s\"']+)",
+              Path(os.environ["MERGED_GALAXY"]).read_text(encoding="utf-8"),
+          )
+          if match is None:
+              raise SystemExit("merged galaxy.yml has no version")
+          print(match.group(1))
+          PY
+          )"
+          if ! [[ "$release_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Merged galaxy.yml does not contain a stable semantic version." >&2
+            exit 1
           fi
-          if [[ "$PR_BODY" == *"$galaxy_publish_marker"* ]]; then
-            publish_galaxy=true
+          test "$HEAD_REF" = "release/v${release_version}"
+
+          create_github_release=true
+          publish_galaxy=true
+          if [[ "$PR_BODY" == *"GitHub release creation: \`false\`"* ]]; then
+            create_github_release=false
+          fi
+          if [[ "$PR_BODY" == *"Galaxy publishing: \`false\`"* ]]; then
+            publish_galaxy=false
           fi
 
-          echo "create_github_release=$create_github_release" >> "$GITHUB_OUTPUT"
-          echo "publish_galaxy=$publish_galaxy" >> "$GITHUB_OUTPUT"
+          {
+            echo "release_sha=$MERGE_SHA"
+            echo "reviewed_head_sha=$REVIEWED_HEAD_SHA"
+            echo "reviewed_base_sha=${parents[0]}"
+            echo "create_github_release=$create_github_release"
+            echo "publish_galaxy=$publish_galaxy"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Dispatch publish workflow on main
+      - name: Dispatch exact-SHA publish workflow on main
         env:
           GH_TOKEN: ${{ github.token }}
-          CREATE_GITHUB_RELEASE: ${{ steps.settings.outputs.create_github_release }}
-          PUBLISH_GALAXY: ${{ steps.settings.outputs.publish_galaxy }}
+          CREATE_GITHUB_RELEASE: ${{ steps.release.outputs.create_github_release }}
+          PUBLISH_GALAXY: ${{ steps.release.outputs.publish_galaxy }}
+          RELEASE_SHA: ${{ steps.release.outputs.release_sha }}
+          REVIEWED_HEAD_SHA: ${{ steps.release.outputs.reviewed_head_sha }}
+          REVIEWED_BASE_SHA: ${{ steps.release.outputs.reviewed_base_sha }}
         run: |
           set -euo pipefail
 
@@ -74,149 +138,1208 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --ref main \
             -f create_github_release="$CREATE_GITHUB_RELEASE" \
-            -f publish_galaxy="$PUBLISH_GALAXY"
+            -f publish_galaxy="$PUBLISH_GALAXY" \
+            -f release_sha="$RELEASE_SHA" \
+            -f reviewed_head_sha="$REVIEWED_HEAD_SHA" \
+            -f reviewed_base_sha="$REVIEWED_BASE_SHA"
 
   publish:
-    if: github.event_name == 'workflow_dispatch'
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
     name: Publish collection release
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     environment: ansible-collections
-    env:
-      RELEASE_BOT_APP_ID: ${{ secrets.RELEASE_BOT_APP_ID }}
-      RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
-      GALAXY_API_TOKEN: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
+    concurrency:
+      group: collection-release-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      actions: write
+      attestations: read
+      contents: write
+      id-token: write
+      pull-requests: read
 
     steps:
-      - name: Create GitHub App token
-        id: app-token
-        if: ${{ env.RELEASE_BOT_APP_ID != '' && env.RELEASE_BOT_PRIVATE_KEY != '' }}
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ env.RELEASE_BOT_APP_ID }}
-          private-key: ${{ env.RELEASE_BOT_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
-
-      - name: Resolve release token
-        id: token
+      - name: Enforce dedicated release-tag principal configuration
         env:
-          APP_TOKEN: ${{ steps.app-token.outputs.token }}
-          TOKEN: ${{ secrets.LITRELEASEBOT_TOKEN }}
+          RELEASE_TAG_APP_ID: ${{ vars.RELEASE_TAG_APP_ID }}
+          RELEASE_TAG_APP_CLIENT_ID: ${{ vars.RELEASE_TAG_APP_CLIENT_ID }}
+          RELEASE_TAG_APP_INSTALLATION_ID: ${{ vars.RELEASE_TAG_APP_INSTALLATION_ID }}
+          RELEASE_TAG_APP_PRIVATE_KEY: ${{ secrets.RELEASE_TAG_APP_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          if [ -n "${APP_TOKEN:-}" ]; then
-            echo "value=$APP_TOKEN" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ -n "${TOKEN:-}" ]; then
-            echo "value=$TOKEN" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "value=${{ github.token }}" >> "$GITHUB_OUTPUT"
+          [[ "$RELEASE_TAG_APP_ID" =~ ^[1-9][0-9]*$ ]]
+          test "$RELEASE_TAG_APP_ID" != 15368
+          test -n "$RELEASE_TAG_APP_CLIENT_ID"
+          [[ "$RELEASE_TAG_APP_INSTALLATION_ID" =~ ^[1-9][0-9]*$ ]]
+          test -n "$RELEASE_TAG_APP_PRIVATE_KEY"
+          case "$RELEASE_TAG_APP_PRIVATE_KEY" in
+            *'BEGIN PRIVATE KEY'*|*'BEGIN RSA PRIVATE KEY'*) ;;
+            *) echo "::error::Dedicated release-tag App private key is malformed."; exit 1 ;;
+          esac
 
-      - name: Checkout main
-        uses: actions/checkout@v7
-        with:
-          ref: main
-          token: ${{ steps.token.outputs.value }}
-          fetch-depth: 0
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.14"
-
-      - name: Install build tools
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install ansible-core pyyaml
-
-      - name: Build and publish
+      - name: Resolve exact protected-main release SHA
+        id: source
         env:
-          GH_TOKEN: ${{ steps.token.outputs.value }}
-          CREATE_GITHUB_RELEASE: ${{ inputs.create_github_release }}
-          PUBLISH_GALAXY: ${{ inputs.publish_galaxy }}
+          REQUESTED_SHA: ${{ inputs.release_sha }}
         run: |
           set -euo pipefail
-
-          version="$(python - <<'PY'
-          import yaml
-          print(yaml.safe_load(open("galaxy.yml"))["version"])
-          PY
-          )"
-          tag="v${version}"
-
-          ansible-galaxy collection build --force
-          tarball="$(ls ./*.tar.gz)"
-
-          notes="$(mktemp)"
-          if [ ! -f CHANGELOG.rst ]; then
-            echo "::error::CHANGELOG.rst is required for collection GitHub Release notes."
+          release_sha="$REQUESTED_SHA"
+          if ! [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid release SHA: $release_sha" >&2
             exit 1
           fi
-          awk '/^v'"$version"'$/{flag=1; print; next} /^v[0-9]/{if(flag) exit} flag {print}' CHANGELOG.rst > "$notes"
+          echo "sha=$release_sha" >> "$GITHUB_OUTPUT"
+          echo "RELEASE_SHA=$release_sha" >> "$GITHUB_ENV"
 
-          if [ "$CREATE_GITHUB_RELEASE" = "true" ]; then
-            if [ ! -s "$notes" ]; then
-              echo "::error::No CHANGELOG.rst section found for $tag."
-              exit 1
-            fi
-            if gh release view "$tag" >/dev/null 2>&1; then
-              echo "GitHub release $tag already exists; leaving it unchanged."
-            else
-              gh release create "$tag" "$tarball" --target main --title "$tag" --notes-file "$notes"
-            fi
-            gh workflow run release-back-sync.yml --ref main -f tag="$tag"
-          else
-            echo "GitHub release creation disabled for this release."
-          fi
-
-          if [ "$PUBLISH_GALAXY" = "true" ]; then
-            if [ -z "${GALAXY_API_TOKEN:-}" ]; then
-              echo "::error::GALAXY_API_TOKEN is required when publish_galaxy is true."
-              exit 1
-            fi
-            ansible-galaxy collection publish "$tarball" --api-key "$GALAXY_API_TOKEN"
-          fi
-
-          TESTED_MATRIX="ansible-core,molecule,collection-build" \
-          PASSED_JOBS="Publish collection release" \
-          BUILT_ARTIFACTS="$tarball" \
-          PUBLISHED_ARTIFACTS="$(
-            if [ "$CREATE_GITHUB_RELEASE" = "true" ]; then
-              printf 'github-release:%s' "$tag"
-            fi
-            if [ "$PUBLISH_GALAXY" = "true" ]; then
-              printf ',ansible-galaxy:lit.%s:%s' "$(python - <<'PY'
-          import yaml
-          print(yaml.safe_load(open("galaxy.yml"))["name"])
-          PY
-          )" "$version"
-            fi
-          )" \
-          ANSIBLE_GALAXY_ARTIFACT="lit.$(python - <<'PY'
-          import yaml
-          print(yaml.safe_load(open("galaxy.yml"))["name"])
-          PY
-          ):${version}" \
-          RELEASE_TAG="$tag" \
-          RELEASE_VERSION="$version" \
-          CHANGELOG_URL="https://github.com/${{ github.repository }}/blob/main/CHANGELOG.rst" \
-          python scripts/generate-release-evidence.py
-
-          if [ "$CREATE_GITHUB_RELEASE" = "true" ]; then
-            gh release upload "$tag" \
-              dist/release-evidence.json \
-              dist/release-evidence.md \
-              --clobber
-          fi
-
-      - name: Upload release evidence artifact
-        if: always()
-        uses: actions/upload-artifact@v5
+      - name: Checkout exact release SHA
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
         with:
-          name: release-evidence
+          ref: ${{ steps.source.outputs.sha }}
+          token: ${{ github.token }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify protected-main and reviewed merge identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED_HEAD_SHA: ${{ inputs.reviewed_head_sha }}
+          REVIEWED_BASE_SHA: ${{ inputs.reviewed_base_sha }}
+        run: |
+          set -euo pipefail
+
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          remote_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          test -n "$remote_main"
+          test "$remote_main" = "$RELEASE_SHA"
+          test "$REVIEWED_HEAD_SHA" != ""
+          test "$REVIEWED_BASE_SHA" != ""
+          test "$REVIEWED_HEAD_SHA" != "$RELEASE_SHA"
+          test "$REVIEWED_BASE_SHA" != "$RELEASE_SHA"
+          mapfile -t parents < <(git show -s --format='%P' "$RELEASE_SHA" | tr ' ' '\n')
+          test "${#parents[@]}" -eq 2
+          test "${parents[0]}" = "$REVIEWED_BASE_SHA"
+          test "${parents[1]}" = "$REVIEWED_HEAD_SHA"
+          git diff --quiet "$REVIEWED_HEAD_SHA" "$RELEASE_SHA" -- .
+
+          mapfile -t preparation_parents < <(
+            git show -s --format='%P' "$REVIEWED_HEAD_SHA" | tr ' ' '\n'
+          )
+          test "${#preparation_parents[@]}" -eq 1
+          test "${preparation_parents[0]}" = "$REVIEWED_BASE_SHA"
+          expected_identity='litreleasebot <litreleasebot@users.noreply.github.com>'
+          test "$(git show -s --format='%an <%ae>' "$REVIEWED_HEAD_SHA")" = \
+            "$expected_identity"
+          test "$(git show -s --format='%cn <%ce>' "$REVIEWED_HEAD_SHA")" = \
+            "$expected_identity"
+          test -s changelogs/release-preparation.json
+          if git diff --quiet \
+              "$REVIEWED_BASE_SHA" "$REVIEWED_HEAD_SHA" -- \
+              changelogs/release-preparation.json
+          then
+            echo "Release preparation receipt was not created by the reviewed commit." >&2
+            exit 1
+          fi
+          while IFS= read -r changed_path; do
+            case "$changed_path" in
+              galaxy.yml|CHANGELOG.rst|changelogs/changelog.yaml|\
+              changelogs/.plugin-cache.yaml|changelogs/release-preparation.json|\
+              changelogs/fragments/*.yml|changelogs/fragments/*.yaml) ;;
+              *)
+                echo "Unauthorized release-preparation path: $changed_path" >&2
+                exit 1
+                ;;
+            esac
+          done < <(
+            git diff --name-only "$REVIEWED_BASE_SHA" "$REVIEWED_HEAD_SHA"
+          )
+
+          associated_prs="$(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/pulls"
+          )"
+          release_version="$(
+            python - <<'PY'
+          import re
+          from pathlib import Path
+
+          match = re.search(
+              r"(?m)^version:\s*[\"']?([^\s\"']+)",
+              Path("galaxy.yml").read_text(encoding="utf-8"),
+          )
+          if match is None:
+              raise SystemExit("galaxy.yml has no version")
+          print(match.group(1))
+          PY
+          )"
+          expected_head="release/v${release_version}"
+          test "$(git show -s --format='%s' "$REVIEWED_HEAD_SHA")" = \
+            "chore(release): prepare v${release_version}"
+          release_pr_count="$(
+            jq \
+              --arg sha "$RELEASE_SHA" \
+              --arg head "$REVIEWED_HEAD_SHA" \
+              --arg head_ref "$expected_head" \
+              --arg repo "$GITHUB_REPOSITORY" '[
+              .[]
+              | select(
+                  .merged_at != null
+                  and .merge_commit_sha == $sha
+                  and .base.ref == "main"
+                  and .head.ref == $head_ref
+                  and .head.sha == $head
+                  and .head.repo.full_name == $repo
+                )
+            ] | length' <<< "$associated_prs"
+          )"
+          test "$release_pr_count" -eq 1
+
+      - name: Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install exact release validation tools
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            ansible-core==2.18.13 \
+            PyYAML==6.0.3
+
+      - name: Re-prove fragment-derived version and authorized preparation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          REVIEWED_HEAD_SHA: ${{ inputs.reviewed_head_sha }}
+          REVIEWED_BASE_SHA: ${{ inputs.reviewed_base_sha }}
+        run: |
+          set -euo pipefail
+
+          receipt=changelogs/release-preparation.json
+          expected_version="$(jq -er '.next_version' "$receipt")"
+          released_version="$(python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          payload = yaml.safe_load(Path("galaxy.yml").read_text(encoding="utf-8"))
+          print(payload["version"])
+          PY
+          )"
+          test "$released_version" = "$expected_version"
+          python scripts/release-version.py \
+            --verify-preparation-receipt "$receipt" \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$REPOSITORY_ID" \
+            --base-sha "$REVIEWED_BASE_SHA" \
+            --expected-version "$expected_version" >/dev/null
+
+          base_tree="$RUNNER_TEMP/release-preparation-base"
+          rm -rf "$base_tree"
+          mkdir -p "$base_tree/fragments"
+          git show "$REVIEWED_BASE_SHA:galaxy.yml" > "$base_tree/galaxy.yml"
+          while IFS= read -r fragment; do
+            name="$(jq -er '.path' <<< "$fragment")"
+            expected_digest="$(jq -er '.sha256' <<< "$fragment")"
+            git show \
+              "$REVIEWED_BASE_SHA:changelogs/fragments/$name" \
+              > "$base_tree/fragments/$name"
+            test "$(sha256sum "$base_tree/fragments/$name" | awk '{print $1}')" = \
+              "$expected_digest"
+            if git cat-file -e \
+                "$REVIEWED_HEAD_SHA:changelogs/fragments/$name" 2>/dev/null
+            then
+              echo "Reviewed fragment was not consumed: $name" >&2
+              exit 1
+            fi
+          done < <(jq -c '.fragments[]' "$receipt")
+
+          recomputed="$(
+            python scripts/release-version.py \
+              --galaxy "$base_tree/galaxy.yml" \
+              --fragments "$base_tree/fragments" \
+              --requested-version "$expected_version"
+          )"
+          jq -e --argjson recomputed "$recomputed" '
+            .current_version == $recomputed.current_version
+            and .impact == $recomputed.impact
+            and .next_version == $recomputed.version
+            and .fragments == $recomputed.fragment_sha256
+          ' "$receipt" >/dev/null
+
+          preparation_run_id="$(jq -er '.workflow.run_id' "$receipt")"
+          preparation_attempt="$(jq -er '.workflow.run_attempt' "$receipt")"
+          preparation_actor="$(jq -er '.workflow.actor' "$receipt")"
+          preparation_run="$(
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${preparation_run_id}"
+          )"
+          jq -e \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg base_sha "$REVIEWED_BASE_SHA" \
+            --arg run_id "$preparation_run_id" \
+            --arg run_attempt "$preparation_attempt" \
+            --arg actor "$preparation_actor" '
+            (.id | tostring) == $run_id
+            and (.run_attempt | tostring) == $run_attempt
+            and .repository.full_name == $repository
+            and .head_repository.full_name == $repository
+            and .head_sha == $base_sha
+            and .head_branch == "main"
+            and (.event == "push" or .event == "workflow_dispatch")
+            and .path == ".github/workflows/release-prepare.yml"
+            and .actor.login == $actor
+            and .status == "completed"
+            and .conclusion == "success"
+          ' <<< "$preparation_run" >/dev/null
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+
+      - name: Wait for exact-SHA main Release Validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 240); do
+            runs="$(
+              gh api --method GET \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/collection-ci.yml/runs" \
+                -f branch=main \
+                -f event=push \
+                -f head_sha="$RELEASE_SHA" \
+                -f per_page=100
+            )"
+            run_id="$(
+              jq -r --arg sha "$RELEASE_SHA" '
+                [
+                  .workflow_runs[]
+                  | select(
+                      .event == "push"
+                      and .head_branch == "main"
+                      and .head_sha == $sha
+                      and .status == "completed"
+                      and .conclusion == "success"
+                    )
+                ]
+                | sort_by(.run_attempt, .id)
+                | last
+                | .id // empty
+              ' <<< "$runs"
+            )"
+            if [ -n "$run_id" ]; then
+              jobs="$(
+                gh api --method GET --paginate --slurp \
+                  "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs" \
+                  -f per_page=100
+              )"
+              gate_count="$(
+                jq '[
+                  .[].jobs[]
+                  | select(
+                      .name == "Collection / Release Validation"
+                      and .status == "completed"
+                      and .conclusion == "success"
+                    )
+                ] | length' <<< "$jobs"
+              )"
+              if [ "$gate_count" -eq 1 ]; then
+                echo "CI_RUN_ID=$run_id" >> "$GITHUB_ENV"
+                echo "Using successful exact-SHA Collection CI run $run_id."
+                exit 0
+              fi
+            fi
+            echo "Waiting for exact-SHA main Release Validation (attempt $attempt/240)."
+            sleep 30
+          done
+
+          echo "No successful exact-SHA main Release Validation was found." >&2
+          exit 1
+
+      - name: Download exact candidate and evidence from validated run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p incoming/candidate incoming/evidence
+          gh run download "$CI_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "collection-candidate-${RELEASE_SHA}" \
+            --dir incoming/candidate
+          gh run download "$CI_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "collection-release-evidence-${RELEASE_SHA}" \
+            --dir incoming/evidence
+
+      - name: Validate candidate, MANIFEST, evidence, and repository policy
+        env:
+          REQUEST_CREATE_GITHUB_RELEASE: ${{ inputs.create_github_release }}
+          REQUEST_PUBLISH_GALAXY: ${{ inputs.publish_galaxy }}
+        run: |
+          set -euo pipefail
+
+          mapfile -t candidates < <(
+            find incoming/candidate -maxdepth 1 -type f -name '*.tar.gz' -print
+          )
+          test "${#candidates[@]}" -eq 1
+          candidate="${candidates[0]}"
+          (
+            cd incoming/candidate
+            test -s candidate-SHA256SUMS
+            sha256sum --check candidate-SHA256SUMS
+          )
+          (
+            cd incoming/evidence/release-assets
+            test -s SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+          python scripts/quality_evidence.py validate \
+            --root incoming/evidence/evidence \
+            --release \
+            --expected-commit "$RELEASE_SHA"
+
+          CANDIDATE="$candidate" python - <<'PY'
+          import json
+          import os
+          import re
+          import tarfile
+          from pathlib import Path
+          from pathlib import PurePosixPath
+
+          import yaml
+
+          candidate = Path(os.environ["CANDIDATE"])
+          galaxy = yaml.safe_load(Path("galaxy.yml").read_text(encoding="utf-8")) or {}
+          policy = yaml.safe_load(Path(".lit/repository.yml").read_text(encoding="utf-8")) or {}
+          compressed_bytes = candidate.stat().st_size
+          if compressed_bytes <= 0:
+              raise SystemExit("candidate archive is empty")
+          with tarfile.open(candidate, "r:gz") as stream:
+              members = stream.getmembers()
+              if len(members) > 20_000:
+                  raise SystemExit("candidate archive has too many members")
+              seen: set[str] = set()
+              total_bytes = 0
+              manifest_member = None
+              for member in members:
+                  path = PurePosixPath(member.name)
+                  normalized = path.as_posix()
+                  if path.is_absolute() or ".." in path.parts or normalized in {"", "."}:
+                      raise SystemExit(f"unsafe candidate member path: {member.name}")
+                  if normalized in seen:
+                      raise SystemExit(f"duplicate candidate member path: {normalized}")
+                  seen.add(normalized)
+                  if not (member.isfile() or member.isdir()):
+                      raise SystemExit(f"unsafe candidate member type: {member.name}")
+                  if member.size > 512 * 1024 * 1024:
+                      raise SystemExit(f"oversized candidate member: {member.name}")
+                  total_bytes += member.size
+                  if total_bytes > 2 * 1024 * 1024 * 1024:
+                      raise SystemExit("candidate expands beyond size limit")
+                  if normalized == "MANIFEST.json":
+                      manifest_member = member
+              if total_bytes > compressed_bytes * 1_000:
+                  raise SystemExit("candidate compression ratio exceeds limit")
+              if manifest_member is None or not manifest_member.isfile():
+                  raise SystemExit("candidate has no regular MANIFEST.json")
+              manifest_file = stream.extractfile(manifest_member)
+              if manifest_file is None:
+                  raise SystemExit("candidate MANIFEST.json cannot be read")
+              archive_manifest = json.loads(manifest_file.read().decode("utf-8"))
+          evidence_manifest = json.loads(
+              Path("incoming/evidence/evidence/manifest.json").read_text(encoding="utf-8")
+          )
+          publication = json.loads(
+              Path("incoming/evidence/release-assets/release-evidence.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          security_receipt = json.loads(
+              Path(
+                  "incoming/evidence/release-assets/release-security-receipt.json"
+              ).read_text(encoding="utf-8")
+          )
+
+          namespace = str(galaxy.get("namespace", ""))
+          name = str(galaxy.get("name", ""))
+          version = str(galaxy.get("version", ""))
+          if namespace != "lit" or name != "supplementary":
+              raise SystemExit("unexpected collection identity in galaxy.yml")
+          if re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version) is None:
+              raise SystemExit(f"invalid collection version: {version!r}")
+
+          info = archive_manifest.get("collection_info", {})
+          expected_filename = f"{namespace}-{name}-{version}.tar.gz"
+          if candidate.name != expected_filename:
+              raise SystemExit(f"unexpected candidate filename: {candidate.name}")
+          if (
+              info.get("namespace") != namespace
+              or info.get("name") != name
+              or str(info.get("version")) != version
+          ):
+              raise SystemExit("candidate MANIFEST identity/version mismatch")
+
+          release_sha = os.environ["RELEASE_SHA"]
+          if evidence_manifest.get("commit_sha") != release_sha:
+              raise SystemExit("evidence commit does not match release SHA")
+          if str(evidence_manifest.get("workflow_run_id")) != os.environ["CI_RUN_ID"]:
+              raise SystemExit("evidence workflow run does not match selected CI run")
+          if evidence_manifest.get("release_eligible") is not True:
+              raise SystemExit("release evidence is not eligible")
+          if publication.get("commit_sha") != release_sha:
+              raise SystemExit("publication eligibility commit does not match release SHA")
+          if str(publication.get("workflow_run_id")) != os.environ["CI_RUN_ID"]:
+              raise SystemExit("publication eligibility workflow does not match selected CI run")
+          if publication.get("release_eligible") is not True:
+              raise SystemExit("publication eligibility is false")
+          publication_gates = publication.get("gates")
+          if (
+              not isinstance(publication_gates, dict)
+              or not publication_gates
+              or not all(publication_gates.values())
+          ):
+              raise SystemExit("publication eligibility contains an unsatisfied gate")
+          if security_receipt.get("commit_sha") != release_sha:
+              raise SystemExit("release-security receipt commit does not match release SHA")
+          if str(security_receipt.get("workflow_run_id")) != os.environ["CI_RUN_ID"]:
+              raise SystemExit("release-security receipt workflow does not match selected CI run")
+          if security_receipt.get("release_eligible") is not True:
+              raise SystemExit("release-security receipt is not eligible")
+          receipt_gates = security_receipt.get("gates")
+          if (
+              not isinstance(receipt_gates, dict)
+              or not receipt_gates
+              or not all(receipt_gates.values())
+          ):
+              raise SystemExit("release-security receipt contains an unsatisfied gate")
+          long_term = security_receipt.get("long_term_archive") or {}
+          archive = Path(
+              f"incoming/evidence/long-term/collection-release-evidence-{release_sha}.tar.gz"
+          )
+          if not archive.is_file():
+              raise SystemExit("complete long-term release-evidence bundle is missing")
+          import hashlib
+
+          if hashlib.sha256(archive.read_bytes()).hexdigest() != long_term.get("sha256"):
+              raise SystemExit("long-term release-evidence bundle digest mismatch")
+
+          targets = set(policy.get("publishing_targets") or [])
+          github_required = "github-release" in targets
+          galaxy_required = bool(policy.get("galaxy_publish")) and "ansible-galaxy" in targets
+          if not github_required:
+              raise SystemExit(".lit policy must enable the mandatory GitHub Release target")
+
+          output = Path(os.environ["GITHUB_ENV"])
+          with output.open("a", encoding="utf-8") as stream:
+              stream.write(f"RELEASE_VERSION={version}\n")
+              stream.write(f"RELEASE_TAG=v{version}\n")
+              stream.write(f"CANDIDATE_NAME={candidate.name}\n")
+              stream.write(f"GALAXY_REQUIRED={str(galaxy_required).lower()}\n")
+
+          if os.environ.get("REQUEST_CREATE_GITHUB_RELEASE") == "false":
+              print("Repository policy overrides the advisory GitHub Release input.")
+          if galaxy_required and os.environ.get("REQUEST_PUBLISH_GALAXY") == "false":
+              print("Repository policy overrides the advisory Galaxy input.")
+          PY
+
+          test -s "incoming/evidence/release-assets/collection-evidence-${RELEASE_SHA}.tar.gz"
+          test -s incoming/evidence/release-assets/sbom.cdx.json
+          test -s incoming/evidence/release-assets/provenance.json
+          test -s incoming/evidence/release-assets/SHA256SUMS.sigstore.json
+          test -s incoming/evidence/release-assets/release-security-receipt.json.sigstore.json
+          test -s incoming/evidence/evidence/security/vulnerability-report.json
+          test -s incoming/evidence/evidence/security/secret-scan-summary.json
+          (
+            cd incoming/evidence/long-term
+            sha256sum --check "collection-release-evidence-${RELEASE_SHA}.tar.gz.sha256"
+          )
+
+      - name: Install exact candidate in a clean collection path
+        run: |
+          set -euo pipefail
+          install_root="$RUNNER_TEMP/candidate-install"
+          rm -rf "$install_root"
+          ansible-galaxy collection install \
+            "incoming/candidate/${CANDIDATE_NAME}" \
+            -p "$install_root" \
+            --force
+          ANSIBLE_COLLECTIONS_PATH="$install_root" \
+            ansible-doc --type role lit.supplementary.keycloak_deploy >/dev/null
+          installed_playbook="$install_root/ansible_collections/lit/supplementary/playbooks/example.yml"
+          test -s "$installed_playbook"
+          ANSIBLE_COLLECTIONS_PATH="$install_root" \
+            ansible-playbook --syntax-check "$installed_playbook"
+
+      - name: Verify signatures and attestations; download attestation bundles
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-ci.yml@refs/heads/main"
+          subjects=(
+            "incoming/candidate/${CANDIDATE_NAME}"
+            incoming/evidence/release-assets/sbom.cdx.json
+            "incoming/evidence/release-assets/collection-evidence-${RELEASE_SHA}.tar.gz"
+            incoming/evidence/release-assets/SHA256SUMS
+            incoming/evidence/release-assets/release-security-receipt.json
+          )
+          mkdir -p dist/attestation-bundles
+          for subject in "${subjects[@]}"; do
+            signature_bundle="incoming/evidence/release-assets/$(basename "$subject").sigstore.json"
+            test -s "$signature_bundle"
+            cosign verify-blob \
+              --bundle "$signature_bundle" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity "$identity" \
+              --certificate-github-workflow-sha "$RELEASE_SHA" \
+              "$subject"
+            gh attestation verify "$subject" \
+              --repo "$GITHUB_REPOSITORY" \
+              --cert-identity "$identity" \
+              --source-ref refs/heads/main \
+              --source-digest "$RELEASE_SHA"
+
+            subject_path="$(realpath "$subject")"
+            bundle_dir="dist/attestation-download/$(basename "$subject")"
+            mkdir -p "$bundle_dir"
+            (
+              cd "$bundle_dir"
+              gh attestation download "$subject_path" --repo "$GITHUB_REPOSITORY"
+            )
+            mapfile -t bundles < <(find "$bundle_dir" -maxdepth 1 -type f -name '*.jsonl' -print)
+            test "${#bundles[@]}" -eq 1
+            cp "${bundles[0]}" \
+              "dist/attestation-bundles/$(basename "$subject").attestation.jsonl"
+          done
+
+      - name: Assemble immutable release attachments and notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p dist/release
+          cp -a incoming/evidence/release-assets/. dist/release/
+          mv dist/release/SHA256SUMS dist/release/ci-release-assets-SHA256SUMS
+          mv dist/release/SHA256SUMS.sigstore.json \
+            dist/release/ci-release-assets-SHA256SUMS.sigstore.json
+          cp "incoming/candidate/${CANDIDATE_NAME}" dist/release/
+          cp incoming/candidate/candidate-SHA256SUMS \
+            dist/release/ci-candidate-SHA256SUMS
+          cp incoming/evidence/evidence/security/vulnerability-report.json \
+            dist/release/vulnerability-report.json
+          cp incoming/evidence/evidence/security/secret-scan-summary.json \
+            dist/release/secret-scan-summary.json
+          cp dist/attestation-bundles/*.jsonl dist/release/
+          cp incoming/evidence/long-term/collection-release-evidence-*.tar.gz \
+            dist/release/
+          cp incoming/evidence/long-term/collection-release-evidence-*.tar.gz.sha256 \
+            dist/release/
+
+          (
+            cd dist/release
+            sha256sum --check ci-candidate-SHA256SUMS
+            sha256sum --check ci-release-assets-SHA256SUMS
+            checksum_file="$RUNNER_TEMP/publish-release-assets-SHA256SUMS"
+            find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' \
+              | sort \
+              | xargs sha256sum > "$checksum_file"
+            mv "$checksum_file" SHA256SUMS
+            test -s SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+          publish_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-publish.yml@refs/heads/main"
+          release_response="$RUNNER_TEMP/existing-release-for-checksum-bundle.json"
+          release_status="$(
+            curl --silent --show-error --location \
+              --output "$release_response" \
+              --write-out '%{http_code}' \
+              --header 'Accept: application/vnd.github+json' \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}"
+          )"
+          case "$release_status" in
+            404)
+              checksum_asset_count=0
+              bundle_asset_count=0
+              ;;
+            200)
+              checksum_asset_count="$(
+                jq '[.assets[] | select(.name == "SHA256SUMS")] | length' \
+                  "$release_response"
+              )"
+              bundle_asset_count="$(
+                jq '[.assets[] | select(.name == "SHA256SUMS.sigstore.json")] | length' \
+                  "$release_response"
+              )"
+              ;;
+            *)
+              echo "Unexpected GitHub Release lookup status: $release_status" >&2
+              exit 1
+              ;;
+          esac
+          test "$checksum_asset_count" -le 1
+          test "$bundle_asset_count" -le 1
+          test "$checksum_asset_count" -eq "$bundle_asset_count"
+          if [ "$checksum_asset_count" -eq 1 ]; then
+            existing_pair="$RUNNER_TEMP/existing-release-checksum-pair"
+            mkdir -p "$existing_pair"
+            gh release download "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern SHA256SUMS \
+              --pattern SHA256SUMS.sigstore.json \
+              --dir "$existing_pair"
+            cmp --silent "$existing_pair/SHA256SUMS" dist/release/SHA256SUMS
+            cp "$existing_pair/SHA256SUMS.sigstore.json" \
+              dist/release/SHA256SUMS.sigstore.json
+          else
+            cosign sign-blob --yes \
+              --bundle dist/release/SHA256SUMS.sigstore.json \
+              dist/release/SHA256SUMS
+          fi
+          cosign verify-blob \
+            --bundle dist/release/SHA256SUMS.sigstore.json \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "$publish_identity" \
+            --certificate-github-workflow-sha "$RELEASE_SHA" \
+            dist/release/SHA256SUMS
+
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          version = os.environ["RELEASE_VERSION"]
+          lines = Path("CHANGELOG.rst").read_text(encoding="utf-8").splitlines()
+          start = next((index for index, line in enumerate(lines) if line.strip() == f"v{version}"), None)
+          if start is None:
+              raise SystemExit(f"CHANGELOG.rst has no v{version} section")
+          end = len(lines)
+          for index in range(start + 1, len(lines)):
+              if re.fullmatch(r"v[0-9]+(?:\.[0-9]+){2}(?:[-.][0-9A-Za-z.-]+)?", lines[index].strip()):
+                  end = index
+                  break
+          notes = "\n".join(lines[start:end]).strip() + "\n"
+          if len(notes.splitlines()) < 3:
+              raise SystemExit(f"CHANGELOG.rst v{version} section is empty")
+          Path("dist/release-notes.rst").write_text(notes, encoding="utf-8")
+          PY
+
+      - name: Require configured publication credentials
+        env:
+          GALAXY_API_TOKEN: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ "$GALAXY_REQUIRED" = true ]; then
+            test -n "${GALAXY_API_TOKEN:-}"
+            candidate_sha="$(
+              sha256sum "incoming/candidate/${CANDIDATE_NAME}" | awk '{print $1}'
+            )"
+            version_url="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index/lit/supplementary/versions/${RELEASE_VERSION}/"
+            response="$RUNNER_TEMP/galaxy-preflight.json"
+            status="$(
+              curl --silent --show-error \
+                --output "$response" \
+                --write-out '%{http_code}' \
+                "$version_url"
+            )"
+            if [ "$status" = 200 ]; then
+              EXPECTED_SHA="$candidate_sha" RESPONSE="$response" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = json.loads(Path(os.environ["RESPONSE"]).read_text(encoding="utf-8"))
+          artifact = payload.get("artifact") or {}
+          if artifact.get("filename") != os.environ["CANDIDATE_NAME"]:
+              raise SystemExit("existing Galaxy artifact filename mismatch")
+          if artifact.get("sha256") != os.environ["EXPECTED_SHA"]:
+              raise SystemExit("existing Galaxy artifact digest mismatch")
+          PY
+            elif [ "$status" != 404 ]; then
+              echo "Unexpected Galaxy preflight API status: $status" >&2
+              exit 1
+            fi
+          fi
+
+      - name: Mint exact repository-scoped release-tag App token
+        id: release-tag-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_TAG_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_TAG_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
+      - name: Validate exact release-tag App installation
+        env:
+          ACTION_APP_SLUG: ${{ steps.release-tag-token.outputs.app-slug }}
+          ACTION_INSTALLATION_ID: ${{ steps.release-tag-token.outputs.installation-id }}
+          EXPECTED_APP_ID: ${{ vars.RELEASE_TAG_APP_ID }}
+          EXPECTED_APP_CLIENT_ID: ${{ vars.RELEASE_TAG_APP_CLIENT_ID }}
+          EXPECTED_INSTALLATION_ID: ${{ vars.RELEASE_TAG_APP_INSTALLATION_ID }}
+          GH_TOKEN: ${{ steps.release-tag-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          [[ "$ACTION_INSTALLATION_ID" =~ ^[1-9][0-9]*$ ]]
+          test "$ACTION_INSTALLATION_ID" = "$EXPECTED_INSTALLATION_ID"
+          test -n "$ACTION_APP_SLUG"
+
+          app="$RUNNER_TEMP/release-tag-app.json"
+          repositories="$RUNNER_TEMP/release-tag-app-repositories.json"
+          gh api "/apps/${ACTION_APP_SLUG}" > "$app"
+          jq -e \
+            --argjson app_id "$EXPECTED_APP_ID" \
+            --arg client_id "$EXPECTED_APP_CLIENT_ID" \
+            --arg app_slug "$ACTION_APP_SLUG" \
+            --arg owner "$GITHUB_REPOSITORY_OWNER" '
+              .id == $app_id
+              and .client_id == $client_id
+              and .slug == $app_slug
+              and .owner.login == $owner
+            ' "$app" >/dev/null
+          gh api '/installation/repositories?per_page=100' > "$repositories"
+          jq -e --arg repository "$GITHUB_REPOSITORY" '
+            .total_count == 1
+            and (.repositories | length) == 1
+            and .repositories[0].full_name == $repository
+          ' "$repositories" >/dev/null
+
+      - name: Create or verify immutable tag with dedicated App
+        env:
+          APP_SLUG: ${{ steps.release-tag-token.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.release-tag-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          current_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          test -n "$current_main"
+          test "$current_main" = "$RELEASE_SHA"
+
+          app_bot_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          [[ "$app_bot_id" =~ ^[1-9][0-9]*$ ]]
+          app_bot_name="${APP_SLUG}[bot]"
+          app_bot_email="${app_bot_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+          remote_tag="$(git ls-remote --tags origin "refs/tags/${RELEASE_TAG}" | awk '{print $1}')"
+          if [ -n "$remote_tag" ]; then
+            git fetch --no-tags origin "refs/tags/${RELEASE_TAG}"
+            test "$(git cat-file -t FETCH_HEAD)" = tag
+            tagged_sha="$(git rev-parse 'FETCH_HEAD^{commit}')"
+            test "$tagged_sha" = "$RELEASE_SHA"
+            tag_payload="$RUNNER_TEMP/existing-release-tag.txt"
+            git cat-file tag FETCH_HEAD > "$tag_payload"
+            EXPECTED_TAGGER_EMAIL="$app_bot_email" \
+              EXPECTED_TAGGER_NAME="$app_bot_name" \
+              TAG_PAYLOAD="$tag_payload" python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          payload = Path(os.environ["TAG_PAYLOAD"]).read_text(encoding="utf-8")
+          headers, separator, message = payload.partition("\n\n")
+          if not separator:
+              raise SystemExit("existing release tag has no annotation")
+          expected = {
+              f"object {os.environ['RELEASE_SHA']}",
+              "type commit",
+              f"tag {os.environ['RELEASE_TAG']}",
+          }
+          lines = headers.splitlines()
+          if not expected.issubset(set(lines)):
+              raise SystemExit("existing annotated tag identity differs from the release")
+          taggers = [line for line in lines if line.startswith("tagger ")]
+          expected_tagger = (
+              f"tagger {os.environ['EXPECTED_TAGGER_NAME']} "
+              f"<{os.environ['EXPECTED_TAGGER_EMAIL']}> "
+          )
+          if len(taggers) != 1 or re.fullmatch(
+              re.escape(expected_tagger) + r"[0-9]+ [+-][0-9]{4}", taggers[0]
+          ) is None:
+              raise SystemExit("existing release tag has an unauthorized tagger identity")
+          if message.rstrip("\n") != f"Release {os.environ['RELEASE_TAG']}":
+              raise SystemExit("existing release tag annotation differs")
+          PY
+          else
+            tag_object="$(
+              gh api --method POST \
+                "repos/${GITHUB_REPOSITORY}/git/tags" \
+                -f tag="$RELEASE_TAG" \
+                -f message="Release ${RELEASE_TAG}" \
+                -f object="$RELEASE_SHA" \
+                -f type=commit \
+                -f "tagger[name]=${app_bot_name}" \
+                -f "tagger[email]=${app_bot_email}" \
+                -f "tagger[date]=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                --jq .sha
+            )"
+            test -n "$tag_object"
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${RELEASE_TAG}" \
+              -f sha="$tag_object" >/dev/null
+            git fetch --no-tags origin "refs/tags/${RELEASE_TAG}"
+            test "$(git cat-file -t FETCH_HEAD)" = tag
+            test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$RELEASE_SHA"
+          fi
+
+      - name: Create or verify GitHub Release and immutable assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          current_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          test -n "$current_main"
+          test "$current_main" = "$RELEASE_SHA"
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null; then
+            release_state="$(
+              gh release view "$RELEASE_TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --json body,isDraft,isPrerelease,name,tagName
+            )"
+            jq -e --arg tag "$RELEASE_TAG" '
+              .tagName == $tag
+              and .name == $tag
+              and .isDraft == false
+              and .isPrerelease == false
+            ' <<< "$release_state" >/dev/null
+            release_state_path="$RUNNER_TEMP/existing-release.json"
+            printf '%s\n' "$release_state" > "$release_state_path"
+            RELEASE_STATE_PATH="$release_state_path" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          state = json.loads(Path(os.environ["RELEASE_STATE_PATH"]).read_text(encoding="utf-8"))
+          expected = Path("dist/release-notes.rst").read_text(encoding="utf-8").rstrip()
+          if str(state.get("body", "")).rstrip() != expected:
+              raise SystemExit("existing GitHub Release notes differ from the changelog")
+          PY
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "$RELEASE_TAG" \
+              --notes-file dist/release-notes.rst
+          fi
+
+          assets_json="$(
+            gh release view "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json assets
+          )"
+          asset_index=0
+          while IFS= read -r asset; do
+            asset_index=$((asset_index + 1))
+            name="$(basename "$asset")"
+            if jq -e --arg name "$name" \
+              '.assets | any(.name == $name)' <<< "$assets_json" >/dev/null
+            then
+              verify_dir="$RUNNER_TEMP/existing-release-asset-${asset_index}"
+              mkdir -p "$verify_dir"
+              gh release download "$RELEASE_TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --pattern "$name" \
+                --dir "$verify_dir"
+              test "$(sha256sum "$verify_dir/$name" | awk '{print $1}')" = \
+                "$(sha256sum "$asset" | awk '{print $1}')"
+            else
+              gh release upload "$RELEASE_TAG" "$asset" \
+                --repo "$GITHUB_REPOSITORY"
+            fi
+          done < <(find dist/release -maxdepth 1 -type f -print | sort)
+
+          local_assets="$(
+            find dist/release -maxdepth 1 -type f -printf '%f\n' | sort
+          )"
+          remote_assets="$(
+            gh release view "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json assets \
+              --jq '.assets[].name | select(
+                . != "post-release-verification.json"
+                and . != "post-release-verification.json.sigstore.json"
+              )' \
+              | sort
+          )"
+          test "$remote_assets" = "$local_assets"
+
+          post_asset_count="$(
+            gh release view "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json assets \
+              --jq '[.assets[].name | select(
+                . == "post-release-verification.json"
+                or . == "post-release-verification.json.sigstore.json"
+              )] | length'
+          )"
+          test "$post_asset_count" -eq 0 || test "$post_asset_count" -eq 2
+
+      - name: Publish or verify exact artifact on Ansible Galaxy
+        if: env.GALAXY_REQUIRED == 'true'
+        env:
+          GALAXY_API_TOKEN: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          candidate="incoming/candidate/${CANDIDATE_NAME}"
+          candidate_sha="$(sha256sum "$candidate" | awk '{print $1}')"
+          version_url="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index/lit/supplementary/versions/${RELEASE_VERSION}/"
+          response="$RUNNER_TEMP/galaxy-version.json"
+          status="$(
+            curl --silent --show-error \
+              --output "$response" \
+              --write-out '%{http_code}' \
+              "$version_url"
+          )"
+
+          if [ "$status" = 404 ]; then
+            ansible-galaxy collection publish "$candidate" \
+              --api-key "$GALAXY_API_TOKEN"
+          elif [ "$status" != 200 ]; then
+            echo "Unexpected Galaxy version API status: $status" >&2
+            exit 1
+          fi
+
+          for attempt in $(seq 1 60); do
+            status="$(
+              curl --silent --show-error \
+                --output "$response" \
+                --write-out '%{http_code}' \
+                "$version_url"
+            )"
+            if [ "$status" = 200 ]; then
+              break
+            fi
+            if [ "$status" != 404 ]; then
+              echo "Unexpected Galaxy verification status: $status" >&2
+              exit 1
+            fi
+            echo "Waiting for Galaxy import (attempt $attempt/60)."
+            sleep 10
+          done
+          test "$status" = 200
+
+          galaxy_download_url="$(EXPECTED_SHA="$candidate_sha" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = json.loads(Path(os.environ["RUNNER_TEMP"]).joinpath("galaxy-version.json").read_text())
+          artifact = payload.get("artifact") or {}
+          if artifact.get("filename") != os.environ["CANDIDATE_NAME"]:
+              raise SystemExit("Galaxy artifact filename mismatch")
+          if artifact.get("sha256") != os.environ["EXPECTED_SHA"]:
+              raise SystemExit("Galaxy artifact digest mismatch")
+          download_url = payload.get("download_url")
+          if not isinstance(download_url, str) or not download_url.startswith("https://"):
+              raise SystemExit("Galaxy download URL is missing or unsafe")
+          print(download_url)
+          PY
+          )"
+
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/galaxy-${CANDIDATE_NAME}" \
+            "$galaxy_download_url"
+          test "$(sha256sum "$RUNNER_TEMP/galaxy-${CANDIDATE_NAME}" | awk '{print $1}')" = \
+            "$candidate_sha"
+
+      - name: Verify GitHub Release download, install, and smoke
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          verify_root="$RUNNER_TEMP/github-release-verification"
+          install_root="$RUNNER_TEMP/github-release-install"
+          mkdir -p "$verify_root"
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$verify_root"
+          (
+            cd "$verify_root"
+            sha256sum --check SHA256SUMS
+          )
+          publish_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-publish.yml@refs/heads/main"
+          cosign verify-blob \
+            --bundle "$verify_root/SHA256SUMS.sigstore.json" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "$publish_identity" \
+            --certificate-github-workflow-sha "$RELEASE_SHA" \
+            "$verify_root/SHA256SUMS"
+          test "$(sha256sum "$verify_root/$CANDIDATE_NAME" | awk '{print $1}')" = \
+            "$(sha256sum "incoming/candidate/$CANDIDATE_NAME" | awk '{print $1}')"
+          ansible-galaxy collection install \
+            "$verify_root/$CANDIDATE_NAME" \
+            -p "$install_root" \
+            --force
+          ANSIBLE_COLLECTIONS_PATH="$install_root" \
+            ansible-doc --type role lit.supplementary.keycloak_deploy >/dev/null
+          installed_playbook="$install_root/ansible_collections/lit/supplementary/playbooks/example.yml"
+          test -s "$installed_playbook"
+          ANSIBLE_COLLECTIONS_PATH="$install_root" \
+            ansible-playbook --syntax-check "$installed_playbook"
+
+      - name: Verify Galaxy version install and smoke
+        if: env.GALAXY_REQUIRED == 'true'
+        run: |
+          set -euo pipefail
+
+          install_root="$RUNNER_TEMP/galaxy-release-install"
+          ansible-galaxy collection install \
+            "lit.supplementary:==${RELEASE_VERSION}" \
+            -p "$install_root" \
+            --force
+          ANSIBLE_COLLECTIONS_PATH="$install_root" \
+            ansible-doc --type role lit.supplementary.keycloak_deploy >/dev/null
+          installed_playbook="$install_root/ansible_collections/lit/supplementary/playbooks/example.yml"
+          test -s "$installed_playbook"
+          ANSIBLE_COLLECTIONS_PATH="$install_root" \
+            ansible-playbook --syntax-check "$installed_playbook"
+
+      - name: Trigger release back-sync after verified publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG_APP_SLUG: ${{ steps.release-tag-token.outputs.app-slug }}
+          RELEASE_TAG_APP_ID: ${{ vars.RELEASE_TAG_APP_ID }}
+          RELEASE_TAG_APP_CLIENT_ID: ${{ vars.RELEASE_TAG_APP_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          gh workflow run release-back-sync.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f tag="$RELEASE_TAG" \
+            -f release_tag_app_slug="$RELEASE_TAG_APP_SLUG" \
+            -f release_tag_app_id="$RELEASE_TAG_APP_ID" \
+            -f release_tag_app_client_id="$RELEASE_TAG_APP_CLIENT_ID"
+
+      - name: Attach signed post-publication verification receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          receipt_root="dist/post-release"
+          mkdir -p "$receipt_root"
+          RECEIPT_ROOT="$receipt_root" python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["RECEIPT_ROOT"])
+          candidate = Path("incoming/candidate") / os.environ["CANDIDATE_NAME"]
+          galaxy_required = os.environ["GALAXY_REQUIRED"] == "true"
+          gates = {
+              "github_release_assets_verified": True,
+              "github_release_install_smoke": True,
+              "galaxy_artifact_verified_or_not_required": True,
+              "galaxy_install_smoke_or_not_required": True,
+              "release_back_sync_dispatched": True,
+          }
+          payload = {
+              "schema_version": 1,
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "commit_sha": os.environ["RELEASE_SHA"],
+              "release_tag": os.environ["RELEASE_TAG"],
+              "collection_version": os.environ["RELEASE_VERSION"],
+              "candidate": {
+                  "name": candidate.name,
+                  "sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
+              },
+              "github_release_url": (
+                  f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/tag/"
+                  f"{os.environ['RELEASE_TAG']}"
+              ),
+              "galaxy_required": galaxy_required,
+              "galaxy_version": os.environ["RELEASE_VERSION"] if galaxy_required else None,
+              "back_sync": {
+                  "workflow": "release-back-sync.yml",
+                  "ref": "main",
+                  "tag": os.environ["RELEASE_TAG"],
+                  "dispatch_accepted": True,
+              },
+              "verified": all(gates.values()),
+              "gates": gates,
+          }
+          (root / "post-release-verification.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+
+          receipt="$receipt_root/post-release-verification.json"
+          bundle="${receipt}.sigstore.json"
+          assets="$(
+            gh release view "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json assets \
+              --jq '.assets[].name'
+          )"
+          receipt_exists=false
+          bundle_exists=false
+          grep -Fxq "$(basename "$receipt")" <<< "$assets" && receipt_exists=true
+          grep -Fxq "$(basename "$bundle")" <<< "$assets" && bundle_exists=true
+          if [ "$receipt_exists" != "$bundle_exists" ]; then
+            echo "Existing post-release receipt assets are incomplete." >&2
+            exit 1
+          fi
+          if [ "$receipt_exists" = true ]; then
+            existing_root="$RUNNER_TEMP/existing-post-release-receipt"
+            rm -rf "$existing_root"
+            mkdir -p "$existing_root"
+            gh release download "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern "$(basename "$receipt")" \
+              --pattern "$(basename "$bundle")" \
+              --dir "$existing_root"
+            test "$(sha256sum "$existing_root/$(basename "$receipt")" | awk '{print $1}')" = \
+              "$(sha256sum "$receipt" | awk '{print $1}')"
+            cp "$existing_root/$(basename "$bundle")" "$bundle"
+          else
+            cosign sign-blob --yes --bundle "$bundle" "$receipt"
+            gh release upload "$RELEASE_TAG" "$receipt" "$bundle" \
+              --repo "$GITHUB_REPOSITORY"
+          fi
+
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-publish.yml@refs/heads/main"
+          cosign verify-blob \
+            --bundle "$bundle" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "$identity" \
+            --certificate-github-workflow-sha "$RELEASE_SHA" \
+            "$receipt"
+          verify_root="$RUNNER_TEMP/final-post-release-receipt"
+          rm -rf "$verify_root"
+          mkdir -p "$verify_root"
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$(basename "$receipt")" \
+            --pattern "$(basename "$bundle")" \
+            --dir "$verify_root"
+          test "$(sha256sum "$verify_root/$(basename "$receipt")" | awk '{print $1}')" = \
+            "$(sha256sum "$receipt" | awk '{print $1}')"
+          cosign verify-blob \
+            --bundle "$verify_root/$(basename "$bundle")" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "$identity" \
+            --certificate-github-workflow-sha "$RELEASE_SHA" \
+            "$verify_root/$(basename "$receipt")"
+
+      - name: Upload exact release attachment set
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
+        with:
+          name: release-attachments-${{ steps.source.outputs.sha }}
           path: |
-            dist/release-evidence.json
-            dist/release-evidence.md
-          if-no-files-found: ignore
+            dist/release/
+            dist/post-release/
+          if-no-files-found: warn
+          retention-days: 90

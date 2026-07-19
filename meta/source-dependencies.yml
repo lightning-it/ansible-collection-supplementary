@@ -1,0 +1,164 @@
+---
+schema_version: 1
+
+# This is the fail-closed inventory for dependencies referenced by files that
+# ship in the collection artifact. Runtime image references retain a readable
+# tag for operators and Renovate, but the manifest digest is authoritative.
+container_images:
+  - reference: "docker.io/389ds/dirsrv:3.1@sha256:af99ccf42c1cd02799d674ffdee3612a1bbd426c1a8a636da67ea349659ee5e0"
+    locations:
+      - "containerfiles/ldap/Containerfile"
+  - reference: "codeberg.org/forgejo/forgejo:10@sha256:99b6c15a1bc98e623103a83a04023662a93fd035dac4f0a856d781afa9d71095"
+    locations:
+      - "roles/forgejo_deploy/defaults/main.yml"
+  - reference: "docker.io/caddy:2@sha256:af5fdcd76f2db5e4e974ee92f96ee8c0fc3edb55bd4ba5032547cbf3f65e486d"
+    locations:
+      - "roles/nexus/defaults/main.yml"
+  - reference: "docker.io/checkmk/check-mk-raw:2.3.0-latest@sha256:b61a4c7b487abf0d34de9b096ed6930bec9b6841c191f4e43e7eaab787e879b1"
+    locations:
+      - "roles/checkmk_deploy/defaults/main.yml"
+  - reference: "docker.io/coredns/coredns:1.11.1@sha256:1eeb4c7316bacb1d4c8ead65571cd92dd21e27359f0d4917f1a5822a73b75db1"
+    locations:
+      - "roles/coredns_deploy/defaults/main.yml"
+  - reference: "docker.io/dperson/samba:latest@sha256:66088b78a19810dd1457a8f39340e95e663c728083efa5fe7dc0d40b2478e869"
+    locations:
+      - "roles/samba_deploy/defaults/main.yml"
+      - "roles/samba_upgrade/defaults/main.yml"
+  - reference: "docker.io/grafana/alloy:v1.7.5@sha256:b92703c13c32c20d629ffd89f40287ed385c12a335a7c9f31c720a5f912f9d6f"
+    locations:
+      - "roles/alloy_deploy/defaults/main.yml"
+  - reference: "docker.io/grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7"
+    locations:
+      - "roles/grafana_deploy/defaults/main.yml"
+  - reference: "docker.io/grafana/loki:3.4.2@sha256:58a6c186ce78ba04d58bfe2a927eff296ba733a430df09645d56cdc158f3ba08"
+    locations:
+      - "roles/loki_deploy/defaults/main.yml"
+  - reference: "docker.io/hashicorp/vault:1.21@sha256:4e33b126a59c0c333b76fb4e894722462659a6bec7c48c9ee8cea56fccfd2569"
+    locations:
+      - "roles/vault_deploy/defaults/main.yml"
+  - reference: "docker.io/library/nginx:stable@sha256:29f8cc6c9d0072f7a79ea4647690f561c0dff83968d7f6d5684f23c6cfe6e41b"
+    locations:
+      - "roles/nginx_deploy/defaults/main.yml"
+  - reference: "docker.io/library/postgres:16@sha256:eb4759788a2182f08257135e61a34f2cfc3c2914079f3465d64ee62350f4d081"
+    locations:
+      - "manifests/identity-stack.pod.yaml"
+      - "roles/forgejo_deploy/defaults/main.yml"
+      - "roles/keycloak_deploy/defaults/main.yml"
+      - "roles/postgres_deploy/defaults/main.yml"
+      - "roles/semaphore_deploy/defaults/main.yml"
+  - reference: "docker.io/prom/alertmanager:v0.28.1@sha256:27c475db5fb156cab31d5c18a4251ac7ed567746a2483ff264516437a39b15ba"
+    locations:
+      - "roles/alertmanager_deploy/defaults/main.yml"
+  - reference: "docker.io/prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996"
+    locations:
+      - "roles/prometheus_deploy/defaults/main.yml"
+  - reference: "docker.io/rsyslog/syslog_appliance_alpine:latest@sha256:c0dd7cad9ff3234967ff59879590175b7590e8a5f5621ec49a85aff546b44a3b"
+    locations:
+      - "roles/rsyslog_deploy/defaults/main.yml"
+      - "roles/rsyslog_upgrade/defaults/main.yml"
+  - reference: "docker.io/renovate/renovate:43.263.3@sha256:dbdb501ad9a2558ab8f99538b1d4be0a8768cf8c3383aaa33a35ed981dfe3464"
+    locations:
+      - ".pre-commit-config.yaml"
+  - reference: "docker.io/rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
+    locations:
+      - ".pre-commit-config.yaml"
+  - reference: "docker.io/semaphoreui/semaphore:latest@sha256:1c9b9837a5f2b031639949988218a0b3894b85f6b50e7f3ddb6b12486dbe5658"
+    locations:
+      - "roles/semaphore_deploy/defaults/main.yml"
+  - reference: "docker.io/smblds/smblds:latest@sha256:d8c4e2e3d00fc5d86decb30ad1736bf927c3868478b3e0b807d4818fdcc76f5c"
+    locations:
+      - "roles/samba_deploy/defaults/main.yml"
+  - reference: "docker.io/sonatype/nexus3:latest@sha256:6e8905c14210c595a8177910179ce080cdc22fa3f6b660a13e6dfa1f8378a866"
+    locations:
+      - "roles/nexus/defaults/main.yml"
+  - reference: "docker.io/tenableofficial/nessus:latest@sha256:c88e43fe1a8ca04a265f127fbfa474e80ab926d21862b6de5972a9465a91d8e6"
+    locations:
+      - "roles/nessus_deploy/defaults/main.yml"
+  - reference: "quay.io/keycloak/keycloak:26.5.4@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4"
+    locations:
+      - "manifests/identity-stack.pod.yaml"
+      - "roles/keycloak_deploy/defaults/main.yml"
+  - reference: "quay.io/l-it/ee-wunder-devtools-ubi9:v1.9.2@sha256:58d5d45f7ea7405394edb00d4a77bf3e5d770532377fba6d80e8f641d27576b0"
+    locations:
+      - "scripts/wunder-devtools-ee.sh"
+  - reference: "quay.io/minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727"
+    locations:
+      - "roles/minio_bootstrap/defaults/main.yml"
+      - "roles/minio_config/defaults/main.yml"
+      - "roles/minio_deploy/defaults/main.yml"
+  - reference: "quay.io/minio/minio:latest@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
+    locations:
+      - "roles/minio_deploy/defaults/main.yml"
+
+# This image is built locally from the pinned 389ds base above. Its digest does
+# not exist until the documented build runs, so it is an explicit derived
+# output rather than an external mutable dependency.
+derived_images:
+  - reference: "localhost/wunderbox-ldap:3.1-bootstrap"
+    disposition: "local-build-output"
+    build_file: "containerfiles/ldap/Containerfile"
+    base_reference: "docker.io/389ds/dirsrv:3.1@sha256:af99ccf42c1cd02799d674ffdee3612a1bbd426c1a8a636da67ea349659ee5e0"
+    locations:
+      - "manifests/identity-stack.pod.yaml"
+
+# Every concrete collection requirement used by shipped role source is either
+# a normal Galaxy dependency or an exact AAP runtime-overlay dependency.
+collections:
+  - name: "ansible.posix"
+    requirement: ">=2.1.0"
+    source: "galaxy.yml"
+  - name: "community.crypto"
+    requirement: ">=3.2.2,<4.0.0"
+    source: "galaxy.yml"
+  - name: "community.general"
+    requirement: ">=11.4.9,<12.0.0"
+    source: "galaxy.yml"
+  - name: "community.hashi_vault"
+    requirement: "7.1.0"
+    source: "galaxy.yml"
+  - name: "community.vmware"
+    requirement: "5.10.0"
+    source: "galaxy.yml"
+  - name: "lit.foundational"
+    requirement: ">=1.31.0"
+    source: "galaxy.yml"
+  - name: "lit.rhel"
+    requirement: ">=1.17.1"
+    source: "galaxy.yml"
+  - name: "ansible.controller"
+    requirement: "4.8.2"
+    source: "collections/requirements-rh.yml"
+  - name: "ansible.platform"
+    requirement: "2.7.20260630"
+    source: "collections/requirements-rh.yml"
+  - name: "infra.aap_configuration"
+    requirement: "4.2.1"
+    source: "collections/requirements-rh.yml"
+  - name: "infra.aap_utilities"
+    requirement: "3.3.0"
+    source: "collections/requirements-rh.yml"
+  - name: "infra.controller_configuration"
+    requirement: "3.2.2"
+    source: "collections/requirements-rh.yml"
+  - name: "infra.ee_utilities"
+    requirement: "4.2.2"
+    source: "collections/requirements-rh.yml"
+
+# ansible.containerized_installer is not independently downloadable. It is
+# supplied by the licensed, customer-provided AAP bundle and remains explicitly
+# blocked from live validation until protected entitlement inputs are present.
+external_products:
+  - name: "red-hat-ansible-automation-platform"
+    version: "2.7"
+    type: "application"
+    disposition: "blocked-external-license"
+    reason: >-
+      The AAP 2.7 containerized installer and its embedded
+      ansible.containerized_installer collection require a customer Red Hat
+      entitlement and bundle artifact that are unavailable to untrusted CI.
+    provides_collections:
+      - "ansible.containerized_installer"
+    locations:
+      - "roles/aap_deploy/defaults/main.yml"
+      - "roles/aap_deploy/tasks/40_install.yml"
+      - "roles/aap_local_execution/templates/aap-local/inventories/group_vars/aaps/aap.yml.j2"

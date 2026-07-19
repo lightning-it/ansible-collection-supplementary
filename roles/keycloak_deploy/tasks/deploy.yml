@@ -50,3 +50,19 @@
       tags:
         - deployment
         - api
+
+    - name: Wait until Keycloak liveness endpoint is reachable (non-systemd)
+      ansible.builtin.uri:
+        url: "{{ keycloak_deploy_liveness_url_effective }}"
+        method: GET
+        validate_certs: "{{ keycloak_deploy_validate_certs }}"
+      register: keycloak_deploy_liveness
+      until: keycloak_deploy_liveness.status == 200
+      retries: 30
+      delay: 5
+      changed_when: false
+      failed_when: keycloak_deploy_liveness is failed or keycloak_deploy_liveness.status != 200
+      when: not keycloak_deploy_manage_systemd | bool
+      tags:
+        - deployment
+        - api

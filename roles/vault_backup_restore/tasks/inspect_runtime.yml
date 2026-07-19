@@ -21,7 +21,7 @@
 - name: Inspect Vault pod state without systemd
   ansible.builtin.command:
     argv:
-      - podman
+      - "{{ vault_backup_restore_podman_executable }}"
       - pod
       - inspect
       - "{{ vault_backup_restore_pod_name }}"

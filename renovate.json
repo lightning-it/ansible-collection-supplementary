@@ -12,6 +12,7 @@
   },
   "labels": ["dependencies", "renovate"],
   "baseBranchPatterns": ["develop"],
+  "ignorePaths": ["collections/requirements-rh.yml"],
   "timezone": "UTC",
   "schedule": [],
   "rebaseWhen": "behind-base-branch",
@@ -41,5 +42,49 @@
       "allowedVersions": "/^5\\.10\\.0$/"
     }
   ],
-  "customManagers": []
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Digest-pinned validation images in the managed pre-commit configuration",
+      "managerFilePatterns": [
+        "/(^|.*/)\\.pre-commit-config\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "docker\\.io/(?<depName>rhysd/actionlint|renovate/renovate):(?<currentValue>[0-9.]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "packageNameTemplate": "{{{depName}}}",
+      "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Digest-pinned devtool execution image in the managed wrapper",
+      "managerFilePatterns": [
+        "/(^|.*/)scripts/wunder-devtools-ee\\.sh$/"
+      ],
+      "matchStrings": [
+        "(?<depName>quay\\.io/l-it/ee-wunder-devtools-ubi9):v(?<currentValue>[0-9.]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "packageNameTemplate": "{{{depName}}}",
+      "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Digest-pinned shipped role, test, and source-inventory images",
+      "managerFilePatterns": [
+        "/(^|.*/)containerfiles/.*/Containerfile$/",
+        "/(^|.*/)manifests/.*\\.ya?ml$/",
+        "/(^|.*/)roles/.*/defaults/main\\.ya?ml$/",
+        "/(^|.*/)meta/source-dependencies\\.ya?ml$/",
+        "/(^|.*/)molecule/keycloak-(?:tiny|heavy)/(?:converge|verify)\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "(?<depName>(?:[a-z0-9][a-z0-9.-]*\\.[a-z]{2,})(?::[0-9]+)?/[A-Za-z0-9._/-]+):(?<currentValue>[A-Za-z0-9][A-Za-z0-9._-]*)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "packageNameTemplate": "{{{depName}}}",
+      "versioningTemplate": "docker"
+    }
+  ]
 }

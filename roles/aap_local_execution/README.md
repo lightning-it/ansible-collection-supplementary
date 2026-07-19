@@ -128,7 +128,7 @@ The role creates or updates:
 ## Molecule Coverage
 
 `molecule/aap-local-execution-basic` exercises the side-effect-free assertion
-entrypoint, both supported secret backends, exact execution-environment command
+entrypoint, both implemented secret-backend paths, exact execution-environment command
 isolation, digest rotation with a fixed archive path, atomic cache identity,
 target-side image verification, and unchanged-digest idempotence using fake
 Podman. Heavy product installation remains in runbook-level integration tests

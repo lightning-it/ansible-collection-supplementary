@@ -66,7 +66,8 @@ minio_config_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c', 
 minio_config_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
 minio_config_vault_token: "{{ vault_token | default('', true) }}"
 
-minio_config_mc_image: "quay.io/minio/mc:latest"
+minio_config_mc_image: >-
+  quay.io/minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
 minio_config_mc_config_dir: "/root/.mc"
 minio_config_mc_path: >-
   podman run --rm --network host --user 0:0 --entrypoint mc

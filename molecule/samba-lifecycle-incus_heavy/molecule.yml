@@ -1,30 +1,26 @@
 ---
 dependency:
   name: shell
-  command: |-
-    set -e
-    mkdir -p /tmp/codex-samba-collections/ansible_collections/lit
-    ln -sfn \
-      /home/rene/sources/ansible-collection-supplementary \
-      /tmp/codex-samba-collections/ansible_collections/lit/supplementary
-    ln -sfn \
-      /home/rene/sources/ansible-collection-foundational \
-      /tmp/codex-samba-collections/ansible_collections/lit/foundational
+  command: ":"
 
 driver:
   name: default
 
 platforms:
-  - name: lit-samba-lifecycle-heavy-ct
-    image: images:ubuntu/24.04
-    type: container
-    ipv4_address: 10.248.82.51/24
-    ipv4_gateway: 10.248.82.1
-    dns_servers:
-      - 1.1.1.1
-      - 8.8.8.8
+  - name: "${MOLECULE_TEST_INSTANCE:-lit-samba-lifecycle-heavy-ct}"
+    image: "${MOLECULE_TEST_IMAGE:-images:ubuntu/24.04}"
+    type: "${MOLECULE_TEST_INSTANCE_TYPE:-container}"
+    identity:
+      scenario: samba-lifecycle-incus_heavy
+      target: "${MOLECULE_TEST_TARGET:-ubuntu-24.04}"
+    resources:
+      cpu: "${MOLECULE_TEST_CPU_LIMIT:-2}"
+      memory: "${MOLECULE_TEST_MEMORY_LIMIT:-4GiB}"
+      disk: "${MOLECULE_TEST_DISK_LIMIT:-20GiB}"
     config:
       - key: security.nesting
+        value: "true"
+      - key: security.idmap.isolated
         value: "true"
       - key: security.privileged
         value: "true"
@@ -33,17 +29,17 @@ provisioner:
   name: ansible
   inventory:
     host_vars:
-      lit-samba-lifecycle-heavy-ct:
+      "${MOLECULE_TEST_INSTANCE:-lit-samba-lifecycle-heavy-ct}":
         ansible_connection: community.general.incus
         ansible_python_interpreter: /usr/bin/python3
   env:
-    ANSIBLE_COLLECTIONS_PATH: "/tmp/codex-samba-collections:/home/rene/sources/modulix-automation/ansible/collections:/home/rene/.ansible/collections:/usr/share/ansible/collections"
-    ANSIBLE_ROLES_PATH: "/home/rene/sources/ansible-collection-supplementary/roles:/home/rene/sources/ansible-collection-foundational/roles:/home/rene/.ansible/roles:/usr/share/ansible/roles:/etc/ansible/roles"
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/roles:${HOME}/.ansible/roles:/usr/share/ansible/roles:/etc/ansible/roles"
   playbooks:
     create: create.yml
     prepare: prepare.yml
     converge: converge.yml
     verify: verify.yml
+    cleanup: cleanup.yml
     destroy: destroy.yml
 
 scenario:
@@ -55,6 +51,7 @@ scenario:
     - prepare
     - converge
     - verify
+    - cleanup
     - destroy
 
 verifier:

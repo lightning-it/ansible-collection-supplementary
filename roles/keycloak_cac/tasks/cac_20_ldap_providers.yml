@@ -25,18 +25,6 @@
       no_log: true
       changed_when: false
 
-    - name: Read Keycloak realm representation for LDAP parent id
-      ansible.builtin.uri:
-        url: "{{ keycloak_cac_url }}/admin/realms/{{ keycloak_cac_realm }}"
-        method: GET
-        validate_certs: "{{ keycloak_cac_validate_certs }}"
-        timeout: "{{ keycloak_cac_request_timeout | int }}"
-        headers:
-          Authorization: "Bearer {{ keycloak_cac_ldap_token.json.access_token }}"
-        status_code: 200
-      register: keycloak_cac_ldap_realm
-      changed_when: false
-
     - name: Reconcile Keycloak LDAP provider entries
       ansible.builtin.include_tasks: ldap_provider.yml
       loop: "{{ keycloak_cac_ldap_providers }}"

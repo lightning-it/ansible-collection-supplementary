@@ -12,7 +12,17 @@ This repository follows the Lightning IT shared OpenSSF readiness model generate
 
 ## Scorecard
 
-Enabled through `.github/workflows/openssf-scorecard.yml` with scheduled, manual, `branch_protection_rule`, and `main` push triggers. Results are published to the OpenSSF API and uploaded as SARIF to GitHub code scanning.
+Enabled through `.github/workflows/openssf-scorecard.yml` with scheduled,
+manual, and `branch_protection_rule` triggers. The workflow executes the
+Scorecard v2.4.3 container by immutable registry digest and uploads SARIF to
+GitHub code scanning.
+
+Repository-run results are not published to the OpenSSF API. Its workflow
+verifier currently allows the upstream `ossf/scorecard-action` reference, whose
+v2.4.3 metadata delegates to a mutable container tag, but does not accept a
+digest-form container reference. The workflow therefore does not request an
+OIDC token or claim publication; the public badge can reflect OpenSSF's
+independent scan until digest-pinned publication is supported upstream.
 
 The Scorecard badge is included in `README.md` only for public repositories where the workflow is synced.
 

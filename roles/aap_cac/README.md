@@ -4,11 +4,15 @@ AAP configuration-as-code role tasksets for AAP object configuration.
 
 ## Requirements
 
-Ensure `lit.supplementary` and its dependencies are preinstalled by your
-workspace/EE preparation flow.
+Ensure `lit.supplementary` and the exact
+`collections/requirements-rh.yml` overlay are preinstalled by your
+workspace/EE preparation flow. This role references `ansible.controller`,
+`ansible.platform`, `infra.aap_configuration`,
+`infra.controller_configuration`, and `infra.ee_utilities`.
 Collection installation and packaging are out of scope for role task execution.
-This role supports AAP 2.7 and uses the AAP gateway token API directly for the
-temporary configuration-as-code authentication token.
+This experimental role targets the AAP 2.7 API shape and uses the AAP gateway
+token API directly for the temporary configuration-as-code authentication
+token. That version target is not a production-support claim.
 
 ## Variables
 
@@ -46,8 +50,10 @@ Password and secret input behavior:
 
 ## Dependencies
 
-Collection dependencies are declared at collection level in `galaxy.yml`
-and must be provisioned by your EE/workspace install flow before role execution.
+Core dependencies are declared in `galaxy.yml`. The optional Red Hat/AAP
+dependencies are intentionally isolated and exactly pinned in
+`collections/requirements-rh.yml`; provision the complete overlay before role
+execution. Do not treat a core-only collection install as AAP-runtime ready.
 
 ## Example Playbook
 
@@ -107,10 +113,12 @@ Run a single taskset directly:
         tasks_from: cac_11_gateway_organizations.yml
 ```
 
-Hub sync is covered by running:
+Hub sync tasksets are implemented as:
 - `cac_30_hub_collection_remotes.yml`
 - `cac_31_hub_collection_repositories.yml`
 - `cac_32_hub_collection_repository_sync.yml`
+
+They remain without licensed Heavy or Application Acceptance evidence.
 
 Optional additional tasksets:
 - `cac_19_controller_license.yml` (manifest content only)

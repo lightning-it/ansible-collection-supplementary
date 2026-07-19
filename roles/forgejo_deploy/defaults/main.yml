@@ -2,12 +2,14 @@
 # Pod basics
 forgejo_deploy_pod_name: "forgejo"
 forgejo_deploy_pod_manifest_path: "/etc/podman/pods/forgejo.yml"
-forgejo_deploy_image: "codeberg.org/forgejo/forgejo:10"
+forgejo_deploy_image: >-
+  codeberg.org/forgejo/forgejo:10@sha256:99b6c15a1bc98e623103a83a04023662a93fd035dac4f0a856d781afa9d71095
 
 # Dedicated PostgreSQL service defaults used by forgejo_deploy
 # Default is shared PostgreSQL managed outside this role.
 forgejo_deploy_manage_postgres: false
-forgejo_deploy_postgres_image: "docker.io/library/postgres:16"
+forgejo_deploy_postgres_image: >-
+  docker.io/library/postgres:16@sha256:eb4759788a2182f08257135e61a34f2cfc3c2914079f3465d64ee62350f4d081
 forgejo_deploy_postgres_pod_name: "{{ forgejo_deploy_pod_name }}-postgres"
 forgejo_deploy_postgres_pod_manifest_path: >-
   /etc/podman/pods/{{ forgejo_deploy_postgres_pod_name }}.yml

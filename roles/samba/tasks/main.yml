@@ -5,6 +5,7 @@
   when: samba_run_preflight | bool
   tags:
     - preflight
+    - molecule-idempotence-notest
 
 - name: Deploy Samba
   ansible.builtin.include_role:

@@ -5,13 +5,18 @@ metadata:
   labels:
     app: {{ postgres_deploy_pod_name }}
 spec:
+{% if postgres_deploy_host_network | bool %}
+  hostNetwork: true
+{% endif %}
   containers:
     - name: {{ postgres_deploy_container_name }}
       image: {{ postgres_deploy_image }}
+{% if not postgres_deploy_host_network | bool %}
       ports:
         - containerPort: {{ postgres_deploy_container_port }}
           hostPort: {{ postgres_deploy_port }}
           hostIP: {{ postgres_deploy_host_ip }}
+{% endif %}
       env:
         - name: POSTGRES_DB
           value: "{{ postgres_deploy_db_name }}"
