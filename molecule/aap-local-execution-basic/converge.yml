@@ -26,6 +26,12 @@
     aap_source_archive_force: false
     modulix_run_ee_image: "{{ aap_local_execution_molecule_image }}"
     modulix_run_ee_digest: "{{ aap_local_execution_molecule_digest_two }}"
+    aap_require_ee_digest: true
+    aap_configure_registry_ee: true
+    aap_registry_fqdn: registry.example.invalid
+    aap_registry_validate_certs: true
+    aap_ee_repository: registry.example.invalid/platform/ee-aap
+    aap_ee_digest: "{{ aap_local_execution_molecule_digest_two }}"
     machine_a_modulix_run_ee_archive_path: "{{ aap_local_execution_molecule_archive }}"
     aap_automation_ansible_dir: "{{ aap_local_execution_molecule_root }}/automation/ansible"
     aap_secrets_dir: "{{ aap_local_execution_molecule_root }}/secrets"
@@ -93,6 +99,47 @@
         tasks_from: assert
       vars:
         aap_local_execution_effective_secret_backend: ansible_vault
+
+    - name: Exercise rejected mutable execution environment
+      block:
+        - name: Reject missing required execution-environment digest
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_local_execution
+            tasks_from: assert
+          vars:
+            aap_local_execution_modulix_run_ee_digest_effective: ""
+
+        - name: Fail when missing digest was accepted
+          ansible.builtin.fail:
+            msg: Required EE digest was unexpectedly accepted.
+      rescue:
+        - name: Record expected missing-digest rejection
+          ansible.builtin.set_fact:
+            aap_local_execution_missing_digest_rejected: true
+
+    - name: Exercise rejected registry TLS opt-out
+      block:
+        - name: Reject disabled registry certificate validation
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_local_execution
+            tasks_from: assert
+          vars:
+            aap_local_execution_registry_validate_certs_effective: false
+
+        - name: Fail when registry TLS opt-out was accepted
+          ansible.builtin.fail:
+            msg: Disabled registry TLS verification was unexpectedly accepted.
+      rescue:
+        - name: Record expected registry TLS rejection
+          ansible.builtin.set_fact:
+            aap_local_execution_registry_tls_rejected: true
+
+    - name: Require immutable execution-environment input rejections
+      ansible.builtin.assert:
+        that:
+          - aap_local_execution_missing_digest_rejected | default(false)
+          - aap_local_execution_registry_tls_rejected | default(false)
+        quiet: true
 
     - name: Require public archive and force-variable contracts
       ansible.builtin.assert:

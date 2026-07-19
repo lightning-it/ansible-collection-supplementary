@@ -443,6 +443,8 @@
       - "--exclude=modulix-automation/.artifacts"
       - "--exclude=modulix-automation/ansible/.artifacts"
       - "--exclude=modulix-automation/ansible/.tmp"
+      - "--exclude=modulix-automation/ansible/collections/ansible_collections"
+      - "--exclude=modulix-automation/ansible/collections/*.tar.gz"
       - "--exclude=modulix-env/.vault-pass.txt"
       - "--exclude=modulix-automation/ansible/ansible-navigator.log"
       - "--exclude=modulix-automation/ansible/venv-*"
@@ -476,6 +478,29 @@
   when:
     - aap_local_execution_action == 'transfer_payload'
     - aap_ssh_key_auth_enabled | default(true) | bool
+
+- name: Check Machine A Ansible Vault password file
+  ansible.builtin.stat:
+    path: "{{ aap_local_execution_machine_a_effective_vault_password_file }}"
+  register: aap_local_execution_machine_a_vault_password_file
+  when:
+    - aap_local_execution_action == 'transfer_payload'
+    - aap_local_execution_effective_secret_backend == 'ansible_vault'
+
+- name: Validate Machine A Ansible Vault password file
+  ansible.builtin.assert:
+    that:
+      - aap_local_execution_machine_a_vault_password_file.stat.exists
+      - aap_local_execution_machine_a_vault_password_file.stat.isreg
+      - aap_local_execution_machine_a_vault_password_file.stat.size | int > 0
+      - aap_local_execution_machine_a_vault_password_file.stat.mode in ['0400', '0600']
+    fail_msg: >-
+      The owner-only Ansible Vault password file is missing or unsafe: {{
+      aap_local_execution_machine_a_effective_vault_password_file }}.
+    quiet: true
+  when:
+    - aap_local_execution_action == 'transfer_payload'
+    - aap_local_execution_effective_secret_backend == 'ansible_vault'
 
 - name: Check verified Machine A SSH known hosts file
   ansible.builtin.stat:

@@ -175,6 +175,17 @@
   become: false
   when: aap_local_execution_action == 'transfer_payload'
 
+- name: Transfer Ansible Vault password file
+  ansible.builtin.copy:
+    src: "{{ aap_local_execution_machine_a_effective_vault_password_file }}"
+    dest: "{{ aap_local_execution_effective_appl_root }}/inbox/.vault-pass.txt"
+    mode: "0600"
+  become: false
+  no_log: true
+  when:
+    - aap_local_execution_action == 'transfer_payload'
+    - aap_local_execution_effective_secret_backend == 'ansible_vault'
+
 - name: Install transferred payload into remote staging paths
   ansible.builtin.copy:
     src: "{{ aap_local_execution_effective_appl_root }}/inbox/aap-local.env"
@@ -205,6 +216,17 @@
     remote_src: true
     mode: "0600"
   when: aap_local_execution_action == 'transfer_payload'
+
+- name: Install Ansible Vault password file
+  ansible.builtin.copy:
+    src: "{{ aap_local_execution_effective_appl_root }}/inbox/.vault-pass.txt"
+    dest: "{{ aap_local_execution_ansible_vault_password_file_effective }}"
+    remote_src: true
+    mode: "0600"
+  no_log: true
+  when:
+    - aap_local_execution_action == 'transfer_payload'
+    - aap_local_execution_effective_secret_backend == 'ansible_vault'
 
 - name: Install transferred Vault token when present
   ansible.builtin.copy:
@@ -515,10 +537,11 @@
 
 - name: Pull execution environment from registry when transfer is disabled
   ansible.builtin.command:
-    argv:
-      - podman
-      - pull
-      - "{{ aap_local_execution_modulix_run_ee_runtime_image }}"
+    argv: >-
+      {{ ['podman', 'pull']
+         + (['--authfile', aap_local_execution_registry_auth_file_effective]
+            if aap_local_execution_registry_auth_file_effective | length > 0 else [])
+         + [aap_local_execution_modulix_run_ee_runtime_image] }}
   register: aap_local_execution_remote_ee_pull_result
   changed_when: >-
     'Copying blob' in (
