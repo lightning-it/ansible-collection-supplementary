@@ -136,6 +136,14 @@
   changed_when: false
   failed_when: false
   no_log: true
+  retries: 3
+  delay: 1
+  until: >-
+    molecule_incus_evidence_container_images_raw.rc != 0
+    or (
+      molecule_incus_evidence_container_images_raw.stdout
+      | default('[]', true) | from_json | length > 0
+    )
 
 - name: Redact exact in-target container image identities
   ansible.builtin.command:
