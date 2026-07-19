@@ -101,7 +101,7 @@ def test_invalid_credentials_create_no_session(secure_page: Page, settings: Sett
     secure_page.locator("#username").fill(settings.invalid_username)
     secure_page.locator("#password").fill(settings.invalid_password)
     secure_page.locator("#kc-login").click()
-    expect(secure_page.locator("#input-error")).to_be_visible()
+    expect(secure_page.locator("[id^='input-error']").first).to_be_visible()
     response = secure_page.request.get(f"{settings.app_url}/admin", max_redirects=0)
     assert response.status in (302, 303)
 

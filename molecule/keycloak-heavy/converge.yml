@@ -278,8 +278,26 @@
         redirect_uris:
           - http://127.0.0.1:8081/callback
         attributes:
+          client.use.lightweight.access.token.enabled: "false"
           post.logout.redirect.uris: http://127.0.0.1:8081/*
         protocol_mappers:
+          - name: subject
+            protocol: openid-connect
+            protocolMapper: oidc-sub-mapper
+            config:
+              access.token.claim: "true"
+              id.token.claim: "true"
+              introspection.token.claim: "true"
+          - name: realm roles
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-realm-role-mapper
+            config:
+              access.token.claim: "true"
+              claim.name: realm_access.roles
+              id.token.claim: "true"
+              introspection.token.claim: "true"
+              multivalued: "true"
+              userinfo.token.claim: "true"
           - name: groups
             protocol: openid-connect
             protocolMapper: oidc-group-membership-mapper

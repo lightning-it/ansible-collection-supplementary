@@ -120,22 +120,6 @@
   changed_when: false
   failed_when: false
 
-- name: Warm the in-target Podman inventory cache
-  ansible.builtin.command:
-    argv:
-      - incus
-      - exec
-      - "{{ molecule_incus_owned_instance.item.name }}"
-      - --
-      - podman
-      - ps
-      - --all
-      - --format
-      - json
-  changed_when: false
-  failed_when: false
-  no_log: true
-
 - name: Read exact in-target container image identities and digests
   ansible.builtin.command:
     argv:
@@ -253,6 +237,42 @@
     label: "{{ item.molecule_incus_evidence_command.name }}"
   register: molecule_incus_evidence_sanitized_logs
   changed_when: false
+  no_log: true
+
+- name: Refresh the dependency inventory from the populated Podman evidence stream
+  ansible.builtin.copy:
+    dest: >-
+      {{
+        molecule_incus_evidence_root_effective
+        ~ '/dependencies/' ~ molecule_incus_identity_effective.scenario
+        ~ '/' ~ molecule_incus_identity_effective.target
+        ~ '/' ~ molecule_incus_owned_instance.item.name
+        ~ '-' ~ molecule_incus_evidence_timestamp.stdout
+        ~ '-container-image-digests.json'
+      }}
+    mode: "0640"
+    content: |-
+      {
+        "schema_version": 1,
+        "scenario": {{ molecule_incus_identity_effective.scenario | to_json }},
+        "target": {{ molecule_incus_identity_effective.target | to_json }},
+        "instance": {{ molecule_incus_owned_instance.item.name | to_json }},
+        "requested_image": {{ molecule_incus_owned_instance.item.image | to_json }},
+        "incus_base_image_fingerprint": {{
+          molecule_incus_evidence_base_image.stdout
+          | default('', true) | trim | to_json
+        }},
+        "container_inventory_available": true,
+        "images": {{ item.stdout | from_json | to_json }}
+      }
+  loop: "{{ molecule_incus_evidence_sanitized_logs.results }}"
+  loop_control:
+    label: "{{ item.item.molecule_incus_evidence_command.name }}"
+  when:
+    - item.item.molecule_incus_evidence_command.name == 'podman-inventory'
+    - item.rc == 0
+    - item.item.rc == 0
+    - item.stdout | trim is match('^\\[')
   no_log: true
 
 - name: Write sanitized application and environment log streams
