@@ -106,6 +106,7 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         shared = (ROOT / "molecule" / "shared" / "incus" / "collect-evidence.yml").read_text(encoding="utf-8")
         self.assertIn("- images\n      - --all\n      - --format=json", shared)
         self.assertIn("if item.molecule_incus_evidence_command.name == 'podman-inventory'", shared)
+        self.assertIn("item.stdout | default('')\n        if item.molecule_incus_evidence_command.name == 'podman-inventory'", shared)
         self.assertIn("['--json-document']", shared)
         self.assertIn("selectattr('item.rc', 'equalto', 0)", shared)
         self.assertIn("molecule_incus_evidence_runtime_inventory_candidates | length > 0", shared)

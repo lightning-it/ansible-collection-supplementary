@@ -233,9 +233,17 @@
           | list
         )
       }}
-    stdin: |-
-      {{ item.stdout | default('') }}
-      {{ item.stderr | default('') }}
+    stdin: >-
+      {{
+        item.stdout | default('')
+        if item.molecule_incus_evidence_command.name == 'podman-inventory'
+        and (item.rc | default(1)) == 0
+        else (
+          (item.stdout | default(''))
+          ~ '\n'
+          ~ (item.stderr | default(''))
+        )
+      }}
     stdin_add_newline: false
   loop: "{{ molecule_incus_evidence_raw_logs.results }}"
   loop_control:
