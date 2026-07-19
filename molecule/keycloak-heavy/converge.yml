@@ -269,6 +269,12 @@
         secret: "{{ keycloak_heavy_client_secret }}"
         direct_access_grants_enabled: true
         standard_flow_enabled: true
+        client_scopes_behavior: patch
+        default_client_scopes:
+          - profile
+          - email
+          - roles
+          - web-origins
         redirect_uris:
           - http://127.0.0.1:8081/callback
         attributes:

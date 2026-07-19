@@ -136,7 +136,7 @@ def create_app() -> Flask:
         client_id=client_id,
         client_secret=client_secret,
         server_metadata_url=f"{issuer}/.well-known/openid-configuration",
-        client_kwargs={"scope": "openid profile email groups"},
+        client_kwargs={"scope": "openid profile email"},
     )
 
     def authenticated(view: View) -> View:

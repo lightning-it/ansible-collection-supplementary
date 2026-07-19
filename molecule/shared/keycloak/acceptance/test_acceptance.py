@@ -38,7 +38,7 @@ def _token(settings: Settings, username: str, password: str) -> dict[str, Any]:
             "client_secret": settings.client_secret,
             "username": username,
             "password": password,
-            "scope": "openid profile email groups",
+            "scope": "openid profile email",
         },
         timeout=20,
         verify=settings.ca_bundle or True,

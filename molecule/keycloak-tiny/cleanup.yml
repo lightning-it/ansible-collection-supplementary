@@ -16,6 +16,7 @@
     molecule_incus_evidence_secret_env_names_override:
       - KEYCLOAK_TEST_ADMIN_PASSWORD
       - KEYCLOAK_TEST_DB_PASSWORD
+    molecule_incus_evidence_require_runtime_containers_override: true
     molecule_incus_evidence_log_commands_override:
       - name: os-release
         argv:

@@ -136,6 +136,14 @@
   changed_when: false
   failed_when: false
   no_log: true
+  retries: 5
+  delay: 1
+  until: >-
+    not molecule_incus_evidence_require_runtime_containers_effective
+    or (
+      molecule_incus_evidence_container_images_raw.rc == 0
+      and molecule_incus_evidence_container_images_raw.stdout | trim not in ['', '[]']
+    )
 
 - name: Redact exact in-target container image identities
   ansible.builtin.command:
