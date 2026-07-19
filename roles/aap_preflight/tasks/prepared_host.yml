@@ -13,8 +13,12 @@
       - ansible_facts.fqdn == aap_preflight_expected_fqdn
       - ansible_facts.processor_vcpus | int >= aap_preflight_minimum_vcpus | int
       - ansible_facts.memtotal_mb | int >= aap_preflight_minimum_memory_mb | int
-      - not (aap_preflight_selinux_enforcing_required | bool) or (ansible_facts.selinux | default({})).status == 'enabled'
-      - not (aap_preflight_selinux_enforcing_required | bool) or (ansible_facts.selinux | default({})).mode == 'enforcing'
+      - >-
+        not (aap_preflight_selinux_enforcing_required | bool)
+        or (ansible_facts.selinux | default({})).status == 'enabled'
+      - >-
+        not (aap_preflight_selinux_enforcing_required | bool)
+        or (ansible_facts.selinux | default({})).mode == 'enforcing'
     fail_msg: >-
       Customer-prepared host contract failed. Expected {{ aap_preflight_expected_distribution }}
       FQDN {{ aap_preflight_expected_fqdn }}, {{ aap_preflight_minimum_vcpus }} vCPUs,
@@ -98,7 +102,8 @@
     that:
       - >-
         (ansible_facts.packages.get('ansible-core', []) | length > 0)
-        and (ansible_facts.packages['ansible-core'][0].version is version(aap_preflight_minimum_ansible_core_version, '>='))
+        and (ansible_facts.packages['ansible-core'][0].version
+        is version(aap_preflight_minimum_ansible_core_version, '>='))
     fail_msg: >-
       ansible-core {{ aap_preflight_minimum_ansible_core_version }} or later is
       required for the host bootstrap contract.
