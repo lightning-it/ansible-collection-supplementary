@@ -117,11 +117,14 @@ class IncusLifecycleTests(unittest.TestCase):
         self,
     ) -> None:
         collection = (SHARED / "collect-evidence.yml").read_text(encoding="utf-8")
+        tasks = yaml.safe_load(collection)
+        inventory = task_named(tasks, "Read exact in-target container image identities and digests")
+        argv = inventory["ansible.builtin.command"]["argv"]
 
-        self.assertIn("\n      - --format\n      - json\n", collection)
+        self.assertEqual(["images", "--all", "--format", "json"], argv[-4:])
         self.assertIn("item.molecule_incus_evidence_command.name == 'podman-inventory'", collection)
         self.assertIn("when: item.rc == 0", collection)
-        self.assertNotIn("- --format=json", collection)
+        self.assertNotIn("--format=json", argv)
 
     def test_firewalld_binding_is_runtime_scoped_and_destroyed_first(self) -> None:
         create_tasks = load_play_tasks("create.yml")
