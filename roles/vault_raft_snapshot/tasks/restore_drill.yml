@@ -212,14 +212,14 @@
         mode: "0600"
         content: |
           storage "raft" {
-            path = "/{{ vault_deploy_flavour }}/data"
+            path = "/{{ vault_deploy_flavour | default('vault') }}/data"
             node_id = "{{ vault_raft_snapshot_restore_node_id }}"
           }
           listener "tcp" {
             address = "0.0.0.0:8200"
             cluster_address = "0.0.0.0:8201"
-            tls_cert_file = "/{{ vault_deploy_flavour }}/certs/vault.crt"
-            tls_key_file = "/{{ vault_deploy_flavour }}/certs/vault.key"
+            tls_cert_file = "/{{ vault_deploy_flavour | default('vault') }}/certs/vault.crt"
+            tls_key_file = "/{{ vault_deploy_flavour | default('vault') }}/certs/vault.key"
           }
           ui = false
           disable_mlock = false
