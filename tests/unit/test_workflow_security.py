@@ -65,7 +65,10 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('[ "$safe_event" = "$expected_safe_event" ]', renovate)
         self.assertIn('grep -Fq "$breaking_event_pattern"', renovate)
         self.assertIn('[ "$PR_AUTHOR" = "renovate[bot]" ]', changelog)
+        self.assertIn('[ "$PR_BASE" = "develop" ]', changelog)
         self.assertIn('[[ "$PR_HEAD" = renovate/* ]]', changelog)
+        self.assertIn('index("renovate") != null', changelog)
+        self.assertIn('index("dependencies") != null', changelog)
         self.assertIn('index("safe-automerge") != null', changelog)
         self.assertIn('index("breaking-update") == null', changelog)
 
