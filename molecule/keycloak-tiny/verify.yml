@@ -94,7 +94,7 @@
         that:
           - >-
             keycloak_tiny_image.stdout ==
-            'quay.io/keycloak/keycloak:26.5.4@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4'
+            'quay.io/keycloak/keycloak@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4'
           - keycloak_tiny_manifest.stat.mode == '0600'
           - keycloak_tiny_manifest.stat.pw_name == 'root'
 
