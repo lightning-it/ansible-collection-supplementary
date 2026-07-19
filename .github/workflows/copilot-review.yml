@@ -21,6 +21,7 @@ env:
   NO_FILES_REVIEW_MARKER: was not able to review any files
   REVIEW_COMPLETED_MARKER: copilot reviewed
   UNABLE_REVIEW_MARKER: unable to review this pull request
+  QUOTA_REVIEW_MARKER: reached their quota limit
 
 concurrency:
   group: copilot-review-${{ github.event.pull_request.number }}
@@ -106,8 +107,8 @@ jobs:
 
           review_comments_clean() {
             local review_id="$1" expected_head="$2" after="" response has_next
-            local content_counts marker_count content_count completed_count meaningful_content=false
-            local count_pattern=$'^[0-9]+\t[0-9]+\t[0-9]+$'
+            local content_counts marker_count quota_count content_count completed_count meaningful_content=false
+            local count_pattern=$'^[0-9]+\t[0-9]+\t[0-9]+\t[0-9]+$'
             local -a arguments
             while true; do
               arguments=(
@@ -136,6 +137,7 @@ jobs:
                   --arg unable_marker "${UNABLE_REVIEW_MARKER}" \
                   --arg no_files_marker "${NO_FILES_REVIEW_MARKER}" \
                   --arg completed_marker "${REVIEW_COMPLETED_MARKER}" \
+                  --arg quota_marker "${QUOTA_REVIEW_MARKER}" \
                   'def normalize_review_text:
                       ascii_downcase
                       | gsub("wasn[\u0027\u2019]t"; "was not")
@@ -146,6 +148,7 @@ jobs:
                   ($unable_marker | normalize_review_text) as $unable
                   | ($no_files_marker | normalize_review_text) as $no_files
                   | ($completed_marker | normalize_review_text) as $completed
+                  | ($quota_marker | normalize_review_text) as $quota
                   | [
                     ([
                       review_content
@@ -156,6 +159,10 @@ jobs:
                               or contains($no_files)
                             )
                         )
+                    ] | length),
+                    ([
+                      review_content
+                      | select(normalize_review_text | contains($quota))
                     ] | length),
                     ([
                       review_content
@@ -175,8 +182,14 @@ jobs:
                 echo "Review ${review_id} returned invalid review content counts; refusing to accept the review." >&2
                 return 3
               fi
-              IFS=$'\t' read -r marker_count content_count completed_count <<<"${content_counts}"
+              IFS=$'\t' read -r marker_count quota_count content_count completed_count <<<"${content_counts}"
               if [ "${marker_count}" -gt 0 ] && [ "${completed_count}" -eq 0 ]; then
+                # A quota response is accepted only as a fallback; the
+                # independent thread gate below must still prove that every
+                # active Copilot finding is resolved.
+                if [ "${quota_count}" -gt 0 ]; then
+                  return 0
+                fi
                 return 1
               fi
               if [ "${content_count}" -gt 0 ]; then
