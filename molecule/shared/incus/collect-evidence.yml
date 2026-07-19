@@ -194,7 +194,8 @@
           ) | bool | to_json
         }},
         "images": {{
-          molecule_incus_evidence_container_images | default([]) | to_json
+          molecule_incus_evidence_container_images_redacted.stdout
+          | default('[]', true) | from_json | to_json
         }}
       }
   no_log: true
