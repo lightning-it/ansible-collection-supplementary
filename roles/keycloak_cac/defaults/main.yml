@@ -18,6 +18,7 @@ keycloak_cac_realm: "master"
 keycloak_cac_realms: []
 keycloak_cac_clients: []
 keycloak_cac_users: []
+keycloak_cac_user_no_log: true
 keycloak_cac_groups: []
 keycloak_cac_roles: []
 keycloak_cac_user_role_mappings: []

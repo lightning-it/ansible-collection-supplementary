@@ -257,6 +257,7 @@
     keycloak_cac_skip_apply: false
     keycloak_cac_url: http://127.0.0.1:28080
     keycloak_cac_admin_password: "{{ keycloak_heavy_admin_password }}"
+    keycloak_cac_user_no_log: false
     keycloak_cac_realms:
       - realm: keycloak-test
         enabled: true

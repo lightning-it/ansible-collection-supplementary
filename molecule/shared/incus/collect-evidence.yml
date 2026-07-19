@@ -250,17 +250,23 @@
           | list
         )
       }}
-    stdin: "{{ item.stdout }}"
+    stdin: "{{ molecule_incus_evidence_runtime_inventory_raw.stdout }}"
     stdin_add_newline: false
-  loop: "{{ molecule_incus_evidence_raw_logs.results }}"
-  loop_control:
-    label: "{{ item.molecule_incus_evidence_command.name }}"
   register: molecule_incus_evidence_runtime_inventory_redacted
   changed_when: false
   failed_when: false
-  when:
-    - item.molecule_incus_evidence_command.name == 'podman-inventory'
-    - item.rc == 0
+  when: molecule_incus_evidence_runtime_inventory_raw.rc == 0
+  vars:
+    molecule_incus_evidence_runtime_inventory_raw: >-
+      {{
+        molecule_incus_evidence_raw_logs.results
+        | selectattr(
+            'molecule_incus_evidence_command.name',
+            'equalto',
+            'podman-inventory'
+          )
+        | first
+      }}
   no_log: true
 
 - name: Refresh the dependency inventory from the populated Podman evidence stream
@@ -287,17 +293,9 @@
           | default('', true) | trim | to_json
         }},
         "container_inventory_available": true,
-        "images": {{ item.stdout | from_json | to_json }}
+        "images": {{ molecule_incus_evidence_runtime_inventory_redacted.stdout | from_json | to_json }}
       }
-  loop: >-
-    {{
-      molecule_incus_evidence_runtime_inventory_redacted.results
-      | selectattr('rc', 'defined')
-      | selectattr('rc', 'equalto', 0)
-      | list
-    }}
-  loop_control:
-    label: "podman-inventory"
+  when: molecule_incus_evidence_runtime_inventory_redacted.rc | default(1) == 0
   no_log: true
 
 - name: Write sanitized application and environment log streams
