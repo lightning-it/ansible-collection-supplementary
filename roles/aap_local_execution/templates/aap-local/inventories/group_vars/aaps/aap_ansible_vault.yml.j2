@@ -15,3 +15,5 @@ aap_admin_password_input: {{ aap_admin_password_input | default(aap_gateway_admi
 
 aap_password: {{ aap_gateway_admin_password_input | default(aap_admin_password_input | default('', true), true) | to_json }}
 rh_offline_token: {{ rh_offline_token | default('', true) | to_json }}
+aap_registry_username_input: {{ aap_registry_username_input | default('', true) | to_json }}
+aap_registry_password_input: {{ aap_registry_password_input | default('', true) | to_json }}

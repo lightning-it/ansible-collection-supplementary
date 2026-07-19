@@ -14,6 +14,13 @@ aap_local_execution_ansible_vault_required_secret_vars:
   - aap_postgresql_admin_password_input
   - aap_breakglass_password_input
   - rh_offline_token
+aap_local_execution_registry_secret_vars:
+  - aap_registry_username_input
+  - aap_registry_password_input
+aap_local_execution_configure_registry_ee_effective: >-
+  {{ aap_configure_registry_ee | default(false) | bool }}
+aap_local_execution_registry_validate_certs_effective: >-
+  {{ aap_registry_validate_certs | default(true) | bool }}
 
 aap_local_execution_machine_a_effective_appl_root: >-
   {{ machine_a_appl_root
@@ -33,6 +40,9 @@ aap_local_execution_machine_a_effective_ssh_key: >-
 aap_local_execution_machine_a_effective_bootstrap_known_hosts: >-
   {{ machine_a_bootstrap_known_hosts
      | default(aap_local_execution_machine_a_effective_secrets_dir ~ '/bootstrap_known_hosts', true) }}
+aap_local_execution_machine_a_effective_vault_password_file: >-
+  {{ machine_a_ansible_vault_password_file
+     | default(aap_local_execution_machine_a_effective_secrets_dir ~ '/.vault-pass.txt', true) }}
 aap_local_execution_machine_a_effective_artifact_dir: >-
   {{ aap_local_execution_machine_a_effective_export_root }}/artifacts/aap
 aap_local_execution_machine_a_effective_source_archive_path: >-
@@ -89,6 +99,10 @@ aap_local_execution_ee_archive_force: >-
   {{ aap_ee_archive_force | default(false) | bool }}
 aap_local_execution_modulix_run_ee_digest_effective: >-
   {{ modulix_run_ee_digest | default('', true) | string | trim }}
+aap_local_execution_require_ee_digest_effective: >-
+  {{ aap_require_ee_digest | default(false) | bool }}
+aap_local_execution_registry_auth_file_effective: >-
+  {{ aap_registry_auth_file | default('', true) | string | trim }}
 aap_local_execution_modulix_run_ee_repository: >-
   {{ modulix_run_ee_image | regex_replace(':[^/:@]+$', '') }}
 aap_local_execution_modulix_run_ee_runtime_image: >-
@@ -217,6 +231,7 @@ aap_local_execution_allowed_actions:
 
 aap_local_execution_remote_playbooks:
   artifacts:
+    - runbooks/50-applications/aap/03-validate-ansible-vault.yml
     - runbooks/50-applications/aap/05-artifacts.yml
   host_prepare_preflight:
     - runbooks/50-applications/aap/06-aap-host-prepare.yml
