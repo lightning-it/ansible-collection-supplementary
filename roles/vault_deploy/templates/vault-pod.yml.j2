@@ -39,9 +39,9 @@ spec:
         - name: data
           mountPath: {{ vault_deploy_container_data_dir }}
         - name: certs
-          mountPath: /vault/certs
+          mountPath: /{{ vault_deploy_flavour }}/certs
         - name: vault-config
-          mountPath: /vault/config
+          mountPath: /{{ vault_deploy_flavour }}/config
   volumes:
     - name: data
       hostPath:
