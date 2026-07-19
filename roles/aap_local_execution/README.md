@@ -51,6 +51,11 @@ must be `svc_aap`.
 - `modulix_run_ee_digest`: optional `sha256:...` digest. Machine A pulls and
   exports, target-side staging verifies, and EE runs use the immutable
   `repository@digest` reference (without a tag) when this value is set.
+- `aap_require_ee_digest`: reject mutable-tag fallback when `true`.
+- `aap_registry_auth_file`: optional target-host Podman auth file used only
+  when the target pulls a private EE. It is not reused as an AAP credential.
+- `aap_configure_registry_ee`: generate the controller configuration for a
+  digest-pinned EE and its separate Container Registry credential.
 - `aap_ee_transfer_enabled`: copy the EE image from Machine A when `true`; pull
   it from the target-side registry when `false`.
 - `aap_ee_archive_force`: recreate the local EE archive even when it already
@@ -68,7 +73,11 @@ replacement whenever the digest changes.
 
 - Secret files are written with `0600`.
 - Ansible Vault generated inventory files are written with `0600` and protected
-  with `no_log`.
+  with `no_log`, then encrypted before any EE run.
+- The owner-only Machine A Ansible Vault password file is transferred with
+  `0600` and never printed.
+- Project collection install trees and collection archives are excluded from
+  the transferred source payload; runtime collections come from the EE.
 - Vault tokens are never printed and are transferred only when the HashiCorp
   backend is selected.
 - HashiCorp Vault mode does not create or pass an Ansible Vault password file.
