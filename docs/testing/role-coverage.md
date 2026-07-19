@@ -7,13 +7,13 @@ Authoritative source: [`meta/role-coverage.yml`](../../meta/role-coverage.yml).
 ## Summary
 
 - Roles: 96
-- Root Molecule scenarios: 56
+- Root Molecule scenarios: 57
 - Production roles: 2
 - Experimental roles: 93
 - Deprecated roles: 1
 - Runtime-container application policies: 6
 - Declared-evidence application policies: 5
-- Reviewed not-applicable application policies: 45
+- Reviewed not-applicable application policies: 46
 
 Profile states are dispositions, not inferred test results. Only `supported` profiles backed by real,
 evidence-producing scenarios are release-eligible.
@@ -33,7 +33,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | aap_host_prepare | aap | infrastructure | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_infrastructure | aap_preflight, lit.foundational.ansible_remote_tmp, lit.rhel.rhsm, lit.rhel.repos, lit.rhel.users, lit.rhel.podman | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | aap-host-prepare-basic |
 | aap_local_execution | aap | runner | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | blocked-external-license | execute_a_real_automation_workload | — | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | aap-local-execution-basic |
 | aap_ops | aap | infrastructure | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | blocked-external-license | restart_backup_restore_and_health | aap, infra.aap_utilities.aap_backup, infra.aap_utilities.aap_restore, infra.aap_utilities.aap_certs | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | aap-ops-basic |
-| aap_preflight | aap | validator | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_validation | — | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | — |
+| aap_preflight | aap | validator | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_validation | — | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | aap-preflight-basic |
 | aap_prepare | aap | infrastructure | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_artifact_staging | artifacts | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | aap-prepare-basic |
 | aap_secrets | aap | secret_management | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_secret_resolution | — | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | — |
 | aap_tls | aap | infrastructure | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_tls_bootstrap | — | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | — |
@@ -277,7 +277,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Role dependencies: —; exercised scenario dependencies: —.
 - External dependencies/blockers: Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets.
 - Required-secret policy: Protected non-production credentials or licensed inputs are required for the declared external dependencies.
-- Local execution: —; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
+- Local execution: `molecule test -s aap-preflight-basic`; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
 - Candidate-target execution: no runnable candidate matrix is currently declared.
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
@@ -1671,6 +1671,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | aap-host-prepare-basic | Tiny | experimental | partial | aap_host_prepare | — | not-applicable | — | Scenario exercises host-preparation role contracts without deploying an independently versioned application. | False | False | False |
 | aap-local-execution-basic | Tiny | experimental | partial | aap_local_execution | — | not-applicable | — | Scenario exercises controller-side role behavior without deploying an independently versioned application. | False | False | False |
 | aap-ops-basic | Tiny | experimental | stub | aap_ops | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
+| aap-preflight-basic | Tiny | experimental | stub | aap_preflight | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | aap-prepare-basic | Tiny | experimental | stub | aap_prepare | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | artifacts-basic | Tiny | experimental | partial | artifacts | — | not-applicable | — | Scenario exercises controller-side role behavior without deploying an independently versioned application. | False | False | False |
 | atlas-observability-incus_heavy | Heavy | experimental | partial | alertmanager_deploy, alloy_deploy, checkmk_deploy, grafana_deploy, loki_deploy, prometheus_deploy, rsyslog_deploy | — | runtime-container | — | Scenario exercises real service containers and must report immutable runtime digests when enabled. | False | False | False |

@@ -315,7 +315,8 @@ roles:
       - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
     deprecation_state: "active"
     scenario_support:
-      tiny: []
+      tiny:
+        - "aap-preflight-basic"
       heavy: []
       application_acceptance: []
   aap_prepare:
@@ -2397,6 +2398,21 @@ scenarios:
       mode: "not-applicable"
       reason: >-
         Scenario exercises controller-side role behavior without deploying an independently versioned
+        application.
+      dependencies: []
+  aap-preflight-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "stub"
+    roles:
+      - "aap_preflight"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario is a role contract or assertion stub and does not deploy an independently versioned
         application.
       dependencies: []
   aap-ops-basic:
