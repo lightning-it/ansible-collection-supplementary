@@ -424,7 +424,7 @@
     keycloak_cac_samba_ldap_provider:
       name: samba-ldaps
       realm: keycloak-test
-      connection_url: ldaps://host.containers.internal:1636
+      connection_url: ldaps://127.0.0.1:1636
       users_dn: CN=Users,DC=keycloak,DC=test
       bind_dn: CN=keycloak,CN=Users,DC=keycloak,DC=test
       bind_credential: "{{ keycloak_heavy_ldap_bind_password }}"

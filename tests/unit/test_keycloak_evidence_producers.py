@@ -86,6 +86,12 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         self.assertIn("unprivileged-403-state-unchanged", verify)
         self.assertIn("postgres-isolated-restore-exact-state", verify)
 
+    def test_heavy_ldap_provider_uses_the_declared_host_network(self) -> None:
+        converge = (ROOT / "molecule" / "keycloak-heavy" / "converge.yml").read_text(encoding="utf-8")
+        self.assertIn("keycloak_deploy_host_network: true", converge)
+        self.assertIn("connection_url: ldaps://127.0.0.1:1636", converge)
+        self.assertNotIn("connection_url: ldaps://host.containers.internal:1636", converge)
+
     def test_acceptance_tests_have_one_supported_role_marker(self) -> None:
         source = (ROOT / "molecule" / "shared" / "keycloak" / "acceptance" / "test_acceptance.py").read_text(
             encoding="utf-8"
