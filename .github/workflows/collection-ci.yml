@@ -22,7 +22,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: collection-quality-${{ github.repository }}-${{ github.ref }}-${{ github.event_name }}
+  group: >-
+    collection-quality-${{ github.repository }}-${{ github.workflow }}-${{
+    github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -316,7 +318,11 @@ jobs:
             'ansible-collection-runtime-protected' }}
     timeout-minutes: 90
     concurrency:
-      group: quality-tiny-${{ github.repository }}-${{ matrix.component }}-${{ matrix.target }}
+      group: >-
+        quality-tiny-${{ github.repository }}-${{ github.workflow }}-${{
+        github.event.pull_request.number || github.ref }}-${{
+        github.event.pull_request.head.sha || github.sha }}-${{
+        matrix.component }}-${{ matrix.target }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
@@ -386,7 +392,11 @@ jobs:
             'ansible-collection-runtime-protected' }}
     timeout-minutes: 180
     concurrency:
-      group: quality-expensive-${{ github.repository }}-${{ matrix.component }}-${{ matrix.target }}
+      group: >-
+        quality-expensive-${{ github.repository }}-${{ github.workflow }}-${{
+        github.event.pull_request.number || github.ref }}-${{
+        github.event.pull_request.head.sha || github.sha }}-${{
+        matrix.component }}-${{ matrix.target }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
@@ -456,7 +466,11 @@ jobs:
             'ansible-collection-runtime-protected' }}
     timeout-minutes: 180
     concurrency:
-      group: quality-expensive-${{ github.repository }}-${{ matrix.component }}-${{ matrix.target }}
+      group: >-
+        quality-expensive-${{ github.repository }}-${{ github.workflow }}-${{
+        github.event.pull_request.number || github.ref }}-${{
+        github.event.pull_request.head.sha || github.sha }}-${{
+        matrix.component }}-${{ matrix.target }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
