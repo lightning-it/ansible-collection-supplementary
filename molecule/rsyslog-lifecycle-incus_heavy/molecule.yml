@@ -20,6 +20,8 @@ platforms:
     config:
       - key: security.nesting
         value: "true"
+      - key: security.idmap.isolated
+        value: "true"
       - key: security.privileged
         value: "true"
 

@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Isolate UID and GID maps for nested Incus test containers so concurrent
+    Podman workloads do not share and exhaust host per-user kernel key quotas.

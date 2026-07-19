@@ -35,6 +35,20 @@ def task_named(tasks: list[dict[str, Any]], name: str) -> dict[str, Any]:
 
 
 class IncusLifecycleTests(unittest.TestCase):
+    def test_nested_containers_use_isolated_idmaps(self) -> None:
+        for molecule_file in sorted((ROOT / "molecule").glob("*/molecule.yml")):
+            config = yaml.safe_load(molecule_file.read_text(encoding="utf-8"))
+            for platform in config.get("platforms", []):
+                instance_config = {item["key"]: item["value"] for item in platform.get("config", [])}
+                if instance_config.get("security.nesting") != "true":
+                    continue
+                with self.subTest(scenario=molecule_file.parent.name):
+                    self.assertEqual(
+                        "true",
+                        instance_config.get("security.idmap.isolated"),
+                        "nested Incus containers must not share per-UID kernel quotas",
+                    )
+
     def test_network_and_instance_ownership_is_atomic(self) -> None:
         tasks = load_play_tasks("create.yml")
         network_create = task_named(tasks, "Create the managed network with atomic exact-owner labels")
