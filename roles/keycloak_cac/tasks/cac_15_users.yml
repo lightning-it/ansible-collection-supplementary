@@ -36,8 +36,21 @@
       vars:
         keycloak_cac_user_failure_raw_message: >-
           {{
-            ansible_failed_result.msg
-            | default('Keycloak user reconciliation failed without a module message.', true)
+            (
+              ansible_failed_result.results
+              | default([])
+              | selectattr('failed', 'defined')
+              | selectattr('failed', 'equalto', true)
+              | map(attribute='msg', default='Keycloak user item failed without a module message.')
+              | map('string')
+              | unique
+              | join('; ')
+            )
+            | default(
+                ansible_failed_result.msg
+                | default('Keycloak user reconciliation failed without a module message.', true),
+                true
+              )
             | string
           }}
         keycloak_cac_user_failure_secret: "{{ keycloak_cac_admin_password | default('') | string }}"
