@@ -223,6 +223,12 @@
       {{
         ['python3', molecule_incus_evidence_sanitizer]
         + (
+          ['--json-document']
+          if item.molecule_incus_evidence_command.name == 'podman-inventory'
+          and (item.rc | default(1)) == 0
+          else []
+        )
+        + (
           molecule_incus_evidence_secret_env_names_effective
           | map('regex_replace', '^(.+)$', '--secret-env=\\1')
           | list
@@ -237,30 +243,6 @@
     label: "{{ item.molecule_incus_evidence_command.name }}"
   register: molecule_incus_evidence_sanitized_logs
   changed_when: false
-  no_log: true
-
-- name: Redact the populated Podman inventory as a JSON document
-  ansible.builtin.command:
-    argv: >-
-      {{
-        ['python3', molecule_incus_evidence_sanitizer, '--json-document']
-        + (
-          molecule_incus_evidence_secret_env_names_effective
-          | map('regex_replace', '^(.+)$', '--secret-env=\\1')
-          | list
-        )
-      }}
-    stdin: "{{ item.stdout }}"
-    stdin_add_newline: false
-  loop: "{{ molecule_incus_evidence_raw_logs.results }}"
-  loop_control:
-    label: "{{ item.molecule_incus_evidence_command.name }}"
-  register: molecule_incus_evidence_runtime_inventory_redacted
-  changed_when: false
-  failed_when: false
-  when:
-    - item.molecule_incus_evidence_command.name == 'podman-inventory'
-    - item.rc == 0
   no_log: true
 
 - name: Refresh the dependency inventory from the populated Podman evidence stream
@@ -287,14 +269,22 @@
           | default('', true) | trim | to_json
         }},
         "container_inventory_available": true,
-        "images": {{ item.stdout | from_json | to_json }}
+        "images": {{ (molecule_incus_evidence_runtime_inventory_candidates | first).stdout | trim }}
       }
-  loop: "{{ molecule_incus_evidence_runtime_inventory_redacted.results }}"
-  loop_control:
-    label: "{{ item.item.molecule_incus_evidence_command.name | default('skipped') }}"
-  when:
-    - item.item.molecule_incus_evidence_command.name | default('') == 'podman-inventory'
-    - item.rc | default(1) == 0
+  when: molecule_incus_evidence_runtime_inventory_candidates | length > 0
+  vars:
+    molecule_incus_evidence_runtime_inventory_candidates: >-
+      {{
+        molecule_incus_evidence_sanitized_logs.results
+        | selectattr(
+            'item.molecule_incus_evidence_command.name',
+            'equalto',
+            'podman-inventory'
+          )
+        | selectattr('item.rc', 'defined')
+        | selectattr('item.rc', 'equalto', 0)
+        | list
+      }}
   no_log: true
 
 - name: Write sanitized application and environment log streams

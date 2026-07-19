@@ -63,6 +63,7 @@ SCENARIO_FILTER="${SCENARIO_FILTER}" \
 CONTAINER_HOME=/tmp/wunder \
 bash scripts/wunder-devtools-ee.sh env \
   MOLECULE_RUN_PROTECTED="${MOLECULE_RUN_PROTECTED:-false}" \
+  INCUS_MODE="${INCUS_MODE:-}" \
   bash -c '
   set -euo pipefail
 

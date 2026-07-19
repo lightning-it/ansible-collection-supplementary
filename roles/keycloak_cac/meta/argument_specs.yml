@@ -118,6 +118,9 @@ argument_specs:
           user_object_classes:
             description: Comma-separated LDAP object classes used to identify user entries.
             type: str
+          custom_user_search_filter:
+            description: Additional LDAP filter applied when Keycloak searches for users.
+            type: str
           search_scope:
             description: LDAP search-scope value used for user queries.
             type: str

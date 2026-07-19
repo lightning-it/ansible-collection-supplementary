@@ -435,6 +435,7 @@
       rdn_ldap_attribute: cn
       uuid_ldap_attribute: objectGUID
       user_object_classes: person, organizationalPerson, user
+      custom_user_search_filter: (sAMAccountName=*)
       search_scope: "1"
       use_truststore_spi: always
   pre_tasks:

@@ -56,7 +56,7 @@ container_images:
     locations:
       - "roles/rsyslog_deploy/defaults/main.yml"
       - "roles/rsyslog_upgrade/defaults/main.yml"
-  - reference: "docker.io/renovate/renovate:43.263.3@sha256:dbdb501ad9a2558ab8f99538b1d4be0a8768cf8c3383aaa33a35ed981dfe3464"
+  - reference: "docker.io/renovate/renovate:43.270.1@sha256:6f215fca5f89bbc2b4bee880ffd9e5080f40eac592efa7d5572f03c7a4629308"
     locations:
       - ".pre-commit-config.yaml"
   - reference: "docker.io/rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
