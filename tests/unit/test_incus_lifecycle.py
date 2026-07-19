@@ -118,10 +118,10 @@ class IncusLifecycleTests(unittest.TestCase):
     ) -> None:
         collection = (SHARED / "collect-evidence.yml").read_text(encoding="utf-8")
 
-        self.assertIn("- --format=json", collection)
+        self.assertIn("\n      - --format\n      - json\n", collection)
         self.assertIn("item.molecule_incus_evidence_command.name == 'podman-inventory'", collection)
         self.assertIn("when: item.rc == 0", collection)
-        self.assertNotIn("\n      - --format\n      - json\n", collection)
+        self.assertNotIn("- --format=json", collection)
 
     def test_firewalld_binding_is_runtime_scoped_and_destroyed_first(self) -> None:
         create_tasks = load_play_tasks("create.yml")
