@@ -78,8 +78,19 @@ class WorkflowSecurityTests(unittest.TestCase):
             if step.get("name") == "Run repository static pre-commit gates"
         ]
         self.assertEqual(1, len(static_steps))
-        require_fragment = static_steps[0]["env"]["REQUIRE_FRAGMENT"]
+        static_env = static_steps[0]["env"]
+        self.assertEqual("${{ github.event.pull_request.base.sha }}", static_env["BASE_SHA"])
+        self.assertEqual("${{ github.event.pull_request.head.sha }}", static_env["HEAD_SHA"])
+        self.assertEqual(
+            "${{ toJson(github.event.pull_request.labels.*.name) }}",
+            static_env["LABELS_JSON"],
+        )
+        require_fragment = static_env["REQUIRE_FRAGMENT"]
+        self.assertIn("github.event.pull_request.base.ref == 'develop'", require_fragment)
+        self.assertIn("startsWith(github.event.pull_request.head.ref, 'renovate/')", require_fragment)
         self.assertIn("github.event.pull_request.user.login == 'renovate[bot]'", require_fragment)
+        self.assertIn("contains(github.event.pull_request.labels.*.name, 'renovate')", require_fragment)
+        self.assertIn("contains(github.event.pull_request.labels.*.name, 'dependencies')", require_fragment)
         self.assertIn("contains(github.event.pull_request.labels.*.name, 'safe-automerge')", require_fragment)
         self.assertIn("!contains(github.event.pull_request.labels.*.name, 'breaking-update')", require_fragment)
 
