@@ -23,7 +23,6 @@
       - KEYCLOAK_TEST_SESSION_SECRET
       - KEYCLOAK_TEST_UNAUTHORIZED_PASSWORD
       - KEYCLOAK_TEST_VIEWER_PASSWORD
-    molecule_incus_evidence_require_runtime_containers_override: true
     molecule_incus_evidence_log_commands_override:
       - name: os-release
         argv:

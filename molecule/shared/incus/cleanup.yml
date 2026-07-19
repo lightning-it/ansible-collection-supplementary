@@ -11,7 +11,6 @@
       {{ lookup('ansible.builtin.env', 'MOLECULE_TEST_ARTIFACTS') }}
     molecule_incus_evidence_log_commands_override: []
     molecule_incus_evidence_secret_env_names_override: []
-    molecule_incus_evidence_require_runtime_containers_override: false
     molecule_incus_evidence_sanitizer_override: ""
     molecule_incus_local_state_directory: >-
       {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}
@@ -148,8 +147,6 @@
           {{ molecule_incus_evidence_log_commands_override | default([], true) }}
         molecule_incus_evidence_secret_env_names_effective: >-
           {{ molecule_incus_evidence_secret_env_names_override | default([], true) }}
-        molecule_incus_evidence_require_runtime_containers_effective: >-
-          {{ molecule_incus_evidence_require_runtime_containers_override | bool }}
 
     - name: Resolve the deterministic per-run Incus network
       ansible.builtin.set_fact:
