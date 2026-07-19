@@ -83,9 +83,12 @@
     keycloak_cac_users:
       - realm: keycloak-test
         username: keycloak_test_viewer
+        first_name: Keycloak
+        last_name: Viewer
         email: viewer@example.invalid
         email_verified: true
         enabled: true
+        required_actions: []
         groups:
           - name: viewers
             state: present
