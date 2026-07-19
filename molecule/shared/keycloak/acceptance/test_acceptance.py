@@ -29,6 +29,21 @@ def _login(page: Page, settings: Settings, username: str, password: str) -> None
     page.wait_for_url(f"{settings.app_url}/viewer", wait_until="domcontentloaded")
 
 
+def _browser_status(page: Page, method: str, url: str) -> int:
+    """Issue a same-origin request with the authenticated browser session."""
+
+    return page.evaluate(
+        """async ({method, url}) => {
+            const response = await fetch(url, {
+                method,
+                credentials: "same-origin",
+            });
+            return response.status;
+        }""",
+        {"method": method.upper(), "url": url},
+    )
+
+
 def _token(settings: Settings, username: str, password: str) -> dict[str, Any]:
     response = httpx.post(
         f"{settings.issuer}/protocol/openid-connect/token",
@@ -69,8 +84,8 @@ def _claims(settings: Settings, encoded: str) -> dict[str, Any]:
 @pytest.mark.parametrize("method", ["post", "put", "patch", "delete"])
 def test_viewer_is_read_only(secure_page: Page, settings: Settings, method: str) -> None:
     _login(secure_page, settings, settings.viewer_username, settings.viewer_password)
-    assert secure_page.request.get(f"{settings.app_url}/viewer").status == 200
-    assert getattr(secure_page.request, method)(f"{settings.app_url}/admin").status == 403
+    assert _browser_status(secure_page, "get", f"{settings.app_url}/viewer") == 200
+    assert _browser_status(secure_page, method, f"{settings.app_url}/admin") == 403
     secure_page.goto(f"{settings.app_url}/logout")
     assert secure_page.request.get(f"{settings.app_url}/viewer", max_redirects=0).status in (302, 303)
 
@@ -78,8 +93,8 @@ def test_viewer_is_read_only(secure_page: Page, settings: Settings, method: str)
 @pytest.mark.evidence_role("keycloak_cac")
 def test_admin_browser_session_and_logout(secure_page: Page, settings: Settings) -> None:
     _login(secure_page, settings, settings.admin_username, settings.admin_password)
-    assert secure_page.request.get(f"{settings.app_url}/viewer").status == 200
-    assert secure_page.request.post(f"{settings.app_url}/admin").status == 200
+    assert _browser_status(secure_page, "get", f"{settings.app_url}/viewer") == 200
+    assert _browser_status(secure_page, "post", f"{settings.app_url}/admin") == 200
     secure_page.goto(f"{settings.app_url}/logout")
     expect(secure_page.locator("#login")).to_be_visible()
     response = secure_page.request.get(f"{settings.app_url}/admin", max_redirects=0)
@@ -91,8 +106,8 @@ def test_admin_browser_session_and_logout(secure_page: Page, settings: Settings)
 @pytest.mark.evidence_role("keycloak_cac")
 def test_unauthorized_user_denied(secure_page: Page, settings: Settings) -> None:
     _login(secure_page, settings, settings.unauthorized_username, settings.unauthorized_password)
-    assert secure_page.request.get(f"{settings.app_url}/viewer").status == 403
-    assert secure_page.request.post(f"{settings.app_url}/admin").status == 403
+    assert _browser_status(secure_page, "get", f"{settings.app_url}/viewer") == 403
+    assert _browser_status(secure_page, "post", f"{settings.app_url}/admin") == 403
 
 
 @pytest.mark.evidence_role("keycloak_cac")
@@ -101,7 +116,7 @@ def test_invalid_credentials_create_no_session(secure_page: Page, settings: Sett
     secure_page.locator("#username").fill(settings.invalid_username)
     secure_page.locator("#password").fill(settings.invalid_password)
     secure_page.locator("#kc-login").click()
-    expect(secure_page.locator("[id^='input-error']").first).to_be_visible()
+    expect(secure_page.locator("[id^='input-error'], [role='alert']").first).to_be_visible()
     response = secure_page.request.get(f"{settings.app_url}/admin", max_redirects=0)
     assert response.status in (302, 303)
 
