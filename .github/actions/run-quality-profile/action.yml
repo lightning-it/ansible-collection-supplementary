@@ -170,6 +170,10 @@ runs:
       run: |
         set -euo pipefail
 
+        python3 scripts/prune_stale_incus_resources.py \
+          --repository "$GITHUB_REPOSITORY" \
+          --current-run-id "$GITHUB_RUN_ID"
+
         command -v ansible-galaxy
         command -v incus
         command -v molecule
@@ -346,6 +350,7 @@ runs:
 
         root = Path(os.environ["QUALITY_ARTIFACT_ROOT"])
         dependencies = root / "dependencies"
+        dependencies.mkdir(parents=True, exist_ok=True)
         scenario = os.environ["QUALITY_SCENARIO"]
         target = os.environ["QUALITY_TARGET"]
         config = Path("molecule") / scenario / "molecule.yml"

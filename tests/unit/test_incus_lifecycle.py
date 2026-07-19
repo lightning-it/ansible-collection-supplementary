@@ -55,6 +55,9 @@ class IncusLifecycleTests(unittest.TestCase):
         network_argv = str(network_create["ansible.builtin.command"]["argv"])
         self.assertIn("'incus', 'network', 'create'", network_argv)
         self.assertIn("user.lit-molecule-owner=", network_argv)
+        self.assertEqual(3, network_create["retries"])
+        self.assertEqual(10, network_create["delay"])
+        self.assertEqual("molecule_incus_network_create.rc == 0", network_create["until"])
 
         instance_init = task_named(
             tasks,
@@ -197,6 +200,24 @@ class IncusLifecycleTests(unittest.TestCase):
         action = (ROOT / ".github" / "actions" / "run-quality-profile" / "action.yml").read_text(encoding="utf-8")
         self.assertIn('echo "MOLECULE_TEST_INSTANCE=$instance"', action)
         self.assertIn('echo "MOLECULE_TEST_IMAGE=$TEST_IMAGE"', action)
+        self.assertIn("dependencies.mkdir(parents=True, exist_ok=True)", action)
+
+    def test_quality_action_prunes_only_superseded_exact_owned_resources(
+        self,
+    ) -> None:
+        action = (ROOT / ".github" / "actions" / "run-quality-profile" / "action.yml").read_text(encoding="utf-8")
+
+        self.assertIn("scripts/prune_stale_incus_resources.py", action)
+        self.assertLess(
+            action.index("scripts/prune_stale_incus_resources.py"),
+            action.index("molecule test"),
+        )
+
+        helper = (ROOT / "scripts" / "prune_stale_incus_resources.py").read_text(encoding="utf-8")
+        self.assertIn("run_id != current_run_id", helper)
+        self.assertIn("config.get(REPOSITORY_KEY) == repository", helper)
+        self.assertIn("bool(config.get(OWNER_KEY))", helper)
+        self.assertIn("or used_by", helper)
 
     def test_legacy_static_entrypoint_fails_before_create(self) -> None:
         payload = yaml.safe_load((SHARED / "create-static-network.yml").read_text(encoding="utf-8"))

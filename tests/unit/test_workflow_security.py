@@ -64,10 +64,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         )
 
         jobs = workflow["jobs"]
-        groups = [
-            jobs[name]["concurrency"]["group"]
-            for name in ("tiny-cells", "heavy-cells", "acceptance-cells")
-        ]
+        groups = [jobs[name]["concurrency"]["group"] for name in ("tiny-cells", "heavy-cells", "acceptance-cells")]
         for group in groups:
             self.assertIn("github.repository", group)
             self.assertIn("github.workflow", group)
