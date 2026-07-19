@@ -14,7 +14,7 @@ Full Checkmk object provisioning is intentionally left for a later CaC role.
 
 | Variable | Default | Description |
 |---|---|---|
-| `checkmk_deploy_image` | `docker.io/checkmk/check-mk-raw:2.3.0-latest` | Checkmk image. |
+| `checkmk_deploy_image` | Tag-and-digest reference in `meta/source-dependencies.yml` | Immutable Checkmk image. |
 | `checkmk_deploy_site_name` | `monitoring` | Checkmk site ID. |
 | `checkmk_deploy_host_data_dir` | `/srv/checkmk/data` | Persistent site data. |
 | `checkmk_deploy_port` | `5000` | Host port for Checkmk HTTP. |

@@ -22,6 +22,8 @@ Key variables:
 - `vault_backup_restore_unseal_after_start`: invokes the protected `vault_ops` unseal flow whenever maintenance
   restarts a Shamir deployment. It defaults to `true` when auto-unseal is disabled.
 - `vault_backup_restore_expected_lifecycle`: lifecycle required by post-restore validation; defaults to `ready`.
+- `vault_backup_restore_podman_executable`: Podman command or absolute executable path used for runtime lifecycle
+  operations; defaults to `podman`.
 - `vault_backup_restore_pod_manifest_path`: resolves the same actual `podman-kube@` unit used by deploy.
 
 The role validates the tar archive layout before stopping Vault. Backup startup runs from an `always` path, so an

@@ -2,7 +2,8 @@
 # Podman runtime
 coredns_deploy_pod_name: "coredns"
 coredns_deploy_pod_manifest_path: "/etc/podman/pods/coredns.yml"
-coredns_deploy_image: "docker.io/coredns/coredns:1.11.1"
+coredns_deploy_image: >-
+  docker.io/coredns/coredns:1.11.1@sha256:1eeb4c7316bacb1d4c8ead65571cd92dd21e27359f0d4917f1a5822a73b75db1
 coredns_deploy_container_name: "{{ coredns_deploy_pod_name }}-coredns"
 coredns_deploy_run_as_user: 0
 coredns_deploy_run_as_group: 0

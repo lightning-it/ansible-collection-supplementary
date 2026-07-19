@@ -20,6 +20,7 @@ vault_backup_restore_expected_gid: "{{ vault_deploy_expected_gid | default(1000,
 vault_backup_restore_expected_mode: "{{ vault_deploy_expected_mode | default('0700', true) }}"
 vault_backup_restore_selinux_relabel: "{{ vault_deploy_selinux_relabel | default(true, true) }}"
 vault_backup_restore_manage_systemd: "{{ vault_deploy_manage_systemd | default(true, true) }}"
+vault_backup_restore_podman_executable: "podman"
 vault_backup_restore_pod_name: "{{ vault_deploy_pod_name | default('vault', true) }}"
 vault_backup_restore_pod_manifest_path: >-
   {{ vault_deploy_pod_manifest_path | default('/etc/podman/pods/vault.yml', true) }}

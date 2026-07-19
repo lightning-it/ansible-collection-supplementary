@@ -25,8 +25,11 @@ without privilege escalation; API tasks always run with `become: false`.
 
 Runtime topology inputs:
 
-- `vault_deploy_image`: OCI image reference. Set `vault_deploy_require_immutable_image: true` to require the exact
-  `registry/repository@sha256:<64 lowercase hex>` form used by production deployments.
+- `vault_deploy_image`: tag-and-digest OCI image reference from the shipped
+  dependency inventory.
+- `vault_deploy_require_immutable_image`: defaults to `true` and requires an
+  exact `registry/repository:tag@sha256:<64 lowercase hex>` reference. Set it to
+  `false` only as an explicit compatibility opt-out for a caller override.
 - `vault_deploy_storage_backend`: `file` (compatibility default) or `raft`.
 - `vault_deploy_listener_address`: Vault API listener bind address inside the container.
 - `vault_deploy_api_addr`: advertised HTTPS API address.
