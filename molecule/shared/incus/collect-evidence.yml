@@ -128,8 +128,10 @@
       - "{{ molecule_incus_owned_instance.item.name }}"
       - --
       - podman
-      - images
-      - --format=json
+      - ps
+      - --all
+      - --format
+      - json
   register: molecule_incus_evidence_container_images_raw
   changed_when: false
   failed_when: false

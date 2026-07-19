@@ -467,7 +467,14 @@ runs:
                     raise SystemExit(f"malformed container image entry: {inventory}")
                 digest = str(image.get("Digest") or image.get("digest") or "")
                 if re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None:
-                    image_id = str(image.get("Id") or image.get("ID") or image.get("id") or "")
+                    image_id = str(
+                        image.get("Id")
+                        or image.get("ID")
+                        or image.get("id")
+                        or image.get("ImageID")
+                        or image.get("image_id")
+                        or ""
+                    )
                     image_id = image_id.removeprefix("sha256:")
                     if re.fullmatch(r"[0-9a-f]{64}", image_id) is None:
                         raise SystemExit(f"container image lacks immutable identity: {inventory}")
