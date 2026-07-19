@@ -107,10 +107,12 @@ jobs:
               '$2 == "safe-automerge" && ($1 == "labeled" || $1 == "unlabeled") { latest=$0 } END { print latest }' \
               <<<"$label_events"
           )"
-          if [ "$safe_event" != $'labeled\tsafe-automerge\trenovate[bot]' ]; then
+          expected_safe_event=$'labeled\tsafe-automerge\trenovate[bot]'
+          breaking_event_pattern=$'labeled\tbreaking-update\t'
+          if [ "$safe_event" != "$expected_safe_event" ]; then
             trusted=false
           fi
-          if grep -Fq $'labeled\tbreaking-update\t' <<<"$label_events"; then
+          if grep -Fq "$breaking_event_pattern" <<<"$label_events"; then
             trusted=false
           fi
 
@@ -127,7 +129,7 @@ jobs:
           set -euo pipefail
 
           current_live_is_safe() {
-            local label_events live_pr safe_event
+            local breaking_event_pattern expected_safe_event label_events live_pr safe_event
             if ! live_pr="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}")"; then
               return 1
             fi
@@ -157,8 +159,10 @@ jobs:
                 '$2 == "safe-automerge" && ($1 == "labeled" || $1 == "unlabeled") { latest=$0 } END { print latest }' \
                 <<<"$label_events"
             )"
-            [ "$safe_event" = $'labeled\tsafe-automerge\trenovate[bot]' ] \
-              && ! grep -Fq $'labeled\tbreaking-update\t' <<<"$label_events"
+            expected_safe_event=$'labeled\tsafe-automerge\trenovate[bot]'
+            breaking_event_pattern=$'labeled\tbreaking-update\t'
+            [ "$safe_event" = "$expected_safe_event" ] \
+              && ! grep -Fq "$breaking_event_pattern" <<<"$label_events"
           }
 
           if current_live_is_safe; then
@@ -203,7 +207,7 @@ jobs:
           set -euo pipefail
 
           assert_live_safe() {
-            local label_events live_pr safe_event
+            local breaking_event_pattern expected_safe_event label_events live_pr safe_event
             if ! live_pr="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}")"; then
               return 1
             fi
@@ -236,8 +240,10 @@ jobs:
                 '$2 == "safe-automerge" && ($1 == "labeled" || $1 == "unlabeled") { latest=$0 } END { print latest }' \
                 <<<"$label_events"
             )"
-            [ "$safe_event" = $'labeled\tsafe-automerge\trenovate[bot]' ] \
-              && ! grep -Fq $'labeled\tbreaking-update\t' <<<"$label_events"
+            expected_safe_event=$'labeled\tsafe-automerge\trenovate[bot]'
+            breaking_event_pattern=$'labeled\tbreaking-update\t'
+            [ "$safe_event" = "$expected_safe_event" ] \
+              && ! grep -Fq "$breaking_event_pattern" <<<"$label_events"
           }
 
           disable_auto_merge() {

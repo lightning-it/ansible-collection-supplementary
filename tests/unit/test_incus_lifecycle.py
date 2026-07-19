@@ -218,6 +218,11 @@ class IncusLifecycleTests(unittest.TestCase):
         action = (ROOT / ".github" / "actions" / "run-quality-profile" / "action.yml").read_text(encoding="utf-8")
 
         self.assertIn("scripts/prune_stale_incus_resources.py", action)
+        self.assertIn("command -v incus", action)
+        self.assertLess(
+            action.index("command -v incus"),
+            action.index("scripts/prune_stale_incus_resources.py"),
+        )
         self.assertLess(
             action.index("scripts/prune_stale_incus_resources.py"),
             action.index("molecule test"),
@@ -228,6 +233,8 @@ class IncusLifecycleTests(unittest.TestCase):
         self.assertIn("config.get(REPOSITORY_KEY) == repository", helper)
         self.assertIn("bool(config.get(OWNER_KEY))", helper)
         self.assertIn("or used_by", helper)
+        self.assertIn('shutil.which("incus")', helper)
+        self.assertIn("except (FileNotFoundError, subprocess.CalledProcessError):", helper)
 
     def test_legacy_static_entrypoint_fails_before_create(self) -> None:
         payload = yaml.safe_load((SHARED / "create-static-network.yml").read_text(encoding="utf-8"))
