@@ -255,11 +255,11 @@
               vault_raft_snapshot_restore_cluster_port
             }}:8201
           - --volume
-          - "{{ vault_raft_snapshot_restore_work_root }}/data:/{{ vault_raft_snapshot_flavour }}/data"
+          - "{{ vault_raft_snapshot_restore_work_root }}/data:/{{ vault_deploy_flavour | default('vault', true) }}/data"
           - --volume
-          - "{{ vault_raft_snapshot_restore_work_root }}/config:/{{ vault_raft_snapshot_flavour }}/config:ro"
+          - "{{ vault_raft_snapshot_restore_work_root }}/config:/{{ vault_deploy_flavour | default('vault', true) }}/config:ro"
           - --volume
-          - "{{ vault_raft_snapshot_production_cert_dir }}:/{{ vault_raft_snapshot_flavour }}/certs:ro"
+          - "{{ vault_raft_snapshot_production_cert_dir }}:/{{ vault_deploy_flavour | default('vault', true) }}/certs:ro"
           - --user
           - >-
             {{ vault_raft_snapshot_restore_run_as_user }}:{{
