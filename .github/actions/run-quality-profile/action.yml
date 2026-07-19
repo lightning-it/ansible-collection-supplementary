@@ -170,6 +170,14 @@ runs:
       run: |
         set -euo pipefail
 
+        minimum_inotify_instances=4096
+        current_inotify_instances="$(sysctl -n fs.inotify.max_user_instances)"
+        [[ "$current_inotify_instances" =~ ^[0-9]+$ ]]
+        if [ "$current_inotify_instances" -lt "$minimum_inotify_instances" ]; then
+          sudo sysctl -w "fs.inotify.max_user_instances=$minimum_inotify_instances"
+        fi
+        test "$(sysctl -n fs.inotify.max_user_instances)" -ge "$minimum_inotify_instances"
+
         command -v ansible-galaxy
         command -v incus
         command -v molecule
