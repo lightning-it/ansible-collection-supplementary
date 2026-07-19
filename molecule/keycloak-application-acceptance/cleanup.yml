@@ -37,8 +37,7 @@
           - podman
           - images
           - --all
-          - --format
-          - json
+          - --format=json
       - name: keycloak
         argv:
           - podman

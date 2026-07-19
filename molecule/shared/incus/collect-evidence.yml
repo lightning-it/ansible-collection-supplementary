@@ -130,8 +130,7 @@
       - podman
       - images
       - --all
-      - --format
-      - json
+      - --format=json
   register: molecule_incus_evidence_container_images_raw
   changed_when: false
   failed_when: false
@@ -243,6 +242,10 @@
     label: "{{ item.molecule_incus_evidence_command.name }}"
   register: molecule_incus_evidence_sanitized_logs
   changed_when: false
+  failed_when: >-
+    molecule_incus_evidence_sanitized_logs.rc != 0
+    and item.molecule_incus_evidence_command.name == 'podman-inventory'
+    and (item.rc | default(1)) == 0
   no_log: true
 
 - name: Refresh the dependency inventory from the populated Podman evidence stream
@@ -299,6 +302,7 @@
   loop: "{{ molecule_incus_evidence_sanitized_logs.results }}"
   loop_control:
     label: "{{ item.item.molecule_incus_evidence_command.name }}"
+  when: item.rc == 0
   no_log: true
 
 - name: Record application and environment log collection status
