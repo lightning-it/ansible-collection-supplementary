@@ -183,6 +183,7 @@ repos:
         name: Markdown lint
         language: system
         entry: npx --yes markdownlint-cli2@0.23.0
+        require_serial: true
         types: [markdown]
 
       - id: shellcheck
