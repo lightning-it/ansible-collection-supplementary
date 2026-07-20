@@ -29,7 +29,7 @@ concurrency:
 
 env:
   PYTHON_VERSION: "3.11"
-  ANSIBLE_CORE_VERSION: "2.18.13"
+  ANSIBLE_CORE_VERSION: "2.18.18"
   COLLECTION_NAMESPACE: lit
   COLLECTION_NAME: supplementary
   # Execute the exact reviewed PR head. The resulting merge commit is a distinct
@@ -351,6 +351,18 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
         with:
           ref: ${{ env.SOURCE_SHA }}
+      - name: Set up exact Python runtime
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install exact Tiny validation toolchain
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            "ansible-core==${ANSIBLE_CORE_VERSION}" \
+            molecule==25.12.0 \
+            molecule-plugins==25.8.12 \
+            PyYAML==6.0.3
       - uses: ./.github/actions/run-quality-profile
         with:
           profile: ${{ matrix.profile }}
@@ -388,7 +400,7 @@ jobs:
           fi
 
   heavy-cells:
-    name: Heavy matrix / ${{ matrix.scenario }} / ${{ matrix.target }}
+    name: Heavy matrix (delegated to modulix-validation)
     if: >-
       needs.quality-matrix.outputs.keycloak_required == 'true' &&
       ((github.event_name == 'pull_request' &&
@@ -403,43 +415,17 @@ jobs:
        ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
         (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
     needs: [build-install, quality-matrix]
-    strategy:
-      fail-fast: false
-      max-parallel: 3
-      matrix: ${{ fromJSON(needs.quality-matrix.outputs.heavy) }}
-    runs-on: ${{ matrix.runner }}
-    environment:
-      name: >-
+    uses: lightning-it/modulix-validation/.github/workflows/collection-quality-profile.yml@ec110a9545dc6b8efe4ed8820b50b27912175111
+    with:
+      profile: heavy
+      matrix-json: ${{ needs.quality-matrix.outputs.heavy }}
+      candidate-artifact: collection-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+      source-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      environment-name: >-
         ${{ github.event_name == 'pull_request' &&
             'ansible-collection-runtime-tests' ||
             'ansible-collection-runtime-protected' }}
-    timeout-minutes: 180
-    concurrency:
-      group: >-
-        quality-expensive-${{ github.repository }}-${{ github.workflow }}-${{
-        github.event.pull_request.number || github.ref }}-${{
-        github.event.pull_request.head.sha || github.sha }}-${{
-        matrix.component }}-${{ matrix.target }}
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
-        with:
-          ref: ${{ env.SOURCE_SHA }}
-      - uses: ./.github/actions/run-quality-profile
-        with:
-          profile: ${{ matrix.profile }}
-          scenario: ${{ matrix.scenario }}
-          target: ${{ matrix.target }}
-          roles: ${{ join(matrix.roles, ',') }}
-          image: ${{ matrix.image || vars[matrix.image_variable] }}
-          instance-type: ${{ matrix.instance_type }}
-          candidate-artifact: ${{ env.CANDIDATE_ARTIFACT }}
-          source-sha: ${{ env.SOURCE_SHA }}
-          junit-required: ${{ matrix.junit }}
-          allure-required: ${{ matrix.allure }}
-          cpu-limit: "4"
-          memory-limit: 12GiB
-          disk-limit: 24GiB
+    secrets: inherit
 
   heavy:
     name: Collection / Heavy
@@ -462,7 +448,7 @@ jobs:
           fi
 
   acceptance-cells:
-    name: Application Acceptance matrix / ${{ matrix.scenario }} / ${{ matrix.target }}
+    name: Application Acceptance matrix (delegated to modulix-validation)
     if: >-
       needs.quality-matrix.outputs.keycloak_required == 'true' &&
       ((github.event_name == 'pull_request' &&
@@ -477,45 +463,17 @@ jobs:
        ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
         (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
     needs: [build-install, quality-matrix]
-    strategy:
-      fail-fast: false
-      max-parallel: 3
-      matrix: ${{ fromJSON(needs.quality-matrix.outputs.acceptance) }}
-    runs-on: ${{ matrix.runner }}
-    environment:
-      name: >-
+    uses: lightning-it/modulix-validation/.github/workflows/collection-quality-profile.yml@ec110a9545dc6b8efe4ed8820b50b27912175111
+    with:
+      profile: application_acceptance
+      matrix-json: ${{ needs.quality-matrix.outputs.acceptance }}
+      candidate-artifact: collection-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+      source-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      environment-name: >-
         ${{ github.event_name == 'pull_request' &&
             'ansible-collection-runtime-tests' ||
             'ansible-collection-runtime-protected' }}
-    timeout-minutes: 180
-    concurrency:
-      group: >-
-        quality-expensive-${{ github.repository }}-${{ github.workflow }}-${{
-        github.event.pull_request.number || github.ref }}-${{
-        github.event.pull_request.head.sha || github.sha }}-${{
-        matrix.component }}-${{ matrix.target }}
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
-        with:
-          ref: ${{ env.SOURCE_SHA }}
-      - uses: ./.github/actions/run-quality-profile
-        with:
-          profile: ${{ matrix.profile }}
-          scenario: ${{ matrix.scenario }}
-          target: ${{ matrix.target }}
-          roles: ${{ join(matrix.roles, ',') }}
-          image: ${{ matrix.image || vars[matrix.image_variable] }}
-          instance-type: ${{ matrix.instance_type }}
-          candidate-artifact: ${{ env.CANDIDATE_ARTIFACT }}
-          source-sha: ${{ env.SOURCE_SHA }}
-          junit-required: ${{ matrix.junit }}
-          allure-required: ${{ matrix.allure }}
-          cpu-limit: "4"
-          # Acceptance starts Keycloak, PostgreSQL, LDAP/Samba, and a browser
-          # concurrently. 8 GiB repeatedly triggered an in-guest OOM kill.
-          memory-limit: 12GiB
-          disk-limit: 24GiB
+    secrets: inherit
 
   acceptance:
     name: Collection / Application Acceptance

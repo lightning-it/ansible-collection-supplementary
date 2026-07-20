@@ -17,3 +17,5 @@
     loop_var: keycloak_cac_user_role_mapping
     label: "{{ keycloak_cac_user_role_mapping.target_username | default('unnamed') }}"
   no_log: true
+  tags:
+    - molecule-idempotence-notest

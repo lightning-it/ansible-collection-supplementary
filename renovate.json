@@ -51,7 +51,7 @@
       "allowedVersions": "/^11\\./"
     },
     {
-      "description": "Pin community.vmware to 5.10.0 for ansible-core 2.18.13 compatibility",
+      "description": "Pin community.vmware to 5.10.0 for ansible-core 2.18.18 compatibility",
       "matchDepNames": ["community.vmware"],
       "matchDatasources": ["galaxy-collection"],
       "allowedVersions": "/^5\\.10\\.0$/"

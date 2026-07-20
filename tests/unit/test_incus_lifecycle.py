@@ -263,7 +263,10 @@ class IncusLifecycleTests(unittest.TestCase):
         inventory = task_named(tasks, "Read exact in-target container image identities and digests")
         argv = inventory["ansible.builtin.command"]["argv"]
 
-        self.assertEqual(["images", "--all", "--format", "json"], argv[-4:])
+        self.assertEqual(["sh", "-c"], argv[-3:-1])
+        self.assertIn("e3tqc29uIC59fQ==", argv[-1])
+        self.assertIn('podman images --all --format "$format"', argv[-1])
+        self.assertNotIn("{{json", argv[-1])
         self.assertIn("item.molecule_incus_evidence_command.name == 'podman-inventory'", collection)
         self.assertIn("when: item.rc == 0", collection)
         self.assertNotIn("--format=json", argv)
@@ -356,6 +359,10 @@ class IncusLifecycleTests(unittest.TestCase):
         self.assertIn('echo "MOLECULE_TEST_INSTANCE=$instance"', action)
         self.assertIn('echo "MOLECULE_TEST_IMAGE=$TEST_IMAGE"', action)
         self.assertIn("dependencies.mkdir(parents=True, exist_ok=True)", action)
+        self.assertIn('"${candidates[0]}"', action)
+        self.assertIn("--no-deps", action)
+        self.assertIn("runtime-collections.tar.gz", action)
+        self.assertIn("missing declared runtime collections", action)
 
     def test_quality_action_prunes_only_superseded_exact_owned_resources(
         self,
@@ -374,12 +381,22 @@ class IncusLifecycleTests(unittest.TestCase):
         )
 
         helper = (ROOT / "scripts" / "prune_stale_incus_resources.py").read_text(encoding="utf-8")
-        self.assertIn("run_id != current_run_id", helper)
+        self.assertIn("int(run_id) < int(current_run_id)", helper)
         self.assertIn("config.get(REPOSITORY_KEY) == repository", helper)
         self.assertIn("bool(config.get(OWNER_KEY))", helper)
         self.assertIn("or used_by", helper)
         self.assertIn('shutil.which("incus")', helper)
         self.assertIn("except (FileNotFoundError, subprocess.CalledProcessError):", helper)
+        self.assertIn("def delete_if_present(", helper)
+        self.assertIn('list_kind="instance"', helper)
+        self.assertIn('list_kind="network"', helper)
+
+        cleanup = (SHARED / "cleanup.yml").read_text(encoding="utf-8")
+        network_show = cleanup.split(
+            "- name: Read exact-owned managed-network state for lifecycle evidence",
+            maxsplit=1,
+        )[1].split("- name:", maxsplit=1)[0]
+        self.assertIn("failed_when: false", network_show)
 
     def test_legacy_static_entrypoint_fails_before_create(self) -> None:
         payload = yaml.safe_load((SHARED / "create-static-network.yml").read_text(encoding="utf-8"))
