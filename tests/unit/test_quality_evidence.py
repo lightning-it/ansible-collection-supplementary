@@ -961,6 +961,15 @@ class QualityEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(evidence.EvidenceError, "symlinked junit reference"):
             evidence.copy_artifacts([input_root], self.base / "symlink-cell-output", excluded=())
 
+    def test_copy_artifacts_rejects_malformed_cell_manifest(self) -> None:
+        input_root = self.base / "malformed-cell-input"
+        cell = input_root / "attempt-1"
+        cell.mkdir(parents=True)
+        (cell / "manifest.json").write_text('{"results": [', encoding="utf-8")
+
+        with self.assertRaisesRegex(evidence.EvidenceError, "invalid cell manifest"):
+            evidence.copy_artifacts([input_root], self.base / "malformed-cell-output", excluded=())
+
     def test_release_dependencies_require_matching_test_application_inventory(self) -> None:
         self._release_dependencies(self.evidence_root)
         applications = self.evidence_root / "dependencies" / "test-application-dependencies.json"

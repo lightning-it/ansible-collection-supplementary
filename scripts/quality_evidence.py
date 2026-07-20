@@ -1172,22 +1172,24 @@ def _cell_manifest_references(input_root: Path) -> tuple[list[Path], set[Path]]:
     for manifest_path in sorted(input_root.rglob("manifest.json")):
         try:
             payload = _strict_json_loads(_bounded_read(manifest_path).decode("utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError, EvidenceError):
-            continue
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, EvidenceError) as error:
+            relative = manifest_path.relative_to(input_root).as_posix()
+            raise EvidenceError(f"invalid cell manifest: {relative}") from error
         if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
-            continue
+            relative = manifest_path.relative_to(input_root).as_posix()
+            raise EvidenceError(f"invalid cell manifest schema: {relative}")
         cell_root = manifest_path.parent.resolve()
         cell_roots.append(cell_root)
         for result in payload["results"]:
             if not isinstance(result, dict):
-                continue
+                raise EvidenceError(f"cell manifest has invalid result: {manifest_path.name}")
             for field in ("junit", "allure_results"):
                 values = result.get(field, [])
                 if not isinstance(values, list):
-                    continue
+                    raise EvidenceError(f"cell manifest has invalid {field} references: {manifest_path.name}")
                 for value in values:
                     if not isinstance(value, str):
-                        continue
+                        raise EvidenceError(f"cell manifest has non-string {field} reference: {manifest_path.name}")
                     reference = PurePosixPath(value)
                     if reference.is_absolute() or ".." in reference.parts or not reference.parts:
                         raise EvidenceError(f"cell manifest has unsafe {field} reference: {value}")

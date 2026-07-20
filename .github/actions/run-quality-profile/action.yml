@@ -62,7 +62,9 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        tool_root="$RUNNER_TEMP/supplementary-quality-tools/$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT/$GITHUB_JOB"
+        tool_parent="$RUNNER_TEMP/supplementary-quality-tools"
+        mkdir -p "$tool_parent"
+        tool_root="$(mktemp -d "$tool_parent/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB.XXXXXX")"
         python3 -m venv --system-site-packages "$tool_root"
         "$tool_root/bin/python" -m pip install --disable-pip-version-check \
           ansible-core==2.21.2 \

@@ -102,9 +102,7 @@ class WorkflowSecurityTests(unittest.TestCase):
             "12GiB",
             candidate["jobs"]["candidate-cells"]["steps"][1]["with"]["memory-limit"],
         )
-        molecule = (ROOT / "molecule" / "keycloak-application-acceptance" / "molecule.yml").read_text(
-            encoding="utf-8"
-        )
+        molecule = (ROOT / "molecule" / "keycloak-application-acceptance" / "molecule.yml").read_text(encoding="utf-8")
         self.assertIn("${KEYCLOAK_TEST_MEMORY_LIMIT:-12GiB}", molecule)
 
     def test_copilot_and_renovate_gates_preserve_safe_update_boundaries(self) -> None:
@@ -535,6 +533,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         collection_payload = load_yaml(WORKFLOWS / "collection-ci.yml")
         self.assertNotIn("QUALITY_SOURCE_SHA", collection_payload["env"])
         self.assertNotIn("actions/setup-python@", action)
+        self.assertIn('tool_root="$(mktemp -d ', action)
         self.assertIn("python3 -m venv --system-site-packages", action)
         self.assertIn("ansible-core==2.21.2", action)
         self.assertIn("molecule==25.12.0", action)
