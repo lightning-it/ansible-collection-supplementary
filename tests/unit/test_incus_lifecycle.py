@@ -264,12 +264,12 @@ class IncusLifecycleTests(unittest.TestCase):
         argv = inventory["ansible.builtin.command"]["argv"]
 
         self.assertEqual(
-            ["images", "--all", "--format", "{{ '{{json .}}' }}"],
-            argv[-4:],
+            ["images", "--all", "--format=json"],
+            argv[-3:],
         )
         self.assertIn("item.molecule_incus_evidence_command.name == 'podman-inventory'", collection)
         self.assertIn("when: item.rc == 0", collection)
-        self.assertNotIn("--format=json", argv)
+        self.assertIn("--format=json", argv)
 
     def test_firewalld_binding_is_runtime_scoped_and_destroyed_first(self) -> None:
         create_tasks = load_play_tasks("create.yml")
