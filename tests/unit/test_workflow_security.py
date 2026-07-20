@@ -505,7 +505,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("command -v python3", action)
         self.assertNotRegex(action, r"(?m)(?<![A-Za-z0-9_-])python(?!3)(?:\s|$)")
         self.assertIn(
-            'MOLECULE_EPHEMERAL_DIRECTORY=$molecule_ephemeral_root',
+            "MOLECULE_EPHEMERAL_DIRECTORY=$molecule_ephemeral_root",
             action,
         )
         self.assertIn('molecule_ephemeral_root="${temp_root}/molecule-ephemeral"', action)
