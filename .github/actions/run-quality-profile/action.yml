@@ -65,13 +65,13 @@ runs:
         tool_parent="$RUNNER_TEMP/supplementary-quality-tools"
         mkdir -p "$tool_parent"
         tool_root="$(mktemp -d "$tool_parent/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB.XXXXXX")"
-        python3 -m venv --system-site-packages "$tool_root"
-        "$tool_root/bin/python" -m pip install --disable-pip-version-check \
+        python3 -m venv "$tool_root"
+        "$tool_root/bin/python3" -m pip install --disable-pip-version-check \
           ansible-core==2.21.2 \
           molecule==25.12.0 \
           molecule-plugins==25.8.12
         export PATH="$tool_root/bin:$PATH"
-        "$tool_root/bin/python" -c 'import ansible; import molecule'
+        "$tool_root/bin/python3" -c 'import ansible; import molecule'
         "$tool_root/bin/molecule" --version
         echo "$tool_root/bin" >> "$GITHUB_PATH"
 
