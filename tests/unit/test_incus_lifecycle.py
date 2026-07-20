@@ -80,7 +80,7 @@ class IncusLifecycleTests(unittest.TestCase):
                 "delete",
                 "--force",
                 "stale-instance",
-                list_kind="instnace",
+                list_kind="unsupported",
             )
         incus.assert_not_called()
 
