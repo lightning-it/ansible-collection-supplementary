@@ -51,6 +51,71 @@ def docker_action_image(path: Path) -> str | None:
 
 
 class WorkflowSecurityTests(unittest.TestCase):
+    def test_quality_cells_install_only_the_prebuilt_exact_candidate(self) -> None:
+        action = ACTION.read_text(encoding="utf-8")
+        install = re.search(
+            r"ansible-galaxy collection install \\\n(?P<body>(?:\s+.*\n){1,8})",
+            action,
+        )
+        self.assertIsNotNone(install)
+        command = install.group(0) if install is not None else ""
+        self.assertIn('"${candidates[0]}"', command)
+        self.assertIn("--force", command)
+        self.assertIn("--no-deps", command)
+        self.assertIn("runtime-collections.tar.gz", action)
+        self.assertIn('path.parts[0] != "ansible_collections"', action)
+        self.assertIn("member.issym()", action)
+        self.assertIn("member.islnk()", action)
+        self.assertIn("absolute runtime collection link", action)
+        self.assertIn("escaping runtime collection link", action)
+        self.assertIn("duplicate runtime collection member", action)
+        self.assertIn('"members": members', action)
+        self.assertIn('extract_arguments["filter"] = "data"', action)
+        self.assertIn("C.COLLECTIONS_PATHS", action)
+        self.assertIn("missing declared runtime collections", action)
+        self.assertIn(
+            "ANSIBLE_COLLECTIONS_PATH=$QUALITY_INSTALL_ROOT:$default_collection_paths",
+            action,
+        )
+        workflow = (WORKFLOWS / "collection-ci.yml").read_text(encoding="utf-8")
+        self.assertIn("-czf dist/candidate/runtime-collections.tar.gz", workflow)
+        self.assertIn("--exclude=ansible_collections/lit/supplementary", workflow)
+        self.assertIn("for path, _ in members", workflow)
+        self.assertIn("runtime collection bundle contains the candidate collection", workflow)
+        self.assertIn("runtime-collections.tar.gz \\", workflow)
+
+    def test_release_evidence_selects_only_the_collection_candidate_and_exact_head(self) -> None:
+        workflow = (WORKFLOWS / "collection-ci.yml").read_text(encoding="utf-8")
+        self.assertIn("-name 'lit-supplementary-*.tar.gz'", workflow)
+        self.assertNotIn(
+            "find artifacts/candidate -maxdepth 1 -type f -name '*.tar.gz'",
+            workflow,
+        )
+        payload = load_yaml(WORKFLOWS / "collection-ci.yml")
+        self.assertNotIn("QUALITY_SOURCE_SHA", payload["env"])
+        self.assertEqual(
+            payload["env"]["SOURCE_SHA"],
+            payload["jobs"]["runtime-evidence"]["env"]["QUALITY_SOURCE_SHA"],
+        )
+
+    def test_keycloak_cells_reserve_memory_for_the_full_runtime_stack(self) -> None:
+        collection = load_yaml(WORKFLOWS / "collection-ci.yml")
+        candidate = load_yaml(WORKFLOWS / "candidate-platform-validation.yml")
+        for job in ("tiny-cells", "heavy-cells", "acceptance-cells"):
+            with self.subTest(job=job):
+                self.assertEqual(
+                    "12GiB",
+                    collection["jobs"][job]["steps"][1]["with"]["memory-limit"],
+                )
+        self.assertEqual(
+            "12GiB",
+            candidate["jobs"]["candidate-cells"]["steps"][1]["with"]["memory-limit"],
+        )
+        for scenario in ("keycloak-tiny", "keycloak-heavy", "keycloak-application-acceptance"):
+            with self.subTest(scenario=scenario):
+                molecule = (ROOT / "molecule" / scenario / "molecule.yml").read_text(encoding="utf-8")
+                self.assertIn("${KEYCLOAK_TEST_MEMORY_LIMIT:-12GiB}", molecule)
+
     def test_copilot_and_renovate_gates_preserve_safe_update_boundaries(self) -> None:
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         renovate = (WORKFLOWS / "renovate-guarded-automerge.yml").read_text(encoding="utf-8")
@@ -405,6 +470,8 @@ class WorkflowSecurityTests(unittest.TestCase):
         ci = (WORKFLOWS / "collection-ci.yml").read_text(encoding="utf-8")
         self.assertIn("/${GITHUB_RUN_ID}/attempt-${GITHUB_RUN_ATTEMPT}", ci)
         self.assertIn("detect-secrets scan --all-files", ci)
+        self.assertIn('detect-secrets scan --all-files "$candidate_extract"', ci)
+        self.assertNotIn("detect-secrets scan --all-files \\\n            artifacts/aggregate-input", ci)
         self.assertIn("secret-scan-inventory.json", ci)
         self.assertIn("scripts/enrich-cyclonedx-sbom.py", ci)
         self.assertIn('scripts/source_dependencies.py --candidate "$candidate"', ci)
@@ -466,6 +533,38 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("actions/runs/${preparation_run_id}", publish)
         self.assertIn('.conclusion == "success"', publish)
         action = ACTION.read_text(encoding="utf-8")
+        collection_ci = (WORKFLOWS / "collection-ci.yml").read_text(encoding="utf-8")
+        self.assertIn("QUALITY_SOURCE_SHA:", collection_ci)
+        expected_quality_source = (
+            "QUALITY_SOURCE_SHA: ${{ github.event_name == 'pull_request' && "
+            "github.event.pull_request.head.sha || github.sha }}"
+        )
+        self.assertIn(
+            expected_quality_source,
+            collection_ci,
+        )
+        collection_payload = load_yaml(WORKFLOWS / "collection-ci.yml")
+        self.assertNotIn("QUALITY_SOURCE_SHA", collection_payload["env"])
+        self.assertNotIn("actions/setup-python@", action)
+        self.assertIn('tool_root="$(mktemp -d ', action)
+        self.assertIn('echo "QUALITY_TOOL_ROOT=$tool_root" >> "$GITHUB_ENV"', action)
+        self.assertIn('python3 -m venv "$tool_root"', action)
+        self.assertNotIn("--system-site-packages", action)
+        self.assertIn('case "$QUALITY_TOOL_ROOT" in', action)
+        self.assertIn('"$RUNNER_TEMP"/supplementary-quality-tools/*)', action)
+        self.assertIn('rm -rf -- "$QUALITY_TOOL_ROOT"', action)
+        self.assertIn("ansible-core==2.21.2", action)
+        self.assertIn("molecule==25.12.0", action)
+        self.assertIn("molecule-plugins==25.8.12", action)
+        self.assertNotIn("QUALITY_DEFAULT_COLLECTION_PATHS", action)
+        self.assertIn('export PATH="$tool_root/bin:$PATH"', action)
+        self.assertIn("command -v python3", action)
+        self.assertNotRegex(action, r"(?m)(?<![A-Za-z0-9_-])python(?!3)(?:\s|$)")
+        self.assertIn(
+            "MOLECULE_EPHEMERAL_DIRECTORY=$molecule_ephemeral_root",
+            action,
+        )
+        self.assertIn('molecule_ephemeral_root="${temp_root}/molecule-ephemeral"', action)
         self.assertIn('os.environ["QUALITY_PROFILE"].replace("_", "-")', action)
         self.assertIn('["git", "show", f"{source_sha}:{path.as_posix()}"]', action)
         self.assertIn('registry = Path("meta/role-coverage.yml")', action)

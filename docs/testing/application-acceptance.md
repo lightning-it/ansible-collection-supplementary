@@ -24,9 +24,9 @@ it with an API, CLI, protocol, protected endpoint, database, or network check.
 
 Browser scenarios use pinned pytest/Playwright tooling and emit JUnit, Allure,
 sanitized screenshots, traces, console logs, and network diagnostics. The
-exact Playwright-managed Chromium revision is installed idempotently for every
-cell instead of trusting a shared cache-directory marker. Its executable path,
-version, SHA-256, and target operating-system package inventory are preserved
+patched stable Chrome channel is installed through Playwright for every cell
+instead of trusting a shared cache-directory marker. Its executable path,
+exact version, SHA-256, and target operating-system package inventory are preserved
 as commit- and cell-bound dependency evidence and included in the release SBOM.
 The package inventory binds unqualified binary and source-package identities to
 the exact distro; Chromium uses the conservative NVD Chrome CPE for security

@@ -182,7 +182,7 @@ jobs:
           junit-required: ${{ matrix.junit }}
           allure-required: ${{ matrix.allure }}
           cpu-limit: "4"
-          memory-limit: 8GiB
+          memory-limit: 12GiB
           disk-limit: 24GiB
 
   promotion-input:

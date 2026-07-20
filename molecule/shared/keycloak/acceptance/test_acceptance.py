@@ -20,6 +20,11 @@ def _b64url_decode(segment: str) -> bytes:
     return base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
 
 
+def _b64url_encode_json(value: dict[str, Any]) -> str:
+    encoded = json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return base64.urlsafe_b64encode(encoded).rstrip(b"=").decode("ascii")
+
+
 def _login(page: Page, settings: Settings, username: str, password: str) -> None:
     page.goto(f"{settings.app_url}/login", wait_until="domcontentloaded")
     expect(page.locator("#username")).to_be_visible()
@@ -231,6 +236,12 @@ def test_tampered_and_expired_tokens_are_rejected(settings: Settings) -> None:
     with pytest.raises((JoseError, KeyError, ValueError)):
         _claims(settings, tampered)
     # A syntactically valid but unsigned expired token must also fail signature validation.
-    expired = jwt.encode({"alg": "none"}, {"iss": settings.issuer, "exp": 1}, None).decode()
+    expired = ".".join(
+        (
+            _b64url_encode_json({"alg": "none"}),
+            _b64url_encode_json({"iss": settings.issuer, "exp": 1}),
+            "",
+        )
+    )
     with pytest.raises((JoseError, KeyError, ValueError)):
         _claims(settings, expired)
