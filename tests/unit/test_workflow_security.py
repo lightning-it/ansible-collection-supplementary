@@ -470,7 +470,9 @@ class WorkflowSecurityTests(unittest.TestCase):
             "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
             action,
         )
-        self.assertIn("python3 -m pip install --disable-pip-version-check", action)
+        self.assertIn("python-version: ${{ env.PYTHON_VERSION }}", action)
+        self.assertIn("python -m pip install --disable-pip-version-check", action)
+        self.assertNotIn("python3", action)
         for package in (
             "ansible-core==2.18.13",
             "molecule==25.12.0",

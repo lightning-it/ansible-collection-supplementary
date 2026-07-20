@@ -53,13 +53,13 @@ runs:
     - name: Set up exact Python runtime
       uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
       with:
-        python-version: "3.11"
+        python-version: ${{ env.PYTHON_VERSION }}
 
     - name: Install exact quality toolchain
       shell: bash
       run: |
         set -euo pipefail
-        python3 -m pip install --disable-pip-version-check \
+        python -m pip install --disable-pip-version-check \
           ansible-core==2.18.13 \
           molecule==25.12.0 \
           molecule-plugins==25.8.12 \
@@ -113,7 +113,7 @@ runs:
         full_owner="${GITHUB_REPOSITORY}-${GITHUB_WORKFLOW}-${GITHUB_RUN_ID}-"
         full_owner+="${GITHUB_RUN_ATTEMPT}-${SCENARIO}-${TARGET}"
         mapfile -t bounded_identities < <(
-          python3 scripts/quality_cell_identity.py \
+          python scripts/quality_cell_identity.py \
             --instance "$full_instance" \
             --owner "$full_owner"
         )
@@ -189,9 +189,9 @@ runs:
         command -v incus
         command -v molecule
         command -v openssl
-        command -v python3
+        command -v python
 
-        python3 scripts/prune_stale_incus_resources.py \
+        python scripts/prune_stale_incus_resources.py \
           --repository "$GITHUB_REPOSITORY" \
           --current-run-id "$GITHUB_RUN_ID"
 
@@ -228,9 +228,9 @@ runs:
         mkdir -p "$dependency_root" "$configuration_root"
         ansible --version > "$dependency_root/ansible-version.txt"
         molecule --version > "$dependency_root/molecule-version.txt"
-        python3 --version > "$dependency_root/python-version.txt" 2>&1
-        python3 -m pip list --format=json > "$dependency_root/python-packages.json"
-        python3 -m pip list --format=freeze > "$dependency_root/python-packages.txt"
+        python --version > "$dependency_root/python-version.txt" 2>&1
+        python -m pip list --format=json > "$dependency_root/python-packages.json"
+        python -m pip list --format=freeze > "$dependency_root/python-packages.txt"
         ansible-galaxy collection list --format json \
           > "$dependency_root/collection-dependencies.json"
         incus version > "$dependency_root/incus-version.txt"
@@ -242,7 +242,7 @@ runs:
         case "$incus_image_fingerprint" in
           *[!0-9a-f]*) exit 1 ;;
         esac
-        INCUS_IMAGE_FINGERPRINT="$incus_image_fingerprint" python3 - <<'PY' \
+        INCUS_IMAGE_FINGERPRINT="$incus_image_fingerprint" python - <<'PY' \
           > "$dependency_root/incus-base-image.json"
         import json
         import os
@@ -262,7 +262,7 @@ runs:
           echo "digest=not-applicable"
           echo "reason=no execution-environment image is used by this profile"
         } > "$dependency_root/execution-environment-digest.txt"
-        python3 - <<'PY'
+        python - <<'PY'
         import json
         import os
         import platform
@@ -354,7 +354,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        python3 - <<'PY'
+        python - <<'PY'
         import hashlib
         import json
         import os
@@ -633,7 +633,7 @@ runs:
           DESTROY_RC="$destroy_rc" \
           EFFECTIVE_RC="$effective_rc" \
           INFRASTRUCTURE_ERROR="$infrastructure_error" \
-          python3 - <<'PY'
+          python - <<'PY'
         import json
         import os
         from pathlib import Path
@@ -667,7 +667,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        python3 - "$QUALITY_ARTIFACT_ROOT" <<'PY'
+        python - "$QUALITY_ARTIFACT_ROOT" <<'PY'
         import os
         import sys
         import tarfile
@@ -760,7 +760,7 @@ runs:
           record_exit_code=1
         fi
 
-        python3 scripts/quality_evidence.py record \
+        python scripts/quality_evidence.py record \
           --scenario "$QUALITY_SCENARIO" \
           --profile "$QUALITY_PROFILE" \
           --target "$QUALITY_TARGET" \
@@ -793,7 +793,7 @@ runs:
         if [ "$QUALITY_TARGET_DISPOSITION" = candidate ]; then
           evidence_mode=candidate
         fi
-        python3 scripts/quality_evidence.py assemble \
+        python scripts/quality_evidence.py assemble \
           --root "$QUALITY_CELL_ROOT" \
           --input-root "$QUALITY_ARTIFACT_ROOT" \
           --results-root "$QUALITY_RESULTS_ROOT" \
