@@ -289,11 +289,12 @@ jobs:
 
           bundle = os.environ["RUNTIME_BUNDLE"]
           with tarfile.open(bundle, "r:gz") as stream:
-              files = [PurePosixPath(member.name) for member in stream if member.isfile()]
+              members = [(PurePosixPath(member.name), member.isfile()) for member in stream]
+          files = [path for path, is_file in members if is_file]
           if not files:
               raise SystemExit("runtime collection bundle contains no dependency files")
           candidate = PurePosixPath("ansible_collections/lit/supplementary")
-          if any(path == candidate or candidate in path.parents for path in files):
+          if any(path == candidate or candidate in path.parents for path, _ in members):
               raise SystemExit("runtime collection bundle contains the candidate collection")
           PY
           (

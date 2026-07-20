@@ -80,6 +80,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         workflow = (WORKFLOWS / "collection-ci.yml").read_text(encoding="utf-8")
         self.assertIn("-czf dist/candidate/runtime-collections.tar.gz", workflow)
         self.assertIn("--exclude=ansible_collections/lit/supplementary", workflow)
+        self.assertIn("for path, _ in members", workflow)
         self.assertIn("runtime collection bundle contains the candidate collection", workflow)
         self.assertIn("runtime-collections.tar.gz \\", workflow)
 
