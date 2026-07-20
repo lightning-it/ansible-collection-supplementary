@@ -4,14 +4,22 @@ set -euo pipefail
 IMAGE="quay.io/l-it/ee-wunder-devtools-ubi9:v1.9.2@sha256:58d5d45f7ea7405394edb00d4a77bf3e5d770532377fba6d80e8f641d27576b0"
 CONTAINER_HOME="${CONTAINER_HOME:-/tmp/wunder}"
 WORKSPACE_MODE="${WUNDER_DEVTOOLS_WORKSPACE_MODE:-ro}"
+ROOTFS_MODE="${WUNDER_DEVTOOLS_ROOTFS_MODE:-ro}"
 RUN_AS_HOST_UID_POLICY="${WUNDER_DEVTOOLS_RUN_AS_HOST_UID:-0}"
+RUN_AS_ROOT_POLICY="${WUNDER_DEVTOOLS_RUN_AS_ROOT:-0}"
 NETWORK_MODE="${WUNDER_DEVTOOLS_NETWORK:-none}"
 SOCKET_POLICY="${WUNDER_DEVTOOLS_DOCKER_SOCKET:-disabled}"
 SOURCE_ROOT_POLICY="${WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT:-disabled}"
 CAPABILITY_POLICY="${WUNDER_DEVTOOLS_CAP_ADD:-}"
 VAGRANT_SSH_POLICY="${WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH:-disabled}"
 case "$WORKSPACE_MODE" in ro|rw) ;; *) echo "Error: unsupported workspace mode: $WORKSPACE_MODE" >&2; exit 1 ;; esac
+case "$ROOTFS_MODE" in ro|rw) ;; *) echo "Error: unsupported rootfs mode: $ROOTFS_MODE" >&2; exit 1 ;; esac
 case "$RUN_AS_HOST_UID_POLICY" in 0|1) ;; *) echo "Error: unsupported host UID policy: $RUN_AS_HOST_UID_POLICY" >&2; exit 1 ;; esac
+case "$RUN_AS_ROOT_POLICY" in 0|1) ;; *) echo "Error: unsupported root user policy: $RUN_AS_ROOT_POLICY" >&2; exit 1 ;; esac
+if [ "$RUN_AS_HOST_UID_POLICY" = "1" ] && [ "$RUN_AS_ROOT_POLICY" = "1" ]; then
+  echo "Error: host UID and root user policies are mutually exclusive" >&2
+  exit 1
+fi
 if [ "$RUN_AS_HOST_UID_POLICY" = "1" ] && [ "$WORKSPACE_MODE" != rw ]; then
   echo "Error: host UID mapping requires a read-write workspace" >&2
   exit 1
@@ -40,7 +48,6 @@ HOME_TMPFS_MOUNT="${CONTAINER_HOME}:rw,exec,nosuid,nodev,size=1g,mode=1777"
 DOCKER_ARGS=(
   -w /workspace
   -e HOME="${CONTAINER_HOME}"
-  --read-only
   --network "$NETWORK_MODE"
   --cap-drop ALL
   --security-opt no-new-privileges=true
@@ -49,6 +56,9 @@ DOCKER_ARGS=(
   --tmpfs "/run:rw,nosuid,nodev,size=256m"
   --tmpfs "$HOME_TMPFS_MOUNT"
 )
+if [ "$ROOTFS_MODE" = "ro" ]; then
+  DOCKER_ARGS+=(--read-only)
+fi
 
 fail_closed() {
   local msg="$1"
@@ -257,7 +267,9 @@ if [ "$VAGRANT_SSH_POLICY" = enabled ]; then
   done
 fi
 
-if [ "$RUN_AS_HOST_UID_POLICY" = "1" ]; then
+if [ "$RUN_AS_ROOT_POLICY" = "1" ]; then
+  DOCKER_ARGS+=(--user 0:0)
+elif [ "$RUN_AS_HOST_UID_POLICY" = "1" ]; then
   if [ "$CONTAINER_BIN" = "podman" ] && [ "$PODMAN_ROOTLESS" = "1" ]; then
     # Rootless Podman maps container UID/GID 0 to the invoking host user. Keep
     # that mapping explicit so a mode-0755 bind-mounted checkout is writable.
@@ -343,6 +355,7 @@ fi
   ${COLLECTION_NAME:+-e COLLECTION_NAME} \
   ${SCENARIO_FILTER:+-e SCENARIO_FILTER} \
   ${EXAMPLE_PLAYBOOK:+-e EXAMPLE_PLAYBOOK} \
+  ${EXAMPLE_PLAYBOOK_ARGS:+-e EXAMPLE_PLAYBOOK_ARGS} \
   ${MOLECULE_NO_LOG:+-e MOLECULE_NO_LOG} \
   ${BASE_SHA:+-e BASE_SHA} \
   ${HEAD_SHA:+-e HEAD_SHA} \
