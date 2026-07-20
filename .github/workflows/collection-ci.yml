@@ -380,7 +380,7 @@ jobs:
        ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
         (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
     needs: [build-install, quality-matrix]
-    uses: lightning-it/modulix-validation-lit/.github/workflows/collection-quality-profile.yml@7819f910493ce2bd3115883730bbfd77296cb7f7
+    uses: lightning-it/modulix-validation-lit/.github/workflows/collection-quality-profile.yml@2eb9d83771301d31eda596bbda9c5619fa6e5b51
     with:
       profile: heavy
       matrix-json: ${{ needs.quality-matrix.outputs.heavy }}
@@ -428,7 +428,7 @@ jobs:
        ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
         (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
     needs: [build-install, quality-matrix]
-    uses: lightning-it/modulix-validation-lit/.github/workflows/collection-quality-profile.yml@7819f910493ce2bd3115883730bbfd77296cb7f7
+    uses: lightning-it/modulix-validation-lit/.github/workflows/collection-quality-profile.yml@2eb9d83771301d31eda596bbda9c5619fa6e5b51
     with:
       profile: application_acceptance
       matrix-json: ${{ needs.quality-matrix.outputs.acceptance }}
