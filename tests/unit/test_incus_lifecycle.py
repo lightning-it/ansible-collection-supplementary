@@ -243,6 +243,9 @@ class IncusLifecycleTests(unittest.TestCase):
         self.assertIn("or used_by", helper)
         self.assertIn('shutil.which("incus")', helper)
         self.assertIn("except (FileNotFoundError, subprocess.CalledProcessError):", helper)
+        self.assertIn("def delete_idempotently(", helper)
+        self.assertIn('("config", "show", name)', helper)
+        self.assertIn('("network", "show", name)', helper)
 
     def test_legacy_static_entrypoint_fails_before_create(self) -> None:
         payload = yaml.safe_load((SHARED / "create-static-network.yml").read_text(encoding="utf-8"))

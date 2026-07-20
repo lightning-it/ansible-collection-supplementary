@@ -54,6 +54,17 @@ def revalidate(kind: str, name: str, repository: str, current_run_id: str) -> bo
     return exact_owner(values, repository, current_run_id)
 
 
+def delete_idempotently(delete_arguments: tuple[str, ...], show_arguments: tuple[str, ...]) -> None:
+    try:
+        incus(*delete_arguments, capture=False)
+    except subprocess.CalledProcessError:
+        try:
+            incus(*show_arguments)
+        except subprocess.CalledProcessError:
+            return
+        raise
+
+
 def prune(repository: str, current_run_id: str) -> None:
     instances = json.loads(incus("list", "--format", "json"))
     for instance in instances:
@@ -62,7 +73,7 @@ def prune(repository: str, current_run_id: str) -> None:
         if not name or not isinstance(config, dict):
             continue
         if exact_owner(config, repository, current_run_id) and revalidate("config", name, repository, current_run_id):
-            incus("delete", "--force", name, capture=False)
+            delete_idempotently(("delete", "--force", name), ("config", "show", name))
 
     networks = json.loads(incus("network", "list", "--format", "json"))
     for network in networks:
@@ -79,7 +90,7 @@ def prune(repository: str, current_run_id: str) -> None:
                 and not current.get("used_by", [])
                 and exact_owner(current.get("config", {}), repository, current_run_id)
             ):
-                incus("network", "delete", name, capture=False)
+                delete_idempotently(("network", "delete", name), ("network", "show", name))
 
 
 def main() -> int:
