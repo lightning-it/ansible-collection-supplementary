@@ -64,13 +64,12 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("--no-deps", command)
         self.assertIn("runtime-collections.tar.gz", action)
         self.assertIn('path.parts[0] != "ansible_collections"', action)
-        self.assertIn("member.issym()", action)
-        self.assertIn("member.islnk()", action)
-        self.assertIn("runtime collection link escapes its root", action)
-        self.assertIn("absolute runtime collection link", action)
-        self.assertIn("escaping runtime collection link", action)
-        self.assertIn('stream.extractall(destination, filter="data")', action)
+        self.assertIn("member.isfile() or member.isdir()", action)
+        self.assertIn("duplicate runtime collection member", action)
+        self.assertIn('"members": members', action)
+        self.assertIn('extract_arguments["filter"] = "data"', action)
         self.assertIn("C.COLLECTIONS_PATHS", action)
+        self.assertIn("missing declared runtime collections", action)
         self.assertIn(
             "ANSIBLE_COLLECTIONS_PATH=$QUALITY_INSTALL_ROOT:$default_collection_paths",
             action,
