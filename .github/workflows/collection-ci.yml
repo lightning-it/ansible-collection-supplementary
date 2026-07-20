@@ -348,7 +348,7 @@ jobs:
           junit-required: ${{ matrix.junit }}
           allure-required: ${{ matrix.allure }}
           cpu-limit: "2"
-          memory-limit: 4GiB
+          memory-limit: 12GiB
           disk-limit: 12GiB
 
   tiny:
@@ -422,7 +422,7 @@ jobs:
           junit-required: ${{ matrix.junit }}
           allure-required: ${{ matrix.allure }}
           cpu-limit: "4"
-          memory-limit: 8GiB
+          memory-limit: 12GiB
           disk-limit: 24GiB
 
   heavy:
