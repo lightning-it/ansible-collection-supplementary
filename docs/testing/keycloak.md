@@ -81,8 +81,8 @@ journey contributes action-only Playwright trace metadata; its private raw trace
 is rewritten to remove network/resources, input values, headers, bodies,
 cookies, storage, tokens, secrets, and URL queries before it can become
 evidence.
-The Acceptance target also inventories the exact Playwright package, Chromium
-revision/version/executable digest, and installed operating-system packages;
+The Acceptance target also inventories the exact Playwright package, stable
+Chrome channel/version/executable digest, and installed operating-system packages;
 release evidence rejects a missing or differently bound browser inventory and
 adds these runtime components to the CycloneDX SBOM.
 

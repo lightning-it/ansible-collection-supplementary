@@ -89,9 +89,9 @@
         - browser-diagnostics
         - dependencies
 
-    - name: Install pinned Chromium managed by Playwright
+    - name: Install the patched stable Chrome channel managed by Playwright
       ansible.builtin.command:
-        cmd: "{{ keycloak_acceptance_root }}/venv/bin/playwright install --with-deps chromium"
+        cmd: "{{ keycloak_acceptance_root }}/venv/bin/playwright install --with-deps chrome"
       register: keycloak_acceptance_browser_install
       changed_when: >-
         'Downloading' in keycloak_acceptance_browser_install.stdout
@@ -112,6 +112,10 @@
           - "{{ keycloak_acceptance_target }}"
           - --source-commit
           - "{{ keycloak_acceptance_source_commit }}"
+          - --browser-channel
+          - chrome
+          - --executable
+          - /opt/google/chrome/chrome
       register: keycloak_acceptance_browser_inventory
       changed_when: false
 
@@ -388,6 +392,8 @@
               - --strict-markers
               - --browser
               - chromium
+              - --browser-channel
+              - chrome
               - --junitxml
               - "{{ keycloak_acceptance_artifacts_remote }}/junit/keycloak-application-acceptance.xml"
               - --alluredir

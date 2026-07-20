@@ -2436,7 +2436,7 @@ def assess_dependencies(
             operating_system = payload.get("operating_system")
             packages = payload.get("os_packages")
             playwright_version = str(payload.get("playwright_version", ""))
-            revision = str(chromium.get("revision", "")) if isinstance(chromium, dict) else ""
+            channel = str(chromium.get("channel", "")) if isinstance(chromium, dict) else ""
             executable = (
                 PurePosixPath(str(chromium.get("executable", ""))) if isinstance(chromium, dict) else PurePosixPath()
             )
@@ -2458,15 +2458,11 @@ def assess_dependencies(
                 or re.fullmatch(r"[0-9]+(?:\.[0-9]+){2,3}", playwright_version) is None
                 or target_playwright_versions.get(browser_cell) != playwright_version
                 or not isinstance(chromium, dict)
-                or set(chromium) != {"name", "revision", "version", "executable", "sha256"}
+                or set(chromium) != {"name", "channel", "version", "executable", "sha256"}
                 or chromium.get("name") != "chromium"
-                or re.fullmatch(r"[0-9]+", revision) is None
+                or channel != "chrome"
                 or re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,3}", str(chromium.get("version", ""))) is None
-                or not executable.is_absolute()
-                or not (
-                    f"chromium-{revision}" in executable.parts
-                    or f"chromium_headless_shell-{revision}" in executable.parts
-                )
+                or executable != PurePosixPath("/opt/google/chrome/chrome")
                 or re.fullmatch(r"[0-9a-f]{64}", str(chromium.get("sha256", ""))) is None
                 or not isinstance(operating_system, dict)
                 or set(operating_system) != {"id", "version_id", "distro"}

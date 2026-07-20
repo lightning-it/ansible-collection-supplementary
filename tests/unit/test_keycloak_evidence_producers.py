@@ -205,28 +205,30 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         )
         self.assertIn("browser_inventory.py", verify)
         self.assertIn("browser-runtime-keycloak-acceptance-target.json", verify)
-        self.assertIn("playwright install --with-deps chromium", verify)
+        self.assertIn("playwright install --with-deps chrome", verify)
+        self.assertIn("--browser-channel", verify)
+        self.assertIn("/opt/google/chrome/chrome", verify)
         self.assertNotIn("creates: /root/.cache/ms-playwright", verify)
-        self.assertIn("playwright.chromium.executable_path", helper)
+        self.assertIn('browser_channel != "chrome"', helper)
         self.assertIn('"dpkg-query"', helper)
         self.assertIn('"rpm"', helper)
         self.assertIn("platform.freedesktop_os_release", helper)
         self.assertIn("${source:Package}", helper)
         self.assertNotIn("${binary:Package}", helper)
         self.assertIn('"sha256": _sha256(executable)', helper)
-        self.assertIn('"revision": revision_match.group(1)', helper)
+        self.assertIn('"channel": browser_channel', helper)
 
     def test_browser_inventory_accepts_only_playwright_browser_version_formats(self) -> None:
         module = self._browser_inventory_module()
-        self.assertEqual("149.0.7827.55", module._browser_version("Google Chrome for Testing 149.0.7827.55"))
-        self.assertEqual("140.0.7339.16", module._browser_version("Chromium 140.0.7339.16"))
+        self.assertEqual("150.0.7871.125", module._browser_version("Google Chrome 150.0.7871.125", channel="chrome"))
         for output in (
-            "Google Chrome 149.0.7827.55",
             "Google Chrome for Testing 149.0.7827.55 extra",
             "Chromium 149.0.7827.55\nmalformed",
         ):
             with self.subTest(output=output), self.assertRaisesRegex(RuntimeError, "unexpected Playwright Chromium"):
-                module._browser_version(output)
+                module._browser_version(output, channel="chrome")
+        with self.assertRaisesRegex(ValueError, "unsupported Playwright browser channel"):
+            module._browser_version("Chromium 149.0.7827.55", channel="chromium")
 
     def test_browser_inventory_binds_distro_and_source_package_identity(self) -> None:
         module = self._browser_inventory_module()

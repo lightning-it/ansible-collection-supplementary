@@ -872,9 +872,9 @@ class QualityEvidenceTests(unittest.TestCase):
             "playwright_version": "1.55.0",
             "chromium": {
                 "name": "chromium",
-                "revision": "1187",
+                "channel": "chrome",
                 "version": "140.0.7339.16",
-                "executable": "/root/.cache/ms-playwright/chromium-1187/chrome-linux/chrome",
+                "executable": "/opt/google/chrome/chrome",
                 "sha256": "b" * 64,
             },
             "operating_system": {
