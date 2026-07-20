@@ -1190,28 +1190,36 @@ def _cell_manifest_references(input_root: Path) -> tuple[list[Path], set[Path]]:
         cell_roots.append(cell_root)
         for result in payload["results"]:
             if not isinstance(result, dict):
-                raise EvidenceError(f"cell manifest has invalid result: {manifest_path.name}")
+                raise EvidenceError(f"cell manifest has invalid result: {relative.as_posix()}")
             for field in ("junit", "allure_results"):
                 values = result.get(field, [])
                 if not isinstance(values, list):
-                    raise EvidenceError(f"cell manifest has invalid {field} references: {manifest_path.name}")
+                    raise EvidenceError(f"cell manifest has invalid {field} references: {relative.as_posix()}")
                 for value in values:
                     if not isinstance(value, str):
-                        raise EvidenceError(f"cell manifest has non-string {field} reference: {manifest_path.name}")
+                        raise EvidenceError(f"cell manifest has non-string {field} reference: {relative.as_posix()}")
                     reference = PurePosixPath(value)
                     if reference.is_absolute() or ".." in reference.parts or not reference.parts:
-                        raise EvidenceError(f"cell manifest has unsafe {field} reference: {value}")
+                        raise EvidenceError(
+                            f"cell manifest has unsafe {field} reference in {relative.as_posix()}: {value}"
+                        )
                     unresolved = cell_root / Path(*reference.parts)
                     current = cell_root
                     for part in reference.parts:
                         current /= part
                         if current.is_symlink():
-                            raise EvidenceError(f"cell manifest has symlinked {field} reference: {value}")
+                            raise EvidenceError(
+                                f"cell manifest has symlinked {field} reference in {relative.as_posix()}: {value}"
+                            )
                     candidate = unresolved.resolve()
                     if candidate == cell_root or cell_root not in candidate.parents:
-                        raise EvidenceError(f"cell manifest has unsafe {field} reference: {value}")
+                        raise EvidenceError(
+                            f"cell manifest has unsafe {field} reference in {relative.as_posix()}: {value}"
+                        )
                     if not unresolved.is_file():
-                        raise EvidenceError(f"cell manifest has missing {field} reference: {value}")
+                        raise EvidenceError(
+                            f"cell manifest has missing {field} reference in {relative.as_posix()}: {value}"
+                        )
                     references.add(candidate)
     return cell_roots, references
 

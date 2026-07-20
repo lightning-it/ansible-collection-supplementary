@@ -65,6 +65,7 @@ runs:
         tool_parent="$RUNNER_TEMP/supplementary-quality-tools"
         mkdir -p "$tool_parent"
         tool_root="$(mktemp -d "$tool_parent/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB.XXXXXX")"
+        echo "QUALITY_TOOL_ROOT=$tool_root" >> "$GITHUB_ENV"
         python3 -m venv "$tool_root"
         "$tool_root/bin/python3" -m pip install --disable-pip-version-check \
           ansible-core==2.21.2 \
@@ -980,3 +981,20 @@ runs:
         test "$RECORD_OUTCOME" = success
         test "$PACKAGE_OUTCOME" = success
         test "$UPLOAD_OUTCOME" = success
+
+    - name: Remove isolated quality toolchain
+      if: always()
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -z "${QUALITY_TOOL_ROOT:-}" ]; then
+          exit 0
+        fi
+        case "$QUALITY_TOOL_ROOT" in
+          "$RUNNER_TEMP"/supplementary-quality-tools/*) ;;
+          *)
+            echo "refusing to remove unexpected quality tool path" >&2
+            exit 1
+            ;;
+        esac
+        rm -rf -- "$QUALITY_TOOL_ROOT"
