@@ -1169,15 +1169,23 @@ def _cell_manifest_references(input_root: Path) -> tuple[list[Path], set[Path]]:
     """Return assembled cell roots and their exact JUnit/Allure references."""
     cell_roots: list[Path] = []
     references: set[Path] = set()
+    input_root_resolved = input_root.resolve()
     for manifest_path in sorted(input_root.rglob("manifest.json")):
+        relative = manifest_path.relative_to(input_root)
+        current = input_root
+        for part in relative.parts:
+            current /= part
+            if current.is_symlink():
+                raise EvidenceError(f"symlinked cell manifest: {relative.as_posix()}")
+        manifest_resolved = manifest_path.resolve()
+        if input_root_resolved not in manifest_resolved.parents:
+            raise EvidenceError(f"cell manifest escapes artifact root: {relative.as_posix()}")
         try:
             payload = _strict_json_loads(_bounded_read(manifest_path).decode("utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, EvidenceError) as error:
-            relative = manifest_path.relative_to(input_root).as_posix()
-            raise EvidenceError(f"invalid cell manifest: {relative}") from error
+            raise EvidenceError(f"invalid cell manifest: {relative.as_posix()}") from error
         if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
-            relative = manifest_path.relative_to(input_root).as_posix()
-            raise EvidenceError(f"invalid cell manifest schema: {relative}")
+            raise EvidenceError(f"invalid cell manifest schema: {relative.as_posix()}")
         cell_root = manifest_path.parent.resolve()
         cell_roots.append(cell_root)
         for result in payload["results"]:
@@ -1217,14 +1225,20 @@ def copy_artifacts(input_roots: Sequence[Path], destination_root: Path, excluded
     for input_root in input_roots:
         if not input_root.exists():
             continue
+        input_root_resolved = input_root.resolve()
         cell_roots, cell_references = _cell_manifest_references(input_root)
         for source in sorted(input_root.rglob("*")):
-            if not source.is_file() or source.is_symlink():
+            relative_source = source.relative_to(input_root)
+            if source.is_symlink():
+                raise EvidenceError(f"symlinked artifact input: {relative_source.as_posix()}")
+            if not source.is_file():
                 continue
             examined_files += 1
             if examined_files > MAX_EVIDENCE_FILES:
                 raise EvidenceError(f"artifact inputs exceed {MAX_EVIDENCE_FILES}-file traversal limit")
             resolved = source.resolve()
+            if input_root_resolved not in resolved.parents:
+                raise EvidenceError(f"artifact input escapes root: {relative_source.as_posix()}")
             if any(resolved == item or item in resolved.parents for item in excluded_resolved):
                 continue
             category = _artifact_category(source.relative_to(input_root))

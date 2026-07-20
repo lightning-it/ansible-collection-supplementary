@@ -970,6 +970,28 @@ class QualityEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(evidence.EvidenceError, "invalid cell manifest"):
             evidence.copy_artifacts([input_root], self.base / "malformed-cell-output", excluded=())
 
+    def test_copy_artifacts_rejects_symlinked_cell_manifest(self) -> None:
+        input_root = self.base / "symlink-manifest-input"
+        cell = input_root / "attempt-1"
+        cell.mkdir(parents=True)
+        outside = self.base / "outside-manifest.json"
+        outside.write_text(json.dumps({"results": []}), encoding="utf-8")
+        (cell / "manifest.json").symlink_to(outside)
+
+        with self.assertRaisesRegex(evidence.EvidenceError, "symlinked cell manifest"):
+            evidence.copy_artifacts([input_root], self.base / "symlink-manifest-output", excluded=())
+
+    def test_copy_artifacts_rejects_symlinked_artifact_directory(self) -> None:
+        input_root = self.base / "symlink-directory-input"
+        input_root.mkdir()
+        outside = self.base / "outside-artifacts"
+        outside.mkdir()
+        (outside / "environment.json").write_text("{}\n", encoding="utf-8")
+        (input_root / "dependencies").symlink_to(outside, target_is_directory=True)
+
+        with self.assertRaisesRegex(evidence.EvidenceError, "symlinked artifact input"):
+            evidence.copy_artifacts([input_root], self.base / "symlink-directory-output", excluded=())
+
     def test_release_dependencies_require_matching_test_application_inventory(self) -> None:
         self._release_dependencies(self.evidence_root)
         applications = self.evidence_root / "dependencies" / "test-application-dependencies.json"
