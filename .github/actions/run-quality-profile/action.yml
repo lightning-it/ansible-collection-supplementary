@@ -65,8 +65,10 @@ runs:
         tool_root="$RUNNER_TEMP/supplementary-quality-tools/$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT/$GITHUB_JOB"
         python3 -m venv --system-site-packages "$tool_root"
         "$tool_root/bin/python" -m pip install --disable-pip-version-check \
+          ansible-core==2.21.2 \
           molecule==25.12.0 \
           molecule-plugins==25.8.12
+        export PATH="$tool_root/bin:$PATH"
         "$tool_root/bin/python" -c 'import ansible; import molecule'
         "$tool_root/bin/molecule" --version
         echo "$tool_root/bin" >> "$GITHUB_PATH"
