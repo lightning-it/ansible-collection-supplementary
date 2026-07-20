@@ -365,7 +365,7 @@ jobs:
           fi
 
   heavy-cells:
-    name: Heavy matrix (delegated to modulix-validation-lit)
+    name: Heavy matrix (delegated to modulix-validation)
     if: >-
       needs.quality-matrix.outputs.keycloak_required == 'true' &&
       ((github.event_name == 'pull_request' &&
@@ -413,7 +413,7 @@ jobs:
           fi
 
   acceptance-cells:
-    name: Application Acceptance matrix (delegated to modulix-validation-lit)
+    name: Application Acceptance matrix (delegated to modulix-validation)
     if: >-
       needs.quality-matrix.outputs.keycloak_required == 'true' &&
       ((github.event_name == 'pull_request' &&
