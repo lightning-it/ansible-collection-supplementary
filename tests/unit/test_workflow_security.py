@@ -576,7 +576,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('case "$QUALITY_TOOL_ROOT" in', action)
         self.assertIn('"$RUNNER_TEMP"/supplementary-quality-tools/*)', action)
         self.assertIn('rm -rf -- "$QUALITY_TOOL_ROOT"', action)
-        self.assertIn("ansible-core==2.18.13", action)
+        self.assertIn("ansible-core==2.18.18", action)
         self.assertIn("molecule==25.12.0", action)
         self.assertIn("molecule-plugins==25.8.12", action)
         self.assertNotIn("QUALITY_DEFAULT_COLLECTION_PATHS", action)
