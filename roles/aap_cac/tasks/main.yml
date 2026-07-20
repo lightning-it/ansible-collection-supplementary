@@ -40,9 +40,10 @@
       no_log: true
       tags: always
 
-    - name: Normalize certificate validation for downstream Controller roles
+    - name: Normalize connection settings for downstream Controller roles
       ansible.builtin.set_fact:
-        controller_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+        aap_hostname: "{{ aap_cac_gateway_hostname }}"
+        aap_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
       changed_when: false
       tags: always
 

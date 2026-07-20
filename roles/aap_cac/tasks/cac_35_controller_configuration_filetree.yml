@@ -93,8 +93,8 @@
           }}
       vars:
         valid_tags: "{{ aap_cac_controller_configuration_filetree_valid_tags }}"
-        controller_hostname: "{{ aap_cac_gateway_hostname }}"
-        controller_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+        aap_hostname: "{{ aap_cac_gateway_hostname }}"
+        aap_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
         controller_oauthtoken: "{{ aap_cac_auth_token | default(omit, true) }}"
         controller_username: >-
           {{ aap_cac_gateway_username | default(omit, true) }}

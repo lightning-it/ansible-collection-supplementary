@@ -7,8 +7,8 @@
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
       vars:
-        controller_hostname: "{{ aap_cac_gateway_hostname }}"
-        controller_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+        aap_hostname: "{{ aap_cac_gateway_hostname }}"
+        aap_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
         aap_password: "{{ aap_cac_controller_password_effective }}"
         aap_token: "{{ aap_cac_auth_token | default(omit, true) }}"
         aap_configuration_dispatcher_roles:
