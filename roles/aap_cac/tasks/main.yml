@@ -40,6 +40,12 @@
       no_log: true
       tags: always
 
+    - name: Normalize certificate validation for downstream Controller roles
+      ansible.builtin.set_fact:
+        controller_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+      changed_when: false
+      tags: always
+
     - name: Require AAP CaC token value
       ansible.builtin.assert:
         that:
