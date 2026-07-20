@@ -101,6 +101,27 @@ class KeycloakRoleContractTests(unittest.TestCase):
         self.assertIn("User={{ keycloak_acceptance_service_user }}", acceptance_source)
         self.assertIn("Group={{ keycloak_acceptance_service_group }}", acceptance_source)
 
+    def test_samba_bind_identity_matches_keycloak_ldap_provider(self) -> None:
+        samba_defaults = self._role_defaults("samba_deploy")
+        expected_cn = " ".join(
+            (
+                str(samba_defaults["samba_deploy_ad_dc_keycloak_bind_given_name"]),
+                str(samba_defaults["samba_deploy_ad_dc_keycloak_bind_surname"]),
+            )
+        )
+
+        cac_defaults = self._role_defaults("keycloak_cac")
+        default_bind_dn = cac_defaults["keycloak_cac_samba_ldap_provider"]["bind_dn"]
+        self.assertEqual(default_bind_dn, f"CN={expected_cn},CN=Users,DC=corp,DC=example,DC=com")
+
+        heavy_path = ROOT / "molecule" / "keycloak-heavy" / "converge.yml"
+        heavy_plays = yaml.safe_load(heavy_path.read_text(encoding="utf-8"))
+        heavy_provider = heavy_plays[1]["vars"]["keycloak_cac_samba_ldap_provider"]
+        self.assertEqual(
+            heavy_provider["bind_dn"],
+            f"CN={expected_cn},CN=Users,DC=keycloak,DC=test",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -30,7 +30,7 @@ keycloak_cac_samba_ldap_provider:
   priority: 0
   connection_url: "ldaps://samba:636"
   users_dn: "CN=Users,DC=corp,DC=example,DC=com"
-  bind_dn: "CN=keycloak,CN=Users,DC=corp,DC=example,DC=com"
+  bind_dn: "CN=Keycloak Bind,CN=Users,DC=corp,DC=example,DC=com"
   bind_credential: ""
   vendor: "ad"
   edit_mode: "READ_ONLY"

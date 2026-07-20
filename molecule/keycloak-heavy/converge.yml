@@ -220,8 +220,6 @@
     keycloak_deploy_image: >-
       quay.io/keycloak/keycloak:26.5.4@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4
     keycloak_deploy_start_command: start
-    keycloak_deploy_extra_start_args:
-      - --log-level=info,org.keycloak.services.error.KeycloakErrorHandler:debug
     keycloak_deploy_manage_postgres: true
     keycloak_deploy_manage_systemd: true
     keycloak_deploy_generate_secrets: false
@@ -429,7 +427,7 @@
       realm: keycloak-test
       connection_url: ldaps://127.0.0.1:1636
       users_dn: CN=Users,DC=keycloak,DC=test
-      bind_dn: CN=keycloak,CN=Users,DC=keycloak,DC=test
+      bind_dn: CN=Keycloak Bind,CN=Users,DC=keycloak,DC=test
       bind_credential: "{{ keycloak_heavy_ldap_bind_password }}"
       vendor: ad
       edit_mode: READ_ONLY
