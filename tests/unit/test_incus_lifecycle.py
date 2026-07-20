@@ -214,6 +214,11 @@ class IncusLifecycleTests(unittest.TestCase):
         self.assertIn('echo "MOLECULE_TEST_INSTANCE=$instance"', action)
         self.assertIn('echo "MOLECULE_TEST_IMAGE=$TEST_IMAGE"', action)
         self.assertIn("dependencies.mkdir(parents=True, exist_ok=True)", action)
+        self.assertIn(
+            'ansible-galaxy collection install "${candidates[0]}" '
+            '-p "$QUALITY_INSTALL_ROOT" --force --no-deps',
+            action,
+        )
 
     def test_quality_action_prunes_only_superseded_exact_owned_resources(
         self,
