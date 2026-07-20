@@ -359,6 +359,17 @@ class QualityEvidenceTests(unittest.TestCase):
         with patch.dict(os.environ, self._environment(), clear=False):
             self.assertEqual(evidence.validate(self.evidence_root), 0)
 
+    def test_copy_artifacts_rejects_symlinked_input_root(self) -> None:
+        real_root = self.base / "real-artifacts"
+        real_root.mkdir()
+        (real_root / "junit").mkdir()
+        (real_root / "junit" / "results.xml").write_text('<testsuite name="safe" tests="0"/>\n', encoding="utf-8")
+        linked_root = self.base / "linked-artifacts"
+        linked_root.symlink_to(real_root, target_is_directory=True)
+
+        with self.assertRaisesRegex(evidence.EvidenceError, "symlinked artifact input root"):
+            evidence.copy_artifacts([linked_root], self.evidence_root, excluded=())
+
     def test_scan_findings_are_projected_without_storing_finding_content(self) -> None:
         self._registry()
         self._junit()

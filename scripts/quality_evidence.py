@@ -1245,6 +1245,8 @@ def copy_artifacts(input_roots: Sequence[Path], destination_root: Path, excluded
     copied_bytes = 0
     examined_files = 0
     for input_root in input_roots:
+        if input_root.is_symlink():
+            raise EvidenceError(f"symlinked artifact input root: {input_root}")
         if not input_root.exists():
             continue
         input_root_resolved = input_root.resolve()

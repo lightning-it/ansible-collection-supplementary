@@ -79,6 +79,8 @@ class WorkflowSecurityTests(unittest.TestCase):
         )
         workflow = (WORKFLOWS / "collection-ci.yml").read_text(encoding="utf-8")
         self.assertIn("-czf dist/candidate/runtime-collections.tar.gz", workflow)
+        self.assertIn("--exclude=ansible_collections/lit/supplementary", workflow)
+        self.assertIn("runtime collection bundle contains the candidate collection", workflow)
         self.assertIn("runtime-collections.tar.gz \\", workflow)
 
     def test_release_evidence_selects_only_the_collection_candidate_and_exact_head(self) -> None:
@@ -467,6 +469,8 @@ class WorkflowSecurityTests(unittest.TestCase):
         ci = (WORKFLOWS / "collection-ci.yml").read_text(encoding="utf-8")
         self.assertIn("/${GITHUB_RUN_ID}/attempt-${GITHUB_RUN_ATTEMPT}", ci)
         self.assertIn("detect-secrets scan --all-files", ci)
+        self.assertIn('detect-secrets scan --all-files "$candidate_extract"', ci)
+        self.assertNotIn("detect-secrets scan --all-files \\\n            artifacts/aggregate-input", ci)
         self.assertIn("secret-scan-inventory.json", ci)
         self.assertIn("scripts/enrich-cyclonedx-sbom.py", ci)
         self.assertIn('scripts/source_dependencies.py --candidate "$candidate"', ci)

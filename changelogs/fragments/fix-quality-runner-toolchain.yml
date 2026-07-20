@@ -7,3 +7,7 @@ bugfixes:
   - >-
     Bind Keycloak to the Samba-created LDAP identity and attach exact role and commit metadata to independently
     generated application-acceptance evidence.
+  - >-
+    Refresh the pinned Keycloak acceptance security stack, scan the exact shipped candidate independently while the
+    generated evidence remains covered by the fail-closed evidence scanner, and keep only runtime dependencies in the
+    immutable collection bundle.
