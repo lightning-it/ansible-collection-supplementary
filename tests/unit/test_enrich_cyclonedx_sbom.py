@@ -443,9 +443,9 @@ class EnrichCycloneDxSbomTests(unittest.TestCase):
                         "playwright_version": "1.55.0",
                         "chromium": {
                             "name": "chromium",
-                            "revision": "1187",
+                            "channel": "chrome",
                             "version": "140.0.7339.16",
-                            "executable": "/root/.cache/ms-playwright/chromium-1187/chrome-linux/chrome",
+                            "executable": "/opt/google/chrome/chrome",
                             "sha256": "e" * 64,
                         },
                         "operating_system": {
@@ -493,6 +493,8 @@ class EnrichCycloneDxSbomTests(unittest.TestCase):
                 "cpe:2.3:a:google:chrome:140.0.7339.16:*:*:*:*:*:*:*",
                 chromium["cpe"],
             )
+            properties = {item["name"]: item["value"] for item in chromium["properties"]}
+            self.assertEqual("chrome", properties["lit:dependency:browser-channel"])
             self.assertTrue(
                 any(
                     component["name"] == "libc++6"

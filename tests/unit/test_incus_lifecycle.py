@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 import yaml
+
+from scripts import prune_stale_incus_resources
 
 ROOT = Path(__file__).resolve().parents[2]
 SHARED = ROOT / "molecule" / "shared" / "incus"
@@ -35,6 +40,143 @@ def task_named(tasks: list[dict[str, Any]], name: str) -> dict[str, Any]:
 
 
 class IncusLifecycleTests(unittest.TestCase):
+    def test_parallel_pruning_accepts_only_an_already_deleted_target(self) -> None:
+        delete_error = subprocess.CalledProcessError(1, ["incus"])
+        with mock.patch.object(
+            prune_stale_incus_resources,
+            "incus",
+            side_effect=(delete_error, "[]"),
+        ):
+            prune_stale_incus_resources.delete_if_present(
+                "stale-instance",
+                "delete",
+                "--force",
+                "stale-instance",
+                list_kind="instance",
+            )
+
+        with mock.patch.object(
+            prune_stale_incus_resources,
+            "incus",
+            side_effect=(delete_error, "[]"),
+        ):
+            prune_stale_incus_resources.delete_if_present(
+                "lit000000000001",
+                "network",
+                "delete",
+                "lit000000000001",
+                list_kind="network",
+            )
+
+        with (
+            mock.patch.object(
+                prune_stale_incus_resources,
+                "incus",
+                side_effect=(delete_error, '[{"name": "lit000000000001"}]'),
+            ),
+            self.assertRaises(subprocess.CalledProcessError),
+        ):
+            prune_stale_incus_resources.delete_if_present(
+                "lit000000000001",
+                "network",
+                "delete",
+                "lit000000000001",
+                list_kind="network",
+            )
+
+        with (
+            mock.patch.object(
+                prune_stale_incus_resources,
+                "incus",
+                side_effect=(delete_error, '[{"name": "stale-instance"}]'),
+            ),
+            self.assertRaises(subprocess.CalledProcessError),
+        ):
+            prune_stale_incus_resources.delete_if_present(
+                "stale-instance",
+                "delete",
+                "--force",
+                "stale-instance",
+                list_kind="instance",
+            )
+
+    def test_parallel_pruning_skips_a_network_that_became_owned_or_used(self) -> None:
+        delete_error = subprocess.CalledProcessError(1, ["incus"])
+        stale_config = {
+            prune_stale_incus_resources.REPOSITORY_KEY: "lightning-it/example",
+            prune_stale_incus_resources.RUN_ID_KEY: "41",
+            prune_stale_incus_resources.OWNER_KEY: "old-cell",
+        }
+        raced_networks = (
+            [{"name": "lit000000000001", "config": stale_config, "used_by": ["/1.0/instances/new"]}],
+            [
+                {
+                    "name": "lit000000000001",
+                    "config": {**stale_config, prune_stale_incus_resources.RUN_ID_KEY: "42"},
+                    "used_by": [],
+                }
+            ],
+        )
+        for current in raced_networks:
+            with (
+                self.subTest(current=current),
+                mock.patch.object(
+                    prune_stale_incus_resources,
+                    "incus",
+                    side_effect=(delete_error, json.dumps(current)),
+                ),
+            ):
+                prune_stale_incus_resources.delete_if_present(
+                    "lit000000000001",
+                    "network",
+                    "delete",
+                    "lit000000000001",
+                    list_kind="network",
+                    repository="lightning-it/example",
+                    current_run_id="42",
+                )
+
+    def test_parallel_pruning_skips_an_instance_that_changed_ownership(self) -> None:
+        delete_error = subprocess.CalledProcessError(1, ["incus"])
+        current = [
+            {
+                "name": "stale-instance",
+                "config": {
+                    prune_stale_incus_resources.REPOSITORY_KEY: "lightning-it/example",
+                    prune_stale_incus_resources.RUN_ID_KEY: "42",
+                    prune_stale_incus_resources.OWNER_KEY: "new-cell",
+                },
+            }
+        ]
+        with mock.patch.object(
+            prune_stale_incus_resources,
+            "incus",
+            side_effect=(delete_error, json.dumps(current)),
+        ):
+            prune_stale_incus_resources.delete_if_present(
+                "stale-instance",
+                "delete",
+                "--force",
+                "stale-instance",
+                list_kind="instance",
+                repository="lightning-it/example",
+                current_run_id="42",
+            )
+
+    def test_pruning_rejects_an_unknown_resource_kind_before_deletion(self) -> None:
+        with (
+            mock.patch.object(prune_stale_incus_resources, "incus") as incus,
+            self.assertRaisesRegex(ValueError, "unsupported Incus resource kind"),
+        ):
+            prune_stale_incus_resources.delete_if_present(
+                "stale-instance",
+                "delete",
+                "--force",
+                "stale-instance",
+                list_kind="unsupported",
+            )
+        incus.assert_not_called()
+
     def test_nested_containers_use_isolated_idmaps(self) -> None:
         for molecule_file in sorted((ROOT / "molecule").glob("*/molecule.yml")):
             config = yaml.safe_load(molecule_file.read_text(encoding="utf-8"))
@@ -121,7 +263,10 @@ class IncusLifecycleTests(unittest.TestCase):
         inventory = task_named(tasks, "Read exact in-target container image identities and digests")
         argv = inventory["ansible.builtin.command"]["argv"]
 
-        self.assertEqual(["images", "--all", "--format", "json"], argv[-4:])
+        self.assertEqual(["sh", "-c"], argv[-3:-1])
+        self.assertIn("e3tqc29uIC59fQ==", argv[-1])
+        self.assertIn('podman images --all --format "$format"', argv[-1])
+        self.assertNotIn("{{json", argv[-1])
         self.assertIn("item.molecule_incus_evidence_command.name == 'podman-inventory'", collection)
         self.assertIn("when: item.rc == 0", collection)
         self.assertNotIn("--format=json", argv)
@@ -214,6 +359,10 @@ class IncusLifecycleTests(unittest.TestCase):
         self.assertIn('echo "MOLECULE_TEST_INSTANCE=$instance"', action)
         self.assertIn('echo "MOLECULE_TEST_IMAGE=$TEST_IMAGE"', action)
         self.assertIn("dependencies.mkdir(parents=True, exist_ok=True)", action)
+        self.assertIn('"${candidates[0]}"', action)
+        self.assertIn("--no-deps", action)
+        self.assertIn("runtime-collections.tar.gz", action)
+        self.assertIn("missing declared runtime collections", action)
 
     def test_quality_action_prunes_only_superseded_exact_owned_resources(
         self,
@@ -232,12 +381,22 @@ class IncusLifecycleTests(unittest.TestCase):
         )
 
         helper = (ROOT / "scripts" / "prune_stale_incus_resources.py").read_text(encoding="utf-8")
-        self.assertIn("run_id != current_run_id", helper)
+        self.assertIn("int(run_id) < int(current_run_id)", helper)
         self.assertIn("config.get(REPOSITORY_KEY) == repository", helper)
         self.assertIn("bool(config.get(OWNER_KEY))", helper)
         self.assertIn("or used_by", helper)
         self.assertIn('shutil.which("incus")', helper)
         self.assertIn("except (FileNotFoundError, subprocess.CalledProcessError):", helper)
+        self.assertIn("def delete_if_present(", helper)
+        self.assertIn('list_kind="instance"', helper)
+        self.assertIn('list_kind="network"', helper)
+
+        cleanup = (SHARED / "cleanup.yml").read_text(encoding="utf-8")
+        network_show = cleanup.split(
+            "- name: Read exact-owned managed-network state for lifecycle evidence",
+            maxsplit=1,
+        )[1].split("- name:", maxsplit=1)[0]
+        self.assertIn("failed_when: false", network_show)
 
     def test_legacy_static_entrypoint_fails_before_create(self) -> None:
         payload = yaml.safe_load((SHARED / "create-static-network.yml").read_text(encoding="utf-8"))

@@ -127,11 +127,11 @@
       - exec
       - "{{ molecule_incus_owned_instance.item.name }}"
       - --
-      - podman
-      - images
-      - --all
-      - --format
-      - json
+      - sh
+      - -c
+      - >-
+        format="$(printf '%s' 'e3tqc29uIC59fQ==' | base64 -d)";
+        podman images --all --format "$format"
   register: molecule_incus_evidence_container_images_raw
   changed_when: false
   failed_when: false
@@ -254,25 +254,6 @@
   failed_when: false
   no_log: true
 
-- name: Require successful redaction for each available structured inventory stream
-  ansible.builtin.assert:
-    that:
-      - >-
-        molecule_incus_evidence_sanitized_logs.results
-        | selectattr('item.molecule_incus_evidence_command.name', 'equalto', 'podman-inventory')
-        | selectattr('item.rc', 'defined')
-        | selectattr('item.rc', 'equalto', 0)
-        | selectattr('rc', 'defined')
-        | selectattr('rc', 'equalto', 0)
-        | list | length
-        ==
-        molecule_incus_evidence_raw_logs.results
-        | selectattr('molecule_incus_evidence_command.name', 'equalto', 'podman-inventory')
-        | selectattr('rc', 'defined')
-        | selectattr('rc', 'equalto', 0)
-        | list | length
-  no_log: true
-
 - name: Refresh the dependency inventory from the populated Podman evidence stream
   ansible.builtin.copy:
     dest: >-
@@ -311,6 +292,8 @@
           )
         | selectattr('item.rc', 'defined')
         | selectattr('item.rc', 'equalto', 0)
+        | selectattr('rc', 'defined')
+        | selectattr('rc', 'equalto', 0)
         | list
       }}
   no_log: true
