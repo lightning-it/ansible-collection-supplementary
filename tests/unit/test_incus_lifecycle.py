@@ -70,6 +70,20 @@ class IncusLifecycleTests(unittest.TestCase):
                 list_kind="instance",
             )
 
+    def test_pruning_rejects_an_unknown_resource_kind_before_deletion(self) -> None:
+        with (
+            mock.patch.object(prune_stale_incus_resources, "incus") as incus,
+            self.assertRaisesRegex(ValueError, "unsupported Incus resource kind"),
+        ):
+            prune_stale_incus_resources.delete_if_present(
+                "stale-instance",
+                "delete",
+                "--force",
+                "stale-instance",
+                list_kind="instnace",
+            )
+        incus.assert_not_called()
+
     def test_nested_containers_use_isolated_idmaps(self) -> None:
         for molecule_file in sorted((ROOT / "molecule").glob("*/molecule.yml")):
             config = yaml.safe_load(molecule_file.read_text(encoding="utf-8"))

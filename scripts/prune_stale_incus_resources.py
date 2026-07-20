@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import argparse
-from functools import lru_cache
 import json
 import re
 import shutil
 import subprocess
+from functools import lru_cache
 from typing import Any
 
 REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -55,14 +55,17 @@ def revalidate(kind: str, name: str, repository: str, current_run_id: str) -> bo
 
 
 def delete_if_present(name: str, *delete_arguments: str, list_kind: str) -> None:
+    list_arguments_by_kind = {
+        "instance": ("list", "--format", "json"),
+        "network": ("network", "list", "--format", "json"),
+    }
+    if list_kind not in list_arguments_by_kind:
+        raise ValueError(f"unsupported Incus resource kind: {list_kind}")
+
     try:
-        incus(*delete_arguments)
+        incus(*delete_arguments, capture=False)
     except subprocess.CalledProcessError:
-        list_arguments = (
-            ("list", "--format", "json")
-            if list_kind == "instance"
-            else ("network", "list", "--format", "json")
-        )
+        list_arguments = list_arguments_by_kind[list_kind]
         current = json.loads(incus(*list_arguments))
         if any(str(item.get("name", "")) == name for item in current):
             raise
