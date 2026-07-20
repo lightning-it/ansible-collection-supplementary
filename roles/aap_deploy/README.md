@@ -75,8 +75,9 @@ Key variables:
 - `aap_deploy_postgresql_admin_password_effective`
 - `aap_deploy_tls_enabled`
 - `aap_deploy_tls_source` (`customer_files` or `vault_pki`)
-- `aap_deploy_tls_customer_files` (controller-side cert/key paths or inline
-  `cert_content`/`key_content`, plus `ca_cert_src` or `ca_cert_content`)
+- `aap_deploy_tls_customer_files` (controller-side cert/key paths, target-side
+  paths with per-service `remote_src: true`, or inline `cert_content`/`key_content`;
+  the CA supports `ca_cert_src`, `ca_cert_remote_src`, or `ca_cert_content`)
 - `aap_deploy_tls_vault_pki_mount_point`
 - `aap_deploy_tls_vault_pki_services` (per-service `role_name`, `common_name`, `alt_names`, `ip_sans`)
 - `aap_deploy_manage_download_unpack`

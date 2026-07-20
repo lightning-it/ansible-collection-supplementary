@@ -69,6 +69,7 @@
       - whoami
   become: true
   register: aap_preflight_become_whoami
+  check_mode: false
   changed_when: false
   when:
     - aap_preflight_enabled | bool
@@ -127,6 +128,7 @@
     argv:
       - which
       - "{{ item }}"
+  check_mode: false
   changed_when: false
   loop: "{{ aap_preflight_required_commands }}"
   when:
@@ -202,6 +204,7 @@
     argv:
       - podman
       - --version
+  check_mode: false
   changed_when: false
   when:
     - aap_preflight_enabled | bool
@@ -229,6 +232,7 @@
       - -u
       - "{{ aap_preflight_install_user }}"
   register: aap_preflight_install_user_processes
+  check_mode: false
   changed_when: false
   failed_when: aap_preflight_install_user_processes.rc not in [0, 1]
   when:
@@ -278,6 +282,7 @@
       - --format
       - "{{ '{{' }} .Store.GraphRoot {{ '}}' }}"
   register: aap_preflight_runtime_graphroot
+  check_mode: false
   changed_when: false
   when:
     - aap_preflight_enabled | bool
