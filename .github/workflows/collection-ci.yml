@@ -496,7 +496,9 @@ jobs:
           junit-required: ${{ matrix.junit }}
           allure-required: ${{ matrix.allure }}
           cpu-limit: "4"
-          memory-limit: 8GiB
+          # Acceptance starts Keycloak, PostgreSQL, LDAP/Samba, and a browser
+          # concurrently. 8 GiB repeatedly triggered an in-guest OOM kill.
+          memory-limit: 12GiB
           disk-limit: 24GiB
 
   acceptance:

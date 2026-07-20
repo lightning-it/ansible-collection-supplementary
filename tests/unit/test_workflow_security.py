@@ -91,6 +91,22 @@ class WorkflowSecurityTests(unittest.TestCase):
             payload["jobs"]["runtime-evidence"]["env"]["QUALITY_SOURCE_SHA"],
         )
 
+    def test_acceptance_cells_reserve_memory_for_the_full_runtime_stack(self) -> None:
+        collection = load_yaml(WORKFLOWS / "collection-ci.yml")
+        candidate = load_yaml(WORKFLOWS / "candidate-platform-validation.yml")
+        self.assertEqual(
+            "12GiB",
+            collection["jobs"]["acceptance-cells"]["steps"][1]["with"]["memory-limit"],
+        )
+        self.assertEqual(
+            "12GiB",
+            candidate["jobs"]["candidate-cells"]["steps"][1]["with"]["memory-limit"],
+        )
+        molecule = (ROOT / "molecule" / "keycloak-application-acceptance" / "molecule.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("${KEYCLOAK_TEST_MEMORY_LIMIT:-12GiB}", molecule)
+
     def test_copilot_and_renovate_gates_preserve_safe_update_boundaries(self) -> None:
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         renovate = (WORKFLOWS / "renovate-guarded-automerge.yml").read_text(encoding="utf-8")
