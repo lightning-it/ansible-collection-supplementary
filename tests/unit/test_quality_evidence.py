@@ -981,6 +981,21 @@ class QualityEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(evidence.EvidenceError, "invalid cell manifest"):
             evidence.copy_artifacts([input_root], self.base / "malformed-cell-output", excluded=())
 
+    def test_copy_artifacts_prunes_excluded_manifests_before_discovery(self) -> None:
+        input_root = self.base / "rerun-input"
+        dependency = input_root / "dependencies" / "python-packages.json"
+        dependency.parent.mkdir(parents=True)
+        dependency.write_text('{"packages": []}\n', encoding="utf-8")
+        excluded = input_root / "evidence"
+        excluded.mkdir()
+        (excluded / "manifest.json").write_text('{"results": [', encoding="utf-8")
+        output = self.base / "rerun-output"
+
+        evidence.copy_artifacts([input_root], output, excluded=(excluded,))
+
+        self.assertTrue((output / "dependencies" / "python-packages.json").is_file())
+        self.assertFalse((output / "manifest.json").exists())
+
     def test_cell_manifest_errors_include_the_relative_manifest_path(self) -> None:
         input_root = self.base / "ambiguous-manifest-input"
         cell = input_root / "expanded" / "archive-2" / "attempt-3"

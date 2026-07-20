@@ -225,7 +225,7 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
             "Google Chrome for Testing 149.0.7827.55 extra",
             "Chromium 149.0.7827.55\nmalformed",
         ):
-            with self.subTest(output=output), self.assertRaisesRegex(RuntimeError, "unexpected Playwright Chromium"):
+            with self.subTest(output=output), self.assertRaisesRegex(RuntimeError, "unexpected Playwright Chrome"):
                 module._browser_version(output, channel="chrome")
         with self.assertRaisesRegex(ValueError, "unsupported Playwright browser channel"):
             module._browser_version("Chromium 149.0.7827.55", channel="chromium")

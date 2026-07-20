@@ -1165,12 +1165,28 @@ def _artifact_category(path: Path) -> str | None:
     return None
 
 
-def _cell_manifest_references(input_root: Path) -> tuple[list[Path], set[Path]]:
+def _is_excluded_artifact_path(path: Path, excluded_resolved: Sequence[Path]) -> bool:
+    resolved = path.resolve()
+    parent_resolved = path.parent.resolve()
+    return any(
+        resolved == excluded
+        or excluded in resolved.parents
+        or parent_resolved == excluded
+        or excluded in parent_resolved.parents
+        for excluded in excluded_resolved
+    )
+
+
+def _cell_manifest_references(input_root: Path, excluded_resolved: Sequence[Path]) -> tuple[list[Path], set[Path]]:
     """Return assembled cell roots and their exact JUnit/Allure references."""
     cell_roots: list[Path] = []
     references: set[Path] = set()
     input_root_resolved = input_root.resolve()
-    for manifest_path in _bounded_artifact_walk(input_root, name="manifest.json"):
+    for manifest_path in _bounded_artifact_walk(
+        input_root,
+        name="manifest.json",
+        excluded_resolved=excluded_resolved,
+    ):
         relative = manifest_path.relative_to(input_root)
         current = input_root
         for part in relative.parts:
@@ -1224,12 +1240,22 @@ def _cell_manifest_references(input_root: Path) -> tuple[list[Path], set[Path]]:
     return cell_roots, references
 
 
-def _bounded_artifact_walk(root: Path, *, name: str | None = None) -> Iterable[Path]:
+def _bounded_artifact_walk(
+    root: Path,
+    *,
+    name: str | None = None,
+    excluded_resolved: Sequence[Path] = (),
+) -> Iterable[Path]:
     """Yield artifact entries deterministically without materializing an untrusted tree."""
     examined_entries = 0
     for directory, directories, filenames in os.walk(root, topdown=True, followlinks=False):
-        directories.sort()
-        filenames.sort()
+        current = Path(directory)
+        directories[:] = sorted(
+            entry for entry in directories if not _is_excluded_artifact_path(current / entry, excluded_resolved)
+        )
+        filenames = sorted(
+            entry for entry in filenames if not _is_excluded_artifact_path(current / entry, excluded_resolved)
+        )
         for entry_name in (*directories, *filenames):
             examined_entries += 1
             if examined_entries > MAX_EVIDENCE_FILES:
@@ -1250,8 +1276,8 @@ def copy_artifacts(input_roots: Sequence[Path], destination_root: Path, excluded
         if not input_root.exists():
             continue
         input_root_resolved = input_root.resolve()
-        cell_roots, cell_references = _cell_manifest_references(input_root)
-        for source in _bounded_artifact_walk(input_root):
+        cell_roots, cell_references = _cell_manifest_references(input_root, excluded_resolved)
+        for source in _bounded_artifact_walk(input_root, excluded_resolved=excluded_resolved):
             relative_source = source.relative_to(input_root)
             if source.is_symlink():
                 raise EvidenceError(f"symlinked artifact input: {relative_source.as_posix()}")

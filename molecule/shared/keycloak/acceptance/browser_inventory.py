@@ -120,7 +120,7 @@ def _browser_version(version_output: str, *, channel: str) -> str:
         raise ValueError("unsupported Playwright browser channel")
     match = re.fullmatch(rf"{re.escape(labels[channel])}\s+([0-9]+(?:\.[0-9]+){{1,3}})", version_output)
     if match is None:
-        raise RuntimeError(f"unexpected Playwright Chromium version output: {version_output!r}")
+        raise RuntimeError(f"unexpected Playwright Chrome version output: {version_output!r}")
     return match.group(1)
 
 
