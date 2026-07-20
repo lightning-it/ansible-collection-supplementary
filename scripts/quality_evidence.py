@@ -1981,7 +1981,7 @@ def _dependency_files(root: Path, pattern: str) -> tuple[list[Path], list[str]]:
 def _read_dependency_text(root: Path, path: Path) -> tuple[str | None, str | None]:
     relative = path.relative_to(root).as_posix()
     try:
-        return _bounded_read(path, 64 * 1024).decode("utf-8"), None
+        return _bounded_read(path, 256 * 1024).decode("utf-8"), None
     except (OSError, EvidenceError, UnicodeDecodeError) as error:
         return None, f"{relative} is not readable dependency evidence: {error}"
 

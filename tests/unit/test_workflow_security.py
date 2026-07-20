@@ -496,6 +496,16 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("actions/runs/${preparation_run_id}", publish)
         self.assertIn('.conclusion == "success"', publish)
         action = ACTION.read_text(encoding="utf-8")
+        collection_ci = (WORKFLOWS / "collection-ci.yml").read_text(encoding="utf-8")
+        self.assertIn("QUALITY_SOURCE_SHA:", collection_ci)
+        expected_quality_source = (
+            "QUALITY_SOURCE_SHA: ${{ github.event_name == 'pull_request' && "
+            "github.event.pull_request.head.sha || github.sha }}"
+        )
+        self.assertIn(
+            expected_quality_source,
+            collection_ci,
+        )
         self.assertNotIn("actions/setup-python@", action)
         self.assertIn("python3 -m venv --system-site-packages", action)
         self.assertIn("ansible-core==2.21.2", action)

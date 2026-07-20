@@ -899,6 +899,17 @@ class QualityEvidenceTests(unittest.TestCase):
         )
         self.assertTrue(any("malformed browser runtime inventory" in error for error in errors), errors)
 
+    def test_dependency_inventory_can_exceed_64_kib_within_bounded_limit(self) -> None:
+        inventory = self.evidence_root / "dependencies" / "browser-runtime-large.json"
+        inventory.parent.mkdir(parents=True, exist_ok=True)
+        inventory.write_text(
+            json.dumps({"schema_version": 1, "packages": ["x" * (70 * 1024)]}),
+            encoding="utf-8",
+        )
+        payload, error = evidence._read_dependency_json(self.evidence_root, inventory)
+        self.assertIsNone(error)
+        self.assertEqual(1, payload["schema_version"])
+
     def test_release_dependencies_require_matching_test_application_inventory(self) -> None:
         self._release_dependencies(self.evidence_root)
         applications = self.evidence_root / "dependencies" / "test-application-dependencies.json"
