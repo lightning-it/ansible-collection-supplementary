@@ -51,6 +51,18 @@ def docker_action_image(path: Path) -> str | None:
 
 
 class WorkflowSecurityTests(unittest.TestCase):
+    def test_quality_cells_install_only_the_prebuilt_exact_candidate(self) -> None:
+        action = ACTION.read_text(encoding="utf-8")
+        install = re.search(
+            r'ansible-galaxy collection install \\\n(?P<body>(?:\s+.*\n){1,8})',
+            action,
+        )
+        self.assertIsNotNone(install)
+        command = install.group(0) if install is not None else ""
+        self.assertIn('"${candidates[0]}"', command)
+        self.assertIn("--force", command)
+        self.assertIn("--no-deps", command)
+
     def test_copilot_and_renovate_gates_preserve_safe_update_boundaries(self) -> None:
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         renovate = (WORKFLOWS / "renovate-guarded-automerge.yml").read_text(encoding="utf-8")
