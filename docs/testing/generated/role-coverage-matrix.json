@@ -1,0 +1,248 @@
+{
+  "candidate_profiles": {
+    "application_acceptance": {
+      "include": [
+        {
+          "allure": true,
+          "component": "keycloak",
+          "evidence": true,
+          "image_variable": "KEYCLOAK_RHEL10_INCUS_IMAGE",
+          "instance_type": "container",
+          "junit": true,
+          "profile": "application_acceptance",
+          "release_required": false,
+          "roles": [
+            "keycloak_cac",
+            "keycloak_deploy"
+          ],
+          "runner": [
+            "self-hosted",
+            "linux",
+            "x64",
+            "incus",
+            "keycloak-test"
+          ],
+          "scenario": "keycloak-application-acceptance",
+          "target": "rhel-10",
+          "target_disposition": "candidate"
+        },
+        {
+          "allure": true,
+          "component": "keycloak",
+          "evidence": true,
+          "image_variable": "KEYCLOAK_RHEL9_INCUS_IMAGE",
+          "instance_type": "container",
+          "junit": true,
+          "profile": "application_acceptance",
+          "release_required": false,
+          "roles": [
+            "keycloak_cac",
+            "keycloak_deploy"
+          ],
+          "runner": [
+            "self-hosted",
+            "linux",
+            "x64",
+            "incus",
+            "keycloak-test"
+          ],
+          "scenario": "keycloak-application-acceptance",
+          "target": "rhel-9",
+          "target_disposition": "candidate"
+        }
+      ]
+    },
+    "heavy": {
+      "include": [
+        {
+          "allure": true,
+          "component": "keycloak",
+          "evidence": true,
+          "image_variable": "KEYCLOAK_RHEL10_INCUS_IMAGE",
+          "instance_type": "container",
+          "junit": true,
+          "profile": "heavy",
+          "release_required": false,
+          "roles": [
+            "keycloak_cac",
+            "keycloak_deploy"
+          ],
+          "runner": [
+            "self-hosted",
+            "linux",
+            "x64",
+            "incus",
+            "keycloak-test"
+          ],
+          "scenario": "keycloak-heavy",
+          "target": "rhel-10",
+          "target_disposition": "candidate"
+        },
+        {
+          "allure": true,
+          "component": "keycloak",
+          "evidence": true,
+          "image_variable": "KEYCLOAK_RHEL9_INCUS_IMAGE",
+          "instance_type": "container",
+          "junit": true,
+          "profile": "heavy",
+          "release_required": false,
+          "roles": [
+            "keycloak_cac",
+            "keycloak_deploy"
+          ],
+          "runner": [
+            "self-hosted",
+            "linux",
+            "x64",
+            "incus",
+            "keycloak-test"
+          ],
+          "scenario": "keycloak-heavy",
+          "target": "rhel-9",
+          "target_disposition": "candidate"
+        }
+      ]
+    },
+    "tiny": {
+      "include": [
+        {
+          "allure": true,
+          "component": "keycloak",
+          "evidence": true,
+          "image_variable": "KEYCLOAK_RHEL10_INCUS_IMAGE",
+          "instance_type": "container",
+          "junit": true,
+          "profile": "tiny",
+          "release_required": false,
+          "roles": [
+            "keycloak_cac",
+            "keycloak_deploy"
+          ],
+          "runner": [
+            "self-hosted",
+            "linux",
+            "x64",
+            "incus",
+            "keycloak-test"
+          ],
+          "scenario": "keycloak-tiny",
+          "target": "rhel-10",
+          "target_disposition": "candidate"
+        },
+        {
+          "allure": true,
+          "component": "keycloak",
+          "evidence": true,
+          "image_variable": "KEYCLOAK_RHEL9_INCUS_IMAGE",
+          "instance_type": "container",
+          "junit": true,
+          "profile": "tiny",
+          "release_required": false,
+          "roles": [
+            "keycloak_cac",
+            "keycloak_deploy"
+          ],
+          "runner": [
+            "self-hosted",
+            "linux",
+            "x64",
+            "incus",
+            "keycloak-test"
+          ],
+          "scenario": "keycloak-tiny",
+          "target": "rhel-9",
+          "target_disposition": "candidate"
+        }
+      ]
+    }
+  },
+  "generated_from": "meta/role-coverage.yml",
+  "profiles": {
+    "application_acceptance": {
+      "include": [
+        {
+          "allure": true,
+          "component": "keycloak",
+          "evidence": true,
+          "image": "images:ubuntu/24.04",
+          "instance_type": "container",
+          "junit": true,
+          "profile": "application_acceptance",
+          "release_required": true,
+          "roles": [
+            "keycloak_cac",
+            "keycloak_deploy"
+          ],
+          "runner": [
+            "self-hosted",
+            "linux",
+            "x64",
+            "incus",
+            "keycloak-test"
+          ],
+          "scenario": "keycloak-application-acceptance",
+          "target": "ubuntu-24.04",
+          "target_disposition": "supported"
+        }
+      ]
+    },
+    "heavy": {
+      "include": [
+        {
+          "allure": true,
+          "component": "keycloak",
+          "evidence": true,
+          "image": "images:ubuntu/24.04",
+          "instance_type": "container",
+          "junit": true,
+          "profile": "heavy",
+          "release_required": true,
+          "roles": [
+            "keycloak_cac",
+            "keycloak_deploy"
+          ],
+          "runner": [
+            "self-hosted",
+            "linux",
+            "x64",
+            "incus",
+            "keycloak-test"
+          ],
+          "scenario": "keycloak-heavy",
+          "target": "ubuntu-24.04",
+          "target_disposition": "supported"
+        }
+      ]
+    },
+    "tiny": {
+      "include": [
+        {
+          "allure": true,
+          "component": "keycloak",
+          "evidence": true,
+          "image": "images:ubuntu/24.04",
+          "instance_type": "container",
+          "junit": true,
+          "profile": "tiny",
+          "release_required": true,
+          "roles": [
+            "keycloak_cac",
+            "keycloak_deploy"
+          ],
+          "runner": [
+            "self-hosted",
+            "linux",
+            "x64",
+            "incus",
+            "keycloak-test"
+          ],
+          "scenario": "keycloak-tiny",
+          "target": "ubuntu-24.04",
+          "target_disposition": "supported"
+        }
+      ]
+    }
+  },
+  "schema_version": 1
+}

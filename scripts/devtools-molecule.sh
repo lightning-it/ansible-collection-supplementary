@@ -19,7 +19,7 @@ COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE:-lit}"
 
 # Prefer authoritative name from galaxy.yml
 if [ -z "${COLLECTION_NAME:-}" ] && [ -f galaxy.yml ]; then
-  COLLECTION_NAME="$(scripts/devtools-galaxy.sh value name galaxy.yml || true)"
+  COLLECTION_NAME="$(scripts/devtools-galaxy.sh value name galaxy.yml)"
 fi
 
 # Fallback: derive COLLECTION_NAME from repo name (ansible-collection-<name>)
@@ -46,16 +46,25 @@ if [ -n "${SCENARIO_FILTER}" ]; then
   echo "Scenario filter: ${SCENARIO_FILTER}"
 fi
 
-# For Molecule (Docker + delegated etc.) we run as root inside the container
+# Molecule exercises ownership transitions that require container UID 0.
+# Rootless Podman maps that UID back to the invoking host user; hosted Docker
+# keeps the checkout read-only so the controller cannot leave root-owned files.
 export WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0
+export WUNDER_DEVTOOLS_PRIVILEGED=0
 
+WUNDER_DEVTOOLS_PRIVILEGED=0 \
 WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0 \
+WUNDER_DEVTOOLS_DOCKER_SOCKET=required \
+WUNDER_DEVTOOLS_NETWORK=bridge \
+WUNDER_DEVTOOLS_WORKSPACE_MODE=ro \
+WUNDER_DEVTOOLS_CAP_ADD=CHOWN,DAC_OVERRIDE,FOWNER \
 COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE}" \
 COLLECTION_NAME="${COLLECTION_NAME}" \
 SCENARIO_FILTER="${SCENARIO_FILTER}" \
 CONTAINER_HOME=/tmp/wunder \
 bash scripts/wunder-devtools-ee.sh env \
   MOLECULE_RUN_PROTECTED="${MOLECULE_RUN_PROTECTED:-false}" \
+  INCUS_MODE="${INCUS_MODE:-}" \
   bash -c '
   set -euo pipefail
 
@@ -78,13 +87,8 @@ bash scripts/wunder-devtools-ee.sh env \
 
   echo "DEBUG: docker info inside ee-wunder-devtools-ubi9..."
   if ! docker info >/dev/null 2>&1; then
-    echo "WARN: docker info failed inside devtools container." >&2
-    if [ "${CI:-false}" = "true" ] || [ "${GITHUB_ACTIONS:-false}" = "true" ]; then
-      echo "ERROR: Docker is required for Molecule tests in CI." >&2
-      exit 1
-    fi
-    echo "Skipping Molecule tests because Docker is unavailable in the local devtools container." >&2
-    exit 0
+    echo "ERROR: Docker is required for Molecule tests but is unavailable inside the devtools container." >&2
+    exit 1
   fi
 
   # -------------------------------------------------------------

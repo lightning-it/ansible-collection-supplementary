@@ -1,0 +1,124 @@
+---
+- name: Verify canonical Keycloak Tiny scenario
+  hosts: all
+  gather_facts: false
+  become: false
+  vars:
+    keycloak_tiny_admin_password: "{{ lookup('env', 'KEYCLOAK_TEST_ADMIN_PASSWORD') }}"
+    keycloak_tiny_junit_dir: "{{ lookup('env', 'KEYCLOAK_JUNIT_DIR') | default('artifacts/junit', true) }}"
+  tasks:
+    - name: Verify Keycloak readiness endpoint
+      ansible.builtin.uri:
+        url: http://127.0.0.1:19000/health/ready
+        status_code: 200
+      changed_when: false
+
+    - name: Verify Keycloak liveness endpoint
+      ansible.builtin.uri:
+        url: http://127.0.0.1:19000/health/live
+        status_code: 200
+      changed_when: false
+
+    - name: Read Keycloak OIDC discovery document
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/realms/keycloak-test/.well-known/openid-configuration
+        status_code: 200
+        return_content: true
+      register: keycloak_tiny_discovery
+      changed_when: false
+
+    - name: Request a viewer token
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/realms/keycloak-test/protocol/openid-connect/token
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: keycloak-test-client
+          username: keycloak_test_viewer
+          password: "{{ keycloak_tiny_admin_password }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_tiny_token
+      changed_when: false
+      no_log: true
+
+    - name: Decode the unpadded base64url viewer access token claims
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - >-
+            import base64, sys;
+            segment = sys.stdin.read().strip().split('.')[1];
+            print(base64.urlsafe_b64decode(segment + '=' * (-len(segment) % 4)).decode())
+        stdin: "{{ keycloak_tiny_token.json.access_token }}"
+      register: keycloak_tiny_decoded_claims
+      changed_when: false
+      no_log: true
+
+    - name: Parse viewer access token claims
+      ansible.builtin.set_fact:
+        keycloak_tiny_claims: "{{ keycloak_tiny_decoded_claims.stdout | from_json }}"
+      no_log: true
+
+    - name: Assert externally observable Tiny state
+      ansible.builtin.assert:
+        that:
+          - keycloak_tiny_discovery.json.issuer == 'http://127.0.0.1:18080/realms/keycloak-test'
+          - keycloak_tiny_discovery.json.token_endpoint | length > 0
+          - keycloak_tiny_discovery.json.jwks_uri | length > 0
+          - keycloak_tiny_claims.preferred_username == 'keycloak_test_viewer'
+          - "'viewers' in keycloak_tiny_claims.groups"
+          - "'viewer' in keycloak_tiny_claims.realm_access.roles"
+          - keycloak_tiny_claims.exp | int > keycloak_tiny_claims.iat | int
+
+    - name: Inspect running Keycloak container image
+      ansible.builtin.command:
+        argv:
+          - podman
+          - inspect
+          - keycloak-tiny-keycloak
+          - --format
+          - "{{ '{{.ImageName}}' }}"
+      register: keycloak_tiny_image
+      changed_when: false
+
+    - name: Assert expected immutable-version input and secure manifest permissions
+      ansible.builtin.stat:
+        path: /etc/podman/pods/keycloak-tiny.yml
+      register: keycloak_tiny_manifest
+
+    - name: Assert runtime version and manifest permissions
+      ansible.builtin.assert:
+        that:
+          - >-
+            keycloak_tiny_image.stdout ==
+            'quay.io/keycloak/keycloak@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4'
+          - keycloak_tiny_manifest.stat.mode == '0600'
+          - keycloak_tiny_manifest.stat.pw_name == 'root'
+
+    - name: Create Tiny JUnit output directory
+      ansible.builtin.file:
+        path: "{{ keycloak_tiny_junit_dir }}"
+        state: directory
+        mode: "0750"
+      delegate_to: localhost
+      become: false
+
+    - name: Write meaningful Tiny JUnit results
+      ansible.builtin.copy:
+        dest: "{{ keycloak_tiny_junit_dir }}/keycloak-tiny.xml"
+        mode: "0640"
+        content: |-
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuite name="keycloak-tiny" tests="6" failures="0" errors="0" skipped="0">
+            <testcase classname="keycloak.health" name="readiness" role="keycloak_deploy"/>
+            <testcase classname="keycloak.health" name="liveness" role="keycloak_deploy"/>
+            <testcase classname="keycloak.oidc" name="discovery" role="keycloak_cac"/>
+            <testcase classname="keycloak.oidc" name="viewer-token" role="keycloak_cac"/>
+            <testcase classname="keycloak.runtime" name="version" role="keycloak_deploy"/>
+            <testcase classname="keycloak.security" name="manifest-permissions" role="keycloak_deploy"/>
+          </testsuite>
+      delegate_to: localhost
+      become: false

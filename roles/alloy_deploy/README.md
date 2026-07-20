@@ -15,7 +15,7 @@ audit log content is safe for the PoC logging backend.
 
 | Variable | Default | Description |
 |---|---|---|
-| `alloy_deploy_image` | `docker.io/grafana/alloy:v1.7.5` | Alloy image. |
+| `alloy_deploy_image` | Tag-and-digest reference in `meta/source-dependencies.yml` | Immutable Alloy image. |
 | `alloy_deploy_config_dir` | `/srv/alloy/config` | Rendered River config. |
 | `alloy_deploy_data_dir` | `/srv/alloy/data` | Alloy storage path. |
 | `alloy_deploy_loki_url` | `http://127.0.0.1:3100/loki/api/v1/push` | Loki push endpoint. |

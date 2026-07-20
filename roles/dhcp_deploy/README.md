@@ -2,10 +2,12 @@
 
 Deploy DHCP as a rootful Podman kube-play pod.
 
-This role is the supported DHCP deployment path. It deploys DHCP through
-rootful Podman kube-play and does not install DHCP packages or manage a native
-`dhcpd` service directly. DHCP broadcast traffic and lease-state correctness
-must be validated on the target network before production use.
+This experimental role is an intended DHCP deployment path. It deploys DHCP
+through rootful Podman kube-play and does not install DHCP packages or manage a
+native `dhcpd` service directly. The current scenario is render-only; no target
+or production support is claimed until real DHCP broadcast, renewal,
+persistence, reboot, and failover evidence is reviewed and the registry is
+promoted.
 
 ## Requirements
 
@@ -16,7 +18,7 @@ must be validated on the target network before production use.
 - A persistent host lease path outside `/tmp`.
 - No active host-native DHCP service.
 
-## Production gate
+## Runtime readiness guard (not a support claim)
 
 Runtime deployment fails closed until all production evidence is explicit:
 
@@ -73,7 +75,8 @@ Runtime kube-play actions use `lit.foundational.kubeplay`.
   roles:
     - role: lit.supplementary.dhcp_deploy
       vars:
-        dhcp_deploy_image: registry.example.com/infra/dhcpd:4.4
+        dhcp_deploy_image: >-
+          registry.example.com/infra/dhcpd:4.4@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
         dhcp_deploy_interfaces:
           - ens34
         dhcp_deploy_production_ready: true

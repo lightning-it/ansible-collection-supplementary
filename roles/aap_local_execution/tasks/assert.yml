@@ -50,6 +50,9 @@
       - >-
         aap_local_execution_modulix_run_ee_digest_effective | length == 0
         or '@' not in modulix_run_ee_image
+      - >-
+        not (aap_local_execution_require_ee_digest_effective | bool)
+        or aap_local_execution_modulix_run_ee_digest_effective | length > 0
     fail_msg: >-
       modulix_run_ee_digest must be empty or a SHA-256 digest in the form
       sha256:<64 lowercase hexadecimal characters>.
@@ -79,8 +82,24 @@
       {{ item }} must be set in the encrypted Ansible inventory when
       aap_secret_backend=ansible_vault.
     quiet: true
-  loop: "{{ aap_local_execution_ansible_vault_required_secret_vars }}"
+  loop: >-
+    {{ aap_local_execution_ansible_vault_required_secret_vars
+       + (aap_local_execution_registry_secret_vars
+          if aap_local_execution_configure_registry_ee_effective | bool else []) }}
   no_log: true
   when:
     - aap_local_execution_effective_secret_backend == 'ansible_vault'
     - aap_local_execution_action != 'prepare_machine_a'
+
+- name: Validate digest-pinned AAP registry execution environment inputs
+  ansible.builtin.assert:
+    that:
+      - aap_registry_fqdn | default('', true) | string | trim | length > 0
+      - aap_ee_repository | default('', true) is match('^' ~ (aap_registry_fqdn | regex_escape) ~ '/.+')
+      - aap_ee_digest | default('', true) is match('^sha256:[0-9a-f]{64}$')
+      - aap_local_execution_registry_validate_certs_effective | bool
+    fail_msg: >-
+      AAP registry/EE configuration requires a trusted registry FQDN, an
+      approved repository in that registry, and a lowercase SHA-256 digest.
+    quiet: true
+  when: aap_local_execution_configure_registry_ee_effective | bool

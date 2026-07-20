@@ -30,7 +30,7 @@
         is match('^[a-z0-9][a-z0-9._-]{2,255}$')
       - vault_raft_snapshot_max_raw_bytes is integer
       - vault_raft_snapshot_max_raw_bytes | int > 0
-      - vault_raft_snapshot_max_raw_bytes | int <= 67108864
+      - vault_raft_snapshot_max_raw_bytes | int <= 134217728
       - vault_raft_snapshot_verification_kv_paths is sequence
       - vault_raft_snapshot_verification_kv_paths is not string
       - vault_raft_snapshot_verification_kv_paths | length > 0
@@ -79,6 +79,11 @@
       - vault_raft_snapshot_restore_work_root is match('^/run/[A-Za-z0-9._-]+$')
       - vault_raft_snapshot_restore_container_name is match('^[A-Za-z0-9][A-Za-z0-9._-]+$')
       - vault_raft_snapshot_restore_node_id is match('^[A-Za-z0-9][A-Za-z0-9._-]+$')
+      - vault_raft_snapshot_restore_timeout is integer
+      - >-
+        vault_raft_snapshot_restore_timeout | int
+        > vault_raft_snapshot_timeout | int
+      - vault_raft_snapshot_restore_timeout | int <= 3600
       - >-
         vault_raft_snapshot_expected_ciphertext_sha256
         is match('^[0-9a-f]{64}$')
@@ -94,7 +99,8 @@
         == vault_raft_snapshot_restore_unseal_keys | length
     fail_msg: >-
       Restore drill requires the literal localhost TLS identity, loopback-only
-      ports, unique production unseal keys, and the exact positive threshold.
+      ports, a bounded long-running restore timeout, unique production unseal
+      keys, and the exact positive threshold.
     quiet: true
   when: vault_raft_snapshot_action == 'restore_drill'
   no_log: true

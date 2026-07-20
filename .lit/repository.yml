@@ -49,3 +49,23 @@ workflows:
   release: collection-publish.yml
   promote: promote-develop-to-main.yml
   backmerge: release-back-sync.yml
+enterprise_role_quality:
+  registry: meta/role-coverage.yml
+  generated_matrix: docs/testing/generated/role-coverage-matrix.json
+  evidence_schema: docs/testing/evidence-manifest.schema.json
+  long_term_archive_required: false
+  release_eligibility: fail-closed
+local_managed_file_exceptions:
+  - path: AGENTS.md
+    owner: ansible-collection-supplementary
+    reason: >-
+      The collection-wide role quality lifecycle is repository-enforced until
+      the equivalent block is rendered by lightning-it/shared-assets-lit.
+    preserve_markers:
+      start: "<!-- role-quality-governance:start -->"
+      end: "<!-- role-quality-governance:end -->"
+  - path: CONTRIBUTING.md
+    owner: ansible-collection-supplementary
+    reason: >-
+      The repository uses feature-to-develop integration and requires the
+      collection-wide role coverage lifecycle.

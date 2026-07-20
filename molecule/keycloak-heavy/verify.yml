@@ -1,0 +1,673 @@
+---
+- name: Verify canonical Keycloak Heavy scenario
+  hosts: all
+  gather_facts: false
+  become: false
+  vars:
+    keycloak_heavy_db_password: "{{ lookup('env', 'KEYCLOAK_TEST_DB_PASSWORD') }}"
+    keycloak_heavy_admin_password: "{{ lookup('env', 'KEYCLOAK_TEST_ADMIN_PASSWORD') }}"
+    keycloak_heavy_viewer_password: "{{ lookup('env', 'KEYCLOAK_TEST_VIEWER_PASSWORD') }}"
+    keycloak_heavy_ldap_password: "{{ lookup('env', 'KEYCLOAK_TEST_LDAP_PASSWORD') }}"
+    keycloak_heavy_ldap_user_password: "{{ lookup('env', 'KEYCLOAK_TEST_LDAP_USER_PASSWORD') }}"
+    keycloak_heavy_cac_operator_password: "{{ lookup('env', 'KEYCLOAK_TEST_CAC_OPERATOR_PASSWORD') }}"
+    keycloak_heavy_cac_denied_password: "{{ lookup('env', 'KEYCLOAK_TEST_CAC_DENIED_PASSWORD') }}"
+    keycloak_heavy_client_secret: "{{ lookup('env', 'KEYCLOAK_TEST_CLIENT_SECRET') }}"
+    keycloak_heavy_junit_dir: "{{ lookup('env', 'KEYCLOAK_JUNIT_DIR') | default('artifacts/junit', true) }}"
+    keycloak_heavy_ldap_ca: /srv/keycloak-heavy/ldap/tls/ca.crt
+  tasks:
+    - name: Verify Keycloak management health
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:29000/health/{{ item }}"
+        status_code: 200
+      loop:
+        - ready
+        - live
+      changed_when: false
+
+    - name: Verify PostgreSQL accepts authenticated queries
+      ansible.builtin.command:
+        argv:
+          - podman
+          - exec
+          - -e
+          - "PGPASSWORD={{ keycloak_heavy_db_password }}"
+          - keycloak-heavy-postgres-postgres
+          - psql
+          - -U
+          - keycloak
+          - -d
+          - keycloak
+          - -tA
+          - -v
+          - ON_ERROR_STOP=1
+          - -c
+          - "SELECT current_database() || ':' || current_user;"
+      register: keycloak_heavy_database_query
+      changed_when: false
+      no_log: true
+
+    - name: Read the exact restore-probe state captured by the backup
+      ansible.builtin.command:
+        argv:
+          - podman
+          - exec
+          - -e
+          - "PGPASSWORD={{ keycloak_heavy_db_password }}"
+          - keycloak-heavy-postgres-postgres
+          - psql
+          - -U
+          - keycloak
+          - -d
+          - keycloak
+          - -tA
+          - -v
+          - ON_ERROR_STOP=1
+          - -c
+          - SELECT id::text || ':' || marker FROM public.molecule_restore_probe ORDER BY id;
+      register: keycloak_heavy_restore_before
+      changed_when: false
+      no_log: true
+
+    - name: Destructively replace only the isolated restore-probe state
+      ansible.builtin.command:
+        argv:
+          - podman
+          - exec
+          - -e
+          - "PGPASSWORD={{ keycloak_heavy_db_password }}"
+          - keycloak-heavy-postgres-postgres
+          - psql
+          - -U
+          - keycloak
+          - -d
+          - keycloak
+          - -v
+          - ON_ERROR_STOP=1
+          - -c
+          - >-
+            TRUNCATE TABLE public.molecule_restore_probe;
+            INSERT INTO public.molecule_restore_probe (id, marker)
+            VALUES (9, 'destructive-mutation');
+      changed_when: true
+      no_log: true
+
+    - name: Prove the isolated restore-probe state was mutated
+      ansible.builtin.command:
+        argv:
+          - podman
+          - exec
+          - -e
+          - "PGPASSWORD={{ keycloak_heavy_db_password }}"
+          - keycloak-heavy-postgres-postgres
+          - psql
+          - -U
+          - keycloak
+          - -d
+          - keycloak
+          - -tA
+          - -v
+          - ON_ERROR_STOP=1
+          - -c
+          - SELECT id::text || ':' || marker FROM public.molecule_restore_probe ORDER BY id;
+      register: keycloak_heavy_restore_mutated
+      changed_when: false
+      no_log: true
+
+    - name: Empty only the isolated restore-probe table before data restore
+      ansible.builtin.command:
+        argv:
+          - podman
+          - exec
+          - -e
+          - "PGPASSWORD={{ keycloak_heavy_db_password }}"
+          - keycloak-heavy-postgres-postgres
+          - psql
+          - -U
+          - keycloak
+          - -d
+          - keycloak
+          - -v
+          - ON_ERROR_STOP=1
+          - -c
+          - TRUNCATE TABLE public.molecule_restore_probe;
+      changed_when: true
+      no_log: true
+
+    - name: Restore only the isolated probe table from the Heavy backup
+      ansible.builtin.include_role:
+        name: lit.supplementary.postgres_backup_restore
+      vars:
+        postgres_backup_restore_action: restore
+        postgres_backup_restore_execute: true
+        postgres_backup_restore_restore_confirm: YES_RESTORE
+        postgres_backup_restore_backup_dir: /srv/keycloak-heavy/backups
+        postgres_backup_restore_file: /srv/keycloak-heavy/backups/keycloak-postgres.dump
+        postgres_backup_restore_restore_source: /srv/keycloak-heavy/backups/keycloak-postgres.dump
+        postgres_backup_restore_db_name: keycloak
+        postgres_backup_restore_db_user: keycloak
+        postgres_backup_restore_db_password: "{{ keycloak_heavy_db_password }}"
+        postgres_backup_restore_db_host: 127.0.0.1
+        postgres_backup_restore_db_port: 5432
+        postgres_backup_restore_format: custom
+        postgres_backup_restore_execution_mode: podman
+        postgres_backup_restore_container_name: keycloak-heavy-postgres-postgres
+        postgres_backup_restore_clean: false
+        postgres_backup_restore_if_exists: false
+        postgres_backup_restore_extra_pg_restore_args:
+          - --exit-on-error
+          - --data-only
+      no_log: true
+
+    - name: Prove the Heavy backup restored the exact isolated state
+      ansible.builtin.command:
+        argv:
+          - podman
+          - exec
+          - -e
+          - "PGPASSWORD={{ keycloak_heavy_db_password }}"
+          - keycloak-heavy-postgres-postgres
+          - psql
+          - -U
+          - keycloak
+          - -d
+          - keycloak
+          - -tA
+          - -v
+          - ON_ERROR_STOP=1
+          - -c
+          - SELECT id::text || ':' || marker FROM public.molecule_restore_probe ORDER BY id;
+      register: keycloak_heavy_restore_after
+      changed_when: false
+      no_log: true
+
+    - name: Verify the LDAPS trust chain and service hostname
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - s_client
+          - -connect
+          - keycloak.test:1636
+          - -servername
+          - keycloak.test
+          - -CAfile
+          - "{{ keycloak_heavy_ldap_ca }}"
+          - -verify_return_error
+          - -verify_hostname
+          - keycloak.test
+          - -brief
+      register: keycloak_heavy_tls
+      changed_when: false
+
+    - name: Verify LDAP authenticated search
+      ansible.builtin.command:
+        argv:
+          - ldapsearch
+          - -H
+          - ldaps://keycloak.test:1636
+          - -x
+          - -D
+          - CN=Administrator,CN=Users,DC=keycloak,DC=test
+          - -w
+          - "{{ keycloak_heavy_ldap_password }}"
+          - -b
+          - CN=Users,DC=keycloak,DC=test
+          - (sAMAccountName=Administrator)
+      environment:
+        LDAPTLS_CACERT: "{{ keycloak_heavy_ldap_ca }}"
+        LDAPTLS_REQCERT: demand
+      register: keycloak_heavy_ldap_search
+      changed_when: false
+      no_log: true
+
+    - name: Authenticate deterministic Keycloak users
+      ansible.builtin.uri:
+        url: http://127.0.0.1:28080/realms/keycloak-test/protocol/openid-connect/token
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: keycloak-test-client
+          client_secret: "{{ keycloak_heavy_client_secret }}"
+          username: "{{ item.username }}"
+          password: "{{ item.password }}"
+        status_code: 200
+        return_content: true
+      loop:
+        - username: keycloak_test_admin
+          password: "{{ keycloak_heavy_admin_password }}"
+        - username: keycloak_test_viewer
+          password: "{{ keycloak_heavy_viewer_password }}"
+      register: keycloak_heavy_tokens
+      changed_when: false
+      no_log: true
+
+    - name: Authenticate the LDAP-backed identity through Keycloak
+      ansible.builtin.uri:
+        url: http://127.0.0.1:28080/realms/keycloak-test/protocol/openid-connect/token
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: keycloak-test-client
+          client_secret: "{{ keycloak_heavy_client_secret }}"
+          username: ldap.viewer
+          password: "{{ keycloak_heavy_ldap_user_password }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_heavy_ldap_token
+      changed_when: false
+      no_log: true
+
+    - name: Reject an invalid LDAP-backed password through Keycloak
+      ansible.builtin.uri:
+        url: http://127.0.0.1:28080/realms/keycloak-test/protocol/openid-connect/token
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: keycloak-test-client
+          client_secret: "{{ keycloak_heavy_client_secret }}"
+          username: ldap.viewer
+          password: deliberately-invalid
+        status_code: 401
+        return_content: true
+      register: keycloak_heavy_invalid_ldap_login
+      changed_when: false
+      no_log: true
+
+    - name: Reject invalid credentials
+      ansible.builtin.uri:
+        url: http://127.0.0.1:28080/realms/keycloak-test/protocol/openid-connect/token
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: keycloak-test-client
+          client_secret: "{{ keycloak_heavy_client_secret }}"
+          username: keycloak_test_viewer
+          password: deliberately-invalid
+        status_code: 401
+        return_content: true
+      register: keycloak_heavy_invalid_login
+      changed_when: false
+      no_log: true
+
+    - name: Request master administrative token
+      ansible.builtin.uri:
+        url: http://127.0.0.1:28080/realms/master/protocol/openid-connect/token
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: admin-cli
+          username: admin
+          password: "{{ keycloak_heavy_admin_password }}"
+        status_code: 200
+      register: keycloak_heavy_master_token
+      changed_when: false
+      no_log: true
+
+    - name: Read configured LDAP federation provider
+      ansible.builtin.uri:
+        url: >-
+          http://127.0.0.1:28080/admin/realms/keycloak-test/components?type=org.keycloak.storage.UserStorageProvider&name=samba-ldaps
+        headers:
+          Authorization: "Bearer {{ keycloak_heavy_master_token.json.access_token }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_heavy_ldap_provider
+      changed_when: false
+      no_log: true
+
+    - name: Create a lifecycle role with the scoped CaC operator
+      ansible.builtin.include_role:
+        name: lit.supplementary.keycloak_cac
+      vars:
+        keycloak_cac_skip_apply: false
+        keycloak_cac_url: http://127.0.0.1:28080
+        keycloak_cac_realm: keycloak-test
+        keycloak_cac_admin_user: keycloak_cac_operator
+        keycloak_cac_admin_password: "{{ keycloak_heavy_cac_operator_password }}"
+        keycloak_cac_roles:
+          - realm: keycloak-test
+            name: molecule-cac-lifecycle
+            description: initial-state
+            state: present
+      no_log: true
+
+    - name: Request scoped CaC operator token
+      ansible.builtin.uri:
+        url: http://127.0.0.1:28080/realms/keycloak-test/protocol/openid-connect/token
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: admin-cli
+          username: keycloak_cac_operator
+          password: "{{ keycloak_heavy_cac_operator_password }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_heavy_cac_operator_token
+      changed_when: false
+      no_log: true
+
+    - name: Query the initially reconciled CaC role
+      ansible.builtin.uri:
+        url: >-
+          http://127.0.0.1:28080/admin/realms/keycloak-test/roles/molecule-cac-lifecycle
+        headers:
+          Authorization: "Bearer {{ keycloak_heavy_cac_operator_token.json.access_token }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_heavy_cac_initial
+      changed_when: false
+      no_log: true
+
+    - name: Mutate and reconcile the lifecycle role with the scoped operator
+      ansible.builtin.include_role:
+        name: lit.supplementary.keycloak_cac
+      vars:
+        keycloak_cac_skip_apply: false
+        keycloak_cac_url: http://127.0.0.1:28080
+        keycloak_cac_realm: keycloak-test
+        keycloak_cac_admin_user: keycloak_cac_operator
+        keycloak_cac_admin_password: "{{ keycloak_heavy_cac_operator_password }}"
+        keycloak_cac_roles:
+          - realm: keycloak-test
+            name: molecule-cac-lifecycle
+            description: reconciled-state
+            state: present
+      no_log: true
+
+    - name: Reapply the reconciled CaC role without desired-state drift
+      ansible.builtin.include_role:
+        name: lit.supplementary.keycloak_cac
+      vars:
+        keycloak_cac_skip_apply: false
+        keycloak_cac_url: http://127.0.0.1:28080
+        keycloak_cac_realm: keycloak-test
+        keycloak_cac_admin_user: keycloak_cac_operator
+        keycloak_cac_admin_password: "{{ keycloak_heavy_cac_operator_password }}"
+        keycloak_cac_roles:
+          - realm: keycloak-test
+            name: molecule-cac-lifecycle
+            description: reconciled-state
+            state: present
+      no_log: true
+
+    - name: Record the observed second-pass CaC role reconciliation results
+      ansible.builtin.set_fact:
+        keycloak_heavy_cac_idempotence_results: >-
+          {{ (keycloak_cac_role_reconciliation | default({})).get('results', []) }}
+      no_log: true
+
+    - name: Derive the Heavy CaC idempotence result from module change reports
+      ansible.builtin.set_fact:
+        keycloak_heavy_cac_idempotence_passed: >-
+          {{
+            keycloak_heavy_cac_idempotence_results is sequence
+            and keycloak_heavy_cac_idempotence_results is not string
+            and keycloak_heavy_cac_idempotence_results | length == 1
+            and (
+              keycloak_heavy_cac_idempotence_results
+              | selectattr('changed', 'defined')
+              | list
+              | length
+            ) == 1
+            and not (
+              (keycloak_cac_role_reconciliation | default({})).get('changed', true)
+              | bool
+            )
+            and not (keycloak_heavy_cac_idempotence_results[0].changed | bool)
+          }}
+      no_log: true
+
+    - name: Query the mutated CaC role
+      ansible.builtin.uri:
+        url: >-
+          http://127.0.0.1:28080/admin/realms/keycloak-test/roles/molecule-cac-lifecycle
+        headers:
+          Authorization: "Bearer {{ keycloak_heavy_cac_operator_token.json.access_token }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_heavy_cac_reconciled
+      changed_when: false
+      no_log: true
+
+    - name: Request the unprivileged CaC identity token
+      ansible.builtin.uri:
+        url: http://127.0.0.1:28080/realms/keycloak-test/protocol/openid-connect/token
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: admin-cli
+          username: keycloak_cac_denied
+          password: "{{ keycloak_heavy_cac_denied_password }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_heavy_cac_denied_token
+      changed_when: false
+      no_log: true
+
+    - name: Require exact HTTP 403 for the unprivileged CaC mutation
+      ansible.builtin.uri:
+        url: >-
+          http://127.0.0.1:28080/admin/realms/keycloak-test/roles/molecule-cac-lifecycle
+        method: PUT
+        headers:
+          Authorization: "Bearer {{ keycloak_heavy_cac_denied_token.json.access_token }}"
+        body_format: json
+        body:
+          name: molecule-cac-lifecycle
+          description: unauthorized-state
+        status_code: 403
+        return_content: true
+      register: keycloak_heavy_cac_denied_response
+      changed_when: false
+      no_log: true
+
+    - name: Re-query the lifecycle role after the denied mutation
+      ansible.builtin.uri:
+        url: >-
+          http://127.0.0.1:28080/admin/realms/keycloak-test/roles/molecule-cac-lifecycle
+        headers:
+          Authorization: "Bearer {{ keycloak_heavy_cac_operator_token.json.access_token }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_heavy_cac_after_denial
+      changed_when: false
+      no_log: true
+
+    - name: Delete the lifecycle role with the scoped CaC operator
+      ansible.builtin.include_role:
+        name: lit.supplementary.keycloak_cac
+      vars:
+        keycloak_cac_skip_apply: false
+        keycloak_cac_url: http://127.0.0.1:28080
+        keycloak_cac_realm: keycloak-test
+        keycloak_cac_admin_user: keycloak_cac_operator
+        keycloak_cac_admin_password: "{{ keycloak_heavy_cac_operator_password }}"
+        keycloak_cac_roles:
+          - realm: keycloak-test
+            name: molecule-cac-lifecycle
+            state: absent
+      no_log: true
+
+    - name: Verify the lifecycle role was deleted
+      ansible.builtin.uri:
+        url: >-
+          http://127.0.0.1:28080/admin/realms/keycloak-test/roles/molecule-cac-lifecycle
+        headers:
+          Authorization: "Bearer {{ keycloak_heavy_cac_operator_token.json.access_token }}"
+        status_code: 404
+        return_content: true
+      register: keycloak_heavy_cac_deleted
+      changed_when: false
+      no_log: true
+
+    - name: Check persistent data and backup artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /srv/keycloak-heavy/postgres
+        - /srv/keycloak-heavy/backups/keycloak-postgres.dump
+      register: keycloak_heavy_artifacts
+
+    - name: Assert externally observable Heavy state
+      ansible.builtin.assert:
+        that:
+          - keycloak_heavy_tokens.results | length == 2
+          - keycloak_heavy_database_query.stdout | trim == 'keycloak:keycloak'
+          - keycloak_heavy_restore_before.stdout | trim == '1:backup-baseline-v1'
+          - keycloak_heavy_restore_mutated.stdout | trim == '9:destructive-mutation'
+          - >-
+            (keycloak_heavy_restore_mutated.stdout | trim)
+            != (keycloak_heavy_restore_before.stdout | trim)
+          - >-
+            (keycloak_heavy_restore_after.stdout | trim)
+            == (keycloak_heavy_restore_before.stdout | trim)
+          - keycloak_heavy_tls.rc == 0
+          - keycloak_heavy_invalid_login.status == 401
+          - keycloak_heavy_ldap_token.status == 200
+          - keycloak_heavy_invalid_ldap_login.status == 401
+          - keycloak_heavy_ldap_provider.json | length == 1
+          - keycloak_heavy_ldap_provider.json[0].providerId == 'ldap'
+          - keycloak_heavy_cac_initial.json.description == 'initial-state'
+          - keycloak_heavy_cac_reconciled.json.description == 'reconciled-state'
+          - keycloak_heavy_cac_denied_response.status == 403
+          - keycloak_heavy_cac_after_denial.json.description == 'reconciled-state'
+          - keycloak_heavy_cac_deleted.status == 404
+          - keycloak_heavy_artifacts.results[0].stat.isdir
+          - keycloak_heavy_artifacts.results[1].stat.size | int > 0
+
+    - name: Resolve the default Keycloak systemd unit identity
+      ansible.builtin.command:
+        argv:
+          - systemd-escape
+          - /etc/podman/pods/keycloak-heavy.yml
+      register: keycloak_heavy_systemd_escape
+      changed_when: false
+
+    - name: Verify the Keycloak systemd unit is enabled
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-enabled
+          - "podman-kube@{{ keycloak_heavy_systemd_escape.stdout }}.service"
+      register: keycloak_heavy_systemd_enabled
+      changed_when: false
+
+    - name: Verify the Keycloak systemd unit is active
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "podman-kube@{{ keycloak_heavy_systemd_escape.stdout }}.service"
+      register: keycloak_heavy_systemd_active
+      changed_when: false
+
+    - name: Restart Keycloak through its default systemd lifecycle
+      ansible.builtin.systemd_service:
+        name: "podman-kube@{{ keycloak_heavy_systemd_escape.stdout }}.service"
+        state: restarted
+
+    - name: Verify restart recovery and database persistence
+      ansible.builtin.uri:
+        url: http://127.0.0.1:29000/health/ready
+        status_code: 200
+      register: keycloak_heavy_recovery
+      until: keycloak_heavy_recovery.status == 200
+      retries: 30
+      delay: 5
+      changed_when: false
+
+    - name: Verify realm survives restart
+      ansible.builtin.uri:
+        url: http://127.0.0.1:28080/realms/keycloak-test/.well-known/openid-configuration
+        status_code: 200
+      changed_when: false
+
+    - name: Create Heavy JUnit output directory
+      ansible.builtin.file:
+        path: "{{ keycloak_heavy_junit_dir }}"
+        state: directory
+        mode: "0750"
+      delegate_to: localhost
+      become: false
+
+    - name: Write meaningful Heavy JUnit results
+      ansible.builtin.copy:
+        dest: "{{ keycloak_heavy_junit_dir }}/keycloak-heavy.xml"
+        mode: "0640"
+        content: |-
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuite name="keycloak-heavy" tests="17" failures="0" errors="0" skipped="0">
+            <properties>
+              <property
+                name="keycloak_cac_second_pass_changed"
+                value="{{ (not keycloak_heavy_cac_idempotence_passed | bool) | lower }}"
+              />
+              <property
+                name="keycloak_cac_denied_status"
+                value="{{ keycloak_heavy_cac_denied_response.status }}"
+              />
+              <property
+                name="keycloak_cac_denied_state_unchanged"
+                value="{{ (keycloak_heavy_cac_after_denial.json.description == 'reconciled-state') | lower }}"
+              />
+              <property
+                name="postgres_isolated_restore_exact"
+                value="{{ (keycloak_heavy_restore_after.stdout | trim == '1:backup-baseline-v1') | lower }}"
+              />
+            </properties>
+            <testcase classname="keycloak.health" name="management-health" role="keycloak_deploy"/>
+            <testcase classname="keycloak.database" name="authenticated-readiness" role="keycloak_deploy"/>
+            <testcase classname="keycloak.tls" name="ldaps-ca-and-hostname" role="keycloak_cac"/>
+            <testcase classname="keycloak.ldap" name="authenticated-search" role="keycloak_cac"/>
+            <testcase classname="keycloak.authentication" name="admin-and-viewer" role="keycloak_cac"/>
+            <testcase classname="keycloak.authentication" name="invalid-password-rejected" role="keycloak_cac"/>
+            <testcase classname="keycloak.federation" name="ldap-provider" role="keycloak_cac"/>
+            <testcase classname="keycloak.federation" name="ldap-login" role="keycloak_cac"/>
+            <testcase classname="keycloak.federation" name="ldap-invalid-password" role="keycloak_cac"/>
+            <testcase classname="keycloak.cac" name="scoped-create" role="keycloak_cac"/>
+            <testcase classname="keycloak.cac" name="mutation" role="keycloak_cac"/>
+            <testcase classname="keycloak.cac" name="idempotent-reconcile" role="keycloak_cac"/>
+            <testcase classname="keycloak.cac" name="unprivileged-403-state-unchanged" role="keycloak_cac"/>
+            <testcase classname="keycloak.cac" name="delete" role="keycloak_cac"/>
+            <testcase classname="keycloak.backup" name="postgres-isolated-restore-exact-state" role="keycloak_deploy"/>
+            <testcase classname="keycloak.systemd" name="enabled-active" role="keycloak_deploy"/>
+            <testcase classname="keycloak.persistence" name="restart-recovery" role="keycloak_deploy"/>
+          </testsuite>
+      delegate_to: localhost
+      become: false
+
+    - name: Record an observed CaC idempotence failure in Heavy JUnit
+      ansible.builtin.replace:
+        path: "{{ keycloak_heavy_junit_dir }}/keycloak-heavy.xml"
+        regexp: >-
+          <testcase classname="keycloak.cac" name="idempotent-reconcile" role="keycloak_cac"/>
+        replace: >-
+          <testcase classname="keycloak.cac" name="idempotent-reconcile" role="keycloak_cac"><failure
+          type="IdempotenceFailure" message="the second CaC reconciliation reported a change"/></testcase>
+      when: not keycloak_heavy_cac_idempotence_passed | bool
+      delegate_to: localhost
+      become: false
+
+    - name: Record the Heavy JUnit failure total for a changed CaC second pass
+      ansible.builtin.replace:
+        path: "{{ keycloak_heavy_junit_dir }}/keycloak-heavy.xml"
+        regexp: 'failures="0"'
+        replace: 'failures="1"'
+      when: not keycloak_heavy_cac_idempotence_passed | bool
+      delegate_to: localhost
+      become: false
+
+    - name: Enforce the observed zero-change CaC reconciliation after writing evidence
+      ansible.builtin.assert:
+        that:
+          - keycloak_heavy_cac_idempotence_passed | bool
+        fail_msg: >-
+          The second scoped Keycloak CaC reconciliation reported a change or did
+          not expose exactly one module result. The Heavy JUnit report records
+          the observed idempotence failure.

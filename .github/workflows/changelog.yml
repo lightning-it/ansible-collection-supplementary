@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
         with:
           fetch-depth: 0
 
@@ -25,6 +25,22 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
-          REQUIRE_FRAGMENT: "true"
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
         run: |
-          bash scripts/devtools-changelog-check.sh
+          set -euo pipefail
+
+          require_fragment=true
+          if [ "$PR_AUTHOR" = "renovate[bot]" ] \
+            && [ "$PR_BASE" = "develop" ] \
+            && [[ "$PR_HEAD" = renovate/* ]] \
+            && jq -e 'index("renovate") != null
+              and index("dependencies") != null
+              and index("safe-automerge") != null
+              and index("breaking-update") == null' \
+              >/dev/null <<<"$LABELS_JSON"; then
+            require_fragment=false
+          fi
+
+          REQUIRE_FRAGMENT="$require_fragment" bash scripts/devtools-changelog-check.sh

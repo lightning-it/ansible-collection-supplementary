@@ -1,0 +1,29 @@
+# Release and promotion trust roots execute with protected credentials or
+# elevated workflow permissions and require approval from the release team.
+/.github/CODEOWNERS @lightning-it/ent:release
+/.github/actions/** @lightning-it/ent:release
+/.github/workflows/** @lightning-it/ent:release
+/.github/actions/run-quality-profile/action.yml @lightning-it/ent:release
+/.github/workflows/collection-ci.yml @lightning-it/ent:release
+/.github/workflows/collection-publish.yml @lightning-it/ent:release
+/.github/workflows/promote-develop-to-main.yml @lightning-it/ent:release
+/.github/workflows/release-back-sync.yml @lightning-it/ent:release
+/.github/workflows/release-prepare.yml @lightning-it/ent:release
+/.lit/repository.yml @lightning-it/ent:release
+/.pre-commit-config.yaml @lightning-it/ent:release
+/changelogs/config.yaml @lightning-it/ent:release
+/changelogs/fragments/ @lightning-it/ent:release
+/docs/testing/evidence-manifest.schema.json @lightning-it/ent:release
+/galaxy.yml @lightning-it/ent:release
+/meta/role-coverage.yml @lightning-it/ent:release
+/meta/quality-impact.yml @lightning-it/ent:release
+/scripts/enrich-cyclonedx-sbom.py @lightning-it/ent:release
+/scripts/devtools-*.sh @lightning-it/ent:release
+/scripts/quality_cell_identity.py @lightning-it/ent:release
+/scripts/quality_evidence.py @lightning-it/ent:release
+/scripts/release-version.py @lightning-it/ent:release
+/scripts/select-quality-impact.py @lightning-it/ent:release
+/scripts/source_dependencies.py @lightning-it/ent:release
+/scripts/validate-role-coverage.py @lightning-it/ent:release
+/scripts/wunder-container-run.sh @lightning-it/ent:release
+/scripts/wunder-devtools-ee.sh @lightning-it/ent:release

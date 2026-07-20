@@ -13,7 +13,8 @@ bundle mode.
   `lit.rhel.virtual_guest`.
 - `ansible-playbook`, `podman`, and `python3` available on the target host.
 - Podman prepared on the target host, for example with `lit.rhel.podman`.
-- `infra.aap_utilities` collection installed in the execution environment.
+- The exact `collections/requirements-rh.yml` overlay, including
+  `infra.aap_utilities`, installed from the configured content sources.
 - AAP containerized setup bundle staged on the managed host with
   `lit.supplementary.aap_prepare`.
 - Enough local storage for bundle copy and extraction. Red Hat documents a minimum 60 GB
@@ -119,7 +120,10 @@ Installer behavior:
 
 ## Dependencies
 
-Requires `infra.aap_utilities` in the execution environment.
+Requires `infra.aap_utilities` through the authoritative,
+exactly pinned `collections/requirements-rh.yml` execution-environment overlay.
+The entitled installer bundle separately supplies
+`ansible.containerized_installer`; it is not an Automation Hub overlay entry.
 
 ## Example Playbook
 
@@ -228,7 +232,9 @@ Expected output includes `[automationmetrics]`, `automationmetrics_pg_host`,
 `automationmetrics_controller_read_pg_password`.
 
 RHEL 10 host prep:
-- AAP 2.7 supports RHEL 10 containerized installs.
+- RHEL 10 remains a candidate for this role even where the upstream AAP 2.7
+  product matrix permits a containerized install; upstream compatibility alone
+  is not role support evidence.
 - This role is 2.7-only and fails fast when
   `aap_deploy_setup_download_version` is changed to another version.
 

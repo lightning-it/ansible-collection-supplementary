@@ -1,0 +1,14 @@
+---
+breaking_changes:
+  - >-
+    Rename the AAP local-execution action from ``base_preflight`` to
+    ``host_prepare_preflight`` and reference the canonical
+    ``06-aap-host-prepare.yml`` playbook so application-owned host preparation
+    is not presented as customer base-OS management.
+  - >-
+    Rename the implementation role from ``aap_base_os`` to
+    ``aap_host_prepare`` together with its internal variables and tags.
+  - >-
+    Rename the successful combined preflight marker from
+    ``AAP_BASE_OS_AND_PREFLIGHT_OK`` to
+    ``AAP_HOST_PREPARE_AND_PREFLIGHT_OK``.

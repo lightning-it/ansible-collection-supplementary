@@ -10,12 +10,12 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   set -euo pipefail
 
   cd /workspace
-  git config --global --add safe.directory /workspace >/dev/null 2>&1 || true
+  git config --global --add safe.directory /workspace >/dev/null
 
   antsibull-changelog lint
 
   diff_names() {
-    git diff --name-only "$@" 2>/dev/null || true
+    git diff --name-only "$@"
   }
 
   changed=""
@@ -26,7 +26,7 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   else
     base_ref="${CHANGELOG_BASE_REF:-origin/develop}"
     if git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
-      merge_base="$(git merge-base "$base_ref" HEAD 2>/dev/null || true)"
+      merge_base="$(git merge-base "$base_ref" HEAD)"
       if [ -n "${merge_base:-}" ]; then
         changed="$(diff_names "$merge_base" HEAD)"
       fi
@@ -58,7 +58,7 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   generated_re="^(CHANGELOG\\.(md|rst)|changelogs/(changelog|\\.plugin-cache)\\.yaml)$"
   is_release_branch=false
   is_release_promotion=false
-  head_ref="${GITHUB_HEAD_REF:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)}"
+  head_ref="${GITHUB_HEAD_REF:-$(git rev-parse --abbrev-ref HEAD)}"
   base_ref="${GITHUB_BASE_REF:-}"
 
   if [[ "$head_ref" == release/v* || "$head_ref" == backsync/release-* ]]; then
@@ -89,12 +89,28 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   non_user_visible_re+="CHANGELOG\\.(md|rst)|changelogs/config\\.yaml|"
   non_user_visible_re+="changelogs/changelog\\.yaml|changelogs/fragments/|"
   non_user_visible_re+="package(-lock)?\\.json|AGENTS\\.md|CONTRIBUTING\\.md|SECURITY\\.md)"
-  user_visible="$(grep -Ev "$non_user_visible_re" <<<"$changed" || true)"
+  user_visible=""
+  if user_visible="$(grep -Ev "$non_user_visible_re" <<<"$changed")"; then
+    :
+  else
+    grep_status="$?"
+    if [ "$grep_status" -ne 1 ]; then
+      exit "$grep_status"
+    fi
+  fi
 
   if [ "$is_release_promotion" = "true" ]; then
     promotion_metadata_re="^(galaxy\\.yml|CHANGELOG\\.(md|rst)|"
     promotion_metadata_re+="changelogs/(changelog|\\.plugin-cache)\\.yaml)$"
-    user_visible="$(grep -Ev "$non_user_visible_re|$promotion_metadata_re" <<<"$changed" || true)"
+    user_visible=""
+    if user_visible="$(grep -Ev "$non_user_visible_re|$promotion_metadata_re" <<<"$changed")"; then
+      :
+    else
+      grep_status="$?"
+      if [ "$grep_status" -ne 1 ]; then
+        exit "$grep_status"
+      fi
+    fi
   fi
 
   if [ -z "$user_visible" ]; then

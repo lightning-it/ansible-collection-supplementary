@@ -12,7 +12,7 @@ samba_deploy_image: >-
   {{
     samba_deploy_ad_dc_image
     if samba_deploy_mode == 'ad_dc'
-    else 'docker.io/dperson/samba:latest'
+    else 'docker.io/dperson/samba:latest@sha256:66088b78a19810dd1457a8f39340e95e663c728083efa5fe7dc0d40b2478e869'
   }}
 samba_deploy_pod_manifest_path: "/etc/podman/pods/samba.yml"
 samba_deploy_kubeplay_remove: true
@@ -34,19 +34,30 @@ samba_deploy_share_guest_ok: true
 samba_deploy_share_read_only: false
 samba_deploy_share_browseable: true
 samba_deploy_share_owner: "nobody"
-samba_deploy_share_group: "nogroup"
+# Debian-family systems pair nobody with nogroup; Red Hat-family systems pair
+# nobody with nobody. An empty value deliberately makes the role fail closed
+# when facts were not gathered or the platform needs an explicit override.
+samba_deploy_share_group: >-
+  {{
+    {
+      'Debian': 'nogroup',
+      'RedHat': 'nobody'
+    }.get((ansible_facts | default({})).get('os_family', ''), '')
+  }}
 samba_deploy_share_mode: "0775"
 samba_deploy_extra_args: []
 
 # Samba AD DC / LDAPS mode. This lightweight Samba AD-LDS style image is suited
 # for app-auth and Molecule validation while preserving LDAP/LDAPS semantics.
-samba_deploy_ad_dc_image: "docker.io/smblds/smblds:latest"
+samba_deploy_ad_dc_image: >-
+  docker.io/smblds/smblds:latest@sha256:d8c4e2e3d00fc5d86decb30ad1736bf927c3868478b3e0b807d4818fdcc76f5c
 samba_deploy_ad_dc_realm: "SAMDOM.EXAMPLE.COM"
 samba_deploy_ad_dc_domain: "SAMDOM"
-samba_deploy_ad_dc_admin_password: "Passw0rd"
+samba_deploy_ad_dc_admin_password: ""
 samba_deploy_ad_dc_insecure_ldap: false
 samba_deploy_ad_dc_insecure_passwordsettings: false
 samba_deploy_ad_dc_server_services: "ldap cldap"
+samba_deploy_ad_dc_persistent_storage: true
 samba_deploy_ldap_port: 389
 samba_deploy_ldaps_port: 636
 samba_deploy_container_ldap_port: 389
@@ -56,8 +67,9 @@ samba_deploy_ad_dc_config_dir: "/srv/samba/ad-dc/config"
 samba_deploy_ad_dc_cache_dir: "/srv/samba/ad-dc/cache"
 samba_deploy_ad_dc_log_dir: "/srv/samba/ad-dc/log"
 samba_deploy_ad_dc_entrypoint_dir: "/srv/samba/ad-dc/entrypoint.d"
+samba_deploy_ad_dc_tls_dir: "/srv/samba/ad-dc/tls"
 samba_deploy_ad_dc_keycloak_bind_user: "keycloak"
-samba_deploy_ad_dc_keycloak_bind_password: "KeycloakBindPassw0rd"
+samba_deploy_ad_dc_keycloak_bind_password: ""
 samba_deploy_ad_dc_keycloak_bind_given_name: "Keycloak"
 samba_deploy_ad_dc_keycloak_bind_surname: "Bind"
 samba_deploy_ad_dc_groups:
@@ -67,22 +79,4 @@ samba_deploy_ad_dc_groups:
     description: "Application managers"
   - name: "viewers"
     description: "Application viewers"
-samba_deploy_ad_dc_users:
-  - name: "alice.admin"
-    password: "SambaUserPassw0rd1"
-    given_name: "Alice"
-    surname: "Admin"
-    groups:
-      - "admins"
-  - name: "maya.manager"
-    password: "SambaUserPassw0rd1"
-    given_name: "Maya"
-    surname: "Manager"
-    groups:
-      - "managers"
-  - name: "victor.viewer"
-    password: "SambaUserPassw0rd1"
-    given_name: "Victor"
-    surname: "Viewer"
-    groups:
-      - "viewers"
+samba_deploy_ad_dc_users: []

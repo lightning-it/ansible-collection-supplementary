@@ -7,7 +7,8 @@ prometheus_deploy_skip_deploy: false
 
 prometheus_deploy_pod_name: "prometheus"
 prometheus_deploy_container_name: "prometheus"
-prometheus_deploy_image: "docker.io/prom/prometheus:v3.5.0"
+prometheus_deploy_image: >-
+  docker.io/prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
 prometheus_deploy_pod_manifest_path: "/etc/podman/pods/prometheus.yml"
 prometheus_deploy_systemd_enabled: true
 prometheus_deploy_systemd_unit_name: "{{ prometheus_deploy_pod_name }}"

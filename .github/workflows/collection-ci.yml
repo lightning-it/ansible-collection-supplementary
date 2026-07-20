@@ -3,84 +3,1896 @@
 name: Collection CI
 
 on:
-  # CI on pushes to integration/stable branches and version tags (v*)
-  push:
-    branches: ["develop", "main"]
-    tags: ["v*"]
-  # CI on all PRs
   pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+    inputs:
+      execution_mode:
+        description: Select manual main validation or the scheduled develop run.
+        required: true
+        default: manual-main
+        type: choice
+        options:
+          - manual-main
+          - nightly-develop
 
 permissions:
   contents: read
 
-env:
-  # Common tool versions (override if needed)
-  PYTHON_VERSION: "3.11"
-  ANSIBLE_LINT_VERSION: "6.22.2"
-  TERRAFORM_VERSION: "1.15.6"
-  COLLECTION_NAMESPACE: lit
+concurrency:
+  group: >-
+    collection-quality-${{ github.repository }}-${{ github.workflow }}-${{
+    github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-  # Example playbook that MUST exist in this repository.
-  EXAMPLE_PLAYBOOK: "playbooks/example.yml"
+env:
+  PYTHON_VERSION: "3.11"
+  ANSIBLE_CORE_VERSION: "2.18.13"
+  COLLECTION_NAMESPACE: lit
+  COLLECTION_NAME: supplementary
+  # Execute the exact reviewed PR head. The resulting merge commit is a distinct
+  # object and must pass the complete matrix again after it reaches main.
+  SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+  SOURCE_REF: ${{ github.ref }}
+  REVIEWED_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+  REVIEWED_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.sha }}
+  COMPARE_BASE_SHA: >-
+    ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha ||
+        github.event_name == 'push' && github.event.before || '' }}
+  COMPARE_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || '' }}
+  COMPARE_HEAD_REF: >-
+    ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
+  CANDIDATE_ARTIFACT: >-
+    collection-candidate-${{ github.event_name == 'pull_request' &&
+      github.event.pull_request.head.sha || github.sha }}
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Collection CI
-  # ---------------------------------------------------------------------------
-  lint:
-    name: Lint (ansible-lint via ee-wunder-devtools-ubi9)
+  lint-sanity:
+    name: Collection / Lint and Sanity
     runs-on: ubuntu-latest
-
+    timeout-minutes: 45
     steps:
-      # 1) Checkout the repository
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      # 2) Run ansible-lint inside the ee-wunder-devtools-ubi9 container
-      - name: Run ansible-lint via devtools-ansible-lint.sh
-        env:
-          # These env vars make the script generic across collections
-          COLLECTION_NAMESPACE: ${{ env.COLLECTION_NAMESPACE }}
-          ANSIBLE_LINT_VERSION: ${{ env.ANSIBLE_LINT_VERSION }}
+      - name: Checkout exact source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install validation tools
         run: |
-          bash scripts/devtools-ansible-lint.sh
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            "ansible-core==${ANSIBLE_CORE_VERSION}" \
+            pre-commit==4.3.0 \
+            pytest==8.4.2 \
+            PyYAML==6.0.3
+      - name: Run repository static pre-commit gates
+        env:
+          CI: "true"
+        run: >-
+          SKIP=molecule-light pre-commit run --all-files
+      - name: Run collection sanity tests from canonical collection path
+        run: |
+          set -euo pipefail
+          collection_root="$RUNNER_TEMP/sanity/ansible_collections/lit/supplementary"
+          mkdir -p "$collection_root"
+          rsync --archive --delete \
+            --exclude .git/ \
+            --exclude .ansible/ \
+            --exclude .cache/ \
+            --exclude .pytest_cache/ \
+            --exclude .ruff_cache/ \
+            --exclude __pycache__/ \
+            --exclude artifacts/ \
+            --exclude build/ \
+            --exclude dist/ \
+            "$GITHUB_WORKSPACE/" "$collection_root/"
+          cd "$collection_root"
+          ansible-test sanity --requirements --python "$PYTHON_VERSION"
+      - name: Run policy and evidence unit tests
+        run: python -m pytest -q tests/test_role_coverage.py tests/unit
+      - name: Compile workflow-facing Python tools
+        run: |
+          python -m py_compile \
+            scripts/quality_evidence.py \
+            scripts/source_dependencies.py \
+            scripts/validate-role-coverage.py
 
-  molecule:
-    name: Molecule (via devtools)
+  role-coverage:
+    name: Collection / Role Coverage
     runs-on: ubuntu-latest
-    needs: lint
-
+    timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      # Run Molecule via ee-wunder-devtools-ubi9.
-      # scripts/devtools-molecule.sh is expected to:
-      #  - build the collection
-      #  - install it into a temp path
-      #  - run one or more molecule scenarios
-      - name: Run Molecule tests (via devtools)
-        env:
-          MOLECULE_NO_LOG: "false"
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install registry parser
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.3
+      - name: Validate authoritative registry and generated outputs
         run: |
-          bash scripts/devtools-molecule.sh
+          set -euo pipefail
+          python scripts/validate-role-coverage.py validate
+          python scripts/validate-role-coverage.py check
+
+  quality-matrix:
+    name: Generate registry quality matrices
+    needs: role-coverage
+    runs-on: ubuntu-latest
+    outputs:
+      tiny: ${{ steps.matrix.outputs.tiny }}
+      heavy: ${{ steps.matrix.outputs.heavy }}
+      acceptance: ${{ steps.matrix.outputs.acceptance }}
+      keycloak_required: ${{ steps.impact.outputs.keycloak_required }}
+      full_matrix: ${{ steps.impact.outputs.full_matrix }}
+      selection: ${{ steps.impact.outputs.selection }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install registry parser
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.3
+      - name: Select affected Keycloak quality profiles
+        id: impact
+        env:
+          EXECUTION_MODE: ${{ inputs.execution_mode || '' }}
+        run: |
+          set -euo pipefail
+          selection="$(python scripts/select-quality-impact.py \
+            --event-name "$GITHUB_EVENT_NAME" \
+            --base-sha "$COMPARE_BASE_SHA" \
+            --head-sha "$SOURCE_SHA" \
+            --base-ref "$COMPARE_BASE_REF" \
+            --head-ref "$COMPARE_HEAD_REF" \
+            --execution-mode "$EXECUTION_MODE")"
+          python -c 'import json,sys; json.loads(sys.argv[1])' "$selection"
+          SELECTION="$selection" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          selection = json.loads(os.environ["SELECTION"])
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
+              stream.write(f"keycloak_required={str(selection['keycloak_required']).lower()}\n")
+              stream.write(f"full_matrix={str(selection['full_matrix']).lower()}\n")
+              stream.write(f"selection={json.dumps(selection, separators=(',', ':'))}\n")
+          print(json.dumps(selection, indent=2, sort_keys=True))
+          PY
+      - name: Generate compact matrices
+        id: matrix
+        run: |
+          set -euo pipefail
+          tiny="$(python scripts/validate-role-coverage.py matrix --profile tiny)"
+          heavy="$(python scripts/validate-role-coverage.py matrix --profile heavy)"
+          acceptance="$(python scripts/validate-role-coverage.py matrix --profile application_acceptance)"
+          python -c 'import json,sys; json.loads(sys.argv[1])' "$tiny"
+          python -c 'import json,sys; json.loads(sys.argv[1])' "$heavy"
+          python -c 'import json,sys; json.loads(sys.argv[1])' "$acceptance"
+          {
+            echo "tiny=$tiny"
+            echo "heavy=$heavy"
+            echo "acceptance=$acceptance"
+          } >> "$GITHUB_OUTPUT"
 
   build-install:
-    name: Build & install collection (via devtools smoke test)
+    name: Collection / Build and Install
     runs-on: ubuntu-latest
-    needs: lint
-
+    timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      # Run a full collection smoke test inside ee-wunder-devtools-ubi9:
-      #  - build the collection
-      #  - install it into /tmp/wunder/collections
-      #  - run the example playbook
-      - name: Run collection smoke test via devtools-collection-smoke.sh
-        env:
-          COLLECTION_NAMESPACE: ${{ env.COLLECTION_NAMESPACE }}
-          EXAMPLE_PLAYBOOK: ${{ env.EXAMPLE_PLAYBOOK }}
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install exact build toolchain
         run: |
-          bash scripts/devtools-collection-smoke.sh
+          python -m pip install --disable-pip-version-check \
+            "ansible-core==${ANSIBLE_CORE_VERSION}" \
+            PyYAML==6.0.3
+      - name: Build, inspect, and install exact candidate
+        run: |
+          set -euo pipefail
+          mkdir -p dist/candidate "$RUNNER_TEMP/collections"
+          ansible-galaxy collection build --output-path dist/candidate --force
+          mapfile -t candidates < <(find dist/candidate -maxdepth 1 -type f -name '*.tar.gz' -print)
+          test "${#candidates[@]}" -eq 1
+          candidate="${candidates[0]}"
+          python - "$candidate" <<'PY'
+          import json
+          import re
+          import sys
+          import tarfile
+          from pathlib import Path
+          from pathlib import PurePosixPath
+
+          candidate = Path(sys.argv[1])
+          compressed_bytes = candidate.stat().st_size
+          if compressed_bytes <= 0:
+              raise SystemExit("candidate archive is empty")
+          with tarfile.open(candidate, "r:gz") as stream:
+              members = stream.getmembers()
+              if len(members) > 20_000:
+                  raise SystemExit("candidate archive has too many members")
+              seen: set[str] = set()
+              total_bytes = 0
+              manifest_member = None
+              for member in members:
+                  path = PurePosixPath(member.name)
+                  normalized = path.as_posix()
+                  if path.is_absolute() or ".." in path.parts or normalized in {"", "."}:
+                      raise SystemExit(f"unsafe candidate member path: {member.name}")
+                  if normalized in seen:
+                      raise SystemExit(f"duplicate candidate member path: {normalized}")
+                  seen.add(normalized)
+                  if not (member.isfile() or member.isdir()):
+                      raise SystemExit(f"unsafe candidate member type: {member.name}")
+                  if member.size > 512 * 1024 * 1024:
+                      raise SystemExit(f"oversized candidate member: {member.name}")
+                  total_bytes += member.size
+                  if total_bytes > 2 * 1024 * 1024 * 1024:
+                      raise SystemExit("candidate expands beyond size limit")
+                  if normalized == "MANIFEST.json":
+                      manifest_member = member
+              if total_bytes > compressed_bytes * 1_000:
+                  raise SystemExit("candidate compression ratio exceeds limit")
+              if manifest_member is None or not manifest_member.isfile():
+                  raise SystemExit("candidate has no regular MANIFEST.json")
+              manifest_file = stream.extractfile(manifest_member)
+              if manifest_file is None:
+                  raise SystemExit("candidate MANIFEST.json cannot be read")
+              manifest = json.loads(manifest_file.read().decode("utf-8"))
+          galaxy = Path("galaxy.yml").read_text(encoding="utf-8")
+          version_match = re.search(r"(?m)^version:\s*['\"]?([^\s'\"]+)", galaxy)
+          if version_match is None:
+              raise SystemExit("galaxy.yml has no version")
+          info = manifest.get("collection_info", {})
+          expected_name = f"lit-supplementary-{version_match.group(1)}.tar.gz"
+          if candidate.name != expected_name:
+              raise SystemExit(f"unexpected candidate filename: {candidate.name}")
+          if info.get("namespace") != "lit" or info.get("name") != "supplementary":
+              raise SystemExit("candidate MANIFEST identity mismatch")
+          if str(info.get("version")) != version_match.group(1):
+              raise SystemExit("candidate MANIFEST version mismatch")
+          PY
+          python scripts/source_dependencies.py --candidate "$candidate"
+          ansible-galaxy collection install "$candidate" -p "$RUNNER_TEMP/collections" --force
+          ANSIBLE_COLLECTIONS_PATH="$RUNNER_TEMP/collections" \
+            ansible-doc --type role lit.supplementary.keycloak_deploy >/dev/null
+          installed_playbook="$RUNNER_TEMP/collections/ansible_collections/lit/supplementary/playbooks/example.yml"
+          test -s "$installed_playbook"
+          ANSIBLE_COLLECTIONS_PATH="$RUNNER_TEMP/collections" \
+            ansible-playbook --syntax-check "$installed_playbook"
+          tar \
+            -C "$RUNNER_TEMP/collections" \
+            -czf dist/candidate/runtime-collections.tar.gz \
+            --exclude=ansible_collections/lit/supplementary \
+            ansible_collections
+          RUNTIME_BUNDLE=dist/candidate/runtime-collections.tar.gz python - <<'PY'
+          import os
+          import tarfile
+          from pathlib import PurePosixPath
+
+          bundle = os.environ["RUNTIME_BUNDLE"]
+          with tarfile.open(bundle, "r:gz") as stream:
+              members = [(PurePosixPath(member.name), member.isfile()) for member in stream]
+          files = [path for path, is_file in members if is_file]
+          if not files:
+              raise SystemExit("runtime collection bundle contains no dependency files")
+          candidate = PurePosixPath("ansible_collections/lit/supplementary")
+          if any(path == candidate or candidate in path.parents for path, _ in members):
+              raise SystemExit("runtime collection bundle contains the candidate collection")
+          PY
+          (
+            cd dist/candidate
+            sha256sum \
+              "$(basename "$candidate")" \
+              runtime-collections.tar.gz \
+              > candidate-SHA256SUMS
+            sha256sum --check candidate-SHA256SUMS
+          )
+      - name: Upload immutable candidate
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
+        with:
+          name: ${{ env.CANDIDATE_ARTIFACT }}
+          path: dist/candidate/
+          if-no-files-found: error
+          retention-days: 30
+
+  tiny-cells:
+    name: Tiny matrix / ${{ matrix.scenario }} / ${{ matrix.target }}
+    if: >-
+      needs.quality-matrix.outputs.keycloak_required == 'true' &&
+      ((github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       (github.event.pull_request.base.ref == 'develop' ||
+        (github.event.pull_request.base.ref == 'main' &&
+         (github.event.pull_request.head.ref == 'develop' ||
+          startsWith(github.event.pull_request.head.ref, 'release/v'))))) ||
+      (github.event_name == 'push' &&
+       (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) ||
+      (github.event_name == 'workflow_dispatch' &&
+       ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
+        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
+    needs: [build-install, quality-matrix]
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.quality-matrix.outputs.tiny) }}
+    runs-on: ${{ matrix.runner }}
+    environment:
+      name: >-
+        ${{ github.event_name == 'pull_request' &&
+            'ansible-collection-runtime-tests' ||
+            'ansible-collection-runtime-protected' }}
+    timeout-minutes: 90
+    concurrency:
+      group: >-
+        quality-tiny-${{ github.repository }}-${{ github.workflow }}-${{
+        github.event.pull_request.number || github.ref }}-${{
+        github.event.pull_request.head.sha || github.sha }}-${{
+        matrix.component }}-${{ matrix.target }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: ./.github/actions/run-quality-profile
+        with:
+          profile: ${{ matrix.profile }}
+          scenario: ${{ matrix.scenario }}
+          target: ${{ matrix.target }}
+          roles: ${{ join(matrix.roles, ',') }}
+          image: ${{ matrix.image || vars[matrix.image_variable] }}
+          instance-type: ${{ matrix.instance_type }}
+          candidate-artifact: ${{ env.CANDIDATE_ARTIFACT }}
+          source-sha: ${{ env.SOURCE_SHA }}
+          junit-required: ${{ matrix.junit }}
+          allure-required: ${{ matrix.allure }}
+          cpu-limit: "2"
+          memory-limit: 12GiB
+          disk-limit: 12GiB
+
+  tiny:
+    name: Collection / Tiny
+    if: always()
+    needs: [quality-matrix, tiny-cells]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every Tiny matrix cell
+        env:
+          MATRIX_RESULT: ${{ needs.quality-matrix.result }}
+          PROFILE_RESULT: ${{ needs.tiny-cells.result }}
+          REQUIRED: ${{ needs.quality-matrix.outputs.keycloak_required }}
+        run: |
+          set -euo pipefail
+          test "$MATRIX_RESULT" = success
+          if [ "$REQUIRED" = true ]; then
+            test "$PROFILE_RESULT" = success
+          else
+            test "$PROFILE_RESULT" = skipped
+          fi
+
+  heavy-cells:
+    name: Heavy matrix / ${{ matrix.scenario }} / ${{ matrix.target }}
+    if: >-
+      needs.quality-matrix.outputs.keycloak_required == 'true' &&
+      ((github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       (github.event.pull_request.base.ref == 'develop' ||
+        (github.event.pull_request.base.ref == 'main' &&
+         (github.event.pull_request.head.ref == 'develop' ||
+          startsWith(github.event.pull_request.head.ref, 'release/v'))))) ||
+      (github.event_name == 'push' &&
+       (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) ||
+      (github.event_name == 'workflow_dispatch' &&
+       ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
+        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
+    needs: [build-install, quality-matrix]
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.quality-matrix.outputs.heavy) }}
+    runs-on: ${{ matrix.runner }}
+    environment:
+      name: >-
+        ${{ github.event_name == 'pull_request' &&
+            'ansible-collection-runtime-tests' ||
+            'ansible-collection-runtime-protected' }}
+    timeout-minutes: 180
+    concurrency:
+      group: >-
+        quality-expensive-${{ github.repository }}-${{ github.workflow }}-${{
+        github.event.pull_request.number || github.ref }}-${{
+        github.event.pull_request.head.sha || github.sha }}-${{
+        matrix.component }}-${{ matrix.target }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: ./.github/actions/run-quality-profile
+        with:
+          profile: ${{ matrix.profile }}
+          scenario: ${{ matrix.scenario }}
+          target: ${{ matrix.target }}
+          roles: ${{ join(matrix.roles, ',') }}
+          image: ${{ matrix.image || vars[matrix.image_variable] }}
+          instance-type: ${{ matrix.instance_type }}
+          candidate-artifact: ${{ env.CANDIDATE_ARTIFACT }}
+          source-sha: ${{ env.SOURCE_SHA }}
+          junit-required: ${{ matrix.junit }}
+          allure-required: ${{ matrix.allure }}
+          cpu-limit: "4"
+          memory-limit: 12GiB
+          disk-limit: 24GiB
+
+  heavy:
+    name: Collection / Heavy
+    if: always()
+    needs: [quality-matrix, heavy-cells]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every Heavy matrix cell
+        env:
+          MATRIX_RESULT: ${{ needs.quality-matrix.result }}
+          PROFILE_RESULT: ${{ needs.heavy-cells.result }}
+          REQUIRED: ${{ needs.quality-matrix.outputs.keycloak_required }}
+        run: |
+          set -euo pipefail
+          test "$MATRIX_RESULT" = success
+          if [ "$REQUIRED" = true ]; then
+            test "$PROFILE_RESULT" = success
+          else
+            test "$PROFILE_RESULT" = skipped
+          fi
+
+  acceptance-cells:
+    name: Application Acceptance matrix / ${{ matrix.scenario }} / ${{ matrix.target }}
+    if: >-
+      needs.quality-matrix.outputs.keycloak_required == 'true' &&
+      ((github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       (github.event.pull_request.base.ref == 'develop' ||
+        (github.event.pull_request.base.ref == 'main' &&
+         (github.event.pull_request.head.ref == 'develop' ||
+          startsWith(github.event.pull_request.head.ref, 'release/v'))))) ||
+      (github.event_name == 'push' &&
+       (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) ||
+      (github.event_name == 'workflow_dispatch' &&
+       ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
+        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
+    needs: [build-install, quality-matrix]
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.quality-matrix.outputs.acceptance) }}
+    runs-on: ${{ matrix.runner }}
+    environment:
+      name: >-
+        ${{ github.event_name == 'pull_request' &&
+            'ansible-collection-runtime-tests' ||
+            'ansible-collection-runtime-protected' }}
+    timeout-minutes: 180
+    concurrency:
+      group: >-
+        quality-expensive-${{ github.repository }}-${{ github.workflow }}-${{
+        github.event.pull_request.number || github.ref }}-${{
+        github.event.pull_request.head.sha || github.sha }}-${{
+        matrix.component }}-${{ matrix.target }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: ./.github/actions/run-quality-profile
+        with:
+          profile: ${{ matrix.profile }}
+          scenario: ${{ matrix.scenario }}
+          target: ${{ matrix.target }}
+          roles: ${{ join(matrix.roles, ',') }}
+          image: ${{ matrix.image || vars[matrix.image_variable] }}
+          instance-type: ${{ matrix.instance_type }}
+          candidate-artifact: ${{ env.CANDIDATE_ARTIFACT }}
+          source-sha: ${{ env.SOURCE_SHA }}
+          junit-required: ${{ matrix.junit }}
+          allure-required: ${{ matrix.allure }}
+          cpu-limit: "4"
+          # Acceptance starts Keycloak, PostgreSQL, LDAP/Samba, and a browser
+          # concurrently. 8 GiB repeatedly triggered an in-guest OOM kill.
+          memory-limit: 12GiB
+          disk-limit: 24GiB
+
+  acceptance:
+    name: Collection / Application Acceptance
+    if: always()
+    needs: [quality-matrix, acceptance-cells]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every Application Acceptance matrix cell
+        env:
+          MATRIX_RESULT: ${{ needs.quality-matrix.result }}
+          PROFILE_RESULT: ${{ needs.acceptance-cells.result }}
+          REQUIRED: ${{ needs.quality-matrix.outputs.keycloak_required }}
+        run: |
+          set -euo pipefail
+          test "$MATRIX_RESULT" = success
+          if [ "$REQUIRED" = true ]; then
+            test "$PROFILE_RESULT" = success
+          else
+            test "$PROFILE_RESULT" = skipped
+          fi
+
+  runtime-evidence:
+    name: Runtime evidence / exact tested SHA
+    env:
+      # Do not expose this override to repository unit tests: they exercise
+      # _tested_commit() with isolated process environments.
+      QUALITY_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+    if: >-
+      always() &&
+      needs.quality-matrix.outputs.keycloak_required == 'true' &&
+      ((github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        (github.event.pull_request.base.ref == 'develop' ||
+         (github.event.pull_request.base.ref == 'main' &&
+          (github.event.pull_request.head.ref == 'develop' ||
+           startsWith(github.event.pull_request.head.ref, 'release/v'))))) ||
+      (github.event_name == 'push' &&
+       (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) ||
+      (github.event_name == 'workflow_dispatch' &&
+       ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
+        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
+    needs: [lint-sanity, build-install, role-coverage, quality-matrix, tiny, heavy, acceptance]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact source
+        if: always()
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - name: Set up Python
+        if: always()
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Download exact collection candidate
+        if: always()
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7
+        with:
+          name: ${{ env.CANDIDATE_ARTIFACT }}
+          path: artifacts/candidate
+      - name: Verify exact collection candidate checksum
+        if: always()
+        run: |
+          set -euo pipefail
+          (
+            cd artifacts/candidate
+            test -s candidate-SHA256SUMS
+            sha256sum --check candidate-SHA256SUMS
+          )
+      - name: Download unique matrix evidence artifacts
+        if: always()
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7
+        with:
+          pattern: quality-result-*-${{ env.SOURCE_SHA }}-attempt-${{ github.run_attempt }}
+          path: artifacts/downloaded
+      - name: Verify and expand every matrix archive without basename merging
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/aggregate-input
+          mapfile -d '' archives < <(
+            find artifacts/downloaded -type f -name '*.tar.gz' -print0
+          )
+          test "${#archives[@]}" -gt 0
+          test "${#archives[@]}" -le 512
+          for archive in "${archives[@]}"; do
+            artifact_dir="$(dirname "$archive")"
+            test -s "$artifact_dir/SHA256SUMS"
+            (
+              cd "$artifact_dir"
+              sha256sum --check SHA256SUMS
+            )
+            relative="${artifact_dir#artifacts/downloaded/}"
+            destination="artifacts/aggregate-input/$relative"
+            mkdir -p "$destination"
+            ARCHIVE="$archive" DESTINATION="$destination" python - <<'PY'
+          import os
+          import tarfile
+          from pathlib import Path, PurePosixPath
+
+          max_members = 20_000
+          max_member_bytes = 512 * 1024 * 1024
+          max_total_bytes = 2 * 1024 * 1024 * 1024
+          max_compression_ratio = 1_000
+          archive = Path(os.environ["ARCHIVE"])
+          destination = Path(os.environ["DESTINATION"]).resolve()
+          compressed_bytes = archive.stat().st_size
+          if compressed_bytes <= 0:
+              raise SystemExit(f"empty matrix evidence archive: {archive}")
+          with tarfile.open(archive, "r:gz") as stream:
+              members = stream.getmembers()
+              if len(members) > max_members:
+                  raise SystemExit(f"archive has too many members: {archive}")
+              seen: set[str] = set()
+              total_bytes = 0
+              for member in members:
+                  path = PurePosixPath(member.name)
+                  normalized = path.as_posix()
+                  if path.is_absolute() or ".." in path.parts or normalized in {"", "."}:
+                      raise SystemExit(f"unsafe archive member path: {member.name}")
+                  if normalized in seen:
+                      raise SystemExit(f"duplicate normalized archive path: {normalized}")
+                  seen.add(normalized)
+                  if not (member.isfile() or member.isdir()):
+                      raise SystemExit(f"unsafe archive member type: {member.name}")
+                  if member.size > max_member_bytes:
+                      raise SystemExit(f"oversized archive member: {member.name}")
+                  total_bytes += member.size
+                  if total_bytes > max_total_bytes:
+                      raise SystemExit(f"archive expands beyond limit: {archive}")
+                  target = (destination / Path(*path.parts)).resolve()
+                  if destination != target and destination not in target.parents:
+                      raise SystemExit(f"archive member escapes destination: {member.name}")
+              if total_bytes > compressed_bytes * max_compression_ratio:
+                  raise SystemExit(f"archive compression ratio exceeds limit: {archive}")
+              stream.extractall(destination, filter="data")
+          PY
+          done
+      - name: Prepare release security directory
+        if: always()
+        run: mkdir -p artifacts/evidence/security artifacts/release-assets
+      - name: Generate exact-candidate CycloneDX SBOM
+        if: always()
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
+        with:
+          path: artifacts/candidate
+          format: cyclonedx-json
+          output-file: artifacts/evidence/security/sbom.cdx.json
+          upload-artifact: false
+      - name: Install evidence validation dependencies
+        if: always()
+        run: |
+          python -m pip install --disable-pip-version-check \
+            detect-secrets==1.5.0 \
+            PyYAML==6.0.3
+      - name: Bind SBOM root component to the exact collection candidate
+        if: always()
+        run: |
+          set -euo pipefail
+          git show "$SOURCE_SHA:meta/source-dependencies.yml" \
+            > artifacts/evidence/security/source-dependencies.yml
+          cmp --silent \
+            meta/source-dependencies.yml \
+            artifacts/evidence/security/source-dependencies.yml
+          mapfile -t candidates < <(
+            find artifacts/candidate -maxdepth 1 -type f -name 'lit-supplementary-*.tar.gz' -print
+          )
+          test "${#candidates[@]}" -eq 1
+          python scripts/enrich-cyclonedx-sbom.py \
+            --candidate "${candidates[0]}" \
+            --sbom artifacts/evidence/security/sbom.cdx.json \
+            --dependencies-root artifacts/aggregate-input \
+            --source-sha "$SOURCE_SHA"
+      - name: Scan the candidate-bound SBOM for high-severity vulnerabilities
+        if: always()
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7
+        with:
+          sbom: artifacts/evidence/security/sbom.cdx.json
+          output-format: json
+          output-file: artifacts/evidence/security/vulnerability-report.json
+          fail-build: true
+          severity-cutoff: high
+      - name: Scan the exact collection candidate for secret-like content
+        if: always()
+        run: |
+          set -euo pipefail
+          candidate_extract="$RUNNER_TEMP/candidate-secret-scan"
+          rm -rf "$candidate_extract"
+          mkdir -p "$candidate_extract"
+          mapfile -t candidates < <(
+            find artifacts/candidate -maxdepth 1 -type f -name 'lit-supplementary-*.tar.gz' -print
+          )
+          test "${#candidates[@]}" -eq 1
+          CANDIDATE="${candidates[0]}" DESTINATION="$candidate_extract" python - <<'PY'
+          import os
+          import tarfile
+          from pathlib import Path, PurePosixPath
+
+          candidate = Path(os.environ["CANDIDATE"])
+          destination = Path(os.environ["DESTINATION"]).resolve()
+          compressed_bytes = candidate.stat().st_size
+          if compressed_bytes <= 0:
+              raise SystemExit("candidate archive is empty")
+          with tarfile.open(candidate, "r:gz") as stream:
+              members = stream.getmembers()
+              if len(members) > 20_000:
+                  raise SystemExit("candidate archive has too many members")
+              seen: set[str] = set()
+              total_bytes = 0
+              for member in members:
+                  path = PurePosixPath(member.name)
+                  normalized = path.as_posix()
+                  if path.is_absolute() or ".." in path.parts or normalized in {"", "."}:
+                      raise SystemExit(f"unsafe candidate member path: {member.name}")
+                  if normalized in seen:
+                      raise SystemExit(f"duplicate candidate member path: {normalized}")
+                  seen.add(normalized)
+                  if not (member.isfile() or member.isdir()):
+                      raise SystemExit(f"unsafe candidate member type: {member.name}")
+                  if member.size > 512 * 1024 * 1024:
+                      raise SystemExit(f"oversized candidate member: {member.name}")
+                  total_bytes += member.size
+                  if total_bytes > 2 * 1024 * 1024 * 1024:
+                      raise SystemExit("candidate expands beyond size limit")
+                  target = (destination / Path(*path.parts)).resolve()
+                  if destination != target and destination not in target.parents:
+                      raise SystemExit(f"candidate member escapes destination: {member.name}")
+              if total_bytes > compressed_bytes * 1_000:
+                  raise SystemExit("candidate compression ratio exceeds limit")
+              stream.extractall(destination, filter="data")
+          PY
+          CANDIDATE_ROOT="$candidate_extract" python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          inventory = {"schema_version": 1, "roots": {}}
+          label = "candidate-extract"
+          root = Path(os.environ["CANDIDATE_ROOT"])
+          files = []
+          for path in sorted(root.rglob("*")):
+              if path.is_symlink():
+                  raise SystemExit(f"secret-scan input contains symlink: {path}")
+              if path.is_file():
+                  files.append(
+                      {
+                          "path": path.relative_to(root).as_posix(),
+                          "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                      }
+                  )
+          if not files:
+              raise SystemExit(f"secret-scan input root is empty: {label}")
+          inventory["roots"][label] = {"file_count": len(files), "files": files}
+          Path("artifacts/evidence/security/secret-scan-inventory.json").write_text(
+              json.dumps(inventory, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+          # Aggregated runtime evidence is independently scanned, redacted, and
+          # re-scanned by quality_evidence.py, including nested archives. Running
+          # an entropy detector over its typed hashes and UUIDs produces false
+          # positives. This independent scan therefore covers the exact shipped
+          # collection candidate with every detect-secrets plugin enabled.
+          detect-secrets scan --all-files "$candidate_extract" \
+            > artifacts/evidence/security/secret-scan-summary.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(
+              Path("artifacts/evidence/security/secret-scan-summary.json").read_text(encoding="utf-8")
+          )
+          findings = sum(len(items) for items in report.get("results", {}).values())
+          if findings:
+              raise SystemExit(f"external secret scan found {findings} potential secret(s)")
+          PY
+      - name: Record candidate-bound provenance
+        if: always()
+        run: |
+          set -euo pipefail
+          mapfile -t candidates < <(
+            find artifacts/candidate -maxdepth 1 -type f -name 'lit-supplementary-*.tar.gz' -print
+          )
+          test "${#candidates[@]}" -eq 1
+          candidate_sha="$(sha256sum "${candidates[0]}" | awk '{print $1}')"
+          CANDIDATE="${candidates[0]}" CANDIDATE_SHA="$candidate_sha" python - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          payload = {
+              "schema_version": 1,
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "commit_sha": os.environ["SOURCE_SHA"],
+              "source_ref": os.environ["SOURCE_REF"],
+              "reviewed_head_sha": os.environ["REVIEWED_HEAD_SHA"],
+              "reviewed_base_sha": os.environ["REVIEWED_BASE_SHA"],
+              "workflow_event_sha": os.environ["GITHUB_SHA"],
+              "ref": os.environ["GITHUB_REF"],
+              "workflow": os.environ["GITHUB_WORKFLOW"],
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+              "workflow_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "builder": os.environ.get("RUNNER_NAME", "github-hosted"),
+              "candidate": Path(os.environ["CANDIDATE"]).name,
+              "candidate_sha256": os.environ["CANDIDATE_SHA"],
+              "generated_at": datetime.now(timezone.utc).isoformat(),
+          }
+          Path("artifacts/evidence/security/provenance.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+      - name: Record actual mandatory prerequisite statuses
+        id: prerequisites
+        if: always()
+        env:
+          LINT_RESULT: ${{ needs.lint-sanity.result }}
+          BUILD_RESULT: ${{ needs.build-install.result }}
+          COVERAGE_RESULT: ${{ needs.role-coverage.result }}
+          TINY_RESULT: ${{ needs.tiny.result }}
+          HEAVY_RESULT: ${{ needs.heavy.result }}
+          ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+        run: |
+          set -euo pipefail
+          profile_lifecycle=failure
+          if [ "$TINY_RESULT" = success ] \
+            && [ "$HEAVY_RESULT" = success ] \
+            && [ "$ACCEPTANCE_RESULT" = success ]
+          then
+            profile_lifecycle=success
+          fi
+          LIFECYCLE_RESULT="$profile_lifecycle" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = {
+              "lint": os.environ["LINT_RESULT"],
+              "build": os.environ["BUILD_RESULT"],
+              "coverage": os.environ["COVERAGE_RESULT"],
+              "tiny": os.environ["TINY_RESULT"],
+              "heavy": os.environ["HEAVY_RESULT"],
+              "acceptance": os.environ["ACCEPTANCE_RESULT"],
+              "cleanup": os.environ["LIFECYCLE_RESULT"],
+              "destroy": os.environ["LIFECYCLE_RESULT"],
+          }
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
+              stream.write(f"json={json.dumps(payload, separators=(',', ':'))}\n")
+          PY
+      - name: Assemble and validate actual release-grade evidence
+        id: assemble
+        if: always()
+        env:
+          QUALITY_EVIDENCE_ARCHIVE_STATUS: >-
+            ${{ github.event_name == 'push' && github.ref == 'refs/heads/main'
+                && 'pending-release-security' || 'not-configured' }}
+          QUALITY_EVIDENCE_PREREQUISITES_JSON: ${{ steps.prerequisites.outputs.json }}
+        run: |
+          set +e
+          python scripts/quality_evidence.py assemble \
+            --root artifacts/evidence \
+            --input-root artifacts/aggregate-input \
+            --registry meta/role-coverage.yml \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --expected-commit "$SOURCE_SHA" \
+            --release
+          assemble_rc="$?"
+          python scripts/quality_evidence.py validate \
+            --root artifacts/evidence \
+            --expected-commit "$SOURCE_SHA" \
+            --release
+          validate_rc="$?"
+          set -e
+          {
+            echo "assemble_exit_code=$assemble_rc"
+            echo "validate_exit_code=$validate_rc"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Create immutable evidence archive and base supply-chain assets
+        if: always()
+        run: |
+          set -euo pipefail
+          test -s artifacts/evidence/manifest.json
+          tar -C artifacts -czf \
+            "artifacts/release-assets/collection-evidence-${SOURCE_SHA}.tar.gz" evidence
+          cp artifacts/evidence/manifest.json artifacts/release-assets/evidence-manifest.json
+          cp artifacts/evidence/security/sbom.cdx.json artifacts/release-assets/sbom.cdx.json
+          cp artifacts/evidence/security/provenance.json artifacts/release-assets/provenance.json
+          cp artifacts/evidence/role-coverage.yml artifacts/release-assets/role-coverage.yml
+          cp artifacts/evidence/matrix/results.json artifacts/release-assets/matrix-results.json
+      - name: Finalize and verify base evidence checksums
+        if: always()
+        run: |
+          set -euo pipefail
+          checksum_file="$RUNNER_TEMP/base-release-assets-SHA256SUMS"
+          (
+            cd artifacts/release-assets
+            find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' \
+              | sort \
+              | xargs sha256sum > "$checksum_file"
+            mv "$checksum_file" SHA256SUMS
+            test -s SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+      - name: Upload complete evidence even on failure
+        id: evidence-upload
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
+        with:
+          name: collection-evidence-${{ env.SOURCE_SHA }}
+          path: |
+            artifacts/evidence/
+            artifacts/release-assets/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Enforce aggregate evidence and prerequisite results after upload
+        if: always()
+        env:
+          LINT_RESULT: ${{ needs.lint-sanity.result }}
+          BUILD_RESULT: ${{ needs.build-install.result }}
+          COVERAGE_RESULT: ${{ needs.role-coverage.result }}
+          TINY_RESULT: ${{ needs.tiny.result }}
+          HEAVY_RESULT: ${{ needs.heavy.result }}
+          ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          ASSEMBLE_RC: ${{ steps.assemble.outputs.assemble_exit_code }}
+          VALIDATE_RC: ${{ steps.assemble.outputs.validate_exit_code }}
+          UPLOAD_OUTCOME: ${{ steps.evidence-upload.outcome }}
+        run: |
+          set -euo pipefail
+          test "$LINT_RESULT" = success
+          test "$BUILD_RESULT" = success
+          test "$COVERAGE_RESULT" = success
+          test "$TINY_RESULT" = success
+          test "$HEAVY_RESULT" = success
+          test "$ACCEPTANCE_RESULT" = success
+          test "${ASSEMBLE_RC:-1}" -eq 0
+          test "${VALIDATE_RC:-1}" -eq 0
+          test "$UPLOAD_OUTCOME" = success
+
+  evidence:
+    name: Collection / Evidence
+    if: always()
+    needs:
+      [lint-sanity, build-install, role-coverage, quality-matrix, tiny, heavy, acceptance, runtime-evidence]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Enforce exact-SHA evidence for every authorized runtime
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          LINT_RESULT: ${{ needs.lint-sanity.result }}
+          BUILD_RESULT: ${{ needs.build-install.result }}
+          COVERAGE_RESULT: ${{ needs.role-coverage.result }}
+          TINY_RESULT: ${{ needs.tiny.result }}
+          HEAVY_RESULT: ${{ needs.heavy.result }}
+          ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          RUNTIME_EVIDENCE_RESULT: ${{ needs.runtime-evidence.result }}
+          KEYCLOAK_REQUIRED: ${{ needs.quality-matrix.outputs.keycloak_required }}
+        run: |
+          set -euo pipefail
+          test "$LINT_RESULT" = success
+          test "$BUILD_RESULT" = success
+          test "$COVERAGE_RESULT" = success
+          test "$TINY_RESULT" = success
+          test "$HEAVY_RESULT" = success
+          test "$ACCEPTANCE_RESULT" = success
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            case "$EVENT_REF" in
+              refs/heads/main|refs/heads/develop) ;;
+              *) exit 1 ;;
+            esac
+          fi
+          if [ "$KEYCLOAK_REQUIRED" = true ]; then
+            test "$RUNTIME_EVIDENCE_RESULT" = success
+          else
+            test "$RUNTIME_EVIDENCE_RESULT" = skipped
+          fi
+
+  release-security:
+    name: Collection / Release Security
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint-sanity, build-install, role-coverage, tiny, heavy, acceptance, evidence]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ansible-collection-release-evidence
+    permissions:
+      actions: read
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout exact protected-main source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install trusted evidence tools
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.3
+      - name: Download exact collection candidate
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7
+        with:
+          name: ${{ env.CANDIDATE_ARTIFACT }}
+          path: artifacts/candidate
+      - name: Download validated base evidence
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7
+        with:
+          name: collection-evidence-${{ env.SOURCE_SHA }}
+          path: artifacts
+      - name: Verify exact protected-main inputs
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          (
+            cd artifacts/candidate
+            test -s candidate-SHA256SUMS
+            sha256sum --check candidate-SHA256SUMS
+          )
+          (
+            cd artifacts/release-assets
+            test -s SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+          python scripts/quality_evidence.py validate \
+            --root artifacts/evidence \
+            --expected-commit "$SOURCE_SHA" \
+            --release
+      - name: Enforce reviewed long-term archive configuration
+        id: archive-policy
+        env:
+          EVIDENCE_BUCKET: ${{ vars.QUALITY_EVIDENCE_S3_BUCKET }}
+          EVIDENCE_ENDPOINT: ${{ vars.QUALITY_EVIDENCE_S3_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+          from urllib.parse import urlsplit
+
+          import yaml
+
+          policy = yaml.safe_load(Path(".lit/repository.yml").read_text(encoding="utf-8")) or {}
+          required = (
+              (policy.get("enterprise_role_quality") or {}).get(
+                  "long_term_archive_required"
+              )
+              is True
+          )
+          bucket = os.environ.get("EVIDENCE_BUCKET", "")
+          endpoint = os.environ.get("EVIDENCE_ENDPOINT", "")
+          if bucket and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]{1,61}[A-Za-z0-9]", bucket) is None:
+              raise SystemExit("QUALITY_EVIDENCE_S3_BUCKET has an unsafe value")
+          if endpoint:
+              parsed = urlsplit(endpoint)
+              if (
+                  parsed.scheme != "https"
+                  or not parsed.hostname
+                  or parsed.username is not None
+                  or parsed.password is not None
+                  or parsed.query
+                  or parsed.fragment
+              ):
+                  raise SystemExit("QUALITY_EVIDENCE_S3_ENDPOINT must be a credential-free HTTPS URL")
+          if required and not bucket:
+              raise SystemExit(
+                  "reviewed long_term_archive_required policy requires a protected archive target"
+              )
+          output = Path(os.environ["GITHUB_OUTPUT"])
+          with output.open("a", encoding="utf-8") as stream:
+              stream.write(f"required={str(required).lower()}\n")
+              stream.write(f"configured={str(bool(bucket)).lower()}\n")
+          PY
+      - name: Attest candidate provenance
+        id: attest-candidate
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763  # v4
+        with:
+          subject-path: artifacts/candidate/*.tar.gz
+      - name: Attest SBOM provenance
+        id: attest-sbom
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763  # v4
+        with:
+          subject-path: artifacts/release-assets/sbom.cdx.json
+      - name: Attest evidence provenance
+        id: attest-evidence
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763  # v4
+        with:
+          subject-path: artifacts/release-assets/collection-evidence-${{ env.SOURCE_SHA }}.tar.gz
+      - name: Capture generated attestation identities and bundles
+        env:
+          CANDIDATE_ATTESTATION_ID: ${{ steps.attest-candidate.outputs.attestation-id }}
+          CANDIDATE_ATTESTATION_URL: ${{ steps.attest-candidate.outputs.attestation-url }}
+          CANDIDATE_BUNDLE_PATH: ${{ steps.attest-candidate.outputs.bundle-path }}
+          SBOM_ATTESTATION_ID: ${{ steps.attest-sbom.outputs.attestation-id }}
+          SBOM_ATTESTATION_URL: ${{ steps.attest-sbom.outputs.attestation-url }}
+          SBOM_BUNDLE_PATH: ${{ steps.attest-sbom.outputs.bundle-path }}
+          EVIDENCE_ATTESTATION_ID: ${{ steps.attest-evidence.outputs.attestation-id }}
+          EVIDENCE_ATTESTATION_URL: ${{ steps.attest-evidence.outputs.attestation-url }}
+          EVIDENCE_BUNDLE_PATH: ${{ steps.attest-evidence.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          test -n "$CANDIDATE_ATTESTATION_ID"
+          test -n "$SBOM_ATTESTATION_ID"
+          test -n "$EVIDENCE_ATTESTATION_ID"
+          test -s "$CANDIDATE_BUNDLE_PATH"
+          test -s "$SBOM_BUNDLE_PATH"
+          test -s "$EVIDENCE_BUNDLE_PATH"
+          cp "$CANDIDATE_BUNDLE_PATH" \
+            artifacts/release-assets/candidate.github-attestation.json
+          cp "$SBOM_BUNDLE_PATH" \
+            artifacts/release-assets/sbom.github-attestation.json
+          cp "$EVIDENCE_BUNDLE_PATH" \
+            artifacts/release-assets/evidence.github-attestation.json
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          records = {}
+          for name in ("candidate", "sbom", "evidence"):
+              prefix = name.upper()
+              url = os.environ[f"{prefix}_ATTESTATION_URL"]
+              if not url.startswith("https://github.com/"):
+                  raise SystemExit(f"unsafe {name} attestation URL")
+              records[name] = {
+                  "attestation_id": os.environ[f"{prefix}_ATTESTATION_ID"],
+                  "attestation_url": url,
+                  "bundle": f"{name}.github-attestation.json",
+              }
+          payload = {"schema_version": 1, "attestations": records}
+          Path("artifacts/release-assets/attestation-records.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+      - name: Sign and verify candidate, SBOM, and evidence
+        run: |
+          set -euo pipefail
+          mapfile -t candidates < <(
+            find artifacts/candidate -maxdepth 1 -type f -name 'lit-supplementary-*.tar.gz' -print
+          )
+          test "${#candidates[@]}" -eq 1
+          subjects=(
+            "${candidates[0]}"
+            artifacts/release-assets/sbom.cdx.json
+            "artifacts/release-assets/collection-evidence-${SOURCE_SHA}.tar.gz"
+          )
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-ci.yml@refs/heads/main"
+          for subject in "${subjects[@]}"; do
+            bundle="artifacts/release-assets/$(basename "$subject").sigstore.json"
+            cosign sign-blob --yes --bundle "$bundle" "$subject"
+            cosign verify-blob \
+              --bundle "$bundle" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity "$identity" \
+              --certificate-github-workflow-sha "$SOURCE_SHA" \
+              "$subject"
+          done
+      - name: Finalize protected-main publication eligibility
+        env:
+          LINT_RESULT: ${{ needs.lint-sanity.result }}
+          BUILD_RESULT: ${{ needs.build-install.result }}
+          COVERAGE_RESULT: ${{ needs.role-coverage.result }}
+          TINY_RESULT: ${{ needs.tiny.result }}
+          HEAVY_RESULT: ${{ needs.heavy.result }}
+          ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          EVIDENCE_RESULT: ${{ needs.evidence.result }}
+          ARCHIVE_REQUIRED: ${{ steps.archive-policy.outputs.required }}
+          ARCHIVE_CONFIGURED: ${{ steps.archive-policy.outputs.configured }}
+        run: |
+          set -euo pipefail
+          cp artifacts/evidence/security/vulnerability-report.json \
+            artifacts/release-assets/vulnerability-report.json
+          cp artifacts/evidence/security/secret-scan-summary.json \
+            artifacts/release-assets/secret-scan-summary.json
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          def digest(path: Path) -> str:
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          root = Path("artifacts/release-assets")
+          evidence = Path("artifacts/evidence/manifest.json")
+          manifest = json.loads(evidence.read_text(encoding="utf-8"))
+          attestation_records = json.loads(
+              (root / "attestation-records.json").read_text(encoding="utf-8")
+          ).get("attestations", {})
+          candidate_paths = sorted(Path("artifacts/candidate").glob("*.tar.gz"))
+          if len(candidate_paths) != 1:
+              raise SystemExit("publication eligibility requires exactly one candidate")
+          candidate = candidate_paths[0]
+          evidence_archive = root / f"collection-evidence-{os.environ['SOURCE_SHA']}.tar.gz"
+          sbom = root / "sbom.cdx.json"
+          subjects = (candidate, sbom, evidence_archive)
+          archive_required = os.environ["ARCHIVE_REQUIRED"] == "true"
+          archive_configured = os.environ["ARCHIVE_CONFIGURED"] == "true"
+
+          gates = {
+              "lint_and_sanity": os.environ["LINT_RESULT"] == "success",
+              "build_and_install": os.environ["BUILD_RESULT"] == "success",
+              "role_coverage": os.environ["COVERAGE_RESULT"] == "success",
+              "tiny": os.environ["TINY_RESULT"] == "success",
+              "heavy": os.environ["HEAVY_RESULT"] == "success",
+              "application_acceptance": os.environ["ACCEPTANCE_RESULT"] == "success",
+              "base_evidence_job": os.environ["EVIDENCE_RESULT"] == "success",
+              "evidence_manifest_eligible": manifest.get("release_eligible") is True,
+              "release_security_complete": not manifest.get("security_evidence", {}).get("missing"),
+              "candidate_checksum_verified": True,
+              "release_asset_input_checksums_verified": True,
+              "candidate_attested": bool(attestation_records.get("candidate")),
+              "sbom_attested": bool(attestation_records.get("sbom")),
+              "evidence_attested": bool(attestation_records.get("evidence")),
+              "candidate_signature_verified": True,
+              "sbom_signature_verified": True,
+              "evidence_signature_verified": True,
+              "long_term_archive_configuration_satisfied": (
+                  archive_configured or not archive_required
+              ),
+          }
+          for subject in subjects:
+              bundle = root / f"{subject.name}.sigstore.json"
+              if not bundle.is_file() or bundle.stat().st_size == 0:
+                  raise SystemExit(f"missing signature bundle: {bundle}")
+
+          release_eligible = all(gates.values())
+          payload = {
+              "schema_version": 3,
+              "generated_at": datetime.now(timezone.utc).isoformat(),
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "commit_sha": os.environ["SOURCE_SHA"],
+              "ref": os.environ["GITHUB_REF"],
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+              "workflow_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "collection_version": manifest["collection_version"],
+              "release_eligible": release_eligible,
+              "gates": gates,
+              "long_term_archive": (
+                  "pending-verification" if archive_configured else "not-configured"
+              ),
+              "attestations": attestation_records,
+              "subjects": {
+                  "candidate": {"name": candidate.name, "sha256": digest(candidate)},
+                  "sbom": {"name": sbom.name, "sha256": digest(sbom)},
+                  "evidence": {
+                      "name": evidence_archive.name,
+                      "sha256": digest(evidence_archive),
+                  },
+                  "evidence_manifest": {
+                      "name": evidence.name,
+                      "sha256": digest(evidence),
+                  },
+              },
+          }
+          if not release_eligible:
+              raise SystemExit("mandatory publication gate failed")
+          (root / "release-evidence.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          lines = [
+              "# Release Evidence",
+              "",
+              f"- Commit SHA: `{payload['commit_sha']}`",
+              f"- Collection version: `{payload['collection_version']}`",
+              f"- Workflow run: `{payload['workflow_run_id']}`",
+              f"- Release eligible: `{str(payload['release_eligible']).lower()}`",
+              f"- Tests: `{manifest['test_totals']['tests']}`",
+              f"- Failures: `{manifest['failures']}`",
+              f"- Skips: `{manifest['skips']}`",
+              f"- Long-term archive: `{payload['long_term_archive']}`",
+              "",
+              "Eligibility includes every mandatory job, semantic security output,",
+              "attestation, signature verification, checksum, and archive configuration gate.",
+              "Final archive verification is recorded in the signed release-security receipt.",
+              "",
+          ]
+          (root / "release-evidence.md").write_text("\n".join(lines), encoding="utf-8")
+          PY
+      - name: Finalize and verify authenticated release-asset checksums
+        run: |
+          set -euo pipefail
+          checksum_file="$RUNNER_TEMP/final-release-assets-SHA256SUMS"
+          (
+            cd artifacts/release-assets
+            find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' \
+              | sort \
+              | xargs sha256sum > "$checksum_file"
+            mv "$checksum_file" SHA256SUMS
+            test -s SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-ci.yml@refs/heads/main"
+          cosign sign-blob --yes \
+            --bundle artifacts/release-assets/SHA256SUMS.sigstore.json \
+            artifacts/release-assets/SHA256SUMS
+          cosign verify-blob \
+            --bundle artifacts/release-assets/SHA256SUMS.sigstore.json \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "$identity" \
+            --certificate-github-workflow-sha "$SOURCE_SHA" \
+            artifacts/release-assets/SHA256SUMS
+      - name: Attest authenticated release-asset checksums
+        id: attest-checksums
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763  # v4
+        with:
+          subject-path: artifacts/release-assets/SHA256SUMS
+      - name: Capture checksum attestation bundle
+        env:
+          CHECKSUM_ATTESTATION_ID: ${{ steps.attest-checksums.outputs.attestation-id }}
+          CHECKSUM_ATTESTATION_URL: ${{ steps.attest-checksums.outputs.attestation-url }}
+          CHECKSUM_BUNDLE_PATH: ${{ steps.attest-checksums.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          test -n "$CHECKSUM_ATTESTATION_ID"
+          test -n "$CHECKSUM_ATTESTATION_URL"
+          test -s "$CHECKSUM_BUNDLE_PATH"
+          cp "$CHECKSUM_BUNDLE_PATH" \
+            artifacts/release-assets/checksums.github-attestation.json
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          url = os.environ["CHECKSUM_ATTESTATION_URL"]
+          if not url.startswith("https://github.com/"):
+              raise SystemExit("unsafe checksum attestation URL")
+          payload = {
+              "schema_version": 1,
+              "attestation_id": os.environ["CHECKSUM_ATTESTATION_ID"],
+              "attestation_url": url,
+              "subject": "SHA256SUMS",
+              "bundle": "checksums.github-attestation.json",
+          }
+          Path("artifacts/release-assets/checksums-attestation-record.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+      - name: Build the complete long-term release-evidence bundle
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/long-term
+          archive="artifacts/long-term/collection-release-evidence-${SOURCE_SHA}.tar.gz"
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -C artifacts -czf "$archive" candidate evidence release-assets
+          (
+            cd artifacts/long-term
+            sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256"
+            sha256sum --check "$(basename "$archive").sha256"
+          )
+      - name: Archive and verify the complete evidence bundle
+        id: archive
+        if: steps.archive-policy.outputs.configured == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.QUALITY_EVIDENCE_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.QUALITY_EVIDENCE_AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.QUALITY_EVIDENCE_AWS_SESSION_TOKEN }}
+          AWS_ENDPOINT_URL: ${{ vars.QUALITY_EVIDENCE_S3_ENDPOINT }}
+          EVIDENCE_BUCKET: ${{ vars.QUALITY_EVIDENCE_S3_BUCKET }}
+        run: |
+          set -euo pipefail
+          command -v aws
+          test -n "${AWS_ACCESS_KEY_ID:-}"
+          test -n "${AWS_SECRET_ACCESS_KEY:-}"
+          version="$(
+            python -c 'import yaml; print(yaml.safe_load(open("galaxy.yml"))["version"])'
+          )"
+          test -n "$version"
+          prefix="ansible-collection-supplementary/${version}/${SOURCE_SHA}/${GITHUB_RUN_ID}/attempt-${GITHUB_RUN_ATTEMPT}"
+          endpoint_args=()
+          if [ -n "${AWS_ENDPOINT_URL:-}" ]; then
+            endpoint_args=(--endpoint-url "$AWS_ENDPOINT_URL")
+          fi
+          archive="artifacts/long-term/collection-release-evidence-${SOURCE_SHA}.tar.gz"
+          archive_checksum="${archive}.sha256"
+          test -s "$archive"
+          test -s "$archive_checksum"
+          aws "${endpoint_args[@]}" s3 cp --only-show-errors --sse AES256 \
+            "$archive" "s3://${EVIDENCE_BUCKET}/${prefix}/$(basename "$archive")"
+          aws "${endpoint_args[@]}" s3 cp --only-show-errors --sse AES256 \
+            "$archive_checksum" \
+            "s3://${EVIDENCE_BUCKET}/${prefix}/$(basename "$archive_checksum")"
+          verify_root="$RUNNER_TEMP/archive-verification"
+          rm -rf "$verify_root"
+          mkdir -p "$verify_root"
+          aws "${endpoint_args[@]}" s3 cp --only-show-errors \
+            "s3://${EVIDENCE_BUCKET}/${prefix}/$(basename "$archive")" \
+            "$verify_root/$(basename "$archive")"
+          aws "${endpoint_args[@]}" s3 cp --only-show-errors \
+            "s3://${EVIDENCE_BUCKET}/${prefix}/$(basename "$archive_checksum")" \
+            "$verify_root/$(basename "$archive_checksum")"
+          (
+            cd "$verify_root"
+            sha256sum --check "$(basename "$archive_checksum")"
+          )
+          archive_sha="$(sha256sum "$archive" | awk '{print $1}')"
+          {
+            echo "prefix=$prefix"
+            echo "archive_sha256=$archive_sha"
+          } >> "$GITHUB_OUTPUT"
+      - name: Generate final release-security receipt
+        env:
+          ARCHIVE_REQUIRED: ${{ steps.archive-policy.outputs.required }}
+          ARCHIVE_CONFIGURED: ${{ steps.archive-policy.outputs.configured }}
+          ARCHIVE_PREFIX: ${{ steps.archive.outputs.prefix }}
+          ARCHIVE_SHA256: ${{ steps.archive.outputs.archive_sha256 }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          root = Path("artifacts/release-assets")
+          release_evidence = json.loads(
+              (root / "release-evidence.json").read_text(encoding="utf-8")
+          )
+          archive = Path(
+              f"artifacts/long-term/collection-release-evidence-{os.environ['SOURCE_SHA']}.tar.gz"
+          )
+          archive_digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          configured = os.environ["ARCHIVE_CONFIGURED"] == "true"
+          required = os.environ["ARCHIVE_REQUIRED"] == "true"
+          if configured and archive_digest != os.environ.get("ARCHIVE_SHA256"):
+              raise SystemExit("verified archive digest differs from the local bundle")
+          archive_status = "verified" if configured else "not-configured"
+          gates = {
+              "publication_eligibility": release_evidence.get("release_eligible") is True,
+              "complete_bundle_checksum_verified": True,
+              "long_term_archive_policy_satisfied": (
+                  archive_status == "verified"
+                  or (not required and archive_status == "not-configured")
+              ),
+          }
+          payload = {
+              "schema_version": 1,
+              "generated_at": datetime.now(timezone.utc).isoformat(),
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "commit_sha": os.environ["SOURCE_SHA"],
+              "ref": os.environ["GITHUB_REF"],
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+              "workflow_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "release_eligible": all(gates.values()),
+              "gates": gates,
+              "long_term_archive": {
+                  "status": archive_status,
+                  "object_prefix": os.environ.get("ARCHIVE_PREFIX") or None,
+                  "bundle": archive.name,
+                  "sha256": archive_digest,
+              },
+              "authenticated_checksums": {
+                  "name": "SHA256SUMS",
+                  "sha256": hashlib.sha256((root / "SHA256SUMS").read_bytes()).hexdigest(),
+                  "signature_bundle": "SHA256SUMS.sigstore.json",
+                  "attestation_bundle": "checksums.github-attestation.json",
+              },
+          }
+          if not payload["release_eligible"]:
+              raise SystemExit("final release-security receipt is ineligible")
+          (root / "release-security-receipt.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-ci.yml@refs/heads/main"
+          cosign sign-blob --yes \
+            --bundle artifacts/release-assets/release-security-receipt.json.sigstore.json \
+            artifacts/release-assets/release-security-receipt.json
+          cosign verify-blob \
+            --bundle artifacts/release-assets/release-security-receipt.json.sigstore.json \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "$identity" \
+            --certificate-github-workflow-sha "$SOURCE_SHA" \
+            artifacts/release-assets/release-security-receipt.json
+      - name: Attest final release-security receipt
+        id: attest-receipt
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763  # v4
+        with:
+          subject-path: artifacts/release-assets/release-security-receipt.json
+      - name: Capture receipt attestation bundle
+        env:
+          RECEIPT_ATTESTATION_ID: ${{ steps.attest-receipt.outputs.attestation-id }}
+          RECEIPT_ATTESTATION_URL: ${{ steps.attest-receipt.outputs.attestation-url }}
+          RECEIPT_BUNDLE_PATH: ${{ steps.attest-receipt.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          test -n "$RECEIPT_ATTESTATION_ID"
+          test -n "$RECEIPT_ATTESTATION_URL"
+          test -s "$RECEIPT_BUNDLE_PATH"
+          cp "$RECEIPT_BUNDLE_PATH" \
+            artifacts/release-assets/release-security-receipt.github-attestation.json
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          url = os.environ["RECEIPT_ATTESTATION_URL"]
+          if not url.startswith("https://github.com/"):
+              raise SystemExit("unsafe release-security receipt attestation URL")
+          payload = {
+              "schema_version": 1,
+              "attestation_id": os.environ["RECEIPT_ATTESTATION_ID"],
+              "attestation_url": url,
+              "subject": "release-security-receipt.json",
+              "bundle": "release-security-receipt.github-attestation.json",
+          }
+          Path("artifacts/release-assets/release-security-receipt-attestation.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+      - name: Archive and verify the signed release-security receipt
+        if: steps.archive-policy.outputs.configured == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.QUALITY_EVIDENCE_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.QUALITY_EVIDENCE_AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.QUALITY_EVIDENCE_AWS_SESSION_TOKEN }}
+          AWS_ENDPOINT_URL: ${{ vars.QUALITY_EVIDENCE_S3_ENDPOINT }}
+          EVIDENCE_BUCKET: ${{ vars.QUALITY_EVIDENCE_S3_BUCKET }}
+          ARCHIVE_PREFIX: ${{ steps.archive.outputs.prefix }}
+        run: |
+          set -euo pipefail
+          endpoint_args=()
+          if [ -n "${AWS_ENDPOINT_URL:-}" ]; then
+            endpoint_args=(--endpoint-url "$AWS_ENDPOINT_URL")
+          fi
+          files=(
+            artifacts/release-assets/release-security-receipt.json
+            artifacts/release-assets/release-security-receipt.json.sigstore.json
+            artifacts/release-assets/release-security-receipt.github-attestation.json
+            artifacts/release-assets/release-security-receipt-attestation.json
+          )
+          verify_root="$RUNNER_TEMP/receipt-verification"
+          rm -rf "$verify_root"
+          mkdir -p "$verify_root"
+          for file in "${files[@]}"; do
+            name="$(basename "$file")"
+            aws "${endpoint_args[@]}" s3 cp --only-show-errors --sse AES256 \
+              "$file" "s3://${EVIDENCE_BUCKET}/${ARCHIVE_PREFIX}/${name}"
+            aws "${endpoint_args[@]}" s3 cp --only-show-errors \
+              "s3://${EVIDENCE_BUCKET}/${ARCHIVE_PREFIX}/${name}" \
+              "$verify_root/$name"
+            test "$(sha256sum "$verify_root/$name" | awk '{print $1}')" = \
+              "$(sha256sum "$file" | awk '{print $1}')"
+          done
+      - name: Upload trusted release evidence even on failure
+        id: release-security-upload
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
+        with:
+          name: collection-release-evidence-${{ env.SOURCE_SHA }}
+          path: |
+            artifacts/evidence/
+            artifacts/release-assets/
+            artifacts/long-term/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Enforce trusted release-security result after upload
+        if: always()
+        env:
+          LINT_RESULT: ${{ needs.lint-sanity.result }}
+          BUILD_RESULT: ${{ needs.build-install.result }}
+          COVERAGE_RESULT: ${{ needs.role-coverage.result }}
+          TINY_RESULT: ${{ needs.tiny.result }}
+          HEAVY_RESULT: ${{ needs.heavy.result }}
+          ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          EVIDENCE_RESULT: ${{ needs.evidence.result }}
+          UPLOAD_OUTCOME: ${{ steps.release-security-upload.outcome }}
+        run: |
+          set -euo pipefail
+          test "$LINT_RESULT" = success
+          test "$BUILD_RESULT" = success
+          test "$COVERAGE_RESULT" = success
+          test "$TINY_RESULT" = success
+          test "$HEAVY_RESULT" = success
+          test "$ACCEPTANCE_RESULT" = success
+          test "$EVIDENCE_RESULT" = success
+          test "$UPLOAD_OUTCOME" = success
+  release-validation:
+    name: Collection / Release Validation
+    if: always()
+    needs:
+      [lint-sanity, build-install, role-coverage, quality-matrix, tiny, heavy, acceptance, evidence, release-security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      attestations: read
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install evidence validation dependency
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.3
+      - name: Download exact candidate
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7
+        with:
+          name: ${{ env.CANDIDATE_ARTIFACT }}
+          path: artifacts/candidate
+      - name: Download exact base evidence
+        if: >-
+          (github.event_name != 'push' || github.ref != 'refs/heads/main') &&
+          needs.quality-matrix.outputs.keycloak_required == 'true'
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7
+        with:
+          name: collection-evidence-${{ env.SOURCE_SHA }}
+          path: artifacts/final
+      - name: Download trusted protected-main release evidence
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7
+        with:
+          name: collection-release-evidence-${{ env.SOURCE_SHA }}
+          path: artifacts/final
+      - name: Validate exact candidate
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          (
+            cd artifacts/candidate
+            sha256sum --check candidate-SHA256SUMS
+          )
+      - name: Validate exact runtime evidence
+        if: >-
+          (github.event_name != 'push' || github.ref != 'refs/heads/main') &&
+          needs.quality-matrix.outputs.keycloak_required == 'true'
+        run: |
+          set -euo pipefail
+          python scripts/quality_evidence.py validate \
+            --root artifacts/final/evidence \
+            --expected-commit "$SOURCE_SHA" \
+            --release
+          (
+            cd artifacts/final/release-assets
+            sha256sum --check SHA256SUMS
+          )
+      - name: Enforce the environment-approved pull-request boundary
+        if: github.event_name == 'pull_request'
+        env:
+          LINT_RESULT: ${{ needs.lint-sanity.result }}
+          BUILD_RESULT: ${{ needs.build-install.result }}
+          COVERAGE_RESULT: ${{ needs.role-coverage.result }}
+          TINY_RESULT: ${{ needs.tiny.result }}
+          HEAVY_RESULT: ${{ needs.heavy.result }}
+          ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          EVIDENCE_RESULT: ${{ needs.evidence.result }}
+          RELEASE_SECURITY_RESULT: ${{ needs.release-security.result }}
+        run: |
+          set -euo pipefail
+          test "$LINT_RESULT" = success
+          test "$BUILD_RESULT" = success
+          test "$COVERAGE_RESULT" = success
+          test "$TINY_RESULT" = success
+          test "$HEAVY_RESULT" = success
+          test "$ACCEPTANCE_RESULT" = success
+          test "$EVIDENCE_RESULT" = success
+          test "$RELEASE_SECURITY_RESULT" = skipped
+          echo "The exact PR head passed its approved runtime matrix and base-evidence checks."
+      - name: Install Cosign for trusted signature verification
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+      - name: Verify trusted keyless signatures
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mapfile -t candidates < <(
+            find artifacts/candidate -maxdepth 1 -type f -name 'lit-supplementary-*.tar.gz' -print
+          )
+          test "${#candidates[@]}" -eq 1
+          subjects=(
+            "${candidates[0]}"
+            artifacts/final/release-assets/sbom.cdx.json
+            "artifacts/final/release-assets/collection-evidence-${SOURCE_SHA}.tar.gz"
+            artifacts/final/release-assets/SHA256SUMS
+            artifacts/final/release-assets/release-security-receipt.json
+          )
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-ci.yml@refs/heads/main"
+          for subject in "${subjects[@]}"; do
+            bundle="artifacts/final/release-assets/$(basename "$subject").sigstore.json"
+            cosign verify-blob \
+              --bundle "$bundle" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity "$identity" \
+              --certificate-github-workflow-sha "$SOURCE_SHA" \
+              "$subject"
+            gh attestation verify "$subject" \
+              --repo "$GITHUB_REPOSITORY" \
+              --cert-identity "$identity" \
+              --source-ref refs/heads/main \
+              --source-digest "$SOURCE_SHA"
+          done
+      - name: Verify final exact-main publication eligibility
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = json.loads(
+              Path("artifacts/final/release-assets/release-evidence.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          if payload.get("commit_sha") != os.environ["SOURCE_SHA"]:
+              raise SystemExit("publication eligibility commit mismatch")
+          if payload.get("workflow_run_id") != os.environ["GITHUB_RUN_ID"]:
+              raise SystemExit("publication eligibility workflow mismatch")
+          if payload.get("release_eligible") is not True:
+              raise SystemExit("publication eligibility is false")
+          gates = payload.get("gates")
+          if not isinstance(gates, dict) or not gates or not all(gates.values()):
+              raise SystemExit("publication eligibility contains an unsatisfied gate")
+          receipt = json.loads(
+              Path(
+                  "artifacts/final/release-assets/release-security-receipt.json"
+              ).read_text(encoding="utf-8")
+          )
+          if receipt.get("commit_sha") != os.environ["SOURCE_SHA"]:
+              raise SystemExit("release-security receipt commit mismatch")
+          if receipt.get("workflow_run_id") != os.environ["GITHUB_RUN_ID"]:
+              raise SystemExit("release-security receipt workflow mismatch")
+          if receipt.get("release_eligible") is not True:
+              raise SystemExit("release-security receipt is ineligible")
+          receipt_gates = receipt.get("gates")
+          if (
+              not isinstance(receipt_gates, dict)
+              or not receipt_gates
+              or not all(receipt_gates.values())
+          ):
+              raise SystemExit("release-security receipt contains an unsatisfied gate")
+          archive = Path(
+              f"artifacts/final/long-term/collection-release-evidence-{os.environ['SOURCE_SHA']}.tar.gz"
+          )
+          import hashlib
+
+          if (
+              hashlib.sha256(archive.read_bytes()).hexdigest()
+              != receipt.get("long_term_archive", {}).get("sha256")
+          ):
+              raise SystemExit("long-term evidence bundle digest mismatch")
+          PY
+      - name: Enforce every mandatory aggregate
+        env:
+          LINT_RESULT: ${{ needs.lint-sanity.result }}
+          BUILD_RESULT: ${{ needs.build-install.result }}
+          COVERAGE_RESULT: ${{ needs.role-coverage.result }}
+          TINY_RESULT: ${{ needs.tiny.result }}
+          HEAVY_RESULT: ${{ needs.heavy.result }}
+          ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          EVIDENCE_RESULT: ${{ needs.evidence.result }}
+          RELEASE_SECURITY_RESULT: ${{ needs.release-security.result }}
+          IS_PROTECTED_MAIN_PUSH: >-
+            ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: |
+          set -euo pipefail
+          test "$LINT_RESULT" = success
+          test "$BUILD_RESULT" = success
+          test "$COVERAGE_RESULT" = success
+          test "$TINY_RESULT" = success
+          test "$HEAVY_RESULT" = success
+          test "$ACCEPTANCE_RESULT" = success
+          test "$EVIDENCE_RESULT" = success
+          if [ "$IS_PROTECTED_MAIN_PUSH" = true ]; then
+            test "$RELEASE_SECURITY_RESULT" = success
+          else
+            test "$RELEASE_SECURITY_RESULT" = skipped
+          fi
+
+  legacy-lint:
+    name: Lint (ansible-lint via ee-wunder-devtools-ubi9)
+    if: always()
+    needs: lint-sanity
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULT: ${{ needs.lint-sanity.result }}
+        run: test "$RESULT" = success
+
+  legacy-build:
+    name: Build & install collection (via devtools smoke test)
+    if: always()
+    needs: build-install
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULT: ${{ needs.build-install.result }}
+        run: test "$RESULT" = success
+
+  legacy-molecule:
+    name: Molecule (via devtools)
+    if: always()
+    needs: [tiny, heavy, acceptance]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          TINY_RESULT: ${{ needs.tiny.result }}
+          HEAVY_RESULT: ${{ needs.heavy.result }}
+          ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+        run: |
+          test "$TINY_RESULT" = success
+          test "$HEAVY_RESULT" = success
+          test "$ACCEPTANCE_RESULT" = success
+
+  keycloak-legacy-lint-sanity:
+    name: Keycloak / Lint and Sanity
+    if: always()
+    needs: lint-sanity
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULT: ${{ needs.lint-sanity.result }}
+        run: test "$RESULT" = success
+
+  keycloak-legacy-tiny:
+    name: Keycloak / Tiny
+    if: always()
+    needs: tiny
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULT: ${{ needs.tiny.result }}
+        run: test "$RESULT" = success
+
+  keycloak-legacy-heavy:
+    name: Keycloak / Heavy
+    if: always()
+    needs: heavy
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULT: ${{ needs.heavy.result }}
+        run: test "$RESULT" = success
+
+  keycloak-legacy-acceptance:
+    name: Keycloak / Application Acceptance
+    if: always()
+    needs: acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULT: ${{ needs.acceptance.result }}
+        run: test "$RESULT" = success
+
+  keycloak-legacy-evidence:
+    name: Keycloak / Evidence
+    if: always()
+    needs: evidence
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULT: ${{ needs.evidence.result }}
+        run: test "$RESULT" = success
+
+  keycloak-legacy-release-validation:
+    name: Keycloak / Release Validation
+    if: always()
+    needs: release-validation
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULT: ${{ needs.release-validation.result }}
+        run: test "$RESULT" = success

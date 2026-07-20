@@ -4,16 +4,23 @@ keycloak_cac_skip_apply: true
 
 # API access for Ansible-driven CaC
 keycloak_cac_url: "{{ keycloak_deploy_api_url_effective | default('http://127.0.0.1:8080', true) }}"
-keycloak_cac_validate_certs: false
+keycloak_cac_validate_certs: true
 keycloak_cac_request_timeout: 30
 keycloak_cac_admin_user: "{{ keycloak_deploy_admin_user | default('admin', true) }}"
-keycloak_cac_admin_password: "{{ keycloak_deploy_admin_password | default('', true) }}"
+keycloak_cac_admin_password: >-
+  {{
+    keycloak_deploy_admin_password_effective
+    | default(keycloak_deploy_admin_password | default('', true), true)
+  }}
 keycloak_cac_realm: "master"
 
 # Future object catalogs (kept empty by default)
 keycloak_cac_realms: []
 keycloak_cac_clients: []
 keycloak_cac_users: []
+keycloak_cac_groups: []
+keycloak_cac_roles: []
+keycloak_cac_user_role_mappings: []
 
 # Optional Samba AD/LDAPS user federation provider.
 keycloak_cac_samba_ldap_enabled: false
@@ -23,7 +30,7 @@ keycloak_cac_samba_ldap_provider:
   priority: 0
   connection_url: "ldaps://samba:636"
   users_dn: "CN=Users,DC=corp,DC=example,DC=com"
-  bind_dn: "CN=keycloak,CN=Users,DC=corp,DC=example,DC=com"
+  bind_dn: "CN=Keycloak Bind,CN=Users,DC=corp,DC=example,DC=com"
   bind_credential: ""
   vendor: "ad"
   edit_mode: "READ_ONLY"

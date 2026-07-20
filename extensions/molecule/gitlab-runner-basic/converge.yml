@@ -1,8 +1,0 @@
----
-- name: Converge gitlab_runner
-  hosts: localhost
-  gather_facts: false
-  vars:
-    gitlab_runner_experimental_acknowledge: true
-  roles:
-    - role: gitlab_runner

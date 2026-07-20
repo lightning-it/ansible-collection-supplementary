@@ -10,6 +10,25 @@
     fail_msg: "Keycloak LDAP provider definition is missing required values."
   no_log: true
 
+- name: Derive Keycloak LDAP provider realm
+  ansible.builtin.set_fact:
+    keycloak_cac_ldap_provider_realm: >-
+      {{ keycloak_cac_ldap_provider.realm | default(keycloak_cac_realm, true) }}
+  no_log: true
+
+- name: Read Keycloak realm representation for LDAP parent id
+  ansible.builtin.uri:
+    url: "{{ keycloak_cac_url }}/admin/realms/{{ keycloak_cac_ldap_provider_realm }}"
+    method: GET
+    validate_certs: "{{ keycloak_cac_validate_certs }}"
+    timeout: "{{ keycloak_cac_request_timeout | int }}"
+    headers:
+      Authorization: "Bearer {{ keycloak_cac_ldap_token.json.access_token }}"
+    status_code: 200
+  register: keycloak_cac_ldap_realm
+  changed_when: false
+  no_log: true
+
 - name: Build Keycloak LDAP provider component payload
   ansible.builtin.set_fact:
     keycloak_cac_ldap_component_payload:
@@ -80,11 +99,33 @@
           - "{{ keycloak_cac_ldap_provider.batch_size_for_sync | default(1000) | string }}"
   no_log: true
 
+- name: Add optional Keycloak LDAP custom user search filter
+  ansible.builtin.set_fact:
+    keycloak_cac_ldap_component_payload: >-
+      {{
+        keycloak_cac_ldap_component_payload
+        | combine(
+            {
+              'config': keycloak_cac_ldap_component_payload.config
+              | combine(
+                  {
+                    'customUserSearchFilter': [
+                      keycloak_cac_ldap_provider.custom_user_search_filter
+                    ]
+                  }
+                )
+            }
+          )
+      }}
+  when:
+    - keycloak_cac_ldap_provider.custom_user_search_filter | default('', true) | trim | length > 0
+  no_log: true
+
 - name: Read existing Keycloak LDAP provider component
   ansible.builtin.uri:
     url: >-
       {{
-        keycloak_cac_url ~ '/admin/realms/' ~ keycloak_cac_realm ~
+        keycloak_cac_url ~ '/admin/realms/' ~ keycloak_cac_ldap_provider_realm ~
         '/components?type=org.keycloak.storage.UserStorageProvider&name=' ~
         (keycloak_cac_ldap_provider.name | urlencode)
       }}
@@ -96,6 +137,7 @@
     status_code: 200
   register: keycloak_cac_existing_ldap_components
   changed_when: false
+  no_log: true
 
 - name: Set existing Keycloak LDAP provider component
   ansible.builtin.set_fact:
@@ -111,9 +153,30 @@
       }}
   no_log: true
 
+- name: Detect Keycloak LDAP provider drift
+  ansible.builtin.set_fact:
+    keycloak_cac_ldap_component_drift: >-
+      {{
+        keycloak_cac_existing_ldap_component.name | default('') != keycloak_cac_ldap_component_payload.name
+        or (
+          keycloak_cac_ldap_component_payload.config
+          | dict2items
+          | rejectattr('key', 'equalto', 'bindCredential')
+          | list
+          | difference(
+              keycloak_cac_existing_ldap_component.config
+              | default({})
+              | dict2items
+            )
+          | length > 0
+        )
+      }}
+  changed_when: false
+  no_log: true
+
 - name: Create Keycloak LDAP provider component
   ansible.builtin.uri:
-    url: "{{ keycloak_cac_url }}/admin/realms/{{ keycloak_cac_realm }}/components"
+    url: "{{ keycloak_cac_url }}/admin/realms/{{ keycloak_cac_ldap_provider_realm }}/components"
     method: POST
     validate_certs: "{{ keycloak_cac_validate_certs }}"
     timeout: "{{ keycloak_cac_request_timeout | int }}"
@@ -130,7 +193,7 @@
   ansible.builtin.uri:
     url: >-
       {{
-        keycloak_cac_url ~ '/admin/realms/' ~ keycloak_cac_realm ~
+        keycloak_cac_url ~ '/admin/realms/' ~ keycloak_cac_ldap_provider_realm ~
         '/components/' ~ keycloak_cac_existing_ldap_component.id
       }}
     method: PUT
@@ -143,4 +206,9 @@
     status_code:
       - 200
       - 204
-  when: keycloak_cac_existing_ldap_component.id | default('', true) | length > 0
+  when:
+    - keycloak_cac_existing_ldap_component.id | default('', true) | length > 0
+    - >-
+      keycloak_cac_ldap_component_drift | bool
+      or keycloak_cac_ldap_provider.force_update | default(false) | bool
+  no_log: true

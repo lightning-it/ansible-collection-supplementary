@@ -1,9 +1,0 @@
----
-- name: Converge minio_config
-  hosts: localhost
-  gather_facts: true
-  vars:
-    minio_config_skip_config: true
-    minio_config_users: []
-  roles:
-    - role: minio_config

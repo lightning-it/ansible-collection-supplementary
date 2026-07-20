@@ -1,0 +1,429 @@
+---
+- name: Run Keycloak browser and protocol acceptance tests
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    keycloak_acceptance_root: /opt/keycloak-acceptance
+    keycloak_acceptance_artifacts_remote: /var/tmp/keycloak-acceptance-artifacts
+    keycloak_acceptance_artifacts_local: >-
+      {{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_ARTIFACTS') | default('artifacts', true) }}
+    keycloak_acceptance_target: >-
+      {{
+        lookup('ansible.builtin.env', 'KEYCLOAK_TEST_TARGET')
+        | default(lookup('ansible.builtin.env', 'MOLECULE_TEST_TARGET'), true)
+      }}
+    keycloak_acceptance_source_commit: >-
+      {{
+        lookup('ansible.builtin.env', 'QUALITY_SOURCE_SHA')
+        | default(lookup('ansible.builtin.env', 'GITHUB_SHA'), true)
+        | default(lookup('ansible.builtin.pipe', 'git rev-parse HEAD'), true)
+      }}
+    keycloak_acceptance_run_attempt: >-
+      {{
+        lookup('ansible.builtin.env', 'MOLECULE_TEST_RUN_ATTEMPT')
+        | default(lookup('ansible.builtin.env', 'GITHUB_RUN_ATTEMPT'), true)
+        | default('1', true)
+      }}
+    keycloak_acceptance_cac_operator_password: >-
+      {{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_CAC_OPERATOR_PASSWORD') }}
+    keycloak_acceptance_required_environment:
+      KEYCLOAK_TEST_ISSUER: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_ISSUER') }}"
+      KEYCLOAK_TEST_CLIENT_ID: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_CLIENT_ID') }}"
+      KEYCLOAK_TEST_CLIENT_SECRET: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_CLIENT_SECRET') }}"
+      KEYCLOAK_TEST_APP_URL: http://127.0.0.1:8081
+      KEYCLOAK_TEST_ADMIN_USERNAME: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_ADMIN_USERNAME') }}"
+      KEYCLOAK_TEST_ADMIN_PASSWORD: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_ADMIN_PASSWORD') }}"
+      KEYCLOAK_TEST_VIEWER_USERNAME: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_VIEWER_USERNAME') }}"
+      KEYCLOAK_TEST_VIEWER_PASSWORD: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_VIEWER_PASSWORD') }}"
+      KEYCLOAK_TEST_UNAUTHORIZED_USERNAME: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_UNAUTHORIZED_USERNAME') }}"
+      KEYCLOAK_TEST_UNAUTHORIZED_PASSWORD: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_UNAUTHORIZED_PASSWORD') }}"
+      KEYCLOAK_TEST_INVALID_USERNAME: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_INVALID_USERNAME') }}"
+      KEYCLOAK_TEST_INVALID_PASSWORD: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_INVALID_PASSWORD') }}"
+      KEYCLOAK_TEST_ARTIFACTS: "{{ keycloak_acceptance_artifacts_remote }}"
+  tasks:
+    - name: Require all deterministic test identities and ephemeral secrets
+      ansible.builtin.assert:
+        that:
+          - item.value | length > 0
+          - keycloak_acceptance_cac_operator_password | length >= 16
+        fail_msg: "Required acceptance input {{ item.key }} is missing."
+      loop: "{{ keycloak_acceptance_required_environment | dict2items }}"
+      no_log: true
+
+    - name: Bind acceptance dependency evidence to the exact matrix cell
+      ansible.builtin.assert:
+        that:
+          - keycloak_acceptance_target is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$')
+          - keycloak_acceptance_source_commit is match('^[0-9a-f]{40}$')
+          - keycloak_acceptance_run_attempt is match('^[1-9][0-9]*$')
+        fail_msg: >-
+          Acceptance dependency evidence requires a safe target, the exact
+          lowercase 40-character source commit, and a positive run attempt.
+
+    - name: Copy acceptance pytest resources
+      ansible.builtin.copy:
+        src: "../shared/keycloak/acceptance/{{ item }}"
+        dest: "{{ keycloak_acceptance_root }}/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - conftest.py
+        - browser_inventory.py
+        - test_acceptance.py
+        - trace_sanitizer.py
+
+    - name: Create private acceptance artifact directories
+      ansible.builtin.file:
+        path: "{{ keycloak_acceptance_artifacts_remote }}/{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      loop:
+        - junit
+        - allure-results
+        - screenshots
+        - playwright-traces
+        - browser-diagnostics
+        - dependencies
+
+    - name: Install the patched stable Chrome channel managed by Playwright
+      ansible.builtin.command:
+        cmd: "{{ keycloak_acceptance_root }}/venv/bin/playwright install --with-deps chrome"
+      register: keycloak_acceptance_browser_install
+      changed_when: >-
+        'Downloading' in keycloak_acceptance_browser_install.stdout
+        or 'Downloading' in keycloak_acceptance_browser_install.stderr
+        or 'Installing dependencies' in keycloak_acceptance_browser_install.stdout
+        or 'Installing dependencies' in keycloak_acceptance_browser_install.stderr
+
+    - name: Inventory the exact Playwright Chromium and target operating-system packages
+      ansible.builtin.command:
+        argv:
+          - "{{ keycloak_acceptance_root }}/venv/bin/python"
+          - "{{ keycloak_acceptance_root }}/browser_inventory.py"
+          - --profile
+          - application-acceptance
+          - --scenario
+          - keycloak-application-acceptance
+          - --target
+          - "{{ keycloak_acceptance_target }}"
+          - --source-commit
+          - "{{ keycloak_acceptance_source_commit }}"
+          - --browser-channel
+          - chrome
+          - --executable
+          - /opt/google/chrome/chrome
+      register: keycloak_acceptance_browser_inventory
+      changed_when: false
+
+    - name: Write cell-bound Acceptance browser runtime dependency inventory
+      ansible.builtin.copy:
+        dest: >-
+          {{ keycloak_acceptance_artifacts_remote }}/dependencies/browser-runtime-keycloak-acceptance-target.json
+        owner: root
+        group: root
+        mode: "0600"
+        content: >-
+          {{ keycloak_acceptance_browser_inventory.stdout | from_json | to_nice_json }}
+
+    - name: Read the exact acceptance target virtual-environment packages
+      ansible.builtin.command:
+        argv:
+          - "{{ keycloak_acceptance_root }}/venv/bin/python"
+          - -m
+          - pip
+          - --disable-pip-version-check
+          - list
+          - --format
+          - json
+      register: keycloak_acceptance_python_packages
+      changed_when: false
+
+    - name: Write cell-bound acceptance target Python dependency inventory
+      ansible.builtin.copy:
+        dest: >-
+          {{ keycloak_acceptance_artifacts_remote }}/dependencies/python-packages-keycloak-acceptance-target.json
+        owner: root
+        group: root
+        mode: "0600"
+        content: >-
+          {{
+            {
+              'schema_version': 1,
+              'source': 'target-venv',
+              'profile': 'application-acceptance',
+              'scenario': 'keycloak-application-acceptance',
+              'target': keycloak_acceptance_target,
+              'source_commit': keycloak_acceptance_source_commit,
+              'packages': keycloak_acceptance_python_packages.stdout | from_json
+            }
+            | to_nice_json
+          }}
+
+    - name: Execute acceptance and always preserve its evidence
+      block:
+        - name: Apply an independently named Acceptance CaC lifecycle role
+          ansible.builtin.include_role:
+            name: lit.supplementary.keycloak_cac
+          vars:
+            keycloak_cac_skip_apply: false
+            keycloak_cac_url: http://127.0.0.1:28080
+            keycloak_cac_realm: keycloak-test
+            keycloak_cac_admin_user: keycloak_cac_operator
+            keycloak_cac_admin_password: "{{ keycloak_acceptance_cac_operator_password }}"
+            keycloak_cac_roles:
+              - realm: keycloak-test
+                name: molecule-acceptance-cac-lifecycle
+                description: acceptance-initial-state
+                state: present
+          no_log: true
+
+        - name: Request the scoped Acceptance CaC operator token
+          ansible.builtin.uri:
+            url: http://127.0.0.1:28080/realms/keycloak-test/protocol/openid-connect/token
+            method: POST
+            body_format: form-urlencoded
+            body:
+              grant_type: password
+              client_id: admin-cli
+              username: keycloak_cac_operator
+              password: "{{ keycloak_acceptance_cac_operator_password }}"
+            status_code: 200
+            return_content: true
+          register: keycloak_acceptance_cac_operator_token
+          changed_when: false
+          no_log: true
+
+        - name: Query the initial Acceptance CaC lifecycle state
+          ansible.builtin.uri:
+            url: >-
+              http://127.0.0.1:28080/admin/realms/keycloak-test/roles/molecule-acceptance-cac-lifecycle
+            headers:
+              Authorization: "Bearer {{ keycloak_acceptance_cac_operator_token.json.access_token }}"
+            status_code: 200
+            return_content: true
+          register: keycloak_acceptance_cac_initial
+          changed_when: false
+          no_log: true
+
+        - name: Mutate the Acceptance CaC lifecycle role through the collection role
+          ansible.builtin.include_role:
+            name: lit.supplementary.keycloak_cac
+          vars:
+            keycloak_cac_skip_apply: false
+            keycloak_cac_url: http://127.0.0.1:28080
+            keycloak_cac_realm: keycloak-test
+            keycloak_cac_admin_user: keycloak_cac_operator
+            keycloak_cac_admin_password: "{{ keycloak_acceptance_cac_operator_password }}"
+            keycloak_cac_roles:
+              - realm: keycloak-test
+                name: molecule-acceptance-cac-lifecycle
+                description: acceptance-reconciled-state
+                state: present
+          no_log: true
+
+        - name: Reapply the Acceptance CaC lifecycle role without desired-state drift
+          ansible.builtin.include_role:
+            name: lit.supplementary.keycloak_cac
+          vars:
+            keycloak_cac_skip_apply: false
+            keycloak_cac_url: http://127.0.0.1:28080
+            keycloak_cac_realm: keycloak-test
+            keycloak_cac_admin_user: keycloak_cac_operator
+            keycloak_cac_admin_password: "{{ keycloak_acceptance_cac_operator_password }}"
+            keycloak_cac_roles:
+              - realm: keycloak-test
+                name: molecule-acceptance-cac-lifecycle
+                description: acceptance-reconciled-state
+                state: present
+          no_log: true
+
+        - name: Derive the Acceptance CaC second-pass result from module reports
+          ansible.builtin.set_fact:
+            keycloak_acceptance_cac_idempotence_results: >-
+              {{ (keycloak_cac_role_reconciliation | default({})).get('results', []) }}
+            keycloak_acceptance_cac_idempotence_passed: >-
+              {{
+                (keycloak_cac_role_reconciliation | default({})).get('results', [])
+                is sequence
+                and (keycloak_cac_role_reconciliation | default({})).get('results', [])
+                is not string
+                and (keycloak_cac_role_reconciliation | default({})).get('results', [])
+                | length == 1
+                and not (
+                  (keycloak_cac_role_reconciliation | default({})).get('changed', true)
+                  | bool
+                )
+                and not (
+                  (
+                    (keycloak_cac_role_reconciliation | default({})).get('results', [])
+                    | first
+                    | default({'changed': true})
+                  ).changed
+                  | bool
+                )
+              }}
+          no_log: true
+
+        - name: Query the reconciled Acceptance CaC lifecycle state
+          ansible.builtin.uri:
+            url: >-
+              http://127.0.0.1:28080/admin/realms/keycloak-test/roles/molecule-acceptance-cac-lifecycle
+            headers:
+              Authorization: "Bearer {{ keycloak_acceptance_cac_operator_token.json.access_token }}"
+            status_code: 200
+            return_content: true
+          register: keycloak_acceptance_cac_reconciled
+          changed_when: false
+          no_log: true
+
+        - name: Delete the Acceptance CaC lifecycle role through the collection role
+          ansible.builtin.include_role:
+            name: lit.supplementary.keycloak_cac
+          vars:
+            keycloak_cac_skip_apply: false
+            keycloak_cac_url: http://127.0.0.1:28080
+            keycloak_cac_realm: keycloak-test
+            keycloak_cac_admin_user: keycloak_cac_operator
+            keycloak_cac_admin_password: "{{ keycloak_acceptance_cac_operator_password }}"
+            keycloak_cac_roles:
+              - realm: keycloak-test
+                name: molecule-acceptance-cac-lifecycle
+                state: absent
+          no_log: true
+
+        - name: Verify the Acceptance CaC lifecycle role was deleted
+          ansible.builtin.uri:
+            url: >-
+              http://127.0.0.1:28080/admin/realms/keycloak-test/roles/molecule-acceptance-cac-lifecycle
+            headers:
+              Authorization: "Bearer {{ keycloak_acceptance_cac_operator_token.json.access_token }}"
+            status_code: 404
+            return_content: true
+          register: keycloak_acceptance_cac_deleted
+          changed_when: false
+          no_log: true
+
+        - name: Bind Acceptance CaC lifecycle observations to report checks
+          ansible.builtin.set_fact:
+            keycloak_acceptance_cac_checks:
+              apply_and_query: >-
+                {{ keycloak_acceptance_cac_initial.json.description == 'acceptance-initial-state' }}
+              mutate_and_query: >-
+                {{
+                  keycloak_acceptance_cac_reconciled.json.description
+                  == 'acceptance-reconciled-state'
+                }}
+              idempotent_reconcile: >-
+                {{ keycloak_acceptance_cac_idempotence_passed | bool }}
+              delete_and_query: >-
+                {{ keycloak_acceptance_cac_deleted.status == 404 }}
+
+        - name: Write independently reported Acceptance CaC lifecycle JUnit
+          ansible.builtin.copy:
+            dest: >-
+              {{ keycloak_acceptance_artifacts_remote }}/junit/keycloak-application-acceptance-cac.xml
+            owner: root
+            group: root
+            mode: "0600"
+            content: |-
+              <?xml version="1.0" encoding="UTF-8"?>
+              <testsuite name="keycloak-application-acceptance-cac" tests="4"
+                failures="{{ 4 - (
+                  keycloak_acceptance_cac_checks.values()
+                  | select('equalto', true)
+                  | list
+                  | length
+                ) }}"
+                errors="0" skipped="0">
+                <properties>
+                  <property name="role" value="keycloak_cac"/>
+                  <property name="roles" value="keycloak_cac"/>
+                  <property name="profile" value="application-acceptance"/>
+                  <property name="scenario" value="keycloak-application-acceptance"/>
+                  <property name="target" value="{{ keycloak_acceptance_target }}"/>
+                  <property name="commit_sha" value="{{ keycloak_acceptance_source_commit }}"/>
+                  <property name="run_attempt" value="{{ keycloak_acceptance_run_attempt }}"/>
+                </properties>
+                <testcase classname="keycloak.cac" name="apply-and-query" role="keycloak_cac">
+              {% if not keycloak_acceptance_cac_checks.apply_and_query %}
+                  <failure type="StateMismatch" message="initial state was not observed"/>
+              {% endif %}
+                </testcase>
+                <testcase classname="keycloak.cac" name="mutate-and-query" role="keycloak_cac">
+              {% if not keycloak_acceptance_cac_checks.mutate_and_query %}
+                  <failure type="StateMismatch" message="reconciled state was not observed"/>
+              {% endif %}
+                </testcase>
+                <testcase classname="keycloak.cac" name="idempotent-reconcile" role="keycloak_cac">
+              {% if not keycloak_acceptance_cac_checks.idempotent_reconcile %}
+                  <failure
+                    type="IdempotenceFailure"
+                    message="second reconciliation reported a change"
+                  />
+              {% endif %}
+                </testcase>
+                <testcase classname="keycloak.cac" name="delete-and-query" role="keycloak_cac">
+              {% if not keycloak_acceptance_cac_checks.delete_and_query %}
+                  <failure type="StateMismatch" message="deleted role remained queryable"/>
+              {% endif %}
+                </testcase>
+              </testsuite>
+
+        - name: Enforce independently reported Acceptance CaC lifecycle results
+          ansible.builtin.assert:
+            that:
+              - keycloak_acceptance_cac_checks.apply_and_query | bool
+              - keycloak_acceptance_cac_checks.mutate_and_query | bool
+              - keycloak_acceptance_cac_checks.idempotent_reconcile | bool
+              - keycloak_acceptance_cac_checks.delete_and_query | bool
+            fail_msg: >-
+              Acceptance CaC apply, query, mutation, idempotent reconciliation,
+              or deletion did not match the independently reported observations.
+
+        - name: Execute browser and protocol acceptance suite
+          ansible.builtin.command:
+            argv:
+              - "{{ keycloak_acceptance_root }}/venv/bin/pytest"
+              - -ra
+              - --strict-markers
+              - --browser
+              - chromium
+              - --browser-channel
+              - chrome
+              - --junitxml
+              - "{{ keycloak_acceptance_artifacts_remote }}/junit/keycloak-application-acceptance.xml"
+              - --alluredir
+              - "{{ keycloak_acceptance_artifacts_remote }}/allure-results"
+              - "{{ keycloak_acceptance_root }}/test_acceptance.py"
+          environment: "{{ keycloak_acceptance_required_environment }}"
+          register: keycloak_acceptance_pytest
+          no_log: true
+          changed_when: false
+      always:
+        - name: Package acceptance evidence without secret-bearing runtime inputs
+          community.general.archive:
+            path: "{{ keycloak_acceptance_artifacts_remote }}"
+            dest: /var/tmp/keycloak-application-acceptance-evidence.tar.gz
+            format: gz
+            owner: root
+            group: root
+            mode: "0600"
+
+        - name: Fetch acceptance evidence to the controller
+          ansible.builtin.fetch:
+            src: /var/tmp/keycloak-application-acceptance-evidence.tar.gz
+            dest: "{{ keycloak_acceptance_artifacts_local }}/keycloak-application-acceptance-evidence.tar.gz"
+            flat: true
+
+        - name: Enforce acceptance suite result after preserving evidence
+          ansible.builtin.assert:
+            that:
+              - keycloak_acceptance_pytest is defined
+              - keycloak_acceptance_pytest.rc | default(1) == 0
+            fail_msg: >-
+              Keycloak Application Acceptance failed. JUnit, Allure, and sanitized
+              browser diagnostics were preserved in the fetched evidence archive.

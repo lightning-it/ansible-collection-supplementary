@@ -6,7 +6,8 @@ minio_deploy_data_dir: "/srv/minio/data"
 minio_deploy_host_data_dir: "{{ minio_deploy_data_dir }}"
 minio_deploy_config_dir: "/srv/minio/config"
 minio_deploy_cert_dir: "/srv/minio/certs"
-minio_deploy_image: "quay.io/minio/minio:latest"
+minio_deploy_image: >-
+  quay.io/minio/minio:latest@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
 minio_deploy_run_as_user: 1000
 minio_deploy_run_as_group: 1000
 minio_deploy_container_name: "{{ minio_deploy_pod_name }}-minio"
@@ -144,7 +145,8 @@ minio_deploy_bootstrap_buckets: []
 
 # Config
 minio_deploy_config_users: []
-minio_deploy_mc_image: "quay.io/minio/mc:latest"
+minio_deploy_mc_image: >-
+  quay.io/minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
 minio_deploy_mc_config_dir: "/root/.mc"
 minio_deploy_mc_path: >-
   podman run --rm --network host --user 0:0 --entrypoint mc

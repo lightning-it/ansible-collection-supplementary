@@ -18,7 +18,7 @@ vault_ops_api_ca_cert_path_effective: >-
 vault_ops_target_ca_cert_path_effective: >-
   {{ vault_ops_target_ca_cert_path if (vault_ops_validate_certs | bool) else '' }}
 vault_ops_container_name: "{{ vault_deploy_container_name | default('vault-vault', true) }}"
-vault_ops_host_data_dir: "{{ vault_deploy_host_data_dir | default('/srv/vault/data', true) }}"
+vault_ops_host_data_dir: "{{ vault_deploy_host_data_dir | default('/srv/' ~ vault_deploy_flavour ~ '/data', true) }}"
 vault_ops_expected_uid: "{{ vault_deploy_expected_uid | default(100, true) }}"
 vault_ops_expected_gid: "{{ vault_deploy_expected_gid | default(1000, true) }}"
 vault_ops_expected_mode: "{{ vault_deploy_expected_mode | default('0700', true) }}"
@@ -32,7 +32,7 @@ vault_ops_systemd_unit_name: >-
     | default(vault_deploy_systemd_unit_name | default('', true), true)
   }}
 vault_ops_init_file_path: >-
-  {{ vault_deploy_init_file_path | default('/srv/vault/bootstrap/vault-init.yml.vault', true) }}
+  {{ vault_deploy_init_file_path | default('/srv/' ~ vault_deploy_flavour ~ '/bootstrap/vault-init.yml.vault', true) }}
 vault_ops_ansible_vault_password_file: "{{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') | default('', true) }}"
 vault_ops_ansible_vault_password: >-
   {{ vault_deploy_ansible_vault_pw | default(vault_ansible_vault_pw | default('', true), true) }}

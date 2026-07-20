@@ -3,40 +3,65 @@
 name: Promote develop to main
 
 on:
-  push:
-    branches: ["develop"]
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
+  dispatch:
+    name: Dispatch promotion from protected main
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch the trusted main-ref promotion job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run promote-develop-to-main.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main
+
   promote:
     name: Open develop-to-main promotion PR
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: ansible-collection-release-prepare
+    permissions:
+      contents: read
+      pull-requests: read
 
     steps:
+      - name: Resolve release token
+        id: token
+        env:
+          TOKEN: ${{ secrets.LITRELEASEBOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${TOKEN:-}"
+          identity="$(GH_TOKEN="$TOKEN" gh api user --jq \
+            '[.login, (.id | tostring), .type] | @tsv')"
+          test "$identity" = $'litreleasebot\t250056030\tUser'
+          echo "value=$TOKEN" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Create or update promotion PR
         env:
-          RELEASE_TOKEN: ${{ secrets.LITRELEASEBOT_TOKEN }}
+          RELEASE_TOKEN: ${{ steps.token.outputs.value }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-
-          if [ -z "${RELEASE_TOKEN:-}" ]; then
-            echo "LITRELEASEBOT_TOKEN is required to create or update"
-            echo "promotion PRs."
-            exit 1
-          fi
 
           if ! git ls-remote \
             --exit-code \
@@ -54,13 +79,28 @@ jobs:
           fi
 
           title="chore(release): promote develop to main"
-          pr_url="$(GH_TOKEN="$RELEASE_TOKEN" gh pr list \
-            --repo "$REPO" \
-            --base main \
-            --head develop \
-            --state open \
-            --json url \
-            --jq '.[0].url')"
+          promotion_pulls="$(GH_TOKEN="$RELEASE_TOKEN" gh api --method GET \
+            "repos/${REPO}/pulls" \
+            -f state=open \
+            -f base=main \
+            -f "head=${GITHUB_REPOSITORY_OWNER}:develop" \
+            -f per_page=100)"
+          promotion_count="$(jq 'length' <<< "$promotion_pulls")"
+          if [ "$promotion_count" -gt 1 ]; then
+            echo "Multiple same-repository promotion PRs exist." >&2
+            exit 1
+          fi
+          if [ "$promotion_count" -eq 1 ]; then
+            jq -e \
+              --arg repo "$REPO" \
+              --arg sha "$(git rev-parse origin/develop)" '
+                .[0].head.repo.full_name == $repo
+                and .[0].head.ref == "develop"
+                and .[0].head.sha == $sha
+                and .[0].base.ref == "main"
+              ' <<< "$promotion_pulls" >/dev/null
+          fi
+          pr_url="$(jq -r '.[0].html_url // empty' <<< "$promotion_pulls")"
 
           if ! git merge-base --is-ancestor origin/main origin/develop; then
             {
@@ -98,15 +138,30 @@ jobs:
           body+=$'so `develop` becomes an ancestor of `main`.'
 
           if [ -z "$pr_url" ]; then
-            pr_url="$(GH_TOKEN="$RELEASE_TOKEN" gh pr create \
+            GH_TOKEN="$RELEASE_TOKEN" gh pr create \
               --repo "$REPO" \
               --base main \
               --head develop \
               --title "$title" \
-              --body "$body")"
-          else
-            GH_TOKEN="$RELEASE_TOKEN" gh pr edit "$pr_url" \
-              --repo "$REPO" \
-              --title "$title" \
               --body "$body"
           fi
+          promotion_pulls="$(GH_TOKEN="$RELEASE_TOKEN" gh api --method GET \
+            "repos/${REPO}/pulls" \
+            -f state=open \
+            -f base=main \
+            -f "head=${GITHUB_REPOSITORY_OWNER}:develop" \
+            -f per_page=100)"
+          test "$(jq 'length' <<< "$promotion_pulls")" -eq 1
+          jq -e \
+            --arg repo "$REPO" \
+            --arg sha "$(git rev-parse origin/develop)" '
+              .[0].head.repo.full_name == $repo
+              and .[0].head.ref == "develop"
+              and .[0].head.sha == $sha
+              and .[0].base.ref == "main"
+            ' <<< "$promotion_pulls" >/dev/null
+          pr_url="$(jq -r '.[0].html_url' <<< "$promotion_pulls")"
+          GH_TOKEN="$RELEASE_TOKEN" gh pr edit "$pr_url" \
+            --repo "$REPO" \
+            --title "$title" \
+            --body "$body"

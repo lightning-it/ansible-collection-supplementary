@@ -28,7 +28,20 @@ dependencies:
   community.hashi_vault: 7.1.0
 build_ignore:
   - .ansible
-  - extensions/molecule
+  - .cache
+  - .lit
+  - .mypy_cache
+  - .pytest_cache
+  - .ruff_cache
+  - .tox
+  - .venv
+  - artifacts
+  - build
+  - dist
+  - extensions
+  - molecule
+  - tests
+  - pyproject.toml
   - node_modules
   - .git
   - .github
@@ -36,5 +49,6 @@ build_ignore:
   - .molecule
   - ansible_collections
   - infra
+  - roles/nexus/.forgejo
   - '*.terraform*'
   - '*.tar.gz'

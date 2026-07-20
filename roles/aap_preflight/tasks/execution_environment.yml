@@ -1,0 +1,80 @@
+---
+- name: Validate execution-environment inputs
+  ansible.builtin.assert:
+    that:
+      - aap_preflight_ee_validate_certs | bool
+      - aap_preflight_ee_registry | length > 0
+      - aap_preflight_ee_registry == aap_preflight_ee_approved_registry
+      - aap_preflight_ee_repository | length > 0
+      - aap_preflight_ee_repository == aap_preflight_ee_approved_repository
+      - aap_preflight_ee_repository is match('^' ~ (aap_preflight_ee_registry | regex_escape) ~ '/.+')
+      - >-
+        (
+          aap_preflight_ee_version | default('', true) | length > 0
+          and aap_preflight_ee_digest | default('', true) | length == 0
+          and aap_preflight_ee_version is match('^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')
+          and aap_preflight_ee_version | lower != 'latest'
+          and aap_preflight_ee_runtime_image ==
+              aap_preflight_ee_repository ~ ':' ~ aap_preflight_ee_version
+        ) or (
+          aap_preflight_ee_version | default('', true) | length == 0
+          and aap_preflight_ee_digest is match('^sha256:[0-9a-f]{64}$')
+          and aap_preflight_ee_runtime_image ==
+              aap_preflight_ee_repository ~ '@' ~ aap_preflight_ee_digest
+          and ':' not in (aap_preflight_ee_runtime_image.split('/')[-1].split('@')[0])
+        )
+    fail_msg: >-
+      The EE must use the approved registry/repository with either a fixed
+      non-latest version or an exact lowercase sha256 digest. Disabled TLS
+      verification is forbidden.
+    quiet: true
+
+- name: Validate trusted registry HTTPS endpoint
+  ansible.builtin.uri:
+    url: "https://{{ aap_preflight_ee_registry }}/v2/"
+    method: GET
+    validate_certs: true
+    status_code: [200, 401]
+    return_content: false
+
+- name: Inspect configured registry manifest
+  ansible.builtin.command:
+    argv: >-
+      {{ ['podman', 'manifest', 'inspect']
+         + (['--authfile', aap_preflight_ee_auth_file] if aap_preflight_ee_auth_file | length > 0 else [])
+         + [aap_preflight_ee_runtime_image] }}
+  register: aap_preflight_ee_manifest
+  changed_when: false
+  failed_when: aap_preflight_ee_manifest.rc != 0
+  no_log: true
+
+- name: Validate execution-environment architecture when manifest declares it
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          (
+            aap_preflight_expected_architecture == 'x86_64'
+            and (
+              '"architecture": "amd64"' in aap_preflight_ee_manifest.stdout
+              or '"architecture":"amd64"' in aap_preflight_ee_manifest.stdout
+            )
+          )
+          or (
+            aap_preflight_expected_architecture in ['aarch64', 'arm64']
+            and (
+              '"architecture": "arm64"' in aap_preflight_ee_manifest.stdout
+              or '"architecture":"arm64"' in aap_preflight_ee_manifest.stdout
+            )
+          )
+          or ('"architecture"' not in aap_preflight_ee_manifest.stdout)
+        )
+    fail_msg: >-
+      The approved EE manifest does not expose an image matching
+      aap_preflight_expected_architecture={{ aap_preflight_expected_architecture }}.
+    quiet: true
+
+- name: Report execution-environment gate success
+  ansible.builtin.debug:
+    msg: AAP_EXECUTION_ENVIRONMENT_VALIDATED_OK
+  changed_when: false

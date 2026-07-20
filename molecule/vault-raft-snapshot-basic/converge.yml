@@ -59,6 +59,11 @@
     vault_raft_snapshot_restore_cluster_port: 18222
     vault_raft_snapshot_restore_work_root: /run/lit-vault-raft-molecule
     vault_raft_snapshot_restore_container_name: molecule-vault-raft-restore
+    # This scenario exercises the role locally inside the capability-minimized
+    # devtools container. Keep its fake runtime directories owned by the
+    # invoking container user; production targets retain the role defaults.
+    vault_raft_snapshot_restore_run_as_user: 0
+    vault_raft_snapshot_restore_run_as_group: 0
     vault_raft_snapshot_production_cert_dir: "{{ vault_raft_snapshot_molecule_root }}"
     vault_raft_snapshot_restore_node_id: molecule-restore
     vault_raft_snapshot_restore_unseal_keys:
@@ -87,6 +92,30 @@
         name: lit.supplementary.vault_raft_snapshot
         tasks_from: assert
       no_log: true
+
+    - name: Initialize oversized raw snapshot limit refusal
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_oversized_limit_refused: false
+
+    - name: Reject a raw snapshot limit above the hard ceiling
+      block:
+        - name: Exercise the raw snapshot limit ceiling
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_max_raw_bytes: 134217729
+          no_log: true
+      rescue:
+        - name: Record oversized raw snapshot limit refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_oversized_limit_refused: true
+
+    - name: Require oversized raw snapshot limit refusal
+      ansible.builtin.assert:
+        that:
+          - vault_raft_snapshot_molecule_oversized_limit_refused | bool
+        quiet: true
 
     - name: Initialize numeric restore TLS hostname refusal
       ansible.builtin.set_fact:

@@ -1,0 +1,19 @@
+---
+- name: Reconcile Keycloak user role mappings  # noqa args[module]
+  community.general.keycloak_user_rolemapping: >-
+    {{
+      keycloak_cac_user_role_mapping
+      | combine({
+          'auth_keycloak_url': keycloak_cac_url,
+          'auth_realm': keycloak_cac_realm,
+          'auth_username': keycloak_cac_admin_user,
+          'auth_password': keycloak_cac_admin_password,
+          'validate_certs': keycloak_cac_validate_certs,
+          'connection_timeout': keycloak_cac_request_timeout
+        })
+    }}
+  loop: "{{ keycloak_cac_user_role_mappings }}"
+  loop_control:
+    loop_var: keycloak_cac_user_role_mapping
+    label: "{{ keycloak_cac_user_role_mapping.target_username | default('unnamed') }}"
+  no_log: true

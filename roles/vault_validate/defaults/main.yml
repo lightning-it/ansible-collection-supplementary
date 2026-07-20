@@ -6,15 +6,17 @@ vault_validate_strict: "{{ vault_validate_mode != 'report' }}"
 vault_validate_expected_lifecycle: "ready"
 vault_validate_lifecycle_retries: 12
 vault_validate_lifecycle_delay: 5
+vault_validate_podman_executable: "podman"
 vault_validate_container_name: "{{ vault_deploy_container_name | default('vault-vault', true) }}"
-vault_validate_host_data_dir: "{{ vault_deploy_host_data_dir | default('/srv/vault/data', true) }}"
+vault_validate_host_data_dir: >-
+  {{ vault_deploy_host_data_dir | default('/srv/' ~ vault_deploy_flavour ~ '/data', true) }}
 vault_validate_expected_uid: "{{ vault_deploy_expected_uid | default(100, true) }}"
 vault_validate_expected_gid: "{{ vault_deploy_expected_gid | default(1000, true) }}"
 vault_validate_expected_mode: "{{ vault_deploy_expected_mode | default('0700', true) }}"
 vault_validate_api_url: "{{ vault_deploy_api_url | default('', true) }}"
 vault_validate_health_url: >-
   {{ vault_deploy_health_url | default(vault_validate_api_url ~ '/v1/sys/health', true) }}
-vault_validate_validate_certs: "{{ vault_deploy_vault_validate_certs | default(true, true) }}"
+vault_validate_validate_certs: "{{ vault_deploy_vault_validate_certs }}"
 vault_validate_ca_cert_path: "{{ vault_deploy_target_ca_cert_path | default('', true) }}"
 vault_validate_ca_cert_path_effective: >-
   {{ vault_validate_ca_cert_path if (vault_validate_validate_certs | bool) else '' }}

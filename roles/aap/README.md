@@ -4,7 +4,8 @@ Shared AAP context role that centralizes common variables and prechecks.
 
 ## Requirements
 
-Supports Red Hat Enterprise Linux 9 and 10 only.
+RHEL 9 and RHEL 10 are candidate platforms. They are not production support
+claims until the licensed Heavy and Application Acceptance matrices pass.
 
 ## Variables
 

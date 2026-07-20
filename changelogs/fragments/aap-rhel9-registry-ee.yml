@@ -1,0 +1,16 @@
+---
+minor_changes:
+  - >-
+    Extend AAP preflight with optional customer-prepared RHEL and immutable
+    registry execution-environment gates.
+  - >-
+    Support digest-required target-side EE pulls, encrypted Ansible Vault
+    inventory generation, and separate AAP Container Registry credential plus
+    EE configuration in local-execution flows.
+security_fixes:
+  - >-
+    Exclude project collection payloads, preserve registry TLS verification,
+    and keep target Podman authentication separate from AAP credentials.
+  - >-
+    Suppress controller credential-dispatch output so registry inputs remain
+    protected even when the underlying configuration role changes verbosity.

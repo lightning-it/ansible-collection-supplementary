@@ -9,7 +9,7 @@
 - name: Start Vault pod after maintenance without systemd
   ansible.builtin.command:
     argv:
-      - podman
+      - "{{ vault_backup_restore_podman_executable }}"
       - pod
       - start
       - "{{ vault_backup_restore_pod_name }}"

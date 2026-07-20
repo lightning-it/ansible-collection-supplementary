@@ -4,7 +4,13 @@
   tags: always
 
 - name: Check Vault container running state
-  ansible.builtin.command: "podman inspect {{ vault_validate_container_name }} --format {{ '{{.State.Running}}' }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ vault_validate_podman_executable }}"
+      - inspect
+      - "{{ vault_validate_container_name }}"
+      - --format
+      - "{{ '{{.State.Running}}' }}"
   register: vault_validate_vault_deploy_container_running
   changed_when: false
   failed_when: false
@@ -81,7 +87,13 @@
     - selinux
 
 - name: Read Vault container mount label
-  ansible.builtin.command: "podman inspect {{ vault_validate_container_name }} --format {{ '{{.MountLabel}}' }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ vault_validate_podman_executable }}"
+      - inspect
+      - "{{ vault_validate_container_name }}"
+      - --format
+      - "{{ '{{.MountLabel}}' }}"
   register: vault_validate_vault_deploy_mount_label
   changed_when: false
   failed_when: false

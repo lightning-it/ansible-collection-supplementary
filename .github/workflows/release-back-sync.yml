@@ -3,84 +3,86 @@
 name: Back-sync collection release
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
         description: Release tag to back-sync, for example v1.2.3.
         required: true
+      release_tag_app_slug:
+        description: Exact GitHub App slug validated by the protected publish job.
+        required: true
+      release_tag_app_id:
+        description: Exact GitHub App ID validated by the protected publish job.
+        required: true
+      release_tag_app_client_id:
+        description: Exact GitHub App client ID validated by the protected publish job.
+        required: true
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: release-back-sync-${{ github.repository }}-${{ inputs.tag }}
+  cancel-in-progress: false
 
 jobs:
   back-sync:
     name: Open release back-sync PR
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    env:
-      RELEASE_BOT_APP_ID: ${{ secrets.RELEASE_BOT_APP_ID }}
-      RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+    environment: ansible-collection-release-prepare
 
     steps:
-      - name: Create GitHub App token
-        id: app-token
-        if: ${{ env.RELEASE_BOT_APP_ID != '' && env.RELEASE_BOT_PRIVATE_KEY != '' }}
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ env.RELEASE_BOT_APP_ID }}
-          private-key: ${{ env.RELEASE_BOT_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
-
       - name: Resolve release token
         id: token
         env:
-          APP_TOKEN: ${{ steps.app-token.outputs.token }}
           TOKEN: ${{ secrets.LITRELEASEBOT_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -n "${APP_TOKEN:-}" ]; then
-            echo "value=$APP_TOKEN" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
           if [ -n "${TOKEN:-}" ]; then
+            identity="$(GH_TOKEN="$TOKEN" gh api user --jq \
+              '[.login, (.id | tostring), .type] | @tsv')"
+            test "$identity" = $'litreleasebot\t250056030\tUser'
             echo "value=$TOKEN" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          {
-            echo "::error::RELEASE_BOT_APP_ID and RELEASE_BOT_PRIVATE_KEY,"
-            echo "or LITRELEASEBOT_TOKEN, are required to create release"
-            echo "back-sync branches and PRs."
-          }
+          echo "::error::The protected-environment LITRELEASEBOT_TOKEN is required."
           exit 1
 
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
         with:
           token: ${{ steps.token.outputs.value }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Open or update release back-sync PR
         env:
           GH_TOKEN: ${{ steps.token.outputs.value }}
           TAG_INPUT: ${{ github.event.inputs.tag }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          EXPECTED_TAG_APP_SLUG: ${{ github.event.inputs.release_tag_app_slug }}
+          EXPECTED_TAG_APP_ID: ${{ github.event.inputs.release_tag_app_id }}
+          EXPECTED_TAG_APP_CLIENT_ID: ${{ github.event.inputs.release_tag_app_client_id }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
-          tag="${RELEASE_TAG:-${TAG_INPUT:-}}"
-          if [ -z "$tag" ]; then
-            echo "::error::Release tag is required."
+          authenticated_push() {
+            GH_TOKEN="$GH_TOKEN" git -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' \
+              push "$@"
+          }
+
+          tag="${TAG_INPUT:-}"
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::A semantic v-prefixed release tag is required."
             exit 1
           fi
-          case "$tag" in
-            v*) ;;
-            *) tag="v${tag}" ;;
-          esac
+          [[ "$EXPECTED_TAG_APP_SLUG" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$ ]]
+          [[ "$EXPECTED_TAG_APP_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_TAG_APP_CLIENT_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]
 
           if ! git ls-remote --exit-code --heads origin develop >/dev/null 2>&1; then
             echo "develop branch does not exist; skipping release back-sync."
@@ -91,22 +93,123 @@ jobs:
           git config user.email "litreleasebot@users.noreply.github.com"
           git fetch origin main develop
 
-          if git merge-base --is-ancestor origin/main origin/develop; then
-            echo "develop already contains main; release back-sync not needed."
+          remote_tag="$(
+            git ls-remote --tags origin "refs/tags/${tag}" \
+              | awk 'NR == 1 { print $1 }'
+          )"
+          if ! [[ "$remote_tag" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The requested release tag does not exist as an immutable object."
+            exit 1
+          fi
+          git fetch --no-tags origin "refs/tags/${tag}"
+          test "$(git cat-file -t FETCH_HEAD)" = tag
+          release_sha="$(git rev-parse 'FETCH_HEAD^{commit}')"
+          test "$(git cat-file -t "$release_sha")" = commit
+          git merge-base --is-ancestor "$release_sha" origin/main
+
+          tag_payload="$RUNNER_TEMP/release-back-sync-tag.txt"
+          git cat-file tag FETCH_HEAD > "$tag_payload"
+          tagger_identity="$(
+            TAG_PAYLOAD="$tag_payload" RELEASE_SHA="$release_sha" RELEASE_TAG="$tag" \
+              python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          payload = Path(os.environ["TAG_PAYLOAD"]).read_text(encoding="utf-8")
+          headers, separator, message = payload.partition("\n\n")
+          if not separator:
+              raise SystemExit("release tag has no annotation")
+          expected = {
+              f"object {os.environ['RELEASE_SHA']}",
+              "type commit",
+              f"tag {os.environ['RELEASE_TAG']}",
+          }
+          lines = headers.splitlines()
+          if not expected.issubset(set(lines)):
+              raise SystemExit("release tag identity differs from its resolved commit")
+          taggers = [line for line in lines if line.startswith("tagger ")]
+          if len(taggers) != 1:
+              raise SystemExit("release tag has an unauthorized tagger identity")
+          match = re.fullmatch(
+              r"tagger (?P<slug>[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)\[bot\] "
+              r"<(?P<id>[1-9][0-9]*)\+(?P=slug)\[bot\]@users\.noreply\.github\.com> "
+              r"[0-9]+ [+-][0-9]{4}",
+              taggers[0],
+          )
+          if match is None:
+              raise SystemExit("release tag has an unauthorized GitHub App tagger identity")
+          if message.rstrip("\n") != f"Release {os.environ['RELEASE_TAG']}":
+              raise SystemExit("release tag annotation differs")
+          print(f"{match.group('slug')}\t{match.group('id')}")
+          PY
+          )"
+          IFS=$'\t' read -r tagger_app_slug tagger_bot_id <<< "$tagger_identity"
+          test -n "$tagger_app_slug"
+          [[ "$tagger_bot_id" =~ ^[1-9][0-9]*$ ]]
+          test "$tagger_app_slug" = "$EXPECTED_TAG_APP_SLUG"
+
+          tagger_bot="$RUNNER_TEMP/release-back-sync-tagger-bot.json"
+          tagger_app="$RUNNER_TEMP/release-back-sync-tagger-app.json"
+          gh api "/users/${tagger_app_slug}[bot]" > "$tagger_bot"
+          jq -e \
+            --argjson bot_id "$tagger_bot_id" \
+            --arg login "${tagger_app_slug}[bot]" '
+              .id == $bot_id and .login == $login and .type == "Bot"
+            ' "$tagger_bot" >/dev/null
+          gh api "/apps/${tagger_app_slug}" > "$tagger_app"
+          jq -e \
+            --arg slug "$tagger_app_slug" \
+            --argjson app_id "$EXPECTED_TAG_APP_ID" \
+            --arg client_id "$EXPECTED_TAG_APP_CLIENT_ID" \
+            --arg owner "$GITHUB_REPOSITORY_OWNER" '
+              .slug == $slug
+              and .id == $app_id
+              and .client_id == $client_id
+              and .owner.login == $owner
+            ' "$tagger_app" >/dev/null
+
+          tagged_galaxy="$RUNNER_TEMP/release-back-sync-galaxy.yml"
+          git show "${release_sha}:galaxy.yml" > "$tagged_galaxy"
+          tagged_version="$(TAGGED_GALAXY="$tagged_galaxy" python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          text = Path(os.environ["TAGGED_GALAXY"]).read_text(encoding="utf-8")
+          match = re.search(r"(?m)^version:\s*[\"']?([^\s\"']+)", text)
+          print(match.group(1) if match else "")
+          PY
+          )"
+          test "$tag" = "v${tagged_version}"
+
+          if git merge-base --is-ancestor "$release_sha" origin/develop; then
+            echo "develop already contains the tagged release; release back-sync not needed."
             exit 0
           fi
 
           branch="backsync/release-${tag}-to-develop"
+          branch_ref="refs/heads/${branch}"
+          remote_branch_sha="$(
+            git ls-remote --heads origin "$branch_ref" \
+              | awk 'NR == 1 { print $1 }'
+          )"
+          if [ -n "$remote_branch_sha" ] && \
+              ! [[ "$remote_branch_sha" =~ ^[0-9a-f]{40}$ ]]
+          then
+            echo "::error::Could not resolve a trustworthy back-sync branch lease."
+            exit 1
+          fi
           title="chore: sync ${tag} release back to develop"
-          body=$'Release back-sync from `main` to `develop`.\n\n'
+          body="Release back-sync of \`${tag}\` (\`${release_sha}\`) to \`develop\`."$'\n\n'
           body+=$'This PR brings release-generated files, changelog metadata, '
           body+=$'and `galaxy.yml` version changes back to `develop` after '
           body+="\`${tag}\` was published.\n\n"
           body+=$'Merge this PR with a merge commit, not squash or rebase, '
-          body+=$'so `main` becomes an ancestor of `develop`.'
+          body+=$'so the exact tagged release becomes an ancestor of `develop`.'
 
           git switch -C "$branch" origin/develop
-          git merge --no-ff -X ours origin/main \
+          git merge --no-ff -X ours "$release_sha" \
             -m "chore: sync ${tag} release back to develop"
 
           release_paths=(
@@ -116,19 +219,17 @@ jobs:
             galaxy.yml
           )
           for path in "${release_paths[@]}"; do
-            if git cat-file -e "origin/main:${path}" 2>/dev/null; then
-              git checkout origin/main -- "$path"
+            if git cat-file -e "${release_sha}:${path}" 2>/dev/null; then
+              git checkout "$release_sha" -- "$path"
             else
               rm -f "$path"
             fi
           done
 
-          release_base="$(git rev-parse origin/main^1 2>/dev/null || true)"
-          if [ -n "$release_base" ]; then
-            git diff --name-only --diff-filter=D \
-              "$release_base" origin/main -- changelogs/fragments/ \
-              | xargs -r rm -f
-          fi
+          release_base="$(git rev-parse "${release_sha}^1")"
+          git diff --name-only --diff-filter=D \
+            "$release_base" "$release_sha" -- changelogs/fragments/ \
+            | xargs -r rm -f
 
           git add -A CHANGELOG.rst changelogs galaxy.yml
           if ! git diff --cached --quiet; then
@@ -140,23 +241,14 @@ jobs:
             exit 0
           fi
 
-          if ! git push --force-with-lease origin "$branch"; then
-            existing="$(
-              gh pr list \
-                --repo "$REPO" \
-                --base develop \
-                --head "$branch" \
-                --state open \
-                --json url \
-                --jq '.[0].url'
-            )"
-            if [ -n "$existing" ]; then
-              echo "Release back-sync PR already exists after push race: $existing"
-            else
-              echo "Force-with-lease failed and no open PR exists; retrying branch push."
-              git push --force origin "$branch"
-            fi
+          if ! authenticated_push \
+              "--force-with-lease=${branch_ref}:${remote_branch_sha}" \
+              origin "HEAD:${branch_ref}"
+          then
+            echo "::error::Release back-sync branch changed concurrently; rerun from fresh state."
+            exit 1
           fi
+          pushed_sha="$(git rev-parse HEAD)"
 
           if ! gh label list --repo "$REPO" --json name --jq '.[].name' \
             | grep -Fxq skip-changelog
@@ -164,51 +256,51 @@ jobs:
             gh label create skip-changelog \
               --repo "$REPO" \
               --description "Changelog fragment intentionally not required for this PR." \
-              --color "6f42c1" || true
+              --color "6f42c1"
           fi
 
-          existing="$(
-            gh pr list \
-              --repo "$REPO" \
-              --base develop \
-              --head "$branch" \
-              --state open \
-              --json url \
-              --jq '.[0].url'
+          owned_pulls="$(
+            gh api --method GET "repos/${REPO}/pulls" \
+              -f state=open \
+              -f base=develop \
+              -f "head=${GITHUB_REPOSITORY_OWNER}:${branch}" \
+              -f per_page=100
           )"
-          if [ -n "$existing" ]; then
-            gh pr edit "$existing" \
-              --repo "$REPO" \
-              --title "$title" \
-              --body "$body" \
-              --add-label skip-changelog
-          else
-            if ! gh pr create \
+          owned_count="$(jq 'length' <<< "$owned_pulls")"
+          if [ "$owned_count" -gt 1 ]; then
+            echo "::error::Multiple same-repository back-sync PRs exist."
+            exit 1
+          fi
+          if [ "$owned_count" -eq 0 ]; then
+            gh pr create \
                 --repo "$REPO" \
                 --base develop \
                 --head "$branch" \
                 --title "$title" \
                 --body "$body" \
                 --label skip-changelog
-            then
-              existing="$(
-                gh pr list \
-                  --repo "$REPO" \
-                  --base develop \
-                  --head "$branch" \
-                  --state open \
-                  --json url \
-                  --jq '.[0].url'
-              )"
-              if [ -z "$existing" ]; then
-                echo "::error::Failed to create release back-sync PR."
-                exit 1
-              fi
-              echo "Release back-sync PR was created by another run: $existing"
-              gh pr edit "$existing" \
-                --repo "$REPO" \
-                --title "$title" \
-                --body "$body" \
-                --add-label skip-changelog
-            fi
           fi
+
+          owned_pulls="$(
+            gh api --method GET "repos/${REPO}/pulls" \
+              -f state=open \
+              -f base=develop \
+              -f "head=${GITHUB_REPOSITORY_OWNER}:${branch}" \
+              -f per_page=100
+          )"
+          test "$(jq 'length' <<< "$owned_pulls")" -eq 1
+          jq -e \
+            --arg repo "$REPO" \
+            --arg branch "$branch" \
+            --arg sha "$pushed_sha" '
+              .[0].head.repo.full_name == $repo
+              and .[0].head.ref == $branch
+              and .[0].head.sha == $sha
+              and .[0].base.ref == "develop"
+            ' <<< "$owned_pulls" >/dev/null
+          existing="$(jq -r '.[0].number' <<< "$owned_pulls")"
+          gh pr edit "$existing" \
+            --repo "$REPO" \
+            --title "$title" \
+            --body "$body" \
+            --add-label skip-changelog

@@ -21,6 +21,61 @@ aap_preflight_check_artifacts: true
 aap_preflight_check_vault: "{{ (aap_secret_backend | default('hashicorp_vault', true)) == 'hashicorp_vault' }}"
 aap_preflight_check_ansible_vault: "{{ (aap_secret_backend | default('hashicorp_vault', true)) == 'ansible_vault' }}"
 
+# Optional customer-prepared host contract.  This is deliberately validation
+# only; ownership of RHSM, repositories, trust, and the operating-system
+# baseline remains with the host owner.
+aap_preflight_check_prepared_host: false
+aap_preflight_expected_distribution: RedHat
+aap_preflight_minimum_distribution_version: "9.6"
+aap_preflight_expected_architecture: x86_64
+aap_preflight_expected_fqdn: "{{ aap_fqdn | default(inventory_hostname, true) }}"
+aap_preflight_minimum_vcpus: 4
+aap_preflight_minimum_memory_mb: 16000
+aap_preflight_appl_mount: /appl
+aap_preflight_appl_allowed_fstypes:
+  - xfs
+aap_preflight_appl_minimum_free_mb: 50000
+aap_preflight_appl_maximum_inode_use_percent: 90
+aap_preflight_temporary_paths:
+  - path: /var/tmp
+    minimum_free_mb: 2048
+  - path: /appl/tmp
+    minimum_free_mb: 10240
+aap_preflight_required_packages:
+  - ansible-core
+  - podman
+  - python3
+  - sudo
+aap_preflight_time_sync_required: true
+aap_preflight_selinux_enforcing_required: true
+aap_preflight_subid_users:
+  - "{{ aap_preflight_install_user }}"
+aap_preflight_minimum_ansible_core_version: "2.18.0"
+aap_preflight_required_repository_labels:
+  - BaseOS
+  - AppStream
+aap_preflight_ca_bundle_path: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
+aap_preflight_expected_rootless_graphroot: >-
+  /appl/home/{{ aap_preflight_install_user }}/.local/share/containers/storage
+
+# Optional EE gate. The registry endpoint is checked over trusted HTTPS and the
+# configured fixed version or immutable digest reference is inspected with Podman.
+aap_preflight_check_execution_environment: false
+aap_preflight_ee_registry: ""
+aap_preflight_ee_approved_registry: ""
+aap_preflight_ee_repository: ""
+aap_preflight_ee_approved_repository: ""
+aap_preflight_ee_version: ""
+aap_preflight_ee_digest: ""
+aap_preflight_ee_runtime_image: >-
+  {{
+    aap_preflight_ee_repository ~ ':' ~ aap_preflight_ee_version
+    if aap_preflight_ee_version | default('', true) | length > 0
+    else aap_preflight_ee_repository ~ '@' ~ aap_preflight_ee_digest
+  }}
+aap_preflight_ee_validate_certs: true
+aap_preflight_ee_auth_file: ""
+
 aap_preflight_required_commands:
   - podman
   - git
@@ -60,3 +115,6 @@ aap_preflight_ansible_vault_required_secret_vars:
   - aap_postgresql_admin_password_input
   - aap_breakglass_password_input
   - rh_offline_token
+aap_preflight_registry_secret_vars:
+  - aap_registry_username_input
+  - aap_registry_password_input

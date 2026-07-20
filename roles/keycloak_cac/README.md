@@ -7,7 +7,8 @@ This role intentionally separates object/API orchestration concerns from runtime
 
 ## Requirements
 
-None.
+The target Keycloak service must be available. The canonical Heavy and
+Application Acceptance scenarios deploy it with `keycloak_deploy`.
 
 ## Variables
 
@@ -32,7 +33,7 @@ providers can be supplied through `keycloak_cac_ldap_providers`.
 
 ## Dependencies
 
-None.
+`community.general` provides the Keycloak API modules declared in `galaxy.yml`.
 
 ## Example Playbook
 
@@ -47,7 +48,7 @@ None.
         keycloak_cac_url: http://127.0.0.1:8080
         keycloak_cac_realm: master
         keycloak_cac_admin_user: admin
-        keycloak_cac_admin_password: changeme
+        keycloak_cac_admin_password: "{{ vault_keycloak_admin_password }}"
 ```
 
 ## License
@@ -57,3 +58,25 @@ MIT
 ## Author
 
 Lightning IT
+
+## Enterprise test disposition
+
+- Classification: configuration-as-code API orchestration.
+- Maturity: production-supported through the registry-required Keycloak
+  component profiles.
+- Supported platform: Ubuntu 24.04. RHEL 9 and RHEL 10 remain candidates until
+  their exact-commit matrices pass on approved images.
+- Tiny: real realm, client, group, role, user, mapping, token, and idempotency
+  reconciliation.
+- Heavy: production-like deployment foundation, LDAP provider integration,
+  persisted state, authentication, and negative credential checks.
+- Application Acceptance: an independently reported apply, query, mutation,
+  zero-change reconciliation, and deletion lifecycle, followed by browser and
+  protected API behavior driven by reconciled identities and authorization
+  state.
+- Security: administrator, bind, and client credentials are ephemeral or
+  supplied by a protected secret source and must never enter evidence.
+- Evidence and commands: see
+  [`docs/testing/keycloak.md`](../../docs/testing/keycloak.md).
+- Limitations: the current suite does not claim complete deletion reconciliation
+  for every supported Keycloak object type.
