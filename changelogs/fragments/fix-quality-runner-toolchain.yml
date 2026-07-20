@@ -2,4 +2,8 @@
 bugfixes:
   - >-
     Install pinned Ansible and Molecule entry points in protected quality jobs instead of relying on runner-global
-    packages, and tolerate another parallel quality cell completing the same stale-resource deletion first.
+    packages, consume one immutable collection candidate with its runtime dependencies, and make concurrent Incus
+    cleanup ownership-aware.
+  - >-
+    Bind Keycloak to the Samba-created LDAP identity and attach exact role and commit metadata to independently
+    generated application-acceptance evidence.

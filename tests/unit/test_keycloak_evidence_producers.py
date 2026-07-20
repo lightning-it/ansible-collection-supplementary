@@ -80,7 +80,10 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         verify = (ROOT / "molecule" / "keycloak-heavy" / "verify.yml").read_text(encoding="utf-8")
         self.assertIn("backup-baseline-v1", converge)
         self.assertIn("Destructively replace only the isolated restore-probe state", verify)
+        self.assertIn("Empty only the isolated restore-probe table before data restore", verify)
         self.assertIn("postgres_backup_restore_action: restore", verify)
+        self.assertIn("postgres_backup_restore_clean: false", verify)
+        self.assertIn("- --data-only", verify)
         self.assertIn("(keycloak_heavy_restore_after.stdout | trim)", verify)
         self.assertIn("== (keycloak_heavy_restore_before.stdout | trim)", verify)
         self.assertIn("-verify_return_error", verify)
@@ -179,6 +182,8 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         self.assertIn("keycloak_acceptance_cac_idempotence_passed", verify)
         self.assertIn("Delete the Acceptance CaC lifecycle role through the collection role", verify)
         self.assertIn("keycloak-application-acceptance-cac.xml", verify)
+        self.assertIn('<property name="role" value="keycloak_cac"/>', verify)
+        self.assertIn('<property name="commit_sha" value="{{ keycloak_acceptance_source_commit }}"/>', verify)
         self.assertLess(
             verify.index("Write independently reported Acceptance CaC lifecycle JUnit"),
             verify.index("Enforce independently reported Acceptance CaC lifecycle results"),

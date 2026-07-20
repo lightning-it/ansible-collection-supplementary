@@ -328,6 +328,14 @@
                   | length
                 ) }}"
                 errors="0" skipped="0">
+                <properties>
+                  <property name="role" value="keycloak_cac"/>
+                  <property name="roles" value="keycloak_cac"/>
+                  <property name="profile" value="application-acceptance"/>
+                  <property name="scenario" value="keycloak-application-acceptance"/>
+                  <property name="target" value="{{ keycloak_acceptance_target }}"/>
+                  <property name="commit_sha" value="{{ keycloak_acceptance_source_commit }}"/>
+                </properties>
                 <testcase classname="keycloak.cac" name="apply-and-query" role="keycloak_cac">
               {% if not keycloak_acceptance_cac_checks.apply_and_query %}
                   <failure type="StateMismatch" message="initial state was not observed"/>

@@ -113,6 +113,26 @@
       changed_when: false
       no_log: true
 
+    - name: Empty only the isolated restore-probe table before data restore
+      ansible.builtin.command:
+        argv:
+          - podman
+          - exec
+          - -e
+          - "PGPASSWORD={{ keycloak_heavy_db_password }}"
+          - keycloak-heavy-postgres-postgres
+          - psql
+          - -U
+          - keycloak
+          - -d
+          - keycloak
+          - -v
+          - ON_ERROR_STOP=1
+          - -c
+          - TRUNCATE TABLE public.molecule_restore_probe;
+      changed_when: true
+      no_log: true
+
     - name: Restore only the isolated probe table from the Heavy backup
       ansible.builtin.include_role:
         name: lit.supplementary.postgres_backup_restore
@@ -131,10 +151,11 @@
         postgres_backup_restore_format: custom
         postgres_backup_restore_execution_mode: podman
         postgres_backup_restore_container_name: keycloak-heavy-postgres-postgres
-        postgres_backup_restore_clean: true
-        postgres_backup_restore_if_exists: true
+        postgres_backup_restore_clean: false
+        postgres_backup_restore_if_exists: false
         postgres_backup_restore_extra_pg_restore_args:
           - --exit-on-error
+          - --data-only
           - --table=public.molecule_restore_probe
       no_log: true
 
