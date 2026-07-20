@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import unittest
 from pathlib import Path
@@ -98,6 +99,42 @@ class IncusLifecycleTests(unittest.TestCase):
                 "stale-instance",
                 list_kind="instance",
             )
+
+    def test_parallel_pruning_skips_a_network_that_became_owned_or_used(self) -> None:
+        delete_error = subprocess.CalledProcessError(1, ["incus"])
+        stale_config = {
+            prune_stale_incus_resources.REPOSITORY_KEY: "lightning-it/example",
+            prune_stale_incus_resources.RUN_ID_KEY: "41",
+            prune_stale_incus_resources.OWNER_KEY: "old-cell",
+        }
+        raced_networks = (
+            [{"name": "lit000000000001", "config": stale_config, "used_by": ["/1.0/instances/new"]}],
+            [
+                {
+                    "name": "lit000000000001",
+                    "config": {**stale_config, prune_stale_incus_resources.RUN_ID_KEY: "42"},
+                    "used_by": [],
+                }
+            ],
+        )
+        for current in raced_networks:
+            with (
+                self.subTest(current=current),
+                mock.patch.object(
+                    prune_stale_incus_resources,
+                    "incus",
+                    side_effect=(delete_error, json.dumps(current)),
+                ),
+            ):
+                prune_stale_incus_resources.delete_if_present(
+                    "lit000000000001",
+                    "network",
+                    "delete",
+                    "lit000000000001",
+                    list_kind="network",
+                    repository="lightning-it/example",
+                    current_run_id="42",
+                )
 
     def test_pruning_rejects_an_unknown_resource_kind_before_deletion(self) -> None:
         with (

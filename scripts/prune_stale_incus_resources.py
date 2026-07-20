@@ -54,7 +54,13 @@ def revalidate(kind: str, name: str, repository: str, current_run_id: str) -> bo
     return exact_owner(values, repository, current_run_id)
 
 
-def delete_if_present(name: str, *delete_arguments: str, list_kind: str) -> None:
+def delete_if_present(
+    name: str,
+    *delete_arguments: str,
+    list_kind: str,
+    repository: str | None = None,
+    current_run_id: str | None = None,
+) -> None:
     list_arguments_by_kind = {
         "instance": ("list", "--format", "json"),
         "network": ("network", "list", "--format", "json"),
@@ -67,8 +73,19 @@ def delete_if_present(name: str, *delete_arguments: str, list_kind: str) -> None
     except subprocess.CalledProcessError:
         list_arguments = list_arguments_by_kind[list_kind]
         current = json.loads(incus(*list_arguments))
-        if any(str(item.get("name", "")) == name for item in current):
-            raise
+        target = next((item for item in current if str(item.get("name", "")) == name), None)
+        if target is None:
+            return
+        if list_kind == "network" and (
+            target.get("used_by", [])
+            or (
+                repository is not None
+                and current_run_id is not None
+                and not exact_owner(target.get("config", {}), repository, current_run_id)
+            )
+        ):
+            return
+        raise
 
 
 def prune(repository: str, current_run_id: str) -> None:
@@ -108,6 +125,8 @@ def prune(repository: str, current_run_id: str) -> None:
                     "delete",
                     name,
                     list_kind="network",
+                    repository=repository,
+                    current_run_id=current_run_id,
                 )
 
 
