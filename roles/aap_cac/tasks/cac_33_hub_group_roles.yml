@@ -6,8 +6,7 @@
   block:
     - name: Set Hub group roles
       ansible.builtin.set_fact:
-        ansible_facts:
-          hub_group_roles: "{{ aap_cac_hub_group_roles }}"
+        hub_group_roles: "{{ aap_cac_hub_group_roles }}"
       changed_when: false
 
     - name: Run role infra.aap_configuration.hub_group_roles  # noqa var-naming[no-role-prefix]
