@@ -219,6 +219,8 @@ class IncusLifecycleTests(unittest.TestCase):
             '-p "$QUALITY_INSTALL_ROOT" --force --no-deps',
             action,
         )
+        self.assertIn("community.general:11.4.9", action)
+        self.assertIn("community.hashi_vault:7.1.0", action)
 
     def test_quality_action_prunes_only_superseded_exact_owned_resources(
         self,
