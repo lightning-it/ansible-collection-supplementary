@@ -491,6 +491,8 @@
     postgres_backup_restore_format: custom
     postgres_backup_restore_execution_mode: podman
     postgres_backup_restore_container_name: keycloak-heavy-postgres-postgres
+    postgres_backup_restore_extra_pg_dump_args:
+      - --table=public.molecule_restore_probe
   pre_tasks:
     - name: Seed exact isolated state for the Heavy restore drill
       ansible.builtin.command:

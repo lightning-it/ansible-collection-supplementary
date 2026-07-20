@@ -156,7 +156,6 @@
         postgres_backup_restore_extra_pg_restore_args:
           - --exit-on-error
           - --data-only
-          - --table=public.molecule_restore_probe
       no_log: true
 
     - name: Prove the Heavy backup restored the exact isolated state

@@ -79,6 +79,8 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         converge = (ROOT / "molecule" / "keycloak-heavy" / "converge.yml").read_text(encoding="utf-8")
         verify = (ROOT / "molecule" / "keycloak-heavy" / "verify.yml").read_text(encoding="utf-8")
         self.assertIn("backup-baseline-v1", converge)
+        self.assertIn("postgres_backup_restore_extra_pg_dump_args:", converge)
+        self.assertIn("- --table=public.molecule_restore_probe", converge)
         self.assertIn("Destructively replace only the isolated restore-probe state", verify)
         self.assertIn("Empty only the isolated restore-probe table before data restore", verify)
         self.assertIn("postgres_backup_restore_action: restore", verify)
