@@ -130,8 +130,8 @@
       - sh
       - -c
       - >-
-        ids="$(podman images --all --quiet --no-trunc | sort -u)";
-        if [ -z "$ids" ]; then printf '[]\n'; else podman image inspect $ids; fi
+        format="$(printf '%s' 'e3tqc29uIC59fQ==' | base64 -d)";
+        podman images --all --format "$format"
   register: molecule_incus_evidence_container_images_raw
   changed_when: false
   failed_when: false

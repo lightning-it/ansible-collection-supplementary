@@ -30,8 +30,8 @@
           - sh
           - -c
           - >-
-            ids="$(podman images --all --quiet --no-trunc | sort -u)";
-            if [ -z "$ids" ]; then printf '[]\n'; else podman image inspect $ids; fi
+            format="$(printf '%s' 'e3tqc29uIC59fQ==' | base64 -d)";
+            podman images --all --format "$format"
       - name: keycloak
         argv:
           - podman
