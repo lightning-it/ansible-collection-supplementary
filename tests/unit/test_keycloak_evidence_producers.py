@@ -79,8 +79,13 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         converge = (ROOT / "molecule" / "keycloak-heavy" / "converge.yml").read_text(encoding="utf-8")
         verify = (ROOT / "molecule" / "keycloak-heavy" / "verify.yml").read_text(encoding="utf-8")
         self.assertIn("backup-baseline-v1", converge)
+        self.assertIn("postgres_backup_restore_extra_pg_dump_args:", converge)
+        self.assertIn("- --table=public.molecule_restore_probe", converge)
         self.assertIn("Destructively replace only the isolated restore-probe state", verify)
+        self.assertIn("Empty only the isolated restore-probe table before data restore", verify)
         self.assertIn("postgres_backup_restore_action: restore", verify)
+        self.assertIn("postgres_backup_restore_clean: false", verify)
+        self.assertIn("- --data-only", verify)
         self.assertIn("(keycloak_heavy_restore_after.stdout | trim)", verify)
         self.assertIn("== (keycloak_heavy_restore_before.stdout | trim)", verify)
         self.assertIn("-verify_return_error", verify)
@@ -181,6 +186,11 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         self.assertIn("keycloak_acceptance_cac_idempotence_passed", verify)
         self.assertIn("Delete the Acceptance CaC lifecycle role through the collection role", verify)
         self.assertIn("keycloak-application-acceptance-cac.xml", verify)
+        self.assertIn('<property name="role" value="keycloak_cac"/>', verify)
+        self.assertIn('<property name="commit_sha" value="{{ keycloak_acceptance_source_commit }}"/>', verify)
+        self.assertIn('<property name="run_attempt" value="{{ keycloak_acceptance_run_attempt }}"/>', verify)
+        self.assertIn("lookup('ansible.builtin.env', 'GITHUB_RUN_ATTEMPT')", verify)
+        self.assertIn("and a positive run attempt", verify)
         self.assertLess(
             verify.index("Write independently reported Acceptance CaC lifecycle JUnit"),
             verify.index("Enforce independently reported Acceptance CaC lifecycle results"),
@@ -197,16 +207,30 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         )
         self.assertIn("browser_inventory.py", verify)
         self.assertIn("browser-runtime-keycloak-acceptance-target.json", verify)
-        self.assertIn("playwright install --with-deps chromium", verify)
+        self.assertIn("playwright install --with-deps chrome", verify)
+        self.assertIn("--browser-channel", verify)
+        self.assertIn("/opt/google/chrome/chrome", verify)
         self.assertNotIn("creates: /root/.cache/ms-playwright", verify)
-        self.assertIn("playwright.chromium.executable_path", helper)
+        self.assertIn('browser_channel != "chrome"', helper)
         self.assertIn('"dpkg-query"', helper)
         self.assertIn('"rpm"', helper)
         self.assertIn("platform.freedesktop_os_release", helper)
         self.assertIn("${source:Package}", helper)
         self.assertNotIn("${binary:Package}", helper)
         self.assertIn('"sha256": _sha256(executable)', helper)
-        self.assertIn('"revision": revision_match.group(1)', helper)
+        self.assertIn('"channel": browser_channel', helper)
+
+    def test_browser_inventory_accepts_only_playwright_browser_version_formats(self) -> None:
+        module = self._browser_inventory_module()
+        self.assertEqual("150.0.7871.125", module._browser_version("Google Chrome 150.0.7871.125", channel="chrome"))
+        for output in (
+            "Google Chrome for Testing 149.0.7827.55 extra",
+            "Chromium 149.0.7827.55\nmalformed",
+        ):
+            with self.subTest(output=output), self.assertRaisesRegex(RuntimeError, "unexpected Playwright Chrome"):
+                module._browser_version(output, channel="chrome")
+        with self.assertRaisesRegex(ValueError, "unsupported Playwright browser channel"):
+            module._browser_version("Chromium 149.0.7827.55", channel="chromium")
 
     def test_browser_inventory_binds_distro_and_source_package_identity(self) -> None:
         module = self._browser_inventory_module()

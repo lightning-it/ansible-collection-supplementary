@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import argparse
-from functools import lru_cache
 import json
 import re
 import shutil
 import subprocess
+from functools import lru_cache
 from typing import Any
 
 REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -54,13 +54,34 @@ def revalidate(kind: str, name: str, repository: str, current_run_id: str) -> bo
     return exact_owner(values, repository, current_run_id)
 
 
-def delete_idempotently(delete_arguments: tuple[str, ...], show_arguments: tuple[str, ...]) -> None:
+def delete_if_present(
+    name: str,
+    *delete_arguments: str,
+    list_kind: str,
+    repository: str | None = None,
+    current_run_id: str | None = None,
+) -> None:
+    list_arguments_by_kind = {
+        "instance": ("list", "--format", "json"),
+        "network": ("network", "list", "--format", "json"),
+    }
+    if list_kind not in list_arguments_by_kind:
+        raise ValueError(f"unsupported Incus resource kind: {list_kind}")
+
     try:
         incus(*delete_arguments, capture=False)
     except subprocess.CalledProcessError:
-        try:
-            incus(*show_arguments)
-        except subprocess.CalledProcessError:
+        list_arguments = list_arguments_by_kind[list_kind]
+        current = json.loads(incus(*list_arguments))
+        target = next((item for item in current if str(item.get("name", "")) == name), None)
+        if target is None:
+            return
+        ownership_changed = (
+            repository is not None
+            and current_run_id is not None
+            and not exact_owner(target.get("config", {}), repository, current_run_id)
+        )
+        if ownership_changed or (list_kind == "network" and target.get("used_by", [])):
             return
         raise
 
@@ -73,7 +94,15 @@ def prune(repository: str, current_run_id: str) -> None:
         if not name or not isinstance(config, dict):
             continue
         if exact_owner(config, repository, current_run_id) and revalidate("config", name, repository, current_run_id):
-            delete_idempotently(("delete", "--force", name), ("config", "show", name))
+            delete_if_present(
+                name,
+                "delete",
+                "--force",
+                name,
+                list_kind="instance",
+                repository=repository,
+                current_run_id=current_run_id,
+            )
 
     networks = json.loads(incus("network", "list", "--format", "json"))
     for network in networks:
@@ -90,7 +119,15 @@ def prune(repository: str, current_run_id: str) -> None:
                 and not current.get("used_by", [])
                 and exact_owner(current.get("config", {}), repository, current_run_id)
             ):
-                delete_idempotently(("network", "delete", name), ("network", "show", name))
+                delete_if_present(
+                    name,
+                    "network",
+                    "delete",
+                    name,
+                    list_kind="network",
+                    repository=repository,
+                    current_run_id=current_run_id,
+                )
 
 
 def main() -> int:

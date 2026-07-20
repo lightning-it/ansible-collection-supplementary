@@ -114,7 +114,25 @@ def _os_packages(os_id: str) -> list[dict[str, str]]:
     return sorted(packages, key=lambda item: (item["name"], item["architecture"], item["version"]))
 
 
-def inventory(*, profile: str, scenario: str, target: str, source_commit: str) -> dict[str, object]:
+def _browser_version(version_output: str, *, channel: str) -> str:
+    labels = {"chrome": "Google Chrome"}
+    if channel not in labels:
+        raise ValueError("unsupported Playwright browser channel")
+    match = re.fullmatch(rf"{re.escape(labels[channel])}\s+([0-9]+(?:\.[0-9]+){{1,3}})", version_output)
+    if match is None:
+        raise RuntimeError(f"unexpected Playwright Chrome version output: {version_output!r}")
+    return match.group(1)
+
+
+def inventory(
+    *,
+    profile: str,
+    scenario: str,
+    target: str,
+    source_commit: str,
+    browser_channel: str,
+    executable_path: str,
+) -> dict[str, object]:
     if SAFE_PROFILE.fullmatch(profile) is None:
         raise ValueError("unsafe profile identity")
     if SAFE_CELL.fullmatch(scenario) is None or SAFE_CELL.fullmatch(target) is None:
@@ -122,19 +140,15 @@ def inventory(*, profile: str, scenario: str, target: str, source_commit: str) -
     if FULL_SHA.fullmatch(source_commit) is None:
         raise ValueError("source commit must be a lowercase full SHA")
 
-    from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]
-
-    with sync_playwright() as playwright:
-        executable = Path(playwright.chromium.executable_path).resolve(strict=True)
+    if browser_channel != "chrome":
+        raise ValueError("unsupported Playwright browser channel")
+    executable = Path(executable_path).resolve(strict=True)
+    if executable != Path("/opt/google/chrome/chrome"):
+        raise RuntimeError("Playwright Chrome executable resolved to an unexpected path")
     if not executable.is_file() or not os.access(executable, os.X_OK):
-        raise RuntimeError("Playwright Chromium executable is absent or not executable")
-    revision_match = re.search(r"/(?:chromium|chromium_headless_shell)-([0-9]+)/", executable.as_posix())
-    if revision_match is None:
-        raise RuntimeError("Playwright Chromium executable has no exact installed revision")
+        raise RuntimeError("Playwright Chrome executable is absent or not executable")
     version_output = _run(str(executable), "--version")
-    version_match = re.fullmatch(r"Chromium\s+([0-9]+(?:\.[0-9]+){1,3})", version_output)
-    if version_match is None:
-        raise RuntimeError(f"unexpected Chromium version output: {version_output!r}")
+    browser_version = _browser_version(version_output, channel=browser_channel)
 
     operating_system = _operating_system(target)
     return {
@@ -147,8 +161,8 @@ def inventory(*, profile: str, scenario: str, target: str, source_commit: str) -
         "playwright_version": importlib.metadata.version("playwright"),
         "chromium": {
             "name": "chromium",
-            "revision": revision_match.group(1),
-            "version": version_match.group(1),
+            "channel": browser_channel,
+            "version": browser_version,
             "executable": executable.as_posix(),
             "sha256": _sha256(executable),
         },
@@ -163,6 +177,8 @@ def main() -> int:
     parser.add_argument("--scenario", required=True)
     parser.add_argument("--target", required=True)
     parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--browser-channel", required=True)
+    parser.add_argument("--executable", required=True)
     args = parser.parse_args()
     print(
         json.dumps(
@@ -171,6 +187,8 @@ def main() -> int:
                 scenario=args.scenario,
                 target=args.target,
                 source_commit=args.source_commit,
+                browser_channel=args.browser_channel,
+                executable_path=args.executable,
             ),
             indent=2,
             sort_keys=True,

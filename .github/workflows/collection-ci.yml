@@ -277,9 +277,32 @@ jobs:
           test -s "$installed_playbook"
           ANSIBLE_COLLECTIONS_PATH="$RUNNER_TEMP/collections" \
             ansible-playbook --syntax-check "$installed_playbook"
+          tar \
+            -C "$RUNNER_TEMP/collections" \
+            -czf dist/candidate/runtime-collections.tar.gz \
+            --exclude=ansible_collections/lit/supplementary \
+            ansible_collections
+          RUNTIME_BUNDLE=dist/candidate/runtime-collections.tar.gz python - <<'PY'
+          import os
+          import tarfile
+          from pathlib import PurePosixPath
+
+          bundle = os.environ["RUNTIME_BUNDLE"]
+          with tarfile.open(bundle, "r:gz") as stream:
+              members = [(PurePosixPath(member.name), member.isfile()) for member in stream]
+          files = [path for path, is_file in members if is_file]
+          if not files:
+              raise SystemExit("runtime collection bundle contains no dependency files")
+          candidate = PurePosixPath("ansible_collections/lit/supplementary")
+          if any(path == candidate or candidate in path.parents for path, _ in members):
+              raise SystemExit("runtime collection bundle contains the candidate collection")
+          PY
           (
             cd dist/candidate
-            sha256sum "$(basename "$candidate")" > candidate-SHA256SUMS
+            sha256sum \
+              "$(basename "$candidate")" \
+              runtime-collections.tar.gz \
+              > candidate-SHA256SUMS
             sha256sum --check candidate-SHA256SUMS
           )
       - name: Upload immutable candidate
@@ -353,7 +376,7 @@ jobs:
           junit-required: ${{ matrix.junit }}
           allure-required: ${{ matrix.allure }}
           cpu-limit: "2"
-          memory-limit: 4GiB
+          memory-limit: 12GiB
           disk-limit: 12GiB
 
   tiny:
@@ -474,6 +497,10 @@ jobs:
 
   runtime-evidence:
     name: Runtime evidence / exact tested SHA
+    env:
+      # Do not expose this override to repository unit tests: they exercise
+      # _tested_commit() with isolated process environments.
+      QUALITY_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     if: >-
       always() &&
       needs.quality-matrix.outputs.keycloak_required == 'true' &&
@@ -615,7 +642,7 @@ jobs:
             meta/source-dependencies.yml \
             artifacts/evidence/security/source-dependencies.yml
           mapfile -t candidates < <(
-            find artifacts/candidate -maxdepth 1 -type f -name '*.tar.gz' -print
+            find artifacts/candidate -maxdepth 1 -type f -name 'lit-supplementary-*.tar.gz' -print
           )
           test "${#candidates[@]}" -eq 1
           python scripts/enrich-cyclonedx-sbom.py \
@@ -632,7 +659,7 @@ jobs:
           output-file: artifacts/evidence/security/vulnerability-report.json
           fail-build: true
           severity-cutoff: high
-      - name: Scan test inputs for secret-like content
+      - name: Scan the exact collection candidate for secret-like content
         if: always()
         run: |
           set -euo pipefail
@@ -640,7 +667,7 @@ jobs:
           rm -rf "$candidate_extract"
           mkdir -p "$candidate_extract"
           mapfile -t candidates < <(
-            find artifacts/candidate -maxdepth 1 -type f -name '*.tar.gz' -print
+            find artifacts/candidate -maxdepth 1 -type f -name 'lit-supplementary-*.tar.gz' -print
           )
           test "${#candidates[@]}" -eq 1
           CANDIDATE="${candidates[0]}" DESTINATION="$candidate_extract" python - <<'PY'
@@ -681,39 +708,39 @@ jobs:
                   raise SystemExit("candidate compression ratio exceeds limit")
               stream.extractall(destination, filter="data")
           PY
-          AGGREGATE_ROOT=artifacts/aggregate-input \
-            CANDIDATE_ROOT="$candidate_extract" python - <<'PY'
+          CANDIDATE_ROOT="$candidate_extract" python - <<'PY'
           import hashlib
           import json
           import os
           from pathlib import Path
 
           inventory = {"schema_version": 1, "roots": {}}
-          for label, root_value in (
-              ("aggregate-input", os.environ["AGGREGATE_ROOT"]),
-              ("candidate-extract", os.environ["CANDIDATE_ROOT"]),
-          ):
-              root = Path(root_value)
-              files = []
-              for path in sorted(root.rglob("*")):
-                  if path.is_symlink():
-                      raise SystemExit(f"secret-scan input contains symlink: {path}")
-                  if path.is_file():
-                      files.append(
-                          {
-                              "path": path.relative_to(root).as_posix(),
-                              "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                          }
-                      )
-              if not files:
-                  raise SystemExit(f"secret-scan input root is empty: {label}")
-              inventory["roots"][label] = {"file_count": len(files), "files": files}
+          label = "candidate-extract"
+          root = Path(os.environ["CANDIDATE_ROOT"])
+          files = []
+          for path in sorted(root.rglob("*")):
+              if path.is_symlink():
+                  raise SystemExit(f"secret-scan input contains symlink: {path}")
+              if path.is_file():
+                  files.append(
+                      {
+                          "path": path.relative_to(root).as_posix(),
+                          "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                      }
+                  )
+          if not files:
+              raise SystemExit(f"secret-scan input root is empty: {label}")
+          inventory["roots"][label] = {"file_count": len(files), "files": files}
           Path("artifacts/evidence/security/secret-scan-inventory.json").write_text(
               json.dumps(inventory, indent=2, sort_keys=True) + "\n", encoding="utf-8"
           )
           PY
-          detect-secrets scan --all-files \
-            artifacts/aggregate-input "$candidate_extract" \
+          # Aggregated runtime evidence is independently scanned, redacted, and
+          # re-scanned by quality_evidence.py, including nested archives. Running
+          # an entropy detector over its typed hashes and UUIDs produces false
+          # positives. This independent scan therefore covers the exact shipped
+          # collection candidate with every detect-secrets plugin enabled.
+          detect-secrets scan --all-files "$candidate_extract" \
             > artifacts/evidence/security/secret-scan-summary.json
           python - <<'PY'
           import json
@@ -730,7 +757,9 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          mapfile -t candidates < <(find artifacts/candidate -maxdepth 1 -type f -name '*.tar.gz' -print)
+          mapfile -t candidates < <(
+            find artifacts/candidate -maxdepth 1 -type f -name 'lit-supplementary-*.tar.gz' -print
+          )
           test "${#candidates[@]}" -eq 1
           candidate_sha="$(sha256sum "${candidates[0]}" | awk '{print $1}')"
           CANDIDATE="${candidates[0]}" CANDIDATE_SHA="$candidate_sha" python - <<'PY'
@@ -1093,7 +1122,7 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t candidates < <(
-            find artifacts/candidate -maxdepth 1 -type f -name '*.tar.gz' -print
+            find artifacts/candidate -maxdepth 1 -type f -name 'lit-supplementary-*.tar.gz' -print
           )
           test "${#candidates[@]}" -eq 1
           subjects=(
@@ -1626,7 +1655,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mapfile -t candidates < <(find artifacts/candidate -maxdepth 1 -type f -name '*.tar.gz' -print)
+          mapfile -t candidates < <(
+            find artifacts/candidate -maxdepth 1 -type f -name 'lit-supplementary-*.tar.gz' -print
+          )
           test "${#candidates[@]}" -eq 1
           subjects=(
             "${candidates[0]}"
