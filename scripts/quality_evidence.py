@@ -1242,18 +1242,21 @@ def copy_artifacts(input_roots: Sequence[Path], destination_root: Path, excluded
                 raise EvidenceError("artifact inputs exceed bounded evidence size limits")
             relative = _safe_relative(source, input_root)
             category_names = set(EVIDENCE_DIRECTORIES) | {"test-results", "test_results"}
-            category_index = next(
-                (index for index, part in enumerate(relative.parts) if part.lower() in category_names),
-                None,
-            )
-            if category_index is not None:
-                remaining = relative.parts[category_index + 1 :]
-                relative = Path(*remaining) if remaining else Path(source.name)
-            # Downloaded Actions artifacts are expanded below an implementation
-            # detail such as expanded/archive-1. Strip that wrapper at every
-            # aggregation level so cell evidence is not nested repeatedly.
-            while len(relative.parts) >= 2 and relative.parts[0].lower() == "expanded":
-                relative = Path(*relative.parts[2:]) if len(relative.parts) > 2 else Path(source.name)
+            if cell_roots:
+                category_index = next(
+                    (index for index, part in enumerate(relative.parts) if part.lower() in category_names),
+                    None,
+                )
+                if category_index is not None:
+                    remaining = relative.parts[category_index + 1 :]
+                    relative = Path(*remaining) if remaining else Path(source.name)
+                # Downloaded Actions artifacts are expanded below an
+                # implementation detail such as expanded/archive-1. Strip it
+                # only when re-aggregating an already assembled cell bundle.
+                while len(relative.parts) >= 2 and relative.parts[0].lower() == "expanded":
+                    relative = Path(*relative.parts[2:]) if len(relative.parts) > 2 else Path(source.name)
+            elif relative.parts and relative.parts[0].lower() in category_names:
+                relative = Path(*relative.parts[1:]) if len(relative.parts) > 1 else Path(source.name)
             destination = _copy_unique(source, destination_root / category / relative)
             if category == "junit":
                 junit_destinations.append(destination)

@@ -915,6 +915,10 @@ class QualityEvidenceTests(unittest.TestCase):
         wrapped.mkdir(parents=True)
         source = wrapped / "python-packages.json"
         source.write_text('[{"name":"ansible","version":"1"}]\n', encoding="utf-8")
+        (input_root / "cell" / "manifest.json").write_text(
+            json.dumps({"results": []}),
+            encoding="utf-8",
+        )
         output = self.base / "aggregate-output"
         evidence.copy_artifacts([input_root], output, excluded=())
         self.assertTrue((output / "dependencies" / "python-packages.json").is_file())
