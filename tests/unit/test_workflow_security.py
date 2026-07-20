@@ -98,7 +98,7 @@ class WorkflowSecurityTests(unittest.TestCase):
             delegated = jobs[name]
             self.assertRegex(
                 delegated["uses"],
-                r"^lightning-it/modulix-validation-lit/\.github/workflows/"
+                r"^lightning-it/modulix-validation/\.github/workflows/"
                 r"collection-quality-profile\.yml@[0-9a-f]{40}$",
             )
             self.assertEqual(profile, delegated["with"]["profile"])
