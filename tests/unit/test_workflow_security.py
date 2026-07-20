@@ -54,7 +54,7 @@ class WorkflowSecurityTests(unittest.TestCase):
     def test_quality_cells_install_only_the_prebuilt_exact_candidate(self) -> None:
         action = ACTION.read_text(encoding="utf-8")
         install = re.search(
-            r'ansible-galaxy collection install \\\n(?P<body>(?:\s+.*\n){1,8})',
+            r"ansible-galaxy collection install \\\n(?P<body>(?:\s+.*\n){1,8})",
             action,
         )
         self.assertIsNotNone(install)
@@ -72,7 +72,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('stream.extractall(destination, filter="data")', action)
         self.assertIn("C.COLLECTIONS_PATHS", action)
         self.assertIn(
-            'ANSIBLE_COLLECTIONS_PATH=$QUALITY_INSTALL_ROOT:$default_collection_paths',
+            "ANSIBLE_COLLECTIONS_PATH=$QUALITY_INSTALL_ROOT:$default_collection_paths",
             action,
         )
         workflow = (WORKFLOWS / "collection-ci.yml").read_text(encoding="utf-8")
@@ -494,20 +494,9 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("actions/runs/${preparation_run_id}", publish)
         self.assertIn('.conclusion == "success"', publish)
         action = ACTION.read_text(encoding="utf-8")
-        self.assertIn(
-            "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
-            action,
-        )
-        self.assertIn("python-version: ${{ env.PYTHON_VERSION }}", action)
-        self.assertIn("python -m pip install --disable-pip-version-check", action)
-        self.assertNotIn("python3", action)
-        for package in (
-            "ansible-core==2.18.13",
-            "molecule==25.12.0",
-            "molecule-plugins==25.8.12",
-            "PyYAML==6.0.3",
-        ):
-            self.assertIn(package, action)
+        self.assertNotIn("actions/setup-python@", action)
+        self.assertNotIn("Install pinned quality toolchain entry points", action)
+        self.assertIn("command -v python3", action)
         self.assertIn('os.environ["QUALITY_PROFILE"].replace("_", "-")', action)
         self.assertIn('["git", "show", f"{source_sha}:{path.as_posix()}"]', action)
         self.assertIn('registry = Path("meta/role-coverage.yml")', action)

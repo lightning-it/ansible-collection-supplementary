@@ -50,21 +50,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Set up configured Python runtime
-      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-
-    - name: Install pinned quality toolchain entry points
-      shell: bash
-      run: |
-        set -euo pipefail
-        python -m pip install --disable-pip-version-check \
-          ansible-core==2.18.13 \
-          molecule==25.12.0 \
-          molecule-plugins==25.8.12 \
-          PyYAML==6.0.3
-
     - name: Download exact collection candidate
       uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7
       with:
@@ -189,9 +174,9 @@ runs:
         command -v incus
         command -v molecule
         command -v openssl
-        command -v python
+        command -v python3
 
-        python scripts/prune_stale_incus_resources.py \
+        python3 scripts/prune_stale_incus_resources.py \
           --repository "$GITHUB_REPOSITORY" \
           --current-run-id "$GITHUB_RUN_ID"
 
@@ -221,7 +206,7 @@ runs:
         test "${#candidates[@]}" -eq 1
         runtime_bundle="$QUALITY_CANDIDATE_ROOT/runtime-collections.tar.gz"
         test -s "$runtime_bundle"
-        RUNTIME_BUNDLE="$runtime_bundle" QUALITY_INSTALL_ROOT="$QUALITY_INSTALL_ROOT" python - <<'PY'
+        RUNTIME_BUNDLE="$runtime_bundle" QUALITY_INSTALL_ROOT="$QUALITY_INSTALL_ROOT" python3 - <<'PY'
         import os
         import tarfile
         from pathlib import Path, PurePosixPath
@@ -283,7 +268,7 @@ runs:
           --force \
           --no-deps
         default_collection_paths="$(
-          python -c 'from ansible import constants as C; print(":".join(C.COLLECTIONS_PATHS))'
+          python3 -c 'from ansible import constants as C; print(":".join(C.COLLECTIONS_PATHS))'
         )"
         test -n "$default_collection_paths"
         echo "ANSIBLE_COLLECTIONS_PATH=$QUALITY_INSTALL_ROOT:$default_collection_paths" >> "$GITHUB_ENV"
@@ -298,9 +283,9 @@ runs:
         mkdir -p "$dependency_root" "$configuration_root"
         ansible --version > "$dependency_root/ansible-version.txt"
         molecule --version > "$dependency_root/molecule-version.txt"
-        python --version > "$dependency_root/python-version.txt" 2>&1
-        python -m pip list --format=json > "$dependency_root/python-packages.json"
-        python -m pip list --format=freeze > "$dependency_root/python-packages.txt"
+        python3 --version > "$dependency_root/python-version.txt" 2>&1
+        python3 -m pip list --format=json > "$dependency_root/python-packages.json"
+        python3 -m pip list --format=freeze > "$dependency_root/python-packages.txt"
         ansible-galaxy collection list --format json \
           > "$dependency_root/collection-dependencies.json"
         incus version > "$dependency_root/incus-version.txt"
@@ -312,7 +297,7 @@ runs:
         case "$incus_image_fingerprint" in
           *[!0-9a-f]*) exit 1 ;;
         esac
-        INCUS_IMAGE_FINGERPRINT="$incus_image_fingerprint" python - <<'PY' \
+        INCUS_IMAGE_FINGERPRINT="$incus_image_fingerprint" python3 - <<'PY' \
           > "$dependency_root/incus-base-image.json"
         import json
         import os
@@ -332,7 +317,7 @@ runs:
           echo "digest=not-applicable"
           echo "reason=no execution-environment image is used by this profile"
         } > "$dependency_root/execution-environment-digest.txt"
-        python - <<'PY'
+        python3 - <<'PY'
         import json
         import os
         import platform
@@ -424,7 +409,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        python - <<'PY'
+        python3 - <<'PY'
         import hashlib
         import json
         import os
@@ -703,7 +688,7 @@ runs:
           DESTROY_RC="$destroy_rc" \
           EFFECTIVE_RC="$effective_rc" \
           INFRASTRUCTURE_ERROR="$infrastructure_error" \
-          python - <<'PY'
+          python3 - <<'PY'
         import json
         import os
         from pathlib import Path
@@ -737,7 +722,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        python - "$QUALITY_ARTIFACT_ROOT" <<'PY'
+        python3 - "$QUALITY_ARTIFACT_ROOT" <<'PY'
         import os
         import sys
         import tarfile
@@ -830,7 +815,7 @@ runs:
           record_exit_code=1
         fi
 
-        python scripts/quality_evidence.py record \
+        python3 scripts/quality_evidence.py record \
           --scenario "$QUALITY_SCENARIO" \
           --profile "$QUALITY_PROFILE" \
           --target "$QUALITY_TARGET" \
@@ -863,7 +848,7 @@ runs:
         if [ "$QUALITY_TARGET_DISPOSITION" = candidate ]; then
           evidence_mode=candidate
         fi
-        python scripts/quality_evidence.py assemble \
+        python3 scripts/quality_evidence.py assemble \
           --root "$QUALITY_CELL_ROOT" \
           --input-root "$QUALITY_ARTIFACT_ROOT" \
           --results-root "$QUALITY_RESULTS_ROOT" \
