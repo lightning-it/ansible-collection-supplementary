@@ -228,6 +228,20 @@ runs:
 
         archive = Path(os.environ["RUNTIME_BUNDLE"])
         destination = Path(os.environ["QUALITY_INSTALL_ROOT"])
+
+        def normalized_parts(path: PurePosixPath) -> tuple[str, ...]:
+            parts: list[str] = []
+            for part in path.parts:
+                if part in {"", "."}:
+                    continue
+                if part == "..":
+                    if not parts:
+                        raise SystemExit(f"runtime collection link escapes its root: {path}")
+                    parts.pop()
+                else:
+                    parts.append(part)
+            return tuple(parts)
+
         total_bytes = 0
         with tarfile.open(archive, "r:gz") as stream:
             members = stream.getmembers()
@@ -240,9 +254,22 @@ runs:
                     or ".." in path.parts
                     or not path.parts
                     or path.parts[0] != "ansible_collections"
-                    or not (member.isfile() or member.isdir())
+                    or not (
+                        member.isfile()
+                        or member.isdir()
+                        or member.issym()
+                        or member.islnk()
+                    )
                 ):
                     raise SystemExit(f"unsafe runtime collection member: {member.name}")
+                if member.issym() or member.islnk():
+                    link = PurePosixPath(member.linkname)
+                    if link.is_absolute():
+                        raise SystemExit(f"absolute runtime collection link: {member.name}")
+                    link_path = path.parent / link if member.issym() else link
+                    link_parts = normalized_parts(link_path)
+                    if not link_parts or link_parts[0] != "ansible_collections":
+                        raise SystemExit(f"escaping runtime collection link: {member.name}")
                 if member.size > 512 * 1024 * 1024:
                     raise SystemExit(f"oversized runtime collection member: {member.name}")
                 total_bytes += member.size
