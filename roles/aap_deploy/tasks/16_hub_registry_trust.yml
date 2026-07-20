@@ -3,21 +3,12 @@
   ansible.builtin.set_fact:
     aap_deploy_hub_registry_trust_hostport: >-
       {{
-        (
-          (aap_deploy_hub_container_registry_url | urlsplit('hostname'))
-          ~ ':'
-          ~ (
-            aap_deploy_hub_container_registry_url
-            | urlsplit('port')
-            | default(
-                443
-                if (aap_deploy_hub_container_registry_url | urlsplit('scheme')) == 'https'
-                else 80,
-                true
-              )
-            | string
+        (aap_deploy_hub_container_registry_url | urlsplit('hostname'))
+        ~ (
+            ':' ~ (aap_deploy_hub_container_registry_url | urlsplit('port') | string)
+            if (aap_deploy_hub_container_registry_url | urlsplit('port'))
+            else ''
           )
-        )
       }}
   changed_when: false
 

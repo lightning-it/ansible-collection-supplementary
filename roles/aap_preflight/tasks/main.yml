@@ -104,7 +104,7 @@
     database: ahostsv4
     key: "{{ item }}"
   loop:
-    - "{{ ansible_host | default(inventory_hostname) }}"
+    - "{{ aap_preflight_expected_fqdn }}"
     - >-
       {{
         (
