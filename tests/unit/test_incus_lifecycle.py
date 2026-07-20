@@ -215,12 +215,12 @@ class IncusLifecycleTests(unittest.TestCase):
         self.assertIn('echo "MOLECULE_TEST_IMAGE=$TEST_IMAGE"', action)
         self.assertIn("dependencies.mkdir(parents=True, exist_ok=True)", action)
         self.assertIn(
-            'ansible-galaxy collection install "${candidates[0]}" '
-            '-p "$QUALITY_INSTALL_ROOT" --force --no-deps',
+            'ansible-galaxy collection install "${candidates[0]}" -p "$QUALITY_INSTALL_ROOT" --force --no-deps',
             action,
         )
         self.assertIn("community.general:11.4.9", action)
         self.assertIn("community.hashi_vault:7.1.0", action)
+        self.assertIn("lit.foundational:1.31.0", action)
 
     def test_quality_action_prunes_only_superseded_exact_owned_resources(
         self,
