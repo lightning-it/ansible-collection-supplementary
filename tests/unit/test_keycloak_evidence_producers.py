@@ -187,6 +187,8 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         self.assertIn('<property name="role" value="keycloak_cac"/>', verify)
         self.assertIn('<property name="commit_sha" value="{{ keycloak_acceptance_source_commit }}"/>', verify)
         self.assertIn('<property name="run_attempt" value="{{ keycloak_acceptance_run_attempt }}"/>', verify)
+        self.assertIn("lookup('ansible.builtin.env', 'GITHUB_RUN_ATTEMPT')", verify)
+        self.assertIn("and a positive run attempt", verify)
         self.assertLess(
             verify.index("Write independently reported Acceptance CaC lifecycle JUnit"),
             verify.index("Enforce independently reported Acceptance CaC lifecycle results"),

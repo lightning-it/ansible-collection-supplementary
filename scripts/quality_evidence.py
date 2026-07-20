@@ -1188,10 +1188,19 @@ def _cell_manifest_references(input_root: Path) -> tuple[list[Path], set[Path]]:
                 for value in values:
                     if not isinstance(value, str):
                         continue
-                    candidate = (cell_root / value).resolve()
+                    reference = PurePosixPath(value)
+                    if reference.is_absolute() or ".." in reference.parts or not reference.parts:
+                        raise EvidenceError(f"cell manifest has unsafe {field} reference: {value}")
+                    unresolved = cell_root / Path(*reference.parts)
+                    current = cell_root
+                    for part in reference.parts:
+                        current /= part
+                        if current.is_symlink():
+                            raise EvidenceError(f"cell manifest has symlinked {field} reference: {value}")
+                    candidate = unresolved.resolve()
                     if candidate == cell_root or cell_root not in candidate.parents:
                         raise EvidenceError(f"cell manifest has unsafe {field} reference: {value}")
-                    if not candidate.is_file() or candidate.is_symlink():
+                    if not unresolved.is_file():
                         raise EvidenceError(f"cell manifest has missing {field} reference: {value}")
                     references.add(candidate)
     return cell_roots, references

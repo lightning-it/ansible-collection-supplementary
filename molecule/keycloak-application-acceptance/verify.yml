@@ -20,7 +20,11 @@
         | default(lookup('ansible.builtin.pipe', 'git rev-parse HEAD'), true)
       }}
     keycloak_acceptance_run_attempt: >-
-      {{ lookup('ansible.builtin.env', 'MOLECULE_TEST_RUN_ATTEMPT') }}
+      {{
+        lookup('ansible.builtin.env', 'MOLECULE_TEST_RUN_ATTEMPT')
+        | default(lookup('ansible.builtin.env', 'GITHUB_RUN_ATTEMPT'), true)
+        | default('1', true)
+      }}
     keycloak_acceptance_cac_operator_password: >-
       {{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_CAC_OPERATOR_PASSWORD') }}
     keycloak_acceptance_required_environment:
@@ -54,8 +58,8 @@
           - keycloak_acceptance_source_commit is match('^[0-9a-f]{40}$')
           - keycloak_acceptance_run_attempt is match('^[1-9][0-9]*$')
         fail_msg: >-
-          Acceptance dependency evidence requires a safe target and the exact
-          lowercase 40-character source commit.
+          Acceptance dependency evidence requires a safe target, the exact
+          lowercase 40-character source commit, and a positive run attempt.
 
     - name: Copy acceptance pytest resources
       ansible.builtin.copy:

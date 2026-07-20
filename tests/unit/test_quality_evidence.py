@@ -941,6 +941,22 @@ class QualityEvidenceTests(unittest.TestCase):
         self.assertTrue((output / "junit" / "demo" / "ubuntu-24.04" / "attempt-1" / "junit" / "demo.xml").is_file())
         self.assertFalse((output / "junit" / "demo.xml").exists())
 
+    def test_copy_artifacts_rejects_symlinked_cell_manifest_reference(self) -> None:
+        input_root = self.base / "symlink-cell-input"
+        cell = input_root / "attempt-1"
+        target = cell / "outside.xml"
+        reference = cell / "junit" / "demo.xml"
+        reference.parent.mkdir(parents=True)
+        target.write_text("<testsuite/>\n", encoding="utf-8")
+        reference.symlink_to(target)
+        (cell / "manifest.json").write_text(
+            json.dumps({"results": [{"junit": [reference.relative_to(cell).as_posix()]}]}),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(evidence.EvidenceError, "symlinked junit reference"):
+            evidence.copy_artifacts([input_root], self.base / "symlink-cell-output", excluded=())
+
     def test_release_dependencies_require_matching_test_application_inventory(self) -> None:
         self._release_dependencies(self.evidence_root)
         applications = self.evidence_root / "dependencies" / "test-application-dependencies.json"
