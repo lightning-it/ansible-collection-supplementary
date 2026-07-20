@@ -102,9 +102,7 @@ class WorkflowSecurityTests(unittest.TestCase):
                 r"collection-quality-profile\.yml@[0-9a-f]{40}$",
             )
             self.assertEqual(profile, delegated["with"]["profile"])
-            self.assertIn(
-                "quality-matrix.outputs", delegated["with"]["matrix-json"]
-            )
+            self.assertIn("quality-matrix.outputs", delegated["with"]["matrix-json"])
             self.assertIn(
                 "github.event.pull_request.head.sha || github.sha",
                 delegated["with"]["source-sha"],
