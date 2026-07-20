@@ -497,6 +497,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertNotIn("actions/setup-python@", action)
         self.assertNotIn("Install pinned quality toolchain entry points", action)
         self.assertIn("command -v python3", action)
+        self.assertNotRegex(action, r"(?m)(?<![A-Za-z0-9_-])python(?!3)(?:\s|$)")
         self.assertIn('os.environ["QUALITY_PROFILE"].replace("_", "-")', action)
         self.assertIn('["git", "show", f"{source_sha}:{path.as_posix()}"]', action)
         self.assertIn('registry = Path("meta/role-coverage.yml")', action)

@@ -98,7 +98,7 @@ runs:
         full_owner="${GITHUB_REPOSITORY}-${GITHUB_WORKFLOW}-${GITHUB_RUN_ID}-"
         full_owner+="${GITHUB_RUN_ATTEMPT}-${SCENARIO}-${TARGET}"
         mapfile -t bounded_identities < <(
-          python scripts/quality_cell_identity.py \
+          python3 scripts/quality_cell_identity.py \
             --instance "$full_instance" \
             --owner "$full_owner"
         )
