@@ -256,13 +256,26 @@ runs:
                     or ".." in path.parts
                     or not path.parts
                     or path.parts[0] != "ansible_collections"
-                    or not (member.isfile() or member.isdir())
+                    or not (
+                        member.isfile()
+                        or member.isdir()
+                        or member.issym()
+                        or member.islnk()
+                    )
                 ):
                     raise SystemExit(f"unsafe runtime collection member: {member.name}")
                 normalized = normalized_parts(path)
                 if normalized in seen:
                     raise SystemExit(f"duplicate runtime collection member: {member.name}")
                 seen.add(normalized)
+                if member.issym() or member.islnk():
+                    link = PurePosixPath(member.linkname)
+                    if link.is_absolute():
+                        raise SystemExit(f"absolute runtime collection link: {member.name}")
+                    link_path = path.parent / link if member.issym() else link
+                    link_parts = normalized_parts(link_path)
+                    if not link_parts or link_parts[0] != "ansible_collections":
+                        raise SystemExit(f"escaping runtime collection link: {member.name}")
                 if member.size > 512 * 1024 * 1024:
                     raise SystemExit(f"oversized runtime collection member: {member.name}")
                 total_bytes += member.size
