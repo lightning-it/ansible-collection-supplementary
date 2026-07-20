@@ -58,6 +58,19 @@ runs:
           ${{ runner.temp }}/supplementary-candidate/${{ github.repository_id }}/${{
           github.run_id }}/${{ github.run_attempt }}/${{ github.job }}/${{ github.sha }}
 
+    - name: Install isolated Molecule entry points
+      shell: bash
+      run: |
+        set -euo pipefail
+        tool_root="$RUNNER_TEMP/supplementary-quality-tools/$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT/$GITHUB_JOB"
+        python3 -m venv --system-site-packages "$tool_root"
+        "$tool_root/bin/python" -m pip install --disable-pip-version-check \
+          molecule==25.12.0 \
+          molecule-plugins==25.8.12
+        "$tool_root/bin/python" -c 'import ansible; import molecule'
+        "$tool_root/bin/molecule" --version
+        echo "$tool_root/bin" >> "$GITHUB_PATH"
+
     - name: Initialize isolated matrix cell
       id: initialize
       shell: bash
