@@ -1165,6 +1165,38 @@ def _artifact_category(path: Path) -> str | None:
     return None
 
 
+def _cell_manifest_references(input_root: Path) -> tuple[list[Path], set[Path]]:
+    """Return assembled cell roots and their exact JUnit/Allure references."""
+    cell_roots: list[Path] = []
+    references: set[Path] = set()
+    for manifest_path in sorted(input_root.rglob("manifest.json")):
+        try:
+            payload = _strict_json_loads(_bounded_read(manifest_path).decode("utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, EvidenceError):
+            continue
+        if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
+            continue
+        cell_root = manifest_path.parent.resolve()
+        cell_roots.append(cell_root)
+        for result in payload["results"]:
+            if not isinstance(result, dict):
+                continue
+            for field in ("junit", "allure_results"):
+                values = result.get(field, [])
+                if not isinstance(values, list):
+                    continue
+                for value in values:
+                    if not isinstance(value, str):
+                        continue
+                    candidate = (cell_root / value).resolve()
+                    if candidate == cell_root or cell_root not in candidate.parents:
+                        raise EvidenceError(f"cell manifest has unsafe {field} reference: {value}")
+                    if not candidate.is_file() or candidate.is_symlink():
+                        raise EvidenceError(f"cell manifest has missing {field} reference: {value}")
+                    references.add(candidate)
+    return cell_roots, references
+
+
 def copy_artifacts(input_roots: Sequence[Path], destination_root: Path, excluded: Sequence[Path]) -> list[Path]:
     junit_destinations: list[Path] = []
     excluded_resolved = [item.resolve() for item in excluded]
@@ -1174,6 +1206,7 @@ def copy_artifacts(input_roots: Sequence[Path], destination_root: Path, excluded
     for input_root in input_roots:
         if not input_root.exists():
             continue
+        cell_roots, cell_references = _cell_manifest_references(input_root)
         for source in sorted(input_root.rglob("*")):
             if not source.is_file() or source.is_symlink():
                 continue
@@ -1186,6 +1219,11 @@ def copy_artifacts(input_roots: Sequence[Path], destination_root: Path, excluded
             category = _artifact_category(source.relative_to(input_root))
             if category is None:
                 continue
+            if category in {"junit", "allure-results"} and any(
+                resolved == cell_root or cell_root in resolved.parents for cell_root in cell_roots
+            ):
+                if resolved not in cell_references:
+                    continue
             size = source.stat().st_size
             copied_files += 1
             copied_bytes += size
@@ -1195,8 +1233,18 @@ def copy_artifacts(input_roots: Sequence[Path], destination_root: Path, excluded
                 raise EvidenceError("artifact inputs exceed bounded evidence size limits")
             relative = _safe_relative(source, input_root)
             category_names = set(EVIDENCE_DIRECTORIES) | {"test-results", "test_results"}
-            if relative.parts and relative.parts[0].lower() in category_names:
-                relative = Path(*relative.parts[1:]) if len(relative.parts) > 1 else Path(source.name)
+            category_index = next(
+                (index for index, part in enumerate(relative.parts) if part.lower() in category_names),
+                None,
+            )
+            if category_index is not None:
+                remaining = relative.parts[category_index + 1 :]
+                relative = Path(*remaining) if remaining else Path(source.name)
+            # Downloaded Actions artifacts are expanded below an implementation
+            # detail such as expanded/archive-1. Strip that wrapper at every
+            # aggregation level so cell evidence is not nested repeatedly.
+            while len(relative.parts) >= 2 and relative.parts[0].lower() == "expanded":
+                relative = Path(*relative.parts[2:]) if len(relative.parts) > 2 else Path(source.name)
             destination = _copy_unique(source, destination_root / category / relative)
             if category == "junit":
                 junit_destinations.append(destination)
@@ -1981,6 +2029,9 @@ def _dependency_files(root: Path, pattern: str) -> tuple[list[Path], list[str]]:
 def _read_dependency_text(root: Path, path: Path) -> tuple[str | None, str | None]:
     relative = path.relative_to(root).as_posix()
     try:
+        # OS package inventories can legitimately exceed 64 KiB, while the
+        # dependency format still benefits from a tighter bound than general
+        # evidence artifacts.
         return _bounded_read(path, 256 * 1024).decode("utf-8"), None
     except (OSError, EvidenceError, UnicodeDecodeError) as error:
         return None, f"{relative} is not readable dependency evidence: {error}"

@@ -35,6 +35,8 @@ env:
   # Execute the exact reviewed PR head. The resulting merge commit is a distinct
   # object and must pass the complete matrix again after it reaches main.
   SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+  # quality_evidence.py deliberately does not infer the reviewed PR head from
+  # GitHub's synthetic pull-request merge SHA.
   QUALITY_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
   SOURCE_REF: ${{ github.ref }}
   REVIEWED_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
@@ -663,7 +665,7 @@ jobs:
             meta/source-dependencies.yml \
             artifacts/evidence/security/source-dependencies.yml
           mapfile -t candidates < <(
-            find artifacts/candidate -maxdepth 1 -type f -name '*.tar.gz' -print
+            find artifacts/candidate -maxdepth 1 -type f -name 'lit-supplementary-*.tar.gz' -print
           )
           test "${#candidates[@]}" -eq 1
           python scripts/enrich-cyclonedx-sbom.py \
@@ -688,7 +690,7 @@ jobs:
           rm -rf "$candidate_extract"
           mkdir -p "$candidate_extract"
           mapfile -t candidates < <(
-            find artifacts/candidate -maxdepth 1 -type f -name '*.tar.gz' -print
+            find artifacts/candidate -maxdepth 1 -type f -name 'lit-supplementary-*.tar.gz' -print
           )
           test "${#candidates[@]}" -eq 1
           CANDIDATE="${candidates[0]}" DESTINATION="$candidate_extract" python - <<'PY'
@@ -778,7 +780,9 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          mapfile -t candidates < <(find artifacts/candidate -maxdepth 1 -type f -name '*.tar.gz' -print)
+          mapfile -t candidates < <(
+            find artifacts/candidate -maxdepth 1 -type f -name 'lit-supplementary-*.tar.gz' -print
+          )
           test "${#candidates[@]}" -eq 1
           candidate_sha="$(sha256sum "${candidates[0]}" | awk '{print $1}')"
           CANDIDATE="${candidates[0]}" CANDIDATE_SHA="$candidate_sha" python - <<'PY'
@@ -1141,7 +1145,7 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t candidates < <(
-            find artifacts/candidate -maxdepth 1 -type f -name '*.tar.gz' -print
+            find artifacts/candidate -maxdepth 1 -type f -name 'lit-supplementary-*.tar.gz' -print
           )
           test "${#candidates[@]}" -eq 1
           subjects=(
@@ -1674,7 +1678,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mapfile -t candidates < <(find artifacts/candidate -maxdepth 1 -type f -name '*.tar.gz' -print)
+          mapfile -t candidates < <(
+            find artifacts/candidate -maxdepth 1 -type f -name 'lit-supplementary-*.tar.gz' -print
+          )
           test "${#candidates[@]}" -eq 1
           subjects=(
             "${candidates[0]}"

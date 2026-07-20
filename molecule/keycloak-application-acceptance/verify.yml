@@ -19,6 +19,8 @@
         | default(lookup('ansible.builtin.env', 'GITHUB_SHA'), true)
         | default(lookup('ansible.builtin.pipe', 'git rev-parse HEAD'), true)
       }}
+    keycloak_acceptance_run_attempt: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_TEST_RUN_ATTEMPT') }}
     keycloak_acceptance_cac_operator_password: >-
       {{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_CAC_OPERATOR_PASSWORD') }}
     keycloak_acceptance_required_environment:
@@ -50,6 +52,7 @@
         that:
           - keycloak_acceptance_target is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$')
           - keycloak_acceptance_source_commit is match('^[0-9a-f]{40}$')
+          - keycloak_acceptance_run_attempt is match('^[1-9][0-9]*$')
         fail_msg: >-
           Acceptance dependency evidence requires a safe target and the exact
           lowercase 40-character source commit.
@@ -335,6 +338,7 @@
                   <property name="scenario" value="keycloak-application-acceptance"/>
                   <property name="target" value="{{ keycloak_acceptance_target }}"/>
                   <property name="commit_sha" value="{{ keycloak_acceptance_source_commit }}"/>
+                  <property name="run_attempt" value="{{ keycloak_acceptance_run_attempt }}"/>
                 </properties>
                 <testcase classname="keycloak.cac" name="apply-and-query" role="keycloak_cac">
               {% if not keycloak_acceptance_cac_checks.apply_and_query %}

@@ -899,16 +899,47 @@ class QualityEvidenceTests(unittest.TestCase):
         )
         self.assertTrue(any("malformed browser runtime inventory" in error for error in errors), errors)
 
-    def test_dependency_inventory_can_exceed_64_kib_within_bounded_limit(self) -> None:
-        inventory = self.evidence_root / "dependencies" / "browser-runtime-large.json"
-        inventory.parent.mkdir(parents=True, exist_ok=True)
-        inventory.write_text(
-            json.dumps({"schema_version": 1, "packages": ["x" * (70 * 1024)]}),
+    def test_dependency_json_accepts_bounded_inventory_larger_than_64_kib(self) -> None:
+        dependency = self.evidence_root / "dependencies" / "browser-runtime-large.json"
+        dependency.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"packages": [{"name": f"package-{index}"} for index in range(5000)]}
+        dependency.write_text(json.dumps(payload), encoding="utf-8")
+        self.assertGreater(dependency.stat().st_size, 64 * 1024)
+        parsed, error = evidence._read_dependency_json(self.evidence_root, dependency)
+        self.assertIsNone(error)
+        self.assertEqual(payload, parsed)
+
+    def test_copy_artifacts_collapses_actions_expansion_wrappers(self) -> None:
+        input_root = self.base / "aggregate-input"
+        wrapped = input_root / "cell" / "dependencies" / "expanded" / "archive-1"
+        wrapped.mkdir(parents=True)
+        source = wrapped / "python-packages.json"
+        source.write_text('[{"name":"ansible","version":"1"}]\n', encoding="utf-8")
+        output = self.base / "aggregate-output"
+        evidence.copy_artifacts([input_root], output, excluded=())
+        self.assertTrue((output / "dependencies" / "python-packages.json").is_file())
+        self.assertFalse(any("expanded" in path.parts for path in output.rglob("*")))
+
+    def test_copy_artifacts_uses_only_cell_manifest_test_references(self) -> None:
+        input_root = self.base / "cell-input"
+        cell = input_root / "expanded" / "archive-1" / "attempt-1"
+        referenced = cell / "junit" / "demo" / "ubuntu-24.04" / "attempt-1" / "junit" / "demo.xml"
+        unreferenced = cell / "junit" / "demo.xml"
+        referenced.parent.mkdir(parents=True)
+        unreferenced.parent.mkdir(parents=True, exist_ok=True)
+        referenced.write_text("<testsuite/>\n", encoding="utf-8")
+        unreferenced.write_text("<testsuite/>\n", encoding="utf-8")
+        (cell / "manifest.json").write_text(
+            json.dumps({"results": [{"junit": [referenced.relative_to(cell).as_posix()]}]}),
             encoding="utf-8",
         )
-        payload, error = evidence._read_dependency_json(self.evidence_root, inventory)
-        self.assertIsNone(error)
-        self.assertEqual(1, payload["schema_version"])
+        output = self.base / "cell-output"
+
+        copied = evidence.copy_artifacts([input_root], output, excluded=())
+
+        self.assertEqual(1, len(copied))
+        self.assertTrue((output / "junit" / "demo" / "ubuntu-24.04" / "attempt-1" / "junit" / "demo.xml").is_file())
+        self.assertFalse((output / "junit" / "demo.xml").exists())
 
     def test_release_dependencies_require_matching_test_application_inventory(self) -> None:
         self._release_dependencies(self.evidence_root)

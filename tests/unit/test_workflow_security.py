@@ -81,6 +81,12 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("-czf dist/candidate/runtime-collections.tar.gz", workflow)
         self.assertIn("runtime-collections.tar.gz \\", workflow)
 
+    def test_release_evidence_selects_only_the_collection_candidate_and_exact_head(self) -> None:
+        workflow = (WORKFLOWS / "collection-ci.yml").read_text(encoding="utf-8")
+        self.assertEqual(5, workflow.count("-name 'lit-supplementary-*.tar.gz'"))
+        payload = load_yaml(WORKFLOWS / "collection-ci.yml")
+        self.assertEqual(payload["env"]["SOURCE_SHA"], payload["env"]["QUALITY_SOURCE_SHA"])
+
     def test_copilot_and_renovate_gates_preserve_safe_update_boundaries(self) -> None:
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         renovate = (WORKFLOWS / "renovate-guarded-automerge.yml").read_text(encoding="utf-8")
