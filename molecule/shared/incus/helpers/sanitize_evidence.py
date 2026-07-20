@@ -140,6 +140,13 @@ def _extract_json_document(text: str) -> Any:
         return json.loads(cleaned.strip())
     except json.JSONDecodeError:
         pass
+    lines = [line for line in cleaned.splitlines() if line.strip()]
+    try:
+        line_documents = [json.loads(line) for line in lines]
+    except json.JSONDecodeError:
+        line_documents = []
+    if line_documents and all(isinstance(item, dict) for item in line_documents):
+        return line_documents
     decoder = json.JSONDecoder()
     for index, character in enumerate(cleaned):
         if character not in "[{":

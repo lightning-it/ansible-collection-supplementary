@@ -38,7 +38,7 @@
           - images
           - --all
           - --format
-          - json
+          - "{{ '{{json .}}' }}"
       - name: keycloak
         argv:
           - podman

@@ -71,6 +71,10 @@ class SanitizeEvidenceTests(unittest.TestCase):
     def test_json_document_mode_normalizes_null_inventory(self) -> None:
         self.assertEqual("[]\n", SANITIZER.sanitize("null\n", [], require_json=True))
 
+    def test_json_document_mode_collects_json_lines_as_array(self) -> None:
+        rendered = SANITIZER.sanitize('{"Id":"one"}\n{"Id":"two"}\n', [], require_json=True)
+        self.assertEqual([{"Id": "one"}, {"Id": "two"}], json.loads(rendered))
+
     def test_redacts_exact_environment_value_and_credential_shapes(self) -> None:
         source = (
             "password=plain-secret\n"

@@ -263,7 +263,10 @@ class IncusLifecycleTests(unittest.TestCase):
         inventory = task_named(tasks, "Read exact in-target container image identities and digests")
         argv = inventory["ansible.builtin.command"]["argv"]
 
-        self.assertEqual(["images", "--all", "--format", "json"], argv[-4:])
+        self.assertEqual(
+            ["images", "--all", "--format", "{{ '{{json .}}' }}"],
+            argv[-4:],
+        )
         self.assertIn("item.molecule_incus_evidence_command.name == 'podman-inventory'", collection)
         self.assertIn("when: item.rc == 0", collection)
         self.assertNotIn("--format=json", argv)

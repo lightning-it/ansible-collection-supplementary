@@ -109,7 +109,7 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
 
     def test_keycloak_evidence_collects_immutable_image_inventory(self) -> None:
         shared = (ROOT / "molecule" / "shared" / "incus" / "collect-evidence.yml").read_text(encoding="utf-8")
-        self.assertIn("- images\n      - --all\n      - --format\n      - json", shared)
+        self.assertIn("- images\n      - --all\n      - --format\n      - \"{{ '{{json .}}' }}\"", shared)
         self.assertIn("if item.molecule_incus_evidence_command.name == 'podman-inventory'", shared)
         structured_input = (
             "item.stdout | default('')\n        if item.molecule_incus_evidence_command.name == 'podman-inventory'"
@@ -122,7 +122,10 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         self.assertIn("molecule_incus_evidence_runtime_inventory_candidates | length > 0", shared)
         for scenario in ("keycloak-tiny", "keycloak-heavy", "keycloak-application-acceptance"):
             cleanup = (ROOT / "molecule" / scenario / "cleanup.yml").read_text(encoding="utf-8")
-            self.assertIn("- images\n          - --all\n          - --format\n          - json", cleanup)
+            self.assertIn(
+                "- images\n          - --all\n          - --format\n          - \"{{ '{{json .}}' }}\"",
+                cleanup,
+            )
             self.assertNotIn("- ps\n          - --all\n          - --format\n          - json", cleanup)
 
     def test_acceptance_tests_have_one_supported_role_marker(self) -> None:
