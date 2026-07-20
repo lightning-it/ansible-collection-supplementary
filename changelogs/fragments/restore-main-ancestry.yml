@@ -1,0 +1,5 @@
+---
+trivial:
+  - >-
+    Restore the protected main promotion merge as an ancestor of develop so subsequent develop-to-main promotions
+    remain fast-forward-compatible at the history boundary.
