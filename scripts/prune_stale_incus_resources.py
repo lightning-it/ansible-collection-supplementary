@@ -76,14 +76,12 @@ def delete_if_present(
         target = next((item for item in current if str(item.get("name", "")) == name), None)
         if target is None:
             return
-        if list_kind == "network" and (
-            target.get("used_by", [])
-            or (
-                repository is not None
-                and current_run_id is not None
-                and not exact_owner(target.get("config", {}), repository, current_run_id)
-            )
-        ):
+        ownership_changed = (
+            repository is not None
+            and current_run_id is not None
+            and not exact_owner(target.get("config", {}), repository, current_run_id)
+        )
+        if ownership_changed or (list_kind == "network" and target.get("used_by", [])):
             return
         raise
 
@@ -102,6 +100,8 @@ def prune(repository: str, current_run_id: str) -> None:
                 "--force",
                 name,
                 list_kind="instance",
+                repository=repository,
+                current_run_id=current_run_id,
             )
 
     networks = json.loads(incus("network", "list", "--format", "json"))

@@ -136,6 +136,33 @@ class IncusLifecycleTests(unittest.TestCase):
                     current_run_id="42",
                 )
 
+    def test_parallel_pruning_skips_an_instance_that_changed_ownership(self) -> None:
+        delete_error = subprocess.CalledProcessError(1, ["incus"])
+        current = [
+            {
+                "name": "stale-instance",
+                "config": {
+                    prune_stale_incus_resources.REPOSITORY_KEY: "lightning-it/example",
+                    prune_stale_incus_resources.RUN_ID_KEY: "42",
+                    prune_stale_incus_resources.OWNER_KEY: "new-cell",
+                },
+            }
+        ]
+        with mock.patch.object(
+            prune_stale_incus_resources,
+            "incus",
+            side_effect=(delete_error, json.dumps(current)),
+        ):
+            prune_stale_incus_resources.delete_if_present(
+                "stale-instance",
+                "delete",
+                "--force",
+                "stale-instance",
+                list_kind="instance",
+                repository="lightning-it/example",
+                current_run_id="42",
+            )
+
     def test_pruning_rejects_an_unknown_resource_kind_before_deletion(self) -> None:
         with (
             mock.patch.object(prune_stale_incus_resources, "incus") as incus,
