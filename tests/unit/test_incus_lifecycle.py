@@ -239,7 +239,7 @@ class IncusLifecycleTests(unittest.TestCase):
         )
 
         helper = (ROOT / "scripts" / "prune_stale_incus_resources.py").read_text(encoding="utf-8")
-        self.assertIn("run_id != current_run_id", helper)
+        self.assertIn("int(run_id) < int(current_run_id)", helper)
         self.assertIn("config.get(REPOSITORY_KEY) == repository", helper)
         self.assertIn("bool(config.get(OWNER_KEY))", helper)
         self.assertIn("or used_by", helper)
