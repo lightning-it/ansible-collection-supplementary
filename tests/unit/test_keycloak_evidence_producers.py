@@ -112,6 +112,7 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         self.assertIn(structured_input, shared)
         self.assertIn("['--json-document']", shared)
         self.assertIn("selectattr('item.rc', 'equalto', 0)", shared)
+        self.assertIn("selectattr('rc', 'equalto', 0)", shared)
         self.assertIn("Require successful redaction for each available structured inventory stream", shared)
         self.assertIn("item.rc | default(1) == 0", shared)
         self.assertIn("item.item.rc | default(1) == 0", shared)

@@ -304,6 +304,8 @@
           )
         | selectattr('item.rc', 'defined')
         | selectattr('item.rc', 'equalto', 0)
+        | selectattr('rc', 'defined')
+        | selectattr('rc', 'equalto', 0)
         | list
       }}
   no_log: true

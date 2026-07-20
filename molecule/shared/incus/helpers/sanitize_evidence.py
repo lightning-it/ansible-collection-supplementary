@@ -136,6 +136,10 @@ def _extract_json_document(text: str) -> Any:
     """Extract one JSON value while tolerating non-JSON command diagnostics."""
 
     cleaned = ANSI_ESCAPE.sub("", text)
+    try:
+        return json.loads(cleaned.strip())
+    except json.JSONDecodeError:
+        pass
     decoder = json.JSONDecoder()
     for index, character in enumerate(cleaned):
         if character not in "[{":
@@ -160,6 +164,8 @@ def sanitize(text: str, explicit_names: list[str], *, require_json: bool = False
             raise
         return _sanitize_text_value(text, secret_values)
 
+    if require_json and document is None:
+        document = []
     trailing_newline = text.endswith("\n")
     document = _sanitize_json(document, explicit_names)
     document = _sanitize_json_strings(document, secret_values)

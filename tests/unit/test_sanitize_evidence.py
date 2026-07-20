@@ -68,6 +68,9 @@ class SanitizeEvidenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             SANITIZER.sanitize("runtime warning only", [], require_json=True)
 
+    def test_json_document_mode_normalizes_null_inventory(self) -> None:
+        self.assertEqual("[]\n", SANITIZER.sanitize("null\n", [], require_json=True))
+
     def test_redacts_exact_environment_value_and_credential_shapes(self) -> None:
         source = (
             "password=plain-secret\n"

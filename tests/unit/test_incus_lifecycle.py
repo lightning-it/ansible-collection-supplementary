@@ -249,6 +249,13 @@ class IncusLifecycleTests(unittest.TestCase):
         self.assertIn('("config", "show", name)', helper)
         self.assertIn('("network", "show", name)', helper)
 
+        cleanup = (SHARED / "cleanup.yml").read_text(encoding="utf-8")
+        network_show = cleanup.split(
+            "- name: Read exact-owned managed-network state for lifecycle evidence",
+            maxsplit=1,
+        )[1].split("- name:", maxsplit=1)[0]
+        self.assertIn("failed_when: false", network_show)
+
     def test_legacy_static_entrypoint_fails_before_create(self) -> None:
         payload = yaml.safe_load((SHARED / "create-static-network.yml").read_text(encoding="utf-8"))
         self.assertEqual(
