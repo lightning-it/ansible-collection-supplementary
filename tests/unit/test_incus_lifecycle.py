@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import subprocess
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 import yaml
+
+from scripts import prune_stale_incus_resources
 
 ROOT = Path(__file__).resolve().parents[2]
 SHARED = ROOT / "molecule" / "shared" / "incus"
@@ -35,6 +39,37 @@ def task_named(tasks: list[dict[str, Any]], name: str) -> dict[str, Any]:
 
 
 class IncusLifecycleTests(unittest.TestCase):
+    def test_parallel_pruning_accepts_only_an_already_deleted_target(self) -> None:
+        delete_error = subprocess.CalledProcessError(1, ["incus"])
+        with mock.patch.object(
+            prune_stale_incus_resources,
+            "incus",
+            side_effect=(delete_error, "[]"),
+        ):
+            prune_stale_incus_resources.delete_if_present(
+                "stale-instance",
+                "delete",
+                "--force",
+                "stale-instance",
+                list_kind="instance",
+            )
+
+        with (
+            mock.patch.object(
+                prune_stale_incus_resources,
+                "incus",
+                side_effect=(delete_error, '[{"name": "stale-instance"}]'),
+            ),
+            self.assertRaises(subprocess.CalledProcessError),
+        ):
+            prune_stale_incus_resources.delete_if_present(
+                "stale-instance",
+                "delete",
+                "--force",
+                "stale-instance",
+                list_kind="instance",
+            )
+
     def test_nested_containers_use_isolated_idmaps(self) -> None:
         for molecule_file in sorted((ROOT / "molecule").glob("*/molecule.yml")):
             config = yaml.safe_load(molecule_file.read_text(encoding="utf-8"))

@@ -466,6 +466,18 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("actions/runs/${preparation_run_id}", publish)
         self.assertIn('.conclusion == "success"', publish)
         action = ACTION.read_text(encoding="utf-8")
+        self.assertIn(
+            "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
+            action,
+        )
+        self.assertIn("python3 -m pip install --disable-pip-version-check", action)
+        for package in (
+            "ansible-core==2.18.13",
+            "molecule==25.12.0",
+            "molecule-plugins==25.8.12",
+            "PyYAML==6.0.3",
+        ):
+            self.assertIn(package, action)
         self.assertIn('os.environ["QUALITY_PROFILE"].replace("_", "-")', action)
         self.assertIn('["git", "show", f"{source_sha}:{path.as_posix()}"]', action)
         self.assertIn('registry = Path("meta/role-coverage.yml")', action)

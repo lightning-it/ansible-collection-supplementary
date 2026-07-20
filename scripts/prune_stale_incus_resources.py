@@ -54,6 +54,20 @@ def revalidate(kind: str, name: str, repository: str, current_run_id: str) -> bo
     return exact_owner(values, repository, current_run_id)
 
 
+def delete_if_present(name: str, *delete_arguments: str, list_kind: str) -> None:
+    try:
+        incus(*delete_arguments)
+    except subprocess.CalledProcessError:
+        list_arguments = (
+            ("list", "--format", "json")
+            if list_kind == "instance"
+            else ("network", "list", "--format", "json")
+        )
+        current = json.loads(incus(*list_arguments))
+        if any(str(item.get("name", "")) == name for item in current):
+            raise
+
+
 def prune(repository: str, current_run_id: str) -> None:
     instances = json.loads(incus("list", "--format", "json"))
     for instance in instances:
@@ -62,7 +76,13 @@ def prune(repository: str, current_run_id: str) -> None:
         if not name or not isinstance(config, dict):
             continue
         if exact_owner(config, repository, current_run_id) and revalidate("config", name, repository, current_run_id):
-            incus("delete", "--force", name, capture=False)
+            delete_if_present(
+                name,
+                "delete",
+                "--force",
+                name,
+                list_kind="instance",
+            )
 
     networks = json.loads(incus("network", "list", "--format", "json"))
     for network in networks:
@@ -79,7 +99,13 @@ def prune(repository: str, current_run_id: str) -> None:
                 and not current.get("used_by", [])
                 and exact_owner(current.get("config", {}), repository, current_run_id)
             ):
-                incus("network", "delete", name, capture=False)
+                delete_if_present(
+                    name,
+                    "network",
+                    "delete",
+                    name,
+                    list_kind="network",
+                )
 
 
 def main() -> int:
