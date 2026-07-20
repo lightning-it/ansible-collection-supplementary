@@ -130,6 +130,7 @@ runs:
         candidate_root="${RUNNER_TEMP}/supplementary-candidate/${GITHUB_REPOSITORY_ID}/"
         candidate_root+="${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}/${GITHUB_JOB}/${GITHUB_SHA}"
         install_root="${temp_root}/collections"
+        molecule_ephemeral_root="${temp_root}/molecule-ephemeral"
         log_path="${GITHUB_WORKSPACE}/artifacts/logs/${SCENARIO}-${TARGET}.log"
         result_artifact="quality-result-${SCENARIO}-${TARGET}-"
         if [ "$TARGET_DISPOSITION" = candidate ]; then
@@ -138,7 +139,13 @@ runs:
         result_artifact+="${SOURCE_SHA}-attempt-${GITHUB_RUN_ATTEMPT}"
 
         rm -rf "$temp_root"
-        mkdir -p "$artifact_root" "$results_root" "$cell_root" "$install_root" "$(dirname "$log_path")"
+        mkdir -p \
+          "$artifact_root" \
+          "$results_root" \
+          "$cell_root" \
+          "$install_root" \
+          "$molecule_ephemeral_root" \
+          "$(dirname "$log_path")"
 
         {
           echo "QUALITY_PROFILE=$PROFILE"
@@ -153,6 +160,7 @@ runs:
           echo "QUALITY_LOG_PATH=$log_path"
           echo "QUALITY_INSTALL_ROOT=$install_root"
           echo "QUALITY_TEMP_ROOT=$temp_root"
+          echo "MOLECULE_EPHEMERAL_DIRECTORY=$molecule_ephemeral_root"
           echo "QUALITY_SOURCE_SHA=$SOURCE_SHA"
           echo "QUALITY_RESULT_ARTIFACT=$result_artifact"
           echo "MOLECULE_RUN_PROTECTED=true"
