@@ -54,6 +54,35 @@ class IncusLifecycleTests(unittest.TestCase):
                 list_kind="instance",
             )
 
+        with mock.patch.object(
+            prune_stale_incus_resources,
+            "incus",
+            side_effect=(delete_error, "[]"),
+        ):
+            prune_stale_incus_resources.delete_if_present(
+                "lit000000000001",
+                "network",
+                "delete",
+                "lit000000000001",
+                list_kind="network",
+            )
+
+        with (
+            mock.patch.object(
+                prune_stale_incus_resources,
+                "incus",
+                side_effect=(delete_error, '[{"name": "lit000000000001"}]'),
+            ),
+            self.assertRaises(subprocess.CalledProcessError),
+        ):
+            prune_stale_incus_resources.delete_if_present(
+                "lit000000000001",
+                "network",
+                "delete",
+                "lit000000000001",
+                list_kind="network",
+            )
+
         with (
             mock.patch.object(
                 prune_stale_incus_resources,

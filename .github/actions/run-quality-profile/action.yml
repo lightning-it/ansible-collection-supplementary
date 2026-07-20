@@ -55,7 +55,7 @@ runs:
       with:
         python-version: ${{ env.PYTHON_VERSION }}
 
-    - name: Install exact quality toolchain
+    - name: Install pinned quality toolchain entry points
       shell: bash
       run: |
         set -euo pipefail
