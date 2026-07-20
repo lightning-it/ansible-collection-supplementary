@@ -34,10 +34,11 @@
           - -a
       - name: podman-inventory
         argv:
-          - podman
-          - images
-          - --all
-          - --format=json
+          - sh
+          - -c
+          - >-
+            ids="$(podman images --all --quiet --no-trunc | sort -u)";
+            if [ -z "$ids" ]; then printf '[]\n'; else podman image inspect $ids; fi
       - name: keycloak
         argv:
           - podman

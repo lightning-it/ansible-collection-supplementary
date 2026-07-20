@@ -127,10 +127,11 @@
       - exec
       - "{{ molecule_incus_owned_instance.item.name }}"
       - --
-      - podman
-      - images
-      - --all
-      - --format=json
+      - sh
+      - -c
+      - >-
+        ids="$(podman images --all --quiet --no-trunc | sort -u)";
+        if [ -z "$ids" ]; then printf '[]\n'; else podman image inspect $ids; fi
   register: molecule_incus_evidence_container_images_raw
   changed_when: false
   failed_when: false
