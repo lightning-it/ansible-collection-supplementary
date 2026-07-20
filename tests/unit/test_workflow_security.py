@@ -101,12 +101,17 @@ class WorkflowSecurityTests(unittest.TestCase):
     def test_keycloak_cells_reserve_memory_for_the_full_runtime_stack(self) -> None:
         collection = load_yaml(WORKFLOWS / "collection-ci.yml")
         candidate = load_yaml(WORKFLOWS / "candidate-platform-validation.yml")
-        for job in ("tiny-cells", "heavy-cells", "acceptance-cells"):
+        tiny_action = next(
+            step
+            for step in collection["jobs"]["tiny-cells"]["steps"]
+            if step.get("uses") == "./.github/actions/run-quality-profile"
+        )
+        self.assertEqual("12GiB", tiny_action["with"]["memory-limit"])
+        for job in ("heavy-cells", "acceptance-cells"):
             with self.subTest(job=job):
-                self.assertEqual(
-                    "12GiB",
-                    collection["jobs"][job]["steps"][1]["with"]["memory-limit"],
-                )
+                delegated = collection["jobs"][job]
+                self.assertIn("lightning-it/modulix-validation/", delegated["uses"])
+                self.assertNotIn("memory-limit", delegated["with"])
         self.assertEqual(
             "12GiB",
             candidate["jobs"]["candidate-cells"]["steps"][1]["with"]["memory-limit"],
@@ -571,7 +576,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('case "$QUALITY_TOOL_ROOT" in', action)
         self.assertIn('"$RUNNER_TEMP"/supplementary-quality-tools/*)', action)
         self.assertIn('rm -rf -- "$QUALITY_TOOL_ROOT"', action)
-        self.assertIn("ansible-core==2.21.2", action)
+        self.assertIn("ansible-core==2.18.13", action)
         self.assertIn("molecule==25.12.0", action)
         self.assertIn("molecule-plugins==25.8.12", action)
         self.assertNotIn("QUALITY_DEFAULT_COLLECTION_PATHS", action)
