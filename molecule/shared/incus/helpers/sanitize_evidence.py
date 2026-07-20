@@ -148,6 +148,7 @@ def _extract_json_document(text: str) -> Any:
     if line_documents and all(isinstance(item, dict) for item in line_documents):
         return line_documents
     decoder = json.JSONDecoder()
+    candidates: list[tuple[int, Any]] = []
     for index, character in enumerate(cleaned):
         if character not in "[{":
             continue
@@ -156,7 +157,9 @@ def _extract_json_document(text: str) -> Any:
         except json.JSONDecodeError:
             continue
         if end_index > index:
-            return document
+            candidates.append((end_index - index, document))
+    if candidates:
+        return max(candidates, key=lambda candidate: candidate[0])[1]
     raise ValueError("input does not contain a valid JSON document")
 
 
