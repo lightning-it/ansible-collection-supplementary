@@ -85,7 +85,11 @@ class WorkflowSecurityTests(unittest.TestCase):
         workflow = (WORKFLOWS / "collection-ci.yml").read_text(encoding="utf-8")
         self.assertEqual(5, workflow.count("-name 'lit-supplementary-*.tar.gz'"))
         payload = load_yaml(WORKFLOWS / "collection-ci.yml")
-        self.assertEqual(payload["env"]["SOURCE_SHA"], payload["env"]["QUALITY_SOURCE_SHA"])
+        self.assertNotIn("QUALITY_SOURCE_SHA", payload["env"])
+        self.assertEqual(
+            payload["env"]["SOURCE_SHA"],
+            payload["jobs"]["runtime-evidence"]["env"]["QUALITY_SOURCE_SHA"],
+        )
 
     def test_copilot_and_renovate_gates_preserve_safe_update_boundaries(self) -> None:
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
@@ -512,6 +516,8 @@ class WorkflowSecurityTests(unittest.TestCase):
             expected_quality_source,
             collection_ci,
         )
+        collection_payload = load_yaml(WORKFLOWS / "collection-ci.yml")
+        self.assertNotIn("QUALITY_SOURCE_SHA", collection_payload["env"])
         self.assertNotIn("actions/setup-python@", action)
         self.assertIn("python3 -m venv --system-site-packages", action)
         self.assertIn("ansible-core==2.21.2", action)

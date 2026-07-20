@@ -35,9 +35,6 @@ env:
   # Execute the exact reviewed PR head. The resulting merge commit is a distinct
   # object and must pass the complete matrix again after it reaches main.
   SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-  # quality_evidence.py deliberately does not infer the reviewed PR head from
-  # GitHub's synthetic pull-request merge SHA.
-  QUALITY_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
   SOURCE_REF: ${{ github.ref }}
   REVIEWED_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
   REVIEWED_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.sha }}
@@ -524,6 +521,10 @@ jobs:
 
   runtime-evidence:
     name: Runtime evidence / exact tested SHA
+    env:
+      # Do not expose this override to repository unit tests: they exercise
+      # _tested_commit() with isolated process environments.
+      QUALITY_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     if: >-
       always() &&
       needs.quality-matrix.outputs.keycloak_required == 'true' &&
