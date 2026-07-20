@@ -590,6 +590,22 @@ Example:
 
 ## 8. Molecule Standards
 
+### 8.0 Test Ownership Boundary (Mandatory)
+
+This collection owns reusable role implementation, Tiny coverage, and environment-neutral scenario logic.
+`lightning-it/modulix-validation-lit` owns the workflow orchestration for protected Incus, Heavy, live, nightly,
+cross-service, and Application Acceptance execution, including matrices, runner contracts, protected environments,
+secrets, finalizers, and evidence retention.
+
+Do not add new self-hosted Heavy or Application Acceptance matrices directly to collection workflows. A collection
+release gate MAY call a reusable workflow from `modulix-validation-lit` so the exact collection candidate remains
+fail-closed without duplicating private infrastructure orchestration here. Scenario sources MAY remain in this
+repository when they are reusable and tightly coupled to role behavior.
+
+Names such as `*_heavy`, `*-heavy`, `*-application-acceptance`, `*_live_*`, and
+`.molecule-mode: protected-incus` MUST route execution through `modulix-validation-lit` unless a documented exception
+proves that the scenario is lightweight and uses no protected infrastructure.
+
 ### 8.1 Location
 
 Molecule scenarios MUST live at repository root under `molecule/`.
