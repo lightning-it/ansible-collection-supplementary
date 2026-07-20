@@ -277,9 +277,16 @@ jobs:
           test -s "$installed_playbook"
           ANSIBLE_COLLECTIONS_PATH="$RUNNER_TEMP/collections" \
             ansible-playbook --syntax-check "$installed_playbook"
+          tar \
+            -C "$RUNNER_TEMP/collections" \
+            -czf dist/candidate/runtime-collections.tar.gz \
+            ansible_collections
           (
             cd dist/candidate
-            sha256sum "$(basename "$candidate")" > candidate-SHA256SUMS
+            sha256sum \
+              "$(basename "$candidate")" \
+              runtime-collections.tar.gz \
+              > candidate-SHA256SUMS
             sha256sum --check candidate-SHA256SUMS
           )
       - name: Upload immutable candidate

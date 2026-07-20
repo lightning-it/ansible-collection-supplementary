@@ -212,9 +212,44 @@ runs:
           sha256sum --check "$(basename "$checksum_file")"
         )
         mapfile -t candidates < <(
-          find "$QUALITY_CANDIDATE_ROOT" -maxdepth 1 -type f -name '*.tar.gz' -print
+          find "$QUALITY_CANDIDATE_ROOT" \
+            -maxdepth 1 \
+            -type f \
+            -name 'lit-supplementary-*.tar.gz' \
+            -print
         )
         test "${#candidates[@]}" -eq 1
+        runtime_bundle="$QUALITY_CANDIDATE_ROOT/runtime-collections.tar.gz"
+        test -s "$runtime_bundle"
+        RUNTIME_BUNDLE="$runtime_bundle" QUALITY_INSTALL_ROOT="$QUALITY_INSTALL_ROOT" python - <<'PY'
+        import os
+        import tarfile
+        from pathlib import Path, PurePosixPath
+
+        archive = Path(os.environ["RUNTIME_BUNDLE"])
+        destination = Path(os.environ["QUALITY_INSTALL_ROOT"])
+        total_bytes = 0
+        with tarfile.open(archive, "r:gz") as stream:
+            members = stream.getmembers()
+            if not members or len(members) > 100_000:
+                raise SystemExit("runtime collection bundle has an unsafe member count")
+            for member in members:
+                path = PurePosixPath(member.name)
+                if (
+                    path.is_absolute()
+                    or ".." in path.parts
+                    or not path.parts
+                    or path.parts[0] != "ansible_collections"
+                    or not (member.isfile() or member.isdir())
+                ):
+                    raise SystemExit(f"unsafe runtime collection member: {member.name}")
+                if member.size > 512 * 1024 * 1024:
+                    raise SystemExit(f"oversized runtime collection member: {member.name}")
+                total_bytes += member.size
+                if total_bytes > 2 * 1024 * 1024 * 1024:
+                    raise SystemExit("runtime collection bundle expands beyond size limit")
+            stream.extractall(destination, filter="data")
+        PY
         ansible-galaxy collection install \
           "${candidates[0]}" \
           -p "$QUALITY_INSTALL_ROOT" \

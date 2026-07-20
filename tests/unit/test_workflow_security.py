@@ -62,11 +62,17 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('"${candidates[0]}"', command)
         self.assertIn("--force", command)
         self.assertIn("--no-deps", command)
+        self.assertIn("runtime-collections.tar.gz", action)
+        self.assertIn('path.parts[0] != "ansible_collections"', action)
+        self.assertIn('stream.extractall(destination, filter="data")', action)
         self.assertIn("C.COLLECTIONS_PATHS", action)
         self.assertIn(
             'ANSIBLE_COLLECTIONS_PATH=$QUALITY_INSTALL_ROOT:$default_collection_paths',
             action,
         )
+        workflow = (WORKFLOWS / "collection-ci.yml").read_text(encoding="utf-8")
+        self.assertIn("-czf dist/candidate/runtime-collections.tar.gz", workflow)
+        self.assertIn("runtime-collections.tar.gz \\", workflow)
 
     def test_copilot_and_renovate_gates_preserve_safe_update_boundaries(self) -> None:
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
