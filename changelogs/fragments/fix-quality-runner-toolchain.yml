@@ -1,5 +1,5 @@
 ---
 bugfixes:
   - >-
-    Install the exact Ansible and Molecule toolchain in protected quality jobs instead of relying on runner-global
+    Install pinned Ansible and Molecule entry points in protected quality jobs instead of relying on runner-global
     packages, and tolerate another parallel quality cell completing the same stale-resource deletion first.
