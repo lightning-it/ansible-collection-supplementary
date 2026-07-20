@@ -543,6 +543,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("ansible-core==2.21.2", action)
         self.assertIn("molecule==25.12.0", action)
         self.assertIn("molecule-plugins==25.8.12", action)
+        self.assertNotIn("QUALITY_DEFAULT_COLLECTION_PATHS", action)
         self.assertIn('export PATH="$tool_root/bin:$PATH"', action)
         self.assertIn("command -v python3", action)
         self.assertNotRegex(action, r"(?m)(?<![A-Za-z0-9_-])python(?!3)(?:\s|$)")

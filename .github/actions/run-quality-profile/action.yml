@@ -306,7 +306,7 @@ runs:
           python3 -c 'from ansible import constants as C; print(":".join(C.COLLECTIONS_PATHS))'
         )"
         test -n "$default_collection_paths"
-        QUALITY_DEFAULT_COLLECTION_PATHS="$default_collection_paths" python3 - <<'PY'
+        python3 - <<'PY'
         import os
         from pathlib import Path
 
@@ -318,11 +318,6 @@ runs:
             raise SystemExit("galaxy.yml dependencies must be a mapping")
 
         roots = [Path(os.environ["QUALITY_INSTALL_ROOT"])]
-        roots.extend(
-            Path(item)
-            for item in os.environ["QUALITY_DEFAULT_COLLECTION_PATHS"].split(":")
-            if item
-        )
         missing = []
         for fqcn in sorted(dependencies):
             parts = fqcn.split(".")

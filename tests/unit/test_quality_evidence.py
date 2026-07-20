@@ -1004,6 +1004,17 @@ class QualityEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(evidence.EvidenceError, "symlinked artifact input"):
             evidence.copy_artifacts([input_root], self.base / "symlink-directory-output", excluded=())
 
+    def test_copy_artifacts_bounds_traversal_before_collecting_the_tree(self) -> None:
+        input_root = self.base / "bounded-walk-input"
+        for index in range(4):
+            (input_root / f"entry-{index}").mkdir(parents=True)
+
+        with (
+            patch.object(evidence, "MAX_EVIDENCE_FILES", 3),
+            self.assertRaisesRegex(evidence.EvidenceError, "3-entry traversal limit"),
+        ):
+            evidence.copy_artifacts([input_root], self.base / "bounded-walk-output", excluded=())
+
     def test_release_dependencies_require_matching_test_application_inventory(self) -> None:
         self._release_dependencies(self.evidence_root)
         applications = self.evidence_root / "dependencies" / "test-application-dependencies.json"

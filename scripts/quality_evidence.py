@@ -1170,7 +1170,7 @@ def _cell_manifest_references(input_root: Path) -> tuple[list[Path], set[Path]]:
     cell_roots: list[Path] = []
     references: set[Path] = set()
     input_root_resolved = input_root.resolve()
-    for manifest_path in sorted(input_root.rglob("manifest.json")):
+    for manifest_path in _bounded_artifact_walk(input_root, name="manifest.json"):
         relative = manifest_path.relative_to(input_root)
         current = input_root
         for part in relative.parts:
@@ -1224,6 +1224,20 @@ def _cell_manifest_references(input_root: Path) -> tuple[list[Path], set[Path]]:
     return cell_roots, references
 
 
+def _bounded_artifact_walk(root: Path, *, name: str | None = None) -> Iterable[Path]:
+    """Yield artifact entries deterministically without materializing an untrusted tree."""
+    examined_entries = 0
+    for directory, directories, filenames in os.walk(root, topdown=True, followlinks=False):
+        directories.sort()
+        filenames.sort()
+        for entry_name in (*directories, *filenames):
+            examined_entries += 1
+            if examined_entries > MAX_EVIDENCE_FILES:
+                raise EvidenceError(f"artifact inputs exceed {MAX_EVIDENCE_FILES}-entry traversal limit")
+            if name is None or entry_name == name:
+                yield Path(directory) / entry_name
+
+
 def copy_artifacts(input_roots: Sequence[Path], destination_root: Path, excluded: Sequence[Path]) -> list[Path]:
     junit_destinations: list[Path] = []
     excluded_resolved = [item.resolve() for item in excluded]
@@ -1235,7 +1249,7 @@ def copy_artifacts(input_roots: Sequence[Path], destination_root: Path, excluded
             continue
         input_root_resolved = input_root.resolve()
         cell_roots, cell_references = _cell_manifest_references(input_root)
-        for source in sorted(input_root.rglob("*")):
+        for source in _bounded_artifact_walk(input_root):
             relative_source = source.relative_to(input_root)
             if source.is_symlink():
                 raise EvidenceError(f"symlinked artifact input: {relative_source.as_posix()}")
