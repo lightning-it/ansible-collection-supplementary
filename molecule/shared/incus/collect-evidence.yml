@@ -257,20 +257,13 @@
 - name: Require successful redaction for each available structured inventory stream
   ansible.builtin.assert:
     that:
-      - >-
-        molecule_incus_evidence_sanitized_logs.results
-        | selectattr('item.molecule_incus_evidence_command.name', 'equalto', 'podman-inventory')
-        | selectattr('item.rc', 'defined')
-        | selectattr('item.rc', 'equalto', 0)
-        | selectattr('rc', 'defined')
-        | selectattr('rc', 'equalto', 0)
-        | list | length
-        ==
-        molecule_incus_evidence_raw_logs.results
-        | selectattr('molecule_incus_evidence_command.name', 'equalto', 'podman-inventory')
-        | selectattr('rc', 'defined')
-        | selectattr('rc', 'equalto', 0)
-        | list | length
+      - item.rc | default(1) == 0
+  loop: "{{ molecule_incus_evidence_sanitized_logs.results }}"
+  loop_control:
+    label: "{{ item.item.molecule_incus_evidence_command.name }}"
+  when:
+    - item.item.molecule_incus_evidence_command.name == 'podman-inventory'
+    - item.item.rc | default(1) == 0
   no_log: true
 
 - name: Refresh the dependency inventory from the populated Podman evidence stream

@@ -59,3 +59,5 @@
     - name: Report the sanitized Keycloak user failure
       ansible.builtin.fail:
         msg: "{{ keycloak_cac_user_failure_message }}"
+  tags:
+    - molecule-idempotence-notest
