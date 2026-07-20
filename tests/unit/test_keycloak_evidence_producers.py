@@ -216,6 +216,18 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         self.assertIn('"sha256": _sha256(executable)', helper)
         self.assertIn('"revision": revision_match.group(1)', helper)
 
+    def test_browser_inventory_accepts_only_playwright_browser_version_formats(self) -> None:
+        module = self._browser_inventory_module()
+        self.assertEqual("149.0.7827.55", module._browser_version("Google Chrome for Testing 149.0.7827.55"))
+        self.assertEqual("140.0.7339.16", module._browser_version("Chromium 140.0.7339.16"))
+        for output in (
+            "Google Chrome 149.0.7827.55",
+            "Google Chrome for Testing 149.0.7827.55 extra",
+            "Chromium 149.0.7827.55\nmalformed",
+        ):
+            with self.subTest(output=output), self.assertRaisesRegex(RuntimeError, "unexpected Playwright Chromium"):
+                module._browser_version(output)
+
     def test_browser_inventory_binds_distro_and_source_package_identity(self) -> None:
         module = self._browser_inventory_module()
         with patch.object(

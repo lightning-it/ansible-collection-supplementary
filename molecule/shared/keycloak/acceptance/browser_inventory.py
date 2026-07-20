@@ -114,6 +114,16 @@ def _os_packages(os_id: str) -> list[dict[str, str]]:
     return sorted(packages, key=lambda item: (item["name"], item["architecture"], item["version"]))
 
 
+def _browser_version(version_output: str) -> str:
+    match = re.fullmatch(
+        r"(?:Chromium|Google Chrome for Testing)\s+([0-9]+(?:\.[0-9]+){1,3})",
+        version_output,
+    )
+    if match is None:
+        raise RuntimeError(f"unexpected Playwright Chromium version output: {version_output!r}")
+    return match.group(1)
+
+
 def inventory(*, profile: str, scenario: str, target: str, source_commit: str) -> dict[str, object]:
     if SAFE_PROFILE.fullmatch(profile) is None:
         raise ValueError("unsafe profile identity")
@@ -132,9 +142,7 @@ def inventory(*, profile: str, scenario: str, target: str, source_commit: str) -
     if revision_match is None:
         raise RuntimeError("Playwright Chromium executable has no exact installed revision")
     version_output = _run(str(executable), "--version")
-    version_match = re.fullmatch(r"Chromium\s+([0-9]+(?:\.[0-9]+){1,3})", version_output)
-    if version_match is None:
-        raise RuntimeError(f"unexpected Chromium version output: {version_output!r}")
+    browser_version = _browser_version(version_output)
 
     operating_system = _operating_system(target)
     return {
@@ -148,7 +156,7 @@ def inventory(*, profile: str, scenario: str, target: str, source_commit: str) -
         "chromium": {
             "name": "chromium",
             "revision": revision_match.group(1),
-            "version": version_match.group(1),
+            "version": browser_version,
             "executable": executable.as_posix(),
             "sha256": _sha256(executable),
         },
