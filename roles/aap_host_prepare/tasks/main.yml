@@ -71,7 +71,9 @@
             'openssl',
             'python3',
             'rsync',
-            'sudo'
+            'sudo',
+            'tar',
+            'unzip'
           ])
       }}
     state: present
@@ -87,7 +89,9 @@
             'openssl',
             'python3',
             'rsync',
-            'sudo'
+            'sudo',
+            'tar',
+            'unzip'
           ])
       ) | length > 0
   tags:
@@ -169,6 +173,19 @@
     - aap_host_prepare
     - os_prep
     - sudoers
+
+- name: Ensure AAP installer setup directory exists
+  ansible.builtin.file:
+    path: "{{ aap_host_prepare_setup_dir_effective }}"
+    state: directory
+    owner: "{{ aap_host_prepare_install_user_effective }}"
+    group: "{{ aap_host_prepare_install_user_effective }}"
+    mode: '0755'
+  tags:
+    - aap
+    - aap_host_prepare
+    - os_prep
+    - filesystem
 
 - name: Prepare Podman on AAP host
   ansible.builtin.include_role:
