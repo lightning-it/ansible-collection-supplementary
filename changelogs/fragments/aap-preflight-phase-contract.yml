@@ -13,3 +13,7 @@ bugfixes:
   - >-
     Accept required AAP host directories that the file module reports as
     planned creations during check mode while retaining strict apply checks.
+  - >-
+    Keep the nested host-prepare preflight path assertion in apply mode so it
+    does not reject directories that are deliberately only planned in check
+    mode.

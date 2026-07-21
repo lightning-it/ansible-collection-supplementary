@@ -365,6 +365,11 @@
     apply:
       tags: [aap, aap_host_prepare, aap_preflight, verify]
   vars:
+    # This role has already validated actual or planned directory creation
+    # immediately above.  The nested generic preflight cannot observe those
+    # planned file-module changes in check mode, so keep its strict path
+    # assertion for apply only.
+    aap_preflight_check_paths: "{{ not ansible_check_mode }}"
     aap_preflight_check_artifacts: false
     aap_preflight_check_vault: false
     aap_preflight_check_ansible_vault: false
