@@ -101,12 +101,17 @@ class WorkflowSecurityTests(unittest.TestCase):
     def test_keycloak_cells_reserve_memory_for_the_full_runtime_stack(self) -> None:
         collection = load_yaml(WORKFLOWS / "collection-ci.yml")
         candidate = load_yaml(WORKFLOWS / "candidate-platform-validation.yml")
-        for job in ("tiny-cells", "heavy-cells", "acceptance-cells"):
+        tiny_action = next(
+            step
+            for step in collection["jobs"]["tiny-cells"]["steps"]
+            if step.get("uses") == "./.github/actions/run-quality-profile"
+        )
+        self.assertEqual("12GiB", tiny_action["with"]["memory-limit"])
+        for job in ("heavy-cells", "acceptance-cells"):
             with self.subTest(job=job):
-                self.assertEqual(
-                    "12GiB",
-                    collection["jobs"][job]["steps"][1]["with"]["memory-limit"],
-                )
+                delegated = collection["jobs"][job]
+                self.assertIn("lightning-it/modulix-validation/", delegated["uses"])
+                self.assertNotIn("memory-limit", delegated["with"])
         self.assertEqual(
             "12GiB",
             candidate["jobs"]["candidate-cells"]["steps"][1]["with"]["memory-limit"],
@@ -150,13 +155,28 @@ class WorkflowSecurityTests(unittest.TestCase):
         )
 
         jobs = workflow["jobs"]
-        groups = [jobs[name]["concurrency"]["group"] for name in ("tiny-cells", "heavy-cells", "acceptance-cells")]
-        for group in groups:
-            self.assertIn("github.repository", group)
-            self.assertIn("github.workflow", group)
-            self.assertIn("github.event.pull_request.number || github.ref", group)
-            self.assertIn("github.event.pull_request.head.sha || github.sha", group)
-        self.assertNotEqual(groups[0], groups[1])
+        tiny_group = jobs["tiny-cells"]["concurrency"]["group"]
+        self.assertIn("github.repository", tiny_group)
+        self.assertIn("github.workflow", tiny_group)
+        self.assertIn("github.event.pull_request.number || github.ref", tiny_group)
+        self.assertIn("github.event.pull_request.head.sha || github.sha", tiny_group)
+
+        for name, profile in (
+            ("heavy-cells", "heavy"),
+            ("acceptance-cells", "application_acceptance"),
+        ):
+            delegated = jobs[name]
+            self.assertRegex(
+                delegated["uses"],
+                r"^lightning-it/modulix-validation/\.github/workflows/"
+                r"collection-quality-profile\.yml@[0-9a-f]{40}$",
+            )
+            self.assertEqual(profile, delegated["with"]["profile"])
+            self.assertIn("quality-matrix.outputs", delegated["with"]["matrix-json"])
+            self.assertIn(
+                "github.event.pull_request.head.sha || github.sha",
+                delegated["with"]["source-sha"],
+            )
 
     def test_all_workflows_and_local_actions_require_release_team_review(self) -> None:
         codeowners = (ROOT / ".github" / "CODEOWNERS").read_text(encoding="utf-8")
@@ -234,7 +254,10 @@ class WorkflowSecurityTests(unittest.TestCase):
             self.assertIn("github.event_name == 'push'", guard)
             self.assertNotIn("github.event_name == 'schedule'", guard)
             self.assertIn("inputs.execution_mode == 'nightly-develop'", guard)
-            environment = jobs[name]["environment"]["name"]
+            if name == "tiny-cells":
+                environment = jobs[name]["environment"]["name"]
+            else:
+                environment = jobs[name]["with"]["environment-name"]
             self.assertIn("ansible-collection-runtime-tests", environment)
             self.assertIn("ansible-collection-runtime-protected", environment)
         runtime_guard = jobs["runtime-evidence"]["if"]
@@ -553,7 +576,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('case "$QUALITY_TOOL_ROOT" in', action)
         self.assertIn('"$RUNNER_TEMP"/supplementary-quality-tools/*)', action)
         self.assertIn('rm -rf -- "$QUALITY_TOOL_ROOT"', action)
-        self.assertIn("ansible-core==2.21.2", action)
+        self.assertIn("ansible-core==2.18.18", action)
         self.assertIn("molecule==25.12.0", action)
         self.assertIn("molecule-plugins==25.8.12", action)
         self.assertNotIn("QUALITY_DEFAULT_COLLECTION_PATHS", action)

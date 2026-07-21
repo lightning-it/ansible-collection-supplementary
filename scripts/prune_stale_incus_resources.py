@@ -42,7 +42,7 @@ def exact_owner(config: dict[str, Any], repository: str, current_run_id: str) ->
         config.get(REPOSITORY_KEY) == repository
         and bool(config.get(OWNER_KEY))
         and RUN_ID_RE.fullmatch(run_id) is not None
-        and run_id != current_run_id
+        and int(run_id) < int(current_run_id)
     )
 
 
