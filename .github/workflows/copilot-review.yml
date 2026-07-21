@@ -7,10 +7,6 @@ name: Copilot review gate
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  pull_request_review:
-    types: [submitted, edited, dismissed]
-  pull_request_review_comment:
-    types: [edited, deleted]
 
 permissions:
   contents: read
@@ -20,7 +16,8 @@ env:
   COPILOT_REVIEWER_LOGIN: copilot-pull-request-reviewer
   NO_FILES_REVIEW_MARKER: was not able to review any files
   UNABLE_REVIEW_MARKER: unable to review this pull request
-  QUOTA_EXHAUSTED_MARKER: quota
+  QUOTA_EXHAUSTED_MARKER: quota exhausted
+  QUOTA_EXCEEDED_MARKER: quota exceeded
 
 concurrency:
   group: copilot-review-${{ github.event.pull_request.number }}
@@ -36,13 +33,13 @@ jobs:
       !(github.event.pull_request.user.login == 'renovate[bot]' &&
         startsWith(github.event.pull_request.head.ref, 'renovate/') &&
         github.event.pull_request.base.ref == 'develop') &&
-      !(github.event.pull_request.user.login == 'litreleasebot' &&
+      !(github.event.pull_request.user.login == 'lightning-it-shared-assets-sync[bot]' &&
         startsWith(github.event.pull_request.head.ref, 'chore/sync-shared-assets-lit-') &&
         github.event.pull_request.base.ref == 'develop' &&
         github.event.pull_request.title == 'chore: sync shared-assets-lit' &&
         contains(github.event.pull_request.labels.*.name, 'chore') &&
         contains(github.event.pull_request.labels.*.name, 'shared-assets-lit')) &&
-      !(github.event.pull_request.user.login == 'litreleasebot' &&
+      !(github.event.pull_request.user.login == 'lightning-it-shared-assets-sync[bot]' &&
         github.event.pull_request.head.repo.full_name == github.repository &&
         startsWith(github.event.pull_request.head.ref, 'chore/sync-repository-quality-') &&
         github.event.pull_request.base.ref == 'develop' &&
@@ -74,9 +71,36 @@ jobs:
         run: |
           set -euo pipefail
           reviewer_login="${COPILOT_REVIEWER_LOGIN%\[bot\]}"
-          gh api --method POST \
-            "repos/${REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers" \
-            -f "reviewers[]=${reviewer_login}[bot]"
+          reviewer="${reviewer_login}[bot]"
+          requested_reviewers_url="repos/${REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers"
+          reviewer_is_requested() {
+            local response
+            if ! response="$(gh api "${requested_reviewers_url}")"; then
+              return 2
+            fi
+            jq -e --arg reviewer "${reviewer}" \
+              'any(.users[]?; .login == $reviewer)' <<<"${response}" >/dev/null
+          }
+          if reviewer_is_requested; then
+            echo "Copilot review is already requested for the current PR."
+          else
+            request_status=$?
+            if [ "${request_status}" -ne 1 ]; then
+              exit "${request_status}"
+            fi
+            if ! gh api --method POST "${requested_reviewers_url}" \
+                -f "reviewers[]=${reviewer}"
+            then
+              # A concurrent workflow can win the request race. Accept only
+              # that verified idempotent outcome; fail on absence/API errors.
+              if reviewer_is_requested; then
+                echo "A concurrent workflow already requested Copilot review."
+              else
+                verification_status=$?
+                exit "${verification_status}"
+              fi
+            fi
+          fi
 
   current-revision-reviewed:
     name: Successful Copilot review
@@ -130,7 +154,7 @@ jobs:
               trusted=true
               trusted_kind=renovate
             fi
-          elif [ "${PR_AUTHOR}" = "litreleasebot" ] \
+          elif [ "${PR_AUTHOR}" = "lightning-it-shared-assets-sync[bot]" ] \
             && [ "${PR_HEAD_REPO}" = "${REPOSITORY}" ] \
             && [[ "${PR_HEAD}" == chore/sync-shared-assets-lit-* ]] \
             && [ "${PR_BASE}" = "develop" ] \
@@ -139,7 +163,7 @@ jobs:
               <<<"${PR_LABELS}" >/dev/null; then
             trusted=true
             trusted_kind=shared-assets
-          elif [ "${PR_AUTHOR}" = "litreleasebot" ] \
+          elif [ "${PR_AUTHOR}" = "lightning-it-shared-assets-sync[bot]" ] \
             && [ "${PR_HEAD_REPO}" = "${REPOSITORY}" ] \
             && [[ "${PR_HEAD}" == chore/sync-repository-quality-* ]] \
             && [ "${PR_BASE}" = "develop" ] \
@@ -372,7 +396,8 @@ jobs:
                 jq -er \
                   --arg unable_marker "${UNABLE_REVIEW_MARKER}" \
                   --arg no_files_marker "${NO_FILES_REVIEW_MARKER}" \
-                  --arg quota_marker "${QUOTA_EXHAUSTED_MARKER}" \
+                  --arg quota_exhausted_marker "${QUOTA_EXHAUSTED_MARKER}" \
+                  --arg quota_exceeded_marker "${QUOTA_EXCEEDED_MARKER}" \
                   'def normalize_review_text:
                       ascii_downcase
                       | gsub("wasn[\u0027\u2019]t"; "was not")
@@ -382,7 +407,8 @@ jobs:
                       (.data.node.comments.nodes[]?.body // "");
                   ($unable_marker | normalize_review_text) as $unable
                   | ($no_files_marker | normalize_review_text) as $no_files
-                  | ($quota_marker | normalize_review_text) as $quota
+                  | ($quota_exhausted_marker | normalize_review_text) as $quota_exhausted
+                  | ($quota_exceeded_marker | normalize_review_text) as $quota_exceeded
                   | [
                     ([
                       review_content
@@ -391,7 +417,8 @@ jobs:
                           | (
                               contains($unable)
                               or contains($no_files)
-                              or contains($quota)
+                              or contains($quota_exhausted)
+                              or contains($quota_exceeded)
                             )
                         )
                     ] | length),
