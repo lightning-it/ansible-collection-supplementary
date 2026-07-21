@@ -47,7 +47,6 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
           permission-contents: read
-          permission-issues: write
           permission-pull-requests: write
 
       - name: Checkout
