@@ -17,3 +17,6 @@ bugfixes:
     Keep the nested host-prepare preflight path assertion in apply mode so it
     does not reject directories that are deliberately only planned in check
     mode.
+  - >-
+    Make temporary self-signed AAP TLS generation check-mode safe by reporting
+    the complete planned certificate chain without creating private keys.
