@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    Add explicit initial and full AAP preflight phases so the read-only
+    customer-baseline gate does not require AAP-owned paths before preparation.
