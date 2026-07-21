@@ -621,7 +621,8 @@ class WorkflowSecurityTests(unittest.TestCase):
         molecule = (ROOT / "scripts" / "devtools-molecule.sh").read_text(encoding="utf-8")
         self.assertIn("Docker is required for Molecule tests", molecule)
         self.assertNotIn("Skipping Molecule tests because Docker", molecule)
-        self.assertIn("WUNDER_DEVTOOLS_WORKSPACE_MODE=ro", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_ROOTFS_MODE=rw", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_WORKSPACE_MODE=rw", molecule)
         self.assertIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0", molecule)
         self.assertNotIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1", molecule)
 
