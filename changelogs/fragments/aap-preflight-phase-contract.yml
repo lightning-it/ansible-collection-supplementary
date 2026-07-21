@@ -26,3 +26,6 @@ bugfixes:
   - >-
     Make customer TLS staging check-mode safe when the target directory is a
     planned creation while preserving strict apply-time certificate staging.
+  - >-
+    Make Hub registry CA trust check-mode safe while the staged CA is a
+    planned TLS asset, retaining real trust-store updates during apply.

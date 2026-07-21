@@ -42,3 +42,12 @@
     - dest: "{{ aap_deploy_hub_registry_trust_user_dir }}/{{ aap_deploy_hub_registry_trust_hostport }}/ca.crt"
       owner: "{{ aap_deploy_install_user }}"
       group: "{{ aap_deploy_install_user }}"
+  when: not ansible_check_mode
+
+- name: Report planned AAP CA trust for Hub registry
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: the staged AAP CA would be trusted for Hub registry
+      {{ aap_deploy_hub_registry_trust_hostport }}.
+  changed_when: true
+  when: ansible_check_mode
