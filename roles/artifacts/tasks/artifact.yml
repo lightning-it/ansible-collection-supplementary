@@ -29,6 +29,36 @@
         else artifacts_item_checksum
       }}
 
+- name: Inspect artifact destination directory
+  ansible.builtin.stat:
+    path: "{{ artifacts_item.dest | dirname }}"
+  register: artifacts_item_destination_directory
+
+- name: Inspect managed-host artifact source
+  ansible.builtin.stat:
+    path: "{{ artifacts_item.remote_src | default(artifacts_item.src, true) }}"
+    checksum_algorithm: "{{ artifacts_item_checksum_algorithm }}"
+    get_checksum: "{{ artifacts_item_checksum | length > 0 }}"
+    follow: false
+  register: artifacts_item_remote_source
+  no_log: "{{ artifacts_item_no_log }}"
+  when: artifacts_item_source == 'remote'
+
+- name: Validate managed-host artifact source
+  ansible.builtin.assert:
+    that:
+      - artifacts_item_remote_source.stat.exists | default(false)
+      - artifacts_item_remote_source.stat.isreg | default(false)
+      - not (artifacts_item_remote_source.stat.islnk | default(false))
+      - artifacts_item_remote_source.stat.size | default(0) | int > 0
+      - >-
+        artifacts_item_checksum | length == 0
+        or artifacts_item_remote_source.stat.checksum == artifacts_item_checksum_value
+    fail_msg: The managed-host artifact source is absent, unsafe, empty, or has an unexpected checksum.
+    quiet: true
+  no_log: "{{ artifacts_item_no_log }}"
+  when: artifacts_item_source == 'remote'
+
 - name: Ensure artifact destination directory exists
   ansible.builtin.file:
     path: "{{ artifacts_item.dest | dirname }}"
@@ -36,6 +66,14 @@
     owner: "{{ artifacts_item_owner }}"
     group: "{{ artifacts_item_group }}"
     mode: "{{ artifacts_item_directory_mode }}"
+
+- name: Report planned artifact transfer into new destination directory
+  ansible.builtin.debug:
+    msg: "Artifact {{ artifacts_item.name | default(artifacts_item.dest) }} would be staged."
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - not (artifacts_item_destination_directory.stat.isdir | default(false))
 
 - name: Download artifact from URL
   ansible.builtin.get_url:
@@ -50,7 +88,11 @@
     timeout: "{{ artifacts_item_timeout }}"
     force: "{{ artifacts_item_force }}"
   no_log: "{{ artifacts_item_no_log }}"
-  when: artifacts_item_source == 'url'
+  when:
+    - artifacts_item_source == 'url'
+    - >-
+      not ansible_check_mode
+      or (artifacts_item_destination_directory.stat.isdir | default(false))
 
 - name: Copy artifact from controller
   ansible.builtin.copy:
@@ -61,7 +103,11 @@
     mode: "{{ artifacts_item_mode }}"
     force: "{{ artifacts_item_force }}"
   no_log: "{{ artifacts_item_no_log }}"
-  when: artifacts_item_source == 'local'
+  when:
+    - artifacts_item_source == 'local'
+    - >-
+      not ansible_check_mode
+      or (artifacts_item_destination_directory.stat.isdir | default(false))
 
 - name: Copy artifact from managed host path
   ansible.builtin.copy:
@@ -73,7 +119,11 @@
     remote_src: true
     force: "{{ artifacts_item_force }}"
   no_log: "{{ artifacts_item_no_log }}"
-  when: artifacts_item_source == 'remote'
+  when:
+    - artifacts_item_source == 'remote'
+    - >-
+      not ansible_check_mode
+      or (artifacts_item_destination_directory.stat.isdir | default(false))
 
 - name: Verify staged artifact checksum
   ansible.builtin.stat:
@@ -81,7 +131,9 @@
     checksum_algorithm: "{{ artifacts_item_checksum_algorithm }}"
     get_checksum: true
   register: artifacts_item_stat
-  when: artifacts_item_checksum | length > 0
+  when:
+    - artifacts_item_checksum | length > 0
+    - not ansible_check_mode
 
 - name: Assert staged artifact checksum is valid
   ansible.builtin.assert:
@@ -92,7 +144,9 @@
       Checksum verification failed for {{ artifacts_item.dest }}.
       Expected {{ artifacts_item_checksum_algorithm }}:{{ artifacts_item_checksum_value }}.
     quiet: true
-  when: artifacts_item_checksum | length > 0
+  when:
+    - artifacts_item_checksum | length > 0
+    - not ansible_check_mode
 
 - name: Record staged artifact result
   ansible.builtin.set_fact:

@@ -3,3 +3,7 @@ minor_changes:
   - >-
     Add explicit initial and full AAP preflight phases so the read-only
     customer-baseline gate does not require AAP-owned paths before preparation.
+bugfixes:
+  - >-
+    Keep managed-host artifact staging check-mode safe when the destination
+    directory does not exist yet, while validating the source checksum first.
