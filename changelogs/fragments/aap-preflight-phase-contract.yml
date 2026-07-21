@@ -20,3 +20,6 @@ bugfixes:
   - >-
     Make temporary self-signed AAP TLS generation check-mode safe by reporting
     the complete planned certificate chain without creating private keys.
+  - >-
+    Make AAP deployment preflight check-mode safe when the install user's
+    systemd manager does not exist until the real rollout starts.

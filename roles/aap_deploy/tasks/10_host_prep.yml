@@ -62,6 +62,15 @@
   ansible.builtin.systemd:
     name: "user@{{ aap_deploy_install_user_uid }}.service"
     state: started
+  when: not ansible_check_mode
+
+- name: Report planned install user systemd manager startup
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: systemd user manager user@{{ aap_deploy_install_user_uid }}.service
+      would be started for {{ aap_deploy_install_user }}.
+  changed_when: true
+  when: ansible_check_mode
 
 - name: Validate required AAP deploy commands are available
   ansible.builtin.command:
