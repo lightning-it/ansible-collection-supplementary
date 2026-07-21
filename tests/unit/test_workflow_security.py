@@ -468,7 +468,7 @@ class WorkflowSecurityTests(unittest.TestCase):
             scorecard_action["inputs"]["publish_results"]["default"],
         )
 
-    def test_release_bot_tokens_are_bound_to_the_reviewed_account_id(self) -> None:
+    def test_release_automation_uses_the_organization_app(self) -> None:
         for name in (
             "promote-develop-to-main.yml",
             "release-back-sync.yml",
@@ -476,9 +476,17 @@ class WorkflowSecurityTests(unittest.TestCase):
         ):
             with self.subTest(workflow=name):
                 text = (WORKFLOWS / name).read_text(encoding="utf-8")
-                self.assertIn("[.login, (.id | tostring), .type] | @tsv", text)
-                self.assertIn("litreleasebot\\t250056030\\tUser", text)
-                self.assertNotIn("gh api user --jq .login", text)
+                self.assertIn("actions/create-github-app-token@", text)
+                self.assertIn("RELEASE_AUTOMATION_APP_CLIENT_ID", text)
+                self.assertIn("RELEASE_AUTOMATION_APP_PRIVATE_KEY", text)
+                self.assertNotIn("LITRELEASEBOT_TOKEN", text)
+                self.assertNotIn("litreleasebot", text)
+
+        for name in ("release-back-sync.yml", "release-prepare.yml"):
+            with self.subTest(identity_workflow=name):
+                text = (WORKFLOWS / name).read_text(encoding="utf-8")
+                self.assertIn("steps.release-bot.outputs.login", text)
+                self.assertIn("steps.release-bot.outputs.email", text)
 
         back_sync = (WORKFLOWS / "release-back-sync.yml").read_text(encoding="utf-8")
         self.assertIn('"--force-with-lease=${branch_ref}:${remote_branch_sha}"', back_sync)
