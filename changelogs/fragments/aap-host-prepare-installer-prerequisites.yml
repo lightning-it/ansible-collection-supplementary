@@ -4,3 +4,7 @@ bugfixes:
     Prepare the AAP installer workspace and archive utilities during host
     preparation so a later deployment check can validate the vendor setup
     role without depending on check-mode-only filesystem or package changes.
+  - >-
+    Avoid the upstream AAP setup preparation role's undefined extraction result
+    in check mode while retaining input validation and deterministic setup-path
+    prediction.
