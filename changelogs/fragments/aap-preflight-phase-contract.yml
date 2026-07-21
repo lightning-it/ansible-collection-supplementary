@@ -10,3 +10,6 @@ bugfixes:
   - >-
     Defer AAP prepared-destination assertions until apply mode so a fresh
     check-mode run can report the planned staging operation without failing.
+  - >-
+    Accept required AAP host directories that the file module reports as
+    planned creations during check mode while retaining strict apply checks.
