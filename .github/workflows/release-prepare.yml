@@ -58,26 +58,38 @@ jobs:
     environment: ansible-collection-release-prepare
 
     steps:
-      - name: Resolve release token
-        id: token
+      - name: Mint release automation App token
+        id: release-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.0.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Resolve release automation App bot identity
+        id: release-bot
         env:
-          TOKEN: ${{ secrets.LITRELEASEBOT_TOKEN }}
+          APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ -n "${TOKEN:-}" ]; then
-            identity="$(GH_TOKEN="$TOKEN" gh api user --jq \
-              '[.login, (.id | tostring), .type] | @tsv')"
-            test "$identity" = $'litreleasebot\t250056030\tUser'
-            echo "value=$TOKEN" >> "$GITHUB_OUTPUT"
-            exit 0
+          bot_json="$(gh api "users/${APP_SLUG}%5Bbot%5D" 2>/dev/null || printf '{}')"
+          login="$(jq -r '.login // ""' <<<"$bot_json")"
+          bot_id="$(jq -r '.id // ""' <<<"$bot_json")"
+          if [ "$login" != "${APP_SLUG}[bot]" ] || ! [[ "$bot_id" =~ ^[0-9]+$ ]]; then
+            echo "::error::Unable to resolve the release automation App bot identity."
+            exit 1
           fi
-          echo "::error::The protected-environment LITRELEASEBOT_TOKEN is required."
-          exit 1
+          echo "login=$login" >>"$GITHUB_OUTPUT"
+          echo "email=${bot_id}+${login}@users.noreply.github.com" >>"$GITHUB_OUTPUT"
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
         with:
-          token: ${{ steps.token.outputs.value }}
+          token: ${{ steps.release-app.outputs.token }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -97,7 +109,7 @@ jobs:
       - name: Prepare release branch
         id: prepare-release
         env:
-          GH_TOKEN: ${{ steps.token.outputs.value }}
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
           VERSION_INPUT: ${{ github.event.inputs.version }}
           BASE_BRANCH_INPUT: ${{ github.event.inputs.base_branch }}
           TARGET_BRANCH_INPUT: ${{ github.event.inputs.target_branch }}
@@ -131,8 +143,8 @@ jobs:
             exit 1
           fi
 
-          git config user.name "litreleasebot"
-          git config user.email "litreleasebot@users.noreply.github.com"
+          git config user.name "${{ steps.release-bot.outputs.login }}"
+          git config user.email "${{ steps.release-bot.outputs.email }}"
           git fetch origin "$BASE_BRANCH" "$TARGET_BRANCH"
           git switch -C release-prepare-base "origin/$BASE_BRANCH"
           BASE_SHA="$(git rev-parse HEAD)"
