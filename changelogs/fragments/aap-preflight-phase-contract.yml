@@ -23,3 +23,6 @@ bugfixes:
   - >-
     Make AAP deployment preflight check-mode safe when the install user's
     systemd manager does not exist until the real rollout starts.
+  - >-
+    Make customer TLS staging check-mode safe when the target directory is a
+    planned creation while preserving strict apply-time certificate staging.

@@ -19,6 +19,7 @@
   when:
     - aap_deploy_tls_source == 'customer_files'
     - aap_deploy_tls_customer_files[item].cert_src | default('', true) | trim | length > 0
+    - not ansible_check_mode
 
 - name: Write customer TLS service certificates to target from inline content
   ansible.builtin.copy:
@@ -38,6 +39,7 @@
     - aap_deploy_tls_source == 'customer_files'
     - aap_deploy_tls_customer_files[item].cert_src | default('', true) | trim | length == 0
     - aap_deploy_tls_customer_files[item].cert_content | default('', true) | trim | length > 0
+    - not ansible_check_mode
 
 - name: Copy customer TLS service keys to target
   ansible.builtin.copy:
@@ -51,6 +53,7 @@
   when:
     - aap_deploy_tls_source == 'customer_files'
     - aap_deploy_tls_customer_files[item].key_src | default('', true) | trim | length > 0
+    - not ansible_check_mode
   no_log: true
 
 - name: Write customer TLS service keys to target from inline content
@@ -71,6 +74,7 @@
     - aap_deploy_tls_source == 'customer_files'
     - aap_deploy_tls_customer_files[item].key_src | default('', true) | trim | length == 0
     - aap_deploy_tls_customer_files[item].key_content | default('', true) | trim | length > 0
+    - not ansible_check_mode
   no_log: true
 
 - name: Copy customer CA certificate to target
@@ -84,6 +88,7 @@
   when:
     - aap_deploy_tls_source == 'customer_files'
     - aap_deploy_tls_customer_files.ca_cert_src | default('', true) | trim | length > 0
+    - not ansible_check_mode
 
 - name: Write customer CA certificate to target from inline content
   ansible.builtin.copy:
@@ -102,6 +107,17 @@
     - aap_deploy_tls_source == 'customer_files'
     - aap_deploy_tls_customer_files.ca_cert_src | default('', true) | trim | length == 0
     - aap_deploy_tls_customer_files.ca_cert_content | default('', true) | trim | length > 0
+    - not ansible_check_mode
+
+- name: Report planned customer TLS staging
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: customer TLS certificates, private keys, and shared CA would
+      be staged in {{ aap_deploy_tls_dir }}.
+  changed_when: true
+  when:
+    - aap_deploy_tls_source == 'customer_files'
+    - ansible_check_mode
 
 - name: Stage TLS assets with foundational helper
   ansible.builtin.include_role:
