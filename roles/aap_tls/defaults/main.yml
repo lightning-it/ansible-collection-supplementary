@@ -1,5 +1,6 @@
 ---
 aap_tls_selfsigned_enabled: true
+aap_tls_selfsigned_delegate_to: localhost
 aap_tls_selfsigned_output_dir: "{{ lookup('ansible.builtin.env', 'PWD') }}/files/tls"
 aap_tls_selfsigned_ca_key_path: "{{ aap_tls_selfsigned_output_dir }}/aap-selfsigned-ca.key"
 aap_tls_selfsigned_ca_csr_path: "{{ aap_tls_selfsigned_output_dir }}/aap-selfsigned-ca.csr"

@@ -10,7 +10,7 @@
     path: "{{ aap_tls_selfsigned_output_dir }}"
     state: directory
     mode: "0750"
-  delegate_to: localhost
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
   when: aap_tls_selfsigned_enabled | bool
 
 - name: Generate temporary AAP self-signed CA private key
@@ -20,7 +20,7 @@
     type: RSA
     mode: "0600"
     force: "{{ aap_tls_selfsigned_force | bool }}"
-  delegate_to: localhost
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
   when: aap_tls_selfsigned_enabled | bool
 
 - name: Generate temporary AAP service private key
@@ -30,7 +30,7 @@
     type: RSA
     mode: "0600"
     force: "{{ aap_tls_selfsigned_force | bool }}"
-  delegate_to: localhost
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
   when: aap_tls_selfsigned_enabled | bool
 
 - name: Generate temporary AAP self-signed CA certificate signing request
@@ -47,7 +47,7 @@
     key_usage_critical: true
     mode: "0644"
     force: "{{ aap_tls_selfsigned_force | bool }}"
-  delegate_to: localhost
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
   when: aap_tls_selfsigned_enabled | bool
 
 - name: Generate temporary AAP self-signed CA certificate
@@ -60,7 +60,7 @@
     selfsigned_create_subject_key_identifier: create_if_not_provided
     mode: "0644"
     force: "{{ aap_tls_selfsigned_force | bool }}"
-  delegate_to: localhost
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
   when: aap_tls_selfsigned_enabled | bool
 
 - name: Generate temporary AAP certificate signing request
@@ -76,7 +76,7 @@
       }}
     mode: "0644"
     force: "{{ aap_tls_selfsigned_force | bool }}"
-  delegate_to: localhost
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
   when: aap_tls_selfsigned_enabled | bool
 
 - name: Generate temporary AAP service certificate signed by temporary CA
@@ -91,14 +91,14 @@
     ownca_create_authority_key_identifier: true
     mode: "0644"
     force: "{{ aap_tls_selfsigned_force | bool }}"
-  delegate_to: localhost
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
   when: aap_tls_selfsigned_enabled | bool
 
 - name: Inspect generated temporary AAP certificate
   community.crypto.x509_certificate_info:
     path: "{{ aap_tls_selfsigned_cert_path }}"
   register: aap_tls_selfsigned_cert_info
-  delegate_to: localhost
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
   when: aap_tls_selfsigned_enabled | bool
 
 - name: Assert generated temporary AAP certificate has expected SANs
