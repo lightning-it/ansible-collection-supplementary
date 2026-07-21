@@ -132,6 +132,30 @@
     - aap_tls_selfsigned_enabled | bool
     - not ansible_check_mode
 
+- name: Install temporary AAP CA in system trust store
+  ansible.builtin.copy:
+    src: "{{ aap_tls_selfsigned_ca_cert_path }}"
+    dest: "{{ aap_tls_selfsigned_ca_trust_path }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
+  register: aap_tls_selfsigned_ca_trust
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - aap_tls_selfsigned_install_ca_trust | bool
+
+- name: Refresh system CA trust after installing temporary AAP CA
+  ansible.builtin.command:
+    cmd: update-ca-trust extract
+  become: true
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
+  changed_when: true
+  when:
+    - aap_tls_selfsigned_ca_trust is changed
+
 - name: Report planned temporary AAP TLS asset generation
   ansible.builtin.debug:
     msg: >-
