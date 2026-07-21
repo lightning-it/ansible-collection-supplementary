@@ -7,3 +7,6 @@ bugfixes:
   - >-
     Keep managed-host artifact staging check-mode safe when the destination
     directory does not exist yet, while validating the source checksum first.
+  - >-
+    Defer AAP prepared-destination assertions until apply mode so a fresh
+    check-mode run can report the planned staging operation without failing.
