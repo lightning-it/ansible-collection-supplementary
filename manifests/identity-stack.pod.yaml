@@ -96,7 +96,7 @@ spec:
         timeoutSeconds: 3
 
     - name: postgres
-      image: docker.io/library/postgres:16@sha256:eb4759788a2182f08257135e61a34f2cfc3c2914079f3465d64ee62350f4d081
+      image: docker.io/library/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
       imagePullPolicy: IfNotPresent
       env:
         - name: POSTGRES_DB

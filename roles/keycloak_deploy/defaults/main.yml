@@ -9,7 +9,7 @@ keycloak_deploy_image: >-
 # Default is shared PostgreSQL managed outside this role.
 keycloak_deploy_manage_postgres: false
 keycloak_deploy_postgres_image: >-
-  docker.io/library/postgres:16@sha256:eb4759788a2182f08257135e61a34f2cfc3c2914079f3465d64ee62350f4d081
+  docker.io/library/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
 keycloak_deploy_postgres_pod_name: "{{ keycloak_deploy_pod_name }}-postgres"
 keycloak_deploy_postgres_pod_manifest_path: >-
   /etc/podman/pods/{{ keycloak_deploy_postgres_pod_name }}.yml
