@@ -78,9 +78,21 @@
     timeout: "{{ aap_request_timeout | default(30, true) }}"
     validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
   when:
+    - not ansible_check_mode
     - __aap_cac_gateway_org_state in ['present', 'enforced']
     - __aap_cac_gateway_org_current | length == 0
   no_log: true
+
+- name: Report planned Gateway organization creation
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: Gateway organization {{ __aap_cac_gateway_org_target_name }}
+      would be created.
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - __aap_cac_gateway_org_state in ['present', 'enforced']
+    - __aap_cac_gateway_org_current | length == 0
 
 - name: Update Gateway organization
   ansible.builtin.uri:
@@ -109,6 +121,7 @@
     timeout: "{{ aap_request_timeout | default(30, true) }}"
     validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
   when:
+    - not ansible_check_mode
     - __aap_cac_gateway_org_state in ['present', 'enforced']
     - __aap_cac_gateway_org_current | length > 0
     - >-
@@ -121,6 +134,26 @@
         != __gateway_organization_item.description
       )
   no_log: true
+
+- name: Report planned Gateway organization update
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: Gateway organization {{ __aap_cac_gateway_org_name }}
+      would be updated.
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - __aap_cac_gateway_org_state in ['present', 'enforced']
+    - __aap_cac_gateway_org_current | length > 0
+    - >-
+      (__aap_cac_gateway_org_current.name != __aap_cac_gateway_org_target_name)
+      or
+      (
+        __gateway_organization_item.description is defined
+        and
+        (__aap_cac_gateway_org_current.description | default(''))
+        != __gateway_organization_item.description
+      )
 
 - name: Delete Gateway organization
   ansible.builtin.uri:
@@ -142,6 +175,18 @@
     timeout: "{{ aap_request_timeout | default(30, true) }}"
     validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
   when:
+    - not ansible_check_mode
     - __aap_cac_gateway_org_state == 'absent'
     - __aap_cac_gateway_org_current | length > 0
   no_log: true
+
+- name: Report planned Gateway organization deletion
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: Gateway organization {{ __aap_cac_gateway_org_name }}
+      would be deleted.
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - __aap_cac_gateway_org_state == 'absent'
+    - __aap_cac_gateway_org_current | length > 0
