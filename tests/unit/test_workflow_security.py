@@ -458,8 +458,7 @@ class WorkflowSecurityTests(unittest.TestCase):
             step for step in scorecard_job["steps"] if step.get("name") == "Run immutable OpenSSF Scorecard analysis"
         )
         self.assertEqual(
-            "docker://ghcr.io/ossf/scorecard-action:v2.4.3@sha256:"
-            "2dd6a6d60100f78ef24e14a47941d0087a524b4d3642041558239b1c6097c941",
+            "ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a",
             run_step["uses"],
         )
         self.assertIs(run_step["with"]["publish_results"], False)
