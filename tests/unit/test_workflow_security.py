@@ -455,9 +455,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         scorecard_job = scorecard["jobs"]["scorecard"]
         self.assertNotIn("id-token", scorecard_job["permissions"])
         run_step = next(
-            step
-            for step in scorecard_job["steps"]
-            if step.get("name") == "Run immutable OpenSSF Scorecard analysis"
+            step for step in scorecard_job["steps"] if step.get("name") == "Run immutable OpenSSF Scorecard analysis"
         )
         self.assertEqual(
             "docker://ghcr.io/ossf/scorecard-action:v2.4.3@sha256:"
