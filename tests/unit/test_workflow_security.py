@@ -125,6 +125,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         renovate = (WORKFLOWS / "renovate-guarded-automerge.yml").read_text(encoding="utf-8")
         changelog = (WORKFLOWS / "changelog.yml").read_text(encoding="utf-8")
+        collection_ci = load_yaml(WORKFLOWS / "collection-ci.yml")
 
         self.assertIn('([.labels[].name] | index("safe-automerge") != null)', copilot)
         self.assertIn('([.labels[].name] | index("breaking-update") == null)', copilot)
@@ -141,6 +142,28 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('index("dependencies") != null', changelog)
         self.assertIn('index("safe-automerge") != null', changelog)
         self.assertIn('index("breaking-update") == null', changelog)
+        static_steps = [
+            step
+            for step in collection_ci["jobs"]["lint-sanity"]["steps"]
+            if step.get("name") == "Run repository static pre-commit gates"
+        ]
+        self.assertEqual(1, len(static_steps))
+        static_env = static_steps[0]["env"]
+        self.assertEqual("${{ env.COMPARE_BASE_SHA }}", static_env["BASE_SHA"])
+        self.assertEqual("${{ env.SOURCE_SHA }}", static_env["HEAD_SHA"])
+        self.assertEqual(
+            "${{ github.event_name == 'pull_request' && "
+            "toJson(github.event.pull_request.labels.*.name) || '[]' }}",
+            static_env["LABELS_JSON"],
+        )
+        require_fragment = static_env["REQUIRE_FRAGMENT"]
+        self.assertIn("github.event.pull_request.base.ref == 'develop'", require_fragment)
+        self.assertIn("startsWith(github.event.pull_request.head.ref, 'renovate/')", require_fragment)
+        self.assertIn("github.event.pull_request.user.login == 'renovate[bot]'", require_fragment)
+        self.assertIn("contains(github.event.pull_request.labels.*.name, 'renovate')", require_fragment)
+        self.assertIn("contains(github.event.pull_request.labels.*.name, 'dependencies')", require_fragment)
+        self.assertIn("contains(github.event.pull_request.labels.*.name, 'safe-automerge')", require_fragment)
+        self.assertIn("!contains(github.event.pull_request.labels.*.name, 'breaking-update')", require_fragment)
 
     def test_collection_ci_concurrency_isolated_by_pr_and_exact_head(self) -> None:
         workflow = load_yaml(WORKFLOWS / "collection-ci.yml")

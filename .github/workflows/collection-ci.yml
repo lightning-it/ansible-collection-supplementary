@@ -74,7 +74,21 @@ jobs:
             PyYAML==6.0.3
       - name: Run repository static pre-commit gates
         env:
+          BASE_SHA: ${{ env.COMPARE_BASE_SHA }}
           CI: "true"
+          HEAD_SHA: ${{ env.SOURCE_SHA }}
+          LABELS_JSON: >-
+            ${{ github.event_name == 'pull_request' &&
+            toJson(github.event.pull_request.labels.*.name) || '[]' }}
+          REQUIRE_FRAGMENT: >-
+            ${{ !(github.event_name == 'pull_request' &&
+            github.event.pull_request.user.login == 'renovate[bot]' &&
+            github.event.pull_request.base.ref == 'develop' &&
+            startsWith(github.event.pull_request.head.ref, 'renovate/') &&
+            contains(github.event.pull_request.labels.*.name, 'renovate') &&
+            contains(github.event.pull_request.labels.*.name, 'dependencies') &&
+            contains(github.event.pull_request.labels.*.name, 'safe-automerge') &&
+            !contains(github.event.pull_request.labels.*.name, 'breaking-update')) }}
         run: >-
           SKIP=molecule-light pre-commit run --all-files
       - name: Run collection sanity tests from canonical collection path
