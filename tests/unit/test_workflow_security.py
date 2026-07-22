@@ -454,8 +454,16 @@ class WorkflowSecurityTests(unittest.TestCase):
         scorecard = load_yaml(WORKFLOWS / "openssf-scorecard.yml")
         scorecard_job = scorecard["jobs"]["scorecard"]
         self.assertNotIn("id-token", scorecard_job["permissions"])
-        run_step = next(step for step in scorecard_job["steps"] if step.get("name") == "Run OpenSSF Scorecard analysis")
-        self.assertEqual("./.github/actions/run-scorecard", run_step["uses"])
+        run_step = next(
+            step
+            for step in scorecard_job["steps"]
+            if step.get("name") == "Run immutable OpenSSF Scorecard analysis"
+        )
+        self.assertEqual(
+            "docker://ghcr.io/ossf/scorecard-action:v2.4.3@sha256:"
+            "2dd6a6d60100f78ef24e14a47941d0087a524b4d3642041558239b1c6097c941",
+            run_step["uses"],
+        )
         self.assertIs(run_step["with"]["publish_results"], False)
         scorecard_action = load_yaml(SCORECARD_ACTION)
         self.assertRegex(scorecard_action["runs"]["image"], PINNED_DOCKER_USE)
