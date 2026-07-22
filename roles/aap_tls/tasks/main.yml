@@ -142,19 +142,10 @@
     mode: "0644"
   become: true
   delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
-  register: aap_tls_selfsigned_ca_trust
+  notify: Refresh system CA trust after installing temporary AAP CA
   when:
     - aap_tls_selfsigned_enabled | bool
     - aap_tls_selfsigned_install_ca_trust | bool
-
-- name: Refresh system CA trust after installing temporary AAP CA
-  ansible.builtin.command:
-    cmd: update-ca-trust extract
-  become: true
-  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
-  changed_when: true
-  when:
-    - aap_tls_selfsigned_ca_trust is changed
 
 - name: Report planned temporary AAP TLS asset generation
   ansible.builtin.debug:
