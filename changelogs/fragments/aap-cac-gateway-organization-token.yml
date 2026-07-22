@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Configure gateway organizations through the canonical ``aap_*`` connection
+    parameters and the short-lived gateway token, avoiding failed persistent
+    connections caused by legacy parameter aliases.
