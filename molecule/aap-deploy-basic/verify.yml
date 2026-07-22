@@ -61,6 +61,18 @@
             | first
           }}
 
+    - name: Assert effective password validation task exists
+      ansible.builtin.assert:
+        that:
+          - aap_deploy_molecule_password_validation_task is mapping
+          - >-
+            'when' in
+            (aap_deploy_molecule_password_validation_task | default({}))
+        fail_msg: >-
+          The AAP deploy role must contain the effective installer password
+          validation task with a conditional expression.
+        quiet: true
+
     - name: Assert prepare-only runs do not require installer passwords
       ansible.builtin.assert:
         that:
