@@ -34,19 +34,74 @@
   changed_when: false
   no_log: true
 
-- name: Require an unambiguous Gateway organization result
+- name: Query renamed Gateway organization
+  ansible.builtin.uri:
+    url: >-
+      {{
+        (aap_cac_gateway_hostname | regex_replace('/+$', ''))
+        ~ '/api/gateway/v1/organizations/?name='
+        ~ (__aap_cac_gateway_org_target_name | urlencode)
+      }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ aap_cac_auth_token }}"
+      Accept: application/json
+    return_content: true
+    status_code: 200
+    timeout: "{{ aap_request_timeout | default(30, true) }}"
+    validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+  register: __aap_cac_gateway_org_target_query
+  changed_when: false
+  no_log: true
+  when: __aap_cac_gateway_org_name != __aap_cac_gateway_org_target_name
+
+- name: Record Gateway organization query results
+  ansible.builtin.set_fact:
+    __aap_cac_gateway_org_source_results: >-
+      {{ __aap_cac_gateway_org_query.json.results | default([]) }}
+    __aap_cac_gateway_org_target_results: >-
+      {{
+        __aap_cac_gateway_org_target_query.json.results
+        | default([])
+        if __aap_cac_gateway_org_name != __aap_cac_gateway_org_target_name
+        else []
+      }}
+  changed_when: false
+
+- name: Require unambiguous Gateway organization results
   ansible.builtin.assert:
     that:
-      - (__aap_cac_gateway_org_query.json.results | default([]) | length) <= 1
+      - (__aap_cac_gateway_org_source_results | length) <= 1
+      - (__aap_cac_gateway_org_target_results | length) <= 1
     fail_msg: >-
-      Gateway returned multiple organizations named
-      {{ __aap_cac_gateway_org_name }}.
+      Gateway returned multiple organizations for the requested source or
+      target organization name.
+
+- name: Reject conflicting Gateway organization rename targets
+  ansible.builtin.assert:
+    that:
+      - >-
+        (__aap_cac_gateway_org_source_results | length == 0)
+        or (__aap_cac_gateway_org_target_results | length == 0)
+        or
+        (
+          (__aap_cac_gateway_org_source_results | first).id
+          == (__aap_cac_gateway_org_target_results | first).id
+        )
+    fail_msg: >-
+      Cannot rename Gateway organization {{ __aap_cac_gateway_org_name }} to
+      {{ __aap_cac_gateway_org_target_name }} because both names already exist.
 
 - name: Record current Gateway organization
   ansible.builtin.set_fact:
     __aap_cac_gateway_org_current: >-
       {{
-        (__aap_cac_gateway_org_query.json.results | default([]) | first)
+        (
+          __aap_cac_gateway_org_source_results
+          if __aap_cac_gateway_org_source_results | length > 0
+          else __aap_cac_gateway_org_target_results
+        )
+        | first
         | default({}, true)
       }}
   changed_when: false
