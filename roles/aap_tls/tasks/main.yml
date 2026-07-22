@@ -146,6 +146,7 @@
   when:
     - aap_tls_selfsigned_enabled | bool
     - aap_tls_selfsigned_install_ca_trust | bool
+    - not ansible_check_mode
 
 - name: Report planned temporary AAP TLS asset generation
   ansible.builtin.debug:

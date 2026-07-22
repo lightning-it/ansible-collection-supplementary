@@ -314,7 +314,10 @@
     - git
     - openssl
     - python3
+    - rsync
     - sudo
+    - tar
+    - unzip
   changed_when: false
   tags:
     - aap
