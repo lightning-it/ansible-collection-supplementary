@@ -9,20 +9,8 @@
         aap_organizations: "{{ aap_cac_controller_organizations }}"
       changed_when: false
 
-    - name: Configure Gateway organizations
-      ansible.platform.organization:
-        name: "{{ __gateway_organization_item.name | mandatory }}"
-        new_name: "{{ __gateway_organization_item.new_name | default(omit) }}"
-        description: "{{ __gateway_organization_item.description | default(omit) }}"
-        state: >-
-          {{
-            __gateway_organization_item.state
-            | default(platform_state | default(omit, true))
-          }}
-        aap_hostname: "{{ aap_cac_gateway_hostname }}"
-        aap_token: "{{ aap_cac_auth_token }}"
-        aap_request_timeout: "{{ aap_request_timeout | default(omit, true) }}"
-        aap_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+    - name: Configure Gateway organizations through Gateway API
+      ansible.builtin.include_tasks: configure_gateway_organization.yml
       loop: "{{ aap_organizations }}"
       loop_control:
         loop_var: __gateway_organization_item
