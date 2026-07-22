@@ -1,5 +1,6 @@
 ---
 aap_preflight_enabled: true
+aap_preflight_phase: full
 
 aap_preflight_expected_ansible_user: svc_ansible
 aap_preflight_install_user: "{{ aap_deploy_install_user | default('svc_aap', true) }}"
@@ -13,11 +14,11 @@ aap_preflight_wait_for_connection_timeout: 120
 aap_preflight_check_expected_users: true
 aap_preflight_check_dns: true
 aap_preflight_check_commands: true
-aap_preflight_check_paths: true
-aap_preflight_check_podman: true
-aap_preflight_check_runtime: true
+aap_preflight_check_paths: "{{ aap_preflight_phase == 'full' }}"
+aap_preflight_check_podman: "{{ aap_preflight_phase == 'full' }}"
+aap_preflight_check_runtime: "{{ aap_preflight_phase == 'full' }}"
 aap_preflight_allow_partial_install_runtime: false
-aap_preflight_check_artifacts: true
+aap_preflight_check_artifacts: "{{ aap_preflight_phase == 'full' }}"
 aap_preflight_check_vault: "{{ (aap_secret_backend | default('hashicorp_vault', true)) == 'hashicorp_vault' }}"
 aap_preflight_check_ansible_vault: "{{ (aap_secret_backend | default('hashicorp_vault', true)) == 'ansible_vault' }}"
 
@@ -36,11 +37,17 @@ aap_preflight_appl_allowed_fstypes:
   - xfs
 aap_preflight_appl_minimum_free_mb: 50000
 aap_preflight_appl_maximum_inode_use_percent: 90
-aap_preflight_temporary_paths:
-  - path: /var/tmp
-    minimum_free_mb: 2048
-  - path: /appl/tmp
-    minimum_free_mb: 10240
+# /appl/tmp is owned by the AAP preparation phase and is therefore only a
+# valid prerequisite for the post-preparation gate.
+aap_preflight_temporary_paths: >-
+  {{
+    [{'path': '/var/tmp', 'minimum_free_mb': 2048}]
+    + (
+      [{'path': '/appl/tmp', 'minimum_free_mb': 10240}]
+      if aap_preflight_phase == 'full'
+      else []
+    )
+  }}
 aap_preflight_required_packages:
   - ansible-core
   - podman

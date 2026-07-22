@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Configure gateway organizations idempotently through the Gateway REST API
+    and the short-lived gateway token, avoiding connection failures in the
+    ``ansible.platform.organization`` manager process.

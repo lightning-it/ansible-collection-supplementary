@@ -8,3 +8,5 @@ aap_host_prepare_install_user_home_effective: >-
   }}
 aap_host_prepare_install_user_shell_effective: >-
   {{ aap_deploy_install_user_shell | default('/bin/bash', true) }}
+aap_host_prepare_setup_dir_effective: >-
+  {{ aap_deploy_setup_dir | default('/appl/aap/setup', true) }}

@@ -106,6 +106,9 @@ Installer behavior:
 - Role expects `lit.supplementary.aap_prepare` to stage the setup bundle on the
   managed host at `aap_deploy_setup_archive_path`.
 - Role prepares the setup workspace and renders installer inventory via `infra.aap_utilities.aap_setup_prepare`.
+- In check mode, the role validates all inputs and predicts the setup path but
+  does not call the vendor preparation role because that role requires the
+  archive extraction result even though Ansible skips extraction in check mode.
 - By default, role runs the prepared containerized installer command directly
   with controlled async status polling.
 - For CI or other orchestrators that cannot hold one Ansible polling task open

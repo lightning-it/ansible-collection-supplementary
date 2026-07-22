@@ -1,0 +1,7 @@
+---
+- name: Refresh system CA trust after installing temporary AAP CA
+  ansible.builtin.command:
+    cmd: update-ca-trust extract
+  become: true
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
+  changed_when: true

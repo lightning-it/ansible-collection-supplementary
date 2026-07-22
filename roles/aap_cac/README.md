@@ -7,7 +7,7 @@ AAP configuration-as-code role tasksets for AAP object configuration.
 Ensure `lit.supplementary` and the exact
 `collections/requirements-rh.yml` overlay are preinstalled by your
 workspace/EE preparation flow. This role references `ansible.controller`,
-`ansible.platform`, `infra.aap_configuration`,
+`infra.aap_configuration`,
 `infra.controller_configuration`, and `infra.ee_utilities`.
 Collection installation and packaging are out of scope for role task execution.
 This experimental role targets the AAP 2.7 API shape and uses the AAP gateway

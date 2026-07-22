@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    Add an opt-in AAP self-signed TLS setting that installs the generated CA
+    into the RHEL system trust store for certificate-validating API clients.

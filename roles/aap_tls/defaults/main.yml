@@ -16,3 +16,5 @@ aap_tls_selfsigned_ca_days: 3650
 aap_tls_selfsigned_cert_days: 825
 aap_tls_selfsigned_key_size: 4096
 aap_tls_selfsigned_force: false
+aap_tls_selfsigned_install_ca_trust: false
+aap_tls_selfsigned_ca_trust_path: /etc/pki/ca-trust/source/anchors/aap-selfsigned-ca.crt

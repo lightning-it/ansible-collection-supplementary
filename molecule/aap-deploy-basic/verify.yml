@@ -9,6 +9,7 @@
     aap_deploy_molecule_eda_task_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY')
       }}/prepared-installer/collections/ansible_collections/ansible/containerized_installer/roles/automationeda/tasks/decision_environment.yml
+    aap_deploy_molecule_role_main_path: "{{ playbook_dir }}/../../roles/aap_deploy/tasks/main.yml"
   tasks:
     - name: Read lit.supplementary.aap_deploy coverage marker
       ansible.builtin.slurp:
@@ -39,4 +40,43 @@
           - >-
             aap_deploy_molecule_eda_tasks[0].until[2]
             == "(_eda_ready.content | trim).startswith('{') and (_eda_ready.content | from_json).status == 'good'"
+        quiet: true
+
+    - name: Read AAP deploy role task flow
+      ansible.builtin.slurp:
+        src: "{{ aap_deploy_molecule_role_main_path }}"
+      register: aap_deploy_molecule_role_main_file
+
+    - name: Parse AAP deploy role task flow as YAML
+      ansible.builtin.set_fact:
+        aap_deploy_molecule_role_main_tasks: >-
+          {{ aap_deploy_molecule_role_main_file.content | b64decode | from_yaml }}
+
+    - name: Select effective password validation task
+      ansible.builtin.set_fact:
+        aap_deploy_molecule_password_validation_task: >-
+          {{
+            aap_deploy_molecule_role_main_tasks
+            | selectattr('name', 'equalto', 'Validate resolved effective installer admin passwords')
+            | first
+          }}
+
+    - name: Assert effective password validation task exists
+      ansible.builtin.assert:
+        that:
+          - aap_deploy_molecule_password_validation_task is mapping
+          - >-
+            'when' in
+            (aap_deploy_molecule_password_validation_task | default({}))
+        fail_msg: >-
+          The AAP deploy role must contain the effective installer password
+          validation task with a conditional expression.
+        quiet: true
+
+    - name: Assert prepare-only runs do not require installer passwords
+      ansible.builtin.assert:
+        that:
+          - >-
+            'aap_deploy_run_installer | bool'
+            in aap_deploy_molecule_password_validation_task.when
         quiet: true
