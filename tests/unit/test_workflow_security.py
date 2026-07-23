@@ -454,13 +454,8 @@ class WorkflowSecurityTests(unittest.TestCase):
         scorecard = load_yaml(WORKFLOWS / "openssf-scorecard.yml")
         scorecard_job = scorecard["jobs"]["scorecard"]
         self.assertNotIn("id-token", scorecard_job["permissions"])
-        run_step = next(
-            step for step in scorecard_job["steps"] if step.get("name") == "Run immutable OpenSSF Scorecard analysis"
-        )
-        self.assertEqual(
-            "ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a",
-            run_step["uses"],
-        )
+        run_step = next(step for step in scorecard_job["steps"] if step.get("name") == "Run OpenSSF Scorecard analysis")
+        self.assertEqual("./.github/actions/run-scorecard", run_step["uses"])
         self.assertIs(run_step["with"]["publish_results"], False)
         scorecard_action = load_yaml(SCORECARD_ACTION)
         self.assertRegex(scorecard_action["runs"]["image"], PINNED_DOCKER_USE)
@@ -639,8 +634,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         molecule = (ROOT / "scripts" / "devtools-molecule.sh").read_text(encoding="utf-8")
         self.assertIn("Docker is required for Molecule tests", molecule)
         self.assertNotIn("Skipping Molecule tests because Docker", molecule)
-        self.assertIn("WUNDER_DEVTOOLS_ROOTFS_MODE=rw", molecule)
-        self.assertIn("WUNDER_DEVTOOLS_WORKSPACE_MODE=rw", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_WORKSPACE_MODE=ro", molecule)
         self.assertIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0", molecule)
         self.assertNotIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1", molecule)
 
