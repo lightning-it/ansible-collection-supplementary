@@ -1,8 +1,0 @@
----
-bugfixes:
-  - >-
-    Give large isolated Vault Raft snapshot restores a separately bounded
-    client/server timeout and a tightly derived listener request-size allowance
-    and temporary staging filesystem instead of reusing short or undersized
-    defaults that reject valid approved snapshots, and report failures through
-    secret-safe status classification.
