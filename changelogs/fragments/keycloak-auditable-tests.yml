@@ -1,6 +1,0 @@
----
-major_changes:
-  - >-
-    Add three canonical Keycloak Molecule profiles for fast technical validation,
-    production-like integration, and browser-based application acceptance, with
-    auditable evidence and fail-closed release governance.

@@ -4,6 +4,59 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v2.0.0
+======
+
+Major Changes
+-------------
+
+- Add three canonical Keycloak Molecule profiles for fast technical validation, production-like integration, and browser-based application acceptance, with auditable evidence and fail-closed release governance.
+
+Minor Changes
+-------------
+
+- Add a ``aap-preflight-basic`` Molecule light scenario for the ``aap_preflight`` role to provide syntax coverage and prevent regressions in the prepared-host and execution-environment gate paths.
+- Allow the AAP execution-environment preflight to validate either a fixed non-``latest`` image version or the existing immutable SHA-256 digest reference while preserving trusted registry TLS enforcement.
+- CI - Select the protected Keycloak Tiny, Heavy, and Application Acceptance matrix only when the Keycloak quality family or one of its registered PostgreSQL, Samba, workflow, registry, or shared Incus dependencies changes.
+- Delegate protected Heavy and Application Acceptance execution to the pinned reusable workflow owned by ``modulix-validation-lit`` while retaining the exact-candidate, evidence, and fail-closed collection release gates.
+- Extend AAP preflight with optional customer-prepared RHEL and immutable registry execution-environment gates.
+- Harden the shared development container wrappers and keep the immutable Renovate validation image inventory synchronized with pre-commit tooling.
+- Raise the enforced Vault Raft raw snapshot ceiling from 64 MiB to 128 MiB for production recovery points that have grown beyond the former bound.
+- Support digest-required target-side EE pulls, encrypted Ansible Vault inventory generation, and separate AAP Container Registry credential plus EE configuration in local-execution flows.
+- collection - Add a registry-driven Tiny, Heavy, Application Acceptance, evidence, CI, governance, and fail-closed release architecture for every role.
+
+Breaking Changes / Porting Guide
+--------------------------------
+
+- Rename the AAP local-execution action from ``base_preflight`` to ``host_prepare_preflight`` and reference the canonical ``06-aap-host-prepare.yml`` playbook so application-owned host preparation is not presented as customer base-OS management.
+- Rename the implementation role from ``aap_base_os`` to ``aap_host_prepare`` together with its internal variables and tags.
+- Rename the successful combined preflight marker from ``AAP_BASE_OS_AND_PREFLIGHT_OK`` to ``AAP_HOST_PREPARE_AND_PREFLIGHT_OK``.
+
+Deprecated Features
+-------------------
+
+- gitlab_runner - Deprecate the non-operational placeholder and make every invocation fail closed instead of allowing an acknowledged debug-only path.
+
+Security Fixes
+--------------
+
+- Exclude project collection payloads, preserve registry TLS verification, and keep target Podman authentication separate from AAP credentials.
+- Suppress controller credential-dispatch output so registry inputs remain protected even when the underlying configuration role changes verbosity.
+
+Bugfixes
+--------
+
+- Bind Keycloak to the Samba-created LDAP identity and attach exact role and commit metadata to independently generated application-acceptance evidence.
+- Capture Podman image records rather than container process records for immutable runtime dependency evidence in Keycloak quality profiles.
+- Give large isolated Vault Raft snapshot restores a separately bounded client/server timeout and a tightly derived listener request-size allowance and temporary staging filesystem instead of reusing short or undersized defaults that reject valid approved snapshots, and report failures through secret-safe status classification.
+- Harden the trusted Renovate and Copilot gates against transient API failures, unsafe major updates, shell word-splitting, outdated review findings, and best-effort Incus cleanup races.
+- Install pinned Ansible and Molecule entry points in protected quality jobs instead of relying on runner-global packages, consume one immutable collection candidate with its runtime dependencies, and make concurrent Incus cleanup ownership-aware.
+- Isolate UID and GID maps for nested Incus test containers so concurrent Podman workloads do not share and exhaust host per-user kernel key quotas.
+- Refresh the pinned Keycloak acceptance security stack, execute the patched stable Chrome channel with exact version and executable-digest evidence, scan the exact shipped candidate independently while generated evidence remains covered by the fail-closed evidence scanner, and keep only runtime dependencies in the immutable bundle.
+- Report only the non-secret raw Raft snapshot size and approved limit when the encrypted snapshot workflow reaches its bounded-size gate.
+- Route the Heavy Keycloak LDAP provider through the loopback endpoint used by its host-networked container so LDAPS authentication reaches Samba.
+- Trust the Heavy profile's ephemeral LDAP certificate authority inside Keycloak so the end-to-end LDAPS authentication proof validates TLS.
+
 v1.40.0
 =======
 

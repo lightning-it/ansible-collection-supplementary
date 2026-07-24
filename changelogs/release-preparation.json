@@ -1,0 +1,82 @@
+{
+  "base_sha": "4286f8f0ee2feb9a4bb2b6f24e25e04d970f4a5c",
+  "current_version": "1.40.0",
+  "fragments": [
+    {
+      "path": "aap-host-prepare-action.yml",
+      "sha256": "d86114562443918db393630a4f1fa5b492ddff48c0c3b306e67db691bb424f20"
+    },
+    {
+      "path": "aap-preflight-ee-version.yml",
+      "sha256": "ed2a65a392724695d02ab883740a4e5ab9328dd72c328c008c612cab5a4cf7c8"
+    },
+    {
+      "path": "aap-preflight-molecule-scenario.yml",
+      "sha256": "6b801875183c3db352ee3a2c330322545d7af180b42da37a60975a879b93f6aa"
+    },
+    {
+      "path": "aap-rhel9-registry-ee.yml",
+      "sha256": "b0df9b0eb40460f45e1baf892d36112c02100415b6b606fc5f0b0afdf937fd2f"
+    },
+    {
+      "path": "delegate-infrastructure-validation.yml",
+      "sha256": "b77fdab77b395061426478155fe08949dc22fdbf2fbe97b4328f4b20dd128360"
+    },
+    {
+      "path": "enterprise-role-quality.yml",
+      "sha256": "7f06fb7bd43396869bed6b8772a1f555b760bc39ce7d8b916d2a7bd797d17f8f"
+    },
+    {
+      "path": "fix-quality-runner-toolchain.yml",
+      "sha256": "73cdc754d7c0e2cabbbc53543aaea4e2de74d8e671d42020c6e0382cef4febf3"
+    },
+    {
+      "path": "incus-nested-idmap-isolation.yml",
+      "sha256": "2dae47a485cc318c1a11b86b0a63041bc5ddf1f34b780d53f32ebf2818306e50"
+    },
+    {
+      "path": "keycloak-auditable-tests.yml",
+      "sha256": "860dd6e15e9430e1130497d9a9bfeca43ed13d57a1579d4878a395dd11769989"
+    },
+    {
+      "path": "keycloak-impact-selection.yml",
+      "sha256": "9199516738be6b9949a241407d97eb781afd75f5841235d1bcbebb67b569f18a"
+    },
+    {
+      "path": "renovate-automerge-followup.yml",
+      "sha256": "04291835c96ff8bf14edc4e3e911010a9205b534d453ad442e4e26bbb91eabf6"
+    },
+    {
+      "path": "shared-assets-tooling-sync.yml",
+      "sha256": "1530671845a265b51e363a200aefabc3b607d385ff072b7ccc3bf7e041099567"
+    },
+    {
+      "path": "vault-raft-snapshot-restore-timeout.yml",
+      "sha256": "0760ac4400928c3fffe117f72898e3a213797cce2011844d8ac075cf8fac228d"
+    },
+    {
+      "path": "vault-raft-snapshot-size-diagnostic.yml",
+      "sha256": "4082e6a3a182f47ef2a4e3ececdd0fe3d10e5ff4e9164364632e513df9f9e3d0"
+    }
+  ],
+  "impact": "major",
+  "next_version": "2.0.0",
+  "preparer": {
+    "account_id": "250056030",
+    "email": "litreleasebot@users.noreply.github.com",
+    "login": "litreleasebot"
+  },
+  "repository": "lightning-it/ansible-collection-supplementary",
+  "repository_id": "1103407173",
+  "schema_version": 1,
+  "workflow": {
+    "actor": "litroc",
+    "event": "push",
+    "git_ref": "refs/heads/main",
+    "path": ".github/workflows/release-prepare.yml",
+    "ref": "lightning-it/ansible-collection-supplementary/.github/workflows/release-prepare.yml@refs/heads/main",
+    "run_attempt": "1",
+    "run_id": "30055942967",
+    "source_sha": "4286f8f0ee2feb9a4bb2b6f24e25e04d970f4a5c"
+  }
+}
