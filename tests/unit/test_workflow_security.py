@@ -200,6 +200,12 @@ class WorkflowSecurityTests(unittest.TestCase):
                 delegated["with"]["source-sha"],
             )
 
+        self.assertIn(
+            "heavy",
+            jobs["acceptance-cells"]["needs"],
+            "delegated Incus profiles must run serially to avoid concurrency cancellation",
+        )
+
     def test_all_workflows_and_local_actions_require_release_team_review(self) -> None:
         codeowners = (ROOT / ".github" / "CODEOWNERS").read_text(encoding="utf-8")
         rules = {
