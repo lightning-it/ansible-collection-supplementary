@@ -1165,6 +1165,105 @@ def _artifact_category(path: Path) -> str | None:
     return None
 
 
+def _is_excluded_artifact_path(path: Path, excluded_resolved: Sequence[Path]) -> bool:
+    resolved = path.resolve()
+    parent_resolved = path.parent.resolve()
+    return any(
+        resolved == excluded
+        or excluded in resolved.parents
+        or parent_resolved == excluded
+        or excluded in parent_resolved.parents
+        for excluded in excluded_resolved
+    )
+
+
+def _cell_manifest_references(input_root: Path, excluded_resolved: Sequence[Path]) -> tuple[list[Path], set[Path]]:
+    """Return assembled cell roots and their exact JUnit/Allure references."""
+    cell_roots: list[Path] = []
+    references: set[Path] = set()
+    input_root_resolved = input_root.resolve()
+    for manifest_path in _bounded_artifact_walk(
+        input_root,
+        name="manifest.json",
+        excluded_resolved=excluded_resolved,
+    ):
+        relative = manifest_path.relative_to(input_root)
+        current = input_root
+        for part in relative.parts:
+            current /= part
+            if current.is_symlink():
+                raise EvidenceError(f"symlinked cell manifest: {relative.as_posix()}")
+        manifest_resolved = manifest_path.resolve()
+        if input_root_resolved not in manifest_resolved.parents:
+            raise EvidenceError(f"cell manifest escapes artifact root: {relative.as_posix()}")
+        try:
+            payload = _strict_json_loads(_bounded_read(manifest_path).decode("utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, EvidenceError) as error:
+            raise EvidenceError(f"invalid cell manifest: {relative.as_posix()}") from error
+        if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
+            raise EvidenceError(f"invalid cell manifest schema: {relative.as_posix()}")
+        cell_root = manifest_path.parent.resolve()
+        cell_roots.append(cell_root)
+        for result in payload["results"]:
+            if not isinstance(result, dict):
+                raise EvidenceError(f"cell manifest has invalid result: {relative.as_posix()}")
+            for field in ("junit", "allure_results"):
+                values = result.get(field, [])
+                if not isinstance(values, list):
+                    raise EvidenceError(f"cell manifest has invalid {field} references: {relative.as_posix()}")
+                for value in values:
+                    if not isinstance(value, str):
+                        raise EvidenceError(f"cell manifest has non-string {field} reference: {relative.as_posix()}")
+                    reference = PurePosixPath(value)
+                    if reference.is_absolute() or ".." in reference.parts or not reference.parts:
+                        raise EvidenceError(
+                            f"cell manifest has unsafe {field} reference in {relative.as_posix()}: {value}"
+                        )
+                    unresolved = cell_root / Path(*reference.parts)
+                    current = cell_root
+                    for part in reference.parts:
+                        current /= part
+                        if current.is_symlink():
+                            raise EvidenceError(
+                                f"cell manifest has symlinked {field} reference in {relative.as_posix()}: {value}"
+                            )
+                    candidate = unresolved.resolve()
+                    if candidate == cell_root or cell_root not in candidate.parents:
+                        raise EvidenceError(
+                            f"cell manifest has unsafe {field} reference in {relative.as_posix()}: {value}"
+                        )
+                    if not unresolved.is_file():
+                        raise EvidenceError(
+                            f"cell manifest has missing {field} reference in {relative.as_posix()}: {value}"
+                        )
+                    references.add(candidate)
+    return cell_roots, references
+
+
+def _bounded_artifact_walk(
+    root: Path,
+    *,
+    name: str | None = None,
+    excluded_resolved: Sequence[Path] = (),
+) -> Iterable[Path]:
+    """Yield artifact entries deterministically without materializing an untrusted tree."""
+    examined_entries = 0
+    for directory, directories, filenames in os.walk(root, topdown=True, followlinks=False):
+        current = Path(directory)
+        directories[:] = sorted(
+            entry for entry in directories if not _is_excluded_artifact_path(current / entry, excluded_resolved)
+        )
+        filenames = sorted(
+            entry for entry in filenames if not _is_excluded_artifact_path(current / entry, excluded_resolved)
+        )
+        for entry_name in (*directories, *filenames):
+            examined_entries += 1
+            if examined_entries > MAX_EVIDENCE_FILES:
+                raise EvidenceError(f"artifact inputs exceed {MAX_EVIDENCE_FILES}-entry traversal limit")
+            if name is None or entry_name == name:
+                yield Path(directory) / entry_name
+
+
 def copy_artifacts(input_roots: Sequence[Path], destination_root: Path, excluded: Sequence[Path]) -> list[Path]:
     junit_destinations: list[Path] = []
     excluded_resolved = [item.resolve() for item in excluded]
@@ -1172,20 +1271,34 @@ def copy_artifacts(input_roots: Sequence[Path], destination_root: Path, excluded
     copied_bytes = 0
     examined_files = 0
     for input_root in input_roots:
+        if input_root.is_symlink():
+            raise EvidenceError(f"symlinked artifact input root: {input_root}")
         if not input_root.exists():
             continue
-        for source in sorted(input_root.rglob("*")):
-            if not source.is_file() or source.is_symlink():
+        input_root_resolved = input_root.resolve()
+        cell_roots, cell_references = _cell_manifest_references(input_root, excluded_resolved)
+        for source in _bounded_artifact_walk(input_root, excluded_resolved=excluded_resolved):
+            relative_source = source.relative_to(input_root)
+            if source.is_symlink():
+                raise EvidenceError(f"symlinked artifact input: {relative_source.as_posix()}")
+            if not source.is_file():
                 continue
             examined_files += 1
             if examined_files > MAX_EVIDENCE_FILES:
                 raise EvidenceError(f"artifact inputs exceed {MAX_EVIDENCE_FILES}-file traversal limit")
             resolved = source.resolve()
+            if input_root_resolved not in resolved.parents:
+                raise EvidenceError(f"artifact input escapes root: {relative_source.as_posix()}")
             if any(resolved == item or item in resolved.parents for item in excluded_resolved):
                 continue
             category = _artifact_category(source.relative_to(input_root))
             if category is None:
                 continue
+            if category in {"junit", "allure-results"} and any(
+                resolved == cell_root or cell_root in resolved.parents for cell_root in cell_roots
+            ):
+                if resolved not in cell_references:
+                    continue
             size = source.stat().st_size
             copied_files += 1
             copied_bytes += size
@@ -1195,7 +1308,20 @@ def copy_artifacts(input_roots: Sequence[Path], destination_root: Path, excluded
                 raise EvidenceError("artifact inputs exceed bounded evidence size limits")
             relative = _safe_relative(source, input_root)
             category_names = set(EVIDENCE_DIRECTORIES) | {"test-results", "test_results"}
-            if relative.parts and relative.parts[0].lower() in category_names:
+            if cell_roots:
+                category_index = next(
+                    (index for index, part in enumerate(relative.parts) if part.lower() in category_names),
+                    None,
+                )
+                if category_index is not None:
+                    remaining = relative.parts[category_index + 1 :]
+                    relative = Path(*remaining) if remaining else Path(source.name)
+                # Downloaded Actions artifacts are expanded below an
+                # implementation detail such as expanded/archive-1. Strip it
+                # only when re-aggregating an already assembled cell bundle.
+                while len(relative.parts) >= 2 and relative.parts[0].lower() == "expanded":
+                    relative = Path(*relative.parts[2:]) if len(relative.parts) > 2 else Path(source.name)
+            elif relative.parts and relative.parts[0].lower() in category_names:
                 relative = Path(*relative.parts[1:]) if len(relative.parts) > 1 else Path(source.name)
             destination = _copy_unique(source, destination_root / category / relative)
             if category == "junit":
@@ -1981,7 +2107,10 @@ def _dependency_files(root: Path, pattern: str) -> tuple[list[Path], list[str]]:
 def _read_dependency_text(root: Path, path: Path) -> tuple[str | None, str | None]:
     relative = path.relative_to(root).as_posix()
     try:
-        return _bounded_read(path, 64 * 1024).decode("utf-8"), None
+        # OS package inventories can legitimately exceed 64 KiB, while the
+        # dependency format still benefits from a tighter bound than general
+        # evidence artifacts.
+        return _bounded_read(path, 256 * 1024).decode("utf-8"), None
     except (OSError, EvidenceError, UnicodeDecodeError) as error:
         return None, f"{relative} is not readable dependency evidence: {error}"
 
@@ -2333,7 +2462,7 @@ def assess_dependencies(
             operating_system = payload.get("operating_system")
             packages = payload.get("os_packages")
             playwright_version = str(payload.get("playwright_version", ""))
-            revision = str(chromium.get("revision", "")) if isinstance(chromium, dict) else ""
+            channel = str(chromium.get("channel", "")) if isinstance(chromium, dict) else ""
             executable = (
                 PurePosixPath(str(chromium.get("executable", ""))) if isinstance(chromium, dict) else PurePosixPath()
             )
@@ -2355,15 +2484,11 @@ def assess_dependencies(
                 or re.fullmatch(r"[0-9]+(?:\.[0-9]+){2,3}", playwright_version) is None
                 or target_playwright_versions.get(browser_cell) != playwright_version
                 or not isinstance(chromium, dict)
-                or set(chromium) != {"name", "revision", "version", "executable", "sha256"}
+                or set(chromium) != {"name", "channel", "version", "executable", "sha256"}
                 or chromium.get("name") != "chromium"
-                or re.fullmatch(r"[0-9]+", revision) is None
+                or channel != "chrome"
                 or re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,3}", str(chromium.get("version", ""))) is None
-                or not executable.is_absolute()
-                or not (
-                    f"chromium-{revision}" in executable.parts
-                    or f"chromium_headless_shell-{revision}" in executable.parts
-                )
+                or executable != PurePosixPath("/opt/google/chrome/chrome")
                 or re.fullmatch(r"[0-9a-f]{64}", str(chromium.get("sha256", ""))) is None
                 or not isinstance(operating_system, dict)
                 or set(operating_system) != {"id", "version_id", "distro"}

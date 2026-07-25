@@ -359,6 +359,17 @@ class QualityEvidenceTests(unittest.TestCase):
         with patch.dict(os.environ, self._environment(), clear=False):
             self.assertEqual(evidence.validate(self.evidence_root), 0)
 
+    def test_copy_artifacts_rejects_symlinked_input_root(self) -> None:
+        real_root = self.base / "real-artifacts"
+        real_root.mkdir()
+        (real_root / "junit").mkdir()
+        (real_root / "junit" / "results.xml").write_text('<testsuite name="safe" tests="0"/>\n', encoding="utf-8")
+        linked_root = self.base / "linked-artifacts"
+        linked_root.symlink_to(real_root, target_is_directory=True)
+
+        with self.assertRaisesRegex(evidence.EvidenceError, "symlinked artifact input root"):
+            evidence.copy_artifacts([linked_root], self.evidence_root, excluded=())
+
     def test_scan_findings_are_projected_without_storing_finding_content(self) -> None:
         self._registry()
         self._junit()
@@ -861,9 +872,9 @@ class QualityEvidenceTests(unittest.TestCase):
             "playwright_version": "1.55.0",
             "chromium": {
                 "name": "chromium",
-                "revision": "1187",
+                "channel": "chrome",
                 "version": "140.0.7339.16",
-                "executable": "/root/.cache/ms-playwright/chromium-1187/chrome-linux/chrome",
+                "executable": "/opt/google/chrome/chrome",
                 "sha256": "b" * 64,
             },
             "operating_system": {
@@ -898,6 +909,137 @@ class QualityEvidenceTests(unittest.TestCase):
             expected_commit=sha,
         )
         self.assertTrue(any("malformed browser runtime inventory" in error for error in errors), errors)
+
+    def test_dependency_json_accepts_bounded_inventory_larger_than_64_kib(self) -> None:
+        dependency = self.evidence_root / "dependencies" / "browser-runtime-large.json"
+        dependency.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"packages": [{"name": f"package-{index}"} for index in range(5000)]}
+        dependency.write_text(json.dumps(payload), encoding="utf-8")
+        self.assertGreater(dependency.stat().st_size, 64 * 1024)
+        parsed, error = evidence._read_dependency_json(self.evidence_root, dependency)
+        self.assertIsNone(error)
+        self.assertEqual(payload, parsed)
+
+    def test_copy_artifacts_collapses_actions_expansion_wrappers(self) -> None:
+        input_root = self.base / "aggregate-input"
+        wrapped = input_root / "cell" / "dependencies" / "expanded" / "archive-1"
+        wrapped.mkdir(parents=True)
+        source = wrapped / "python-packages.json"
+        source.write_text('[{"name":"ansible","version":"1"}]\n', encoding="utf-8")
+        (input_root / "cell" / "manifest.json").write_text(
+            json.dumps({"results": []}),
+            encoding="utf-8",
+        )
+        output = self.base / "aggregate-output"
+        evidence.copy_artifacts([input_root], output, excluded=())
+        self.assertTrue((output / "dependencies" / "python-packages.json").is_file())
+        self.assertFalse(any("expanded" in path.parts for path in output.rglob("*")))
+
+    def test_copy_artifacts_uses_only_cell_manifest_test_references(self) -> None:
+        input_root = self.base / "cell-input"
+        cell = input_root / "expanded" / "archive-1" / "attempt-1"
+        referenced = cell / "junit" / "demo" / "ubuntu-24.04" / "attempt-1" / "junit" / "demo.xml"
+        unreferenced = cell / "junit" / "demo.xml"
+        referenced.parent.mkdir(parents=True)
+        unreferenced.parent.mkdir(parents=True, exist_ok=True)
+        referenced.write_text("<testsuite/>\n", encoding="utf-8")
+        unreferenced.write_text("<testsuite/>\n", encoding="utf-8")
+        (cell / "manifest.json").write_text(
+            json.dumps({"results": [{"junit": [referenced.relative_to(cell).as_posix()]}]}),
+            encoding="utf-8",
+        )
+        output = self.base / "cell-output"
+
+        copied = evidence.copy_artifacts([input_root], output, excluded=())
+
+        self.assertEqual(1, len(copied))
+        self.assertTrue((output / "junit" / "demo" / "ubuntu-24.04" / "attempt-1" / "junit" / "demo.xml").is_file())
+        self.assertFalse((output / "junit" / "demo.xml").exists())
+
+    def test_copy_artifacts_rejects_symlinked_cell_manifest_reference(self) -> None:
+        input_root = self.base / "symlink-cell-input"
+        cell = input_root / "attempt-1"
+        target = cell / "outside.xml"
+        reference = cell / "junit" / "demo.xml"
+        reference.parent.mkdir(parents=True)
+        target.write_text("<testsuite/>\n", encoding="utf-8")
+        reference.symlink_to(target)
+        (cell / "manifest.json").write_text(
+            json.dumps({"results": [{"junit": [reference.relative_to(cell).as_posix()]}]}),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(evidence.EvidenceError, "symlinked junit reference"):
+            evidence.copy_artifacts([input_root], self.base / "symlink-cell-output", excluded=())
+
+    def test_copy_artifacts_rejects_malformed_cell_manifest(self) -> None:
+        input_root = self.base / "malformed-cell-input"
+        cell = input_root / "attempt-1"
+        cell.mkdir(parents=True)
+        (cell / "manifest.json").write_text('{"results": [', encoding="utf-8")
+
+        with self.assertRaisesRegex(evidence.EvidenceError, "invalid cell manifest"):
+            evidence.copy_artifacts([input_root], self.base / "malformed-cell-output", excluded=())
+
+    def test_copy_artifacts_prunes_excluded_manifests_before_discovery(self) -> None:
+        input_root = self.base / "rerun-input"
+        dependency = input_root / "dependencies" / "python-packages.json"
+        dependency.parent.mkdir(parents=True)
+        dependency.write_text('{"packages": []}\n', encoding="utf-8")
+        excluded = input_root / "evidence"
+        excluded.mkdir()
+        (excluded / "manifest.json").write_text('{"results": [', encoding="utf-8")
+        output = self.base / "rerun-output"
+
+        evidence.copy_artifacts([input_root], output, excluded=(excluded,))
+
+        self.assertTrue((output / "dependencies" / "python-packages.json").is_file())
+        self.assertFalse((output / "manifest.json").exists())
+
+    def test_cell_manifest_errors_include_the_relative_manifest_path(self) -> None:
+        input_root = self.base / "ambiguous-manifest-input"
+        cell = input_root / "expanded" / "archive-2" / "attempt-3"
+        cell.mkdir(parents=True)
+        (cell / "manifest.json").write_text(json.dumps({"results": [None]}), encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            evidence.EvidenceError,
+            "expanded/archive-2/attempt-3/manifest.json",
+        ):
+            evidence.copy_artifacts([input_root], self.base / "ambiguous-manifest-output", excluded=())
+
+    def test_copy_artifacts_rejects_symlinked_cell_manifest(self) -> None:
+        input_root = self.base / "symlink-manifest-input"
+        cell = input_root / "attempt-1"
+        cell.mkdir(parents=True)
+        outside = self.base / "outside-manifest.json"
+        outside.write_text(json.dumps({"results": []}), encoding="utf-8")
+        (cell / "manifest.json").symlink_to(outside)
+
+        with self.assertRaisesRegex(evidence.EvidenceError, "symlinked cell manifest"):
+            evidence.copy_artifacts([input_root], self.base / "symlink-manifest-output", excluded=())
+
+    def test_copy_artifacts_rejects_symlinked_artifact_directory(self) -> None:
+        input_root = self.base / "symlink-directory-input"
+        input_root.mkdir()
+        outside = self.base / "outside-artifacts"
+        outside.mkdir()
+        (outside / "environment.json").write_text("{}\n", encoding="utf-8")
+        (input_root / "dependencies").symlink_to(outside, target_is_directory=True)
+
+        with self.assertRaisesRegex(evidence.EvidenceError, "symlinked artifact input"):
+            evidence.copy_artifacts([input_root], self.base / "symlink-directory-output", excluded=())
+
+    def test_copy_artifacts_bounds_traversal_before_collecting_the_tree(self) -> None:
+        input_root = self.base / "bounded-walk-input"
+        for index in range(4):
+            (input_root / f"entry-{index}").mkdir(parents=True)
+
+        with (
+            patch.object(evidence, "MAX_EVIDENCE_FILES", 3),
+            self.assertRaisesRegex(evidence.EvidenceError, "3-entry traversal limit"),
+        ):
+            evidence.copy_artifacts([input_root], self.base / "bounded-walk-output", excluded=())
 
     def test_release_dependencies_require_matching_test_application_inventory(self) -> None:
         self._release_dependencies(self.evidence_root)

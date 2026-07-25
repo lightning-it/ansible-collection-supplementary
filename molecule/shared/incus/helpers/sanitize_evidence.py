@@ -136,7 +136,19 @@ def _extract_json_document(text: str) -> Any:
     """Extract one JSON value while tolerating non-JSON command diagnostics."""
 
     cleaned = ANSI_ESCAPE.sub("", text)
+    try:
+        return json.loads(cleaned.strip())
+    except json.JSONDecodeError:
+        pass
+    lines = [line for line in cleaned.splitlines() if line.strip()]
+    try:
+        line_documents = [json.loads(line) for line in lines]
+    except json.JSONDecodeError:
+        line_documents = []
+    if line_documents and all(isinstance(item, dict) for item in line_documents):
+        return line_documents
     decoder = json.JSONDecoder()
+    candidates: list[tuple[int, Any]] = []
     for index, character in enumerate(cleaned):
         if character not in "[{":
             continue
@@ -145,7 +157,9 @@ def _extract_json_document(text: str) -> Any:
         except json.JSONDecodeError:
             continue
         if end_index > index:
-            return document
+            candidates.append((end_index - index, document))
+    if candidates:
+        return max(candidates, key=lambda candidate: candidate[0])[1]
     raise ValueError("input does not contain a valid JSON document")
 
 
@@ -160,6 +174,8 @@ def sanitize(text: str, explicit_names: list[str], *, require_json: bool = False
             raise
         return _sanitize_text_value(text, secret_values)
 
+    if require_json and document is None:
+        document = []
     trailing_newline = text.endswith("\n")
     document = _sanitize_json(document, explicit_names)
     document = _sanitize_json_strings(document, secret_values)

@@ -33,7 +33,7 @@ Dependency evidence records controller Ansible, Molecule, Python, pip package,
 and installed collection inventories; the resolved Incus base image; the
 host-native execution-environment disposition; scenario dependency inputs; and
 in-target container image digests or immutable image IDs. Application
-Acceptance also records the exact Playwright version, Chromium revision,
+Acceptance also records the exact Playwright version, stable Chrome channel,
 browser version and executable SHA-256, plus the target operating-system
 package inventory installed for that browser. Binary packages are tied to the
 exact distro and source-package identity so vulnerability matching does not

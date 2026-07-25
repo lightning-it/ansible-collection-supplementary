@@ -8,6 +8,8 @@
       - aap_host_prepare_install_user_home_effective is match('^/.+')
       - aap_host_prepare_install_user_shell_effective is string
       - aap_host_prepare_install_user_shell_effective is match('^/.+')
+      - aap_host_prepare_setup_dir_effective is string
+      - aap_host_prepare_setup_dir_effective is match('^/.+')
     fail_msg: Invalid configuration for lit.supplementary.aap_host_prepare.
     quiet: true
   changed_when: false

@@ -13,8 +13,10 @@ explicitly by the calling runbook.
 ## Variables
 
 See `defaults/main.yml` for the complete role interface. The role maps the AAP
-install user, home, and shell into `aap_host_prepare_*_effective` values. The
-calling runbook controls optional host changes through the existing
+install user, home, shell, and installer setup directory into
+`aap_host_prepare_*_effective` values. The default prerequisite package set
+includes the `tar` and `unzip` tools required by the vendor setup preparation
+role. The calling runbook controls optional host changes through the existing
 `aap_runbook_manage_*` variables.
 
 ## Dependencies

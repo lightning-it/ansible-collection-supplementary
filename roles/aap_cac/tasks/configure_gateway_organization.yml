@@ -1,0 +1,247 @@
+---
+- name: Resolve desired Gateway organization state
+  ansible.builtin.set_fact:
+    __aap_cac_gateway_org_state: >-
+      {{
+        __gateway_organization_item.state
+        | default(platform_state | default('present', true), true)
+      }}
+    __aap_cac_gateway_org_name: "{{ __gateway_organization_item.name | mandatory }}"
+    __aap_cac_gateway_org_target_name: >-
+      {{
+        __gateway_organization_item.new_name
+        | default(__gateway_organization_item.name, true)
+      }}
+  changed_when: false
+
+- name: Query Gateway organization
+  ansible.builtin.uri:
+    url: >-
+      {{
+        (aap_cac_gateway_hostname | regex_replace('/+$', ''))
+        ~ '/api/gateway/v1/organizations/?name='
+        ~ (__aap_cac_gateway_org_name | urlencode)
+      }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ aap_cac_auth_token }}"
+      Accept: application/json
+    return_content: true
+    status_code: 200
+    timeout: "{{ aap_request_timeout | default(30, true) }}"
+    validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+  register: __aap_cac_gateway_org_query
+  changed_when: false
+  no_log: true
+
+- name: Query renamed Gateway organization
+  ansible.builtin.uri:
+    url: >-
+      {{
+        (aap_cac_gateway_hostname | regex_replace('/+$', ''))
+        ~ '/api/gateway/v1/organizations/?name='
+        ~ (__aap_cac_gateway_org_target_name | urlencode)
+      }}
+    method: GET
+    headers:
+      Authorization: "Bearer {{ aap_cac_auth_token }}"
+      Accept: application/json
+    return_content: true
+    status_code: 200
+    timeout: "{{ aap_request_timeout | default(30, true) }}"
+    validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+  register: __aap_cac_gateway_org_target_query
+  changed_when: false
+  no_log: true
+  when: __aap_cac_gateway_org_name != __aap_cac_gateway_org_target_name
+
+- name: Record Gateway organization query results
+  ansible.builtin.set_fact:
+    __aap_cac_gateway_org_source_results: >-
+      {{ __aap_cac_gateway_org_query.json.results | default([]) }}
+    __aap_cac_gateway_org_target_results: >-
+      {{
+        __aap_cac_gateway_org_target_query.json.results
+        | default([])
+        if __aap_cac_gateway_org_name != __aap_cac_gateway_org_target_name
+        else []
+      }}
+  changed_when: false
+
+- name: Require unambiguous Gateway organization results
+  ansible.builtin.assert:
+    that:
+      - (__aap_cac_gateway_org_source_results | length) <= 1
+      - (__aap_cac_gateway_org_target_results | length) <= 1
+    fail_msg: >-
+      Gateway returned multiple organizations for the requested source or
+      target organization name.
+
+- name: Reject conflicting Gateway organization rename targets
+  ansible.builtin.assert:
+    that:
+      - >-
+        (__aap_cac_gateway_org_source_results | length == 0)
+        or (__aap_cac_gateway_org_target_results | length == 0)
+        or
+        (
+          (__aap_cac_gateway_org_source_results | first).id
+          == (__aap_cac_gateway_org_target_results | first).id
+        )
+    fail_msg: >-
+      Cannot rename Gateway organization {{ __aap_cac_gateway_org_name }} to
+      {{ __aap_cac_gateway_org_target_name }} because both names already exist.
+
+- name: Record current Gateway organization
+  ansible.builtin.set_fact:
+    __aap_cac_gateway_org_current: >-
+      {{
+        (
+          __aap_cac_gateway_org_source_results
+          if __aap_cac_gateway_org_source_results | length > 0
+          else __aap_cac_gateway_org_target_results
+        )
+        | first
+        | default({}, true)
+      }}
+  changed_when: false
+
+- name: Create Gateway organization
+  ansible.builtin.uri:
+    url: >-
+      {{
+        (aap_cac_gateway_hostname | regex_replace('/+$', ''))
+        ~ '/api/gateway/v1/organizations/'
+      }}
+    method: POST
+    headers:
+      Authorization: "Bearer {{ aap_cac_auth_token }}"
+      Accept: application/json
+    body_format: json
+    body: >-
+      {{
+        {'name': __aap_cac_gateway_org_target_name}
+        | combine(
+            {'description': __gateway_organization_item.description}
+            if __gateway_organization_item.description is defined
+            else {}
+          )
+      }}
+    status_code:
+      - 200
+      - 201
+    timeout: "{{ aap_request_timeout | default(30, true) }}"
+    validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+  when:
+    - not ansible_check_mode
+    - __aap_cac_gateway_org_state in ['present', 'enforced']
+    - __aap_cac_gateway_org_current | length == 0
+  no_log: true
+
+- name: Report planned Gateway organization creation
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: Gateway organization {{ __aap_cac_gateway_org_target_name }}
+      would be created.
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - __aap_cac_gateway_org_state in ['present', 'enforced']
+    - __aap_cac_gateway_org_current | length == 0
+
+- name: Update Gateway organization
+  ansible.builtin.uri:
+    url: >-
+      {{
+        (aap_cac_gateway_hostname | regex_replace('/+$', ''))
+        ~ '/api/gateway/v1/organizations/'
+        ~ (__aap_cac_gateway_org_current.id | string)
+        ~ '/'
+      }}
+    method: PATCH
+    headers:
+      Authorization: "Bearer {{ aap_cac_auth_token }}"
+      Accept: application/json
+    body_format: json
+    body: >-
+      {{
+        {'name': __aap_cac_gateway_org_target_name}
+        | combine(
+            {'description': __gateway_organization_item.description}
+            if __gateway_organization_item.description is defined
+            else {}
+          )
+      }}
+    status_code: 200
+    timeout: "{{ aap_request_timeout | default(30, true) }}"
+    validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+  when:
+    - not ansible_check_mode
+    - __aap_cac_gateway_org_state in ['present', 'enforced']
+    - __aap_cac_gateway_org_current | length > 0
+    - >-
+      (__aap_cac_gateway_org_current.name != __aap_cac_gateway_org_target_name)
+      or
+      (
+        __gateway_organization_item.description is defined
+        and
+        (__aap_cac_gateway_org_current.description | default(''))
+        != __gateway_organization_item.description
+      )
+  no_log: true
+
+- name: Report planned Gateway organization update
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: Gateway organization {{ __aap_cac_gateway_org_name }}
+      would be updated.
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - __aap_cac_gateway_org_state in ['present', 'enforced']
+    - __aap_cac_gateway_org_current | length > 0
+    - >-
+      (__aap_cac_gateway_org_current.name != __aap_cac_gateway_org_target_name)
+      or
+      (
+        __gateway_organization_item.description is defined
+        and
+        (__aap_cac_gateway_org_current.description | default(''))
+        != __gateway_organization_item.description
+      )
+
+- name: Delete Gateway organization
+  ansible.builtin.uri:
+    url: >-
+      {{
+        (aap_cac_gateway_hostname | regex_replace('/+$', ''))
+        ~ '/api/gateway/v1/organizations/'
+        ~ (__aap_cac_gateway_org_current.id | string)
+        ~ '/'
+      }}
+    method: DELETE
+    headers:
+      Authorization: "Bearer {{ aap_cac_auth_token }}"
+      Accept: application/json
+    status_code:
+      - 200
+      - 202
+      - 204
+    timeout: "{{ aap_request_timeout | default(30, true) }}"
+    validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
+  when:
+    - not ansible_check_mode
+    - __aap_cac_gateway_org_state == 'absent'
+    - __aap_cac_gateway_org_current | length > 0
+  no_log: true
+
+- name: Report planned Gateway organization deletion
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: Gateway organization {{ __aap_cac_gateway_org_name }}
+      would be deleted.
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - __aap_cac_gateway_org_state == 'absent'
+    - __aap_cac_gateway_org_current | length > 0

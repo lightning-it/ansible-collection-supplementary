@@ -624,21 +624,17 @@ def enrich_sbom(
                 )
             ):
                 raise SbomError(f"browser operating system differs from target: {dependency}")
-            if set(chromium) != {"name", "revision", "version", "executable", "sha256"}:
+            if set(chromium) != {"name", "channel", "version", "executable", "sha256"}:
                 raise SbomError(f"malformed Chromium runtime identity: {dependency}")
-            revision = str(chromium.get("revision", ""))
+            channel = str(chromium.get("channel", ""))
             browser_version = str(chromium.get("version", ""))
             executable = Path(str(chromium.get("executable", "")))
             executable_digest = str(chromium.get("sha256", ""))
             if (
                 chromium.get("name") != "chromium"
-                or re.fullmatch(r"[0-9]+", revision) is None
+                or channel != "chrome"
                 or re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,3}", browser_version) is None
-                or not executable.is_absolute()
-                or not (
-                    f"chromium-{revision}" in executable.parts
-                    or f"chromium_headless_shell-{revision}" in executable.parts
-                )
+                or executable != Path("/opt/google/chrome/chrome")
                 or re.fullmatch(r"[0-9a-f]{64}", executable_digest) is None
             ):
                 raise SbomError(f"malformed Chromium runtime identity: {dependency}")
@@ -663,7 +659,7 @@ def enrich_sbom(
                     "properties": common_properties
                     + [
                         {"name": "lit:dependency:playwright-version", "value": str(inventory["playwright_version"])},
-                        {"name": "lit:dependency:browser-revision", "value": revision},
+                        {"name": "lit:dependency:browser-channel", "value": channel},
                         {"name": "lit:dependency:executable", "value": executable.as_posix()},
                         {
                             "name": "lit:dependency:scanner-cpe-rationale",

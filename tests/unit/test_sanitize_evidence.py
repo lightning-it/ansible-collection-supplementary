@@ -68,6 +68,18 @@ class SanitizeEvidenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             SANITIZER.sanitize("runtime warning only", [], require_json=True)
 
+    def test_json_document_mode_normalizes_null_inventory(self) -> None:
+        self.assertEqual("[]\n", SANITIZER.sanitize("null\n", [], require_json=True))
+
+    def test_json_document_mode_collects_json_lines_as_array(self) -> None:
+        rendered = SANITIZER.sanitize('{"Id":"one"}\n{"Id":"two"}\n', [], require_json=True)
+        self.assertEqual([{"Id": "one"}, {"Id": "two"}], json.loads(rendered))
+
+    def test_json_document_mode_prefers_complete_document_over_nested_array(self) -> None:
+        source = 'warning: inspect output follows\n{"Config":{"Entrypoint":["/catatonit","-P"]},"Id":"sha256:abc"}\n'
+        rendered = SANITIZER.sanitize(source, [], require_json=True)
+        self.assertEqual("sha256:abc", json.loads(rendered)["Id"])
+
     def test_redacts_exact_environment_value_and_credential_shapes(self) -> None:
         source = (
             "password=plain-secret\n"

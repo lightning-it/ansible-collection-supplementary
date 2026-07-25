@@ -328,7 +328,6 @@ class RoleCoverageRegistryTests(unittest.TestCase):
     def test_aap_overlay_exactly_covers_registry_and_role_references(self) -> None:
         expected = {
             "ansible.controller",
-            "ansible.platform",
             "infra.aap_configuration",
             "infra.aap_utilities",
             "infra.controller_configuration",

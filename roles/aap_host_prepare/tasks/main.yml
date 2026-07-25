@@ -71,7 +71,9 @@
             'openssl',
             'python3',
             'rsync',
-            'sudo'
+            'sudo',
+            'tar',
+            'unzip'
           ])
       }}
     state: present
@@ -87,7 +89,9 @@
             'openssl',
             'python3',
             'rsync',
-            'sudo'
+            'sudo',
+            'tar',
+            'unzip'
           ])
       ) | length > 0
   tags:
@@ -117,6 +121,7 @@
     }}
   loop_control:
     label: "{{ item.path }}"
+  register: aap_host_prepare_directory_results
   tags:
     - aap
     - aap_host_prepare
@@ -168,6 +173,19 @@
     - aap_host_prepare
     - os_prep
     - sudoers
+
+- name: Ensure AAP installer setup directory exists
+  ansible.builtin.file:
+    path: "{{ aap_host_prepare_setup_dir_effective }}"
+    state: directory
+    owner: "{{ aap_host_prepare_install_user_effective }}"
+    group: "{{ aap_host_prepare_install_user_effective }}"
+    mode: '0755'
+  tags:
+    - aap
+    - aap_host_prepare
+    - os_prep
+    - filesystem
 
 - name: Prepare Podman on AAP host
   ansible.builtin.include_role:
@@ -296,7 +314,10 @@
     - git
     - openssl
     - python3
+    - rsync
     - sudo
+    - tar
+    - unzip
   changed_when: false
   tags:
     - aap
@@ -331,8 +352,23 @@
 - name: Assert required AAP host paths exist
   ansible.builtin.assert:
     that:
-      - item.stat.exists | default(false)
-      - item.stat.isdir | default(false)
+      - >-
+        (
+          item.stat.exists | default(false)
+          and item.stat.isdir | default(false)
+        )
+        or
+        (
+          ansible_check_mode
+          and
+          (
+            aap_host_prepare_directory_results.results
+            | selectattr('item.path', 'equalto', item.item)
+            | selectattr('changed', 'equalto', true)
+            | list
+            | length
+          ) == 1
+        )
     fail_msg: "Required AAP host path is missing or not a directory: {{ item.item }}"
     quiet: true
   loop: "{{ aap_host_prepare_path_stats.results }}"
@@ -349,6 +385,11 @@
     apply:
       tags: [aap, aap_host_prepare, aap_preflight, verify]
   vars:
+    # This role has already validated actual or planned directory creation
+    # immediately above.  The nested generic preflight cannot observe those
+    # planned file-module changes in check mode, so keep its strict path
+    # assertion for apply only.
+    aap_preflight_check_paths: "{{ not ansible_check_mode }}"
     aap_preflight_check_artifacts: false
     aap_preflight_check_vault: false
     aap_preflight_check_ansible_vault: false

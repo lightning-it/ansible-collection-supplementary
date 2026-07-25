@@ -19,6 +19,12 @@
         | default(lookup('ansible.builtin.env', 'GITHUB_SHA'), true)
         | default(lookup('ansible.builtin.pipe', 'git rev-parse HEAD'), true)
       }}
+    keycloak_acceptance_run_attempt: >-
+      {{
+        lookup('ansible.builtin.env', 'MOLECULE_TEST_RUN_ATTEMPT')
+        | default(lookup('ansible.builtin.env', 'GITHUB_RUN_ATTEMPT'), true)
+        | default('1', true)
+      }}
     keycloak_acceptance_cac_operator_password: >-
       {{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_CAC_OPERATOR_PASSWORD') }}
     keycloak_acceptance_required_environment:
@@ -50,9 +56,10 @@
         that:
           - keycloak_acceptance_target is match('^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$')
           - keycloak_acceptance_source_commit is match('^[0-9a-f]{40}$')
+          - keycloak_acceptance_run_attempt is match('^[1-9][0-9]*$')
         fail_msg: >-
-          Acceptance dependency evidence requires a safe target and the exact
-          lowercase 40-character source commit.
+          Acceptance dependency evidence requires a safe target, the exact
+          lowercase 40-character source commit, and a positive run attempt.
 
     - name: Copy acceptance pytest resources
       ansible.builtin.copy:
@@ -82,9 +89,9 @@
         - browser-diagnostics
         - dependencies
 
-    - name: Install pinned Chromium managed by Playwright
+    - name: Install the patched stable Chrome channel managed by Playwright
       ansible.builtin.command:
-        cmd: "{{ keycloak_acceptance_root }}/venv/bin/playwright install --with-deps chromium"
+        cmd: "{{ keycloak_acceptance_root }}/venv/bin/playwright install --with-deps chrome"
       register: keycloak_acceptance_browser_install
       changed_when: >-
         'Downloading' in keycloak_acceptance_browser_install.stdout
@@ -105,6 +112,10 @@
           - "{{ keycloak_acceptance_target }}"
           - --source-commit
           - "{{ keycloak_acceptance_source_commit }}"
+          - --browser-channel
+          - chrome
+          - --executable
+          - /opt/google/chrome/chrome
       register: keycloak_acceptance_browser_inventory
       changed_when: false
 
@@ -328,6 +339,15 @@
                   | length
                 ) }}"
                 errors="0" skipped="0">
+                <properties>
+                  <property name="role" value="keycloak_cac"/>
+                  <property name="roles" value="keycloak_cac"/>
+                  <property name="profile" value="application-acceptance"/>
+                  <property name="scenario" value="keycloak-application-acceptance"/>
+                  <property name="target" value="{{ keycloak_acceptance_target }}"/>
+                  <property name="commit_sha" value="{{ keycloak_acceptance_source_commit }}"/>
+                  <property name="run_attempt" value="{{ keycloak_acceptance_run_attempt }}"/>
+                </properties>
                 <testcase classname="keycloak.cac" name="apply-and-query" role="keycloak_cac">
               {% if not keycloak_acceptance_cac_checks.apply_and_query %}
                   <failure type="StateMismatch" message="initial state was not observed"/>
@@ -372,6 +392,8 @@
               - --strict-markers
               - --browser
               - chromium
+              - --browser-channel
+              - chrome
               - --junitxml
               - "{{ keycloak_acceptance_artifacts_remote }}/junit/keycloak-application-acceptance.xml"
               - --alluredir

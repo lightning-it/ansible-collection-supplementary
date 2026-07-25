@@ -31,7 +31,7 @@ class SourceDependencyTests(unittest.TestCase):
         result = DEPENDENCIES.validate_source_dependencies(root=ROOT)
         self.assertEqual(result["container_count"], 25)
         self.assertEqual(result["derived_container_count"], 1)
-        self.assertEqual(result["collection_count"], 13)
+        self.assertEqual(result["collection_count"], 12)
         self.assertEqual(result["external_product_count"], 1)
 
     def test_binary_shipped_payload_is_not_decoded_as_dependency_source(self) -> None:

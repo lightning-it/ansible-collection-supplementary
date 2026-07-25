@@ -13,7 +13,7 @@ platforms:
       target: "${KEYCLOAK_TEST_TARGET:-ubuntu-24.04}"
     resources:
       cpu: "${KEYCLOAK_TEST_CPU_LIMIT:-2}"
-      memory: "${KEYCLOAK_TEST_MEMORY_LIMIT:-4GiB}"
+      memory: "${KEYCLOAK_TEST_MEMORY_LIMIT:-12GiB}"
       disk: "${KEYCLOAK_TEST_DISK_LIMIT:-10GiB}"
     config:
       - key: security.nesting

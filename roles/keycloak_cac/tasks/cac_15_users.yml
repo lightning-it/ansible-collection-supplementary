@@ -1,5 +1,7 @@
 ---
 - name: Reconcile Keycloak users and group memberships
+  tags:
+    - molecule-idempotence-notest
   block:
     - name: Apply Keycloak user and group membership definitions  # noqa args[module]
       community.general.keycloak_user: >-

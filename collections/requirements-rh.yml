@@ -2,8 +2,6 @@
 collections:
   # Exact AAP 2.7 runtime overlay used by the shipped AAP roles. These
   # licensed/certified dependencies are intentionally outside galaxy.yml.
-  - name: ansible.platform
-    version: "2.7.20260630"
   - name: ansible.controller
     version: "4.8.2"
   - name: infra.aap_utilities

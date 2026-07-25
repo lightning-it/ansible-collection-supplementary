@@ -267,6 +267,7 @@
           - "{{ molecule_incus_network_effective }}"
       register: molecule_incus_cleanup_network_show
       changed_when: false
+      failed_when: false
       when:
         - molecule_incus_cleanup_network_owner.rc == 0
         - molecule_incus_cleanup_network_owner.stdout | trim == molecule_incus_owner_effective

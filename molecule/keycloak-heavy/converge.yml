@@ -427,7 +427,7 @@
       realm: keycloak-test
       connection_url: ldaps://127.0.0.1:1636
       users_dn: CN=Users,DC=keycloak,DC=test
-      bind_dn: CN=keycloak,CN=Users,DC=keycloak,DC=test
+      bind_dn: CN=Keycloak Bind,CN=Users,DC=keycloak,DC=test
       bind_credential: "{{ keycloak_heavy_ldap_bind_password }}"
       vendor: ad
       edit_mode: READ_ONLY
@@ -491,6 +491,8 @@
     postgres_backup_restore_format: custom
     postgres_backup_restore_execution_mode: podman
     postgres_backup_restore_container_name: keycloak-heavy-postgres-postgres
+    postgres_backup_restore_extra_pg_dump_args:
+      - --table=public.molecule_restore_probe
   pre_tasks:
     - name: Seed exact isolated state for the Heavy restore drill
       ansible.builtin.command:

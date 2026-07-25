@@ -2,6 +2,11 @@
 
 Validate AAP setup prerequisites before prepare or deploy.
 
+Set `aap_preflight_phase: initial` for the read-only customer-baseline gate
+before AAP-owned paths and runtime storage are prepared. The default `full`
+phase also validates those paths, staged artifacts, Podman storage, and clean
+runtime state before deployment.
+
 The role checks the operational contract for local execution:
 
 - setup/runbooks connect as `svc_ansible` by default
