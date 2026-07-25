@@ -70,7 +70,7 @@ jobs:
           python -m pip install --disable-pip-version-check \
             "ansible-core==${ANSIBLE_CORE_VERSION}" \
             pre-commit==4.3.0 \
-            pytest==8.4.2 \
+            pytest==9.0.3 \
             PyYAML==6.0.3
       - name: Run repository static pre-commit gates
         env:
