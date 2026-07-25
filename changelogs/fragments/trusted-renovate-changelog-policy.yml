@@ -1,0 +1,3 @@
+---
+bugfixes:
+  - Allow trusted non-breaking Renovate pull requests to pass collection CI without an unrelated changelog fragment.
