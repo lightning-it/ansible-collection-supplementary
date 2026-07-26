@@ -2,7 +2,7 @@
 grafana_deploy_pod_name: "grafana"
 grafana_deploy_container_name: "grafana"
 grafana_deploy_image: >-
-  docker.io/grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7
+  docker.io/grafana/grafana:11.6.16@sha256:d67af92050b8d93b393dc741864752a69c9da1ffa39c1bb9af49ad5d9e47d2c3
 grafana_deploy_pod_manifest_path: "/etc/podman/pods/grafana.yml"
 
 grafana_deploy_host_data_dir: "/srv/grafana/data"
