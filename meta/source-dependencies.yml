@@ -24,7 +24,7 @@ container_images:
     locations:
       - "roles/samba_deploy/defaults/main.yml"
       - "roles/samba_upgrade/defaults/main.yml"
-  - reference: "docker.io/grafana/alloy:v1.7.5@sha256:b92703c13c32c20d629ffd89f40287ed385c12a335a7c9f31c720a5f912f9d6f"
+  - reference: "docker.io/grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308"
     locations:
       - "roles/alloy_deploy/defaults/main.yml"
   - reference: "docker.io/grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7"
