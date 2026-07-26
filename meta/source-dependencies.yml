@@ -17,7 +17,7 @@ container_images:
   - reference: "docker.io/checkmk/check-mk-raw:2.4.0-latest@sha256:d6cb29c34ce8199cdae5246d1aadad489ef43250e211ad9b25d375237ee2eb34"
     locations:
       - "roles/checkmk_deploy/defaults/main.yml"
-  - reference: "docker.io/coredns/coredns:1.11.1@sha256:1eeb4c7316bacb1d4c8ead65571cd92dd21e27359f0d4917f1a5822a73b75db1"
+  - reference: "docker.io/coredns/coredns:1.14.6@sha256:900f9c109f7a33545d3c811516e8376df9019147b750f5ce3e254468769176ea"
     locations:
       - "roles/coredns_deploy/defaults/main.yml"
   - reference: "docker.io/dperson/samba:latest@sha256:66088b78a19810dd1457a8f39340e95e663c728083efa5fe7dc0d40b2478e869"
