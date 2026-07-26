@@ -55,7 +55,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout exact source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 0
@@ -123,7 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ env.SOURCE_SHA }}
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
@@ -149,7 +149,7 @@ jobs:
       full_matrix: ${{ steps.impact.outputs.full_matrix }}
       selection: ${{ steps.impact.outputs.selection }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 0
@@ -205,7 +205,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 0
@@ -362,7 +362,7 @@ jobs:
         matrix.component }}-${{ matrix.target }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ env.SOURCE_SHA }}
       - name: Set up exact Python runtime
@@ -540,7 +540,7 @@ jobs:
     steps:
       - name: Checkout exact source
         if: always()
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ env.SOURCE_SHA }}
       - name: Set up Python
@@ -988,7 +988,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout exact protected-main source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ env.SOURCE_SHA }}
           persist-credentials: false
@@ -1074,17 +1074,17 @@ jobs:
           PY
       - name: Attest candidate provenance
         id: attest-candidate
-        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763  # v4
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6  # v4
         with:
           subject-path: artifacts/candidate/*.tar.gz
       - name: Attest SBOM provenance
         id: attest-sbom
-        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763  # v4
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6  # v4
         with:
           subject-path: artifacts/release-assets/sbom.cdx.json
       - name: Attest evidence provenance
         id: attest-evidence
-        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763  # v4
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6  # v4
         with:
           subject-path: artifacts/release-assets/collection-evidence-${{ env.SOURCE_SHA }}.tar.gz
       - name: Capture generated attestation identities and bundles
@@ -1306,7 +1306,7 @@ jobs:
             artifacts/release-assets/SHA256SUMS
       - name: Attest authenticated release-asset checksums
         id: attest-checksums
-        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763  # v4
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6  # v4
         with:
           subject-path: artifacts/release-assets/SHA256SUMS
       - name: Capture checksum attestation bundle
@@ -1479,7 +1479,7 @@ jobs:
             artifacts/release-assets/release-security-receipt.json
       - name: Attest final release-security receipt
         id: attest-receipt
-        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763  # v4
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6  # v4
         with:
           subject-path: artifacts/release-assets/release-security-receipt.json
       - name: Capture receipt attestation bundle
@@ -1591,7 +1591,7 @@ jobs:
       attestations: read
       contents: read
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ env.SOURCE_SHA }}
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6

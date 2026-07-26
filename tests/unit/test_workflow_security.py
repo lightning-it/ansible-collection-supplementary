@@ -486,7 +486,7 @@ class WorkflowSecurityTests(unittest.TestCase):
             step for step in scorecard_job["steps"] if step.get("name") == "Run immutable OpenSSF Scorecard analysis"
         )
         self.assertEqual(
-            "ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a",
+            "ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc",
             run_step["uses"],
         )
         self.assertIs(run_step["with"]["publish_results"], False)
