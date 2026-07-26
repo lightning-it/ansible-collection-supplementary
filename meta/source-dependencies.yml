@@ -52,7 +52,7 @@ container_images:
   - reference: "docker.io/prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996"
     locations:
       - "roles/prometheus_deploy/defaults/main.yml"
-  - reference: "docker.io/rsyslog/syslog_appliance_alpine:latest@sha256:c0dd7cad9ff3234967ff59879590175b7590e8a5f5621ec49a85aff546b44a3b"
+  - reference: "docker.io/rsyslog/syslog_appliance_alpine:latest@sha256:93bb7d1f5f5a0e84f1f78c4f86ae8cf9506a2c00236155c4b5f068412d93613e"
     locations:
       - "roles/rsyslog_deploy/defaults/main.yml"
       - "roles/rsyslog_upgrade/defaults/main.yml"
