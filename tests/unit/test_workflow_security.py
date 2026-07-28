@@ -87,6 +87,8 @@ class WorkflowSecurityTests(unittest.TestCase):
     def test_release_evidence_selects_only_the_collection_candidate_and_exact_head(self) -> None:
         workflow = (WORKFLOWS / "collection-ci.yml").read_text(encoding="utf-8")
         self.assertIn("-name 'lit-supplementary-*.tar.gz'", workflow)
+        self.assertIn('.glob("lit-supplementary-*.tar.gz")', workflow)
+        self.assertNotIn('.glob("*.tar.gz")', workflow)
         self.assertNotIn(
             "find artifacts/candidate -maxdepth 1 -type f -name '*.tar.gz'",
             workflow,

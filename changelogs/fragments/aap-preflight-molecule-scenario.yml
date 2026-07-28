@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    Add a ``aap-preflight-basic`` Molecule light scenario for the
+    ``aap_preflight`` role to provide syntax coverage and prevent regressions
+    in the prepared-host and execution-environment gate paths.
