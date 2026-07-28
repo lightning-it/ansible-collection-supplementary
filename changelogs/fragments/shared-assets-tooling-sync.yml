@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    Harden the shared development container wrappers and keep the immutable
+    Renovate validation image inventory synchronized with pre-commit tooling.
