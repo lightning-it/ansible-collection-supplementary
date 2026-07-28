@@ -295,3 +295,11 @@ releases:
     fragments:
       - 493-release-state-version-neutral.yml
     release_date: '2026-07-28'
+  2.0.3:
+    changes:
+      bugfixes:
+        - Limit the public release candidate checksum manifest to the collection archive
+          when the CI candidate artifact also contains a runtime bundle.
+    fragments:
+      - 495-release-candidate-checksum.yml
+    release_date: '2026-07-28'
