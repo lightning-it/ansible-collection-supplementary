@@ -61,6 +61,16 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   head_ref="${GITHUB_HEAD_REF:-$(git rev-parse --abbrev-ref HEAD)}"
   base_ref="${GITHUB_BASE_REF:-}"
 
+  # Push CI checks out the reviewed merge commit in detached-HEAD mode. Recover
+  # the reviewed release branch from the GitHub merge subject so the same
+  # generated-changelog policy applies before and after the PR merge.
+  if [[ "$head_ref" == HEAD ]]; then
+    merge_subject="$(git log -1 --format=%s HEAD)"
+    if [[ "$merge_subject" =~ ^Merge\ pull\ request\ \#[0-9]+\ from\ [^/]+/(release/v[^[:space:]]+|backsync/release-[^[:space:]]+)$ ]]; then
+      head_ref="${BASH_REMATCH[1]}"
+    fi
+  fi
+
   if [[ "$head_ref" == release/v* || "$head_ref" == backsync/release-* ]]; then
     is_release_branch=true
   fi
