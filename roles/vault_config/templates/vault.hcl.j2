@@ -111,7 +111,7 @@ inputs = {
 ) }}
 
 {{ macros.render_block(
-  "vault_pki_roots",
+  "pki_roots",
   vault_config_pki_roots,
   "key",
   ["mount", "common_name", "vault_server"],
@@ -120,7 +120,7 @@ inputs = {
 ) }}
 
 {{ macros.render_block(
-  "vault_pki_intermediates",
+  "pki_intermediates",
   vault_config_pki_intermediates,
   "key",
   ["mount", "common_name", "vault_server"],
@@ -129,7 +129,7 @@ inputs = {
 ) }}
 
 {{ macros.render_block(
-  "vault_pki_roles",
+  "pki_roles",
   vault_config_pki_roles,
   "key",
   ["name", "mount"],
