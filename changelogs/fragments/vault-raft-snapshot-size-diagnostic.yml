@@ -1,9 +1,0 @@
----
-bugfixes:
-  - >-
-    Report only the non-secret raw Raft snapshot size and approved limit when
-    the encrypted snapshot workflow reaches its bounded-size gate.
-minor_changes:
-  - >-
-    Raise the enforced Vault Raft raw snapshot ceiling from 64 MiB to 128 MiB
-    for production recovery points that have grown beyond the former bound.
