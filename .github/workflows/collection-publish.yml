@@ -229,7 +229,8 @@ jobs:
           )
           test "${#preparation_parents[@]}" -eq 1
           test "${preparation_parents[0]}" = "$REVIEWED_BASE_SHA"
-          expected_identity='litreleasebot <litreleasebot@users.noreply.github.com>'
+          expected_identity='lightning-it-release-automation[bot]'
+          expected_identity+=' <307565056+lightning-it-release-automation[bot]@users.noreply.github.com>'
           test "$(git show -s --format='%an <%ae>' "$REVIEWED_HEAD_SHA")" = \
             "$expected_identity"
           test "$(git show -s --format='%cn <%ce>' "$REVIEWED_HEAD_SHA")" = \
