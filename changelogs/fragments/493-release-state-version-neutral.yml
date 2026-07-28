@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Keep repository release-state validation independent of a specific release
+    version so subsequent patch releases remain eligible.

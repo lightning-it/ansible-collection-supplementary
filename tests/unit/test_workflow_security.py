@@ -94,9 +94,7 @@ class WorkflowSecurityTests(unittest.TestCase):
             workflow,
         )
 
-        publish_workflow = (WORKFLOWS / "collection-publish.yml").read_text(
-            encoding="utf-8"
-        )
+        publish_workflow = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
         self.assertIn("-name 'lit-supplementary-*.tar.gz'", publish_workflow)
         self.assertNotIn("-name '*.tar.gz'", publish_workflow)
 
