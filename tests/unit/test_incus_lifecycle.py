@@ -141,7 +141,7 @@ class IncusLifecycleTests(unittest.TestCase):
             1,
             ["incus", "network", "delete", "lit000000000001"],
             stderr=(
-                'Error: Failed to run: ip link delete dev lit000000000001: '
+                "Error: Failed to run: ip link delete dev lit000000000001: "
                 'exit status 1 (Cannot find device "lit000000000001")'
             ),
         )
