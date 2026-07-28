@@ -1,6 +1,0 @@
----
-minor_changes:
-  - >-
-    CI - Select the protected Keycloak Tiny, Heavy, and Application Acceptance
-    matrix only when the Keycloak quality family or one of its registered
-    PostgreSQL, Samba, workflow, registry, or shared Incus dependencies changes.
