@@ -279,3 +279,11 @@ releases:
       - vault-raft-snapshot-restore-timeout.yml
       - vault-raft-snapshot-size-diagnostic.yml
     release_date: '2026-07-28'
+  2.0.1:
+    changes:
+      bugfixes:
+        - Restrict release publication to the lit.supplementary collection archive
+          when runtime evidence bundles are present beside the candidate.
+    fragments:
+      - 490-publish-candidate-selection.yml
+    release_date: '2026-07-28'

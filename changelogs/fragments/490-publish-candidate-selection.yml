@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Restrict release publication to the lit.supplementary collection archive
-    when runtime evidence bundles are present beside the candidate.
