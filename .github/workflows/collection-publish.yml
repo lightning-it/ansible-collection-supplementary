@@ -730,8 +730,11 @@ jobs:
           mv dist/release/SHA256SUMS.sigstore.json \
             dist/release/ci-release-assets-SHA256SUMS.sigstore.json
           cp "incoming/candidate/${CANDIDATE_NAME}" dist/release/
-          cp incoming/candidate/candidate-SHA256SUMS \
-            dist/release/ci-candidate-SHA256SUMS
+          awk -v candidate="$CANDIDATE_NAME" \
+            '$2 == candidate { print }' \
+            incoming/candidate/candidate-SHA256SUMS \
+            > dist/release/ci-candidate-SHA256SUMS
+          test "$(wc -l < dist/release/ci-candidate-SHA256SUMS)" -eq 1
           cp incoming/evidence/evidence/security/vulnerability-report.json \
             dist/release/vulnerability-report.json
           cp incoming/evidence/evidence/security/secret-scan-summary.json \

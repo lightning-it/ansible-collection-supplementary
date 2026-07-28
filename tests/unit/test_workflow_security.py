@@ -97,6 +97,14 @@ class WorkflowSecurityTests(unittest.TestCase):
         publish_workflow = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
         self.assertIn("-name 'lit-supplementary-*.tar.gz'", publish_workflow)
         self.assertNotIn("-name '*.tar.gz'", publish_workflow)
+        self.assertIn(
+            "'$2 == candidate { print }'",
+            publish_workflow,
+        )
+        self.assertNotIn(
+            "cp incoming/candidate/candidate-SHA256SUMS",
+            publish_workflow,
+        )
 
         payload = load_yaml(WORKFLOWS / "collection-ci.yml")
         self.assertNotIn("QUALITY_SOURCE_SHA", payload["env"])
