@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    Route candidate-platform Heavy and Application Acceptance execution through
+    the pinned ``modulix-validation`` reusable workflow while retaining local
+    Tiny execution, exact-candidate evidence, and fail-closed promotion gates.
