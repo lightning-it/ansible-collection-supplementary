@@ -287,3 +287,11 @@ releases:
     fragments:
       - 490-publish-candidate-selection.yml
     release_date: '2026-07-28'
+  2.0.2:
+    changes:
+      bugfixes:
+        - Keep repository release-state validation independent of a specific release
+          version so subsequent patch releases remain eligible.
+    fragments:
+      - 493-release-state-version-neutral.yml
+    release_date: '2026-07-28'
