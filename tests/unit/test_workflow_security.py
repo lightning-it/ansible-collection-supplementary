@@ -93,6 +93,13 @@ class WorkflowSecurityTests(unittest.TestCase):
             "find artifacts/candidate -maxdepth 1 -type f -name '*.tar.gz'",
             workflow,
         )
+
+        publish_workflow = (WORKFLOWS / "collection-publish.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("-name 'lit-supplementary-*.tar.gz'", publish_workflow)
+        self.assertNotIn("-name '*.tar.gz'", publish_workflow)
+
         payload = load_yaml(WORKFLOWS / "collection-ci.yml")
         self.assertNotIn("QUALITY_SOURCE_SHA", payload["env"])
         self.assertEqual(
