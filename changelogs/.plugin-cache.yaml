@@ -1,14 +1,6 @@
 ---
 objects:
-  role:
-    keycloak_cac:
-      description: Reconcile Keycloak configuration through its API
-      name: keycloak_cac
-      version_added: null
-    keycloak_deploy:
-      description: Deploy Keycloak with a PostgreSQL backend
-      name: keycloak_deploy
-      version_added: null
+  role: {}
 plugins:
   become: {}
   cache: {}
@@ -25,4 +17,4 @@ plugins:
   strategy: {}
   test: {}
   vars: {}
-version: 2.0.0
+version: 1.40.0
