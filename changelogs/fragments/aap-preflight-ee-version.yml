@@ -1,6 +1,0 @@
----
-minor_changes:
-  - >-
-    Allow the AAP execution-environment preflight to validate either a fixed
-    non-``latest`` image version or the existing immutable SHA-256 digest
-    reference while preserving trusted registry TLS enforcement.
