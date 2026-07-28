@@ -38,6 +38,20 @@ mandatory where access control applies.
 `verify` is a Molecule phase in every scenario. It is not a fourth profile, and
 converge alone is never a pass.
 
+## Execution ownership
+
+Tiny remains a repository-local component gate. The component-specific
+Molecule scenarios and assertions for all profiles also remain in this
+repository. Heavy and Application Acceptance execution, including candidate
+platform validation, is orchestrated only by the commit-pinned reusable
+workflow in `lightning-it/modulix-validation`.
+
+The collection passes the exact candidate artifact, source commit, profile,
+scenario, and platform matrix to that workflow. Stable aggregate jobs fail
+closed if a required delegated profile is skipped or does not succeed. This
+implements the accepted
+[Modulix test execution ownership ADR](https://wiki.cloud.l-it.io/wiki/spaces/LIT/pages/2886566105).
+
 ## Local validation
 
 Run the deterministic policy and unit checks first:
