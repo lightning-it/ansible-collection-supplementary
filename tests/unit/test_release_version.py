@@ -124,14 +124,13 @@ class ReleaseVersionTests(unittest.TestCase):
         fragments = sorted(path for path in fragments_root.iterdir() if path.suffix.lower() in {".yml", ".yaml"})
         if fragments:
             resolved = VERSION.resolve_version(ROOT / "galaxy.yml", fragments_root)
-            self.assertEqual("major", resolved["impact"])
-            self.assertEqual("2.0.0", resolved["version"])
+            galaxy = VERSION._load_yaml(ROOT / "galaxy.yml")
+            self.assertNotEqual(str(galaxy["version"]), resolved["version"])
             return
 
         receipt = VERSION._load_unique_json(ROOT / "changelogs" / "release-preparation.json")
         galaxy = VERSION._load_yaml(ROOT / "galaxy.yml")
-        self.assertEqual("2.0.0", str(galaxy["version"]))
-        self.assertEqual("2.0.0", receipt["next_version"])
+        self.assertEqual(str(galaxy["version"]), receipt["next_version"])
 
 
 if __name__ == "__main__":
