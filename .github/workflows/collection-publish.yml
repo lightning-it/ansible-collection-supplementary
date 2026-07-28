@@ -483,7 +483,8 @@ jobs:
           set -euo pipefail
 
           mapfile -t candidates < <(
-            find incoming/candidate -maxdepth 1 -type f -name '*.tar.gz' -print
+            find incoming/candidate -maxdepth 1 -type f \
+              -name 'lit-supplementary-*.tar.gz' -print
           )
           test "${#candidates[@]}" -eq 1
           candidate="${candidates[0]}"
