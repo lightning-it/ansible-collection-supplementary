@@ -1,14 +1,14 @@
 {
-  "base_sha": "33db0c49441d5b90a9062b0be452778d89d99469",
-  "current_version": "2.0.0",
+  "base_sha": "35f73cd1f1d63795ef5e8d0233e6aa15b2430e2e",
+  "current_version": "2.0.1",
   "fragments": [
     {
-      "path": "490-publish-candidate-selection.yml",
-      "sha256": "fcf75d89275871866da4662e82585ea1846dc5b85fdd633785c0b50e5310fe56"
+      "path": "493-release-state-version-neutral.yml",
+      "sha256": "c4313bdea404769330bca6b8ffd914ba240e3949646ba2dbefa14fc18595d7ac"
     }
   ],
   "impact": "patch",
-  "next_version": "2.0.1",
+  "next_version": "2.0.2",
   "preparer": {
     "account_id": "307565056",
     "email": "307565056+lightning-it-release-automation[bot]@users.noreply.github.com",
@@ -24,7 +24,7 @@
     "path": ".github/workflows/release-prepare.yml",
     "ref": "lightning-it/ansible-collection-supplementary/.github/workflows/release-prepare.yml@refs/heads/main",
     "run_attempt": "1",
-    "run_id": "30355105783",
-    "source_sha": "33db0c49441d5b90a9062b0be452778d89d99469"
+    "run_id": "30355986633",
+    "source_sha": "35f73cd1f1d63795ef5e8d0233e6aa15b2430e2e"
   }
 }

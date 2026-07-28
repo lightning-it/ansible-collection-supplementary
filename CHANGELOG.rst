@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v2.0.2
+======
+
+Bugfixes
+--------
+
+- Keep repository release-state validation independent of a specific release version so subsequent patch releases remain eligible.
+
 v2.0.1
 ======
 
