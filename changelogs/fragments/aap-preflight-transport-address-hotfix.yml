@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Validate the configured AAP service FQDN during preflight instead of the
-    execution environment's SSH transport address.
