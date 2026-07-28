@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v2.0.3
+======
+
+Bugfixes
+--------
+
+- Limit the public release candidate checksum manifest to the collection archive when the CI candidate artifact also contains a runtime bundle.
+
 v2.0.2
 ======
 

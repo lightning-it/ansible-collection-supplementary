@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Limit the public release candidate checksum manifest to the collection
-    archive when the CI candidate artifact also contains a runtime bundle.
