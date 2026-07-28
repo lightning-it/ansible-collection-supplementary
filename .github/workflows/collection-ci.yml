@@ -1174,7 +1174,9 @@ jobs:
           attestation_records = json.loads(
               (root / "attestation-records.json").read_text(encoding="utf-8")
           ).get("attestations", {})
-          candidate_paths = sorted(Path("artifacts/candidate").glob("*.tar.gz"))
+          candidate_paths = sorted(
+              Path("artifacts/candidate").glob("lit-supplementary-*.tar.gz")
+          )
           if len(candidate_paths) != 1:
               raise SystemExit("publication eligibility requires exactly one candidate")
           candidate = candidate_paths[0]
