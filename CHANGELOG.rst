@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v2.0.1
+======
+
+Bugfixes
+--------
+
+- Restrict release publication to the lit.supplementary collection archive when runtime evidence bundles are present beside the candidate.
+
 v2.0.0
 ======
 
