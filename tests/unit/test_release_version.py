@@ -119,10 +119,19 @@ class ReleaseVersionTests(unittest.TestCase):
                 with self.assertRaises(VERSION.VersionError):
                     VERSION.resolve_version(galaxy, fragments)
 
-    def test_repository_fragments_require_the_next_major_release(self) -> None:
-        resolved = VERSION.resolve_version(ROOT / "galaxy.yml", ROOT / "changelogs" / "fragments")
-        self.assertEqual("major", resolved["impact"])
-        self.assertEqual("2.0.0", resolved["version"])
+    def test_repository_release_state_is_consistent(self) -> None:
+        fragments_root = ROOT / "changelogs" / "fragments"
+        fragments = sorted(path for path in fragments_root.iterdir() if path.suffix.lower() in {".yml", ".yaml"})
+        if fragments:
+            resolved = VERSION.resolve_version(ROOT / "galaxy.yml", fragments_root)
+            self.assertEqual("major", resolved["impact"])
+            self.assertEqual("2.0.0", resolved["version"])
+            return
+
+        receipt = VERSION._load_unique_json(ROOT / "changelogs" / "release-preparation.json")
+        galaxy = VERSION._load_yaml(ROOT / "galaxy.yml")
+        self.assertEqual("2.0.0", str(galaxy["version"]))
+        self.assertEqual("2.0.0", receipt["next_version"])
 
 
 if __name__ == "__main__":
