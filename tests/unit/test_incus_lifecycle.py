@@ -136,6 +136,50 @@ class IncusLifecycleTests(unittest.TestCase):
                     current_run_id="42",
                 )
 
+    def test_parallel_pruning_accepts_an_already_absent_network_device(self) -> None:
+        delete_error = subprocess.CalledProcessError(
+            1,
+            ["incus", "network", "delete", "lit000000000001"],
+            stderr=(
+                'Error: Failed to run: ip link delete dev lit000000000001: '
+                'exit status 1 (Cannot find device "lit000000000001")'
+            ),
+        )
+        with mock.patch.object(
+            prune_stale_incus_resources,
+            "incus",
+            side_effect=delete_error,
+        ):
+            prune_stale_incus_resources.delete_if_present(
+                "lit000000000001",
+                "network",
+                "delete",
+                "lit000000000001",
+                list_kind="network",
+            )
+
+    def test_parallel_pruning_rejects_other_network_delete_failures(self) -> None:
+        delete_error = subprocess.CalledProcessError(
+            1,
+            ["incus", "network", "delete", "lit000000000001"],
+            stderr="Error: network is still in use",
+        )
+        with (
+            mock.patch.object(
+                prune_stale_incus_resources,
+                "incus",
+                side_effect=(delete_error, '[{"name": "lit000000000001"}]'),
+            ),
+            self.assertRaises(subprocess.CalledProcessError),
+        ):
+            prune_stale_incus_resources.delete_if_present(
+                "lit000000000001",
+                "network",
+                "delete",
+                "lit000000000001",
+                list_kind="network",
+            )
+
     def test_parallel_pruning_skips_an_instance_that_changed_ownership(self) -> None:
         delete_error = subprocess.CalledProcessError(1, ["incus"])
         current = [
