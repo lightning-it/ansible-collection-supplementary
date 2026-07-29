@@ -44,19 +44,15 @@ class AapGatewayContractsTests(unittest.TestCase):
                 with self.subTest(path=path, token=token):
                     self.assertNotIn(token, content)
 
-    def test_service_backed_sso_uses_supported_eda_extra_settings(self) -> None:
+    def test_eda_settings_remain_owned_by_upstream_installer(self) -> None:
         inventory_vars = (ROOT / "roles/aap_deploy/tasks/22_build_setup_inventory_vars.yml").read_text(encoding="utf-8")
-
-        self.assertIn("eda_extra_settings:", inventory_vars)
-        self.assertIn("aap_deploy_eda_extra_settings", inventory_vars)
-        self.assertNotIn("settings.yaml.j2", inventory_vars)
-
         defaults = (ROOT / "roles/aap_deploy/defaults/main.yml").read_text(encoding="utf-8")
-        self.assertIn("'setting': 'ENABLE_SERVICE_BACKED_SSO'", defaults)
-        self.assertIn(
-            "aap_deploy_eda_service_backed_sso_enabled | bool",
-            defaults,
-        )
+
+        self.assertIn("automationeda: {}", inventory_vars)
+        self.assertNotIn("eda_extra_settings", inventory_vars)
+        self.assertNotIn("aap_deploy_eda_extra_settings", defaults)
+        self.assertNotIn("aap_deploy_eda_service_backed_sso_enabled", defaults)
+        self.assertNotIn("settings.yaml.j2", inventory_vars)
 
     def test_local_execution_uses_public_envoy_url(self) -> None:
         template = (

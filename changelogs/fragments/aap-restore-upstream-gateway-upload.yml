@@ -5,5 +5,6 @@ bugfixes:
     paths for Hub readiness, execution-environment uploads, and EDA API access
     instead of redirecting them to internal service ports, and leave Gateway
     registry CA trust to the upstream installer. Remove the related upload-skip
-    and readiness bundle rewrites, and configure service-backed EDA SSO through
-    the supported ``eda_extra_settings`` inventory variable.
+    and readiness bundle rewrites. Leave EDA settings with the upstream
+    installer so ``ENABLE_SERVICE_BACKED_SSO`` is not emitted twice in
+    ``/etc/eda.yaml``.

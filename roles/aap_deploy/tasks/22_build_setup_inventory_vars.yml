@@ -6,8 +6,7 @@
         controller_extra_settings: "{{ aap_deploy_controller_extra_settings }}"
       automationhub:
         hub_extra_settings: "{{ aap_deploy_hub_extra_settings }}"
-      automationeda:
-        eda_extra_settings: "{{ aap_deploy_eda_extra_settings }}"
+      automationeda: {}
       all: >-
         {{
           {

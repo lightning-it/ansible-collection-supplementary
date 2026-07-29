@@ -106,8 +106,9 @@ Installer behavior:
   listener ports are not substituted for the public Gateway/Envoy endpoint.
 - The upstream installer owns Podman registry trust for the public Gateway URL
   and the staged CA; this role does not create competing `certs.d` entries.
-- The prepared Red Hat installer bundle is not rewritten. Service-backed EDA
-  SSO is passed through the supported `eda_extra_settings` inventory variable.
+- The prepared Red Hat installer bundle is not rewritten. EDA settings remain
+  owned by the upstream installer; this role does not append duplicate keys to
+  the generated `/etc/eda.yaml`.
 - Role performs an early existing-install detection (marker and runtime containers).
 - Marker-based skip is runtime-validated by default to avoid stale marker false positives.
 - When detected, host prep, bundle handling, inventory rendering, and installer execution are skipped.

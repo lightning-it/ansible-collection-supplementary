@@ -142,23 +142,6 @@ aap_deploy_hub_extra_settings: >-
     | from_json
   }}
 
-aap_deploy_eda_service_backed_sso_enabled: true
-aap_deploy_eda_extra_settings_additional: []
-aap_deploy_eda_extra_settings: >-
-  {{
-    (
-      [
-        {
-          'setting': 'ENABLE_SERVICE_BACKED_SSO',
-          'value': (aap_deploy_eda_service_backed_sso_enabled | bool)
-        }
-      ]
-      + (aap_deploy_eda_extra_settings_additional | default([], true))
-    )
-    | to_json
-    | from_json
-  }}
-
 # TLS asset staging for installer inventory.
 # We stage all certificate material on the target first, then hand only remote
 # file paths to the upstream installer inventory.

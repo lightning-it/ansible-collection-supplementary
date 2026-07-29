@@ -11,7 +11,6 @@
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/prepared-installer
     aap_setup_prep_setup_dir: "{{ aap_deploy_molecule_fixture_dir }}"
     aap_deploy_gateway_main_url: https://aap.example.test
-    aap_deploy_eda_service_backed_sso_enabled: true
     aap_deploy_molecule_vendor_files:
       - collections/ansible_collections/ansible/containerized_installer/playbooks/install.yml
       - collections/ansible_collections/ansible/containerized_installer/roles/automationhub/tasks/upload_images.yml
@@ -165,15 +164,7 @@
           - >-
             ':8446'
             not in aap_deploy_setup_prep_inv_vars.all.gateway_main_url
-          - >-
-            aap_deploy_setup_prep_inv_vars.automationeda.eda_extra_settings
-            ==
-            [
-              {
-                'setting': 'ENABLE_SERVICE_BACKED_SSO',
-                'value': true
-              }
-            ]
+          - aap_deploy_setup_prep_inv_vars.automationeda == {}
           - >-
             'hub_seed_execution_environment_images'
             not in aap_deploy_setup_prep_inv_vars.all
