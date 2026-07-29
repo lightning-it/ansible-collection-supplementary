@@ -56,6 +56,16 @@ when mandatory, or tested/released SHA mismatch.
 
 An edited variable or hand-written status file cannot make a release eligible.
 
+## Trusted release-preparation changes
+
+Release-preparation pull requests created by the configured GitHub App are
+accepted only when the required trusted verifier binds the pull request's exact
+head SHA to a successful release-preparation workflow run and validates the
+generated receipt and release diff. This narrowly scoped machine-identity
+control is not a generic review exception: human-authored changes, an
+unverified bot commit, or any SHA mismatch fail closed and still require the
+normal protected-branch review and checks.
+
 ## Version and changelog
 
 `galaxy.yml` is the version source of truth. Normal implementation pull requests

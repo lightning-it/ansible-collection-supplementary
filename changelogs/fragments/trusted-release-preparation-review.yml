@@ -1,0 +1,5 @@
+---
+trivial:
+  - >-
+    Document the exact-SHA trusted verifier used for App-authored
+    release-preparation changes and its fail-closed review boundaries.
