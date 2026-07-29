@@ -61,7 +61,8 @@ Key variables:
 - `aap_deploy_automationmetrics_secret_key`
 - `aap_deploy_automationmetrics_resource_server`
 - `aap_deploy_setup_prep_inv_nodes_extra`
-- `aap_deploy_gateway_main_url` (optional installer `gateway_main_url`)
+- `aap_deploy_gateway_main_url` (optional public installer `gateway_main_url`;
+  use the Envoy endpoint, normally `https://<aap-fqdn>` on port 443)
 - `aap_deploy_gateway_nginx_http_port` / `aap_deploy_gateway_nginx_https_port`
 - `aap_deploy_envoy_http_port` / `aap_deploy_envoy_https_port`
 - `aap_deploy_postgresql_admin_username` (default: `postgres`)
@@ -90,6 +91,7 @@ Key variables:
 - `aap_deploy_runtime_probe_all_containers` (default: `true`, uses `podman ps -a`)
 - `aap_deploy_runtime_name_regex` (default: `.*(automation|ansible|aap).*`)
 - `aap_deploy_runtime_min_matching_containers` (default: `1`)
+- `aap_deploy_reset_partial_install_enabled` (default: `false`)
 - `aap_deploy_enforce_min_mem_check` (default: `true`)
 - `aap_deploy_min_mem_mb` (default: `15000`, approximately 16GB)
 - `aap_deploy_growth_inventory_connection` (default: `local`)
@@ -99,6 +101,15 @@ Key variables:
 - `aap_deploy_enterprise_automationmetrics_hosts`
 
 Installer behavior:
+
+- Hub readiness, Hub image uploads, and EDA API calls retain the
+  `ansible.containerized_installer` `_gateway_proxy_url`; internal component
+  listener ports are not substituted for the public Gateway/Envoy endpoint.
+- The upstream installer owns Podman registry trust for the public Gateway URL
+  and the staged CA; this role does not create competing `certs.d` entries.
+- The prepared Red Hat installer bundle is not rewritten. EDA settings remain
+  owned by the upstream installer; this role does not append duplicate keys to
+  the generated `/etc/eda.yaml`.
 - Role performs an early existing-install detection (marker and runtime containers).
 - Marker-based skip is runtime-validated by default to avoid stale marker false positives.
 - When detected, host prep, bundle handling, inventory rendering, and installer execution are skipped.
@@ -383,6 +394,11 @@ Troubleshooting:
   state first.
 - `Overall Status: Not registered`: run the RHEL RHSM/repository preparation
   before this role.
+- `Ensure automation hub is ready` returns HTTP 404 for
+  `https://<aap-fqdn>:8446/pulp/api/v3/status/`: port 8446 is the internal
+  Gateway Nginx backend and does not expose the public `/pulp` route. Regenerate
+  the local inventory with the updated collection and use the public Envoy URL
+  `https://<aap-fqdn>`. Rebuild partial installations from a clean state.
 
 Local validation:
 

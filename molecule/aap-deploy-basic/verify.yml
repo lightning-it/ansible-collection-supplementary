@@ -9,7 +9,18 @@
     aap_deploy_molecule_eda_task_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY')
       }}/prepared-installer/collections/ansible_collections/ansible/containerized_installer/roles/automationeda/tasks/decision_environment.yml
+    aap_deploy_molecule_hub_image_task_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY')
+      }}/prepared-installer/collections/ansible_collections/ansible/containerized_installer/roles/automationhub/tasks/upload_images.yml
+    aap_deploy_molecule_hub_collection_task_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY')
+      }}/prepared-installer/collections/ansible_collections/ansible/containerized_installer/roles/automationhub/tasks/upload_collections.yml
+    aap_deploy_molecule_install_playbook_path: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY')
+      }}/prepared-installer/collections/ansible_collections/ansible/containerized_installer/playbooks/install.yml
     aap_deploy_molecule_role_main_path: "{{ playbook_dir }}/../../roles/aap_deploy/tasks/main.yml"
+    aap_deploy_molecule_customizer_path: >-
+      {{ playbook_dir }}/../../roles/aap_deploy/tasks/25_customize_prepared_installer.yml
   tasks:
     - name: Read lit.supplementary.aap_deploy coverage marker
       ansible.builtin.slurp:
@@ -22,30 +33,132 @@
           - aap_deploy_molecule_marker.content | b64decode | trim == 'syntax_stub'
         quiet: true
 
-    - name: Read customized prepared EDA tasks
+    - name: Read official prepared EDA tasks
       ansible.builtin.slurp:
         src: "{{ aap_deploy_molecule_eda_task_path }}"
       register: aap_deploy_molecule_eda_task_file
 
-    - name: Parse customized prepared EDA tasks as YAML
+    - name: Parse official prepared EDA tasks as YAML
       ansible.builtin.set_fact:
         aap_deploy_molecule_eda_tasks: >-
           {{ aap_deploy_molecule_eda_task_file.content | b64decode | from_yaml }}
 
-    - name: Assert the EDA readiness condition remains valid YAML
+    - name: Assert the upstream EDA readiness behavior remains unchanged
       ansible.builtin.assert:
         that:
-          - aap_deploy_molecule_eda_tasks[0].retries == 20
+          - aap_deploy_molecule_eda_tasks[0].retries == 5
           - aap_deploy_molecule_eda_tasks[0].until | length == 3
           - >-
             aap_deploy_molecule_eda_tasks[0].until[2]
-            == "(_eda_ready.content | trim).startswith('{') and (_eda_ready.content | from_json).status == 'good'"
+            == "(_eda_ready.content | from_json).status == 'good'"
+        quiet: true
+
+    - name: Read official installer playbook
+      ansible.builtin.slurp:
+        src: "{{ aap_deploy_molecule_install_playbook_path }}"
+      register: aap_deploy_molecule_install_playbook_file
+
+    - name: Parse official installer playbook
+      ansible.builtin.set_fact:
+        aap_deploy_molecule_install_plays: >-
+          {{
+            aap_deploy_molecule_install_playbook_file.content
+            | b64decode
+            | from_yaml
+          }}
+
+    - name: Assert registry trust and image uploads retain upstream conditions
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              aap_deploy_molecule_install_plays
+              | selectattr('name', 'equalto', 'Trust the Automation Hub registry')
+              | first
+            ).tasks[0].when
+            == "groups.get('automationhub', []) | length > 0"
+          - >-
+            (
+              aap_deploy_molecule_install_plays
+              | selectattr('name', 'equalto', 'Run the Automation Controller postinstall')
+              | first
+            ).tasks[0].when
+            == "groups.get('automationhub', []) | length > 0"
+          - >-
+            (
+              aap_deploy_molecule_install_plays
+              | selectattr('name', 'equalto', 'Run the Automation EDA postinstall')
+              | first
+            ).tasks[0].when
+            == "groups.get('automationhub', []) | length > 0"
+          - >-
+            'hub_seed_execution_environment_images'
+            not in (
+              aap_deploy_molecule_install_playbook_file.content
+              | b64decode
+            )
+        quiet: true
+
+    - name: Read prepared Hub upload tasks
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - "{{ aap_deploy_molecule_hub_image_task_path }}"
+        - "{{ aap_deploy_molecule_hub_collection_task_path }}"
+      register: aap_deploy_molecule_hub_task_files
+
+    - name: Assert official Gateway paths remain unchanged
+      ansible.builtin.assert:
+        that:
+          - >-
+            '_gateway_proxy_url'
+            in (item.content | b64decode)
+          - >-
+            ':8444'
+            not in (item.content | b64decode)
+          - >-
+            'hub_container_registry_url'
+            not in (item.content | b64decode)
+          - >-
+            'hub_upload_readiness_url'
+            not in (item.content | b64decode)
+        quiet: true
+      loop: "{{ aap_deploy_molecule_hub_task_files.results }}"
+      loop_control:
+        label: "{{ item.source }}"
+
+    - name: Assert EDA continues to use the official Gateway path
+      ansible.builtin.assert:
+        that:
+          - >-
+            '_gateway_proxy_url'
+            in (aap_deploy_molecule_eda_task_file.content | b64decode)
+          - >-
+            ':8445'
+            not in (aap_deploy_molecule_eda_task_file.content | b64decode)
+          - >-
+            'automationeda_api_url'
+            not in (aap_deploy_molecule_eda_task_file.content | b64decode)
         quiet: true
 
     - name: Read AAP deploy role task flow
       ansible.builtin.slurp:
         src: "{{ aap_deploy_molecule_role_main_path }}"
       register: aap_deploy_molecule_role_main_file
+
+    - name: Inspect removed prepared installer customizer
+      ansible.builtin.stat:
+        path: "{{ aap_deploy_molecule_customizer_path }}"
+      register: aap_deploy_molecule_customizer
+
+    - name: Assert the role no longer patches the prepared installer bundle
+      ansible.builtin.assert:
+        that:
+          - not aap_deploy_molecule_customizer.stat.exists
+          - >-
+            '25_customize_prepared_installer.yml'
+            not in (aap_deploy_molecule_role_main_file.content | b64decode)
+        quiet: true
 
     - name: Parse AAP deploy role task flow as YAML
       ansible.builtin.set_fact:
