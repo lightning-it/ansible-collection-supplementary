@@ -178,6 +178,29 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         decoded = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
         self.assertEqual(b"\xfb\xff", decoded)
 
+    def test_runtime_assertions_preserve_digest_and_oauth_error_semantics(self) -> None:
+        tiny = (ROOT / "molecule" / "keycloak-tiny" / "verify.yml").read_text(encoding="utf-8")
+        heavy = (ROOT / "molecule" / "keycloak-heavy" / "verify.yml").read_text(encoding="utf-8")
+
+        self.assertIn("keycloak_tiny_image.stdout is match(", tiny)
+        self.assertIn("(?::26\\.7\\.0)?@sha256:", tiny)
+        self.assertIn("0f198be292568439d700cdbfb893e69a6009bb43a94a06a945b1d3d506c76b13", tiny)
+        self.assertIn("RFC 6749 section 5.2", heavy)
+        invalid_ldap_task = heavy.split("- name: Reject an invalid LDAP-backed password through Keycloak", maxsplit=1)[
+            1
+        ].split("- name: Reject invalid credentials", maxsplit=1)[0]
+        self.assertIn("status_code: 400", invalid_ldap_task)
+        self.assertNotIn("status_code: 401", invalid_ldap_task)
+        invalid_local_task = heavy.split("- name: Reject invalid credentials", maxsplit=1)[1].split(
+            "- name: Request master administrative token", maxsplit=1
+        )[0]
+        self.assertIn("status_code: 400", invalid_local_task)
+        self.assertNotIn("status_code: 401", invalid_local_task)
+        self.assertIn("keycloak_heavy_invalid_ldap_login.status == 400", heavy)
+        self.assertNotIn("keycloak_heavy_invalid_ldap_login.status == 401", heavy)
+        self.assertIn("keycloak_heavy_invalid_login.status == 400", heavy)
+        self.assertNotIn("keycloak_heavy_invalid_login.status == 401", heavy)
+
     def test_application_acceptance_reports_an_independent_cac_lifecycle(self) -> None:
         verify = (ROOT / "molecule" / "keycloak-application-acceptance" / "verify.yml").read_text(encoding="utf-8")
         self.assertIn("molecule-acceptance-cac-lifecycle", verify)
