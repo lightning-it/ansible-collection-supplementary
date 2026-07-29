@@ -615,16 +615,51 @@ class WorkflowSecurityTests(unittest.TestCase):
 
         back_sync = (WORKFLOWS / "release-back-sync.yml").read_text(encoding="utf-8")
         self.assertIn("git cat-file -t FETCH_HEAD", back_sync)
-        self.assertIn("/apps/${tagger_app_slug}", back_sync)
+        self.assertIn("git cat-file tag FETCH_HEAD", back_sync)
+        self.assertIn(
+            'git merge-base --is-ancestor "$release_sha" origin/main',
+            back_sync,
+        )
+        self.assertIn(
+            'message.rstrip("\\n") != f"Release {os.environ[\'RELEASE_TAG\']}"',
+            back_sync,
+        )
+        self.assertNotIn("/apps/${tagger_app_slug}", back_sync)
+        self.assertNotIn("release-back-sync-tagger-app.json", back_sync)
         self.assertIn("/users/${tagger_app_slug}[bot]", back_sync)
+        self.assertIn(
+            '.id == $bot_id and .login == $login and .type == "Bot"',
+            back_sync,
+        )
         self.assertIn("EXPECTED_TAG_APP_ID", back_sync)
         self.assertIn("EXPECTED_TAG_APP_CLIENT_ID", back_sync)
         self.assertIn("[A-Za-z0-9._-]{0,127}", back_sync)
+        self.assertIn(
+            'test "$EXPECTED_TAG_APP_SLUG" = "lightning-it-release-tag-creator"',
+            back_sync,
+        )
+        self.assertIn('test "$EXPECTED_TAG_APP_ID" = "4344269"', back_sync)
+        self.assertIn(
+            'test "$EXPECTED_TAG_APP_CLIENT_ID" = "Iv23liJnnvOQwajan2Mf"',
+            back_sync,
+        )
         self.assertIn('test "$tagger_app_slug" = "$EXPECTED_TAG_APP_SLUG"', back_sync)
+        self.assertNotIn("RELEASE_TAG_APP_PRIVATE_KEY", back_sync)
+        self.assertEqual(1, back_sync.count("actions/create-github-app-token@"))
         self.assertNotIn("tagger litreleasebot", back_sync)
         self.assertIn('git merge --no-ff -X ours "$release_sha"', back_sync)
         self.assertIn('test "$tag" = "v${tagged_version}"', back_sync)
         self.assertNotIn("git merge --no-ff -X ours origin/main", back_sync)
+
+        self.assertIn(
+            '-f release_tag_app_slug="$RELEASE_TAG_APP_SLUG"',
+            publish,
+        )
+        self.assertIn('-f release_tag_app_id="$RELEASE_TAG_APP_ID"', publish)
+        self.assertIn(
+            '-f release_tag_app_client_id="$RELEASE_TAG_APP_CLIENT_ID"',
+            publish,
+        )
 
         for name in (
             "promote-develop-to-main.yml",

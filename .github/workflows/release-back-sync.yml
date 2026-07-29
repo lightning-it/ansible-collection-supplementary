@@ -94,6 +94,9 @@ jobs:
           [[ "$EXPECTED_TAG_APP_SLUG" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$ ]]
           [[ "$EXPECTED_TAG_APP_ID" =~ ^[1-9][0-9]*$ ]]
           [[ "$EXPECTED_TAG_APP_CLIENT_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]
+          test "$EXPECTED_TAG_APP_SLUG" = "lightning-it-release-tag-creator"
+          test "$EXPECTED_TAG_APP_ID" = "4344269"
+          test "$EXPECTED_TAG_APP_CLIENT_ID" = "Iv23liJnnvOQwajan2Mf"
 
           if ! git ls-remote --exit-code --heads origin develop >/dev/null 2>&1; then
             echo "develop branch does not exist; skipping release back-sync."
@@ -161,24 +164,12 @@ jobs:
           test "$tagger_app_slug" = "$EXPECTED_TAG_APP_SLUG"
 
           tagger_bot="$RUNNER_TEMP/release-back-sync-tagger-bot.json"
-          tagger_app="$RUNNER_TEMP/release-back-sync-tagger-app.json"
           gh api "/users/${tagger_app_slug}[bot]" > "$tagger_bot"
           jq -e \
             --argjson bot_id "$tagger_bot_id" \
             --arg login "${tagger_app_slug}[bot]" '
               .id == $bot_id and .login == $login and .type == "Bot"
             ' "$tagger_bot" >/dev/null
-          gh api "/apps/${tagger_app_slug}" > "$tagger_app"
-          jq -e \
-            --arg slug "$tagger_app_slug" \
-            --argjson app_id "$EXPECTED_TAG_APP_ID" \
-            --arg client_id "$EXPECTED_TAG_APP_CLIENT_ID" \
-            --arg owner "$GITHUB_REPOSITORY_OWNER" '
-              .slug == $slug
-              and .id == $app_id
-              and .client_id == $client_id
-              and .owner.login == $owner
-            ' "$tagger_app" >/dev/null
 
           tagged_galaxy="$RUNNER_TEMP/release-back-sync-galaxy.yml"
           git show "${release_sha}:galaxy.yml" > "$tagged_galaxy"
