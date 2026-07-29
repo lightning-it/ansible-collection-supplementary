@@ -67,6 +67,10 @@ class AapGatewayContractsTests(unittest.TestCase):
             'aap_deploy_gateway_main_url: "https://{{ aap_fqdn }}:8446"',
             template,
         )
+        self.assertIn(
+            "aap_deploy_reset_partial_install_enabled: false",
+            template,
+        )
 
     def test_registry_trust_remains_owned_by_upstream_installer(self) -> None:
         role_main = (ROOT / "roles/aap_deploy/tasks/main.yml").read_text(encoding="utf-8")

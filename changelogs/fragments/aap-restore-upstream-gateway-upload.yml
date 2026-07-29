@@ -7,4 +7,5 @@ bugfixes:
     registry CA trust to the upstream installer. Remove the related upload-skip
     and readiness bundle rewrites. Leave EDA settings with the upstream
     installer so ``ENABLE_SERVICE_BACKED_SSO`` is not emitted twice in
-    ``/etc/eda.yaml``.
+    ``/etc/eda.yaml``. Generate the public Envoy URL without the internal
+    Gateway Nginx port and leave automatic partial-install reset disabled.
