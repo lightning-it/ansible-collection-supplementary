@@ -1,14 +1,94 @@
 {
-  "base_sha": "8b4c655ace1fc1881d2babb70e3202292bde87fe",
-  "current_version": "2.0.2",
+  "base_sha": "59583e4d94399186d399a73d02a1b12ab9ed9c29",
+  "current_version": "2.0.3",
   "fragments": [
     {
-      "path": "495-release-candidate-checksum.yml",
-      "sha256": "728f5d00a033bbeb706e64577fc2d12949276c7858d7bda4cab13948b8e29c3e"
+      "path": "aap-cac-gateway-organization-token.yml",
+      "sha256": "93fd4c3746a72cfec339a43030c435c147c2c86ffe40d65546d120a768ccff9e"
+    },
+    {
+      "path": "aap-deploy-hub-readiness-url.yml",
+      "sha256": "333e3e99de4caa4a68e020d70d36e3860f80d14fcbe5054cf3b750c0cbf95100"
+    },
+    {
+      "path": "aap-deploy-prepare-without-passwords.yml",
+      "sha256": "cd979c7778aabc69bacb2c6083e14d47d753d02cd24a7597528bc1da90168cee"
+    },
+    {
+      "path": "aap-host-prepare-installer-prerequisites.yml",
+      "sha256": "cc4ff7b570fbef714ac54876b70089d60f33fd228a1421eab6d03e417eec940d"
+    },
+    {
+      "path": "aap-host-prepare-selinux.yml",
+      "sha256": "7aedf48b749414a1543e3e7547c040839819e1ebb55af0d97ecbbe4480e5c361"
+    },
+    {
+      "path": "aap-preflight-check-mode.yml",
+      "sha256": "179825e98ae41f6d4dd8424812d88353b38c5c36a5e88e14d659e69c4b0ed80e"
+    },
+    {
+      "path": "aap-preflight-phase-contract.yml",
+      "sha256": "eb23dc94907b54139cc59be263eaa88703e23dc41afc163b57dc41d44407f771"
+    },
+    {
+      "path": "aap-preflight-platform-dns.yml",
+      "sha256": "d1921d692d635e0ee9a799742ead60d03625a7faa68d2806da666f5b61f4888a"
+    },
+    {
+      "path": "aap-prepare-fqdn-fallback.yml",
+      "sha256": "9ce71d8e2c46ee831c0d1caad6da8d847c235206b4bfbc102537ccb0f5f0cccd"
+    },
+    {
+      "path": "aap-selfsigned-system-trust.yml",
+      "sha256": "424bab35dd7df9312357f9f975dad2a9587f662796a4fbd1fa2375099cb4f258"
+    },
+    {
+      "path": "aap-tls-source-validation.yml",
+      "sha256": "948abe84172a58b058b7722a0a003d12ad7bddbf12b85a2526486a8f2fe21cd0"
+    },
+    {
+      "path": "adr-assurance.yml",
+      "sha256": "5927b59543d8228c3cd5bcd07b7f2f21565d2a89eaeff63b53e184e998ec737e"
+    },
+    {
+      "path": "adr-heavy-execution-ownership.yml",
+      "sha256": "dc653a7c2dbab533c25d5fc7967797d15702b9656c75afc5c18db995876e2678"
+    },
+    {
+      "path": "shared-assets-sync-29853456486.yml",
+      "sha256": "b637a090dd4cd427b7154c68ccb11efd1e13b7fc1974bd0bb36b7886a978a440"
+    },
+    {
+      "path": "shared-assets-sync-29869010879.yml",
+      "sha256": "b637a090dd4cd427b7154c68ccb11efd1e13b7fc1974bd0bb36b7886a978a440"
+    },
+    {
+      "path": "shared-assets-sync-29901680048.yml",
+      "sha256": "b637a090dd4cd427b7154c68ccb11efd1e13b7fc1974bd0bb36b7886a978a440"
+    },
+    {
+      "path": "shared-assets-sync-29908171139.yml",
+      "sha256": "b637a090dd4cd427b7154c68ccb11efd1e13b7fc1974bd0bb36b7886a978a440"
+    },
+    {
+      "path": "shared-assets-sync-29910506345.yml",
+      "sha256": "b637a090dd4cd427b7154c68ccb11efd1e13b7fc1974bd0bb36b7886a978a440"
+    },
+    {
+      "path": "shared-assets-sync-29913646011.yml",
+      "sha256": "b637a090dd4cd427b7154c68ccb11efd1e13b7fc1974bd0bb36b7886a978a440"
+    },
+    {
+      "path": "shared-assets-sync.yml",
+      "sha256": "b637a090dd4cd427b7154c68ccb11efd1e13b7fc1974bd0bb36b7886a978a440"
+    },
+    {
+      "path": "trusted-renovate-changelog-policy.yml",
+      "sha256": "d12ff95caab1172a145a55bd06fb2199307eb18fbab678850b418d3d847eb5cd"
     }
   ],
-  "impact": "patch",
-  "next_version": "2.0.3",
+  "impact": "minor",
+  "next_version": "2.1.0",
   "preparer": {
     "account_id": "307565056",
     "email": "307565056+lightning-it-release-automation[bot]@users.noreply.github.com",
@@ -24,7 +104,7 @@
     "path": ".github/workflows/release-prepare.yml",
     "ref": "lightning-it/ansible-collection-supplementary/.github/workflows/release-prepare.yml@refs/heads/main",
     "run_attempt": "1",
-    "run_id": "30358112535",
-    "source_sha": "8b4c655ace1fc1881d2babb70e3202292bde87fe"
+    "run_id": "30423885334",
+    "source_sha": "59583e4d94399186d399a73d02a1b12ab9ed9c29"
   }
 }
