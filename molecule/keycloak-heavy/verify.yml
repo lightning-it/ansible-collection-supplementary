@@ -269,7 +269,9 @@
           client_secret: "{{ keycloak_heavy_client_secret }}"
           username: ldap.viewer
           password: deliberately-invalid
-        status_code: 401
+        # RFC 6749 section 5.2 requires invalid resource-owner credentials to
+        # use the invalid_grant error response with HTTP 400.
+        status_code: 400
         return_content: true
       register: keycloak_heavy_invalid_ldap_login
       changed_when: false
@@ -286,7 +288,9 @@
           client_secret: "{{ keycloak_heavy_client_secret }}"
           username: keycloak_test_viewer
           password: deliberately-invalid
-        status_code: 401
+        # RFC 6749 section 5.2 also classifies invalid local resource-owner
+        # credentials as invalid_grant and requires HTTP 400.
+        status_code: 400
         return_content: true
       register: keycloak_heavy_invalid_login
       changed_when: false
@@ -528,9 +532,9 @@
             (keycloak_heavy_restore_after.stdout | trim)
             == (keycloak_heavy_restore_before.stdout | trim)
           - keycloak_heavy_tls.rc == 0
-          - keycloak_heavy_invalid_login.status == 401
+          - keycloak_heavy_invalid_login.status == 400
           - keycloak_heavy_ldap_token.status == 200
-          - keycloak_heavy_invalid_ldap_login.status == 401
+          - keycloak_heavy_invalid_ldap_login.status == 400
           - keycloak_heavy_ldap_provider.json | length == 1
           - keycloak_heavy_ldap_provider.json[0].providerId == 'ldap'
           - keycloak_heavy_cac_initial.json.description == 'initial-state'
