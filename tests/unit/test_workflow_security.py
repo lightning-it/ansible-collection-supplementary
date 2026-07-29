@@ -579,6 +579,10 @@ class WorkflowSecurityTests(unittest.TestCase):
         back_sync = (WORKFLOWS / "release-back-sync.yml").read_text(encoding="utf-8")
         self.assertIn('"--force-with-lease=${branch_ref}:${remote_branch_sha}"', back_sync)
         self.assertNotIn("authenticated_push --force origin", back_sync)
+        self.assertNotIn("permission-issues:", back_sync)
+        self.assertNotIn("gh label ", back_sync)
+        self.assertNotIn("--label skip-changelog", back_sync)
+        self.assertNotIn("--add-label skip-changelog", back_sync)
         release_prepare = (WORKFLOWS / "release-prepare.yml").read_text(encoding="utf-8")
         self.assertIn(
             '"--force-with-lease=${release_ref}:${remote_release_sha}"',
