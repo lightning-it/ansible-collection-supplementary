@@ -153,8 +153,8 @@
       - item.stat.isreg
       - item.stat.readable
     fail_msg: >-
-      Required generated AAP TLS file is not readable on the automation
-      controller: {{ item.item }}
+      Required generated AAP TLS file is not readable on
+      {{ aap_tls_selfsigned_delegate_to }}: {{ item.item }}
     quiet: true
   loop: "{{ aap_tls_selfsigned_deployment_file_stats.results }}"
   loop_control:

@@ -10,6 +10,7 @@
   changed_when: false
   when:
     - aap_deploy_tls_source == 'customer_files'
+    - not (aap_deploy_tls_customer_files[item.0].remote_src | default(false) | bool)
     - aap_deploy_tls_customer_files[item.0][item.1] | default('', true) | trim | length > 0
 
 - name: Validate controller-side customer TLS service files
@@ -37,6 +38,7 @@
   changed_when: false
   when:
     - aap_deploy_tls_source == 'customer_files'
+    - not (aap_deploy_tls_customer_files.ca_cert_remote_src | default(false) | bool)
     - aap_deploy_tls_customer_files.ca_cert_src | default('', true) | trim | length > 0
 
 - name: Validate controller-side customer CA certificate

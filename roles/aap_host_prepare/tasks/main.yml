@@ -191,6 +191,7 @@
   ansible.builtin.import_tasks: selinux.yml
   when:
     - aap_host_prepare_selinux_manage | bool
+    - not ansible_check_mode
     - ansible_facts.selinux is defined
     - ansible_facts.selinux.status | default('disabled') == 'enabled'
   tags:
