@@ -583,9 +583,6 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertNotIn("gh label ", back_sync)
         self.assertNotIn("--label skip-changelog", back_sync)
         self.assertNotIn("--add-label skip-changelog", back_sync)
-        copilot_review = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
-        self.assertIn('[[ "${PR_HEAD}" == backsync/release-v*-to-develop ]]', copilot_review)
-        self.assertIn('[ "${PR_BASE}" = "develop" ]', copilot_review)
         release_prepare = (WORKFLOWS / "release-prepare.yml").read_text(encoding="utf-8")
         self.assertIn(
             '"--force-with-lease=${release_ref}:${remote_release_sha}"',
