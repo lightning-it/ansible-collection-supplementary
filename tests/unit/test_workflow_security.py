@@ -226,19 +226,20 @@ class WorkflowSecurityTests(unittest.TestCase):
             "delegated Incus profiles must run serially to avoid concurrency cancellation",
         )
 
-    def test_all_workflows_and_local_actions_require_release_team_review(self) -> None:
+    def test_all_trust_roots_require_security_and_compliance_ownership(self) -> None:
         codeowners = (ROOT / ".github" / "CODEOWNERS").read_text(encoding="utf-8")
         rules = {
             line.split("#", maxsplit=1)[0].strip()
             for line in codeowners.splitlines()
             if line.split("#", maxsplit=1)[0].strip()
         }
+        owner = "@lightning-it/lightning-it-security-and-compliance-maintainers"
         self.assertIn(
-            "/.github/workflows/** @lightning-it/ent:release",
+            f"/.github/workflows/** {owner}",
             rules,
         )
         self.assertIn(
-            "/.github/actions/** @lightning-it/ent:release",
+            f"/.github/actions/** {owner}",
             rules,
         )
         for path in (
@@ -248,7 +249,7 @@ class WorkflowSecurityTests(unittest.TestCase):
             "/scripts/source_dependencies.py",
             "/scripts/validate-role-coverage.py",
         ):
-            self.assertIn(f"{path} @lightning-it/ent:release", rules)
+            self.assertIn(f"{path} {owner}", rules)
 
     def test_every_external_action_is_commit_pinned(self) -> None:
         paths = sorted(WORKFLOWS.glob("*.yml")) + sorted((ROOT / ".github" / "actions").rglob("*.yml"))
