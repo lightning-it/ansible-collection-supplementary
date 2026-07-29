@@ -61,7 +61,8 @@ Key variables:
 - `aap_deploy_automationmetrics_secret_key`
 - `aap_deploy_automationmetrics_resource_server`
 - `aap_deploy_setup_prep_inv_nodes_extra`
-- `aap_deploy_gateway_main_url` (optional installer `gateway_main_url`)
+- `aap_deploy_gateway_main_url` (optional public installer `gateway_main_url`;
+  use the Envoy endpoint, normally `https://<aap-fqdn>` on port 443)
 - `aap_deploy_gateway_nginx_http_port` / `aap_deploy_gateway_nginx_https_port`
 - `aap_deploy_envoy_http_port` / `aap_deploy_envoy_https_port`
 - `aap_deploy_postgresql_admin_username` (default: `postgres`)
@@ -99,6 +100,14 @@ Key variables:
 - `aap_deploy_enterprise_automationmetrics_hosts`
 
 Installer behavior:
+
+- Hub readiness, Hub image uploads, and EDA API calls retain the
+  `ansible.containerized_installer` `_gateway_proxy_url`; internal component
+  listener ports are not substituted for the public Gateway/Envoy endpoint.
+- The upstream installer owns Podman registry trust for the public Gateway URL
+  and the staged CA; this role does not create competing `certs.d` entries.
+- The prepared Red Hat installer bundle is not rewritten. Service-backed EDA
+  SSO is passed through the supported `eda_extra_settings` inventory variable.
 - Role performs an early existing-install detection (marker and runtime containers).
 - Marker-based skip is runtime-validated by default to avoid stale marker false positives.
 - When detected, host prep, bundle handling, inventory rendering, and installer execution are skipped.

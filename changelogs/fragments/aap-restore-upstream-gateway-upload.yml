@@ -1,0 +1,9 @@
+---
+bugfixes:
+  - >-
+    Restore the AAP 2.7 containerized installer's upstream Gateway and Envoy
+    paths for Hub readiness, execution-environment uploads, and EDA API access
+    instead of redirecting them to internal service ports, and leave Gateway
+    registry CA trust to the upstream installer. Remove the related upload-skip
+    and readiness bundle rewrites, and configure service-backed EDA SSO through
+    the supported ``eda_extra_settings`` inventory variable.

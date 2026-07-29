@@ -143,6 +143,21 @@ aap_deploy_hub_extra_settings: >-
   }}
 
 aap_deploy_eda_service_backed_sso_enabled: true
+aap_deploy_eda_extra_settings_additional: []
+aap_deploy_eda_extra_settings: >-
+  {{
+    (
+      [
+        {
+          'setting': 'ENABLE_SERVICE_BACKED_SSO',
+          'value': (aap_deploy_eda_service_backed_sso_enabled | bool)
+        }
+      ]
+      + (aap_deploy_eda_extra_settings_additional | default([], true))
+    )
+    | to_json
+    | from_json
+  }}
 
 # TLS asset staging for installer inventory.
 # We stage all certificate material on the target first, then hand only remote
@@ -346,34 +361,7 @@ aap_deploy_gateway_nginx_disable_https: false
 aap_deploy_envoy_http_port: 80
 aap_deploy_envoy_https_port: 443
 aap_deploy_envoy_disable_https: false
-aap_deploy_hub_upload_readiness_url: >-
-  {{
-    (
-      'https://'
-      ~ aap_fqdn
-      ~ ':8444/api/galaxy/pulp/api/v3/status/'
-    )
-    if (aap_fqdn | default('', true) | trim | length > 0)
-    else ''
-  }}
-aap_deploy_hub_container_registry_url: >-
-  {{
-    ('https://' ~ aap_fqdn ~ ':8444')
-    if (aap_fqdn | default('', true) | trim | length > 0)
-    else ''
-  }}
-aap_deploy_hub_seed_execution_environment_images: true
 aap_deploy_hub_seed_collections: true
-aap_deploy_eda_api_url: >-
-  {{
-    ('https://' ~ aap_fqdn ~ ':8445')
-    if (aap_fqdn | default('', true) | trim | length > 0)
-    else ''
-  }}
-aap_deploy_manage_hub_registry_trust: true
-aap_deploy_hub_registry_trust_system_dir: /etc/containers/certs.d
-aap_deploy_hub_registry_trust_user_dir: >-
-  {{ aap_deploy_install_user_home }}/.config/containers/certs.d
 
 aap_deploy_tls_gateway_host_default: >-
   {{
