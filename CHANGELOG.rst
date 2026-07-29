@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v2.1.1
+======
+
+Security Fixes
+--------------
+
+- Remove label operations from release back-sync automation so its GitHub App token needs only repository contents and pull-request access; strict bot, branch, base, title, tag, and immutable-SHA checks identify trusted back-sync pull requests without Issues API access.
+
 v2.1.0
 ======
 
