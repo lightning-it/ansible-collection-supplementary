@@ -187,6 +187,19 @@
     - os_prep
     - filesystem
 
+- name: Apply persistent SELinux labels for AAP paths
+  ansible.builtin.import_tasks: selinux.yml
+  when:
+    - aap_host_prepare_selinux_manage | bool
+    - not ansible_check_mode
+    - ansible_facts.selinux is defined
+    - ansible_facts.selinux.status | default('disabled') == 'enabled'
+  tags:
+    - aap
+    - aap_host_prepare
+    - os_prep
+    - selinux
+
 - name: Prepare Podman on AAP host
   ansible.builtin.include_role:
     name: lit.rhel.podman

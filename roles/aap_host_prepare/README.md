@@ -19,6 +19,13 @@ includes the `tar` and `unzip` tools required by the vendor setup preparation
 role. The calling runbook controls optional host changes through the existing
 `aap_runbook_manage_*` variables.
 
+`aap_host_prepare_selinux_manage` defaults to `true`. On SELinux-enabled
+hosts, the role persists and applies contexts for `/appl`, temporary paths,
+the alternate user-home hierarchy, and Podman storage before deployment.
+Customize `aap_host_prepare_selinux_fcontexts` and
+`aap_host_prepare_selinux_restore_paths` only when the application filesystem
+layout differs.
+
 ## Dependencies
 
 Optional host operations use roles from `lit.rhel` and the remote temporary

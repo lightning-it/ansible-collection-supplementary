@@ -7,9 +7,11 @@ the managed AAP host. It is intentionally independent from the Red Hat installer
 workflow in `aap_deploy` and from API configuration in `aap_cac`.
 
 Before staging artifacts, the role validates that the configured AAP gateway
-hostname resolves to one of the managed host's IPv4 addresses. Disable this
-precheck with `aap_prepare_gateway_dns_precheck_enabled: false` when DNS is
-managed outside the rollout window.
+hostname resolves to one of the managed host's IPv4 addresses. It resolves the
+hostname from `aap_deploy_gateway_main_url`, then
+`aap_cac_gateway_hostname`, and finally `aap_fqdn`. Disable this precheck with
+`aap_prepare_gateway_dns_precheck_enabled: false` when DNS is managed outside
+the rollout window.
 
 ## Requirements
 
@@ -18,6 +20,8 @@ None.
 ## Variables
 
 - `aap_prepare_artifact_dir`: `${PWD}/.artifacts`
+- `aap_prepare_artifact_dir_mode`: `0750`; the role creates this
+  controller-local directory when a local or auto-detected source is used
 - `aap_prepare_gateway_dns_precheck_enabled`: `true`
 - setup bundle patterns:
   - `aap-containerized-setup.tar.gz`

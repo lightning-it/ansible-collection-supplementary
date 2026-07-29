@@ -1,4 +1,60 @@
 ---
+- name: Inspect controller-side customer TLS service files
+  ansible.builtin.stat:
+    path: "{{ aap_deploy_tls_customer_files[item.0][item.1] }}"
+  loop: "{{ aap_deploy_tls_services | product(['cert_src', 'key_src']) | list }}"
+  loop_control:
+    label: "{{ item.0 }} {{ item.1 }}"
+  register: aap_deploy_tls_customer_service_file_stats
+  delegate_to: localhost
+  changed_when: false
+  when:
+    - aap_deploy_tls_source == 'customer_files'
+    - not (aap_deploy_tls_customer_files[item.0].remote_src | default(false) | bool)
+    - aap_deploy_tls_customer_files[item.0][item.1] | default('', true) | trim | length > 0
+
+- name: Validate controller-side customer TLS service files
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+      - item.stat.readable
+    fail_msg: >-
+      Customer TLS source file is not readable on the automation controller:
+      {{ item.item.0 }} {{ item.item.1 }}={{
+        aap_deploy_tls_customer_files[item.item.0][item.item.1]
+      }}. Generate or provide the TLS assets before running AAP deployment.
+    quiet: true
+  loop: "{{ aap_deploy_tls_customer_service_file_stats.results }}"
+  loop_control:
+    label: "{{ item.item.0 }} {{ item.item.1 }}"
+  when: not (item.skipped | default(false))
+
+- name: Inspect controller-side customer CA certificate
+  ansible.builtin.stat:
+    path: "{{ aap_deploy_tls_customer_files.ca_cert_src }}"
+  register: aap_deploy_tls_customer_ca_file_stat
+  delegate_to: localhost
+  changed_when: false
+  when:
+    - aap_deploy_tls_source == 'customer_files'
+    - not (aap_deploy_tls_customer_files.ca_cert_remote_src | default(false) | bool)
+    - aap_deploy_tls_customer_files.ca_cert_src | default('', true) | trim | length > 0
+
+- name: Validate controller-side customer CA certificate
+  ansible.builtin.assert:
+    that:
+      - aap_deploy_tls_customer_ca_file_stat.stat.exists
+      - aap_deploy_tls_customer_ca_file_stat.stat.isreg
+      - aap_deploy_tls_customer_ca_file_stat.stat.readable
+    fail_msg: >-
+      Customer CA certificate is not readable on the automation controller:
+      {{ aap_deploy_tls_customer_files.ca_cert_src }}. Generate or provide the
+      TLS assets before running AAP deployment.
+    quiet: true
+  when:
+    - not (aap_deploy_tls_customer_ca_file_stat.skipped | default(false))
+
 - name: Ensure TLS asset directory exists
   ansible.builtin.file:
     path: "{{ aap_deploy_tls_dir }}"

@@ -11,11 +11,15 @@
         if (aap_deploy_gateway_main_url | default('', true) | trim | length > 0)
         else
         (
-          aap_cac_gateway_hostname
-          | default('', true)
-          | regex_replace('^https?://', '')
-          | regex_replace('/.*$', '')
-          | regex_replace(':.*$', '')
+          (
+            aap_cac_gateway_hostname
+            | default('', true)
+            | regex_replace('^https?://', '')
+            | regex_replace('/.*$', '')
+            | regex_replace(':.*$', '')
+          )
+          if (aap_cac_gateway_hostname | default('', true) | trim | length > 0)
+          else (aap_fqdn | default('', true) | trim)
         )
       }}
   changed_when: false
@@ -31,8 +35,8 @@
       - aap_prepare_gateway_dns_precheck_hostname is not match('^https?://')
     fail_msg: >-
       AAP gateway URL precheck requires a resolvable hostname. Set
-      aap_deploy_gateway_main_url or aap_cac_gateway_hostname to the AAP
-      gateway FQDN before running the AAP rollout.
+      aap_deploy_gateway_main_url, aap_cac_gateway_hostname, or aap_fqdn to
+      the AAP gateway FQDN before running the AAP rollout.
     quiet: true
   changed_when: false
   tags:
