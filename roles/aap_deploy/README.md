@@ -330,6 +330,7 @@ Installer admin password behavior:
 
 Installer TLS behavior:
 - When enabled, the role stages TLS assets under `aap_deploy_tls_dir` on the managed host.
+- Controller-side TLS source files are validated for existence and readability before staging begins.
 - The upstream installer receives only remote file paths (`*_tls_cert`, `*_tls_key`, `custom_ca_cert`).
 - TLS staging and Vault PKI issuing are delegated to `lit.foundational.tls_assets`;
   this role only maps the staged paths into AAP installer inventory variables.

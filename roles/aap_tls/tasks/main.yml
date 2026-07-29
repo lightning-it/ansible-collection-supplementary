@@ -132,6 +132,37 @@
     - aap_tls_selfsigned_enabled | bool
     - not ansible_check_mode
 
+- name: Inspect generated temporary AAP TLS deployment files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ aap_tls_selfsigned_cert_path }}"
+    - "{{ aap_tls_selfsigned_key_path }}"
+    - "{{ aap_tls_selfsigned_ca_cert_path }}"
+  register: aap_tls_selfsigned_deployment_file_stats
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
+  changed_when: false
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - not ansible_check_mode
+
+- name: Assert generated temporary AAP TLS deployment files are readable
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+      - item.stat.readable
+    fail_msg: >-
+      Required generated AAP TLS file is not readable on the automation
+      controller: {{ item.item }}
+    quiet: true
+  loop: "{{ aap_tls_selfsigned_deployment_file_stats.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - not ansible_check_mode
+
 - name: Install temporary AAP CA in system trust store
   ansible.builtin.copy:
     src: "{{ aap_tls_selfsigned_ca_cert_path }}"
