@@ -19,6 +19,8 @@
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY')
       }}/prepared-installer/collections/ansible_collections/ansible/containerized_installer/playbooks/install.yml
     aap_deploy_molecule_role_main_path: "{{ playbook_dir }}/../../roles/aap_deploy/tasks/main.yml"
+    aap_deploy_molecule_state_guard_path: >-
+      {{ playbook_dir }}/../../roles/aap_deploy/tasks/05_detect_existing_install.yml
     aap_deploy_molecule_customizer_path: >-
       {{ playbook_dir }}/../../roles/aap_deploy/tasks/25_customize_prepared_installer.yml
   tasks:
@@ -192,4 +194,46 @@
           - >-
             'aap_deploy_run_installer | bool'
             in aap_deploy_molecule_password_validation_task.when
+        quiet: true
+
+    - name: Read AAP clean-install state guard
+      ansible.builtin.slurp:
+        src: "{{ aap_deploy_molecule_state_guard_path }}"
+      register: aap_deploy_molecule_state_guard_file
+
+    - name: Parse AAP clean-install state guard
+      ansible.builtin.set_fact:
+        aap_deploy_molecule_state_guard_tasks: >-
+          {{ aap_deploy_molecule_state_guard_file.content | b64decode | from_yaml }}
+
+    - name: Select AAP clean-install state tasks
+      ansible.builtin.set_fact:
+        aap_deploy_molecule_state_classifier: >-
+          {{
+            aap_deploy_molecule_state_guard_tasks
+            | selectattr('name', 'equalto', 'Classify existing AAP install state')
+            | first
+          }}
+        aap_deploy_molecule_state_rejection: >-
+          {{
+            aap_deploy_molecule_state_guard_tasks
+            | selectattr('name', 'equalto', 'Reject inconsistent AAP install state')
+            | first
+          }}
+
+    - name: Assert clean, installed, and inconsistent states remain explicit
+      ansible.builtin.assert:
+        that:
+          - >-
+            ' and '
+            in aap_deploy_molecule_state_classifier['ansible.builtin.set_fact'].aap_deploy_existing_install_detected
+          - >-
+            ' != '
+            in aap_deploy_molecule_state_classifier['ansible.builtin.set_fact'].aap_deploy_install_state_inconsistent
+          - >-
+            aap_deploy_molecule_state_rejection['ansible.builtin.assert'].that
+            == ['not (aap_deploy_install_state_inconsistent | bool)']
+          - >-
+            'ansible.containerized_installer.uninstall'
+            in aap_deploy_molecule_state_rejection['ansible.builtin.assert'].fail_msg
         quiet: true
