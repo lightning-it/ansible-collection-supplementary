@@ -1,0 +1,59 @@
+---
+- name: Install SELinux management tools for AAP paths
+  ansible.builtin.package:
+    name: policycoreutils-python-utils
+    state: present
+
+- name: Persist SELinux contexts for AAP paths
+  community.general.sefcontext:
+    target: "{{ item.target }}"
+    setype: "{{ item.setype | default(omit) }}"
+    substitute: "{{ item.substitute | default(omit) }}"
+    state: present
+  loop: "{{ aap_host_prepare_selinux_fcontexts }}"
+  loop_control:
+    label: >-
+      {{
+        item.target
+        ~ ' -> '
+        ~ (item.setype | default(item.substitute))
+      }}
+
+- name: Apply persistent SELinux context to AAP mountpoint
+  ansible.builtin.command:
+    argv:
+      - restorecon
+      - -F
+      - -v
+      - /appl
+  register: aap_host_prepare_mountpoint_restorecon
+  changed_when: >-
+    aap_host_prepare_mountpoint_restorecon.stdout
+    | default('')
+    | trim
+    | length > 0
+
+- name: Apply persistent SELinux contexts to AAP paths
+  ansible.builtin.command:
+    argv:
+      - restorecon
+      - -R
+      - -F
+      - -v
+      - "{{ item }}"
+  register: aap_host_prepare_restorecon
+  changed_when: aap_host_prepare_restorecon.stdout | default('') | trim | length > 0
+  loop: "{{ aap_host_prepare_selinux_restore_paths }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Validate effective SELinux contexts for AAP paths
+  ansible.builtin.command:
+    argv:
+      - matchpathcon
+      - -V
+      - "{{ item }}"
+  changed_when: false
+  loop: "{{ ['/appl'] + aap_host_prepare_selinux_restore_paths }}"
+  loop_control:
+    label: "{{ item }}"

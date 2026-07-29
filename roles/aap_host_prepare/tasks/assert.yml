@@ -10,6 +10,11 @@
       - aap_host_prepare_install_user_shell_effective is match('^/.+')
       - aap_host_prepare_setup_dir_effective is string
       - aap_host_prepare_setup_dir_effective is match('^/.+')
+      - aap_host_prepare_selinux_manage is boolean
+      - aap_host_prepare_selinux_fcontexts is sequence
+      - aap_host_prepare_selinux_fcontexts is not string
+      - aap_host_prepare_selinux_restore_paths is sequence
+      - aap_host_prepare_selinux_restore_paths is not string
     fail_msg: Invalid configuration for lit.supplementary.aap_host_prepare.
     quiet: true
   changed_when: false

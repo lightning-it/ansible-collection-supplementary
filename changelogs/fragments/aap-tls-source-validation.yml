@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    aap_tls now validates that generated deployment certificate, key, and CA
+    files are readable, and aap_deploy validates controller-side customer TLS
+    source files before attempting to stage them.
