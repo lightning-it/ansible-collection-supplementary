@@ -508,9 +508,6 @@ aap_deploy_skip_if_runtime_active: true
 aap_deploy_runtime_probe_all_containers: true
 aap_deploy_runtime_name_regex: '^(automation-|postgresql$|redis-|receptor$)'
 aap_deploy_runtime_min_matching_containers: 1
-aap_deploy_reset_partial_install_enabled: false
-aap_deploy_reset_partial_install_remove_setup: true
-aap_deploy_reset_partial_install_remove_logs: true
 
 # Post-install verification
 aap_deploy_verify_gateway_https: false
