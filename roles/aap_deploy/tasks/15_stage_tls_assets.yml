@@ -7,6 +7,7 @@
     label: "{{ item.0 }} {{ item.1 }}"
   register: aap_deploy_tls_customer_service_file_stats
   delegate_to: localhost
+  become: false
   changed_when: false
   when:
     - aap_deploy_tls_source == 'customer_files'
@@ -35,6 +36,7 @@
     path: "{{ aap_deploy_tls_customer_files.ca_cert_src }}"
   register: aap_deploy_tls_customer_ca_file_stat
   delegate_to: localhost
+  become: false
   changed_when: false
   when:
     - aap_deploy_tls_source == 'customer_files'
