@@ -20,7 +20,6 @@ on:
 
 permissions:
   contents: read
-  issues: read
   pull-requests: read
 
 concurrency:
@@ -44,7 +43,6 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
           permission-contents: write
-          permission-issues: write
           permission-pull-requests: write
 
       - name: Resolve release automation App bot identity
@@ -263,15 +261,6 @@ jobs:
           fi
           pushed_sha="$(git rev-parse HEAD)"
 
-          if ! gh label list --repo "$REPO" --json name --jq '.[].name' \
-            | grep -Fxq skip-changelog
-          then
-            gh label create skip-changelog \
-              --repo "$REPO" \
-              --description "Changelog fragment intentionally not required for this PR." \
-              --color "6f42c1"
-          fi
-
           owned_pulls="$(
             gh api --method GET "repos/${REPO}/pulls" \
               -f state=open \
@@ -290,8 +279,7 @@ jobs:
                 --base develop \
                 --head "$branch" \
                 --title "$title" \
-                --body "$body" \
-                --label skip-changelog
+                --body "$body"
           fi
 
           owned_pulls="$(
@@ -315,5 +303,4 @@ jobs:
           gh pr edit "$existing" \
             --repo "$REPO" \
             --title "$title" \
-            --body "$body" \
-            --add-label skip-changelog
+            --body "$body"
