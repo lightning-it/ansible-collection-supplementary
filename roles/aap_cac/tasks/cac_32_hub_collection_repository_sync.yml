@@ -6,8 +6,7 @@
   block:
     - name: Set Hub collection repositories for sync
       ansible.builtin.set_fact:
-        ansible_facts:
-          hub_collection_repositories: "{{ aap_cac_hub_collection_repositories }}"
+        hub_collection_repositories: "{{ aap_cac_hub_collection_repositories }}"
       changed_when: false
 
     - name: Run role infra.aap_configuration.hub_collection_repository_sync  # noqa var-naming[no-role-prefix]

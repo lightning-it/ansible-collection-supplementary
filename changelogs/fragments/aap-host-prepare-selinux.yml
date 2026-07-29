@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Persist and apply SELinux file contexts for the AAP application mount,
+    temporary directories, alternate user homes, and Podman storage during
+    AAP host preparation.

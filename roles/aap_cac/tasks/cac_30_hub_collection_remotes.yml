@@ -7,8 +7,7 @@
   block:
     - name: Set Hub collection remotes
       ansible.builtin.set_fact:
-        ansible_facts:
-          hub_collection_remotes: "{{ aap_cac_hub_collection_remotes }}"
+        hub_collection_remotes: "{{ aap_cac_hub_collection_remotes }}"
       changed_when: false
 
     - name: Run role infra.aap_configuration.hub_collection_remote  # noqa var-naming[no-role-prefix]

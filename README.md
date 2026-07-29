@@ -314,7 +314,7 @@ Example playbook:
 - Red Hat/AAP extension collections are intentionally excluded from the core
   `galaxy.yml` dependency graph. The authoritative, exactly pinned AAP overlay
   is [`collections/requirements-rh.yml`](collections/requirements-rh.yml):
-  `ansible.controller`, `ansible.platform`, `infra.aap_configuration`,
+  `ansible.controller`, `infra.aap_configuration`,
   `infra.aap_utilities`, `infra.controller_configuration`, and
   `infra.ee_utilities`. Install that complete overlay from configured Galaxy
   and Automation Hub sources in the protected AAP execution environment.

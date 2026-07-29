@@ -29,6 +29,22 @@
     - aap_prepare
     - artifacts
 
+- name: Ensure controller-local AAP artifact directory exists
+  ansible.builtin.file:
+    path: "{{ aap_prepare_artifact_dir }}"
+    state: directory
+    mode: "{{ aap_prepare_artifact_dir_mode }}"
+  delegate_to: localhost
+  become: false
+  when:
+    - aap_prepare_enabled | bool
+    - >-
+      aap_prepare_bundle_source in ['auto', 'local']
+      or aap_prepare_manifest_source in ['auto', 'local']
+  tags:
+    - aap_prepare
+    - artifacts
+
 - name: Resolve AAP setup bundle artifact
   ansible.builtin.include_tasks: resolve_artifact.yml
   vars:
@@ -92,6 +108,7 @@
   when:
     - aap_prepare_enabled | bool
     - aap_prepare_bundle_required | bool
+    - not ansible_check_mode
   tags:
     - aap_prepare
     - artifacts
@@ -108,6 +125,7 @@
   when:
     - aap_prepare_enabled | bool
     - aap_prepare_bundle_required | bool
+    - not ansible_check_mode
   tags:
     - aap_prepare
     - artifacts
@@ -120,6 +138,7 @@
   when:
     - aap_prepare_enabled | bool
     - aap_prepare_manifest_required | bool
+    - not ansible_check_mode
   tags:
     - aap_prepare
     - artifacts
@@ -137,6 +156,7 @@
   when:
     - aap_prepare_enabled | bool
     - aap_prepare_manifest_required | bool
+    - not ansible_check_mode
   tags:
     - aap_prepare
     - artifacts

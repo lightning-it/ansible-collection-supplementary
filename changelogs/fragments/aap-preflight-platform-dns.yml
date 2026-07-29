@@ -1,0 +1,8 @@
+---
+bugfixes:
+  - >-
+    Make the AAP preflight DNS gate validate the configured platform FQDN
+    instead of a potentially transport-only ansible_host value.
+  - >-
+    Store private Hub CA trust under Podman's canonical host-only certs.d key
+    when the HTTPS registry URL uses the implicit default port.

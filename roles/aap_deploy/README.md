@@ -75,8 +75,9 @@ Key variables:
 - `aap_deploy_postgresql_admin_password_effective`
 - `aap_deploy_tls_enabled`
 - `aap_deploy_tls_source` (`customer_files` or `vault_pki`)
-- `aap_deploy_tls_customer_files` (controller-side cert/key paths or inline
-  `cert_content`/`key_content`, plus `ca_cert_src` or `ca_cert_content`)
+- `aap_deploy_tls_customer_files` (controller-side cert/key paths, target-side
+  paths with per-service `remote_src: true`, or inline `cert_content`/`key_content`;
+  the CA supports `ca_cert_src`, `ca_cert_remote_src`, or `ca_cert_content`)
 - `aap_deploy_tls_vault_pki_mount_point`
 - `aap_deploy_tls_vault_pki_services` (per-service `role_name`, `common_name`, `alt_names`, `ip_sans`)
 - `aap_deploy_manage_download_unpack`
@@ -105,6 +106,9 @@ Installer behavior:
 - Role expects `lit.supplementary.aap_prepare` to stage the setup bundle on the
   managed host at `aap_deploy_setup_archive_path`.
 - Role prepares the setup workspace and renders installer inventory via `infra.aap_utilities.aap_setup_prepare`.
+- In check mode, the role validates all inputs and predicts the setup path but
+  does not call the vendor preparation role because that role requires the
+  archive extraction result even though Ansible skips extraction in check mode.
 - By default, role runs the prepared containerized installer command directly
   with controlled async status polling.
 - For CI or other orchestrators that cannot hold one Ansible polling task open
@@ -326,6 +330,7 @@ Installer admin password behavior:
 
 Installer TLS behavior:
 - When enabled, the role stages TLS assets under `aap_deploy_tls_dir` on the managed host.
+- Controller-side TLS source files are validated for existence and readability before staging begins.
 - The upstream installer receives only remote file paths (`*_tls_cert`, `*_tls_key`, `custom_ca_cert`).
 - TLS staging and Vault PKI issuing are delegated to `lit.foundational.tls_assets`;
   this role only maps the staged paths into AAP installer inventory variables.

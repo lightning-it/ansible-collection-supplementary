@@ -1,0 +1,10 @@
+---
+bugfixes:
+  - Keep read-only AAP preflight commands active in Ansible check mode so their
+    registered results remain available to subsequent assertions.
+  - Allow temporary AAP TLS assets to be generated on a persistent delegated
+    host instead of requiring controller-local storage.
+  - Keep the read-only AAP install-user lookup active in check mode so account
+    validation uses the real passwd entry.
+  - Allow customer TLS source files to be staged directly from the managed AAP
+    host, keeping owner-only private keys off the automation controller.

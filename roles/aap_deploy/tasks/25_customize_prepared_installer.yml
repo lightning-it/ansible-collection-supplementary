@@ -42,31 +42,6 @@
       hostvars[groups["automationgateway"][0]]["_gateway_proxy_url"], true) }}'{% endraw %}
   when: aap_deploy_hub_container_registry_url | trim | length > 0
 
-- name: Patch prepared Hub container registry upload username
-  ansible.builtin.replace:
-    path: >-
-      {{
-        aap_setup_prep_setup_dir
-      }}/collections/ansible_collections/ansible/containerized_installer/roles/automationhub/tasks/upload_images.yml
-    regexp: >-
-      username: '(\{\{ gateway_admin_user \| default\("admin"\) \}\}|admin)'
-    replace: >-
-      {% raw %}username: '{{ automationhub_admin_user | default(
-      gateway_admin_user | default("admin"), true) }}'{% endraw %}
-  when: aap_deploy_hub_container_registry_url | trim | length > 0
-
-- name: Patch prepared Hub container registry upload password
-  ansible.builtin.replace:
-    path: >-
-      {{
-        aap_setup_prep_setup_dir
-      }}/collections/ansible_collections/ansible/containerized_installer/roles/automationhub/tasks/upload_images.yml
-    regexp: >-
-      password: '\{\{ gateway_admin_password \}\}'
-    replace: >-
-      {% raw %}password: '{{ automationhub_admin_password | default(gateway_admin_password, true) }}'{% endraw %}
-  when: aap_deploy_hub_container_registry_url | trim | length > 0
-
 - name: Make prepared EE and DE image upload optional
   ansible.builtin.replace:
     path: >-

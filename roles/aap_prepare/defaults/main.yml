@@ -6,6 +6,7 @@ aap_prepare_artifact_dir: >-
     lookup('ansible.builtin.env', 'AAP_ARTIFACT_DIR')
     | default(lookup('ansible.builtin.env', 'PWD') ~ '/.artifacts', true)
   }}
+aap_prepare_artifact_dir_mode: "0750"
 aap_prepare_validate_certs: true
 aap_prepare_timeout: 1800
 aap_prepare_force: false

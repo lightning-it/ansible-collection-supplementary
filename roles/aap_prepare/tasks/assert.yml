@@ -4,6 +4,7 @@
     that:
       - aap_prepare_enabled is boolean
       - aap_prepare_artifact_dir | trim | length > 0
+      - aap_prepare_artifact_dir_mode is match('^0[0-7]{3}$')
       - aap_prepare_validate_certs is boolean
       - aap_prepare_timeout | int > 0
       - aap_prepare_force is boolean

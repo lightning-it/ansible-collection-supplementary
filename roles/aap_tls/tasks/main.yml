@@ -10,7 +10,7 @@
     path: "{{ aap_tls_selfsigned_output_dir }}"
     state: directory
     mode: "0750"
-  delegate_to: localhost
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
   when: aap_tls_selfsigned_enabled | bool
 
 - name: Generate temporary AAP self-signed CA private key
@@ -20,8 +20,10 @@
     type: RSA
     mode: "0600"
     force: "{{ aap_tls_selfsigned_force | bool }}"
-  delegate_to: localhost
-  when: aap_tls_selfsigned_enabled | bool
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - not ansible_check_mode
 
 - name: Generate temporary AAP service private key
   community.crypto.openssl_privatekey:
@@ -30,8 +32,10 @@
     type: RSA
     mode: "0600"
     force: "{{ aap_tls_selfsigned_force | bool }}"
-  delegate_to: localhost
-  when: aap_tls_selfsigned_enabled | bool
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - not ansible_check_mode
 
 - name: Generate temporary AAP self-signed CA certificate signing request
   community.crypto.openssl_csr:
@@ -47,8 +51,10 @@
     key_usage_critical: true
     mode: "0644"
     force: "{{ aap_tls_selfsigned_force | bool }}"
-  delegate_to: localhost
-  when: aap_tls_selfsigned_enabled | bool
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - not ansible_check_mode
 
 - name: Generate temporary AAP self-signed CA certificate
   community.crypto.x509_certificate:
@@ -60,8 +66,10 @@
     selfsigned_create_subject_key_identifier: create_if_not_provided
     mode: "0644"
     force: "{{ aap_tls_selfsigned_force | bool }}"
-  delegate_to: localhost
-  when: aap_tls_selfsigned_enabled | bool
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - not ansible_check_mode
 
 - name: Generate temporary AAP certificate signing request
   community.crypto.openssl_csr:
@@ -76,8 +84,10 @@
       }}
     mode: "0644"
     force: "{{ aap_tls_selfsigned_force | bool }}"
-  delegate_to: localhost
-  when: aap_tls_selfsigned_enabled | bool
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - not ansible_check_mode
 
 - name: Generate temporary AAP service certificate signed by temporary CA
   community.crypto.x509_certificate:
@@ -91,15 +101,19 @@
     ownca_create_authority_key_identifier: true
     mode: "0644"
     force: "{{ aap_tls_selfsigned_force | bool }}"
-  delegate_to: localhost
-  when: aap_tls_selfsigned_enabled | bool
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - not ansible_check_mode
 
 - name: Inspect generated temporary AAP certificate
   community.crypto.x509_certificate_info:
     path: "{{ aap_tls_selfsigned_cert_path }}"
   register: aap_tls_selfsigned_cert_info
-  delegate_to: localhost
-  when: aap_tls_selfsigned_enabled | bool
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - not ansible_check_mode
 
 - name: Assert generated temporary AAP certificate has expected SANs
   ansible.builtin.assert:
@@ -114,4 +128,63 @@
     fail_msg: >-
       Generated temporary AAP certificate is missing one or more expected SANs.
     success_msg: "Generated temporary AAP certificate contains the expected SANs."
-  when: aap_tls_selfsigned_enabled | bool
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - not ansible_check_mode
+
+- name: Inspect generated temporary AAP TLS deployment files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ aap_tls_selfsigned_cert_path }}"
+    - "{{ aap_tls_selfsigned_key_path }}"
+    - "{{ aap_tls_selfsigned_ca_cert_path }}"
+  register: aap_tls_selfsigned_deployment_file_stats
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
+  changed_when: false
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - not ansible_check_mode
+
+- name: Assert generated temporary AAP TLS deployment files are readable
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+      - item.stat.readable
+    fail_msg: >-
+      Required generated AAP TLS file is not readable on
+      {{ aap_tls_selfsigned_delegate_to }}: {{ item.item }}
+    quiet: true
+  loop: "{{ aap_tls_selfsigned_deployment_file_stats.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - not ansible_check_mode
+
+- name: Install temporary AAP CA in system trust store
+  ansible.builtin.copy:
+    src: "{{ aap_tls_selfsigned_ca_cert_path }}"
+    dest: "{{ aap_tls_selfsigned_ca_trust_path }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
+  notify: Refresh system CA trust after installing temporary AAP CA
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - aap_tls_selfsigned_install_ca_trust | bool
+    - not ansible_check_mode
+
+- name: Report planned temporary AAP TLS asset generation
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: temporary AAP CA, private keys, CSR, and service certificate
+      would be generated in {{ aap_tls_selfsigned_output_dir }}.
+  changed_when: true
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - ansible_check_mode

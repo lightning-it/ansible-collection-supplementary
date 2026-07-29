@@ -57,10 +57,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
-      cells: ${{ steps.matrix.outputs.cells }}
+      tiny: ${{ steps.matrix.outputs.tiny }}
+      heavy: ${{ steps.matrix.outputs.heavy }}
+      acceptance: ${{ steps.matrix.outputs.acceptance }}
     steps:
       - name: Checkout exact protected-branch source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ needs.source.outputs.sha }}
       - name: Set up Python
@@ -74,12 +76,19 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/validate-role-coverage.py validate
-          cells="$(python - <<'PY'
+          python - <<'PY'
           import json
+          import os
           import subprocess
+          from pathlib import Path
 
-          cells = []
-          for profile in ("tiny", "heavy", "application_acceptance"):
+          profiles = {
+              "tiny": "tiny",
+              "heavy": "heavy",
+              "acceptance": "application_acceptance",
+          }
+          matrices = {}
+          for output_name, profile in profiles.items():
               output = subprocess.check_output(
                   [
                       "python",
@@ -92,19 +101,26 @@ jobs:
                   ],
                   text=True,
               )
-              cells.extend(json.loads(output)["include"])
-          if not cells:
-              raise SystemExit("candidate platform matrix is empty")
-          if any(
-              cell.get("target_disposition") != "candidate"
-              or cell.get("release_required") is not False
-              for cell in cells
-          ):
-              raise SystemExit("candidate platform matrix contains a release-required cell")
-          print(json.dumps({"include": cells}, separators=(",", ":")))
+              matrix = json.loads(output)
+              cells = matrix.get("include")
+              if not isinstance(cells, list) or not cells:
+                  raise SystemExit(f"candidate {profile} matrix is empty")
+              if any(
+                  cell.get("profile") != profile
+                  or cell.get("target_disposition") != "candidate"
+                  or cell.get("release_required") is not False
+                  for cell in cells
+              ):
+                  raise SystemExit(f"candidate {profile} matrix violates its contract")
+              matrices[output_name] = json.dumps(
+                  matrix,
+                  separators=(",", ":"),
+              )
+
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
+              for output_name, matrix in matrices.items():
+                  stream.write(f"{output_name}={matrix}\n")
           PY
-          )"
-          echo "cells=$cells" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build exact candidate-platform source
@@ -113,7 +129,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout exact protected-branch source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ needs.source.outputs.sha }}
       - name: Set up Python
@@ -148,13 +164,13 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  candidate-cells:
-    name: Candidate only / ${{ matrix.profile }} / ${{ matrix.target }}
+  candidate-tiny-cells:
+    name: Candidate only / tiny / ${{ matrix.target }}
     needs: [source, matrix, build]
     strategy:
       fail-fast: false
       max-parallel: 2
-      matrix: ${{ fromJSON(needs.matrix.outputs.cells) }}
+      matrix: ${{ fromJSON(needs.matrix.outputs.tiny) }}
     runs-on: ${{ matrix.runner }}
     environment: ansible-collection-runtime-protected
     timeout-minutes: 180
@@ -164,7 +180,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout exact protected-branch source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ needs.source.outputs.sha }}
       - name: Execute candidate target without release eligibility
@@ -185,17 +201,49 @@ jobs:
           memory-limit: 12GiB
           disk-limit: 24GiB
 
+  candidate-heavy-cells:
+    name: Candidate Heavy matrix (delegated to modulix-validation)
+    needs: [source, matrix, build]
+    uses: lightning-it/modulix-validation/.github/workflows/collection-quality-profile.yml@ec110a9545dc6b8efe4ed8820b50b27912175111
+    with:
+      profile: heavy
+      matrix-json: ${{ needs.matrix.outputs.heavy }}
+      candidate-artifact: candidate-platform-source-${{ needs.source.outputs.sha }}
+      source-sha: ${{ needs.source.outputs.sha }}
+      environment-name: ansible-collection-runtime-protected
+    secrets: inherit
+
+  candidate-acceptance-cells:
+    name: Candidate Application Acceptance matrix (delegated to modulix-validation)
+    needs: [source, matrix, build, candidate-heavy-cells]
+    uses: lightning-it/modulix-validation/.github/workflows/collection-quality-profile.yml@ec110a9545dc6b8efe4ed8820b50b27912175111
+    with:
+      profile: application_acceptance
+      matrix-json: ${{ needs.matrix.outputs.acceptance }}
+      candidate-artifact: candidate-platform-source-${{ needs.source.outputs.sha }}
+      source-sha: ${{ needs.source.outputs.sha }}
+      environment-name: ansible-collection-runtime-protected
+    secrets: inherit
+
   promotion-input:
     name: Candidate platform / Promotion input only
     if: always()
-    needs: [source, matrix, build, candidate-cells]
+    needs:
+      - source
+      - matrix
+      - build
+      - candidate-tiny-cells
+      - candidate-heavy-cells
+      - candidate-acceptance-cells
     runs-on: ubuntu-latest
     steps:
       - name: Require all candidate cells and state the promotion boundary
         env:
           MATRIX_RESULT: ${{ needs.matrix.result }}
           BUILD_RESULT: ${{ needs.build.result }}
-          CELLS_RESULT: ${{ needs.candidate-cells.result }}
+          TINY_RESULT: ${{ needs.candidate-tiny-cells.result }}
+          HEAVY_RESULT: ${{ needs.candidate-heavy-cells.result }}
+          ACCEPTANCE_RESULT: ${{ needs.candidate-acceptance-cells.result }}
           EVENT_NAME: ${{ github.event_name }}
           SOURCE_REF: ${{ needs.source.outputs.ref }}
         run: |
@@ -206,7 +254,9 @@ jobs:
           esac
           test "$MATRIX_RESULT" = success
           test "$BUILD_RESULT" = success
-          test "$CELLS_RESULT" = success
+          test "$TINY_RESULT" = success
+          test "$HEAVY_RESULT" = success
+          test "$ACCEPTANCE_RESULT" = success
           {
             echo "### Candidate platform validation passed"
             echo

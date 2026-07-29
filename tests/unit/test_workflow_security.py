@@ -129,8 +129,13 @@ class WorkflowSecurityTests(unittest.TestCase):
                 self.assertNotIn("memory-limit", delegated["with"])
         self.assertEqual(
             "12GiB",
-            candidate["jobs"]["candidate-cells"]["steps"][1]["with"]["memory-limit"],
+            candidate["jobs"]["candidate-tiny-cells"]["steps"][1]["with"]["memory-limit"],
         )
+        for job in ("candidate-heavy-cells", "candidate-acceptance-cells"):
+            with self.subTest(job=job):
+                delegated = candidate["jobs"][job]
+                self.assertIn("lightning-it/modulix-validation/", delegated["uses"])
+                self.assertNotIn("memory-limit", delegated["with"])
         for scenario in ("keycloak-tiny", "keycloak-heavy", "keycloak-application-acceptance"):
             with self.subTest(scenario=scenario):
                 molecule = (ROOT / "molecule" / scenario / "molecule.yml").read_text(encoding="utf-8")
@@ -140,6 +145,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         renovate = (WORKFLOWS / "renovate-guarded-automerge.yml").read_text(encoding="utf-8")
         changelog = (WORKFLOWS / "changelog.yml").read_text(encoding="utf-8")
+        collection_ci = load_yaml(WORKFLOWS / "collection-ci.yml")
 
         self.assertIn('([.labels[].name] | index("safe-automerge") != null)', copilot)
         self.assertIn('([.labels[].name] | index("breaking-update") == null)', copilot)
@@ -156,6 +162,27 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('index("dependencies") != null', changelog)
         self.assertIn('index("safe-automerge") != null', changelog)
         self.assertIn('index("breaking-update") == null', changelog)
+        static_steps = [
+            step
+            for step in collection_ci["jobs"]["lint-sanity"]["steps"]
+            if step.get("name") == "Run repository static pre-commit gates"
+        ]
+        self.assertEqual(1, len(static_steps))
+        static_env = static_steps[0]["env"]
+        self.assertEqual("${{ env.COMPARE_BASE_SHA }}", static_env["BASE_SHA"])
+        self.assertEqual("${{ env.SOURCE_SHA }}", static_env["HEAD_SHA"])
+        self.assertEqual(
+            "${{ github.event_name == 'pull_request' && toJson(github.event.pull_request.labels.*.name) || '[]' }}",
+            static_env["LABELS_JSON"],
+        )
+        require_fragment = static_env["REQUIRE_FRAGMENT"]
+        self.assertIn("github.event.pull_request.base.ref == 'develop'", require_fragment)
+        self.assertIn("startsWith(github.event.pull_request.head.ref, 'renovate/')", require_fragment)
+        self.assertIn("github.event.pull_request.user.login == 'renovate[bot]'", require_fragment)
+        self.assertIn("contains(github.event.pull_request.labels.*.name, 'renovate')", require_fragment)
+        self.assertIn("contains(github.event.pull_request.labels.*.name, 'dependencies')", require_fragment)
+        self.assertIn("contains(github.event.pull_request.labels.*.name, 'safe-automerge')", require_fragment)
+        self.assertIn("!contains(github.event.pull_request.labels.*.name, 'breaking-update')", require_fragment)
 
     def test_collection_ci_concurrency_isolated_by_pr_and_exact_head(self) -> None:
         workflow = load_yaml(WORKFLOWS / "collection-ci.yml")
@@ -192,6 +219,12 @@ class WorkflowSecurityTests(unittest.TestCase):
                 "github.event.pull_request.head.sha || github.sha",
                 delegated["with"]["source-sha"],
             )
+
+        self.assertIn(
+            "heavy",
+            jobs["acceptance-cells"]["needs"],
+            "delegated Incus profiles must run serially to avoid concurrency cancellation",
+        )
 
     def test_all_workflows_and_local_actions_require_release_team_review(self) -> None:
         codeowners = (ROOT / ".github" / "CODEOWNERS").read_text(encoding="utf-8")
@@ -370,19 +403,49 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("source_ref=refs/heads/develop", source_step)
         self.assertEqual("source", jobs["matrix"]["needs"])
         self.assertEqual("source", jobs["build"]["needs"])
-        self.assertIn("source", jobs["candidate-cells"]["needs"])
+        self.assertIn("source", jobs["candidate-tiny-cells"]["needs"])
         self.assertEqual(
             "ansible-collection-runtime-protected",
-            jobs["candidate-cells"]["environment"],
+            jobs["candidate-tiny-cells"]["environment"],
         )
         self.assertIn(
             "needs.source.outputs.sha",
-            json.dumps(jobs["candidate-cells"]),
+            json.dumps(jobs["candidate-tiny-cells"]),
+        )
+        for name, profile in (
+            ("candidate-heavy-cells", "heavy"),
+            ("candidate-acceptance-cells", "application_acceptance"),
+        ):
+            delegated = jobs[name]
+            self.assertRegex(
+                delegated["uses"],
+                r"^lightning-it/modulix-validation/\.github/workflows/"
+                r"collection-quality-profile\.yml@[0-9a-f]{40}$",
+            )
+            self.assertEqual(profile, delegated["with"]["profile"])
+            self.assertIn("matrix.outputs", delegated["with"]["matrix-json"])
+            self.assertEqual(
+                "${{ needs.source.outputs.sha }}",
+                delegated["with"]["source-sha"],
+            )
+            self.assertEqual(
+                "ansible-collection-runtime-protected",
+                delegated["with"]["environment-name"],
+            )
+        self.assertIn(
+            "candidate-heavy-cells",
+            jobs["candidate-acceptance-cells"]["needs"],
         )
         self.assertEqual(
             "Candidate platform / Promotion input only",
             jobs["promotion-input"]["name"],
         )
+        for dependency in (
+            "candidate-tiny-cells",
+            "candidate-heavy-cells",
+            "candidate-acceptance-cells",
+        ):
+            self.assertIn(dependency, jobs["promotion-input"]["needs"])
         serialized = json.dumps(workflow)
         self.assertIn("target-disposition", serialized)
         self.assertIn("candidate", serialized)
@@ -469,8 +532,13 @@ class WorkflowSecurityTests(unittest.TestCase):
         scorecard = load_yaml(WORKFLOWS / "openssf-scorecard.yml")
         scorecard_job = scorecard["jobs"]["scorecard"]
         self.assertNotIn("id-token", scorecard_job["permissions"])
-        run_step = next(step for step in scorecard_job["steps"] if step.get("name") == "Run OpenSSF Scorecard analysis")
-        self.assertEqual("./.github/actions/run-scorecard", run_step["uses"])
+        run_step = next(
+            step for step in scorecard_job["steps"] if step.get("name") == "Run immutable OpenSSF Scorecard analysis"
+        )
+        self.assertEqual(
+            "ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc",
+            run_step["uses"],
+        )
         self.assertIs(run_step["with"]["publish_results"], False)
         scorecard_action = load_yaml(SCORECARD_ACTION)
         self.assertRegex(scorecard_action["runs"]["image"], PINNED_DOCKER_USE)
@@ -649,7 +717,8 @@ class WorkflowSecurityTests(unittest.TestCase):
         molecule = (ROOT / "scripts" / "devtools-molecule.sh").read_text(encoding="utf-8")
         self.assertIn("Docker is required for Molecule tests", molecule)
         self.assertNotIn("Skipping Molecule tests because Docker", molecule)
-        self.assertIn("WUNDER_DEVTOOLS_WORKSPACE_MODE=ro", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_ROOTFS_MODE=rw", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_WORKSPACE_MODE=rw", molecule)
         self.assertIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0", molecule)
         self.assertNotIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1", molecule)
 

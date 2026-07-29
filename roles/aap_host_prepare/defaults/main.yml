@@ -8,3 +8,23 @@ aap_host_prepare_install_user_home_effective: >-
   }}
 aap_host_prepare_install_user_shell_effective: >-
   {{ aap_deploy_install_user_shell | default('/bin/bash', true) }}
+aap_host_prepare_setup_dir_effective: >-
+  {{ aap_deploy_setup_dir | default('/appl/aap/setup', true) }}
+
+aap_host_prepare_selinux_manage: true
+aap_host_prepare_selinux_fcontexts:
+  - target: /appl
+    setype: var_t
+  - target: /appl/tmp(/.*)?
+    setype: tmp_t
+  - target: /appl/ansible-tmp(/.*)?
+    setype: tmp_t
+  - target: /appl/podman(/.*)?
+    setype: container_var_lib_t
+  - target: /appl/home
+    substitute: /home
+aap_host_prepare_selinux_restore_paths:
+  - /appl/tmp
+  - /appl/ansible-tmp
+  - /appl/podman
+  - /appl/home

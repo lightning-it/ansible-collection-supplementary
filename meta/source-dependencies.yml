@@ -11,64 +11,64 @@ container_images:
   - reference: "codeberg.org/forgejo/forgejo:10@sha256:99b6c15a1bc98e623103a83a04023662a93fd035dac4f0a856d781afa9d71095"
     locations:
       - "roles/forgejo_deploy/defaults/main.yml"
-  - reference: "docker.io/caddy:2@sha256:af5fdcd76f2db5e4e974ee92f96ee8c0fc3edb55bd4ba5032547cbf3f65e486d"
+  - reference: "docker.io/caddy:2@sha256:844f60b64e4724a5aa8245e019dace0d3f199f7433ce6c57676cb30a920dbad9"
     locations:
       - "roles/nexus/defaults/main.yml"
-  - reference: "docker.io/checkmk/check-mk-raw:2.3.0-latest@sha256:b61a4c7b487abf0d34de9b096ed6930bec9b6841c191f4e43e7eaab787e879b1"
+  - reference: "docker.io/checkmk/check-mk-raw:2.4.0-latest@sha256:d6cb29c34ce8199cdae5246d1aadad489ef43250e211ad9b25d375237ee2eb34"
     locations:
       - "roles/checkmk_deploy/defaults/main.yml"
-  - reference: "docker.io/coredns/coredns:1.11.1@sha256:1eeb4c7316bacb1d4c8ead65571cd92dd21e27359f0d4917f1a5822a73b75db1"
+  - reference: "docker.io/coredns/coredns:1.14.6@sha256:900f9c109f7a33545d3c811516e8376df9019147b750f5ce3e254468769176ea"
     locations:
       - "roles/coredns_deploy/defaults/main.yml"
   - reference: "docker.io/dperson/samba:latest@sha256:66088b78a19810dd1457a8f39340e95e663c728083efa5fe7dc0d40b2478e869"
     locations:
       - "roles/samba_deploy/defaults/main.yml"
       - "roles/samba_upgrade/defaults/main.yml"
-  - reference: "docker.io/grafana/alloy:v1.7.5@sha256:b92703c13c32c20d629ffd89f40287ed385c12a335a7c9f31c720a5f912f9d6f"
+  - reference: "docker.io/grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308"
     locations:
       - "roles/alloy_deploy/defaults/main.yml"
-  - reference: "docker.io/grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7"
+  - reference: "docker.io/grafana/grafana:11.6.16@sha256:d67af92050b8d93b393dc741864752a69c9da1ffa39c1bb9af49ad5d9e47d2c3"
     locations:
       - "roles/grafana_deploy/defaults/main.yml"
-  - reference: "docker.io/grafana/loki:3.4.2@sha256:58a6c186ce78ba04d58bfe2a927eff296ba733a430df09645d56cdc158f3ba08"
+  - reference: "docker.io/grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc"
     locations:
       - "roles/loki_deploy/defaults/main.yml"
   - reference: "docker.io/hashicorp/vault:1.21@sha256:4e33b126a59c0c333b76fb4e894722462659a6bec7c48c9ee8cea56fccfd2569"
     locations:
       - "roles/vault_deploy/defaults/main.yml"
-  - reference: "docker.io/library/nginx:stable@sha256:29f8cc6c9d0072f7a79ea4647690f561c0dff83968d7f6d5684f23c6cfe6e41b"
+  - reference: "docker.io/library/nginx:stable@sha256:5cf90903deda2c5981b8ad05e7617ac010e389f0dde0ac83487c02c509281de6"
     locations:
       - "roles/nginx_deploy/defaults/main.yml"
-  - reference: "docker.io/library/postgres:16@sha256:eb4759788a2182f08257135e61a34f2cfc3c2914079f3465d64ee62350f4d081"
+  - reference: "docker.io/library/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20"
     locations:
       - "manifests/identity-stack.pod.yaml"
       - "roles/forgejo_deploy/defaults/main.yml"
       - "roles/keycloak_deploy/defaults/main.yml"
       - "roles/postgres_deploy/defaults/main.yml"
       - "roles/semaphore_deploy/defaults/main.yml"
-  - reference: "docker.io/prom/alertmanager:v0.28.1@sha256:27c475db5fb156cab31d5c18a4251ac7ed567746a2483ff264516437a39b15ba"
+  - reference: "docker.io/prom/alertmanager:v0.33.1@sha256:9e082985f56f4c8c9f724e18f2288c6708f472e56a5286b8863d080434ea065d"
     locations:
       - "roles/alertmanager_deploy/defaults/main.yml"
-  - reference: "docker.io/prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996"
+  - reference: "docker.io/prom/prometheus:v3.13.1@sha256:3c42b892cf723fa54d2f262c37a0e1f80aa8c8ddb1da7b9b0df9455a35a7f893"
     locations:
       - "roles/prometheus_deploy/defaults/main.yml"
   - reference: "docker.io/rsyslog/syslog_appliance_alpine:latest@sha256:c0dd7cad9ff3234967ff59879590175b7590e8a5f5621ec49a85aff546b44a3b"
     locations:
       - "roles/rsyslog_deploy/defaults/main.yml"
       - "roles/rsyslog_upgrade/defaults/main.yml"
-  - reference: "docker.io/renovate/renovate:43.270.1@sha256:6f215fca5f89bbc2b4bee880ffd9e5080f40eac592efa7d5572f03c7a4629308"
+  - reference: "docker.io/renovate/renovate:43.274.0@sha256:5485fdddee8d281f59babb16c2b3e408496019f38dd210ed4414c398e220c9b7"
     locations:
       - ".pre-commit-config.yaml"
   - reference: "docker.io/rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
     locations:
       - ".pre-commit-config.yaml"
-  - reference: "docker.io/semaphoreui/semaphore:latest@sha256:1c9b9837a5f2b031639949988218a0b3894b85f6b50e7f3ddb6b12486dbe5658"
+  - reference: "docker.io/semaphoreui/semaphore:latest@sha256:6454b2e58a6616de82240f7b4f271663fe0ec3430e10a9cc7e763ff6df12baa0"
     locations:
       - "roles/semaphore_deploy/defaults/main.yml"
-  - reference: "docker.io/smblds/smblds:latest@sha256:d8c4e2e3d00fc5d86decb30ad1736bf927c3868478b3e0b807d4818fdcc76f5c"
+  - reference: "docker.io/smblds/smblds:latest@sha256:496d52f7f61a3fcbc4674a22481b0b83b7220ee481f9f2244d8038aac21e112d"
     locations:
       - "roles/samba_deploy/defaults/main.yml"
-  - reference: "docker.io/sonatype/nexus3:latest@sha256:6e8905c14210c595a8177910179ce080cdc22fa3f6b660a13e6dfa1f8378a866"
+  - reference: "docker.io/sonatype/nexus3:latest@sha256:f20aca9b5688b9d1bd9550cc4e2daca2591909b39dc0e7dc240b9e065342c3fe"
     locations:
       - "roles/nexus/defaults/main.yml"
   - reference: "docker.io/tenableofficial/nessus:latest@sha256:c88e43fe1a8ca04a265f127fbfa474e80ab926d21862b6de5972a9465a91d8e6"
@@ -127,9 +127,6 @@ collections:
     source: "galaxy.yml"
   - name: "ansible.controller"
     requirement: "4.8.2"
-    source: "collections/requirements-rh.yml"
-  - name: "ansible.platform"
-    requirement: "2.7.20260630"
     source: "collections/requirements-rh.yml"
   - name: "infra.aap_configuration"
     requirement: "4.2.1"

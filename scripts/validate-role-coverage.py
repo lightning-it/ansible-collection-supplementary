@@ -1066,7 +1066,6 @@ def validate_aap_overlay(root: Path, registry: dict[str, Any]) -> list[str]:
         "README.md": expected,
         "roles/aap_cac/README.md": {
             "ansible.controller",
-            "ansible.platform",
             "infra.aap_configuration",
             "infra.controller_configuration",
             "infra.ee_utilities",
