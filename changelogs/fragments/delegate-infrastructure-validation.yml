@@ -1,6 +1,0 @@
----
-minor_changes:
-  - >-
-    Delegate protected Heavy and Application Acceptance execution to the pinned
-    reusable workflow owned by ``modulix-validation-lit`` while retaining the
-    exact-candidate, evidence, and fail-closed collection release gates.

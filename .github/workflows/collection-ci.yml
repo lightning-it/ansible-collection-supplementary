@@ -429,7 +429,7 @@ jobs:
        ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
         (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
     needs: [build-install, quality-matrix]
-    uses: lightning-it/modulix-validation/.github/workflows/collection-quality-profile.yml@ec110a9545dc6b8efe4ed8820b50b27912175111
+    uses: lightning-it/modulix-validation/.github/workflows/collection-quality-profile.yml@154c99eb0d907b01edc10e9b39c94ef4912fd9dd
     with:
       profile: heavy
       matrix-json: ${{ needs.quality-matrix.outputs.heavy }}
@@ -1191,7 +1191,9 @@ jobs:
           attestation_records = json.loads(
               (root / "attestation-records.json").read_text(encoding="utf-8")
           ).get("attestations", {})
-          candidate_paths = sorted(Path("artifacts/candidate").glob("*.tar.gz"))
+          candidate_paths = sorted(
+              Path("artifacts/candidate").glob("lit-supplementary-*.tar.gz")
+          )
           if len(candidate_paths) != 1:
               raise SystemExit("publication eligibility requires exactly one candidate")
           candidate = candidate_paths[0]

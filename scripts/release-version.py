@@ -22,9 +22,9 @@ KNOWN_CATEGORIES = set().union(*IMPACT_CATEGORIES.values(), NEUTRAL_CATEGORIES)
 MAX_FRAGMENT_BYTES = 1024 * 1024
 RELEASE_PREPARATION_SCHEMA_VERSION = 1
 RELEASE_PREPARER = {
-    "login": "litreleasebot",
-    "account_id": "250056030",
-    "email": "litreleasebot@users.noreply.github.com",
+    "login": "lightning-it-release-automation[bot]",
+    "account_id": "307565056",
+    "email": "307565056+lightning-it-release-automation[bot]@users.noreply.github.com",
 }
 
 

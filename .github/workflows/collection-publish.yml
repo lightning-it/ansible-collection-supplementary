@@ -229,7 +229,8 @@ jobs:
           )
           test "${#preparation_parents[@]}" -eq 1
           test "${preparation_parents[0]}" = "$REVIEWED_BASE_SHA"
-          expected_identity='litreleasebot <litreleasebot@users.noreply.github.com>'
+          expected_identity='lightning-it-release-automation[bot]'
+          expected_identity+=' <307565056+lightning-it-release-automation[bot]@users.noreply.github.com>'
           test "$(git show -s --format='%an <%ae>' "$REVIEWED_HEAD_SHA")" = \
             "$expected_identity"
           test "$(git show -s --format='%cn <%ce>' "$REVIEWED_HEAD_SHA")" = \
@@ -482,7 +483,8 @@ jobs:
           set -euo pipefail
 
           mapfile -t candidates < <(
-            find incoming/candidate -maxdepth 1 -type f -name '*.tar.gz' -print
+            find incoming/candidate -maxdepth 1 -type f \
+              -name 'lit-supplementary-*.tar.gz' -print
           )
           test "${#candidates[@]}" -eq 1
           candidate="${candidates[0]}"
@@ -728,8 +730,11 @@ jobs:
           mv dist/release/SHA256SUMS.sigstore.json \
             dist/release/ci-release-assets-SHA256SUMS.sigstore.json
           cp "incoming/candidate/${CANDIDATE_NAME}" dist/release/
-          cp incoming/candidate/candidate-SHA256SUMS \
-            dist/release/ci-candidate-SHA256SUMS
+          awk -v candidate="$CANDIDATE_NAME" \
+            '$2 == candidate { print }' \
+            incoming/candidate/candidate-SHA256SUMS \
+            > dist/release/ci-candidate-SHA256SUMS
+          test "$(wc -l < dist/release/ci-candidate-SHA256SUMS)" -eq 1
           cp incoming/evidence/evidence/security/vulnerability-report.json \
             dist/release/vulnerability-report.json
           cp incoming/evidence/evidence/security/secret-scan-summary.json \

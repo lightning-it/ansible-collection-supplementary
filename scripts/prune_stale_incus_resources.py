@@ -16,6 +16,9 @@ NETWORK_RE = re.compile(r"^lit[0-9a-f]{12}$")
 OWNER_KEY = "user.lit-molecule-owner"
 REPOSITORY_KEY = "user.lit-molecule-repository"
 RUN_ID_KEY = "user.lit-molecule-run-id"
+NETWORK_DEVICE_ABSENT_RE = re.compile(
+    r'Failed to run: ip link delete dev [^:]+: exit status 1 \(Cannot find device "[^"]+"\)'
+)
 
 
 @lru_cache(maxsize=1)
@@ -69,8 +72,10 @@ def delete_if_present(
         raise ValueError(f"unsupported Incus resource kind: {list_kind}")
 
     try:
-        incus(*delete_arguments, capture=False)
-    except subprocess.CalledProcessError:
+        incus(*delete_arguments)
+    except subprocess.CalledProcessError as error:
+        if list_kind == "network" and NETWORK_DEVICE_ABSENT_RE.search(error.stderr or ""):
+            return
         list_arguments = list_arguments_by_kind[list_kind]
         current = json.loads(incus(*list_arguments))
         target = next((item for item in current if str(item.get("name", "")) == name), None)
