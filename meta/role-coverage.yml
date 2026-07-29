@@ -741,6 +741,33 @@ roles:
       heavy:
         - "atlas-observability-incus_heavy"
       application_acceptance: []
+  hetzner_object_storage_cac:
+    component: "hetzner_object_storage"
+    classification: "configuration_as_code"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "blocked-external-service"
+    application_acceptance: "blocked-external-service"
+    acceptance_surface: "create_query_reconcile_and_remove_protected_s3_objects"
+    dependencies:
+      - "amazon.aws"
+      - "community.aws"
+      - "community.hashi_vault"
+    external_dependencies:
+      - "Paid Hetzner Object Storage project and protected S3 credentials"
+    known_limitations:
+      - "Tiny validates the real plan and negative safety contracts without calling the paid external API."
+      - "Bucket deletion and S3 credential creation are deliberately outside the role."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "hetzner-object-storage-tiny"
+      heavy: []
+      application_acceptance: []
   incus_esxi_image:
     component: "esxi"
     classification: "infrastructure"
@@ -2629,6 +2656,20 @@ scenarios:
       reason: >-
         Scenario enforces a deprecation contract and intentionally does not deploy an independently versioned
         application.
+      dependencies: []
+  hetzner-object-storage-tiny:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "hetzner_object_storage_cac"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario validates the real provider contract and plan path without mutating a paid external service.
       dependencies: []
   incus-esxi-image-basic:
     profile: "tiny"

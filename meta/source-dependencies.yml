@@ -104,8 +104,14 @@ derived_images:
 # Every concrete collection requirement used by shipped role source is either
 # a normal Galaxy dependency or an exact AAP runtime-overlay dependency.
 collections:
+  - name: "amazon.aws"
+    requirement: "10.1.2"
+    source: "galaxy.yml"
   - name: "ansible.posix"
     requirement: ">=2.1.0"
+    source: "galaxy.yml"
+  - name: "community.aws"
+    requirement: "10.0.0"
     source: "galaxy.yml"
   - name: "community.crypto"
     requirement: ">=3.2.2,<4.0.0"

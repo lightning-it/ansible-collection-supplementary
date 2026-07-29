@@ -1,0 +1,26 @@
+---
+hetzner_object_storage_cac_action: plan
+hetzner_object_storage_cac_delegate_to: localhost
+
+hetzner_object_storage_cac_endpoint: ""
+hetzner_object_storage_cac_region: ""
+hetzner_object_storage_cac_bucket: ""
+hetzner_object_storage_cac_prefix: ""
+
+hetzner_object_storage_cac_access_key: ""
+hetzner_object_storage_cac_secret_key: ""
+
+hetzner_object_storage_cac_use_vault: false
+hetzner_object_storage_cac_vault_addr: ""
+hetzner_object_storage_cac_vault_token: ""
+hetzner_object_storage_cac_vault_kv_mount: secret
+hetzner_object_storage_cac_vault_kv_path: ""
+hetzner_object_storage_cac_vault_access_key_field: access_key
+hetzner_object_storage_cac_vault_secret_key_field: secret_key
+
+hetzner_object_storage_cac_versioning: true
+hetzner_object_storage_cac_object_lock_enabled: true
+hetzner_object_storage_cac_object_lock_mode: GOVERNANCE
+hetzner_object_storage_cac_object_lock_retention_days: 30
+hetzner_object_storage_cac_abort_incomplete_multipart_upload_days: 7
+hetzner_object_storage_cac_validate_certs: true
