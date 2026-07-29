@@ -395,3 +395,15 @@ releases:
       - shared-assets-sync.yml
       - trusted-renovate-changelog-policy.yml
     release_date: '2026-07-29'
+  2.1.1:
+    changes:
+      security_fixes:
+        - Remove label operations from release back-sync automation so its GitHub
+          App token needs only repository contents and pull-request access; strict
+          bot, branch, base, title, tag, and immutable-SHA checks identify trusted
+          back-sync pull requests without Issues API access.
+    fragments:
+      - release-backsync-least-privilege.yml
+      - shared-assets-sync-30440111944.yml
+      - trusted-release-preparation-review.yml
+    release_date: '2026-07-29'
