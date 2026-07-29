@@ -67,10 +67,23 @@ class AapGatewayContractsTests(unittest.TestCase):
             'aap_deploy_gateway_main_url: "https://{{ aap_fqdn }}:8446"',
             template,
         )
-        self.assertIn(
-            "aap_deploy_reset_partial_install_enabled: false",
-            template,
+
+    def test_partial_install_autoreset_is_not_supported(self) -> None:
+        files = (
+            ROOT / "roles/aap_deploy/defaults/main.yml",
+            ROOT / "roles/aap_deploy/tasks/assert.yml",
+            ROOT / "roles/aap_deploy/tasks/05_detect_existing_install.yml",
+            ROOT / "roles/aap_host_prepare/tasks/main.yml",
+            ROOT / "roles/aap_local_execution/templates/aap-local/inventories/group_vars/aaps/aap.yml.j2",
+            ROOT / "roles/aap_deploy/README.md",
         )
+
+        for path in files:
+            with self.subTest(path=path):
+                self.assertNotIn(
+                    "aap_deploy_reset_partial_install",
+                    path.read_text(encoding="utf-8"),
+                )
 
     def test_registry_trust_remains_owned_by_upstream_installer(self) -> None:
         role_main = (ROOT / "roles/aap_deploy/tasks/main.yml").read_text(encoding="utf-8")
