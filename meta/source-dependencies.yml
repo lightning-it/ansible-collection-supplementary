@@ -74,7 +74,7 @@ container_images:
   - reference: "docker.io/tenableofficial/nessus:latest@sha256:c88e43fe1a8ca04a265f127fbfa474e80ab926d21862b6de5972a9465a91d8e6"
     locations:
       - "roles/nessus_deploy/defaults/main.yml"
-  - reference: "quay.io/keycloak/keycloak:26.5.4@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4"
+  - reference: "quay.io/keycloak/keycloak:26.7.0@sha256:0f198be292568439d700cdbfb893e69a6009bb43a94a06a945b1d3d506c76b13"
     locations:
       - "manifests/identity-stack.pod.yaml"
       - "roles/keycloak_deploy/defaults/main.yml"
