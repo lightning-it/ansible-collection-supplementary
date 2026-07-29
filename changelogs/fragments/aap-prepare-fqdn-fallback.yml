@@ -1,8 +1,0 @@
----
-bugfixes:
-  - >-
-    Let aap_prepare use aap_fqdn as the gateway DNS precheck hostname when
-    neither aap_deploy_gateway_main_url nor aap_cac_gateway_hostname is set.
-  - >-
-    Create the controller-local AAP artifact directory before discovering
-    locally supplied setup bundles and manifests.

@@ -303,3 +303,95 @@ releases:
     fragments:
       - 495-release-candidate-checksum.yml
     release_date: '2026-07-28'
+  2.1.0:
+    changes:
+      bugfixes:
+        - Accept required AAP host directories that the file module reports as planned
+          creations during check mode while retaining strict apply checks.
+        - Allow customer TLS source files to be staged directly from the managed AAP
+          host, keeping owner-only private keys off the automation controller.
+        - Allow temporary AAP TLS assets to be generated on a persistent delegated
+          host instead of requiring controller-local storage.
+        - Allow trusted non-breaking Renovate pull requests to pass collection CI
+          without an unrelated changelog fragment.
+        - Avoid the upstream AAP setup preparation role's undefined extraction result
+          in check mode while retaining input validation and deterministic setup-path
+          prediction.
+        - Configure gateway organizations idempotently through the Gateway REST API
+          and the short-lived gateway token, avoiding connection failures in the ``ansible.platform.organization``
+          manager process.
+        - Create the controller-local AAP artifact directory before discovering locally
+          supplied setup bundles and manifests.
+        - Defer AAP prepared-destination assertions until apply mode so a fresh check-mode
+          run can report the planned staging operation without failing.
+        - Derive the AAP Hub upload readiness, Hub container registry, and EDA API
+          URLs from aap_fqdn and their standard HTTPS ports. This prevents the upstream
+          installer from probing the Pulp status path through the Gateway endpoint.
+        - Keep managed-host artifact staging check-mode safe when the destination
+          directory does not exist yet, while validating the source checksum first.
+        - Keep read-only AAP preflight commands active in Ansible check mode so their
+          registered results remain available to subsequent assertions.
+        - Keep the nested host-prepare preflight path assertion in apply mode so it
+          does not reject directories that are deliberately only planned in check
+          mode.
+        - Keep the read-only AAP install-user lookup active in check mode so account
+          validation uses the real passwd entry.
+        - Let aap_prepare use aap_fqdn as the gateway DNS precheck hostname when neither
+          aap_deploy_gateway_main_url nor aap_cac_gateway_hostname is set.
+        - Make AAP deployment preflight check-mode safe when the install user's systemd
+          manager does not exist until the real rollout starts.
+        - Make Hub registry CA trust check-mode safe while the staged CA is a planned
+          TLS asset, retaining real trust-store updates during apply.
+        - Make customer TLS staging check-mode safe when the target directory is a
+          planned creation while preserving strict apply-time certificate staging.
+        - Make temporary self-signed AAP TLS generation check-mode safe by reporting
+          the complete planned certificate chain without creating private keys.
+        - Make the AAP preflight DNS gate validate the configured platform FQDN instead
+          of a potentially transport-only ansible_host value.
+        - Persist and apply SELinux file contexts for the AAP application mount, temporary
+          directories, alternate user homes, and Podman storage during AAP host preparation.
+        - Prepare the AAP installer workspace and archive utilities during host preparation
+          so a later deployment check can validate the vendor setup role without depending
+          on check-mode-only filesystem or package changes.
+        - Preserve the upstream AAP 2.7 Gateway administrator credentials for Hub
+          registry image uploads instead of replacing them with component-local Hub
+          administrator credentials, which the platform registry rejects.
+        - Skip effective installer admin-password validation when ``aap_deploy_run_installer``
+          is disabled, allowing prepare-only deployment runs without loading unused
+          installer secrets.
+        - Store private Hub CA trust under Podman's canonical host-only certs.d key
+          when the HTTPS registry URL uses the implicit default port.
+      minor_changes:
+        - Add an opt-in AAP self-signed TLS setting that installs the generated CA
+          into the RHEL system trust store for certificate-validating API clients.
+        - Add explicit initial and full AAP preflight phases so the read-only customer-baseline
+          gate does not require AAP-owned paths before preparation.
+        - Route candidate-platform Heavy and Application Acceptance execution through
+          the pinned ``modulix-validation`` reusable workflow while retaining local
+          Tiny execution, exact-candidate evidence, and fail-closed promotion gates.
+        - aap_tls now validates that generated deployment certificate, key, and CA
+          files are readable, and aap_deploy validates controller-side customer TLS
+          source files before attempting to stage them.
+    fragments:
+      - aap-cac-gateway-organization-token.yml
+      - aap-deploy-hub-readiness-url.yml
+      - aap-deploy-prepare-without-passwords.yml
+      - aap-host-prepare-installer-prerequisites.yml
+      - aap-host-prepare-selinux.yml
+      - aap-preflight-check-mode.yml
+      - aap-preflight-phase-contract.yml
+      - aap-preflight-platform-dns.yml
+      - aap-prepare-fqdn-fallback.yml
+      - aap-selfsigned-system-trust.yml
+      - aap-tls-source-validation.yml
+      - adr-assurance.yml
+      - adr-heavy-execution-ownership.yml
+      - shared-assets-sync-29853456486.yml
+      - shared-assets-sync-29869010879.yml
+      - shared-assets-sync-29901680048.yml
+      - shared-assets-sync-29908171139.yml
+      - shared-assets-sync-29910506345.yml
+      - shared-assets-sync-29913646011.yml
+      - shared-assets-sync.yml
+      - trusted-renovate-changelog-policy.yml
+    release_date: '2026-07-29'

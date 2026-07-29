@@ -1,0 +1,6 @@
+---
+security_fixes:
+  - >-
+    Remove the unused issues permission from release back-sync automation so
+    its GitHub App token requests only repository contents and pull-request
+    access.
