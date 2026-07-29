@@ -10,6 +10,12 @@
     aap_deploy_molecule_fixture_dir: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/prepared-installer
     aap_setup_prep_setup_dir: "{{ aap_deploy_molecule_fixture_dir }}"
+    aap_deploy_gateway_main_url: https://aap.example.test
+    aap_deploy_molecule_vendor_files:
+      - collections/ansible_collections/ansible/containerized_installer/playbooks/install.yml
+      - collections/ansible_collections/ansible/containerized_installer/roles/automationhub/tasks/upload_images.yml
+      - collections/ansible_collections/ansible/containerized_installer/roles/automationhub/tasks/upload_collections.yml
+      - collections/ansible_collections/ansible/containerized_installer/roles/automationeda/tasks/decision_environment.yml
   tasks:
     - name: Import lit.supplementary.aap_deploy for syntax coverage
       ansible.builtin.import_role:
@@ -27,8 +33,8 @@
         mode: "0755"
       loop:
         - collections/ansible_collections/ansible/containerized_installer/playbooks
+        - collections/ansible_collections/ansible/containerized_installer/roles/automationhub/tasks
         - collections/ansible_collections/ansible/containerized_installer/roles/automationeda/tasks
-        - collections/ansible_collections/ansible/containerized_installer/roles/automationeda/templates
 
     - name: Create prepared installer playbook fixture
       ansible.builtin.copy:
@@ -39,22 +45,66 @@
         mode: "0644"
         content: |-
           ---
-          - name: Seed automation hub
-            hosts: localhost
+          - name: Trust the Automation Hub registry
+            hosts: automationcontroller:automationeda:execution_nodes
             gather_facts: false
-            tasks: []
-            when: groups.get('automationhub', []) | length > 0
+            tasks:
+              - name: Add TLS CA to podman configuration
+                ansible.builtin.import_role:
+                  name: common
+                  tasks_from: hub_registry.yml
+                when: groups.get('automationhub', []) | length > 0
 
-    - name: Create prepared EDA settings fixture
+          - name: Run the Automation Controller postinstall
+            hosts: automationcontroller
+            gather_facts: false
+            tasks:
+              - name: Upload EE images to Automation Hub
+                ansible.builtin.include_role:
+                  name: automationhub
+                  tasks_from: upload_images.yml
+                when: groups.get('automationhub', []) | length > 0
+
+          - name: Run the Automation EDA postinstall
+            hosts: automationeda
+            gather_facts: false
+            tasks:
+              - name: Upload DE images to Automation Hub
+                ansible.builtin.include_role:
+                  name: automationhub
+                  tasks_from: upload_images.yml
+                when: groups.get('automationhub', []) | length > 0
+
+    - name: Create prepared Hub image upload fixture
       ansible.builtin.copy:
         dest: >-
           {{ aap_deploy_molecule_fixture_dir
-          }}/collections/ansible_collections/ansible/containerized_installer/roles/automationeda/templates/settings.yaml.j2
+          }}/collections/ansible_collections/ansible/containerized_installer/roles/automationhub/tasks/upload_images.yml
         force: false
         mode: "0644"
-        content: |-
+        content: !unsafe |-
           ---
-          ENABLE_SERVICE_BACKED_SSO: False
+          - name: Ensure automation hub is ready
+            ansible.builtin.uri:
+              url: '{{ hostvars[groups["automationgateway"][0]]["_gateway_proxy_url"] }}/pulp/api/v3/status/'
+
+          - name: Push container images to automation hub
+            vars:
+              __dest_url: '{{ hostvars[groups["automationgateway"][0]]["_gateway_proxy_url"] }}'
+            block: []
+
+    - name: Create prepared Hub collection upload fixture
+      ansible.builtin.copy:
+        dest: >-
+          {{ aap_deploy_molecule_fixture_dir
+          }}/collections/ansible_collections/ansible/containerized_installer/roles/automationhub/tasks/upload_collections.yml
+        force: false
+        mode: "0644"
+        content: !unsafe |-
+          ---
+          - name: Ensure automation hub is ready for collection upload
+            ansible.builtin.uri:
+              url: '{{ hostvars[groups["automationgateway"][0]]["_gateway_proxy_url"] }}/pulp/api/v3/status/'
 
     - name: Create prepared EDA task fixture
       ansible.builtin.copy:
@@ -87,10 +137,58 @@
               __dest_url: '{{ hostvars[groups["automationgateway"][0]]["_gateway_proxy_url"] }}'
             block: []
 
-    - name: Exercise prepared installer customizations
+    - name: Record official installer fixtures before inventory rendering
+      ansible.builtin.stat:
+        path: "{{ aap_deploy_molecule_fixture_dir }}/{{ item }}"
+        checksum_algorithm: sha256
+      loop: "{{ aap_deploy_molecule_vendor_files }}"
+      register: aap_deploy_molecule_vendor_fixtures_before
+
+    - name: Build installer inventory through supported variables
       ansible.builtin.include_role:
         name: lit.supplementary.aap_deploy
-        tasks_from: 25_customize_prepared_installer.yml
+        tasks_from: 22_build_setup_inventory_vars.yml
+
+    - name: Assert supported EDA settings and upstream Hub seeding
+      ansible.builtin.assert:
+        that:
+          - >-
+            aap_deploy_setup_prep_inv_vars.all.gateway_main_url
+            == "'https://aap.example.test'"
+          - >-
+            ':8444'
+            not in aap_deploy_setup_prep_inv_vars.all.gateway_main_url
+          - >-
+            ':8445'
+            not in aap_deploy_setup_prep_inv_vars.all.gateway_main_url
+          - >-
+            ':8446'
+            not in aap_deploy_setup_prep_inv_vars.all.gateway_main_url
+          - aap_deploy_setup_prep_inv_vars.automationeda == {}
+          - >-
+            'hub_seed_execution_environment_images'
+            not in aap_deploy_setup_prep_inv_vars.all
+        quiet: true
+
+    - name: Read official installer fixtures after inventory rendering
+      ansible.builtin.stat:
+        path: "{{ aap_deploy_molecule_fixture_dir }}/{{ item }}"
+        checksum_algorithm: sha256
+      loop: "{{ aap_deploy_molecule_vendor_files }}"
+      register: aap_deploy_molecule_vendor_fixtures_after
+
+    - name: Assert the complete official installer fixture remains byte-identical
+      ansible.builtin.assert:
+        that:
+          - >-
+            aap_deploy_molecule_vendor_fixtures_before.results
+            | map(attribute='stat.checksum')
+            | list
+            ==
+            aap_deploy_molecule_vendor_fixtures_after.results
+            | map(attribute='stat.checksum')
+            | list
+        quiet: true
 
     - name: Persist lit.supplementary.aap_deploy Molecule coverage mode
       ansible.builtin.copy:
