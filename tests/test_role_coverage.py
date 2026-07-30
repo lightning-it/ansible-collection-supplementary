@@ -137,7 +137,7 @@ class RoleCoverageRegistryTests(unittest.TestCase):
             },
             declared,
         )
-        self.assertEqual(47, len(not_applicable))
+        self.assertEqual(48, len(not_applicable))
         self.assertEqual(set(self.registry["scenarios"]), runtime | declared | not_applicable)
         for name in declared:
             self.assertEqual(
