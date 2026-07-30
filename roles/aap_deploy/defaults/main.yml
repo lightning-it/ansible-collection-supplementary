@@ -58,13 +58,9 @@ aap_deploy_debug_install_environment: false
 aap_deploy_manage_install_tmp_dir: false
 aap_deploy_install_tmp_dir: ""
 
-aap_deploy_installer_wait: true
 aap_deploy_installer_async_timeout: 14400
-aap_deploy_installer_async_retries: 720
 aap_deploy_installer_async_delay: 10
 aap_deploy_installer_log_dir: "{{ aap_deploy_install_dir }}/logs"
-aap_deploy_installer_async_jid_path: >-
-  {{ aap_deploy_installer_log_dir }}/aap_installer_async_jid
 aap_deploy_installer_extra_vars_path: >-
   {{ aap_setup_prep_setup_dir | default(aap_deploy_setup_dir, true) }}/aap_deploy_extra_vars.yml
 aap_deploy_installer_diagnostics_enabled: true
@@ -499,18 +495,8 @@ aap_deploy_run_verify: true
 aap_deploy_enforce_min_mem_check: true
 aap_deploy_min_mem_mb: 15000
 
-# Installer idempotency guard
-aap_deploy_skip_if_installed: true
-aap_deploy_skip_if_installed_require_runtime: true
-aap_deploy_skip_if_installed_runtime_min_matching_containers: 1
+# Installer state guard
 aap_deploy_installed_marker_path: "{{ aap_deploy_install_dir }}/.aap_containerized_installed"
-aap_deploy_skip_if_runtime_active: true
-aap_deploy_runtime_probe_all_containers: true
-aap_deploy_runtime_name_regex: '^(automation-|postgresql$|redis-|receptor$)'
-aap_deploy_runtime_min_matching_containers: 1
-aap_deploy_reset_partial_install_enabled: false
-aap_deploy_reset_partial_install_remove_setup: true
-aap_deploy_reset_partial_install_remove_logs: true
 
 # Post-install verification
 aap_deploy_verify_gateway_https: false

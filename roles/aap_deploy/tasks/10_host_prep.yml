@@ -29,17 +29,6 @@
       shell={{ aap_deploy_install_user_shell }}.
     quiet: true
 
-- name: Resolve install user UID
-  ansible.builtin.command:
-    cmd: "id -u {{ aap_deploy_install_user }}"
-  register: aap_deploy_install_user_uid_result
-  changed_when: false
-
-- name: Record install user UID fact
-  ansible.builtin.set_fact:
-    aap_deploy_install_user_uid: "{{ aap_deploy_install_user_uid_result.stdout | trim }}"
-  changed_when: false
-
 - name: Ensure AAP installer temporary directory exists
   ansible.builtin.file:
     path: "{{ aap_deploy_install_tmp_dir }}"
@@ -51,26 +40,6 @@
   when:
     - aap_deploy_manage_install_tmp_dir | bool
     - aap_deploy_install_tmp_dir | trim | length > 0
-
-- name: Enable lingering for install user
-  ansible.builtin.command:
-    cmd: "loginctl enable-linger {{ aap_deploy_install_user }}"
-  args:
-    creates: "/var/lib/systemd/linger/{{ aap_deploy_install_user }}"
-
-- name: Ensure install user systemd manager is running
-  ansible.builtin.systemd:
-    name: "user@{{ aap_deploy_install_user_uid }}.service"
-    state: started
-  when: not ansible_check_mode
-
-- name: Report planned install user systemd manager startup
-  ansible.builtin.debug:
-    msg: >-
-      Check mode: systemd user manager user@{{ aap_deploy_install_user_uid }}.service
-      would be started for {{ aap_deploy_install_user }}.
-  changed_when: true
-  when: ansible_check_mode
 
 - name: Validate required AAP deploy commands are available
   ansible.builtin.command:

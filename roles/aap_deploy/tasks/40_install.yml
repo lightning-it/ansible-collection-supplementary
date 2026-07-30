@@ -52,6 +52,7 @@
         group: "{{ aap_deploy_install_user }}"
         mode: '0600'
         content: "{{ aap_deploy_setup_install_extra_vars | to_nice_yaml }}"
+      no_log: true
       when:
         - (aap_deploy_setup_install_extra_vars | length) > 0
 
@@ -78,82 +79,17 @@
           -e @{{ extra_vars_file.dest | quote }}
           {% endfor %}
 
-    - name: Start native AAP containerized installer
+    - name: Run native AAP containerized installer
       ansible.builtin.command:
         cmd: "{{ aap_deploy_installer_command }}"
         chdir: "{{ aap_setup_prep_setup_dir }}"
       async: "{{ aap_deploy_installer_async_timeout | int }}"
-      poll: 0
+      poll: "{{ aap_deploy_installer_async_delay | int }}"
       become: true
       become_user: "{{ aap_deploy_install_user }}"
       environment: "{{ aap_deploy_installer_environment }}"
-      register: aap_deploy_installer_async_job
-      changed_when: false
-
-    - name: Show native installer async job details
-      ansible.builtin.debug:
-        msg:
-          - "AAP installer async job id: {{ aap_deploy_installer_async_job.ansible_job_id }}"
-          - >-
-            Async result file:
-            {{ aap_deploy_install_user_home }}/.ansible_async/{{ aap_deploy_installer_async_job.ansible_job_id }}
-          - "Installer log directory: {{ aap_deploy_installer_log_dir }}"
-
-    - name: Write native installer async job id
-      ansible.builtin.copy:
-        dest: "{{ aap_deploy_installer_async_jid_path }}"
-        owner: "{{ aap_deploy_install_user }}"
-        group: "{{ aap_deploy_install_user }}"
-        mode: '0640'
-        content: "{{ aap_deploy_installer_async_job.ansible_job_id }}\n"
-
-    - name: Wait for native AAP containerized installer
-      ansible.builtin.async_status:
-        jid: "{{ aap_deploy_installer_async_job.ansible_job_id }}"
-      become: true
-      become_user: "{{ aap_deploy_install_user }}"
-      environment: "{{ aap_deploy_installer_environment }}"
-      register: aap_deploy_installer_async_status
-      until: >-
-        (aap_deploy_installer_async_status.finished | default(false) | bool)
-        or
-        (aap_deploy_installer_async_status.failed | default(false) | bool)
-      retries: "{{ aap_deploy_installer_async_retries | int }}"
-      delay: "{{ aap_deploy_installer_async_delay | int }}"
-      when: aap_deploy_installer_wait | bool
-
-    - name: Fail when native installer failed
-      ansible.builtin.fail:
-        msg: |-
-          Native AAP containerized installer failed.
-          Async job id: {{ aap_deploy_installer_async_job.ansible_job_id }}
-          Async result file:
-          {{ aap_deploy_install_user_home }}/.ansible_async/{{ aap_deploy_installer_async_job.ansible_job_id }}
-          Result message:
-          {{ aap_deploy_installer_async_status.msg | default('n/a', true) }}
-          rc: {{ aap_deploy_installer_async_status.rc | default('n/a', true) }}
-          stdout:
-          {{ aap_deploy_installer_async_status.stdout | default('') | trim }}
-          stderr:
-          {{ aap_deploy_installer_async_status.stderr | default('') | trim }}
-      when:
-        - aap_deploy_installer_wait | bool
-        - >-
-          (aap_deploy_installer_async_status.failed | default(false) | bool)
-          or
-          (
-            (aap_deploy_installer_async_status.finished | default(false) | bool)
-            and
-            ((aap_deploy_installer_async_status.rc | default(0) | int) != 0)
-          )
-
-    - name: Report native installer external polling handoff
-      ansible.builtin.debug:
-        msg: >-
-          Native AAP containerized installer started asynchronously.
-          External polling is required with jid file {{ aap_deploy_installer_async_jid_path }}.
-      when:
-        - not (aap_deploy_installer_wait | bool)
+      changed_when: true
+      no_log: true
   rescue:
     - name: Collect AAP installer failure diagnostics
       ansible.builtin.include_tasks: 45_installer_diagnostics.yml
@@ -175,4 +111,3 @@
       installed=true
       setup_dir={{ aap_setup_prep_setup_dir | default(aap_deploy_setup_dir, true) }}
       playbook=ansible.containerized_installer.install
-  when: aap_deploy_installer_wait | bool
