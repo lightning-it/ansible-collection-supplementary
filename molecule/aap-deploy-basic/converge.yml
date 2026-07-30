@@ -10,7 +10,7 @@
     aap_deploy_molecule_fixture_dir: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/prepared-installer
     aap_setup_prep_setup_dir: "{{ aap_deploy_molecule_fixture_dir }}"
-    aap_deploy_gateway_main_url: https://aap.example.test
+    aap_fqdn: aap.example.test
     aap_deploy_molecule_vendor_files:
       - collections/ansible_collections/ansible/containerized_installer/playbooks/install.yml
       - collections/ansible_collections/ansible/containerized_installer/roles/automationhub/tasks/upload_images.yml
