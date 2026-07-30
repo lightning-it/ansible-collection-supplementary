@@ -4,6 +4,29 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.0.0
+======
+
+Removed Features (previously deprecated)
+----------------------------------------
+
+- Remove configurable runtime-only and marker-only install detection. These modes could continue from an incomplete deployment instead of requiring a clean reinstall.
+- Remove detached installer handoff. The role now waits for the official installer to finish before it writes its success marker.
+- Remove the opt-in destructive partial-install reset from ``aap_deploy``. Incomplete deployments must be cleaned explicitly before a clean reinstall.
+
+Security Fixes
+--------------
+
+- Suppress the setup inventory fact and installer output that can contain resolved credentials.
+
+Bugfixes
+--------
+
+- Align the Keycloak runtime evidence checks with Podman image-name normalization and the RFC 6749 invalid_grant response.
+- Make ``aap_deploy`` fail closed when its success marker and the dedicated install user's Podman containers disagree. Clean hosts proceed, complete installations are skipped, and incomplete installations require an explicit official uninstall.
+- Prevent controller-side AAP customer TLS file checks from inheriting privilege escalation intended for the managed host, so the checks also work in execution environments without sudo.
+- Restore the AAP 2.7 containerized installer's upstream Gateway and Envoy paths for Hub readiness, execution-environment uploads, and EDA API access instead of redirecting them to internal service ports, and leave Gateway registry CA trust to the upstream installer. Remove the related upload-skip and readiness bundle rewrites. Leave EDA settings with the upstream installer so ``ENABLE_SERVICE_BACKED_SSO`` is not emitted twice in ``/etc/eda.yaml``. Generate the public Envoy URL without the internal Gateway Nginx port.
+
 v2.1.1
 ======
 
