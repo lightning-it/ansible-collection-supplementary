@@ -1,0 +1,518 @@
+---
+# Complete AAP configuration-as-code example for lit.supplementary.aap_cac.
+#
+# WARNING:
+# This file demonstrates every resource family currently dispatched by the
+# role. It is intentionally not a production inventory. Review names, URLs,
+# IDs, schedules, credentials, and the operational job/filetree/EE-builder
+# sections before applying it. Job launch/cancel, repository sync, project
+# update, filetree export/import, and EE builder resources perform actions.
+#
+# Keep the referenced vault_* variables in an encrypted Ansible Vault file.
+# The subscription manifest must be a genuine Red Hat manifest ZIP staged by
+# lit.supplementary.aap_prepare at the path below.
+
+# Role connection and authentication contract.
+aap_cac_gateway_hostname: "https://aap.demo.example.invalid"
+aap_cac_gateway_username: "admin"
+aap_cac_gateway_password: "{{ vault_demo_aap_admin_password }}"
+aap_cac_gateway_validate_certs: true
+aap_cac_token_description: "aap-cac-complete-demo"
+aap_cac_token_request_retries: 10
+aap_cac_token_request_delay: 3
+aap_cac_gateway_ready_check: true
+aap_cac_gateway_ready_path: "/api/gateway/v1/ping/"
+aap_cac_gateway_ready_status_codes:
+  - 200
+  - 401
+  - 403
+aap_cac_gateway_ready_retries: 60
+aap_cac_gateway_ready_delay: 5
+aap_cac_controller_ready_check: true
+aap_cac_controller_ready_path: "/api/controller/v2/ping/"
+aap_cac_controller_ready_status_codes:
+  - 200
+  - 401
+  - 403
+aap_cac_controller_ready_retries: 120
+aap_cac_controller_ready_delay: 5
+
+# Controller subscription manifest activation.
+aap_cac_controller_license_required: true
+aap_cac_controller_license_state: "present"
+aap_cac_controller_license_force: false
+aap_cac_controller_license_secure_logging: true
+aap_cac_controller_license_manifest_remote_src: >-
+  {{
+    aap_prepare_manifest_dest_effective
+    | default(
+        aap_prepare_manifest_dest
+        | default('/opt/aap/manifest.zip', true),
+        true
+      )
+  }}
+
+# Gateway settings.
+gateway_settings:
+  password_min_length: 12
+  password_min_digits: 1
+  password_min_upper: 1
+  password_min_special: 1
+  allow_admins_to_set_insecure: false
+
+# Gateway and Controller organizations.
+aap_cac_controller_organizations:
+  - name: "Demo Organization"
+    description: "Organization managed by the complete CaC example"
+    state: "present"
+
+# Gateway users.
+aap_user_accounts:
+  - username: "demo.operator"
+    password: "{{ vault_demo_operator_password }}"
+    email: "demo.operator@example.invalid"
+    first_name: "Demo"
+    last_name: "Operator"
+    is_superuser: false
+    is_platform_auditor: false
+    update_secrets: false
+    state: "present"
+
+# Gateway and Controller teams.
+aap_teams:
+  - name: "Demo Automation Team"
+    description: "Team managed by the complete CaC example"
+    organization: "Demo Organization"
+    state: "present"
+
+# Gateway role assignment.
+gateway_role_user_assignments:
+  - role_definition: "Organization Admin"
+    user: "demo.operator"
+    object_ids:
+      - "Demo Organization"
+    state: "present"
+
+# Controller settings.
+controller_settings:
+  - name: "AWX_ISOLATION_SHOW_PATHS"
+    value:
+      - "/tmp"
+  - name: "AWX_TASK_ENV"
+    value:
+      DEMO_CAC_ENVIRONMENT: "complete-example"
+
+# Controller custom credential type.
+controller_credential_types:
+  - name: "Demo API Credential"
+    description: "Example API username and token"
+    kind: "cloud"
+    inputs:
+      fields:
+        - id: "demo_username"
+          type: "string"
+          label: "Demo username"
+        - id: "demo_token"
+          type: "string"
+          label: "Demo token"
+          secret: true
+      required:
+        - "demo_username"
+        - "demo_token"
+    injectors:
+      env:
+        DEMO_API_USERNAME: "{% raw %}{{ demo_username }}{% endraw %}"
+        DEMO_API_TOKEN: "{% raw %}{{ demo_token }}{% endraw %}"
+    state: "present"
+
+# Controller label.
+controller_labels:
+  - name: "demo"
+    organization: "Demo Organization"
+    state: "present"
+
+# Controller credentials.
+controller_credentials:
+  - name: "Demo API Credential"
+    description: "Credential populated from encrypted inventory values"
+    organization: "Demo Organization"
+    credential_type: "Demo API Credential"
+    inputs:
+      demo_username: "demo-api-user"
+      demo_token: "{{ vault_demo_api_token }}"
+    state: "present"
+  - name: "Demo Machine Credential"
+    description: "Machine credential for demo inventory hosts"
+    organization: "Demo Organization"
+    credential_type: "Machine"
+    inputs:
+      username: "demo-automation"
+      password: "{{ vault_demo_machine_password }}"
+      become_method: "sudo"
+      become_username: "root"
+      become_password: "{{ vault_demo_become_password }}"
+    state: "present"
+  - name: "Demo Source Control Credential"
+    description: "SCM credential used by the demo project"
+    organization: "Demo Organization"
+    credential_type: "Source Control"
+    inputs:
+      username: "demo-scm-user"
+      password: "{{ vault_demo_scm_token }}"
+    state: "present"
+  - name: "Demo External Secret Lookup"
+    description: "External lookup credential used by input source demo"
+    organization: "Demo Organization"
+    credential_type: "CyberArk Central Credential Provider Lookup"
+    inputs:
+      url: "https://secrets.demo.example.invalid"
+      app_id: "demo-aap-cac"
+      client_key: "{{ vault_demo_external_lookup_client_key }}"
+    state: "present"
+
+# Controller credential input source.
+controller_credential_input_sources:
+  - source_credential: "Demo External Secret Lookup"
+    target_credential: "Demo Source Control Credential"
+    input_field_name: "password"
+    metadata:
+      object_query: "Safe=DEMO_SAFE;Object=DEMO_SCM_TOKEN"
+      object_query_format: "Exact"
+    description: "Populate the demo SCM token from an external secret backend"
+    state: "present"
+
+# Controller project.
+controller_projects:
+  - name: "Demo CaC Project"
+    description: "Public demo project managed through CaC"
+    organization: "Demo Organization"
+    scm_type: "git"
+    scm_url: "https://github.com/ansible/ansible-examples.git"
+    scm_branch: "master"
+    scm_clean: true
+    credential: "Demo Source Control Credential"
+    update_project: false
+    wait: true
+    state: "present"
+
+# Controller instance group.
+controller_instance_groups:
+  - name: "Demo Instance Group"
+    policy_instance_percentage: 100
+    policy_instance_minimum: 0
+    max_concurrent_jobs: 10
+    max_forks: 50
+    state: "present"
+
+# Controller inventory and inventory source.
+controller_inventories:
+  - name: "Demo Inventory"
+    description: "Inventory managed by the complete CaC example"
+    organization: "Demo Organization"
+    variables:
+      demo_environment: "example"
+      ansible_connection: "local"
+    state: "present"
+
+controller_inventory_sources:
+  - name: "Demo SCM Inventory Source"
+    description: "Inventory source from the demo project"
+    inventory: "Demo Inventory"
+    organization: "Demo Organization"
+    source: "scm"
+    source_project: "Demo CaC Project"
+    source_path: "lamp_haproxy/hosts"
+    overwrite: true
+    overwrite_vars: true
+    update_on_launch: false
+    update_project: false
+    wait: true
+    state: "present"
+
+# Controller hosts, groups, bulk hosts, and execution instance.
+controller_hosts:
+  - name: "demo-host.example.invalid"
+    description: "Host managed by the complete CaC example"
+    inventory: "Demo Inventory"
+    variables:
+      ansible_host: "192.0.2.10"
+      demo_role: "application"
+    enabled: true
+    state: "present"
+
+controller_groups:
+  - name: "demo_application"
+    description: "Demo application group"
+    inventory: "Demo Inventory"
+    hosts:
+      - "demo-host.example.invalid"
+    variables:
+      demo_tier: "application"
+    state: "present"
+
+controller_bulk_hosts:
+  - inventory: "Demo Inventory"
+    hosts:
+      - name: "demo-bulk-host.example.invalid"
+        description: "Host created by bulk_host_create"
+        enabled: true
+        variables:
+          ansible_host: "192.0.2.11"
+          demo_role: "bulk"
+
+controller_instances:
+  - hostname: "demo-execution-node.example.invalid"
+    capacity_adjustment: 1.0
+    listener_port: 27199
+    enabled: true
+    managed_by_policy: true
+    node_type: "execution"
+    state: "present"
+
+# Controller execution environment.
+controller_execution_environments:
+  - name: "Demo Execution Environment"
+    description: "Execution environment managed through CaC"
+    organization: "Demo Organization"
+    image: "quay.io/ansible/awx-ee:latest"
+    pull: "missing"
+    state: "present"
+
+# Controller job template and workflow template.
+controller_templates:
+  - name: "Demo CaC Job Template"
+    description: "Job template managed by the complete CaC example"
+    organization: "Demo Organization"
+    job_type: "run"
+    inventory: "Demo Inventory"
+    project: "Demo CaC Project"
+    playbook: "lamp_haproxy/site.yml"
+    credentials:
+      - "Demo Machine Credential"
+    execution_environment: "Demo Execution Environment"
+    labels:
+      - "demo"
+    verbosity: 1
+    ask_limit_on_launch: true
+    ask_variables_on_launch: true
+    extra_vars:
+      demo_message: "Hello from AAP CaC"
+    state: "present"
+
+controller_workflows:
+  - name: "Demo CaC Workflow"
+    description: "Workflow managed by the complete CaC example"
+    organization: "Demo Organization"
+    allow_simultaneous: false
+    ask_variables_on_launch: true
+    extra_vars:
+      demo_workflow_value: "complete-example"
+    simplified_workflow_nodes:
+      - identifier: "run-demo-job"
+        unified_job_template: "Demo CaC Job Template"
+        all_parents_must_converge: false
+    state: "present"
+
+# Controller OAuth application.
+controller_applications:
+  - name: "Demo CaC Application"
+    description: "OAuth application managed by the complete CaC example"
+    organization: "Demo Organization"
+    authorization_grant_type: "authorization-code"
+    client_type: "confidential"
+    redirect_uris:
+      - "https://client.demo.example.invalid/oauth/callback"
+    skip_authorization: false
+    state: "present"
+
+# Controller notification template.
+controller_notifications:
+  - name: "Demo Email Notification"
+    description: "Email notification managed by the complete CaC example"
+    organization: "Demo Organization"
+    notification_type: "email"
+    notification_configuration:
+      host: "smtp.demo.example.invalid"
+      port: 587
+      username: "demo-smtp-user"
+      password: "{{ vault_demo_smtp_password }}"
+      sender: "aap@example.invalid"
+      recipients:
+        - "aap-operators@example.invalid"
+      use_tls: true
+      use_ssl: false
+    state: "present"
+
+# Controller RBAC role.
+controller_roles:
+  - team: "Demo Automation Team"
+    job_template: "Demo CaC Job Template"
+    roles:
+      - "read"
+      - "execute"
+    state: "present"
+
+# Controller schedule.
+controller_schedules:
+  - name: "Demo Daily Schedule"
+    description: "Daily demonstration schedule"
+    unified_job_template: "Demo CaC Job Template"
+    rrule: "DTSTART:20300101T010000Z RRULE:FREQ=DAILY;INTERVAL=1"
+    enabled: false
+    extra_data:
+      demo_scheduled_value: "complete-example"
+    state: "present"
+
+# Dispatcher, global operation translation, and object-diff resources.
+controller_configuration_dispatcher_roles:
+  - role: "settings"
+    var: "controller_settings"
+    tags: "settings"
+  - role: "organizations"
+    var: "controller_organizations"
+    tags: "organizations"
+
+operation_translate:
+  present:
+    verb: "Create or update"
+    action: "creation or update"
+  absent:
+    verb: "Remove"
+    action: "deletion"
+
+controller_configuration_object_diff_tasks:
+  - name: "projects"
+    var: "controller_projects"
+    tags: "projects"
+  - name: "job_templates"
+    var: "controller_templates"
+    tags: "job_templates"
+
+# Private Automation Hub collection remote, repository, sync, and group role.
+aap_cac_hub_collection_remotes:
+  - name: "demo-community"
+    url: "https://galaxy.ansible.com/api/"
+    policy: "on_demand"
+    requirements:
+      - name: "community.general"
+        version: ">=10.0.0"
+    tls_validation: true
+    download_concurrency: 4
+    rate_limit: 4
+    signed_only: false
+    sync_dependencies: true
+    state: "present"
+
+aap_cac_hub_collection_repositories:
+  - name: "demo-community"
+    description: "Demo repository connected to Galaxy"
+    retain_repo_versions: 3
+    pulp_labels:
+      pipeline: "demo"
+      hide_from_search: false
+    distribution:
+      name: "demo-community"
+      state: "present"
+    private: false
+    remote: "demo-community"
+    update_repo: true
+    wait: true
+    interval: 2
+    timeout: 600
+    state: "present"
+
+aap_cac_hub_group_roles:
+  - groups:
+      - "Demo Automation Team"
+    role_list:
+      - roles:
+          - "galaxy.ansible_repository_owner"
+        targets:
+          collection_repositories:
+            - "demo-community"
+
+# Filetree create and read resources.
+output_path: "/tmp/aap-cac-demo-export"
+input_tag:
+  - "all"
+dir_orgs_vars: "/tmp/aap-cac-demo-input"
+orgs:
+  - "Demo Organization"
+
+# Operational resources below execute or cancel jobs when the complete file is
+# applied. Replace IDs and review all objects before enabling them in a target.
+controller_ad_hoc_commands:
+  - job_type: "run"
+    inventory: "Demo Inventory"
+    credential: "Demo Machine Credential"
+    module_name: "ansible.builtin.ping"
+    limit: "demo-host.example.invalid"
+    wait: true
+
+controller_ad_hoc_commands_cancel:
+  - id: 900001
+    fail_if_not_running: false
+    interval: 1
+    timeout: 10
+
+controller_bulk_launch_jobs:
+  - name: "Demo Bulk Job Launch"
+    organization: "Demo Organization"
+    jobs:
+      - unified_job_template: "Demo CaC Job Template"
+
+controller_launch_jobs:
+  - name: "Demo CaC Job Template"
+    limit: "demo-host.example.invalid"
+    extra_vars:
+      demo_launch_value: "complete-example"
+    wait: false
+
+controller_cancel_jobs:
+  - id: 900002
+    fail_if_not_running: false
+    interval: 1
+    timeout: 10
+
+controller_workflow_launch_jobs:
+  - name: "Demo CaC Workflow"
+    extra_vars:
+      demo_workflow_launch_value: "complete-example"
+    wait: false
+
+# Execution Environment builder resource. This creates a local build context
+# and image; configure registry credentials separately when push is required.
+ee_list:
+  - name: "demo_cac_ee"
+    alt_name: "Demo CaC EE"
+    tags:
+      - "1.0.0"
+    dependencies:
+      system:
+        - "git"
+      python:
+        - "jmespath>=1.0.1"
+      galaxy:
+        collections:
+          - name: "ansible.posix"
+            version: ">=1.5.4"
+          - name: "community.general"
+            version: ">=10.0.0"
+    build_steps:
+      prepend_final:
+        - "RUN echo 'Building Demo CaC EE'"
+      append_final:
+        - "RUN ansible --version"
+
+# Required encrypted variables: store these in an Ansible Vault file.
+# They are listed here as non-secret documentation values and must not be
+# committed with real credentials.
+aap_cac_demo_required_vault_variables:
+  vault_demo_aap_admin_password: "REPLACE_IN_ANSIBLE_VAULT"
+  vault_demo_operator_password: "REPLACE_IN_ANSIBLE_VAULT"
+  vault_demo_api_token: "REPLACE_IN_ANSIBLE_VAULT"
+  vault_demo_machine_password: "REPLACE_IN_ANSIBLE_VAULT"
+  vault_demo_become_password: "REPLACE_IN_ANSIBLE_VAULT"
+  vault_demo_scm_token: "REPLACE_IN_ANSIBLE_VAULT"
+  vault_demo_external_lookup_client_key: "REPLACE_IN_ANSIBLE_VAULT"
+  vault_demo_smtp_password: "REPLACE_IN_ANSIBLE_VAULT"

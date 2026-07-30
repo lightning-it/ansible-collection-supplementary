@@ -105,6 +105,30 @@ The preferred flow is to run `lit.supplementary.aap_prepare` first. That role
 stages the manifest and publishes `aap_cac_controller_license_manifest_remote_src`
 for this role.
 
+## Complete CaC inventory example
+
+[`examples/aap-cac.yml`](../../examples/aap-cac.yml) contains a populated,
+cross-referenced example for every resource family currently dispatched by
+this role:
+
+- Gateway settings, organizations, users, teams, and role assignments
+- Controller license, settings, credentials, projects, inventories, templates,
+  workflows, runtime objects, and platform operations
+- Private Automation Hub remotes, repositories, synchronization, and roles
+- Controller filetree, job operations, and Execution Environment builder
+
+The manifest path in the example consumes
+`aap_prepare_manifest_dest_effective`, so a manifest staged earlier in the same
+deployment flow is activated automatically. A real Red Hat subscription
+manifest is still required; the example does not contain one.
+
+The complete example is an inventory reference, not a safe production
+configuration. Some populated sections intentionally perform actions, such as
+launching or cancelling jobs, synchronizing repositories, exporting/importing
+a filetree, or building an Execution Environment. Copy only the reviewed
+sections into environment-specific group variables and keep all referenced
+`vault_*` values in an encrypted Ansible Vault file.
+
 Run a single taskset directly:
 
 ```yaml

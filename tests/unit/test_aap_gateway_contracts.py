@@ -5,6 +5,8 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -142,6 +144,99 @@ class AapGatewayContractsTests(unittest.TestCase):
             'aap_cac_gateway_validate_certs: "{{ aap_validate_certs | default(true) }}"',
             defaults,
         )
+
+    def test_cac_gateway_and_hub_tasksets_receive_canonical_auth(self) -> None:
+        gateway_tasksets = (
+            "cac_10_gateway_settings.yml",
+            "cac_12_aap_users.yml",
+            "cac_13_aap_teams.yml",
+            "cac_14_gateway_role_user_assignments.yml",
+        )
+        hub_tasksets = (
+            "cac_30_hub_collection_remotes.yml",
+            "cac_31_hub_collection_repositories.yml",
+            "cac_32_hub_collection_repository_sync.yml",
+            "cac_33_hub_group_roles.yml",
+        )
+        common_contract = (
+            'aap_hostname: "{{ aap_cac_gateway_hostname }}"',
+            'aap_username: "{{ aap_cac_gateway_username }}"',
+            'aap_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"',
+        )
+
+        for filename in gateway_tasksets:
+            content = (ROOT / "roles/aap_cac/tasks" / filename).read_text(encoding="utf-8")
+            with self.subTest(taskset=filename):
+                for contract in common_contract:
+                    self.assertIn(contract, content)
+                self.assertIn(
+                    'aap_password: "{{ aap_cac_gateway_password_effective }}"',
+                    content,
+                )
+                self.assertIn('aap_token: "{{ aap_cac_auth_token }}"', content)
+
+        for filename in hub_tasksets:
+            content = (ROOT / "roles/aap_cac/tasks" / filename).read_text(encoding="utf-8")
+            with self.subTest(taskset=filename):
+                for contract in common_contract:
+                    self.assertIn(contract, content)
+                self.assertIn(
+                    'aap_password: "{{ aap_cac_hub_password_effective }}"',
+                    content,
+                )
+
+    def test_complete_cac_example_populates_every_dispatched_resource(self) -> None:
+        example = yaml.safe_load((ROOT / "examples/aap-cac.yml").read_text(encoding="utf-8"))
+        expected_inputs = {
+            "aap_cac_controller_organizations",
+            "aap_user_accounts",
+            "aap_teams",
+            "gateway_role_user_assignments",
+            "gateway_settings",
+            "controller_settings",
+            "controller_credential_types",
+            "controller_labels",
+            "controller_credentials",
+            "controller_projects",
+            "controller_instance_groups",
+            "controller_inventories",
+            "controller_inventory_sources",
+            "controller_templates",
+            "aap_cac_hub_collection_remotes",
+            "aap_cac_hub_collection_repositories",
+            "aap_cac_hub_group_roles",
+            "controller_bulk_hosts",
+            "controller_hosts",
+            "controller_groups",
+            "controller_instances",
+            "controller_ad_hoc_commands",
+            "controller_ad_hoc_commands_cancel",
+            "controller_bulk_launch_jobs",
+            "controller_launch_jobs",
+            "controller_cancel_jobs",
+            "controller_workflows",
+            "controller_workflow_launch_jobs",
+            "controller_applications",
+            "controller_credential_input_sources",
+            "controller_configuration_dispatcher_roles",
+            "controller_execution_environments",
+            "operation_translate",
+            "controller_notifications",
+            "controller_configuration_object_diff_tasks",
+            "controller_roles",
+            "controller_schedules",
+            "ee_list",
+            "output_path",
+            "input_tag",
+            "dir_orgs_vars",
+            "orgs",
+            "aap_cac_controller_license_manifest_remote_src",
+        }
+
+        self.assertTrue(expected_inputs.issubset(example))
+        for name in expected_inputs:
+            with self.subTest(variable=name):
+                self.assertNotIn(example[name], (None, "", [], {}))
 
 
 if __name__ == "__main__":
