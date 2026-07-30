@@ -4,6 +4,7 @@
   connection: local
   gather_facts: false
   vars:
+    aap_fqdn: aap-cac-basic.example.test
     aap_username: ""
     aap_password: ""
     aap_validate_certs: false
