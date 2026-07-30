@@ -6,14 +6,14 @@ Authoritative source: [`meta/role-coverage.yml`](../../meta/role-coverage.yml).
 
 ## Summary
 
-- Roles: 96
-- Root Molecule scenarios: 58
+- Roles: 97
+- Root Molecule scenarios: 59
 - Production roles: 2
-- Experimental roles: 93
+- Experimental roles: 94
 - Deprecated roles: 1
 - Runtime-container application policies: 6
 - Declared-evidence application policies: 5
-- Reviewed not-applicable application policies: 47
+- Reviewed not-applicable application policies: 48
 
 Profile states are dispositions, not inferred test results. Only `supported` profiles backed by real,
 evidence-producing scenarios are release-eligible.
@@ -52,6 +52,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | forgejo_deploy | forgejo | web_application | experimental | — | rhel-9 | experimental | experimental | experimental | browser_and_authenticated_api | postgres_deploy, lit.foundational.kubeplay | — | Production persistence, TLS, restart, and browser/API workflows are not yet proven. | forgejo-deploy-basic |
 | gitlab_runner | gitlab_runner | runner | deprecated | — | — | deprecated | deprecated | deprecated | register_runner_and_execute_a_real_workload | — | GitLab service and runner registration token | Role is intentionally fail-closed and retained only to report its deprecated contract. | gitlab-runner-basic |
 | grafana_deploy | observability | web_application | experimental | — | ubuntu-22.04, ubuntu-24.04, rhel-9 | experimental | experimental | experimental | browser_and_authenticated_api | lit.foundational.kubeplay, lit.foundational.podman_systemd, loki_deploy | — | Current Incus scenario has no browser or authenticated API workflow. | atlas-observability-incus_heavy, wunderbox-monitoring-logging-basic |
+| hetzner_object_storage_cac | hetzner_object_storage | configuration_as_code | experimental | — | ubuntu-24.04, rhel-9 | experimental | blocked-external-service | blocked-external-service | create_query_reconcile_and_remove_protected_s3_objects | amazon.aws, community.aws, community.hashi_vault | Paid Hetzner Object Storage project and protected S3 credentials | Tiny validates the real plan and negative safety contracts without calling the paid external API., Bucket deletion and S3 credential creation are deliberately outside the role. | hetzner-object-storage-tiny |
 | incus_esxi_image | esxi | infrastructure | experimental | — | ubuntu-24.04, rhel-9 | experimental | blocked-external-license | blocked-external-license | import_publish_use_and_cleanup_a_real_image | — | Privately licensed VMware ESXi image artifacts | Current scenario uses a fake Incus CLI and fake artifacts. | incus-esxi-image-basic |
 | incus_nested_esxi | esxi | infrastructure | experimental | — | ubuntu-24.04, rhel-9 | experimental | blocked-external-infrastructure | blocked-external-infrastructure | launch_query_and_destroy_a_real_nested_esxi_vm | — | Nested-virtualization-capable Incus host, Privately licensed VMware ESXi image | No root Molecule scenario exists. | — |
 | keycloak | keycloak | orchestrator | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | browser_and_authenticated_oidc_api | keycloak_preflight, keycloak_deploy, keycloak_config, keycloak_cac, keycloak_validate, keycloak_ops, keycloak_backup_restore, keycloak_upgrade, keycloak_destroy | — | Canonical scenarios do not invoke the orchestrator role directly. | — |
@@ -570,6 +571,22 @@ promotion input only and never satisfy the release-required supported-target mat
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
 - Known limitations: Current Incus scenario has no browser or authenticated API workflow.
+
+### `hetzner_object_storage_cac`
+
+- Purpose/classification: `configuration_as_code` in component `hetzner_object_storage`.
+- Maturity/deprecation: `experimental` / `active`.
+- Supported targets: —; candidate targets: ubuntu-24.04, rhel-9.
+- Profiles: Tiny `experimental`, Heavy `blocked-external-service`, Application Acceptance `blocked-external-service`.
+- Acceptance surface: `create_query_reconcile_and_remove_protected_s3_objects`.
+- Role dependencies: amazon.aws, community.aws, community.hashi_vault; exercised scenario dependencies: —.
+- External dependencies/blockers: Paid Hetzner Object Storage project and protected S3 credentials.
+- Required-secret policy: Protected non-production credentials or licensed inputs are required for the declared external dependencies.
+- Local execution: `molecule test -s hetzner-object-storage-tiny`; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
+- Candidate-target execution: no runnable candidate matrix is currently declared.
+- Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
+- Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
+- Known limitations: Tiny validates the real plan and negative safety contracts without calling the paid external API., Bucket deletion and S3 credential creation are deliberately outside the role.
 
 ### `incus_esxi_image`
 
@@ -1686,6 +1703,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | forgejo-cac-basic | Tiny | experimental | stub | forgejo_cac | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | forgejo-deploy-basic | Tiny | experimental | stub | forgejo_deploy | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | gitlab-runner-basic | Tiny | deprecated | deprecation-contract | gitlab_runner | — | not-applicable | — | Scenario enforces a deprecation contract and intentionally does not deploy an independently versioned application. | False | False | False |
+| hetzner-object-storage-tiny | Tiny | experimental | partial | hetzner_object_storage_cac | — | not-applicable | — | Scenario validates the real provider contract and plan path without mutating a paid external service. | False | False | False |
 | incus-esxi-image-basic | Tiny | experimental | partial | incus_esxi_image | — | not-applicable | — | Scenario exercises controller-side role behavior without deploying an independently versioned application. | False | False | False |
 | keycloak-application-acceptance | Application Acceptance | supported | real | keycloak_cac, keycloak_deploy | postgres_backup_restore, samba | runtime-container | — | Scenario deploys and verifies independently versioned application containers; immutable runtime digests are mandatory. | True | True | True |
 | keycloak-heavy | Heavy | supported | real | keycloak_cac, keycloak_deploy | postgres_backup_restore, samba | runtime-container | — | Scenario deploys and verifies independently versioned application containers; immutable runtime digests are mandatory. | True | True | True |

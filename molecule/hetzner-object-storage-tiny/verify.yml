@@ -1,0 +1,29 @@
+---
+- name: Verify the Hetzner Object Storage CaC safety contract
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Read the sanitized plan
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/hetzner-object-storage-plan.yml"
+        name: _hetzner_object_storage_cac_plan
+
+    - name: Read negative safety results
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/hetzner-object-storage-safety.yml"
+        name: _hetzner_object_storage_cac_safety
+
+    - name: Verify safe plan and negative contracts
+      ansible.builtin.assert:
+        that:
+          - _hetzner_object_storage_cac_plan.action == 'plan'
+          - _hetzner_object_storage_cac_plan.bucket == 'example-production-backup'
+          - not _hetzner_object_storage_cac_plan.changed | bool
+          - _hetzner_object_storage_cac_plan.object_lock_enabled | bool
+          - _hetzner_object_storage_cac_plan.object_lock_mode == 'GOVERNANCE'
+          - _hetzner_object_storage_cac_plan.object_lock_retention_days | int == 30
+          - _hetzner_object_storage_cac_plan.versioning | bool
+          - _hetzner_object_storage_cac_safety.insecure_endpoint_rejected | bool
+          - _hetzner_object_storage_cac_safety.disabled_lock_rejected | bool
+        quiet: true

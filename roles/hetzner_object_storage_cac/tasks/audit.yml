@@ -1,0 +1,33 @@
+---
+- name: Read Hetzner Object Storage buckets
+  amazon.aws.s3_bucket_info:
+    endpoint_url: "{{ hetzner_object_storage_cac_endpoint }}"
+    region: "{{ hetzner_object_storage_cac_region }}"
+    access_key: "{{ _hetzner_object_storage_cac_access_key }}"
+    secret_key: "{{ _hetzner_object_storage_cac_secret_key }}"
+    validate_certs: "{{ hetzner_object_storage_cac_validate_certs }}"
+  register: _hetzner_object_storage_cac_bucket_info
+  delegate_to: "{{ hetzner_object_storage_cac_delegate_to }}"
+  no_log: true
+
+- name: Require the declared Hetzner Object Storage bucket
+  ansible.builtin.assert:
+    that:
+      - >-
+        _hetzner_object_storage_cac_bucket_info.buckets
+        | map(attribute='name')
+        | select('equalto', hetzner_object_storage_cac_bucket)
+        | list | length == 1
+    fail_msg: The declared Hetzner Object Storage bucket is absent or not uniquely visible.
+    quiet: true
+
+- name: Publish sanitized Hetzner Object Storage audit result
+  ansible.builtin.set_fact:
+    hetzner_object_storage_cac_result:
+      action: audit
+      bucket: "{{ hetzner_object_storage_cac_bucket }}"
+      changed: false
+      endpoint: "{{ hetzner_object_storage_cac_endpoint }}"
+      exists: true
+      prefix: "{{ hetzner_object_storage_cac_prefix }}"
+      region: "{{ hetzner_object_storage_cac_region }}"

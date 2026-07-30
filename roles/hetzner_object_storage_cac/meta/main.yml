@@ -1,0 +1,9 @@
+---
+galaxy_info:
+  author: Lightning IT
+  description: Reconcile private Hetzner Object Storage buckets through the S3-compatible API
+  license: MIT
+  min_ansible_version: "2.18"
+  role_name: hetzner_object_storage_cac
+  namespace: lit
+dependencies: []
