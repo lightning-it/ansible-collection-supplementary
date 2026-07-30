@@ -1,30 +1,14 @@
 {
-  "base_sha": "911782e7d2f9ae47bf2303a89e992bab5d1287e0",
-  "current_version": "2.1.1",
+  "base_sha": "9fb938e4aadbd1008e82bff6a05896ed74934bcf",
+  "current_version": "3.0.0",
   "fragments": [
     {
-      "path": "aap-deploy-controller-tls-no-become.yml",
-      "sha256": "5bd84f64eeb4e87eeaaab4e5651d6198951a6b3bc8b56c11a50bb3053a508500"
-    },
-    {
-      "path": "aap-deploy-strict-clean-state.yml",
-      "sha256": "a0ec134c99b1e3c24cbf1ea20c67460e1a1d23267d5c5c3876c8967bc1e7027a"
-    },
-    {
-      "path": "aap-restore-upstream-gateway-upload.yml",
-      "sha256": "fb87286a44eec9afd7447b673ef126524a4c325abd1de5370f741b37bf8edc22"
-    },
-    {
-      "path": "keycloak-runtime-assertions.yml",
-      "sha256": "32e6b0745d4a03d10b4a7e132b4ba525a9a411f28732be85a949ba7683a9a100"
-    },
-    {
-      "path": "shared-assets-sync-30464765804.yml",
-      "sha256": "b637a090dd4cd427b7154c68ccb11efd1e13b7fc1974bd0bb36b7886a978a440"
+      "path": "aap-deploy-public-gateway-default.yml",
+      "sha256": "573058a71a39ec004882df9181a3f331340f43e32b750b272eba94c9817764a8"
     }
   ],
-  "impact": "major",
-  "next_version": "3.0.0",
+  "impact": "patch",
+  "next_version": "3.0.1",
   "preparer": {
     "account_id": "307565056",
     "email": "307565056+lightning-it-release-automation[bot]@users.noreply.github.com",
@@ -35,12 +19,12 @@
   "schema_version": 1,
   "workflow": {
     "actor": "litroc",
-    "event": "push",
+    "event": "workflow_dispatch",
     "git_ref": "refs/heads/main",
     "path": ".github/workflows/release-prepare.yml",
     "ref": "lightning-it/ansible-collection-supplementary/.github/workflows/release-prepare.yml@refs/heads/main",
     "run_attempt": "1",
-    "run_id": "30503676412",
-    "source_sha": "911782e7d2f9ae47bf2303a89e992bab5d1287e0"
+    "run_id": "30517387525",
+    "source_sha": "9fb938e4aadbd1008e82bff6a05896ed74934bcf"
   }
 }
