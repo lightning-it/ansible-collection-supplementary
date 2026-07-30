@@ -1,6 +1,0 @@
----
-bugfixes:
-  - >-
-    Prevent controller-side AAP customer TLS file checks from inheriting
-    privilege escalation intended for the managed host, so the checks also
-    work in execution environments without sudo.

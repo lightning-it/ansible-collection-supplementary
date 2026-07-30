@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Align the Keycloak runtime evidence checks with Podman image-name
-    normalization and the RFC 6749 invalid_grant response.
