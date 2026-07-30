@@ -6,6 +6,7 @@
   vars:
     aap_username: ""
     aap_password: ""
+    aap_validate_certs: false
     aap_gateway_admin_password_input:
       active: gateway-active-password
       next: gateway-next-password
@@ -30,6 +31,8 @@
           - aap_gateway_admin_password_effective == 'gateway-active-password'
           - (aap_cac_controller_organizations | type_debug) == 'list'
           - aap_cac_controller_organizations | length == 0
+          - (aap_cac_gateway_validate_certs | type_debug) == 'bool'
+          - aap_cac_gateway_validate_certs
         quiet: true
 
     - name: Persist lit.supplementary.aap_cac Molecule coverage mode

@@ -22,7 +22,8 @@ Key variables:
 - `aap_cac_gateway_hostname`
 - `aap_cac_gateway_username` (default: `admin`)
 - `aap_cac_gateway_password` (default: `aap_gateway_admin_password_effective`)
-- `aap_cac_gateway_validate_certs` (defaults to `aap_validate_certs`)
+- `aap_cac_gateway_validate_certs` (default: `true`; set this role-specific
+  variable explicitly only when certificate validation must be disabled)
 - `aap_cac_token_description`
 - `aap_cac_token_request_retries`
 - `aap_cac_token_request_delay`

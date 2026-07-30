@@ -134,6 +134,15 @@ class AapGatewayContractsTests(unittest.TestCase):
             assertions,
         )
 
+    def test_cac_certificate_validation_default_is_not_recursive(self) -> None:
+        defaults = (ROOT / "roles/aap_cac/defaults/main.yml").read_text(encoding="utf-8")
+
+        self.assertIn("aap_cac_gateway_validate_certs: true", defaults)
+        self.assertNotIn(
+            'aap_cac_gateway_validate_certs: "{{ aap_validate_certs | default(true) }}"',
+            defaults,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -10,7 +10,7 @@ aap_cac_gateway_password: >-
         true
       )
   }}
-aap_cac_gateway_validate_certs: "{{ aap_validate_certs | default(true) }}"
+aap_cac_gateway_validate_certs: true
 aap_cac_token_description: "aap-cac-token"
 aap_cac_token_request_retries: 5
 aap_cac_token_request_delay: 5
