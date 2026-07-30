@@ -2343,7 +2343,7 @@ scenarios:
   aap-cac-basic:
     profile: "tiny"
     state: "experimental"
-    implementation: "stub"
+    implementation: "partial"
     roles:
       - "aap_cac"
     junit: false
@@ -2352,8 +2352,8 @@ scenarios:
     test_application:
       mode: "not-applicable"
       reason: >-
-        Scenario is a role contract or assertion stub and does not deploy an independently versioned
-        application.
+        Scenario executes the AAP CaC authentication contract and shared password
+        resolution without deploying an independently versioned application.
       dependencies: []
   aap-deploy-basic:
     profile: "tiny"

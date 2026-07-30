@@ -1,8 +1,15 @@
 ---
 # Gateway API endpoint used by token helper tasks.
 aap_cac_gateway_hostname: "https://{{ inventory_hostname }}"
-aap_cac_gateway_username: "{{ aap_username }}"
-aap_cac_gateway_password: "{{ aap_password }}"
+aap_cac_gateway_username: "{{ aap_username | default('admin', true) }}"
+aap_cac_gateway_password: >-
+  {{
+    aap_password
+    | default(
+        aap_gateway_admin_password_effective | default('', true),
+        true
+      )
+  }}
 aap_cac_gateway_validate_certs: "{{ aap_validate_certs | default(true) }}"
 aap_cac_token_description: "aap-cac-token"
 aap_cac_token_request_retries: 5

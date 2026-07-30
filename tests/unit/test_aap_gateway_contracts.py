@@ -101,6 +101,27 @@ class AapGatewayContractsTests(unittest.TestCase):
             assertions,
         )
 
+    def test_cac_authentication_uses_shared_gateway_password_contract(self) -> None:
+        defaults = (ROOT / "roles/aap_cac/defaults/main.yml").read_text(encoding="utf-8")
+        main = (ROOT / "roles/aap_cac/tasks/main.yml").read_text(encoding="utf-8")
+        assertions = (ROOT / "roles/aap_cac/tasks/assert.yml").read_text(encoding="utf-8")
+
+        self.assertIn("aap_username | default('admin', true)", defaults)
+        self.assertIn("aap_gateway_admin_password_effective", defaults)
+        self.assertIn(
+            "aap_password\n"
+            "    | default(\n"
+            "        aap_gateway_admin_password_effective | default('', true),",
+            defaults,
+        )
+        self.assertNotIn('aap_cac_gateway_password: "{{ aap_password }}"', defaults)
+        self.assertIn("ansible.builtin.import_tasks: assert.yml", main)
+        self.assertIn("tasks_from: resolve_admin_passwords.yml", assertions)
+        self.assertLess(
+            assertions.index("Resolve shared AAP admin passwords for CaC authentication"),
+            assertions.index("Validate AAP CaC authentication inputs"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

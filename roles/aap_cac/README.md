@@ -44,6 +44,10 @@ Key variables:
 Password and secret input behavior:
 - Inventory is the source of truth.
 - Inventory may provide plain values, Ansible Vault values, or lookup-based values (for example HCP Vault).
+- The role resolves `aap_gateway_admin_password_input` through the shared AAP
+  password contract before authenticating. The legacy `aap_username` and
+  `aap_password` aliases remain fallback inputs for compatibility but are not
+  required.
 - This role does not read or write Vault directly.
 - If `aap_token` is provided by the caller, it must be the raw AAP 2.7 gateway
   token string.

@@ -1,0 +1,23 @@
+---
+- name: Resolve shared AAP admin passwords for CaC authentication
+  ansible.builtin.include_role:
+    name: lit.supplementary.aap
+    tasks_from: resolve_admin_passwords.yml
+  when:
+    - aap_cac_gateway_password | default('', true) | string | trim | length == 0
+  tags: always
+
+- name: Validate AAP CaC authentication inputs
+  ansible.builtin.assert:
+    that:
+      - aap_cac_gateway_hostname | default('', true) | trim | length > 0
+      - aap_cac_gateway_username | default('', true) | trim | length > 0
+      - aap_cac_gateway_password | default('', true) | trim | length > 0
+    fail_msg: >-
+      Missing AAP CaC authentication inputs. Provide the canonical
+      aap_gateway_admin_password_input so the shared AAP password resolver can
+      expose aap_gateway_admin_password_effective, or explicitly set
+      aap_cac_gateway_password.
+    quiet: true
+  no_log: true
+  tags: always

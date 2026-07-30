@@ -1665,7 +1665,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | Scenario | Profile | State | Implementation | Reported roles | Exercised dependencies | Test application mode | Application claims | Application policy rationale | JUnit | Allure | Evidence |
 |---|---|---|---|---|---|---|---|---|---:|---:|---:|
 | aap-basic | Tiny | experimental | partial | aap | — | not-applicable | — | Scenario exercises controller-side role behavior without deploying an independently versioned application. | False | False | False |
-| aap-cac-basic | Tiny | experimental | stub | aap_cac | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
+| aap-cac-basic | Tiny | experimental | partial | aap_cac | — | not-applicable | — | Scenario executes the AAP CaC authentication contract and shared password resolution without deploying an independently versioned application. | False | False | False |
 | aap-deploy-basic | Tiny | experimental | stub | aap_deploy | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | aap-destroy-basic | Tiny | experimental | stub | aap_destroy | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | aap-host-prepare-basic | Tiny | experimental | partial | aap_host_prepare | — | not-applicable | — | Scenario exercises host-preparation role contracts without deploying an independently versioned application. | False | False | False |
