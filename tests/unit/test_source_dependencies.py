@@ -24,7 +24,7 @@ class SourceDependencyTests(unittest.TestCase):
     def _copy_source(self, destination: Path) -> None:
         for filename in ("galaxy.yml", ".pre-commit-config.yaml"):
             shutil.copy2(ROOT / filename, destination / filename)
-        for directory in ("collections", "containerfiles", "manifests", "meta", "roles", "scripts"):
+        for directory in ("collections", "containerfiles", "examples", "manifests", "meta", "roles", "scripts"):
             shutil.copytree(ROOT / directory, destination / directory)
 
     def test_repository_inventory_is_complete(self) -> None:

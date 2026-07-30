@@ -13,7 +13,7 @@
 # lit.supplementary.aap_prepare at the path below.
 
 # Role connection and authentication contract.
-aap_cac_gateway_hostname: "https://aap.demo.example.invalid"
+aap_fqdn: "aap.demo.example.invalid"
 aap_cac_gateway_username: "admin"
 aap_cac_gateway_password: "{{ vault_demo_aap_admin_password }}"
 aap_cac_gateway_validate_certs: true
@@ -274,7 +274,8 @@ controller_execution_environments:
   - name: "Demo Execution Environment"
     description: "Execution environment managed through CaC"
     organization: "Demo Organization"
-    image: "quay.io/ansible/awx-ee:latest"
+    image: >-
+      quay.io/l-it/ee-wunder-devtools-ubi9:v1.9.2@sha256:58d5d45f7ea7405394edb00d4a77bf3e5d770532377fba6d80e8f641d27576b0
     pull: "missing"
     state: "present"
 

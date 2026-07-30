@@ -57,6 +57,7 @@ class AapGatewayContractsTests(unittest.TestCase):
         self.assertNotIn("settings.yaml.j2", inventory_vars)
 
     def test_local_execution_uses_public_envoy_url(self) -> None:
+        cac_defaults = (ROOT / "roles/aap_cac/defaults/main.yml").read_text(encoding="utf-8")
         template = (
             ROOT / "roles/aap_local_execution/templates/aap-local/inventories/group_vars/aaps/aap.yml.j2"
         ).read_text(encoding="utf-8")
@@ -68,6 +69,14 @@ class AapGatewayContractsTests(unittest.TestCase):
         self.assertNotIn(
             'aap_deploy_gateway_main_url: "https://{{ aap_fqdn }}:8446"',
             template,
+        )
+        self.assertIn(
+            'aap_cac_gateway_hostname: "https://{{ aap_fqdn }}"',
+            cac_defaults,
+        )
+        self.assertNotIn(
+            'aap_cac_gateway_hostname: "https://{{ inventory_hostname }}"',
+            cac_defaults,
         )
 
     def test_partial_install_autoreset_is_not_supported(self) -> None:

@@ -1,6 +1,6 @@
 ---
 # Gateway API endpoint used by token helper tasks.
-aap_cac_gateway_hostname: "https://{{ inventory_hostname }}"
+aap_cac_gateway_hostname: "https://{{ aap_fqdn }}"
 aap_cac_gateway_username: "{{ aap_username | default('admin', true) }}"
 aap_cac_gateway_password: >-
   {{

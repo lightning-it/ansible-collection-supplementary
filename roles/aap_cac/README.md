@@ -19,7 +19,7 @@ token. That version target is not a production-support claim.
 See `roles/aap_cac/defaults/main.yml`.
 
 Key variables:
-- `aap_cac_gateway_hostname`
+- `aap_cac_gateway_hostname` (default: `https://{{ aap_fqdn }}`)
 - `aap_cac_gateway_username` (default: `admin`)
 - `aap_cac_gateway_password` (default: `aap_gateway_admin_password_effective`)
 - `aap_cac_gateway_validate_certs` (default: `true`; set this role-specific
@@ -71,7 +71,7 @@ execution. Do not treat a core-only collection install as AAP-runtime ready.
   roles:
     - role: lit.supplementary.aap_cac
       vars:
-        aap_cac_gateway_hostname: "https://{{ inventory_hostname }}"
+        aap_fqdn: "aap.example.invalid"
 ```
 
 Controller license activation via manifest content from inventory:
