@@ -88,6 +88,7 @@
       become: true
       become_user: "{{ aap_deploy_install_user }}"
       environment: "{{ aap_deploy_installer_environment }}"
+      changed_when: true
       no_log: true
   rescue:
     - name: Collect AAP installer failure diagnostics

@@ -99,11 +99,30 @@ class AapInstallStateContractsTests(unittest.TestCase):
                     self.assertNotIn(variable, content)
 
     def test_runtime_probe_fails_closed_and_runs_in_check_mode(self) -> None:
+        uid_probe = task_named(self.tasks, "Resolve install user UID for state guard")
+        manager = task_named(self.tasks, "Ensure install user systemd manager is running")
+        check_guard = task_named(self.tasks, "Require active install user runtime for check mode")
         probe = task_named(self.tasks, "List Podman containers for install user")
 
+        self.assertLess(self.tasks.index(uid_probe), self.tasks.index(probe))
+        self.assertLess(self.tasks.index(manager), self.tasks.index(probe))
+        self.assertLess(self.tasks.index(check_guard), self.tasks.index(probe))
+        self.assertIs(uid_probe["check_mode"], False)
+        self.assertNotIn("when", manager)
+        self.assertIn(
+            "ansible_check_mode",
+            check_guard["ansible.builtin.assert"]["that"][0],
+        )
         self.assertIs(probe["check_mode"], False)
         self.assertNotIn("failed_when", probe)
         self.assertNotIn("ignore_errors", probe)
+        self.assertEqual(
+            probe["environment"],
+            {
+                "XDG_RUNTIME_DIR": "/run/user/{{ aap_deploy_install_user_uid }}",
+                "DBUS_SESSION_BUS_ADDRESS": ("unix:path=/run/user/{{ aap_deploy_install_user_uid }}/bus"),
+            },
+        )
 
     def test_installer_always_waits_before_writing_marker(self) -> None:
         tasks = yaml.safe_load((ROOT / "roles/aap_deploy/tasks/40_install.yml").read_text(encoding="utf-8"))
@@ -112,6 +131,7 @@ class AapInstallStateContractsTests(unittest.TestCase):
         marker = task_named(tasks, "Write installation marker")
 
         self.assertNotEqual(installer["poll"], 0)
+        self.assertIs(installer["changed_when"], True)
         self.assertIs(installer["no_log"], True)
         self.assertNotIn("when", marker)
 
