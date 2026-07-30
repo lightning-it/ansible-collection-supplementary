@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.0.1
+======
+
+Bugfixes
+--------
+
+- Default the AAP containerized installer ``gateway_main_url`` to the public Envoy HTTPS endpoint so Hub readiness and image seeding do not target the internal Gateway Nginx listener.
+
 v3.0.0
 ======
 

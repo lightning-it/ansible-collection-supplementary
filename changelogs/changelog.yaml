@@ -444,3 +444,12 @@ releases:
       - keycloak-runtime-assertions.yml
       - shared-assets-sync-30464765804.yml
     release_date: '2026-07-30'
+  3.0.1:
+    changes:
+      bugfixes:
+        - Default the AAP containerized installer ``gateway_main_url`` to the public
+          Envoy HTTPS endpoint so Hub readiness and image seeding do not target the
+          internal Gateway Nginx listener.
+    fragments:
+      - aap-deploy-public-gateway-default.yml
+    release_date: '2026-07-30'
