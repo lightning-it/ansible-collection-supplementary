@@ -40,10 +40,7 @@ Key variables:
 - `aap_deploy_manage_install_tmp_dir`
 - `aap_deploy_install_tmp_dir`
 - `aap_deploy_bundle_dir` (path containing `/bundle`)
-- `aap_deploy_installer_wait`
-- `aap_deploy_installer_async_jid_path`
 - `aap_deploy_installer_async_timeout`
-- `aap_deploy_installer_async_retries`
 - `aap_deploy_installer_async_delay`
 - `aap_deploy_installer_log_dir`
 - `aap_deploy_installer_diagnostics_enabled`
@@ -84,13 +81,6 @@ Key variables:
 - `aap_deploy_manage_download_unpack`
 - `aap_deploy_run_installer`
 - `aap_deploy_run_verify`
-- `aap_deploy_skip_if_installed`
-- `aap_deploy_skip_if_installed_require_runtime` (default: `true`)
-- `aap_deploy_skip_if_installed_runtime_min_matching_containers` (default: `1`)
-- `aap_deploy_skip_if_runtime_active`
-- `aap_deploy_runtime_probe_all_containers` (default: `true`, uses `podman ps -a`)
-- `aap_deploy_runtime_name_regex` (default: `^(automation-|postgresql$|redis-|receptor$)`)
-- `aap_deploy_runtime_min_matching_containers` (default: `1`)
 - `aap_deploy_enforce_min_mem_check` (default: `true`)
 - `aap_deploy_min_mem_mb` (default: `15000`, approximately 16GB)
 - `aap_deploy_growth_inventory_connection` (default: `local`)
@@ -109,9 +99,13 @@ Installer behavior:
 - The prepared Red Hat installer bundle is not rewritten. EDA settings remain
   owned by the upstream installer; this role does not append duplicate keys to
   the generated `/etc/eda.yaml`.
-- Role performs an early existing-install detection (marker and runtime containers).
-- Marker-based skip is runtime-validated by default to avoid stale marker false positives.
-- When detected, host prep, bundle handling, inventory rendering, and installer execution are skipped.
+- Role proceeds only when neither its success marker nor any Podman container
+  owned by the dedicated install user exists.
+- Marker and install-user containers together mean that AAP is installed; host prep, bundle
+  handling, inventory rendering, and installer execution are skipped.
+- A stale marker or markerless install-user container fails closed. Run the official
+  `ansible.containerized_installer.uninstall` playbook and clean the incomplete
+  installation explicitly before reinstalling.
 - Verification still runs (when enabled).
 - Role expects `lit.supplementary.aap_prepare` to stage the setup bundle on the
   managed host at `aap_deploy_setup_archive_path`.
@@ -119,15 +113,8 @@ Installer behavior:
 - In check mode, the role validates all inputs and predicts the setup path but
   does not call the vendor preparation role because that role requires the
   archive extraction result even though Ansible skips extraction in check mode.
-- By default, role runs the prepared containerized installer command directly
-  with controlled async status polling.
-- For CI or other orchestrators that cannot hold one Ansible polling task open
-  for the full installer runtime, set `aap_deploy_installer_wait: false`.
-  The role starts the native installer asynchronously, writes the async job id to
-  `aap_deploy_installer_async_jid_path`, skips the install marker, and skips
-  verification for that run. The orchestrator must poll the async job id with
-  short Ansible calls, fail on a non-zero installer return code, and run
-  verification after the async job finishes successfully.
+- Role runs the prepared containerized installer to completion with controlled
+  async polling before it writes the success marker.
 - Role writes the installer Ansible log below `aap_deploy_installer_log_dir`.
 - On installer failure, role prints redacted diagnostics before returning failure.
 - Default bundle dir is `bundle` (relative to the extracted setup directory).

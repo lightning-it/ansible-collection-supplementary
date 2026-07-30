@@ -72,3 +72,4 @@
         }}
     aap_deploy_setup_prep_inv_secrets: {}
   changed_when: false
+  no_log: true
