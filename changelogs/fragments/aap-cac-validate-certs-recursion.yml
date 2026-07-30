@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Make the AAP CaC certificate-validation default a literal boolean so nested
+    configuration roles cannot create a recursive variable alias with
+    ``aap_validate_certs``.

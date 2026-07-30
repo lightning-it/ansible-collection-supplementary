@@ -7,13 +7,13 @@ Authoritative source: [`meta/role-coverage.yml`](../../meta/role-coverage.yml).
 ## Summary
 
 - Roles: 96
-- Root Molecule scenarios: 57
+- Root Molecule scenarios: 58
 - Production roles: 2
 - Experimental roles: 93
 - Deprecated roles: 1
 - Runtime-container application policies: 6
 - Declared-evidence application policies: 5
-- Reviewed not-applicable application policies: 46
+- Reviewed not-applicable application policies: 47
 
 Profile states are dispositions, not inferred test results. Only `supported` profiles backed by real,
 evidence-producing scenarios are release-eligible.
@@ -36,7 +36,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | aap_preflight | aap | validator | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_validation | — | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | aap-preflight-basic |
 | aap_prepare | aap | infrastructure | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_artifact_staging | artifacts | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | aap-prepare-basic |
 | aap_secrets | aap | secret_management | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_secret_resolution | — | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | — |
-| aap_tls | aap | infrastructure | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_tls_bootstrap | — | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | — |
+| aap_tls | aap | infrastructure | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_tls_bootstrap | — | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | aap-tls-basic |
 | alertmanager_deploy | observability | monitoring_service | experimental | — | ubuntu-22.04, ubuntu-24.04, rhel-9 | experimental | experimental | experimental | deliver_and_verify_a_real_alert | lit.foundational.podman_systemd | — | Current Incus scenario verifies service and port state, not alert delivery. | atlas-observability-incus_heavy |
 | alloy_deploy | observability | agent | experimental | — | ubuntu-22.04, ubuntu-24.04, rhel-9 | experimental | experimental | experimental | generate_deliver_and_query_source_data | lit.foundational.kubeplay, lit.foundational.podman_systemd, loki_deploy | — | Current Incus scenario does not query delivered data from Loki. | atlas-observability-incus_heavy, wunderbox-monitoring-logging-basic |
 | artifacts | artifacts | infrastructure | experimental | — | rhel-9, ubuntu-24.04 | experimental | experimental | experimental | stage_verify_and_consume_a_real_artifact | — | — | Current scenario covers only a local source, not URL or managed-host sources. | artifacts-basic |
@@ -325,7 +325,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Role dependencies: —; exercised scenario dependencies: —.
 - External dependencies/blockers: Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets.
 - Required-secret policy: Protected non-production credentials or licensed inputs are required for the declared external dependencies.
-- Local execution: —; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
+- Local execution: `molecule test -s aap-tls-basic`; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
 - Candidate-target execution: no runnable candidate matrix is currently declared.
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
@@ -1665,7 +1665,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | Scenario | Profile | State | Implementation | Reported roles | Exercised dependencies | Test application mode | Application claims | Application policy rationale | JUnit | Allure | Evidence |
 |---|---|---|---|---|---|---|---|---|---:|---:|---:|
 | aap-basic | Tiny | experimental | partial | aap | — | not-applicable | — | Scenario exercises controller-side role behavior without deploying an independently versioned application. | False | False | False |
-| aap-cac-basic | Tiny | experimental | stub | aap_cac | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
+| aap-cac-basic | Tiny | experimental | partial | aap_cac | — | not-applicable | — | Scenario executes the AAP CaC authentication contract and shared password resolution without deploying an independently versioned application. | False | False | False |
 | aap-deploy-basic | Tiny | experimental | stub | aap_deploy | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | aap-destroy-basic | Tiny | experimental | stub | aap_destroy | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | aap-host-prepare-basic | Tiny | experimental | partial | aap_host_prepare | — | not-applicable | — | Scenario exercises host-preparation role contracts without deploying an independently versioned application. | False | False | False |
@@ -1673,6 +1673,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | aap-ops-basic | Tiny | experimental | stub | aap_ops | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | aap-preflight-basic | Tiny | experimental | stub | aap_preflight | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | aap-prepare-basic | Tiny | experimental | stub | aap_prepare | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
+| aap-tls-basic | Tiny | experimental | partial | aap_tls | — | not-applicable | — | Scenario generates an ephemeral AAP CA and verifies transfer to the managed host trust anchor without deploying AAP. | False | False | False |
 | artifacts-basic | Tiny | experimental | partial | artifacts | — | not-applicable | — | Scenario exercises controller-side role behavior without deploying an independently versioned application. | False | False | False |
 | atlas-observability-incus_heavy | Heavy | experimental | partial | alertmanager_deploy, alloy_deploy, checkmk_deploy, grafana_deploy, loki_deploy, prometheus_deploy, rsyslog_deploy | — | runtime-container | — | Scenario exercises real service containers and must report immutable runtime digests when enabled. | False | False | False |
 | cloudflare-warp-basic | Tiny | experimental | partial | cloudflare_warp | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |

@@ -1,0 +1,55 @@
+---
+- name: Converge AAP TLS target trust contract
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_tls_molecule_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-tls
+    aap_tls_selfsigned_delegate_to: localhost
+    aap_tls_selfsigned_output_dir: "{{ aap_tls_molecule_root }}/generated"
+    aap_tls_selfsigned_ca_trust_path: "{{ aap_tls_molecule_root }}/trust/aap-selfsigned-ca.crt"
+    aap_tls_selfsigned_common_name: localhost
+    aap_tls_selfsigned_dns_names:
+      - localhost
+    aap_tls_selfsigned_key_size: 2048
+  environment:
+    PATH: >-
+      {{ aap_tls_molecule_root }}/bin:{{ lookup('env', 'PATH') }}
+  tasks:
+    - name: Ensure AAP TLS Molecule directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ aap_tls_molecule_root }}/bin"
+        - "{{ aap_tls_molecule_root }}/trust"
+
+    - name: Install fake update-ca-trust command
+      ansible.builtin.copy:
+        dest: "{{ aap_tls_molecule_root }}/bin/update-ca-trust"
+        content: |
+          #!/bin/sh
+          printf '%s\n' "$*" > "{{ aap_tls_molecule_root }}/update-ca-trust.marker"
+        mode: "0755"
+
+    - name: Apply lit.supplementary.aap_tls
+      ansible.builtin.include_role:
+        name: lit.supplementary.aap_tls
+
+    - name: Read generated AAP CA
+      ansible.builtin.slurp:
+        src: "{{ aap_tls_selfsigned_output_dir }}/aap-selfsigned-ca.crt"
+      register: aap_tls_molecule_generated_ca
+
+    - name: Read installed AAP trust anchor
+      ansible.builtin.slurp:
+        src: "{{ aap_tls_selfsigned_ca_trust_path }}"
+      register: aap_tls_molecule_installed_ca
+
+    - name: Assert generated AAP CA is installed unchanged
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_generated_ca.content == aap_tls_molecule_installed_ca.content
+        quiet: true

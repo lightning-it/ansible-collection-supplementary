@@ -1,24 +1,42 @@
 ---
-- name: Converge aap cac syntax coverage
+- name: Converge aap cac authentication contract
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
-    aap_cac_molecule_execute_role: false
+    aap_username: ""
+    aap_password: ""
+    aap_validate_certs: false
+    aap_gateway_admin_password_input:
+      active: gateway-active-password
+      next: gateway-next-password
+    aap_controller_admin_password_input: controller-password
+    aap_hub_admin_password_input: hub-password
+    aap_eda_admin_password_input: eda-password
+    aap_postgresql_admin_password_input: postgresql-password
     aap_cac_molecule_marker_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-cac-coverage-mode
   tasks:
-    - name: Import lit.supplementary.aap_cac for syntax coverage
-      ansible.builtin.import_role:
+    - name: Resolve lit.supplementary.aap_cac authentication inputs
+      ansible.builtin.include_role:
         name: lit.supplementary.aap_cac
-      when: aap_cac_molecule_execute_role | bool
+        tasks_from: assert.yml
+        public: true
 
-    - name: Record lit.supplementary.aap_cac Molecule coverage mode
-      ansible.builtin.set_fact:
-        aap_cac_molecule_coverage_mode: syntax_stub
+    - name: Assert canonical AAP CaC authentication resolution
+      ansible.builtin.assert:
+        that:
+          - aap_cac_gateway_username == 'admin'
+          - aap_cac_gateway_password == 'gateway-active-password'
+          - aap_gateway_admin_password_effective == 'gateway-active-password'
+          - (aap_cac_controller_organizations | type_debug) == 'list'
+          - aap_cac_controller_organizations | length == 0
+          - (aap_cac_gateway_validate_certs | type_debug) == 'bool'
+          - aap_cac_gateway_validate_certs
+        quiet: true
 
     - name: Persist lit.supplementary.aap_cac Molecule coverage mode
       ansible.builtin.copy:
         dest: "{{ aap_cac_molecule_marker_path }}"
-        content: "syntax_stub\n"
+        content: "authentication_contract\n"
         mode: "0644"

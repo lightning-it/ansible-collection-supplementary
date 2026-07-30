@@ -19,10 +19,11 @@ token. That version target is not a production-support claim.
 See `roles/aap_cac/defaults/main.yml`.
 
 Key variables:
-- `aap_cac_gateway_hostname`
+- `aap_cac_gateway_hostname` (default: `https://{{ aap_fqdn }}`)
 - `aap_cac_gateway_username` (default: `admin`)
 - `aap_cac_gateway_password` (default: `aap_gateway_admin_password_effective`)
-- `aap_cac_gateway_validate_certs` (defaults to `aap_validate_certs`)
+- `aap_cac_gateway_validate_certs` (default: `true`; set this role-specific
+  variable explicitly only when certificate validation must be disabled)
 - `aap_cac_token_description`
 - `aap_cac_token_request_retries`
 - `aap_cac_token_request_delay`
@@ -31,7 +32,8 @@ Key variables:
 - `aap_cac_gateway_ready_status_codes`
 - `aap_cac_gateway_ready_retries`
 - `aap_cac_gateway_ready_delay`
-- `aap_cac_controller_organizations` (default: `[{name: ModuLix}]`)
+- `aap_cac_controller_organizations` (default: `[]`; must be a list of
+  organization mappings)
 - `aap_cac_hub_collection_remotes` (default: `[]`)
 - `aap_cac_hub_collection_repositories` (default: `[]`)
 - `aap_cac_hub_group_roles` (default: `[]`)
@@ -44,6 +46,10 @@ Key variables:
 Password and secret input behavior:
 - Inventory is the source of truth.
 - Inventory may provide plain values, Ansible Vault values, or lookup-based values (for example HCP Vault).
+- The role resolves `aap_gateway_admin_password_input` through the shared AAP
+  password contract before authenticating. The legacy `aap_username` and
+  `aap_password` aliases remain fallback inputs for compatibility but are not
+  required.
 - This role does not read or write Vault directly.
 - If `aap_token` is provided by the caller, it must be the raw AAP 2.7 gateway
   token string.
@@ -65,7 +71,7 @@ execution. Do not treat a core-only collection install as AAP-runtime ready.
   roles:
     - role: lit.supplementary.aap_cac
       vars:
-        aap_cac_gateway_hostname: "https://{{ inventory_hostname }}"
+        aap_fqdn: "aap.example.invalid"
 ```
 
 Controller license activation via manifest content from inventory:
@@ -98,6 +104,30 @@ Controller license activation via prepared runtime artifact:
 The preferred flow is to run `lit.supplementary.aap_prepare` first. That role
 stages the manifest and publishes `aap_cac_controller_license_manifest_remote_src`
 for this role.
+
+## Complete CaC inventory example
+
+[`examples/aap-cac.yml`](../../examples/aap-cac.yml) contains a populated,
+cross-referenced example for every resource family currently dispatched by
+this role:
+
+- Gateway settings, organizations, users, teams, and role assignments
+- Controller license, settings, credentials, projects, inventories, templates,
+  workflows, runtime objects, and platform operations
+- Private Automation Hub remotes, repositories, synchronization, and roles
+- Controller filetree, job operations, and Execution Environment builder
+
+The manifest path in the example consumes
+`aap_prepare_manifest_dest_effective`, so a manifest staged earlier in the same
+deployment flow is activated automatically. A real Red Hat subscription
+manifest is still required; the example does not contain one.
+
+The complete example is an inventory reference, not a safe production
+configuration. Some populated sections intentionally perform actions, such as
+launching or cancelling jobs, synchronizing repositories, exporting/importing
+a filetree, or building an Execution Environment. Copy only the reviewed
+sections into environment-specific group variables and keep all referenced
+`vault_*` values in an encrypted Ansible Vault file.
 
 Run a single taskset directly:
 

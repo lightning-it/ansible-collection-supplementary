@@ -1,17 +1,10 @@
 ---
+- name: Validate AAP CaC authentication
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
 - name: Execute AAP CaC tasksets with shared auth token lifecycle
   block:
-    - name: Validate AAP CaC authentication inputs
-      ansible.builtin.assert:
-        that:
-          - aap_cac_gateway_hostname | default('', true) | trim | length > 0
-          - aap_cac_gateway_username | default('', true) | trim | length > 0
-          - aap_cac_gateway_password | default('', true) | trim | length > 0
-        fail_msg: >-
-          Missing AAP CaC auth inputs.
-          Set aap_cac_gateway_username and aap_cac_gateway_password.
-      tags: always
-
     - name: Record whether an auth token was provided by caller
       ansible.builtin.set_fact:
         aap_cac_preexisting_token: "{{ aap_token is defined }}"
@@ -60,17 +53,17 @@
           }}
         aap_cac_controller_password_effective: >-
           {{
-            aap_controller_admin_password_input
+            aap_controller_admin_password_effective
+            | default(aap_controller_admin_password_input, true)
             | default(aap_cac_gateway_password, true)
-            | default(aap_gateway_admin_password_input | default('', true), true)
             | string
             | trim
           }}
         aap_cac_hub_password_effective: >-
           {{
-            aap_hub_admin_password_input
+            aap_hub_admin_password_effective
+            | default(aap_hub_admin_password_input, true)
             | default(aap_cac_gateway_password, true)
-            | default(aap_gateway_admin_password_input | default('', true), true)
             | string
             | trim
           }}
