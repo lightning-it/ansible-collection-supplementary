@@ -62,7 +62,7 @@ container_images:
   - reference: "docker.io/rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
     locations:
       - ".pre-commit-config.yaml"
-  - reference: "docker.io/semaphoreui/semaphore:latest@sha256:6454b2e58a6616de82240f7b4f271663fe0ec3430e10a9cc7e763ff6df12baa0"
+  - reference: "docker.io/semaphoreui/semaphore:latest@sha256:7c7504614c4795b0e0670fb2d4400d35e2302204609664943cb16308b7a6f1e4"
     locations:
       - "roles/semaphore_deploy/defaults/main.yml"
   - reference: "docker.io/smblds/smblds:latest@sha256:496d52f7f61a3fcbc4674a22481b0b83b7220ee481f9f2244d8038aac21e112d"
