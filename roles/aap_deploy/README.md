@@ -58,8 +58,8 @@ Key variables:
 - `aap_deploy_automationmetrics_secret_key`
 - `aap_deploy_automationmetrics_resource_server`
 - `aap_deploy_setup_prep_inv_nodes_extra`
-- `aap_deploy_gateway_main_url` (optional public installer `gateway_main_url`;
-  use the Envoy endpoint, normally `https://<aap-fqdn>` on port 443)
+- `aap_deploy_gateway_main_url` (public installer `gateway_main_url`; defaults
+  to the Envoy endpoint `https://<aap-fqdn>` on port 443)
 - `aap_deploy_gateway_nginx_http_port` / `aap_deploy_gateway_nginx_https_port`
 - `aap_deploy_envoy_http_port` / `aap_deploy_envoy_https_port`
 - `aap_deploy_postgresql_admin_username` (default: `postgres`)

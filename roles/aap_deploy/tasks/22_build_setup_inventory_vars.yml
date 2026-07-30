@@ -47,6 +47,7 @@
             'automationmetrics_resource_server': "'" ~ aap_deploy_automationmetrics_resource_server ~ "'",
             'pg_admin_password': "'" ~ aap_deploy_postgresql_admin_password_effective ~ "'",
             'redis_mode': "'" ~ aap_deploy_redis_mode ~ "'",
+            'gateway_main_url': "'" ~ aap_deploy_gateway_main_url ~ "'",
             'gateway_nginx_http_port': (aap_deploy_gateway_nginx_http_port | int),
             'gateway_nginx_https_port': (aap_deploy_gateway_nginx_https_port | int),
             'gateway_nginx_disable_https': (aap_deploy_gateway_nginx_disable_https | bool),
@@ -57,14 +58,6 @@
             'hub_seed_collections': (aap_deploy_hub_seed_collections | bool),
             'bundle_dir': aap_deploy_bundle_dir_effective
           }
-          | combine(
-              (
-                {'gateway_main_url': "'" ~ aap_deploy_gateway_main_url ~ "'"}
-                if (aap_deploy_gateway_main_url | trim | length > 0)
-                else {}
-              ),
-              recursive=true
-            )
           | combine(
               aap_deploy_tls_inventory_vars | default({}, true),
               recursive=true

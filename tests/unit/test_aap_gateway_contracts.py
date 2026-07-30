@@ -55,10 +55,15 @@ class AapGatewayContractsTests(unittest.TestCase):
         self.assertNotIn("settings.yaml.j2", inventory_vars)
 
     def test_local_execution_uses_public_envoy_url(self) -> None:
+        defaults = (ROOT / "roles/aap_deploy/defaults/main.yml").read_text(encoding="utf-8")
         template = (
             ROOT / "roles/aap_local_execution/templates/aap-local/inventories/group_vars/aaps/aap.yml.j2"
         ).read_text(encoding="utf-8")
 
+        self.assertIn(
+            'aap_deploy_gateway_main_url: "https://{{ aap_fqdn }}"',
+            defaults,
+        )
         self.assertIn(
             'aap_deploy_gateway_main_url: "https://{{ aap_fqdn }}"',
             template,

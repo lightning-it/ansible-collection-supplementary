@@ -1,22 +1,14 @@
 {
-  "base_sha": "506f059df026cf5fa426d6ded706786479d9ad68",
-  "current_version": "2.1.0",
+  "base_sha": "9fb938e4aadbd1008e82bff6a05896ed74934bcf",
+  "current_version": "3.0.0",
   "fragments": [
     {
-      "path": "release-backsync-least-privilege.yml",
-      "sha256": "5fa73473ca6d6d145d847bcf8aecd20069a3ab869fa9efc3ce10a5bfc3e6242a"
-    },
-    {
-      "path": "shared-assets-sync-30440111944.yml",
-      "sha256": "b637a090dd4cd427b7154c68ccb11efd1e13b7fc1974bd0bb36b7886a978a440"
-    },
-    {
-      "path": "trusted-release-preparation-review.yml",
-      "sha256": "bd3e36be56ce8595e5b546948dfb85f4a9d223531570db08c238f0da214ccc80"
+      "path": "aap-deploy-public-gateway-default.yml",
+      "sha256": "573058a71a39ec004882df9181a3f331340f43e32b750b272eba94c9817764a8"
     }
   ],
   "impact": "patch",
-  "next_version": "2.1.1",
+  "next_version": "3.0.1",
   "preparer": {
     "account_id": "307565056",
     "email": "307565056+lightning-it-release-automation[bot]@users.noreply.github.com",
@@ -27,12 +19,12 @@
   "schema_version": 1,
   "workflow": {
     "actor": "litroc",
-    "event": "push",
+    "event": "workflow_dispatch",
     "git_ref": "refs/heads/main",
     "path": ".github/workflows/release-prepare.yml",
     "ref": "lightning-it/ansible-collection-supplementary/.github/workflows/release-prepare.yml@refs/heads/main",
     "run_attempt": "1",
-    "run_id": "30447681926",
-    "source_sha": "506f059df026cf5fa426d6ded706786479d9ad68"
+    "run_id": "30517387525",
+    "source_sha": "9fb938e4aadbd1008e82bff6a05896ed74934bcf"
   }
 }
