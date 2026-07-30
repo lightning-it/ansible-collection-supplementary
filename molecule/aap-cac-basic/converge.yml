@@ -28,6 +28,8 @@
           - aap_cac_gateway_username == 'admin'
           - aap_cac_gateway_password == 'gateway-active-password'
           - aap_gateway_admin_password_effective == 'gateway-active-password'
+          - (aap_cac_controller_organizations | type_debug) == 'list'
+          - aap_cac_controller_organizations | length == 0
         quiet: true
 
     - name: Persist lit.supplementary.aap_cac Molecule coverage mode

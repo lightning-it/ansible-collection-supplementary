@@ -21,3 +21,28 @@
     quiet: true
   no_log: true
   tags: always
+
+- name: Validate AAP CaC organization collection input
+  ansible.builtin.assert:
+    that:
+      - (aap_cac_controller_organizations | type_debug) == 'list'
+    fail_msg: >-
+      aap_cac_controller_organizations must be a YAML list of organization
+      mappings, or an empty list when no organizations are managed.
+    quiet: true
+  tags: always
+
+- name: Validate AAP CaC organization entries
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.name is defined
+      - item.name | default('', true) | string | trim | length > 0
+    fail_msg: >-
+      Each aap_cac_controller_organizations entry must be a mapping with a
+      non-empty name.
+    quiet: true
+  loop: "{{ aap_cac_controller_organizations }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed organization') }}"
+  tags: always

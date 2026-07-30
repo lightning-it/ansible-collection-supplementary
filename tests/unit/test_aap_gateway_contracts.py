@@ -109,9 +109,7 @@ class AapGatewayContractsTests(unittest.TestCase):
         self.assertIn("aap_username | default('admin', true)", defaults)
         self.assertIn("aap_gateway_admin_password_effective", defaults)
         self.assertIn(
-            "aap_password\n"
-            "    | default(\n"
-            "        aap_gateway_admin_password_effective | default('', true),",
+            "aap_password\n    | default(\n        aap_gateway_admin_password_effective | default('', true),",
             defaults,
         )
         self.assertNotIn('aap_cac_gateway_password: "{{ aap_password }}"', defaults)
@@ -120,6 +118,20 @@ class AapGatewayContractsTests(unittest.TestCase):
         self.assertLess(
             assertions.index("Resolve shared AAP admin passwords for CaC authentication"),
             assertions.index("Validate AAP CaC authentication inputs"),
+        )
+
+    def test_cac_organization_default_is_loop_safe(self) -> None:
+        defaults = (ROOT / "roles/aap_cac/defaults/main.yml").read_text(encoding="utf-8")
+        assertions = (ROOT / "roles/aap_cac/tasks/assert.yml").read_text(encoding="utf-8")
+
+        self.assertIn("aap_cac_controller_organizations: []", defaults)
+        self.assertIn(
+            "Validate AAP CaC organization collection input",
+            assertions,
+        )
+        self.assertIn(
+            "(aap_cac_controller_organizations | type_debug) == 'list'",
+            assertions,
         )
 
 
