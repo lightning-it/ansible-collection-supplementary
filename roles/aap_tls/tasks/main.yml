@@ -163,17 +163,33 @@
     - aap_tls_selfsigned_enabled | bool
     - not ansible_check_mode
 
-- name: Install temporary AAP CA in system trust store
-  ansible.builtin.copy:
+- name: Read temporary AAP CA from generation host
+  ansible.builtin.slurp:
     src: "{{ aap_tls_selfsigned_ca_cert_path }}"
+  register: aap_tls_selfsigned_ca_content
+  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
+  changed_when: false
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - aap_tls_selfsigned_install_ca_trust | bool
+    - not ansible_check_mode
+
+- name: Install temporary AAP CA in target system trust store
+  ansible.builtin.copy:
+    content: "{{ aap_tls_selfsigned_ca_content.content | b64decode }}"
     dest: "{{ aap_tls_selfsigned_ca_trust_path }}"
-    remote_src: true
     owner: root
     group: root
     mode: "0644"
   become: true
-  delegate_to: "{{ aap_tls_selfsigned_delegate_to }}"
   notify: Refresh system CA trust after installing temporary AAP CA
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - aap_tls_selfsigned_install_ca_trust | bool
+    - not ansible_check_mode
+
+- name: Apply updated target system CA trust
+  ansible.builtin.meta: flush_handlers
   when:
     - aap_tls_selfsigned_enabled | bool
     - aap_tls_selfsigned_install_ca_trust | bool
@@ -183,7 +199,9 @@
   ansible.builtin.debug:
     msg: >-
       Check mode: temporary AAP CA, private keys, CSR, and service certificate
-      would be generated in {{ aap_tls_selfsigned_output_dir }}.
+      would be generated in {{ aap_tls_selfsigned_output_dir }}, and the CA
+      would be installed at {{ aap_tls_selfsigned_ca_trust_path }} on the
+      managed AAP host when target trust installation is enabled.
   changed_when: true
   when:
     - aap_tls_selfsigned_enabled | bool
