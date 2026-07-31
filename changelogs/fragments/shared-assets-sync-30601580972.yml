@@ -1,3 +1,3 @@
 ---
-trivial:
-  - Synchronize centrally managed repository standards.
+bugfixes:
+  - Keep centrally managed repository standards and their validated source-dependency inventory synchronized.
