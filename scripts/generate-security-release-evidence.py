@@ -106,7 +106,11 @@ def main():
         "validity": {"notBefore": a.not_before, "expiresAt": a.expires_at, "revoked": False},
         "status": "approved",
     }
-    a.output.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    try:
+        a.output.parent.mkdir(parents=True, exist_ok=True)
+        a.output.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    except OSError as exc:
+        p.error(f"unable to write evidence output: {exc}")
 
 
 if __name__ == "__main__":
