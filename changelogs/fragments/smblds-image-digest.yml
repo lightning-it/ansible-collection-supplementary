@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Update the pinned ``smblds/smblds`` container image digest used by the
+    Samba deployment role and the authoritative source-dependency inventory.
