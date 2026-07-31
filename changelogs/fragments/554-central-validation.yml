@@ -2,4 +2,5 @@
 minor_changes:
   - >-
     Move protected Heavy and Application Acceptance validation to the central ModuLix validation controller and
-    require SHA-bound evidence for main promotion.
+    require SHA-bound evidence for main promotion, using the short-lived workflow token for public controller
+    artifacts when no dedicated read token is configured.

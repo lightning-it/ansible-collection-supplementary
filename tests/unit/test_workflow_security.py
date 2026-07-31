@@ -259,6 +259,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         evidence_step = jobs["evidence"]["steps"][0]
         token_guard = evidence_step["env"]["GH_TOKEN"]
         self.assertIn("secrets.MODULIX_VALIDATION_READ_TOKEN", token_guard)
+        self.assertIn("secrets.MODULIX_VALIDATION_READ_TOKEN || github.token", token_guard)
         self.assertIn("pull_request.base.ref == 'main'", token_guard)
         self.assertIn('test -n "$GH_TOKEN"', evidence_step["run"])
         self.assertIn("per_page=100", evidence_step["run"])
