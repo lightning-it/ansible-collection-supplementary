@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Generate deterministic producer evidence for the MLX-90 contract.
 
 Signing/attestation and consumer dispatch happen only after this payload and all
@@ -60,6 +59,9 @@ def main():
     p.add_argument("--expires-at", required=True)
     p.add_argument("--output", type=Path, required=True)
     a = p.parse_args()
+    for path in (a.artifact, a.signature, a.sbom, a.provenance):
+        if path.is_symlink() or not path.is_file():
+            p.error(f"release asset must be a regular non-symlink file: {path}")
     if not SHA.fullmatch(a.source_sha) or not SHA.fullmatch(a.workflow_ref):
         p.error("source/workflow refs must be full SHAs")
     for field in (a.artifact_url, a.signature_url, a.sbom_url, a.provenance_url):
