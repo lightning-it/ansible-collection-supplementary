@@ -155,6 +155,8 @@ families:
             result["profiles"],
         )
         self.assertFalse(result["runtime_evidence_required"])
+        self.assertFalse(result["unknown_impact"])
+        self.assertTrue(result["profiles"]["tiny"])
 
     def test_dependency_location_move_keeps_the_old_protected_impact(self) -> None:
         base_inventory = self._base_inventory(

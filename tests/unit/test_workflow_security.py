@@ -259,6 +259,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         evidence_step = jobs["evidence"]["steps"][0]
         self.assertEqual("${{ secrets.MODULIX_VALIDATION_READ_TOKEN }}", evidence_step["env"]["GH_TOKEN"])
         self.assertIn('test -n "$GH_TOKEN"', evidence_step["run"])
+        self.assertIn("per_page=100", evidence_step["run"])
 
     def test_self_hosted_pr_cells_require_exact_head_and_protected_environment(self) -> None:
         jobs = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]

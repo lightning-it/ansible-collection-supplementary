@@ -1017,7 +1017,7 @@ jobs:
             test -n "$GH_TOKEN"
             artifact_name="supplementary-validation-evidence-$SOURCE_SHA"
             artifact_id="$(gh api \
-              "repos/lightning-it/modulix-validation/actions/artifacts?name=$artifact_name&per_page=1" \
+              "repos/lightning-it/modulix-validation/actions/artifacts?name=$artifact_name&per_page=100" \
               --jq '.artifacts | map(select(.expired | not)) | first.id // empty')"
             test -n "$artifact_id"
             gh api "repos/lightning-it/modulix-validation/actions/artifacts/$artifact_id/zip" > evidence.zip

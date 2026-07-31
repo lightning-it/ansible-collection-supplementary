@@ -89,9 +89,7 @@ def _registry(path: str) -> tuple[dict[str, FamilyPolicy], list[str]]:
         if not isinstance(profiles, list) or not profiles or set(profiles) - PROFILES:
             raise ValueError(f"quality impact family {name!r} has unsupported profiles")
         if "application_acceptance" in profiles and "heavy" not in profiles:
-            raise ValueError(
-                f"quality impact family {name!r} requires heavy when it declares application_acceptance"
-            )
+            raise ValueError(f"quality impact family {name!r} requires heavy when it declares application_acceptance")
         if not isinstance(prefixes, list) or not prefixes or not all(isinstance(item, str) for item in prefixes):
             raise ValueError(f"quality impact family {name!r} requires path prefixes")
         normalized[name] = {"profiles": profiles, "path_prefixes": prefixes}
@@ -157,13 +155,13 @@ def _base_inventory(args: argparse.Namespace) -> str:
 
 def _dependency_impact(
     args: argparse.Namespace, families: dict[str, FamilyPolicy]
-) -> tuple[set[str], list[str], list[str], bool]:
+) -> tuple[set[str], list[str], list[str], bool, bool]:
     """Classify changed dependency entries by their declared source locations."""
     try:
         before = _inventory_entries(_base_inventory(args))
         after = _inventory_entries(Path(DEPENDENCY_INVENTORY).read_text(encoding="utf-8"))
     except (OSError, subprocess.CalledProcessError, ValueError, yaml.YAMLError):
-        return set(), [], [], True
+        return set(), [], [], True, True
     profiles: set[str] = set()
     affected: list[str] = []
     keys: list[str] = []
@@ -191,7 +189,7 @@ def _dependency_impact(
             # source impact. Validate it in the unprivileged Fast Lane only.
             requires_fast_lane = True
         profiles.update(entry_profiles)
-    return profiles, sorted(set(affected)), keys, requires_fast_lane
+    return profiles, sorted(set(affected)), keys, False, requires_fast_lane
 
 
 def select(args: argparse.Namespace) -> dict[str, object]:
@@ -199,8 +197,7 @@ def select(args: argparse.Namespace) -> dict[str, object]:
     full_matrix = (
         args.event_name == "workflow_dispatch"
         or (
-            args.event_name == "push"
-            and (args.head_ref == "refs/heads/main" or args.head_ref.startswith("refs/tags/"))
+            args.event_name == "push" and (args.head_ref == "refs/heads/main" or args.head_ref.startswith("refs/tags/"))
         )
         or (
             args.event_name == "pull_request"
@@ -215,24 +212,24 @@ def select(args: argparse.Namespace) -> dict[str, object]:
 
     direct_files = [path for path in changed_files if path != DEPENDENCY_INVENTORY]
     affected_by_family = {
-        name: [
-            path
-            for path in direct_files
-            if any(_matches(path, prefix) for prefix in policy["path_prefixes"])
-        ]
+        name: [path for path in direct_files if any(_matches(path, prefix) for prefix in policy["path_prefixes"])]
         for name, policy in families.items()
     }
     selected_profiles = {
-        profile
-        for name, paths in affected_by_family.items()
-        if paths
-        for profile in families[name]["profiles"]
+        profile for name, paths in affected_by_family.items() if paths for profile in families[name]["profiles"]
     }
     dependency_files: list[str] = []
     dependency_keys: list[str] = []
     dependency_unknown = False
+    dependency_requires_fast_lane = False
     if DEPENDENCY_INVENTORY in changed_files and not full_matrix and not indeterminate_push:
-        dependency_profiles, dependency_files, dependency_keys, dependency_unknown = _dependency_impact(args, families)
+        (
+            dependency_profiles,
+            dependency_files,
+            dependency_keys,
+            dependency_unknown,
+            dependency_requires_fast_lane,
+        ) = _dependency_impact(args, families)
         selected_profiles.update(dependency_profiles)
 
     unknown_files = [
@@ -244,7 +241,7 @@ def select(args: argparse.Namespace) -> dict[str, object]:
     unknown_impact = bool(unknown_files) or dependency_unknown
     if full_matrix or indeterminate_push:
         selected_profiles = set(PROFILES)
-    elif unknown_impact:
+    elif unknown_impact or dependency_requires_fast_lane:
         # Unknown source remains safe on an unprivileged runner; it must not
         # create a privileged Heavy or application-acceptance PR execution.
         selected_profiles.add("tiny")
