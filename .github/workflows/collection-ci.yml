@@ -422,6 +422,34 @@ jobs:
             test "$PROFILE_RESULT" = skipped
           fi
 
+  fast:
+    # Stable Fast-Lane context for the future branch-specific protection model.
+    # It deliberately excludes privileged Heavy/Application and release evidence.
+    name: Collection / Fast
+    if: always()
+    needs: [lint-sanity, build-install, role-coverage, quality-matrix, tiny]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every Fast-Lane prerequisite
+        env:
+          LINT_RESULT: ${{ needs.lint-sanity.result }}
+          BUILD_RESULT: ${{ needs.build-install.result }}
+          COVERAGE_RESULT: ${{ needs.role-coverage.result }}
+          MATRIX_RESULT: ${{ needs.quality-matrix.result }}
+          TINY_RESULT: ${{ needs.tiny.result }}
+          TINY_REQUIRED: ${{ needs.quality-matrix.outputs.tiny_required }}
+        run: |
+          set -euo pipefail
+          test "$LINT_RESULT" = success
+          test "$BUILD_RESULT" = success
+          test "$COVERAGE_RESULT" = success
+          test "$MATRIX_RESULT" = success
+          if [ "$TINY_REQUIRED" = true ]; then
+            test "$TINY_RESULT" = success
+          else
+            test "$TINY_RESULT" = skipped
+          fi
+
   heavy-cells:
     name: Heavy matrix (delegated to modulix-validation)
     if: >-

@@ -83,3 +83,10 @@ future Heavy-only selection is therefore fail-closed: it cannot be represented
 as passing release evidence or claim release eligibility until #134 delivers
 the central evidence contract. This Stage-1 selector must not be read as a
 release-evidence migration.
+
+`Collection / Fast` is the stable Stage-1 aggregate context. It deterministically
+requires only Lint/Sanity, Build/Install, Role Coverage, quality-matrix
+generation, and Tiny when the selector requires it. It has no dependency on
+Heavy, Application Acceptance, runtime evidence, or release evidence. Existing
+branch-protection contexts remain unchanged until the central migration can
+replace them deliberately.

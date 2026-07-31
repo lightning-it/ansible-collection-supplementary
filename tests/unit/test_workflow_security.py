@@ -360,12 +360,27 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("ACCEPTANCE_REQUIRED", runtime_prerequisites["env"])
         self.assertIn('if [ "$HEAVY_REQUIRED" = true ]', runtime_prerequisites["run"])
         self.assertIn('if [ "$ACCEPTANCE_REQUIRED" = true ]', runtime_prerequisites["run"])
+        fast = jobs["fast"]
+        self.assertEqual("Collection / Fast", fast["name"])
+        self.assertEqual(
+            ["lint-sanity", "build-install", "role-coverage", "quality-matrix", "tiny"],
+            fast["needs"],
+        )
+        self.assertNotIn("heavy", fast["needs"])
+        self.assertNotIn("acceptance", fast["needs"])
+        self.assertNotIn("runtime-evidence", fast["needs"])
+        fast_gate = fast["steps"][0]["run"]
+        self.assertIn('test "$LINT_RESULT" = success', fast_gate)
+        self.assertIn('test "$BUILD_RESULT" = success', fast_gate)
+        self.assertIn('test "$COVERAGE_RESULT" = success', fast_gate)
+        self.assertIn('if [ "$TINY_REQUIRED" = true ]', fast_gate)
         stable_names = {
             jobs[name]["name"]
             for name in (
                 "lint-sanity",
                 "build-install",
                 "tiny",
+                "fast",
                 "heavy",
                 "acceptance",
                 "role-coverage",
@@ -378,6 +393,7 @@ class WorkflowSecurityTests(unittest.TestCase):
                 "Collection / Lint and Sanity",
                 "Collection / Build and Install",
                 "Collection / Tiny",
+                "Collection / Fast",
                 "Collection / Heavy",
                 "Collection / Application Acceptance",
                 "Collection / Role Coverage",
