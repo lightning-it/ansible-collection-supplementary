@@ -517,6 +517,35 @@ class QualityEvidenceTests(unittest.TestCase):
         manifest = json.loads((self.evidence_root / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["prerequisites"], self._prerequisites())
 
+    def test_stage_one_heavy_only_prerequisites_cannot_claim_release_evidence(self) -> None:
+        sha = "b" * 40
+        self._registry()
+        self._junit(commit=sha)
+        self._release_security(sha)
+        self._release_dependencies(source_commit=sha)
+        prerequisites = self._prerequisites()
+        prerequisites["tiny"] = "skipped"
+        prerequisites["acceptance"] = "skipped"
+        environment = {
+            **self._environment(sha),
+            "QUALITY_EVIDENCE_PREREQUISITES_JSON": json.dumps(prerequisites),
+        }
+        with patch.dict(os.environ, environment, clear=False):
+            self.assertEqual(
+                evidence.assemble(
+                    self.evidence_root,
+                    input_roots=[self.artifacts],
+                    registry_path=self.repository / "meta" / "role-coverage.yml",
+                    repository_root=self.repository,
+                    release_mode=True,
+                ),
+                1,
+            )
+        manifest = json.loads((self.evidence_root / "manifest.json").read_text(encoding="utf-8"))
+        self.assertFalse(manifest["release_eligible"])
+        self.assertTrue(any("prerequisite tiny concluded skipped" in item for item in manifest["blockers"]))
+        self.assertTrue(any("prerequisite acceptance concluded skipped" in item for item in manifest["blockers"]))
+
     def test_release_fails_closed_without_dependency_evidence(self) -> None:
         sha = "b" * 40
         self._registry()
