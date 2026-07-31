@@ -68,25 +68,16 @@ Keycloak Heavy or Application Acceptance. An unreadable or unclassifiable
 inventory fails closed only to the unprivileged Tiny Fast Lane; it never starts
 a privileged PR validation.
 
-### Stage-1 boundary
+### Central execution boundary
 
-This change separates impact selection; it does **not** yet move execution.
-For a real Keycloak impact, Heavy and Application Acceptance therefore remain
-synchronous in this workflow until the protected Trust/Nightly adapter from
-[#134](https://github.com/lightning-it/modulix-validation/issues/134) is
-operational. A registry family may not declare Application Acceptance without
-Heavy, so Acceptance cannot start without a successful Heavy aggregate.
+Supplementary runs only the Fast Lane. `modulix-validation` resolves the exact
+protected `develop` SHA nightly, builds that candidate, and runs Heavy before
+Application Acceptance in its protected environment. It publishes a compact
+evidence artifact bound to that SHA.
 
-The current `quality_evidence.py` release contract intentionally still requires
-every legacy prerequisite to be `success` and the full expected matrix. A
-future Heavy-only selection is therefore fail-closed: it cannot be represented
-as passing release evidence or claim release eligibility until #134 delivers
-the central evidence contract. This Stage-1 selector must not be read as a
-release-evidence migration.
-
-`Collection / Fast` is the stable Stage-1 aggregate context. It deterministically
-requires only Lint/Sanity, Build/Install, Role Coverage, quality-matrix
-generation, and Tiny when the selector requires it. It has no dependency on
-Heavy, Application Acceptance, runtime evidence, or release evidence. Existing
-branch-protection contexts remain unchanged until the central migration can
-replace them deliberately.
+`Collection / Fast` is the only required context on `develop`. A PR to `main`
+also requires `Collection / Release Evidence`: the collection workflow obtains
+the central artifact and accepts it only when its repository, SHA, schema, and
+`release_eligible` value match exactly. Missing, expired, malformed, or
+mismatched evidence fails closed. This keeps infrastructure validation out of
+PR/release execution while preventing promotion without a completed central run.

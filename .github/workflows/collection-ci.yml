@@ -10,13 +10,12 @@ on:
   workflow_dispatch:
     inputs:
       execution_mode:
-        description: Select manual main validation or the scheduled develop run.
+        description: Select the manual protected-main validation mode.
         required: true
         default: manual-main
         type: choice
         options:
           - manual-main
-          - nightly-develop
 
 permissions:
   contents: read
@@ -452,19 +451,10 @@ jobs:
 
   heavy-cells:
     name: Heavy matrix (delegated to modulix-validation)
-    if: >-
-      needs.quality-matrix.outputs.heavy_required == 'true' &&
-      ((github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository &&
-       (github.event.pull_request.base.ref == 'develop' ||
-        (github.event.pull_request.base.ref == 'main' &&
-         (github.event.pull_request.head.ref == 'develop' ||
-          startsWith(github.event.pull_request.head.ref, 'release/v'))))) ||
-      (github.event_name == 'push' &&
-       (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) ||
-      (github.event_name == 'workflow_dispatch' &&
-       ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
-        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
+    # MLX-70: protected infrastructure validation is scheduled and owned by
+    # modulix-validation.  This collection must never start it from a PR,
+    # push, or local manual dispatch.
+    if: false
     needs: [build-install, quality-matrix]
     uses: lightning-it/modulix-validation/.github/workflows/collection-quality-profile.yml@154c99eb0d907b01edc10e9b39c94ef4912fd9dd
     with:
@@ -480,7 +470,7 @@ jobs:
 
   heavy:
     name: Collection / Heavy
-    if: always()
+    if: false
     needs: [quality-matrix, heavy-cells]
     runs-on: ubuntu-latest
     steps:
@@ -500,19 +490,8 @@ jobs:
 
   acceptance-cells:
     name: Application Acceptance matrix (delegated to modulix-validation)
-    if: >-
-      needs.quality-matrix.outputs.acceptance_required == 'true' &&
-      ((github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository &&
-       (github.event.pull_request.base.ref == 'develop' ||
-        (github.event.pull_request.base.ref == 'main' &&
-         (github.event.pull_request.head.ref == 'develop' ||
-          startsWith(github.event.pull_request.head.ref, 'release/v'))))) ||
-      (github.event_name == 'push' &&
-       (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) ||
-      (github.event_name == 'workflow_dispatch' &&
-       ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
-        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
+    # See heavy-cells: Application Acceptance has the same central ownership.
+    if: false
     # The reusable validation workflow has a repository-wide Incus concurrency
     # group. Run acceptance only after the Heavy aggregate completes so the two
     # delegated profiles from this workflow cannot cancel each other.
@@ -531,7 +510,7 @@ jobs:
 
   acceptance:
     name: Collection / Application Acceptance
-    if: always()
+    if: false
     needs: [quality-matrix, acceptance-cells]
     runs-on: ubuntu-latest
     steps:
@@ -558,20 +537,8 @@ jobs:
       TINY_REQUIRED: ${{ needs.quality-matrix.outputs.tiny_required }}
       HEAVY_REQUIRED: ${{ needs.quality-matrix.outputs.heavy_required }}
       ACCEPTANCE_REQUIRED: ${{ needs.quality-matrix.outputs.acceptance_required }}
-    if: >-
-      always() &&
-      needs.quality-matrix.outputs.runtime_evidence_required == 'true' &&
-      ((github.event_name == 'pull_request' &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        (github.event.pull_request.base.ref == 'develop' ||
-         (github.event.pull_request.base.ref == 'main' &&
-          (github.event.pull_request.head.ref == 'develop' ||
-           startsWith(github.event.pull_request.head.ref, 'release/v'))))) ||
-      (github.event_name == 'push' &&
-       (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) ||
-      (github.event_name == 'workflow_dispatch' &&
-       ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
-        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
+    # The central controller publishes the trusted runtime evidence.
+    if: false
     needs: [lint-sanity, build-install, role-coverage, quality-matrix, tiny, heavy, acceptance]
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -1004,28 +971,27 @@ jobs:
           test "$UPLOAD_OUTCOME" = success
 
   evidence:
-    name: Collection / Evidence
+    name: Collection / Release Evidence
     if: always()
     needs:
-      [lint-sanity, build-install, role-coverage, quality-matrix, tiny, heavy, acceptance, runtime-evidence]
+      [lint-sanity, build-install, role-coverage, quality-matrix, tiny]
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
     steps:
       - name: Enforce exact-SHA evidence for every authorized runtime
         env:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_REF: ${{ github.ref }}
+          PR_BASE: ${{ github.event.pull_request.base.ref || '' }}
+          SOURCE_SHA: ${{ env.SOURCE_SHA }}
           LINT_RESULT: ${{ needs.lint-sanity.result }}
           BUILD_RESULT: ${{ needs.build-install.result }}
           COVERAGE_RESULT: ${{ needs.role-coverage.result }}
           TINY_RESULT: ${{ needs.tiny.result }}
-          HEAVY_RESULT: ${{ needs.heavy.result }}
-          ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
-          RUNTIME_EVIDENCE_RESULT: ${{ needs.runtime-evidence.result }}
           TINY_REQUIRED: ${{ needs.quality-matrix.outputs.tiny_required }}
-          HEAVY_REQUIRED: ${{ needs.quality-matrix.outputs.heavy_required }}
-          ACCEPTANCE_REQUIRED: ${{ needs.quality-matrix.outputs.acceptance_required }}
-          RUNTIME_EVIDENCE_REQUIRED: ${{ needs.quality-matrix.outputs.runtime_evidence_required }}
         run: |
           set -euo pipefail
           test "$LINT_RESULT" = success
@@ -1036,32 +1002,49 @@ jobs:
           else
             test "$TINY_RESULT" = skipped
           fi
-          if [ "$HEAVY_REQUIRED" = true ]; then
-            test "$HEAVY_RESULT" = success
-          else
-            test "$HEAVY_RESULT" = skipped
-          fi
-          if [ "$ACCEPTANCE_REQUIRED" = true ]; then
-            test "$ACCEPTANCE_RESULT" = success
-          else
-            test "$ACCEPTANCE_RESULT" = skipped
-          fi
           if [ "$EVENT_NAME" = workflow_dispatch ]; then
             case "$EVENT_REF" in
-              refs/heads/main|refs/heads/develop) ;;
+              refs/heads/main) ;;
               *) exit 1 ;;
             esac
           fi
-          if [ "$RUNTIME_EVIDENCE_REQUIRED" = true ]; then
-            test "$RUNTIME_EVIDENCE_RESULT" = success
-          else
-            test "$RUNTIME_EVIDENCE_RESULT" = skipped
+          requires_central=false
+          if [ "$EVENT_REF" = refs/heads/main ] || [ "$PR_BASE" = main ]; then
+            requires_central=true
           fi
+          if [ "$requires_central" = true ]; then
+            artifact_name="supplementary-validation-evidence-$SOURCE_SHA"
+            artifact_id="$(gh api \
+              "repos/lightning-it/modulix-validation/actions/artifacts?name=$artifact_name&per_page=1" \
+              --jq '.artifacts | map(select(.expired | not)) | first.id // empty')"
+            test -n "$artifact_id"
+            gh api "repos/lightning-it/modulix-validation/actions/artifacts/$artifact_id/zip" > evidence.zip
+            unzip -q evidence.zip -d central-evidence
+            SOURCE_SHA="$SOURCE_SHA" python - <<'PY'
+            import json
+            import os
+            from pathlib import Path
+
+            entries = list(Path("central-evidence").rglob("validation-evidence.json"))
+            if len(entries) != 1:
+                raise SystemExit("expected exactly one central validation evidence document")
+            value = json.loads(entries[0].read_text(encoding="utf-8"))
+            expected = {
+                "schema_version": 1,
+                "repository": "lightning-it/ansible-collection-supplementary",
+                "source_sha": os.environ["SOURCE_SHA"],
+                "release_eligible": True,
+            }
+            if value != expected:
+                raise SystemExit("central validation evidence does not exactly bind this candidate SHA")
+            PY
 
   release-security:
     name: Collection / Release Security
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [lint-sanity, build-install, role-coverage, tiny, heavy, acceptance, evidence]
+    # Publication remains blocked until the central evidence adapter replaces
+    # this source-repository release job.
+    if: false
+    needs: [lint-sanity, build-install, role-coverage, tiny, evidence]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: ansible-collection-release-evidence
@@ -1669,7 +1652,7 @@ jobs:
           test "$UPLOAD_OUTCOME" = success
   release-validation:
     name: Collection / Release Validation
-    if: always()
+    if: false
     needs:
       [lint-sanity, build-install, role-coverage, quality-matrix, tiny, heavy, acceptance, evidence, release-security]
     runs-on: ubuntu-latest
@@ -1866,7 +1849,7 @@ jobs:
 
   legacy-lint:
     name: Lint (ansible-lint via ee-wunder-devtools-ubi9)
-    if: always()
+    if: false
     needs: lint-sanity
     runs-on: ubuntu-latest
     steps:
@@ -1876,7 +1859,7 @@ jobs:
 
   legacy-build:
     name: Build & install collection (via devtools smoke test)
-    if: always()
+    if: false
     needs: build-install
     runs-on: ubuntu-latest
     steps:
@@ -1886,7 +1869,7 @@ jobs:
 
   legacy-molecule:
     name: Molecule (via devtools)
-    if: always()
+    if: false
     needs: [tiny, heavy, acceptance]
     runs-on: ubuntu-latest
     steps:
@@ -1901,7 +1884,7 @@ jobs:
 
   keycloak-legacy-lint-sanity:
     name: Keycloak / Lint and Sanity
-    if: always()
+    if: false
     needs: lint-sanity
     runs-on: ubuntu-latest
     steps:
@@ -1911,7 +1894,7 @@ jobs:
 
   keycloak-legacy-tiny:
     name: Keycloak / Tiny
-    if: always()
+    if: false
     needs: tiny
     runs-on: ubuntu-latest
     steps:
@@ -1921,7 +1904,7 @@ jobs:
 
   keycloak-legacy-heavy:
     name: Keycloak / Heavy
-    if: always()
+    if: false
     needs: heavy
     runs-on: ubuntu-latest
     steps:
@@ -1931,7 +1914,7 @@ jobs:
 
   keycloak-legacy-acceptance:
     name: Keycloak / Application Acceptance
-    if: always()
+    if: false
     needs: acceptance
     runs-on: ubuntu-latest
     steps:
@@ -1941,7 +1924,7 @@ jobs:
 
   keycloak-legacy-evidence:
     name: Keycloak / Evidence
-    if: always()
+    if: false
     needs: evidence
     runs-on: ubuntu-latest
     steps:
@@ -1951,7 +1934,7 @@ jobs:
 
   keycloak-legacy-release-validation:
     name: Keycloak / Release Validation
-    if: always()
+    if: false
     needs: release-validation
     runs-on: ubuntu-latest
     steps:
