@@ -1,6 +1,11 @@
+"""Tests for deterministic MLX-90 producer evidence."""
+
+from __future__ import annotations
+
 import hashlib
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,16 +15,16 @@ SCRIPT = ROOT / "scripts/generate-security-release-evidence.py"
 
 
 class ProducerEvidenceTests(unittest.TestCase):
-    def test_evidence_binds_every_release_asset(self):
+    def test_evidence_binds_every_release_asset(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             files = {}
             for name in ("artifact", "signature", "sbom", "provenance"):
                 files[name] = root / name
-                files[name].write_text(name)
+                files[name].write_text(name, encoding="utf-8")
             output = root / "evidence.json"
             cmd = [
-                "python3",
+                sys.executable,
                 str(SCRIPT),
                 "--id",
                 "LIT-SEC-TEST",
@@ -48,8 +53,8 @@ class ProducerEvidenceTests(unittest.TestCase):
             ]
             for name, path in files.items():
                 cmd += [f"--{name}", str(path), f"--{name}-url", f"https://example.invalid/{name}"]
-            subprocess.run(cmd, check=True)  # noqa: S603
-            value = json.loads(output.read_text())
+            subprocess.run(cmd, check=True, timeout=30)  # noqa: S603
+            value = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(value["artifact"]["digest"], "sha256:" + hashlib.sha256(b"artifact").hexdigest())
             for name in ("signature", "sbom", "provenance"):
                 expected_digest = "sha256:" + hashlib.sha256(name.encode()).hexdigest()
