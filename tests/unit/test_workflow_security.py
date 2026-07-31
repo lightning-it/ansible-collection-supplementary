@@ -255,6 +255,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         release_security = jobs["release-security"]
         self.assertEqual("${{ github.event_name == 'workflow_call' }}", release_security["if"])
         self.assertEqual("Collection / Release Evidence", jobs["evidence"]["name"])
+        self.assertEqual("ansible-collection-runtime-tests", jobs["evidence"]["environment"])
         self.assertIn("supplementary-validation-evidence-", jobs["evidence"]["steps"][0]["run"])
         evidence_step = jobs["evidence"]["steps"][0]
         token_guard = evidence_step["env"]["GH_TOKEN"]
