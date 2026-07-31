@@ -112,7 +112,7 @@ collections:
     requirement: ">=2.1.0"
     source: "galaxy.yml"
   - name: "community.aws"
-    requirement: "10.0.0"
+    requirement: "10.1.1"
     source: "galaxy.yml"
   - name: "community.crypto"
     requirement: ">=3.2.2,<4.0.0"
