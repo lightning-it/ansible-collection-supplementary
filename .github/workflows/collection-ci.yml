@@ -673,10 +673,19 @@ jobs:
         uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7
         with:
           sbom: artifacts/evidence/security/sbom.cdx.json
+          vex: security/vex/chrome-linux-151.0.7922.71.openvex.json
           output-format: json
           output-file: artifacts/evidence/security/vulnerability-report.json
           fail-build: true
           severity-cutoff: high
+      - name: Preserve the applied vulnerability-exploitability statement
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/evidence/security
+          cp \
+            security/vex/chrome-linux-151.0.7922.71.openvex.json \
+            artifacts/evidence/security/chrome-linux.openvex.json
       - name: Scan the exact collection candidate for secret-like content
         if: always()
         run: |
