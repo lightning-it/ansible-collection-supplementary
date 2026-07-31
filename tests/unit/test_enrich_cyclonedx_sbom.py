@@ -493,6 +493,10 @@ class EnrichCycloneDxSbomTests(unittest.TestCase):
                 "cpe:2.3:a:google:chrome:140.0.7339.16:*:*:*:*:*:*:*",
                 chromium["cpe"],
             )
+            self.assertEqual(
+                "pkg:generic/google-chrome@140.0.7339.16",
+                chromium["purl"],
+            )
             properties = {item["name"]: item["value"] for item in chromium["properties"]}
             self.assertEqual("chrome", properties["lit:dependency:browser-channel"])
             self.assertTrue(

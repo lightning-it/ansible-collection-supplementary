@@ -56,7 +56,7 @@ container_images:
     locations:
       - "roles/rsyslog_deploy/defaults/main.yml"
       - "roles/rsyslog_upgrade/defaults/main.yml"
-  - reference: "docker.io/renovate/renovate:43.280.5@sha256:90153a8b9c00bf7a917a985cda9061a701a6890f0422fe05bc74d437f6815e30"
+  - reference: "docker.io/renovate/renovate:43.288.0@sha256:3b72fc4274c56f65f53dcd4dcbed3143289358e0a2d96f7af215e6cf1923e5f6"
     locations:
       - ".pre-commit-config.yaml"
   - reference: "docker.io/rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
@@ -78,7 +78,7 @@ container_images:
     locations:
       - "manifests/identity-stack.pod.yaml"
       - "roles/keycloak_deploy/defaults/main.yml"
-  - reference: "quay.io/l-it/ee-wunder-devtools-ubi9:v1.9.2@sha256:58d5d45f7ea7405394edb00d4a77bf3e5d770532377fba6d80e8f641d27576b0"
+  - reference: "quay.io/l-it/ee-wunder-devtools-ubi9:v1.12.0@sha256:b1189c8d51cb8f9f7b8aa396b8aaf30da7635ebd5d0fc9fe8b0f9f9d3c36d6de"
     locations:
       - "examples/aap-cac.yml"
       - "scripts/wunder-devtools-ee.sh"
@@ -112,7 +112,7 @@ collections:
     requirement: ">=2.1.0"
     source: "galaxy.yml"
   - name: "community.aws"
-    requirement: "10.0.0"
+    requirement: "10.1.1"
     source: "galaxy.yml"
   - name: "community.crypto"
     requirement: ">=3.2.2,<4.0.0"

@@ -602,6 +602,48 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('git show "$SOURCE_SHA:meta/source-dependencies.yml"', ci)
         self.assertIn("artifacts/evidence/security/source-dependencies.yml", ci)
         self.assertIn("cmp --silent", ci)
+        self.assertIn(
+            "vex: security/vex/chrome-linux-151.0.7922.71.openvex.json",
+            ci,
+        )
+        self.assertIn(
+            "artifacts/evidence/security/chrome-linux.openvex.json",
+            ci,
+        )
+        step_marker = "- name: Preserve the applied vulnerability-exploitability statement"
+        before_step, marker, after_step = ci.partition(step_marker)
+        self.assertTrue(before_step)
+        self.assertEqual(step_marker, marker)
+        preserve_vex, next_marker, remaining_steps = after_step.partition("- name:")
+        self.assertEqual("- name:", next_marker)
+        self.assertTrue(remaining_steps)
+        self.assertIn("set -euo pipefail", preserve_vex)
+        self.assertIn("mkdir -p artifacts/evidence/security", preserve_vex)
+
+        vex_path = ROOT / "security" / "vex" / "chrome-linux-151.0.7922.71.openvex.json"
+        vex = json.loads(vex_path.read_text(encoding="utf-8"))
+        expected_cves = {
+            "CVE-2026-17950",
+            "CVE-2026-17952",
+            "CVE-2026-17956",
+            "CVE-2026-17969",
+            "CVE-2026-17979",
+            "CVE-2026-17989",
+            "CVE-2026-17993",
+            "CVE-2026-18012",
+            "CVE-2026-18017",
+        }
+        self.assertEqual(
+            {statement["vulnerability"]["name"] for statement in vex["statements"]},
+            expected_cves,
+        )
+        for statement in vex["statements"]:
+            self.assertEqual(statement["status"], "fixed")
+            self.assertEqual(
+                statement["products"],
+                [{"@id": "pkg:generic/google-chrome@151.0.7922.71"}],
+            )
+            self.assertIn("chromereleases.googleblog.com", statement["status_notes"])
 
         publish = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
         self.assertIn("dist/release/SHA256SUMS.sigstore.json", publish)
@@ -759,8 +801,11 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertNotIn("Skipping Molecule tests because Docker", molecule)
         self.assertIn("WUNDER_DEVTOOLS_ROOTFS_MODE=rw", molecule)
         self.assertIn("WUNDER_DEVTOOLS_WORKSPACE_MODE=rw", molecule)
-        self.assertIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0", molecule)
-        self.assertNotIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_RUN_AS_ROOT=0", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT=disabled", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH=disabled", molecule)
+        self.assertNotIn("WUNDER_DEVTOOLS_CAP_ADD=CHOWN", molecule)
 
     def test_devtools_capability_policy_expands_to_individual_docker_arguments(self) -> None:
         wrapper = ROOT / "scripts" / "wunder-devtools-ee.sh"
