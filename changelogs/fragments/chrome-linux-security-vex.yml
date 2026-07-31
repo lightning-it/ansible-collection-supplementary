@@ -1,3 +1,4 @@
+---
 bugfixes:
   - >-
     Bind release vulnerability scans to an exact-version OpenVEX statement for
