@@ -1,46 +1,18 @@
 {
-  "base_sha": "495d676a951a783c94f957b009d2ef02d9d6eb90",
-  "current_version": "3.0.1",
+  "base_sha": "848820dc520f418e04168eb62f2759d741574e85",
+  "current_version": "3.1.0",
   "fragments": [
     {
-      "path": "aap-cac-complete-example.yml",
-      "sha256": "87fa375ede1ec8474059cf0dfe931394e78e11d77b69d1708754612e04512157"
+      "path": "chrome-linux-security-vex.yml",
+      "sha256": "98bf4c75e5d737a67ef6daef9b144bddb4fda586e2b5c9525be2b876c4003b0e"
     },
     {
-      "path": "aap-cac-gateway-from-fqdn.yml",
-      "sha256": "af3b4de60167c3a0d96faa032597543cbf430bdc2e76c13a4a615da138225b9c"
-    },
-    {
-      "path": "aap-cac-organization-list-default.yml",
-      "sha256": "10cd1b4c2816fdbefa2a1d7721f4a10a946fb57a9db4dda11262f0b15869cc6e"
-    },
-    {
-      "path": "aap-cac-shared-auth.yml",
-      "sha256": "b40b6f0273b7c2516e2430f1a7b0d5285e6df1651b19233dddd565060e6394fb"
-    },
-    {
-      "path": "aap-cac-validate-certs-recursion.yml",
-      "sha256": "eec5f9c7fbbe7f547d0e28a08b7c92bdfac0cd3704cb9818e519503e02319be0"
-    },
-    {
-      "path": "aap-deploy-public-gateway-default.yml",
-      "sha256": "573058a71a39ec004882df9181a3f331340f43e32b750b272eba94c9817764a8"
-    },
-    {
-      "path": "aap-tls-target-ca-trust.yml",
-      "sha256": "14bb74005386bdd9cb76369a31862f0192a1cc0b53dad38d398516a6529cb18c"
-    },
-    {
-      "path": "hetzner-object-storage-cac.yml",
-      "sha256": "a38a4a3a7838624fd48526609a3a90c9a3e28bc4dd8cf81a1187d491afd601b3"
-    },
-    {
-      "path": "shared-assets-sync-30541900564.yml",
-      "sha256": "b637a090dd4cd427b7154c68ccb11efd1e13b7fc1974bd0bb36b7886a978a440"
+      "path": "shared-assets-sync-30601580972.yml",
+      "sha256": "f11f3ea1c1de072076178634f8d8c4ec281e5e978bb0f9f10a2a470d369d065a"
     }
   ],
-  "impact": "minor",
-  "next_version": "3.1.0",
+  "impact": "patch",
+  "next_version": "3.1.1",
   "preparer": {
     "account_id": "307565056",
     "email": "307565056+lightning-it-release-automation[bot]@users.noreply.github.com",
@@ -56,7 +28,7 @@
     "path": ".github/workflows/release-prepare.yml",
     "ref": "lightning-it/ansible-collection-supplementary/.github/workflows/release-prepare.yml@refs/heads/main",
     "run_attempt": "1",
-    "run_id": "30599058383",
-    "source_sha": "495d676a951a783c94f957b009d2ef02d9d6eb90"
+    "run_id": "30623858048",
+    "source_sha": "848820dc520f418e04168eb62f2759d741574e85"
   }
 }
