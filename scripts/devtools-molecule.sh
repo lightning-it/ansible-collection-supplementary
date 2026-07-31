@@ -46,19 +46,26 @@ if [ -n "${SCENARIO_FILTER}" ]; then
   echo "Scenario filter: ${SCENARIO_FILTER}"
 fi
 
-# Molecule exercises ownership transitions that require container UID 0.
-# Rootless Podman maps that UID back to the invoking host user; hosted Docker
-# keeps the checkout read-only so the controller cannot leave root-owned files.
-export WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0
+# The controller only needs the invoking host identity plus its explicit engine
+# socket groups. Nested containers exercise production ownership contracts; the
+# controller itself never receives root, privileged mode, or added capabilities.
+export WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1
+export WUNDER_DEVTOOLS_RUN_AS_ROOT=0
 export WUNDER_DEVTOOLS_PRIVILEGED=0
+export WUNDER_DEVTOOLS_CAP_ADD=''
+export WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT=disabled
+export WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH=disabled
 
 WUNDER_DEVTOOLS_PRIVILEGED=0 \
-WUNDER_DEVTOOLS_RUN_AS_HOST_UID=0 \
+WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1 \
+WUNDER_DEVTOOLS_RUN_AS_ROOT=0 \
 WUNDER_DEVTOOLS_DOCKER_SOCKET=required \
+WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT=disabled \
+WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH=disabled \
 WUNDER_DEVTOOLS_NETWORK=bridge \
 WUNDER_DEVTOOLS_ROOTFS_MODE=rw \
 WUNDER_DEVTOOLS_WORKSPACE_MODE=rw \
-WUNDER_DEVTOOLS_CAP_ADD=CHOWN,DAC_OVERRIDE,FOWNER \
+WUNDER_DEVTOOLS_CAP_ADD='' \
 COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE}" \
 COLLECTION_NAME="${COLLECTION_NAME}" \
 SCENARIO_FILTER="${SCENARIO_FILTER}" \
