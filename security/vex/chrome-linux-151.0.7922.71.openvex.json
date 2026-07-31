@@ -12,7 +12,7 @@
       },
       "products": [
         {
-          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+          "@id": "pkg:generic/google-chrome@151.0.7922.71"
         }
       ],
       "status": "fixed",
@@ -24,7 +24,7 @@
       },
       "products": [
         {
-          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+          "@id": "pkg:generic/google-chrome@151.0.7922.71"
         }
       ],
       "status": "fixed",
@@ -36,7 +36,7 @@
       },
       "products": [
         {
-          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+          "@id": "pkg:generic/google-chrome@151.0.7922.71"
         }
       ],
       "status": "fixed",
@@ -48,7 +48,7 @@
       },
       "products": [
         {
-          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+          "@id": "pkg:generic/google-chrome@151.0.7922.71"
         }
       ],
       "status": "fixed",
@@ -60,7 +60,7 @@
       },
       "products": [
         {
-          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+          "@id": "pkg:generic/google-chrome@151.0.7922.71"
         }
       ],
       "status": "fixed",
@@ -72,7 +72,7 @@
       },
       "products": [
         {
-          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+          "@id": "pkg:generic/google-chrome@151.0.7922.71"
         }
       ],
       "status": "fixed",
@@ -84,7 +84,7 @@
       },
       "products": [
         {
-          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+          "@id": "pkg:generic/google-chrome@151.0.7922.71"
         }
       ],
       "status": "fixed",
@@ -96,7 +96,7 @@
       },
       "products": [
         {
-          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+          "@id": "pkg:generic/google-chrome@151.0.7922.71"
         }
       ],
       "status": "fixed",
@@ -108,7 +108,7 @@
       },
       "products": [
         {
-          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+          "@id": "pkg:generic/google-chrome@151.0.7922.71"
         }
       ],
       "status": "fixed",

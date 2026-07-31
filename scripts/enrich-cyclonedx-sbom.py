@@ -654,6 +654,7 @@ def enrich_sbom(
                     "name": "chromium",
                     "version": browser_version,
                     "bom-ref": browser_reference,
+                    "purl": f"pkg:generic/google-chrome@{browser_version}",
                     "cpe": f"cpe:2.3:a:google:chrome:{browser_version}:*:*:*:*:*:*:*",
                     "hashes": [{"alg": "SHA-256", "content": executable_digest}],
                     "properties": common_properties

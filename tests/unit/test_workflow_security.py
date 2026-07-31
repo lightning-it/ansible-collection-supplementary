@@ -639,7 +639,7 @@ class WorkflowSecurityTests(unittest.TestCase):
             self.assertEqual(statement["status"], "fixed")
             self.assertEqual(
                 statement["products"],
-                [{"@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"}],
+                [{"@id": "pkg:generic/google-chrome@151.0.7922.71"}],
             )
             self.assertIn("chromereleases.googleblog.com", statement["status_notes"])
 
