@@ -64,6 +64,24 @@ class ProducerEvidenceTests(unittest.TestCase):
             self.assertEqual(value["status"], "approved")
             self.assertNotIn("delivery", value)
 
+            output_arg = cmd.index("--output") + 1
+            target = root / "target.json"
+            linked_output = root / "linked-output.json"
+            linked_output.symlink_to(target)
+            cmd[output_arg] = str(linked_output)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)  # noqa: S603
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must not contain symlink components", result.stderr)
+
+            real_directory = root / "real-directory"
+            real_directory.mkdir()
+            linked_directory = root / "linked-directory"
+            linked_directory.symlink_to(real_directory, target_is_directory=True)
+            cmd[output_arg] = str(linked_directory / "evidence.json")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)  # noqa: S603
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must not contain symlink components", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
