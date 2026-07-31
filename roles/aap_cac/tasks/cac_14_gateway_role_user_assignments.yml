@@ -1,15 +1,16 @@
 ---
 # CaC taskset: Configure Ansible Automation Platform (Gateway) role assignments.
 - name: Configure Ansible Automation Platform (Gateway) role assignments
-  environment:
-    GATEWAY_HOST: '{{ inventory_hostname }}'
-    GATEWAY_PASSWORD: '{{ aap_cac_gateway_password }}'
-    GATEWAY_USERNAME: '{{ aap_cac_gateway_username }}'
   block:
     - name: Run role infra.aap_configuration.dispatch  # noqa var-naming[no-role-prefix]
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
       vars:
+        aap_hostname: "{{ aap_cac_gateway_hostname }}"
+        aap_username: "{{ aap_cac_gateway_username }}"
+        aap_password: "{{ aap_cac_gateway_password_effective }}"
+        aap_token: "{{ aap_cac_auth_token }}"
+        aap_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
         aap_configuration_dispatcher_roles:
           - role: gateway_role_user_assignments
             var: gateway_role_user_assignments

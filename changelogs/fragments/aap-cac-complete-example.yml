@@ -1,0 +1,10 @@
+---
+minor_changes:
+  - >-
+    Add a complete, populated AAP configuration-as-code inventory example
+    covering every resource family dispatched by the aap_cac role.
+bugfixes:
+  - >-
+    Pass the canonical AAP hostname, username, password, and certificate
+    validation settings explicitly to Gateway and Private Automation Hub
+    configuration tasksets.

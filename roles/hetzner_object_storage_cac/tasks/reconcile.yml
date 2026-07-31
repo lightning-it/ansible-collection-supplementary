@@ -1,0 +1,54 @@
+---
+- name: Reconcile the private Hetzner Object Storage bucket
+  amazon.aws.s3_bucket:
+    name: "{{ hetzner_object_storage_cac_bucket }}"
+    state: present
+    acl: private
+    endpoint_url: "{{ hetzner_object_storage_cac_endpoint }}"
+    region: "{{ hetzner_object_storage_cac_region }}"
+    access_key: "{{ _hetzner_object_storage_cac_access_key }}"
+    secret_key: "{{ _hetzner_object_storage_cac_secret_key }}"
+    object_lock_enabled: "{{ hetzner_object_storage_cac_object_lock_enabled }}"
+    object_lock_default_retention:
+      mode: "{{ hetzner_object_storage_cac_object_lock_mode }}"
+      days: "{{ hetzner_object_storage_cac_object_lock_retention_days }}"
+    versioning: "{{ hetzner_object_storage_cac_versioning }}"
+    validate_certs: "{{ hetzner_object_storage_cac_validate_certs }}"
+  register: _hetzner_object_storage_cac_bucket_result
+  delegate_to: "{{ hetzner_object_storage_cac_delegate_to }}"
+  no_log: true
+
+- name: Reconcile incomplete multipart upload cleanup
+  community.aws.s3_lifecycle:
+    name: "{{ hetzner_object_storage_cac_bucket }}"
+    rule_id: abort-incomplete-multipart-uploads
+    status: enabled
+    abort_incomplete_multipart_upload_days: >-
+      {{ hetzner_object_storage_cac_abort_incomplete_multipart_upload_days }}
+    endpoint_url: "{{ hetzner_object_storage_cac_endpoint }}"
+    region: "{{ hetzner_object_storage_cac_region }}"
+    access_key: "{{ _hetzner_object_storage_cac_access_key }}"
+    secret_key: "{{ _hetzner_object_storage_cac_secret_key }}"
+    validate_certs: "{{ hetzner_object_storage_cac_validate_certs }}"
+  register: _hetzner_object_storage_cac_lifecycle_result
+  delegate_to: "{{ hetzner_object_storage_cac_delegate_to }}"
+  no_log: true
+
+- name: Publish sanitized Hetzner Object Storage reconciliation result
+  ansible.builtin.set_fact:
+    hetzner_object_storage_cac_result:
+      action: reconcile
+      bucket: "{{ hetzner_object_storage_cac_bucket }}"
+      changed: >-
+        {{
+          _hetzner_object_storage_cac_bucket_result.changed | bool
+          or _hetzner_object_storage_cac_lifecycle_result.changed | bool
+        }}
+      endpoint: "{{ hetzner_object_storage_cac_endpoint }}"
+      lifecycle_abort_days: "{{ hetzner_object_storage_cac_abort_incomplete_multipart_upload_days | int }}"
+      object_lock_enabled: "{{ hetzner_object_storage_cac_object_lock_enabled | bool }}"
+      object_lock_mode: "{{ hetzner_object_storage_cac_object_lock_mode }}"
+      object_lock_retention_days: "{{ hetzner_object_storage_cac_object_lock_retention_days | int }}"
+      prefix: "{{ hetzner_object_storage_cac_prefix }}"
+      region: "{{ hetzner_object_storage_cac_region }}"
+      versioning: "{{ hetzner_object_storage_cac_versioning | bool }}"

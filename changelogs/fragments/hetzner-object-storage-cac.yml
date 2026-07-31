@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    Add the experimental ``hetzner_object_storage_cac`` role for fail-closed
+    Hetzner S3 bucket planning, auditing, Object Lock, versioning, retention,
+    and multipart lifecycle reconciliation.

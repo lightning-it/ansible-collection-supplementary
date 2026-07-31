@@ -49,23 +49,23 @@ container_images:
   - reference: "docker.io/prom/alertmanager:v0.33.1@sha256:9e082985f56f4c8c9f724e18f2288c6708f472e56a5286b8863d080434ea065d"
     locations:
       - "roles/alertmanager_deploy/defaults/main.yml"
-  - reference: "docker.io/prom/prometheus:v3.13.1@sha256:3c42b892cf723fa54d2f262c37a0e1f80aa8c8ddb1da7b9b0df9455a35a7f893"
+  - reference: "docker.io/prom/prometheus:v3.13.2@sha256:508729e0e2d18e11fd742a5a5ca70e557b940a93948c3c95fd0123a6fd538b69"
     locations:
       - "roles/prometheus_deploy/defaults/main.yml"
   - reference: "docker.io/rsyslog/syslog_appliance_alpine:latest@sha256:c0dd7cad9ff3234967ff59879590175b7590e8a5f5621ec49a85aff546b44a3b"
     locations:
       - "roles/rsyslog_deploy/defaults/main.yml"
       - "roles/rsyslog_upgrade/defaults/main.yml"
-  - reference: "docker.io/renovate/renovate:43.288.0@sha256:3b72fc4274c56f65f53dcd4dcbed3143289358e0a2d96f7af215e6cf1923e5f6"
+  - reference: "docker.io/renovate/renovate:43.280.5@sha256:90153a8b9c00bf7a917a985cda9061a701a6890f0422fe05bc74d437f6815e30"
     locations:
       - ".pre-commit-config.yaml"
   - reference: "docker.io/rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
     locations:
       - ".pre-commit-config.yaml"
-  - reference: "docker.io/semaphoreui/semaphore:latest@sha256:6454b2e58a6616de82240f7b4f271663fe0ec3430e10a9cc7e763ff6df12baa0"
+  - reference: "docker.io/semaphoreui/semaphore:latest@sha256:7c7504614c4795b0e0670fb2d4400d35e2302204609664943cb16308b7a6f1e4"
     locations:
       - "roles/semaphore_deploy/defaults/main.yml"
-  - reference: "docker.io/smblds/smblds:latest@sha256:496d52f7f61a3fcbc4674a22481b0b83b7220ee481f9f2244d8038aac21e112d"
+  - reference: "docker.io/smblds/smblds:latest@sha256:313d892e395713335c6f2d10421290a316e0b1194e4929243f901d46e4f7c549"
     locations:
       - "roles/samba_deploy/defaults/main.yml"
   - reference: "docker.io/sonatype/nexus3:latest@sha256:f20aca9b5688b9d1bd9550cc4e2daca2591909b39dc0e7dc240b9e065342c3fe"
@@ -80,6 +80,7 @@ container_images:
       - "roles/keycloak_deploy/defaults/main.yml"
   - reference: "quay.io/l-it/ee-wunder-devtools-ubi9:v1.9.2@sha256:58d5d45f7ea7405394edb00d4a77bf3e5d770532377fba6d80e8f641d27576b0"
     locations:
+      - "examples/aap-cac.yml"
       - "scripts/wunder-devtools-ee.sh"
   - reference: "quay.io/minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727"
     locations:
@@ -104,8 +105,14 @@ derived_images:
 # Every concrete collection requirement used by shipped role source is either
 # a normal Galaxy dependency or an exact AAP runtime-overlay dependency.
 collections:
+  - name: "amazon.aws"
+    requirement: "10.3.2"
+    source: "galaxy.yml"
   - name: "ansible.posix"
     requirement: ">=2.1.0"
+    source: "galaxy.yml"
+  - name: "community.aws"
+    requirement: "10.0.0"
     source: "galaxy.yml"
   - name: "community.crypto"
     requirement: ">=3.2.2,<4.0.0"

@@ -1,0 +1,32 @@
+---
+- name: Run Hetzner Object Storage CaC prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Publish the sanitized Hetzner Object Storage plan
+  ansible.builtin.set_fact:
+    hetzner_object_storage_cac_result:
+      action: plan
+      bucket: "{{ hetzner_object_storage_cac_bucket }}"
+      changed: false
+      endpoint: "{{ hetzner_object_storage_cac_endpoint }}"
+      lifecycle_abort_days: "{{ hetzner_object_storage_cac_abort_incomplete_multipart_upload_days | int }}"
+      object_lock_enabled: "{{ hetzner_object_storage_cac_object_lock_enabled | bool }}"
+      object_lock_mode: "{{ hetzner_object_storage_cac_object_lock_mode }}"
+      object_lock_retention_days: "{{ hetzner_object_storage_cac_object_lock_retention_days | int }}"
+      prefix: "{{ hetzner_object_storage_cac_prefix }}"
+      region: "{{ hetzner_object_storage_cac_region }}"
+      versioning: "{{ hetzner_object_storage_cac_versioning | bool }}"
+  when: hetzner_object_storage_cac_action == 'plan'
+
+- name: Resolve protected Hetzner S3 credentials
+  ansible.builtin.import_tasks: resolve_credentials.yml
+  when: hetzner_object_storage_cac_action in ['audit', 'reconcile']
+
+- name: Audit Hetzner Object Storage
+  ansible.builtin.import_tasks: audit.yml
+  when: hetzner_object_storage_cac_action == 'audit'
+
+- name: Reconcile Hetzner Object Storage
+  ansible.builtin.import_tasks: reconcile.yml
+  when: hetzner_object_storage_cac_action == 'reconcile'
