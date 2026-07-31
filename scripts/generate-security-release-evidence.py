@@ -75,6 +75,8 @@ def main():
         p.error(str(exc))
     if expires <= not_before:
         p.error("--expires-at must be after --not-before")
+    if created < not_before or created >= expires:
+        p.error("--created-at must be within the evidence validity interval")
     evidence = {
         "apiVersion": "lit.security-release/v1",
         "kind": "SecurityReleaseEvidence",
