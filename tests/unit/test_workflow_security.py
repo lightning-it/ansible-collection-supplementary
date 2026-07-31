@@ -610,16 +610,17 @@ class WorkflowSecurityTests(unittest.TestCase):
             "artifacts/evidence/security/chrome-linux.openvex.json",
             ci,
         )
-        preserve_vex = ci.split(
-            "- name: Preserve the applied vulnerability-exploitability statement",
-            maxsplit=1,
-        )[1].split("- name:", maxsplit=1)[0]
+        step_marker = "- name: Preserve the applied vulnerability-exploitability statement"
+        before_step, marker, after_step = ci.partition(step_marker)
+        self.assertTrue(before_step)
+        self.assertEqual(step_marker, marker)
+        preserve_vex, next_marker, _ = after_step.partition("- name:")
+        self.assertEqual("- name:", next_marker)
         self.assertIn("set -euo pipefail", preserve_vex)
         self.assertIn("mkdir -p artifacts/evidence/security", preserve_vex)
 
-        vex = json.loads(
-            (ROOT / "security" / "vex" / "chrome-linux-151.0.7922.71.openvex.json").read_text(encoding="utf-8")
-        )
+        vex_path = ROOT / "security" / "vex" / "chrome-linux-151.0.7922.71.openvex.json"
+        vex = json.loads(vex_path.read_text(encoding="utf-8"))
         expected_cves = {
             "CVE-2026-17950",
             "CVE-2026-17952",
