@@ -6,9 +6,9 @@ independent verify phase that checks externally observable state.
 
 | Profile | Purpose | Normal trigger |
 |---|---|---|
-| Tiny | Fast deployment, health, database, realm, client, roles, token, permissions, and idempotency | Approved same-repository PR, protected branch, nightly, manual |
-| Heavy | PostgreSQL, LDAP, persistence, restart, backup and restore, authorization, and secret checks | Approved same-repository PR, protected branch, nightly, manual |
-| Application Acceptance | CaC lifecycle plus browser login/logout and positive and negative OIDC authorization journeys | Approved same-repository PR, protected branch, nightly, manual |
+| Tiny | Fast deployment, health, database, realm, client, roles, token, permissions, and idempotency | Supplementary PR and protected branch |
+| Heavy | PostgreSQL, LDAP, persistence, restart, backup and restore, authorization, and secret checks | Nightly/manual in `modulix-validation`, exact protected `develop` SHA |
+| Application Acceptance | CaC lifecycle plus browser login/logout and positive and negative OIDC authorization journeys | After central Heavy success, in `modulix-validation` |
 
 Create a unique local identity and ephemeral credentials before running a
 profile. The values remain in the current shell only; never reuse production
