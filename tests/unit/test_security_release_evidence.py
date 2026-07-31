@@ -22,7 +22,7 @@ class ProducerEvidenceTests(unittest.TestCase):
             for name in ("artifact", "signature", "sbom", "provenance"):
                 files[name] = root / name
                 files[name].write_text(name, encoding="utf-8")
-            output = root / "evidence.json"
+            output = root / "missing" / "evidence.json"
             cmd = [
                 sys.executable,
                 str(SCRIPT),
@@ -53,6 +53,7 @@ class ProducerEvidenceTests(unittest.TestCase):
             ]
             for name, path in files.items():
                 cmd += [f"--{name}", str(path), f"--{name}-url", f"https://example.invalid/{name}"]
+            # The command contains only a fixed interpreter/script and test-owned arguments.
             subprocess.run(cmd, check=True, timeout=30)  # noqa: S603
             value = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(value["artifact"]["digest"], "sha256:" + hashlib.sha256(b"artifact").hexdigest())
