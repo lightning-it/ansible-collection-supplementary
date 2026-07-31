@@ -121,8 +121,9 @@ class WorkflowSecurityTests(unittest.TestCase):
             if step.get("uses") == "./.github/actions/run-quality-profile"
         )
         self.assertEqual("12GiB", tiny_action["with"]["memory-limit"])
-        self.assertIs(False, collection["jobs"]["heavy-cells"]["if"])
-        self.assertIs(False, collection["jobs"]["acceptance-cells"]["if"])
+        disabled_adapter = "${{ github.event_name == 'workflow_call' }}"
+        self.assertEqual(disabled_adapter, collection["jobs"]["heavy-cells"]["if"])
+        self.assertEqual(disabled_adapter, collection["jobs"]["acceptance-cells"]["if"])
         self.assertFalse((WORKFLOWS / "candidate-platform-validation.yml").exists())
         return
         candidate = load_yaml(WORKFLOWS / "candidate-platform-validation.yml")
@@ -278,7 +279,7 @@ class WorkflowSecurityTests(unittest.TestCase):
     def test_release_credentials_are_outside_pull_request_jobs(self) -> None:
         jobs = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]
         release_security = jobs["release-security"]
-        self.assertIs(False, release_security["if"])
+        self.assertEqual("${{ github.event_name == 'workflow_call' }}", release_security["if"])
         self.assertEqual("Collection / Release Evidence", jobs["evidence"]["name"])
         self.assertIn("supplementary-validation-evidence-", jobs["evidence"]["steps"][0]["run"])
         return
@@ -301,9 +302,10 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("needs.quality-matrix.outputs.tiny_required == 'true'", guard)
         self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", guard)
         self.assertNotIn("github.event_name == 'schedule'", guard)
-        self.assertIs(False, jobs["heavy-cells"]["if"])
-        self.assertIs(False, jobs["acceptance-cells"]["if"])
-        self.assertIs(False, jobs["runtime-evidence"]["if"])
+        disabled_adapter = "${{ github.event_name == 'workflow_call' }}"
+        self.assertEqual(disabled_adapter, jobs["heavy-cells"]["if"])
+        self.assertEqual(disabled_adapter, jobs["acceptance-cells"]["if"])
+        self.assertEqual(disabled_adapter, jobs["runtime-evidence"]["if"])
         self.assertEqual("Collection / Release Evidence", jobs["evidence"]["name"])
         self.assertEqual(
             ["lint-sanity", "build-install", "role-coverage", "quality-matrix", "tiny"],

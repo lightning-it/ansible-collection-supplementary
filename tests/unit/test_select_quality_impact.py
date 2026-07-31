@@ -159,10 +159,8 @@ families:
     def test_dependency_location_move_keeps_the_old_protected_impact(self) -> None:
         base_inventory = self._base_inventory(
             (
-                '      - "roles/rsyslog_deploy/defaults/main.yml"\n'
-                '      - "roles/rsyslog_upgrade/defaults/main.yml"',
-                '      - "roles/keycloak_deploy/defaults/main.yml"\n'
-                '      - "roles/rsyslog_upgrade/defaults/main.yml"',
+                '      - "roles/rsyslog_deploy/defaults/main.yml"\n      - "roles/rsyslog_upgrade/defaults/main.yml"',
+                '      - "roles/keycloak_deploy/defaults/main.yml"\n      - "roles/rsyslog_upgrade/defaults/main.yml"',
             )
         )
         result = SELECTOR.select(

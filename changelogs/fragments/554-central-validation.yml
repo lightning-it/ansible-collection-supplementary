@@ -1,3 +1,5 @@
 ---
 minor_changes:
-  - Move protected Heavy and Application Acceptance validation to the central ModuLix validation controller and require SHA-bound evidence for main promotion.
+  - >-
+    Move protected Heavy and Application Acceptance validation to the central ModuLix validation controller and
+    require SHA-bound evidence for main promotion.

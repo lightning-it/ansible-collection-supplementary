@@ -450,11 +450,11 @@ jobs:
           fi
 
   heavy-cells:
-    name: Heavy matrix (delegated to modulix-validation)
+    name: Delegation marker / Heavy (not executed in source repository)
     # MLX-70: protected infrastructure validation is scheduled and owned by
     # modulix-validation.  This collection must never start it from a PR,
     # push, or local manual dispatch.
-    if: false
+    if: ${{ github.event_name == 'workflow_call' }}
     needs: [build-install, quality-matrix]
     uses: lightning-it/modulix-validation/.github/workflows/collection-quality-profile.yml@154c99eb0d907b01edc10e9b39c94ef4912fd9dd
     with:
@@ -469,8 +469,8 @@ jobs:
     secrets: inherit
 
   heavy:
-    name: Collection / Heavy
-    if: false
+    name: Deprecated alias / Heavy (not executed)
+    if: ${{ github.event_name == 'workflow_call' }}
     needs: [quality-matrix, heavy-cells]
     runs-on: ubuntu-latest
     steps:
@@ -489,9 +489,9 @@ jobs:
           fi
 
   acceptance-cells:
-    name: Application Acceptance matrix (delegated to modulix-validation)
+    name: Delegation marker / Application Acceptance (not executed in source repository)
     # See heavy-cells: Application Acceptance has the same central ownership.
-    if: false
+    if: ${{ github.event_name == 'workflow_call' }}
     # The reusable validation workflow has a repository-wide Incus concurrency
     # group. Run acceptance only after the Heavy aggregate completes so the two
     # delegated profiles from this workflow cannot cancel each other.
@@ -509,8 +509,8 @@ jobs:
     secrets: inherit
 
   acceptance:
-    name: Collection / Application Acceptance
-    if: false
+    name: Deprecated alias / Application Acceptance (not executed)
+    if: ${{ github.event_name == 'workflow_call' }}
     needs: [quality-matrix, acceptance-cells]
     runs-on: ubuntu-latest
     steps:
@@ -529,7 +529,7 @@ jobs:
           fi
 
   runtime-evidence:
-    name: Runtime evidence / exact tested SHA
+    name: Deprecated adapter / Runtime evidence (not executed)
     env:
       # Do not expose this override to repository unit tests: they exercise
       # _tested_commit() with isolated process environments.
@@ -538,7 +538,7 @@ jobs:
       HEAVY_REQUIRED: ${{ needs.quality-matrix.outputs.heavy_required }}
       ACCEPTANCE_REQUIRED: ${{ needs.quality-matrix.outputs.acceptance_required }}
     # The central controller publishes the trusted runtime evidence.
-    if: false
+    if: ${{ github.event_name == 'workflow_call' }}
     needs: [lint-sanity, build-install, role-coverage, quality-matrix, tiny, heavy, acceptance]
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -1021,30 +1021,31 @@ jobs:
             gh api "repos/lightning-it/modulix-validation/actions/artifacts/$artifact_id/zip" > evidence.zip
             unzip -q evidence.zip -d central-evidence
             SOURCE_SHA="$SOURCE_SHA" python - <<'PY'
-            import json
-            import os
-            from pathlib import Path
+          import json
+          import os
+          from pathlib import Path
 
-            entries = list(Path("central-evidence").rglob("validation-evidence.json"))
-            if len(entries) != 1:
-                raise SystemExit("expected exactly one central validation evidence document")
-            value = json.loads(entries[0].read_text(encoding="utf-8"))
-            expected = {
-                "schema_version": 1,
-                "repository": "lightning-it/ansible-collection-supplementary",
-                "source_sha": os.environ["SOURCE_SHA"],
-                "release_eligible": True,
-            }
-            if value != expected:
-                raise SystemExit("central validation evidence does not exactly bind this candidate SHA")
-            PY
+          entries = list(Path("central-evidence").rglob("validation-evidence.json"))
+          if len(entries) != 1:
+              raise SystemExit("expected exactly one central validation evidence document")
+          value = json.loads(entries[0].read_text(encoding="utf-8"))
+          expected = {
+              "schema_version": 1,
+              "repository": "lightning-it/ansible-collection-supplementary",
+              "source_sha": os.environ["SOURCE_SHA"],
+              "release_eligible": True,
+          }
+          if value != expected:
+              raise SystemExit("central validation evidence does not exactly bind this candidate SHA")
+          PY
+          fi
 
   release-security:
-    name: Collection / Release Security
+    name: Deprecated adapter / Release Security (not executed)
     # Publication remains blocked until the central evidence adapter replaces
     # this source-repository release job.
-    if: false
-    needs: [lint-sanity, build-install, role-coverage, tiny, evidence]
+    if: ${{ github.event_name == 'workflow_call' }}
+    needs: [lint-sanity, build-install, role-coverage, tiny, heavy, acceptance, evidence]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: ansible-collection-release-evidence
@@ -1651,8 +1652,8 @@ jobs:
           test "$EVIDENCE_RESULT" = success
           test "$UPLOAD_OUTCOME" = success
   release-validation:
-    name: Collection / Release Validation
-    if: false
+    name: Deprecated adapter / Release Validation (not executed)
+    if: ${{ github.event_name == 'workflow_call' }}
     needs:
       [lint-sanity, build-install, role-coverage, quality-matrix, tiny, heavy, acceptance, evidence, release-security]
     runs-on: ubuntu-latest
@@ -1848,8 +1849,8 @@ jobs:
           fi
 
   legacy-lint:
-    name: Lint (ansible-lint via ee-wunder-devtools-ubi9)
-    if: false
+    name: Deprecated alias / Lint (not executed)
+    if: ${{ github.event_name == 'workflow_call' }}
     needs: lint-sanity
     runs-on: ubuntu-latest
     steps:
@@ -1858,8 +1859,8 @@ jobs:
         run: test "$RESULT" = success
 
   legacy-build:
-    name: Build & install collection (via devtools smoke test)
-    if: false
+    name: Deprecated alias / Build and install (not executed)
+    if: ${{ github.event_name == 'workflow_call' }}
     needs: build-install
     runs-on: ubuntu-latest
     steps:
@@ -1868,8 +1869,8 @@ jobs:
         run: test "$RESULT" = success
 
   legacy-molecule:
-    name: Molecule (via devtools)
-    if: false
+    name: Deprecated alias / Molecule (not executed)
+    if: ${{ github.event_name == 'workflow_call' }}
     needs: [tiny, heavy, acceptance]
     runs-on: ubuntu-latest
     steps:
@@ -1883,8 +1884,8 @@ jobs:
           test "$ACCEPTANCE_RESULT" = success
 
   keycloak-legacy-lint-sanity:
-    name: Keycloak / Lint and Sanity
-    if: false
+    name: Deprecated Keycloak alias / Lint and Sanity (not executed)
+    if: ${{ github.event_name == 'workflow_call' }}
     needs: lint-sanity
     runs-on: ubuntu-latest
     steps:
@@ -1893,8 +1894,8 @@ jobs:
         run: test "$RESULT" = success
 
   keycloak-legacy-tiny:
-    name: Keycloak / Tiny
-    if: false
+    name: Deprecated Keycloak alias / Tiny (not executed)
+    if: ${{ github.event_name == 'workflow_call' }}
     needs: tiny
     runs-on: ubuntu-latest
     steps:
@@ -1903,8 +1904,8 @@ jobs:
         run: test "$RESULT" = success
 
   keycloak-legacy-heavy:
-    name: Keycloak / Heavy
-    if: false
+    name: Deprecated Keycloak alias / Heavy (not executed)
+    if: ${{ github.event_name == 'workflow_call' }}
     needs: heavy
     runs-on: ubuntu-latest
     steps:
@@ -1913,8 +1914,8 @@ jobs:
         run: test "$RESULT" = success
 
   keycloak-legacy-acceptance:
-    name: Keycloak / Application Acceptance
-    if: false
+    name: Deprecated Keycloak alias / Application Acceptance (not executed)
+    if: ${{ github.event_name == 'workflow_call' }}
     needs: acceptance
     runs-on: ubuntu-latest
     steps:
@@ -1923,8 +1924,8 @@ jobs:
         run: test "$RESULT" = success
 
   keycloak-legacy-evidence:
-    name: Keycloak / Evidence
-    if: false
+    name: Deprecated Keycloak alias / Evidence (not executed)
+    if: ${{ github.event_name == 'workflow_call' }}
     needs: evidence
     runs-on: ubuntu-latest
     steps:
@@ -1933,8 +1934,8 @@ jobs:
         run: test "$RESULT" = success
 
   keycloak-legacy-release-validation:
-    name: Keycloak / Release Validation
-    if: false
+    name: Deprecated Keycloak alias / Release Validation (not executed)
+    if: ${{ github.event_name == 'workflow_call' }}
     needs: release-validation
     runs-on: ubuntu-latest
     steps:
