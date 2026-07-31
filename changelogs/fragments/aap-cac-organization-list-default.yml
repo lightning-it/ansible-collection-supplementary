@@ -1,0 +1,7 @@
+---
+bugfixes:
+  - >-
+    Keep the default AAP CaC organization collection as an empty list and
+    validate organization input types before taskset execution. This prevents
+    an unset organization inventory from reaching an Ansible loop as an empty
+    string.

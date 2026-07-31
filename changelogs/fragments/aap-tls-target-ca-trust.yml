@@ -1,0 +1,7 @@
+---
+bugfixes:
+  - >-
+    Install generated AAP self-signed CA certificates in the managed AAP
+    host's system trust store instead of the controller-side generation host,
+    and enable that trust installation by default. This allows verified
+    Gateway API requests from subsequent configuration-as-code runs.

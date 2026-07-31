@@ -1,0 +1,65 @@
+---
+- name: Exercise the Hetzner Object Storage CaC safety contract
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    hetzner_object_storage_cac_action: plan
+    hetzner_object_storage_cac_endpoint: https://fsn1.your-objectstorage.com
+    hetzner_object_storage_cac_region: fsn1
+    hetzner_object_storage_cac_bucket: example-production-backup
+    hetzner_object_storage_cac_prefix: host01
+  tasks:
+    - name: Run the real safe planning path
+      ansible.builtin.include_role:
+        name: lit.supplementary.hetzner_object_storage_cac
+
+    - name: Preserve the sanitized plan for verification
+      ansible.builtin.copy:
+        dest: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/hetzner-object-storage-plan.yml"
+        content: "{{ hetzner_object_storage_cac_result | to_nice_yaml }}"
+        mode: "0600"
+
+    - name: Prove an insecure endpoint is rejected
+      block:
+        - name: Run the role with an insecure endpoint
+          ansible.builtin.include_role:
+            name: lit.supplementary.hetzner_object_storage_cac
+          vars:
+            hetzner_object_storage_cac_endpoint: http://fsn1.your-objectstorage.com
+
+        - name: Reject an accepted insecure endpoint
+          ansible.builtin.fail:
+            msg: The role accepted an insecure endpoint.
+      rescue:
+        - name: Record endpoint rejection
+          ansible.builtin.set_fact:
+            _hetzner_object_storage_cac_insecure_endpoint_rejected: true
+
+    - name: Prove disabled Object Lock is rejected
+      block:
+        - name: Run the role with Object Lock disabled
+          ansible.builtin.include_role:
+            name: lit.supplementary.hetzner_object_storage_cac
+          vars:
+            hetzner_object_storage_cac_object_lock_enabled: false
+
+        - name: Reject accepted disabled Object Lock
+          ansible.builtin.fail:
+            msg: The role accepted disabled Object Lock.
+      rescue:
+        - name: Record Object Lock rejection
+          ansible.builtin.set_fact:
+            _hetzner_object_storage_cac_disabled_lock_rejected: true
+
+    - name: Persist negative safety results
+      ansible.builtin.copy:
+        dest: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/hetzner-object-storage-safety.yml"
+        content: >-
+          {{
+            {
+              'disabled_lock_rejected': _hetzner_object_storage_cac_disabled_lock_rejected | default(false),
+              'insecure_endpoint_rejected': _hetzner_object_storage_cac_insecure_endpoint_rejected | default(false)
+            } | to_nice_yaml
+          }}
+        mode: "0600"

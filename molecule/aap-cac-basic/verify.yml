@@ -1,5 +1,5 @@
 ---
-- name: Verify aap cac syntax coverage
+- name: Verify aap cac authentication contract
   hosts: localhost
   connection: local
   gather_facts: false
@@ -12,8 +12,10 @@
         src: "{{ aap_cac_molecule_marker_path }}"
       register: aap_cac_molecule_marker
 
-    - name: Assert lit.supplementary.aap_cac coverage stub ran
+    - name: Assert lit.supplementary.aap_cac authentication contract ran
       ansible.builtin.assert:
         that:
-          - aap_cac_molecule_marker.content | b64decode | trim == 'syntax_stub'
+          - >-
+            aap_cac_molecule_marker.content | b64decode | trim
+            == 'authentication_contract'
         quiet: true

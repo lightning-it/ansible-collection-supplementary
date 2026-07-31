@@ -511,6 +511,7 @@ synthesized as passes.
 | forgejo_deploy | experimental | — | experimental | experimental | experimental |
 | gitlab_runner | deprecated | — | deprecated | deprecated | deprecated |
 | grafana_deploy | experimental | — | experimental | experimental | experimental |
+| hetzner_object_storage_cac | experimental | — | experimental | blocked-external-service | blocked-external-service |
 | incus_esxi_image | experimental | — | experimental | blocked-external-license | blocked-external-license |
 | incus_nested_esxi | experimental | — | experimental | blocked-external-infrastructure | blocked-external-infrastructure |
 | keycloak | experimental | — | experimental | experimental | experimental |

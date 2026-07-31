@@ -1,0 +1,74 @@
+---
+- name: Validate Hetzner Object Storage CaC contract
+  ansible.builtin.assert:
+    that:
+      - hetzner_object_storage_cac_action in ['plan', 'audit', 'reconcile']
+      - hetzner_object_storage_cac_delegate_to is string
+      - hetzner_object_storage_cac_delegate_to | trim | length > 0
+      - hetzner_object_storage_cac_endpoint is string
+      - >-
+        hetzner_object_storage_cac_endpoint
+        is match('^https://(fsn1|nbg1|hel1)\\.your-objectstorage\\.com$')
+      - hetzner_object_storage_cac_region in ['fsn1', 'nbg1', 'hel1']
+      - >-
+        hetzner_object_storage_cac_endpoint
+        == 'https://' ~ hetzner_object_storage_cac_region ~ '.your-objectstorage.com'
+      - hetzner_object_storage_cac_bucket is string
+      - >-
+        hetzner_object_storage_cac_bucket
+        is match('^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$')
+      - "'..' not in hetzner_object_storage_cac_bucket"
+      - "'.-' not in hetzner_object_storage_cac_bucket"
+      - "'-.' not in hetzner_object_storage_cac_bucket"
+      - hetzner_object_storage_cac_prefix is string
+      - not hetzner_object_storage_cac_prefix.startswith('/')
+      - not hetzner_object_storage_cac_prefix.endswith('/')
+      - hetzner_object_storage_cac_use_vault is boolean
+      - hetzner_object_storage_cac_versioning is boolean
+      - hetzner_object_storage_cac_versioning | bool
+      - hetzner_object_storage_cac_object_lock_enabled is boolean
+      - hetzner_object_storage_cac_object_lock_enabled | bool
+      - hetzner_object_storage_cac_object_lock_mode in ['GOVERNANCE', 'COMPLIANCE']
+      - hetzner_object_storage_cac_object_lock_retention_days | int > 0
+      - hetzner_object_storage_cac_abort_incomplete_multipart_upload_days | int > 0
+      - hetzner_object_storage_cac_validate_certs is boolean
+      - hetzner_object_storage_cac_validate_certs | bool
+    fail_msg: >-
+      The Hetzner Object Storage contract is incomplete or unsafe. Use one
+      supported HTTPS location endpoint, a private DNS-compatible bucket name,
+      versioning, Object Lock, positive retention, and TLS verification.
+    quiet: true
+
+- name: Validate explicit Hetzner S3 credentials
+  ansible.builtin.assert:
+    that:
+      - hetzner_object_storage_cac_access_key is string
+      - hetzner_object_storage_cac_access_key | length > 0
+      - hetzner_object_storage_cac_secret_key is string
+      - hetzner_object_storage_cac_secret_key | length > 0
+    fail_msg: Reconcile and audit require explicit credentials or HashiCorp Vault.
+    quiet: true
+  when:
+    - hetzner_object_storage_cac_action != 'plan'
+    - not hetzner_object_storage_cac_use_vault | bool
+  no_log: true
+
+- name: Validate the HashiCorp Vault credential source
+  ansible.builtin.assert:
+    that:
+      - hetzner_object_storage_cac_vault_addr is string
+      - hetzner_object_storage_cac_vault_addr is match('^https://')
+      - hetzner_object_storage_cac_vault_token is string
+      - hetzner_object_storage_cac_vault_token | length > 0
+      - hetzner_object_storage_cac_vault_kv_mount is string
+      - hetzner_object_storage_cac_vault_kv_mount | trim | length > 0
+      - hetzner_object_storage_cac_vault_kv_path is string
+      - hetzner_object_storage_cac_vault_kv_path | trim | length > 0
+      - hetzner_object_storage_cac_vault_access_key_field | trim | length > 0
+      - hetzner_object_storage_cac_vault_secret_key_field | trim | length > 0
+    fail_msg: Vault-backed reconciliation requires an HTTPS address, token, mount, path, and field names.
+    quiet: true
+  when:
+    - hetzner_object_storage_cac_action != 'plan'
+    - hetzner_object_storage_cac_use_vault | bool
+  no_log: true

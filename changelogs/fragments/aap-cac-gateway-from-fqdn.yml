@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    Default aap_cac_gateway_hostname to the public HTTPS endpoint derived from
+    aap_fqdn so inventories do not need to repeat the AAP gateway hostname.

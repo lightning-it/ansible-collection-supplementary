@@ -79,6 +79,8 @@
       ansible.builtin.fail:
         msg: >-
           Failed to create AAP 2.7 gateway token via {{ aap_cac_gateway_hostname }} as
-          user {{ aap_cac_gateway_username }} (validate_certs={{ aap_cac_gateway_validate_certs | bool }}).
+          user {{ aap_cac_gateway_username }}
+          (validate_certs={{ aap_cac_gateway_validate_certs | bool }}).
           Check gateway reachability/readiness, credentials, and certificate trust.
-          For self-signed certs, set aap_validate_certs=false (or aap_cac_gateway_validate_certs=false).
+          Install the issuing CA in the target trust store. Only for an intentional
+          insecure exception, set aap_cac_gateway_validate_certs=false explicitly.

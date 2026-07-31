@@ -1,0 +1,27 @@
+---
+- name: Verify AAP TLS target trust contract
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_tls_molecule_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-tls
+  tasks:
+    - name: Inspect installed AAP trust anchor
+      ansible.builtin.stat:
+        path: "{{ aap_tls_molecule_root }}/trust/aap-selfsigned-ca.crt"
+      register: aap_tls_molecule_trust_anchor
+
+    - name: Read target trust refresh marker
+      ansible.builtin.slurp:
+        src: "{{ aap_tls_molecule_root }}/update-ca-trust.marker"
+      register: aap_tls_molecule_trust_refresh
+
+    - name: Assert AAP trust anchor is installed
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_trust_anchor.stat.exists
+          - aap_tls_molecule_trust_anchor.stat.isreg
+          - aap_tls_molecule_trust_anchor.stat.mode == '0644'
+          - aap_tls_molecule_trust_refresh.content | b64decode | trim == 'extract'
+        quiet: true

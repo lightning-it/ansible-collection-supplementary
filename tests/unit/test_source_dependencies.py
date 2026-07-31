@@ -24,14 +24,14 @@ class SourceDependencyTests(unittest.TestCase):
     def _copy_source(self, destination: Path) -> None:
         for filename in ("galaxy.yml", ".pre-commit-config.yaml"):
             shutil.copy2(ROOT / filename, destination / filename)
-        for directory in ("collections", "containerfiles", "manifests", "meta", "roles", "scripts"):
+        for directory in ("collections", "containerfiles", "examples", "manifests", "meta", "roles", "scripts"):
             shutil.copytree(ROOT / directory, destination / directory)
 
     def test_repository_inventory_is_complete(self) -> None:
         result = DEPENDENCIES.validate_source_dependencies(root=ROOT)
         self.assertEqual(result["container_count"], 25)
         self.assertEqual(result["derived_container_count"], 1)
-        self.assertEqual(result["collection_count"], 12)
+        self.assertEqual(result["collection_count"], 14)
         self.assertEqual(result["external_product_count"], 1)
 
     def test_binary_shipped_payload_is_not_decoded_as_dependency_source(self) -> None:

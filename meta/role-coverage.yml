@@ -387,7 +387,8 @@ roles:
       - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
     deprecation_state: "active"
     scenario_support:
-      tiny: []
+      tiny:
+        - "aap-tls-basic"
       heavy: []
       application_acceptance: []
   alertmanager_deploy:
@@ -740,6 +741,33 @@ roles:
         - "wunderbox-monitoring-logging-basic"
       heavy:
         - "atlas-observability-incus_heavy"
+      application_acceptance: []
+  hetzner_object_storage_cac:
+    component: "hetzner_object_storage"
+    classification: "configuration_as_code"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "blocked-external-service"
+    application_acceptance: "blocked-external-service"
+    acceptance_surface: "create_query_reconcile_and_remove_protected_s3_objects"
+    dependencies:
+      - "amazon.aws"
+      - "community.aws"
+      - "community.hashi_vault"
+    external_dependencies:
+      - "Paid Hetzner Object Storage project and protected S3 credentials"
+    known_limitations:
+      - "Tiny validates the real plan and negative safety contracts without calling the paid external API."
+      - "Bucket deletion and S3 credential creation are deliberately outside the role."
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "hetzner-object-storage-tiny"
+      heavy: []
       application_acceptance: []
   incus_esxi_image:
     component: "esxi"
@@ -2343,7 +2371,7 @@ scenarios:
   aap-cac-basic:
     profile: "tiny"
     state: "experimental"
-    implementation: "stub"
+    implementation: "partial"
     roles:
       - "aap_cac"
     junit: false
@@ -2352,8 +2380,8 @@ scenarios:
     test_application:
       mode: "not-applicable"
       reason: >-
-        Scenario is a role contract or assertion stub and does not deploy an independently versioned
-        application.
+        Scenario executes the AAP CaC authentication contract and shared password
+        resolution without deploying an independently versioned application.
       dependencies: []
   aap-deploy-basic:
     profile: "tiny"
@@ -2444,6 +2472,21 @@ scenarios:
       reason: >-
         Scenario is a role contract or assertion stub and does not deploy an independently versioned
         application.
+      dependencies: []
+  aap-tls-basic:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "aap_tls"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario generates an ephemeral AAP CA and verifies transfer to the
+        managed host trust anchor without deploying AAP.
       dependencies: []
   artifacts-basic:
     profile: "tiny"
@@ -2629,6 +2672,20 @@ scenarios:
       reason: >-
         Scenario enforces a deprecation contract and intentionally does not deploy an independently versioned
         application.
+      dependencies: []
+  hetzner-object-storage-tiny:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "hetzner_object_storage_cac"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario validates the real provider contract and plan path without mutating a paid external service.
       dependencies: []
   incus-esxi-image-basic:
     profile: "tiny"

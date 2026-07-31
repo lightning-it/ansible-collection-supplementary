@@ -6,6 +6,11 @@
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
       vars:
+        aap_hostname: "{{ aap_cac_gateway_hostname }}"
+        aap_username: "{{ aap_cac_gateway_username }}"
+        aap_password: "{{ aap_cac_gateway_password_effective }}"
+        aap_token: "{{ aap_cac_auth_token }}"
+        aap_validate_certs: "{{ aap_cac_gateway_validate_certs | bool }}"
         aap_configuration_dispatcher_roles:
           - role: gateway_settings
             var: gateway_settings

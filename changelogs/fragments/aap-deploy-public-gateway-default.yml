@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Default the AAP containerized installer ``gateway_main_url`` to the public
+    Envoy HTTPS endpoint so Hub readiness and image seeding do not target the
+    internal Gateway Nginx listener.
