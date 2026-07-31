@@ -506,3 +506,11 @@ releases:
       - chrome-linux-security-vex.yml
       - shared-assets-sync-30601580972.yml
     release_date: '2026-07-31'
+  3.1.2:
+    changes:
+      bugfixes:
+        - Update the pinned ``smblds/smblds`` container image digest used by the Samba
+          deployment role and the authoritative source-dependency inventory.
+    fragments:
+      - smblds-image-digest.yml
+    release_date: '2026-07-31'
