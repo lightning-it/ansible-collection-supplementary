@@ -1,7 +1,0 @@
----
-bugfixes:
-  - >-
-    Resolve AAP configuration-as-code authentication from the canonical shared
-    Gateway admin password input instead of requiring the legacy
-    ``aap_username`` and ``aap_password`` inventory aliases. This also makes
-    CaC-only reruns work after an existing AAP installation.
