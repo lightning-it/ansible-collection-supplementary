@@ -54,3 +54,30 @@ digests, and scanner output when those licensed inputs become available.
 Caller-provided runtime overrides are not source dependencies. Production
 inventories should use immutable image digests and exact Git revisions; the
 source check only proves the defaults contained in the released artifact.
+
+## Quality-impact selection
+
+As required by [MLX-70](https://wiki.cloud.l-it.io/wiki/spaces/LIT/pages/2893119515),
+[MLX-10](https://wiki.cloud.l-it.io/wiki/spaces/LIT/pages/2886566105), and
+[MLX-40](https://wiki.cloud.l-it.io/wiki/spaces/LIT/pages/2886926524), and tracked
+in [#554](https://github.com/lightning-it/ansible-collection-supplementary/issues/554),
+an inventory edit is not a blanket Keycloak change. The CI selector compares
+the old and new declared dependency entries and classifies the changed entry by
+its declared `locations`. A Rsyslog-only digest update therefore cannot select
+Keycloak Heavy or Application Acceptance. An unreadable or unclassifiable
+inventory fails closed only to the unprivileged Tiny Fast Lane; it never starts
+a privileged PR validation.
+
+### Central execution boundary
+
+Supplementary runs only the Fast Lane. `modulix-validation` resolves the exact
+protected `develop` SHA nightly, builds that candidate, and runs Heavy before
+Application Acceptance in its protected environment. It publishes a compact
+evidence artifact bound to that SHA.
+
+`Collection / Fast` is the only required context on `develop`. A PR to `main`
+also requires `Collection / Release Evidence`: the collection workflow obtains
+the central artifact and accepts it only when its repository, SHA, schema, and
+`release_eligible` value match exactly. Missing, expired, malformed, or
+mismatched evidence fails closed. This keeps infrastructure validation out of
+PR/release execution while preventing promotion without a completed central run.
