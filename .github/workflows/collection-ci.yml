@@ -986,7 +986,7 @@ jobs:
         env:
           GH_TOKEN: >-
             ${{ (github.ref == 'refs/heads/main' || github.event.pull_request.base.ref == 'main') &&
-                secrets.MODULIX_VALIDATION_READ_TOKEN || '' }}
+                (secrets.MODULIX_VALIDATION_READ_TOKEN || github.token) || '' }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_REF: ${{ github.ref }}
           PR_BASE: ${{ github.event.pull_request.base.ref || '' }}
