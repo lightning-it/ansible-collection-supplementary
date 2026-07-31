@@ -602,6 +602,40 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('git show "$SOURCE_SHA:meta/source-dependencies.yml"', ci)
         self.assertIn("artifacts/evidence/security/source-dependencies.yml", ci)
         self.assertIn("cmp --silent", ci)
+        self.assertIn(
+            "vex: security/vex/chrome-linux-151.0.7922.71.openvex.json",
+            ci,
+        )
+        self.assertIn(
+            "artifacts/evidence/security/chrome-linux.openvex.json",
+            ci,
+        )
+
+        vex = json.loads(
+            (ROOT / "security" / "vex" / "chrome-linux-151.0.7922.71.openvex.json").read_text(encoding="utf-8")
+        )
+        expected_cves = {
+            "CVE-2026-17950",
+            "CVE-2026-17952",
+            "CVE-2026-17956",
+            "CVE-2026-17969",
+            "CVE-2026-17979",
+            "CVE-2026-17989",
+            "CVE-2026-17993",
+            "CVE-2026-18012",
+            "CVE-2026-18017",
+        }
+        self.assertEqual(
+            {statement["vulnerability"]["name"] for statement in vex["statements"]},
+            expected_cves,
+        )
+        for statement in vex["statements"]:
+            self.assertEqual(statement["status"], "fixed")
+            self.assertEqual(
+                statement["products"],
+                [{"@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"}],
+            )
+            self.assertIn("chromereleases.googleblog.com", statement["status_notes"])
 
         publish = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
         self.assertIn("dist/release/SHA256SUMS.sigstore.json", publish)

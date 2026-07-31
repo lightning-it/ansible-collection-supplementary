@@ -1,0 +1,5 @@
+bugfixes:
+  - >-
+    Bind release vulnerability scans to an exact-version OpenVEX statement for
+    the Chrome 151.0.7922.71 Linux security release, avoiding Windows/macOS
+    version comparisons being applied to the Linux browser artifact.

@@ -1,0 +1,118 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/lightning-it/ansible-collection-supplementary/security/vex/chrome-linux-151.0.7922.71",
+  "author": "https://github.com/lightning-it",
+  "role": "Document Creator",
+  "timestamp": "2026-07-31T00:00:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2026-17950"
+      },
+      "products": [
+        {
+          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+        }
+      ],
+      "status": "fixed",
+      "status_notes": "Google's Stable Channel Update for Desktop publishes 151.0.7922.71 as the fixed Linux release; 151.0.7922.72 applies only to Windows and macOS. Source: https://chromereleases.googleblog.com/2026/07/stable-channel-update-for-desktop_0887107924.html"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-17952"
+      },
+      "products": [
+        {
+          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+        }
+      ],
+      "status": "fixed",
+      "status_notes": "Google's Stable Channel Update for Desktop publishes 151.0.7922.71 as the fixed Linux release; 151.0.7922.72 applies only to Windows and macOS. Source: https://chromereleases.googleblog.com/2026/07/stable-channel-update-for-desktop_0887107924.html"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-17956"
+      },
+      "products": [
+        {
+          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+        }
+      ],
+      "status": "fixed",
+      "status_notes": "Google's Stable Channel Update for Desktop publishes 151.0.7922.71 as the fixed Linux release; 151.0.7922.72 applies only to Windows and macOS. Source: https://chromereleases.googleblog.com/2026/07/stable-channel-update-for-desktop_0887107924.html"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-17969"
+      },
+      "products": [
+        {
+          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+        }
+      ],
+      "status": "fixed",
+      "status_notes": "Google's Stable Channel Update for Desktop publishes 151.0.7922.71 as the fixed Linux release; 151.0.7922.72 applies only to Windows and macOS. Source: https://chromereleases.googleblog.com/2026/07/stable-channel-update-for-desktop_0887107924.html"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-17979"
+      },
+      "products": [
+        {
+          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+        }
+      ],
+      "status": "fixed",
+      "status_notes": "Google's Stable Channel Update for Desktop publishes 151.0.7922.71 as the fixed Linux release; 151.0.7922.72 applies only to Windows and macOS. Source: https://chromereleases.googleblog.com/2026/07/stable-channel-update-for-desktop_0887107924.html"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-17989"
+      },
+      "products": [
+        {
+          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+        }
+      ],
+      "status": "fixed",
+      "status_notes": "Google's Stable Channel Update for Desktop publishes 151.0.7922.71 as the fixed Linux release; 151.0.7922.72 applies only to Windows and macOS. Source: https://chromereleases.googleblog.com/2026/07/stable-channel-update-for-desktop_0887107924.html"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-17993"
+      },
+      "products": [
+        {
+          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+        }
+      ],
+      "status": "fixed",
+      "status_notes": "Google's Stable Channel Update for Desktop publishes 151.0.7922.71 as the fixed Linux release; 151.0.7922.72 applies only to Windows and macOS. Source: https://chromereleases.googleblog.com/2026/07/stable-channel-update-for-desktop_0887107924.html"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-18012"
+      },
+      "products": [
+        {
+          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+        }
+      ],
+      "status": "fixed",
+      "status_notes": "Google's Stable Channel Update for Desktop publishes 151.0.7922.71 as the fixed Linux release; 151.0.7922.72 applies only to Windows and macOS. Source: https://chromereleases.googleblog.com/2026/07/stable-channel-update-for-desktop_0887107924.html"
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-18017"
+      },
+      "products": [
+        {
+          "@id": "cpe:2.3:a:google:chrome:151.0.7922.71:*:*:*:*:*:*:*"
+        }
+      ],
+      "status": "fixed",
+      "status_notes": "Google's Stable Channel Update for Desktop publishes 151.0.7922.71 as the fixed Linux release; 151.0.7922.72 applies only to Windows and macOS. Source: https://chromereleases.googleblog.com/2026/07/stable-channel-update-for-desktop_0887107924.html"
+    }
+  ]
+}
