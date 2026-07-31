@@ -106,7 +106,7 @@ derived_images:
 # a normal Galaxy dependency or an exact AAP runtime-overlay dependency.
 collections:
   - name: "amazon.aws"
-    requirement: "10.1.2"
+    requirement: "10.3.2"
     source: "galaxy.yml"
   - name: "ansible.posix"
     requirement: ">=2.1.0"
