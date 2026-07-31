@@ -54,3 +54,32 @@ digests, and scanner output when those licensed inputs become available.
 Caller-provided runtime overrides are not source dependencies. Production
 inventories should use immutable image digests and exact Git revisions; the
 source check only proves the defaults contained in the released artifact.
+
+## Quality-impact selection
+
+As required by [MLX-70](https://wiki.cloud.l-it.io/wiki/spaces/LIT/pages/2893119515),
+[MLX-10](https://wiki.cloud.l-it.io/wiki/spaces/LIT/pages/2886566105), and
+[MLX-40](https://wiki.cloud.l-it.io/wiki/spaces/LIT/pages/2886926524), and tracked
+in [#554](https://github.com/lightning-it/ansible-collection-supplementary/issues/554),
+an inventory edit is not a blanket Keycloak change. The CI selector compares
+the old and new declared dependency entries and classifies the changed entry by
+its declared `locations`. A Rsyslog-only digest update therefore cannot select
+Keycloak Heavy or Application Acceptance. An unreadable or unclassifiable
+inventory fails closed only to the unprivileged Tiny Fast Lane; it never starts
+a privileged PR validation.
+
+### Stage-1 boundary
+
+This change separates impact selection; it does **not** yet move execution.
+For a real Keycloak impact, Heavy and Application Acceptance therefore remain
+synchronous in this workflow until the protected Trust/Nightly adapter from
+[#134](https://github.com/lightning-it/modulix-validation/issues/134) is
+operational. A registry family may not declare Application Acceptance without
+Heavy, so Acceptance cannot start without a successful Heavy aggregate.
+
+The current `quality_evidence.py` release contract intentionally still requires
+every legacy prerequisite to be `success` and the full expected matrix. A
+future Heavy-only selection is therefore fail-closed: it cannot be represented
+as passing release evidence or claim release eligibility until #134 delivers
+the central evidence contract. This Stage-1 selector must not be read as a
+release-evidence migration.

@@ -283,10 +283,15 @@ class WorkflowSecurityTests(unittest.TestCase):
 
     def test_self_hosted_pr_cells_require_exact_head_and_protected_environment(self) -> None:
         jobs = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]
-        for name in ("tiny-cells", "heavy-cells", "acceptance-cells"):
+        required_outputs = {
+            "tiny-cells": "tiny_required",
+            "heavy-cells": "heavy_required",
+            "acceptance-cells": "acceptance_required",
+        }
+        for name, output in required_outputs.items():
             guard = jobs[name]["if"]
             self.assertIn(
-                "needs.quality-matrix.outputs.keycloak_required == 'true'",
+                f"needs.quality-matrix.outputs.{output} == 'true'",
                 guard,
             )
             self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", guard)
@@ -312,7 +317,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         runtime_guard = jobs["runtime-evidence"]["if"]
         self.assertIn("always()", runtime_guard)
         self.assertIn(
-            "needs.quality-matrix.outputs.keycloak_required == 'true'",
+            "needs.quality-matrix.outputs.runtime_evidence_required == 'true'",
             runtime_guard,
         )
         self.assertIn("pull_request.head.repo.full_name == github.repository", runtime_guard)
@@ -335,11 +340,26 @@ class WorkflowSecurityTests(unittest.TestCase):
             )
         quality_outputs = jobs["quality-matrix"]["outputs"]
         self.assertIn("keycloak_required", quality_outputs)
+        self.assertIn("tiny_required", quality_outputs)
+        self.assertIn("heavy_required", quality_outputs)
+        self.assertIn("acceptance_required", quality_outputs)
+        self.assertIn("runtime_evidence_required", quality_outputs)
         self.assertIn("full_matrix", quality_outputs)
         self.assertIn("selection", quality_outputs)
         evidence_gate = jobs["evidence"]["steps"][0]["run"]
+        self.assertIn('if [ "$TINY_REQUIRED" = true ]', evidence_gate)
+        self.assertIn('if [ "$HEAVY_REQUIRED" = true ]', evidence_gate)
+        self.assertIn('if [ "$ACCEPTANCE_REQUIRED" = true ]', evidence_gate)
         self.assertIn('test "$RUNTIME_EVIDENCE_RESULT" = success', evidence_gate)
         self.assertIn('test "$RUNTIME_EVIDENCE_RESULT" = skipped', evidence_gate)
+        runtime_prerequisites = next(
+            step for step in jobs["runtime-evidence"]["steps"] if step.get("id") == "prerequisites"
+        )
+        self.assertIn("TINY_REQUIRED", runtime_prerequisites["env"])
+        self.assertIn("HEAVY_REQUIRED", runtime_prerequisites["env"])
+        self.assertIn("ACCEPTANCE_REQUIRED", runtime_prerequisites["env"])
+        self.assertIn('if [ "$HEAVY_REQUIRED" = true ]', runtime_prerequisites["run"])
+        self.assertIn('if [ "$ACCEPTANCE_REQUIRED" = true ]', runtime_prerequisites["run"])
         stable_names = {
             jobs[name]["name"]
             for name in (
