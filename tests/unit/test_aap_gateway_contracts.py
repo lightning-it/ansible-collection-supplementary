@@ -64,7 +64,7 @@ class AapGatewayContractsTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn(
-            'aap_deploy_gateway_main_url: "https://{{ aap_fqdn }}"',
+            "('https://' ~ aap_fqdn)",
             defaults,
         )
         self.assertIn(
@@ -76,7 +76,15 @@ class AapGatewayContractsTests(unittest.TestCase):
             template,
         )
         self.assertIn(
-            'aap_cac_gateway_hostname: "https://{{ aap_fqdn }}"',
+            "('https://' ~ aap_fqdn)",
+            cac_defaults,
+        )
+        self.assertIn(
+            "aap_fqdn | default('', true) | string | trim | length > 0",
+            defaults,
+        )
+        self.assertIn(
+            "aap_fqdn | default('', true) | string | trim | length > 0",
             cac_defaults,
         )
         self.assertNotIn(

@@ -334,7 +334,12 @@ aap_deploy_setup_prep_inv_nodes_extra: {}
 # Gateway public URL and listener ports for the containerized installer
 # inventory. Post-install clients must use the public Envoy endpoint rather
 # than the internal Gateway Nginx listener.
-aap_deploy_gateway_main_url: "https://{{ aap_fqdn }}"
+aap_deploy_gateway_main_url: >-
+  {{
+    ('https://' ~ aap_fqdn)
+    if (aap_fqdn | default('', true) | string | trim | length > 0)
+    else ''
+  }}
 aap_deploy_gateway_nginx_http_port: 8083
 aap_deploy_gateway_nginx_https_port: 8446
 aap_deploy_gateway_nginx_disable_https: false

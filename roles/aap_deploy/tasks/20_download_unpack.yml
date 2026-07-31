@@ -119,12 +119,17 @@
 - name: Validate public Gateway URL before rendering installer inventory
   ansible.builtin.assert:
     that:
-      - aap_deploy_gateway_main_url == 'https://' ~ aap_fqdn
+      - aap_fqdn | default('', true) | string | trim | length > 0
+      - >-
+        aap_deploy_gateway_main_url
+        == 'https://' ~ (aap_fqdn | default('', true) | string | trim)
     fail_msg: >-
       The effective aap_deploy_gateway_main_url is
       {{ aap_deploy_gateway_main_url }} but this deployment requires the
-      public Envoy URL https://{{ aap_fqdn }}. Remove the inventory override
-      that selects the internal Gateway Nginx port.
+      public Envoy URL derived from a non-empty aap_fqdn
+      (current value: {{ aap_fqdn | default('<missing>', true) }}).
+      Define aap_fqdn and remove any inventory override that selects the
+      internal Gateway Nginx port.
     quiet: true
 
 - name: Prepare setup bundle and render installer inventory via vendor role  # noqa var-naming[no-role-prefix]
