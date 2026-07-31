@@ -610,6 +610,12 @@ class WorkflowSecurityTests(unittest.TestCase):
             "artifacts/evidence/security/chrome-linux.openvex.json",
             ci,
         )
+        preserve_vex = ci.split(
+            "- name: Preserve the applied vulnerability-exploitability statement",
+            maxsplit=1,
+        )[1].split("- name:", maxsplit=1)[0]
+        self.assertIn("set -euo pipefail", preserve_vex)
+        self.assertIn("mkdir -p artifacts/evidence/security", preserve_vex)
 
         vex = json.loads(
             (ROOT / "security" / "vex" / "chrome-linux-151.0.7922.71.openvex.json").read_text(encoding="utf-8")

@@ -681,6 +681,8 @@ jobs:
       - name: Preserve the applied vulnerability-exploitability statement
         if: always()
         run: |
+          set -euo pipefail
+          mkdir -p artifacts/evidence/security
           cp \
             security/vex/chrome-linux-151.0.7922.71.openvex.json \
             artifacts/evidence/security/chrome-linux.openvex.json
