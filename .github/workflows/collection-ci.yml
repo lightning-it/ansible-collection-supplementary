@@ -146,6 +146,10 @@ jobs:
       tiny: ${{ steps.matrix.outputs.tiny }}
       heavy: ${{ steps.matrix.outputs.heavy }}
       acceptance: ${{ steps.matrix.outputs.acceptance }}
+      tiny_required: ${{ steps.impact.outputs.tiny_required }}
+      heavy_required: ${{ steps.impact.outputs.heavy_required }}
+      acceptance_required: ${{ steps.impact.outputs.acceptance_required }}
+      runtime_evidence_required: ${{ steps.impact.outputs.runtime_evidence_required }}
       keycloak_required: ${{ steps.impact.outputs.keycloak_required }}
       full_matrix: ${{ steps.impact.outputs.full_matrix }}
       selection: ${{ steps.impact.outputs.selection }}
@@ -180,6 +184,10 @@ jobs:
 
           selection = json.loads(os.environ["SELECTION"])
           with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
+              stream.write(f"tiny_required={str(selection['profiles']['tiny']).lower()}\n")
+              stream.write(f"heavy_required={str(selection['profiles']['heavy']).lower()}\n")
+              stream.write(f"acceptance_required={str(selection['profiles']['application_acceptance']).lower()}\n")
+              stream.write(f"runtime_evidence_required={str(selection['runtime_evidence_required']).lower()}\n")
               stream.write(f"keycloak_required={str(selection['keycloak_required']).lower()}\n")
               stream.write(f"full_matrix={str(selection['full_matrix']).lower()}\n")
               stream.write(f"selection={json.dumps(selection, separators=(',', ':'))}\n")
@@ -331,7 +339,7 @@ jobs:
   tiny-cells:
     name: Tiny matrix / ${{ matrix.scenario }} / ${{ matrix.target }}
     if: >-
-      needs.quality-matrix.outputs.keycloak_required == 'true' &&
+      needs.quality-matrix.outputs.tiny_required == 'true' &&
       ((github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
        (github.event.pull_request.base.ref == 'develop' ||
@@ -404,7 +412,7 @@ jobs:
         env:
           MATRIX_RESULT: ${{ needs.quality-matrix.result }}
           PROFILE_RESULT: ${{ needs.tiny-cells.result }}
-          REQUIRED: ${{ needs.quality-matrix.outputs.keycloak_required }}
+          REQUIRED: ${{ needs.quality-matrix.outputs.tiny_required }}
         run: |
           set -euo pipefail
           test "$MATRIX_RESULT" = success
@@ -417,7 +425,7 @@ jobs:
   heavy-cells:
     name: Heavy matrix (delegated to modulix-validation)
     if: >-
-      needs.quality-matrix.outputs.keycloak_required == 'true' &&
+      needs.quality-matrix.outputs.heavy_required == 'true' &&
       ((github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
        (github.event.pull_request.base.ref == 'develop' ||
@@ -452,7 +460,7 @@ jobs:
         env:
           MATRIX_RESULT: ${{ needs.quality-matrix.result }}
           PROFILE_RESULT: ${{ needs.heavy-cells.result }}
-          REQUIRED: ${{ needs.quality-matrix.outputs.keycloak_required }}
+          REQUIRED: ${{ needs.quality-matrix.outputs.heavy_required }}
         run: |
           set -euo pipefail
           test "$MATRIX_RESULT" = success
@@ -465,7 +473,7 @@ jobs:
   acceptance-cells:
     name: Application Acceptance matrix (delegated to modulix-validation)
     if: >-
-      needs.quality-matrix.outputs.keycloak_required == 'true' &&
+      needs.quality-matrix.outputs.acceptance_required == 'true' &&
       ((github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
        (github.event.pull_request.base.ref == 'develop' ||
@@ -503,7 +511,7 @@ jobs:
         env:
           MATRIX_RESULT: ${{ needs.quality-matrix.result }}
           PROFILE_RESULT: ${{ needs.acceptance-cells.result }}
-          REQUIRED: ${{ needs.quality-matrix.outputs.keycloak_required }}
+          REQUIRED: ${{ needs.quality-matrix.outputs.acceptance_required }}
         run: |
           set -euo pipefail
           test "$MATRIX_RESULT" = success
@@ -519,9 +527,12 @@ jobs:
       # Do not expose this override to repository unit tests: they exercise
       # _tested_commit() with isolated process environments.
       QUALITY_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      TINY_REQUIRED: ${{ needs.quality-matrix.outputs.tiny_required }}
+      HEAVY_REQUIRED: ${{ needs.quality-matrix.outputs.heavy_required }}
+      ACCEPTANCE_REQUIRED: ${{ needs.quality-matrix.outputs.acceptance_required }}
     if: >-
       always() &&
-      needs.quality-matrix.outputs.keycloak_required == 'true' &&
+      needs.quality-matrix.outputs.runtime_evidence_required == 'true' &&
       ((github.event_name == 'pull_request' &&
         github.event.pull_request.head.repo.full_name == github.repository &&
         (github.event.pull_request.base.ref == 'develop' ||
@@ -817,14 +828,20 @@ jobs:
           TINY_RESULT: ${{ needs.tiny.result }}
           HEAVY_RESULT: ${{ needs.heavy.result }}
           ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          TINY_REQUIRED: ${{ needs.quality-matrix.outputs.tiny_required }}
+          HEAVY_REQUIRED: ${{ needs.quality-matrix.outputs.heavy_required }}
+          ACCEPTANCE_REQUIRED: ${{ needs.quality-matrix.outputs.acceptance_required }}
         run: |
           set -euo pipefail
-          profile_lifecycle=failure
-          if [ "$TINY_RESULT" = success ] \
-            && [ "$HEAVY_RESULT" = success ] \
-            && [ "$ACCEPTANCE_RESULT" = success ]
-          then
-            profile_lifecycle=success
+          profile_lifecycle=success
+          if [ "$TINY_REQUIRED" = true ] && [ "$TINY_RESULT" != success ]; then
+            profile_lifecycle=failure
+          fi
+          if [ "$HEAVY_REQUIRED" = true ] && [ "$HEAVY_RESULT" != success ]; then
+            profile_lifecycle=failure
+          fi
+          if [ "$ACCEPTANCE_REQUIRED" = true ] && [ "$ACCEPTANCE_RESULT" != success ]; then
+            profile_lifecycle=failure
           fi
           LIFECYCLE_RESULT="$profile_lifecycle" python - <<'PY'
           import json
@@ -919,6 +936,9 @@ jobs:
           TINY_RESULT: ${{ needs.tiny.result }}
           HEAVY_RESULT: ${{ needs.heavy.result }}
           ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          TINY_REQUIRED: ${{ needs.quality-matrix.outputs.tiny_required }}
+          HEAVY_REQUIRED: ${{ needs.quality-matrix.outputs.heavy_required }}
+          ACCEPTANCE_REQUIRED: ${{ needs.quality-matrix.outputs.acceptance_required }}
           ASSEMBLE_RC: ${{ steps.assemble.outputs.assemble_exit_code }}
           VALIDATE_RC: ${{ steps.assemble.outputs.validate_exit_code }}
           UPLOAD_OUTCOME: ${{ steps.evidence-upload.outcome }}
@@ -927,9 +947,21 @@ jobs:
           test "$LINT_RESULT" = success
           test "$BUILD_RESULT" = success
           test "$COVERAGE_RESULT" = success
-          test "$TINY_RESULT" = success
-          test "$HEAVY_RESULT" = success
-          test "$ACCEPTANCE_RESULT" = success
+          if [ "$TINY_REQUIRED" = true ]; then
+            test "$TINY_RESULT" = success
+          else
+            test "$TINY_RESULT" = skipped
+          fi
+          if [ "$HEAVY_REQUIRED" = true ]; then
+            test "$HEAVY_RESULT" = success
+          else
+            test "$HEAVY_RESULT" = skipped
+          fi
+          if [ "$ACCEPTANCE_REQUIRED" = true ]; then
+            test "$ACCEPTANCE_RESULT" = success
+          else
+            test "$ACCEPTANCE_RESULT" = skipped
+          fi
           test "${ASSEMBLE_RC:-1}" -eq 0
           test "${VALIDATE_RC:-1}" -eq 0
           test "$UPLOAD_OUTCOME" = success
@@ -953,22 +985,37 @@ jobs:
           HEAVY_RESULT: ${{ needs.heavy.result }}
           ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
           RUNTIME_EVIDENCE_RESULT: ${{ needs.runtime-evidence.result }}
-          KEYCLOAK_REQUIRED: ${{ needs.quality-matrix.outputs.keycloak_required }}
+          TINY_REQUIRED: ${{ needs.quality-matrix.outputs.tiny_required }}
+          HEAVY_REQUIRED: ${{ needs.quality-matrix.outputs.heavy_required }}
+          ACCEPTANCE_REQUIRED: ${{ needs.quality-matrix.outputs.acceptance_required }}
+          RUNTIME_EVIDENCE_REQUIRED: ${{ needs.quality-matrix.outputs.runtime_evidence_required }}
         run: |
           set -euo pipefail
           test "$LINT_RESULT" = success
           test "$BUILD_RESULT" = success
           test "$COVERAGE_RESULT" = success
-          test "$TINY_RESULT" = success
-          test "$HEAVY_RESULT" = success
-          test "$ACCEPTANCE_RESULT" = success
+          if [ "$TINY_REQUIRED" = true ]; then
+            test "$TINY_RESULT" = success
+          else
+            test "$TINY_RESULT" = skipped
+          fi
+          if [ "$HEAVY_REQUIRED" = true ]; then
+            test "$HEAVY_RESULT" = success
+          else
+            test "$HEAVY_RESULT" = skipped
+          fi
+          if [ "$ACCEPTANCE_REQUIRED" = true ]; then
+            test "$ACCEPTANCE_RESULT" = success
+          else
+            test "$ACCEPTANCE_RESULT" = skipped
+          fi
           if [ "$EVENT_NAME" = workflow_dispatch ]; then
             case "$EVENT_REF" in
               refs/heads/main|refs/heads/develop) ;;
               *) exit 1 ;;
             esac
           fi
-          if [ "$KEYCLOAK_REQUIRED" = true ]; then
+          if [ "$RUNTIME_EVIDENCE_REQUIRED" = true ]; then
             test "$RUNTIME_EVIDENCE_RESULT" = success
           else
             test "$RUNTIME_EVIDENCE_RESULT" = skipped
@@ -1610,7 +1657,7 @@ jobs:
       - name: Download exact base evidence
         if: >-
           (github.event_name != 'push' || github.ref != 'refs/heads/main') &&
-          needs.quality-matrix.outputs.keycloak_required == 'true'
+          needs.quality-matrix.outputs.runtime_evidence_required == 'true'
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7
         with:
           name: collection-evidence-${{ env.SOURCE_SHA }}
@@ -1633,7 +1680,7 @@ jobs:
       - name: Validate exact runtime evidence
         if: >-
           (github.event_name != 'push' || github.ref != 'refs/heads/main') &&
-          needs.quality-matrix.outputs.keycloak_required == 'true'
+          needs.quality-matrix.outputs.runtime_evidence_required == 'true'
         run: |
           set -euo pipefail
           python scripts/quality_evidence.py validate \
