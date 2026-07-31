@@ -4,6 +4,26 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.1.0
+======
+
+Minor Changes
+-------------
+
+- Add a complete, populated AAP configuration-as-code inventory example covering every resource family dispatched by the aap_cac role.
+- Add the experimental ``hetzner_object_storage_cac`` role for fail-closed Hetzner S3 bucket planning, auditing, Object Lock, versioning, retention, and multipart lifecycle reconciliation.
+- Default aap_cac_gateway_hostname to the public HTTPS endpoint derived from aap_fqdn so inventories do not need to repeat the AAP gateway hostname.
+
+Bugfixes
+--------
+
+- Default the AAP containerized installer ``gateway_main_url`` to the public Envoy HTTPS endpoint so Hub readiness and image seeding do not target the internal Gateway Nginx listener.
+- Install generated AAP self-signed CA certificates in the managed AAP host's system trust store instead of the controller-side generation host, and enable that trust installation by default. This allows verified Gateway API requests from subsequent configuration-as-code runs.
+- Keep the default AAP CaC organization collection as an empty list and validate organization input types before taskset execution. This prevents an unset organization inventory from reaching an Ansible loop as an empty string.
+- Make the AAP CaC certificate-validation default a literal boolean so nested configuration roles cannot create a recursive variable alias with ``aap_validate_certs``.
+- Pass the canonical AAP hostname, username, password, and certificate validation settings explicitly to Gateway and Private Automation Hub configuration tasksets.
+- Resolve AAP configuration-as-code authentication from the canonical shared Gateway admin password input instead of requiring the legacy ``aap_username`` and ``aap_password`` inventory aliases. This also makes CaC-only reruns work after an existing AAP installation.
+
 v3.0.1
 ======
 
