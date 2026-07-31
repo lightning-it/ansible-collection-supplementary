@@ -983,6 +983,7 @@ jobs:
     steps:
       - name: Enforce exact-SHA evidence for every authorized runtime
         env:
+          GH_TOKEN: ${{ secrets.MODULIX_VALIDATION_READ_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_REF: ${{ github.ref }}
           PR_BASE: ${{ github.event.pull_request.base.ref || '' }}
@@ -1013,6 +1014,7 @@ jobs:
             requires_central=true
           fi
           if [ "$requires_central" = true ]; then
+            test -n "$GH_TOKEN"
             artifact_name="supplementary-validation-evidence-$SOURCE_SHA"
             artifact_id="$(gh api \
               "repos/lightning-it/modulix-validation/actions/artifacts?name=$artifact_name&per_page=1" \
