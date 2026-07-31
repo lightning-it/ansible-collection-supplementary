@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.1.2
+======
+
+Bugfixes
+--------
+
+- Update the pinned ``smblds/smblds`` container image digest used by the Samba deployment role and the authoritative source-dependency inventory.
+
 v3.1.1
 ======
 
