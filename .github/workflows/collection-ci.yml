@@ -976,6 +976,7 @@ jobs:
     needs:
       [lint-sanity, build-install, role-coverage, quality-matrix, tiny]
     runs-on: ubuntu-latest
+    environment: ansible-collection-runtime-tests
     timeout-minutes: 10
     permissions:
       actions: read
