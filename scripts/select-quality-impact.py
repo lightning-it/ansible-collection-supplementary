@@ -120,9 +120,13 @@ def _inventory_entries(raw: str) -> dict[str, tuple[object, list[str]]]:
             identity = str(item[identity_key]).split("@", maxsplit=1)[0]
             key = f"{section}:{identity}"
             locations = item.get("locations")
-            if key in entries or not isinstance(locations, list):
+            if (
+                key in entries
+                or not isinstance(locations, list)
+                or not all(isinstance(location, str) for location in locations)
+            ):
                 raise ValueError(f"source dependency inventory {section} has duplicate or malformed entries")
-            entries[key] = (item, _normalized_paths([str(location) for location in locations]))
+            entries[key] = (item, _normalized_paths(locations))
     # Collection declarations have no source location. Their changes are
     # deliberately unclassified, so only Tiny fails closed for a PR.
     collections = payload.get("collections")
