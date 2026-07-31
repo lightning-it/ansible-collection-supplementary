@@ -19,7 +19,7 @@ tags:
   - security
   - automation
 dependencies:
-  amazon.aws: 10.1.2
+  amazon.aws: 10.3.2
   community.aws: 10.0.0
   community.general: '>=11.4.9,<12.0.0'
   community.crypto: '>=3.2.2,<4.0.0'
