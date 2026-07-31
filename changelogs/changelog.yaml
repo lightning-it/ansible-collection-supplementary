@@ -494,3 +494,15 @@ releases:
       - hetzner-object-storage-cac.yml
       - shared-assets-sync-30541900564.yml
     release_date: '2026-07-31'
+  3.1.1:
+    changes:
+      bugfixes:
+        - Bind release vulnerability scans to an exact-version OpenVEX statement for
+          the Chrome 151.0.7922.71 Linux security release, avoiding Windows/macOS
+          version comparisons being applied to the Linux browser artifact.
+        - Keep centrally managed repository standards and their validated source-dependency
+          inventory synchronized.
+    fragments:
+      - chrome-linux-security-vex.yml
+      - shared-assets-sync-30601580972.yml
+    release_date: '2026-07-31'

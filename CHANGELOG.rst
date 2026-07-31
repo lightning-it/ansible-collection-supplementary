@@ -4,6 +4,15 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.1.1
+======
+
+Bugfixes
+--------
+
+- Bind release vulnerability scans to an exact-version OpenVEX statement for the Chrome 151.0.7922.71 Linux security release, avoiding Windows/macOS version comparisons being applied to the Linux browser artifact.
+- Keep centrally managed repository standards and their validated source-dependency inventory synchronized.
+
 v3.1.0
 ======
 
