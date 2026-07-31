@@ -614,8 +614,9 @@ class WorkflowSecurityTests(unittest.TestCase):
         before_step, marker, after_step = ci.partition(step_marker)
         self.assertTrue(before_step)
         self.assertEqual(step_marker, marker)
-        preserve_vex, next_marker, _ = after_step.partition("- name:")
+        preserve_vex, next_marker, remaining_steps = after_step.partition("- name:")
         self.assertEqual("- name:", next_marker)
+        self.assertTrue(remaining_steps)
         self.assertIn("set -euo pipefail", preserve_vex)
         self.assertIn("mkdir -p artifacts/evidence/security", preserve_vex)
 
