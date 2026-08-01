@@ -32,21 +32,25 @@ must be back-synced before the next promotion.
 
 ## Validation lanes
 
-Collection source pull requests require the stable aggregate
-`Collection / Fast`. It covers lint/sanity, build/install, role coverage, and
-only the registry-selected Tiny profiles. A Keycloak-only change therefore does
-not start Satellite validation.
+Collection source pull requests require the stable `Collection / Fast` aggregate
+for the Fast Lane. It covers lint/sanity, build/install, role coverage, and only
+the registry-selected Tiny profiles. A Keycloak-only change therefore does not
+start Satellite validation.
 
-Heavy and application validation execute centrally and asynchronously against
-the exact immutable release identity. They do not block the source-repository
+Heavy and Application Acceptance validation execute centrally and asynchronously
+against the exact immutable release identity. They do not block the source-repository
 merge or the initial candidate publication. Repository settings are managed
 through `github-management-lit`, not ad hoc workflow or API changes.
+
+`Collection / Release Evidence` remains the exact-main compatibility and
+evidence gate where the current workflow requires it. It does not execute Heavy
+or Application Acceptance validation in the Collection source repository.
 
 Until the Nexus Collection registry is available, release publication continues
 directly to Galaxy. The central transition workflow validates repository,
 commit, version, artifact name, and SHA-256 digest and prints the future Galaxy
-promotion command; it performs no Heavy/Application execution and does not
-publish to Galaxy a second time. Cross-repository dispatch uses a short-lived
+promotion command; it performs no Heavy or Application Acceptance execution and
+does not publish to Galaxy a second time. Cross-repository dispatch uses a short-lived
 Release Automation GitHub App token, not a long-lived personal access token.
 
 ## Release eligibility
