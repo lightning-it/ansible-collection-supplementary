@@ -1,5 +1,6 @@
 ---
 bugfixes:
   - >-
-    Keep release-evidence assembly outside the managed runtime-test
-    environment so only Tiny runtime jobs require that approval gate.
+    Keep release-evidence assembly outside the managed
+    ansible-collection-runtime-tests environment so only Tiny runtime jobs
+    require that approval gate.
