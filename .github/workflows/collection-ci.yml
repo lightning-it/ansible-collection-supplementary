@@ -349,7 +349,8 @@ jobs:
       (github.event_name == 'push' &&
        (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) ||
       (github.event_name == 'workflow_dispatch' &&
-       (inputs.execution_mode == 'manual-candidate' ||
+       ((inputs.execution_mode == 'manual-candidate' &&
+         github.ref != 'refs/heads/main') ||
         (inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main'))))
     needs: [build-install, quality-matrix]
     strategy:
@@ -1003,6 +1004,7 @@ jobs:
             steps.validation-app.outputs.token || '' }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_REF: ${{ github.ref }}
+          EXECUTION_MODE: ${{ inputs.execution_mode || '' }}
           SOURCE_SHA: ${{ env.SOURCE_SHA }}
           LINT_RESULT: ${{ needs.lint-sanity.result }}
           BUILD_RESULT: ${{ needs.build-install.result }}
@@ -1020,10 +1022,13 @@ jobs:
             test "$TINY_RESULT" = skipped
           fi
           if [ "$EVENT_NAME" = workflow_dispatch ]; then
-            case "$EVENT_REF" in
-              refs/heads/main) ;;
-              *) exit 1 ;;
-            esac
+            if [ "$EXECUTION_MODE" = manual-main ]; then
+              test "$EVENT_REF" = refs/heads/main
+            elif [ "$EXECUTION_MODE" = manual-candidate ]; then
+              test "$EVENT_REF" != refs/heads/main
+            else
+              exit 1
+            fi
           fi
           requires_central=false
           if [ "$EVENT_REF" = refs/heads/main ]; then
