@@ -1,0 +1,80 @@
+---
+# Canonical Ansible Collection archetype contract managed by
+# lightning-it/shared-assets-lit and rendered into explicitly inventoried repositories.
+schema_version: 1
+lifecycle: active
+archetype: ansible-collection
+policy:
+  max_age_hours: 36
+  related_adrs:
+    - https://wiki.cloud.l-it.io/wiki/spaces/LIT/pages/2886566105
+    - https://wiki.cloud.l-it.io/wiki/spaces/LIT/pages/2886926524
+    - https://wiki.cloud.l-it.io/wiki/spaces/LIT/pages/2893119515
+  branch_aggregates:
+    develop:
+      - name: Collection / Fast
+        profiles:
+          - Static
+          - Build
+          - Unit
+          - Contract
+          - Tiny
+        evidence_verifier: false
+    main:
+      - name: Collection / Fast
+        profiles:
+          - Static
+          - Build
+          - Unit
+          - Contract
+          - Tiny
+        evidence_verifier: false
+      - name: Collection / Release Evidence
+        profiles:
+          - Heavy
+          - Application Acceptance
+        evidence_verifier: true
+profiles:
+  Static:
+    owner: source-repository
+    executor: source-repository
+    triggers: [pull_request]
+    blocking: {develop: true, main: true}
+    evidence: {kind: source-check, candidate_bound: false, retention_days: 90}
+  Build:
+    owner: source-repository
+    executor: source-repository
+    triggers: [pull_request]
+    blocking: {develop: true, main: true}
+    evidence: {kind: source-check, candidate_bound: false, retention_days: 90}
+  Unit:
+    owner: source-repository
+    executor: source-repository
+    triggers: [pull_request]
+    blocking: {develop: true, main: true}
+    evidence: {kind: source-check, candidate_bound: false, retention_days: 90}
+  Contract:
+    owner: source-repository
+    executor: source-repository
+    triggers: [pull_request]
+    blocking: {develop: true, main: true}
+    evidence: {kind: source-check, candidate_bound: false, retention_days: 90}
+  Tiny:
+    owner: source-repository
+    executor: source-repository
+    triggers: [pull_request]
+    blocking: {develop: true, main: true}
+    evidence: {kind: source-check, candidate_bound: false, retention_days: 90}
+  Heavy:
+    owner: modulix-validation
+    executor: modulix-validation
+    triggers: [nightly, manual]
+    blocking: {develop: false, main: false}
+    evidence: {kind: central-validation, candidate_bound: true, retention_days: 90}
+  Application Acceptance:
+    owner: modulix-validation
+    executor: modulix-validation
+    triggers: [nightly, manual]
+    blocking: {develop: false, main: false}
+    evidence: {kind: central-validation, candidate_bound: true, retention_days: 90}
+exceptions: []
