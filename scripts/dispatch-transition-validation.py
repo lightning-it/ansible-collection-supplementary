@@ -38,7 +38,7 @@ def main() -> int:
     parser.add_argument("--version", required=True)
     parser.add_argument("--artifact-name", required=True)
     parser.add_argument("--artifact-sha256", required=True)
-    parser.add_argument("--ref", default="develop")
+    parser.add_argument("--ref", default="main")
     args = parser.parse_args()
 
     repository = validated(args.source_repository, REPOSITORY_RE, "source repository")

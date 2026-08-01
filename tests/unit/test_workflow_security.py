@@ -705,6 +705,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("collection-release-transition.yml/dispatches", dispatcher)
         self.assertIn("inputs[artifact_sha256]", dispatcher)
         self.assertIn("inputs[artifact_name]", dispatcher)
+        self.assertIn('default="main"', dispatcher)
         self.assertIn(
             r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\Z",
             dispatcher,
