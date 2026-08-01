@@ -360,7 +360,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     environment:
       name: >-
-        ${{ github.event_name == 'pull_request' &&
+        ${{ (github.event_name == 'pull_request' ||
+            (github.event_name == 'workflow_dispatch' &&
+             inputs.execution_mode == 'manual-candidate')) &&
             'ansible-collection-runtime-tests' ||
             'ansible-collection-runtime-protected' }}
     timeout-minutes: 90
