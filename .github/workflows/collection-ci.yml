@@ -986,14 +986,24 @@ jobs:
       actions: read
       contents: read
     steps:
+      - name: Mint least-privilege validation evidence token
+        id: validation-app
+        if: github.ref == 'refs/heads/main'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: modulix-validation
+          permission-actions: read
+
       - name: Enforce exact-SHA evidence for every authorized runtime
         env:
           GH_TOKEN: >-
-            ${{ (github.ref == 'refs/heads/main' || github.event.pull_request.base.ref == 'main') &&
-                secrets.MODULIX_VALIDATION_READ_TOKEN || '' }}
+            ${{ github.ref == 'refs/heads/main' &&
+            steps.validation-app.outputs.token || '' }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_REF: ${{ github.ref }}
-          PR_BASE: ${{ github.event.pull_request.base.ref || '' }}
           SOURCE_SHA: ${{ env.SOURCE_SHA }}
           LINT_RESULT: ${{ needs.lint-sanity.result }}
           BUILD_RESULT: ${{ needs.build-install.result }}
@@ -1017,7 +1027,7 @@ jobs:
             esac
           fi
           requires_central=false
-          if [ "$EVENT_REF" = refs/heads/main ] || [ "$PR_BASE" = main ]; then
+          if [ "$EVENT_REF" = refs/heads/main ]; then
             requires_central=true
           fi
           if [ "$requires_central" = true ]; then
