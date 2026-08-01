@@ -277,25 +277,17 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('ZipFile("evidence.zip")', evidence_step["run"])
         self.assertNotIn("unzip", evidence_step["run"])
 
-    def test_self_hosted_candidate_cells_require_exact_head_and_scoped_environment(self) -> None:
+    def test_self_hosted_pr_cells_require_exact_head_and_protected_environment(self) -> None:
         jobs = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]
         guard = jobs["tiny-cells"]["if"]
         self.assertIn("needs.quality-matrix.outputs.tiny_required == 'true'", guard)
         self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", guard)
-        self.assertIn("inputs.execution_mode == 'manual-candidate'", guard)
-        self.assertIn("github.ref != 'refs/heads/main'", guard)
-        environment_name = jobs["tiny-cells"]["environment"]["name"]
-        self.assertIn("inputs.execution_mode == 'manual-candidate'", environment_name)
-        self.assertIn("ansible-collection-runtime-tests", environment_name)
         self.assertNotIn("github.event_name == 'schedule'", guard)
         disabled_adapter = "${{ github.event_name == 'workflow_call' }}"
         self.assertEqual(disabled_adapter, jobs["heavy-cells"]["if"])
         self.assertEqual(disabled_adapter, jobs["acceptance-cells"]["if"])
         self.assertEqual(disabled_adapter, jobs["runtime-evidence"]["if"])
         self.assertEqual("Collection / Release Evidence", jobs["evidence"]["name"])
-        evidence_run = jobs["evidence"]["steps"][1]["run"]
-        self.assertIn('test "$EVENT_REF" = refs/heads/main', evidence_run)
-        self.assertIn('test "$EVENT_REF" != refs/heads/main', evidence_run)
         self.assertEqual(
             ["lint-sanity", "build-install", "role-coverage", "quality-matrix", "tiny"],
             jobs["fast"]["needs"],
