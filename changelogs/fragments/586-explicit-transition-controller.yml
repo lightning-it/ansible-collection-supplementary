@@ -1,0 +1,2 @@
+bugfixes:
+  - Pin the central transition workflow to its protected main revision at the release call site.

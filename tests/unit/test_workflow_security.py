@@ -693,14 +693,19 @@ class WorkflowSecurityTests(unittest.TestCase):
 
     def test_publish_dispatches_transition_validation_after_galaxy(self) -> None:
         workflow = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
-        publish_index = workflow.index("Publish or verify exact artifact on Ansible Galaxy")
-        dispatch_index = workflow.index("Dispatch transitional central validation")
+        publish_steps = yaml.safe_load(workflow)["jobs"]["publish"]["steps"]
+        step_names = [step.get("name") for step in publish_steps]
+        publish_index = step_names.index(
+            "Publish or verify exact artifact on Ansible Galaxy"
+        )
+        dispatch_index = step_names.index("Dispatch transitional central validation")
         self.assertGreater(dispatch_index, publish_index)
         self.assertIn("RELEASE_AUTOMATION_APP_CLIENT_ID", workflow)
         self.assertIn("RELEASE_AUTOMATION_APP_PRIVATE_KEY", workflow)
         self.assertIn("permission-actions: write", workflow)
         self.assertIn("steps.transition-app.outputs.token", workflow)
         self.assertIn("scripts/dispatch-transition-validation.py", workflow)
+        self.assertIn("--ref main", workflow)
         dispatcher = (ROOT / "scripts/dispatch-transition-validation.py").read_text(encoding="utf-8")
         self.assertIn("collection-release-transition.yml/dispatches", dispatcher)
         self.assertIn("inputs[artifact_sha256]", dispatcher)
