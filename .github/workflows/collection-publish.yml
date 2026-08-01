@@ -1182,7 +1182,8 @@ jobs:
             --source-sha "$RELEASE_SHA" \
             --version "$RELEASE_VERSION" \
             --artifact-name "$CANDIDATE_NAME" \
-            --artifact-sha256 "$candidate_sha"
+            --artifact-sha256 "$candidate_sha" \
+            --ref main
 
       - name: Verify GitHub Release download, install, and smoke
         env:
