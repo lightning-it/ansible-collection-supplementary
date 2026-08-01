@@ -239,6 +239,26 @@ families:
         with self.assertRaisesRegex(ValueError, "requires heavy when it declares application_acceptance"):
             SELECTOR.select(arguments(registry=temporary.name, changed_file=["roles/invalid/tasks/main.yml"]))
 
+    def test_registry_rejects_unsafe_safe_fast_lane_prefixes(self) -> None:
+        for prefix in ("", ".", "/", "../", "docs/../", " docs/"):
+            with self.subTest(prefix=prefix):
+                temporary = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False)
+                self.addCleanup(lambda path=temporary.name: Path(path).unlink(missing_ok=True))
+                temporary.write(
+                    f"""---
+schema_version: 2
+safe_fast_lane_path_prefixes: [{prefix!r}]
+families:
+  valid:
+    profiles: [tiny]
+    path_prefixes: [roles/valid/]
+"""
+                )
+                temporary.close()
+
+                with self.assertRaisesRegex(ValueError, "unsafe safe Fast-Lane path prefix"):
+                    SELECTOR.select(arguments(registry=temporary.name, changed_file=["README.md"]))
+
     def test_unreadable_dependency_inventory_only_selects_tiny(self) -> None:
         result = SELECTOR.select(
             arguments(
