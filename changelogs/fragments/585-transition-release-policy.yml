@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    Require only the Fast lane in Collection source pull requests, select Tiny
+    validation by affected role, and delegate Heavy and application validation
+    asynchronously to the central validation controller.
