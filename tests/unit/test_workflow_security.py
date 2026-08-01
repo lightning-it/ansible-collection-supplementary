@@ -268,8 +268,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         evidence_step = next(
             step
             for step in jobs["evidence"]["steps"]
-            if step["name"]
-            == "Enforce exact-SHA evidence for every authorized runtime"
+            if step["name"] == "Enforce exact-SHA evidence for every authorized runtime"
         )
         self.assertIn("supplementary-validation-evidence-", evidence_step["run"])
         token_guard = evidence_step["env"]["GH_TOKEN"]
