@@ -272,6 +272,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         guard = jobs["tiny-cells"]["if"]
         self.assertIn("needs.quality-matrix.outputs.tiny_required == 'true'", guard)
         self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", guard)
+        self.assertIn("inputs.execution_mode == 'manual-candidate'", guard)
         self.assertNotIn("github.event_name == 'schedule'", guard)
         disabled_adapter = "${{ github.event_name == 'workflow_call' }}"
         self.assertEqual(disabled_adapter, jobs["heavy-cells"]["if"])
