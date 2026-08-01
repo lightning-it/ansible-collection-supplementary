@@ -255,7 +255,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         release_security = jobs["release-security"]
         self.assertEqual("${{ github.event_name == 'workflow_call' }}", release_security["if"])
         self.assertEqual("Collection / Release Evidence", jobs["evidence"]["name"])
-        self.assertEqual("ansible-collection-runtime-tests", jobs["evidence"]["environment"])
+        self.assertNotIn("environment", jobs["evidence"])
         token_step = next(step for step in jobs["evidence"]["steps"] if step.get("id") == "validation-app")
         self.assertEqual("modulix-validation", token_step["with"]["repositories"])
         self.assertEqual("read", token_step["with"]["permission-actions"])

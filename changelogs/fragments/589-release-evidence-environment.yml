@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Keep release-evidence assembly outside the managed runtime-test
+    environment so only Tiny runtime jobs require that approval gate.
