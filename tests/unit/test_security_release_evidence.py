@@ -69,7 +69,7 @@ class ProducerEvidenceTests(unittest.TestCase):
             linked_output = root / "linked-output.json"
             linked_output.symlink_to(target)
             cmd[output_arg] = str(linked_output)
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)  # noqa: S603
+            result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=30)  # noqa: S603
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must not contain symlink components", result.stderr)
             self.assertFalse(target.exists())
@@ -79,7 +79,7 @@ class ProducerEvidenceTests(unittest.TestCase):
             linked_directory = root / "linked-directory"
             linked_directory.symlink_to(real_directory, target_is_directory=True)
             cmd[output_arg] = str(linked_directory / "evidence.json")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)  # noqa: S603
+            result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=30)  # noqa: S603
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must not contain symlink components", result.stderr)
             self.assertFalse((real_directory / "evidence.json").exists())
