@@ -681,6 +681,20 @@ class WorkflowSecurityTests(unittest.TestCase):
                 arguments,
             )
 
+    def test_publish_dispatches_transition_validation_after_galaxy(self) -> None:
+        workflow = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
+        publish_index = workflow.index("Publish or verify exact artifact on Ansible Galaxy")
+        dispatch_index = workflow.index("Dispatch transitional central validation")
+        self.assertGreater(dispatch_index, publish_index)
+        self.assertIn("MODULIX_VALIDATION_DISPATCH_TOKEN", workflow)
+        self.assertIn(
+            "modulix-validation/actions/workflows/"
+            "supplementary-central-validation.yml/dispatches",
+            workflow,
+        )
+        self.assertIn('inputs[artifact_sha256]', workflow)
+        self.assertIn('inputs[artifact_name]', workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
