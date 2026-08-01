@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       execution_mode:
-        description: Select the manual protected-main validation mode.
+        description: Select protected-main or exact-head candidate validation.
         required: true
         default: manual-main
         type: choice
