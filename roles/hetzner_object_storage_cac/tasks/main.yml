@@ -52,6 +52,7 @@
         _hetzner_object_storage_cac_bucket_policy
         | to_json(sort_keys=true, separators=[',', ':'])
       }}
+  no_log: true
 
 - name: Publish the sanitized Hetzner Object Storage plan
   ansible.builtin.set_fact:
