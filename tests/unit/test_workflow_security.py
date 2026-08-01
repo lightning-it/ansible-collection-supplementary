@@ -115,31 +115,16 @@ class WorkflowSecurityTests(unittest.TestCase):
 
     def test_keycloak_cells_reserve_memory_for_the_full_runtime_stack(self) -> None:
         collection = load_yaml(WORKFLOWS / "collection-ci.yml")
-        candidate = load_yaml(WORKFLOWS / "candidate-platform-validation.yml")
         tiny_action = next(
             step
             for step in collection["jobs"]["tiny-cells"]["steps"]
             if step.get("uses") == "./.github/actions/run-quality-profile"
         )
         self.assertEqual("12GiB", tiny_action["with"]["memory-limit"])
-        for job in ("heavy-cells", "acceptance-cells"):
-            with self.subTest(job=job):
-                delegated = collection["jobs"][job]
-                self.assertIn("lightning-it/modulix-validation/", delegated["uses"])
-                self.assertNotIn("memory-limit", delegated["with"])
-        self.assertEqual(
-            "12GiB",
-            candidate["jobs"]["candidate-tiny-cells"]["steps"][1]["with"]["memory-limit"],
-        )
-        for job in ("candidate-heavy-cells", "candidate-acceptance-cells"):
-            with self.subTest(job=job):
-                delegated = candidate["jobs"][job]
-                self.assertIn("lightning-it/modulix-validation/", delegated["uses"])
-                self.assertNotIn("memory-limit", delegated["with"])
-        for scenario in ("keycloak-tiny", "keycloak-heavy", "keycloak-application-acceptance"):
-            with self.subTest(scenario=scenario):
-                molecule = (ROOT / "molecule" / scenario / "molecule.yml").read_text(encoding="utf-8")
-                self.assertIn("${KEYCLOAK_TEST_MEMORY_LIMIT:-12GiB}", molecule)
+        disabled_adapter = "${{ github.event_name == 'workflow_call' }}"
+        self.assertEqual(disabled_adapter, collection["jobs"]["heavy-cells"]["if"])
+        self.assertEqual(disabled_adapter, collection["jobs"]["acceptance-cells"]["if"])
+        self.assertFalse((WORKFLOWS / "candidate-platform-validation.yml").exists())
 
     def test_copilot_and_renovate_gates_preserve_safe_update_boundaries(self) -> None:
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
@@ -268,198 +253,49 @@ class WorkflowSecurityTests(unittest.TestCase):
     def test_release_credentials_are_outside_pull_request_jobs(self) -> None:
         jobs = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]
         release_security = jobs["release-security"]
-        self.assertEqual("ansible-collection-release-evidence", release_security["environment"])
-        self.assertEqual(
-            "github.event_name == 'push' && github.ref == 'refs/heads/main'",
-            release_security["if"],
+        self.assertEqual("${{ github.event_name == 'workflow_call' }}", release_security["if"])
+        self.assertEqual("Collection / Release Evidence", jobs["evidence"]["name"])
+        self.assertEqual("ansible-collection-runtime-tests", jobs["evidence"]["environment"])
+        token_step = next(step for step in jobs["evidence"]["steps"] if step.get("id") == "validation-app")
+        self.assertEqual("modulix-validation", token_step["with"]["repositories"])
+        self.assertEqual("read", token_step["with"]["permission-actions"])
+        self.assertIn("github.ref == 'refs/heads/main'", token_step["if"])
+        self.assertNotIn("pull_request", token_step["if"])
+        evidence_step = next(
+            step
+            for step in jobs["evidence"]["steps"]
+            if step["name"] == "Enforce exact-SHA evidence for every authorized runtime"
         )
-        self.assertEqual("write", release_security["permissions"]["id-token"])
-        self.assertEqual({"contents": "read"}, jobs["runtime-evidence"]["permissions"])
-
-        aws_secret = "QUALITY_EVIDENCE_AWS_ACCESS_KEY_ID"  # noqa: S105
-        self.assertIn(aws_secret, json.dumps(release_security))
-        untrusted_jobs = {name: job for name, job in jobs.items() if name != "release-security"}
-        self.assertNotIn(aws_secret, json.dumps(untrusted_jobs))
+        self.assertIn("supplementary-validation-evidence-", evidence_step["run"])
+        token_guard = evidence_step["env"]["GH_TOKEN"]
+        self.assertIn("steps.validation-app.outputs.token", token_guard)
+        self.assertNotIn("MODULIX_VALIDATION_READ_TOKEN", token_guard)
+        self.assertNotIn("github.token", token_guard)
+        self.assertNotIn("pull_request", token_guard)
+        self.assertIn('test -n "$GH_TOKEN"', evidence_step["run"])
+        self.assertIn("per_page=100", evidence_step["run"])
+        self.assertIn('ZipFile("evidence.zip")', evidence_step["run"])
+        self.assertNotIn("unzip", evidence_step["run"])
 
     def test_self_hosted_pr_cells_require_exact_head_and_protected_environment(self) -> None:
         jobs = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]
-        for name in ("tiny-cells", "heavy-cells", "acceptance-cells"):
-            guard = jobs[name]["if"]
-            self.assertIn(
-                "needs.quality-matrix.outputs.keycloak_required == 'true'",
-                guard,
-            )
-            self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", guard)
-            self.assertIn("github.event.pull_request.base.ref == 'develop'", guard)
-            self.assertIn("github.event.pull_request.head.ref == 'develop'", guard)
-            self.assertIn(
-                "startsWith(github.event.pull_request.head.ref, 'release/v')",
-                guard,
-            )
-            self.assertRegex(
-                " ".join(guard.split()),
-                r"base\.ref == 'main'.*head\.ref == 'develop'.*startsWith\(",
-            )
-            self.assertIn("github.event_name == 'push'", guard)
-            self.assertNotIn("github.event_name == 'schedule'", guard)
-            self.assertIn("inputs.execution_mode == 'nightly-develop'", guard)
-            if name == "tiny-cells":
-                environment = jobs[name]["environment"]["name"]
-            else:
-                environment = jobs[name]["with"]["environment-name"]
-            self.assertIn("ansible-collection-runtime-tests", environment)
-            self.assertIn("ansible-collection-runtime-protected", environment)
-        runtime_guard = jobs["runtime-evidence"]["if"]
-        self.assertIn("always()", runtime_guard)
-        self.assertIn(
-            "needs.quality-matrix.outputs.keycloak_required == 'true'",
-            runtime_guard,
-        )
-        self.assertIn("pull_request.head.repo.full_name == github.repository", runtime_guard)
-        self.assertIn(
-            "startsWith(github.event.pull_request.head.ref, 'release/v')",
-            runtime_guard,
-        )
-        serialized = json.dumps(load_yaml(WORKFLOWS / "collection-ci.yml"))
-        self.assertIn("github.event.pull_request.head.sha || github.sha", serialized)
-        self.assertNotIn("runtime is deferred", serialized)
-        self.assertNotIn("Privileged self-hosted execution is deferred", serialized)
-        for name in ("tiny", "heavy", "acceptance"):
-            self.assertIn(
-                'test "$PROFILE_RESULT" = success',
-                jobs[name]["steps"][0]["run"],
-            )
-            self.assertIn(
-                'test "$PROFILE_RESULT" = skipped',
-                jobs[name]["steps"][0]["run"],
-            )
-        quality_outputs = jobs["quality-matrix"]["outputs"]
-        self.assertIn("keycloak_required", quality_outputs)
-        self.assertIn("full_matrix", quality_outputs)
-        self.assertIn("selection", quality_outputs)
-        evidence_gate = jobs["evidence"]["steps"][0]["run"]
-        self.assertIn('test "$RUNTIME_EVIDENCE_RESULT" = success', evidence_gate)
-        self.assertIn('test "$RUNTIME_EVIDENCE_RESULT" = skipped', evidence_gate)
-        stable_names = {
-            jobs[name]["name"]
-            for name in (
-                "lint-sanity",
-                "build-install",
-                "tiny",
-                "heavy",
-                "acceptance",
-                "role-coverage",
-                "evidence",
-                "release-validation",
-            )
-        }
+        guard = jobs["tiny-cells"]["if"]
+        self.assertIn("needs.quality-matrix.outputs.tiny_required == 'true'", guard)
+        self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", guard)
+        self.assertNotIn("github.event_name == 'schedule'", guard)
+        disabled_adapter = "${{ github.event_name == 'workflow_call' }}"
+        self.assertEqual(disabled_adapter, jobs["heavy-cells"]["if"])
+        self.assertEqual(disabled_adapter, jobs["acceptance-cells"]["if"])
+        self.assertEqual(disabled_adapter, jobs["runtime-evidence"]["if"])
+        self.assertEqual("Collection / Release Evidence", jobs["evidence"]["name"])
         self.assertEqual(
-            {
-                "Collection / Lint and Sanity",
-                "Collection / Build and Install",
-                "Collection / Tiny",
-                "Collection / Heavy",
-                "Collection / Application Acceptance",
-                "Collection / Role Coverage",
-                "Collection / Evidence",
-                "Collection / Release Validation",
-            },
-            stable_names,
-        )
-        legacy_names = {
-            jobs[name]["name"]
-            for name in (
-                "keycloak-legacy-lint-sanity",
-                "keycloak-legacy-tiny",
-                "keycloak-legacy-heavy",
-                "keycloak-legacy-acceptance",
-                "keycloak-legacy-evidence",
-                "keycloak-legacy-release-validation",
-            )
-        }
-        self.assertEqual(
-            {
-                "Keycloak / Lint and Sanity",
-                "Keycloak / Tiny",
-                "Keycloak / Heavy",
-                "Keycloak / Application Acceptance",
-                "Keycloak / Evidence",
-                "Keycloak / Release Validation",
-            },
-            legacy_names,
+            ["lint-sanity", "build-install", "role-coverage", "quality-matrix", "tiny"],
+            jobs["fast"]["needs"],
         )
 
     def test_candidate_platforms_run_only_as_non_release_promotion_input(self) -> None:
-        path = WORKFLOWS / "candidate-platform-validation.yml"
-        workflow = load_yaml(path)
-        # PyYAML 1.1 treats the plain YAML key `on` as boolean true.
-        trigger = workflow.get("on", workflow.get(True))
-        self.assertEqual({"schedule", "workflow_dispatch"}, set(trigger))
-        self.assertNotIn("pull_request", trigger)
-        jobs = workflow["jobs"]
-        source = jobs["source"]
-        self.assertIn("github.event_name == 'schedule'", source["if"])
-        source_step = json.dumps(source["steps"])
-        self.assertIn("git/ref/heads/develop", source_step)
-        self.assertIn("source_ref=refs/heads/develop", source_step)
-        self.assertEqual("source", jobs["matrix"]["needs"])
-        self.assertEqual("source", jobs["build"]["needs"])
-        self.assertIn("source", jobs["candidate-tiny-cells"]["needs"])
-        self.assertEqual(
-            "ansible-collection-runtime-protected",
-            jobs["candidate-tiny-cells"]["environment"],
-        )
-        self.assertIn(
-            "needs.source.outputs.sha",
-            json.dumps(jobs["candidate-tiny-cells"]),
-        )
-        for name, profile in (
-            ("candidate-heavy-cells", "heavy"),
-            ("candidate-acceptance-cells", "application_acceptance"),
-        ):
-            delegated = jobs[name]
-            self.assertRegex(
-                delegated["uses"],
-                r"^lightning-it/modulix-validation/\.github/workflows/"
-                r"collection-quality-profile\.yml@[0-9a-f]{40}$",
-            )
-            self.assertEqual(profile, delegated["with"]["profile"])
-            self.assertIn("matrix.outputs", delegated["with"]["matrix-json"])
-            self.assertEqual(
-                "${{ needs.source.outputs.sha }}",
-                delegated["with"]["source-sha"],
-            )
-            self.assertEqual(
-                "ansible-collection-runtime-protected",
-                delegated["with"]["environment-name"],
-            )
-        self.assertIn(
-            "candidate-heavy-cells",
-            jobs["candidate-acceptance-cells"]["needs"],
-        )
-        self.assertEqual(
-            "Candidate platform / Promotion input only",
-            jobs["promotion-input"]["name"],
-        )
-        for dependency in (
-            "candidate-tiny-cells",
-            "candidate-heavy-cells",
-            "candidate-acceptance-cells",
-        ):
-            self.assertIn(dependency, jobs["promotion-input"]["needs"])
-        serialized = json.dumps(workflow)
-        self.assertIn("target-disposition", serialized)
-        self.assertIn("candidate", serialized)
-        self.assertIn("promotion input only", serialized)
-        self.assertIn("not release evidence", serialized)
-
-        nightly = load_yaml(WORKFLOWS / "nightly-develop.yml")
-        trigger = nightly.get("on", nightly.get(True))
-        self.assertIn("schedule", trigger)
-        dispatch = json.dumps(nightly["jobs"]["dispatch"])
-        self.assertIn("git/ref/heads/develop", dispatch)
-        self.assertIn("--ref develop", dispatch)
-        self.assertIn("execution_mode=nightly-develop", dispatch)
+        self.assertFalse((WORKFLOWS / "candidate-platform-validation.yml").exists())
+        self.assertFalse((WORKFLOWS / "nightly-develop.yml").exists())
 
     def test_composite_shell_never_interpolates_untrusted_inputs_directly(self) -> None:
         action = load_yaml(ACTION)

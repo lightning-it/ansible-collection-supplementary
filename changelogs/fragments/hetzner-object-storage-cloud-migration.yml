@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    Stabilize the Hetzner Object Storage compatibility role with deterministic
+    separate-project admin, writer, reader, and reviewer bucket policies and a
+    complete migration manifest for lit.cloud.

@@ -1,0 +1,46 @@
+---
+schema_version: 1
+source:
+  collection: lit.supplementary
+  role: hetzner_object_storage_cac
+  fqcn: lit.supplementary.hetzner_object_storage_cac
+target:
+  collection: lit.cloud
+  role: hetzner_object_storage
+  fqcn: lit.cloud.hetzner_object_storage
+contract:
+  preserve:
+    - plan-audit-reconcile actions
+    - endpoint and region validation
+    - private bucket, versioning, Object Lock, retention, and multipart cleanup
+    - explicit or HashiCorp Vault-backed administration credentials
+  required_target_behavior:
+    - separate-project external principals
+    - fixed admin, writer, reader, and reviewer profiles
+    - sanitized result and policy digest
+    - fail-closed same-project and unknown-profile validation
+files:
+  role:
+    - roles/hetzner_object_storage_cac
+  tiny_tests:
+    - molecule/hetzner-object-storage-tiny
+  heavy_contract:
+    - lightning-it/modulix-validation#137
+  documentation:
+    - roles/hetzner_object_storage_cac/README.md
+  changelog:
+    - changelogs/fragments/hetzner-object-storage-cloud-migration.yml
+fqcn_changes:
+  - from: lit.supplementary.hetzner_object_storage_cac
+    to: lit.cloud.hetzner_object_storage
+compatibility:
+  shim: Keep the source role operational until the replacement is released.
+  deprecation: Announce removal only with a future supplementary major version.
+  removal_preconditions:
+    - released and Heavy-accepted lit.cloud replacement
+    - consumer migration and rollback validation
+    - announced major-version removal window
+secret_boundary:
+  - never move or copy productive credentials
+  - preserve separate administration and external-principal Vault paths
+  - never include access or secret keys in evidence

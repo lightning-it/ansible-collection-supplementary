@@ -6,6 +6,8 @@ hetzner_object_storage_cac_endpoint: ""
 hetzner_object_storage_cac_region: ""
 hetzner_object_storage_cac_bucket: ""
 hetzner_object_storage_cac_prefix: ""
+hetzner_object_storage_cac_bucket_project_id: ""
+hetzner_object_storage_cac_external_principals: []
 
 hetzner_object_storage_cac_access_key: ""
 hetzner_object_storage_cac_secret_key: ""

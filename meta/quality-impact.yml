@@ -1,5 +1,12 @@
 ---
-schema_version: 1
+schema_version: 2
+# MLX-70 / #554: Tiny, Heavy and Application Acceptance are deliberately
+# selected independently. Unknown source stays in the unprivileged Fast Lane.
+safe_fast_lane_path_prefixes:
+  - CHANGELOG.rst
+  - README.md
+  - changelogs/
+  - docs/
 families:
   keycloak:
     profiles:
@@ -15,7 +22,6 @@ families:
       - docs/testing/generated/role-coverage-matrix.json
       - meta/quality-impact.yml
       - meta/role-coverage.yml
-      - meta/source-dependencies.yml
       - molecule/keycloak-
       - molecule/shared/incus/
       - molecule/shared/keycloak/

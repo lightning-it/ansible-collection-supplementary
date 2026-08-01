@@ -13,6 +13,12 @@
       mode: "{{ hetzner_object_storage_cac_object_lock_mode }}"
       days: "{{ hetzner_object_storage_cac_object_lock_retention_days }}"
     versioning: "{{ hetzner_object_storage_cac_versioning }}"
+    policy: >-
+      {{
+        _hetzner_object_storage_cac_bucket_policy
+        if hetzner_object_storage_cac_external_principals | length > 0
+        else omit
+      }}
     validate_certs: "{{ hetzner_object_storage_cac_validate_certs }}"
   register: _hetzner_object_storage_cac_bucket_result
   delegate_to: "{{ hetzner_object_storage_cac_delegate_to }}"
@@ -50,5 +56,9 @@
       object_lock_mode: "{{ hetzner_object_storage_cac_object_lock_mode }}"
       object_lock_retention_days: "{{ hetzner_object_storage_cac_object_lock_retention_days | int }}"
       prefix: "{{ hetzner_object_storage_cac_prefix }}"
+      principal_profiles: >-
+        {{ hetzner_object_storage_cac_external_principals | map(attribute='profile') | unique | sort | list }}
+      policy_sha256: >-
+        {{ _hetzner_object_storage_cac_bucket_policy_json | hash('sha256') }}
       region: "{{ hetzner_object_storage_cac_region }}"
       versioning: "{{ hetzner_object_storage_cac_versioning | bool }}"
