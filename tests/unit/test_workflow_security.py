@@ -695,9 +695,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         workflow = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
         publish_steps = yaml.safe_load(workflow)["jobs"]["publish"]["steps"]
         step_names = [step.get("name") for step in publish_steps]
-        publish_index = step_names.index(
-            "Publish or verify exact artifact on Ansible Galaxy"
-        )
+        publish_index = step_names.index("Publish or verify exact artifact on Ansible Galaxy")
         dispatch_index = step_names.index("Dispatch transitional central validation")
         self.assertGreater(dispatch_index, publish_index)
         self.assertIn("RELEASE_AUTOMATION_APP_CLIENT_ID", workflow)
