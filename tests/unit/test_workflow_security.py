@@ -256,10 +256,21 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertEqual("${{ github.event_name == 'workflow_call' }}", release_security["if"])
         self.assertEqual("Collection / Release Evidence", jobs["evidence"]["name"])
         self.assertEqual("ansible-collection-runtime-tests", jobs["evidence"]["environment"])
-        token_step = jobs["evidence"]["steps"][0]
+        token_step = next(
+            step
+            for step in jobs["evidence"]["steps"]
+            if step.get("id") == "validation-app"
+        )
         self.assertEqual("modulix-validation", token_step["with"]["repositories"])
         self.assertEqual("read", token_step["with"]["permission-actions"])
-        evidence_step = jobs["evidence"]["steps"][1]
+        self.assertIn("github.ref == 'refs/heads/main'", token_step["if"])
+        self.assertIn("pull_request.base.ref == 'main'", token_step["if"])
+        evidence_step = next(
+            step
+            for step in jobs["evidence"]["steps"]
+            if step["name"]
+            == "Enforce exact-SHA evidence for every authorized runtime"
+        )
         self.assertIn("supplementary-validation-evidence-", evidence_step["run"])
         token_guard = evidence_step["env"]["GH_TOKEN"]
         self.assertIn("steps.validation-app.outputs.token", token_guard)

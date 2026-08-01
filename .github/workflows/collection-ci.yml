@@ -984,6 +984,9 @@ jobs:
     steps:
       - name: Mint least-privilege validation evidence token
         id: validation-app
+        if: >-
+          github.ref == 'refs/heads/main' ||
+          github.event.pull_request.base.ref == 'main'
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
           client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
