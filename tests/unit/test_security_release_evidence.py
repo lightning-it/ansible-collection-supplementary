@@ -72,6 +72,7 @@ class ProducerEvidenceTests(unittest.TestCase):
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)  # noqa: S603
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must not contain symlink components", result.stderr)
+            self.assertFalse(target.exists())
 
             real_directory = root / "real-directory"
             real_directory.mkdir()
@@ -81,6 +82,7 @@ class ProducerEvidenceTests(unittest.TestCase):
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)  # noqa: S603
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must not contain symlink components", result.stderr)
+            self.assertFalse((real_directory / "evidence.json").exists())
 
 
 if __name__ == "__main__":
