@@ -26,6 +26,16 @@ def file_ref(path: Path, url: str):
     return {"url": url, "digest": sha256(path)}
 
 
+def has_symlink_component(path: Path):
+    current = path
+    while True:
+        if current.is_symlink():
+            return True
+        if current == current.parent:
+            return False
+        current = current.parent
+
+
 def timestamp(value: str, field: str):
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -62,6 +72,8 @@ def main():
     for path in (a.artifact, a.signature, a.sbom, a.provenance):
         if path.is_symlink() or not path.is_file():
             p.error(f"release asset must be a regular non-symlink file: {path}")
+    if has_symlink_component(a.output):
+        p.error(f"evidence output must not contain symlink components: {a.output}")
     if not SHA.fullmatch(a.source_sha) or not SHA.fullmatch(a.workflow_ref):
         p.error("source/workflow refs must be full SHAs")
     for field in (a.artifact_url, a.signature_url, a.sbom_url, a.provenance_url):
