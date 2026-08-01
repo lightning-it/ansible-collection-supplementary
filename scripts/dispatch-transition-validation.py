@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Dispatch the temporary central Collection validation without rebuilding."""
 
 # Managed by lightning-it/shared-assets-lit. Change the canonical source there.
