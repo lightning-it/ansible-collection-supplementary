@@ -1158,28 +1158,31 @@ jobs:
           test "$(sha256sum "$RUNNER_TEMP/galaxy-${CANDIDATE_NAME}" | awk '{print $1}')" = \
             "$candidate_sha"
 
+      - name: Mint central validation dispatch token
+        id: transition-app
+        if: env.GALAXY_REQUIRED == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: modulix-validation
+          permission-actions: write
+
       - name: Dispatch transitional central validation
         if: env.GALAXY_REQUIRED == 'true'
         env:
-          GH_TOKEN: ${{ secrets.MODULIX_VALIDATION_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ steps.transition-app.outputs.token }}
         run: |
           set -euo pipefail
-
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "MODULIX_VALIDATION_DISPATCH_TOKEN is required for the transition dispatch." >&2
-            exit 1
-          fi
           candidate="incoming/candidate/${CANDIDATE_NAME}"
           candidate_sha="$(sha256sum "$candidate" | awk '{print $1}')"
-          gh api --method POST \
-            repos/lightning-it/modulix-validation/actions/workflows/supplementary-central-validation.yml/dispatches \
-            -f ref=develop \
-            -f "inputs[source_repository]=${GITHUB_REPOSITORY}" \
-            -f "inputs[source_sha]=${RELEASE_SHA}" \
-            -f "inputs[version]=${RELEASE_VERSION}" \
-            -f "inputs[artifact_sha256]=${candidate_sha}" \
-            -f "inputs[artifact_name]=${CANDIDATE_NAME}"
-          echo "Dispatched transition-mode central validation for ${CANDIDATE_NAME}."
+          python scripts/dispatch-transition-validation.py \
+            --source-repository "$GITHUB_REPOSITORY" \
+            --source-sha "$RELEASE_SHA" \
+            --version "$RELEASE_VERSION" \
+            --artifact-name "$CANDIDATE_NAME" \
+            --artifact-sha256 "$candidate_sha"
 
       - name: Verify GitHub Release download, install, and smoke
         env:
