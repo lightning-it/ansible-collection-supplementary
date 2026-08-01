@@ -305,9 +305,10 @@ if [ -n "$DOCKER_SOCKET" ]; then
   DOCKER_SOCKET_REAL="$DOCKER_SOCKET"
   if command -v python3 >/dev/null 2>&1; then
     DOCKER_SOCKET_REAL="$(
-      python3 - <<PY
+      python3 - "$DOCKER_SOCKET" <<'PY'
 import os
-print(os.path.realpath("${DOCKER_SOCKET}"))
+import sys
+print(os.path.realpath(sys.argv[1]))
 PY
     )"
   fi
