@@ -16,7 +16,6 @@ from typing import TypedDict
 
 import yaml
 
-
 ZERO_SHA = "0" * 40
 SHA = re.compile(r"^[0-9a-f]{40}$")
 PROFILES = {"tiny", "heavy", "application_acceptance"}
@@ -80,6 +79,18 @@ def _registry(path: str) -> tuple[dict[str, FamilyPolicy], list[str]]:
         raise ValueError("quality impact registry must declare at least one family")
     if not isinstance(safe_prefixes, list) or not all(isinstance(item, str) for item in safe_prefixes):
         raise ValueError("quality impact registry must declare safe Fast-Lane path prefixes")
+    for prefix in safe_prefixes:
+        if "\0" in prefix:
+            raise ValueError(f"unsafe safe Fast-Lane path prefix: {prefix!r}")
+        prefix_path = PurePosixPath(prefix)
+        if (
+            prefix != prefix.strip()
+            or not prefix
+            or prefix == "."
+            or prefix_path.is_absolute()
+            or ".." in prefix_path.parts
+        ):
+            raise ValueError(f"unsafe safe Fast-Lane path prefix: {prefix!r}")
     normalized: dict[str, FamilyPolicy] = {}
     for name, policy in families.items():
         if not isinstance(name, str) or not isinstance(policy, dict):
