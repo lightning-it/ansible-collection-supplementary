@@ -16,6 +16,7 @@ DIGEST_RE = re.compile(r"[0-9a-f]{64}\Z")
 VERSION_RE = re.compile(
     r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\Z"
 )
+REF_RE = re.compile(r"[0-9A-Za-z][0-9A-Za-z._/-]*\Z")
 ARTIFACT_RE = re.compile(
     r"[a-z0-9_]+-[a-z0-9_]+-[0-9A-Za-z.-]+\.tar\.gz\Z"
 )
@@ -38,7 +39,7 @@ def main() -> int:
     parser.add_argument("--version", required=True)
     parser.add_argument("--artifact-name", required=True)
     parser.add_argument("--artifact-sha256", required=True)
-    parser.add_argument("--ref", default="develop")
+    parser.add_argument("--ref", default="main")
     args = parser.parse_args()
 
     repository = validated(args.source_repository, REPOSITORY_RE, "source repository")
@@ -46,6 +47,7 @@ def main() -> int:
     version = validated(args.version, VERSION_RE, "version")
     artifact_name = validated(args.artifact_name, ARTIFACT_RE, "artifact name")
     artifact_sha256 = validated(args.artifact_sha256, DIGEST_RE, "artifact SHA-256")
+    controller_ref = validated(args.ref, REF_RE, "controller ref")
     if PurePath(artifact_name).name != artifact_name or not artifact_name.endswith(
         f"-{version}.tar.gz"
     ):
@@ -60,7 +62,7 @@ def main() -> int:
         "POST",
         WORKFLOW_ENDPOINT,
         "-f",
-        f"ref={args.ref}",
+        f"ref={controller_ref}",
         "-f",
         f"inputs[source_repository]={repository}",
         "-f",
