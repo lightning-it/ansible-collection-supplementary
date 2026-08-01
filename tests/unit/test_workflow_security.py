@@ -695,12 +695,10 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("permission-actions: write", workflow)
         self.assertIn("steps.transition-app.outputs.token", workflow)
         self.assertIn("scripts/dispatch-transition-validation.py", workflow)
-        dispatcher = (ROOT / "scripts/dispatch-transition-validation.py").read_text(
-            encoding="utf-8"
-        )
+        dispatcher = (ROOT / "scripts/dispatch-transition-validation.py").read_text(encoding="utf-8")
         self.assertIn("collection-release-transition.yml/dispatches", dispatcher)
-        self.assertIn('inputs[artifact_sha256]', dispatcher)
-        self.assertIn('inputs[artifact_name]', dispatcher)
+        self.assertIn("inputs[artifact_sha256]", dispatcher)
+        self.assertIn("inputs[artifact_name]", dispatcher)
 
 
 if __name__ == "__main__":
