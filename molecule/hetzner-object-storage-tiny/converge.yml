@@ -9,6 +9,20 @@
     hetzner_object_storage_cac_region: fsn1
     hetzner_object_storage_cac_bucket: example-production-backup
     hetzner_object_storage_cac_prefix: host01
+    hetzner_object_storage_cac_bucket_project_id: "10001"
+    hetzner_object_storage_cac_external_principals:
+      - name: backup-writer
+        project_id: "20001"
+        access_key: WRITERKEY00000001
+        profile: writer
+      - name: backup-reader
+        project_id: "20002"
+        access_key: READERKEY00000001
+        profile: reader
+      - name: evidence-reviewer
+        project_id: "20003"
+        access_key: REVIEWERKEY000001
+        profile: reviewer
   tasks:
     - name: Run the real safe planning path
       ansible.builtin.include_role:
@@ -19,6 +33,59 @@
         dest: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/hetzner-object-storage-plan.yml"
         content: "{{ hetzner_object_storage_cac_result | to_nice_yaml }}"
         mode: "0600"
+
+    - name: Verify the documented Hetzner principal ARN format
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              _hetzner_object_storage_cac_bucket_policy.Statement
+              | selectattr('Sid', 'equalto', 'BackupWriterBucket')
+              | map(attribute='Principal.AWS')
+              | first
+            )
+            == 'arn:aws:iam:::user/p20001:WRITERKEY00000001'
+        quiet: true
+
+    - name: Preserve the canonical policy digest
+      ansible.builtin.set_fact:
+        _hetzner_object_storage_cac_expected_policy_sha256: >-
+          {{ hetzner_object_storage_cac_result.policy_sha256 }}
+        _hetzner_object_storage_cac_reordered_principals: >-
+          {{ hetzner_object_storage_cac_external_principals | reverse | list }}
+
+    - name: Replan with the same principals in reverse order
+      ansible.builtin.include_role:
+        name: lit.supplementary.hetzner_object_storage_cac
+      vars:
+        hetzner_object_storage_cac_external_principals: "{{ _hetzner_object_storage_cac_reordered_principals }}"
+
+    - name: Verify principal order does not change the policy digest
+      ansible.builtin.assert:
+        that:
+          - >-
+            hetzner_object_storage_cac_result.policy_sha256
+            == _hetzner_object_storage_cac_expected_policy_sha256
+        quiet: true
+
+    - name: Prove a compatibility plan needs no external principals
+      ansible.builtin.include_role:
+        name: lit.supplementary.hetzner_object_storage_cac
+      vars:
+        hetzner_object_storage_cac_bucket_project_id: ""
+        hetzner_object_storage_cac_external_principals: []
+
+    - name: Verify the compatibility plan remains non-mutating
+      ansible.builtin.assert:
+        that:
+          - hetzner_object_storage_cac_result.action == 'plan'
+          - not hetzner_object_storage_cac_result.changed | bool
+          - hetzner_object_storage_cac_result.principal_profiles == []
+        quiet: true
+
+    - name: Restore the external-principal planning contract
+      ansible.builtin.include_role:
+        name: lit.supplementary.hetzner_object_storage_cac
 
     - name: Prove an insecure endpoint is rejected
       block:
@@ -52,6 +119,46 @@
           ansible.builtin.set_fact:
             _hetzner_object_storage_cac_disabled_lock_rejected: true
 
+    - name: Prove a same-project role key is rejected
+      block:
+        - name: Run the role with a same-project Writer
+          ansible.builtin.include_role:
+            name: lit.supplementary.hetzner_object_storage_cac
+          vars:
+            hetzner_object_storage_cac_external_principals:
+              - name: unsafe-writer
+                project_id: "10001"
+                access_key: UNSAFEKEY00000001
+                profile: writer
+
+        - name: Reject an accepted same-project Writer
+          ansible.builtin.fail:
+            msg: The role accepted a same-project role key as least privilege.
+      rescue:
+        - name: Record same-project rejection
+          ansible.builtin.set_fact:
+            _hetzner_object_storage_cac_same_project_rejected: true
+
+    - name: Prove custom over-privileged profiles are rejected
+      block:
+        - name: Run the role with an undefined profile
+          ansible.builtin.include_role:
+            name: lit.supplementary.hetzner_object_storage_cac
+          vars:
+            hetzner_object_storage_cac_external_principals:
+              - name: unsafe-profile
+                project_id: "20004"
+                access_key: UNSAFEKEY00000002
+                profile: writer-with-delete
+
+        - name: Reject an accepted custom profile
+          ansible.builtin.fail:
+            msg: The role accepted an undefined permission profile.
+      rescue:
+        - name: Record over-privileged profile rejection
+          ansible.builtin.set_fact:
+            _hetzner_object_storage_cac_overprivileged_profile_rejected: true
+
     - name: Persist negative safety results
       ansible.builtin.copy:
         dest: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/hetzner-object-storage-safety.yml"
@@ -59,7 +166,10 @@
           {{
             {
               'disabled_lock_rejected': _hetzner_object_storage_cac_disabled_lock_rejected | default(false),
-              'insecure_endpoint_rejected': _hetzner_object_storage_cac_insecure_endpoint_rejected | default(false)
+              'insecure_endpoint_rejected': _hetzner_object_storage_cac_insecure_endpoint_rejected | default(false),
+              'overprivileged_profile_rejected':
+                _hetzner_object_storage_cac_overprivileged_profile_rejected | default(false),
+              'same_project_rejected': _hetzner_object_storage_cac_same_project_rejected | default(false)
             } | to_nice_yaml
           }}
         mode: "0600"

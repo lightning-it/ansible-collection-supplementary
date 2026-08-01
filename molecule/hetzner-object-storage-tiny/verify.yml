@@ -24,6 +24,10 @@
           - _hetzner_object_storage_cac_plan.object_lock_mode == 'GOVERNANCE'
           - _hetzner_object_storage_cac_plan.object_lock_retention_days | int == 30
           - _hetzner_object_storage_cac_plan.versioning | bool
+          - _hetzner_object_storage_cac_plan.principal_profiles == ['reader', 'reviewer', 'writer']
+          - _hetzner_object_storage_cac_plan.policy_sha256 | length == 64
           - _hetzner_object_storage_cac_safety.insecure_endpoint_rejected | bool
           - _hetzner_object_storage_cac_safety.disabled_lock_rejected | bool
+          - _hetzner_object_storage_cac_safety.same_project_rejected | bool
+          - _hetzner_object_storage_cac_safety.overprivileged_profile_rejected | bool
         quiet: true

@@ -3,6 +3,57 @@
   ansible.builtin.import_tasks: assert.yml
   tags: always
 
+- name: Initialize the least-privilege external-principal bucket policy
+  ansible.builtin.set_fact:
+    _hetzner_object_storage_cac_bucket_policy:
+      Version: "2012-10-17"
+      Statement: []
+
+- name: Add fixed-profile external principals to the bucket policy
+  ansible.builtin.set_fact:
+    _hetzner_object_storage_cac_bucket_policy: >-
+      {{
+        _hetzner_object_storage_cac_bucket_policy
+        | combine(
+            {
+              'Statement': _hetzner_object_storage_cac_bucket_policy.Statement
+              + [
+                  {
+                    'Sid': (item.name | replace('-', ' ') | title | replace(' ', '')) ~ 'Bucket',
+                    'Effect': 'Allow',
+                    'Principal': {
+                      'AWS': 'arn:aws:iam:::user/p' ~ item.project_id ~ ':' ~ item.access_key
+                    },
+                    'Action': _hetzner_object_storage_cac_permission_profiles[item.profile].bucket_actions,
+                    'Resource': 'arn:aws:s3:::' ~ hetzner_object_storage_cac_bucket
+                  },
+                  {
+                    'Sid': (item.name | replace('-', ' ') | title | replace(' ', '')) ~ 'Objects',
+                    'Effect': 'Allow',
+                    'Principal': {
+                      'AWS': 'arn:aws:iam:::user/p' ~ item.project_id ~ ':' ~ item.access_key
+                    },
+                    'Action': _hetzner_object_storage_cac_permission_profiles[item.profile].object_actions,
+                    'Resource': 'arn:aws:s3:::' ~ hetzner_object_storage_cac_bucket ~ '/*'
+                  }
+                ]
+            }
+          )
+      }}
+  loop: "{{ hetzner_object_storage_cac_external_principals | sort(attribute='access_key') }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+
+- name: Canonicalize the external-principal bucket policy
+  ansible.builtin.set_fact:
+    _hetzner_object_storage_cac_bucket_policy_json: >-
+      {{
+        _hetzner_object_storage_cac_bucket_policy
+        | to_json(sort_keys=true, separators=[',', ':'])
+      }}
+  no_log: true
+
 - name: Publish the sanitized Hetzner Object Storage plan
   ansible.builtin.set_fact:
     hetzner_object_storage_cac_result:
@@ -15,6 +66,10 @@
       object_lock_mode: "{{ hetzner_object_storage_cac_object_lock_mode }}"
       object_lock_retention_days: "{{ hetzner_object_storage_cac_object_lock_retention_days | int }}"
       prefix: "{{ hetzner_object_storage_cac_prefix }}"
+      principal_profiles: >-
+        {{ hetzner_object_storage_cac_external_principals | map(attribute='profile') | unique | sort | list }}
+      policy_sha256: >-
+        {{ _hetzner_object_storage_cac_bucket_policy_json | hash('sha256') }}
       region: "{{ hetzner_object_storage_cac_region }}"
       versioning: "{{ hetzner_object_storage_cac_versioning | bool }}"
   when: hetzner_object_storage_cac_action == 'plan'
