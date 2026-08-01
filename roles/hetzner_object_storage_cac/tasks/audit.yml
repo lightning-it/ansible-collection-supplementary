@@ -21,6 +21,30 @@
     fail_msg: The declared Hetzner Object Storage bucket is absent or not uniquely visible.
     quiet: true
 
+- name: Check the declared bucket policy without mutation
+  amazon.aws.s3_bucket:
+    name: "{{ hetzner_object_storage_cac_bucket }}"
+    state: present
+    endpoint_url: "{{ hetzner_object_storage_cac_endpoint }}"
+    region: "{{ hetzner_object_storage_cac_region }}"
+    access_key: "{{ _hetzner_object_storage_cac_access_key }}"
+    secret_key: "{{ _hetzner_object_storage_cac_secret_key }}"
+    policy: "{{ _hetzner_object_storage_cac_bucket_policy }}"
+    validate_certs: "{{ hetzner_object_storage_cac_validate_certs }}"
+  check_mode: true
+  register: _hetzner_object_storage_cac_policy_audit
+  delegate_to: "{{ hetzner_object_storage_cac_delegate_to }}"
+  when: hetzner_object_storage_cac_external_principals | length > 0
+  no_log: true
+
+- name: Reject Hetzner Object Storage bucket-policy drift
+  ansible.builtin.assert:
+    that:
+      - not _hetzner_object_storage_cac_policy_audit.changed | bool
+    fail_msg: The live bucket policy differs from the declared external-principal policy.
+    quiet: true
+  when: hetzner_object_storage_cac_external_principals | length > 0
+
 - name: Publish sanitized Hetzner Object Storage audit result
   ansible.builtin.set_fact:
     hetzner_object_storage_cac_result:
@@ -30,4 +54,8 @@
       endpoint: "{{ hetzner_object_storage_cac_endpoint }}"
       exists: true
       prefix: "{{ hetzner_object_storage_cac_prefix }}"
+      principal_profiles: >-
+        {{ hetzner_object_storage_cac_external_principals | map(attribute='profile') | unique | sort | list }}
+      policy_sha256: >-
+        {{ _hetzner_object_storage_cac_bucket_policy | to_json | hash('sha256') }}
       region: "{{ hetzner_object_storage_cac_region }}"
