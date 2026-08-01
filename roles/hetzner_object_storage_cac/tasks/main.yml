@@ -40,10 +40,18 @@
             }
           )
       }}
-  loop: "{{ hetzner_object_storage_cac_external_principals }}"
+  loop: "{{ hetzner_object_storage_cac_external_principals | sort(attribute='access_key') }}"
   loop_control:
     label: "{{ item.name }}"
   no_log: true
+
+- name: Canonicalize the external-principal bucket policy
+  ansible.builtin.set_fact:
+    _hetzner_object_storage_cac_bucket_policy_json: >-
+      {{
+        _hetzner_object_storage_cac_bucket_policy
+        | to_json(sort_keys=true, separators=[',', ':'])
+      }}
 
 - name: Publish the sanitized Hetzner Object Storage plan
   ansible.builtin.set_fact:
@@ -60,7 +68,7 @@
       principal_profiles: >-
         {{ hetzner_object_storage_cac_external_principals | map(attribute='profile') | unique | sort | list }}
       policy_sha256: >-
-        {{ _hetzner_object_storage_cac_bucket_policy | to_json | hash('sha256') }}
+        {{ _hetzner_object_storage_cac_bucket_policy_json | hash('sha256') }}
       region: "{{ hetzner_object_storage_cac_region }}"
       versioning: "{{ hetzner_object_storage_cac_versioning | bool }}"
   when: hetzner_object_storage_cac_action == 'plan'

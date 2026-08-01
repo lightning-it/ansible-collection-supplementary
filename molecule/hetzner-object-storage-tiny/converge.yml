@@ -38,8 +38,34 @@
       ansible.builtin.assert:
         that:
           - >-
-            _hetzner_object_storage_cac_bucket_policy.Statement[0].Principal.AWS
+            (
+              _hetzner_object_storage_cac_bucket_policy.Statement
+              | selectattr('Sid', 'equalto', 'BackupWriterBucket')
+              | map(attribute='Principal.AWS')
+              | first
+            )
             == 'arn:aws:iam:::user/p20001:WRITERKEY00000001'
+        quiet: true
+
+    - name: Preserve the canonical policy digest
+      ansible.builtin.set_fact:
+        _hetzner_object_storage_cac_expected_policy_sha256: >-
+          {{ hetzner_object_storage_cac_result.policy_sha256 }}
+        _hetzner_object_storage_cac_reordered_principals: >-
+          {{ hetzner_object_storage_cac_external_principals | reverse | list }}
+
+    - name: Replan with the same principals in reverse order
+      ansible.builtin.include_role:
+        name: lit.supplementary.hetzner_object_storage_cac
+      vars:
+        hetzner_object_storage_cac_external_principals: "{{ _hetzner_object_storage_cac_reordered_principals }}"
+
+    - name: Verify principal order does not change the policy digest
+      ansible.builtin.assert:
+        that:
+          - >-
+            hetzner_object_storage_cac_result.policy_sha256
+            == _hetzner_object_storage_cac_expected_policy_sha256
         quiet: true
 
     - name: Prove a compatibility plan needs no external principals
