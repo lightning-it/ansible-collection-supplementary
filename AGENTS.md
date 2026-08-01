@@ -35,6 +35,7 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    1. the marked shared block in `.pre-commit-config.yaml`
    2. `scripts/wunder-container-run.sh`
    3. the digest-pinned validation-image custom manager in `renovate.json`
+   4. `scripts/dispatch-transition-validation.py`
 4. The sync MUST preserve every other Renovate setting and all repository-local workflows, scripts, documentation,
    tests, evidence schemas, and release-model metadata. Generic script/workflow `rsync --delete` and generic release
    model rendering MUST NOT run against this repository.

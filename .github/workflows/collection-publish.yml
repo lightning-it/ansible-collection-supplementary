@@ -1158,6 +1158,32 @@ jobs:
           test "$(sha256sum "$RUNNER_TEMP/galaxy-${CANDIDATE_NAME}" | awk '{print $1}')" = \
             "$candidate_sha"
 
+      - name: Mint central validation dispatch token
+        id: transition-app
+        if: env.GALAXY_REQUIRED == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: modulix-validation
+          permission-actions: write
+
+      - name: Dispatch transitional central validation
+        if: env.GALAXY_REQUIRED == 'true'
+        env:
+          GH_TOKEN: ${{ steps.transition-app.outputs.token }}
+        run: |
+          set -euo pipefail
+          candidate="incoming/candidate/${CANDIDATE_NAME}"
+          candidate_sha="$(sha256sum "$candidate" | awk '{print $1}')"
+          python scripts/dispatch-transition-validation.py \
+            --source-repository "$GITHUB_REPOSITORY" \
+            --source-sha "$RELEASE_SHA" \
+            --version "$RELEASE_VERSION" \
+            --artifact-name "$CANDIDATE_NAME" \
+            --artifact-sha256 "$candidate_sha"
+
       - name: Verify GitHub Release download, install, and smoke
         env:
           GH_TOKEN: ${{ github.token }}
