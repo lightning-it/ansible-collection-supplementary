@@ -264,7 +264,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertEqual("modulix-validation", token_step["with"]["repositories"])
         self.assertEqual("read", token_step["with"]["permission-actions"])
         self.assertIn("github.ref == 'refs/heads/main'", token_step["if"])
-        self.assertIn("pull_request.base.ref == 'main'", token_step["if"])
+        self.assertNotIn("pull_request", token_step["if"])
         evidence_step = next(
             step
             for step in jobs["evidence"]["steps"]
@@ -276,7 +276,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("steps.validation-app.outputs.token", token_guard)
         self.assertNotIn("MODULIX_VALIDATION_READ_TOKEN", token_guard)
         self.assertNotIn("github.token", token_guard)
-        self.assertIn("pull_request.base.ref == 'main'", token_guard)
+        self.assertNotIn("pull_request", token_guard)
         self.assertIn('test -n "$GH_TOKEN"', evidence_step["run"])
         self.assertIn("per_page=100", evidence_step["run"])
         self.assertIn('ZipFile("evidence.zip")', evidence_step["run"])
