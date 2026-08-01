@@ -80,14 +80,15 @@ def _registry(path: str) -> tuple[dict[str, FamilyPolicy], list[str]]:
     if not isinstance(safe_prefixes, list) or not all(isinstance(item, str) for item in safe_prefixes):
         raise ValueError("quality impact registry must declare safe Fast-Lane path prefixes")
     for prefix in safe_prefixes:
-        path = PurePosixPath(prefix)
+        if "\0" in prefix:
+            raise ValueError(f"unsafe safe Fast-Lane path prefix: {prefix!r}")
+        prefix_path = PurePosixPath(prefix)
         if (
             prefix != prefix.strip()
             or not prefix
             or prefix == "."
-            or path.is_absolute()
-            or ".." in path.parts
-            or "\0" in prefix
+            or prefix_path.is_absolute()
+            or ".." in prefix_path.parts
         ):
             raise ValueError(f"unsafe safe Fast-Lane path prefix: {prefix!r}")
     normalized: dict[str, FamilyPolicy] = {}

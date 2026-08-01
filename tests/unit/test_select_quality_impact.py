@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -240,14 +241,14 @@ families:
             SELECTOR.select(arguments(registry=temporary.name, changed_file=["roles/invalid/tasks/main.yml"]))
 
     def test_registry_rejects_unsafe_safe_fast_lane_prefixes(self) -> None:
-        for prefix in ("", ".", "/", "../", "docs/../", " docs/"):
+        for prefix in ("", ".", "/", "../", "docs/../", " docs/", "\0"):
             with self.subTest(prefix=prefix):
                 temporary = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False)
                 self.addCleanup(lambda path=temporary.name: Path(path).unlink(missing_ok=True))
                 temporary.write(
                     f"""---
 schema_version: 2
-safe_fast_lane_path_prefixes: [{prefix!r}]
+safe_fast_lane_path_prefixes: [{json.dumps(prefix)}]
 families:
   valid:
     profiles: [tiny]
