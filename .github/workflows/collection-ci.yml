@@ -350,8 +350,7 @@ jobs:
        (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) ||
       (github.event_name == 'workflow_dispatch' &&
        (inputs.execution_mode == 'manual-candidate' ||
-        (inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
-        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
+        (inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main'))))
     needs: [build-install, quality-matrix]
     strategy:
       fail-fast: false
