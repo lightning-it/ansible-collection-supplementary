@@ -1,4 +1,7 @@
 ---
+default_language_version:
+  python: python3.12
+
 repos:
   # >>> BEGIN shared-assets-lit pre-commit
   - repo: local

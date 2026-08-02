@@ -178,10 +178,10 @@
   ansible.builtin.copy:
     content: "{{ aap_tls_selfsigned_ca_content.content | b64decode }}"
     dest: "{{ aap_tls_selfsigned_ca_trust_path }}"
-    owner: root
-    group: root
+    owner: "{{ aap_tls_selfsigned_ca_trust_owner }}"
+    group: "{{ aap_tls_selfsigned_ca_trust_group }}"
     mode: "0644"
-  become: true
+  become: "{{ aap_tls_selfsigned_ca_trust_become | bool }}"
   notify: Refresh system CA trust after installing temporary AAP CA
   when:
     - aap_tls_selfsigned_enabled | bool

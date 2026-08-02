@@ -17,7 +17,10 @@ SCRIPT = ROOT / "scripts/generate-security-release-evidence.py"
 class ProducerEvidenceTests(unittest.TestCase):
     def test_evidence_binds_every_release_asset(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            # macOS exposes /var as a system symlink to /private/var. Resolve
+            # that trusted temporary root so the test still detects only
+            # symlink components created below its own boundary.
+            root = Path(tmp).resolve()
             files = {}
             for name in ("artifact", "signature", "sbom", "provenance"):
                 files[name] = root / name

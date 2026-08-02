@@ -148,8 +148,8 @@
     mode: "{{ item.mode }}"
   loop:
     - path: "{{ vault_raft_snapshot_restore_work_root }}"
-      owner: root
-      group: root
+      owner: "{{ vault_raft_snapshot_restore_work_root_owner }}"
+      group: "{{ vault_raft_snapshot_restore_work_root_group }}"
       mode: "0700"
     - path: "{{ vault_raft_snapshot_restore_work_root }}/data"
       owner: "{{ vault_raft_snapshot_restore_run_as_user }}"

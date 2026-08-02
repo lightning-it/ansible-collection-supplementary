@@ -10,3 +10,6 @@ bugfixes:
   - >-
     Synchronize the centrally managed quality-policy validator so current policy lint passes without weakening
     boolean or integer validation.
+  - >-
+    Keep protected-main release evidence bound to the exact local candidate while central Heavy and Application
+    Acceptance validation remains asynchronous and therefore does not block publication from the source repository.

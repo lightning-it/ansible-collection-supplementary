@@ -26,6 +26,8 @@
       {{ vault_bootstrap_molecule_controller_root }}/scoped-ca.pem
     vault_bootstrap_molecule_scoped_document: >-
       {{ vault_bootstrap_molecule_controller_dir }}/scoped-approle.vault.yml
+    vault_bootstrap_target_escrow_owner: "{{ lookup('pipe', 'id -u') }}"
+    vault_bootstrap_target_escrow_group: "{{ lookup('pipe', 'id -g') }}"
   tasks:
     - name: Normalize canonical persisted init payload
       ansible.builtin.include_role:

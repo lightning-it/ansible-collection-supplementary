@@ -15,8 +15,12 @@
     that:
       - vault_bootstrap_target_persist_dir_stat.stat.isdir | default(false)
       - not (vault_bootstrap_target_persist_dir_stat.stat.islnk | default(false))
-      - vault_bootstrap_target_persist_dir_stat.stat.uid | default(-1) | int == 0
-      - vault_bootstrap_target_persist_dir_stat.stat.gid | default(-1) | int == 0
+      - >-
+        vault_bootstrap_target_persist_dir_stat.stat.uid | default(-1) | int
+        == vault_bootstrap_target_escrow_owner | int
+      - >-
+        vault_bootstrap_target_persist_dir_stat.stat.gid | default(-1) | int
+        == vault_bootstrap_target_escrow_group | int
       - vault_bootstrap_target_persist_dir_stat.stat.mode | default('') == '0700'
     fail_msg: "The existing target secondary escrow directory has unsafe metadata."
     quiet: true
@@ -27,8 +31,8 @@
   ansible.builtin.file:
     path: "{{ vault_bootstrap_persist_dir }}"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ vault_bootstrap_target_escrow_owner }}"
+    group: "{{ vault_bootstrap_target_escrow_group }}"
     mode: "0700"
   when: not (vault_bootstrap_target_persist_dir_stat.stat.exists | default(false))
   no_log: true
@@ -49,8 +53,12 @@
     that:
       - vault_bootstrap_target_init_file_stat.stat.isreg | default(false)
       - not (vault_bootstrap_target_init_file_stat.stat.islnk | default(false))
-      - vault_bootstrap_target_init_file_stat.stat.uid | default(-1) | int == 0
-      - vault_bootstrap_target_init_file_stat.stat.gid | default(-1) | int == 0
+      - >-
+        vault_bootstrap_target_init_file_stat.stat.uid | default(-1) | int
+        == vault_bootstrap_target_escrow_owner | int
+      - >-
+        vault_bootstrap_target_init_file_stat.stat.gid | default(-1) | int
+        == vault_bootstrap_target_escrow_group | int
       - vault_bootstrap_target_init_file_stat.stat.mode | default('') == '0600'
       - vault_bootstrap_target_init_file_stat.stat.nlink | default(0) | int == 1
       - vault_bootstrap_target_init_file_stat.stat.size | default(0) | int > 0
@@ -65,8 +73,8 @@
   ansible.builtin.copy:
     src: "{{ vault_bootstrap_controller_init_file_path }}"
     dest: "{{ vault_bootstrap_init_file_path }}"
-    owner: root
-    group: root
+    owner: "{{ vault_bootstrap_target_escrow_owner }}"
+    group: "{{ vault_bootstrap_target_escrow_group }}"
     mode: "0600"
     force: false
     decrypt: false
@@ -91,8 +99,12 @@
       - vault_bootstrap_target_init_file_verified.stat.exists | default(false)
       - vault_bootstrap_target_init_file_verified.stat.isreg | default(false)
       - not (vault_bootstrap_target_init_file_verified.stat.islnk | default(false))
-      - vault_bootstrap_target_init_file_verified.stat.uid | default(-1) | int == 0
-      - vault_bootstrap_target_init_file_verified.stat.gid | default(-1) | int == 0
+      - >-
+        vault_bootstrap_target_init_file_verified.stat.uid | default(-1) | int
+        == vault_bootstrap_target_escrow_owner | int
+      - >-
+        vault_bootstrap_target_init_file_verified.stat.gid | default(-1) | int
+        == vault_bootstrap_target_escrow_group | int
       - vault_bootstrap_target_init_file_verified.stat.mode | default('') == '0600'
       - vault_bootstrap_target_init_file_verified.stat.nlink | default(0) | int == 1
       - >-
