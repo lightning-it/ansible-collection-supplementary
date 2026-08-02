@@ -13,7 +13,9 @@ from pathlib import PurePath
 REPOSITORY_RE = re.compile(r"lightning-it/ansible-collection-[a-z0-9-]+\Z")
 SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST_RE = re.compile(r"[0-9a-f]{64}\Z")
-VERSION_RE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?\Z")
+VERSION_RE = re.compile(
+    r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\Z"
+)
 REF_RE = re.compile(r"[0-9A-Za-z][0-9A-Za-z._/-]*\Z")
 ARTIFACT_RE = re.compile(
     r"[a-z0-9_]+-[a-z0-9_]+-[0-9A-Za-z.-]+\.tar\.gz\Z"

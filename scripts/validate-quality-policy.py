@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Fail-closed validator for the centrally managed quality-policy contract."""
 
 from __future__ import annotations
@@ -73,7 +72,7 @@ def string(value: Any, path: str, errors: list[str]) -> str | None:
 
 
 def boolean(value: Any, path: str, errors: list[str]) -> bool | None:
-    if type(value) is not bool:
+    if not isinstance(value, bool):
         errors.append(f"{path} must be a boolean")
         return None
     return value
@@ -122,7 +121,11 @@ def validate_profile(name: str, profile: Any, errors: list[str]) -> None:
             evidence.get("candidate_bound"), f"{path}.evidence.candidate_bound", errors
         )
         retention_days = evidence.get("retention_days")
-        if type(retention_days) is not int or retention_days < 1:
+        if (
+            isinstance(retention_days, bool)
+            or not isinstance(retention_days, int)
+            or retention_days < 1
+        ):
             errors.append(f"{path}.evidence.retention_days must be an integer >= 1")
         if kind not in {"source-check", "central-validation"}:
             errors.append(f"{path}.evidence.kind must be source-check or central-validation")
@@ -235,7 +238,11 @@ def validate_policy(data: Any, *, today: date | None = None) -> list[str]:
     if policy is not None:
         exact_keys(policy, {"max_age_hours", "related_adrs", "branch_aggregates"}, "policy", errors)
         max_age_hours = policy.get("max_age_hours")
-        if type(max_age_hours) is not int or not 1 <= max_age_hours <= 36:
+        if (
+            isinstance(max_age_hours, bool)
+            or not isinstance(max_age_hours, int)
+            or not 1 <= max_age_hours <= 36
+        ):
             errors.append("policy.max_age_hours must be an integer from 1 through 36")
         adrs = string_list(policy.get("related_adrs"), "policy.related_adrs", errors)
         if adrs is not None:
