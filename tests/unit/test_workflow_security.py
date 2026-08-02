@@ -711,6 +711,78 @@ class WorkflowSecurityTests(unittest.TestCase):
         )
         self.assertNotIn(r"(?:[-.][0-9A-Za-z.-]+)?\Z", dispatcher)
 
+    def test_publish_security_release_is_metadata_bound_and_dispatches_after_acceptance(self) -> None:
+        workflow_path = WORKFLOWS / "collection-publish.yml"
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+        publish = load_yaml(workflow_path)["jobs"]["publish"]
+        self.assertEqual("write", publish["permissions"]["attestations"])
+        step_names = [step.get("name") for step in publish["steps"]]
+        classify_index = step_names.index("Classify exact-SHA Security release metadata")
+        prepare_index = step_names.index("Prepare deterministic signed Security release evidence")
+        attest_index = step_names.index("Attest Security release evidence")
+        finalize_index = step_names.index("Finalize immutable release attachments and notes")
+        release_index = step_names.index("Create or verify GitHub Release and immutable assets")
+        verify_index = step_names.index("Verify GitHub Release download, install, and smoke")
+        receipt_index = step_names.index("Attach signed post-publication verification receipt")
+        dispatch_index = step_names.index("Dispatch immutable Security evidence after Producer acceptance")
+        self.assertLess(classify_index, prepare_index)
+        self.assertLess(prepare_index, attest_index)
+        self.assertLess(attest_index, finalize_index)
+        self.assertLess(finalize_index, release_index)
+        self.assertLess(release_index, verify_index)
+        self.assertLess(verify_index, receipt_index)
+        self.assertLess(receipt_index, dispatch_index)
+
+        steps = {step.get("name"): step for step in publish["steps"]}
+        self.assertEqual(
+            "env.SECURITY_RELEASE == 'true'",
+            steps["Prepare deterministic signed Security release evidence"]["if"],
+        )
+        self.assertEqual(
+            "env.SECURITY_RELEASE == 'true'",
+            steps["Dispatch immutable Security evidence after Producer acceptance"]["if"],
+        )
+        transition_condition = steps["Dispatch transitional central validation"]["if"]
+        self.assertEqual("env.GALAXY_REQUIRED == 'true'", transition_condition)
+        self.assertIn("No exact-version Security metadata", workflow_text)
+        self.assertIn(".lit/security-releases/${RELEASE_VERSION}.json", workflow_text)
+        self.assertIn('--metadata "$SECURITY_METADATA"', workflow_text)
+        self.assertIn("actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d", workflow_text)
+        self.assertIn('test "$APP_INSTALLATION_ID" = 148019054', workflow_text)
+        self.assertIn('test "$revocation_count" -eq 0', workflow_text)
+        self.assertGreaterEqual(workflow_text.count("generate-security-release-evidence.py verify"), 2)
+        self.assertIn("permission-actions: write", workflow_text)
+        self.assertNotIn("--clobber", workflow_text)
+
+        generator = (ROOT / "scripts/generate-security-release-evidence.py").read_text(encoding="utf-8")
+        for free_claim in (
+            'add_argument("--id"',
+            'add_argument("--security-id"',
+            'add_argument("--consumer"',
+            'add_argument("--acceptance-profile"',
+            'add_argument("--created-at"',
+            'add_argument("--not-before"',
+            'add_argument("--expires-at"',
+        ):
+            self.assertNotIn(free_claim, generator)
+        dispatcher = (ROOT / "scripts/dispatch-security-release.py").read_text(encoding="utf-8")
+        self.assertIn("security-release-update.yml/dispatches", dispatcher)
+        self.assertIn("inputs[evidence_url]", dispatcher)
+        self.assertIn("inputs[evidence_sha256]", dispatcher)
+        self.assertNotIn("inputs[evidence_id]", dispatcher)
+        self.assertNotIn('add_argument("--ref"', dispatcher)
+
+        profiles = json.loads((ROOT / ".lit" / "security-release-profiles.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            {
+                "lit.supplementary/mlx90-fixture": {
+                    "description": "Historical v3.1.2/#488 dry-run fixture; never release eligible.",
+                    "releaseEligible": False,
+                }
+            },
+            profiles["profiles"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
