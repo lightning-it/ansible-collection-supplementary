@@ -1,0 +1,4 @@
+bugfixes:
+  - >-
+    Accept a successful Tiny matrix result when the selected diff does not require Tiny, while continuing to reject
+    every failed, cancelled, or otherwise incomplete result.

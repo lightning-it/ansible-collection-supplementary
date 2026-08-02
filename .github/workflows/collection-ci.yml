@@ -446,7 +446,10 @@ jobs:
           if [ "$TINY_REQUIRED" = true ]; then
             test "$TINY_RESULT" = success
           else
-            test "$TINY_RESULT" = skipped
+            case "$TINY_RESULT" in
+              skipped|success) ;;
+              *) exit 1 ;;
+            esac
           fi
 
   heavy-cells:
@@ -954,7 +957,10 @@ jobs:
           if [ "$TINY_REQUIRED" = true ]; then
             test "$TINY_RESULT" = success
           else
-            test "$TINY_RESULT" = skipped
+            case "$TINY_RESULT" in
+              skipped|success) ;;
+              *) exit 1 ;;
+            esac
           fi
           if [ "$HEAVY_REQUIRED" = true ]; then
             test "$HEAVY_RESULT" = success
@@ -1013,7 +1019,10 @@ jobs:
           if [ "$TINY_REQUIRED" = true ]; then
             test "$TINY_RESULT" = success
           else
-            test "$TINY_RESULT" = skipped
+            case "$TINY_RESULT" in
+              skipped|success) ;;
+              *) exit 1 ;;
+            esac
           fi
           if [ "$EVENT_NAME" = workflow_dispatch ]; then
             case "$EVENT_REF" in
