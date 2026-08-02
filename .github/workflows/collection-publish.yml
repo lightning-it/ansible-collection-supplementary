@@ -904,10 +904,8 @@ jobs:
               --dir "$existing_pair"
             cmp --silent "$existing_pair/security-release-evidence.json" "$evidence"
             cp "$existing_pair/security-release-evidence.json.sigstore.json" "$bundle"
-            echo "attest_needed=false" >> "$GITHUB_OUTPUT"
           else
             cosign sign-blob --yes --bundle "$bundle" "$evidence"
-            echo "attest_needed=true" >> "$GITHUB_OUTPUT"
           fi
           publish_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-publish.yml@refs/heads/main"
           cosign verify-blob \
@@ -919,9 +917,7 @@ jobs:
 
       - name: Attest Security release evidence
         id: attest-security-evidence
-        if: >-
-          env.SECURITY_RELEASE == 'true' &&
-          steps.security-evidence.outputs.attest_needed == 'true'
+        if: env.SECURITY_RELEASE == 'true'
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d  # v4
         with:
           subject-path: dist/release/security-release-evidence.json
@@ -931,14 +927,11 @@ jobs:
         env:
           ATTESTATION_BUNDLE: ${{ steps.attest-security-evidence.outputs.bundle-path }}
           ATTESTATION_ID: ${{ steps.attest-security-evidence.outputs.attestation-id }}
-          ATTEST_NEEDED: ${{ steps.security-evidence.outputs.attest_needed }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ "$ATTEST_NEEDED" = true ]; then
-            test -n "$ATTESTATION_ID"
-            test -s "$ATTESTATION_BUNDLE"
-          fi
+          test -n "$ATTESTATION_ID"
+          test -s "$ATTESTATION_BUNDLE"
           publish_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-publish.yml@refs/heads/main"
           gh attestation verify dist/release/security-release-evidence.json \
             --repo "$GITHUB_REPOSITORY" \

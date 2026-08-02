@@ -839,6 +839,13 @@ class WorkflowSecurityTests(unittest.TestCase):
         )
         self.assertEqual(
             "env.SECURITY_RELEASE == 'true'",
+            steps["Attest Security release evidence"]["if"],
+        )
+        self.assertNotIn("attest_needed", workflow_text)
+        self.assertIn('test -n "$ATTESTATION_ID"', workflow_text)
+        self.assertIn('test -s "$ATTESTATION_BUNDLE"', workflow_text)
+        self.assertEqual(
+            "env.SECURITY_RELEASE == 'true'",
             steps["Dispatch immutable Security evidence after Producer acceptance"]["if"],
         )
         transition_condition = steps["Dispatch transitional central validation"]["if"]
