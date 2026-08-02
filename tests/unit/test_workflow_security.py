@@ -294,6 +294,12 @@ class WorkflowSecurityTests(unittest.TestCase):
         for job_name in ("heavy-cells", "acceptance-cells"):
             delegated = jobs[job_name]
             self.assertEqual(
+                "lightning-it/modulix-validation/.github/workflows/"
+                "collection-quality-profile.yml@"
+                "154c99eb0d907b01edc10e9b39c94ef4912fd9dd",
+                delegated["uses"],
+            )
+            self.assertEqual(
                 "ansible-collection-runtime-protected",
                 delegated["with"]["environment-name"],
             )
