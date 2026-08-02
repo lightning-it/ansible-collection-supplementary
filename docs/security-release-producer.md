@@ -40,11 +40,19 @@ both the producer registry and the central final-acceptance allowlist. The consu
 `.github/workflows/security-release-update.yml` must also be promoted and registered on its protected `main` branch
 before the first producer Security release. There is no fallback to labels, mutable claims, or a weaker dispatch.
 
-The current producer `main` additionally leaves the former source-repository `Release Security` and
-`Release Validation` jobs as non-executed adapters while `collection-publish.yml` still requires their exact-SHA
-`Collection / Release Validation` result and `collection-release-evidence-<sha>` artifact. Publication therefore
-continues to stop before this new Security path until the reviewed central evidence adapter restores that prerequisite.
-This PR does not remove, synthesize, or weaken the existing gate.
+The producer evidence adapter is restricted to an exact `push` on `refs/heads/main`. It delegates Heavy and
+Application Acceptance to the SHA-pinned reusable workflow in `lightning-it/modulix-validation`, using the producer's
+protected runtime environment. The reusable jobs execute as part of the producer workflow run and publish their
+exact-SHA evidence into that same run. No pull request, `develop` push, or manual dispatch can enter this path, and the
+delegation neither inherits repository secrets nor mints an App token.
+
+The producer aggregates those same-run artifacts as `collection-evidence-<sha>`. `Collection / Release Security`
+directly depends on that aggregation before it may create `collection-release-evidence-<sha>` in the protected release
+environment. The final `Collection / Release Validation` check verifies the exact protected-main SHA, workflow-run
+identity, signatures, attestations, eligible gate receipts, and long-term archive digest. `collection-publish.yml`
+continues to stop unless that exact named check succeeds and that exact artifact exists; it does not synthesize or
+weaken the prerequisite. The release App's later transition and consumer dispatch remain separate, post-publication
+operations.
 
 Revocation is fail-closed: metadata with `revoked: true` cannot generate approved evidence, and consumers/finalizers
 must additionally reject a release carrying a matching revocation asset. Published evidence and release assets are

@@ -121,9 +121,16 @@ class WorkflowSecurityTests(unittest.TestCase):
             if step.get("uses") == "./.github/actions/run-quality-profile"
         )
         self.assertEqual("12GiB", tiny_action["with"]["memory-limit"])
-        disabled_adapter = "${{ github.event_name == 'workflow_call' }}"
-        self.assertEqual(disabled_adapter, collection["jobs"]["heavy-cells"]["if"])
-        self.assertEqual(disabled_adapter, collection["jobs"]["acceptance-cells"]["if"])
+        for job_name, required_output in (
+            ("heavy-cells", "heavy_required"),
+            ("acceptance-cells", "acceptance_required"),
+        ):
+            guard = collection["jobs"][job_name]["if"]
+            self.assertIn("github.event_name == 'push'", guard)
+            self.assertIn("github.ref == 'refs/heads/main'", guard)
+            self.assertIn(f"quality-matrix.outputs.{required_output} == 'true'", guard)
+            self.assertNotIn("pull_request", guard)
+            self.assertNotIn("workflow_dispatch", guard)
         self.assertFalse((WORKFLOWS / "candidate-platform-validation.yml").exists())
 
     def test_copilot_and_renovate_gates_preserve_safe_update_boundaries(self) -> None:
@@ -253,7 +260,13 @@ class WorkflowSecurityTests(unittest.TestCase):
     def test_release_credentials_are_outside_pull_request_jobs(self) -> None:
         jobs = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]
         release_security = jobs["release-security"]
-        self.assertEqual("${{ github.event_name == 'workflow_call' }}", release_security["if"])
+        release_guard = release_security["if"]
+        self.assertIn("github.event_name == 'push'", release_guard)
+        self.assertIn("github.ref == 'refs/heads/main'", release_guard)
+        self.assertNotIn("pull_request", release_guard)
+        self.assertNotIn("workflow_dispatch", release_guard)
+        self.assertEqual("ansible-collection-release-evidence", release_security["environment"])
+        self.assertIn("runtime-evidence", release_security["needs"])
         self.assertEqual("Collection / Release Evidence", jobs["evidence"]["name"])
         self.assertNotIn("environment", jobs["evidence"])
         self.assertEqual({"contents": "read"}, jobs["evidence"]["permissions"])
@@ -272,14 +285,68 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("needs.quality-matrix.outputs.tiny_required == 'true'", guard)
         self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", guard)
         self.assertNotIn("github.event_name == 'schedule'", guard)
-        disabled_adapter = "${{ github.event_name == 'workflow_call' }}"
-        self.assertEqual(disabled_adapter, jobs["heavy-cells"]["if"])
-        self.assertEqual(disabled_adapter, jobs["acceptance-cells"]["if"])
-        self.assertEqual(disabled_adapter, jobs["runtime-evidence"]["if"])
+        for job_name in ("heavy-cells", "acceptance-cells", "runtime-evidence"):
+            protected_main_guard = jobs[job_name]["if"]
+            self.assertIn("github.event_name == 'push'", protected_main_guard)
+            self.assertIn("github.ref == 'refs/heads/main'", protected_main_guard)
+            self.assertNotIn("pull_request", protected_main_guard)
+            self.assertNotIn("workflow_dispatch", protected_main_guard)
+        for job_name in ("heavy-cells", "acceptance-cells"):
+            delegated = jobs[job_name]
+            self.assertEqual(
+                "ansible-collection-runtime-protected",
+                delegated["with"]["environment-name"],
+            )
+            self.assertNotIn("secrets", delegated)
         self.assertEqual("Collection / Release Evidence", jobs["evidence"]["name"])
         self.assertEqual(
             ["lint-sanity", "build-install", "role-coverage", "quality-matrix", "tiny"],
             jobs["fast"]["needs"],
+        )
+
+    def test_protected_main_evidence_adapter_is_exact_and_fail_closed(self) -> None:
+        jobs = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]
+
+        self.assertEqual("Collection / Heavy", jobs["heavy"]["name"])
+        self.assertEqual("Collection / Application Acceptance", jobs["acceptance"]["name"])
+        self.assertEqual("Runtime evidence / exact tested SHA", jobs["runtime-evidence"]["name"])
+        self.assertEqual("Collection / Release Security", jobs["release-security"]["name"])
+        self.assertEqual("Collection / Release Validation", jobs["release-validation"]["name"])
+
+        for job_name in (
+            "heavy",
+            "acceptance",
+            "runtime-evidence",
+            "release-security",
+            "release-validation",
+        ):
+            guard = jobs[job_name]["if"]
+            self.assertIn("github.event_name == 'push'", guard)
+            self.assertIn("github.ref == 'refs/heads/main'", guard)
+            self.assertNotIn("pull_request", guard)
+            self.assertNotIn("workflow_dispatch", guard)
+
+        self.assertIn("runtime-evidence", jobs["release-security"]["needs"])
+        self.assertIn("runtime-evidence", jobs["release-validation"]["needs"])
+        release_security = json.dumps(jobs["release-security"])
+        release_validation = json.dumps(jobs["release-validation"])
+        self.assertIn("needs.runtime-evidence.result", release_security)
+        self.assertIn("needs.runtime-evidence.result", release_validation)
+        self.assertIn("collection-evidence-${{ env.SOURCE_SHA }}", release_security)
+        self.assertIn("collection-release-evidence-${{ env.SOURCE_SHA }}", release_security)
+        self.assertIn("collection-release-evidence-${{ env.SOURCE_SHA }}", release_validation)
+        final_aggregate = next(
+            step
+            for step in jobs["release-validation"]["steps"]
+            if step.get("name") == "Enforce every mandatory aggregate"
+        )
+        self.assertEqual(
+            "${{ needs.runtime-evidence.result }}",
+            final_aggregate["env"]["RUNTIME_EVIDENCE_RESULT"],
+        )
+        self.assertIn(
+            'test "$RUNTIME_EVIDENCE_RESULT" = success',
+            final_aggregate["run"],
         )
 
     def test_candidate_platforms_run_only_as_non_release_promotion_input(self) -> None:

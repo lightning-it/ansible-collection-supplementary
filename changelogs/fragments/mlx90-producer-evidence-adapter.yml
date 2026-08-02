@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Restore the protected-main producer evidence adapter so release publication
+    consumes exact-SHA Heavy, Application Acceptance, runtime, and signed release
+    evidence from one workflow run.
