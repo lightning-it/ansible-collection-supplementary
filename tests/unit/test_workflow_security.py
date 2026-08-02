@@ -659,7 +659,7 @@ class WorkflowSecurityTests(unittest.TestCase):
             )
 
             subprocess.run(  # noqa: S603 -- execute the repository-owned wrapper under test.
-                ["/usr/bin/bash", str(wrapper), "true"],
+                ["/bin/bash", str(wrapper), "true"],
                 cwd=ROOT,
                 env=environment,
                 check=True,
