@@ -1277,6 +1277,7 @@ jobs:
               "tiny": os.environ["TINY_RESULT"] == "success",
               "heavy": os.environ["HEAVY_RESULT"] == "success",
               "application_acceptance": os.environ["ACCEPTANCE_RESULT"] == "success",
+              "runtime_evidence": os.environ["RUNTIME_EVIDENCE_RESULT"] == "success",
               "base_evidence_job": os.environ["EVIDENCE_RESULT"] == "success",
               "evidence_manifest_eligible": manifest.get("release_eligible") is True,
               "release_security_complete": not manifest.get("security_evidence", {}).get("missing"),

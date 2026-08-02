@@ -346,6 +346,19 @@ class WorkflowSecurityTests(unittest.TestCase):
             'test "$RUNTIME_EVIDENCE_RESULT" = success',
             release_security_aggregate["run"],
         )
+        release_security_finalize = next(
+            step
+            for step in jobs["release-security"]["steps"]
+            if step.get("name") == "Finalize protected-main publication eligibility"
+        )
+        self.assertEqual(
+            "${{ needs.runtime-evidence.result }}",
+            release_security_finalize["env"]["RUNTIME_EVIDENCE_RESULT"],
+        )
+        self.assertIn(
+            '"runtime_evidence": os.environ["RUNTIME_EVIDENCE_RESULT"] == "success"',
+            release_security_finalize["run"],
+        )
         self.assertIn("collection-evidence-${{ env.SOURCE_SHA }}", release_security)
         self.assertIn("collection-release-evidence-${{ env.SOURCE_SHA }}", release_security)
         self.assertIn("collection-release-evidence-${{ env.SOURCE_SHA }}", release_validation)
