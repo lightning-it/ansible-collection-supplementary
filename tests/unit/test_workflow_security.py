@@ -335,8 +335,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         release_security_aggregate = next(
             step
             for step in jobs["release-security"]["steps"]
-            if step.get("name")
-            == "Enforce trusted release-security result after upload"
+            if step.get("name") == "Enforce trusted release-security result after upload"
         )
         self.assertEqual(
             "${{ needs.runtime-evidence.result }}",
