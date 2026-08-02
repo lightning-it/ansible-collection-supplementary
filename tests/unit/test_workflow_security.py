@@ -256,26 +256,15 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertEqual("${{ github.event_name == 'workflow_call' }}", release_security["if"])
         self.assertEqual("Collection / Release Evidence", jobs["evidence"]["name"])
         self.assertNotIn("environment", jobs["evidence"])
-        token_step = next(step for step in jobs["evidence"]["steps"] if step.get("id") == "validation-app")
-        self.assertEqual("modulix-validation", token_step["with"]["repositories"])
-        self.assertEqual("read", token_step["with"]["permission-actions"])
-        self.assertIn("github.ref == 'refs/heads/main'", token_step["if"])
-        self.assertNotIn("pull_request", token_step["if"])
+        self.assertEqual({"contents": "read"}, jobs["evidence"]["permissions"])
+        self.assertFalse(any(step.get("id") == "validation-app" for step in jobs["evidence"]["steps"]))
         evidence_step = next(
             step
             for step in jobs["evidence"]["steps"]
-            if step["name"] == "Enforce exact-SHA evidence for every authorized runtime"
+            if step["name"] == "Enforce exact-SHA local release prerequisites"
         )
-        self.assertIn("supplementary-validation-evidence-", evidence_step["run"])
-        token_guard = evidence_step["env"]["GH_TOKEN"]
-        self.assertIn("steps.validation-app.outputs.token", token_guard)
-        self.assertNotIn("MODULIX_VALIDATION_READ_TOKEN", token_guard)
-        self.assertNotIn("github.token", token_guard)
-        self.assertNotIn("pull_request", token_guard)
-        self.assertIn('test -n "$GH_TOKEN"', evidence_step["run"])
-        self.assertIn("per_page=100", evidence_step["run"])
-        self.assertIn('ZipFile("evidence.zip")', evidence_step["run"])
-        self.assertNotIn("unzip", evidence_step["run"])
+        self.assertNotIn("GH_TOKEN", evidence_step["env"])
+        self.assertNotIn("modulix-validation", evidence_step["run"])
 
     def test_self_hosted_pr_cells_require_exact_head_and_protected_environment(self) -> None:
         jobs = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]

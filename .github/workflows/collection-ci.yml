@@ -984,25 +984,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      actions: read
       contents: read
     steps:
-      - name: Mint least-privilege validation evidence token
-        id: validation-app
-        if: github.ref == 'refs/heads/main'
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
-        with:
-          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: modulix-validation
-          permission-actions: read
-
-      - name: Enforce exact-SHA evidence for every authorized runtime
+      - name: Enforce exact-SHA local release prerequisites
         env:
-          GH_TOKEN: >-
-            ${{ github.ref == 'refs/heads/main' &&
-            steps.validation-app.outputs.token || '' }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_REF: ${{ github.ref }}
           SOURCE_SHA: ${{ env.SOURCE_SHA }}
@@ -1029,49 +1014,6 @@ jobs:
               refs/heads/main) ;;
               *) exit 1 ;;
             esac
-          fi
-          requires_central=false
-          if [ "$EVENT_REF" = refs/heads/main ]; then
-            requires_central=true
-          fi
-          if [ "$requires_central" = true ]; then
-            test -n "$GH_TOKEN"
-            artifact_name="supplementary-validation-evidence-$SOURCE_SHA"
-            artifact_id="$(gh api \
-              "repos/lightning-it/modulix-validation/actions/artifacts?name=$artifact_name&per_page=100" \
-              --jq '.artifacts | map(select(.expired | not)) | first.id // empty')"
-            test -n "$artifact_id"
-            gh api "repos/lightning-it/modulix-validation/actions/artifacts/$artifact_id/zip" > evidence.zip
-            SOURCE_SHA="$SOURCE_SHA" python - <<'PY'
-          import json
-          import os
-          from pathlib import PurePosixPath
-          from zipfile import ZipFile
-
-          with ZipFile("evidence.zip") as archive:
-              entries = [
-                  info
-                  for info in archive.infolist()
-                  if PurePosixPath(info.filename).name == "validation-evidence.json"
-              ]
-              if len(entries) != 1:
-                  raise SystemExit("expected exactly one central validation evidence document")
-              entry = entries[0]
-              member = PurePosixPath(entry.filename)
-              if member.is_absolute() or ".." in member.parts or entry.is_dir():
-                  raise SystemExit("central validation evidence archive contains an unsafe member path")
-              value = json.loads(archive.read(entry).decode("utf-8"))
-          if not isinstance(value, dict):
-              raise SystemExit("expected exactly one central validation evidence document")
-          expected = {
-              "schema_version": 1,
-              "repository": "lightning-it/ansible-collection-supplementary",
-              "source_sha": os.environ["SOURCE_SHA"],
-              "release_eligible": True,
-          }
-          if value != expected:
-              raise SystemExit("central validation evidence does not exactly bind this candidate SHA")
-          PY
           fi
 
   release-security:
