@@ -91,6 +91,11 @@ class SecurityReleaseDispatchTests(unittest.TestCase):
             self.assertNotIn("version", serialized)
             self.assertNotIn("consumer", serialized)
 
+    def test_dispatch_has_a_fixed_network_timeout(self) -> None:
+        source = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("DISPATCH_TIMEOUT_SECONDS = 60", source)
+        self.assertIn("timeout=DISPATCH_TIMEOUT_SECONDS", source)
+
     def test_invalid_url_digest_and_missing_app_token_never_dispatch(self) -> None:
         cases = (
             {"evidence_url": "https://example.invalid/security-release-evidence.json"},

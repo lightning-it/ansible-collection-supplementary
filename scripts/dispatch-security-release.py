@@ -17,6 +17,7 @@ WORKFLOW_ENDPOINT = (
     "repos/lightning-it/container-ee-wunder-ansible-ubi9/actions/workflows/security-release-update.yml/dispatches"
 )
 CONTROLLER_REF = "main"
+DISPATCH_TIMEOUT_SECONDS = 60
 
 
 def main() -> int:
@@ -45,7 +46,11 @@ def main() -> int:
         "-f",
         f"inputs[evidence_sha256]={args.evidence_sha256}",
     ]
-    subprocess.run(command, check=True)  # noqa: S603 -- fixed executable and validated arguments.
+    subprocess.run(  # noqa: S603 -- fixed executable and validated arguments.
+        command,
+        check=True,
+        timeout=DISPATCH_TIMEOUT_SECONDS,
+    )
     print("Dispatched immutable MLX-90 producer evidence to the allowlisted consumer.")
     return 0
 
