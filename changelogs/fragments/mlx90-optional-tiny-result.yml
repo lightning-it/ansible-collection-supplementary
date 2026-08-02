@@ -13,7 +13,3 @@ bugfixes:
   - >-
     Keep protected-main release evidence bound to the exact local candidate while central Heavy and Application
     Acceptance validation remains asynchronous and therefore does not block publication from the source repository.
-  - >-
-    Run repository-local pre-commit Python hooks with Python 3.12 so the pinned mypy toolchain remains installable.
-  - >-
-    Keep local Molecule and unit-test harnesses portable across numeric container users and macOS temporary paths.
