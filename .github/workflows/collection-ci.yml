@@ -1637,6 +1637,7 @@ jobs:
           TINY_RESULT: ${{ needs.tiny.result }}
           HEAVY_RESULT: ${{ needs.heavy.result }}
           ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          RUNTIME_EVIDENCE_RESULT: ${{ needs.runtime-evidence.result }}
           EVIDENCE_RESULT: ${{ needs.evidence.result }}
           UPLOAD_OUTCOME: ${{ steps.release-security-upload.outcome }}
         run: |

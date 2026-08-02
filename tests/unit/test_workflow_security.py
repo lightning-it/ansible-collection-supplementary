@@ -332,6 +332,20 @@ class WorkflowSecurityTests(unittest.TestCase):
         release_validation = json.dumps(jobs["release-validation"])
         self.assertIn("needs.runtime-evidence.result", release_security)
         self.assertIn("needs.runtime-evidence.result", release_validation)
+        release_security_aggregate = next(
+            step
+            for step in jobs["release-security"]["steps"]
+            if step.get("name")
+            == "Enforce trusted release-security result after upload"
+        )
+        self.assertEqual(
+            "${{ needs.runtime-evidence.result }}",
+            release_security_aggregate["env"]["RUNTIME_EVIDENCE_RESULT"],
+        )
+        self.assertIn(
+            'test "$RUNTIME_EVIDENCE_RESULT" = success',
+            release_security_aggregate["run"],
+        )
         self.assertIn("collection-evidence-${{ env.SOURCE_SHA }}", release_security)
         self.assertIn("collection-release-evidence-${{ env.SOURCE_SHA }}", release_security)
         self.assertIn("collection-release-evidence-${{ env.SOURCE_SHA }}", release_validation)
