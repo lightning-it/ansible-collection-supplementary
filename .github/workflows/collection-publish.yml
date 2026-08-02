@@ -1644,6 +1644,11 @@ jobs:
           set -euo pipefail
           test "$APP_SLUG" = lightning-it-release-automation
           test "$APP_INSTALLATION_ID" = 148019054
+          actual_repositories="$(gh api --paginate --slurp \
+            'installation/repositories?per_page=100' \
+            --jq '[.[].repositories[].full_name] | sort | unique')"
+          test "$actual_repositories" = \
+            '["lightning-it/container-ee-wunder-ansible-ubi9"]'
           evidence=dist/release/security-release-evidence.json
           python scripts/generate-security-release-evidence.py verify \
             --metadata "$SECURITY_METADATA" \

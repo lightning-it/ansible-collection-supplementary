@@ -749,6 +749,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('--metadata "$SECURITY_METADATA"', workflow_text)
         self.assertIn("actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d", workflow_text)
         self.assertIn('test "$APP_INSTALLATION_ID" = 148019054', workflow_text)
+        self.assertIn("installation/repositories?per_page=100", workflow_text)
         self.assertIn('test "$revocation_count" -eq 0', workflow_text)
         self.assertGreaterEqual(workflow_text.count("generate-security-release-evidence.py verify"), 2)
         self.assertIn("permission-actions: write", workflow_text)
