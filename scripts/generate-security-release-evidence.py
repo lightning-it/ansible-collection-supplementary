@@ -59,11 +59,21 @@ def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def has_symlink_component(path: Path) -> bool:
-    # The checkout/runner roots are trusted by the workflow and may themselves
-    # be platform aliases (for example macOS /var -> /private/var). Reject the
-    # caller-controlled leaf and its immediate container without treating such
-    # platform roots as an unsafe release input.
-    return path.is_symlink() or path.parent.is_symlink()
+    # Inspect the lexical path rather than resolving it so a symlink cannot
+    # disappear from the path being checked. The first component below the
+    # filesystem root is trusted runner/platform state and may be an alias (for
+    # example macOS /var -> /private/var); every deeper component is part of the
+    # checkout or release-material path and must not be a symlink.
+    absolute = path if path.is_absolute() else Path.cwd() / path
+    if ".." in absolute.parts:
+        return True
+    anchor = Path(absolute.anchor)
+    current = anchor
+    for component in absolute.parts[1:]:
+        current /= component
+        if current.parent != anchor and current.is_symlink():
+            return True
+    return False
 
 
 def require_regular_file(path: Path, label: str) -> None:

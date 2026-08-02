@@ -219,6 +219,48 @@ class ProducerEvidenceTests(unittest.TestCase):
             self.assertIn("must not contain symlink components", result.stderr)
             self.assertFalse(target.exists())
 
+    def test_symlinked_metadata_grandparent_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            metadata, profiles, assets = self.make_inputs(root)
+            real_metadata_root = root / "review-bypass"
+            (root / ".lit").rename(real_metadata_root)
+            (root / ".lit").symlink_to(real_metadata_root, target_is_directory=True)
+
+            output = root / "security-release-evidence.json"
+            result = self.run_command(self.command("generate", metadata, profiles, assets, output))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must be a regular non-symlink file", result.stderr)
+            self.assertFalse(output.exists())
+
+    def test_symlinked_output_grandparent_is_rejected_without_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            metadata, profiles, assets = self.make_inputs(root)
+            real_output_root = root / "real-output"
+            real_output_root.mkdir()
+            linked_output_root = root / "linked-output"
+            linked_output_root.symlink_to(real_output_root, target_is_directory=True)
+            output = linked_output_root / "nested" / "security-release-evidence.json"
+
+            result = self.run_command(self.command("generate", metadata, profiles, assets, output))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must not contain symlink components", result.stderr)
+            self.assertFalse((real_output_root / "nested").exists())
+
+    def test_parent_traversal_cannot_hide_a_symlink_component(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            metadata, profiles, assets = self.make_inputs(root)
+            linked_output_root = root / "linked-output"
+            linked_output_root.symlink_to(root, target_is_directory=True)
+            output = linked_output_root / ".." / "escaped-evidence.json"
+
+            result = self.run_command(self.command("generate", metadata, profiles, assets, output))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must not contain symlink components", result.stderr)
+            self.assertFalse((root.parent / "escaped-evidence.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
