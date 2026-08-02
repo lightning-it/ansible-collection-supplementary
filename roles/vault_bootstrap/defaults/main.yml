@@ -42,6 +42,8 @@ vault_bootstrap_init_file_path: >-
 vault_bootstrap_require_controller_escrow: false
 vault_bootstrap_controller_escrow_root_path: ""
 vault_bootstrap_controller_init_file_path: ""
+vault_bootstrap_target_escrow_owner: 0
+vault_bootstrap_target_escrow_group: 0
 
 # Prefer the controller's existing password-file integration. The plaintext fallback
 # remains for compatibility with inventories that still provide vault_ansible_vault_pw.
