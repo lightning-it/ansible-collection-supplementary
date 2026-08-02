@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import runpy
 import subprocess
 import sys
 import tempfile
@@ -11,6 +12,7 @@ import unittest
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/generate-security-release-evidence.py"
@@ -218,6 +220,54 @@ class ProducerEvidenceTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must not contain symlink components", result.stderr)
             self.assertFalse(target.exists())
+
+    def test_unrecognized_root_level_symlink_is_rejected(self) -> None:
+        module = runpy.run_path(str(SCRIPT), run_name="mlx90_evidence_module")
+        has_symlink_component = module["has_symlink_component"]
+        with patch.object(
+            Path,
+            "is_symlink",
+            autospec=True,
+            side_effect=lambda candidate: candidate == Path("/untrusted-root"),
+        ):
+            self.assertTrue(has_symlink_component(Path("/untrusted-root/repository/evidence.json")))
+
+    def test_only_the_canonical_macos_var_alias_is_accepted(self) -> None:
+        module = runpy.run_path(str(SCRIPT), run_name="mlx90_evidence_module")
+        has_symlink_component = module["has_symlink_component"]
+        with (
+            patch.object(
+                Path,
+                "is_symlink",
+                autospec=True,
+                side_effect=lambda candidate: candidate == Path("/var"),
+            ),
+            patch.object(
+                Path,
+                "resolve",
+                autospec=True,
+                side_effect=lambda candidate, *, strict: (
+                    Path("/private/var") if candidate == Path("/var") and strict else candidate
+                ),
+            ),
+        ):
+            self.assertFalse(has_symlink_component(Path("/var/folders/repository/evidence.json")))
+
+        with (
+            patch.object(
+                Path,
+                "is_symlink",
+                autospec=True,
+                side_effect=lambda candidate: candidate == Path("/var"),
+            ),
+            patch.object(
+                Path,
+                "resolve",
+                autospec=True,
+                return_value=Path("/attacker-controlled"),
+            ),
+        ):
+            self.assertTrue(has_symlink_component(Path("/var/folders/repository/evidence.json")))
 
     def test_symlinked_metadata_grandparent_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
