@@ -6,6 +6,8 @@
   vars:
     cloudflare_warp_mdm_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/cloudflare-warp/mdm.xml
+    cloudflare_warp_expected_uid: "{{ lookup('pipe', 'id -u') | int }}"
+    cloudflare_warp_expected_gid: "{{ lookup('pipe', 'id -g') | int }}"
   tasks:
     - name: Inspect rendered Cloudflare WARP MDM profile
       ansible.builtin.stat:
@@ -29,6 +31,12 @@
           - cloudflare_warp_mdm_stat.stat.isreg | default(false)
           - not (cloudflare_warp_mdm_stat.stat.islnk | default(false))
           - cloudflare_warp_mdm_stat.stat.mode == '0600'
+          - >-
+            (cloudflare_warp_mdm_stat.stat.uid | int)
+            == (cloudflare_warp_expected_uid | int)
+          - >-
+            (cloudflare_warp_mdm_stat.stat.gid | int)
+            == (cloudflare_warp_expected_gid | int)
           - cloudflare_warp_mdm_stat.stat.checksum is match('^[0-9a-f]{64}$')
           - >-
             (cloudflare_warp_mdm_content.content | b64decode)
