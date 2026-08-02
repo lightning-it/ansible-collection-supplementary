@@ -70,14 +70,19 @@ a privileged PR validation.
 
 ### Central execution boundary
 
-Supplementary runs only the Fast Lane. `modulix-validation` resolves the exact
-protected `develop` SHA nightly, builds that candidate, and runs Heavy before
-Application Acceptance in its protected environment. It publishes a compact
-evidence artifact bound to that SHA.
+Supplementary PRs and `develop` pushes run only the Fast Lane.
+`modulix-validation` retains ownership of the protected Heavy and Application
+Acceptance orchestration. For an exact push to protected `main`, the producer
+release gate calls the SHA-pinned reusable ModuLix workflow inside the same
+producer run, without inheriting repository secrets. Heavy completes before
+Application Acceptance, both use the producer's protected runtime environment,
+and their evidence artifacts are bound to the exact candidate SHA and run
+attempt.
 
-`Collection / Fast` is the only required context on `develop`. A PR to `main`
-also requires `Collection / Release Evidence`: the collection workflow obtains
-the central artifact and accepts it only when its repository, SHA, schema, and
-`release_eligible` value match exactly. Missing, expired, malformed, or
-mismatched evidence fails closed. This keeps infrastructure validation out of
-PR/release execution while preventing promotion without a completed central run.
+`Collection / Fast` is the only required context on `develop`. The protected
+`main` push aggregates only same-run Heavy and Application Acceptance artifacts,
+then creates `Collection / Release Evidence`, `Collection / Release Security`,
+and the exact named `Collection / Release Validation` publisher prerequisite.
+Missing, skipped, malformed, cross-attempt, or SHA-mismatched evidence fails
+closed. This keeps protected infrastructure execution out of PRs while ensuring
+that publication cannot use evidence from another workflow run.
