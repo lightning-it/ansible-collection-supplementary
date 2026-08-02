@@ -3,3 +3,10 @@ bugfixes:
   - >-
     Accept a successful Tiny matrix result when the selected diff does not require Tiny, while continuing to reject
     every failed, cancelled, or otherwise incomplete result.
+  - >-
+    Keep transition validation asynchronous and non-authoritative: local exact-SHA release prerequisites remain
+    fail-closed, while immutable central validation evidence is produced and enforced later in the MLX-90 promotion
+    chain instead of being required before the transition dispatch can run.
+  - >-
+    Synchronize the centrally managed quality-policy validator so current policy lint passes without weakening
+    boolean or integer validation.

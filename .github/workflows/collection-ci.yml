@@ -448,7 +448,10 @@ jobs:
           else
             case "$TINY_RESULT" in
               skipped|success) ;;
-              *) exit 1 ;;
+              *)
+                echo "::error::unexpected Tiny result '$TINY_RESULT'; expected skipped or success" >&2
+                exit 1
+                ;;
             esac
           fi
 
@@ -959,7 +962,10 @@ jobs:
           else
             case "$TINY_RESULT" in
               skipped|success) ;;
-              *) exit 1 ;;
+              *)
+                echo "::error::unexpected Tiny result '$TINY_RESULT'; expected skipped or success" >&2
+                exit 1
+                ;;
             esac
           fi
           if [ "$HEAVY_REQUIRED" = true ]; then
@@ -1006,7 +1012,10 @@ jobs:
           else
             case "$TINY_RESULT" in
               skipped|success) ;;
-              *) exit 1 ;;
+              *)
+                echo "::error::unexpected Tiny result '$TINY_RESULT'; expected skipped or success" >&2
+                exit 1
+                ;;
             esac
           fi
           if [ "$EVENT_NAME" = workflow_dispatch ]; then
