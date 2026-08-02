@@ -456,27 +456,29 @@ jobs:
           fi
 
   heavy-cells:
-    name: Delegation marker / Heavy (not executed in source repository)
-    # MLX-70: protected infrastructure validation is scheduled and owned by
-    # modulix-validation.  This collection must never start it from a PR,
-    # push, or local manual dispatch.
-    if: ${{ github.event_name == 'workflow_call' }}
+    name: Heavy matrix / central protected validation
+    # The central workflow runs inside this producer workflow run, against the
+    # exact protected-main candidate. It is never callable from a PR, develop,
+    # or a local manual dispatch path.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.quality-matrix.outputs.heavy_required == 'true'
     needs: [build-install, quality-matrix]
-    uses: lightning-it/modulix-validation/.github/workflows/collection-quality-profile.yml@ec110a9545dc6b8efe4ed8820b50b27912175111
+    uses: lightning-it/modulix-validation/.github/workflows/collection-quality-profile.yml@154c99eb0d907b01edc10e9b39c94ef4912fd9dd
     with:
       profile: heavy
       matrix-json: ${{ needs.quality-matrix.outputs.heavy }}
       candidate-artifact: collection-candidate-${{ github.event.pull_request.head.sha || github.sha }}
       source-sha: ${{ github.event.pull_request.head.sha || github.sha }}
-      environment-name: >-
-        ${{ github.event_name == 'pull_request' &&
-            'ansible-collection-runtime-tests' ||
-            'ansible-collection-runtime-protected' }}
-    secrets: inherit
+      environment-name: ansible-collection-runtime-protected
 
   heavy:
-    name: Deprecated alias / Heavy (not executed)
-    if: ${{ github.event_name == 'workflow_call' }}
+    name: Collection / Heavy
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
     needs: [quality-matrix, heavy-cells]
     runs-on: ubuntu-latest
     steps:
@@ -495,28 +497,31 @@ jobs:
           fi
 
   acceptance-cells:
-    name: Delegation marker / Application Acceptance (not executed in source repository)
-    # See heavy-cells: Application Acceptance has the same central ownership.
-    if: ${{ github.event_name == 'workflow_call' }}
+    name: Application Acceptance matrix / central protected validation
+    # See heavy-cells: Application Acceptance has the same central ownership
+    # and the same exact protected-main boundary.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.quality-matrix.outputs.acceptance_required == 'true'
     # The reusable validation workflow has a repository-wide Incus concurrency
     # group. Run acceptance only after the Heavy aggregate completes so the two
     # delegated profiles from this workflow cannot cancel each other.
     needs: [build-install, quality-matrix, heavy]
-    uses: lightning-it/modulix-validation/.github/workflows/collection-quality-profile.yml@ec110a9545dc6b8efe4ed8820b50b27912175111
+    uses: lightning-it/modulix-validation/.github/workflows/collection-quality-profile.yml@154c99eb0d907b01edc10e9b39c94ef4912fd9dd
     with:
       profile: application_acceptance
       matrix-json: ${{ needs.quality-matrix.outputs.acceptance }}
       candidate-artifact: collection-candidate-${{ github.event.pull_request.head.sha || github.sha }}
       source-sha: ${{ github.event.pull_request.head.sha || github.sha }}
-      environment-name: >-
-        ${{ github.event_name == 'pull_request' &&
-            'ansible-collection-runtime-tests' ||
-            'ansible-collection-runtime-protected' }}
-    secrets: inherit
+      environment-name: ansible-collection-runtime-protected
 
   acceptance:
-    name: Deprecated alias / Application Acceptance (not executed)
-    if: ${{ github.event_name == 'workflow_call' }}
+    name: Collection / Application Acceptance
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
     needs: [quality-matrix, acceptance-cells]
     runs-on: ubuntu-latest
     steps:
@@ -535,7 +540,7 @@ jobs:
           fi
 
   runtime-evidence:
-    name: Deprecated adapter / Runtime evidence (not executed)
+    name: Runtime evidence / exact tested SHA
     env:
       # Do not expose this override to repository unit tests: they exercise
       # _tested_commit() with isolated process environments.
@@ -543,8 +548,13 @@ jobs:
       TINY_REQUIRED: ${{ needs.quality-matrix.outputs.tiny_required }}
       HEAVY_REQUIRED: ${{ needs.quality-matrix.outputs.heavy_required }}
       ACCEPTANCE_REQUIRED: ${{ needs.quality-matrix.outputs.acceptance_required }}
-    # The central controller publishes the trusted runtime evidence.
-    if: ${{ github.event_name == 'workflow_call' }}
+    # Aggregate only the same-run protected-main evidence. Central reusable
+    # jobs publish their artifacts into this caller workflow run.
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.quality-matrix.outputs.runtime_evidence_required == 'true'
     needs: [lint-sanity, build-install, role-coverage, quality-matrix, tiny, heavy, acceptance]
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -1026,11 +1036,13 @@ jobs:
           fi
 
   release-security:
-    name: Deprecated adapter / Release Security (not executed)
-    # Publication remains blocked until the central evidence adapter replaces
-    # this source-repository release job.
-    if: ${{ github.event_name == 'workflow_call' }}
-    needs: [lint-sanity, build-install, role-coverage, tiny, heavy, acceptance, evidence]
+    name: Collection / Release Security
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    needs:
+      [lint-sanity, build-install, role-coverage, tiny, heavy, acceptance, runtime-evidence, evidence]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: ansible-collection-release-evidence
@@ -1220,6 +1232,7 @@ jobs:
           TINY_RESULT: ${{ needs.tiny.result }}
           HEAVY_RESULT: ${{ needs.heavy.result }}
           ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          RUNTIME_EVIDENCE_RESULT: ${{ needs.runtime-evidence.result }}
           EVIDENCE_RESULT: ${{ needs.evidence.result }}
           ARCHIVE_REQUIRED: ${{ steps.archive-policy.outputs.required }}
           ARCHIVE_CONFIGURED: ${{ steps.archive-policy.outputs.configured }}
@@ -1264,6 +1277,7 @@ jobs:
               "tiny": os.environ["TINY_RESULT"] == "success",
               "heavy": os.environ["HEAVY_RESULT"] == "success",
               "application_acceptance": os.environ["ACCEPTANCE_RESULT"] == "success",
+              "runtime_evidence": os.environ["RUNTIME_EVIDENCE_RESULT"] == "success",
               "base_evidence_job": os.environ["EVIDENCE_RESULT"] == "success",
               "evidence_manifest_eligible": manifest.get("release_eligible") is True,
               "release_security_complete": not manifest.get("security_evidence", {}).get("missing"),
@@ -1624,6 +1638,7 @@ jobs:
           TINY_RESULT: ${{ needs.tiny.result }}
           HEAVY_RESULT: ${{ needs.heavy.result }}
           ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          RUNTIME_EVIDENCE_RESULT: ${{ needs.runtime-evidence.result }}
           EVIDENCE_RESULT: ${{ needs.evidence.result }}
           UPLOAD_OUTCOME: ${{ steps.release-security-upload.outcome }}
         run: |
@@ -1634,13 +1649,26 @@ jobs:
           test "$TINY_RESULT" = success
           test "$HEAVY_RESULT" = success
           test "$ACCEPTANCE_RESULT" = success
+          test "$RUNTIME_EVIDENCE_RESULT" = success
           test "$EVIDENCE_RESULT" = success
           test "$UPLOAD_OUTCOME" = success
   release-validation:
-    name: Deprecated adapter / Release Validation (not executed)
-    if: ${{ github.event_name == 'workflow_call' }}
+    name: Collection / Release Validation
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
     needs:
-      [lint-sanity, build-install, role-coverage, quality-matrix, tiny, heavy, acceptance, evidence, release-security]
+      - lint-sanity
+      - build-install
+      - role-coverage
+      - quality-matrix
+      - tiny
+      - heavy
+      - acceptance
+      - runtime-evidence
+      - evidence
+      - release-security
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -1814,6 +1842,7 @@ jobs:
           TINY_RESULT: ${{ needs.tiny.result }}
           HEAVY_RESULT: ${{ needs.heavy.result }}
           ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          RUNTIME_EVIDENCE_RESULT: ${{ needs.runtime-evidence.result }}
           EVIDENCE_RESULT: ${{ needs.evidence.result }}
           RELEASE_SECURITY_RESULT: ${{ needs.release-security.result }}
           IS_PROTECTED_MAIN_PUSH: >-
@@ -1826,6 +1855,7 @@ jobs:
           test "$TINY_RESULT" = success
           test "$HEAVY_RESULT" = success
           test "$ACCEPTANCE_RESULT" = success
+          test "$RUNTIME_EVIDENCE_RESULT" = success
           test "$EVIDENCE_RESULT" = success
           if [ "$IS_PROTECTED_MAIN_PUSH" = true ]; then
             test "$RELEASE_SECURITY_RESULT" = success

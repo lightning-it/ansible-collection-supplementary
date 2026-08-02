@@ -156,7 +156,7 @@ jobs:
       cancel-in-progress: false
     permissions:
       actions: write
-      attestations: read
+      attestations: write
       contents: write
       id-token: write
       pull-requests: read
@@ -659,6 +659,28 @@ jobs:
             sha256sum --check "collection-release-evidence-${RELEASE_SHA}.tar.gz.sha256"
           )
 
+      - name: Classify exact-SHA Security release metadata
+        run: |
+          set -euo pipefail
+          profiles=.lit/security-release-profiles.json
+          metadata=".lit/security-releases/${RELEASE_VERSION}.json"
+          test -s "$profiles"
+          test ! -L "$profiles"
+          if [ -L "$metadata" ]; then
+            echo "Security release metadata must not be a symlink: $metadata" >&2
+            exit 1
+          fi
+          if [ -e "$metadata" ]; then
+            test -f "$metadata"
+            test -s "$metadata"
+            echo "SECURITY_RELEASE=true" >> "$GITHUB_ENV"
+            echo "SECURITY_METADATA=$metadata" >> "$GITHUB_ENV"
+          else
+            echo "SECURITY_RELEASE=false" >> "$GITHUB_ENV"
+            echo "SECURITY_METADATA=" >> "$GITHUB_ENV"
+            echo "No exact-version Security metadata; retaining transition-only release semantics."
+          fi
+
       - name: Install exact candidate in a clean collection path
         run: |
           set -euo pipefail
@@ -680,6 +702,77 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+
+          CANDIDATE="incoming/candidate/${CANDIDATE_NAME}" python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          candidate = Path(os.environ["CANDIDATE"])
+          candidate_sha = hashlib.sha256(candidate.read_bytes()).hexdigest()
+          sbom = json.loads(
+              Path("incoming/evidence/release-assets/sbom.cdx.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          component = ((sbom.get("metadata") or {}).get("component") or {})
+          expected_component = {
+              "group": "lit",
+              "name": "supplementary",
+              "version": os.environ["RELEASE_VERSION"],
+          }
+          if any(component.get(key) != value for key, value in expected_component.items()):
+              raise SystemExit("SBOM component does not match the collection release")
+          if component.get("purl") != (
+              f"pkg:ansible/lit/supplementary@{os.environ['RELEASE_VERSION']}"
+          ):
+              raise SystemExit("SBOM purl does not match the collection release")
+          hashes = component.get("hashes")
+          if not isinstance(hashes, list) or not any(
+              isinstance(item, dict)
+              and item.get("alg") == "SHA-256"
+              and item.get("content") == candidate_sha
+              for item in hashes
+          ):
+              raise SystemExit("SBOM does not bind the exact collection digest")
+          properties = component.get("properties")
+          if not isinstance(properties, list):
+              raise SystemExit("SBOM candidate properties are missing")
+          actual_properties = {
+              (item.get("name"), item.get("value"))
+              for item in properties
+              if isinstance(item, dict)
+          }
+          expected_properties = {
+              ("lit:candidate:filename", candidate.name),
+              ("lit:candidate:commit", os.environ["RELEASE_SHA"]),
+          }
+          if not expected_properties <= actual_properties:
+              raise SystemExit("SBOM does not bind the candidate filename and source SHA")
+
+          provenance = json.loads(
+              Path("incoming/evidence/release-assets/provenance.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          expected_provenance = {
+              "schema_version": 1,
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "commit_sha": os.environ["RELEASE_SHA"],
+              "candidate": candidate.name,
+              "candidate_sha256": candidate_sha,
+              "ref": "refs/heads/main",
+              "source_ref": "refs/heads/main",
+              "workflow": "Collection CI",
+              "workflow_event_sha": os.environ["RELEASE_SHA"],
+          }
+          if any(
+              provenance.get(key) != value
+              for key, value in expected_provenance.items()
+          ):
+              raise SystemExit("provenance does not bind the exact collection release")
+          PY
 
           identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-ci.yml@refs/heads/main"
           subjects=(
@@ -718,9 +811,7 @@ jobs:
               "dist/attestation-bundles/$(basename "$subject").attestation.jsonl"
           done
 
-      - name: Assemble immutable release attachments and notes
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Assemble verified release attachments
         run: |
           set -euo pipefail
 
@@ -749,6 +840,112 @@ jobs:
             cd dist/release
             sha256sum --check ci-candidate-SHA256SUMS
             sha256sum --check ci-release-assets-SHA256SUMS
+          )
+
+      - name: Prepare deterministic signed Security release evidence
+        id: security-evidence
+        if: env.SECURITY_RELEASE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          evidence=dist/release/security-release-evidence.json
+          bundle="${evidence}.sigstore.json"
+          python scripts/generate-security-release-evidence.py generate \
+            --metadata "$SECURITY_METADATA" \
+            --profiles .lit/security-release-profiles.json \
+            --source-sha "$RELEASE_SHA" \
+            --artifact "dist/release/${CANDIDATE_NAME}" \
+            --signature "dist/release/${CANDIDATE_NAME}.sigstore.json" \
+            --sbom dist/release/sbom.cdx.json \
+            --provenance dist/release/provenance.json \
+            --output "$evidence"
+
+          release_response="$RUNNER_TEMP/existing-release-for-security-evidence.json"
+          release_status="$(
+            curl --silent --show-error --location \
+              --output "$release_response" \
+              --write-out '%{http_code}' \
+              --header 'Accept: application/vnd.github+json' \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}"
+          )"
+          case "$release_status" in
+            404)
+              evidence_asset_count=0
+              evidence_bundle_count=0
+              ;;
+            200)
+              evidence_asset_count="$(
+                jq '[.assets[] | select(.name == "security-release-evidence.json")] | length' \
+                  "$release_response"
+              )"
+              evidence_bundle_count="$(
+                jq '[.assets[] | select(.name == "security-release-evidence.json.sigstore.json")] | length' \
+                  "$release_response"
+              )"
+              ;;
+            *)
+              echo "Unexpected GitHub Release lookup status: $release_status" >&2
+              exit 1
+              ;;
+          esac
+          test "$evidence_asset_count" -le 1
+          test "$evidence_bundle_count" -le 1
+          test "$evidence_asset_count" -eq "$evidence_bundle_count"
+          if [ "$evidence_asset_count" -eq 1 ]; then
+            existing_pair="$RUNNER_TEMP/existing-security-evidence-pair"
+            mkdir -p "$existing_pair"
+            gh release download "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern security-release-evidence.json \
+              --pattern security-release-evidence.json.sigstore.json \
+              --dir "$existing_pair"
+            cmp --silent "$existing_pair/security-release-evidence.json" "$evidence"
+            cp "$existing_pair/security-release-evidence.json.sigstore.json" "$bundle"
+          else
+            cosign sign-blob --yes --bundle "$bundle" "$evidence"
+          fi
+          publish_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-publish.yml@refs/heads/main"
+          cosign verify-blob \
+            --bundle "$bundle" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "$publish_identity" \
+            --certificate-github-workflow-sha "$RELEASE_SHA" \
+            "$evidence"
+
+      - name: Attest Security release evidence
+        id: attest-security-evidence
+        if: env.SECURITY_RELEASE == 'true'
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d  # v4
+        with:
+          subject-path: dist/release/security-release-evidence.json
+
+      - name: Verify Security release evidence attestation
+        if: env.SECURITY_RELEASE == 'true'
+        env:
+          ATTESTATION_BUNDLE: ${{ steps.attest-security-evidence.outputs.bundle-path }}
+          ATTESTATION_ID: ${{ steps.attest-security-evidence.outputs.attestation-id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -n "$ATTESTATION_ID"
+          test -s "$ATTESTATION_BUNDLE"
+          publish_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-publish.yml@refs/heads/main"
+          gh attestation verify dist/release/security-release-evidence.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --cert-identity "$publish_identity" \
+            --source-ref refs/heads/main \
+            --source-digest "$RELEASE_SHA"
+
+      - name: Finalize immutable release attachments and notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          (
+            cd dist/release
             checksum_file="$RUNNER_TEMP/publish-release-assets-SHA256SUMS"
             find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' \
               | sort \
@@ -832,6 +1029,30 @@ jobs:
           notes = "\n".join(lines[start:end]).strip() + "\n"
           if len(notes.splitlines()) < 3:
               raise SystemExit(f"CHANGELOG.rst v{version} section is empty")
+          if os.environ["SECURITY_RELEASE"] == "true":
+              import json
+
+              evidence = json.loads(
+                  Path("dist/release/security-release-evidence.json").read_text(
+                      encoding="utf-8"
+                  )
+              )
+              evidence_id = evidence["metadata"]["id"]
+              identifiers = ", ".join(
+                  f"``{identifier}``"
+                  for identifier in evidence["security"]["identifiers"]
+              )
+              evidence_url = (
+                  f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/"
+                  f"download/{os.environ['RELEASE_TAG']}/security-release-evidence.json"
+              )
+              notes += (
+                  "\nSecurity release evidence\n"
+                  "-------------------------\n\n"
+                  f"* Evidence ID: ``{evidence_id}``\n"
+                  f"* Security identifiers: {identifiers}\n"
+                  f"* Evidence: `{evidence_id} <{evidence_url}>`_\n"
+              )
           Path("dist/release-notes.rst").write_text(notes, encoding="utf-8")
           PY
 
@@ -1210,6 +1431,35 @@ jobs:
             "$verify_root/SHA256SUMS"
           test "$(sha256sum "$verify_root/$CANDIDATE_NAME" | awk '{print $1}')" = \
             "$(sha256sum "incoming/candidate/$CANDIDATE_NAME" | awk '{print $1}')"
+          if [ "$SECURITY_RELEASE" = true ]; then
+            python scripts/generate-security-release-evidence.py verify \
+              --metadata "$SECURITY_METADATA" \
+              --profiles .lit/security-release-profiles.json \
+              --source-sha "$RELEASE_SHA" \
+              --artifact "$verify_root/$CANDIDATE_NAME" \
+              --signature "$verify_root/$CANDIDATE_NAME.sigstore.json" \
+              --sbom "$verify_root/sbom.cdx.json" \
+              --provenance "$verify_root/provenance.json" \
+              --evidence "$verify_root/security-release-evidence.json"
+            cosign verify-blob \
+              --bundle "$verify_root/security-release-evidence.json.sigstore.json" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity "$publish_identity" \
+              --certificate-github-workflow-sha "$RELEASE_SHA" \
+              "$verify_root/security-release-evidence.json"
+            gh attestation verify "$verify_root/security-release-evidence.json" \
+              --repo "$GITHUB_REPOSITORY" \
+              --cert-identity "$publish_identity" \
+              --source-ref refs/heads/main \
+              --source-digest "$RELEASE_SHA"
+            candidate_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-ci.yml@refs/heads/main"
+            cosign verify-blob \
+              --bundle "$verify_root/$CANDIDATE_NAME.sigstore.json" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity "$candidate_identity" \
+              --certificate-github-workflow-sha "$RELEASE_SHA" \
+              "$verify_root/$CANDIDATE_NAME"
+          fi
           ansible-galaxy collection install \
             "$verify_root/$CANDIDATE_NAME" \
             -p "$install_root" \
@@ -1364,6 +1614,66 @@ jobs:
             --certificate-identity "$identity" \
             --certificate-github-workflow-sha "$RELEASE_SHA" \
             "$verify_root/$(basename "$receipt")"
+
+      - name: Mint exact consumer-scoped Security release token
+        id: security-app
+        if: env.SECURITY_RELEASE == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: container-ee-wunder-ansible-ubi9
+          permission-actions: write
+
+      - name: Dispatch immutable Security evidence after Producer acceptance
+        if: env.SECURITY_RELEASE == 'true'
+        env:
+          APP_INSTALLATION_ID: ${{ steps.security-app.outputs.installation-id }}
+          APP_SLUG: ${{ steps.security-app.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.security-app.outputs.token }}
+          PRODUCER_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$APP_SLUG" = lightning-it-release-automation
+          test "$APP_INSTALLATION_ID" = 148019054
+          actual_repositories="$(
+            gh api --paginate 'installation/repositories?per_page=100' \
+              | jq -sc '[.[].repositories[].full_name] | sort | unique'
+          )"
+          test "$actual_repositories" = \
+            '["lightning-it/container-ee-wunder-ansible-ubi9"]'
+          evidence=dist/release/security-release-evidence.json
+          python scripts/generate-security-release-evidence.py verify \
+            --metadata "$SECURITY_METADATA" \
+            --profiles .lit/security-release-profiles.json \
+            --source-sha "$RELEASE_SHA" \
+            --artifact "dist/release/${CANDIDATE_NAME}" \
+            --signature "dist/release/${CANDIDATE_NAME}.sigstore.json" \
+            --sbom dist/release/sbom.cdx.json \
+            --provenance dist/release/provenance.json \
+            --evidence "$evidence"
+          evidence_id="$(jq -er '.metadata.id' "$evidence")"
+          release_state="$RUNNER_TEMP/security-release-before-dispatch.json"
+          curl --fail --silent --show-error --location \
+            --output "$release_state" \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${PRODUCER_TOKEN}" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}"
+          revocation_count="$(
+            jq --arg id "$evidence_id" '[.assets[].name | select(
+              . == "security-release-revocation.json"
+              or . == ("security-release-revocation-" + $id + ".json")
+            )] | length' "$release_state"
+          )"
+          test "$revocation_count" -eq 0
+          evidence_url="https://github.com/${GITHUB_REPOSITORY}/"
+          evidence_url+="releases/download/${RELEASE_TAG}/$(basename "$evidence")"
+          evidence_sha256="sha256:$(sha256sum "$evidence" | awk '{print $1}')"
+          python scripts/dispatch-security-release.py \
+            --evidence-url "$evidence_url" \
+            --evidence-sha256 "$evidence_sha256"
 
       - name: Upload exact release attachment set
         if: always()

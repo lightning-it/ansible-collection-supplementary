@@ -121,9 +121,16 @@ class WorkflowSecurityTests(unittest.TestCase):
             if step.get("uses") == "./.github/actions/run-quality-profile"
         )
         self.assertEqual("12GiB", tiny_action["with"]["memory-limit"])
-        disabled_adapter = "${{ github.event_name == 'workflow_call' }}"
-        self.assertEqual(disabled_adapter, collection["jobs"]["heavy-cells"]["if"])
-        self.assertEqual(disabled_adapter, collection["jobs"]["acceptance-cells"]["if"])
+        for job_name, required_output in (
+            ("heavy-cells", "heavy_required"),
+            ("acceptance-cells", "acceptance_required"),
+        ):
+            guard = collection["jobs"][job_name]["if"]
+            self.assertIn("github.event_name == 'push'", guard)
+            self.assertIn("github.ref == 'refs/heads/main'", guard)
+            self.assertIn(f"quality-matrix.outputs.{required_output} == 'true'", guard)
+            self.assertNotIn("pull_request", guard)
+            self.assertNotIn("workflow_dispatch", guard)
         self.assertFalse((WORKFLOWS / "candidate-platform-validation.yml").exists())
 
     def test_copilot_and_renovate_gates_preserve_safe_update_boundaries(self) -> None:
@@ -253,7 +260,13 @@ class WorkflowSecurityTests(unittest.TestCase):
     def test_release_credentials_are_outside_pull_request_jobs(self) -> None:
         jobs = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]
         release_security = jobs["release-security"]
-        self.assertEqual("${{ github.event_name == 'workflow_call' }}", release_security["if"])
+        release_guard = release_security["if"]
+        self.assertIn("github.event_name == 'push'", release_guard)
+        self.assertIn("github.ref == 'refs/heads/main'", release_guard)
+        self.assertNotIn("pull_request", release_guard)
+        self.assertNotIn("workflow_dispatch", release_guard)
+        self.assertEqual("ansible-collection-release-evidence", release_security["environment"])
+        self.assertIn("runtime-evidence", release_security["needs"])
         self.assertEqual("Collection / Release Evidence", jobs["evidence"]["name"])
         self.assertNotIn("environment", jobs["evidence"])
         self.assertEqual({"contents": "read"}, jobs["evidence"]["permissions"])
@@ -272,14 +285,100 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("needs.quality-matrix.outputs.tiny_required == 'true'", guard)
         self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", guard)
         self.assertNotIn("github.event_name == 'schedule'", guard)
-        disabled_adapter = "${{ github.event_name == 'workflow_call' }}"
-        self.assertEqual(disabled_adapter, jobs["heavy-cells"]["if"])
-        self.assertEqual(disabled_adapter, jobs["acceptance-cells"]["if"])
-        self.assertEqual(disabled_adapter, jobs["runtime-evidence"]["if"])
+        for job_name in ("heavy-cells", "acceptance-cells", "runtime-evidence"):
+            protected_main_guard = jobs[job_name]["if"]
+            self.assertIn("github.event_name == 'push'", protected_main_guard)
+            self.assertIn("github.ref == 'refs/heads/main'", protected_main_guard)
+            self.assertNotIn("pull_request", protected_main_guard)
+            self.assertNotIn("workflow_dispatch", protected_main_guard)
+        for job_name in ("heavy-cells", "acceptance-cells"):
+            delegated = jobs[job_name]
+            self.assertEqual(
+                "lightning-it/modulix-validation/.github/workflows/"
+                "collection-quality-profile.yml@"
+                "154c99eb0d907b01edc10e9b39c94ef4912fd9dd",
+                delegated["uses"],
+            )
+            self.assertEqual(
+                "ansible-collection-runtime-protected",
+                delegated["with"]["environment-name"],
+            )
+            self.assertNotIn("secrets", delegated)
         self.assertEqual("Collection / Release Evidence", jobs["evidence"]["name"])
         self.assertEqual(
             ["lint-sanity", "build-install", "role-coverage", "quality-matrix", "tiny"],
             jobs["fast"]["needs"],
+        )
+
+    def test_protected_main_evidence_adapter_is_exact_and_fail_closed(self) -> None:
+        jobs = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]
+
+        self.assertEqual("Collection / Heavy", jobs["heavy"]["name"])
+        self.assertEqual("Collection / Application Acceptance", jobs["acceptance"]["name"])
+        self.assertEqual("Runtime evidence / exact tested SHA", jobs["runtime-evidence"]["name"])
+        self.assertEqual("Collection / Release Security", jobs["release-security"]["name"])
+        self.assertEqual("Collection / Release Validation", jobs["release-validation"]["name"])
+
+        for job_name in (
+            "heavy",
+            "acceptance",
+            "runtime-evidence",
+            "release-security",
+            "release-validation",
+        ):
+            guard = jobs[job_name]["if"]
+            self.assertIn("github.event_name == 'push'", guard)
+            self.assertIn("github.ref == 'refs/heads/main'", guard)
+            self.assertNotIn("pull_request", guard)
+            self.assertNotIn("workflow_dispatch", guard)
+
+        self.assertIn("runtime-evidence", jobs["release-security"]["needs"])
+        self.assertIn("runtime-evidence", jobs["release-validation"]["needs"])
+        release_security = json.dumps(jobs["release-security"])
+        release_validation = json.dumps(jobs["release-validation"])
+        self.assertIn("needs.runtime-evidence.result", release_security)
+        self.assertIn("needs.runtime-evidence.result", release_validation)
+        release_security_aggregate = next(
+            step
+            for step in jobs["release-security"]["steps"]
+            if step.get("name") == "Enforce trusted release-security result after upload"
+        )
+        self.assertEqual(
+            "${{ needs.runtime-evidence.result }}",
+            release_security_aggregate["env"]["RUNTIME_EVIDENCE_RESULT"],
+        )
+        self.assertIn(
+            'test "$RUNTIME_EVIDENCE_RESULT" = success',
+            release_security_aggregate["run"],
+        )
+        release_security_finalize = next(
+            step
+            for step in jobs["release-security"]["steps"]
+            if step.get("name") == "Finalize protected-main publication eligibility"
+        )
+        self.assertEqual(
+            "${{ needs.runtime-evidence.result }}",
+            release_security_finalize["env"]["RUNTIME_EVIDENCE_RESULT"],
+        )
+        self.assertIn(
+            '"runtime_evidence": os.environ["RUNTIME_EVIDENCE_RESULT"] == "success"',
+            release_security_finalize["run"],
+        )
+        self.assertIn("collection-evidence-${{ env.SOURCE_SHA }}", release_security)
+        self.assertIn("collection-release-evidence-${{ env.SOURCE_SHA }}", release_security)
+        self.assertIn("collection-release-evidence-${{ env.SOURCE_SHA }}", release_validation)
+        final_aggregate = next(
+            step
+            for step in jobs["release-validation"]["steps"]
+            if step.get("name") == "Enforce every mandatory aggregate"
+        )
+        self.assertEqual(
+            "${{ needs.runtime-evidence.result }}",
+            final_aggregate["env"]["RUNTIME_EVIDENCE_RESULT"],
+        )
+        self.assertIn(
+            'test "$RUNTIME_EVIDENCE_RESULT" = success',
+            final_aggregate["run"],
         )
 
     def test_candidate_platforms_run_only_as_non_release_promotion_input(self) -> None:
@@ -710,6 +809,91 @@ class WorkflowSecurityTests(unittest.TestCase):
             dispatcher,
         )
         self.assertNotIn(r"(?:[-.][0-9A-Za-z.-]+)?\Z", dispatcher)
+
+    def test_publish_security_release_is_metadata_bound_and_dispatches_after_acceptance(self) -> None:
+        workflow_path = WORKFLOWS / "collection-publish.yml"
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+        publish = load_yaml(workflow_path)["jobs"]["publish"]
+        self.assertEqual("write", publish["permissions"]["attestations"])
+        step_names = [step.get("name") for step in publish["steps"]]
+        classify_index = step_names.index("Classify exact-SHA Security release metadata")
+        prepare_index = step_names.index("Prepare deterministic signed Security release evidence")
+        attest_index = step_names.index("Attest Security release evidence")
+        finalize_index = step_names.index("Finalize immutable release attachments and notes")
+        release_index = step_names.index("Create or verify GitHub Release and immutable assets")
+        verify_index = step_names.index("Verify GitHub Release download, install, and smoke")
+        receipt_index = step_names.index("Attach signed post-publication verification receipt")
+        dispatch_index = step_names.index("Dispatch immutable Security evidence after Producer acceptance")
+        self.assertLess(classify_index, prepare_index)
+        self.assertLess(prepare_index, attest_index)
+        self.assertLess(attest_index, finalize_index)
+        self.assertLess(finalize_index, release_index)
+        self.assertLess(release_index, verify_index)
+        self.assertLess(verify_index, receipt_index)
+        self.assertLess(receipt_index, dispatch_index)
+
+        steps = {step.get("name"): step for step in publish["steps"]}
+        self.assertEqual(
+            "env.SECURITY_RELEASE == 'true'",
+            steps["Prepare deterministic signed Security release evidence"]["if"],
+        )
+        self.assertEqual(
+            "env.SECURITY_RELEASE == 'true'",
+            steps["Attest Security release evidence"]["if"],
+        )
+        self.assertNotIn("attest_needed", workflow_text)
+        self.assertIn('test -n "$ATTESTATION_ID"', workflow_text)
+        self.assertIn('test -s "$ATTESTATION_BUNDLE"', workflow_text)
+        self.assertEqual(
+            "env.SECURITY_RELEASE == 'true'",
+            steps["Dispatch immutable Security evidence after Producer acceptance"]["if"],
+        )
+        transition_condition = steps["Dispatch transitional central validation"]["if"]
+        self.assertEqual("env.GALAXY_REQUIRED == 'true'", transition_condition)
+        self.assertIn("No exact-version Security metadata", workflow_text)
+        self.assertIn(".lit/security-releases/${RELEASE_VERSION}.json", workflow_text)
+        self.assertIn('--metadata "$SECURITY_METADATA"', workflow_text)
+        self.assertIn("actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d", workflow_text)
+        self.assertIn('test "$APP_INSTALLATION_ID" = 148019054', workflow_text)
+        self.assertIn("installation/repositories?per_page=100", workflow_text)
+        self.assertIn(
+            "jq -sc '[.[].repositories[].full_name] | sort | unique'",
+            workflow_text,
+        )
+        self.assertNotIn("gh api --paginate --slurp", workflow_text)
+        self.assertIn('test "$revocation_count" -eq 0', workflow_text)
+        self.assertGreaterEqual(workflow_text.count("generate-security-release-evidence.py verify"), 2)
+        self.assertIn("permission-actions: write", workflow_text)
+        self.assertNotIn("--clobber", workflow_text)
+
+        generator = (ROOT / "scripts/generate-security-release-evidence.py").read_text(encoding="utf-8")
+        for free_claim in (
+            'add_argument("--id"',
+            'add_argument("--security-id"',
+            'add_argument("--consumer"',
+            'add_argument("--acceptance-profile"',
+            'add_argument("--created-at"',
+            'add_argument("--not-before"',
+            'add_argument("--expires-at"',
+        ):
+            self.assertNotIn(free_claim, generator)
+        dispatcher = (ROOT / "scripts/dispatch-security-release.py").read_text(encoding="utf-8")
+        self.assertIn("security-release-update.yml/dispatches", dispatcher)
+        self.assertIn("inputs[evidence_url]", dispatcher)
+        self.assertIn("inputs[evidence_sha256]", dispatcher)
+        self.assertNotIn("inputs[evidence_id]", dispatcher)
+        self.assertNotIn('add_argument("--ref"', dispatcher)
+
+        profiles = json.loads((ROOT / ".lit" / "security-release-profiles.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            {
+                "lit.supplementary/mlx90-fixture": {
+                    "description": "Historical v3.1.2/#488 dry-run fixture; never release eligible.",
+                    "releaseEligible": False,
+                }
+            },
+            profiles["profiles"],
+        )
 
 
 if __name__ == "__main__":
