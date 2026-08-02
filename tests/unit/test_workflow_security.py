@@ -706,7 +706,7 @@ class WorkflowSecurityTests(unittest.TestCase):
             dispatcher,
         )
         self.assertIn(
-            r"(?:[-.][0-9A-Za-z.-]+)?\Z",
+            r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\Z",
             dispatcher,
         )
         self.assertNotIn(r"(?:[-.][0-9A-Za-z.-]+)?\Z", dispatcher)
