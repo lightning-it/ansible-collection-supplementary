@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "evidenceId": "MLX90-GHSA-VJJF-WC74-GP86-3.2.0",
+  "createdAt": "2026-08-03T03:32:24Z",
+  "securityIdentifiers": [
+    "GHSA-vjjf-wc74-gp86"
+  ],
+  "affectedVersion": "3.1.0",
+  "fixedVersion": "3.2.0",
+  "consumers": [
+    "lightning-it/container-ee-wunder-ansible-ubi9"
+  ],
+  "acceptanceProfile": "lit.supplementary/forgejo-manifest-secret-permissions-v1",
+  "validity": {
+    "notBefore": "2026-08-03T03:32:24Z",
+    "expiresAt": "2026-09-02T03:32:24Z",
+    "revoked": false
+  }
+}
