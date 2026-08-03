@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Verify the packaged Forgejo manifest secret-permission contract offline."""
 
 from __future__ import annotations
