@@ -887,10 +887,16 @@ class WorkflowSecurityTests(unittest.TestCase):
         profiles = json.loads((ROOT / ".lit" / "security-release-profiles.json").read_text(encoding="utf-8"))
         self.assertEqual(
             {
+                "lit.supplementary/forgejo-manifest-secret-permissions-v1": {
+                    "description": (
+                        "Verify the packaged Forgejo Pod manifest writer is root:root mode 0600 with no_log enabled."
+                    ),
+                    "releaseEligible": True,
+                },
                 "lit.supplementary/mlx90-fixture": {
                     "description": "Historical v3.1.2/#488 dry-run fixture; never release eligible.",
                     "releaseEligible": False,
-                }
+                },
             },
             profiles["profiles"],
         )

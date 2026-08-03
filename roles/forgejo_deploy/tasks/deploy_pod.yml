@@ -374,7 +374,10 @@
   ansible.builtin.template:
     src: forgejo-pod.yml.j2
     dest: "{{ forgejo_deploy_pod_manifest_path }}"
-    mode: '0644'
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
   notify:
     - Recreate forgejo pod
     - Run forgejo pod
