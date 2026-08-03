@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    Document that every protected main merge must be back-synced into develop before the next promotion, preserving
+    an exact and reviewable MLX-90 release ancestry without bypassing protected branch gates.
