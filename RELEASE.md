@@ -30,6 +30,10 @@ Do not direct-push release commits, bypass protection, use an administrator
 override, or publish from a feature/develop branch. A release-generated change
 must be back-synced before the next promotion.
 
+Every merge into `main`, including a develop-to-main promotion that does not
+yet publish a release, must become an ancestor of `develop` through a reviewed
+back-sync pull request before another promotion is opened.
+
 ## Validation lanes
 
 Collection source pull requests require the stable `Collection / Fast` aggregate

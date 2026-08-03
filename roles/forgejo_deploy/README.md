@@ -12,6 +12,7 @@ None.
 See `roles/forgejo_deploy/defaults/main.yml`.
 
 Key variables:
+
 - `forgejo_deploy_image`
 - `forgejo_deploy_pod_manifest_path`
 - `forgejo_deploy_host_data_dir`
@@ -32,6 +33,11 @@ Key variables:
 - `forgejo_deploy_root_url_effective`
 - `forgejo_deploy_generate_secrets`
 - `forgejo_deploy_manage_systemd`
+
+The generated Forgejo Pod manifest contains the effective database credential.
+The role therefore writes it as `root:root` with mode `0600` and suppresses the
+render task output. The optional PostgreSQL role manages its own manifest and is
+outside this role's manifest-permission guarantee.
 
 ## Dependencies
 

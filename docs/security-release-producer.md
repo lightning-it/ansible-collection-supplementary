@@ -33,12 +33,12 @@ The consumer derives all trusted claims and the signature-bundle URL from that v
 
 ## Current fail-closed dependency
 
-The only currently defined profile is `lit.supplementary/mlx90-fixture`; it is deliberately marked
-`releaseEligible: false` because v3.1.2/#488 is historical dry-run data, not retrospective release attestation. A real
-Security release therefore remains blocked until a separately reviewed, fix-specific acceptance profile is added to
-both the producer registry and the central final-acceptance allowlist. The consumer
-`.github/workflows/security-release-update.yml` must also be promoted and registered on its protected `main` branch
-before the first producer Security release. There is no fallback to labels, mutable claims, or a weaker dispatch.
+The historical `lit.supplementary/mlx90-fixture` profile remains explicitly non-releaseable. The separately reviewed
+`lit.supplementary/forgejo-manifest-secret-permissions-v1` profile is release eligible only for the fix identified by
+`GHSA-vjjf-wc74-gp86`; its packaged offline verifier binds the Forgejo manifest writer to root:root mode 0600 and
+`no_log: true`. The first real Security release remains blocked until this producer change, the matching central
+final-acceptance allowlist, and the consumer workflow are all promoted to their protected `main` branches. There is no
+fallback to labels, mutable claims, the historical fixture, or a weaker dispatch.
 
 The producer evidence adapter is restricted to an exact `push` on `refs/heads/main`. It delegates Heavy and
 Application Acceptance to the SHA-pinned reusable workflow in `lightning-it/modulix-validation`, using the producer's
