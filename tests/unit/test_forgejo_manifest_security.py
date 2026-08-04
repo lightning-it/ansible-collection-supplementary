@@ -23,7 +23,7 @@ PROFILE = "lit.supplementary/forgejo-manifest-secret-permissions-v1"
 class ForgejoManifestSecurityTests(unittest.TestCase):
     def test_real_release_metadata_binds_the_ghsa_version_and_profile(self) -> None:
         registry_path = ROOT / ".lit" / "security-release-profiles.json"
-        metadata_path = ROOT / ".lit" / "security-releases" / "3.2.0.json"
+        metadata_path = ROOT / ".lit" / "security-releases" / "3.2.2.json"
         registry = json.loads(registry_path.read_text(encoding="utf-8"))
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         self.assertEqual(
@@ -36,9 +36,9 @@ class ForgejoManifestSecurityTests(unittest.TestCase):
             registry["profiles"][PROFILE],
         )
         self.assertEqual(["GHSA-vjjf-wc74-gp86"], metadata["securityIdentifiers"])
-        self.assertEqual("MLX90-GHSA-VJJF-WC74-GP86-3.2.0", metadata["evidenceId"])
+        self.assertEqual("MLX90-GHSA-VJJF-WC74-GP86-3.2.2", metadata["evidenceId"])
         self.assertEqual("3.1.0", metadata["affectedVersion"])
-        self.assertEqual("3.2.0", metadata["fixedVersion"])
+        self.assertEqual("3.2.2", metadata["fixedVersion"])
         self.assertEqual(PROFILE, metadata["acceptanceProfile"])
         self.assertEqual(
             ["lightning-it/container-ee-wunder-ansible-ubi9"],
@@ -51,7 +51,7 @@ class ForgejoManifestSecurityTests(unittest.TestCase):
         validated = generator["load_metadata"](
             metadata_path,
             registry_path,
-            datetime(2026, 8, 3, 3, 32, 24, tzinfo=UTC),
+            datetime(2026, 8, 4, 11, 31, 48, tzinfo=UTC),
         )
         self.assertEqual(metadata, validated)
 
