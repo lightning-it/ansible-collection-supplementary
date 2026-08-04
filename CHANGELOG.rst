@@ -4,6 +4,38 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.2.0
+======
+
+Minor Changes
+-------------
+
+- Bind every reviewed MLX-90 promotion back-sync to the current protected main SHA while preserving the current develop tree, so stale ancestry and unintended source changes fail closed before the next promotion.
+- Document that every protected main merge must be back-synced into develop before the next promotion, preserving an exact and reviewable MLX-90 release ancestry without bypassing protected branch gates.
+- Move protected Heavy and Application Acceptance validation to the central ModuLix validation controller and require SHA-bound evidence for main promotion, using the short-lived workflow token for public controller artifacts when no dedicated read token is configured.
+- Preserve the protected main merge history in develop before the MLX-90 producer promotion, so subsequent develop-to-main promotions remain ancestry-verifiable without changing the reviewed collection content.
+- Require only the Fast Lane in Collection source pull requests, select Tiny validation by affected role, and delegate Heavy and Application Acceptance validation asynchronously to the central validation controller.
+- Stabilize the Hetzner Object Storage compatibility role with deterministic separate-project admin, writer, reader, and reviewer bucket policies and a complete migration manifest for lit.cloud.
+
+Security Fixes
+--------------
+
+- Bind MLX-90 producer evidence to reviewed, versioned Security metadata and the exact protected-main collection release, then sign, attest, persist, and re-verify the immutable evidence before dispatching the allowlisted consumer with only its release-asset URL and SHA-256 digest.
+- Keep ordinary collection releases on the asynchronous transition-only path and reject missing profiles, non-allowlisted consumers, invalid or expired metadata, revocations, and every release-material digest mismatch.
+- Restrict the secret-bearing Forgejo Pod manifest to root:root mode 0600 and suppress its Ansible render output, preventing local users and diff logs from exposing the effective Forgejo database password.
+
+Bugfixes
+--------
+
+- Accept a successful Tiny matrix result when the selected diff does not require Tiny, while continuing to reject every failed, cancelled, or otherwise incomplete result.
+- Dispatch transitional release validation to the stable modulix-validation main workflow by default.
+- Keep release-evidence assembly outside the managed ansible-collection-runtime-tests environment so only Tiny runtime jobs require that approval gate.
+- Keep transition validation asynchronous and non-authoritative: local exact-SHA release prerequisites remain fail-closed, while immutable central validation evidence is produced and enforced later in the MLX-90 promotion chain instead of being required before the transition dispatch can run.
+- Pin the central transition workflow to its protected main revision at the release call site.
+- Restore the protected-main producer evidence adapter so release publication consumes exact-SHA Heavy, Application Acceptance, runtime, and signed release evidence from one workflow run.
+- Retry the exact same-repository release pull-request lookup with bounded backoff after updating its branch, while retaining fail-closed repository, ref, base, and pushed-head verification before editing the pull request body.
+- Synchronize the centrally managed quality-policy validator so current policy lint passes without weakening boolean or integer validation.
+
 v3.1.2
 ======
 
