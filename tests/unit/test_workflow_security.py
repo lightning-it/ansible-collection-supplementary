@@ -545,7 +545,10 @@ class WorkflowSecurityTests(unittest.TestCase):
             retry_block,
         )
         self.assertIn(
-            "failed on the final API attempt after "
+            "failed on the final API attempt after",
+            retry_block,
+        )
+        self.assertIn(
             "${successful_pr_lookup_count} successful but non-converged response(s)",
             retry_block,
         )
@@ -559,6 +562,7 @@ class WorkflowSecurityTests(unittest.TestCase):
             "Release PR lookup has not converged to the exact expected state",
             retry_block,
         )
+        self.assertIn("retrying in ${retry_delay}s", retry_block)
         self.assertIn("Unexpected Release PR lookup outcome", retry_block)
         self.assertIn('if [ "$owned_count" -gt 1 ]; then', retry_block)
         self.assertIn("Multiple same-repository release PRs exist", retry_block)

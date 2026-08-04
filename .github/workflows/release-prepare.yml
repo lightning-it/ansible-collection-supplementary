@@ -388,7 +388,8 @@ jobs:
                 if [ "$successful_pr_lookup_count" -eq 0 ]; then
                   echo "::error::Release PR lookup failed on all ${max_pr_lookup_attempts} API attempts."
                 else
-                  echo "::error::Release PR lookup failed on the final API attempt after ${successful_pr_lookup_count} successful but non-converged response(s)."
+                  echo "::error::Release PR lookup failed on the final API attempt after" \
+                    "${successful_pr_lookup_count} successful but non-converged response(s)."
                 fi
                 exit 1
               fi
@@ -429,7 +430,8 @@ jobs:
                   echo "::notice::Release PR API request failed; retrying in ${retry_delay}s."
                   ;;
                 non-converged)
-                  echo "::notice::Release PR lookup has not converged to the exact expected state; retrying in ${retry_delay}s."
+                  echo "::notice::Release PR lookup has not converged to the exact expected state;" \
+                    "retrying in ${retry_delay}s."
                   ;;
                 *)
                   echo "::error::Unexpected Release PR lookup outcome: ${lookup_outcome}."
