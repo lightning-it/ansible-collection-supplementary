@@ -415,7 +415,7 @@ jobs:
 
             if [ "$attempt" -lt "$max_pr_lookup_attempts" ]; then
               retry_delay=$((1 << (attempt - 1)))
-              echo "::notice::Exact release PR head is not visible yet; retrying in ${retry_delay}s."
+              echo "::notice::Release PR lookup has not converged to the exact expected state; retrying in ${retry_delay}s."
               sleep "$retry_delay"
             fi
           done

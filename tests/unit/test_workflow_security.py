@@ -534,6 +534,10 @@ class WorkflowSecurityTests(unittest.TestCase):
         )
         self.assertIn("retry_delay=$((1 << (attempt - 1)))", retry_block)
         self.assertIn('sleep "$retry_delay"', retry_block)
+        self.assertIn(
+            "Release PR lookup has not converged to the exact expected state",
+            retry_block,
+        )
         self.assertIn('if [ "$owned_count" -gt 1 ]; then', retry_block)
         self.assertIn("Multiple same-repository release PRs exist", retry_block)
         for exact_binding in (
