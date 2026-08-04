@@ -39,10 +39,25 @@ MUTABLE_APPLICATION_VERSIONS = {
     "unversioned",
     "unspecified",
 }
+CHROME_LINUX_CPE_EQUIVALENCE = {
+    "151.0.7922.71": (
+        "151.0.7922.72",
+        "https://chromereleases.googleblog.com/2026/07/stable-channel-update-for-desktop_0887107924.html",
+    ),
+}
 
 
 class SbomError(ValueError):
     """Raised when SBOM identity or dependency evidence is unsafe."""
+
+
+def _chrome_linux_scanner_cpe(browser_version: str) -> tuple[str, str | None]:
+    """Return the reviewed platform-neutral CPE version for an observed Linux build."""
+
+    equivalent = CHROME_LINUX_CPE_EQUIVALENCE.get(browser_version)
+    if equivalent is None:
+        return browser_version, None
+    return equivalent
 
 
 def _os_package_purl(
@@ -640,6 +655,7 @@ def enrich_sbom(
                 raise SbomError(f"malformed Chromium runtime identity: {dependency}")
             cell_identity = "\0".join((*cell, source_sha))
             browser_reference = f"urn:lit:target-browser:sha256:{hashlib.sha256(cell_identity.encode()).hexdigest()}"
+            scanner_cpe_version, scanner_cpe_source = _chrome_linux_scanner_cpe(browser_version)
             common_properties = [
                 {"name": "lit:dependency:source", "value": "target-browser-runtime"},
                 {"name": "lit:dependency:profile", "value": profile},
@@ -655,7 +671,7 @@ def enrich_sbom(
                     "version": browser_version,
                     "bom-ref": browser_reference,
                     "purl": f"pkg:generic/google-chrome@{browser_version}",
-                    "cpe": f"cpe:2.3:a:google:chrome:{browser_version}:*:*:*:*:*:*:*",
+                    "cpe": f"cpe:2.3:a:google:chrome:{scanner_cpe_version}:*:*:*:*:*:*:*",
                     "hashes": [{"alg": "SHA-256", "content": executable_digest}],
                     "properties": common_properties
                     + [
@@ -664,9 +680,29 @@ def enrich_sbom(
                         {"name": "lit:dependency:executable", "value": executable.as_posix()},
                         {
                             "name": "lit:dependency:scanner-cpe-rationale",
-                            "value": "NVD maps Chromium security advisories to the Google Chrome CPE",
+                            "value": (
+                                "NVD maps Chromium advisories to a platform-neutral Google Chrome CPE; "
+                                "the reviewed Stable update binds the observed Linux patch level to the "
+                                "paired Windows/macOS CPE patch level"
+                                if scanner_cpe_source is not None
+                                else "NVD maps Chromium security advisories to the Google Chrome CPE"
+                            ),
                         },
-                    ],
+                    ]
+                    + (
+                        [
+                            {
+                                "name": "lit:dependency:scanner-cpe-version",
+                                "value": scanner_cpe_version,
+                            },
+                            {
+                                "name": "lit:dependency:scanner-cpe-source",
+                                "value": scanner_cpe_source,
+                            },
+                        ]
+                        if scanner_cpe_source is not None
+                        else []
+                    ),
                 },
                 "browser",
             )
