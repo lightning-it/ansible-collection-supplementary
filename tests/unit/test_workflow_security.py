@@ -566,7 +566,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("Unexpected Release PR lookup outcome", retry_block)
         self.assertIn('if [ "$owned_count" -gt 1 ]; then', retry_block)
         self.assertIn(
-            "owned_numbers=\"$(jq -c 'map(.number)' <<< \"$owned_pulls\")\"",
+            'owned_numbers="$(jq -c \'map(.number)\' <<< "$owned_pulls")"',
             retry_block,
         )
         self.assertIn(
