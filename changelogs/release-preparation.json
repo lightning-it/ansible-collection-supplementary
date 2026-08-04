@@ -1,14 +1,74 @@
 {
-  "base_sha": "7012acfc49c1c927d34e9adae188d17d8a10604f",
-  "current_version": "3.1.1",
+  "base_sha": "8a440fedaca4b4c07864de950323e737beccc119",
+  "current_version": "3.1.2",
   "fragments": [
     {
-      "path": "smblds-image-digest.yml",
-      "sha256": "98eff3fd28aaf5ffcea758e1ca125ebf19c9bd16ae85376efc5e57b0c0189d74"
+      "path": "554-central-validation.yml",
+      "sha256": "4f62bf56f13e657ad8e9a21b2e2d0e187c772db5f306bff61793dfff67c5d1a4"
+    },
+    {
+      "path": "585-transition-release-policy.yml",
+      "sha256": "c14f3c8e38b9871c58c320aa14fdfebecded7d223d8b9c08ce6b1265ed5d0a29"
+    },
+    {
+      "path": "586-explicit-transition-controller.yml",
+      "sha256": "7d2a664c82a7ab1aed4ae95f0192ef39b4c03d28d2a68dca71e8fd5c82362f11"
+    },
+    {
+      "path": "586-transition-controller-main.yml",
+      "sha256": "10654fd58eab6864d1d4f5f666ce64a773360ccf0e7cfa9920f273df2901ca09"
+    },
+    {
+      "path": "589-release-evidence-environment.yml",
+      "sha256": "bff43d81d44861f2e2336dbc3f21c9eaa56473334e0da645cb15ba4e1c2cf22f"
+    },
+    {
+      "path": "hetzner-object-storage-cloud-migration.yml",
+      "sha256": "81dbafc3c2fe7bf07fd391b5de02f0565c267fbd49785a8aeda4311088d80772"
+    },
+    {
+      "path": "mlx90-back-sync-contract.yml",
+      "sha256": "87f8dc2392a98c27b7911f4178b89c35fec65a28057767d36a16245b32f406dd"
+    },
+    {
+      "path": "mlx90-current-main-back-sync.yml",
+      "sha256": "73f508d1c9341532147ede703f868adf7122b503a4bcc5bcb86b367c35c62de3"
+    },
+    {
+      "path": "mlx90-forgejo-manifest-secret-permissions.yml",
+      "sha256": "93a318e37597866a8ad9152bae88a98a9a1c6cd971478460bb9cbc5078bbfa2f"
+    },
+    {
+      "path": "mlx90-main-ancestry.yml",
+      "sha256": "223c18b5ac091184c84c8340afc6fe3d27f6d22cc39e3d8ac3d485677e9f8a7d"
+    },
+    {
+      "path": "mlx90-optional-tiny-result.yml",
+      "sha256": "b242a8290e23b7b1965a809a92500e508cac7d6ee1f1f51f70b36c39c061f69a"
+    },
+    {
+      "path": "mlx90-producer-evidence-adapter.yml",
+      "sha256": "e46bd02cd1528f0fd10324b68b5dbdd3a51903d176022ea397fea9496f38edcd"
+    },
+    {
+      "path": "mlx90-security-release-producer.yml",
+      "sha256": "74a52715bc8c46fe6e877e9302b98b8b07e2d233d1c3a83fb0541a645338e725"
+    },
+    {
+      "path": "release-pr-api-propagation-retry.yml",
+      "sha256": "65aaac7f56876ddfec51aa4d264d4ce766243cc350ebc5532b97dcb1a24d0fb5"
+    },
+    {
+      "path": "shared-assets-sync-30688843967.yml",
+      "sha256": "b637a090dd4cd427b7154c68ccb11efd1e13b7fc1974bd0bb36b7886a978a440"
+    },
+    {
+      "path": "shared-assets-sync-30735856911.yml",
+      "sha256": "b637a090dd4cd427b7154c68ccb11efd1e13b7fc1974bd0bb36b7886a978a440"
     }
   ],
-  "impact": "patch",
-  "next_version": "3.1.2",
+  "impact": "minor",
+  "next_version": "3.2.0",
   "preparer": {
     "account_id": "307565056",
     "email": "307565056+lightning-it-release-automation[bot]@users.noreply.github.com",
@@ -24,7 +84,7 @@
     "path": ".github/workflows/release-prepare.yml",
     "ref": "lightning-it/ansible-collection-supplementary/.github/workflows/release-prepare.yml@refs/heads/main",
     "run_attempt": "1",
-    "run_id": "30633294910",
-    "source_sha": "7012acfc49c1c927d34e9adae188d17d8a10604f"
+    "run_id": "30892637501",
+    "source_sha": "8a440fedaca4b4c07864de950323e737beccc119"
   }
 }

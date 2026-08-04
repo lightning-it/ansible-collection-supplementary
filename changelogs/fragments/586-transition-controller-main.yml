@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Dispatch transitional release validation to the stable
-    modulix-validation main workflow by default.
