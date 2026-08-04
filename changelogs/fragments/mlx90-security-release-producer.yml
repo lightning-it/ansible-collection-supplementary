@@ -1,9 +1,0 @@
----
-security_fixes:
-  - >-
-    Bind MLX-90 producer evidence to reviewed, versioned Security metadata and the exact protected-main collection
-    release, then sign, attest, persist, and re-verify the immutable evidence before dispatching the allowlisted
-    consumer with only its release-asset URL and SHA-256 digest.
-  - >-
-    Keep ordinary collection releases on the asynchronous transition-only path and reject missing profiles,
-    non-allowlisted consumers, invalid or expired metadata, revocations, and every release-material digest mismatch.
