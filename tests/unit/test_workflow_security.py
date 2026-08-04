@@ -533,6 +533,8 @@ class WorkflowSecurityTests(unittest.TestCase):
             "for (( attempt=1; attempt<=max_pr_lookup_attempts; attempt++ )); do",
             retry_block,
         )
+        self.assertIn("lookup_outcome=api-failure", retry_block)
+        self.assertIn("lookup_outcome=non-converged", retry_block)
         self.assertGreaterEqual(retry_block.count("owned_pulls='[]'"), 2)
         self.assertIn(
             "successful_pr_lookup_count=$((successful_pr_lookup_count + 1))",
@@ -550,9 +552,14 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("retry_delay=$((1 << (attempt - 1)))", retry_block)
         self.assertIn('sleep "$retry_delay"', retry_block)
         self.assertIn(
+            "Release PR API request failed; retrying in ${retry_delay}s",
+            retry_block,
+        )
+        self.assertIn(
             "Release PR lookup has not converged to the exact expected state",
             retry_block,
         )
+        self.assertIn("Unexpected Release PR lookup outcome", retry_block)
         self.assertIn('if [ "$owned_count" -gt 1 ]; then', retry_block)
         self.assertIn("Multiple same-repository release PRs exist", retry_block)
         for exact_binding in (

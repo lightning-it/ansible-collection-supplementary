@@ -375,6 +375,7 @@ jobs:
           owned_pr_ready=false
           owned_pulls='[]'
           for (( attempt=1; attempt<=max_pr_lookup_attempts; attempt++ )); do
+            lookup_outcome=api-failure
             if ! owned_pulls="$(
               gh api --method GET "repos/${GITHUB_REPOSITORY}/pulls" \
                 -f state=open \
@@ -392,6 +393,7 @@ jobs:
                 exit 1
               fi
             else
+              lookup_outcome=non-converged
               successful_pr_lookup_count=$((successful_pr_lookup_count + 1))
               if ! owned_count="$(
                 jq -er 'if type == "array" then length else error("response is not an array") end' \
@@ -422,7 +424,18 @@ jobs:
 
             if [ "$attempt" -lt "$max_pr_lookup_attempts" ]; then
               retry_delay=$((1 << (attempt - 1)))
-              echo "::notice::Release PR lookup has not converged to the exact expected state; retrying in ${retry_delay}s."
+              case "$lookup_outcome" in
+                api-failure)
+                  echo "::notice::Release PR API request failed; retrying in ${retry_delay}s."
+                  ;;
+                non-converged)
+                  echo "::notice::Release PR lookup has not converged to the exact expected state; retrying in ${retry_delay}s."
+                  ;;
+                *)
+                  echo "::error::Unexpected Release PR lookup outcome: ${lookup_outcome}."
+                  exit 1
+                  ;;
+              esac
               sleep "$retry_delay"
             fi
           done
