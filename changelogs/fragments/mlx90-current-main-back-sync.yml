@@ -1,5 +1,0 @@
----
-minor_changes:
-  - >-
-    Bind every reviewed MLX-90 promotion back-sync to the current protected main SHA while preserving the current
-    develop tree, so stale ancestry and unintended source changes fail closed before the next promotion.

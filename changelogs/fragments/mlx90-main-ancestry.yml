@@ -1,5 +1,0 @@
----
-minor_changes:
-  - >-
-    Preserve the protected main merge history in develop before the MLX-90 producer promotion, so subsequent
-    develop-to-main promotions remain ancestry-verifiable without changing the reviewed collection content.
