@@ -31,14 +31,15 @@ The workflow signs and attests that evidence, stores it as an immutable GitHub R
 the published copy, and only then dispatches the allowlisted consumer with the evidence URL and its `sha256:` digest.
 The consumer derives all trusted claims and the signature-bundle URL from that verified evidence.
 
-## Current fail-closed dependency
+## Current live Security release candidate
 
 The historical `lit.supplementary/mlx90-fixture` profile remains explicitly non-releaseable. The separately reviewed
 `lit.supplementary/forgejo-manifest-secret-permissions-v1` profile is release eligible only for the fix identified by
 `GHSA-vjjf-wc74-gp86`; its packaged offline verifier binds the Forgejo manifest writer to root:root mode 0600 and
-`no_log: true`. The first real Security release remains blocked until this producer change, the matching central
-final-acceptance allowlist, and the consumer workflow are all promoted to their protected `main` branches. There is no
-fallback to labels, mutable claims, the historical fixture, or a weaker dispatch.
+`no_log: true`. The reviewed first live Security release candidate is bound to version `3.2.2` and the allowlisted
+`lightning-it/container-ee-wunder-ansible-ubi9` consumer. The producer, matching central final-acceptance allowlist,
+and consumer workflow are promoted to their protected `main` branches. There is no fallback to labels, mutable
+claims, the historical fixture, or a weaker dispatch.
 
 The producer evidence adapter is restricted to an exact `push` on `refs/heads/main`. It delegates Heavy and
 Application Acceptance to the SHA-pinned reusable workflow in `lightning-it/modulix-validation`, using the producer's
