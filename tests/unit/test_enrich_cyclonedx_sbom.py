@@ -444,7 +444,7 @@ class EnrichCycloneDxSbomTests(unittest.TestCase):
                         "chromium": {
                             "name": "chromium",
                             "channel": "chrome",
-                            "version": "140.0.7339.16",
+                            "version": "151.0.7922.71",
                             "executable": "/opt/google/chrome/chrome",
                             "sha256": "e" * 64,
                         },
@@ -490,15 +490,21 @@ class EnrichCycloneDxSbomTests(unittest.TestCase):
             )
             self.assertEqual("e" * 64, chromium["hashes"][0]["content"])
             self.assertEqual(
-                "cpe:2.3:a:google:chrome:140.0.7339.16:*:*:*:*:*:*:*",
+                "cpe:2.3:a:google:chrome:151.0.7922.72:*:*:*:*:*:*:*",
                 chromium["cpe"],
             )
             self.assertEqual(
-                "pkg:generic/google-chrome@140.0.7339.16",
+                "pkg:generic/google-chrome@151.0.7922.71",
                 chromium["purl"],
             )
             properties = {item["name"]: item["value"] for item in chromium["properties"]}
             self.assertEqual("chrome", properties["lit:dependency:browser-channel"])
+            self.assertEqual("151.0.7922.72", properties["lit:dependency:scanner-cpe-version"])
+            self.assertIn(
+                "chromereleases.googleblog.com",
+                properties["lit:dependency:scanner-cpe-source"],
+            )
+            self.assertIn("platform-neutral", properties["lit:dependency:scanner-cpe-rationale"])
             self.assertTrue(
                 any(
                     component["name"] == "libc++6"
@@ -522,6 +528,12 @@ class EnrichCycloneDxSbomTests(unittest.TestCase):
                     dependencies_root=paths["dependencies"],
                     source_sha="c" * 40,
                 )
+
+    def test_unreviewed_chrome_linux_version_keeps_its_observed_cpe_version(self) -> None:
+        self.assertEqual(
+            ("152.0.8000.1", None),
+            SBOM._chrome_linux_scanner_cpe("152.0.8000.1"),
+        )
 
     def test_root_version_mismatch_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
