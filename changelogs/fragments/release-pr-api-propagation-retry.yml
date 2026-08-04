@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Retry the exact same-repository release pull-request lookup with bounded backoff after updating its branch, while
+    retaining fail-closed repository, ref, base, and pushed-head verification before editing the pull request body.

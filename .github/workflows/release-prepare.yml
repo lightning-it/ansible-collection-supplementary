@@ -370,24 +370,96 @@ jobs:
               --body-file "$body_file"
           fi
 
-          owned_pulls="$(
-            gh api --method GET "repos/${GITHUB_REPOSITORY}/pulls" \
-              -f state=open \
-              -f "base=${TARGET_BRANCH}" \
-              -f "head=${GITHUB_REPOSITORY_OWNER}:${RELEASE_BRANCH}" \
-              -f per_page=100
-          )"
-          test "$(jq 'length' <<< "$owned_pulls")" -eq 1
-          jq -e \
-            --arg repo "$GITHUB_REPOSITORY" \
-            --arg branch "$RELEASE_BRANCH" \
-            --arg base "$TARGET_BRANCH" \
-            --arg sha "$pushed_sha" '
-              .[0].head.repo.full_name == $repo
-              and .[0].head.ref == $branch
-              and .[0].head.sha == $sha
-              and .[0].base.ref == $base
-            ' <<< "$owned_pulls" >/dev/null
+          max_pr_lookup_attempts=6
+          successful_pr_lookup_count=0
+          owned_pr_ready=false
+          owned_pulls='[]'
+          for (( attempt=1; attempt<=max_pr_lookup_attempts; attempt++ )); do
+            lookup_outcome=api-failure
+            if ! owned_pulls="$(
+              gh api --method GET "repos/${GITHUB_REPOSITORY}/pulls" \
+                -f state=open \
+                -f "base=${TARGET_BRANCH}" \
+                -f "head=${GITHUB_REPOSITORY_OWNER}:${RELEASE_BRANCH}" \
+                -f per_page=100
+            )"; then
+              owned_pulls='[]'
+              if [ "$attempt" -eq "$max_pr_lookup_attempts" ]; then
+                if [ "$successful_pr_lookup_count" -eq 0 ]; then
+                  echo "::error::Release PR lookup failed on all ${max_pr_lookup_attempts} API attempts."
+                else
+                  echo "::error::Release PR lookup failed on the final API attempt after" \
+                    "${successful_pr_lookup_count} successful but non-converged response(s)."
+                fi
+                exit 1
+              fi
+            else
+              lookup_outcome=non-converged
+              successful_pr_lookup_count=$((successful_pr_lookup_count + 1))
+              if ! owned_count="$(
+                jq -er 'if type == "array" then length else error("response is not an array") end' \
+                  <<< "$owned_pulls"
+              )"; then
+                echo "::error::Release PR lookup returned invalid JSON or an unexpected response shape."
+                exit 1
+              fi
+              if [ "$owned_count" -gt 1 ]; then
+                owned_numbers="$(jq -c 'map(.number)' <<< "$owned_pulls")"
+                echo "::error::Multiple same-repository release PRs exist: ${owned_numbers}."
+                exit 1
+              fi
+              if [ "$owned_count" -eq 1 ] && jq -e \
+                --arg repo "$GITHUB_REPOSITORY" \
+                --arg branch "$RELEASE_BRANCH" \
+                --arg base "$TARGET_BRANCH" \
+                --arg sha "$pushed_sha" '
+                  .[0].head.repo.full_name == $repo
+                  and .[0].head.ref == $branch
+                  and .[0].head.sha == $sha
+                  and .[0].base.ref == $base
+                ' <<< "$owned_pulls" >/dev/null
+              then
+                owned_pr_ready=true
+                break
+              fi
+            fi
+
+            if [ "$attempt" -lt "$max_pr_lookup_attempts" ]; then
+              retry_delay=$((1 << (attempt - 1)))
+              case "$lookup_outcome" in
+                api-failure)
+                  echo "::notice::Release PR API request failed; retrying in ${retry_delay}s."
+                  ;;
+                non-converged)
+                  echo "::notice::Release PR lookup has not converged to the exact expected state;" \
+                    "retrying in ${retry_delay}s."
+                  ;;
+                *)
+                  echo "::error::Unexpected Release PR lookup outcome: ${lookup_outcome}."
+                  exit 1
+                  ;;
+              esac
+              sleep "$retry_delay"
+            fi
+          done
+          if [ "$owned_pr_ready" != true ]; then
+            observed_release_pr="$(
+              jq -c '
+                map({
+                  number,
+                  head_repository: .head.repo.full_name,
+                  head_ref: .head.ref,
+                  head_sha: .head.sha,
+                  base_ref: .base.ref
+                })
+              ' <<< "$owned_pulls"
+            )"
+            echo "::error::Release PR did not converge to the exact same-repository ref/base/head" \
+              "after ${max_pr_lookup_attempts} API attempts. Expected" \
+              "${GITHUB_REPOSITORY}:${RELEASE_BRANCH}@${pushed_sha} -> ${TARGET_BRANCH};" \
+              "observed ${observed_release_pr}."
+            exit 1
+          fi
           existing="$(jq -r '.[0].number' <<< "$owned_pulls")"
           gh pr edit "$existing" \
             --title "Release v${VERSION}" \
