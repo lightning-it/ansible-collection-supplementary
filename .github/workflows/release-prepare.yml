@@ -371,6 +371,7 @@ jobs:
           fi
 
           max_pr_lookup_attempts=6
+          successful_pr_lookup_count=0
           owned_pr_ready=false
           owned_pulls='[]'
           for (( attempt=1; attempt<=max_pr_lookup_attempts; attempt++ )); do
@@ -381,11 +382,17 @@ jobs:
                 -f "head=${GITHUB_REPOSITORY_OWNER}:${RELEASE_BRANCH}" \
                 -f per_page=100
             )"; then
+              owned_pulls='[]'
               if [ "$attempt" -eq "$max_pr_lookup_attempts" ]; then
-                echo "::error::Release PR lookup failed on all ${max_pr_lookup_attempts} API attempts."
+                if [ "$successful_pr_lookup_count" -eq 0 ]; then
+                  echo "::error::Release PR lookup failed on all ${max_pr_lookup_attempts} API attempts."
+                else
+                  echo "::error::Release PR lookup failed on the final API attempt after ${successful_pr_lookup_count} successful but non-converged response(s)."
+                fi
                 exit 1
               fi
             else
+              successful_pr_lookup_count=$((successful_pr_lookup_count + 1))
               if ! owned_count="$(
                 jq -er 'if type == "array" then length else error("response is not an array") end' \
                   <<< "$owned_pulls"

@@ -528,8 +528,23 @@ class WorkflowSecurityTests(unittest.TestCase):
         retry_block = after_retry_start.partition(retry_end)[0]
 
         self.assertIn("max_pr_lookup_attempts=6", retry_block)
+        self.assertIn("successful_pr_lookup_count=0", retry_block)
         self.assertIn(
             "for (( attempt=1; attempt<=max_pr_lookup_attempts; attempt++ )); do",
+            retry_block,
+        )
+        self.assertGreaterEqual(retry_block.count("owned_pulls='[]'"), 2)
+        self.assertIn(
+            "successful_pr_lookup_count=$((successful_pr_lookup_count + 1))",
+            retry_block,
+        )
+        self.assertIn(
+            'if [ "$successful_pr_lookup_count" -eq 0 ]; then',
+            retry_block,
+        )
+        self.assertIn(
+            "failed on the final API attempt after "
+            "${successful_pr_lookup_count} successful but non-converged response(s)",
             retry_block,
         )
         self.assertIn("retry_delay=$((1 << (attempt - 1)))", retry_block)
