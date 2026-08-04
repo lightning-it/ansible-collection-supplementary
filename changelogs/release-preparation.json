@@ -1,14 +1,14 @@
 {
-  "base_sha": "f2e5aef24f9d7cc2ddf9551e07bfdbc3561e94a2",
-  "current_version": "3.2.0",
+  "base_sha": "3c2c3763971377afa7560b13c10af38236a07e16",
+  "current_version": "3.2.1",
   "fragments": [
     {
-      "path": "mlx90-chrome-linux-cpe-equivalence.yml",
-      "sha256": "92ddec83974141d88498c1eacff22e6e7be341611d19b5d49766fca8f355885c"
+      "path": "mlx90-v322-security-release-metadata.yml",
+      "sha256": "46466c712dc89a2dec8c473bebcf6c6c9cfc8184292c399c2dbb1fd25e6fdbb2"
     }
   ],
   "impact": "patch",
-  "next_version": "3.2.1",
+  "next_version": "3.2.2",
   "preparer": {
     "account_id": "307565056",
     "email": "307565056+lightning-it-release-automation[bot]@users.noreply.github.com",
@@ -24,7 +24,7 @@
     "path": ".github/workflows/release-prepare.yml",
     "ref": "lightning-it/ansible-collection-supplementary/.github/workflows/release-prepare.yml@refs/heads/main",
     "run_attempt": "1",
-    "run_id": "30900816729",
-    "source_sha": "f2e5aef24f9d7cc2ddf9551e07bfdbc3561e94a2"
+    "run_id": "30908180982",
+    "source_sha": "3c2c3763971377afa7560b13c10af38236a07e16"
   }
 }
