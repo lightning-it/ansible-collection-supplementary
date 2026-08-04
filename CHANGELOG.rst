@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.2.2
+======
+
+Bugfixes
+--------
+
+- Bind the first live MLX-90 security publication to collection version 3.2.2, the GHSA-vjjf-wc74-gp86 identifier, the reviewed Forgejo manifest acceptance profile, and the allowlisted container consumer.
+
 v3.2.1
 ======
 
