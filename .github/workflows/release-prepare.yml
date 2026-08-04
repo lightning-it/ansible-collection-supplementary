@@ -404,7 +404,8 @@ jobs:
                 exit 1
               fi
               if [ "$owned_count" -gt 1 ]; then
-                echo "::error::Multiple same-repository release PRs exist."
+                owned_numbers="$(jq -c 'map(.number)' <<< "$owned_pulls")"
+                echo "::error::Multiple same-repository release PRs exist: ${owned_numbers}."
                 exit 1
               fi
               if [ "$owned_count" -eq 1 ] && jq -e \
