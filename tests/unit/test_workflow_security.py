@@ -520,11 +520,18 @@ class WorkflowSecurityTests(unittest.TestCase):
             step for step in workflow["jobs"]["prepare"]["steps"] if step.get("name") == "Prepare release branch"
         )
         run = prepare_step["run"]
-        retry_block = run.split('pushed_sha="$(git rev-parse HEAD)"', maxsplit=1)[1]
-        retry_block = retry_block.split("existing=\"$(jq -r '.[0].number'", maxsplit=1)[0]
+        retry_start = 'pushed_sha="$(git rev-parse HEAD)"'
+        retry_end = "existing=\"$(jq -r '.[0].number'"
+        self.assertIn(retry_start, run)
+        after_retry_start = run.partition(retry_start)[2]
+        self.assertIn(retry_end, after_retry_start)
+        retry_block = after_retry_start.partition(retry_end)[0]
 
         self.assertIn("max_pr_lookup_attempts=6", retry_block)
-        self.assertIn("for attempt in 1 2 3 4 5 6; do", retry_block)
+        self.assertIn(
+            "for (( attempt=1; attempt<=max_pr_lookup_attempts; attempt++ )); do",
+            retry_block,
+        )
         self.assertIn("retry_delay=$((1 << (attempt - 1)))", retry_block)
         self.assertIn('sleep "$retry_delay"', retry_block)
         self.assertIn('if [ "$owned_count" -gt 1 ]; then', retry_block)

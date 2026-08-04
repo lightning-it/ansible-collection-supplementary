@@ -373,7 +373,7 @@ jobs:
           max_pr_lookup_attempts=6
           owned_pr_ready=false
           owned_pulls='[]'
-          for attempt in 1 2 3 4 5 6; do
+          for (( attempt=1; attempt<=max_pr_lookup_attempts; attempt++ )); do
             if ! owned_pulls="$(
               gh api --method GET "repos/${GITHUB_REPOSITORY}/pulls" \
                 -f state=open \
@@ -390,7 +390,7 @@ jobs:
                 jq -er 'if type == "array" then length else error("response is not an array") end' \
                   <<< "$owned_pulls"
               )"; then
-                echo "::error::Release PR lookup returned malformed JSON."
+                echo "::error::Release PR lookup returned invalid JSON or an unexpected response shape."
                 exit 1
               fi
               if [ "$owned_count" -gt 1 ]; then
