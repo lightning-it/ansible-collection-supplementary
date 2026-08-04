@@ -514,6 +514,79 @@ class WorkflowSecurityTests(unittest.TestCase):
             release_prepare,
         )
 
+    def test_release_prepare_bounds_exact_owned_pr_propagation_retries(self) -> None:
+        workflow = load_yaml(WORKFLOWS / "release-prepare.yml")
+        prepare_step = next(
+            step for step in workflow["jobs"]["prepare"]["steps"] if step.get("name") == "Prepare release branch"
+        )
+        run = prepare_step["run"]
+        retry_start = 'pushed_sha="$(git rev-parse HEAD)"'
+        retry_end = "existing=\"$(jq -r '.[0].number'"
+        self.assertIn(retry_start, run)
+        after_retry_start = run.partition(retry_start)[2]
+        self.assertIn(retry_end, after_retry_start)
+        retry_block = after_retry_start.partition(retry_end)[0]
+
+        self.assertIn("max_pr_lookup_attempts=6", retry_block)
+        self.assertIn("successful_pr_lookup_count=0", retry_block)
+        self.assertIn(
+            "for (( attempt=1; attempt<=max_pr_lookup_attempts; attempt++ )); do",
+            retry_block,
+        )
+        self.assertIn("lookup_outcome=api-failure", retry_block)
+        self.assertIn("lookup_outcome=non-converged", retry_block)
+        self.assertGreaterEqual(retry_block.count("owned_pulls='[]'"), 2)
+        self.assertIn(
+            "successful_pr_lookup_count=$((successful_pr_lookup_count + 1))",
+            retry_block,
+        )
+        self.assertIn(
+            'if [ "$successful_pr_lookup_count" -eq 0 ]; then',
+            retry_block,
+        )
+        self.assertIn(
+            "failed on the final API attempt after",
+            retry_block,
+        )
+        self.assertIn(
+            "${successful_pr_lookup_count} successful but non-converged response(s)",
+            retry_block,
+        )
+        self.assertIn("retry_delay=$((1 << (attempt - 1)))", retry_block)
+        self.assertIn('sleep "$retry_delay"', retry_block)
+        self.assertIn(
+            "Release PR API request failed; retrying in ${retry_delay}s",
+            retry_block,
+        )
+        self.assertIn(
+            "Release PR lookup has not converged to the exact expected state",
+            retry_block,
+        )
+        self.assertIn("retrying in ${retry_delay}s", retry_block)
+        self.assertIn("Unexpected Release PR lookup outcome", retry_block)
+        self.assertIn('if [ "$owned_count" -gt 1 ]; then', retry_block)
+        self.assertIn(
+            'owned_numbers="$(jq -c \'map(.number)\' <<< "$owned_pulls")"',
+            retry_block,
+        )
+        self.assertIn(
+            "Multiple same-repository release PRs exist: ${owned_numbers}",
+            retry_block,
+        )
+        for exact_binding in (
+            ".[0].head.repo.full_name == $repo",
+            ".[0].head.ref == $branch",
+            ".[0].head.sha == $sha",
+            ".[0].base.ref == $base",
+        ):
+            self.assertIn(exact_binding, retry_block)
+        self.assertIn(
+            "Release PR did not converge to the exact same-repository ref/base/head",
+            retry_block,
+        )
+        self.assertIn("after ${max_pr_lookup_attempts} API attempts. Expected", retry_block)
+        self.assertIn("${GITHUB_REPOSITORY}:${RELEASE_BRANCH}@${pushed_sha}", retry_block)
+
     def test_release_evidence_and_publication_are_attempt_and_identity_bound(self) -> None:
         ci = (WORKFLOWS / "collection-ci.yml").read_text(encoding="utf-8")
         self.assertIn("/${GITHUB_RUN_ID}/attempt-${GITHUB_RUN_ATTEMPT}", ci)
