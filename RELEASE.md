@@ -33,6 +33,9 @@ must be back-synced before the next promotion.
 Every merge into `main`, including a develop-to-main promotion that does not
 yet publish a release, must become an ancestor of `develop` through a reviewed
 back-sync pull request before another promotion is opened.
+The back-sync must preserve the current `develop` tree and record the current
+protected `main` SHA as its second parent; a stale parent or changed source tree
+must fail closed.
 
 ## Validation lanes
 
