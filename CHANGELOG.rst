@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.2.1
+======
+
+Bugfixes
+--------
+
+- Bind the observed Chrome 151.0.7922.71 Linux runtime to its reviewed platform-neutral CPE equivalent 151.0.7922.72 while preserving the exact Linux version, executable digest, package URL, and upstream release source in the SBOM, so cross-platform NVD version ordering no longer produces false blocking findings.
+
 v3.2.0
 ======
 

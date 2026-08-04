@@ -588,3 +588,13 @@ releases:
       - shared-assets-sync-30688843967.yml
       - shared-assets-sync-30735856911.yml
     release_date: '2026-08-04'
+  3.2.1:
+    changes:
+      bugfixes:
+        - Bind the observed Chrome 151.0.7922.71 Linux runtime to its reviewed platform-neutral
+          CPE equivalent 151.0.7922.72 while preserving the exact Linux version, executable
+          digest, package URL, and upstream release source in the SBOM, so cross-platform
+          NVD version ordering no longer produces false blocking findings.
+    fragments:
+      - mlx90-chrome-linux-cpe-equivalence.yml
+    release_date: '2026-08-04'
