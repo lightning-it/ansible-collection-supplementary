@@ -1,14 +1,26 @@
 {
-  "base_sha": "3c2c3763971377afa7560b13c10af38236a07e16",
-  "current_version": "3.2.1",
+  "base_sha": "cb926421f2f4e623b01049e0075b0734c188bc21",
+  "current_version": "3.2.2",
   "fragments": [
     {
-      "path": "mlx90-v322-security-release-metadata.yml",
-      "sha256": "46466c712dc89a2dec8c473bebcf6c6c9cfc8184292c399c2dbb1fd25e6fdbb2"
+      "path": "mlx90-zero-touch-release-chain.yml",
+      "sha256": "8e98590270dd10d1ae78496c9207214bcee1c926918d6bc71e11d7fdaa84e2f4"
+    },
+    {
+      "path": "shared-assets-sync-30957250438.yml",
+      "sha256": "b637a090dd4cd427b7154c68ccb11efd1e13b7fc1974bd0bb36b7886a978a440"
+    },
+    {
+      "path": "shared-assets-sync-31237016904.yml",
+      "sha256": "b637a090dd4cd427b7154c68ccb11efd1e13b7fc1974bd0bb36b7886a978a440"
+    },
+    {
+      "path": "shared-assets-sync-31241646931.yml",
+      "sha256": "b637a090dd4cd427b7154c68ccb11efd1e13b7fc1974bd0bb36b7886a978a440"
     }
   ],
   "impact": "patch",
-  "next_version": "3.2.2",
+  "next_version": "3.2.3",
   "preparer": {
     "account_id": "307565056",
     "email": "307565056+lightning-it-release-automation[bot]@users.noreply.github.com",
@@ -24,7 +36,7 @@
     "path": ".github/workflows/release-prepare.yml",
     "ref": "lightning-it/ansible-collection-supplementary/.github/workflows/release-prepare.yml@refs/heads/main",
     "run_attempt": "1",
-    "run_id": "30908180982",
-    "source_sha": "3c2c3763971377afa7560b13c10af38236a07e16"
+    "run_id": "31245804025",
+    "source_sha": "cb926421f2f4e623b01049e0075b0734c188bc21"
   }
 }
