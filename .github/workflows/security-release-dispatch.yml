@@ -30,16 +30,17 @@ jobs:
       dispatch: ${{ steps.request.outputs.dispatch }}
       source-sha: ${{ steps.request.outputs.source_sha }}
     steps:
-      - name: Checkout exact successful develop revision
+      - name: Checkout protected-main Security controller
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Construct and fully validate immutable Security request
         id: request
         env:
+          CONTROLLER_SHA: ${{ github.sha }}
           SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
           SOURCE_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
           SOURCE_BRANCH: ${{ github.event.workflow_run.head_branch }}
@@ -52,9 +53,11 @@ jobs:
           test "$SOURCE_BRANCH" = develop
           test "$SOURCE_EVENT" = push
           test "$SOURCE_CONCLUSION" = success
+          [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse HEAD)" = "$CONTROLLER_SHA"
           git fetch --no-tags origin main develop
+          test "$(git rev-parse origin/main)" = "$CONTROLLER_SHA"
           test "$(git rev-parse origin/develop)" = "$SOURCE_SHA"
 
           result="$RUNNER_TEMP/security-dispatch-envelope.json"
@@ -83,23 +86,26 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout exact successful develop revision
+      - name: Checkout protected-main Security controller
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
-          ref: ${{ needs.classify.outputs.source-sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Reconstruct exact validated request before token access
         id: request
         env:
+          CONTROLLER_SHA: ${{ github.sha }}
           SOURCE_SHA: ${{ needs.classify.outputs.source-sha }}
         run: |
           set -euo pipefail
 
+          [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse HEAD)" = "$CONTROLLER_SHA"
           git fetch --no-tags origin main develop
+          test "$(git rev-parse origin/main)" = "$CONTROLLER_SHA"
           test "$(git rev-parse origin/develop)" = "$SOURCE_SHA"
           result="$RUNNER_TEMP/security-dispatch-envelope.json"
           umask 077
