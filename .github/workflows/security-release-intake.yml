@@ -1,0 +1,275 @@
+# Managed by lightning-it/shared-assets-lit. MLX-90 Security-only intake.
+# yamllint disable rule:truthy
+---
+name: Security release intake
+
+on:
+  repository_dispatch:
+    types: [mlx90-security-release]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mlx90-security-intake-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  classify:
+    name: Validate confirmed Security evidence before environment access
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'lightning-it-release-automation[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      base-sha: ${{ steps.request.outputs.base_sha }}
+      candidate-head-sha: ${{ steps.request.outputs.candidate_head_sha }}
+      evidence-id: ${{ steps.request.outputs.evidence_id }}
+      fixed-version: ${{ steps.request.outputs.fixed_version }}
+    steps:
+      - name: Checkout immutable default-branch controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate exact evidence-bound source range
+        id: request
+        env:
+          EVENT_PATH: ${{ github.event_path }}
+        run: |
+          set -euo pipefail
+
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git fetch --no-tags origin main develop
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+
+          request="$RUNNER_TEMP/security-intake-request.json"
+          patch="$RUNNER_TEMP/security-intake.patch"
+          result="$RUNNER_TEMP/security-intake-result.json"
+          umask 077
+          jq -ce '.client_payload' "$EVENT_PATH" >"$request"
+          python3 scripts/security-release-intake.py \
+            --request "$request" \
+            --repository "$GITHUB_REPOSITORY" \
+            --root . \
+            --output-patch "$patch" \
+            --output-json "$result" >/dev/null
+
+          test -s "$patch"
+          jq -e '.humanActions == 0' "$result" >/dev/null
+          {
+            echo "base_sha=$(jq -er '.baseSha' "$result")"
+            echo "candidate_head_sha=$(jq -er '.candidateHeadSha' "$result")"
+            echo "evidence_id=$(jq -er '.evidenceId' "$result")"
+            echo "fixed_version=$(jq -er '.fixedVersion' "$result")"
+          } >>"$GITHUB_OUTPUT"
+
+  materialize:
+    name: Materialize isolated Security PR and request native auto-merge
+    needs: classify
+    if: >-
+      needs.classify.result == 'success' &&
+      github.actor == 'lightning-it-release-automation[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: mlx90-security-release-evidence
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout immutable default-branch controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ needs.classify.outputs.base-sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Revalidate live source and reconstruct exact approved patch
+        id: request
+        env:
+          EVENT_PATH: ${{ github.event_path }}
+          EXPECTED_BASE_SHA: ${{ needs.classify.outputs.base-sha }}
+          EXPECTED_CANDIDATE_HEAD_SHA: ${{ needs.classify.outputs.candidate-head-sha }}
+          EXPECTED_EVIDENCE_ID: ${{ needs.classify.outputs.evidence-id }}
+          EXPECTED_FIXED_VERSION: ${{ needs.classify.outputs.fixed-version }}
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags origin main develop
+          test "$(git rev-parse HEAD)" = "$EXPECTED_BASE_SHA"
+          test "$(git rev-parse origin/main)" = "$EXPECTED_BASE_SHA"
+
+          request="$RUNNER_TEMP/security-intake-request.json"
+          patch="$RUNNER_TEMP/security-intake.patch"
+          result="$RUNNER_TEMP/security-intake-result.json"
+          umask 077
+          jq -ce '.client_payload' "$EVENT_PATH" >"$request"
+          python3 scripts/security-release-intake.py \
+            --request "$request" \
+            --repository "$GITHUB_REPOSITORY" \
+            --root . \
+            --output-patch "$patch" \
+            --output-json "$result" >/dev/null
+
+          test "$(jq -er '.baseSha' "$result")" = "$EXPECTED_BASE_SHA"
+          test "$(jq -er '.candidateHeadSha' "$result")" = "$EXPECTED_CANDIDATE_HEAD_SHA"
+          test "$(jq -er '.evidenceId' "$result")" = "$EXPECTED_EVIDENCE_ID"
+          test "$(jq -er '.fixedVersion' "$result")" = "$EXPECTED_FIXED_VERSION"
+          {
+            echo "request=$request"
+            echo "patch=$patch"
+            echo "result=$result"
+            echo "branch=$(jq -er '.branch' "$result")"
+            echo "candidate_diff_sha256=$(jq -er '.candidateDiffSha256' "$result")"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Mint least-privilege release automation App token
+        id: release-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Resolve exact App bot identity
+        id: release-bot
+        env:
+          APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$APP_SLUG" = lightning-it-release-automation
+          bot_json="$(gh api "users/${APP_SLUG}%5Bbot%5D")"
+          login="$(jq -er '.login' <<<"$bot_json")"
+          bot_id="$(jq -er '.id' <<<"$bot_json")"
+          test "$login" = 'lightning-it-release-automation[bot]'
+          [[ "$bot_id" =~ ^[1-9][0-9]*$ ]]
+          echo "login=$login" >>"$GITHUB_OUTPUT"
+          echo "email=${bot_id}+${login}@users.noreply.github.com" >>"$GITHUB_OUTPUT"
+
+      - name: Create or prove deterministic isolated branch
+        id: branch
+        env:
+          APP_TOKEN: ${{ steps.release-app.outputs.token }}
+          BASE_SHA: ${{ needs.classify.outputs.base-sha }}
+          BOT_EMAIL: ${{ steps.release-bot.outputs.email }}
+          BOT_LOGIN: ${{ steps.release-bot.outputs.login }}
+          BRANCH: ${{ steps.request.outputs.branch }}
+          EVIDENCE_ID: ${{ needs.classify.outputs.evidence-id }}
+          FIXED_VERSION: ${{ needs.classify.outputs.fixed-version }}
+          PATCH_FILE: ${{ steps.request.outputs.patch }}
+          REQUEST_FILE: ${{ steps.request.outputs.request }}
+          RESULT_FILE: ${{ steps.request.outputs.result }}
+        run: |
+          set -euo pipefail
+
+          authenticated_push() {
+            GH_TOKEN="$APP_TOKEN" git -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' push "$@"
+          }
+
+          [[ "$BRANCH" == security-release/MLX90-* ]]
+          test "$(git rev-parse origin/main)" = "$BASE_SHA"
+          git switch --detach "$BASE_SHA"
+          git switch -c "$BRANCH"
+          git apply --binary --index "$PATCH_FILE"
+
+          receipt=".lit/security-release-intakes/${FIXED_VERSION}.json"
+          test ! -e "$receipt"
+          mkdir -p "$(dirname "$receipt")"
+          jq -S -n \
+            --slurpfile request "$REQUEST_FILE" \
+            --slurpfile verified "$RESULT_FILE" \
+            '{schemaVersion:1,request:$request[0],verified:$verified[0]}' \
+            >"$receipt"
+          git add "$receipt"
+
+          git config user.name "$BOT_LOGIN"
+          git config user.email "$BOT_EMAIL"
+          tree_sha="$(git write-tree)"
+          remote_sha="$(git ls-remote --heads origin "refs/heads/${BRANCH}" | awk 'NR == 1 {print $1}')"
+          if [ -n "$remote_sha" ]; then
+            [[ "$remote_sha" =~ ^[0-9a-f]{40}$ ]]
+            git fetch --no-tags origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
+            test "$(git show -s --format=%T "$remote_sha")" = "$tree_sha"
+            test "$(git show -s --format=%P "$remote_sha")" = "$BASE_SHA"
+            test "$(git show -s --format='%an <%ae>' "$remote_sha")" = \
+              "$BOT_LOGIN <$BOT_EMAIL>"
+            test "$(git show -s --format='%cn <%ce>' "$remote_sha")" = \
+              "$BOT_LOGIN <$BOT_EMAIL>"
+            head_sha="$remote_sha"
+          else
+            git commit -m "fix(security): ${EVIDENCE_ID}"
+            head_sha="$(git rev-parse HEAD)"
+            test "$(git show -s --format=%P HEAD)" = "$BASE_SHA"
+            authenticated_push origin "HEAD:refs/heads/${BRANCH}"
+          fi
+          test "$(git ls-remote --heads origin "refs/heads/${BRANCH}" | awk 'NR == 1 {print $1}')" = "$head_sha"
+          echo "head_sha=$head_sha" >>"$GITHUB_OUTPUT"
+
+      - name: Create or prove exact App-authored Security PR
+        id: pull
+        env:
+          BASE_SHA: ${{ needs.classify.outputs.base-sha }}
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          BRANCH: ${{ steps.request.outputs.branch }}
+          HEAD_SHA: ${{ steps.branch.outputs.head_sha }}
+          EVIDENCE_ID: ${{ needs.classify.outputs.evidence-id }}
+          FIXED_VERSION: ${{ needs.classify.outputs.fixed-version }}
+          DIFF_SHA256: ${{ steps.request.outputs.candidate_diff_sha256 }}
+        run: |
+          set -euo pipefail
+
+          pulls="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/pulls" \
+            -f state=open -f base=main \
+            -f "head=${GITHUB_REPOSITORY_OWNER}:${BRANCH}" -f per_page=100)"
+          test "$(jq 'length' <<<"$pulls")" -le 1
+          pr_url="$(jq -r '.[0].html_url // empty' <<<"$pulls")"
+          body="$RUNNER_TEMP/security-pr-body.md"
+          {
+            echo '## Evidence-bound MLX-90 Security release'
+            echo
+            echo "- Evidence ID: \`${EVIDENCE_ID}\`"
+            echo "- Fixed collection version: \`${FIXED_VERSION}\`"
+            echo "- Approved candidate diff: \`${DIFF_SHA256}\`"
+            echo "- Isolated base: \`${BASE_SHA}\`"
+            echo "- Exact head: \`${HEAD_SHA}\`"
+            echo '- Human actions in the successful path: 0'
+            echo
+            echo 'Native auto-merge may complete only after all protected current-head gates pass.'
+          } >"$body"
+          if [ -z "$pr_url" ]; then
+            pr_url="$(gh pr create --repo "$GITHUB_REPOSITORY" \
+              --base main --head "$BRANCH" \
+              --title "fix(security): ${EVIDENCE_ID}" --body-file "$body")"
+          fi
+          live="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/$(gh pr view "$pr_url" --json number --jq .number)")"
+          # shellcheck disable=SC2016  # jq variables are expanded by jq, not the shell.
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg branch "$BRANCH" --arg head "$HEAD_SHA" '
+            .user.login == "lightning-it-release-automation[bot]"
+            and .head.repo.full_name == $repo
+            and .head.ref == $branch
+            and .head.sha == $head
+            and .base.ref == "main"
+            and .state == "open"
+          ' <<<"$live" >/dev/null
+          gh pr edit "$pr_url" --repo "$GITHUB_REPOSITORY" \
+            --title "fix(security): ${EVIDENCE_ID}" --body-file "$body"
+          echo "url=$pr_url" >>"$GITHUB_OUTPUT"
+
+      - name: Enable protected native auto-merge for the exact current head
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          PR_URL: ${{ steps.pull.outputs.url }}
+          HEAD_SHA: ${{ steps.branch.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          test "$(gh pr view "$PR_URL" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)" = "$HEAD_SHA"
+          gh pr merge "$PR_URL" --repo "$GITHUB_REPOSITORY" \
+            --auto --merge --match-head-commit "$HEAD_SHA"
