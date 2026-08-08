@@ -1,0 +1,154 @@
+# Managed by lightning-it/shared-assets-lit. MLX-90 Security-only dispatch.
+# yamllint disable rule:truthy
+---
+name: Security release dispatch
+
+on:
+  workflow_run:
+    workflows: [Collection CI]
+    types: [completed]
+    branches: [develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mlx90-security-dispatch-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  classify:
+    name: Bind successful protected-develop Security candidate
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'develop' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      dispatch: ${{ steps.request.outputs.dispatch }}
+      source-sha: ${{ steps.request.outputs.source_sha }}
+    steps:
+      - name: Checkout exact successful develop revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Construct and fully validate immutable Security request
+        id: request
+        env:
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          SOURCE_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SOURCE_EVENT: ${{ github.event.workflow_run.event }}
+          SOURCE_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          set -euo pipefail
+
+          test "$SOURCE_REPOSITORY" = "$GITHUB_REPOSITORY"
+          test "$SOURCE_BRANCH" = develop
+          test "$SOURCE_EVENT" = push
+          test "$SOURCE_CONCLUSION" = success
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git fetch --no-tags origin main develop
+          test "$(git rev-parse origin/develop)" = "$SOURCE_SHA"
+
+          result="$RUNNER_TEMP/security-dispatch-envelope.json"
+          umask 077
+          python3 scripts/security-release-dispatch.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-sha "$(git rev-parse origin/main)" \
+            --head-sha "$SOURCE_SHA" \
+            --root . \
+            --output-json "$result" >/dev/null
+          dispatch="$(jq -er '.dispatch | if . then "true" else "false" end' "$result")"
+          {
+            echo "dispatch=$dispatch"
+            echo "source_sha=$SOURCE_SHA"
+          } >>"$GITHUB_OUTPUT"
+
+  dispatch:
+    name: Dispatch exact Security request as release App
+    needs: classify
+    if: >-
+      needs.classify.result == 'success' &&
+      needs.classify.outputs.dispatch == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: mlx90-security-release-evidence
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact successful develop revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ needs.classify.outputs.source-sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Reconstruct exact validated request before token access
+        id: request
+        env:
+          SOURCE_SHA: ${{ needs.classify.outputs.source-sha }}
+        run: |
+          set -euo pipefail
+
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git fetch --no-tags origin main develop
+          test "$(git rev-parse origin/develop)" = "$SOURCE_SHA"
+          result="$RUNNER_TEMP/security-dispatch-envelope.json"
+          umask 077
+          python3 scripts/security-release-dispatch.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-sha "$(git rev-parse origin/main)" \
+            --head-sha "$SOURCE_SHA" \
+            --root . \
+            --output-json "$result" >/dev/null
+          jq -e '.dispatch == true and (.request.humanActions == 0)' "$result" >/dev/null
+          echo "envelope=$result" >>"$GITHUB_OUTPUT"
+
+      - name: Mint repository-scoped release automation App token
+        id: release-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
+      - name: Verify exact App installation and repository scope
+        env:
+          APP_INSTALLATION_ID: ${{ steps.release-app.outputs.installation-id }}
+          APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          test "$APP_SLUG" = lightning-it-release-automation
+          test "$APP_INSTALLATION_ID" = 148019054
+          test "$(gh api "users/${APP_SLUG}%5Bbot%5D" --jq .login)" = \
+            'lightning-it-release-automation[bot]'
+          repositories="$(gh api --paginate 'installation/repositories?per_page=100')"
+          jq -se --arg repository "$GITHUB_REPOSITORY" \
+            '[.[].repositories[].full_name] | sort | unique == [$repository]' \
+            <<<"$repositories" >/dev/null
+
+      - name: Dispatch exact humanActions=0 Security intake
+        env:
+          ENVELOPE: ${{ steps.request.outputs.envelope }}
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          payload="$RUNNER_TEMP/security-repository-dispatch.json"
+          jq -ce '{event_type:"mlx90-security-release",client_payload:.request}' \
+            "$ENVELOPE" >"$payload"
+          jq -e '.client_payload.humanActions == 0' "$payload" >/dev/null
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/dispatches" \
+            --input "$payload"
