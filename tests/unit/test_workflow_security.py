@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -265,7 +266,10 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("github.ref == 'refs/heads/main'", release_guard)
         self.assertNotIn("pull_request", release_guard)
         self.assertNotIn("workflow_dispatch", release_guard)
-        self.assertEqual("ansible-collection-release-evidence", release_security["environment"])
+        release_environment = release_security["environment"]["name"]
+        self.assertIn("mlx90-security-release-evidence", release_environment)
+        self.assertIn("ansible-collection-release-evidence", release_environment)
+        self.assertIn("lightning-it-release-automation[bot]", release_environment)
         self.assertIn("runtime-evidence", release_security["needs"])
         self.assertEqual("Collection / Release Evidence", jobs["evidence"]["name"])
         self.assertNotIn("environment", jobs["evidence"])
@@ -397,7 +401,10 @@ class WorkflowSecurityTests(unittest.TestCase):
 
     def test_publish_mutation_is_protected_and_scorecard_is_immutable(self) -> None:
         publish = load_yaml(WORKFLOWS / "collection-publish.yml")["jobs"]["publish"]
-        self.assertEqual("ansible-collections", publish["environment"])
+        publish_environment = publish["environment"]["name"]
+        self.assertIn("mlx90-security-publish", publish_environment)
+        self.assertIn("ansible-collections", publish_environment)
+        self.assertIn("lightning-it-release-automation[bot]", publish_environment)
         self.assertIn("github.ref == 'refs/heads/main'", publish["if"])
         self.assertEqual("write", publish["permissions"]["contents"])
         self.assertEqual("write", publish["permissions"]["id-token"])
@@ -492,8 +499,19 @@ class WorkflowSecurityTests(unittest.TestCase):
                 self.assertIn("RELEASE_AUTOMATION_APP_PRIVATE_KEY", text)
                 self.assertIn("repositories: ${{ github.event.repository.name }}", text)
                 self.assertIn("permission-pull-requests: write", text)
+                self.assertIn("ansible-collection-release-prepare", text)
                 self.assertNotIn("LITRELEASEBOT_TOKEN", text)
                 self.assertNotIn("litreleasebot", text)
+
+        promotion = (WORKFLOWS / "promote-develop-to-main.yml").read_text(encoding="utf-8")
+        self.assertNotIn("mlx90-security-", promotion)
+        self.assertIn("environment: ansible-collection-release-prepare", promotion)
+
+        for name in ("release-back-sync.yml", "release-prepare.yml"):
+            with self.subTest(security_workflow=name):
+                text = (WORKFLOWS / name).read_text(encoding="utf-8")
+                self.assertIn("mlx90-security-release-prepare", text)
+                self.assertIn("lightning-it-release-automation[bot]", text)
 
         for name in ("release-back-sync.yml", "release-prepare.yml"):
             with self.subTest(identity_workflow=name):
@@ -512,6 +530,42 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn(
             '"--force-with-lease=${release_ref}:${remote_release_sha}"',
             release_prepare,
+        )
+
+    def test_zero_touch_is_security_only_and_normal_promotion_stays_manual(self) -> None:
+        ci = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]
+        prepare = load_yaml(WORKFLOWS / "release-prepare.yml")["jobs"]
+        publish = load_yaml(WORKFLOWS / "collection-publish.yml")["jobs"]
+        back_sync = load_yaml(WORKFLOWS / "release-back-sync.yml")["jobs"]
+        promotion = load_yaml(WORKFLOWS / "promote-develop-to-main.yml")["jobs"]
+
+        for jobs, mutation_name in (
+            (prepare, "prepare"),
+            (publish, "publish"),
+            (back_sync, "back-sync"),
+        ):
+            with self.subTest(mutation=mutation_name):
+                self.assertIn("security-classification", jobs)
+                mutation = jobs[mutation_name]
+                self.assertIn("security-classification", mutation["needs"])
+                self.assertIn(
+                    "needs.security-classification.outputs.security-release != 'true'",
+                    mutation["if"],
+                )
+                self.assertIn("lightning-it-release-automation[bot]", mutation["if"])
+
+        for name in ("tiny-cells", "release-security"):
+            with self.subTest(ci_job=name):
+                self.assertIn("security-classification", ci[name]["needs"])
+                self.assertIn(
+                    "needs.security-classification.outputs.security-release != 'true'",
+                    ci[name]["if"],
+                )
+                self.assertIn("lightning-it-release-automation[bot]", ci[name]["if"])
+
+        self.assertEqual(
+            "ansible-collection-release-prepare",
+            promotion["promote"]["environment"],
         )
 
     def test_release_prepare_bounds_exact_owned_pr_propagation_retries(self) -> None:
@@ -830,8 +884,10 @@ class WorkflowSecurityTests(unittest.TestCase):
                 }
             )
 
+            bash = shutil.which("bash")
+            self.assertIsNotNone(bash, "bash is required for the wrapper contract test")
             subprocess.run(  # noqa: S603 -- execute the repository-owned wrapper under test.
-                ["/usr/bin/bash", str(wrapper), "true"],
+                [bash, str(wrapper), "true"],
                 cwd=ROOT,
                 env=environment,
                 check=True,

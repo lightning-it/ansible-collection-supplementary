@@ -32,6 +32,10 @@ on:
         default: "true"
         type: choice
         options: ["true", "false"]
+      security_evidence_id:
+        description: Exact MLX-90 Evidence ID; release automation only.
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -42,20 +46,72 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  security-classification:
+    name: Classify evidence-bound Security release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      security-release: ${{ steps.classify.outputs.security_release }}
+      security-evidence-id: ${{ steps.classify.outputs.security_evidence_id }}
+      security-version: ${{ steps.classify.outputs.security_version }}
+    steps:
+      - name: Checkout exact protected-main source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify before selecting a protected environment
+        id: classify
+        env:
+          BEFORE_SHA: ${{ github.event.before || '' }}
+          EVIDENCE_ID: ${{ inputs.security_evidence_id || '' }}
+          EVENT_NAME: ${{ github.event_name }}
+          VERSION: ${{ inputs.version || '' }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = push ]; then
+            commit_message="$(git show -s --format=%B "$GITHUB_SHA")"
+            python scripts/classify-security-release.py \
+              --event-kind push \
+              --base-sha "$BEFORE_SHA" \
+              --head-sha "$GITHUB_SHA" \
+              --ref "$GITHUB_REF" \
+              --commit-message "$commit_message" \
+              --evidence-id "$EVIDENCE_ID"
+          else
+            python scripts/classify-security-release.py \
+              --event-kind version \
+              --version "$VERSION" \
+              --evidence-id "$EVIDENCE_ID"
+          fi
+
   prepare:
     name: Prepare release PR
     runs-on: ubuntu-latest
+    needs: security-classification
     if: >-
       (
-        github.event_name == 'workflow_dispatch' &&
-        github.ref == 'refs/heads/main'
-      ) ||
-      (
-        github.event_name == 'push' &&
-        github.ref == 'refs/heads/main' &&
-        !startsWith(github.event.head_commit.message, 'chore(release): prepare v')
-      )
-    environment: ansible-collection-release-prepare
+        (
+          github.event_name == 'workflow_dispatch' &&
+          github.ref == 'refs/heads/main'
+        ) ||
+        (
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          !startsWith(github.event.head_commit.message, 'chore(release): prepare v')
+        )
+      ) &&
+      (needs.security-classification.outputs.security-release != 'true' ||
+       github.actor == 'lightning-it-release-automation[bot]')
+    environment:
+      name: >-
+        ${{ needs.security-classification.outputs.security-release == 'true' &&
+            github.actor == 'lightning-it-release-automation[bot]' &&
+            'mlx90-security-release-prepare' ||
+            'ansible-collection-release-prepare' }}
 
     steps:
       - name: Mint release automation App token

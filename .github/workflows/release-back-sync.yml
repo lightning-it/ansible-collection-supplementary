@@ -17,6 +17,10 @@ on:
       release_tag_app_client_id:
         description: Exact GitHub App client ID validated by the protected publish job.
         required: true
+      security_evidence_id:
+        description: Exact MLX-90 Evidence ID; release automation only.
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -27,11 +31,53 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  back-sync:
-    name: Open release back-sync PR
+  security-classification:
+    name: Classify exact back-sync request
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: ansible-collection-release-prepare
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      security-release: ${{ steps.classify.outputs.security_release }}
+      security-evidence-id: ${{ steps.classify.outputs.security_evidence_id }}
+      security-version: ${{ steps.classify.outputs.security_version }}
+    steps:
+      - name: Checkout exact protected-main source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify tag-shaped input and classify before environment selection
+        id: classify
+        env:
+          EVIDENCE_ID: ${{ inputs.security_evidence_id || '' }}
+          TAG_INPUT: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$TAG_INPUT" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::A stable semantic v-prefixed release tag is required."
+            exit 1
+          fi
+          python scripts/classify-security-release.py \
+            --event-kind version \
+            --version "${TAG_INPUT#v}" \
+            --evidence-id "$EVIDENCE_ID"
+
+  back-sync:
+    name: Open release back-sync PR
+    needs: security-classification
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (needs.security-classification.outputs.security-release != 'true' ||
+       github.actor == 'lightning-it-release-automation[bot]')
+    runs-on: ubuntu-latest
+    environment:
+      name: >-
+        ${{ needs.security-classification.outputs.security-release == 'true' &&
+            'mlx90-security-release-prepare' ||
+            'ansible-collection-release-prepare' }}
 
     steps:
       - name: Mint release automation App token

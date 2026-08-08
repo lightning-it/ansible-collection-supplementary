@@ -33,6 +33,10 @@ on:
       reviewed_base_sha:
         description: Reviewed PR base parent for automated merge-integrity validation.
         required: true
+      security_evidence_id:
+        description: Exact MLX-90 Evidence ID; release automation only.
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -116,6 +120,7 @@ jobs:
           fi
 
           {
+            echo "release_version=$release_version"
             echo "release_sha=$MERGE_SHA"
             echo "reviewed_head_sha=$REVIEWED_HEAD_SHA"
             echo "reviewed_base_sha=${parents[0]}"
@@ -123,14 +128,41 @@ jobs:
             echo "publish_galaxy=$publish_galaxy"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Checkout exact merge for Security classification
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ steps.release.outputs.release_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Classify evidence-bound release version
+        id: security
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.release_version }}
+        run: >-
+          python scripts/classify-security-release.py
+          --event-kind version
+          --version "$RELEASE_VERSION"
+
+      - name: Mint exact publish-dispatch App token
+        id: publish-dispatch-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-actions: write
+
       - name: Dispatch exact-SHA publish workflow on main
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.publish-dispatch-app.outputs.token }}
           CREATE_GITHUB_RELEASE: ${{ steps.release.outputs.create_github_release }}
           PUBLISH_GALAXY: ${{ steps.release.outputs.publish_galaxy }}
           RELEASE_SHA: ${{ steps.release.outputs.release_sha }}
           REVIEWED_HEAD_SHA: ${{ steps.release.outputs.reviewed_head_sha }}
           REVIEWED_BASE_SHA: ${{ steps.release.outputs.reviewed_base_sha }}
+          SECURITY_EVIDENCE_ID: ${{ steps.security.outputs.security_evidence_id }}
         run: |
           set -euo pipefail
 
@@ -141,16 +173,72 @@ jobs:
             -f publish_galaxy="$PUBLISH_GALAXY" \
             -f release_sha="$RELEASE_SHA" \
             -f reviewed_head_sha="$REVIEWED_HEAD_SHA" \
-            -f reviewed_base_sha="$REVIEWED_BASE_SHA"
+            -f reviewed_base_sha="$REVIEWED_BASE_SHA" \
+            -f security_evidence_id="$SECURITY_EVIDENCE_ID"
+
+  security-classification:
+    name: Classify exact publish request
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      security-release: ${{ steps.classify.outputs.security_release }}
+      security-evidence-id: ${{ steps.classify.outputs.security_evidence_id }}
+      security-version: ${{ steps.classify.outputs.security_version }}
+    steps:
+      - name: Checkout requested protected-main SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify main identity and classify before environment selection
+        id: classify
+        env:
+          EVIDENCE_ID: ${{ inputs.security_evidence_id || '' }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          test "$(git ls-remote origin refs/heads/main | awk '{print $1}')" = "$RELEASE_SHA"
+          release_version="$(python - <<'PY'
+          import re
+          from pathlib import Path
+          match = re.search(
+              r"(?m)^version:\s*[\"']?([^\s\"']+)",
+              Path("galaxy.yml").read_text(encoding="utf-8"),
+          )
+          if match is None:
+              raise SystemExit("galaxy.yml has no version")
+          print(match.group(1))
+          PY
+          )"
+          python scripts/classify-security-release.py \
+            --event-kind version \
+            --version "$release_version" \
+            --evidence-id "$EVIDENCE_ID"
 
   publish:
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      github.ref == 'refs/heads/main'
+      github.ref == 'refs/heads/main' &&
+      (needs.security-classification.outputs.security-release != 'true' ||
+       github.actor == 'lightning-it-release-automation[bot]')
     name: Publish collection release
+    needs: security-classification
     runs-on: ubuntu-latest
     timeout-minutes: 180
-    environment: ansible-collections
+    environment:
+      name: >-
+        ${{ needs.security-classification.outputs.security-release == 'true' &&
+            github.actor == 'lightning-it-release-automation[bot]' &&
+            'mlx90-security-publish' ||
+            'ansible-collections' }}
     concurrency:
       group: collection-release-${{ github.repository }}
       cancel-in-progress: false
@@ -1488,12 +1576,23 @@ jobs:
           ANSIBLE_COLLECTIONS_PATH="$install_root" \
             ansible-playbook --syntax-check "$installed_playbook"
 
+      - name: Mint exact back-sync dispatch App token
+        id: back-sync-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-actions: write
+
       - name: Trigger release back-sync after verified publication
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.back-sync-app.outputs.token }}
           RELEASE_TAG_APP_SLUG: ${{ steps.release-tag-token.outputs.app-slug }}
           RELEASE_TAG_APP_ID: ${{ vars.RELEASE_TAG_APP_ID }}
           RELEASE_TAG_APP_CLIENT_ID: ${{ vars.RELEASE_TAG_APP_CLIENT_ID }}
+          SECURITY_EVIDENCE_ID: ${{ needs.security-classification.outputs.security-evidence-id }}
         run: |
           set -euo pipefail
           gh workflow run release-back-sync.yml \
@@ -1502,7 +1601,8 @@ jobs:
             -f tag="$RELEASE_TAG" \
             -f release_tag_app_slug="$RELEASE_TAG_APP_SLUG" \
             -f release_tag_app_id="$RELEASE_TAG_APP_ID" \
-            -f release_tag_app_client_id="$RELEASE_TAG_APP_CLIENT_ID"
+            -f release_tag_app_client_id="$RELEASE_TAG_APP_CLIENT_ID" \
+            -f security_evidence_id="$SECURITY_EVIDENCE_ID"
 
       - name: Attach signed post-publication verification receipt
         env:
