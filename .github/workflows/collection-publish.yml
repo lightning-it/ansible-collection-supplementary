@@ -227,8 +227,9 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main' &&
-      (needs.security-classification.outputs.security-release != 'true' ||
-       github.actor == 'lightning-it-release-automation[bot]')
+      (needs.security-classification.outputs.security-release == 'false' ||
+       (needs.security-classification.outputs.security-release == 'true' &&
+        github.actor == 'lightning-it-release-automation[bot]'))
     name: Publish collection release
     needs: security-classification
     runs-on: ubuntu-latest
