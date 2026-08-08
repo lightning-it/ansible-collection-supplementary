@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Classify only evidence-bound MLX-90 Security release events."""
 
 from __future__ import annotations
