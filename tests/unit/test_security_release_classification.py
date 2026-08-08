@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import importlib.util
-from argparse import Namespace
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import sys
 import tempfile
 import unittest
+from argparse import Namespace
+from datetime import UTC, datetime
+from pathlib import Path
 from unittest import mock
-
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "classify-security-release.py"
@@ -19,7 +18,7 @@ if SPEC is None or SPEC.loader is None:
 MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
-CHECKED_AT = datetime(2026, 8, 8, tzinfo=timezone.utc)
+CHECKED_AT = datetime(2026, 8, 8, tzinfo=UTC)
 EVIDENCE_ID = "MLX90-GHSA-VJJF-WC74-GP86-3.2.2"
 
 
@@ -74,9 +73,7 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
                 "revoked": False,
             },
         }
-        (metadata_root / "3.2.2.json").write_text(
-            json.dumps(self.metadata), encoding="utf-8"
-        )
+        (metadata_root / "3.2.2.json").write_text(json.dumps(self.metadata), encoding="utf-8")
 
     def tearDown(self):
         self.temporary.cleanup()
@@ -108,7 +105,7 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
             MODULE.classify(
                 args(event_kind="version", version="3.2.2"),
                 self.root,
-                datetime(2026, 10, 1, tzinfo=timezone.utc),
+                datetime(2026, 10, 1, tzinfo=UTC),
             )
 
     def test_normal_develop_and_unrelated_main_events_stay_manual(self):
