@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.2.3
+======
+
+Bugfixes
+--------
+
+- Route MLX-90 release-App and GitHub-Actions execution through dedicated reviewer-free protected environments so evidence, preparation, publication, promotion, and back-sync can complete without a human deployment approval while retaining the existing manual environments for non-automation callers.
+
 v3.2.2
 ======
 
