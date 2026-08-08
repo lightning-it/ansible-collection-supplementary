@@ -548,20 +548,42 @@ class WorkflowSecurityTests(unittest.TestCase):
                 self.assertIn("security-classification", jobs)
                 mutation = jobs[mutation_name]
                 self.assertIn("security-classification", mutation["needs"])
+                normalized_condition = " ".join(mutation["if"].split())
                 self.assertIn(
-                    "needs.security-classification.outputs.security-release != 'true'",
-                    mutation["if"],
+                    "needs.security-classification.outputs.security-release == 'false'",
+                    normalized_condition,
                 )
-                self.assertIn("lightning-it-release-automation[bot]", mutation["if"])
+                self.assertIn(
+                    "security-release == 'false' || "
+                    "(needs.security-classification.outputs.security-release == "
+                    "'true' &&",
+                    normalized_condition,
+                )
+                self.assertNotIn("security-release != 'true'", normalized_condition)
+                self.assertIn(
+                    "lightning-it-release-automation[bot]",
+                    normalized_condition,
+                )
 
         for name in ("tiny-cells", "release-security"):
             with self.subTest(ci_job=name):
                 self.assertIn("security-classification", ci[name]["needs"])
+                normalized_condition = " ".join(ci[name]["if"].split())
                 self.assertIn(
-                    "needs.security-classification.outputs.security-release != 'true'",
-                    ci[name]["if"],
+                    "needs.security-classification.outputs.security-release == 'false'",
+                    normalized_condition,
                 )
-                self.assertIn("lightning-it-release-automation[bot]", ci[name]["if"])
+                self.assertIn(
+                    "security-release == 'false' || "
+                    "(needs.security-classification.outputs.security-release == "
+                    "'true' &&",
+                    normalized_condition,
+                )
+                self.assertNotIn("security-release != 'true'", normalized_condition)
+                self.assertIn(
+                    "lightning-it-release-automation[bot]",
+                    normalized_condition,
+                )
 
         self.assertEqual(
             "ansible-collection-release-prepare",
