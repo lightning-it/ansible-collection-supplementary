@@ -18,6 +18,7 @@
 /galaxy.yml @lightning-it/lightning-it-security-and-compliance-maintainers
 /meta/role-coverage.yml @lightning-it/lightning-it-security-and-compliance-maintainers
 /meta/quality-impact.yml @lightning-it/lightning-it-security-and-compliance-maintainers
+/scripts/classify-security-release.py @lightning-it/lightning-it-security-and-compliance-maintainers
 /scripts/enrich-cyclonedx-sbom.py @lightning-it/lightning-it-security-and-compliance-maintainers
 /scripts/devtools-*.sh @lightning-it/lightning-it-security-and-compliance-maintainers
 /scripts/quality_cell_identity.py @lightning-it/lightning-it-security-and-compliance-maintainers
