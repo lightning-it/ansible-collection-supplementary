@@ -607,3 +607,16 @@ releases:
     fragments:
       - mlx90-v322-security-release-metadata.yml
     release_date: '2026-08-04'
+  3.2.3:
+    changes:
+      bugfixes:
+        - Route MLX-90 release-App and GitHub-Actions execution through dedicated
+          reviewer-free protected environments so evidence, preparation, publication,
+          promotion, and back-sync can complete without a human deployment approval
+          while retaining the existing manual environments for non-automation callers.
+    fragments:
+      - mlx90-zero-touch-release-chain.yml
+      - shared-assets-sync-30957250438.yml
+      - shared-assets-sync-31237016904.yml
+      - shared-assets-sync-31241646931.yml
+    release_date: '2026-08-08'
