@@ -78,6 +78,7 @@ class Keycloak2671SecurityTests(unittest.TestCase):
             },
             registry["profiles"][PROFILE],
         )
+
     def test_verifier_accepts_only_the_exact_packaged_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -127,6 +128,21 @@ class Keycloak2671SecurityTests(unittest.TestCase):
             invalid.write_bytes(b"\xff\xfe")
             with self.assertRaisesRegex(SystemExit, "cannot read"):
                 self.module["read_bounded_file"](root, invalid)
+
+    def test_loader_rejects_unhashable_yaml_keys_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_fixture(root)
+            defaults = root / "roles/keycloak_deploy/defaults/main.yml"
+            defaults.write_text(
+                "? [not, hashable]\n: value\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(SystemExit, "must be hashable"):
+                self.module["load_yaml"](
+                    root,
+                    "roles/keycloak_deploy/defaults/main.yml",
+                )
 
 
 if __name__ == "__main__":
