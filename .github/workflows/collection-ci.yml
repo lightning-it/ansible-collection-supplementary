@@ -16,6 +16,14 @@ on:
         type: choice
         options:
           - manual-main
+      security_version:
+        description: Exact Security release version; release automation only.
+        required: false
+        default: ""
+      security_evidence_id:
+        description: Exact MLX-90 Evidence ID; release automation only.
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -48,6 +56,68 @@ env:
       github.event.pull_request.head.sha || github.sha }}
 
 jobs:
+  security-classification:
+    name: Classify evidence-bound Security release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      security-release: ${{ steps.classify.outputs.security_release }}
+      security-evidence-id: ${{ steps.classify.outputs.security_evidence_id }}
+      security-version: ${{ steps.classify.outputs.security_version }}
+    steps:
+      - name: Checkout exact source for classification
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify exact event without granting an environment
+        id: classify
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref || '' }}
+          BASE_SHA: ${{ env.COMPARE_BASE_SHA }}
+          EVIDENCE_ID: ${{ inputs.security_evidence_id || '' }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          HEAD_REF: ${{ env.COMPARE_HEAD_REF }}
+          HEAD_SHA: ${{ env.SOURCE_SHA }}
+          SECURITY_VERSION: ${{ inputs.security_version || '' }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request)
+              python scripts/classify-security-release.py \
+                --event-kind pull_request \
+                --base-sha "$BASE_SHA" \
+                --head-sha "$HEAD_SHA" \
+                --base-ref "$BASE_REF" \
+                --head-ref "$HEAD_REF" \
+                --evidence-id "$EVIDENCE_ID"
+              ;;
+            push)
+              commit_message="$(git show -s --format=%B "$HEAD_SHA")"
+              python scripts/classify-security-release.py \
+                --event-kind push \
+                --base-sha "$BASE_SHA" \
+                --head-sha "$HEAD_SHA" \
+                --ref "$EVENT_REF" \
+                --commit-message "$commit_message" \
+                --evidence-id "$EVIDENCE_ID"
+              ;;
+            workflow_dispatch)
+              python scripts/classify-security-release.py \
+                --event-kind version \
+                --version "$SECURITY_VERSION" \
+                --evidence-id "$EVIDENCE_ID"
+              ;;
+            *)
+              echo "Unsupported classification event: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+
   lint-sanity:
     name: Collection / Lint and Sanity
     runs-on: ubuntu-latest
@@ -344,13 +414,21 @@ jobs:
        (github.event.pull_request.base.ref == 'develop' ||
         (github.event.pull_request.base.ref == 'main' &&
          (github.event.pull_request.head.ref == 'develop' ||
-          startsWith(github.event.pull_request.head.ref, 'release/v'))))) ||
+          startsWith(github.event.pull_request.head.ref, 'release/v') ||
+          startsWith(github.event.pull_request.head.ref, 'security-release/'))))) ||
       (github.event_name == 'push' &&
        (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) ||
       (github.event_name == 'workflow_dispatch' &&
        ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
-        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop'))))
-    needs: [build-install, quality-matrix]
+        (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop')))) &&
+      (needs.security-classification.outputs.security-release != 'true' ||
+       (github.event_name == 'pull_request' &&
+        github.event.pull_request.user.login ==
+          'lightning-it-release-automation[bot]' &&
+        github.event.pull_request.head.repo.full_name == github.repository) ||
+       (github.event_name != 'pull_request' &&
+        github.actor == 'lightning-it-release-automation[bot]'))
+    needs: [build-install, quality-matrix, security-classification]
     strategy:
       fail-fast: false
       max-parallel: 3
@@ -358,7 +436,17 @@ jobs:
     runs-on: ${{ matrix.runner }}
     environment:
       name: >-
-        ${{ github.event_name == 'pull_request' &&
+        ${{ needs.security-classification.outputs.security-release == 'true' &&
+            github.event_name == 'pull_request' &&
+            github.event.pull_request.user.login ==
+              'lightning-it-release-automation[bot]' &&
+            github.event.pull_request.head.repo.full_name == github.repository &&
+            'mlx90-security-runtime-tests' ||
+            needs.security-classification.outputs.security-release == 'true' &&
+            github.event_name != 'pull_request' &&
+            github.actor == 'lightning-it-release-automation[bot]' &&
+            'mlx90-security-runtime-protected' ||
+            github.event_name == 'pull_request' &&
             'ansible-collection-runtime-tests' ||
             'ansible-collection-runtime-protected' }}
     timeout-minutes: 90
@@ -1040,12 +1128,27 @@ jobs:
     if: >-
       always() &&
       github.event_name == 'push' &&
-      github.ref == 'refs/heads/main'
+      github.ref == 'refs/heads/main' &&
+      (needs.security-classification.outputs.security-release != 'true' ||
+       github.actor == 'lightning-it-release-automation[bot]')
     needs:
-      [lint-sanity, build-install, role-coverage, tiny, heavy, acceptance, runtime-evidence, evidence]
+      - security-classification
+      - lint-sanity
+      - build-install
+      - role-coverage
+      - tiny
+      - heavy
+      - acceptance
+      - runtime-evidence
+      - evidence
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    environment: ansible-collection-release-evidence
+    environment:
+      name: >-
+        ${{ needs.security-classification.outputs.security-release == 'true' &&
+            github.actor == 'lightning-it-release-automation[bot]' &&
+            'mlx90-security-release-evidence' ||
+            'ansible-collection-release-evidence' }}
     permissions:
       actions: read
       artifact-metadata: write
