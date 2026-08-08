@@ -52,6 +52,8 @@ def read_bounded_file(collection_root: Path, path: Path) -> str:
         relative = path.relative_to(collection_root)
     except ValueError:
         fail(f"path escapes the collection root: {path}")
+    if any(component in {"", ".", ".."} for component in relative.parts):
+        fail(f"path escapes the collection root: {path}")
     current = collection_root
     for component in relative.parts:
         current /= component
@@ -63,7 +65,7 @@ def read_bounded_file(collection_root: Path, path: Path) -> str:
         if path.stat().st_size > MAX_SOURCE_BYTES:
             fail(f"source exceeds the {MAX_SOURCE_BYTES}-byte limit: {path}")
         return path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         fail(f"cannot read {path}: {exc}")
 
 

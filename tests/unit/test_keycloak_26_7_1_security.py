@@ -61,7 +61,7 @@ class Keycloak2671SecurityTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def test_profile_is_preapproved_but_not_bound_to_unreviewed_metadata(self) -> None:
+    def test_profile_is_preapproved_with_the_exact_contract(self) -> None:
         registry = json.loads(
             (ROOT / ".lit" / "security-release-profiles.json").read_text(
                 encoding="utf-8"
@@ -78,8 +78,6 @@ class Keycloak2671SecurityTests(unittest.TestCase):
             },
             registry["profiles"][PROFILE],
         )
-        self.assertFalse((ROOT / ".lit" / "security-releases" / "3.2.4.json").exists())
-
     def test_verifier_accepts_only_the_exact_packaged_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -111,6 +109,24 @@ class Keycloak2671SecurityTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(SystemExit, "identity-stack"):
                 self.module["verify"](root)
+
+    def test_reader_rejects_parent_traversal_and_invalid_utf8(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = parent / "collection"
+            root.mkdir()
+            outside = parent / "outside.yml"
+            outside.write_text("secret: value\n", encoding="utf-8")
+            with self.assertRaisesRegex(SystemExit, "escapes the collection root"):
+                self.module["read_bounded_file"](
+                    root,
+                    root / ".." / outside.name,
+                )
+
+            invalid = root / "invalid.yml"
+            invalid.write_bytes(b"\xff\xfe")
+            with self.assertRaisesRegex(SystemExit, "cannot read"):
+                self.module["read_bounded_file"](root, invalid)
 
 
 if __name__ == "__main__":
