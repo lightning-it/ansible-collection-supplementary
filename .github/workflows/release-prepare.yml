@@ -104,8 +104,9 @@ jobs:
           !startsWith(github.event.head_commit.message, 'chore(release): prepare v')
         )
       ) &&
-      (needs.security-classification.outputs.security-release != 'true' ||
-       github.actor == 'lightning-it-release-automation[bot]')
+      (needs.security-classification.outputs.security-release == 'false' ||
+       (needs.security-classification.outputs.security-release == 'true' &&
+        github.actor == 'lightning-it-release-automation[bot]'))
     environment:
       name: >-
         ${{ needs.security-classification.outputs.security-release == 'true' &&

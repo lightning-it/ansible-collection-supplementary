@@ -421,13 +421,14 @@ jobs:
       (github.event_name == 'workflow_dispatch' &&
        ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
         (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop')))) &&
-      (needs.security-classification.outputs.security-release != 'true' ||
-       (github.event_name == 'pull_request' &&
-        github.event.pull_request.user.login ==
-          'lightning-it-release-automation[bot]' &&
-        github.event.pull_request.head.repo.full_name == github.repository) ||
-       (github.event_name != 'pull_request' &&
-        github.actor == 'lightning-it-release-automation[bot]'))
+      (needs.security-classification.outputs.security-release == 'false' ||
+       (needs.security-classification.outputs.security-release == 'true' &&
+        ((github.event_name == 'pull_request' &&
+          github.event.pull_request.user.login ==
+            'lightning-it-release-automation[bot]' &&
+          github.event.pull_request.head.repo.full_name == github.repository) ||
+         (github.event_name != 'pull_request' &&
+          github.actor == 'lightning-it-release-automation[bot]'))))
     needs: [build-install, quality-matrix, security-classification]
     strategy:
       fail-fast: false
@@ -1129,8 +1130,9 @@ jobs:
       always() &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
-      (needs.security-classification.outputs.security-release != 'true' ||
-       github.actor == 'lightning-it-release-automation[bot]')
+      (needs.security-classification.outputs.security-release == 'false' ||
+       (needs.security-classification.outputs.security-release == 'true' &&
+        github.actor == 'lightning-it-release-automation[bot]'))
     needs:
       - security-classification
       - lint-sanity
