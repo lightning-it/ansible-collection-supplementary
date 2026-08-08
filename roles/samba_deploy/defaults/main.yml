@@ -50,7 +50,7 @@ samba_deploy_extra_args: []
 # Samba AD DC / LDAPS mode. This lightweight Samba AD-LDS style image is suited
 # for app-auth and Molecule validation while preserving LDAP/LDAPS semantics.
 samba_deploy_ad_dc_image: >-
-  docker.io/smblds/smblds:latest@sha256:066197b8a264329373667af87a384ec5c6c5edb4fd825f39a178775f3a800364
+  docker.io/smblds/smblds:latest@sha256:16460271fd0aab599f574f30ac3976a6b5f3b5b5d99ecec95fc1b350680b89f6
 samba_deploy_ad_dc_realm: "SAMDOM.EXAMPLE.COM"
 samba_deploy_ad_dc_domain: "SAMDOM"
 samba_deploy_ad_dc_admin_password: ""
