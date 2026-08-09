@@ -5,12 +5,12 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/security-release-dispatch.py"
@@ -24,19 +24,22 @@ VERSION = "3.2.4"
 EVIDENCE_ID = "MLX90-KEYCLOAK-26.7.1-3.2.4"
 PROFILE = "lit.supplementary/keycloak-26.7.1-security-v1"
 NOW = datetime(2026, 8, 8, 23, 0, tzinfo=UTC)
+GIT = shutil.which("git")
+assert GIT is not None
 
 
 def git(root: Path, *args: str) -> str:
     environment = os.environ.copy()
     for variable in ("GIT_COMMON_DIR", "GIT_DIR", "GIT_WORK_TREE"):
         environment.pop(variable, None)
-    return subprocess.run(
-        ["git", *args],
+    return subprocess.run(  # noqa: S603 -- fixed git binary and test-owned arguments.
+        [GIT, *args],
         cwd=root,
         check=True,
         capture_output=True,
         text=True,
         env=environment,
+        timeout=30,
     ).stdout.strip()
 
 
@@ -161,7 +164,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("needs.classify.outputs.dispatch == 'true'", workflow)
         self.assertIn("environment: mlx90-security-release-evidence", workflow)
         self.assertIn("permission-contents: write", workflow)
-        self.assertIn("test \"$APP_INSTALLATION_ID\" = 148019054", workflow)
+        self.assertIn('test "$APP_INSTALLATION_ID" = 148019054', workflow)
         self.assertIn(".client_payload.humanActions == 0", workflow)
         self.assertNotIn("permission-actions", workflow)
         self.assertNotIn("permission-pull-requests", workflow)

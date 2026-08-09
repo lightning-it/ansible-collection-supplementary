@@ -13,10 +13,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 VERIFIER = ROOT / "scripts" / "verify-keycloak-26.7.1-security.py"
 PROFILE = "lit.supplementary/keycloak-26.7.1-security-v1"
-IMAGE = (
-    "quay.io/keycloak/keycloak:26.7.1@"
-    "sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6"
-)
+IMAGE = "quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6"
 
 
 class Keycloak2671SecurityTests(unittest.TestCase):
@@ -62,11 +59,7 @@ class Keycloak2671SecurityTests(unittest.TestCase):
         )
 
     def test_profile_is_preapproved_with_the_exact_contract(self) -> None:
-        registry = json.loads(
-            (ROOT / ".lit" / "security-release-profiles.json").read_text(
-                encoding="utf-8"
-            )
-        )
+        registry = json.loads((ROOT / ".lit" / "security-release-profiles.json").read_text(encoding="utf-8"))
         self.assertEqual(
             {
                 "description": (
