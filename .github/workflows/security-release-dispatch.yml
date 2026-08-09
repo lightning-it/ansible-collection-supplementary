@@ -97,7 +97,7 @@ jobs:
         id: request
         env:
           CONTROLLER_SHA: ${{ github.sha }}
-          SOURCE_SHA: ${{ needs.classify.outputs.source-sha }}
+          SOURCE_SHA: ${{ needs.classify.outputs['source-sha'] }}
         run: |
           set -euo pipefail
 

@@ -159,6 +159,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertEqual(2, workflow.count("ref: ${{ github.sha }}"))
         self.assertNotIn("ref: ${{ github.event.workflow_run.head_sha }}", workflow)
         self.assertNotIn("ref: ${{ needs.classify.outputs.source-sha }}", workflow)
+        self.assertIn("needs.classify.outputs['source-sha']", workflow)
         self.assertIn('test "$(git rev-parse HEAD)" = "$CONTROLLER_SHA"', workflow)
         self.assertIn('test "$(git rev-parse origin/develop)" = "$SOURCE_SHA"', workflow)
         self.assertIn("needs.classify.outputs.dispatch == 'true'", workflow)
