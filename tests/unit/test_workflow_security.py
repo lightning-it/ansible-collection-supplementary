@@ -177,6 +177,56 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("contains(github.event.pull_request.labels.*.name, 'safe-automerge')", require_fragment)
         self.assertIn("!contains(github.event.pull_request.labels.*.name, 'breaking-update')", require_fragment)
 
+    def test_shared_assets_guard_streams_large_check_evidence_via_stdin(self) -> None:
+        workflow = (WORKFLOWS / "shared-assets-guarded-automerge.yml").read_text(encoding="utf-8")
+        self.assertNotIn('--argjson check_pages "$check_runs"', workflow)
+        self.assertNotIn('--argjson status_pages "$status_pages"', workflow)
+
+        start_marker = (
+            '            evidence="$(\n'
+            '              printf \'%s\\n%s\\n\' "$check_runs" "$status_pages" |\n'
+            "                jq -s '\n"
+        )
+        end_marker = "\n              '\n            )\"\n            pending=false"
+        start = workflow.index(start_marker) + len(start_marker)
+        jq_program = workflow[start : workflow.index(end_marker, start)]
+
+        check_pages = [
+            {
+                "check_runs": [
+                    {
+                        "id": 1,
+                        "name": "required / large evidence",
+                        "app": {"id": 15368},
+                        "status": "completed",
+                        "conclusion": "success",
+                        "ignored_payload": "x" * (3 * 1024 * 1024),
+                    }
+                ]
+            }
+        ]
+        jq = shutil.which("jq")
+        if jq is None:
+            self.fail("jq is required for the workflow evidence regression test")
+        result = subprocess.run(  # noqa: S603
+            [jq, "-s", jq_program],
+            input=f"{json.dumps(check_pages)}\n{json.dumps([[]])}\n",
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(
+            [
+                {
+                    "context": "required / large evidence",
+                    "app_id": 15368,
+                    "state": "success",
+                }
+            ],
+            json.loads(result.stdout),
+        )
+
     def test_collection_ci_concurrency_isolated_by_pr_and_exact_head(self) -> None:
         workflow = load_yaml(WORKFLOWS / "collection-ci.yml")
         top_group = workflow["concurrency"]["group"]
