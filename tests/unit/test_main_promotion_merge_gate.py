@@ -21,10 +21,7 @@ FINAL_STEP = {
         "AUTHORIZE_RESULT": "${{ needs.authorize.result }}",
         "CLASSIFY_RESULT": "${{ needs.classify.result }}",
     },
-    "run": (
-        'set -euo pipefail\ntest "$CLASSIFY_RESULT" = success\n'
-        'test "$AUTHORIZE_RESULT" = success\n'
-    ),
+    "run": ('set -euo pipefail\ntest "$CLASSIFY_RESULT" = success\ntest "$AUTHORIZE_RESULT" = success\n'),
 }
 
 
