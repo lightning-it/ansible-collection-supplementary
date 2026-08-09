@@ -11,6 +11,7 @@ import json
 import os
 import re
 import stat
+from contextlib import ExitStack
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, NoReturn
@@ -165,37 +166,50 @@ def load_json_bytes(raw: bytes, label: str) -> dict[str, Any]:
     return value
 
 
-def read_bounded_regular_file(path: Path, label: str, limit: int) -> bytes:
-    """Read at most ``limit`` bytes from one non-symlink regular file."""
+def read_bounded_regular_file(root: Path, relative_path: Path, label: str, limit: int) -> bytes:
+    """Read a bounded regular file through non-symlink descendants of ``root``."""
     nofollow_flag = getattr(os, "O_NOFOLLOW", None)
-    if type(nofollow_flag) is not int:
+    directory_flag = getattr(os, "O_DIRECTORY", None)
+    if type(nofollow_flag) is not int or type(directory_flag) is not int or os.open not in os.supports_dir_fd:
         fail(f"{label} cannot prove non-symlink reads on this platform")
-    flags = os.O_RDONLY
+    parts = relative_path.parts
+    if relative_path.is_absolute() or not parts or any(part in {"", ".", ".."} for part in parts):
+        fail(f"{label} path must be a canonical relative path beneath the trusted root")
+    file_flags = os.O_RDONLY | nofollow_flag
+    directory_flags = file_flags | directory_flag
     if hasattr(os, "O_CLOEXEC"):
-        flags |= os.O_CLOEXEC
-    flags |= nofollow_flag
+        file_flags |= os.O_CLOEXEC
+        directory_flags |= os.O_CLOEXEC
     try:
-        descriptor = os.open(path, flags)
-    except (FileNotFoundError, NotADirectoryError, OSError) as exc:
+        with ExitStack() as descriptors:
+            current_directory = os.open(root, directory_flags)
+            descriptors.callback(os.close, current_directory)
+            for component in parts[:-1]:
+                current_directory = os.open(
+                    component,
+                    directory_flags,
+                    dir_fd=current_directory,
+                )
+                descriptors.callback(os.close, current_directory)
+            descriptor = os.open(parts[-1], file_flags, dir_fd=current_directory)
+            descriptors.callback(os.close, descriptor)
+            file_stat = os.fstat(descriptor)
+            if not stat.S_ISREG(file_stat.st_mode):
+                fail(f"{label} must be a regular non-symlink file")
+            if file_stat.st_size > limit:
+                fail(f"{label} exceeds {limit} bytes")
+            with os.fdopen(descriptor, "rb", closefd=False) as stream:
+                raw = stream.read(limit + 1)
+    except OSError as exc:
         raise ContractError(f"{label} must be a regular non-symlink file") from exc
-    try:
-        file_stat = os.fstat(descriptor)
-        if not stat.S_ISREG(file_stat.st_mode):
-            fail(f"{label} must be a regular non-symlink file")
-        if file_stat.st_size > limit:
-            fail(f"{label} exceeds {limit} bytes")
-        with os.fdopen(descriptor, "rb", closefd=False) as stream:
-            raw = stream.read(limit + 1)
-    finally:
-        os.close(descriptor)
     if len(raw) > limit:
         fail(f"{label} exceeds {limit} bytes")
     return raw
 
 
-def load_json_file(path: Path, label: str) -> dict[str, Any]:
+def load_json_file(root: Path, relative_path: Path, label: str) -> dict[str, Any]:
     return load_json_bytes(
-        read_bounded_regular_file(path, label, MAX_JSON_BYTES),
+        read_bounded_regular_file(root, relative_path, label, MAX_JSON_BYTES),
         label,
     )
 
@@ -601,7 +615,8 @@ def load_security_binding(
         fail("partial Security marker: metadata and App-owned intake receipt must exist together")
 
     metadata_raw = read_bounded_regular_file(
-        metadata_path,
+        root,
+        metadata_path.relative_to(root),
         "Security metadata",
         MAX_JSON_BYTES,
     )
@@ -609,7 +624,8 @@ def load_security_binding(
         fail("Security metadata must be a non-empty regular non-symlink file")
     metadata = load_json_bytes(metadata_raw, "Security release metadata")
     intake_raw = read_bounded_regular_file(
-        intake_path,
+        root,
+        intake_path.relative_to(root),
         "Security intake receipt",
         MAX_JSON_BYTES,
     )
@@ -635,7 +651,8 @@ def load_security_binding(
     fragment_path_text = verified["changelogFragmentPath"]
     fragment_path = root / fragment_path_text
     fragment_raw = read_bounded_regular_file(
-        fragment_path,
+        root,
+        fragment_path.relative_to(root),
         "Security changelog fragment",
         MAX_SECURITY_FRAGMENT_BYTES,
     )
@@ -644,7 +661,8 @@ def load_security_binding(
     if verified["changelogFragmentSha256"] != fragment_digest:
         fail("Security changelog fragment digest differs from the immutable intake binding")
     profiles = load_json_file(
-        root / ".lit" / "security-release-profiles.json",
+        root,
+        Path(".lit/security-release-profiles.json"),
         "protected-main acceptance-profile registry",
     )
     validate_profile_registry(profiles, request["acceptanceProfile"])

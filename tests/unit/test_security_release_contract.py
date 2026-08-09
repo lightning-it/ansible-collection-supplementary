@@ -351,13 +351,36 @@ class SecurityReleaseContractTests(unittest.TestCase):
 
         profiles_path.write_bytes(b"x" * (CONTRACT.MAX_JSON_BYTES + 1))
         with self.assertRaisesRegex(CONTRACT.ContractError, "profile registry exceeds"):
-            CONTRACT.load_json_file(profiles_path, "profile registry")
+            CONTRACT.load_json_file(
+                self.root,
+                Path(".lit/security-release-profiles.json"),
+                "profile registry",
+            )
 
     def test_bounded_read_fails_closed_without_nofollow_support(self) -> None:
-        profiles_path = self.root / ".lit/security-release-profiles.json"
         with patch.object(CONTRACT.os, "O_NOFOLLOW", None):
             with self.assertRaisesRegex(CONTRACT.ContractError, "cannot prove non-symlink reads"):
-                CONTRACT.load_json_file(profiles_path, "profile registry")
+                CONTRACT.load_json_file(
+                    self.root,
+                    Path(".lit/security-release-profiles.json"),
+                    "profile registry",
+                )
+
+    def test_binding_rejects_symlinked_ancestor_directories(self) -> None:
+        self._write_binding()
+        metadata_path = self.root / f".lit/security-releases/{VERSION}.json"
+        fragment_path = self.root / self.verified["changelogFragmentPath"]
+        for parent in (self.root / ".lit", metadata_path.parent, fragment_path.parent):
+            backup = parent.with_name(parent.name + "-real")
+            with self.subTest(parent=parent):
+                parent.rename(backup)
+                parent.symlink_to(backup, target_is_directory=True)
+                try:
+                    with self.assertRaisesRegex(CONTRACT.ContractError, "regular non-symlink"):
+                        CONTRACT.load_security_binding(self.root, VERSION, checked_at=NOW)
+                finally:
+                    parent.unlink()
+                    backup.rename(parent)
 
     def test_request_metadata_profile_and_pending_marker_contracts_are_exact(
         self,
@@ -374,7 +397,8 @@ class SecurityReleaseContractTests(unittest.TestCase):
                     CONTRACT.validate_request_metadata_binding(request, metadata)
 
         profiles = CONTRACT.load_json_file(
-            self.root / ".lit/security-release-profiles.json",
+            self.root,
+            Path(".lit/security-release-profiles.json"),
             "profile registry",
         )
         CONTRACT.validate_profile_registry(profiles, PROFILE)
