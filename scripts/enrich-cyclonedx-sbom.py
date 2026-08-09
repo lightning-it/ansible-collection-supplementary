@@ -44,6 +44,10 @@ CHROME_LINUX_CPE_EQUIVALENCE = {
         "151.0.7922.72",
         "https://chromereleases.googleblog.com/2026/07/stable-channel-update-for-desktop_0887107924.html",
     ),
+    "151.0.7922.108": (
+        "151.0.7922.109",
+        "https://chromereleases.googleblog.com/2026/08/stable-channel-update-for-desktop_01193673229.html",
+    ),
 }
 
 
