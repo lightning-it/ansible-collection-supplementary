@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -52,6 +53,17 @@ def docker_action_image(path: Path) -> str | None:
 
 
 class WorkflowSecurityTests(unittest.TestCase):
+    def test_copilot_instructions_bind_the_exact_agent_contract(self) -> None:
+        agents_digest = hashlib.sha256((ROOT / "AGENTS.md").read_bytes()).hexdigest()
+        instructions = (ROOT / ".github" / "copilot-instructions.md").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(
+            [
+                "<!-- Managed contract: Codex and Copilot must apply AGENTS.md. -->",
+                f"<!-- AGENTS_SHA256: {agents_digest} -->",
+            ],
+            instructions[-2:],
+        )
+
     def test_quality_cells_install_only_the_prebuilt_exact_candidate(self) -> None:
         action = ACTION.read_text(encoding="utf-8")
         install = re.search(
