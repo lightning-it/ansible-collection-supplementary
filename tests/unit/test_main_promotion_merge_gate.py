@@ -16,12 +16,15 @@ WORKFLOW = ROOT / ".github" / "workflows" / "main-promotion-authorization.yml"
 FINAL_JOB_ID = "merge-gate"
 FINAL_JOB_NAME = "Main promotion merge gate"
 FINAL_STEP = {
-    "name": "Require successful classification and authorization",
+    "name": "Require successful protected authorization",
     "env": {
-        "CLASSIFY_RESULT": "${{ needs.classify.result }}",
         "AUTHORIZE_RESULT": "${{ needs.authorize.result }}",
+        "CLASSIFY_RESULT": "${{ needs.classify.result }}",
     },
-    "run": ('test "${CLASSIFY_RESULT}" = "success"\ntest "${AUTHORIZE_RESULT}" = "success"\n'),
+    "run": (
+        'set -euo pipefail\ntest "$CLASSIFY_RESULT" = success\n'
+        'test "$AUTHORIZE_RESULT" = success\n'
+    ),
 }
 
 
@@ -44,6 +47,7 @@ class MainPromotionMergeGateTests(unittest.TestCase):
         self.assertEqual(gate["name"], FINAL_JOB_NAME)
         self.assertEqual(gate["if"], "${{ always() }}")
         self.assertEqual(gate["needs"], ["classify", "authorize"])
+        self.assertEqual(gate["permissions"], {})
         self.assertEqual(gate["steps"], [FINAL_STEP])
         self.assertEqual(
             sum(job.get("name") == FINAL_JOB_NAME for job in jobs.values() if isinstance(job, dict)),
