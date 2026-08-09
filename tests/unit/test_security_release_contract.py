@@ -243,6 +243,17 @@ class SecurityReleaseContractTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(CONTRACT.ContractError):
                 CONTRACT.validate_security_fragment(invalid, "fragment")
 
+        for invalid_entries in (
+            [],
+            ["entry"] * 65,
+            [""],
+            [" not trimmed"],
+            ["two\nlines"],
+            [1],
+        ):
+            with self.subTest(invalid_entries=invalid_entries), self.assertRaises(CONTRACT.ContractError):
+                CONTRACT.canonical_security_fragment_bytes(invalid_entries)
+
         CONTRACT.validate_metadata_payload(
             self.metadata,
             expected_evidence_id=EVIDENCE_ID,
