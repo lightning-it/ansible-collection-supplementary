@@ -10,7 +10,7 @@ on:
     branches: [develop]
   workflow_dispatch:
     inputs:
-      source-run-id:
+      source_run_id:
         description: Completed protected-develop Collection CI run ID
         required: true
         type: string
@@ -48,7 +48,7 @@ jobs:
           gh workflow run security-release-dispatch.yml \
             --repo "$GITHUB_REPOSITORY" \
             --ref main \
-            -f "source-run-id=$SOURCE_RUN_ID"
+            -f "source_run_id=$SOURCE_RUN_ID"
 
   classify:
     name: Bind successful protected-develop Security candidate
@@ -76,7 +76,7 @@ jobs:
         env:
           CONTROLLER_SHA: ${{ github.sha }}
           GH_TOKEN: ${{ github.token }}
-          SOURCE_RUN_ID: ${{ inputs.source-run-id }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
         run: |
           set -euo pipefail
 
