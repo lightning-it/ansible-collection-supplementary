@@ -163,9 +163,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("github.event_name == 'workflow_dispatch'", workflow)
         self.assertIn("github.ref == 'refs/heads/main'", workflow)
         self.assertIn('(.name == "Collection CI")', workflow)
-        self.assertIn(
-            '(.path == ".github/workflows/collection-ci.yml")', workflow
-        )
+        self.assertIn('(.path == ".github/workflows/collection-ci.yml")', workflow)
         self.assertEqual(2, workflow.count("ref: ${{ github.sha }}"))
         self.assertNotIn("ref: ${{ github.event.workflow_run.head_sha }}", workflow)
         self.assertNotIn("ref: ${{ needs.classify.outputs.source-sha }}", workflow)
