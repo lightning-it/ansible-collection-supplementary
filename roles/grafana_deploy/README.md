@@ -9,6 +9,8 @@ still use the existing kubeplay path.
 The role provisions Loki as the default datasource and stores the local admin
 password in HC Vault when Vault access is configured. Without HC Vault, provide
 `grafana_deploy_admin_password` from Ansible Vault encrypted inventory.
+Because the rendered Pod manifest contains the effective admin password, it is
+written as `root:root` with mode `0600` and its task output is never logged.
 
 ## Key Variables
 

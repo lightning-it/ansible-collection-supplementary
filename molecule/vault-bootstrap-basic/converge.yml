@@ -26,7 +26,105 @@
       {{ vault_bootstrap_molecule_controller_root }}/scoped-ca.pem
     vault_bootstrap_molecule_scoped_document: >-
       {{ vault_bootstrap_molecule_controller_dir }}/scoped-approle.vault.yml
+    vault_bootstrap_molecule_ephemeral_secret_prefix: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-bootstrap
+    vault_bootstrap_molecule_canonical_key_one_file: >-
+      {{ vault_bootstrap_molecule_ephemeral_secret_prefix }}-canonical-key-one
+    vault_bootstrap_molecule_canonical_key_two_file: >-
+      {{ vault_bootstrap_molecule_ephemeral_secret_prefix }}-canonical-key-two
+    vault_bootstrap_molecule_canonical_token_file: >-
+      {{ vault_bootstrap_molecule_ephemeral_secret_prefix }}-canonical-token
+    vault_bootstrap_molecule_legacy_key_file: >-
+      {{ vault_bootstrap_molecule_ephemeral_secret_prefix }}-legacy-key
+    vault_bootstrap_molecule_legacy_token_file: >-
+      {{ vault_bootstrap_molecule_ephemeral_secret_prefix }}-legacy-token
+    vault_bootstrap_molecule_rejected_password_file: >-
+      {{ vault_bootstrap_molecule_ephemeral_secret_prefix }}-rejected-password
+    vault_bootstrap_molecule_injected_suffix_file: >-
+      {{ vault_bootstrap_molecule_ephemeral_secret_prefix }}-injected-suffix
+    vault_bootstrap_molecule_role_id_file: >-
+      {{ vault_bootstrap_molecule_ephemeral_secret_prefix }}-role-id
+    vault_bootstrap_molecule_secret_id_file: >-
+      {{ vault_bootstrap_molecule_ephemeral_secret_prefix }}-secret-id
+    vault_bootstrap_molecule_batch_token_file: >-
+      {{ vault_bootstrap_molecule_ephemeral_secret_prefix }}-batch-token
+    vault_bootstrap_molecule_ephemeral_secret_files:
+      - "{{ vault_bootstrap_molecule_canonical_key_one_file }}"
+      - "{{ vault_bootstrap_molecule_canonical_key_two_file }}"
+      - "{{ vault_bootstrap_molecule_canonical_token_file }}"
+      - "{{ vault_bootstrap_molecule_legacy_key_file }}"
+      - "{{ vault_bootstrap_molecule_legacy_token_file }}"
+      - "{{ vault_bootstrap_molecule_rejected_password_file }}"
+      - "{{ vault_bootstrap_molecule_injected_suffix_file }}"
+      - "{{ vault_bootstrap_molecule_role_id_file }}"
+      - "{{ vault_bootstrap_molecule_secret_id_file }}"
+      - "{{ vault_bootstrap_molecule_batch_token_file }}"
+    vault_bootstrap_molecule_canonical_key_one: >-
+      {{ lookup('ansible.builtin.password', vault_bootstrap_molecule_canonical_key_one_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
+    vault_bootstrap_molecule_canonical_key_two: >-
+      {{ lookup('ansible.builtin.password', vault_bootstrap_molecule_canonical_key_two_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
+    vault_bootstrap_molecule_canonical_token: >-
+      {{ lookup('ansible.builtin.password', vault_bootstrap_molecule_canonical_token_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
+    vault_bootstrap_molecule_legacy_key: >-
+      {{ lookup('ansible.builtin.password', vault_bootstrap_molecule_legacy_key_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
+    vault_bootstrap_molecule_legacy_token: >-
+      {{ lookup('ansible.builtin.password', vault_bootstrap_molecule_legacy_token_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
+    vault_bootstrap_molecule_rejected_password: >-
+      {{ lookup('ansible.builtin.password', vault_bootstrap_molecule_rejected_password_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
+    vault_bootstrap_molecule_injected_suffix: >-
+      {{ lookup('ansible.builtin.password', vault_bootstrap_molecule_injected_suffix_file,
+                length=16, chars=['ascii_letters', 'digits']) }}
+    vault_bootstrap_molecule_role_id: >-
+      {{ lookup('ansible.builtin.password', vault_bootstrap_molecule_role_id_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
+    vault_bootstrap_molecule_secret_id: >-
+      {{ lookup('ansible.builtin.password', vault_bootstrap_molecule_secret_id_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
+    vault_bootstrap_molecule_batch_token: >-
+      {{ lookup('ansible.builtin.password', vault_bootstrap_molecule_batch_token_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
   tasks:
+    - name: Materialize stable ephemeral Vault fixture credentials
+      ansible.builtin.set_fact:
+        vault_bootstrap_molecule_canonical_key_one_effective: "{{ vault_bootstrap_molecule_canonical_key_one }}"
+        vault_bootstrap_molecule_canonical_key_two_effective: "{{ vault_bootstrap_molecule_canonical_key_two }}"
+        vault_bootstrap_molecule_canonical_token_effective: "{{ vault_bootstrap_molecule_canonical_token }}"
+        vault_bootstrap_molecule_legacy_key_effective: "{{ vault_bootstrap_molecule_legacy_key }}"
+        vault_bootstrap_molecule_legacy_token_effective: "{{ vault_bootstrap_molecule_legacy_token }}"
+        vault_bootstrap_molecule_rejected_password_effective: "{{ vault_bootstrap_molecule_rejected_password }}"
+        vault_bootstrap_molecule_injected_suffix_effective: "{{ vault_bootstrap_molecule_injected_suffix }}"
+        vault_bootstrap_molecule_role_id_effective: "{{ vault_bootstrap_molecule_role_id }}"
+        vault_bootstrap_molecule_secret_id_effective: "{{ vault_bootstrap_molecule_secret_id }}"
+        vault_bootstrap_molecule_batch_token_effective: "{{ vault_bootstrap_molecule_batch_token }}"
+      changed_when: false
+      no_log: true
+
+    - name: Inspect ephemeral Vault fixture credential files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      loop: "{{ vault_bootstrap_molecule_ephemeral_secret_files }}"
+      register: vault_bootstrap_molecule_ephemeral_secret_file_stats
+      changed_when: false
+      no_log: true
+
+    - name: Require restrictive ephemeral Vault fixture credential files
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+          - not (item.stat.islnk | default(false))
+          - item.stat.mode | default('') == '0600'
+          - item.stat.nlink | default(0) | int == 1
+        quiet: true
+      loop: "{{ vault_bootstrap_molecule_ephemeral_secret_file_stats.results }}"
+      no_log: true
+
     - name: Normalize canonical persisted init payload
       ansible.builtin.include_role:
         name: lit.supplementary.vault_bootstrap
@@ -34,14 +132,19 @@
       vars:
         vault_bootstrap_init_payload_source:
           vault_init:
-            unseal_keys_b64: [test-key-one, test-key-two]
-            root_token: test-root-token
+            unseal_keys_b64:
+              - "{{ vault_bootstrap_molecule_canonical_key_one_effective }}"
+              - "{{ vault_bootstrap_molecule_canonical_key_two_effective }}"
+            root_token: "{{ vault_bootstrap_molecule_canonical_token_effective }}"
 
     - name: Assert canonical payload handoff
       ansible.builtin.assert:
         that:
-          - vault_bootstrap_unseal_keys == ['test-key-one', 'test-key-two']
-          - vault_bootstrap_token == 'test-root-token'
+          - >-
+            vault_bootstrap_unseal_keys
+            == [vault_bootstrap_molecule_canonical_key_one_effective,
+                vault_bootstrap_molecule_canonical_key_two_effective]
+          - vault_bootstrap_token == vault_bootstrap_molecule_canonical_token_effective
         quiet: true
       no_log: true
 
@@ -52,14 +155,15 @@
       vars:
         vault_bootstrap_init_payload_source:
           vault_bootstrap_vault_init:
-            unseal_keys_hex: [legacy-test-key]
-            root_token: legacy-test-token
+            unseal_keys_hex:
+              - "{{ vault_bootstrap_molecule_legacy_key_effective }}"
+            root_token: "{{ vault_bootstrap_molecule_legacy_token_effective }}"
 
     - name: Assert legacy payload handoff
       ansible.builtin.assert:
         that:
-          - vault_bootstrap_unseal_keys == ['legacy-test-key']
-          - vault_bootstrap_token == 'legacy-test-token'
+          - vault_bootstrap_unseal_keys == [vault_bootstrap_molecule_legacy_key_effective]
+          - vault_bootstrap_token == vault_bootstrap_molecule_legacy_token_effective
         quiet: true
       no_log: true
 
@@ -243,10 +347,12 @@
         path: "{{ vault_bootstrap_molecule_controller_file }}"
         document:
           vault_init:
-            unseal_keys_b64: [unit-test-share-one, unit-test-share-two]
+            unseal_keys_b64:
+              - "{{ vault_bootstrap_molecule_canonical_key_one_effective }}"
+              - "{{ vault_bootstrap_molecule_canonical_key_two_effective }}"
             unseal_shares: 2
             unseal_threshold: 2
-            root_token: unit-test-root-token
+            root_token: "{{ vault_bootstrap_molecule_canonical_token_effective }}"
       register: vault_bootstrap_molecule_controller_escrow_result
       no_log: true
 
@@ -272,8 +378,11 @@
     - name: Require the in-memory strict controller escrow handoff
       ansible.builtin.assert:
         that:
-          - vault_bootstrap_unseal_keys == ['unit-test-share-one', 'unit-test-share-two']
-          - vault_bootstrap_token == 'unit-test-root-token'
+          - >-
+            vault_bootstrap_unseal_keys
+            == [vault_bootstrap_molecule_canonical_key_one_effective,
+                vault_bootstrap_molecule_canonical_key_two_effective]
+          - vault_bootstrap_token == vault_bootstrap_molecule_canonical_token_effective
         quiet: true
       no_log: true
 
@@ -297,10 +406,12 @@
             vault_bootstrap_key_threshold: 2
             vault_bootstrap_controller_init_document:
               vault_init:
-                unseal_keys_b64: [unit-test-share-one, unit-test-share-two]
+                unseal_keys_b64:
+                  - "{{ vault_bootstrap_molecule_canonical_key_one_effective }}"
+                  - "{{ vault_bootstrap_molecule_canonical_key_two_effective }}"
                 unseal_shares: 2
                 unseal_threshold: 1
-                root_token: unit-test-root-token
+                root_token: "{{ vault_bootstrap_molecule_canonical_token_effective }}"
             vault_bootstrap_init_payload: "{{ vault_bootstrap_controller_init_document.vault_init }}"
             vault_bootstrap_unseal_keys: "{{ vault_bootstrap_init_payload.unseal_keys_b64 }}"
             vault_bootstrap_token: "{{ vault_bootstrap_init_payload.root_token }}"
@@ -319,10 +430,12 @@
             dest: "{{ vault_bootstrap_molecule_controller_root }}/plaintext-init.yml"
             content: |-
               vault_init:
-                unseal_keys_b64: [unit-test-share-one, unit-test-share-two]
+                unseal_keys_b64:
+                  - "{{ vault_bootstrap_molecule_canonical_key_one_effective }}"
+                  - "{{ vault_bootstrap_molecule_canonical_key_two_effective }}"
                 unseal_shares: 2
                 unseal_threshold: 2
-                root_token: unit-test-root-token
+                root_token: "{{ vault_bootstrap_molecule_canonical_token_effective }}"
             mode: "0600"
           no_log: true
 
@@ -357,10 +470,14 @@
             vault_bootstrap_key_threshold: 2
             vault_bootstrap_controller_init_document:
               vault_init:
-                unseal_keys_b64: ["unit-test-share-one\ninjected", unit-test-share-two]
+                unseal_keys_b64:
+                  - |-
+                    {{ vault_bootstrap_molecule_canonical_key_one_effective }}
+                    {{ vault_bootstrap_molecule_injected_suffix_effective }}
+                  - "{{ vault_bootstrap_molecule_canonical_key_two_effective }}"
                 unseal_shares: 2
                 unseal_threshold: 2
-                root_token: unit-test-root-token
+                root_token: "{{ vault_bootstrap_molecule_canonical_token_effective }}"
             vault_bootstrap_init_payload: "{{ vault_bootstrap_controller_init_document.vault_init }}"
             vault_bootstrap_unseal_keys: "{{ vault_bootstrap_init_payload.unseal_keys_b64 }}"
             vault_bootstrap_token: "{{ vault_bootstrap_init_payload.root_token }}"
@@ -409,13 +526,15 @@
             vault_bootstrap_write_init_file_on_init: true
             vault_bootstrap_ansible_vault_password_file: >-
               {{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') }}
-            vault_bootstrap_ansible_vault_password: unit-test-only-rejected-password
+            vault_bootstrap_ansible_vault_password: >-
+              {{ vault_bootstrap_molecule_rejected_password_effective }}
             vault_bootstrap_init_payload: {}
             vault_bootstrap_controller_escrow_root_path: "{{ vault_bootstrap_molecule_controller_root }}"
             vault_bootstrap_controller_init_file_path: "{{ vault_bootstrap_molecule_controller_file }}"
             vault_bootstrap_persist_dir: "{{ vault_bootstrap_molecule_target_dir }}"
             vault_bootstrap_init_file_path: "{{ vault_bootstrap_molecule_target_file }}"
             vault_bootstrap_initialized: true
+          no_log: true
 
       rescue:
         - name: Record plaintext password fallback refusal
@@ -552,11 +671,11 @@
         _vault_scoped_approle_role_id_response:
           json:
             data:
-              role_id: molecule-role-id-fixture
+              role_id: "{{ vault_bootstrap_molecule_role_id_effective }}"
         _vault_scoped_approle_secret_id_response:
           json:
             data:
-              secret_id: molecule-secret-id-fixture
+              secret_id: "{{ vault_bootstrap_molecule_secret_id_effective }}"
       changed_when: false
       no_log: true
 
@@ -584,7 +703,7 @@
         _vault_scoped_approle_login:
           json:
             auth:
-              client_token: molecule-batch-token-fixture
+              client_token: "{{ vault_bootstrap_molecule_batch_token_effective }}"
               token_policies:
                 - molecule-automation
               lease_duration: 1200

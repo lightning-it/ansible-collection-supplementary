@@ -9,6 +9,8 @@ still use the existing kubeplay path.
 This first implementation deploys Checkmk and writes a documented monitoring
 target hook file at `{{ checkmk_deploy_config_dir }}/monitoring-targets.yml`.
 Full Checkmk object provisioning is intentionally left for a later CaC role.
+Because the rendered Pod manifest contains the effective admin password, it is
+written as `root:root` with mode `0600` and its task output is never logged.
 
 ## Key Variables
 

@@ -12,6 +12,9 @@
     keycloak_heavy_cac_operator_password: "{{ lookup('env', 'KEYCLOAK_TEST_CAC_OPERATOR_PASSWORD') }}"
     keycloak_heavy_cac_denied_password: "{{ lookup('env', 'KEYCLOAK_TEST_CAC_DENIED_PASSWORD') }}"
     keycloak_heavy_client_secret: "{{ lookup('env', 'KEYCLOAK_TEST_CLIENT_SECRET') }}"
+    keycloak_heavy_invalid_password: >-
+      {{ lookup('ansible.builtin.password', '/dev/null',
+                length=32, chars=['ascii_letters', 'digits']) }}
     keycloak_heavy_junit_dir: "{{ lookup('env', 'KEYCLOAK_JUNIT_DIR') | default('artifacts/junit', true) }}"
     keycloak_heavy_ldap_ca: /srv/keycloak-heavy/ldap/tls/ca.crt
   tasks:
@@ -268,7 +271,7 @@
           client_id: keycloak-test-client
           client_secret: "{{ keycloak_heavy_client_secret }}"
           username: ldap.viewer
-          password: deliberately-invalid
+          password: "{{ keycloak_heavy_invalid_password }}"
         # RFC 6749 section 5.2 requires invalid resource-owner credentials to
         # use the invalid_grant error response with HTTP 400.
         status_code: 400
@@ -287,7 +290,7 @@
           client_id: keycloak-test-client
           client_secret: "{{ keycloak_heavy_client_secret }}"
           username: keycloak_test_viewer
-          password: deliberately-invalid
+          password: "{{ keycloak_heavy_invalid_password }}"
         # RFC 6749 section 5.2 also classifies invalid local resource-owner
         # credentials as invalid_grant and requires HTTP 400.
         status_code: 400
