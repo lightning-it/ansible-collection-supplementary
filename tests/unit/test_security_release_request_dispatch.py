@@ -148,14 +148,23 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             MODULE.build_envelope(self.root, REPOSITORY, self.base, head, NOW),
         )
 
-    def test_controller_workflow_is_default_branch_bound_and_least_privilege(self) -> None:
+    def test_controller_workflow_relays_to_main_and_is_least_privilege(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("workflow_run:", workflow)
         self.assertIn("workflows: [Collection CI]", workflow)
         self.assertIn("branches: [develop]", workflow)
-        self.assertNotIn("workflow_dispatch:", workflow)
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertIn("source-run-id:", workflow)
         self.assertNotIn("pull_request:", workflow)
         self.assertIn("github.event.workflow_run.event == 'push'", workflow)
+        self.assertIn("gh workflow run security-release-dispatch.yml", workflow)
+        self.assertIn("--ref main", workflow)
+        self.assertIn("github.event_name == 'workflow_dispatch'", workflow)
+        self.assertIn("github.ref == 'refs/heads/main'", workflow)
+        self.assertIn('(.name == "Collection CI")', workflow)
+        self.assertIn(
+            '(.path == ".github/workflows/collection-ci.yml")', workflow
+        )
         self.assertEqual(2, workflow.count("ref: ${{ github.sha }}"))
         self.assertNotIn("ref: ${{ github.event.workflow_run.head_sha }}", workflow)
         self.assertNotIn("ref: ${{ needs.classify.outputs.source-sha }}", workflow)
