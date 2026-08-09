@@ -12,9 +12,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "scripts"))
-
-import security_release_contract as CONTRACT  # noqa: E402
+SCRIPTS = str(ROOT / "scripts")
+sys.path.insert(0, SCRIPTS)
+try:
+    import security_release_contract as CONTRACT  # noqa: E402
+finally:
+    sys.path.remove(SCRIPTS)
 
 VERSION = "3.2.4"
 EVIDENCE_ID = "MLX90-KEYCLOAK-26.7.1-3.2.4"
@@ -116,10 +119,11 @@ class SecurityReleaseContractTests(unittest.TestCase):
         }
         self.fragment_raw = fragment
 
-    def _receipt(self) -> dict[str, object]:
+    def _receipt(self, *, checked_at: datetime = NOW) -> dict[str, object]:
         return CONTRACT.build_intake_receipt(
             self.request,
             self.verified,
+            checked_at=checked_at,
             workflow_run_id="123456",
             workflow_attempt="1",
             workflow_ref=(
@@ -164,7 +168,7 @@ class SecurityReleaseContractTests(unittest.TestCase):
     def test_request_and_receipt_are_exact_duplicate_safe_and_app_bound(self) -> None:
         CONTRACT.validate_request(self.request, CONTRACT.PRODUCER_REPOSITORY, NOW)
         receipt = self._receipt()
-        CONTRACT.verify_intake_receipt(receipt)
+        CONTRACT.verify_intake_receipt(receipt, checked_at=NOW)
         self.assertEqual(CONTRACT.RELEASE_APP_IDENTITY, receipt["automation"])
 
         mutations = (
@@ -181,7 +185,13 @@ class SecurityReleaseContractTests(unittest.TestCase):
                 tampered = copy.deepcopy(receipt)
                 mutate(tampered)
                 with self.assertRaises(CONTRACT.ContractError):
-                    CONTRACT.verify_intake_receipt(tampered)
+                    CONTRACT.verify_intake_receipt(tampered, checked_at=NOW)
+
+        after_expiry = datetime(2026, 9, 8, 22, 30, tzinfo=UTC)
+        with self.assertRaisesRegex(CONTRACT.ContractError, "not currently valid"):
+            CONTRACT.verify_intake_receipt(receipt, checked_at=after_expiry)
+        with self.assertRaisesRegex(CONTRACT.ContractError, "not currently valid"):
+            self._receipt(checked_at=after_expiry)
 
         with self.assertRaisesRegex(CONTRACT.ContractError, "duplicate JSON key"):
             CONTRACT.load_json_bytes(b'{"schemaVersion":2,"schemaVersion":2}', "receipt")
@@ -201,6 +211,7 @@ class SecurityReleaseContractTests(unittest.TestCase):
             CONTRACT.build_intake_receipt(
                 self.request,
                 self.verified,
+                checked_at=NOW,
                 workflow_run_id="123456",
                 workflow_attempt="1",
                 workflow_ref=(

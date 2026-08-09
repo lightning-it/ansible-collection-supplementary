@@ -480,6 +480,7 @@ def build_intake_receipt(
     request: dict[str, Any],
     verified: dict[str, Any],
     *,
+    checked_at: datetime,
     workflow_run_id: str,
     workflow_attempt: str,
     workflow_ref: str,
@@ -487,7 +488,7 @@ def build_intake_receipt(
     workflow_actor: str,
     observed_automation: dict[str, Any],
 ) -> dict[str, Any]:
-    validate_request(request, PRODUCER_REPOSITORY, timestamp(request["issuedAt"], "issuedAt"))
+    validate_request(request, PRODUCER_REPOSITORY, checked_at)
     validate_intake_result(request, verified)
     if observed_automation != RELEASE_APP_IDENTITY:
         fail("observed release automation identity is unauthorized")
@@ -508,11 +509,15 @@ def build_intake_receipt(
             "actor": workflow_actor,
         },
     }
-    verify_intake_receipt(receipt)
+    verify_intake_receipt(receipt, checked_at=checked_at)
     return receipt
 
 
-def verify_intake_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
+def verify_intake_receipt(
+    receipt: dict[str, Any],
+    *,
+    checked_at: datetime,
+) -> dict[str, Any]:
     exact_keys(receipt, INTAKE_RECEIPT_KEYS, "Security intake receipt")
     if type(receipt["schemaVersion"]) is not int or receipt["schemaVersion"] != INTAKE_RECEIPT_SCHEMA_VERSION:
         fail(f"Security intake receipt schemaVersion must be {INTAKE_RECEIPT_SCHEMA_VERSION}")
@@ -520,7 +525,7 @@ def verify_intake_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     verified = receipt["verified"]
     if not isinstance(request, dict) or not isinstance(verified, dict):
         fail("Security intake receipt request and verified values must be objects")
-    validate_request(request, PRODUCER_REPOSITORY, timestamp(request.get("issuedAt"), "issuedAt"))
+    validate_request(request, PRODUCER_REPOSITORY, checked_at)
     validate_intake_result(request, verified)
     if receipt["chainId"] != request["chainId"]:
         fail("Security intake receipt chainId differs from its request")
@@ -574,7 +579,7 @@ def load_security_binding(
     receipt = load_json_bytes(intake_raw, "Security intake receipt")
     if intake_raw != canonical_document_bytes(receipt):
         fail("Security intake receipt is not canonical JSON")
-    verify_intake_receipt(receipt)
+    verify_intake_receipt(receipt, checked_at=checked_at)
     request = receipt["request"]
     verified = receipt["verified"]
     if request["fixedVersion"] != version:

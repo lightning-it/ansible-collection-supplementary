@@ -70,7 +70,7 @@ class MainPromotionMergeGateTests(unittest.TestCase):
         )
 
     def test_final_gate_succeeds_only_when_both_upstreams_succeed(self) -> None:
-        command = "set -euo pipefail\n" + FINAL_STEP["run"]
+        command = FINAL_STEP["run"]
         bash = shutil.which("bash")
         if bash is None:
             self.fail("bash is required for the final-gate regression test")

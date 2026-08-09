@@ -56,6 +56,8 @@ class WorkflowSecurityTests(unittest.TestCase):
     def test_copilot_instructions_bind_the_exact_agent_contract(self) -> None:
         agents_digest = hashlib.sha256((ROOT / "AGENTS.md").read_bytes()).hexdigest()
         instructions = (ROOT / ".github" / "copilot-instructions.md").read_text(encoding="utf-8").splitlines()
+        while instructions and not instructions[-1].strip():
+            instructions.pop()
         self.assertEqual(
             [
                 "<!-- Managed contract: Codex and Copilot must apply AGENTS.md. -->",
