@@ -166,11 +166,16 @@ def load_json_bytes(raw: bytes, label: str) -> dict[str, Any]:
     return value
 
 
+def is_exact_int(value: object) -> bool:
+    """Accept integers while rejecting bool, which is an int subclass."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def read_bounded_regular_file(root: Path, relative_path: Path, label: str, limit: int) -> bytes:
     """Read a bounded regular file through non-symlink descendants of ``root``."""
     nofollow_flag = getattr(os, "O_NOFOLLOW", None)
     directory_flag = getattr(os, "O_DIRECTORY", None)
-    if type(nofollow_flag) is not int or type(directory_flag) is not int or os.open not in os.supports_dir_fd:
+    if not is_exact_int(nofollow_flag) or not is_exact_int(directory_flag) or os.open not in os.supports_dir_fd:
         fail(f"{label} cannot prove non-symlink reads on this platform")
     parts = relative_path.parts
     if relative_path.is_absolute() or not parts or any(part in {"", ".", ".."} for part in parts):
@@ -302,13 +307,34 @@ def chain_binding(
     return binding
 
 
-def compute_chain_id(**values: str) -> str:
-    return canonical_sha256(chain_binding(**values))
+def compute_chain_id(
+    *,
+    repository: str,
+    repository_id: str,
+    base_sha: str,
+    candidate_head_sha: str,
+    candidate_diff_sha256: str,
+    evidence_id: str,
+    fixed_version: str,
+    acceptance_profile: str,
+) -> str:
+    return canonical_sha256(
+        chain_binding(
+            repository=repository,
+            repository_id=repository_id,
+            base_sha=base_sha,
+            candidate_head_sha=candidate_head_sha,
+            candidate_diff_sha256=candidate_diff_sha256,
+            evidence_id=evidence_id,
+            fixed_version=fixed_version,
+            acceptance_profile=acceptance_profile,
+        )
+    )
 
 
 def validate_request(request: dict[str, Any], repository: str, now: datetime) -> dict[str, Any]:
     exact_keys(request, REQUEST_KEYS, "Security intake request")
-    if type(request["schemaVersion"]) is not int or request["schemaVersion"] != INTAKE_REQUEST_SCHEMA_VERSION:
+    if not is_exact_int(request["schemaVersion"]) or request["schemaVersion"] != INTAKE_REQUEST_SCHEMA_VERSION:
         fail(f"Security intake schemaVersion must be {INTAKE_REQUEST_SCHEMA_VERSION}")
     if repository != PRODUCER_REPOSITORY or request["repository"] != repository:
         fail("Security intake repository does not match the exact producer repository")
@@ -316,7 +342,7 @@ def validate_request(request: dict[str, Any], repository: str, now: datetime) ->
         fail("Security intake repositoryId does not match the exact producer repository")
     if request["event"] != "mlx90-security-release":
         fail("Security intake event is unsupported")
-    if type(request["humanActions"]) is not int or request["humanActions"] != 0:
+    if not is_exact_int(request["humanActions"]) or request["humanActions"] != 0:
         fail("Security Zero-Touch intake must declare humanActions=0")
 
     for field in ("baseSha", "candidateBaseSha", "candidateHeadSha"):
@@ -379,7 +405,7 @@ def validate_metadata_payload(
     checked_at: datetime,
 ) -> dict[str, Any]:
     exact_keys(metadata, METADATA_KEYS, "Security release metadata")
-    if type(metadata["schemaVersion"]) is not int or metadata["schemaVersion"] != 1:
+    if not is_exact_int(metadata["schemaVersion"]) or metadata["schemaVersion"] != 1:
         fail("Security release metadata schemaVersion must be 1")
     if metadata["evidenceId"] != expected_evidence_id:
         fail("Security metadata evidenceId does not match the intake")
@@ -430,7 +456,7 @@ def validate_profile_registry(registry: dict[str, Any], profile_id: str) -> dict
     """Validate the exact protected-main profile registry and selected profile."""
 
     exact_keys(registry, {"schemaVersion", "profiles"}, "acceptance-profile registry")
-    if type(registry["schemaVersion"]) is not int or registry["schemaVersion"] != 1:
+    if not is_exact_int(registry["schemaVersion"]) or registry["schemaVersion"] != 1:
         fail("acceptance-profile registry is unsupported")
     profiles = registry["profiles"]
     if not isinstance(profiles, dict) or not profiles:
@@ -442,7 +468,7 @@ def validate_profile_registry(registry: dict[str, Any], profile_id: str) -> dict
             fail(f"acceptance profile {name} must be an object")
         exact_keys(profile, PROFILE_KEYS, f"acceptance profile {name}")
         require_string(profile["description"], f"acceptance profile {name} description")
-        if type(profile["releaseEligible"]) is not bool:
+        if not isinstance(profile["releaseEligible"], bool):
             fail(f"acceptance profile {name} releaseEligible must be boolean")
     selected = profiles.get(profile_id)
     if not isinstance(selected, dict) or selected["releaseEligible"] is not True:
@@ -482,9 +508,9 @@ def validate_immutable_marker_changes(changes: list[tuple[str, str]], fixed_vers
 
 def validate_intake_result(request: dict[str, Any], verified: dict[str, Any]) -> dict[str, Any]:
     exact_keys(verified, VERIFIED_KEYS, "verified Security intake")
-    if type(verified["schemaVersion"]) is not int or verified["schemaVersion"] != INTAKE_RESULT_SCHEMA_VERSION:
+    if not is_exact_int(verified["schemaVersion"]) or verified["schemaVersion"] != INTAKE_RESULT_SCHEMA_VERSION:
         fail(f"verified Security intake schemaVersion must be {INTAKE_RESULT_SCHEMA_VERSION}")
-    if type(verified["humanActions"]) is not int or verified["humanActions"] != 0:
+    if not is_exact_int(verified["humanActions"]) or verified["humanActions"] != 0:
         fail("verified Security intake must declare humanActions=0")
     expected = {
         "chainId": request["chainId"],
@@ -564,7 +590,7 @@ def verify_intake_receipt(
     checked_at: datetime,
 ) -> dict[str, Any]:
     exact_keys(receipt, INTAKE_RECEIPT_KEYS, "Security intake receipt")
-    if type(receipt["schemaVersion"]) is not int or receipt["schemaVersion"] != INTAKE_RECEIPT_SCHEMA_VERSION:
+    if not is_exact_int(receipt["schemaVersion"]) or receipt["schemaVersion"] != INTAKE_RECEIPT_SCHEMA_VERSION:
         fail(f"Security intake receipt schemaVersion must be {INTAKE_RECEIPT_SCHEMA_VERSION}")
     request = receipt["request"]
     verified = receipt["verified"]
