@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = str(ROOT / "scripts")
@@ -351,6 +352,12 @@ class SecurityReleaseContractTests(unittest.TestCase):
         profiles_path.write_bytes(b"x" * (CONTRACT.MAX_JSON_BYTES + 1))
         with self.assertRaisesRegex(CONTRACT.ContractError, "profile registry exceeds"):
             CONTRACT.load_json_file(profiles_path, "profile registry")
+
+    def test_bounded_read_fails_closed_without_nofollow_support(self) -> None:
+        profiles_path = self.root / ".lit/security-release-profiles.json"
+        with patch.object(CONTRACT.os, "O_NOFOLLOW", None):
+            with self.assertRaisesRegex(CONTRACT.ContractError, "cannot prove non-symlink reads"):
+                CONTRACT.load_json_file(profiles_path, "profile registry")
 
     def test_request_metadata_profile_and_pending_marker_contracts_are_exact(
         self,

@@ -167,11 +167,13 @@ def load_json_bytes(raw: bytes, label: str) -> dict[str, Any]:
 
 def read_bounded_regular_file(path: Path, label: str, limit: int) -> bytes:
     """Read at most ``limit`` bytes from one non-symlink regular file."""
+    nofollow_flag = getattr(os, "O_NOFOLLOW", None)
+    if type(nofollow_flag) is not int:
+        fail(f"{label} cannot prove non-symlink reads on this platform")
     flags = os.O_RDONLY
     if hasattr(os, "O_CLOEXEC"):
         flags |= os.O_CLOEXEC
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
+    flags |= nofollow_flag
     try:
         descriptor = os.open(path, flags)
     except (FileNotFoundError, NotADirectoryError, OSError) as exc:
