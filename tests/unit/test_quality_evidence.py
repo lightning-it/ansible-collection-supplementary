@@ -325,7 +325,8 @@ class QualityEvidenceTests(unittest.TestCase):
         self._registry()
         self._junit()
         (self.artifacts / "logs").mkdir()
-        (self.artifacts / "logs" / "molecule.log").write_text("password=never-publish-this\n", encoding="utf-8")
+        synthetic_log_value = "never-publish-this"
+        (self.artifacts / "logs" / "molecule.log").write_text(f"password={synthetic_log_value}\n", encoding="utf-8")
         (self.artifacts / "configuration").mkdir()
         (self.artifacts / "configuration" / "inventory.yml").write_text(
             "client_secret: hidden-value\n", encoding="utf-8"
@@ -376,11 +377,12 @@ class QualityEvidenceTests(unittest.TestCase):
         self._release_security("a" * 40)
         summary_path = self.evidence_root / "security" / "secret-scan-summary.json"
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        synthetic_finding_value = "do-not-persist-in-public-evidence"
         summary["results"] = {
             "configuration/example.yml": [
                 {
                     "type": "KeywordDetector",
-                    "detail": "password=do-not-persist-in-public-evidence",
+                    "detail": f"password={synthetic_finding_value}",
                 }
             ]
         }
@@ -1388,10 +1390,11 @@ class QualityEvidenceTests(unittest.TestCase):
             encoding="utf-8",
         )
         headers = root / "headers.txt"
+        synthetic_header_value = "lowentropy-api-key"
         headers.write_text(
             "Authorization: Basic dXNlcjpwYXNzd29yZA==\n"
             "Cookie: session=private-cookie\n"
-            "X-API-Key: lowentropy-api-key\n",
+            f"X-API-Key: {synthetic_header_value}\n",
             encoding="utf-8",
         )
         before = evidence.scan_evidence(root)

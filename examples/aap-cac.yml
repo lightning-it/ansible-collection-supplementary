@@ -509,11 +509,11 @@ ee_list:
 # They are listed here as non-secret documentation values and must not be
 # committed with real credentials.
 aap_cac_demo_required_vault_variables:
-  vault_demo_aap_admin_password: "REPLACE_IN_ANSIBLE_VAULT"
-  vault_demo_operator_password: "REPLACE_IN_ANSIBLE_VAULT"
-  vault_demo_api_token: "REPLACE_IN_ANSIBLE_VAULT"
-  vault_demo_machine_password: "REPLACE_IN_ANSIBLE_VAULT"
-  vault_demo_become_password: "REPLACE_IN_ANSIBLE_VAULT"
-  vault_demo_scm_token: "REPLACE_IN_ANSIBLE_VAULT"
-  vault_demo_external_lookup_client_key: "REPLACE_IN_ANSIBLE_VAULT"
-  vault_demo_smtp_password: "REPLACE_IN_ANSIBLE_VAULT"
+  vault_demo_aap_admin_password: "VAULT_REQUIRED"
+  vault_demo_operator_password: "VAULT_REQUIRED"
+  vault_demo_api_token: "VAULT_REQUIRED"
+  vault_demo_machine_password: "VAULT_REQUIRED"
+  vault_demo_become_password: "VAULT_REQUIRED"
+  vault_demo_scm_token: "VAULT_REQUIRED"
+  vault_demo_external_lookup_client_key: "VAULT_REQUIRED"
+  vault_demo_smtp_password: "VAULT_REQUIRED"

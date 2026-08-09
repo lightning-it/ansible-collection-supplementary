@@ -114,7 +114,7 @@
         grafana_deploy_public_fqdn: grafana.example.invalid
         grafana_deploy_root_url: http://127.0.0.1:3000
         grafana_deploy_loki_url: http://127.0.0.1:3100
-        grafana_deploy_admin_password: molecule-grafana-admin-password
+        grafana_deploy_admin_password: test-grafana
     - role: checkmk_deploy
       vars:
         checkmk_deploy_install_packages: false
@@ -130,4 +130,4 @@
         checkmk_deploy_systemd_description: Molecule Checkmk container service
         checkmk_deploy_public_fqdn: checkmk.example.invalid
         checkmk_deploy_public_url: http://127.0.0.1:5000
-        checkmk_deploy_admin_password: molecule-checkmk-admin-password
+        checkmk_deploy_admin_password: test-checkmk

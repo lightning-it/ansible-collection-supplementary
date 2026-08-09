@@ -1,0 +1,10 @@
+---
+bugfixes:
+  - >-
+    Remove the credential-shaped literals from documented and test-only
+    fixtures without weakening the shared push-ready scanner. The temporary
+    centrally managed manifest intentionally remains unchanged for this
+    cleanup PR: the review engine reads it from the authoritative base and
+    masks only exact old path, line, and content matches. Shared Assets retires
+    that manifest through its guarded synchronizer only after this cleanup is
+    merged, so replacement or newly introduced lines remain fully scanned.

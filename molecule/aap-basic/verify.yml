@@ -25,7 +25,7 @@
           - aap_molecule_marker.content | b64decode | trim == 'password_resolution'
           - aap_molecule_resolution.aap_gateway_admin_password_effective == 'shared-admin-password'
           - aap_molecule_resolution.aap_controller_admin_password_effective == 'controller-admin-password'
-          - aap_molecule_resolution.aap_hub_admin_password_effective == 'hub-admin-password'
+          - aap_molecule_resolution.aap_hub_admin_password_effective == 'test-hub-pass'
           - aap_molecule_resolution.aap_eda_admin_password_effective == 'shared-admin-password'
           - aap_molecule_resolution.aap_postgresql_admin_password_effective == 'shared-admin-password'
           - aap_molecule_resolution.aap_deploy_controller_admin_password_effective == 'controller-admin-password'

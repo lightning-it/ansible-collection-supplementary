@@ -268,7 +268,7 @@
           client_id: keycloak-test-client
           client_secret: "{{ keycloak_heavy_client_secret }}"
           username: ldap.viewer
-          password: deliberately-invalid
+          password: invalid-test
         # RFC 6749 section 5.2 requires invalid resource-owner credentials to
         # use the invalid_grant error response with HTTP 400.
         status_code: 400
@@ -287,7 +287,7 @@
           client_id: keycloak-test-client
           client_secret: "{{ keycloak_heavy_client_secret }}"
           username: keycloak_test_viewer
-          password: deliberately-invalid
+          password: invalid-test
         # RFC 6749 section 5.2 also classifies invalid local resource-owner
         # credentials as invalid_grant and requires HTTP 400.
         status_code: 400

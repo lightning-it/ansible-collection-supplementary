@@ -20,7 +20,7 @@
     aap_controller_admin_password_input:
       value: controller-admin-password
     aap_hub_admin_password_input:
-      password: hub-admin-password
+      password: test-hub-pass
   tasks:
     - name: Import lit.supplementary.aap for password resolution coverage
       ansible.builtin.import_role:

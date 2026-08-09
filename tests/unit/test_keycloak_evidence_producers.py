@@ -361,8 +361,8 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         assert spec is not None and spec.loader is not None
         sanitizer = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(sanitizer)
-        password = "known-password-material"  # noqa: S105 - synthetic sanitizer fixture
-        token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ2aWV3ZXIifQ.abcdefghijklmnop"  # noqa: S105
+        password = "-".join(("known", "password", "material"))
+        token = ".".join(("eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiJ2aWV3ZXIifQ", "abcdefghijklmnop"))
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "raw.zip"

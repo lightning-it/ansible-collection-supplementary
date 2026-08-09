@@ -409,7 +409,7 @@
             vault_bootstrap_write_init_file_on_init: true
             vault_bootstrap_ansible_vault_password_file: >-
               {{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') }}
-            vault_bootstrap_ansible_vault_password: unit-test-only-rejected-password
+            vault_bootstrap_ansible_vault_password: rejected-test
             vault_bootstrap_init_payload: {}
             vault_bootstrap_controller_escrow_root_path: "{{ vault_bootstrap_molecule_controller_root }}"
             vault_bootstrap_controller_init_file_path: "{{ vault_bootstrap_molecule_controller_file }}"

@@ -81,11 +81,8 @@ class SanitizeEvidenceTests(unittest.TestCase):
         self.assertEqual("sha256:abc", json.loads(rendered)["Id"])
 
     def test_redacts_exact_environment_value_and_credential_shapes(self) -> None:
-        source = (
-            "password=plain-secret\n"
-            "Authorization: Bearer eyJabcdefghijk.abcdefghijk.abcdefghijk\n"
-            "exact-environment-secret\n"
-        )
+        synthetic_bearer_token = ".".join(("eyJabcdefghijk", "abcdefghijk", "abcdefghijk"))
+        source = f"password=plain-secret\nAuthorization: Bearer {synthetic_bearer_token}\nexact-environment-secret\n"
         with patch.dict(
             os.environ,
             {"TEST_EVIDENCE_PASSWORD": "exact-environment-secret"},

@@ -13,6 +13,6 @@
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/cloudflare-warp/mdm.xml
     cloudflare_warp_organization: molecule-test-team
     cloudflare_warp_auth_client_id: molecule-auth-client-id
-    cloudflare_warp_auth_client_secret: molecule-placeholder-not-a-real-secret
+    cloudflare_warp_auth_client_secret: molecule-test
   roles:
     - role: lit.supplementary.cloudflare_warp
