@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import stat
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, NoReturn
@@ -163,10 +165,37 @@ def load_json_bytes(raw: bytes, label: str) -> dict[str, Any]:
     return value
 
 
+def read_bounded_regular_file(path: Path, label: str, limit: int) -> bytes:
+    """Read at most ``limit`` bytes from one non-symlink regular file."""
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except (FileNotFoundError, NotADirectoryError, OSError) as exc:
+        raise ContractError(f"{label} must be a regular non-symlink file") from exc
+    try:
+        file_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(file_stat.st_mode):
+            fail(f"{label} must be a regular non-symlink file")
+        if file_stat.st_size > limit:
+            fail(f"{label} exceeds {limit} bytes")
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            raw = stream.read(limit + 1)
+    finally:
+        os.close(descriptor)
+    if len(raw) > limit:
+        fail(f"{label} exceeds {limit} bytes")
+    return raw
+
+
 def load_json_file(path: Path, label: str) -> dict[str, Any]:
-    if path.is_symlink() or not path.is_file():
-        fail(f"{label} must be a regular non-symlink file")
-    return load_json_bytes(path.read_bytes(), label)
+    return load_json_bytes(
+        read_bounded_regular_file(path, label, MAX_JSON_BYTES),
+        label,
+    )
 
 
 def exact_keys(value: dict[str, Any], expected: set[str], label: str) -> None:
@@ -569,13 +598,19 @@ def load_security_binding(
     if metadata_exists != intake_exists:
         fail("partial Security marker: metadata and App-owned intake receipt must exist together")
 
-    metadata_raw = metadata_path.read_bytes() if metadata_path.is_file() and not metadata_path.is_symlink() else b""
+    metadata_raw = read_bounded_regular_file(
+        metadata_path,
+        "Security metadata",
+        MAX_JSON_BYTES,
+    )
     if not metadata_raw:
         fail("Security metadata must be a non-empty regular non-symlink file")
-    if intake_path.is_symlink() or not intake_path.is_file():
-        fail("Security intake receipt must be a regular non-symlink file")
     metadata = load_json_bytes(metadata_raw, "Security release metadata")
-    intake_raw = intake_path.read_bytes()
+    intake_raw = read_bounded_regular_file(
+        intake_path,
+        "Security intake receipt",
+        MAX_JSON_BYTES,
+    )
     receipt = load_json_bytes(intake_raw, "Security intake receipt")
     if intake_raw != canonical_document_bytes(receipt):
         fail("Security intake receipt is not canonical JSON")
@@ -597,9 +632,11 @@ def load_security_binding(
     validate_request_metadata_binding(request, metadata)
     fragment_path_text = verified["changelogFragmentPath"]
     fragment_path = root / fragment_path_text
-    if fragment_path.is_symlink() or not fragment_path.is_file():
-        fail("Security changelog fragment must be a regular non-symlink file")
-    fragment_raw = fragment_path.read_bytes()
+    fragment_raw = read_bounded_regular_file(
+        fragment_path,
+        "Security changelog fragment",
+        MAX_SECURITY_FRAGMENT_BYTES,
+    )
     validate_security_fragment(fragment_raw, "Security changelog fragment")
     fragment_digest = sha256_bytes(fragment_raw)
     if verified["changelogFragmentSha256"] != fragment_digest:
@@ -635,7 +672,10 @@ def _security_marker_versions(root: Path, relative_directory: str) -> set[tuple[
     for path in directory.iterdir():
         if path.name == ".gitkeep":
             continue
-        match = re.fullmatch(r"((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))\.json", path.name)
+        match = re.fullmatch(
+            r"((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))\.json",
+            path.name,
+        )
         if match is None:
             fail(f"Security marker namespace contains an invalid entry: {relative_directory}/{path.name}")
         if path.is_symlink() or not path.is_file():

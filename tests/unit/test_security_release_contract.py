@@ -255,7 +255,9 @@ class SecurityReleaseContractTests(unittest.TestCase):
                 checked_at=NOW,
             )
 
-    def test_immutable_markers_reject_receipts_and_existing_metadata_in_candidate(self) -> None:
+    def test_immutable_markers_reject_receipts_and_existing_metadata_in_candidate(
+        self,
+    ) -> None:
         metadata_path = f".lit/security-releases/{VERSION}.json"
         valid = [
             ("A", metadata_path),
@@ -292,7 +294,10 @@ class SecurityReleaseContractTests(unittest.TestCase):
         binding = CONTRACT.load_security_binding(self.root, VERSION, checked_at=NOW)
         assert binding is not None
         self.assertEqual(self.request["chainId"], binding["chain_id"])
-        self.assertEqual(CONTRACT.sha256_bytes(receipt_path.read_bytes()), binding["intake_receipt_sha256"])
+        self.assertEqual(
+            CONTRACT.sha256_bytes(receipt_path.read_bytes()),
+            binding["intake_receipt_sha256"],
+        )
 
         receipt_path.write_text(
             json.dumps(receipt, indent=2, sort_keys=True) + "\n",
@@ -320,7 +325,36 @@ class SecurityReleaseContractTests(unittest.TestCase):
         with self.assertRaisesRegex(CONTRACT.ContractError, "digest differs"):
             CONTRACT.load_security_binding(self.root, VERSION, checked_at=NOW)
 
-    def test_request_metadata_profile_and_pending_marker_contracts_are_exact(self) -> None:
+    def test_binding_rejects_oversized_files_before_parsing(self) -> None:
+        self._write_binding()
+        metadata_path = self.root / f".lit/security-releases/{VERSION}.json"
+        receipt_path = self.root / f".lit/security-release-intakes/{VERSION}.json"
+        fragment_path = self.root / self.verified["changelogFragmentPath"]
+        profiles_path = self.root / ".lit/security-release-profiles.json"
+
+        for path, limit, label in (
+            (metadata_path, CONTRACT.MAX_JSON_BYTES, "Security metadata exceeds"),
+            (receipt_path, CONTRACT.MAX_JSON_BYTES, "Security intake receipt exceeds"),
+            (
+                fragment_path,
+                CONTRACT.MAX_SECURITY_FRAGMENT_BYTES,
+                "Security changelog fragment exceeds",
+            ),
+        ):
+            original = path.read_bytes()
+            with self.subTest(path=path):
+                path.write_bytes(b"x" * (limit + 1))
+                with self.assertRaisesRegex(CONTRACT.ContractError, label):
+                    CONTRACT.load_security_binding(self.root, VERSION, checked_at=NOW)
+                path.write_bytes(original)
+
+        profiles_path.write_bytes(b"x" * (CONTRACT.MAX_JSON_BYTES + 1))
+        with self.assertRaisesRegex(CONTRACT.ContractError, "profile registry exceeds"):
+            CONTRACT.load_json_file(profiles_path, "profile registry")
+
+    def test_request_metadata_profile_and_pending_marker_contracts_are_exact(
+        self,
+    ) -> None:
         metadata = copy.deepcopy(self.metadata)
         for field, value, message in (
             ("issuedAt", "2026-08-08T22:31:00Z", "issuedAt differs"),
