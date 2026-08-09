@@ -274,6 +274,19 @@ jobs:
           git merge-base --is-ancestor "origin/main" "${HEAD_SHA}"
           echo "Verified current protected develop head and main ancestry."
 
+      - name: Setup Python for trusted release receipt verification
+        if: steps.trusted-automation.outputs.kind == 'release-preparation'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install exact trusted release receipt dependency
+        if: steps.trusted-automation.outputs.kind == 'release-preparation'
+        run: >-
+          python -m pip install --disable-pip-version-check
+          PyYAML==6.0.3
+
       - name: Verify release preparation commit and bounded files
         if: steps.trusted-automation.outputs.kind == 'release-preparation'
         env:
@@ -281,6 +294,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RELEASE_TAG: ${{ steps.trusted-automation.outputs.release_tag }}
+          REPOSITORY_ID: ${{ github.repository_id }}
         run: |
           set -euo pipefail
           gh auth setup-git
@@ -308,19 +322,21 @@ jobs:
           }
           version="${RELEASE_TAG#v}"
           [ "$(git show "${HEAD_SHA}:galaxy.yml" | awk '$1 == "version:" {print $2; exit}')" = "${version}" ]
-          preparation="$(git show "${HEAD_SHA}:changelogs/release-preparation.json")"
-          jq -e \
-            --arg base "${BASE_SHA}" \
-            --arg repository "${GITHUB_REPOSITORY}" \
-            --arg version "${version}" \
-            '.schema_version == 1
-             and .base_sha == $base
-             and .next_version == $version
-             and .repository == $repository
-             and .preparer.login == "lightning-it-release-automation[bot]"
-             and .workflow.source_sha == $base' \
-            <<<"${preparation}" >/dev/null
-          echo "Verified single-parent release preparation and bounded generated files."
+          receipt="$RUNNER_TEMP/release-preparation-receipt.json"
+          base_tree="$RUNNER_TEMP/release-preparation-base"
+          test ! -e "$receipt"
+          test ! -e "$base_tree"
+          git show "${HEAD_SHA}:changelogs/release-preparation.json" > "$receipt"
+          git worktree add --detach --quiet "$base_tree" "$BASE_SHA"
+          test "$(git -C "$base_tree" rev-parse HEAD)" = "$BASE_SHA"
+          python "$base_tree/scripts/release-version.py" \
+            --verify-preparation-receipt "$receipt" \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$REPOSITORY_ID" \
+            --base-sha "$BASE_SHA" \
+            --expected-version "$version" \
+            --root "$base_tree" >/dev/null
+          echo "Verified schema-v2 preparation against the immutable base tree and bounded generated files."
 
       - name: Verify release back-sync merge and bounded files
         if: steps.trusted-automation.outputs.kind == 'release-backsync'

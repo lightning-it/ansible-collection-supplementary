@@ -81,6 +81,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          authenticated_fetch() {
+            git -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' fetch "$@"
+          }
+
           [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
           [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]]
           source_run="$RUNNER_TEMP/security-source-run.json"
@@ -103,7 +108,7 @@ jobs:
           SOURCE_SHA="$(jq -er .head_sha "$source_run")"
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$CONTROLLER_SHA"
-          git fetch --no-tags origin main develop
+          authenticated_fetch --no-tags origin main develop
           test "$(git rev-parse origin/main)" = "$CONTROLLER_SHA"
           test "$(git rev-parse origin/develop)" = "$SOURCE_SHA"
 
@@ -144,14 +149,20 @@ jobs:
         id: request
         env:
           CONTROLLER_SHA: ${{ github.sha }}
+          RUN_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.classify.outputs['source-sha'] }}
         run: |
           set -euo pipefail
 
+          authenticated_fetch() {
+            GH_TOKEN="$RUN_TOKEN" git -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' fetch "$@"
+          }
+
           [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$CONTROLLER_SHA"
-          git fetch --no-tags origin main develop
+          authenticated_fetch --no-tags origin main develop
           test "$(git rev-parse origin/main)" = "$CONTROLLER_SHA"
           test "$(git rev-parse origin/develop)" = "$SOURCE_SHA"
           result="$RUNNER_TEMP/security-dispatch-envelope.json"
@@ -165,6 +176,58 @@ jobs:
           jq -e '.dispatch == true and (.request.humanActions == 0)' "$result" >/dev/null
           echo "envelope=$result" >>"$GITHUB_OUTPUT"
 
+      - name: Mint installation-wide metadata-only App attestation token
+        id: release-app-metadata
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-metadata: read
+
+      - name: Verify exact App installation and repository scope
+        env:
+          APP_INSTALLATION_ID: ${{ steps.release-app-metadata.outputs.installation-id }}
+          APP_SLUG: ${{ steps.release-app-metadata.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.release-app-metadata.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          test "$APP_SLUG" = lightning-it-release-automation
+          test "$APP_INSTALLATION_ID" = 148019054
+          bot="$RUNNER_TEMP/security-dispatch-app-bot.json"
+          gh api "users/${APP_SLUG}%5Bbot%5D" >"$bot"
+          jq -e '
+            .login == "lightning-it-release-automation[bot]"
+            and .id == 307565056
+            and .type == "Bot"
+          ' "$bot" >/dev/null
+          app="$RUNNER_TEMP/security-dispatch-app.json"
+          gh api "apps/${APP_SLUG}" >"$app"
+          jq -e '
+            .slug == "lightning-it-release-automation"
+            and .owner.login == "lightning-it"
+            and .permissions == {
+              "actions": "write",
+              "checks": "read",
+              "contents": "write",
+              "metadata": "read",
+              "pull_requests": "write"
+            }
+          ' "$app" >/dev/null
+          repositories="$RUNNER_TEMP/security-dispatch-installation-repositories.json"
+          gh api --paginate --slurp \
+            'installation/repositories?per_page=100' >"$repositories"
+          jq -e '
+            [.[].repositories[].full_name] | sort == [
+              "lightning-it/ansible-collection-supplementary",
+              "lightning-it/container-ee-wunder-ansible-ubi9",
+              "lightning-it/github-management-lit",
+              "lightning-it/modulix-validation",
+              "lightning-it/shared-assets-lit"
+            ]
+          ' "$repositories" >/dev/null
+
       - name: Mint repository-scoped release automation App token
         id: release-app
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
@@ -173,35 +236,55 @@ jobs:
           private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
-          permission-contents: write
+          permission-actions: write
 
-      - name: Verify exact App installation and repository scope
+      - name: Revalidate and dispatch exact request to immutable main intake
         env:
           APP_INSTALLATION_ID: ${{ steps.release-app.outputs.installation-id }}
           APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          CONTROLLER_SHA: ${{ github.sha }}
+          EXPECTED_ENVELOPE: ${{ steps.request.outputs.envelope }}
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          READ_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.classify.outputs['source-sha'] }}
         run: |
           set -euo pipefail
 
           test "$APP_SLUG" = lightning-it-release-automation
           test "$APP_INSTALLATION_ID" = 148019054
-          test "$(gh api "users/${APP_SLUG}%5Bbot%5D" --jq .login)" = \
-            'lightning-it-release-automation[bot]'
-          repositories="$(gh api --paginate 'installation/repositories?per_page=100')"
-          jq -se --arg repository "$GITHUB_REPOSITORY" \
-            '[.[].repositories[].full_name] | sort | unique == [$repository]' \
-            <<<"$repositories" >/dev/null
 
-      - name: Dispatch exact humanActions=0 Security intake
-        env:
-          ENVELOPE: ${{ steps.request.outputs.envelope }}
-          GH_TOKEN: ${{ steps.release-app.outputs.token }}
-        run: |
-          set -euo pipefail
+          authenticated_fetch() {
+            GH_TOKEN="$READ_TOKEN" git -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' fetch "$@"
+          }
 
-          payload="$RUNNER_TEMP/security-repository-dispatch.json"
-          jq -ce '{event_type:"mlx90-security-release",client_payload:.request}' \
-            "$ENVELOPE" >"$payload"
-          jq -e '.client_payload.humanActions == 0' "$payload" >/dev/null
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/dispatches" \
+          [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          authenticated_fetch --no-tags origin main develop
+          test "$(git rev-parse HEAD)" = "$CONTROLLER_SHA"
+          test "$(git rev-parse origin/main)" = "$CONTROLLER_SHA"
+          test "$(git rev-parse origin/develop)" = "$SOURCE_SHA"
+
+          fresh_envelope="$RUNNER_TEMP/security-dispatch-envelope-final.json"
+          request="$RUNNER_TEMP/security-intake-request.json"
+          umask 077
+          python3 scripts/security-release-dispatch.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-sha "$CONTROLLER_SHA" \
+            --head-sha "$SOURCE_SHA" \
+            --root . \
+            --output-json "$fresh_envelope" \
+            --output-request-json "$request" >/dev/null
+          cmp "$EXPECTED_ENVELOPE" "$fresh_envelope"
+          jq -e '.dispatch == true and (.request.humanActions == 0)' \
+            "$fresh_envelope" >/dev/null
+
+          request_json="$(<"$request")"
+          payload="$RUNNER_TEMP/security-workflow-dispatch.json"
+          jq -n --arg request_json "$request_json" \
+            '{ref:"main",inputs:{request_json:$request_json}}' >"$payload"
+          test "$(jq -er .ref "$payload")" = main
+          test "$(jq -er '.inputs.request_json' "$payload")" = "$request_json"
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/security-release-intake.yml/dispatches" \
             --input "$payload"

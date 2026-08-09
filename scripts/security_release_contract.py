@@ -24,12 +24,28 @@ RELEASE_APP_INSTALLATION_ID = "148019054"
 RELEASE_APP_LOGIN = f"{RELEASE_APP_SLUG}[bot]"
 RELEASE_APP_ACCOUNT_ID = "307565056"
 RELEASE_APP_EMAIL = f"{RELEASE_APP_ACCOUNT_ID}+{RELEASE_APP_LOGIN}@users.noreply.github.com"
+RELEASE_APP_SELECTED_REPOSITORIES = [
+    "lightning-it/ansible-collection-supplementary",
+    "lightning-it/container-ee-wunder-ansible-ubi9",
+    "lightning-it/github-management-lit",
+    "lightning-it/modulix-validation",
+    "lightning-it/shared-assets-lit",
+]
+RELEASE_APP_PERMISSIONS = {
+    "actions": "write",
+    "checks": "read",
+    "contents": "write",
+    "metadata": "read",
+    "pull_requests": "write",
+}
 RELEASE_APP_IDENTITY = {
     "slug": RELEASE_APP_SLUG,
     "installationId": RELEASE_APP_INSTALLATION_ID,
     "login": RELEASE_APP_LOGIN,
     "accountId": RELEASE_APP_ACCOUNT_ID,
     "type": "Bot",
+    "selectedRepositories": RELEASE_APP_SELECTED_REPOSITORIES,
+    "permissions": RELEASE_APP_PERMISSIONS,
 }
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -120,6 +136,7 @@ CONTROLLER_KEYS = {
     "event",
     "gitRef",
     "actor",
+    "triggeringActor",
 }
 CHAIN_BINDING_KEYS = {
     "repository",
@@ -583,18 +600,22 @@ def build_intake_receipt(
     workflow_ref: str,
     workflow_event: str,
     workflow_actor: str,
+    workflow_triggering_actor: str,
     observed_automation: dict[str, Any],
 ) -> dict[str, Any]:
     validate_request(request, PRODUCER_REPOSITORY, checked_at)
     validate_intake_result(request, verified)
     if observed_automation != RELEASE_APP_IDENTITY:
         fail("observed release automation identity is unauthorized")
+    automation = dict(observed_automation)
+    automation["selectedRepositories"] = list(observed_automation["selectedRepositories"])
+    automation["permissions"] = dict(observed_automation["permissions"])
     receipt = {
         "schemaVersion": INTAKE_RECEIPT_SCHEMA_VERSION,
         "chainId": request["chainId"],
         "request": request,
         "verified": verified,
-        "automation": dict(observed_automation),
+        "automation": automation,
         "controller": {
             "path": ".github/workflows/security-release-intake.yml",
             "ref": workflow_ref,
@@ -604,6 +625,7 @@ def build_intake_receipt(
             "event": workflow_event,
             "gitRef": "refs/heads/main",
             "actor": workflow_actor,
+            "triggeringActor": workflow_triggering_actor,
         },
     }
     verify_intake_receipt(receipt, checked_at=checked_at)
@@ -637,9 +659,10 @@ def verify_intake_receipt(
         controller["path"] != ".github/workflows/security-release-intake.yml"
         or controller["ref"] != expected_ref
         or controller["sourceSha"] != request["baseSha"]
-        or controller["event"] != "repository_dispatch"
+        or controller["event"] != "workflow_dispatch"
         or controller["gitRef"] != "refs/heads/main"
         or controller["actor"] != RELEASE_APP_LOGIN
+        or controller["triggeringActor"] != RELEASE_APP_LOGIN
         or not isinstance(controller["runId"], str)
         or re.fullmatch(r"[1-9][0-9]*", controller["runId"]) is None
         or not isinstance(controller["runAttempt"], str)
