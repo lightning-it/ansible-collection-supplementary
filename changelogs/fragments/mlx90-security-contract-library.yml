@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    Add the inert, versioned MLX-90 Security release contract library and its
+    fail-closed unit contract before activating any production consumer.
