@@ -1044,6 +1044,14 @@ class WorkflowSecurityTests(unittest.TestCase):
                     ),
                     "releaseEligible": True,
                 },
+                "lit.supplementary/keycloak-26.7.1-security-v1": {
+                    "description": (
+                        "Verify the packaged Keycloak runtime is pinned to official "
+                        "26.7.1 OCI index digest in role defaults, identity manifest, "
+                        "and source inventory."
+                    ),
+                    "releaseEligible": True,
+                },
                 "lit.supplementary/mlx90-fixture": {
                     "description": "Historical v3.1.2/#488 dry-run fixture; never release eligible.",
                     "releaseEligible": False,
