@@ -81,6 +81,7 @@ SUPPORTING_PRODUCT_PREFIXES = (
     "tests/integration/",
     "tests/unit/",
 )
+SUPPORTING_PRODUCT_PATHS = frozenset({"meta/source-dependencies.yml"})
 PRODUCT_PATH_PREFIXES = RUNTIME_PRODUCT_PREFIXES + SUPPORTING_PRODUCT_PREFIXES
 FORBIDDEN_SUPPORTING_PATHS = {
     "tests/unit/test_workflow_security.py",
@@ -340,7 +341,10 @@ def validate_metadata(
         path
         for path in product_paths
         if path in FORBIDDEN_SUPPORTING_PATHS
-        or not path.startswith(PRODUCT_PATH_PREFIXES)
+        or (
+            path not in SUPPORTING_PRODUCT_PATHS
+            and not path.startswith(PRODUCT_PATH_PREFIXES)
+        )
     ]
     if unsupported_paths:
         fail(
