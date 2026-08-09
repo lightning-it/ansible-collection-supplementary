@@ -476,21 +476,37 @@ def validate_profile_registry(registry: dict[str, Any], profile_id: str) -> dict
     return selected
 
 
+def canonical_security_fragment_bytes(entries: list[str]) -> bytes:
+    """Serialize security fixes as deterministic repository-standard YAML."""
+    lines = ["---", "security_fixes:"]
+    lines.extend(f"  - {json.dumps(entry, ensure_ascii=True)}" for entry in entries)
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
 def validate_security_fragment(raw: bytes, label: str) -> dict[str, list[str]]:
     if len(raw) > MAX_SECURITY_FRAGMENT_BYTES:
         fail(f"{label} exceeds {MAX_SECURITY_FRAGMENT_BYTES} bytes")
-    payload = load_json_bytes(raw, label)
-    if raw != canonical_document_bytes(payload):
-        fail(f"{label} must be canonical JSON with one trailing newline")
-    exact_keys(payload, {"security_fixes"}, label)
-    entries = payload["security_fixes"]
-    if (
-        not isinstance(entries, list)
-        or not entries
-        or len(entries) > 64
-        or any(not isinstance(entry, str) or not entry.strip() or entry != entry.strip() for entry in entries)
-    ):
+    try:
+        lines = raw.decode("utf-8").splitlines()
+    except UnicodeDecodeError as exc:
+        raise ContractError(f"{label} is not valid UTF-8 YAML: {exc}") from exc
+    if len(lines) < 3 or lines[:2] != ["---", "security_fixes:"]:
+        fail(f"{label} must use canonical repository security_fixes YAML")
+    entries: list[str] = []
+    for line in lines[2:]:
+        if not line.startswith("  - "):
+            fail(f"{label} must use canonical repository security_fixes YAML")
+        try:
+            entry = json.loads(line[4:], parse_constant=lambda value: fail(f"{label} has invalid scalar: {value}"))
+        except json.JSONDecodeError as exc:
+            raise ContractError(f"{label} contains an invalid quoted YAML scalar: {exc}") from exc
+        if not isinstance(entry, str):
+            fail(f"{label} security_fixes entries must be strings")
+        entries.append(require_string(entry, f"{label} security_fixes entry"))
+    if not entries or len(entries) > 64:
         fail(f"{label} must contain 1..64 non-empty trimmed security_fixes entries")
+    if raw != canonical_security_fragment_bytes(entries):
+        fail(f"{label} must be canonical repository YAML with one trailing newline")
     return {"security_fixes": entries}
 
 

@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = str(ROOT / "scripts")
 sys.path.insert(0, SCRIPTS)
@@ -95,7 +97,7 @@ class SecurityReleaseContractTests(unittest.TestCase):
             "expiresAt": "2026-09-08T22:30:00Z",
             "humanActions": 0,
         }
-        fragment = b'{"security_fixes":["Keycloak fix."]}\n'
+        fragment = CONTRACT.canonical_security_fragment_bytes(["Keycloak fix."])
         self.verified = {
             "schemaVersion": 2,
             "chainId": chain_id,
@@ -224,16 +226,19 @@ class SecurityReleaseContractTests(unittest.TestCase):
             )
 
     def test_security_fragment_and_consumer_are_exact(self) -> None:
-        valid = b'{"security_fixes":["Fixed exact vulnerability."]}\n'
+        entries = ['Fixed: "quoted" vulnerability.', "Unicode \u00e4 remains deterministic."]
+        valid = CONTRACT.canonical_security_fragment_bytes(entries)
         self.assertEqual(
-            {"security_fixes": ["Fixed exact vulnerability."]},
+            {"security_fixes": entries},
             CONTRACT.validate_security_fragment(valid, "fragment"),
         )
+        self.assertEqual({"security_fixes": entries}, yaml.safe_load(valid))
         for invalid in (
-            b"---\nsecurity_fixes:\n  - YAML is not canonical JSON.\n",
-            b'{"bugfixes":["not Security"]}',
-            b'{"security_fixes":[]}',
-            b'{"security_fixes":["one"],"security_fixes":["two"]}',
+            b"---\nsecurity_fixes:\n  - YAML scalar is not canonically quoted.\n",
+            b'---\nbugfixes:\n  - "not Security"\n',
+            b"---\nsecurity_fixes: []\n",
+            b'---\nsecurity_fixes:\n  - "one"\nsecurity_fixes:\n  - "two"\n',
+            b'---\nsecurity_fixes:\n  - "missing final newline"',
         ):
             with self.subTest(invalid=invalid), self.assertRaises(CONTRACT.ContractError):
                 CONTRACT.validate_security_fragment(invalid, "fragment")
@@ -308,7 +313,7 @@ class SecurityReleaseContractTests(unittest.TestCase):
             CONTRACT.load_security_binding(self.root, VERSION, checked_at=NOW)
         receipt_path.write_bytes(CONTRACT.canonical_document_bytes(receipt))
 
-        fragment_path.write_bytes(b'{"security_fixes":["Changed fix."]}\n')
+        fragment_path.write_bytes(CONTRACT.canonical_security_fragment_bytes(["Changed fix."]))
         with self.assertRaisesRegex(CONTRACT.ContractError, "fragment digest differs"):
             CONTRACT.load_security_binding(self.root, VERSION, checked_at=NOW)
         fragment_path.write_bytes(self.fragment_raw)
