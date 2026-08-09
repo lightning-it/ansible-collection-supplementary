@@ -292,7 +292,9 @@
   ansible.builtin.template:
     src: checkmk-pod.yml.j2
     dest: "{{ checkmk_deploy_pod_manifest_path }}"
-    mode: '0644'
+    owner: root
+    group: root
+    mode: '0600'
   notify:
     - Recreate Checkmk pod
     - Run Checkmk pod

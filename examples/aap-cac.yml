@@ -505,15 +505,14 @@ ee_list:
       append_final:
         - "RUN ansible --version"
 
-# Required encrypted variables: store these in an Ansible Vault file.
-# They are listed here as non-secret documentation values and must not be
-# committed with real credentials.
-aap_cac_demo_required_vault_variables:
-  vault_demo_aap_admin_password: "REPLACE_IN_ANSIBLE_VAULT"
-  vault_demo_operator_password: "REPLACE_IN_ANSIBLE_VAULT"
-  vault_demo_api_token: "REPLACE_IN_ANSIBLE_VAULT"
-  vault_demo_machine_password: "REPLACE_IN_ANSIBLE_VAULT"
-  vault_demo_become_password: "REPLACE_IN_ANSIBLE_VAULT"
-  vault_demo_scm_token: "REPLACE_IN_ANSIBLE_VAULT"
-  vault_demo_external_lookup_client_key: "REPLACE_IN_ANSIBLE_VAULT"
-  vault_demo_smtp_password: "REPLACE_IN_ANSIBLE_VAULT"
+# Required encrypted variable names. Define their values only in a separate
+# encrypted Ansible Vault file or an approved external secret manager.
+aap_cac_demo_required_vault_variable_names:
+  - vault_demo_aap_admin_password
+  - vault_demo_operator_password
+  - vault_demo_api_token
+  - vault_demo_machine_password
+  - vault_demo_become_password
+  - vault_demo_scm_token
+  - vault_demo_external_lookup_client_key
+  - vault_demo_smtp_password

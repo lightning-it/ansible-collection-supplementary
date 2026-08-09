@@ -3,7 +3,38 @@
   hosts: all
   gather_facts: false
   become: false
+  vars:
+    atlas_molecule_grafana_password_file: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/atlas-grafana-admin
+    atlas_molecule_checkmk_password_file: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/atlas-checkmk-admin
   tasks:
+    - name: Inspect ephemeral observability credential files on the controller
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+        get_attributes: false
+        get_checksum: false
+        get_mime: false
+      loop:
+        - "{{ atlas_molecule_grafana_password_file }}"
+        - "{{ atlas_molecule_checkmk_password_file }}"
+      register: atlas_molecule_controller_credential_file_stats
+      delegate_to: localhost
+      no_log: true
+
+    - name: Require restrictive ephemeral observability credential files
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+          - not (item.stat.islnk | default(false))
+          - item.stat.mode | default('') == '0600'
+          - item.stat.nlink | default(0) | int == 1
+        quiet: true
+      loop: "{{ atlas_molecule_controller_credential_file_stats.results }}"
+      delegate_to: localhost
+      no_log: true
+
     - name: Check Loki systemd service is active
       ansible.builtin.command:
         argv:
@@ -94,6 +125,30 @@
         - /srv/atlas-observability/grafana/config/provisioning/datasources/loki.yml
         - /srv/atlas-observability/checkmk/config/monitoring-targets.yml
       register: atlas_molecule_expected_files
+
+    - name: Inspect secret-bearing observability Pod manifests
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      loop:
+        - /srv/atlas-observability/quadlet/grafana.yml
+        - /srv/atlas-observability/quadlet/checkmk.yml
+      register: atlas_molecule_secret_manifest_stats
+      changed_when: false
+      no_log: true
+
+    - name: Require root-only secret-bearing observability Pod manifests
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+          - not (item.stat.islnk | default(false))
+          - item.stat.pw_name | default('') == 'root'
+          - item.stat.gr_name | default('') == 'root'
+          - item.stat.mode | default('') == '0600'
+          - item.stat.nlink | default(0) | int == 1
+        quiet: true
+      loop: "{{ atlas_molecule_secret_manifest_stats.results }}"
+      no_log: true
 
     - name: Check Loki port
       ansible.builtin.wait_for:

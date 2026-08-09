@@ -5,7 +5,11 @@
   gather_facts: true
   vars:
     minio_deploy_root_user: molecule-root-user
-    minio_deploy_root_password: molecule-placeholder-not-a-real-secret
+    minio_molecule_root_password_file: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/minio-root
+    minio_deploy_root_password: >-
+      {{ lookup('ansible.builtin.password', minio_molecule_root_password_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
     minio_deploy_generate_root_credentials: false
     minio_deploy_store_root_credentials: false
     minio_deploy_vault_address: ''
@@ -17,6 +21,26 @@
   roles:
     - role: lit.supplementary.minio_foundational
   tasks:
+    - name: Inspect ephemeral MinIO credential file
+      ansible.builtin.stat:
+        path: "{{ minio_molecule_root_password_file }}"
+        follow: false
+        get_attributes: false
+        get_checksum: false
+        get_mime: false
+      register: minio_molecule_root_password_stat
+      no_log: true
+
+    - name: Require restrictive ephemeral MinIO credential file
+      ansible.builtin.assert:
+        that:
+          - minio_molecule_root_password_stat.stat.isreg | default(false)
+          - not (minio_molecule_root_password_stat.stat.islnk | default(false))
+          - minio_molecule_root_password_stat.stat.mode | default('') == '0600'
+          - minio_molecule_root_password_stat.stat.nlink | default(0) | int == 1
+        quiet: true
+      no_log: true
+
     - name: Require exact MinIO foundational endpoint resolution
       ansible.builtin.assert:
         that:

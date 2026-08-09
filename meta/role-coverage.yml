@@ -482,7 +482,9 @@ roles:
       - "lit.foundational.podman_systemd"
     external_dependencies: []
     known_limitations:
-      - "Current Incus scenario verifies service and port state only."
+      - >-
+        Current Incus scenario verifies service, port, and secret-bearing manifest permissions,
+        but not a complete target-discovery and authenticated query workflow.
     deprecation_state: "active"
     scenario_support:
       tiny:

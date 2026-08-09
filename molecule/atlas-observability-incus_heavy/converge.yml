@@ -5,6 +5,16 @@
   become: false
   vars:
     atlas_molecule_base_dir: /srv/atlas-observability
+    atlas_molecule_grafana_password_file: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/atlas-grafana-admin
+    atlas_molecule_checkmk_password_file: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/atlas-checkmk-admin
+    atlas_molecule_grafana_password: >-
+      {{ lookup('ansible.builtin.password', atlas_molecule_grafana_password_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
+    atlas_molecule_checkmk_password: >-
+      {{ lookup('ansible.builtin.password', atlas_molecule_checkmk_password_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
   roles:
     - role: loki_deploy
       vars:
@@ -114,7 +124,7 @@
         grafana_deploy_public_fqdn: grafana.example.invalid
         grafana_deploy_root_url: http://127.0.0.1:3000
         grafana_deploy_loki_url: http://127.0.0.1:3100
-        grafana_deploy_admin_password: molecule-grafana-admin-password
+        grafana_deploy_admin_password: "{{ atlas_molecule_grafana_password }}"
     - role: checkmk_deploy
       vars:
         checkmk_deploy_install_packages: false
@@ -130,4 +140,4 @@
         checkmk_deploy_systemd_description: Molecule Checkmk container service
         checkmk_deploy_public_fqdn: checkmk.example.invalid
         checkmk_deploy_public_url: http://127.0.0.1:5000
-        checkmk_deploy_admin_password: molecule-checkmk-admin-password
+        checkmk_deploy_admin_password: "{{ atlas_molecule_checkmk_password }}"

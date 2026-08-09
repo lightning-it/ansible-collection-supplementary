@@ -6,7 +6,29 @@
   vars:
     cloudflare_warp_mdm_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/cloudflare-warp/mdm.xml
+    cloudflare_warp_auth_client_secret_file: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/cloudflare-warp-client
   tasks:
+    - name: Inspect ephemeral Cloudflare WARP credential file
+      ansible.builtin.stat:
+        path: "{{ cloudflare_warp_auth_client_secret_file }}"
+        follow: false
+        get_attributes: false
+        get_checksum: false
+        get_mime: false
+      register: cloudflare_warp_auth_client_secret_stat
+      no_log: true
+
+    - name: Require restrictive ephemeral Cloudflare WARP credential file
+      ansible.builtin.assert:
+        that:
+          - cloudflare_warp_auth_client_secret_stat.stat.isreg | default(false)
+          - not (cloudflare_warp_auth_client_secret_stat.stat.islnk | default(false))
+          - cloudflare_warp_auth_client_secret_stat.stat.mode | default('') == '0600'
+          - cloudflare_warp_auth_client_secret_stat.stat.nlink | default(0) | int == 1
+        quiet: true
+      no_log: true
+
     - name: Inspect rendered Cloudflare WARP MDM profile
       ansible.builtin.stat:
         path: "{{ cloudflare_warp_mdm_path }}"

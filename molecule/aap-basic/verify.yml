@@ -8,6 +8,23 @@
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-coverage-mode
     aap_molecule_resolution_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-resolution.yml
+    aap_molecule_shared_password_file: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-shared-admin
+    aap_molecule_next_password_file: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-next-admin
+    aap_molecule_controller_password_file: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-controller-admin
+    aap_molecule_hub_password_file: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-hub-admin
+    aap_molecule_shared_password: >-
+      {{ lookup('ansible.builtin.password', aap_molecule_shared_password_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
+    aap_molecule_controller_password: >-
+      {{ lookup('ansible.builtin.password', aap_molecule_controller_password_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
+    aap_molecule_hub_password: >-
+      {{ lookup('ansible.builtin.password', aap_molecule_hub_password_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
   tasks:
     - name: Read lit.supplementary.aap coverage marker
       ansible.builtin.slurp:
@@ -18,15 +35,46 @@
       ansible.builtin.include_vars:
         file: "{{ aap_molecule_resolution_path }}"
         name: aap_molecule_resolution
+      no_log: true
+
+    - name: Inspect ephemeral lit.supplementary.aap credential files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+        get_attributes: false
+        get_checksum: false
+        get_mime: false
+      loop:
+        - "{{ aap_molecule_shared_password_file }}"
+        - "{{ aap_molecule_next_password_file }}"
+        - "{{ aap_molecule_controller_password_file }}"
+        - "{{ aap_molecule_hub_password_file }}"
+        - "{{ aap_molecule_resolution_path }}"
+      register: aap_molecule_credential_file_stats
+      no_log: true
+
+    - name: Require restrictive ephemeral lit.supplementary.aap credential files
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+          - not (item.stat.islnk | default(false))
+          - item.stat.mode | default('') == '0600'
+          - item.stat.nlink | default(0) | int == 1
+        quiet: true
+      loop: "{{ aap_molecule_credential_file_stats.results }}"
+      no_log: true
 
     - name: Assert lit.supplementary.aap password resolution ran
       ansible.builtin.assert:
         that:
           - aap_molecule_marker.content | b64decode | trim == 'password_resolution'
-          - aap_molecule_resolution.aap_gateway_admin_password_effective == 'shared-admin-password'
-          - aap_molecule_resolution.aap_controller_admin_password_effective == 'controller-admin-password'
-          - aap_molecule_resolution.aap_hub_admin_password_effective == 'hub-admin-password'
-          - aap_molecule_resolution.aap_eda_admin_password_effective == 'shared-admin-password'
-          - aap_molecule_resolution.aap_postgresql_admin_password_effective == 'shared-admin-password'
-          - aap_molecule_resolution.aap_deploy_controller_admin_password_effective == 'controller-admin-password'
+          - aap_molecule_resolution.aap_gateway_admin_password_effective == aap_molecule_shared_password
+          - aap_molecule_resolution.aap_controller_admin_password_effective == aap_molecule_controller_password
+          - aap_molecule_resolution.aap_hub_admin_password_effective == aap_molecule_hub_password
+          - aap_molecule_resolution.aap_eda_admin_password_effective == aap_molecule_shared_password
+          - aap_molecule_resolution.aap_postgresql_admin_password_effective == aap_molecule_shared_password
+          - >-
+            aap_molecule_resolution.aap_deploy_controller_admin_password_effective
+            == aap_molecule_controller_password
         quiet: true
+      no_log: true
