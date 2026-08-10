@@ -248,25 +248,35 @@ def build_request(
 
 
 class ControllerClient(Protocol):
-    def installation(self) -> dict[str, Any]: ...
+    def installation(self) -> dict[str, Any]:
+        raise NotImplementedError
 
-    def installation_repositories(self) -> list[str]: ...
+    def installation_repositories(self) -> list[str]:
+        raise NotImplementedError
 
-    def controller_sha(self) -> str: ...
+    def controller_sha(self) -> str:
+        raise NotImplementedError
 
-    def workflow(self) -> dict[str, Any]: ...
+    def workflow(self) -> dict[str, Any]:
+        raise NotImplementedError
 
-    def dispatch(self, request_json: str, request_id: str) -> None: ...
+    def dispatch(self, request_json: str, request_id: str) -> None:
+        raise NotImplementedError
 
-    def workflow_runs(self) -> list[dict[str, Any]]: ...
+    def workflow_runs(self) -> list[dict[str, Any]]:
+        raise NotImplementedError
 
-    def jobs(self, run_id: int) -> list[dict[str, Any]]: ...
+    def jobs(self, run_id: int) -> list[dict[str, Any]]:
+        raise NotImplementedError
 
-    def artifacts(self, run_id: int) -> list[dict[str, Any]]: ...
+    def artifacts(self, run_id: int) -> list[dict[str, Any]]:
+        raise NotImplementedError
 
-    def download(self, run_id: int, artifact_name: str, destination: Path) -> None: ...
+    def download(self, run_id: int, artifact_name: str, destination: Path) -> None:
+        raise NotImplementedError
 
-    def verify_signature(self, receipt: Path, bundle: Path, controller_sha: str) -> None: ...
+    def verify_signature(self, receipt: Path, bundle: Path, controller_sha: str) -> None:
+        raise NotImplementedError
 
 
 class GhControllerClient:

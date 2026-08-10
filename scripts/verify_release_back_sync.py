@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Verify one immutable App-authored release back-sync head."""
 
 from __future__ import annotations

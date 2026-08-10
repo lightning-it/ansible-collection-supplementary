@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Verify an exact Supplementary main-promotion head without trusting its name."""
 
 from __future__ import annotations
