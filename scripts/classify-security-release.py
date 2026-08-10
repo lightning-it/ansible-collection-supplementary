@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -39,6 +40,13 @@ class Classification:
 
 def fail(message: str) -> NoReturn:
     raise ClassificationError(message)
+
+
+def git_binary() -> str:
+    executable = shutil.which("git")
+    if executable is None:
+        fail("git executable is unavailable")
+    return executable
 
 
 def timestamp(value: Any, field: str) -> datetime:
@@ -120,7 +128,7 @@ def changed_preparation_version(root: Path, base_sha: str, head_sha: str) -> str
             fail(f"{label} is invalid")
     result = subprocess.run(  # noqa: S603
         [
-            "/usr/bin/git",
+            git_binary(),
             "diff",
             "--name-only",
             "--no-renames",
@@ -161,7 +169,7 @@ def changed_security_versions(root: Path, base_sha: str, head_sha: str) -> list[
             fail(f"{label} is invalid")
     result = subprocess.run(  # noqa: S603
         [
-            "/usr/bin/git",
+            git_binary(),
             "diff",
             "--name-only",
             "--diff-filter=AM",

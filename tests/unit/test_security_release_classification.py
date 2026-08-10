@@ -154,6 +154,13 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
+    def test_git_binary(self):
+        with mock.patch.object(MODULE.shutil, "which", return_value="/opt/bin/git"):
+            self.assertEqual("/opt/bin/git", MODULE.git_binary())
+        with mock.patch.object(MODULE.shutil, "which", return_value=None):
+            with self.assertRaises(MODULE.ClassificationError):
+                MODULE.git_binary()
+
     def test_exact_version_classifies_only_real_metadata(self):
         result = MODULE.classify(
             args(event_kind="version", version="3.2.2", evidence_id=EVIDENCE_ID),
