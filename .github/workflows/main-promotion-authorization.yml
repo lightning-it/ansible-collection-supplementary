@@ -43,6 +43,14 @@ jobs:
           path: policy
           persist-credentials: false
 
+      - name: Checkout exact promotion head as non-executable evidence
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          path: candidate
+          persist-credentials: false
+
       - name: Classify exact live pull request
         id: classify
         env:
@@ -94,6 +102,8 @@ jobs:
             --repository "$REPOSITORY" \
             --expected-base "$EVENT_BASE_SHA" \
             --expected-head "$EVENT_HEAD_SHA" \
+            --base-root policy \
+            --head-root candidate \
             --classification-only)"
           environment="$(jq -er .environment <<<"$classification")"
           gh api "repos/${REPOSITORY}/environments/${environment}" \
@@ -104,6 +114,8 @@ jobs:
             --repository "$REPOSITORY" \
             --expected-base "$EVENT_BASE_SHA" \
             --expected-head "$EVENT_HEAD_SHA" \
+            --base-root policy \
+            --head-root candidate \
             --github-output "$GITHUB_OUTPUT"
           echo 'bootstrap=false' >>"$GITHUB_OUTPUT"
 
@@ -126,6 +138,14 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: policy
+          persist-credentials: false
+
+      - name: Checkout exact promotion head as non-executable evidence
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          path: candidate
           persist-credentials: false
 
       - name: Revalidate exact live state after authorization
@@ -190,6 +210,8 @@ jobs:
               --repository "$REPOSITORY" \
               --expected-base "$EVENT_BASE_SHA" \
               --expected-head "$EVENT_HEAD_SHA" \
+              --base-root policy \
+              --head-root candidate \
               --expected-mode "$EXPECTED_MODE"
           fi
           {

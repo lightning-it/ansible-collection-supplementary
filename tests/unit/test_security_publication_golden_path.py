@@ -60,6 +60,24 @@ class SecurityPublicationGoldenPathTests(unittest.TestCase):
             self.steps["Stage exact Security candidate in native Nexus Galaxy v3"]["run"],
         )
 
+    def test_release_validation_wait_has_an_independent_timeout_budget(self) -> None:
+        validation = self.workflow["jobs"]["release-validation"]
+        self.assertEqual(130, validation["timeout-minutes"])
+        self.assertEqual("${{ steps.exact.outputs.ci-run-id }}", validation["outputs"]["ci-run-id"])
+        self.assertEqual(
+            ["security-classification", "release-validation"],
+            self.publish["needs"],
+        )
+        self.assertNotIn(
+            "Wait for exact-SHA main Release Validation",
+            self.step_names,
+        )
+        download = self.steps["Download exact candidate and evidence from validated run"]
+        self.assertEqual(
+            "${{ needs.release-validation.outputs.ci-run-id }}",
+            download["env"]["CI_RUN_ID"],
+        )
+
     def test_nexus_stage_is_native_v3_readback_and_fails_without_configuration(self) -> None:
         stage = self.steps["Stage exact Security candidate in native Nexus Galaxy v3"]
         self.assertEqual("${{ vars.NEXUS_GALAXY_REPOSITORY_URL }}", stage["env"]["NEXUS_GALAXY_REPOSITORY_URL"])
@@ -87,6 +105,7 @@ class SecurityPublicationGoldenPathTests(unittest.TestCase):
         token = self.steps["Mint exact ModuLix validation App token"]
         self.assertEqual("modulix-validation", token["with"]["repositories"])
         self.assertEqual("write", token["with"]["permission-actions"])
+        self.assertEqual("read", token["with"]["permission-contents"])
         self.assertNotIn("permission-administration", token["with"])
         self.assertNotIn("permission-environments", token["with"])
         self.assertNotIn("permission-secrets", token["with"])

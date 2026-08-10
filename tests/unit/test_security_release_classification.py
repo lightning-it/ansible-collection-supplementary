@@ -47,19 +47,18 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         metadata_root = self.root / ".lit" / "security-releases"
         metadata_root.mkdir(parents=True)
-        (self.root / ".lit" / "security-release-profiles.json").write_text(
-            json.dumps(
-                {
-                    "schemaVersion": 1,
-                    "profiles": {
-                        "lit.supplementary/fix-v1": {
-                            "description": "fixture",
-                            "releaseEligible": True,
-                        }
-                    },
+        self.profile = "lit.supplementary/fix-v1"
+        profiles = {
+            "schemaVersion": 1,
+            "profiles": {
+                self.profile: {
+                    "description": "fixture",
+                    "releaseEligible": True,
                 }
-            ),
-            encoding="utf-8",
+            },
+        }
+        (self.root / ".lit" / "security-release-profiles.json").write_bytes(
+            MODULE.CONTRACT.canonical_document_bytes(profiles)
         )
         self.metadata = {
             "schemaVersion": 1,
@@ -69,17 +68,88 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
             "affectedVersion": "3.1.0",
             "fixedVersion": "3.2.2",
             "consumers": ["lightning-it/container-ee-wunder-ansible-ubi9"],
-            "acceptanceProfile": "lit.supplementary/fix-v1",
+            "acceptanceProfile": self.profile,
             "validity": {
                 "notBefore": "2026-08-04T11:31:48Z",
                 "expiresAt": "2026-09-03T11:31:48Z",
                 "revoked": False,
             },
         }
-        (metadata_root / "3.2.2.json").write_text(json.dumps(self.metadata), encoding="utf-8")
-        intake_root = self.root / ".lit" / "security-release-intakes"
-        intake_root.mkdir()
-        (intake_root / "3.2.2.json").write_text("{}\n", encoding="utf-8")
+        metadata_raw = (json.dumps(self.metadata, indent=2, sort_keys=True) + "\n").encode()
+        (metadata_root / "3.2.2.json").write_bytes(metadata_raw)
+        fragment_raw = b'---\nsecurity_fixes:\n  - "Exact fixture fix."\n'
+        fragment_path = self.root / "changelogs/fragments/exact-security.yml"
+        fragment_path.parent.mkdir(parents=True)
+        fragment_path.write_bytes(fragment_raw)
+        candidate_digest = "sha256:" + "c" * 64
+        chain_id = MODULE.CONTRACT.compute_chain_id(
+            repository=MODULE.CONTRACT.PRODUCER_REPOSITORY,
+            repository_id=MODULE.CONTRACT.PRODUCER_REPOSITORY_ID,
+            base_sha="1" * 40,
+            candidate_head_sha="2" * 40,
+            candidate_diff_sha256=candidate_digest,
+            evidence_id=EVIDENCE_ID,
+            fixed_version="3.2.2",
+            acceptance_profile=self.profile,
+        )
+        request = {
+            "schemaVersion": 2,
+            "event": "mlx90-security-release",
+            "repository": MODULE.CONTRACT.PRODUCER_REPOSITORY,
+            "repositoryId": MODULE.CONTRACT.PRODUCER_REPOSITORY_ID,
+            "baseSha": "1" * 40,
+            "candidateRef": "develop",
+            "candidateBaseSha": "1" * 40,
+            "candidateHeadSha": "2" * 40,
+            "candidateDiffSha256": candidate_digest,
+            "evidenceId": EVIDENCE_ID,
+            "fixedVersion": "3.2.2",
+            "acceptanceProfile": self.profile,
+            "metadataSha256": MODULE.CONTRACT.sha256_bytes(metadata_raw),
+            "chainId": chain_id,
+            "issuedAt": "2026-08-04T11:31:48Z",
+            "expiresAt": "2026-09-03T11:31:48Z",
+            "humanActions": 0,
+        }
+        verified = {
+            "schemaVersion": 2,
+            "chainId": chain_id,
+            "branch": f"security-release/{EVIDENCE_ID}",
+            "baseSha": "1" * 40,
+            "candidateBaseSha": "1" * 40,
+            "candidateHeadSha": "2" * 40,
+            "candidateDiffSha256": candidate_digest,
+            "evidenceId": EVIDENCE_ID,
+            "fixedVersion": "3.2.2",
+            "metadataPath": ".lit/security-releases/3.2.2.json",
+            "metadataSha256": MODULE.CONTRACT.sha256_bytes(metadata_raw),
+            "acceptanceProfile": self.profile,
+            "changelogFragmentPath": "changelogs/fragments/exact-security.yml",
+            "changelogFragmentSha256": MODULE.CONTRACT.sha256_bytes(fragment_raw),
+            "changedPaths": [
+                ".lit/security-releases/3.2.2.json",
+                "changelogs/fragments/exact-security.yml",
+                "roles/example/defaults/main.yml",
+            ],
+            "humanActions": 0,
+        }
+        receipt = MODULE.CONTRACT.build_intake_receipt(
+            request,
+            verified,
+            checked_at=CHECKED_AT,
+            workflow_run_id="123456",
+            workflow_attempt="1",
+            workflow_ref=(
+                f"{MODULE.CONTRACT.PRODUCER_REPOSITORY}/.github/workflows/security-release-intake.yml@refs/heads/main"
+            ),
+            workflow_event="workflow_dispatch",
+            workflow_actor=MODULE.CONTRACT.RELEASE_APP_LOGIN,
+            workflow_triggering_actor=MODULE.CONTRACT.RELEASE_APP_LOGIN,
+            observed_automation=MODULE.CONTRACT.RELEASE_APP_IDENTITY,
+        )
+        intake_path = self.root / ".lit/security-release-intakes/3.2.2.json"
+        intake_path.parent.mkdir(parents=True)
+        intake_path.write_bytes(MODULE.CONTRACT.canonical_document_bytes(receipt))
 
     def tearDown(self):
         self.temporary.cleanup()
@@ -180,7 +250,10 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
                 CHECKED_AT,
             ).security_release
         )
-        with mock.patch.object(MODULE, "changed_security_versions", return_value=[]):
+        with (
+            mock.patch.object(MODULE, "changed_security_versions", return_value=[]),
+            mock.patch.object(MODULE, "changed_preparation_version", return_value=""),
+        ):
             self.assertFalse(
                 MODULE.classify(
                     args(event_kind="push", ref="refs/heads/main", commit_message="feat: normal"),
@@ -202,6 +275,7 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
                     event_kind="pull_request",
                     base_ref="main",
                     head_ref=f"security-release/{EVIDENCE_ID}",
+                    binding_root=self.root / "absent",
                 ),
                 self.root,
                 CHECKED_AT,
@@ -216,7 +290,10 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
                 CHECKED_AT,
             )
         self.assertTrue(promoted.security_release)
-        with mock.patch.object(MODULE, "changed_security_versions", return_value=[]):
+        with (
+            mock.patch.object(MODULE, "changed_security_versions", return_value=[]),
+            mock.patch.object(MODULE, "changed_preparation_version", return_value=""),
+        ):
             prepared = MODULE.classify(
                 args(
                     event_kind="push",
@@ -227,6 +304,43 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
                 CHECKED_AT,
             )
         self.assertTrue(prepared.security_release)
+
+    def test_changed_preparation_receipt_is_a_security_binding(self):
+        with (
+            mock.patch.object(MODULE, "changed_security_versions", return_value=[]),
+            mock.patch.object(
+                MODULE,
+                "changed_preparation_version",
+                return_value="3.2.2",
+            ),
+        ):
+            prepared = MODULE.classify(
+                args(event_kind="push", ref="refs/heads/main"),
+                self.root,
+                CHECKED_AT,
+            )
+        self.assertTrue(prepared.security_release)
+        self.assertEqual(EVIDENCE_ID, prepared.evidence_id)
+
+    def test_released_markers_must_equal_the_preconsumption_binding(self):
+        binding_root = self.root.parent / f"{self.root.name}-binding"
+        self.addCleanup(shutil.rmtree, binding_root, True)
+        shutil.copytree(self.root, binding_root)
+        metadata_path = self.root / ".lit/security-releases/3.2.2.json"
+        metadata_path.write_bytes(metadata_path.read_bytes() + b"\n")
+        with self.assertRaisesRegex(
+            MODULE.ClassificationError,
+            "differs from its pre-consumption base",
+        ):
+            MODULE.classify(
+                args(
+                    event_kind="version",
+                    version="3.2.2",
+                    binding_root=binding_root,
+                ),
+                self.root,
+                CHECKED_AT,
+            )
 
 
 if __name__ == "__main__":
