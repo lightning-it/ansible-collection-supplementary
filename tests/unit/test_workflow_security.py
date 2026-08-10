@@ -584,17 +584,21 @@ class WorkflowSecurityTests(unittest.TestCase):
                 self.assertIn("steps.release-bot.outputs.email", text)
 
         back_sync = (WORKFLOWS / "release-back-sync.yml").read_text(encoding="utf-8")
-        self.assertIn('"--force-with-lease=${branch_ref}:${remote_branch_sha}"', back_sync)
+        self.assertNotIn("--force-with-lease", back_sync)
         self.assertNotIn("authenticated_push --force origin", back_sync)
+        self.assertIn('"$back_sync_policy/scripts/verify_release_back_sync.py"', back_sync)
+        self.assertIn('authenticated_push origin "HEAD:${branch_ref}"', back_sync)
         self.assertNotIn("permission-issues:", back_sync)
         self.assertNotIn("gh label ", back_sync)
         self.assertNotIn("--label skip-changelog", back_sync)
         self.assertNotIn("--add-label skip-changelog", back_sync)
         release_prepare = (WORKFLOWS / "release-prepare.yml").read_text(encoding="utf-8")
-        self.assertIn(
-            '"--force-with-lease=${release_ref}:${remote_release_sha}"',
-            release_prepare,
-        )
+        self.assertNotIn("--force-with-lease", release_prepare)
+        self.assertIn('"$promotion_base/scripts/security_main_promotion.py"', release_prepare)
+        self.assertIn('authenticated_push origin "HEAD:${release_ref}"', release_prepare)
+        for workflow in (back_sync, release_prepare, (WORKFLOWS / "collection-ci.yml").read_text()):
+            self.assertIn("git cat-file -e", workflow)
+            self.assertIn("git merge-base --is-ancestor", workflow)
 
     def test_zero_touch_is_security_only_and_normal_promotion_stays_manual(self) -> None:
         ci = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]

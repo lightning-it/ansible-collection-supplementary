@@ -73,6 +73,52 @@ jobs:
           ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Resolve immutable pre-consumption Security binding
+        id: binding
+        env:
+          BASE_SHA: ${{ env.COMPARE_BASE_SHA }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ env.COMPARE_HEAD_REF }}
+          SECURITY_VERSION: ${{ inputs.security_version || '' }}
+        run: |
+          set -euo pipefail
+          binding_sha="$SOURCE_SHA"
+          receipt=changelogs/release-preparation.json
+          require_receipt=false
+          if [ "$EVENT_NAME" = pull_request ] && [[ "$HEAD_REF" == release/v* ]]; then
+            require_receipt=true
+          elif [ "$EVENT_NAME" = push ] && [ -n "$BASE_SHA" ] && \
+              git diff --name-only --no-renames "$BASE_SHA" "$SOURCE_SHA" -- \
+                "$receipt" | grep -Fxq "$receipt"
+          then
+            require_receipt=true
+          elif [ "$EVENT_NAME" = workflow_dispatch ] && [ -n "$SECURITY_VERSION" ]; then
+            require_receipt=true
+          fi
+          if [ "$require_receipt" = true ]; then
+            test -f "$receipt"
+            test ! -L "$receipt"
+            receipt_version="$SECURITY_VERSION"
+            if [ "$EVENT_NAME" = pull_request ]; then
+              receipt_version="${HEAD_REF#release/v}"
+            fi
+            binding_sha="$(
+              jq -er --arg version "$receipt_version" '
+                select($version == "" or .next_version == $version)
+                | .base_sha
+                | select(test("^[0-9a-f]{40}$"))
+              ' "$receipt"
+            )"
+          fi
+          git cat-file -e "${binding_sha}^{commit}"
+          git merge-base --is-ancestor "$binding_sha" "$SOURCE_SHA"
+          echo "base_sha=$binding_sha" >>"$GITHUB_OUTPUT"
+      - name: Checkout immutable pre-consumption Security binding
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ steps.binding.outputs.base_sha }}
+          path: security-binding-base
+          persist-credentials: false
       - name: Classify exact event without granting an environment
         id: classify
         env:
@@ -94,7 +140,8 @@ jobs:
                 --head-sha "$HEAD_SHA" \
                 --base-ref "$BASE_REF" \
                 --head-ref "$HEAD_REF" \
-                --evidence-id "$EVIDENCE_ID"
+                --evidence-id "$EVIDENCE_ID" \
+                --binding-root security-binding-base
               ;;
             push)
               commit_message="$(git show -s --format=%B "$HEAD_SHA")"
@@ -104,13 +151,15 @@ jobs:
                 --head-sha "$HEAD_SHA" \
                 --ref "$EVENT_REF" \
                 --commit-message "$commit_message" \
-                --evidence-id "$EVIDENCE_ID"
+                --evidence-id "$EVIDENCE_ID" \
+                --binding-root security-binding-base
               ;;
             workflow_dispatch)
               python scripts/classify-security-release.py \
                 --event-kind version \
                 --version "$SECURITY_VERSION" \
-                --evidence-id "$EVIDENCE_ID"
+                --evidence-id "$EVIDENCE_ID" \
+                --binding-root security-binding-base
               ;;
             *)
               echo "Unsupported classification event: $EVENT_NAME" >&2

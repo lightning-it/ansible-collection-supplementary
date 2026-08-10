@@ -207,6 +207,11 @@ class FakeController:
 
 
 class ModuLixValidationReceiptTests(unittest.TestCase):
+    def test_wait_budget_covers_parallel_controller_contract(self) -> None:
+        controller_maximum_seconds = (15 + 45 + 180 + 15) * 60
+        self.assertGreaterEqual(MODULE.DEFAULT_TIMEOUT_SECONDS, controller_maximum_seconds)
+        self.assertLess(MODULE.DEFAULT_TIMEOUT_SECONDS, 360 * 60)
+
     def test_manifest_and_request_are_exact_digest_bound(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "nexus.json"

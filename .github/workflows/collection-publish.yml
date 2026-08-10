@@ -1180,6 +1180,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: modulix-validation
           permission-actions: write
+          permission-contents: read
 
       - name: Require signed successful ModuLix validation receipt
         if: env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'

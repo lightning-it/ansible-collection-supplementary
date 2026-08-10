@@ -58,7 +58,11 @@ ARTIFACT_RE = re.compile(
 )
 EVIDENCE_ID_RE = re.compile(r"MLX90-[A-Z0-9][A-Z0-9._-]{2,121}\Z")
 NEXUS_REPOSITORY_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,126}\Z")
-DEFAULT_TIMEOUT_SECONDS = 10_200
+# The controller executes validation, Nexus readback, the Heavy and Application
+# matrices in parallel, then signs its receipt.  Keep the bounded Producer wait
+# below the 360-minute publish-job limit while covering the controller's full
+# 255-minute execution budget plus queue/startup allowance.
+DEFAULT_TIMEOUT_SECONDS = 16_200
 DEFAULT_POLL_SECONDS = 10
 COMMAND_TIMEOUT_SECONDS = 120
 
@@ -245,34 +249,34 @@ def build_request(
 
 class ControllerClient(Protocol):
     def installation(self) -> dict[str, Any]:
-        ...
+        raise NotImplementedError
 
     def installation_repositories(self) -> list[str]:
-        ...
+        raise NotImplementedError
 
     def controller_sha(self) -> str:
-        ...
+        raise NotImplementedError
 
     def workflow(self) -> dict[str, Any]:
-        ...
+        raise NotImplementedError
 
     def dispatch(self, request_json: str, request_id: str) -> None:
-        ...
+        raise NotImplementedError
 
     def workflow_runs(self) -> list[dict[str, Any]]:
-        ...
+        raise NotImplementedError
 
     def jobs(self, run_id: int) -> list[dict[str, Any]]:
-        ...
+        raise NotImplementedError
 
     def artifacts(self, run_id: int) -> list[dict[str, Any]]:
-        ...
+        raise NotImplementedError
 
     def download(self, run_id: int, artifact_name: str, destination: Path) -> None:
-        ...
+        raise NotImplementedError
 
     def verify_signature(self, receipt: Path, bundle: Path, controller_sha: str) -> None:
-        ...
+        raise NotImplementedError
 
 
 class GhControllerClient:
@@ -688,9 +692,7 @@ def main() -> int:
         dispatch_if_absent(client, request_json, request_id, controller_sha)
         run = wait_for_run(client, request_id, controller_sha, args.timeout_seconds)
         validate_run_jobs(client.jobs(positive_integer(run.get("id"), "controller run ID")))
-        receipt_path = download_and_verify_receipt(
-            client, request, request_id, run, args.output_directory
-        )[0]
+        receipt_path = download_and_verify_receipt(client, request, request_id, run, args.output_directory)[0]
     except ReceiptError as exc:
         parser.error(str(exc))
 

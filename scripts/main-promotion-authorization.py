@@ -7,16 +7,12 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
+from security_main_promotion import verify_promotion
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
-SUPPLEMENTARY_SECURITY_BRANCH = re.compile(
-    r"^security-release/MLX90-[A-Z0-9][A-Z0-9._-]{2,127}$"
-)
-CONTAINER_SECURITY_BRANCH = re.compile(
-    r"^security/mlx90-(?:cleanup-)?[a-z0-9][a-z0-9._-]*$"
-)
+CONTAINER_SECURITY_BRANCH = re.compile(r"^security/mlx90-(?:cleanup-)?[a-z0-9][a-z0-9._-]*$")
 RELEASE_APP_LOGIN = "lightning-it-release-automation[bot]"
 RELEASE_APP_USER_ID = 307565056
 RELEASE_TEAM_ID = 15545798
@@ -45,7 +41,7 @@ class Authorization:
     head_ref: str
 
 
-def fail(message: str) -> None:
+def fail(message: str) -> NoReturn:
     raise AuthorizationError(message)
 
 
@@ -98,11 +94,7 @@ def validate_environment(payload: dict[str, Any], result: Authorization) -> None
         for rule in protection_rules
         if isinstance(rule, dict) and rule.get("type") == "required_reviewers"
     ]
-    wait_rules = [
-        rule
-        for rule in protection_rules
-        if isinstance(rule, dict) and rule.get("type") == "wait_timer"
-    ]
+    wait_rules = [rule for rule in protection_rules if isinstance(rule, dict) and rule.get("type") == "wait_timer"]
     if wait_rules:
         fail("live environment must not substitute a wait timer for authorization")
 
@@ -120,13 +112,8 @@ def validate_environment(payload: dict[str, Any], result: Authorization) -> None
     if not isinstance(reviewers, list) or len(reviewers) != 1:
         fail("normal promotion environment must have exactly one reviewer")
     reviewer = require_dict(reviewers[0], "environment reviewer")
-    reviewer_identity = require_dict(
-        reviewer.get("reviewer"), "environment reviewer identity"
-    )
-    if (
-        reviewer.get("type") != "BusinessTeam"
-        or reviewer_identity.get("id") != RELEASE_TEAM_ID
-    ):
+    reviewer_identity = require_dict(reviewer.get("reviewer"), "environment reviewer identity")
+    if reviewer.get("type") != "BusinessTeam" or reviewer_identity.get("id") != RELEASE_TEAM_ID:
         fail("normal promotion environment reviewer must be the release team")
 
 
@@ -135,6 +122,9 @@ def classify(
     repository: str,
     expected_base: str,
     expected_head: str,
+    *,
+    base_root: Path | None = None,
+    head_root: Path | None = None,
 ) -> Authorization:
     if repository not in ALLOWED_REPOSITORIES:
         fail("repository is outside the MLX-90 promotion allowlist")
@@ -164,23 +154,37 @@ def classify(
     if head_repository != repository:
         fail("cross-repository main promotion is not authorized")
 
-    reserved_security_prefix = False
-    security_branch = False
+    release_app = author_login == RELEASE_APP_LOGIN and author_id == RELEASE_APP_USER_ID and author_type == "Bot"
     if repository == SUPPLEMENTARY:
-        reserved_security_prefix = head_ref.startswith("security-release/")
-        security_branch = SUPPLEMENTARY_SECURITY_BRANCH.fullmatch(head_ref) is not None
-    elif repository == CONTAINER:
-        reserved_security_prefix = head_ref.startswith("security/mlx90-")
-        security_branch = CONTAINER_SECURITY_BRANCH.fullmatch(head_ref) is not None
+        reserved_release = head_ref.startswith("security-release/") or head_ref.startswith("release/")
+        if reserved_release:
+            if not release_app:
+                fail("Supplementary release promotion must be authored by the release App")
+            if base_root is None or head_root is None:
+                fail("Supplementary release promotion requires exact base and head checkouts")
+            try:
+                verified = verify_promotion(
+                    base_root=base_root,
+                    head_root=head_root,
+                    base_sha=expected_base,
+                    head_sha=expected_head,
+                    head_ref=head_ref,
+                )
+            except ValueError as exc:
+                raise AuthorizationError(str(exc)) from exc
+            return Authorization(
+                mode=verified.mode,
+                environment=(SECURITY_ENVIRONMENT if verified.mode == "security" else NORMAL_ENVIRONMENT),
+                head_sha=head_sha,
+                head_ref=head_ref,
+            )
+        if head_ref != "develop":
+            fail("normal Supplementary main promotion must originate from develop")
 
-    if reserved_security_prefix:
-        if not security_branch:
+    elif repository == CONTAINER and head_ref.startswith("security/mlx90-"):
+        if CONTAINER_SECURITY_BRANCH.fullmatch(head_ref) is None:
             fail("reserved MLX-90 Security branch name is malformed")
-        if (
-            author_login != RELEASE_APP_LOGIN
-            or author_id != RELEASE_APP_USER_ID
-            or author_type != "Bot"
-        ):
+        if not release_app:
             fail("MLX-90 Security promotion must be authored by the release App")
         return Authorization(
             mode="security",
@@ -188,6 +192,9 @@ def classify(
             head_sha=head_sha,
             head_ref=head_ref,
         )
+
+    elif head_ref != "develop":
+        fail("normal main promotion must originate from develop")
 
     return Authorization(
         mode="normal",
@@ -221,6 +228,8 @@ def main() -> int:
     parser.add_argument("--repository", required=True)
     parser.add_argument("--expected-base", required=True)
     parser.add_argument("--expected-head", required=True)
+    parser.add_argument("--base-root", type=Path)
+    parser.add_argument("--head-root", type=Path)
     parser.add_argument("--expected-mode", choices=("normal", "security"))
     parser.add_argument("--github-output", type=Path)
     args = parser.parse_args()
@@ -230,6 +239,8 @@ def main() -> int:
             args.repository,
             args.expected_base,
             args.expected_head,
+            base_root=args.base_root.resolve() if args.base_root else None,
+            head_root=args.head_root.resolve() if args.head_root else None,
         )
         if args.expected_mode is not None and result.mode != args.expected_mode:
             fail("live promotion mode changed after environment authorization")

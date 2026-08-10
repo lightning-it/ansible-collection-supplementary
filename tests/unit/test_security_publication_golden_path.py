@@ -87,6 +87,7 @@ class SecurityPublicationGoldenPathTests(unittest.TestCase):
         token = self.steps["Mint exact ModuLix validation App token"]
         self.assertEqual("modulix-validation", token["with"]["repositories"])
         self.assertEqual("write", token["with"]["permission-actions"])
+        self.assertEqual("read", token["with"]["permission-contents"])
         self.assertNotIn("permission-administration", token["with"])
         self.assertNotIn("permission-environments", token["with"])
         self.assertNotIn("permission-secrets", token["with"])
