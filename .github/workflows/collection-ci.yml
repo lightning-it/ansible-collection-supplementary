@@ -833,19 +833,25 @@ jobs:
         uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7
         with:
           sbom: artifacts/evidence/security/sbom.cdx.json
-          vex: security/vex/chrome-linux-151.0.7922.71.openvex.json
           output-format: json
           output-file: artifacts/evidence/security/vulnerability-report.json
           fail-build: true
           severity-cutoff: high
-      - name: Preserve the applied vulnerability-exploitability statement
+      - name: Independently scan the candidate-bound SBOM with Trivy
         if: always()
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts/evidence/security
-          cp \
-            security/vex/chrome-linux-151.0.7922.71.openvex.json \
-            artifacts/evidence/security/chrome-linux.openvex.json
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          scan-type: sbom
+          scan-ref: artifacts/evidence/security/sbom.cdx.json
+          scanners: vuln
+          vuln-type: os,library
+          format: json
+          output: artifacts/evidence/security/trivy-vulnerability-report.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "1"
+          version: v0.70.0
+          cache: false
       - name: Scan the exact collection candidate for secret-like content
         if: always()
         run: |
@@ -1394,6 +1400,8 @@ jobs:
           set -euo pipefail
           cp artifacts/evidence/security/vulnerability-report.json \
             artifacts/release-assets/vulnerability-report.json
+          cp artifacts/evidence/security/trivy-vulnerability-report.json \
+            artifacts/release-assets/trivy-vulnerability-report.json
           cp artifacts/evidence/security/secret-scan-summary.json \
             artifacts/release-assets/secret-scan-summary.json
           python - <<'PY'

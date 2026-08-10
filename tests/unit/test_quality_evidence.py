@@ -140,6 +140,18 @@ class QualityEvidenceTests(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
+        (security / "trivy-vulnerability-report.json").write_text(
+            json.dumps(
+                {
+                    "SchemaVersion": 2,
+                    "ArtifactName": "artifacts/evidence/security/sbom.cdx.json",
+                    "ArtifactType": "CycloneDX",
+                    "Results": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         (security / "provenance.json").write_text(
             json.dumps(
                 {
@@ -753,6 +765,49 @@ class QualityEvidenceTests(unittest.TestCase):
         summary, errors = evidence.assess_security(self.evidence_root, release_mode=True, commit_sha=sha)
         self.assertFalse(summary["semantic_valid"])
         self.assertTrue(any("Grype scanner identity" in error for error in errors), errors)
+
+    def test_trivy_report_must_be_independent_bound_and_high_critical_clean(self) -> None:
+        sha = "c" * 40
+        self._release_security(sha)
+        collection = self.evidence_root / "collection"
+        collection.mkdir()
+        (collection / "galaxy.yml").write_text(
+            (self.repository / "galaxy.yml").read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        report_path = self.evidence_root / "security" / "trivy-vulnerability-report.json"
+        valid_report = json.loads(report_path.read_text(encoding="utf-8"))
+        cases = (
+            ("old schema", {**valid_report, "SchemaVersion": 1}, "schema version"),
+            ("wrong source", {**valid_report, "ArtifactName": "other.cdx.json"}, "sbom.cdx.json"),
+            ("missing results", {key: value for key, value in valid_report.items() if key != "Results"}, "Results"),
+        )
+        for label, changed, expected_error in cases:
+            with self.subTest(label=label):
+                report_path.write_text(json.dumps(changed) + "\n", encoding="utf-8")
+                summary, errors = evidence.assess_security(self.evidence_root, release_mode=True, commit_sha=sha)
+                self.assertFalse(summary["semantic_valid"])
+                self.assertTrue(any(expected_error in error for error in errors), errors)
+
+        blocking = json.loads(json.dumps(valid_report))
+        blocking["Results"] = [
+            {
+                "Target": "sbom.cdx.json",
+                "Class": "lang-pkgs",
+                "Type": "python-pkg",
+                "Vulnerabilities": [
+                    {
+                        "VulnerabilityID": "CVE-2099-0001",
+                        "PkgName": "synthetic-package",
+                        "Severity": "HIGH",
+                    }
+                ],
+            }
+        ]
+        report_path.write_text(json.dumps(blocking) + "\n", encoding="utf-8")
+        summary, errors = evidence.assess_security(self.evidence_root, release_mode=True, commit_sha=sha)
+        self.assertFalse(summary["semantic_valid"])
+        self.assertEqual(1, summary["vulnerability_blocking_findings"])
+        self.assertTrue(any("Trivy scan reports 1" in error for error in errors), errors)
 
     def test_release_dependencies_require_controller_and_dependency_inventories(self) -> None:
         self._release_dependencies(self.evidence_root)
