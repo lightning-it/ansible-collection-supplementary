@@ -9,4 +9,4 @@
 - Prefer a regression test for bugs and security issues.
 
 <!-- Managed contract: Codex and Copilot must apply AGENTS.md. -->
-<!-- AGENTS_SHA256: a0162704193f51350d43ad4873462490f6ead53919ebb37e07c15ef72dacbf04 -->
+<!-- AGENTS_SHA256: 14756dae73fbbae40e3fe06c8f00eaf61412d1f85512d0aed2e1bcfd3b5ea843 -->

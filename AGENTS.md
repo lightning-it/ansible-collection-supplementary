@@ -45,6 +45,12 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    tests in `shared-assets-lit`.
 7. The role-quality governance block in this file is enforced by `scripts/validate-role-coverage.py` and recorded in
    `.lit/repository.yml`; a shared-assets sync MUST preserve it.
+8. Until a fresh real Security release proves `humanActions=0`, this repository owns exactly
+   `.github/workflows/copilot-review.yml`, `scripts/security-release-intake.py`,
+   `.github/workflows/security-release-intake.yml`, `scripts/security-release-dispatch.py`,
+   `.github/workflows/security-release-dispatch.yml`, and
+   `tests/unit/test_security_release_request_dispatch.py`. Sync MUST preserve them byte-for-byte; after acceptance,
+   their proven versions are canonicalized once in `shared-assets-lit`.
 
 ## 2. Repository Baseline (This Repo)
 

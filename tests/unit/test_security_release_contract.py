@@ -132,8 +132,9 @@ class SecurityReleaseContractTests(unittest.TestCase):
             workflow_ref=(
                 f"{CONTRACT.PRODUCER_REPOSITORY}/.github/workflows/security-release-intake.yml@refs/heads/main"
             ),
-            workflow_event="repository_dispatch",
+            workflow_event="workflow_dispatch",
             workflow_actor=CONTRACT.RELEASE_APP_LOGIN,
+            workflow_triggering_actor=CONTRACT.RELEASE_APP_LOGIN,
             observed_automation=CONTRACT.RELEASE_APP_IDENTITY,
         )
 
@@ -177,6 +178,10 @@ class SecurityReleaseContractTests(unittest.TestCase):
         mutations = (
             lambda value: value["automation"].__setitem__("installationId", "1"),
             lambda value: value["controller"].__setitem__("actor", "human"),
+            lambda value: value["controller"].__setitem__("triggeringActor", "human"),
+            lambda value: value["controller"].__setitem__("event", "repository_dispatch"),
+            lambda value: value["automation"]["selectedRepositories"].append("example/extra"),
+            lambda value: value["automation"]["permissions"].__setitem__("checks", "write"),
             lambda value: value.__setitem__("unknown", True),
             lambda value: value["request"].__setitem__("chainId", "sha256:" + "0" * 64),
             lambda value: value["request"].__setitem__("schemaVersion", 2.0),
@@ -220,8 +225,9 @@ class SecurityReleaseContractTests(unittest.TestCase):
                 workflow_ref=(
                     f"{CONTRACT.PRODUCER_REPOSITORY}/.github/workflows/security-release-intake.yml@refs/heads/main"
                 ),
-                workflow_event="repository_dispatch",
+                workflow_event="workflow_dispatch",
                 workflow_actor=CONTRACT.RELEASE_APP_LOGIN,
+                workflow_triggering_actor=CONTRACT.RELEASE_APP_LOGIN,
                 observed_automation=observed,
             )
 

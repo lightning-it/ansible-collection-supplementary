@@ -861,6 +861,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("Required merge method: \\`merge commit\\`", prepare)
         self.assertIn("Immutable tag v${VERSION} already exists", prepare)
         publish = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
+        copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         self.assertIn("Re-prove fragment-derived version and authorized preparation", publish)
         self.assertIn('test "${#preparation_parents[@]}" -eq 1', publish)
         self.assertIn(
@@ -868,6 +869,26 @@ class WorkflowSecurityTests(unittest.TestCase):
             publish,
         )
         self.assertIn("--verify-preparation-receipt", publish)
+        self.assertIn('git worktree add --detach --quiet "$base_tree" "$REVIEWED_BASE_SHA"', publish)
+        self.assertIn('--root "$base_tree"', publish)
+        self.assertEqual(
+            2,
+            publish.count('python "$base_tree/scripts/release-version.py"'),
+        )
+        self.assertIn(
+            'git worktree add --detach --quiet "$base_tree" "$BASE_SHA"',
+            copilot,
+        )
+        self.assertIn(
+            'python "$base_tree/scripts/release-version.py"',
+            copilot,
+        )
+        self.assertIn('--root "$base_tree"', copilot)
+        self.assertNotIn(".schema_version == 1", copilot)
+        self.assertIn(
+            "Verified schema-v2 preparation against the immutable base tree",
+            copilot,
+        )
         self.assertIn("actions/runs/${preparation_run_id}", publish)
         self.assertIn('.conclusion == "success"', publish)
         action = ACTION.read_text(encoding="utf-8")

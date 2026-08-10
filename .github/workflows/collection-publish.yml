@@ -420,24 +420,26 @@ jobs:
           PY
           )"
           test "$released_version" = "$expected_version"
-          python scripts/release-version.py \
+
+          base_tree="$RUNNER_TEMP/release-preparation-base"
+          test ! -e "$base_tree"
+          git worktree add --detach --quiet "$base_tree" "$REVIEWED_BASE_SHA"
+          test "$(git -C "$base_tree" rev-parse HEAD)" = "$REVIEWED_BASE_SHA"
+          python "$base_tree/scripts/release-version.py" \
             --verify-preparation-receipt "$receipt" \
             --repository "$GITHUB_REPOSITORY" \
             --repository-id "$REPOSITORY_ID" \
             --base-sha "$REVIEWED_BASE_SHA" \
-            --expected-version "$expected_version" >/dev/null
+            --expected-version "$expected_version" \
+            --root "$base_tree" >/dev/null
 
-          base_tree="$RUNNER_TEMP/release-preparation-base"
-          rm -rf "$base_tree"
-          mkdir -p "$base_tree/fragments"
-          git show "$REVIEWED_BASE_SHA:galaxy.yml" > "$base_tree/galaxy.yml"
           while IFS= read -r fragment; do
             name="$(jq -er '.path' <<< "$fragment")"
             expected_digest="$(jq -er '.sha256' <<< "$fragment")"
-            git show \
-              "$REVIEWED_BASE_SHA:changelogs/fragments/$name" \
-              > "$base_tree/fragments/$name"
-            test "$(sha256sum "$base_tree/fragments/$name" | awk '{print $1}')" = \
+            fragment_path="$base_tree/changelogs/fragments/$name"
+            test -f "$fragment_path"
+            test ! -L "$fragment_path"
+            test "$(sha256sum "$fragment_path" | awk '{print $1}')" = \
               "$expected_digest"
             if git cat-file -e \
                 "$REVIEWED_HEAD_SHA:changelogs/fragments/$name" 2>/dev/null
@@ -448,9 +450,9 @@ jobs:
           done < <(jq -c '.fragments[]' "$receipt")
 
           recomputed="$(
-            python scripts/release-version.py \
+            python "$base_tree/scripts/release-version.py" \
               --galaxy "$base_tree/galaxy.yml" \
-              --fragments "$base_tree/fragments" \
+              --fragments "$base_tree/changelogs/fragments" \
               --requested-version "$expected_version"
           )"
           jq -e --argjson recomputed "$recomputed" '
