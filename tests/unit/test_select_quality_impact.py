@@ -182,9 +182,9 @@ families:
     def test_keycloak_dependency_digest_selects_all_declared_profiles(self) -> None:
         base_inventory = self._base_inventory(
             (
-                "quay.io/keycloak/keycloak:26.7.0@sha256:"
-                "0f198be292568439d700cdbfb893e69a6009bb43a94a06a945b1d3d506c76b13",
-                "quay.io/keycloak/keycloak:26.7.0@sha256:"
+                "quay.io/keycloak/keycloak:26.7.1@sha256:"
+                "f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6",
+                "quay.io/keycloak/keycloak:26.7.1@sha256:"
                 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             )
         )

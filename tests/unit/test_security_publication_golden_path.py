@@ -35,6 +35,39 @@ class SecurityPublicationGoldenPathTests(unittest.TestCase):
         self.assertIn("'ansible-collections'", environment)
         self.assertIn("lightning-it-release-automation[bot]", self.publish["if"])
 
+    def test_release_validation_wait_covers_complete_ci_budget(self) -> None:
+        environment = self.workflow["env"]
+        attempts = int(environment["RELEASE_VALIDATION_WINDOW_ONE_ATTEMPTS"]) + int(
+            environment["RELEASE_VALIDATION_WINDOW_TWO_ATTEMPTS"]
+        )
+        budget = attempts * int(environment["RELEASE_VALIDATION_POLL_SECONDS"]) // 60
+        required = int(environment["RELEASE_VALIDATION_WORST_CASE_MINUTES"]) + int(
+            environment["RELEASE_VALIDATION_QUEUE_ALLOWANCE_MINUTES"]
+        )
+        self.assertGreaterEqual(budget, required)
+        jobs = self.workflow["jobs"]
+        self.assertLessEqual(jobs["release-validation-window"]["timeout-minutes"], 360)
+        self.assertLessEqual(jobs["release-validation"]["timeout-minutes"], 360)
+        first_wait = jobs["release-validation-window"]["steps"][0]["run"]
+        final_wait = jobs["release-validation"]["steps"][0]["run"]
+        for exact_identity in (
+            '.event == "push"',
+            '.head_branch == "main"',
+            ".head_sha == $sha",
+        ):
+            self.assertIn(exact_identity, first_wait)
+            self.assertIn(exact_identity, final_wait)
+        self.assertIn('test -n "$run_id"', first_wait)
+        self.assertIn('echo "ci-run-id=$run_id"', first_wait)
+        self.assertIn("First bounded window exhausted", first_wait)
+        self.assertIn('test "$EARLY_RUN_ID" = "$run_id"', final_wait)
+        self.assertIn('test "$conclusion" = success', final_wait)
+        self.assertIn('test "$gate_count" -eq 1', final_wait)
+        self.assertEqual(["security-classification", "release-validation"], self.publish["needs"])
+        self.assertNotIn("Wait for exact-SHA main Release Validation", self.step_names)
+        download = self.steps["Download exact candidate and evidence from validated run"]
+        self.assertEqual("${{ needs.release-validation.outputs.ci-run-id }}", download["env"]["CI_RUN_ID"])
+
     def test_security_order_is_nexus_then_signed_modulix_then_galaxy(self) -> None:
         nexus = self.step_names.index("Stage exact Security candidate in native Nexus Galaxy v3")
         receipt = self.step_names.index("Require signed successful ModuLix validation receipt")

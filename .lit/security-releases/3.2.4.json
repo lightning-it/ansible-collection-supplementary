@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "evidenceId": "MLX90-KEYCLOAK-26.7.1-3.2.4",
+  "createdAt": "2026-08-08T22:48:24Z",
+  "securityIdentifiers": [
+    "CVE-2026-4629",
+    "CVE-2026-9793",
+    "CVE-2026-14209",
+    "CVE-2026-14614",
+    "CVE-2026-14615"
+  ],
+  "affectedVersion": "3.2.3",
+  "fixedVersion": "3.2.4",
+  "consumers": [
+    "lightning-it/container-ee-wunder-ansible-ubi9"
+  ],
+  "acceptanceProfile": "lit.supplementary/keycloak-26.7.1-security-v1",
+  "validity": {
+    "notBefore": "2026-08-08T22:48:24Z",
+    "expiresAt": "2026-09-07T22:48:24Z",
+    "revoked": false
+  }
+}

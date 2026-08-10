@@ -743,50 +743,68 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('git show "$SOURCE_SHA:meta/source-dependencies.yml"', ci)
         self.assertIn("artifacts/evidence/security/source-dependencies.yml", ci)
         self.assertIn("cmp --silent", ci)
-        self.assertIn(
-            "vex: security/vex/chrome-linux-151.0.7922.71.openvex.json",
-            ci,
-        )
-        self.assertIn(
-            "artifacts/evidence/security/chrome-linux.openvex.json",
-            ci,
-        )
-        step_marker = "- name: Preserve the applied vulnerability-exploitability statement"
-        before_step, marker, after_step = ci.partition(step_marker)
-        self.assertTrue(before_step)
-        self.assertEqual(step_marker, marker)
-        preserve_vex, next_marker, remaining_steps = after_step.partition("- name:")
+        self.assertNotRegex(ci, r"(?im)^\s*(?:vex|ignore|allowlist)\s*:")
+        self.assertNotIn("openvex", ci.casefold())
+        self.assertNotIn("vulnerability-exploitability", ci.casefold())
+        self.assertEqual([], list((ROOT / "security" / "vex").glob("*")))
+        trivy_marker = "- name: Independently scan the candidate-bound SBOM with Trivy"
+        before_trivy, marker, after_trivy = ci.partition(trivy_marker)
+        self.assertTrue(before_trivy)
+        self.assertEqual(trivy_marker, marker)
+        trivy_step, next_marker, remaining_steps = after_trivy.partition("- name:")
         self.assertEqual("- name:", next_marker)
         self.assertTrue(remaining_steps)
-        self.assertIn("set -euo pipefail", preserve_vex)
-        self.assertIn("mkdir -p artifacts/evidence/security", preserve_vex)
-
-        vex_path = ROOT / "security" / "vex" / "chrome-linux-151.0.7922.71.openvex.json"
-        vex = json.loads(vex_path.read_text(encoding="utf-8"))
-        expected_cves = {
-            "CVE-2026-17950",
-            "CVE-2026-17952",
-            "CVE-2026-17956",
-            "CVE-2026-17969",
-            "CVE-2026-17979",
-            "CVE-2026-17989",
-            "CVE-2026-17993",
-            "CVE-2026-18012",
-            "CVE-2026-18017",
-        }
-        self.assertEqual(
-            {statement["vulnerability"]["name"] for statement in vex["statements"]},
-            expected_cves,
+        for exact_contract in (
+            "docker run --rm",
+            "--read-only",
+            'cache_dir="$RUNNER_TEMP/trivy-cache-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+            'test ! -e "$cache_dir"',
+            'mkdir -m 0700 "$cache_dir"',
+            '--user "$(id -u):$(id -g)"',
+            "--cap-drop ALL",
+            "--security-opt no-new-privileges=true",
+            "--pids-limit 128",
+            "--network bridge",
+            "--tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777",
+            '-v "$PWD:/workspace:ro"',
+            '-v "$cache_dir:/trivy-cache:rw"',
+            "docker.io/aquasec/trivy:0.70.0@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e",
+            "--cache-dir /trivy-cache",
+            "--config /dev/null",
+            "--quiet",
+            "--timeout 15m",
+            "sbom",
+            "--no-progress",
+            "--disable-telemetry",
+            "--scanners vuln",
+            "--pkg-types os,library",
+            "--severity HIGH,CRITICAL",
+            "--ignore-unfixed=false",
+            "--skip-vex-repo-update",
+            "--ignorefile /dev/null",
+            "--exit-code 1",
+            "--format json",
+            "artifacts/evidence/security/sbom.cdx.json",
+            "> artifacts/evidence/security/trivy-vulnerability-report.json",
+            "test -s artifacts/evidence/security/trivy-vulnerability-report.json",
+        ):
+            self.assertIn(exact_contract, trivy_step)
+        self.assertNotIn("aquasecurity/trivy-action", ci)
+        self.assertIn("test ! -e .trivyignore", trivy_step)
+        self.assertIn("test ! -e trivy.yaml", trivy_step)
+        self.assertNotIn("--ignore-policy", trivy_step)
+        self.assertNotIn("--vex", trivy_step)
+        self.assertIn(
+            "artifacts/release-assets/trivy-vulnerability-report.json",
+            ci,
         )
-        for statement in vex["statements"]:
-            self.assertEqual(statement["status"], "fixed")
-            self.assertEqual(
-                statement["products"],
-                [{"@id": "pkg:generic/google-chrome@151.0.7922.71"}],
-            )
-            self.assertIn("chromereleases.googleblog.com", statement["status_notes"])
 
         publish = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
+        self.assertIn(
+            "incoming/evidence/evidence/security/trivy-vulnerability-report.json",
+            publish,
+        )
+        self.assertIn("dist/release/trivy-vulnerability-report.json", publish)
         self.assertIn("dist/release/SHA256SUMS.sigstore.json", publish)
         self.assertIn("existing-release-checksum-pair", publish)
         self.assertIn('test "$checksum_asset_count" -eq "$bundle_asset_count"', publish)
