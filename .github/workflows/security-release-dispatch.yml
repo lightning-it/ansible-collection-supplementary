@@ -1,4 +1,4 @@
-# Managed by lightning-it/shared-assets-lit. MLX-90 Security-only dispatch.
+# Repository-owned MLX-90 golden-path incubation asset; canonicalize after real humanActions=0 acceptance.
 # yamllint disable rule:truthy
 ---
 name: Security release dispatch

@@ -871,6 +871,10 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("--verify-preparation-receipt", publish)
         self.assertIn('git worktree add --detach --quiet "$base_tree" "$REVIEWED_BASE_SHA"', publish)
         self.assertIn('--root "$base_tree"', publish)
+        self.assertEqual(
+            2,
+            publish.count('python "$base_tree/scripts/release-version.py"'),
+        )
         self.assertIn(
             'git worktree add --detach --quiet "$base_tree" "$BASE_SHA"',
             copilot,

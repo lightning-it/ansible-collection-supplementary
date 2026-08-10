@@ -1,5 +1,4 @@
-# Managed by lightning-it/shared-assets-lit.
-# Do not edit downstream copies directly.
+# Repository-owned MLX-90 golden-path incubation asset; canonicalize after real humanActions=0 acceptance.
 # yamllint disable rule:truthy rule:line-length
 ---
 name: Copilot review gate

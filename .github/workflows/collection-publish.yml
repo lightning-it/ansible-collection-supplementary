@@ -425,7 +425,7 @@ jobs:
           test ! -e "$base_tree"
           git worktree add --detach --quiet "$base_tree" "$REVIEWED_BASE_SHA"
           test "$(git -C "$base_tree" rev-parse HEAD)" = "$REVIEWED_BASE_SHA"
-          python scripts/release-version.py \
+          python "$base_tree/scripts/release-version.py" \
             --verify-preparation-receipt "$receipt" \
             --repository "$GITHUB_REPOSITORY" \
             --repository-id "$REPOSITORY_ID" \
@@ -450,7 +450,7 @@ jobs:
           done < <(jq -c '.fragments[]' "$receipt")
 
           recomputed="$(
-            python scripts/release-version.py \
+            python "$base_tree/scripts/release-version.py" \
               --galaxy "$base_tree/galaxy.yml" \
               --fragments "$base_tree/changelogs/fragments" \
               --requested-version "$expected_version"

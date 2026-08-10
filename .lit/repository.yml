@@ -56,6 +56,24 @@ enterprise_role_quality:
   long_term_archive_required: false
   release_eligibility: fail-closed
 local_managed_file_exceptions:
+  - path: .github/workflows/copilot-review.yml
+    owner: ansible-collection-supplementary
+    reason: MLX-90 golden-path incubation until real humanActions=0 acceptance.
+  - path: scripts/security-release-intake.py
+    owner: ansible-collection-supplementary
+    reason: MLX-90 golden-path incubation until real humanActions=0 acceptance.
+  - path: .github/workflows/security-release-intake.yml
+    owner: ansible-collection-supplementary
+    reason: MLX-90 golden-path incubation until real humanActions=0 acceptance.
+  - path: scripts/security-release-dispatch.py
+    owner: ansible-collection-supplementary
+    reason: MLX-90 golden-path incubation until real humanActions=0 acceptance.
+  - path: .github/workflows/security-release-dispatch.yml
+    owner: ansible-collection-supplementary
+    reason: MLX-90 golden-path incubation until real humanActions=0 acceptance.
+  - path: tests/unit/test_security_release_request_dispatch.py
+    owner: ansible-collection-supplementary
+    reason: MLX-90 golden-path incubation until real humanActions=0 acceptance.
   - path: AGENTS.md
     owner: ansible-collection-supplementary
     reason: >-
