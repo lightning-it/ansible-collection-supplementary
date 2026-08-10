@@ -145,6 +145,32 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
         )
         self.assertEqual(2, rejected.returncode)
         self.assertIn("differs from its pre-consumption base", rejected.stderr)
+        metadata_path.write_bytes(
+            (binding_root / ".lit/security-releases/3.2.2.json").read_bytes()
+        )
+
+        binding_target = self.root.parent / f"{self.root.name}-binding-target"
+        symlinked_binding = self.root.parent / f"{self.root.name}-symlinked-binding"
+        self.addCleanup(shutil.rmtree, binding_target, True)
+        self.addCleanup(shutil.rmtree, symlinked_binding, True)
+        shutil.copytree(binding_root, binding_target)
+        symlinked_binding.mkdir()
+        (symlinked_binding / ".lit").symlink_to(
+            binding_target / ".lit", target_is_directory=True
+        )
+        with self.assertRaisesRegex(
+            MODULE.ClassificationError, "differs from its pre-consumption base"
+        ):
+            MODULE.classify(
+                args(
+                    event_kind="version",
+                    version="3.2.2",
+                    binding_root=symlinked_binding,
+                ),
+                self.root,
+                CHECKED_AT,
+            )
+
         with self.assertRaisesRegex(MODULE.ClassificationError, "not currently valid"):
             MODULE.classify(
                 args(event_kind="version", version="3.2.2"),

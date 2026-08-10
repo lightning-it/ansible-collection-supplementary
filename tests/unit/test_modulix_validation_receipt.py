@@ -52,7 +52,7 @@ def manifest_payload() -> dict[str, object]:
 
 
 def request_payload() -> tuple[dict[str, object], str]:
-    request, _, request_id = MODULE.build_request(
+    built_request = MODULE.build_request(
         manifest=manifest_payload(),
         source_sha=SOURCE_SHA,
         source_run_id=12345,
@@ -61,7 +61,7 @@ def request_payload() -> tuple[dict[str, object], str]:
         version="3.2.4",
         controller_sha=CONTROLLER_SHA,
     )
-    return request, request_id
+    return built_request[0], built_request[2]
 
 
 def run_payload(request_id: str, *, status: str = "completed", conclusion: str | None = "success") -> dict[str, object]:
@@ -275,7 +275,7 @@ class ModuLixValidationReceiptTests(unittest.TestCase):
             MODULE.validate_installation(client, MODULE.APP_SLUG, MODULE.APP_INSTALLATION_ID)
 
     def test_run_requires_exact_app_actor_ref_sha_and_unique_match(self) -> None:
-        _, request_id = request_payload()
+        request_id = request_payload()[1]
         run = run_payload(request_id)
         self.assertTrue(MODULE.matching_run(run, request_id, CONTROLLER_SHA))
         for field, value in (

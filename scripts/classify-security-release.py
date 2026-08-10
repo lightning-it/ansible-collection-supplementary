@@ -82,6 +82,20 @@ def exact_keys(payload: dict[str, Any], expected: set[str], label: str) -> None:
         fail(f"{label} has unexpected or missing fields")
 
 
+def is_regular_file_beneath(root: Path, relative: Path) -> bool:
+    """Reject symlinks at every repository-relative path component."""
+    current = root
+    if current.is_symlink() or not current.is_dir():
+        return False
+    for component in relative.parts:
+        if component in {"", ".", ".."}:
+            return False
+        current /= component
+        if current.is_symlink():
+            return False
+    return current.is_file()
+
+
 def classify_version(
     root: Path,
     version: str,
@@ -98,8 +112,6 @@ def classify_version(
         return Classification(False)
 
     if binding_root is not None:
-        if binding_root.is_symlink() or not binding_root.is_dir():
-            fail("Security binding root must be a regular directory")
         for relative in (
             Path(".lit/security-releases") / f"{version}.json",
             Path(".lit/security-release-intakes") / f"{version}.json",
@@ -108,10 +120,8 @@ def classify_version(
             current = root / relative
             bound = binding_root / relative
             if (
-                current.is_symlink()
-                or bound.is_symlink()
-                or not current.is_file()
-                or not bound.is_file()
+                not is_regular_file_beneath(root, relative)
+                or not is_regular_file_beneath(binding_root, relative)
                 or current.read_bytes() != bound.read_bytes()
             ):
                 fail(

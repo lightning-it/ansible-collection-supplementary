@@ -41,11 +41,14 @@ class StageError(ValueError):
 
 
 class HttpResponse(Protocol):
-    def getcode(self) -> int: ...
+    def getcode(self) -> int:
+        ...
 
-    def read(self, amount: int = -1) -> bytes: ...
+    def read(self, amount: int = -1) -> bytes:
+        ...
 
-    def __enter__(self) -> HttpResponse: ...
+    def __enter__(self) -> HttpResponse:
+        ...
 
     def __exit__(
         self,
@@ -58,14 +61,14 @@ class HttpResponse(Protocol):
 class _RejectRedirects(urllib.request.HTTPRedirectHandler):
     def redirect_request(  # type: ignore[override]
         self,
-        request: urllib.request.Request,
-        file_pointer: BinaryIO,
+        req: urllib.request.Request,
+        fp: BinaryIO,
         code: int,
-        message: str,
+        msg: str,
         headers: object,
-        new_url: str,
+        newurl: str,
     ) -> None:
-        del request, file_pointer, code, message, headers, new_url
+        del req, fp, code, msg, headers, newurl
         return None
 
 
@@ -208,9 +211,11 @@ class NexusClient:
 
 
 class StageClient(Protocol):
-    def readback(self, url: str, destination: Path) -> int | None: ...
+    def readback(self, url: str, destination: Path) -> int | None:
+        ...
 
-    def upload(self, url: str, candidate: Path) -> None: ...
+    def upload(self, url: str, candidate: Path) -> None:
+        ...
 
 
 def stage(
