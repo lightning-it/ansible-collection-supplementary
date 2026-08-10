@@ -1,5 +1,3 @@
-"""Classify only evidence-bound MLX-90 Security release events."""
-
 from __future__ import annotations
 
 import argparse
@@ -28,7 +26,7 @@ PREPARE_TITLE = re.compile(r"(?:^|\n)chore\(release\): prepare v([0-9]+\.[0-9]+\
 
 
 class ClassificationError(ValueError):
-    """Raised when an event claims Security semantics without valid evidence."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -45,24 +43,30 @@ def fail(message: str) -> NoReturn:
 def git_binary() -> str:
     executable = shutil.which("git")
     if executable is None:
-        fail("git executable is unavailable")
+        fail("git unavailable")
     return executable
+
+
+def git_environment() -> dict[str, str]:
+    environment = os.environ.copy()
+    for variable in ("GIT_COMMON_DIR", "GIT_DIR", "GIT_WORK_TREE"):
+        environment.pop(variable, None)
+    return environment
 
 
 def timestamp(value: Any, field: str) -> datetime:
     if not isinstance(value, str) or not value:
-        fail(f"{field} must be a non-empty RFC3339 timestamp")
+        fail(f"{field} must be RFC3339")
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:
         raise ClassificationError(f"{field} must be RFC3339") from exc
     if parsed.tzinfo is None:
-        fail(f"{field} must include a timezone")
+        fail(f"{field} needs a timezone")
     return parsed.astimezone(UTC)
 
 
 def is_regular_file_beneath(root: Path, relative: Path) -> bool:
-    """Reject symlinks at every repository-relative path component."""
     current = root
     if current.is_symlink() or not current.is_dir():
         return False
@@ -83,16 +87,16 @@ def classify_version(
     binding_root: Path | None = None,
 ) -> Classification:
     if SEMVER.fullmatch(version) is None:
-        fail("Security release version is not stable SemVer")
+        fail("invalid version")
     metadata_path = root / ".lit" / "security-releases" / f"{version}.json"
     intake_path = root / ".lit" / "security-release-intakes" / f"{version}.json"
     metadata_exists = metadata_path.exists() or metadata_path.is_symlink()
     intake_exists = intake_path.exists() or intake_path.is_symlink()
     if metadata_exists != intake_exists:
-        fail("partial Security marker: metadata and intake receipt must exist together")
+        fail("partial marker")
     if not metadata_exists:
         if expected_evidence_id:
-            fail("claimed Security release binding is missing")
+            fail("Security binding missing")
         return Classification(False)
     source = root
     if binding_root is not None:
@@ -109,16 +113,16 @@ def classify_version(
                 or not is_regular_file_beneath(source, relative)
                 or current.read_bytes() != bound.read_bytes()
             ):
-                fail(f"released Security binding differs from its pre-consumption base: {relative}")
+                fail(f"binding differs from its pre-consumption base: {relative}")
     try:
         binding = CONTRACT.load_security_binding(source, version, checked_at=checked_at)
     except CONTRACT.ContractError as exc:
         raise ClassificationError(str(exc)) from exc
     if binding is None:
-        fail("claimed Security release binding is unavailable")
+        fail("binding unavailable")
     evidence_id = binding["evidence_id"]
     if expected_evidence_id and evidence_id != expected_evidence_id:
-        fail("Security release evidenceId does not match the event binding")
+        fail("evidenceId does not match")
     return Classification(True, evidence_id, version)
 
 
@@ -141,12 +145,14 @@ def changed_preparation_version(root: Path, base_sha: str, head_sha: str) -> str
         check=True,
         text=True,
         capture_output=True,
+        env=git_environment(),
+        timeout=30,
     )
     paths = [line for line in result.stdout.splitlines() if line]
     if not paths:
         return ""
     if paths != ["changelogs/release-preparation.json"]:
-        fail("release preparation change is ambiguous")
+        fail("ambiguous change")
     try:
         receipt_relative = Path("changelogs/release-preparation.json")
         receipt_path = root / receipt_relative
@@ -158,10 +164,10 @@ def changed_preparation_version(root: Path, base_sha: str, head_sha: str) -> str
     except CONTRACT.ContractError as exc:
         raise ClassificationError(str(exc)) from exc
     if receipt_path.read_bytes() != CONTRACT.canonical_document_bytes(receipt):
-        fail("release preparation receipt is not canonical JSON")
+        fail("receipt not canonical")
     version = receipt.get("next_version")
     if not isinstance(version, str) or SEMVER.fullmatch(version) is None:
-        fail("release preparation receipt has no stable next version")
+        fail("invalid next version")
     return version
 
 
@@ -184,15 +190,17 @@ def changed_security_versions(root: Path, base_sha: str, head_sha: str) -> list[
         check=True,
         text=True,
         capture_output=True,
+        env=git_environment(),
+        timeout=30,
     )
     versions: list[str] = []
     for raw in result.stdout.splitlines():
         match = METADATA_PATH.fullmatch(raw)
         if match is None:
-            fail("Security release metadata change has an invalid path")
+            fail("invalid metadata path")
         versions.append(match.group(1))
     if len(versions) > 1 or len(versions) != len(set(versions)):
-        fail("an event may bind at most one Security release metadata file")
+        fail("multiple metadata files")
     return versions
 
 
@@ -202,7 +210,7 @@ def classify(args: argparse.Namespace, root: Path, checked_at: datetime) -> Clas
     if args.event_kind == "version":
         if not args.version:
             if args.evidence_id:
-                fail("Security evidenceId requires an exact version")
+                fail("evidenceId needs a version")
             return Classification(False)
         return classify_version(
             root,
@@ -229,7 +237,7 @@ def classify(args: argparse.Namespace, root: Path, checked_at: datetime) -> Clas
             return Classification(False)
         versions = changed_security_versions(root, args.base_sha, args.head_sha)
         if len(versions) != 1:
-            fail("Security release branch must change exactly one metadata file")
+            fail("metadata mismatch")
         # The intake PR creates the binding; its signed App receipt verifies the candidate diff.
         return classify_version(
             root,

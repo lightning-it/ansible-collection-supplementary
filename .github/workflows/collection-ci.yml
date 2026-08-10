@@ -110,6 +110,8 @@ jobs:
               ' "$receipt"
             )"
           fi
+          git cat-file -e "${binding_sha}^{commit}"
+          git merge-base --is-ancestor "$binding_sha" "$SOURCE_SHA"
           echo "base_sha=$binding_sha" >>"$GITHUB_OUTPUT"
       - name: Checkout immutable pre-consumption Security binding
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7

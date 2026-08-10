@@ -1,5 +1,3 @@
-"""Verify an exact Supplementary main-promotion head without trusting its name."""
-
 from __future__ import annotations
 
 import argparse
@@ -37,7 +35,7 @@ RELEASE_GENERATED_PATHS = {
 
 
 class PromotionError(ValueError):
-    """Raised when a main-promotion head is not an exact authorized state."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -64,7 +62,7 @@ def git_environment() -> dict[str, str]:
 def git_binary() -> str:
     executable = shutil.which("git")
     if executable is None:
-        fail("git executable is unavailable")
+        fail("git unavailable")
     return executable
 
 
@@ -99,25 +97,25 @@ def git_bytes(root: Path, *args: str) -> bytes:
 
 def require_checkout(root: Path, expected_sha: str, label: str) -> None:
     if root.is_symlink() or not root.is_dir():
-        fail(f"{label} checkout must be a regular directory")
+        fail(f"{label} checkout invalid")
     if SHA.fullmatch(expected_sha) is None:
         fail(f"{label} SHA is invalid")
     if git_text(root, "rev-parse", "HEAD") != expected_sha:
-        fail(f"{label} checkout is not the exact expected revision")
+        fail(f"{label} checkout mismatch")
     if git_text(root, "cat-file", "-t", expected_sha) != "commit":
-        fail(f"{label} revision is not a commit")
+        fail(f"{label} is not a commit")
 
 
 def require_app_commit(head_root: Path, base_sha: str, head_sha: str, message: str) -> None:
     parents = git_text(head_root, "show", "-s", "--format=%P", head_sha).split()
     if parents != [base_sha]:
-        fail("promotion parent mismatch")
+        fail("parent mismatch")
     expected_identity = f"{CONTRACT.RELEASE_APP_LOGIN} <{CONTRACT.RELEASE_APP_EMAIL}>"
     for field, label in (("%an <%ae>", "author"), ("%cn <%ce>", "committer")):
         if git_text(head_root, "show", "-s", f"--format={field}", head_sha) != expected_identity:
-            fail(f"promotion commit {label} is not the release App")
+            fail(f"{label} is not the release App")
     if git_text(head_root, "show", "-s", "--format=%B", head_sha) != message:
-        fail("promotion message mismatch")
+        fail("message mismatch")
 
 
 def changed_paths(root: Path, base_sha: str, head_sha: str) -> list[tuple[str, str]]:
@@ -136,19 +134,19 @@ def changed_paths(root: Path, base_sha: str, head_sha: str) -> list[tuple[str, s
     if fields and fields[-1] == b"":
         fields.pop()
     if len(fields) % 2:
-        fail("malformed promotion diff")
+        fail("malformed diff")
     result: list[tuple[str, str]] = []
     for index in range(0, len(fields), 2):
         try:
             status = fields[index].decode("ascii")
             path = fields[index + 1].decode("utf-8")
         except UnicodeDecodeError as exc:
-            raise PromotionError("promotion diff contains a non-UTF-8 path") from exc
+            raise PromotionError("non-UTF-8 promotion path") from exc
         if status not in {"A", "D", "M", "T"} or not path or path.startswith("/"):
-            fail("unsupported promotion path transition")
+            fail("unsupported path")
         result.append((status, path))
     if not result:
-        fail("promotion diff is empty")
+        fail("empty diff")
     return result
 
 
@@ -189,17 +187,17 @@ def candidate_diff_without_receipt(
         f":(exclude){receipt_path}",
     )
     if not value:
-        fail("Security candidate diff is empty")
+        fail("candidate diff empty")
     return value
 
 
 def load_release_version_module(base_root: Path) -> ModuleType:
     path = base_root / "scripts" / "release-version.py"
     if path.is_symlink() or not path.is_file():
-        fail("release-version policy unavailable")
+        fail("policy unavailable")
     spec = importlib.util.spec_from_file_location("mlx90_release_version", path)
     if spec is None or spec.loader is None:
-        fail("release-version policy load failed")
+        fail("invalid policy")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
@@ -219,7 +217,7 @@ def load_canonical_document(
     )
     payload = CONTRACT.load_json_bytes(raw, label)
     if raw != CONTRACT.canonical_document_bytes(payload):
-        fail(f"{label} is not canonical JSON")
+        fail(f"{label} not canonical")
     return payload
 
 
@@ -233,7 +231,7 @@ def verify_intake_promotion(
 ) -> Promotion:
     match = SECURITY_BRANCH.fullmatch(head_ref)
     if match is None:
-        fail("reserved Security intake branch name is malformed")
+        fail("Security intake branch malformed")
     changes = changed_paths(head_root, base_sha, head_sha)
     receipts = [
         (status, path, INTAKE_RECEIPT.fullmatch(path))
@@ -241,7 +239,7 @@ def verify_intake_promotion(
         if INTAKE_RECEIPT.fullmatch(path) is not None
     ]
     if len(receipts) != 1 or receipts[0][0] != "A" or receipts[0][2] is None:
-        fail("Security intake receipt count mismatch")
+        fail("receipt count mismatch")
     receipt_path = receipts[0][1]
     receipt = load_canonical_document(
         head_root,
@@ -263,14 +261,14 @@ def verify_intake_promotion(
         or verified["branch"] != head_ref
         or request["fixedVersion"] != receipts[0][2].group(1)
     ):
-        fail("Security intake branch/base mismatch")
+        fail("branch/base mismatch")
     CONTRACT.validate_request(request, CONTRACT.PRODUCER_REPOSITORY, checked_at)
     non_receipt_paths = sorted(path for _status, path in changes if path != receipt_path)
     if non_receipt_paths != verified["changedPaths"]:
-        fail("Security promotion paths differ from the verified candidate")
+        fail("paths differ from the verified candidate")
     materialized = candidate_diff_without_receipt(head_root, base_sha, head_sha, receipt_path)
     if CONTRACT.sha256_bytes(materialized) != request["candidateDiffSha256"]:
-        fail("Security promotion diff differs from the approved candidate")
+        fail("diff mismatch")
     require_app_commit(
         head_root,
         base_sha,
@@ -289,13 +287,13 @@ def verify_intake_promotion(
 
 def galaxy_version(path: Path) -> str:
     if path.is_symlink() or not path.is_file():
-        fail("galaxy.yml is not a regular file")
+        fail("galaxy.yml invalid")
     matches: list[str] = re.findall(
         r"(?m)^version:\s*[\"']?([^\s\"']+)[\"']?\s*$",
         path.read_text(encoding="utf-8"),
     )
     if len(matches) != 1:
-        fail("galaxy.yml version is ambiguous")
+        fail("ambiguous galaxy version")
     return matches[0]
 
 
@@ -309,7 +307,7 @@ def verify_release_promotion(
 ) -> Promotion:
     match = RELEASE_BRANCH.fullmatch(head_ref)
     if match is None:
-        fail("reserved release branch name is malformed")
+        fail("branch malformed")
     version = match.group(1)
     receipt = load_canonical_document(
         head_root,
@@ -331,14 +329,14 @@ def verify_release_promotion(
         raise PromotionError(str(exc)) from exc
     mode = receipt.get("release_mode")
     if mode not in {"normal", "security"}:
-        fail("release preparation mode is unsupported")
+        fail("unsupported mode")
     if galaxy_version(head_root / "galaxy.yml") != version:
-        fail("release branch/version mismatch")
+        fail("branch/version mismatch")
 
     changes = changed_paths(head_root, base_sha, head_sha)
     changed = {path: status for status, path in changes}
     if PREPARATION_RECEIPT.as_posix() not in changed or "galaxy.yml" not in changed:
-        fail("generated release state missing")
+        fail("generated state missing")
     fragment_paths = {
         f"changelogs/fragments/{fragment['path']}"
         for fragment in receipt.get("fragments", [])
@@ -349,9 +347,9 @@ def verify_release_promotion(
     if unexpected:
         fail(f"non-generated release paths: {unexpected}")
     if any(changed.get(path) != "D" for path in fragment_paths):
-        fail("reviewed fragments not consumed")
+        fail("fragments not consumed")
     if any(path.startswith(".lit/security-") for path in changed):
-        fail("immutable Security bindings changed")
+        fail("Security bindings changed")
     require_app_commit(
         head_root,
         base_sha,
@@ -405,7 +403,7 @@ def verify_promotion(
             head_ref,
             checked_at,
         )
-    fail("unsupported promotion head")
+    fail("unsupported head")
 
 
 def main() -> int:

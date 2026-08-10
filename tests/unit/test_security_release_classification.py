@@ -316,11 +316,14 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
         receipt = self.root / "changelogs/release-preparation.json"
         receipt.write_bytes(MODULE.CONTRACT.canonical_document_bytes({"next_version": "3.2.2"}))
         changed = subprocess.CompletedProcess([], 0, "changelogs/release-preparation.json\n", "")
-        with mock.patch.object(MODULE.subprocess, "run", return_value=changed):
-            self.assertEqual(
-                "3.2.2",
-                MODULE.changed_preparation_version(self.root, "1" * 40, "2" * 40),
-            )
+        with (
+            mock.patch.dict(MODULE.os.environ, {"GIT_DIR": "poison"}),
+            mock.patch.object(MODULE.subprocess, "run", return_value=changed) as run,
+        ):
+            version = MODULE.changed_preparation_version(self.root, "1" * 40, "2" * 40)
+        self.assertEqual(
+            ("3.2.2", False, 30), (version, "GIT_DIR" in run.call_args.kwargs["env"], run.call_args.kwargs["timeout"])
+        )
         with (
             mock.patch.object(MODULE, "changed_security_versions", return_value=[]),
             mock.patch.object(

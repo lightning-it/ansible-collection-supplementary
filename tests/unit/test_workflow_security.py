@@ -596,6 +596,9 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertNotIn("--force-with-lease", release_prepare)
         self.assertIn('"$promotion_base/scripts/security_main_promotion.py"', release_prepare)
         self.assertIn('authenticated_push origin "HEAD:${release_ref}"', release_prepare)
+        for workflow in (back_sync, release_prepare, (WORKFLOWS / "collection-ci.yml").read_text()):
+            self.assertIn("git cat-file -e", workflow)
+            self.assertIn("git merge-base --is-ancestor", workflow)
 
     def test_zero_touch_is_security_only_and_normal_promotion_stays_manual(self) -> None:
         ci = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]

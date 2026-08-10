@@ -66,6 +66,8 @@ jobs:
               | select(test("^[0-9a-f]{40}$"))
             ' "$receipt"
           )"
+          git cat-file -e "${base_sha}^{commit}"
+          git merge-base --is-ancestor "$base_sha" "$GITHUB_SHA"
           echo "base_sha=$base_sha" >>"$GITHUB_OUTPUT"
       - name: Checkout immutable pre-consumption Security binding
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
