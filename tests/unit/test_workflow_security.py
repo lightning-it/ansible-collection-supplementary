@@ -1015,36 +1015,23 @@ class WorkflowSecurityTests(unittest.TestCase):
                 arguments,
             )
 
-    def test_publish_dispatches_transition_validation_after_galaxy(self) -> None:
+    def test_security_publish_requires_nexus_and_signed_validation_before_galaxy(self) -> None:
         workflow = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
         publish_steps = yaml.safe_load(workflow)["jobs"]["publish"]["steps"]
         step_names = [step.get("name") for step in publish_steps]
-        publish_index = step_names.index("Publish or verify exact artifact on Ansible Galaxy")
-        dispatch_index = step_names.index("Dispatch transitional central validation")
-        self.assertGreater(dispatch_index, publish_index)
+        nexus_index = step_names.index("Stage exact Security candidate in native Nexus Galaxy v3")
+        receipt_index = step_names.index("Require signed successful ModuLix validation receipt")
+        publish_index = step_names.index("Publish or verify validated artifact on Ansible Galaxy")
+        self.assertLess(nexus_index, receipt_index)
+        self.assertLess(receipt_index, publish_index)
         self.assertIn("RELEASE_AUTOMATION_APP_CLIENT_ID", workflow)
         self.assertIn("RELEASE_AUTOMATION_APP_PRIVATE_KEY", workflow)
         self.assertIn("permission-actions: write", workflow)
-        self.assertIn("steps.transition-app.outputs.token", workflow)
-        self.assertIn("scripts/dispatch-transition-validation.py", workflow)
-        self.assertIn("--ref main", workflow)
-        dispatcher = (ROOT / "scripts/dispatch-transition-validation.py").read_text(encoding="utf-8")
-        self.assertIn("collection-release-transition.yml/dispatches", dispatcher)
-        self.assertIn("inputs[artifact_sha256]", dispatcher)
-        self.assertIn("inputs[artifact_name]", dispatcher)
-        self.assertRegex(
-            dispatcher,
-            r'add_argument\("--ref", default="main"\)',
-        )
-        self.assertIn(
-            'controller_ref = validated(args.ref, REF_RE, "controller ref")',
-            dispatcher,
-        )
-        self.assertIn(
-            r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\Z",
-            dispatcher,
-        )
-        self.assertNotIn(r"(?:[-.][0-9A-Za-z.-]+)?\Z", dispatcher)
+        self.assertIn("steps.modulix-validation-app.outputs.token", workflow)
+        self.assertIn("scripts/nexus-galaxy-v3-stage.py", workflow)
+        self.assertIn("scripts/modulix-validation-receipt.py", workflow)
+        self.assertNotIn("scripts/dispatch-transition-validation.py", workflow)
+        self.assertNotIn("transition-noop", workflow)
 
     def test_publish_security_release_is_metadata_bound_and_dispatches_after_acceptance(self) -> None:
         workflow_path = WORKFLOWS / "collection-publish.yml"
@@ -1084,8 +1071,11 @@ class WorkflowSecurityTests(unittest.TestCase):
             "env.SECURITY_RELEASE == 'true'",
             steps["Dispatch immutable Security evidence after Producer acceptance"]["if"],
         )
-        transition_condition = steps["Dispatch transitional central validation"]["if"]
-        self.assertEqual("env.GALAXY_REQUIRED == 'true'", transition_condition)
+        self.assertEqual(
+            "env.SECURITY_RELEASE == 'true'",
+            steps["Require signed successful ModuLix validation receipt"]["if"],
+        )
+        self.assertIn('test "$GALAXY_REQUIRED" = true', workflow_text)
         self.assertIn("No exact-version Security metadata", workflow_text)
         self.assertIn(".lit/security-releases/${RELEASE_VERSION}.json", workflow_text)
         self.assertIn('--metadata "$SECURITY_METADATA"', workflow_text)

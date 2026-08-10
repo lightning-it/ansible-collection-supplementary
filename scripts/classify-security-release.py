@@ -87,6 +87,7 @@ def classify_version(
     version: str,
     expected_evidence_id: str,
     checked_at: datetime,
+    binding_root: Path | None = None,
 ) -> Classification:
     if SEMVER.fullmatch(version) is None:
         fail("Security release version is not stable SemVer")
@@ -95,6 +96,28 @@ def classify_version(
         if expected_evidence_id:
             fail("claimed Security release metadata is missing")
         return Classification(False)
+
+    if binding_root is not None:
+        if binding_root.is_symlink() or not binding_root.is_dir():
+            fail("Security binding root must be a regular directory")
+        for relative in (
+            Path(".lit/security-releases") / f"{version}.json",
+            Path(".lit/security-release-intakes") / f"{version}.json",
+            Path(".lit/security-release-profiles.json"),
+        ):
+            current = root / relative
+            bound = binding_root / relative
+            if (
+                current.is_symlink()
+                or bound.is_symlink()
+                or not current.is_file()
+                or not bound.is_file()
+                or current.read_bytes() != bound.read_bytes()
+            ):
+                fail(
+                    "released Security binding differs from its "
+                    f"pre-consumption base: {relative}"
+                )
 
     metadata = load_json(metadata_path, "Security release metadata")
     exact_keys(metadata, METADATA_KEYS, "Security release metadata")
@@ -183,19 +206,32 @@ def changed_security_versions(root: Path, base_sha: str, head_sha: str) -> list[
 
 
 def classify(args: argparse.Namespace, root: Path, checked_at: datetime) -> Classification:
+    binding_root = getattr(args, "binding_root", None)
     if args.event_kind == "version":
         if not args.version:
             if args.evidence_id:
                 fail("Security evidenceId requires an exact version")
             return Classification(False)
-        return classify_version(root, args.version, args.evidence_id, checked_at)
+        return classify_version(
+            root,
+            args.version,
+            args.evidence_id,
+            checked_at,
+            binding_root,
+        )
 
     if args.event_kind == "pull_request":
         if args.base_ref != "main":
             return Classification(False)
         release = RELEASE_BRANCH.fullmatch(args.head_ref)
         if release is not None:
-            return classify_version(root, release.group(1), args.evidence_id, checked_at)
+            return classify_version(
+                root,
+                release.group(1),
+                args.evidence_id,
+                checked_at,
+                binding_root,
+            )
         security = SECURITY_BRANCH.fullmatch(args.head_ref)
         if security is None:
             return Classification(False)
@@ -209,10 +245,22 @@ def classify(args: argparse.Namespace, root: Path, checked_at: datetime) -> Clas
             return Classification(False)
         versions = changed_security_versions(root, args.base_sha, args.head_sha)
         if versions:
-            return classify_version(root, versions[0], args.evidence_id, checked_at)
+            return classify_version(
+                root,
+                versions[0],
+                args.evidence_id,
+                checked_at,
+                binding_root,
+            )
         prepared = PREPARE_TITLE.search(args.commit_message)
         if prepared is not None:
-            return classify_version(root, prepared.group(1), args.evidence_id, checked_at)
+            return classify_version(
+                root,
+                prepared.group(1),
+                args.evidence_id,
+                checked_at,
+                binding_root,
+            )
         return Classification(False)
 
     fail("unsupported event kind")
@@ -244,6 +292,7 @@ def main() -> int:
     parser.add_argument("--version", default="")
     parser.add_argument("--evidence-id", default="")
     parser.add_argument("--checked-at", default="")
+    parser.add_argument("--binding-root", type=Path)
     parser.add_argument("--github-output", default=os.environ.get("GITHUB_OUTPUT", ""))
     args = parser.parse_args()
     checked_at = (

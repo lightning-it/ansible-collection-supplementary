@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -33,6 +35,7 @@ def args(**overrides):
         "commit_message": "",
         "version": "",
         "evidence_id": "",
+        "binding_root": None,
     }
     values.update(overrides)
     return Namespace(**values)
@@ -74,6 +77,9 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
             },
         }
         (metadata_root / "3.2.2.json").write_text(json.dumps(self.metadata), encoding="utf-8")
+        intake_root = self.root / ".lit" / "security-release-intakes"
+        intake_root.mkdir()
+        (intake_root / "3.2.2.json").write_text("{}\n", encoding="utf-8")
 
     def tearDown(self):
         self.temporary.cleanup()
@@ -101,6 +107,44 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
                 self.root,
                 CHECKED_AT,
             )
+
+    def test_cli_enforces_the_immutable_preconsumption_binding(self):
+        binding_root = self.root.parent / f"{self.root.name}-binding"
+        self.addCleanup(shutil.rmtree, binding_root, True)
+        shutil.copytree(self.root, binding_root)
+        command = [
+            sys.executable,
+            str(SCRIPT),
+            "--event-kind",
+            "version",
+            "--version",
+            "3.2.2",
+            "--checked-at",
+            "2026-08-08T00:00:00Z",
+            "--binding-root",
+            str(binding_root),
+        ]
+        accepted = subprocess.run(  # noqa: S603
+            command,
+            cwd=self.root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, accepted.returncode, accepted.stderr)
+        self.assertIn('"security_release":"true"', accepted.stdout)
+
+        metadata_path = self.root / ".lit/security-releases/3.2.2.json"
+        metadata_path.write_bytes(metadata_path.read_bytes() + b"\n")
+        rejected = subprocess.run(  # noqa: S603
+            command,
+            cwd=self.root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(2, rejected.returncode)
+        self.assertIn("differs from its pre-consumption base", rejected.stderr)
         with self.assertRaisesRegex(MODULE.ClassificationError, "not currently valid"):
             MODULE.classify(
                 args(event_kind="version", version="3.2.2"),

@@ -21,6 +21,8 @@
 /scripts/classify-security-release.py @lightning-it/lightning-it-security-and-compliance-maintainers
 /scripts/enrich-cyclonedx-sbom.py @lightning-it/lightning-it-security-and-compliance-maintainers
 /scripts/devtools-*.sh @lightning-it/lightning-it-security-and-compliance-maintainers
+/scripts/modulix-validation-receipt.py @lightning-it/lightning-it-security-and-compliance-maintainers
+/scripts/nexus-galaxy-v3-stage.py @lightning-it/lightning-it-security-and-compliance-maintainers
 /scripts/quality_cell_identity.py @lightning-it/lightning-it-security-and-compliance-maintainers
 /scripts/quality_evidence.py @lightning-it/lightning-it-security-and-compliance-maintainers
 /scripts/release-version.py @lightning-it/lightning-it-security-and-compliance-maintainers
