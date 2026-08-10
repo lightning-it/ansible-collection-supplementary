@@ -839,19 +839,43 @@ jobs:
           severity-cutoff: high
       - name: Independently scan the candidate-bound SBOM with Trivy
         if: always()
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
-        with:
-          scan-type: sbom
-          scan-ref: artifacts/evidence/security/sbom.cdx.json
-          scanners: vuln
-          vuln-type: os,library
-          format: json
-          output: artifacts/evidence/security/trivy-vulnerability-report.json
-          severity: HIGH,CRITICAL
-          ignore-unfixed: false
-          exit-code: "1"
-          version: v0.70.0
-          cache: false
+        run: |
+          set -euo pipefail
+          test ! -e .trivyignore
+          test ! -e trivy.yaml
+          cache_dir="$RUNNER_TEMP/trivy-cache-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          test ! -e "$cache_dir"
+          mkdir -m 0700 "$cache_dir"
+          docker run --rm \
+            --read-only \
+            --user "$(id -u):$(id -g)" \
+            --cap-drop ALL \
+            --security-opt no-new-privileges=true \
+            --pids-limit 128 \
+            --network bridge \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777 \
+            -v "$PWD:/workspace:ro" \
+            -v "$cache_dir:/trivy-cache:rw" \
+            -w /workspace \
+            docker.io/aquasec/trivy:0.70.0@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e \
+            --cache-dir /trivy-cache \
+            --config /dev/null \
+            --quiet \
+            --timeout 15m \
+            sbom \
+            --no-progress \
+            --disable-telemetry \
+            --scanners vuln \
+            --pkg-types os,library \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed=false \
+            --skip-vex-repo-update \
+            --ignorefile /dev/null \
+            --exit-code 1 \
+            --format json \
+            artifacts/evidence/security/sbom.cdx.json \
+            > artifacts/evidence/security/trivy-vulnerability-report.json
+          test -s artifacts/evidence/security/trivy-vulnerability-report.json
       - name: Scan the exact collection candidate for secret-like content
         if: always()
         run: |

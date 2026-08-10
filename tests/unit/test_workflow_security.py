@@ -755,23 +755,45 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertEqual("- name:", next_marker)
         self.assertTrue(remaining_steps)
         for exact_contract in (
-            "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25",
-            "scan-type: sbom",
-            "scan-ref: artifacts/evidence/security/sbom.cdx.json",
-            "scanners: vuln",
-            "vuln-type: os,library",
-            "format: json",
-            "output: artifacts/evidence/security/trivy-vulnerability-report.json",
-            "severity: HIGH,CRITICAL",
-            "ignore-unfixed: false",
-            'exit-code: "1"',
-            "version: v0.70.0",
-            "cache: false",
+            "docker run --rm",
+            "--read-only",
+            'cache_dir="$RUNNER_TEMP/trivy-cache-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+            'test ! -e "$cache_dir"',
+            'mkdir -m 0700 "$cache_dir"',
+            '--user "$(id -u):$(id -g)"',
+            "--cap-drop ALL",
+            "--security-opt no-new-privileges=true",
+            "--pids-limit 128",
+            "--network bridge",
+            "--tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777",
+            '-v "$PWD:/workspace:ro"',
+            '-v "$cache_dir:/trivy-cache:rw"',
+            "docker.io/aquasec/trivy:0.70.0@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e",
+            "--cache-dir /trivy-cache",
+            "--config /dev/null",
+            "--quiet",
+            "--timeout 15m",
+            "sbom",
+            "--no-progress",
+            "--disable-telemetry",
+            "--scanners vuln",
+            "--pkg-types os,library",
+            "--severity HIGH,CRITICAL",
+            "--ignore-unfixed=false",
+            "--skip-vex-repo-update",
+            "--ignorefile /dev/null",
+            "--exit-code 1",
+            "--format json",
+            "artifacts/evidence/security/sbom.cdx.json",
+            "> artifacts/evidence/security/trivy-vulnerability-report.json",
+            "test -s artifacts/evidence/security/trivy-vulnerability-report.json",
         ):
             self.assertIn(exact_contract, trivy_step)
-        self.assertNotIn("trivyignores", ci.casefold())
-        self.assertNotIn("ignore-policy", ci.casefold())
-        self.assertNotIn(".trivyignore", ci.casefold())
+        self.assertNotIn("aquasecurity/trivy-action", ci)
+        self.assertIn("test ! -e .trivyignore", trivy_step)
+        self.assertIn("test ! -e trivy.yaml", trivy_step)
+        self.assertNotIn("--ignore-policy", trivy_step)
+        self.assertNotIn("--vex", trivy_step)
         self.assertIn(
             "artifacts/release-assets/trivy-vulnerability-report.json",
             ci,
