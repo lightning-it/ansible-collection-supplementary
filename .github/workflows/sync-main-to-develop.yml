@@ -7,59 +7,18 @@ name: Sync main back to develop
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: main-develop-transition-${{ github.repository }}
+  group: sync-main-to-develop
   cancel-in-progress: false
 
 jobs:
-  classify:
-    name: Classify main-to-develop ownership
-    if: >-
-      github.repository_owner == 'lightning-it' &&
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      chain-owned: ${{ steps.classify.outputs.chain_owned }}
-    steps:
-      - name: Checkout exact protected-main push
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Reserve Security intake and release transitions for exact back-sync
-        id: classify
-        env:
-          BEFORE_SHA: ${{ github.event.before }}
-          HEAD_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          [[ "$BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
-          changed="$RUNNER_TEMP/main-transition-paths.txt"
-          git diff --name-only --no-renames "$BEFORE_SHA" "$HEAD_SHA" -- . >"$changed"
-          chain_owned=false
-          if grep -Eq \
-              '^(changelogs/release-preparation\.json|\.lit/security-release-intakes/[0-9]+\.[0-9]+\.[0-9]+\.json)$' \
-              "$changed"
-          then
-            chain_owned=true
-          fi
-          echo "chain_owned=$chain_owned" >>"$GITHUB_OUTPUT"
-
   backmerge:
-    needs: classify
-    if: >-
-      needs.classify.result == 'success' &&
-      needs.classify.outputs['chain-owned'] == 'false'
+    if: github.repository_owner == 'lightning-it'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
