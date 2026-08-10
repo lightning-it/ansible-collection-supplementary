@@ -49,6 +49,10 @@ by Sonatype:
 Both `PUT` and authenticated `GET` address this exact URL. This path requires
 Nexus Repository 3.93.1 or later because 3.93.1 contains the hosted-repository
 and disable-redeploy corrections, with the `AnsibleGalaxyToken` realm enabled.
+The direct `PUT` is a Nexus-specific native extension documented by Sonatype;
+it intentionally differs from the generic Galaxy-NG multipart
+`POST /api/v3/artifacts/collections/` import API. It must not be replaced with
+the generic endpoint unless the supported Nexus contract changes.
 See the
 [Sonatype Ansible repository documentation](https://help.sonatype.com/en/ansible-repositories.html)
 and [native CLI/API examples](https://help.sonatype.com/en/ansible-cli-usage.html).

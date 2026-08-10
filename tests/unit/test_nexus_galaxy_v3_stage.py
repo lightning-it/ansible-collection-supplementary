@@ -4,6 +4,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+import urllib.request
 from pathlib import Path
 from types import ModuleType
 
@@ -41,6 +42,32 @@ class FakeClient:
         self.urls.append(url)
         self.uploads += 1
         self.remote = candidate.read_bytes()
+
+
+class FakeResponse:
+    def getcode(self) -> int:
+        return 201
+
+    def read(self, amount: int = -1) -> bytes:
+        del amount
+        return b""
+
+    def __enter__(self) -> FakeResponse:
+        return self
+
+    def __exit__(self, *arguments: object) -> None:
+        del arguments
+
+
+class RecordingOpener:
+    def __init__(self) -> None:
+        self.request: urllib.request.Request | None = None
+        self.timeout: int | None = None
+
+    def open(self, request: urllib.request.Request, *, timeout: int) -> FakeResponse:
+        self.request = request
+        self.timeout = timeout
+        return FakeResponse()
 
 
 class NexusGalaxyV3StageTests(unittest.TestCase):
@@ -109,6 +136,30 @@ class NexusGalaxyV3StageTests(unittest.TestCase):
                     client=client,
                 )
             self.assertEqual(0, client.uploads)
+
+    def test_nexus_native_direct_upload_uses_documented_put_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            candidate = self.candidate(Path(temporary_directory))
+            artifact_url = (
+                "https://nexus.example.test/repository/ansible-hosted"
+                "/api/v3/plugin/ansible/content/published/collections/artifacts/"
+                "lit-supplementary-3.2.4.tar.gz"
+            )
+            opener = RecordingOpener()
+            client = object.__new__(MODULE.NexusClient)
+            client._authorization = "fixture-authorization"  # noqa: SLF001
+            client._opener = opener  # noqa: SLF001
+
+            client.upload(artifact_url, candidate)
+
+            request = opener.request
+            self.assertIsNotNone(request)
+            assert request is not None
+            self.assertEqual("PUT", request.get_method())
+            self.assertEqual(artifact_url, request.full_url)
+            self.assertEqual(candidate.read_bytes(), request.data)
+            self.assertEqual("application/gzip", request.get_header("Content-type"))
+            self.assertEqual(MODULE.REQUEST_TIMEOUT_SECONDS, opener.timeout)
 
     def test_repository_url_is_https_credential_free_and_exact(self) -> None:
         for value, repository in (

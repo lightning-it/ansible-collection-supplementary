@@ -1104,7 +1104,7 @@ jobs:
             --source-digest "$RELEASE_SHA"
 
       - name: Stage exact Security candidate in native Nexus Galaxy v3
-        if: env.SECURITY_RELEASE == 'true'
+        if: env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'
         env:
           NEXUS_GALAXY_PASSWORD: ${{ secrets.NEXUS_GALAXY_PASSWORD }}
           NEXUS_GALAXY_REPOSITORY: ${{ vars.NEXUS_GALAXY_REPOSITORY }}
@@ -1112,7 +1112,6 @@ jobs:
           NEXUS_GALAXY_USERNAME: ${{ secrets.NEXUS_GALAXY_USERNAME }}
         run: |
           set -euo pipefail
-          test "$GALAXY_REQUIRED" = true
           test -n "$NEXUS_GALAXY_REPOSITORY"
           test -n "$NEXUS_GALAXY_REPOSITORY_URL"
           test -n "$NEXUS_GALAXY_USERNAME"
@@ -1126,7 +1125,7 @@ jobs:
 
       - name: Mint read-only release automation installation audit token
         id: release-automation-audit-app
-        if: env.SECURITY_RELEASE == 'true'
+        if: env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
           client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
@@ -1135,7 +1134,7 @@ jobs:
           permission-actions: read
 
       - name: Verify exact release automation installation and allowlist
-        if: env.SECURITY_RELEASE == 'true'
+        if: env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'
         env:
           APP_INSTALLATION_ID: ${{ steps.release-automation-audit-app.outputs.installation-id }}
           APP_SLUG: ${{ steps.release-automation-audit-app.outputs.app-slug }}
@@ -1173,7 +1172,7 @@ jobs:
 
       - name: Mint exact ModuLix validation App token
         id: modulix-validation-app
-        if: env.SECURITY_RELEASE == 'true'
+        if: env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
           client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
@@ -1183,7 +1182,7 @@ jobs:
           permission-actions: write
 
       - name: Require signed successful ModuLix validation receipt
-        if: env.SECURITY_RELEASE == 'true'
+        if: env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'
         env:
           APP_INSTALLATION_ID: ${{ steps.modulix-validation-app.outputs.installation-id }}
           APP_SLUG: ${{ steps.modulix-validation-app.outputs.app-slug }}

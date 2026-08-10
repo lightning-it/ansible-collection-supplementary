@@ -42,20 +42,21 @@ class StageError(ValueError):
 
 class HttpResponse(Protocol):
     def getcode(self) -> int:
-        ...
+        raise NotImplementedError
 
     def read(self, amount: int = -1) -> bytes:
-        ...
+        raise NotImplementedError
 
     def __enter__(self) -> HttpResponse:
-        ...
+        raise NotImplementedError
 
     def __exit__(
         self,
         exception_type: type[BaseException] | None,
         exception: BaseException | None,
         traceback: TracebackType | None,
-    ) -> None: ...
+    ) -> None:
+        return None
 
 
 class _RejectRedirects(urllib.request.HTTPRedirectHandler):
@@ -189,6 +190,10 @@ class NexusClient:
         return size
 
     def upload(self, url: str, candidate: Path) -> None:
+        # Nexus Repository's native ansiblegalaxy contract deliberately uses a
+        # direct PUT to the published artifact URL. This is not the generic
+        # Galaxy-NG multipart POST /api/v3/artifacts/collections/ contract.
+        # https://help.sonatype.com/en/ansible-cli-usage.html
         request = urllib.request.Request(  # noqa: S310 -- exact credential-free HTTPS URL.
             url,
             data=candidate.read_bytes(),
@@ -212,10 +217,10 @@ class NexusClient:
 
 class StageClient(Protocol):
     def readback(self, url: str, destination: Path) -> int | None:
-        ...
+        raise NotImplementedError
 
     def upload(self, url: str, candidate: Path) -> None:
-        ...
+        raise NotImplementedError
 
 
 def stage(

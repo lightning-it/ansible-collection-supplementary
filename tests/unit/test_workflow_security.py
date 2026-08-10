@@ -1072,10 +1072,10 @@ class WorkflowSecurityTests(unittest.TestCase):
             steps["Dispatch immutable Security evidence after Producer acceptance"]["if"],
         )
         self.assertEqual(
-            "env.SECURITY_RELEASE == 'true'",
+            "env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'",
             steps["Require signed successful ModuLix validation receipt"]["if"],
         )
-        self.assertIn('test "$GALAXY_REQUIRED" = true', workflow_text)
+        self.assertNotIn('test "$GALAXY_REQUIRED" = true', workflow_text)
         self.assertIn("No exact-version Security metadata", workflow_text)
         self.assertIn(".lit/security-releases/${RELEASE_VERSION}.json", workflow_text)
         self.assertIn('--metadata "$SECURITY_METADATA"', workflow_text)

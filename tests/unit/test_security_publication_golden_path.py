@@ -46,10 +46,19 @@ class SecurityPublicationGoldenPathTests(unittest.TestCase):
 
         for name in (
             "Stage exact Security candidate in native Nexus Galaxy v3",
+            "Mint read-only release automation installation audit token",
+            "Verify exact release automation installation and allowlist",
             "Mint exact ModuLix validation App token",
             "Require signed successful ModuLix validation receipt",
         ):
-            self.assertEqual("env.SECURITY_RELEASE == 'true'", self.steps[name]["if"])
+            self.assertEqual(
+                "env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'",
+                self.steps[name]["if"],
+            )
+        self.assertNotIn(
+            'test "$GALAXY_REQUIRED" = true',
+            self.steps["Stage exact Security candidate in native Nexus Galaxy v3"]["run"],
+        )
 
     def test_nexus_stage_is_native_v3_readback_and_fails_without_configuration(self) -> None:
         stage = self.steps["Stage exact Security candidate in native Nexus Galaxy v3"]
