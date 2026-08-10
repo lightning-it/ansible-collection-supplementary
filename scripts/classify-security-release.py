@@ -148,9 +148,11 @@ def changed_preparation_version(root: Path, base_sha: str, head_sha: str) -> str
     if paths != ["changelogs/release-preparation.json"]:
         fail("release preparation change is ambiguous")
     try:
-        receipt_path = root / "changelogs/release-preparation.json"
+        receipt_relative = Path("changelogs/release-preparation.json")
+        receipt_path = root / receipt_relative
         receipt = CONTRACT.load_json_file(
-            receipt_path,
+            root,
+            receipt_relative,
             "release preparation receipt",
         )
     except CONTRACT.ContractError as exc:

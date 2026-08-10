@@ -313,6 +313,14 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
         self.assertTrue(prepared.security_release)
 
     def test_changed_preparation_receipt_is_a_security_binding(self):
+        receipt = self.root / "changelogs/release-preparation.json"
+        receipt.write_bytes(MODULE.CONTRACT.canonical_document_bytes({"next_version": "3.2.2"}))
+        changed = subprocess.CompletedProcess([], 0, "changelogs/release-preparation.json\n", "")
+        with mock.patch.object(MODULE.subprocess, "run", return_value=changed):
+            self.assertEqual(
+                "3.2.2",
+                MODULE.changed_preparation_version(self.root, "1" * 40, "2" * 40),
+            )
         with (
             mock.patch.object(MODULE, "changed_security_versions", return_value=[]),
             mock.patch.object(

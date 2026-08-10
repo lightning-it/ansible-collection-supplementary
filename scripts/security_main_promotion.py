@@ -111,13 +111,13 @@ def require_checkout(root: Path, expected_sha: str, label: str) -> None:
 def require_app_commit(head_root: Path, base_sha: str, head_sha: str, message: str) -> None:
     parents = git_text(head_root, "show", "-s", "--format=%P", head_sha).split()
     if parents != [base_sha]:
-        fail("promotion head must have the exact protected-main commit as its sole parent")
+        fail("promotion parent mismatch")
     expected_identity = f"{CONTRACT.RELEASE_APP_LOGIN} <{CONTRACT.RELEASE_APP_EMAIL}>"
     for field, label in (("%an <%ae>", "author"), ("%cn <%ce>", "committer")):
         if git_text(head_root, "show", "-s", f"--format={field}", head_sha) != expected_identity:
             fail(f"promotion commit {label} is not the release App")
     if git_text(head_root, "show", "-s", "--format=%B", head_sha) != message:
-        fail("promotion commit message differs from the deterministic contract")
+        fail("promotion message mismatch")
 
 
 def changed_paths(root: Path, base_sha: str, head_sha: str) -> list[tuple[str, str]]:
@@ -136,7 +136,7 @@ def changed_paths(root: Path, base_sha: str, head_sha: str) -> list[tuple[str, s
     if fields and fields[-1] == b"":
         fields.pop()
     if len(fields) % 2:
-        fail("promotion diff returned malformed path status data")
+        fail("malformed promotion diff")
     result: list[tuple[str, str]] = []
     for index in range(0, len(fields), 2):
         try:
@@ -145,7 +145,7 @@ def changed_paths(root: Path, base_sha: str, head_sha: str) -> list[tuple[str, s
         except UnicodeDecodeError as exc:
             raise PromotionError("promotion diff contains a non-UTF-8 path") from exc
         if status not in {"A", "D", "M", "T"} or not path or path.startswith("/"):
-            fail("promotion diff contains an unsupported path transition")
+            fail("unsupported promotion path transition")
         result.append((status, path))
     if not result:
         fail("promotion diff is empty")
@@ -189,17 +189,17 @@ def candidate_diff_without_receipt(
         f":(exclude){receipt_path}",
     )
     if not value:
-        fail("materialized Security candidate diff is empty")
+        fail("Security candidate diff is empty")
     return value
 
 
 def load_release_version_module(base_root: Path) -> ModuleType:
     path = base_root / "scripts" / "release-version.py"
     if path.is_symlink() or not path.is_file():
-        fail("protected-main release-version policy is unavailable")
+        fail("release-version policy unavailable")
     spec = importlib.util.spec_from_file_location("mlx90_release_version", path)
     if spec is None or spec.loader is None:
-        fail("protected-main release-version policy cannot be loaded")
+        fail("release-version policy load failed")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
@@ -241,7 +241,7 @@ def verify_intake_promotion(
         if INTAKE_RECEIPT.fullmatch(path) is not None
     ]
     if len(receipts) != 1 or receipts[0][0] != "A" or receipts[0][2] is None:
-        fail("Security intake promotion must add exactly one immutable intake receipt")
+        fail("Security intake receipt count mismatch")
     receipt_path = receipts[0][1]
     receipt = load_canonical_document(
         head_root,
@@ -263,14 +263,14 @@ def verify_intake_promotion(
         or verified["branch"] != head_ref
         or request["fixedVersion"] != receipts[0][2].group(1)
     ):
-        fail("Security intake receipt does not bind the exact promotion branch and base")
+        fail("Security intake branch/base mismatch")
     CONTRACT.validate_request(request, CONTRACT.PRODUCER_REPOSITORY, checked_at)
     non_receipt_paths = sorted(path for _status, path in changes if path != receipt_path)
     if non_receipt_paths != verified["changedPaths"]:
-        fail("materialized Security promotion paths differ from the verified candidate")
+        fail("Security promotion paths differ from the verified candidate")
     materialized = candidate_diff_without_receipt(head_root, base_sha, head_sha, receipt_path)
     if CONTRACT.sha256_bytes(materialized) != request["candidateDiffSha256"]:
-        fail("materialized Security promotion diff differs from the approved candidate")
+        fail("Security promotion diff differs from the approved candidate")
     require_app_commit(
         head_root,
         base_sha,
@@ -289,13 +289,13 @@ def verify_intake_promotion(
 
 def galaxy_version(path: Path) -> str:
     if path.is_symlink() or not path.is_file():
-        fail("release promotion galaxy.yml must be a regular file")
+        fail("galaxy.yml is not a regular file")
     matches: list[str] = re.findall(
         r"(?m)^version:\s*[\"']?([^\s\"']+)[\"']?\s*$",
         path.read_text(encoding="utf-8"),
     )
     if len(matches) != 1:
-        fail("release promotion galaxy.yml has no unique version")
+        fail("galaxy.yml version is ambiguous")
     return matches[0]
 
 
@@ -333,12 +333,12 @@ def verify_release_promotion(
     if mode not in {"normal", "security"}:
         fail("release preparation mode is unsupported")
     if galaxy_version(head_root / "galaxy.yml") != version:
-        fail("release branch version differs from its exact galaxy.yml")
+        fail("release branch/version mismatch")
 
     changes = changed_paths(head_root, base_sha, head_sha)
     changed = {path: status for status, path in changes}
     if PREPARATION_RECEIPT.as_posix() not in changed or "galaxy.yml" not in changed:
-        fail("release promotion is missing required generated state")
+        fail("generated release state missing")
     fragment_paths = {
         f"changelogs/fragments/{fragment['path']}"
         for fragment in receipt.get("fragments", [])
@@ -347,11 +347,11 @@ def verify_release_promotion(
     allowed = RELEASE_GENERATED_PATHS | fragment_paths
     unexpected = sorted(set(changed) - allowed)
     if unexpected:
-        fail(f"release promotion contains non-generated paths: {unexpected}")
+        fail(f"non-generated release paths: {unexpected}")
     if any(changed.get(path) != "D" for path in fragment_paths):
-        fail("release promotion did not consume exactly the reviewed changelog fragments")
+        fail("reviewed fragments not consumed")
     if any(path.startswith(".lit/security-") for path in changed):
-        fail("release promotion may not mutate immutable Security bindings")
+        fail("immutable Security bindings changed")
     require_app_commit(
         head_root,
         base_sha,
@@ -360,11 +360,11 @@ def verify_release_promotion(
     )
     if mode == "normal":
         if receipt.get("chain_id") is not None or receipt.get("security") is not None:
-            fail("normal release promotion contains partial Security binding")
+            fail("partial Security binding")
         return Promotion(mode="normal", head_ref=head_ref, head_sha=head_sha, version=version)
     security = receipt.get("security")
     if not isinstance(security, dict):
-        fail("Security release promotion has no immutable Security binding")
+        fail("Security binding missing")
     return Promotion(
         mode="security",
         head_ref=head_ref,
@@ -405,7 +405,7 @@ def verify_promotion(
             head_ref,
             checked_at,
         )
-    fail("head ref is not a reserved Supplementary release promotion")
+    fail("unsupported promotion head")
 
 
 def main() -> int:

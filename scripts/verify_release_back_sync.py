@@ -88,7 +88,7 @@ def changes(root: Path, base: str, head: str) -> list[tuple[str, str]]:
     if fields and fields[-1] == b"":
         fields.pop()
     if len(fields) % 2:
-        fail("back-sync diff returned malformed path status data")
+        fail("malformed back-sync diff")
     result: list[tuple[str, str]] = []
     for index in range(0, len(fields), 2):
         try:
@@ -97,7 +97,7 @@ def changes(root: Path, base: str, head: str) -> list[tuple[str, str]]:
         except UnicodeDecodeError as exc:
             raise BackSyncError("back-sync diff contains a non-UTF-8 path") from exc
         if status not in {"A", "D", "M", "T"} or not path or path.startswith("/"):
-            fail("back-sync diff contains an unsupported path transition")
+            fail("unsupported back-sync path transition")
         result.append((status, path))
     if not result:
         fail("back-sync diff is empty")
@@ -162,7 +162,7 @@ def verify(
 
     parents = git_text(root, "show", "-s", "--format=%P", head_sha).split()
     if len(parents) != 2 or parents[1] != release_sha:
-        fail("back-sync head must merge the exact release as its second parent")
+        fail("back-sync release parent mismatch")
     develop_base = parents[0]
     if (
         subprocess.run(  # noqa: S603 -- exact validated commits.
@@ -179,11 +179,11 @@ def verify(
         if git_text(root, "show", "-s", f"--format={field}", head_sha) != APP_IDENTITY:
             fail(f"back-sync commit {label} is not the release App")
     if git_text(root, "show", "-s", "--format=%B", head_sha) != f"chore: sync {tag} release back to develop":
-        fail("back-sync commit message differs from the deterministic contract")
+        fail("back-sync message mismatch")
 
     release_parents = git_text(root, "show", "-s", "--format=%P", release_sha).split()
     if len(release_parents) != 2:
-        fail("release SHA must be a normal two-parent merge commit")
+        fail("release SHA is not a two-parent merge")
     released_fragment_changes = changes(root, release_parents[0], release_sha)
     deleted_fragments = {
         path for status, path in released_fragment_changes if status == "D" and path.startswith("changelogs/fragments/")
@@ -199,12 +199,12 @@ def verify(
         metadata_payload = load_object(root, release_sha, metadata, "Security metadata")
         intake_payload = load_object(root, release_sha, intake, "Security intake receipt")
         if metadata_payload.get("evidenceId") != evidence_id:
-            fail("Security metadata evidenceId differs from the classified release")
+            fail("Security metadata evidenceId differs")
         request = intake_payload.get("request")
         if not isinstance(request, dict) or request.get("evidenceId") != evidence_id:
-            fail("Security intake receipt differs from the classified release")
+            fail("Security intake receipt differs")
     elif evidence_id:
-        fail("normal back-sync may not carry a Security evidenceId")
+        fail("normal back-sync carries Security evidenceId")
 
     for status, path in changes(root, develop_base, head_sha):
         if path.startswith("changelogs/fragments/"):
