@@ -71,6 +71,10 @@ class Keycloak2671SecurityTests(unittest.TestCase):
             },
             registry["profiles"][PROFILE],
         )
+        metadata = json.loads((ROOT / ".lit" / "security-releases" / "3.2.4.json").read_text(encoding="utf-8"))
+        self.assertEqual("3.2.3", metadata["affectedVersion"])
+        self.assertEqual("3.2.4", metadata["fixedVersion"])
+        self.assertEqual(PROFILE, metadata["acceptanceProfile"])
 
     def test_verifier_accepts_only_the_exact_packaged_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

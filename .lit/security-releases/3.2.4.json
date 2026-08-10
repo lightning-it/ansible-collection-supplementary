@@ -9,7 +9,7 @@
     "CVE-2026-14614",
     "CVE-2026-14615"
   ],
-  "affectedVersion": "3.2.2",
+  "affectedVersion": "3.2.3",
   "fixedVersion": "3.2.4",
   "consumers": [
     "lightning-it/container-ee-wunder-ansible-ubi9"

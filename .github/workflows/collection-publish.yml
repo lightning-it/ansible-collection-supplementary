@@ -331,21 +331,30 @@ jobs:
           ))
           test "$total_minutes" -ge "$required_minutes"
           for attempt in $(seq 1 "$RELEASE_VALIDATION_WINDOW_ONE_ATTEMPTS"); do
-            latest="$(
+            runs="$(
               gh api --method GET \
                 "repos/${GITHUB_REPOSITORY}/actions/workflows/collection-ci.yml/runs" \
                 -f branch=main -f event=push -f head_sha="$RELEASE_SHA" -f per_page=100 \
-                --jq '.workflow_runs | sort_by(.run_attempt, .id) | last // {}'
             )"
+            latest="$(
+              jq -c --arg sha "$RELEASE_SHA" '
+                [.workflow_runs[] | select(
+                  .event == "push" and .head_branch == "main" and .head_sha == $sha
+                )] | sort_by(.run_attempt, .id) | last // {}
+              ' <<< "$runs"
+            )"
+            run_id="$(jq -r '.id // empty' <<< "$latest")"
             status="$(jq -r '.status // empty' <<< "$latest")"
             if [ "$status" = completed ]; then
-              jq -er '.id' <<< "$latest" | sed 's/^/ci-run-id=/' >> "$GITHUB_OUTPUT"
+              test -n "$run_id"
+              echo "ci-run-id=$run_id" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             case "$status" in ""|queued|in_progress|pending|requested|waiting) ;; *) exit 1 ;; esac
             echo "Waiting for Collection CI terminal state ($attempt/$RELEASE_VALIDATION_WINDOW_ONE_ATTEMPTS)."
             sleep "$RELEASE_VALIDATION_POLL_SECONDS"
           done
+          echo "First bounded window exhausted; continuing with the final exact-SHA window."
 
   release-validation:
     if: >-

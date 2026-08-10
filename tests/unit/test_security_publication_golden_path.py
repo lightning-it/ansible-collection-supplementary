@@ -48,7 +48,18 @@ class SecurityPublicationGoldenPathTests(unittest.TestCase):
         jobs = self.workflow["jobs"]
         self.assertLessEqual(jobs["release-validation-window"]["timeout-minutes"], 360)
         self.assertLessEqual(jobs["release-validation"]["timeout-minutes"], 360)
+        first_wait = jobs["release-validation-window"]["steps"][0]["run"]
         final_wait = jobs["release-validation"]["steps"][0]["run"]
+        for exact_identity in (
+            '.event == "push"',
+            '.head_branch == "main"',
+            ".head_sha == $sha",
+        ):
+            self.assertIn(exact_identity, first_wait)
+            self.assertIn(exact_identity, final_wait)
+        self.assertIn('test -n "$run_id"', first_wait)
+        self.assertIn('echo "ci-run-id=$run_id"', first_wait)
+        self.assertIn("First bounded window exhausted", first_wait)
         self.assertIn('test "$EARLY_RUN_ID" = "$run_id"', final_wait)
         self.assertIn('test "$conclusion" = success', final_wait)
         self.assertIn('test "$gate_count" -eq 1', final_wait)
