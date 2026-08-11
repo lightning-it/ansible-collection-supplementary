@@ -1,0 +1,10 @@
+---
+- name: Restart Guacamole
+  ansible.builtin.systemd:
+    name: guacamole.service
+    state: restarted
+    daemon_reload: true
+  when:
+    - guacamole_deploy_manage_systemd | bool
+    - not ansible_check_mode
+    - not guacamole_deploy_skip_runtime | bool

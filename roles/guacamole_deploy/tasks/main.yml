@@ -1,0 +1,208 @@
+---
+- name: Validate Guacamole deployment contract
+  ansible.builtin.assert:
+    that:
+      - guacamole_deploy_image is search('@sha256:')
+      - guacamole_deploy_guacd_image is search('@sha256:')
+      - guacamole_deploy_postgres_image is search('@sha256:')
+      - guacamole_deploy_host_ip | trim | length > 0
+      - guacamole_deploy_port | int > 0
+      - guacamole_deploy_breakglass_user is match('^[A-Za-z0-9_.@-]+$')
+      - guacamole_deploy_secrets.db_password | default('', true) | length >= 16
+      - guacamole_deploy_secrets.breakglass_password | default('', true) | length >= 16
+      - guacamole_deploy_secrets.breakglass_salt | default('', true) | length >= 16
+      - guacamole_deploy_connections is sequence
+      - guacamole_deploy_connections is not string
+      - not guacamole_deploy_oidc_enabled | bool or guacamole_deploy_oidc_authorization_endpoint | trim | length > 0
+      - not guacamole_deploy_oidc_enabled | bool or guacamole_deploy_oidc_jwks_endpoint | trim | length > 0
+      - not guacamole_deploy_oidc_enabled | bool or guacamole_deploy_oidc_issuer | trim | length > 0
+      - not guacamole_deploy_oidc_enabled | bool or guacamole_deploy_oidc_redirect_uri | trim | length > 0
+    fail_msg: "Guacamole requires immutable images, Vault secrets, and complete OIDC settings."
+  no_log: true
+
+- name: Install the Podman runtime for Guacamole
+  ansible.builtin.package:
+    name: podman
+    state: present
+  when: guacamole_deploy_install_packages | bool
+
+- name: Validate declared Guacamole connection contracts
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.name | default('', true) | trim | length > 0
+      - item.protocol | default('', true) in ['rdp', 'ssh', 'vnc']
+      - item.parameters | default({}) is mapping
+      - item.attributes | default({}) is mapping
+      - "'password' not in (item.parameters | default({}))"
+      - "'private-key' not in (item.parameters | default({}))"
+      - "'passphrase' not in (item.parameters | default({}))"
+    fail_msg: >-
+      Each Guacamole connection requires a name, supported protocol,
+      parameters, and attributes; credentials must not be stored in inventory.
+    quiet: true
+  loop: "{{ guacamole_deploy_connections }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed') }}"
+
+- name: Create Guacamole persistent directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ guacamole_deploy_base_dir }}", owner: root, group: root, mode: "0750"}
+    - {path: "{{ guacamole_deploy_base_dir }}/postgres", owner: "999", group: "999", mode: "0700"}
+    - {path: "{{ guacamole_deploy_base_dir }}/postgres-init", owner: root, group: root, mode: "0755"}
+    - {path: "{{ guacamole_deploy_manifest_path | dirname }}", owner: root, group: root, mode: "0755"}
+
+- name: Render the private Guacamole pod manifest
+  ansible.builtin.template:
+    src: guacamole-pod.yml.j2
+    dest: "{{ guacamole_deploy_manifest_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart Guacamole
+
+- name: Install Guacamole systemd unit
+  ansible.builtin.template:
+    src: guacamole.service.j2
+    dest: /etc/systemd/system/guacamole.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Guacamole
+  when: guacamole_deploy_manage_systemd | bool
+
+- name: Apply pending Guacamole runtime changes
+  ansible.builtin.meta: flush_handlers
+  when: not ansible_check_mode and not guacamole_deploy_skip_runtime | bool
+
+- name: Ensure Guacamole is enabled and started
+  ansible.builtin.systemd:
+    name: guacamole.service
+    enabled: true
+    state: started
+    daemon_reload: true
+  when:
+    - guacamole_deploy_manage_systemd | bool
+    - not ansible_check_mode
+    - not guacamole_deploy_skip_runtime | bool
+
+- name: Wait for Guacamole readiness
+  ansible.builtin.uri:
+    url: "{{ guacamole_deploy_health_url }}"
+    method: GET
+    status_code: 200
+    validate_certs: "{{ guacamole_deploy_validate_certs }}"
+  register: guacamole_deploy_health
+  until: guacamole_deploy_health.status == 200
+  retries: 40
+  delay: 5
+  changed_when: false
+  when: not ansible_check_mode and not guacamole_deploy_skip_runtime | bool
+
+- name: Derive the Guacamole break-glass password hash
+  delegate_to: localhost
+  become: false
+  ansible.builtin.command:
+    argv: [openssl, dgst, -sha256, -hex]
+    stdin: "{{ guacamole_deploy_secrets.breakglass_password }}{{ guacamole_deploy_secrets.breakglass_salt }}"
+  register: guacamole_deploy_breakglass_digest
+  changed_when: false
+  no_log: true
+  when: not ansible_check_mode and not guacamole_deploy_skip_runtime | bool
+
+- name: Enforce the Vault-custodied Guacamole break-glass credential
+  ansible.builtin.command:
+    argv:
+      - podman
+      - exec
+      - -i
+      - "{{ guacamole_deploy_pod_name }}-postgres"
+      - psql
+      - -v
+      - ON_ERROR_STOP=1
+      - -v
+      - "breakglass_salt={{ guacamole_deploy_secrets.breakglass_salt }}"
+      - -v
+      - >-
+        breakglass_hash={{ guacamole_deploy_breakglass_digest.stdout
+        | regex_replace('^.*= ', '') }}
+      - -v
+      - "breakglass_user={{ guacamole_deploy_breakglass_user }}"
+      - -U
+      - "{{ guacamole_deploy_db_user }}"
+      - -d
+      - "{{ guacamole_deploy_db_name }}"
+    stdin: >-
+      UPDATE guacamole_user SET password_salt =
+      convert_to(:'breakglass_salt','UTF8'),
+      password_hash = decode(:'breakglass_hash','hex'),
+      password_date = CURRENT_TIMESTAMP WHERE entity_id =
+      (SELECT entity_id FROM guacamole_entity WHERE
+      name = :'breakglass_user' AND type = 'USER')
+      AND (password_salt IS DISTINCT FROM
+      convert_to(:'breakglass_salt','UTF8') OR
+      password_hash IS DISTINCT FROM decode(:'breakglass_hash','hex'));
+  register: guacamole_deploy_breakglass_update
+  changed_when: "'UPDATE 1' in guacamole_deploy_breakglass_update.stdout"
+  no_log: true
+  when: not ansible_check_mode and not guacamole_deploy_skip_runtime | bool
+
+- name: Authenticate to the local Guacamole configuration API
+  ansible.builtin.uri:
+    url: "{{ guacamole_deploy_api_url }}/tokens"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: "{{ guacamole_deploy_breakglass_user }}"
+      password: "{{ guacamole_deploy_secrets.breakglass_password }}"
+    status_code: 200
+    return_content: true
+    validate_certs: "{{ guacamole_deploy_validate_certs }}"
+  register: guacamole_deploy_api_login
+  changed_when: false
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - not guacamole_deploy_skip_runtime | bool
+    - guacamole_deploy_connections | length > 0
+
+- name: Read existing Guacamole connections
+  ansible.builtin.uri:
+    url: >-
+      {{
+        guacamole_deploy_api_url
+        ~ '/session/data/'
+        ~ (guacamole_deploy_api_login.json.dataSource | urlencode)
+        ~ '/connections?token='
+        ~ (guacamole_deploy_api_login.json.authToken | urlencode)
+      }}
+    method: GET
+    status_code: 200
+    return_content: true
+    validate_certs: "{{ guacamole_deploy_validate_certs }}"
+  register: guacamole_deploy_existing_connections
+  changed_when: false
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - not guacamole_deploy_skip_runtime | bool
+    - guacamole_deploy_connections | length > 0
+
+- name: Reconcile declared Guacamole connections
+  ansible.builtin.include_tasks: reconcile_connection.yml
+  loop: "{{ guacamole_deploy_connections }}"
+  loop_control:
+    loop_var: guacamole_deploy_connection
+    label: "{{ guacamole_deploy_connection.name | default('unnamed') }}"
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - not guacamole_deploy_skip_runtime | bool
+    - guacamole_deploy_connections | length > 0

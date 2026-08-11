@@ -18,6 +18,9 @@ nginx_config_tls_common_name: "{{ ansible_fqdn | default(inventory_hostname, tru
 nginx_config_tls_no_log: true
 nginx_config_vault_address: "{{ vault_address | default('') }}"
 nginx_config_vault_validate_certs: "{{ vault_validate_certs | default(true) }}"
+nginx_config_vault_ca_cert: ""
+nginx_config_vault_namespace: ""
+nginx_config_vault_auth_mount_point: "approle"
 nginx_config_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') }}"
 nginx_config_vault_kv_path: "{{ inventory_hostname }}/nginx/certificate"
 nginx_config_vault_pki_path: "{{ vault_config_vault_pki_path }}"

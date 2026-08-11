@@ -1,0 +1,14 @@
+---
+vault_secret_bundle_address: "{{ vault_address | default('') }}"
+vault_secret_bundle_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') }}"
+vault_secret_bundle_kv_path: ""
+vault_secret_bundle_validate_certs: "{{ vault_validate_certs | default(true) }}"
+vault_secret_bundle_ca_cert: ""
+vault_secret_bundle_namespace: ""
+vault_secret_bundle_auth_mount_point: "approle"
+vault_secret_bundle_token: "{{ vault_token | default('', true) }}"
+vault_secret_bundle_role_id: "{{ ansible_hashi_vault_role_id | default('', true) }}"
+vault_secret_bundle_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"
+vault_secret_bundle_items: []
+vault_secret_bundle_static_data: {}
+vault_secret_bundle_generate_missing: true

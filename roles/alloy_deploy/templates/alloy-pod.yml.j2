@@ -44,6 +44,11 @@ spec:
         - name: srv-logs
           mountPath: /srv
           readOnly: true
+{% if alloy_deploy_loki_tls_enabled | bool %}
+        - name: alloy-tls
+          mountPath: {{ alloy_deploy_container_tls_dir }}
+          readOnly: true
+{% endif %}
   volumes:
     - name: alloy-config
       hostPath:
@@ -69,3 +74,9 @@ spec:
       hostPath:
         path: /srv
         type: DirectoryOrCreate
+{% if alloy_deploy_loki_tls_enabled | bool %}
+    - name: alloy-tls
+      hostPath:
+        path: {{ alloy_deploy_tls_dir }}
+        type: Directory
+{% endif %}

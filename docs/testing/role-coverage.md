@@ -6,10 +6,10 @@ Authoritative source: [`meta/role-coverage.yml`](../../meta/role-coverage.yml).
 
 ## Summary
 
-- Roles: 97
+- Roles: 100
 - Root Molecule scenarios: 59
 - Production roles: 2
-- Experimental roles: 94
+- Experimental roles: 97
 - Deprecated roles: 1
 - Runtime-container application policies: 6
 - Declared-evidence application policies: 5
@@ -52,6 +52,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | forgejo_deploy | forgejo | web_application | experimental | — | rhel-9 | experimental | experimental | experimental | browser_and_authenticated_api | postgres_deploy, lit.foundational.kubeplay | — | Production persistence, TLS, restart, and browser/API workflows are not yet proven. | forgejo-deploy-basic |
 | gitlab_runner | gitlab_runner | runner | deprecated | — | — | deprecated | deprecated | deprecated | register_runner_and_execute_a_real_workload | — | GitLab service and runner registration token | Role is intentionally fail-closed and retained only to report its deprecated contract. | gitlab-runner-basic |
 | grafana_deploy | observability | web_application | experimental | — | ubuntu-22.04, ubuntu-24.04, rhel-9 | experimental | experimental | experimental | browser_and_authenticated_api | lit.foundational.kubeplay, lit.foundational.podman_systemd, loki_deploy | — | Current Incus scenario has no browser or authenticated API workflow. | atlas-observability-incus_heavy, wunderbox-monitoring-logging-basic |
+| guacamole_deploy | guacamole | web_application | experimental | — | ubuntu-24.04 | experimental | experimental | experimental | browser_oidc_breakglass_and_rdp_session | lit.foundational.kubeplay | Keycloak OIDC provider, RDP destination reachable through the management VLAN | Goal 07 production acceptance is maintained in the consumer automation repository. | — |
 | hetzner_object_storage_cac | hetzner_object_storage | configuration_as_code | experimental | — | ubuntu-24.04, rhel-9 | experimental | blocked-external-service | blocked-external-service | create_query_reconcile_and_remove_protected_s3_objects | amazon.aws, community.aws, community.hashi_vault | Paid Hetzner Object Storage project and protected S3 credentials | Tiny validates the real plan and negative safety contracts without calling the paid external API., Bucket deletion and S3 credential creation are deliberately outside the role. | hetzner-object-storage-tiny |
 | incus_esxi_image | esxi | infrastructure | experimental | — | ubuntu-24.04, rhel-9 | experimental | blocked-external-license | blocked-external-license | import_publish_use_and_cleanup_a_real_image | — | Privately licensed VMware ESXi image artifacts | Current scenario uses a fake Incus CLI and fake artifacts. | incus-esxi-image-basic |
 | incus_nested_esxi | esxi | infrastructure | experimental | — | ubuntu-24.04, rhel-9 | experimental | blocked-external-infrastructure | blocked-external-infrastructure | launch_query_and_destroy_a_real_nested_esxi_vm | — | Nested-virtualization-capable Incus host, Privately licensed VMware ESXi image | No root Molecule scenario exists. | — |
@@ -76,6 +77,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | minio_validate | minio | validator | experimental | — | rhel-9 | experimental | experimental | not-applicable | parent_component_validation | — | — | Current root scenario is a syntax stub. | minio-validate-basic |
 | nessus_cac | nessus | configuration_as_code | experimental | — | rhel-9 | experimental | blocked-external-license | blocked-external-license | apply_query_reconcile_and_delete_api_objects | — | Tenable Nessus activation and license | Current scenario is a syntax stub. | nessus-cac-basic |
 | nessus_deploy | nessus | web_application | experimental | — | rhel-9 | experimental | blocked-external-license | blocked-external-license | browser_and_authenticated_api | lit.foundational.kubeplay | Tenable Nessus activation and license | Current scenario is a syntax stub. | nessus-deploy-basic |
+| netbox_deploy | netbox | web_application | experimental | — | ubuntu-24.04 | experimental | experimental | experimental | browser_oidc_authenticated_api_backup_and_restore | lit.foundational.kubeplay | Keycloak OIDC provider | Goal 07 production acceptance is maintained in the consumer automation repository. | — |
 | nexus | nexus | web_application | experimental | — | rhel-9 | experimental | experimental | experimental | browser_and_authenticated_repository_api | lit.foundational.kubeplay | HashiCorp Vault when Vault PKI integration is enabled | Current root scenario is a syntax stub; README calls the role a template. | nexus-basic |
 | nginx_config | nginx | configuration_as_code | experimental | — | rhel-9 | experimental | experimental | experimental | apply_reconcile_and_verify_http | nginx_deploy | — | Current root scenario is a syntax stub. | nginx-config-basic |
 | nginx_deploy | nginx | web_service | experimental | — | rhel-9 | experimental | experimental | experimental | real_http_and_tls_workflow | lit.foundational.kubeplay | — | Current root scenario is a syntax stub. | nginx-deploy-basic |
@@ -120,6 +122,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | vault_ops | vault | infrastructure | experimental | — | rhel-9 | experimental | experimental | experimental | restart_unseal_recovery_and_authenticated_read | vault_deploy, vault_validate, lit.foundational.kubeplay | — | Current scenario uses fake Podman and a fake Vault API. | vault-ops-basic |
 | vault_raft_snapshot | vault | backup_component | experimental | — | rhel-9 | experimental | experimental | experimental | snapshot_modify_restore_and_verify_exact_state | — | — | Current scenario uses a fake Vault API rather than an integrated-Raft cluster. | vault-raft-snapshot-basic, vault-security-lifecycle-basic |
 | vault_scoped_approle | vault | secret_management | experimental | — | rhel-9 | experimental | experimental | experimental | authenticate_positive_and_negative_policy_workflows | — | — | Current scenario uses a fake Vault API. | vault-bootstrap-basic, vault-scoped-approle-basic, vault-security-lifecycle-basic |
+| vault_secret_bundle | vault | secret_management | experimental | — | ubuntu-24.04, rhel-9 | experimental | experimental | experimental | read_before_generate_persist_and_reuse_secret_fields | community.hashi_vault | Reachable HashiCorp Vault KV v2 service and scoped authentication | No standalone Molecule scenario exists yet. | — |
 | vault_validate | vault | validator | experimental | — | rhel-9 | experimental | experimental | not-applicable | parent_component_validation | — | — | Current scenario uses fake Podman and a fake Vault API. | vault-validate-basic |
 
 ## Per-role operating contracts
@@ -572,6 +575,22 @@ promotion input only and never satisfy the release-required supported-target mat
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
 - Known limitations: Current Incus scenario has no browser or authenticated API workflow.
 
+### `guacamole_deploy`
+
+- Purpose/classification: `web_application` in component `guacamole`.
+- Maturity/deprecation: `experimental` / `active`.
+- Supported targets: —; candidate targets: ubuntu-24.04.
+- Profiles: Tiny `experimental`, Heavy `experimental`, Application Acceptance `experimental`.
+- Acceptance surface: `browser_oidc_breakglass_and_rdp_session`.
+- Role dependencies: lit.foundational.kubeplay; exercised scenario dependencies: —.
+- External dependencies/blockers: Keycloak OIDC provider, RDP destination reachable through the management VLAN.
+- Required-secret policy: Protected non-production credentials or licensed inputs are required for the declared external dependencies.
+- Local execution: —; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
+- Candidate-target execution: no runnable candidate matrix is currently declared.
+- Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
+- Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
+- Known limitations: Goal 07 production acceptance is maintained in the consumer automation repository.
+
 ### `hetzner_object_storage_cac`
 
 - Purpose/classification: `configuration_as_code` in component `hetzner_object_storage`.
@@ -955,6 +974,22 @@ promotion input only and never satisfy the release-required supported-target mat
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
 - Known limitations: Current scenario is a syntax stub.
+
+### `netbox_deploy`
+
+- Purpose/classification: `web_application` in component `netbox`.
+- Maturity/deprecation: `experimental` / `active`.
+- Supported targets: —; candidate targets: ubuntu-24.04.
+- Profiles: Tiny `experimental`, Heavy `experimental`, Application Acceptance `experimental`.
+- Acceptance surface: `browser_oidc_authenticated_api_backup_and_restore`.
+- Role dependencies: lit.foundational.kubeplay; exercised scenario dependencies: —.
+- External dependencies/blockers: Keycloak OIDC provider.
+- Required-secret policy: Protected non-production credentials or licensed inputs are required for the declared external dependencies.
+- Local execution: —; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
+- Candidate-target execution: no runnable candidate matrix is currently declared.
+- Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
+- Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
+- Known limitations: Goal 07 production acceptance is maintained in the consumer automation repository.
 
 ### `nexus`
 
@@ -1659,6 +1694,22 @@ promotion input only and never satisfy the release-required supported-target mat
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
 - Known limitations: Current scenario uses a fake Vault API.
+
+### `vault_secret_bundle`
+
+- Purpose/classification: `secret_management` in component `vault`.
+- Maturity/deprecation: `experimental` / `active`.
+- Supported targets: —; candidate targets: ubuntu-24.04, rhel-9.
+- Profiles: Tiny `experimental`, Heavy `experimental`, Application Acceptance `experimental`.
+- Acceptance surface: `read_before_generate_persist_and_reuse_secret_fields`.
+- Role dependencies: community.hashi_vault; exercised scenario dependencies: —.
+- External dependencies/blockers: Reachable HashiCorp Vault KV v2 service and scoped authentication.
+- Required-secret policy: Protected non-production credentials or licensed inputs are required for the declared external dependencies.
+- Local execution: —; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
+- Candidate-target execution: no runnable candidate matrix is currently declared.
+- Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
+- Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
+- Known limitations: No standalone Molecule scenario exists yet.
 
 ### `vault_validate`
 
