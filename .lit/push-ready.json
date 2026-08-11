@@ -39,7 +39,7 @@
       "command": [
         "copilot"
       ],
-      "timeout_seconds": 600
+      "timeout_seconds": 900
     },
     "codex": {
       "enabled": true,
