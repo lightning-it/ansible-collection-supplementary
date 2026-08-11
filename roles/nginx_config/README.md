@@ -28,7 +28,22 @@ Key variables:
 - `nginx_config_vault_kv_path`
 - `nginx_config_vault_pki_path`
 - `nginx_config_vault_pki_role`
+- `nginx_config_vault_issue_missing` (default: `true`; issue and persist missing or mismatched material through Vault PKI)
+- `nginx_config_vault_allow_local_fallback` (compatibility default: `true`; set to `false` for Vault-only custody)
 - `nginx_config_remove_default`
+
+With `nginx_config_tls_source: vault`, certificate material is read from Vault
+KV or issued through Vault PKI and then persisted to Vault KV. Private keys are
+written to the managed host with mode `0600`. Set
+`nginx_config_vault_allow_local_fallback: false` in security profiles that must
+reject local certificate/key files as a source of record. The compatibility
+default remains enabled for existing consumers and must not be relied upon as
+proof of Vault-only custody.
+
+When `nginx_config_vault_issue_missing: false`, Vault KV must already contain a
+certificate/private-key pair, a CA chain, and matching common-name and
+alternative-name metadata. Local host files do not satisfy that stored-identity
+contract.
 
 ## Dependencies
 
