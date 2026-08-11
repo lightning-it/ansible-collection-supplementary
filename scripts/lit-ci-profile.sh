@@ -70,7 +70,11 @@ BASE_SHA="$merge_base" \
 HEAD_SHA="$(git rev-parse HEAD)" \
 LABELS_JSON='[]' \
 REQUIRE_FRAGMENT=true \
+SKIP=molecule-light \
 "$pre_commit_venv/bin/pre-commit" run --all-files
+
+printf '==> Run rootless Molecule gate\n'
+bash scripts/devtools-molecule.sh artifacts-basic
 
 printf '==> Verify Codex and Copilot instruction binding\n'
 python3 scripts/lit-push-ready.py instructions
