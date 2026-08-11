@@ -1039,10 +1039,10 @@ def integration_worktree_fingerprint(cwd: Path, *, include_ignored: bool = False
             if descriptor >= 0:
                 os.close(descriptor)
         if len(file_payload) > 100_000_000:
-            raise RuntimeError("worktree fingerprint input exceeds 100000000 bytes")
+            raise RuntimeError("fingerprint file exceeds 100 MB")
         untracked_bytes += len(file_payload)
         if untracked_bytes > 500_000_000:
-            raise RuntimeError("worktree fingerprint input exceeds 500000000 total bytes")
+            raise RuntimeError("fingerprint input exceeds 500 MB")
         untracked_hashes[name] = sha256_bytes(file_payload)
     payload = {
         "head": git_output_at(cwd, "rev-parse", "HEAD").strip(),
@@ -1093,7 +1093,7 @@ def synthetic_integration_commit(change: PlannedChange, integration_tree: str) -
     )
     commit = result.stdout.strip()
     if result.returncode or not is_full_git_object_id(commit):
-        raise RuntimeError("could not create the synthetic pull-request integration commit")
+        raise RuntimeError("integration commit creation failed")
     return commit
 
 
@@ -1103,13 +1103,13 @@ def create_integration_directory() -> tuple[Path, tuple[int, int, int, int]]:
     required_dir_fd_calls = (os.mkdir, os.rmdir, os.stat)
     if missing_flags or any(call not in os.supports_dir_fd for call in required_dir_fd_calls):
         unsupported = ", ".join(missing_flags) or "directory-relative filesystem calls"
-        raise RuntimeError(f"isolated integration checks require unavailable safe-directory capability: {unsupported}")
+        raise RuntimeError(f"integration safe-open unavailable: {unsupported}")
 
     directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
     try:
         root_descriptor = os.open(ROOT, directory_flags)
     except OSError as exc:
-        raise RuntimeError("could not safely open the repository for integration checks") from exc
+        raise RuntimeError("integration repository open failed") from exc
     created_name: str | None = None
     created_identity: tuple[int, int] | None = None
     completed = False
@@ -1120,7 +1120,7 @@ def create_integration_directory() -> tuple[Path, tuple[int, int, int, int]]:
             path_stat.st_dev,
             path_stat.st_ino,
         ):
-            raise RuntimeError("repository identity changed before integration checks")
+            raise RuntimeError("repository identity changed")
         for _attempt in range(128):
             candidate = f"{INTEGRATION_DIRECTORY_PREFIX}{secrets.token_hex(16)}"
             try:
@@ -1135,7 +1135,7 @@ def create_integration_directory() -> tuple[Path, tuple[int, int, int, int]]:
             created_name = candidate
             break
         if created_name is None:
-            raise RuntimeError("could not allocate a collision-free integration directory")
+            raise RuntimeError("integration directory collision")
 
         created_stat = os.stat(
             created_name,
@@ -1148,14 +1148,14 @@ def create_integration_directory() -> tuple[Path, tuple[int, int, int, int]]:
             or created_stat.st_uid != os.geteuid()
             or stat.S_IMODE(created_stat.st_mode) & 0o077
         ):
-            raise RuntimeError("private integration directory has unsafe ownership or permissions")
+            raise RuntimeError("integration directory permissions are unsafe")
         directory = ROOT / created_name
         try:
             resolved = directory.resolve(strict=True)
         except OSError as exc:
-            raise RuntimeError("private integration directory could not be resolved safely") from exc
+            raise RuntimeError("integration directory is unresolved") from exc
         if resolved != directory or resolved.parent != ROOT:
-            raise RuntimeError("private integration directory escaped the repository")
+            raise RuntimeError("integration directory escaped repository")
         identity = (
             root_stat.st_dev,
             root_stat.st_ino,
@@ -1185,12 +1185,12 @@ def create_integration_directory() -> tuple[Path, tuple[int, int, int, int]]:
 
 def remove_integration_directory(directory: Path, identity: tuple[int, int, int, int]) -> None:
     if directory.parent != ROOT or not directory.name.startswith(INTEGRATION_DIRECTORY_PREFIX):
-        raise RuntimeError("refused cleanup for an unbound integration directory")
+        raise RuntimeError("integration cleanup is unbound")
     directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
     try:
         root_descriptor = os.open(ROOT, directory_flags)
     except OSError as exc:
-        raise RuntimeError("could not safely reopen the repository for integration cleanup") from exc
+        raise RuntimeError("integration cleanup reopen failed") from exc
     try:
         root_stat = os.fstat(root_descriptor)
         try:
@@ -1200,7 +1200,7 @@ def remove_integration_directory(directory: Path, identity: tuple[int, int, int,
                 follow_symlinks=False,
             )
         except OSError as exc:
-            raise RuntimeError("integration directory identity changed before cleanup") from exc
+            raise RuntimeError("integration identity changed") from exc
         expected = identity
         current = (
             root_stat.st_dev,
@@ -1209,7 +1209,7 @@ def remove_integration_directory(directory: Path, identity: tuple[int, int, int,
             current_stat.st_ino,
         )
         if current != expected or not stat.S_ISDIR(current_stat.st_mode) or current_stat.st_uid != os.geteuid():
-            raise RuntimeError("integration directory identity changed before cleanup")
+            raise RuntimeError("integration identity changed")
         try:
             os.rmdir(directory.name, dir_fd=root_descriptor)
         except OSError as exc:
@@ -1269,7 +1269,7 @@ def execute_integration_checks(
             capture=True,
         )
         if added.returncode:
-            raise RuntimeError("could not create isolated integration worktree: " + added.stdout.strip())
+            raise RuntimeError("integration worktree failed: " + added.stdout.strip())
         worktree_identity = directory_identity(
             worktree,
             purpose="isolated integration worktree",
@@ -1277,7 +1277,7 @@ def execute_integration_checks(
         try:
             checked_tree = git_output_at(worktree, "write-tree").strip()
             if checked_tree != integration_tree:
-                raise RuntimeError("isolated integration checkout does not match git merge-tree")
+                raise RuntimeError("integration differs from merge-tree")
             status_value = git_output_at(
                 worktree,
                 "status",
@@ -1286,7 +1286,7 @@ def execute_integration_checks(
                 "-z",
             )
             if status_value:
-                raise RuntimeError("synthetic pull-request integration checkout is not clean")
+                raise RuntimeError("integration checkout is dirty")
             parents = (
                 git_output_at(
                     worktree,
@@ -1299,7 +1299,7 @@ def execute_integration_checks(
                 .split()
             )
             if parents != [change.base_tip, change.head_commit]:
-                raise RuntimeError("synthetic pull-request integration parents are invalid")
+                raise RuntimeError("integration parents are invalid")
             before = integration_worktree_fingerprint(worktree)
             checks = execute_checks(config, cwd=worktree)
             after = integration_worktree_fingerprint(worktree)
@@ -1317,13 +1317,13 @@ def execute_integration_checks(
                 )
                 != worktree_identity
             ):
-                raise RuntimeError("isolated integration worktree identity changed; cleanup was refused")
+                raise RuntimeError("integration worktree identity changed")
             removed = run(
                 ["git", "worktree", "remove", str(worktree)],
                 capture=True,
             )
             if removed.returncode:
-                raise RuntimeError("could not remove isolated integration worktree: " + removed.stdout.strip())
+                raise RuntimeError("integration removal failed: " + removed.stdout.strip())
 
 
 def quote_diff_path(prefix: str, name: str) -> str:
@@ -1355,7 +1355,7 @@ def unquote_diff_path(value: str, prefix: str) -> str | None:
         return None
     if value.startswith('"'):
         if len(value) < 2 or not value.endswith('"'):
-            raise RuntimeError("planned diff contains a malformed quoted path")
+            raise RuntimeError("malformed quoted diff path")
         payload = value[1:-1]
         decoded = bytearray()
         index = 0
@@ -1378,30 +1378,30 @@ def unquote_diff_path(value: str, prefix: str) -> str | None:
                 continue
             index += 1
             if index >= len(payload):
-                raise RuntimeError("planned diff quoted path ends in an escape")
+                raise RuntimeError("diff path ends in escape")
             escaped = payload[index]
             if escaped in escapes:
                 decoded.append(escapes[escaped])
                 index += 1
                 continue
             if escaped not in "01234567":
-                raise RuntimeError("planned diff quoted path has an unsafe escape")
+                raise RuntimeError("diff path escape is unsafe")
             octal = payload[index : index + 3]
             if len(octal) != 3 or any(octal_character not in "01234567" for octal_character in octal):
-                raise RuntimeError("planned diff quoted path has invalid octal")
+                raise RuntimeError("diff path octal is invalid")
             decoded.append(int(octal, 8))
             index += 3
         try:
             path_value = decoded.decode("utf-8")
         except UnicodeDecodeError as exc:
-            raise RuntimeError("planned diff path is not UTF-8") from exc
+            raise RuntimeError("diff path is not UTF-8") from exc
     else:
         if any(character.isspace() for character in value):
-            raise RuntimeError("planned diff unquoted path contains whitespace")
+            raise RuntimeError("diff path contains whitespace")
         path_value = value
     expected = f"{prefix}/"
     if not path_value.startswith(expected):
-        raise RuntimeError("planned diff path has an unexpected prefix")
+        raise RuntimeError("diff path prefix is invalid")
     path = path_value[len(expected) :]
     if (
         not path
@@ -1411,17 +1411,17 @@ def unquote_diff_path(value: str, prefix: str) -> str | None:
         or Path(path).as_posix() != path
         or any(part in {"", ".", "..", ".git"} for part in Path(path).parts)
     ):
-        raise RuntimeError("planned diff contains an unsafe repository path")
+        raise RuntimeError("diff path is unsafe")
     return path
 
 
 def render_untracked_patch(name: str, payload: bytes, mode: int) -> str:
     if b"\0" in payload:
-        raise RuntimeError(f"local review refused for binary untracked path: {name}")
+        raise RuntimeError(f"binary untracked path: {name}")
     try:
         text = payload.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise RuntimeError(f"local review refused for non-UTF-8 untracked path: {name}") from exc
+        raise RuntimeError(f"non-UTF-8 untracked path: {name}") from exc
     old_path = quote_diff_path("a", name)
     new_path = quote_diff_path("b", name)
     file_mode = "100755" if mode & 0o111 else "100644"
@@ -1457,7 +1457,7 @@ def planned_change(
     fixture_manifest_bootstrap: bool = False,
 ) -> PlannedChange:
     if any(path.name.startswith(INTEGRATION_DIRECTORY_PREFIX) for path in ROOT.iterdir()):
-        raise RuntimeError("stale integration directory requires manual inspection")
+        raise RuntimeError("stale integration directory")
     initial_tree_fingerprint = tree_fingerprint()
     base_ref, base_tip, base_commit = resolve_base(config, base_override)
     head_commit = git_output("rev-parse", "--verify", "HEAD^{commit}").strip()
@@ -1472,7 +1472,7 @@ def planned_change(
         "--",
     )
     if "GIT binary patch\n" in tracked_diff or "\nBinary files " in tracked_diff:
-        raise RuntimeError("local review refused because the planned tracked diff contains binary content")
+        raise RuntimeError("tracked diff contains binary content")
     tracked_names = git_output("diff", "--name-only", "--no-renames", "-z", base_commit, "--").split("\0")
     max_bytes = require_positive_integer(
         config["review"]["max_diff_bytes"],
@@ -1485,7 +1485,7 @@ def planned_change(
     for name in untracked_names():
         remaining = max_bytes - consumed
         if remaining <= 0:
-            raise RuntimeError(f"planned diff exceeds local review limit of {max_bytes} bytes")
+            raise RuntimeError(f"diff exceeds {max_bytes} bytes")
         payload, mode = read_repository_file(
             name,
             purpose="Local review",
@@ -1495,16 +1495,16 @@ def planned_change(
         patch_bytes = utf8_size(patch)
         consumed += patch_bytes
         if consumed > max_bytes:
-            raise RuntimeError(f"planned diff exceeds local review limit of {max_bytes} bytes")
+            raise RuntimeError(f"diff exceeds {max_bytes} bytes")
         patches.append(patch)
         untracked_hashes[name] = sha256_bytes(payload)
     diff = tracked_diff + "".join(patches)
     if utf8_size(diff) > max_bytes:
-        raise RuntimeError(f"planned diff exceeds local review limit of {max_bytes} bytes")
+        raise RuntimeError(f"diff exceeds {max_bytes} bytes")
     paths = tuple(sorted({path for path in tracked_names if path} | set(untracked_hashes)))
     final_tree_fingerprint = tree_fingerprint()
     if final_tree_fingerprint != initial_tree_fingerprint:
-        raise RuntimeError("Git tree changed while constructing the exact planned push patch")
+        raise RuntimeError("Git tree changed during diff")
     change = PlannedChange(
         base_ref=base_ref,
         base_tip=base_tip,
@@ -1545,7 +1545,7 @@ def changed_paths() -> list[str]:
         paths.append(entry[3:])
         if "R" in status_value or "C" in status_value:
             if index >= len(values) or not values[index]:
-                raise RuntimeError("rename/copy status is missing its paired path")
+                raise RuntimeError("rename/copy lacks paired path")
             paths.append(values[index])
             index += 1
     return paths
@@ -1584,7 +1584,7 @@ def untracked_review_text(max_bytes: int = 1_000_000) -> str:
         try:
             chunks.append(payload.decode("utf-8"))
         except UnicodeDecodeError as exc:
-            raise RuntimeError(f"local review refused for non-UTF-8 untracked path: {name}") from exc
+            raise RuntimeError(f"non-UTF-8 untracked path: {name}") from exc
     return "\n".join(chunks)
 
 
@@ -1596,12 +1596,12 @@ def parse_secret_fixture_manifest(
         "version",
         "fixtures",
     }:
-        raise RuntimeError("secret fixture manifest must contain exactly version and fixtures")
+        raise RuntimeError("fixture manifest fields are invalid")
     if document["version"] != 1:
-        raise RuntimeError("secret fixture manifest version must be 1")
+        raise RuntimeError("fixture manifest version must be 1")
     fixtures = document["fixtures"]
     if not isinstance(fixtures, list) or not 1 <= len(fixtures) <= 100:
-        raise RuntimeError("secret fixture manifest must contain between 1 and 100 entries")
+        raise RuntimeError("fixture count must be 1..100")
     parsed: dict[str, dict[int, tuple[str, str]]] = {}
     for entry in fixtures:
         if not isinstance(entry, dict) or set(entry) != {
@@ -1610,14 +1610,14 @@ def parse_secret_fixture_manifest(
             "line_number",
             "purpose",
         }:
-            raise RuntimeError("secret fixture entries must contain exactly path, line_hex, line_number, and purpose")
+            raise RuntimeError("fixture fields are invalid")
         path = entry["path"]
         encoded = entry["line_hex"]
         line_number = entry["line_number"]
         if entry["purpose"] != "synthetic-test-fixture":
-            raise RuntimeError("secret fixture manifest purpose must be synthetic-test-fixture")
+            raise RuntimeError("fixture purpose is invalid")
         if isinstance(line_number, bool) or not isinstance(line_number, int) or not 1 <= line_number <= 10_000_000:
-            raise RuntimeError("secret fixture manifest line_number must be a positive integer")
+            raise RuntimeError("fixture line must be positive")
         if (
             not isinstance(path, str)
             or not path
@@ -1630,10 +1630,10 @@ def parse_secret_fixture_manifest(
             or any(part in {"", ".", "..", ".git"} for part in Path(path).parts)
             or not path.startswith(SECRET_FIXTURE_PATH_PREFIXES)
         ):
-            raise RuntimeError("secret fixture manifest contains an unsafe path")
+            raise RuntimeError("fixture path is unsafe")
         lowered = path.lower()
         if any(part in lowered for part in SECRET_PATH_PARTS) or Path(path).name.lower() == ".npmrc":
-            raise RuntimeError("secret fixture manifest may not authorize secret-like paths")
+            raise RuntimeError("fixture path is secret-like")
         if (
             not isinstance(encoded, str)
             or not re.fullmatch(r"[0-9a-f]+", encoded)
@@ -2867,7 +2867,7 @@ def run_agent_reviews(
 ) -> list[dict[str, Any]]:
     expected = change.tree_fingerprint
     if tree_fingerprint() != expected:
-        raise RuntimeError("exact planned push patch is stale before local review")
+        raise RuntimeError("patch is stale before review")
     reviews: list[dict[str, Any]] = []
     with sanitized_review_workspace(
         change,
@@ -2928,7 +2928,7 @@ def run_agent_reviews(
         for review in reviews:
             review["input_sha256"] = binding
     if tree_fingerprint() != expected:
-        raise RuntimeError("local agent review changed the reviewed Git tree")
+        raise RuntimeError("agent review changed tree")
     return reviews
 
 
@@ -2974,7 +2974,7 @@ def governed_push_remote_from_url(name: str, url: str) -> dict[str, str]:
             repository_name = value[len(prefix) :]
             break
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", repository_name):
-        raise RuntimeError("origin push URL must target a Lightning IT repository on github.com")
+        raise RuntimeError("origin must target lightning-it on github.com")
     return {
         "name": "origin",
         "host": "github.com",
@@ -3031,7 +3031,7 @@ def write_evidence(
     if not isinstance(fixture_manifest_bootstrap, bool):
         raise RuntimeError("secret fixture bootstrap evidence flag is invalid")
     if tree_fingerprint() != change.tree_fingerprint:
-        raise RuntimeError("exact planned push patch is stale before evidence write")
+        raise RuntimeError("patch is stale before evidence write")
     completed_at = now_utc()
     payload = {
         "version": 2,
@@ -3288,7 +3288,7 @@ def pre_commit_push_context() -> tuple[str, str, str]:
     )
     values = tuple(os.environ.get(name, "") for name in names)
     if not all(values):
-        raise RuntimeError("pre-commit did not provide complete pre-push context")
+        raise RuntimeError("incomplete pre-commit push context")
     remote_name, remote_url, local_ref, remote_ref = values
     local_oid = os.environ.get("PRE_COMMIT_TO_REF") or git_output("rev-parse", local_ref).strip()
     remote_oid = os.environ.get("PRE_COMMIT_FROM_REF") or "0" * 40
@@ -3414,7 +3414,7 @@ def main() -> int:
             or current_branch_ref() != original_branch
             or tree_fingerprint() != original_tree_fingerprint
         ):
-            raise RuntimeError("deterministic checks changed the reviewed branch or Git tree")
+            raise RuntimeError("checks changed branch or tree")
         change = planned_change(
             config,
             fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,

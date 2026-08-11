@@ -210,6 +210,13 @@ class PushReadyEngineTests(unittest.TestCase):
             with mock.patch.dict(os.environ, environment, clear=True):
                 with self.assertRaises(subprocess.CalledProcessError):
                     quality["check_embedded_code"]()
+            canary = root / "filter-canary"
+            subprocess.run(  # noqa: S603
+                [git, "-C", repository, "config", "filter.review.clean", f"touch {canary}"], check=True, env=environment
+            )
+            with self.assertRaisesRegex(AssertionError, "unsafe local Git configuration"):
+                quality["check_embedded_code"]()
+            self.assertFalse(canary.exists())
 
             quality["assert_file"].__globals__["ROOT"] = repository
             outside = root / "outside.md"

@@ -387,16 +387,36 @@ def check_embedded_code() -> None:
     git = shutil.which("git")
     if git is None:
         raise AssertionError("git is required for embedded-code validation")
+    environment = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+    environment.update({"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull})
+    configured = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
+        [git, "config", "--local", "--no-includes", "--null", "--name-only", "--list"],
+        cwd=ROOT,
+        env=environment,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    unsafe = []
+    for name in configured.stdout.split("\0"):
+        lowered = name.lower()
+        if (
+            lowered in {"core.attributesfile", "core.fsmonitor", "core.hookspath"}
+            or lowered.startswith(("filter.", "include."))
+            or (lowered.startswith("merge.") and lowered.endswith(".driver"))
+        ):
+            unsafe.append(name)
+    if configured.returncode or unsafe:
+        raise AssertionError("unsafe local Git configuration: " + ", ".join(sorted(unsafe)))
     merge_base_result = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
         [
             git,
-            "-c",
-            f"safe.directory={ROOT}",
             "merge-base",
             "refs/remotes/origin/develop",
             "HEAD",
         ],
         cwd=ROOT,
+        env=environment,
         text=True,
         encoding="utf-8",
         capture_output=True,
@@ -413,8 +433,6 @@ def check_embedded_code() -> None:
         result = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
             [
                 git,
-                "-c",
-                f"safe.directory={ROOT}",
                 "diff",
                 "--name-only",
                 "--diff-filter=ACMR",
@@ -423,6 +441,7 @@ def check_embedded_code() -> None:
                 "--",
             ],
             cwd=ROOT,
+            env=environment,
             text=True,
             encoding="utf-8",
             errors="surrogateescape",
