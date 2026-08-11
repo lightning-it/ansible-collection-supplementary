@@ -99,7 +99,7 @@ class PushReadyEngineTests(unittest.TestCase):
         original = function_globals["git_tree_entry"]
         try:
             function_globals["git_tree_entry"] = lambda commit, _path: "entry" if commit == "b" * 40 else ""
-            ENGINE["require_review_bootstrap_contract"](change)
+            self.assertTrue(ENGINE["require_review_bootstrap_contract"](change))
             function_globals["git_tree_entry"] = lambda commit, path: (
                 "entry" if commit == "b" * 40 or path == ".lit/push-ready.json" else ""
             )

@@ -986,7 +986,7 @@ def require_trusted_check_policy(
             raise RuntimeError(f"policy differs from base: {path}; use trust-root review")
 
 
-def require_review_bootstrap_contract(change: PlannedChange) -> None:
+def require_review_bootstrap_contract(change: PlannedChange) -> bool:
     try:
         running_engine = Path(__file__).resolve().relative_to(ROOT).as_posix()
     except ValueError as exc:
@@ -996,11 +996,12 @@ def require_review_bootstrap_contract(change: PlannedChange) -> None:
     if all(base_entries):
         if not all(git_tree_entry(change.head_commit, path) for path in required_paths):
             raise RuntimeError("trust-root review lacks policy")
-        return
+        return False
     if any(base_entries):
         raise RuntimeError("trust-root bootstrap is incomplete on base")
     if not all(git_tree_entry(change.head_commit, path) for path in required_paths):
         raise RuntimeError("trust-root bootstrap lacks policy")
+    return True
 
 
 def integration_worktree_fingerprint(cwd: Path, *, include_ignored: bool = False) -> str:
@@ -3034,6 +3035,7 @@ def write_evidence(
         "remote_pr_review_authoritative": True,
         "push_scope": "clean-head",
         "fixture_manifest_bootstrap": fixture_manifest_bootstrap,
+        "trust_root_bootstrap": require_review_bootstrap_contract(change),
         "evidence_trust": LOCAL_EVIDENCE_TRUST,
     }
     write_evidence_text(
@@ -3088,14 +3090,17 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
     fixture_manifest_bootstrap = payload.get("fixture_manifest_bootstrap")
     if not isinstance(fixture_manifest_bootstrap, bool):
         raise RuntimeError("evidence fixture bootstrap is invalid")
+    trust_root_bootstrap = payload.get("trust_root_bootstrap")
+    if not isinstance(trust_root_bootstrap, bool):
+        raise RuntimeError("evidence trust-root bootstrap is invalid")
     change = planned_change(
         config,
         fixture_manifest_bootstrap=fixture_manifest_bootstrap,
     )
-    require_trusted_check_policy(
-        change,
-        allow_fixture_manifest_bootstrap=fixture_manifest_bootstrap,
-    )
+    if require_review_bootstrap_contract(change) is not trust_root_bootstrap:
+        raise RuntimeError("evidence trust-root bootstrap is stale")
+    if not trust_root_bootstrap:
+        require_trusted_check_policy(change, allow_fixture_manifest_bootstrap=fixture_manifest_bootstrap)
     expected_integration = expected_integration_tree(change)
     expected = {
         "config_sha256": config_sha256(),
@@ -3122,6 +3127,7 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
         "remote_pr_review_authoritative": True,
         "push_scope": "clean-head",
         "fixture_manifest_bootstrap": fixture_manifest_bootstrap,
+        "trust_root_bootstrap": trust_root_bootstrap,
         "evidence_trust": LOCAL_EVIDENCE_TRUST,
     }
     for key, value in expected.items():
