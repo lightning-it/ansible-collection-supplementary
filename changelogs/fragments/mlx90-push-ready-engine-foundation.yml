@@ -3,4 +3,6 @@ security_fixes:
   - >-
     Add the bounded MLX-90 push-ready foundation. It validates the exact
     current-head patch, rejects unsafe review inputs, and records only
-    non-secret integrity evidence before a normal protected-branch push.
+    non-secret integrity evidence before a normal protected-branch push. Its
+    temporary working directory also keeps nested container-wrapper probes
+    independent from linked-worktree Git metadata.

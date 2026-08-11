@@ -19,9 +19,10 @@ import subprocess
 import sys
 import tempfile
 import time
-from datetime import datetime, timezone
+from collections.abc import Mapping
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, NamedTuple, Optional, Tuple
+from typing import Any, NamedTuple
 
 ENGINE_PATH = Path(__file__)
 if ENGINE_PATH.is_symlink():
@@ -42,21 +43,15 @@ else:
         raise RuntimeError("authorized repository root must be an absolute path")
     try:
         ROOT = authorized_candidate.resolve(strict=True)
-        authorized_engine = (
-            ROOT / "default" / "scripts" / "lit-push-ready.py"
-        ).resolve(strict=True)
+        authorized_engine = (ROOT / "default" / "scripts" / "lit-push-ready.py").resolve(strict=True)
     except OSError as exc:
-        raise RuntimeError(
-            "authorized repository root cannot be resolved safely"
-        ) from exc
+        raise RuntimeError("authorized repository root cannot be resolved safely") from exc
     if ROOT != ENGINE_PATH.parents[2] or authorized_engine != ENGINE_PATH:
-        raise RuntimeError(
-            "authorized repository root is not bound to the running engine"
-        )
+        raise RuntimeError("authorized repository root is not bound to the running engine")
 CONFIG = ROOT / ".lit" / "push-ready.json"
 COPILOT = ROOT / ".github" / "copilot-instructions.md"
 AGENTS = ROOT / "AGENTS.md"
-PASS_MARKER = "PUSH_READY: PASS"
+PASS_MARKER = "PUSH_READY: PASS"  # noqa: S105 -- review verdict, not a password.
 BLOCKED_MARKER = "PUSH_READY: BLOCKED"
 CONTRACT_LINE = "<!-- Managed contract: Codex and Copilot must apply AGENTS.md. -->"
 SECRET_PATH_PARTS = {
@@ -91,10 +86,10 @@ SECRET_CONTENT_PATTERNS = (
     re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
     re.compile(r"(?i)_authToken\s*=\s*[^\s]{12,}"),
 )
-NPMRC_AUTH_PATTERN = re.compile(
-    r"(?im)(?:^|[+:])\s*(?:_authToken|_auth|_password|username)\s*="
+NPMRC_AUTH_PATTERN = re.compile(r"(?im)(?:^|[+:])\s*(?:_authToken|_auth|_password|username)\s*=")
+SECRET_FIXTURE_MANIFEST_PATH = (  # noqa: S105 -- policy path, not a password.
+    ".lit/push-ready-secret-fixtures.json"  # noqa: S105
 )
-SECRET_FIXTURE_MANIFEST_PATH = ".lit/push-ready-secret-fixtures.json"
 SECRET_FIXTURE_PATH_PREFIXES = ("examples/", "molecule/", "tests/")
 MAX_SECRET_FIXTURE_MANIFEST_BYTES = 100_000
 MAX_SECRET_FIXTURE_SOURCE_BYTES = 10_000_000
@@ -111,7 +106,10 @@ AUTHORITATIVE_BASE_REFS = {
     "refs/remotes/origin/main": "main",
 }
 INTEGRATION_DIRECTORY_PREFIX = ".lit-integration-"
-COPILOT_DEVTOOL_IMAGE = "quay.io/l-it/ee-wunder-devtools-ubi9:v1.12.0@sha256:b1189c8d51cb8f9f7b8aa396b8aaf30da7635ebd5d0fc9fe8b0f9f9d3c36d6de"
+COPILOT_DEVTOOL_IMAGE = (
+    "quay.io/l-it/ee-wunder-devtools-ubi9:v1.12.0@sha256:"
+    "b1189c8d51cb8f9f7b8aa396b8aaf30da7635ebd5d0fc9fe8b0f9f9d3c36d6de"
+)
 CHECK_PROFILE = {
     "name": "repository-quality-profile",
     "command": ["scripts/lit-ci-profile.sh", "repository-quality"],
@@ -203,16 +201,17 @@ class ReviewTopology(NamedTuple):
 
 
 def is_full_git_object_id(value: str) -> bool:
-    return re.fullmatch(
-        r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})",
-        value,
-    ) is not None
+    return (
+        re.fullmatch(
+            r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})",
+            value,
+        )
+        is not None
+    )
 
 
 def now_utc() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z"
-    )
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def sha256_bytes(payload: bytes) -> str:
@@ -231,9 +230,7 @@ def utf8_size(payload: str) -> int:
     try:
         return len(payload.encode("utf-8"))
     except UnicodeError as exc:
-        raise RuntimeError(
-            "planned review input cannot be represented safely as UTF-8"
-        ) from exc
+        raise RuntimeError("planned review input cannot be represented safely as UTF-8") from exc
 
 
 GIT_IDENTITY_ENVIRONMENT = frozenset(
@@ -248,7 +245,7 @@ GIT_IDENTITY_ENVIRONMENT = frozenset(
 )
 
 
-def trusted_container_git_binding(source: dict[str, str]) -> dict[str, str]:
+def trusted_container_git_binding(source: Mapping[str, str]) -> dict[str, str]:
     required = ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE")
     if any(name not in source for name in required):
         return {}
@@ -259,12 +256,7 @@ def trusted_container_git_binding(source: dict[str, str]) -> dict[str, str]:
     except (OSError, ValueError):
         return {}
     mount_root = Path("/run/wunder-git/common")
-    if (
-        work_tree != ROOT
-        or not common.is_absolute()
-        or common != mount_root
-        or not git_dir.is_absolute()
-    ):
+    if work_tree != ROOT or not common.is_absolute() or common != mount_root or not git_dir.is_absolute():
         return {}
     try:
         relative_git_dir = git_dir.relative_to(common)
@@ -280,7 +272,7 @@ def trusted_container_git_binding(source: dict[str, str]) -> dict[str, str]:
 
 
 def isolated_git_environment(
-    environment: Optional[Dict[str, str]] = None,
+    environment: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Return an environment that cannot redirect or configure Git externally.
 
@@ -289,11 +281,7 @@ def isolated_git_environment(
     identity from callers and discard every other ``GIT_*`` variable.
     """
     source = environment if environment is not None else os.environ
-    result = {
-        name: value
-        for name, value in source.items()
-        if not name.startswith("GIT_")
-    }
+    result = {name: value for name, value in source.items() if not name.startswith("GIT_")}
     for name in GIT_IDENTITY_ENVIRONMENT:
         if name in source:
             result[name] = source[name]
@@ -320,7 +308,8 @@ def assert_safe_git_configuration(cwd: Path) -> None:
     for name in (entry for entry in configured.stdout.split("\0") if entry):
         lowered = name.lower()
         if (
-            lowered in {
+            lowered
+            in {
                 "core.attributesfile",
                 "core.fsmonitor",
                 "core.hookspath",
@@ -331,8 +320,7 @@ def assert_safe_git_configuration(cwd: Path) -> None:
             unsafe.append(name)
     if unsafe:
         raise RuntimeError(
-            "local Git configuration can alter or execute the reviewed tree: "
-            + ", ".join(sorted(unsafe))
+            "local Git configuration can alter or execute the reviewed tree: " + ", ".join(sorted(unsafe))
         )
 
 
@@ -340,15 +328,15 @@ def run(
     command: list[str],
     *,
     capture: bool = False,
-    input_text: Optional[str] = None,
-    timeout: Optional[int] = None,
-    cwd: Optional[Path] = None,
-    env: Optional[Dict[str, str]] = None,
+    input_text: str | None = None,
+    timeout: int | None = None,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     resolved_environment = env
     if command and command[0] == "git":
         resolved_environment = isolated_git_environment(env)
-    return subprocess.run(
+    return subprocess.run(  # noqa: S603 -- callers provide validated fixed argv.
         command,
         cwd=cwd or ROOT,
         check=False,
@@ -379,27 +367,17 @@ def evidence_path() -> Path:
 
 def open_regular_below(root: Path, name: str, *, purpose: str) -> int:
     required_flags = ("O_CLOEXEC", "O_DIRECTORY", "O_NOFOLLOW", "O_NONBLOCK")
-    missing_flags = [
-        flag for flag in required_flags if not isinstance(getattr(os, flag, None), int)
-    ]
+    missing_flags = [flag for flag in required_flags if not isinstance(getattr(os, flag, None), int)]
     if missing_flags or os.open not in os.supports_dir_fd:
         unsupported = ", ".join(missing_flags) or "open(dir_fd=...)"
-        raise RuntimeError(
-            f"{purpose} requires unavailable safe-open capability: {unsupported}"
-        )
+        raise RuntimeError(f"{purpose} requires unavailable safe-open capability: {unsupported}")
 
     candidate = Path(name)
     parts = candidate.parts
-    if (
-        candidate.is_absolute()
-        or not parts
-        or any(part in {"", ".", ".."} for part in parts)
-    ):
+    if candidate.is_absolute() or not parts or any(part in {"", ".", ".."} for part in parts):
         raise RuntimeError(f"{purpose} refused for unsafe repository path: {name}")
 
-    directory_flags = (
-        os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
-    )
+    directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
     file_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
     directory_descriptors: list[int] = []
     descriptor = -1
@@ -412,15 +390,11 @@ def open_regular_below(root: Path, name: str, *, purpose: str) -> int:
             directory_descriptors.append(current)
         descriptor = os.open(parts[-1], file_flags, dir_fd=current)
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise RuntimeError(
-                f"{purpose} refused for non-regular repository path: {name}"
-            )
+            raise RuntimeError(f"{purpose} refused for non-regular repository path: {name}")
         keep_descriptor = True
         return descriptor
     except OSError as exc:
-        raise RuntimeError(
-            f"{purpose} could not safely inspect repository path: {name}"
-        ) from exc
+        raise RuntimeError(f"{purpose} could not safely inspect repository path: {name}") from exc
     finally:
         if descriptor >= 0 and not keep_descriptor:
             os.close(descriptor)
@@ -437,9 +411,7 @@ def open_untracked_regular(name: str, *, purpose: str) -> int:
     return open_repository_regular(name, purpose=purpose)
 
 
-def read_repository_file(
-    name: str, *, purpose: str, max_bytes: int
-) -> tuple[bytes, int]:
+def read_repository_file(name: str, *, purpose: str, max_bytes: int) -> tuple[bytes, int]:
     if max_bytes < 0:
         raise RuntimeError(f"{purpose} input exceeds its aggregate byte limit")
     descriptor = open_repository_regular(name, purpose=purpose)
@@ -484,9 +456,7 @@ def tree_fingerprint() -> str:
     reject_hidden_index_entries()
     payload = {
         "head": git_output("rev-parse", "HEAD").strip(),
-        "status": git_output(
-            "status", "--porcelain=v1", "--untracked-files=all", "-z"
-        ),
+        "status": git_output("status", "--porcelain=v1", "--untracked-files=all", "-z"),
         "diff": git_output(
             "diff",
             "--no-ext-diff",
@@ -497,9 +467,7 @@ def tree_fingerprint() -> str:
         ),
         "untracked": untracked_file_hashes(),
     }
-    return sha256_text(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    )
+    return sha256_text(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
 
 
 def reject_hidden_index_entries() -> None:
@@ -524,13 +492,9 @@ def reject_hidden_index_entries() -> None:
 def require_policy_files_committed() -> None:
     reject_hidden_index_entries()
     try:
-        running_engine = (
-            Path(__file__).resolve().relative_to(ROOT).as_posix()
-        )
+        running_engine = Path(__file__).resolve().relative_to(ROOT).as_posix()
     except ValueError as exc:
-        raise RuntimeError(
-            "push-ready engine is outside the repository root"
-        ) from exc
+        raise RuntimeError("push-ready engine is outside the repository root") from exc
     for path in (
         ".lit/push-ready.json",
         "AGENTS.md",
@@ -542,9 +506,7 @@ def require_policy_files_committed() -> None:
         if not candidate.exists():
             raise RuntimeError(f"required push-ready policy file is missing: {path}")
         if not candidate.is_file() or candidate.is_symlink():
-            raise RuntimeError(
-                f"required push-ready policy file is unsafe: {path}"
-            )
+            raise RuntimeError(f"required push-ready policy file is unsafe: {path}")
         unstaged = run(
             ["git", "diff", "--quiet", "--", path],
             capture=True,
@@ -554,16 +516,12 @@ def require_policy_files_committed() -> None:
             capture=True,
         )
         if unstaged.returncode or staged.returncode:
-            raise RuntimeError(
-                f"push-ready policy file must match committed HEAD: {path}"
-            )
+            raise RuntimeError(f"push-ready policy file must match committed HEAD: {path}")
 
 
 def require_clean_head() -> None:
     require_policy_files_committed()
-    status_value = git_output(
-        "status", "--porcelain=v1", "--untracked-files=all", "-z"
-    )
+    status_value = git_output("status", "--porcelain=v1", "--untracked-files=all", "-z")
     if status_value:
         raise RuntimeError(
             "push-ready requires a clean committed HEAD; commit or remove "
@@ -576,10 +534,7 @@ def current_branch_ref() -> str:
     if not branch.startswith("refs/heads/"):
         raise RuntimeError("push-ready requires an attached local branch")
     if branch in {"refs/heads/develop", "refs/heads/main"}:
-        raise RuntimeError(
-            "push-ready requires a feature branch; direct pushes to develop "
-            "and main are not authorized"
-        )
+        raise RuntimeError("push-ready requires a feature branch; direct pushes to develop and main are not authorized")
     return branch
 
 
@@ -593,20 +548,11 @@ def github_https_authorization() -> str:
             timeout=30,
         )
         if result.returncode:
-            raise RuntimeError(
-                "GitHub HTTPS origin requires GH_TOKEN, GITHUB_TOKEN, or "
-                "an authenticated gh session"
-            )
+            raise RuntimeError("GitHub HTTPS origin requires GH_TOKEN, GITHUB_TOKEN, or an authenticated gh session")
         token = result.stdout.strip()
-    if (
-        not token
-        or len(token) > 4096
-        or any(ord(character) < 32 or ord(character) == 127 for character in token)
-    ):
+    if not token or len(token) > 4096 or any(ord(character) < 32 or ord(character) == 127 for character in token):
         raise RuntimeError("GitHub HTTPS authentication token is invalid")
-    credentials = base64.b64encode(
-        f"x-access-token:{token}".encode("utf-8")
-    ).decode("ascii")
+    credentials = base64.b64encode(f"x-access-token:{token}".encode()).decode("ascii")
     return f"AUTHORIZATION: basic {credentials}"
 
 
@@ -617,9 +563,7 @@ def fetch_authoritative_base(branch: str, base_ref: str) -> subprocess.Completed
     fetch_remote = governed_push_remote_from_url("origin", origin_url)
     push_remote = governed_push_remote_from_url("origin", push_url)
     if fetch_remote["repository"] != push_remote["repository"]:
-        raise RuntimeError(
-            "origin fetch and push URLs must target the same governed repository"
-        )
+        raise RuntimeError("origin fetch and push URLs must target the same governed repository")
     command = [
         "git",
         "fetch",
@@ -638,7 +582,7 @@ def fetch_authoritative_base(branch: str, base_ref: str) -> subprocess.Completed
             "GIT_CONFIG_VALUE_0": github_https_authorization(),
         }
     )
-    return subprocess.run(
+    return subprocess.run(  # noqa: S603 -- fixed Git argv; token stays in env.
         command,
         cwd=ROOT,
         check=False,
@@ -659,9 +603,7 @@ def refresh_authoritative_base(config: dict[str, Any]) -> str:
         raise RuntimeError("cannot refresh an ungoverned base ref")
     result = fetch_authoritative_base(branch, base_ref)
     if result.returncode:
-        raise RuntimeError(
-            f"could not refresh the authoritative origin/{branch} base"
-        )
+        raise RuntimeError(f"could not refresh the authoritative origin/{branch} base")
     return git_output(
         "rev-parse",
         "--verify",
@@ -676,18 +618,9 @@ def require_nonempty_string(value: Any, description: str) -> str:
     return value
 
 
-def require_positive_integer(
-    value: Any, description: str, *, maximum: int
-) -> int:
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, int)
-        or value <= 0
-        or value > maximum
-    ):
-        raise RuntimeError(
-            f"{description} must be an integer between 1 and {maximum}"
-        )
+def require_positive_integer(value: Any, description: str, *, maximum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0 or value > maximum:
+        raise RuntimeError(f"{description} must be an integer between 1 and {maximum}")
     return value
 
 
@@ -697,9 +630,7 @@ def validate_command(value: Any, description: str) -> list[str]:
         or not value
         or any(not isinstance(argument, str) or not argument for argument in value)
     ):
-        raise RuntimeError(
-            f"{description} must be a non-empty command array of non-empty strings"
-        )
+        raise RuntimeError(f"{description} must be a non-empty command array of non-empty strings")
     return value
 
 
@@ -709,18 +640,12 @@ def validate_agent_config(name: str, value: Any) -> None:
     enabled = value.get("enabled")
     required = value.get("required")
     if not isinstance(enabled, bool) or not isinstance(required, bool):
-        raise RuntimeError(
-            f"agents.{name}.enabled and agents.{name}.required must be booleans"
-        )
+        raise RuntimeError(f"agents.{name}.enabled and agents.{name}.required must be booleans")
     if enabled is not True or required is not True:
-        raise RuntimeError(
-            f"agents.{name} must be enabled and required by the v2 policy"
-        )
+        raise RuntimeError(f"agents.{name} must be enabled and required by the v2 policy")
     command = validate_command(value.get("command"), f"agents.{name}.command")
     if command != [name]:
-        raise RuntimeError(
-            f"agents.{name}.command is centrally fixed to [{name!r}]"
-        )
+        raise RuntimeError(f"agents.{name}.command is centrally fixed to [{name!r}]")
     require_positive_integer(
         value.get("timeout_seconds"),
         f"agents.{name}.timeout_seconds",
@@ -735,41 +660,24 @@ def validate_agent_config(name: str, value: Any) -> None:
 
 def validate_remote_only_checks(value: Any) -> None:
     if not isinstance(value, list) or not value:
-        raise RuntimeError(
-            "remote_only_checks must be a non-empty array of gap objects"
-        )
+        raise RuntimeError("remote_only_checks must be a non-empty array of gap objects")
     identifiers: list[str] = []
     required_keys = {"id", "workflow", "job", "reason", "owner"}
     for item in value:
         if not isinstance(item, dict) or set(item) != required_keys:
-            raise RuntimeError(
-                "each remote_only_checks item must define exactly id, "
-                "workflow, job, reason, and owner"
-            )
-        identifier = require_nonempty_string(
-            item.get("id"), "remote_only_checks id"
-        )
-        workflow = require_nonempty_string(
-            item.get("workflow"), "remote_only_checks workflow"
-        )
-        job = require_nonempty_string(
-            item.get("job"), "remote_only_checks job"
-        )
-        reason = require_nonempty_string(
-            item.get("reason"), "remote_only_checks reason"
-        )
-        owner = require_nonempty_string(
-            item.get("owner"), "remote_only_checks owner"
-        )
+            raise RuntimeError("each remote_only_checks item must define exactly id, workflow, job, reason, and owner")
+        identifier = require_nonempty_string(item.get("id"), "remote_only_checks id")
+        workflow = require_nonempty_string(item.get("workflow"), "remote_only_checks workflow")
+        job = require_nonempty_string(item.get("job"), "remote_only_checks job")
+        reason = require_nonempty_string(item.get("reason"), "remote_only_checks reason")
+        owner = require_nonempty_string(item.get("owner"), "remote_only_checks owner")
         if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", identifier):
             raise RuntimeError("remote_only_checks id is unsafe")
         if not re.fullmatch(
             r"\.github/workflows/[A-Za-z0-9_.-]+\.(?:yml|yaml)",
             workflow,
         ):
-            raise RuntimeError(
-                "remote_only_checks workflow must name a repository workflow"
-            )
+            raise RuntimeError("remote_only_checks workflow must name a repository workflow")
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", job):
             raise RuntimeError("remote_only_checks job is unsafe")
         if len(reason) > 1_000 or len(owner) > 200:
@@ -782,10 +690,7 @@ def validate_remote_only_checks(value: Any) -> None:
 def load_config() -> dict[str, Any]:
     reject_hidden_index_entries()
     if not CONFIG.is_file() or CONFIG.is_symlink():
-        raise RuntimeError(
-            "missing required regular configuration: "
-            f"{CONFIG.relative_to(ROOT)}"
-        )
+        raise RuntimeError(f"missing required regular configuration: {CONFIG.relative_to(ROOT)}")
     if CONFIG.stat().st_size > MAX_CONFIG_BYTES:
         raise RuntimeError("push-ready configuration is unreasonably large")
     data = json.loads(CONFIG.read_text(encoding="utf-8"))
@@ -795,20 +700,14 @@ def load_config() -> dict[str, Any]:
         or not isinstance(data.get("checks"), list)
         or not data.get("checks")
     ):
-        raise RuntimeError(
-            "push-ready configuration must use version 2 and define checks"
-        )
+        raise RuntimeError("push-ready configuration must use version 2 and define checks")
     base_ref = require_nonempty_string(data.get("base_ref"), "base_ref")
     if base_ref not in AUTHORITATIVE_BASE_REFS:
         raise RuntimeError(
-            "base_ref must be a centrally governed remote-tracking ref: "
-            + ", ".join(sorted(AUTHORITATIVE_BASE_REFS))
+            "base_ref must be a centrally governed remote-tracking ref: " + ", ".join(sorted(AUTHORITATIVE_BASE_REFS))
         )
     if data["checks"] != [CHECK_PROFILE]:
-        raise RuntimeError(
-            "checks must contain exactly the centrally allowlisted "
-            "repository-quality profile"
-        )
+        raise RuntimeError("checks must contain exactly the centrally allowlisted repository-quality profile")
     agents = data.get("agents")
     if not isinstance(agents, dict) or set(agents) != {"copilot", "codex"}:
         raise RuntimeError("agents must define exactly copilot and codex")
@@ -844,11 +743,7 @@ def instruction_file_hashes() -> dict[str, str]:
     if not COPILOT.is_file() or COPILOT.is_symlink():
         raise RuntimeError(".github/copilot-instructions.md must be a regular file")
     names = git_output("ls-files", "--cached", "-z")
-    candidates = {
-        name
-        for name in names.split("\0")
-        if name and INSTRUCTION_PATH_PATTERN.search(name)
-    }
+    candidates = {name for name in names.split("\0") if name and INSTRUCTION_PATH_PATTERN.search(name)}
     candidates.update({"AGENTS.md", ".github/copilot-instructions.md"})
     hashes: dict[str, str] = {}
     for name in sorted(candidates):
@@ -866,33 +761,17 @@ def check_instruction_contract() -> None:
     expected = instructions_digest()
     marker = f"<!-- AGENTS_SHA256: {expected} -->"
     if not COPILOT.is_file() or COPILOT.is_symlink():
-        raise RuntimeError(
-            "AGENTS.md and .github/copilot-instructions.md are required regular files"
-        )
+        raise RuntimeError("AGENTS.md and .github/copilot-instructions.md are required regular files")
     lines = COPILOT.read_text(encoding="utf-8").splitlines()
     if lines[-2:] != [CONTRACT_LINE, marker]:
-        raise RuntimeError(
-            "Copilot instructions are stale; run "
-            "`python3 scripts/lit-push-ready.py sync-instructions`"
-        )
+        raise RuntimeError("Copilot instructions are stale; run `python3 scripts/lit-push-ready.py sync-instructions`")
 
 
 def sync_instructions() -> None:
-    if (
-        not AGENTS.is_file()
-        or AGENTS.is_symlink()
-        or not COPILOT.is_file()
-        or COPILOT.is_symlink()
-    ):
-        raise RuntimeError(
-            "AGENTS.md and .github/copilot-instructions.md are required regular files"
-        )
+    if not AGENTS.is_file() or AGENTS.is_symlink() or not COPILOT.is_file() or COPILOT.is_symlink():
+        raise RuntimeError("AGENTS.md and .github/copilot-instructions.md are required regular files")
     lines = COPILOT.read_text(encoding="utf-8").splitlines()
-    lines = [
-        line
-        for line in lines
-        if not line.startswith("<!-- AGENTS_SHA256:") and line != CONTRACT_LINE
-    ]
+    lines = [line for line in lines if not line.startswith("<!-- AGENTS_SHA256:") and line != CONTRACT_LINE]
     while lines and not lines[-1]:
         lines.pop()
     lines.extend(
@@ -905,7 +784,7 @@ def sync_instructions() -> None:
     COPILOT.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def existing_unix_socket(value: str) -> Optional[str]:
+def existing_unix_socket(value: str) -> str | None:
     candidate_value = value.removeprefix("unix://")
     try:
         candidate = Path(candidate_value).expanduser().resolve(strict=True)
@@ -936,15 +815,11 @@ def minimal_check_environment(state_root: Path) -> dict[str, str]:
     selected_engine = os.environ.get("WUNDER_CONTAINER_ENGINE")
     if selected_engine:
         if selected_engine not in {"docker", "podman"}:
-            raise RuntimeError(
-                "WUNDER_CONTAINER_ENGINE must be docker or podman when set"
-            )
+            raise RuntimeError("WUNDER_CONTAINER_ENGINE must be docker or podman when set")
         environment["WUNDER_CONTAINER_ENGINE"] = selected_engine
     configured_host = os.environ.get("DOCKER_HOST")
     if configured_host and not configured_host.startswith("unix://"):
-        raise RuntimeError(
-            "deterministic checks refuse a non-local DOCKER_HOST"
-        )
+        raise RuntimeError("deterministic checks refuse a non-local DOCKER_HOST")
     socket_candidates = []
     if configured_host:
         socket_candidates.append(configured_host)
@@ -968,9 +843,7 @@ def minimal_check_environment(state_root: Path) -> dict[str, str]:
     return environment
 
 
-def execute_checks(
-    config: dict[str, Any], *, cwd: Optional[Path] = None
-) -> list[dict[str, Any]]:
+def execute_checks(config: dict[str, Any], *, cwd: Path | None = None) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     check_cwd = (cwd or ROOT).resolve()
     with tempfile.TemporaryDirectory(prefix="lit-check-environment-") as temporary:
@@ -981,11 +854,7 @@ def execute_checks(
                 raise RuntimeError("each check must be an object")
             name = require_nonempty_string(check.get("name"), "each check name")
             command = validate_command(check.get("command"), "each check command")
-            runtime_command = (
-                [sys.executable, *command[1:]]
-                if command[0] in {"python", "python3"}
-                else command
-            )
+            runtime_command = [sys.executable, *command[1:]] if command[0] in {"python", "python3"} else command
             started_at = now_utc()
             started = time.monotonic()
             print(f"==> {name}: {shlex.join(runtime_command)}", flush=True)
@@ -997,9 +866,7 @@ def execute_checks(
                     timeout=CHECK_TIMEOUT_SECONDS,
                 )
             except subprocess.TimeoutExpired as exc:
-                raise RuntimeError(
-                    f"check timed out after {CHECK_TIMEOUT_SECONDS} seconds: {name}"
-                ) from exc
+                raise RuntimeError(f"check timed out after {CHECK_TIMEOUT_SECONDS} seconds: {name}") from exc
             completed_at = now_utc()
             elapsed = round(time.monotonic() - started, 3)
             results.append(
@@ -1017,18 +884,12 @@ def execute_checks(
     return results
 
 
-def resolve_base(
-    config: dict[str, Any], override: Optional[str] = None
-) -> Tuple[str, str, str]:
+def resolve_base(config: dict[str, Any], override: str | None = None) -> tuple[str, str, str]:
     base_ref = override or config["base_ref"]
     require_nonempty_string(base_ref, "base_ref")
-    if len(base_ref) > 200 or base_ref.startswith("-") or any(
-        character.isspace() for character in base_ref
-    ):
+    if len(base_ref) > 200 or base_ref.startswith("-") or any(character.isspace() for character in base_ref):
         raise RuntimeError("base_ref is unsafe")
-    base_tip = git_output(
-        "rev-parse", "--verify", "--end-of-options", f"{base_ref}^{{commit}}"
-    ).strip()
+    base_tip = git_output("rev-parse", "--verify", "--end-of-options", f"{base_ref}^{{commit}}").strip()
     head_commit = git_output("rev-parse", "--verify", "HEAD^{commit}").strip()
     base_commit = git_output("merge-base", base_tip, head_commit).strip()
     if not is_full_git_object_id(base_commit):
@@ -1063,10 +924,7 @@ def expected_integration_tree(change: PlannedChange) -> str:
             capture=True,
         )
         if added.returncode:
-            raise RuntimeError(
-                "could not create the compatibility merge worktree: "
-                + added.stdout.strip()
-            )
+            raise RuntimeError("could not create the compatibility merge worktree: " + added.stdout.strip())
         worktree_identity = directory_identity(
             worktree,
             purpose="compatibility merge worktree",
@@ -1085,8 +943,7 @@ def expected_integration_tree(change: PlannedChange) -> str:
             )
             if refreshed.returncode:
                 raise RuntimeError(
-                    "could not refresh the compatibility merge worktree "
-                    "index: " + refreshed.stdout.strip()
+                    "could not refresh the compatibility merge worktree index: " + refreshed.stdout.strip()
                 )
             merged = run(
                 [
@@ -1120,16 +977,16 @@ def expected_integration_tree(change: PlannedChange) -> str:
             return tree
         finally:
             active_error = sys.exc_info()[1]
-            cleanup_error: Optional[RuntimeError] = None
+            cleanup_error: RuntimeError | None = None
             try:
-                if directory_identity(
-                    worktree,
-                    purpose="compatibility merge worktree",
-                ) != worktree_identity:
-                    raise RuntimeError(
-                        "compatibility merge worktree identity changed; "
-                        "cleanup was refused"
+                if (
+                    directory_identity(
+                        worktree,
+                        purpose="compatibility merge worktree",
                     )
+                    != worktree_identity
+                ):
+                    raise RuntimeError("compatibility merge worktree identity changed; cleanup was refused")
                 merge_head = run(
                     ["git", "rev-parse", "--verify", "--quiet", "MERGE_HEAD"],
                     capture=True,
@@ -1148,14 +1005,9 @@ def expected_integration_tree(change: PlannedChange) -> str:
                         cwd=worktree,
                     )
                     if aborted.returncode:
-                        raise RuntimeError(
-                            "could not abort the compatibility merge safely: "
-                            + aborted.stdout.strip()
-                        )
+                        raise RuntimeError("could not abort the compatibility merge safely: " + aborted.stdout.strip())
                 elif merge_head.returncode != 1:
-                    raise RuntimeError(
-                        "could not inspect compatibility merge state"
-                    )
+                    raise RuntimeError("could not inspect compatibility merge state")
                 status_value = git_output_at(
                     worktree,
                     "status",
@@ -1164,32 +1016,24 @@ def expected_integration_tree(change: PlannedChange) -> str:
                     "-z",
                 )
                 if status_value:
-                    raise RuntimeError(
-                        "compatibility merge cleanup left a modified worktree"
-                    )
+                    raise RuntimeError("compatibility merge cleanup left a modified worktree")
                 removed = run(
                     ["git", "worktree", "remove", str(worktree)],
                     capture=True,
                 )
                 if removed.returncode:
-                    raise RuntimeError(
-                        "could not remove compatibility merge worktree: "
-                        + removed.stdout.strip()
-                    )
+                    raise RuntimeError("could not remove compatibility merge worktree: " + removed.stdout.strip())
                 disabled_hooks.rmdir()
             except (OSError, RuntimeError) as exc:
                 cleanup_error = (
                     exc
                     if isinstance(exc, RuntimeError)
-                    else RuntimeError(
-                        "compatibility merge cleanup could not finish safely"
-                    )
+                    else RuntimeError("compatibility merge cleanup could not finish safely")
                 )
             if cleanup_error is not None:
                 if active_error is not None:
                     raise RuntimeError(
-                        f"{active_error}; compatibility merge cleanup also "
-                        f"failed: {cleanup_error}"
+                        f"{active_error}; compatibility merge cleanup also failed: {cleanup_error}"
                     ) from active_error
                 raise cleanup_error
 
@@ -1210,33 +1054,22 @@ def require_trusted_check_policy(
     allow_fixture_manifest_bootstrap: bool = False,
 ) -> None:
     try:
-        running_engine = (
-            Path(__file__).resolve().relative_to(ROOT).as_posix()
-        )
+        running_engine = Path(__file__).resolve().relative_to(ROOT).as_posix()
     except ValueError as exc:
-        raise RuntimeError(
-            "push-ready engine is outside the repository root"
-        ) from exc
-    policy_paths = tuple(
-        dict.fromkeys((*TRUSTED_CHECK_POLICY_PATHS, running_engine))
-    )
+        raise RuntimeError("push-ready engine is outside the repository root") from exc
+    policy_paths = tuple(dict.fromkeys((*TRUSTED_CHECK_POLICY_PATHS, running_engine)))
     required_paths = {
         ".lit/push-ready.json",
         "scripts/lit-ci-profile.sh",
         running_engine,
     }
     for path in policy_paths:
-        if (
-            path == SECRET_FIXTURE_MANIFEST_PATH
-            and allow_fixture_manifest_bootstrap
-        ):
+        if path == SECRET_FIXTURE_MANIFEST_PATH and allow_fixture_manifest_bootstrap:
             continue
         base_entry = git_tree_entry(change.base_tip, path)
         head_entry = git_tree_entry(change.head_commit, path)
         if path in required_paths and (not base_entry or not head_entry):
-            raise RuntimeError(
-                f"required check-policy path is missing: {path}"
-            )
+            raise RuntimeError(f"required check-policy path is missing: {path}")
         if base_entry != head_entry:
             raise RuntimeError(
                 "local execution refused because executable check policy "
@@ -1246,9 +1079,7 @@ def require_trusted_check_policy(
             )
 
 
-def integration_worktree_fingerprint(
-    cwd: Path, *, include_ignored: bool = False
-) -> str:
+def integration_worktree_fingerprint(cwd: Path, *, include_ignored: bool = False) -> str:
     untracked_command = ["ls-files", "--others"]
     if not include_ignored:
         untracked_command.append("--exclude-standard")
@@ -1265,26 +1096,20 @@ def integration_worktree_fingerprint(
         try:
             with os.fdopen(descriptor, "rb") as stream:
                 descriptor = -1
-                payload = stream.read(100_000_001)
+                file_payload = stream.read(100_000_001)
         finally:
             if descriptor >= 0:
                 os.close(descriptor)
-        if len(payload) > 100_000_000:
-            raise RuntimeError(
-                "worktree fingerprint input exceeds 100000000 bytes"
-            )
-        untracked_bytes += len(payload)
+        if len(file_payload) > 100_000_000:
+            raise RuntimeError("worktree fingerprint input exceeds 100000000 bytes")
+        untracked_bytes += len(file_payload)
         if untracked_bytes > 500_000_000:
-            raise RuntimeError(
-                "worktree fingerprint input exceeds 500000000 total bytes"
-            )
-        untracked_hashes[name] = sha256_bytes(payload)
+            raise RuntimeError("worktree fingerprint input exceeds 500000000 total bytes")
+        untracked_hashes[name] = sha256_bytes(file_payload)
     payload = {
         "head": git_output_at(cwd, "rev-parse", "HEAD").strip(),
         "index_tree": git_output_at(cwd, "write-tree").strip(),
-        "status": git_output_at(
-            cwd, "status", "--porcelain=v1", "--untracked-files=all", "-z"
-        ),
+        "status": git_output_at(cwd, "status", "--porcelain=v1", "--untracked-files=all", "-z"),
         "diff": git_output_at(
             cwd,
             "diff",
@@ -1296,14 +1121,10 @@ def integration_worktree_fingerprint(
         ),
         "untracked": untracked_hashes,
     }
-    return sha256_text(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    )
+    return sha256_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
 
 
-def synthetic_integration_commit(
-    change: PlannedChange, integration_tree: str
-) -> str:
+def synthetic_integration_commit(change: PlannedChange, integration_tree: str) -> str:
     environment = dict(os.environ)
     environment.update(
         {
@@ -1334,60 +1155,37 @@ def synthetic_integration_commit(
     )
     commit = result.stdout.strip()
     if result.returncode or not is_full_git_object_id(commit):
-        raise RuntimeError(
-            "could not create the synthetic pull-request integration commit"
-        )
+        raise RuntimeError("could not create the synthetic pull-request integration commit")
     return commit
 
 
 def create_integration_directory() -> tuple[Path, tuple[int, int, int, int]]:
     """Create a private executable worktree parent strictly below ROOT."""
     required_flags = ("O_CLOEXEC", "O_DIRECTORY", "O_NOFOLLOW")
-    missing_flags = [
-        flag
-        for flag in required_flags
-        if not isinstance(getattr(os, flag, None), int)
-    ]
+    missing_flags = [flag for flag in required_flags if not isinstance(getattr(os, flag, None), int)]
     required_dir_fd_calls = (os.mkdir, os.rmdir, os.stat)
-    if missing_flags or any(
-        call not in os.supports_dir_fd for call in required_dir_fd_calls
-    ):
-        unsupported = (
-            ", ".join(missing_flags)
-            or "directory-relative filesystem calls"
-        )
-        raise RuntimeError(
-            "isolated integration checks require unavailable safe-directory "
-            f"capability: {unsupported}"
-        )
+    if missing_flags or any(call not in os.supports_dir_fd for call in required_dir_fd_calls):
+        unsupported = ", ".join(missing_flags) or "directory-relative filesystem calls"
+        raise RuntimeError(f"isolated integration checks require unavailable safe-directory capability: {unsupported}")
 
-    directory_flags = (
-        os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
-    )
+    directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
     try:
         root_descriptor = os.open(ROOT, directory_flags)
     except OSError as exc:
-        raise RuntimeError(
-            "could not safely open the repository for integration checks"
-        ) from exc
-    created_name: Optional[str] = None
-    created_identity: Optional[Tuple[int, int]] = None
+        raise RuntimeError("could not safely open the repository for integration checks") from exc
+    created_name: str | None = None
+    created_identity: tuple[int, int] | None = None
     completed = False
     try:
         root_stat = os.fstat(root_descriptor)
         path_stat = os.stat(ROOT, follow_symlinks=False)
-        if (
-            not stat.S_ISDIR(root_stat.st_mode)
-            or (root_stat.st_dev, root_stat.st_ino)
-            != (path_stat.st_dev, path_stat.st_ino)
+        if not stat.S_ISDIR(root_stat.st_mode) or (root_stat.st_dev, root_stat.st_ino) != (
+            path_stat.st_dev,
+            path_stat.st_ino,
         ):
-            raise RuntimeError(
-                "repository identity changed before integration checks"
-            )
+            raise RuntimeError("repository identity changed before integration checks")
         for _attempt in range(128):
-            candidate = (
-                f"{INTEGRATION_DIRECTORY_PREFIX}{secrets.token_hex(16)}"
-            )
+            candidate = f"{INTEGRATION_DIRECTORY_PREFIX}{secrets.token_hex(16)}"
             try:
                 os.mkdir(candidate, mode=0o700, dir_fd=root_descriptor)
             except FileExistsError:
@@ -1400,9 +1198,7 @@ def create_integration_directory() -> tuple[Path, tuple[int, int, int, int]]:
             created_name = candidate
             break
         if created_name is None:
-            raise RuntimeError(
-                "could not allocate a collision-free integration directory"
-            )
+            raise RuntimeError("could not allocate a collision-free integration directory")
 
         created_stat = os.stat(
             created_name,
@@ -1415,20 +1211,14 @@ def create_integration_directory() -> tuple[Path, tuple[int, int, int, int]]:
             or created_stat.st_uid != os.geteuid()
             or stat.S_IMODE(created_stat.st_mode) & 0o077
         ):
-            raise RuntimeError(
-                "private integration directory has unsafe ownership or permissions"
-            )
+            raise RuntimeError("private integration directory has unsafe ownership or permissions")
         directory = ROOT / created_name
         try:
             resolved = directory.resolve(strict=True)
         except OSError as exc:
-            raise RuntimeError(
-                "private integration directory could not be resolved safely"
-            ) from exc
+            raise RuntimeError("private integration directory could not be resolved safely") from exc
         if resolved != directory or resolved.parent != ROOT:
-            raise RuntimeError(
-                "private integration directory escaped the repository"
-            )
+            raise RuntimeError("private integration directory escaped the repository")
         identity = (
             root_stat.st_dev,
             root_stat.st_ino,
@@ -1448,8 +1238,7 @@ def create_integration_directory() -> tuple[Path, tuple[int, int, int, int]]:
                 if (
                     stat.S_ISDIR(current_stat.st_mode)
                     and current_stat.st_uid == os.geteuid()
-                    and (current_stat.st_dev, current_stat.st_ino)
-                    == created_identity
+                    and (current_stat.st_dev, current_stat.st_ino) == created_identity
                 ):
                     os.rmdir(created_name, dir_fd=root_descriptor)
             except OSError:
@@ -1458,26 +1247,15 @@ def create_integration_directory() -> tuple[Path, tuple[int, int, int, int]]:
         os.close(root_descriptor)
 
 
-def remove_integration_directory(
-    directory: Path, identity: tuple[int, int, int, int]
-) -> None:
+def remove_integration_directory(directory: Path, identity: tuple[int, int, int, int]) -> None:
     """Remove only the same empty private directory that this process created."""
-    if (
-        directory.parent != ROOT
-        or not directory.name.startswith(INTEGRATION_DIRECTORY_PREFIX)
-    ):
-        raise RuntimeError(
-            "refused cleanup for an unbound integration directory"
-        )
-    directory_flags = (
-        os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
-    )
+    if directory.parent != ROOT or not directory.name.startswith(INTEGRATION_DIRECTORY_PREFIX):
+        raise RuntimeError("refused cleanup for an unbound integration directory")
+    directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
     try:
         root_descriptor = os.open(ROOT, directory_flags)
     except OSError as exc:
-        raise RuntimeError(
-            "could not safely reopen the repository for integration cleanup"
-        ) from exc
+        raise RuntimeError("could not safely reopen the repository for integration cleanup") from exc
     try:
         root_stat = os.fstat(root_descriptor)
         try:
@@ -1487,9 +1265,7 @@ def remove_integration_directory(
                 follow_symlinks=False,
             )
         except OSError as exc:
-            raise RuntimeError(
-                "integration directory identity changed before cleanup"
-            ) from exc
+            raise RuntimeError("integration directory identity changed before cleanup") from exc
         expected = identity
         current = (
             root_stat.st_dev,
@@ -1497,20 +1273,13 @@ def remove_integration_directory(
             current_stat.st_dev,
             current_stat.st_ino,
         )
-        if (
-            current != expected
-            or not stat.S_ISDIR(current_stat.st_mode)
-            or current_stat.st_uid != os.geteuid()
-        ):
-            raise RuntimeError(
-                "integration directory identity changed before cleanup"
-            )
+        if current != expected or not stat.S_ISDIR(current_stat.st_mode) or current_stat.st_uid != os.geteuid():
+            raise RuntimeError("integration directory identity changed before cleanup")
         try:
             os.rmdir(directory.name, dir_fd=root_descriptor)
         except OSError as exc:
             raise RuntimeError(
-                "integration directory is not empty; recursive cleanup was "
-                "refused to protect unrelated data"
+                "integration directory is not empty; recursive cleanup was refused to protect unrelated data"
             ) from exc
     finally:
         os.close(root_descriptor)
@@ -1529,8 +1298,7 @@ def isolated_integration_directory():
         except RuntimeError as cleanup_error:
             if active_error is not None:
                 raise RuntimeError(
-                    f"{active_error}; integration cleanup also failed: "
-                    f"{cleanup_error}"
+                    f"{active_error}; integration cleanup also failed: {cleanup_error}"
                 ) from active_error
             raise
 
@@ -1567,10 +1335,7 @@ def execute_integration_checks(
             capture=True,
         )
         if added.returncode:
-            raise RuntimeError(
-                "could not create isolated integration worktree: "
-                + added.stdout.strip()
-            )
+            raise RuntimeError("could not create isolated integration worktree: " + added.stdout.strip())
         worktree_identity = directory_identity(
             worktree,
             purpose="isolated integration worktree",
@@ -1578,9 +1343,7 @@ def execute_integration_checks(
         try:
             checked_tree = git_output_at(worktree, "write-tree").strip()
             if checked_tree != integration_tree:
-                raise RuntimeError(
-                    "isolated integration checkout does not match git merge-tree"
-                )
+                raise RuntimeError("isolated integration checkout does not match git merge-tree")
             status_value = git_output_at(
                 worktree,
                 "status",
@@ -1589,20 +1352,20 @@ def execute_integration_checks(
                 "-z",
             )
             if status_value:
-                raise RuntimeError(
-                    "synthetic pull-request integration checkout is not clean"
+                raise RuntimeError("synthetic pull-request integration checkout is not clean")
+            parents = (
+                git_output_at(
+                    worktree,
+                    "show",
+                    "-s",
+                    "--format=%P",
+                    "HEAD",
                 )
-            parents = git_output_at(
-                worktree,
-                "show",
-                "-s",
-                "--format=%P",
-                "HEAD",
-            ).strip().split()
+                .strip()
+                .split()
+            )
             if parents != [change.base_tip, change.head_commit]:
-                raise RuntimeError(
-                    "synthetic pull-request integration parents are invalid"
-                )
+                raise RuntimeError("synthetic pull-request integration parents are invalid")
             before = integration_worktree_fingerprint(worktree)
             checks = execute_checks(config, cwd=worktree)
             after = integration_worktree_fingerprint(worktree)
@@ -1613,23 +1376,20 @@ def execute_integration_checks(
                 )
             return checks, integration_tree, integration_commit, before
         finally:
-            if directory_identity(
-                worktree,
-                purpose="isolated integration worktree",
-            ) != worktree_identity:
-                raise RuntimeError(
-                    "isolated integration worktree identity changed; cleanup "
-                    "was refused"
+            if (
+                directory_identity(
+                    worktree,
+                    purpose="isolated integration worktree",
                 )
+                != worktree_identity
+            ):
+                raise RuntimeError("isolated integration worktree identity changed; cleanup was refused")
             removed = run(
                 ["git", "worktree", "remove", str(worktree)],
                 capture=True,
             )
             if removed.returncode:
-                raise RuntimeError(
-                    "could not remove isolated integration worktree: "
-                    + removed.stdout.strip()
-                )
+                raise RuntimeError("could not remove isolated integration worktree: " + removed.stdout.strip())
 
 
 def quote_diff_path(prefix: str, name: str) -> str:
@@ -1638,7 +1398,7 @@ def quote_diff_path(prefix: str, name: str) -> str:
         encoded = value.encode("utf-8", errors="surrogateescape")
         escaped: list[str] = []
         for byte in encoded:
-            if byte == ord('\\'):
+            if byte == ord("\\"):
                 escaped.append("\\\\")
             elif byte == ord('"'):
                 escaped.append('\\"')
@@ -1656,7 +1416,7 @@ def quote_diff_path(prefix: str, name: str) -> str:
     return value
 
 
-def unquote_diff_path(value: str, prefix: str) -> Optional[str]:
+def unquote_diff_path(value: str, prefix: str) -> str | None:
     if value == "/dev/null":
         return None
     if value.startswith('"'):
@@ -1693,10 +1453,7 @@ def unquote_diff_path(value: str, prefix: str) -> Optional[str]:
             if escaped not in "01234567":
                 raise RuntimeError("planned diff quoted path has an unsafe escape")
             octal = payload[index : index + 3]
-            if len(octal) != 3 or any(
-                octal_character not in "01234567"
-                for octal_character in octal
-            ):
+            if len(octal) != 3 or any(octal_character not in "01234567" for octal_character in octal):
                 raise RuntimeError("planned diff quoted path has invalid octal")
             decoded.append(int(octal, 8))
             index += 3
@@ -1716,10 +1473,7 @@ def unquote_diff_path(value: str, prefix: str) -> Optional[str]:
         not path
         or path.startswith("/")
         or "\\" in path
-        or any(
-            ord(character) < 0x20 or ord(character) == 0x7F
-            for character in path
-        )
+        or any(ord(character) < 0x20 or ord(character) == 0x7F for character in path)
         or Path(path).as_posix() != path
         or any(part in {"", ".", "..", ".git"} for part in Path(path).parts)
     ):
@@ -1727,19 +1481,13 @@ def unquote_diff_path(value: str, prefix: str) -> Optional[str]:
     return path
 
 
-def render_untracked_patch(
-    name: str, payload: bytes, mode: int
-) -> str:
+def render_untracked_patch(name: str, payload: bytes, mode: int) -> str:
     if b"\0" in payload:
-        raise RuntimeError(
-            f"local review refused for binary untracked path: {name}"
-        )
+        raise RuntimeError(f"local review refused for binary untracked path: {name}")
     try:
         text = payload.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise RuntimeError(
-            f"local review refused for non-UTF-8 untracked path: {name}"
-        ) from exc
+        raise RuntimeError(f"local review refused for non-UTF-8 untracked path: {name}") from exc
     old_path = quote_diff_path("a", name)
     new_path = quote_diff_path("b", name)
     file_mode = "100755" if mode & 0o111 else "100644"
@@ -1752,8 +1500,8 @@ def render_untracked_patch(
         return "".join(parts)
     parts.extend(
         [
-        "--- /dev/null\n",
-        f"+++ {new_path}\n",
+            "--- /dev/null\n",
+            f"+++ {new_path}\n",
         ]
     )
     lines = text.splitlines(keepends=True)
@@ -1771,7 +1519,7 @@ def render_untracked_patch(
 def planned_change(
     config: dict[str, Any],
     *,
-    base_override: Optional[str] = None,
+    base_override: str | None = None,
     fixture_manifest_bootstrap: bool = False,
 ) -> PlannedChange:
     initial_tree_fingerprint = tree_fingerprint()
@@ -1788,13 +1536,8 @@ def planned_change(
         "--",
     )
     if "GIT binary patch\n" in tracked_diff or "\nBinary files " in tracked_diff:
-        raise RuntimeError(
-            "local review refused because the planned tracked diff contains "
-            "binary content"
-        )
-    tracked_names = git_output(
-        "diff", "--name-only", "--no-renames", "-z", base_commit, "--"
-    ).split("\0")
+        raise RuntimeError("local review refused because the planned tracked diff contains binary content")
+    tracked_names = git_output("diff", "--name-only", "--no-renames", "-z", base_commit, "--").split("\0")
     max_bytes = require_positive_integer(
         config["review"]["max_diff_bytes"],
         "review.max_diff_bytes",
@@ -1806,9 +1549,7 @@ def planned_change(
     for name in untracked_names():
         remaining = max_bytes - consumed
         if remaining <= 0:
-            raise RuntimeError(
-                f"planned diff exceeds local review limit of {max_bytes} bytes"
-            )
+            raise RuntimeError(f"planned diff exceeds local review limit of {max_bytes} bytes")
         payload, mode = read_repository_file(
             name,
             purpose="Local review",
@@ -1818,31 +1559,16 @@ def planned_change(
         patch_bytes = utf8_size(patch)
         consumed += patch_bytes
         if consumed > max_bytes:
-            raise RuntimeError(
-                f"planned diff exceeds local review limit of {max_bytes} bytes"
-            )
+            raise RuntimeError(f"planned diff exceeds local review limit of {max_bytes} bytes")
         patches.append(patch)
         untracked_hashes[name] = sha256_bytes(payload)
     diff = tracked_diff + "".join(patches)
     if utf8_size(diff) > max_bytes:
-        raise RuntimeError(
-            f"planned diff exceeds local review limit of {max_bytes} bytes"
-        )
-    paths = tuple(
-        sorted(
-            {
-                path
-                for path in tracked_names
-                if path
-            }
-            | set(untracked_hashes)
-        )
-    )
+        raise RuntimeError(f"planned diff exceeds local review limit of {max_bytes} bytes")
+    paths = tuple(sorted({path for path in tracked_names if path} | set(untracked_hashes)))
     final_tree_fingerprint = tree_fingerprint()
     if final_tree_fingerprint != initial_tree_fingerprint:
-        raise RuntimeError(
-            "Git tree changed while constructing the exact planned push patch"
-        )
+        raise RuntimeError("Git tree changed while constructing the exact planned push patch")
     change = PlannedChange(
         base_ref=base_ref,
         base_tip=base_tip,
@@ -1890,9 +1616,9 @@ def changed_paths() -> list[str]:
 
 
 def planned_paths(
-    config: Optional[dict[str, Any]] = None,
+    config: dict[str, Any] | None = None,
     *,
-    base_override: Optional[str] = None,
+    base_override: str | None = None,
 ) -> list[str]:
     if config is None:
         config = load_config()
@@ -1900,9 +1626,9 @@ def planned_paths(
 
 
 def planned_diff(
-    config: Optional[dict[str, Any]] = None,
+    config: dict[str, Any] | None = None,
     *,
-    base_override: Optional[str] = None,
+    base_override: str | None = None,
 ) -> str:
     if config is None:
         config = load_config()
@@ -1922,9 +1648,7 @@ def untracked_review_text(max_bytes: int = 1_000_000) -> str:
         try:
             chunks.append(payload.decode("utf-8"))
         except UnicodeDecodeError as exc:
-            raise RuntimeError(
-                f"local review refused for non-UTF-8 untracked path: {name}"
-            ) from exc
+            raise RuntimeError(f"local review refused for non-UTF-8 untracked path: {name}") from exc
     return "\n".join(chunks)
 
 
@@ -1936,16 +1660,12 @@ def parse_secret_fixture_manifest(
         "version",
         "fixtures",
     }:
-        raise RuntimeError(
-            "secret fixture manifest must contain exactly version and fixtures"
-        )
+        raise RuntimeError("secret fixture manifest must contain exactly version and fixtures")
     if document["version"] != 1:
         raise RuntimeError("secret fixture manifest version must be 1")
     fixtures = document["fixtures"]
     if not isinstance(fixtures, list) or not 1 <= len(fixtures) <= 100:
-        raise RuntimeError(
-            "secret fixture manifest must contain between 1 and 100 entries"
-        )
+        raise RuntimeError("secret fixture manifest must contain between 1 and 100 entries")
     parsed: dict[str, dict[int, tuple[str, str]]] = {}
     for entry in fixtures:
         if not isinstance(entry, dict) or set(entry) != {
@@ -1954,25 +1674,14 @@ def parse_secret_fixture_manifest(
             "line_number",
             "purpose",
         }:
-            raise RuntimeError(
-                "secret fixture entries must contain exactly path, line_hex, "
-                "line_number, and purpose"
-            )
+            raise RuntimeError("secret fixture entries must contain exactly path, line_hex, line_number, and purpose")
         path = entry["path"]
         encoded = entry["line_hex"]
         line_number = entry["line_number"]
         if entry["purpose"] != "synthetic-test-fixture":
-            raise RuntimeError(
-                "secret fixture manifest purpose must be synthetic-test-fixture"
-            )
-        if (
-            isinstance(line_number, bool)
-            or not isinstance(line_number, int)
-            or not 1 <= line_number <= 10_000_000
-        ):
-            raise RuntimeError(
-                "secret fixture manifest line_number must be a positive integer"
-            )
+            raise RuntimeError("secret fixture manifest purpose must be synthetic-test-fixture")
+        if isinstance(line_number, bool) or not isinstance(line_number, int) or not 1 <= line_number <= 10_000_000:
+            raise RuntimeError("secret fixture manifest line_number must be a positive integer")
         if (
             not isinstance(path, str)
             or not path
@@ -1980,52 +1689,34 @@ def parse_secret_fixture_manifest(
             or path.startswith("/")
             or "\\" in path
             or ":" in path
-            or any(
-                ord(character) < 0x20 or ord(character) == 0x7F
-                for character in path
-            )
+            or any(ord(character) < 0x20 or ord(character) == 0x7F for character in path)
             or Path(path).as_posix() != path
             or any(part in {"", ".", "..", ".git"} for part in Path(path).parts)
             or not path.startswith(SECRET_FIXTURE_PATH_PREFIXES)
         ):
             raise RuntimeError("secret fixture manifest contains an unsafe path")
         lowered = path.lower()
-        if (
-            any(part in lowered for part in SECRET_PATH_PARTS)
-            or Path(path).name.lower() == ".npmrc"
-        ):
-            raise RuntimeError(
-                "secret fixture manifest may not authorize secret-like paths"
-            )
+        if any(part in lowered for part in SECRET_PATH_PARTS) or Path(path).name.lower() == ".npmrc":
+            raise RuntimeError("secret fixture manifest may not authorize secret-like paths")
         if (
             not isinstance(encoded, str)
             or not re.fullmatch(r"[0-9a-f]+", encoded)
             or len(encoded) % 2
             or len(encoded) > 20_000
         ):
-            raise RuntimeError(
-                "secret fixture manifest line_hex must be bounded lowercase hex"
-            )
+            raise RuntimeError("secret fixture manifest line_hex must be bounded lowercase hex")
         try:
             line = bytes.fromhex(encoded).decode("utf-8")
         except (UnicodeDecodeError, ValueError) as exc:
-            raise RuntimeError(
-                "secret fixture manifest line_hex must encode UTF-8"
-            ) from exc
+            raise RuntimeError("secret fixture manifest line_hex must encode UTF-8") from exc
         if not line or "\n" in line or "\r" in line:
-            raise RuntimeError(
-                "secret fixture manifest entries must encode one non-empty line"
-            )
+            raise RuntimeError("secret fixture manifest entries must encode one non-empty line")
         if not any(pattern.search(line) for pattern in SECRET_CONTENT_PATTERNS):
-            raise RuntimeError(
-                "secret fixture manifest entry is not secret-like"
-            )
+            raise RuntimeError("secret fixture manifest entry is not secret-like")
         digest = sha256_text(line)
         path_entries = parsed.setdefault(path, {})
         if line_number in path_entries:
-            raise RuntimeError(
-                "secret fixture manifest contains a duplicate line position"
-            )
+            raise RuntimeError("secret fixture manifest contains a duplicate line position")
         path_entries[line_number] = (digest, line)
     return parsed
 
@@ -2035,7 +1726,7 @@ def repository_blob_at_commit(
     path: str,
     *,
     max_bytes: int,
-) -> Optional[str]:
+) -> str | None:
     if not is_full_git_object_id(commit):
         raise RuntimeError("secret fixture manifest commit is invalid")
     object_name = f"{commit}:{path}"
@@ -2049,9 +1740,7 @@ def repository_blob_at_commit(
     try:
         value.encode("utf-8", errors="strict")
     except UnicodeEncodeError as exc:
-        raise RuntimeError(
-            "secret fixture manifest source blob is not UTF-8"
-        ) from exc
+        raise RuntimeError("secret fixture manifest source blob is not UTF-8") from exc
     return value
 
 
@@ -2073,57 +1762,35 @@ def bootstrap_secret_fixture_manifest(
 ) -> dict[str, dict[int, tuple[str, str]]]:
     """Authorize only pre-existing synthetic lines for one manifest bootstrap."""
     if SECRET_FIXTURE_MANIFEST_PATH not in change.paths:
-        raise RuntimeError(
-            "secret fixture bootstrap requires a changed manifest"
-        )
-    changelog_paths = [
-        path
-        for path in change.paths
-        if re.fullmatch(r"changelogs/fragments/[^/]+\.ya?ml", path)
-    ]
+        raise RuntimeError("secret fixture bootstrap requires a changed manifest")
+    changelog_paths = [path for path in change.paths if re.fullmatch(r"changelogs/fragments/[^/]+\.ya?ml", path)]
     disallowed = [
         path
         for path in change.paths
-        if path != SECRET_FIXTURE_MANIFEST_PATH
-        and not re.fullmatch(r"changelogs/fragments/[^/]+\.ya?ml", path)
+        if path != SECRET_FIXTURE_MANIFEST_PATH and not re.fullmatch(r"changelogs/fragments/[^/]+\.ya?ml", path)
     ]
     if disallowed or len(changelog_paths) > 1:
-        raise RuntimeError(
-            "secret fixture bootstrap may change only the manifest and one "
-            "changelog fragment"
-        )
+        raise RuntimeError("secret fixture bootstrap may change only the manifest and one changelog fragment")
     if secret_fixture_manifest_at_commit(change.base_tip):
-        raise RuntimeError(
-            "secret fixture bootstrap requires an absent base manifest"
-        )
+        raise RuntimeError("secret fixture bootstrap requires an absent base manifest")
     manifest = secret_fixture_manifest_at_commit(change.head_commit)
     if not manifest:
-        raise RuntimeError(
-            "secret fixture bootstrap requires a committed head manifest"
-        )
+        raise RuntimeError("secret fixture bootstrap requires a committed head manifest")
     for path, entries in manifest.items():
         if path in change.paths:
-            raise RuntimeError(
-                "secret fixture bootstrap may classify only unchanged base files"
-            )
+            raise RuntimeError("secret fixture bootstrap may classify only unchanged base files")
         source = repository_blob_at_commit(
             change.base_tip,
             path,
             max_bytes=MAX_SECRET_FIXTURE_SOURCE_BYTES,
         )
         if source is None:
-            raise RuntimeError(
-                f"secret fixture bootstrap source is absent from base: {path}"
-            )
+            raise RuntimeError(f"secret fixture bootstrap source is absent from base: {path}")
         source_lines = source.splitlines()
         for line_number, (_digest, line) in entries.items():
-            if (
-                line_number > len(source_lines)
-                or source_lines[line_number - 1] != line
-            ):
+            if line_number > len(source_lines) or source_lines[line_number - 1] != line:
                 raise RuntimeError(
-                    "secret fixture bootstrap line is absent from its exact "
-                    f"base position: {path}:{line_number}"
+                    f"secret fixture bootstrap line is absent from its exact base position: {path}:{line_number}"
                 )
     return manifest
 
@@ -2136,10 +1803,7 @@ def secret_fixture_manifest_for_change(
     if bootstrap:
         return bootstrap_secret_fixture_manifest(change)
     if SECRET_FIXTURE_MANIFEST_PATH in change.paths:
-        raise RuntimeError(
-            "secret fixture manifest changes require the explicit audited "
-            "bootstrap review path"
-        )
+        raise RuntimeError("secret fixture manifest changes require the explicit audited bootstrap review path")
     return secret_fixture_manifest_at_commit(change.base_tip)
 
 
@@ -2147,7 +1811,7 @@ def mask_documented_secret_fixture_lines(
     value: str,
     documented: dict[str, dict[int, tuple[str, str]]],
     *,
-    path: Optional[str] = None,
+    path: str | None = None,
     diff: bool = False,
 ) -> str:
     if diff:
@@ -2171,7 +1835,7 @@ def mask_documented_secret_fixture_lines(
 
 def documented_secret_fixture_matches(
     documented: dict[str, dict[int, tuple[str, str]]],
-    path: Optional[str],
+    path: str | None,
     line_number: int,
     line: str,
 ) -> bool:
@@ -2189,8 +1853,8 @@ def mask_documented_secret_fixture_diff(
     if not documented:
         return diff
     masked: list[str] = []
-    old_path: Optional[str] = None
-    new_path: Optional[str] = None
+    old_path: str | None = None
+    new_path: str | None = None
     old_line_number = 0
     new_line_number = 0
     in_hunk = False
@@ -2243,7 +1907,7 @@ def mask_documented_secret_fixture_diff(
 
 def ensure_review_safe(
     change: PlannedChange,
-    documented: Optional[dict[str, dict[int, tuple[str, str]]]] = None,
+    documented: dict[str, dict[int, tuple[str, str]]] | None = None,
 ) -> None:
     unsafe = []
     for path in change.paths:
@@ -2251,28 +1915,16 @@ def ensure_review_safe(
         if any(part in lowered for part in SECRET_PATH_PARTS):
             unsafe.append(path)
     if unsafe:
-        raise RuntimeError(
-            "local review refused for secret-like paths: "
-            + ", ".join(sorted(unsafe))
-        )
+        raise RuntimeError("local review refused for secret-like paths: " + ", ".join(sorted(unsafe)))
     scanned_diff = mask_documented_secret_fixture_lines(
         change.diff,
         documented or {},
         diff=True,
     )
     if any(pattern.search(scanned_diff) for pattern in SECRET_CONTENT_PATTERNS):
-        raise RuntimeError(
-            "local review refused because the planned review input contains "
-            "secret-like content"
-        )
-    if (
-        any(Path(path).name.lower() == ".npmrc" for path in change.paths)
-        and NPMRC_AUTH_PATTERN.search(change.diff)
-    ):
-        raise RuntimeError(
-            "local review refused because planned .npmrc content contains "
-            "authentication configuration"
-        )
+        raise RuntimeError("local review refused because the planned review input contains secret-like content")
+    if any(Path(path).name.lower() == ".npmrc" for path in change.paths) and NPMRC_AUTH_PATTERN.search(change.diff):
+        raise RuntimeError("local review refused because planned .npmrc content contains authentication configuration")
 
 
 def checkout_sanitized_commit(
@@ -2314,10 +1966,7 @@ def checkout_sanitized_commit(
         cwd=destination,
     )
     if initialized.returncode:
-        raise RuntimeError(
-            "could not initialize sanitized review repository: "
-            + initialized.stdout.strip()
-        )
+        raise RuntimeError("could not initialize sanitized review repository: " + initialized.stdout.strip())
     fetched = run(
         [
             "git",
@@ -2334,19 +1983,14 @@ def checkout_sanitized_commit(
         cwd=destination,
     )
     if fetched.returncode:
-        raise RuntimeError(
-            "could not fetch sanitized review commit: " + fetched.stdout.strip()
-        )
+        raise RuntimeError("could not fetch sanitized review commit: " + fetched.stdout.strip())
     checked_out = run(
         ["git", "checkout", "-q", "--detach", "FETCH_HEAD"],
         capture=True,
         cwd=destination,
     )
     if checked_out.returncode:
-        raise RuntimeError(
-            "could not materialize sanitized review commit: "
-            + checked_out.stdout.strip()
-        )
+        raise RuntimeError("could not materialize sanitized review commit: " + checked_out.stdout.strip())
 
 
 def sanitized_root_commit(repository: Path, tree: str) -> str:
@@ -2387,24 +2031,15 @@ def verified_review_topology(
     integration_tree: str,
     workspace_commit: str,
 ) -> ReviewTopology:
-    head_line = git_output(
-        "rev-list", "--parents", "-n", "1", change.head_commit
-    ).strip().split()
+    head_line = git_output("rev-list", "--parents", "-n", "1", change.head_commit).strip().split()
     if (
         not head_line
         or head_line[0] != change.head_commit
-        or any(
-            not is_full_git_object_id(value)
-            for value in head_line
-        )
+        or any(not is_full_git_object_id(value) for value in head_line)
     ):
         raise RuntimeError("could not verify review HEAD topology")
-    head_tree = git_output(
-        "rev-parse", "--verify", f"{change.head_commit}^{{tree}}"
-    ).strip()
-    base_tree = git_output(
-        "rev-parse", "--verify", f"{change.base_tip}^{{tree}}"
-    ).strip()
+    head_tree = git_output("rev-parse", "--verify", f"{change.head_commit}^{{tree}}").strip()
+    base_tree = git_output("rev-parse", "--verify", f"{change.base_tip}^{{tree}}").strip()
     if any(
         not is_full_git_object_id(value)
         for value in (
@@ -2430,9 +2065,7 @@ def require_history_free_review_workspace(
     source_commits: tuple[str, ...],
 ) -> str:
     workspace_commit = git_output_at(workspace, "rev-parse", "HEAD").strip()
-    root_line = git_output_at(
-        workspace, "rev-list", "--parents", "-n", "1", "HEAD"
-    ).strip().split()
+    root_line = git_output_at(workspace, "rev-list", "--parents", "-n", "1", "HEAD").strip().split()
     if root_line != [workspace_commit]:
         raise RuntimeError("sanitized review commit is not a history-free root")
     all_objects = {
@@ -2446,16 +2079,10 @@ def require_history_free_review_workspace(
         if line.strip()
     }
     reachable_objects = {
-        line.split(" ", 1)[0]
-        for line in git_output_at(
-            workspace, "rev-list", "--objects", "HEAD"
-        ).splitlines()
-        if line
+        line.split(" ", 1)[0] for line in git_output_at(workspace, "rev-list", "--objects", "HEAD").splitlines() if line
     }
     if not all_objects or all_objects != reachable_objects:
-        raise RuntimeError(
-            "sanitized review object store contains non-snapshot objects"
-        )
+        raise RuntimeError("sanitized review object store contains non-snapshot objects")
     for commit in dict.fromkeys(source_commits):
         present = run(
             ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
@@ -2463,9 +2090,7 @@ def require_history_free_review_workspace(
             cwd=workspace,
         )
         if present.returncode == 0:
-            raise RuntimeError(
-                "sanitized review object store contains source history"
-            )
+            raise RuntimeError("sanitized review object store contains source history")
     checked = run(
         ["git", "fsck", "--strict", "--no-reflogs"],
         capture=True,
@@ -2530,20 +2155,12 @@ def sanitized_review_workspace(
                 )
                 if applied.returncode:
                     raise RuntimeError(
-                        "could not apply exact patch in sanitized review builder: "
-                        + applied.stdout.strip()
+                        "could not apply exact patch in sanitized review builder: " + applied.stdout.strip()
                     )
             actual_tree = git_output_at(builder, "write-tree").strip()
-            integration_tree = (
-                expected_integration_tree(change)
-                if not source_status
-                else actual_tree
-            )
+            integration_tree = expected_integration_tree(change) if not source_status else actual_tree
             if actual_tree != integration_tree:
-                raise RuntimeError(
-                    "sanitized review tree does not match the synthetic "
-                    "pull-request integration tree"
-                )
+                raise RuntimeError("sanitized review tree does not match the synthetic pull-request integration tree")
             root_commit = sanitized_root_commit(builder, integration_tree)
             checkout_sanitized_commit(
                 builder,
@@ -2581,7 +2198,7 @@ def sanitized_review_workspace(
 
 def ensure_workspace_review_safe(
     workspace: Path,
-    documented: Optional[dict[str, dict[int, tuple[str, str]]]] = None,
+    documented: dict[str, dict[int, tuple[str, str]]] | None = None,
 ) -> None:
     """Scan the complete tracked review snapshot before external model use."""
     names = git_output_at(workspace, "ls-files", "-z").split("\0")
@@ -2602,16 +2219,11 @@ def ensure_workspace_review_safe(
     sensitive_directories = {".aws", ".ssh", "secrets"}
     for name in (entry for entry in names if entry):
         parts = tuple(part.lower() for part in Path(name).parts)
-        if (
-            parts[-1] in sensitive_basenames
-            or any(part in sensitive_directories for part in parts[:-1])
-        ):
+        if parts[-1] in sensitive_basenames or any(part in sensitive_directories for part in parts[:-1]):
             unsafe_paths.append(name)
         candidate = workspace / name
         if not candidate.is_file() or candidate.is_symlink():
-            raise RuntimeError(
-                f"sanitized review path is not a regular file: {name}"
-            )
+            raise RuntimeError(f"sanitized review path is not a regular file: {name}")
         payload = candidate.read_bytes()
         total += len(payload)
         if total > 500_000_000:
@@ -2621,10 +2233,7 @@ def ensure_workspace_review_safe(
         # rejected from the planned diff before workspace creation.
         text_value = payload.decode("utf-8", errors="replace")
         if parts[-1] == ".npmrc" and NPMRC_AUTH_PATTERN.search(text_value):
-            raise RuntimeError(
-                "local review refused because tracked .npmrc contains "
-                "authentication configuration"
-            )
+            raise RuntimeError("local review refused because tracked .npmrc contains authentication configuration")
         scanned_value = mask_documented_secret_fixture_lines(
             text_value,
             documented or {},
@@ -2632,30 +2241,20 @@ def ensure_workspace_review_safe(
         )
         if any(pattern.search(scanned_value) for pattern in SECRET_CONTENT_PATTERNS):
             raise RuntimeError(
-                "local review refused because the tracked review snapshot "
-                f"contains secret-like content in {name}"
+                f"local review refused because the tracked review snapshot contains secret-like content in {name}"
             )
     if unsafe_paths:
-        raise RuntimeError(
-            "local review refused for secret-like tracked paths: "
-            + ", ".join(sorted(unsafe_paths))
-        )
+        raise RuntimeError("local review refused for secret-like tracked paths: " + ", ".join(sorted(unsafe_paths)))
 
 
 def tracked_instruction_bundle(workspace: Path) -> str:
     names = git_output_at(workspace, "ls-files", "-z").split("\0")
     chunks: list[str] = []
     total = 0
-    for name in sorted(
-        entry
-        for entry in names
-        if entry and INSTRUCTION_PATH_PATTERN.search(entry)
-    ):
+    for name in sorted(entry for entry in names if entry and INSTRUCTION_PATH_PATTERN.search(entry)):
         candidate = workspace / name
         if not candidate.is_file() or candidate.is_symlink():
-            raise RuntimeError(
-                f"sanitized instruction is not a regular file: {name}"
-            )
+            raise RuntimeError(f"sanitized instruction is not a regular file: {name}")
         payload = candidate.read_bytes()
         total += len(payload)
         if total > 2_000_000:
@@ -2663,18 +2262,14 @@ def tracked_instruction_bundle(workspace: Path) -> str:
         try:
             text_value = payload.decode("utf-8")
         except UnicodeDecodeError as exc:
-            raise RuntimeError(
-                f"tracked instruction is not UTF-8: {name}"
-            ) from exc
+            raise RuntimeError(f"tracked instruction is not UTF-8: {name}") from exc
         chunks.append(f"----- BEGIN {name} -----\n{text_value}\n----- END {name} -----")
     if not any(chunk.startswith("----- BEGIN AGENTS.md -----") for chunk in chunks):
         raise RuntimeError("sanitized review repository lacks tracked AGENTS.md")
     return "\n\n".join(chunks)
 
 
-def minimal_agent_environment(
-    *, state_root: Path, agent: str, workspace: Optional[Path] = None
-) -> dict[str, str]:
+def minimal_agent_environment(*, state_root: Path, agent: str, workspace: Path | None = None) -> dict[str, str]:
     allowed = {
         "HOME",
         "LANG",
@@ -2701,11 +2296,7 @@ def minimal_agent_environment(
         )
     else:
         allowed.update({"CODEX_API_KEY", "OPENAI_API_KEY"})
-    environment = {
-        key: value
-        for key, value in os.environ.items()
-        if key in allowed and value
-    }
+    environment = {key: value for key, value in os.environ.items() if key in allowed and value}
     environment["CI"] = "1"
     environment["TMPDIR"] = str(state_root / "tmp")
     Path(environment["TMPDIR"]).mkdir(mode=0o700, exist_ok=True)
@@ -2713,10 +2304,7 @@ def minimal_agent_environment(
         environment["COPILOT_HOME"] = str(state_root / "copilot-home")
         Path(environment["COPILOT_HOME"]).mkdir(mode=0o700, exist_ok=True)
         environment.update(COPILOT_PROMPT_MODE_BOUNDARY)
-        if not any(
-            environment.get(name)
-            for name in ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")
-        ):
+        if not any(environment.get(name) for name in ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")):
             gh = shutil.which("gh")
             if gh is not None:
                 token = run(
@@ -2732,9 +2320,7 @@ def minimal_agent_environment(
             raise RuntimeError("Codex isolation requires an explicit workspace")
         isolated_home = state_root / "codex-home"
         isolated_home.mkdir(mode=0o700, exist_ok=True)
-        source_home = Path(
-            os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))
-        )
+        source_home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
         source_auth = source_home / "auth.json"
         if (
             not environment.get("CODEX_API_KEY")
@@ -2765,10 +2351,7 @@ def minimal_agent_environment(
                     f"[permissions.{permission_profile}.filesystem]",
                     '":minimal" = "read"',
                     "",
-                    (
-                        f'[permissions.{permission_profile}.filesystem.'
-                        '":workspace_roots"]'
-                    ),
+                    (f'[permissions.{permission_profile}.filesystem.":workspace_roots"]'),
                     '"." = "read"',
                     "",
                     f"[permissions.{permission_profile}.network]",
@@ -2792,31 +2375,18 @@ def minimal_agent_environment(
     return environment
 
 
-def require_copilot_prompt_mode_boundary(
-    environment: dict[str, str], arguments: list[str]
-) -> None:
+def require_copilot_prompt_mode_boundary(environment: dict[str, str], arguments: list[str]) -> None:
     invalid_environment = [
-        name
-        for name, expected in COPILOT_PROMPT_MODE_BOUNDARY.items()
-        if environment.get(name) != expected
+        name for name, expected in COPILOT_PROMPT_MODE_BOUNDARY.items() if environment.get(name) != expected
     ]
-    missing_arguments = [
-        argument
-        for argument in COPILOT_REQUIRED_SAFETY_ARGUMENTS
-        if argument not in arguments
-    ]
+    missing_arguments = [argument for argument in COPILOT_REQUIRED_SAFETY_ARGUMENTS if argument not in arguments]
     if invalid_environment or missing_arguments:
         details = []
         if invalid_environment:
-            details.append(
-                "environment: " + ", ".join(sorted(invalid_environment))
-            )
+            details.append("environment: " + ", ".join(sorted(invalid_environment)))
         if missing_arguments:
             details.append("arguments: " + ", ".join(missing_arguments))
-        raise RuntimeError(
-            "Copilot prompt-mode safety boundary is incomplete: "
-            + "; ".join(details)
-        )
+        raise RuntimeError("Copilot prompt-mode safety boundary is incomplete: " + "; ".join(details))
 
 
 def codex_permission_profile_name(state_root: Path) -> str:
@@ -2827,15 +2397,10 @@ def codex_permission_profile_name(state_root: Path) -> str:
 def require_codex_permission_profile_version(version: str) -> None:
     match = re.search(r"\b(\d+)\.(\d+)\.(\d+)(?:[-+.\w]*)?\b", version)
     if match is None:
-        raise RuntimeError(
-            "Codex version is unparseable; permission-profile enforcement "
-            "cannot be established"
-        )
+        raise RuntimeError("Codex version is unparseable; permission-profile enforcement cannot be established")
     current = tuple(int(value) for value in match.groups())
     if current < (0, 138, 0):
-        raise RuntimeError(
-            "Codex 0.138.0 or newer is required for local permission profiles"
-        )
+        raise RuntimeError("Codex 0.138.0 or newer is required for local permission profiles")
 
 
 def verify_codex_permission_profile(
@@ -2849,9 +2414,7 @@ def verify_codex_permission_profile(
     true_command = shutil.which("true")
     cat_command = shutil.which("cat")
     if true_command is None or cat_command is None:
-        raise RuntimeError(
-            "Codex permission-profile self-test requires true and cat"
-        )
+        raise RuntimeError("Codex permission-profile self-test requires true and cat")
     profile = codex_permission_profile_name(state_root)
     common = [
         *command,
@@ -2871,10 +2434,7 @@ def verify_codex_permission_profile(
         env=environment,
     )
     if allowed.returncode:
-        raise RuntimeError(
-            "Codex permission-profile self-test could not execute a minimal "
-            "runtime command"
-        )
+        raise RuntimeError("Codex permission-profile self-test could not execute a minimal runtime command")
     workspace_read = run(
         [*common, cat_command, str(workspace / "AGENTS.md")],
         capture=True,
@@ -2883,10 +2443,7 @@ def verify_codex_permission_profile(
         env=environment,
     )
     if workspace_read.returncode:
-        raise RuntimeError(
-            "Codex permission-profile self-test could not read the sanitized "
-            "review workspace"
-        )
+        raise RuntimeError("Codex permission-profile self-test could not read the sanitized review workspace")
     canary = state_root / "codex-denied-read-canary"
     canary.write_text(
         "LIT_CODEX_PERMISSION_PROFILE_CANARY\n",
@@ -2904,10 +2461,7 @@ def verify_codex_permission_profile(
     finally:
         canary.unlink(missing_ok=True)
     if denied.returncode == 0:
-        raise RuntimeError(
-            "Codex permission profile allowed a read outside the sanitized "
-            "review workspace"
-        )
+        raise RuntimeError("Codex permission profile allowed a read outside the sanitized review workspace")
 
 
 def resolve_command(command: list[str], name: str) -> list[str]:
@@ -2924,44 +2478,28 @@ def resolve_command(command: list[str], name: str) -> list[str]:
         try:
             relative_parts = candidate.relative_to(ROOT).parts
         except ValueError as exc:
-            raise RuntimeError(
-                f"required {name} command escapes the repository"
-            ) from exc
+            raise RuntimeError(f"required {name} command escapes the repository") from exc
         if any(part in {"", ".", ".."} for part in relative_parts):
-            raise RuntimeError(
-                f"required {name} command uses an unsafe repository path"
-            )
+            raise RuntimeError(f"required {name} command uses an unsafe repository path")
         for part in relative_parts:
             current /= part
             if current.is_symlink():
-                raise RuntimeError(
-                    f"required {name} command contains a symbolic link"
-                )
+                raise RuntimeError(f"required {name} command contains a symbolic link")
         try:
             candidate.resolve(strict=True).relative_to(ROOT)
         except (OSError, ValueError) as exc:
-            raise RuntimeError(
-                f"required {name} command is unavailable or unsafe"
-            ) from exc
+            raise RuntimeError(f"required {name} command is unavailable or unsafe") from exc
     if not candidate.is_file() or candidate.is_symlink():
         raise RuntimeError(f"required {name} command is unavailable or unsafe")
     return [str(candidate.resolve()), *command[1:]]
 
 
-def copilot_container_command(
-    environment: dict[str, str], workspace: Path
-) -> list[str]:
+def copilot_container_command(environment: dict[str, str], workspace: Path) -> list[str]:
     """Run the pinned Copilot CLI without requiring a host installation."""
     requested_engine = os.environ.get("WUNDER_CONTAINER_ENGINE")
     if requested_engine and requested_engine not in {"docker", "podman"}:
-        raise RuntimeError(
-            "WUNDER_CONTAINER_ENGINE must be docker or podman when set"
-        )
-    engine_names = (
-        [requested_engine]
-        if requested_engine
-        else ["docker", "podman"]
-    )
+        raise RuntimeError("WUNDER_CONTAINER_ENGINE must be docker or podman when set")
+    engine_names = [requested_engine] if requested_engine else ["docker", "podman"]
     engine = next(
         (
             resolved
@@ -2980,9 +2518,7 @@ def copilot_container_command(
     if Path(engine).name == "docker":
         configured_host = os.environ.get("DOCKER_HOST")
         if configured_host and not configured_host.startswith("unix://"):
-            raise RuntimeError(
-                "containerized Copilot review refuses a non-local DOCKER_HOST"
-            )
+            raise RuntimeError("containerized Copilot review refuses a non-local DOCKER_HOST")
         socket_candidates = []
         if configured_host:
             socket_candidates.append(configured_host)
@@ -3026,7 +2562,7 @@ def copilot_container_command(
         "--pids-limit",
         "256",
         "--tmpfs",
-        "/tmp:rw,exec,nosuid,nodev,size=256m",
+        "/tmp:rw,exec,nosuid,nodev,size=256m",  # noqa: S108 -- isolated tmpfs mount.
         "--tmpfs",
         "/copilot-cache:rw,exec,nosuid,nodev,size=256m",
         "--tmpfs",
@@ -3050,10 +2586,7 @@ def copilot_container_command(
         command.append("--read-only-tmpfs=false")
     for name, value in COPILOT_PROMPT_MODE_BOUNDARY.items():
         if environment.get(name) != value:
-            raise RuntimeError(
-                "Copilot container prompt-mode boundary is incomplete: "
-                + name
-            )
+            raise RuntimeError("Copilot container prompt-mode boundary is incomplete: " + name)
         command.extend(["-e", f"{name}={value}"])
     for name in ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
         if environment.get(name):
@@ -3066,8 +2599,8 @@ def tool_version(
     command: list[str],
     name: str,
     *,
-    cwd: Optional[Path] = None,
-    env: Optional[Dict[str, str]] = None,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
 ) -> str:
     try:
         result = run(
@@ -3124,8 +2657,7 @@ def review_prompt(
         prefix = ""
     else:
         verdict = (
-            "Use the caller-supplied structured verdict schema. A passing "
-            "verdict requires an empty findings array."
+            "Use the caller-supplied structured verdict schema. A passing verdict requires an empty findings array."
         )
         prefix = ""
     return (
@@ -3145,10 +2677,7 @@ def review_prompt(
         + (" ".join(topology.head_parents) or "(none)")
         + "\n"
         + f"Authoritative base tree: {topology.base_tree}\n"
-        + (
-            "Locally verified review workspace tree: "
-            f"{topology.integration_tree}\n"
-        )
+        + (f"Locally verified review workspace tree: {topology.integration_tree}\n")
         + f"Sanitized workspace root: {topology.workspace_commit}\n"
         + f"Patch SHA-256: {change.diff_sha256}\n"
         + "\n----- BEGIN TRACKED REVIEW INSTRUCTIONS -----\n"
@@ -3221,10 +2750,7 @@ def copilot_review(
             env=environment,
         )
     except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(
-            "Copilot CLI exact-diff review timed out after "
-            f"{agent['timeout_seconds']} seconds"
-        ) from exc
+        raise RuntimeError(f"Copilot CLI exact-diff review timed out after {agent['timeout_seconds']} seconds") from exc
     completed_at = now_utc()
     review = result.stdout
     final_line = next(
@@ -3232,18 +2758,14 @@ def copilot_review(
         "",
     )
     if tree_fingerprint() != expected_tree_fingerprint:
-        raise RuntimeError(
-            "Copilot CLI exact-diff review modified the reviewed Git tree"
-        )
+        raise RuntimeError("Copilot CLI exact-diff review modified the reviewed Git tree")
     if (
         result.returncode
         or final_line != PASS_MARKER
         or any(line.strip() == BLOCKED_MARKER for line in review.splitlines())
     ):
         print(review)
-        raise RuntimeError(
-            "Copilot CLI exact-diff review did not produce a passing result"
-        )
+        raise RuntimeError("Copilot CLI exact-diff review did not produce a passing result")
     if COPILOT_DEVTOOL_IMAGE not in command:
         raise RuntimeError("Copilot CLI is not bound to the pinned Devtool image")
     print(review)
@@ -3376,9 +2898,7 @@ def codex_review(
                 env=environment,
             )
         except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(
-                f"Codex review timed out after {agent['timeout_seconds']} seconds"
-            ) from exc
+            raise RuntimeError(f"Codex review timed out after {agent['timeout_seconds']} seconds") from exc
         if not output.is_file():
             if result.stdout:
                 print(result.stdout)
@@ -3406,11 +2926,7 @@ def codex_review(
     )
     if not valid_shape:
         raise RuntimeError("Codex review output does not match the required schema")
-    if (
-        result.returncode
-        or review.get("verdict") != "pass"
-        or review.get("findings") != []
-    ):
+    if result.returncode or review.get("verdict") != "pass" or review.get("findings") != []:
         print(raw_review)
         raise RuntimeError("Codex review did not produce a passing result")
     print(raw_review)
@@ -3479,9 +2995,7 @@ def run_agent_reviews(
             )
             != workspace_fingerprint
         ):
-            raise RuntimeError(
-                "Copilot review changed the sanitized exact-patch workspace"
-            )
+            raise RuntimeError("Copilot review changed the sanitized exact-patch workspace")
         reviews.append(
             codex_review(
                 config,
@@ -3500,9 +3014,7 @@ def run_agent_reviews(
             )
             != workspace_fingerprint
         ):
-            raise RuntimeError(
-                "Codex review changed the sanitized exact-patch workspace"
-            )
+            raise RuntimeError("Codex review changed the sanitized exact-patch workspace")
     if tree_fingerprint() != expected:
         raise RuntimeError("local agent review changed the reviewed Git tree")
     return reviews
@@ -3535,12 +3047,8 @@ def runtime_versions() -> dict[str, str]:
     }
 
 
-def governed_push_remote_from_url(
-    name: str, url: str
-) -> dict[str, str]:
-    if name != "origin" or not url or any(
-        ord(character) < 32 or ord(character) == 127 for character in url
-    ):
+def governed_push_remote_from_url(name: str, url: str) -> dict[str, str]:
+    if name != "origin" or not url or any(ord(character) < 32 or ord(character) == 127 for character in url):
         raise RuntimeError("push-ready requires the governed origin remote")
     value = url[:-4] if url.endswith(".git") else url
     prefixes = (
@@ -3554,9 +3062,7 @@ def governed_push_remote_from_url(
             repository_name = value[len(prefix) :]
             break
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", repository_name):
-        raise RuntimeError(
-            "origin push URL must target a Lightning IT repository on github.com"
-        )
+        raise RuntimeError("origin push URL must target a Lightning IT repository on github.com")
     return {
         "name": "origin",
         "host": "github.com",
@@ -3655,23 +3161,15 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
     if started > completed:
         raise RuntimeError("push-ready evidence timestamps are reversed")
     duration = payload.get("duration_seconds")
-    if (
-        isinstance(duration, bool)
-        or not isinstance(duration, (int, float))
-        or duration < 0
-    ):
+    if isinstance(duration, bool) or not isinstance(duration, (int, float)) or duration < 0:
         raise RuntimeError("push-ready evidence duration is invalid")
-    age = (datetime.now(timezone.utc) - completed).total_seconds()
+    age = (datetime.now(UTC) - completed).total_seconds()
     max_age = config["evidence"]["max_age_seconds"]
     if age < -300 or age > max_age:
-        raise RuntimeError(
-            f"push-ready evidence is outside the allowed age of {max_age} seconds"
-        )
+        raise RuntimeError(f"push-ready evidence is outside the allowed age of {max_age} seconds")
     fixture_manifest_bootstrap = payload.get("fixture_manifest_bootstrap")
     if not isinstance(fixture_manifest_bootstrap, bool):
-        raise RuntimeError(
-            "push-ready evidence fixture_manifest_bootstrap is invalid"
-        )
+        raise RuntimeError("push-ready evidence fixture_manifest_bootstrap is invalid")
     change = planned_change(
         config,
         fixture_manifest_bootstrap=fixture_manifest_bootstrap,
@@ -3710,20 +3208,14 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
     }
     for key, value in expected.items():
         if payload.get(key) != value:
-            raise RuntimeError(
-                f"push-ready evidence is stale or malformed for {key}"
-            )
+            raise RuntimeError(f"push-ready evidence is stale or malformed for {key}")
     integration_fingerprint = payload.get("integration_fingerprint")
-    if not isinstance(integration_fingerprint, str) or not re.fullmatch(
-        r"[0-9a-f]{64}", integration_fingerprint
-    ):
-        raise RuntimeError(
-            "push-ready evidence has an invalid integration fingerprint"
-        )
+    if not isinstance(integration_fingerprint, str) or not re.fullmatch(r"[0-9a-f]{64}", integration_fingerprint):
+        raise RuntimeError("push-ready evidence has an invalid integration fingerprint")
     checks = payload.get("checks")
     if not isinstance(checks, list) or len(checks) != len(config["checks"]):
         raise RuntimeError("push-ready evidence skipped a required check")
-    for configured, recorded in zip(config["checks"], checks):
+    for configured, recorded in zip(config["checks"], checks, strict=True):
         expected_command = (
             [sys.executable, *configured["command"][1:]]
             if configured["command"][0] in {"python", "python3"}
@@ -3735,18 +3227,10 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
             or recorded.get("command") != expected_command
             or recorded.get("exit_code") != 0
         ):
-            raise RuntimeError(
-                f"push-ready evidence lacks passing check {configured['name']}"
-            )
+            raise RuntimeError(f"push-ready evidence lacks passing check {configured['name']}")
         check_duration = recorded.get("duration_seconds")
-        if (
-            isinstance(check_duration, bool)
-            or not isinstance(check_duration, (int, float))
-            or check_duration < 0
-        ):
-            raise RuntimeError(
-                f"push-ready evidence has invalid timing for {configured['name']}"
-            )
+        if isinstance(check_duration, bool) or not isinstance(check_duration, (int, float)) or check_duration < 0:
+            raise RuntimeError(f"push-ready evidence has invalid timing for {configured['name']}")
         parse_timestamp(
             recorded.get("started_at"),
             f"check {configured['name']} started_at",
@@ -3758,14 +3242,8 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
     reviews = payload.get("agent_reviews")
     if not isinstance(reviews, list):
         raise RuntimeError("push-ready evidence has invalid agent reviews")
-    by_name = {
-        review.get("agent"): review
-        for review in reviews
-        if isinstance(review, dict)
-    }
-    enabled_agents = {
-        name for name, agent in config["agents"].items() if agent["enabled"]
-    }
+    by_name = {review.get("agent"): review for review in reviews if isinstance(review, dict)}
+    enabled_agents = {name for name, agent in config["agents"].items() if agent["enabled"]}
     if len(by_name) != len(reviews) or set(by_name) != enabled_agents:
         raise RuntimeError("push-ready evidence has incomplete agent reviews")
     for name, agent in config["agents"].items():
@@ -3782,26 +3260,18 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
             or not isinstance(review.get("output_sha256"), str)
             or not re.fullmatch(r"[0-9a-f]{64}", review["output_sha256"])
         ):
-            raise RuntimeError(
-                f"push-ready evidence lacks a passing local {name} review"
-            )
+            raise RuntimeError(f"push-ready evidence lacks a passing local {name} review")
         execution_mode = review.get("execution_mode")
         if name == "copilot":
             if execution_mode != "pinned-devtool-container":
-                raise RuntimeError(
-                    "push-ready evidence has invalid Copilot execution mode"
-                )
+                raise RuntimeError("push-ready evidence has invalid Copilot execution mode")
             if (
                 review.get("container_image") != COPILOT_DEVTOOL_IMAGE
                 or review.get("container_runtime") not in {"docker", "podman"}
-                or not isinstance(
-                    review.get("container_runtime_version"), str
-                )
+                or not isinstance(review.get("container_runtime_version"), str)
                 or not review.get("container_runtime_version")
             ):
-                raise RuntimeError(
-                    "push-ready evidence has invalid Copilot container binding"
-                )
+                raise RuntimeError("push-ready evidence has invalid Copilot container binding")
         elif (
             execution_mode != "host"
             or review.get("container_image") is not None
@@ -3810,14 +3280,8 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
         ):
             raise RuntimeError("push-ready evidence has invalid Codex execution mode")
         review_duration = review.get("duration_seconds")
-        if (
-            isinstance(review_duration, bool)
-            or not isinstance(review_duration, (int, float))
-            or review_duration < 0
-        ):
-            raise RuntimeError(
-                f"push-ready evidence has invalid timing for {name} review"
-            )
+        if isinstance(review_duration, bool) or not isinstance(review_duration, (int, float)) or review_duration < 0:
+            raise RuntimeError(f"push-ready evidence has invalid timing for {name} review")
         parse_timestamp(
             review.get("started_at"),
             f"{name} review started_at",
@@ -3839,15 +3303,10 @@ def verify_pre_push_updates(
     """Bind every ref update supplied by Git's pre-push hook to reviewed HEAD."""
     supplied_remote = governed_push_remote_from_url(remote_name, remote_url)
     if payload.get("push_remote") != supplied_remote:
-        raise RuntimeError(
-            "pre-push remote does not match the reviewed GitHub origin"
-        )
+        raise RuntimeError("pre-push remote does not match the reviewed GitHub origin")
     updates = [line for line in hook_input.splitlines() if line.strip()]
     if not updates:
-        raise RuntimeError(
-            "pre-push requires Git hook update input; use `verify` for a "
-            "manual evidence check"
-        )
+        raise RuntimeError("pre-push requires Git hook update input; use `verify` for a manual evidence check")
     if len(updates) != 1:
         raise RuntimeError(
             "push-ready evidence authorizes exactly one branch update; push "
@@ -3878,19 +3337,14 @@ def verify_pre_push_updates(
             f"{local_oid}^{{commit}}",
         ).strip()
         if pushed_commit != expected_head:
-            raise RuntimeError(
-                "pre-push ref update is not bound to the reviewed evidence HEAD"
-            )
+            raise RuntimeError("pre-push ref update is not bound to the reviewed evidence HEAD")
         if not creates_remote_branch:
             ancestry = run(
                 ["git", "merge-base", "--is-ancestor", remote_oid, local_oid],
                 capture=True,
             )
             if ancestry.returncode:
-                raise RuntimeError(
-                    "push-ready evidence does not authorize a non-fast-forward "
-                    "branch update"
-                )
+                raise RuntimeError("push-ready evidence does not authorize a non-fast-forward branch update")
 
 
 def main() -> int:
@@ -3931,21 +3385,14 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.base and args.command != "review":
-            raise RuntimeError(
-                "--base is diagnostic-only and may be used only with `review`"
-            )
+            raise RuntimeError("--base is diagnostic-only and may be used only with `review`")
         if args.fixture_manifest_bootstrap and args.command not in {
             "review",
             "push-ready",
         }:
-            raise RuntimeError(
-                "--bootstrap-secret-fixtures may be used only with `review` "
-                "or `push-ready`"
-            )
+            raise RuntimeError("--bootstrap-secret-fixtures may be used only with `review` or `push-ready`")
         if args.fixture_manifest_bootstrap and args.base:
-            raise RuntimeError(
-                "secret fixture bootstrap may not override the authoritative base"
-            )
+            raise RuntimeError("secret fixture bootstrap may not override the authoritative base")
         if args.command == "sync-instructions":
             sync_instructions()
             return 0
@@ -3959,10 +3406,7 @@ def main() -> int:
             return 0
         if args.command == "pre-push":
             if not args.remote_name or not args.remote_url:
-                raise RuntimeError(
-                    "pre-push requires --remote-name and --remote-url from "
-                    "the Git hook arguments"
-                )
+                raise RuntimeError("pre-push requires --remote-name and --remote-url from the Git hook arguments")
             require_clean_head()
             refresh_authoritative_base(config)
             payload = verify_evidence(config)
@@ -4015,18 +3459,14 @@ def main() -> int:
             integration_tree,
             integration_commit,
             integration_fingerprint,
-        ) = (
-            execute_integration_checks(config, change)
-        )
+        ) = execute_integration_checks(config, change)
         require_clean_head()
         if (
             git_output("rev-parse", "HEAD").strip() != original_head
             or current_branch_ref() != original_branch
             or tree_fingerprint() != original_tree_fingerprint
         ):
-            raise RuntimeError(
-                "deterministic checks changed the reviewed branch or Git tree"
-            )
+            raise RuntimeError("deterministic checks changed the reviewed branch or Git tree")
         change = planned_change(
             config,
             fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,

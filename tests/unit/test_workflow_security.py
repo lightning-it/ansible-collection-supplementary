@@ -1062,6 +1062,84 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertEqual("python scripts/lit-repository-quality.py", quality_hooks[0]["entry"])
         self.assertTrue(quality_hooks[0]["always_run"])
 
+        secret_line = "pass" + 'word = "' + ("x" * 16) + '"'
+        planned_change = engine["PlannedChange"](
+            "refs/remotes/origin/develop",
+            "a" * 40,
+            "a" * 40,
+            "b" * 40,
+            f"+{secret_line}",
+            ("tests/example.yml",),
+            {},
+            "c" * 64,
+        )
+        with self.assertRaisesRegex(RuntimeError, "secret-like content"):
+            engine["ensure_review_safe"](planned_change)
+
+        manifest = json.dumps(
+            {
+                "version": 1,
+                "fixtures": [
+                    {
+                        "path": "tests/example.yml",
+                        "line_hex": secret_line.encode().hex(),
+                        "line_number": 1,
+                        "purpose": "synthetic-test-fixture",
+                    }
+                ],
+            }
+        )
+        parsed = engine["parse_secret_fixture_manifest"](manifest)
+        self.assertEqual(secret_line, parsed["tests/example.yml"][1][1])
+        with self.assertRaisesRegex(RuntimeError, "unsafe path"):
+            engine["parse_secret_fixture_manifest"](manifest.replace("tests/example.yml", "../unsafe"))
+
+        remote = engine["governed_push_remote_from_url"](
+            "origin", "https://github.com/lightning-it/ansible-collection-supplementary.git"
+        )
+        self.assertEqual("lightning-it/ansible-collection-supplementary", remote["repository"])
+        with self.assertRaisesRegex(RuntimeError, "Lightning IT repository"):
+            engine["governed_push_remote_from_url"]("origin", "https://github.com/external/repository.git")
+        payload = {
+            "push_remote": remote,
+            "head_commit": "b" * 40,
+            "local_branch_ref": "refs/heads/feature",
+        }
+        unsafe_update = f"refs/heads/other {'b' * 40} refs/heads/other {'0' * 40}"
+        with self.assertRaisesRegex(RuntimeError, "unsafe ref update"):
+            engine["verify_pre_push_updates"](
+                payload,
+                unsafe_update,
+                remote_name="origin",
+                remote_url="https://github.com/lightning-it/ansible-collection-supplementary.git",
+            )
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repository = Path(temporary_directory)
+            git = shutil.which("git")
+            self.assertIsNotNone(git)
+            subprocess.run([git, "init", "-q", repository], check=True)  # noqa: S603
+            (repository / "safe.txt").write_text("safe\n", encoding="utf-8")
+            subprocess.run([git, "-C", repository, "add", "safe.txt"], check=True)  # noqa: S603
+            subprocess.run(  # noqa: S603 -- resolved Git and test-owned repository.
+                [
+                    git,
+                    "-C",
+                    repository,
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "user.email=test@invalid",
+                    "commit",
+                    "-q",
+                    "-m",
+                    "root",
+                ],
+                check=True,
+            )
+            root_commit = engine["require_history_free_review_workspace"](repository, source_commits=("f" * 40,))
+            self.assertRegex(root_commit, r"^[0-9a-f]{40}$")
+
     def test_security_publish_requires_nexus_and_signed_validation_before_galaxy(self) -> None:
         workflow = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
         publish_steps = yaml.safe_load(workflow)["jobs"]["publish"]["steps"]

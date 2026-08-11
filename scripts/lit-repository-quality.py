@@ -13,7 +13,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-
 ROOT = Path.cwd()
 GENERATED = [ROOT / "README.md", ROOT / "RELEASE.md", ROOT / "TESTING.md", ROOT / "OPENSSF.md"]
 BEGIN = "<!-- BEGIN LIT_SHARED_RELEASE_MODEL -->"
@@ -53,7 +52,9 @@ def run(command: list[str], *, required: bool = True) -> None:
         print(f"Skipping {' '.join(command)}: {command[0]} is not installed")
         return
     print("+ " + " ".join(command))
-    result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+    result = subprocess.run(  # noqa: S603 -- repository-owned command allowlist.
+        command, cwd=ROOT, text=True, capture_output=True
+    )
     if result.returncode != 0:
         if result.stdout:
             print(result.stdout)
@@ -119,7 +120,14 @@ def check_generated_docs(meta: dict[str, str]) -> None:
         raise AssertionError("README.md does not link to RELEASE.md")
     if "## Supported and tested platforms" not in readme:
         raise AssertionError("README.md does not include the supported/tested platforms matrix")
-    for term in ["Production Ready", "Enterprise Ready", "Battle Tested", "100% Tested", "github/stars", "github/forks"]:
+    for term in [
+        "Production Ready",
+        "Enterprise Ready",
+        "Battle Tested",
+        "100% Tested",
+        "github/stars",
+        "github/forks",
+    ]:
         if term in readme:
             raise AssertionError(f"README.md contains disallowed badge term {term}")
     repository_type = meta.get("repository_type", "")
@@ -192,15 +200,9 @@ def check_secret_safe_generated_docs() -> None:
 def check_terraform(repo_type: str) -> None:
     if repo_type not in {"terraform_module", "terraform_policy"}:
         return
-    tf_files = sorted(
-        path
-        for path in ROOT.glob("**/*.tf")
-        if ".terraform" not in path.relative_to(ROOT).parts
-    )
+    tf_files = sorted(path for path in ROOT.glob("**/*.tf") if ".terraform" not in path.relative_to(ROOT).parts)
     if not tf_files:
-        raise AssertionError(
-            "Terraform repository has no *.tf files outside .terraform directories"
-        )
+        raise AssertionError("Terraform repository has no *.tf files outside .terraform directories")
     if repo_type == "terraform_module" and not any(path.parent == ROOT for path in tf_files):
         raise AssertionError("Terraform module repository has no root *.tf files")
     if shutil_which("terraform"):
@@ -294,10 +296,13 @@ def check_terraform(repo_type: str) -> None:
                     resolved_validation_copy = validation_copy.resolve()
                     lock_file = validation_copy / ".terraform.lock.hcl"
                     if (
-                        resolved_validation_copy != resolved_workspace
-                        and resolved_workspace not in resolved_validation_copy.parents
-                    ) or validation_copy.is_symlink() or not validation_copy.is_dir() or (
-                        lock_file.exists() and not lock_file.is_file()
+                        (
+                            resolved_validation_copy != resolved_workspace
+                            and resolved_workspace not in resolved_validation_copy.parents
+                        )
+                        or validation_copy.is_symlink()
+                        or not validation_copy.is_dir()
+                        or (lock_file.exists() and not lock_file.is_file())
                     ):
                         raise AssertionError(
                             "Terraform validation copy must resolve inside its temporary "
@@ -369,9 +374,12 @@ def check_markdown() -> None:
 
 
 def check_embedded_code() -> None:
-    merge_base_result = subprocess.run(
+    git = shutil.which("git")
+    if git is None:
+        raise AssertionError("git is required for embedded-code validation")
+    merge_base_result = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
         [
-            "git",
+            git,
             "-c",
             f"safe.directory={ROOT}",
             "merge-base",
@@ -388,12 +396,11 @@ def check_embedded_code() -> None:
     if merge_base_result.returncode or not merge_base:
         details = merge_base_result.stderr.strip()
         raise AssertionError(
-            "cannot resolve the authoritative Markdown validation merge base"
-            + (f": {details}" if details else "")
+            "cannot resolve the authoritative Markdown validation merge base" + (f": {details}" if details else "")
         )
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
         [
-            "git",
+            git,
             "-c",
             f"safe.directory={ROOT}",
             "diff",
@@ -413,23 +420,16 @@ def check_embedded_code() -> None:
     if result.returncode:
         details = result.stderr.strip()
         raise AssertionError(
-            "cannot enumerate changed Markdown files with git diff"
-            + (f": {details}" if details else "")
+            "cannot enumerate changed Markdown files with git diff" + (f": {details}" if details else "")
         )
-    markdown_paths = sorted(
-        path
-        for path in result.stdout.split("\0")
-        if path and Path(path).suffix.lower() == ".md"
-    )
+    markdown_paths = sorted(path for path in result.stdout.split("\0") if path and Path(path).suffix.lower() == ".md")
     if markdown_paths:
         validator = ROOT / "scripts" / "validate-embedded-code.py"
         shared_validator = ROOT / "default" / "scripts" / "validate-embedded-code.py"
         if not validator.is_file() and shared_validator.is_file():
             validator = shared_validator
         if not validator.is_file() or validator.is_symlink():
-            raise AssertionError(
-                "embedded-code validator must be a non-symlink regular file"
-            )
+            raise AssertionError("embedded-code validator must be a non-symlink regular file")
         command_prefix = [
             sys.executable,
             validator.relative_to(ROOT).as_posix(),
@@ -456,9 +456,7 @@ def check_managed_assets() -> None:
     try:
         inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise AssertionError(
-            f".lit/managed-assets.json cannot be read as JSON: {exc}"
-        ) from exc
+        raise AssertionError(f".lit/managed-assets.json cannot be read as JSON: {exc}") from exc
     if not isinstance(inventory, dict):
         raise AssertionError(".lit/managed-assets.json root must be an object")
     if inventory.get("schema_version") != 1:
@@ -503,31 +501,23 @@ def check_managed_assets() -> None:
             if not isinstance(source, str) or not source.strip():
                 raise AssertionError(f"{path_text}: central-managed asset has no source")
             expected_digest = asset.get("sha256")
-            if not isinstance(expected_digest, str) or not re.fullmatch(
-                r"[0-9a-f]{64}", expected_digest
-            ):
-                raise AssertionError(
-                    f"{path_text}: central-managed sha256 must be 64 lowercase hex characters"
-                )
+            if not isinstance(expected_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_digest):
+                raise AssertionError(f"{path_text}: central-managed sha256 must be 64 lowercase hex characters")
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
             if digest != expected_digest:
-                raise AssertionError(
-                    f"{path_text}: unsupported local drift from centrally managed source"
-                )
+                raise AssertionError(f"{path_text}: unsupported local drift from centrally managed source")
         elif category in {"local-required", "private-configuration"}:
             purpose = asset.get("purpose")
             owner = asset.get("owner")
-            if (
-                not isinstance(purpose, str)
-                or not purpose.strip()
-                or not isinstance(owner, str)
-                or not owner.strip()
-            ):
+            if not isinstance(purpose, str) or not purpose.strip() or not isinstance(owner, str) or not owner.strip():
                 raise AssertionError(f"{path_text}: local asset needs purpose and owner")
 
     try:
-        tracked = subprocess.run(
-            ["git", "ls-files", "-z"],
+        git = shutil.which("git")
+        if git is None:
+            raise AssertionError("git is required for provenance validation")
+        tracked = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
+            [git, "ls-files", "-z"],
             cwd=ROOT,
             check=True,
             capture_output=True,
@@ -536,9 +526,7 @@ def check_managed_assets() -> None:
             errors="surrogateescape",
         ).stdout.split("\0")
     except (OSError, subprocess.CalledProcessError) as exc:
-        raise AssertionError(
-            "managed asset inventory requires a readable Git worktree"
-        ) from exc
+        raise AssertionError("managed asset inventory requires a readable Git worktree") from exc
     ignored_prefixes = ("docs/", "dist/")
     current = {
         path_text

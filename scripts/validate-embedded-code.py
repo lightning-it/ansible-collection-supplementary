@@ -16,8 +16,7 @@ try:
     import yaml
 except ImportError as error:
     raise SystemExit(
-        "PyYAML is required for fail-closed embedded YAML validation: "
-        "python3 -m pip install PyYAML==6.0.3"
+        "PyYAML is required for fail-closed embedded YAML validation: python3 -m pip install PyYAML==6.0.3"
     ) from error
 
 SCRIPT = Path(__file__).resolve()
@@ -26,10 +25,7 @@ SHARED_ROOT = SCRIPT.parents[2]
 ROOT = (
     SHARED_ROOT
     if DISTRIBUTED_ROOT.name == "default"
-    and (
-        (SHARED_ROOT / ".git").exists()
-        or (SHARED_ROOT / "release-model" / "repositories.yml").is_file()
-    )
+    and ((SHARED_ROOT / ".git").exists() or (SHARED_ROOT / "release-model" / "repositories.yml").is_file())
     else DISTRIBUTED_ROOT
 )
 FENCE = re.compile(
@@ -47,9 +43,7 @@ def validator_candidate(
     fence_index: int,
     suffix: str,
 ) -> Path:
-    path_digest = hashlib.sha256(
-        markdown_path.encode("utf-8", errors="surrogateescape")
-    ).hexdigest()[:12]
+    path_digest = hashlib.sha256(markdown_path.encode("utf-8", errors="surrogateescape")).hexdigest()[:12]
     return temporary / f"{kind}-{path_digest}-{fence_index}.{suffix}"
 
 
@@ -68,9 +62,7 @@ def main() -> int:
                 or ".." in relative_path.parts
                 or relative_path.as_posix() != name
             ):
-                failures.append(
-                    f"{name}: Markdown path must be normalized and repository-relative"
-                )
+                failures.append(f"{name}: Markdown path must be normalized and repository-relative")
                 continue
             path = ROOT / relative_path
             if not path.is_file() or path.suffix != ".md":
@@ -90,7 +82,8 @@ def main() -> int:
                     except yaml.YAMLError as error:
                         failures.append(f"{label}: invalid YAML: {error}")
                         continue
-                    if language == "ansible" and shutil.which("ansible-lint"):
+                    ansible_lint = shutil.which("ansible-lint")
+                    if language == "ansible" and ansible_lint:
                         candidate = validator_candidate(
                             temp,
                             "ansible",
@@ -100,28 +93,23 @@ def main() -> int:
                         )
                         candidate.write_text(content, encoding="utf-8")
                         try:
-                            result = subprocess.run(
-                                ["ansible-lint", str(candidate)],
+                            result = subprocess.run(  # noqa: S603 -- resolved executable and test-owned file.
+                                [ansible_lint, str(candidate)],
                                 text=True,
                                 capture_output=True,
                                 timeout=VALIDATOR_TIMEOUT_SECONDS,
                             )
                         except subprocess.TimeoutExpired:
                             failures.append(
-                                f"{label}: ansible-lint timed out after "
-                                f"{VALIDATOR_TIMEOUT_SECONDS} seconds"
+                                f"{label}: ansible-lint timed out after {VALIDATOR_TIMEOUT_SECONDS} seconds"
                             )
                             continue
                         if result.returncode:
                             details = "\n".join(
-                                output.strip()
-                                for output in (result.stdout, result.stderr)
-                                if output.strip()
+                                output.strip() for output in (result.stdout, result.stderr) if output.strip()
                             )
-                            failures.append(
-                                f"{label}: ansible-lint failed\n{details}".rstrip()
-                            )
-                elif shutil.which("shellcheck"):
+                            failures.append(f"{label}: ansible-lint failed\n{details}".rstrip())
+                elif shellcheck := shutil.which("shellcheck"):
                     candidate = validator_candidate(
                         temp,
                         "shell",
@@ -135,27 +123,20 @@ def main() -> int:
                         encoding="utf-8",
                     )
                     try:
-                        result = subprocess.run(
-                            ["shellcheck", "-x", str(candidate)],
+                        result = subprocess.run(  # noqa: S603 -- resolved executable and test-owned file.
+                            [shellcheck, "-x", str(candidate)],
                             text=True,
                             capture_output=True,
                             timeout=VALIDATOR_TIMEOUT_SECONDS,
                         )
                     except subprocess.TimeoutExpired:
-                        failures.append(
-                            f"{label}: ShellCheck timed out after "
-                            f"{VALIDATOR_TIMEOUT_SECONDS} seconds"
-                        )
+                        failures.append(f"{label}: ShellCheck timed out after {VALIDATOR_TIMEOUT_SECONDS} seconds")
                         continue
                     if result.returncode:
                         details = "\n".join(
-                            output.strip()
-                            for output in (result.stdout, result.stderr)
-                            if output.strip()
+                            output.strip() for output in (result.stdout, result.stderr) if output.strip()
                         )
-                        failures.append(
-                            f"{label}: ShellCheck failed\n{details}".rstrip()
-                        )
+                        failures.append(f"{label}: ShellCheck failed\n{details}".rstrip())
     for failure in failures:
         print(f"ERROR: {failure}", file=sys.stderr)
     return 1 if failures else 0
