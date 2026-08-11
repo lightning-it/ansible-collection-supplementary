@@ -48,6 +48,9 @@ class PushReadyEngineTests(unittest.TestCase):
         for marker in ("default_stages: [pre-commit]", "default_install_hook_types: [pre-commit, pre-push]"):
             self.assertIn(marker, config)
         self.assertEqual(1, config.count("stages: [pre-push]"))
+        profile = (ROOT / "scripts" / "lit-ci-profile.sh").read_text(encoding="utf-8")
+        self.assertIn("pre-commit run --all-files", profile)
+        self.assertNotIn("SKIP=molecule-light", profile)
         branch, stale, expected = "refs/heads/test", "b" * 40, "a" * 40
         payload = {
             "push_remote": ENGINE["governed_push_remote_from_url"](

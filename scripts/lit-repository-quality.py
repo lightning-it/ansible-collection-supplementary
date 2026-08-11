@@ -233,12 +233,6 @@ def check_terraform(repo_type: str) -> None:
                     "Terraform policy repository has no explicit validation root; "
                     "add .terraform.lock.hcl, versions.tf, or backend.tf"
                 )
-        # The canonical profile runs inside a read-only source checkout.
-        # Terraform writes both .terraform data and dependency lock-file
-        # updates below each validation root, so validate one temporary copy
-        # instead of allowing writes to the repository. The managed Devtool
-        # mounts HOME as a fresh executable tmpfs because downloaded provider
-        # binaries must be executable during validate.
         terraform_home = os.environ.get("HOME", "")
         terraform_temp_parent = Path(terraform_home)
         resolved_temp_parent = (

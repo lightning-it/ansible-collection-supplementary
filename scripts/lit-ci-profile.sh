@@ -71,6 +71,13 @@ fingerprint() {
 initial_fingerprint="$(fingerprint)" \
   || fail_closed "cannot fingerprint initial worktree"
 
+printf '==> Run complete repository pre-commit gates\n'
+BASE_SHA="$merge_base" \
+HEAD_SHA="$(git rev-parse HEAD)" \
+LABELS_JSON='[]' \
+REQUIRE_FRAGMENT=true \
+pre-commit run --all-files
+
 run_devtools() {
   local network_mode="${1:-}"
   shift || fail_closed "Devtool network mode is required"
