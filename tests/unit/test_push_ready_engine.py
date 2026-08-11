@@ -150,8 +150,8 @@ class PushReadyEngineTests(unittest.TestCase):
             )
             (repository / "scripts").mkdir()
             shutil.copy2(ROOT / "scripts" / "validate-embedded-code.py", repository / "scripts")
-            (repository / "staged.md").write_text("```yaml\ninvalid: [\n```\n", encoding="utf-8")
-            subprocess.run([git, "-C", repository, "add", "staged.md"], check=True, env=environment)  # noqa: S603
+            (repository / "staged.MD").write_text("```yaml\ninvalid: [\n```\n", encoding="utf-8")
+            subprocess.run([git, "-C", repository, "add", "staged.MD"], check=True, env=environment)  # noqa: S603
             subprocess.run(  # noqa: S603
                 [git, "-C", repository, "update-ref", "refs/remotes/origin/develop", "HEAD"],
                 check=True,
