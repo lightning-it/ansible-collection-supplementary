@@ -49,7 +49,7 @@ class PushReadyEngineTests(unittest.TestCase):
             self.assertIn(marker, config)
         self.assertEqual(1, config.count("stages: [pre-push]"))
         profile = (ROOT / "scripts" / "lit-ci-profile.sh").read_text(encoding="utf-8")
-        self.assertIn("pre-commit run --all-files", profile)
+        self.assertIn('pre-commit" run --all-files', profile)
         self.assertNotIn("SKIP=molecule-light", profile)
         branch, stale, expected = "refs/heads/test", "b" * 40, "a" * 40
         payload = {

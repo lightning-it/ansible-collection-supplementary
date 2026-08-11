@@ -72,11 +72,14 @@ initial_fingerprint="$(fingerprint)" \
   || fail_closed "cannot fingerprint initial worktree"
 
 printf '==> Run complete repository pre-commit gates\n'
+pre_commit_venv="$TMPDIR/lit-pre-commit"
+python3 -m venv "$pre_commit_venv"
+"$pre_commit_venv/bin/pip" install --disable-pip-version-check --quiet pre-commit==4.3.0
 BASE_SHA="$merge_base" \
 HEAD_SHA="$(git rev-parse HEAD)" \
 LABELS_JSON='[]' \
 REQUIRE_FRAGMENT=true \
-pre-commit run --all-files
+"$pre_commit_venv/bin/pre-commit" run --all-files
 
 run_devtools() {
   local network_mode="${1:-}"
