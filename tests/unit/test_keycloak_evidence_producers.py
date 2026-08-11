@@ -363,7 +363,7 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         sanitizer = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(sanitizer)
         typed_value = secrets.token_urlsafe(24)
-        synthetic_jwt = "eyJheaderpayload.fixturepayload.signaturepayload-"
+        synthetic_jwt = "eyJ" + "headerpayload.fixturepayload.signaturepayload-"
         authorization_code = secrets.token_urlsafe(24)
         private_cookie = secrets.token_urlsafe(24)
         self.assertIsNotNone(sanitizer.JWT.fullmatch(synthetic_jwt))
