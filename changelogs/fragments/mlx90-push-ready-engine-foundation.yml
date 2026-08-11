@@ -12,3 +12,6 @@ bugfixes:
   - >-
     Reject non-UTF-8 files in the sanitized review workspace instead of
     replacing undecodable bytes before secret scanning.
+  - >-
+    Bind every repository-owned executable used by the repository-quality
+    profile to the immutable check-policy trust root.

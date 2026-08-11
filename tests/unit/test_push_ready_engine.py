@@ -16,6 +16,12 @@ ENGINE = runpy.run_path(str(ROOT / "scripts" / "lit-push-ready.py"), run_name="l
 
 
 class PushReadyEngineTests(unittest.TestCase):
+    def test_trusted_policy_covers_executable_quality_scripts(self) -> None:
+        trusted_paths = set(ENGINE["TRUSTED_CHECK_POLICY_PATHS"])
+
+        self.assertIn("scripts/lit-repository-quality.py", trusted_paths)
+        self.assertIn("scripts/validate-embedded-code.py", trusted_paths)
+
     def test_bootstrap_config(self) -> None:
         change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
         function_globals = ENGINE["require_review_bootstrap_contract"].__globals__
