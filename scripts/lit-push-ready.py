@@ -3098,9 +3098,10 @@ def evidence_interval(
     started = parse_timestamp(record.get("started_at"), f"{description} started_at")
     completed = parse_timestamp(record.get("completed_at"), f"{description} completed_at")
     duration = record.get("duration_seconds")
-    invalid_duration = isinstance(duration, bool) or not isinstance(duration, (int, float)) or duration < 0
+    if isinstance(duration, bool) or not isinstance(duration, (int, float)):
+        duration = -1
     if (
-        invalid_duration
+        duration < 0
         or started > completed
         or abs((completed - started).total_seconds() - duration) > 5
         or (bounds is not None and (started < bounds[0] or completed > bounds[1]))
