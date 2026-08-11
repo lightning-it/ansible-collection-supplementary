@@ -369,8 +369,40 @@ def check_markdown() -> None:
 
 
 def check_embedded_code() -> None:
+    merge_base_result = subprocess.run(
+        [
+            "git",
+            "-c",
+            f"safe.directory={ROOT}",
+            "merge-base",
+            "refs/remotes/origin/develop",
+            "HEAD",
+        ],
+        cwd=ROOT,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+    )
+    merge_base = merge_base_result.stdout.strip()
+    if merge_base_result.returncode or not merge_base:
+        details = merge_base_result.stderr.strip()
+        raise AssertionError(
+            "cannot resolve the authoritative Markdown validation merge base"
+            + (f": {details}" if details else "")
+        )
     result = subprocess.run(
-        ["git", "-c", f"safe.directory={ROOT}", "ls-files", "-z"],
+        [
+            "git",
+            "-c",
+            f"safe.directory={ROOT}",
+            "diff",
+            "--name-only",
+            "--diff-filter=ACMR",
+            "-z",
+            f"{merge_base}...HEAD",
+            "--",
+        ],
         cwd=ROOT,
         text=True,
         encoding="utf-8",
@@ -381,7 +413,7 @@ def check_embedded_code() -> None:
     if result.returncode:
         details = result.stderr.strip()
         raise AssertionError(
-            "cannot enumerate tracked Markdown files with git ls-files"
+            "cannot enumerate changed Markdown files with git diff"
             + (f": {details}" if details else "")
         )
     markdown_paths = sorted(

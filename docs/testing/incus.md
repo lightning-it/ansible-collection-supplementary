@@ -113,8 +113,7 @@ For a concurrent local run, set a unique instance name while keeping one owner
 value for create, cleanup, and destroy:
 
 ```bash
-MOLECULE_TEST_OWNER="local/${USER}/$(date -u +%Y%m%dT%H%M%S)-rsyslog"
-export MOLECULE_TEST_OWNER
+export MOLECULE_TEST_OWNER="local/${USER}/$(date -u +%Y%m%dT%H%M%S)-rsyslog"
 export MOLECULE_TEST_INSTANCE="rsyslog-${USER}-$$"
 export MOLECULE_TEST_TARGET=ubuntu-24.04
 molecule test -s rsyslog-lifecycle-incus_heavy

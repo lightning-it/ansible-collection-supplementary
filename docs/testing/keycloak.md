@@ -17,8 +17,7 @@ credentials:
 ```bash
 export MOLECULE_RUN_PROTECTED=true
 export MOLECULE_TEST_REPOSITORY=local/ansible-collection-supplementary
-MOLECULE_TEST_RUN_ID="local-$(id -u)-$(date +%s)"
-export MOLECULE_TEST_RUN_ID
+export MOLECULE_TEST_RUN_ID="local-$(id -u)-$(date +%s)"
 export MOLECULE_TEST_RUN_ATTEMPT=1
 export MOLECULE_TEST_TARGET=ubuntu-24.04
 export KEYCLOAK_TEST_TARGET=ubuntu-24.04

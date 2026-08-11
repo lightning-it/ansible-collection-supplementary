@@ -63,7 +63,7 @@ VAULT_ADDR=https://vault01.example.com:8200 vault login
 ```bash
 ansible-navigator run playbooks/common/02_nexus.yml -i inventory/ --m stdout \
   -e nexus_vault_auth_method=token -e nexus_vault_validate_certs=false \
-  -e vault_token="$(cat "$HOME"/.vault-token)"
+  -e vault_token="$(cat $HOME/.vault-token)"
 ```
 
 If you use AppRole, ensure Vault KV contains the credentials at:
@@ -80,5 +80,5 @@ and run with a `vault_token` that can read those paths.
 ```bash
 ansible-navigator run playbooks/common/02_nexus.yml -i inventory/ --m stdout \
   -e nexus_vault_auth_method=token -e nexus_vault_validate_certs=false -t users \
-  -e vault_token="$(cat "$HOME"/.vault-token)"
+  -e vault_token="$(cat $HOME/.vault-token)"
 ```
