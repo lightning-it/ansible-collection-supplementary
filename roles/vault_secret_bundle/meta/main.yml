@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: vault_secret_bundle
+  namespace: lit
+  author: Lightning IT
+  description: Read-before-generate secret bundles in HashiCorp Vault KV v2.
+  company: Lightning IT
+  license: MIT
+  min_ansible_version: "2.18"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - vault
+    - secrets
+    - automation
+dependencies: []

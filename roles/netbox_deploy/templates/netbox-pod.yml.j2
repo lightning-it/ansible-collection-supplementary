@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ netbox_deploy_pod_name }}
+  labels:
+    app: {{ netbox_deploy_pod_name }}
+spec:
+  restartPolicy: Always
+  containers:
+    - name: postgres
+      image: {{ netbox_deploy_postgres_image }}
+      env:
+        - {name: POSTGRES_DB, value: {{ netbox_deploy_db_name | to_json }}}
+        - {name: POSTGRES_USER, value: {{ netbox_deploy_db_user | to_json }}}
+        - {name: POSTGRES_PASSWORD, value: {{ netbox_deploy_secrets.db_password | to_json }}}
+      volumeMounts:
+        - {name: postgres, mountPath: /var/lib/postgresql/data}
+    - name: redis
+      image: {{ netbox_deploy_valkey_image }}
+      args: ["valkey-server", "--appendonly", "yes", "--requirepass", {{ netbox_deploy_secrets.redis_password | to_json }}]
+      volumeMounts:
+        - {name: redis, mountPath: /data}
+    - name: redis-cache
+      image: {{ netbox_deploy_valkey_image }}
+      args: ["valkey-server", "--requirepass", {{ netbox_deploy_secrets.redis_cache_password | to_json }}]
+      volumeMounts:
+        - {name: redis-cache, mountPath: /data}
+    - name: netbox
+      image: {{ netbox_deploy_image }}
+      ports:
+        - {containerPort: 8080, hostPort: {{ netbox_deploy_port }}, hostIP: {{ netbox_deploy_host_ip }}}
+      env: &netbox_env
+        - {name: DB_HOST, value: "127.0.0.1"}
+        - {name: DB_NAME, value: {{ netbox_deploy_db_name | to_json }}}
+        - {name: DB_USER, value: {{ netbox_deploy_db_user | to_json }}}
+        - {name: DB_PASSWORD, value: {{ netbox_deploy_secrets.db_password | to_json }}}
+        - {name: REDIS_HOST, value: "127.0.0.1"}
+        - {name: REDIS_PASSWORD, value: {{ netbox_deploy_secrets.redis_password | to_json }}}
+        - {name: REDIS_CACHE_HOST, value: "127.0.0.1"}
+        - {name: REDIS_CACHE_PASSWORD, value: {{ netbox_deploy_secrets.redis_cache_password | to_json }}}
+        - {name: SECRET_KEY, value: {{ netbox_deploy_secrets.secret_key | to_json }}}
+        - {name: ALLOWED_HOSTS, value: {{ netbox_deploy_allowed_hosts | to_json }}}
+        - {name: SUPERUSER_NAME, value: {{ netbox_deploy_superuser_name | to_json }}}
+        - {name: SUPERUSER_EMAIL, value: {{ netbox_deploy_superuser_email | to_json }}}
+        - {name: SUPERUSER_PASSWORD, value: {{ netbox_deploy_secrets.superuser_password | to_json }}}
+        - {name: SUPERUSER_API_TOKEN, value: {{ netbox_deploy_secrets.superuser_api_token | to_json }}}
+      volumeMounts:
+{% if netbox_deploy_oidc_enabled | bool %}
+        - {name: sso-config, mountPath: /etc/netbox/config/goal07-sso.py, readOnly: true}
+{% endif %}
+        - {name: media, mountPath: /opt/netbox/netbox/media}
+        - {name: reports, mountPath: /etc/netbox/reports}
+        - {name: scripts, mountPath: /etc/netbox/scripts}
+    - name: worker
+      image: {{ netbox_deploy_image }}
+      args: ["/opt/netbox/venv/bin/python", "/opt/netbox/netbox/manage.py", "rqworker"]
+      env: *netbox_env
+      volumeMounts:
+{% if netbox_deploy_oidc_enabled | bool %}
+        - {name: sso-config, mountPath: /etc/netbox/config/goal07-sso.py, readOnly: true}
+{% endif %}
+        - {name: media, mountPath: /opt/netbox/netbox/media}
+        - {name: reports, mountPath: /etc/netbox/reports}
+        - {name: scripts, mountPath: /etc/netbox/scripts}
+  volumes:
+{% if netbox_deploy_oidc_enabled | bool %}
+    - {name: sso-config, hostPath: {path: {{ netbox_deploy_config_path }}, type: File}}
+{% endif %}
+    - {name: postgres, hostPath: {path: {{ netbox_deploy_base_dir }}/postgres, type: Directory}}
+    - {name: redis, hostPath: {path: {{ netbox_deploy_base_dir }}/redis, type: Directory}}
+    - {name: redis-cache, hostPath: {path: {{ netbox_deploy_base_dir }}/redis-cache, type: Directory}}
+    - {name: media, hostPath: {path: {{ netbox_deploy_base_dir }}/media, type: Directory}}
+    - {name: reports, hostPath: {path: {{ netbox_deploy_base_dir }}/reports, type: Directory}}
+    - {name: scripts, hostPath: {path: {{ netbox_deploy_base_dir }}/scripts, type: Directory}}

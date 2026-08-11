@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ guacamole_deploy_pod_name }}
+  labels:
+    app: {{ guacamole_deploy_pod_name }}
+spec:
+  restartPolicy: Always
+  initContainers:
+    - name: schema
+      image: {{ guacamole_deploy_image }}
+      command: ["/bin/sh", "-ec"]
+      args: ["test -s /init/001-guacamole.sql || /opt/guacamole/bin/initdb.sh --postgresql > /init/001-guacamole.sql"]
+      volumeMounts:
+        - {name: postgres-init, mountPath: /init}
+  containers:
+    - name: postgres
+      image: {{ guacamole_deploy_postgres_image }}
+      env:
+        - {name: POSTGRES_DB, value: {{ guacamole_deploy_db_name | to_json }}}
+        - {name: POSTGRES_USER, value: {{ guacamole_deploy_db_user | to_json }}}
+        - {name: POSTGRES_PASSWORD, value: {{ guacamole_deploy_secrets.db_password | to_json }}}
+      volumeMounts:
+        - {name: postgres, mountPath: /var/lib/postgresql/data}
+        - {name: postgres-init, mountPath: /docker-entrypoint-initdb.d}
+    - name: guacd
+      image: {{ guacamole_deploy_guacd_image }}
+    - name: guacamole
+      image: {{ guacamole_deploy_image }}
+      ports:
+        - {containerPort: 8080, hostPort: {{ guacamole_deploy_port }}, hostIP: {{ guacamole_deploy_host_ip }}}
+      env:
+        - {name: GUACD_HOSTNAME, value: "127.0.0.1"}
+        - {name: POSTGRESQL_ENABLED, value: "true"}
+        - {name: POSTGRESQL_HOSTNAME, value: "127.0.0.1"}
+        - {name: POSTGRESQL_DATABASE, value: {{ guacamole_deploy_db_name | to_json }}}
+        - {name: POSTGRESQL_USERNAME, value: {{ guacamole_deploy_db_user | to_json }}}
+        - {name: POSTGRESQL_PASSWORD, value: {{ guacamole_deploy_secrets.db_password | to_json }}}
+        - {name: REMOTE_IP_VALVE_ENABLED, value: "true"}
+{% if guacamole_deploy_oidc_enabled | bool %}
+        - {name: OPENID_ENABLED, value: "true"}
+        - {name: OPENID_AUTHORIZATION_ENDPOINT, value: {{ guacamole_deploy_oidc_authorization_endpoint | to_json }}}
+        - {name: OPENID_JWKS_ENDPOINT, value: {{ guacamole_deploy_oidc_jwks_endpoint | to_json }}}
+        - {name: OPENID_ISSUER, value: {{ guacamole_deploy_oidc_issuer | to_json }}}
+        - {name: OPENID_CLIENT_ID, value: {{ guacamole_deploy_oidc_client_id | to_json }}}
+        - {name: OPENID_REDIRECT_URI, value: {{ guacamole_deploy_oidc_redirect_uri | to_json }}}
+        - {name: EXTENSION_PRIORITY, value: "*, openid"}
+{% endif %}
+  volumes:
+    - {name: postgres, hostPath: {path: {{ guacamole_deploy_base_dir }}/postgres, type: Directory}}
+    - {name: postgres-init, hostPath: {path: {{ guacamole_deploy_base_dir }}/postgres-init, type: Directory}}

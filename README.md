@@ -511,6 +511,7 @@ synthesized as passes.
 | forgejo_deploy | experimental | — | experimental | experimental | experimental |
 | gitlab_runner | deprecated | — | deprecated | deprecated | deprecated |
 | grafana_deploy | experimental | — | experimental | experimental | experimental |
+| guacamole_deploy | experimental | — | experimental | experimental | experimental |
 | hetzner_object_storage_cac | experimental | — | experimental | blocked-external-service | blocked-external-service |
 | incus_esxi_image | experimental | — | experimental | blocked-external-license | blocked-external-license |
 | incus_nested_esxi | experimental | — | experimental | blocked-external-infrastructure | blocked-external-infrastructure |
@@ -535,6 +536,7 @@ synthesized as passes.
 | minio_validate | experimental | — | experimental | experimental | not-applicable |
 | nessus_cac | experimental | — | experimental | blocked-external-license | blocked-external-license |
 | nessus_deploy | experimental | — | experimental | blocked-external-license | blocked-external-license |
+| netbox_deploy | experimental | — | experimental | experimental | experimental |
 | nexus | experimental | — | experimental | experimental | experimental |
 | nginx_config | experimental | — | experimental | experimental | experimental |
 | nginx_deploy | experimental | — | experimental | experimental | experimental |
@@ -579,6 +581,7 @@ synthesized as passes.
 | vault_ops | experimental | — | experimental | experimental | experimental |
 | vault_raft_snapshot | experimental | — | experimental | experimental | experimental |
 | vault_scoped_approle | experimental | — | experimental | experimental | experimental |
+| vault_secret_bundle | experimental | — | experimental | experimental | experimental |
 | vault_validate | experimental | — | experimental | experimental | not-applicable |
 
 <!-- role-coverage-table:end -->

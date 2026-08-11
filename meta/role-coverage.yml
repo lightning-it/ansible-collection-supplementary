@@ -744,6 +744,29 @@ roles:
       heavy:
         - "atlas-observability-incus_heavy"
       application_acceptance: []
+  guacamole_deploy:
+    component: "guacamole"
+    classification: "web_application"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "browser_oidc_breakglass_and_rdp_session"
+    dependencies:
+      - "lit.foundational.kubeplay"
+    external_dependencies:
+      - "Keycloak OIDC provider"
+      - "RDP destination reachable through the management VLAN"
+    known_limitations:
+      - "Goal 07 production acceptance is maintained in the consumer automation repository."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
   hetzner_object_storage_cac:
     component: "hetzner_object_storage"
     classification: "configuration_as_code"
@@ -1317,6 +1340,28 @@ roles:
     scenario_support:
       tiny:
         - "nessus-deploy-basic"
+      heavy: []
+      application_acceptance: []
+  netbox_deploy:
+    component: "netbox"
+    classification: "web_application"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "browser_oidc_authenticated_api_backup_and_restore"
+    dependencies:
+      - "lit.foundational.kubeplay"
+    external_dependencies:
+      - "Keycloak OIDC provider"
+    known_limitations:
+      - "Goal 07 production acceptance is maintained in the consumer automation repository."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
       heavy: []
       application_acceptance: []
   nexus:
@@ -2316,6 +2361,29 @@ roles:
         - "vault-bootstrap-basic"
         - "vault-scoped-approle-basic"
         - "vault-security-lifecycle-basic"
+      heavy: []
+      application_acceptance: []
+  vault_secret_bundle:
+    component: "vault"
+    classification: "secret_management"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "ubuntu-24.04"
+      - "rhel-9"
+    tiny: "experimental"
+    heavy: "experimental"
+    application_acceptance: "experimental"
+    acceptance_surface: "read_before_generate_persist_and_reuse_secret_fields"
+    dependencies:
+      - "community.hashi_vault"
+    external_dependencies:
+      - "Reachable HashiCorp Vault KV v2 service and scoped authentication"
+    known_limitations:
+      - "No standalone Molecule scenario exists yet."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
       heavy: []
       application_acceptance: []
   vault_validate:

@@ -49,7 +49,7 @@ class RoleCoverageRegistryTests(unittest.TestCase):
         }
 
     def test_registry_exactly_covers_repository(self) -> None:
-        self.assertEqual(97, len(self.registry["roles"]))
+        self.assertEqual(100, len(self.registry["roles"]))
         self.assertEqual(59, len(self.registry["scenarios"]))
         self.assertEqual(
             VALIDATOR.discovered_roles(ROOT),

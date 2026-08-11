@@ -66,6 +66,27 @@ class MainPromotionMergeGateTests(unittest.TestCase):
             "${{ steps.classify.outputs.environment }}",
         )
 
+    def test_policy_root_bootstrap_is_limited_to_exact_normal_develop(self) -> None:
+        jobs = load_workflow()["jobs"]
+        for job_name, step_name in (
+            ("classify", "Classify exact live pull request"),
+            ("authorize", "Revalidate exact live state after authorization"),
+        ):
+            with self.subTest(job=job_name):
+                steps = jobs[job_name]["steps"]
+                command = next(step["run"] for step in steps if step["name"] == step_name)
+                self.assertIn(
+                    "grep -Fq 'parser.add_argument(\"--base-root\"'",
+                    command,
+                )
+                self.assertIn(
+                    "policy_root_args=(--base-root policy --head-root candidate)",
+                    command,
+                )
+                self.assertIn('and (.head.ref == "develop")', command)
+                self.assertIn("and (.head.repo.full_name == $repo)", command)
+                self.assertIn('"${policy_root_args[@]}"', command)
+
     def test_final_gate_succeeds_only_when_both_upstreams_succeed(self) -> None:
         command = FINAL_STEP["run"]
         bash = shutil.which("bash")

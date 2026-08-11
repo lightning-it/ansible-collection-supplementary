@@ -1,0 +1,11 @@
+# Managed by Ansible. Contains a Vault-custodied OIDC client secret.
+REMOTE_AUTH_ENABLED = True
+REMOTE_AUTH_AUTO_CREATE_USER = True
+REMOTE_AUTH_BACKEND = "social_core.backends.keycloak.KeycloakOAuth2"
+SOCIAL_AUTH_KEYCLOAK_KEY = {{ netbox_deploy_oidc_key | to_json }}
+SOCIAL_AUTH_KEYCLOAK_SECRET = {{ netbox_deploy_secrets.oidc_client_secret | to_json }}
+SOCIAL_AUTH_KEYCLOAK_PUBLIC_KEY = ""
+SOCIAL_AUTH_KEYCLOAK_AUTHORIZATION_URL = {{ (netbox_deploy_oidc_url ~ '/protocol/openid-connect/auth') | to_json }}
+SOCIAL_AUTH_KEYCLOAK_ACCESS_TOKEN_URL = {{ (netbox_deploy_oidc_url ~ '/protocol/openid-connect/token') | to_json }}
+SOCIAL_AUTH_KEYCLOAK_ID_KEY = {{ netbox_deploy_oidc_username_claim | to_json }}
+SOCIAL_AUTH_REDIRECT_IS_HTTPS = True
