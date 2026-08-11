@@ -1106,7 +1106,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("No exact-version Security metadata", workflow_text)
         self.assertIn(".lit/security-releases/${RELEASE_VERSION}.json", workflow_text)
         self.assertIn('--metadata "$SECURITY_METADATA"', workflow_text)
-        self.assertIn("actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d", workflow_text)
+        self.assertIn("actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6", workflow_text)
         self.assertIn('test "$APP_INSTALLATION_ID" = 148019054', workflow_text)
         self.assertIn("installation/repositories?per_page=100", workflow_text)
         self.assertIn(
