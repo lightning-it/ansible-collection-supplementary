@@ -1118,9 +1118,16 @@ class WorkflowSecurityTests(unittest.TestCase):
             repository = Path(temporary_directory)
             git = shutil.which("git")
             self.assertIsNotNone(git)
-            subprocess.run([git, "init", "-q", repository], check=True)  # noqa: S603
+            git_environment = engine["isolated_git_environment"]({"PATH": os.environ["PATH"]})
+            subprocess.run(  # noqa: S603
+                [git, "init", "-q", repository], check=True, env=git_environment
+            )
             (repository / "safe.txt").write_text("safe\n", encoding="utf-8")
-            subprocess.run([git, "-C", repository, "add", "safe.txt"], check=True)  # noqa: S603
+            subprocess.run(  # noqa: S603
+                [git, "-C", repository, "add", "safe.txt"],
+                check=True,
+                env=git_environment,
+            )
             subprocess.run(  # noqa: S603 -- resolved Git and test-owned repository.
                 [
                     git,
@@ -1136,6 +1143,7 @@ class WorkflowSecurityTests(unittest.TestCase):
                     "root",
                 ],
                 check=True,
+                env=git_environment,
             )
             root_commit = engine["require_history_free_review_workspace"](repository, source_commits=("f" * 40,))
             self.assertRegex(root_commit, r"^[0-9a-f]{40}$")
