@@ -158,7 +158,7 @@ def main() -> int:
                     )
                     try:
                         result = subprocess.run(  # noqa: S603 -- resolved executable and test-owned file.
-                            [shellcheck, "-x", str(candidate)],
+                            [shellcheck, str(candidate)],
                             text=True,
                             capture_output=True,
                             timeout=VALIDATOR_TIMEOUT_SECONDS,
