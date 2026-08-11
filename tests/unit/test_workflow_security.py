@@ -196,6 +196,36 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("contains(github.event.pull_request.labels.*.name, 'safe-automerge')", require_fragment)
         self.assertIn("!contains(github.event.pull_request.labels.*.name, 'breaking-update')", require_fragment)
 
+    def test_copilot_review_is_requested_only_for_one_finalized_exact_head(self) -> None:
+        copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
+        request_job = copilot.split("  request-current-revision-review:", 1)[1].split(
+            "  current-revision-reviewed:", 1
+        )[0]
+        self.assertIn("github.event.action == 'ready_for_review'", request_job)
+        self.assertIn("github.event_name == 'workflow_dispatch'", request_job)
+        self.assertIn("github.ref == 'refs/heads/develop'", request_job)
+        self.assertNotIn("synchronize", request_job)
+        self.assertIn('test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"', request_job)
+        self.assertIn("Copilot already reviewed the exact finalized head", request_job)
+        self.assertIn("mlx90-copilot-request head=${EXPECTED_HEAD}", request_job)
+        self.assertIn("Copilot review is already requested for the exact finalized head", request_job)
+        self.assertIn('gh api --method DELETE "${requested_reviewers_url}"', request_job)
+        self.assertIn("cancel-in-progress: false", copilot)
+        self.assertIn("pull_request_review:", copilot)
+
+        remediation = (WORKFLOWS / "codex-copilot-remediation.yml").read_text(encoding="utf-8")
+        self.assertIn("reviewThreads(first:100,after:$after)", remediation)
+        self.assertIn('if [ "${round}" -gt 1 ]', remediation)
+        self.assertIn("No recursive repair loop is permitted", remediation)
+        self.assertEqual(1, remediation.count('git commit -m "fix: remediate Copilot findings'))
+        self.assertEqual(1, remediation.count("gh workflow run codex-copilot-remediation.yml"))
+        self.assertNotIn("maximum three automatic repair rounds", remediation)
+        prompt = (ROOT / ".github" / "codex" / "prompts" / "remediate-copilot.md").read_text(encoding="utf-8")
+        self.assertIn("complete thread set", prompt)
+        self.assertIn("one bounded correction package", prompt)
+        self.assertIn("Do not manufacture a no-op", prompt)
+        self.assertIn("only one final Current-Head", prompt)
+
     def test_shared_assets_guard_streams_large_check_evidence_via_stdin(self) -> None:
         workflow = (WORKFLOWS / "shared-assets-guarded-automerge.yml").read_text(encoding="utf-8")
         self.assertNotIn('--argjson check_pages "$check_runs"', workflow)

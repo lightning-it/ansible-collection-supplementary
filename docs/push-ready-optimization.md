@@ -45,6 +45,38 @@ The local Copilot CLI result remains an approximation. GitHub's authoritative
 Copilot Current-Head review and every protected repository gate remain required
 after the normal fast-forward feature-branch push.
 
+## Risk profiles and trusted classification
+
+The base branch owns the only trusted classifier. Known collection code, role,
+test, Molecule, changelog, and documentation paths use the `standard` profile:
+all deterministic gates plus one complete history-free Codex review run locally,
+while local Copilot is not invoked. Engine, policy, workflow, authorization,
+release, promotion, acceptance, validator, and otherwise unknown paths use the
+`trust-root` profile and require Codex and Copilot in separate parallel
+history-free workspaces. A missing, malformed, or pre-profile base policy also
+falls back to `trust-root`. Editing the classifier or either profile therefore
+classifies itself as `trust-root`.
+
+Evidence binds the profile, its trusted base-policy digest, the authoritative
+base tip, merge-base, exact head, integration tree, instructions, and exact
+review input. A head or base movement invalidates the evidence.
+
+## Finalization and server review
+
+Local `validate` performs deterministic checks without external review. Drafts,
+ordinary pushes, and `synchronize` events never request GitHub Copilot. They only
+make any old Current-Head result stale. One request is made when a draft becomes
+ready or when the protected `develop` workflow receives a finalization dispatch
+bound to the exact live PR head. A previous request or completed review for that
+same head makes the operation idempotent.
+
+All unresolved material Copilot findings for one reviewed head are supplied to
+one Codex remediation run and can produce at most one correction commit. That
+commit receives one final exact-head Copilot re-review. New material findings in
+that closing review stop fail-closed; they do not start a recursive loop.
+Formatter-, linter-, and type-only advice covered by passing deterministic gates
+does not justify a no-op source commit.
+
 ## Early review-size contract
 
 The engine renders the exact 40-line-context, binary-aware patch before any
@@ -57,8 +89,10 @@ The limit is never increased or bypassed automatically.
 
 1. Merge the bounded engine foundation through its protected Current-Head
    gates.
-2. Merge this parallel-review and measurement stage after a fresh dual review.
-3. Add the signed exact-input review cache as a separate stage.
+2. Merge the two-profile, finalization, parallel-review, and measurement pilot
+   after a fresh trust-root dual review.
+3. Add the signed exact-input review cache as a separate stage only after the
+   profile pilot has live evidence.
 4. Add bounded parallel local checks and the explicit Foundation stack schema.
 5. Run one complete real Supplementary pilot with `humanActions=0` on the final
    unchanged integration head.
