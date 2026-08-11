@@ -28,7 +28,7 @@ ROOT = (
     else DISTRIBUTED_ROOT
 )
 FENCE_OPEN = re.compile(
-    r"^[ \t]*(?P<delimiter>`{3,})[ \t]*(?P<language>yaml|yml|bash|sh|shell|ansible)\b[^\r\n]*$",
+    r"^[ \t]*(?P<delimiter>`{3,}|~{3,})[ \t]*(?P<language>yaml|yml|bash|sh|shell|ansible)\b[^\r\n]*$",
     re.IGNORECASE,
 )
 VALIDATOR_TIMEOUT_SECONDS = 60
@@ -47,16 +47,16 @@ def validator_candidate(
 
 def fenced_blocks(source: str) -> list[tuple[str, str]]:
     blocks: list[tuple[str, str]] = []
-    active: tuple[str, int] | None = None
+    active: tuple[str, str, int] | None = None
     content: list[str] = []
     for line in source.splitlines(keepends=True):
         text = line.rstrip("\r\n")
         if active is None:
             match = FENCE_OPEN.fullmatch(text)
             if match:
-                active = match["language"].lower(), len(match["delimiter"])
+                active = match["language"].lower(), match["delimiter"][0], len(match["delimiter"])
                 content = []
-        elif re.fullmatch(rf"[ \t]*`{{{active[1]},}}[ \t]*", text):
+        elif re.fullmatch(rf"[ \t]*{re.escape(active[1])}{{{active[2]},}}[ \t]*", text):
             blocks.append((active[0], "".join(content)))
             active = None
         else:

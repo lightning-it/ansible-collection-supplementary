@@ -56,6 +56,20 @@ class PushReadyEngineTests(unittest.TestCase):
         ):
             command = ENGINE["copilot_container_command"](dict(ENGINE["COPILOT_PROMPT_MODE_BOUNDARY"]), ROOT)
         self.assertEqual("/podman", command[0])
+        with (
+            tempfile.TemporaryDirectory() as temporary_directory,
+            mock.patch.dict(os.environ, {name: "token" for name in ENGINE["COPILOT_TOKEN_NAMES"]}, clear=True),
+            mock.patch.object(function_globals["shutil"], "which", return_value=None),
+        ):
+            environment = ENGINE["minimal_agent_environment"](state_root=Path(temporary_directory), agent="copilot")
+        forwarded = [name for name in ENGINE["COPILOT_TOKEN_NAMES"] if name in environment]
+        self.assertEqual(["COPILOT_GITHUB_TOKEN"], forwarded)
+        with (
+            mock.patch.object(function_globals["shutil"], "which", return_value="/podman"),
+            mock.patch.dict(function_globals, {"run": mock.Mock(return_value=subprocess.CompletedProcess([], 0, ""))}),
+        ):
+            version_command = ENGINE["copilot_container_command"](environment, ROOT, include_credentials=False)
+        self.assertTrue(all(name not in version_command for name in ENGINE["COPILOT_TOKEN_NAMES"]))
 
     def test_bootstrap_config(self) -> None:
         change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
@@ -185,7 +199,7 @@ class PushReadyEngineTests(unittest.TestCase):
             )
             (repository / "scripts").mkdir()
             shutil.copy2(ROOT / "scripts" / "validate-embedded-code.py", repository / "scripts")
-            (repository / "staged.MD").write_text("```yaml\ninvalid: [\n```\n", encoding="utf-8")
+            (repository / "staged.MD").write_text("~~~yaml\ninvalid: [\n~~~\n", encoding="utf-8")
             subprocess.run([git, "-C", repository, "add", "staged.MD"], check=True, env=environment)  # noqa: S603
             subprocess.run(  # noqa: S603
                 [git, "-C", repository, "update-ref", "refs/remotes/origin/develop", "HEAD"],
@@ -221,7 +235,8 @@ class PushReadyEngineTests(unittest.TestCase):
             try:
                 shutil.which = lambda _name: None
                 for name, language in (("A.MD", "ansible"), ("s.md", "sh")):
-                    (markdown / name).write_text(f"```{language}\n[]\n```\n", encoding="utf-8")
+                    fence = "~~~" if name == "s.md" else "```"
+                    (markdown / name).write_text(f"{fence}{language}\n[]\n{fence}\n", encoding="utf-8")
                     runtime.argv = ["validate-embedded-code.py", name]
                     self.assertEqual(1, validator["main"]())
             finally:

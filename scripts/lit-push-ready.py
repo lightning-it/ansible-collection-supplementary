@@ -160,6 +160,7 @@ COPILOT_PROMPT_MODE_BOUNDARY = {
     "GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS": "false",
     "GITHUB_COPILOT_PROMPT_MODE_WORKSPACE_MCP": "false",
 }
+COPILOT_TOKEN_NAMES = ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")
 COPILOT_REQUIRED_SAFETY_ARGUMENTS = (
     "-s",
     "--no-ask-user",
@@ -1639,19 +1640,19 @@ def parse_secret_fixture_manifest(
             or len(encoded) % 2
             or len(encoded) > 20_000
         ):
-            raise RuntimeError("secret fixture manifest line_hex must be bounded lowercase hex")
+            raise RuntimeError("fixture line_hex must be bounded lowercase hex")
         try:
             line = bytes.fromhex(encoded).decode("utf-8")
         except (UnicodeDecodeError, ValueError) as exc:
-            raise RuntimeError("secret fixture manifest line_hex must encode UTF-8") from exc
+            raise RuntimeError("fixture line_hex is not UTF-8") from exc
         if not line or "\n" in line or "\r" in line:
-            raise RuntimeError("secret fixture manifest entries must encode one non-empty line")
+            raise RuntimeError("fixture must encode one line")
         if not any(pattern.search(line) for pattern in SECRET_CONTENT_PATTERNS):
-            raise RuntimeError("secret fixture manifest entry is not secret-like")
+            raise RuntimeError("fixture is not secret-like")
         digest = sha256_text(line)
         path_entries = parsed.setdefault(path, {})
         if line_number in path_entries:
-            raise RuntimeError("secret fixture manifest contains a duplicate line position")
+            raise RuntimeError("duplicate fixture line")
         path_entries[line_number] = (digest, line)
     return parsed
 
@@ -1663,19 +1664,19 @@ def repository_blob_at_commit(
     max_bytes: int,
 ) -> str | None:
     if not is_full_git_object_id(commit):
-        raise RuntimeError("secret fixture manifest commit is invalid")
+        raise RuntimeError("fixture commit is invalid")
     object_name = f"{commit}:{path}"
     exists = run(["git", "cat-file", "-e", object_name], capture=True)
     if exists.returncode:
         return None
     size_value = git_output("cat-file", "-s", object_name).strip()
     if not size_value.isdigit() or int(size_value) > max_bytes:
-        raise RuntimeError("secret fixture manifest source blob is too large")
+        raise RuntimeError("fixture source is too large")
     value = git_output("cat-file", "-p", object_name)
     try:
         value.encode("utf-8", errors="strict")
     except UnicodeEncodeError as exc:
-        raise RuntimeError("secret fixture manifest source blob is not UTF-8") from exc
+        raise RuntimeError("fixture source is not UTF-8") from exc
     return value
 
 
@@ -1696,7 +1697,7 @@ def bootstrap_secret_fixture_manifest(
     change: PlannedChange,
 ) -> dict[str, dict[int, tuple[str, str]]]:
     if SECRET_FIXTURE_MANIFEST_PATH not in change.paths:
-        raise RuntimeError("secret fixture bootstrap requires a changed manifest")
+        raise RuntimeError("fixture bootstrap needs a changed manifest")
     changelog_paths = [path for path in change.paths if re.fullmatch(r"changelogs/fragments/[^/]+\.ya?ml", path)]
     disallowed = [
         path
@@ -1704,22 +1705,22 @@ def bootstrap_secret_fixture_manifest(
         if path != SECRET_FIXTURE_MANIFEST_PATH and not re.fullmatch(r"changelogs/fragments/[^/]+\.ya?ml", path)
     ]
     if disallowed or len(changelog_paths) > 1:
-        raise RuntimeError("secret fixture bootstrap may change only the manifest and one changelog fragment")
+        raise RuntimeError("fixture bootstrap scope is invalid")
     if secret_fixture_manifest_at_commit(change.base_tip):
-        raise RuntimeError("secret fixture bootstrap requires an absent base manifest")
+        raise RuntimeError("fixture base manifest must be absent")
     manifest = secret_fixture_manifest_at_commit(change.head_commit)
     if not manifest:
-        raise RuntimeError("secret fixture bootstrap requires a committed head manifest")
+        raise RuntimeError("fixture head manifest must be committed")
     for path, entries in manifest.items():
         if path in change.paths:
-            raise RuntimeError("secret fixture bootstrap may classify only unchanged base files")
+            raise RuntimeError("fixture source must be unchanged")
         source = repository_blob_at_commit(
             change.base_tip,
             path,
             max_bytes=MAX_SECRET_FIXTURE_SOURCE_BYTES,
         )
         if source is None:
-            raise RuntimeError(f"secret fixture bootstrap source is absent from base: {path}")
+            raise RuntimeError(f"fixture source absent from base: {path}")
         source_lines = source.splitlines()
         for line_number, (_digest, line) in entries.items():
             if line_number > len(source_lines) or source_lines[line_number - 1] != line:
@@ -1737,7 +1738,7 @@ def secret_fixture_manifest_for_change(
     if bootstrap:
         return bootstrap_secret_fixture_manifest(change)
     if SECRET_FIXTURE_MANIFEST_PATH in change.paths:
-        raise RuntimeError("secret fixture manifest changes require the explicit audited bootstrap review path")
+        raise RuntimeError("fixture changes require bootstrap review")
     return secret_fixture_manifest_at_commit(change.base_tip)
 
 
@@ -1855,9 +1856,9 @@ def ensure_review_safe(
         diff=True,
     )
     if any(pattern.search(scanned_diff) for pattern in SECRET_CONTENT_PATTERNS):
-        raise RuntimeError("local review refused because the planned review input contains secret-like content")
+        raise RuntimeError("review input contains secret-like content")
     if any(Path(path).name.lower() == ".npmrc" for path in change.paths) and NPMRC_AUTH_PATTERN.search(change.diff):
-        raise RuntimeError("local review refused because planned .npmrc content contains authentication configuration")
+        raise RuntimeError("planned .npmrc contains authentication")
 
 
 def checkout_sanitized_commit(
@@ -1867,14 +1868,14 @@ def checkout_sanitized_commit(
     hooks: Path,
 ) -> None:
     if not is_full_git_object_id(commit):
-        raise RuntimeError("sanitized review commit has an invalid object ID")
+        raise RuntimeError("review commit ID is invalid")
     object_format = git_output_at(
         source,
         "rev-parse",
         "--show-object-format",
     ).strip()
     if object_format not in {"sha1", "sha256"}:
-        raise RuntimeError("source repository has an unsupported object format")
+        raise RuntimeError("unsupported Git object format")
     initialized = run(
         [
             "git",
@@ -1892,7 +1893,7 @@ def checkout_sanitized_commit(
         cwd=destination,
     )
     if initialized.returncode:
-        raise RuntimeError("could not initialize sanitized review repository: " + initialized.stdout.strip())
+        raise RuntimeError("review init failed: " + initialized.stdout.strip())
     fetched = run(
         [
             "git",
@@ -1909,14 +1910,14 @@ def checkout_sanitized_commit(
         cwd=destination,
     )
     if fetched.returncode:
-        raise RuntimeError("could not fetch sanitized review commit: " + fetched.stdout.strip())
+        raise RuntimeError("review fetch failed: " + fetched.stdout.strip())
     checked_out = run(
         ["git", "checkout", "-q", "--detach", "FETCH_HEAD"],
         capture=True,
         cwd=destination,
     )
     if checked_out.returncode:
-        raise RuntimeError("could not materialize sanitized review commit: " + checked_out.stdout.strip())
+        raise RuntimeError("review checkout failed: " + checked_out.stdout.strip())
 
 
 def sanitized_root_commit(repository: Path, tree: str) -> str:
@@ -1947,7 +1948,7 @@ def sanitized_root_commit(repository: Path, tree: str) -> str:
     )
     commit = result.stdout.strip()
     if result.returncode or not is_full_git_object_id(commit):
-        raise RuntimeError("could not create sanitized review root commit")
+        raise RuntimeError("review root creation failed")
     return commit
 
 
@@ -1963,7 +1964,7 @@ def verified_review_topology(
         or head_line[0] != change.head_commit
         or any(not is_full_git_object_id(value) for value in head_line)
     ):
-        raise RuntimeError("could not verify review HEAD topology")
+        raise RuntimeError("review topology check failed")
     head_tree = git_output("rev-parse", "--verify", f"{change.head_commit}^{{tree}}").strip()
     base_tree = git_output("rev-parse", "--verify", f"{change.base_tip}^{{tree}}").strip()
     if any(
@@ -1975,7 +1976,7 @@ def verified_review_topology(
             workspace_commit,
         )
     ):
-        raise RuntimeError("review topology contains an invalid Git object ID")
+        raise RuntimeError("review topology ID is invalid")
     return ReviewTopology(
         head_tree=head_tree,
         head_parents=tuple(head_line[1:]),
@@ -1993,7 +1994,7 @@ def require_history_free_review_workspace(
     workspace_commit = git_output_at(workspace, "rev-parse", "HEAD").strip()
     root_line = git_output_at(workspace, "rev-list", "--parents", "-n", "1", "HEAD").strip().split()
     if root_line != [workspace_commit]:
-        raise RuntimeError("sanitized review commit is not a history-free root")
+        raise RuntimeError("review commit has history")
     all_objects = {
         line.strip()
         for line in git_output_at(
@@ -2008,7 +2009,7 @@ def require_history_free_review_workspace(
         line.split(" ", 1)[0] for line in git_output_at(workspace, "rev-list", "--objects", "HEAD").splitlines() if line
     }
     if not all_objects or all_objects != reachable_objects:
-        raise RuntimeError("sanitized review object store contains non-snapshot objects")
+        raise RuntimeError("review store has non-snapshot objects")
     for commit in dict.fromkeys(source_commits):
         present = run(
             ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
@@ -2016,14 +2017,14 @@ def require_history_free_review_workspace(
             cwd=workspace,
         )
         if present.returncode == 0:
-            raise RuntimeError("sanitized review object store contains source history")
+            raise RuntimeError("review store contains source history")
     checked = run(
         ["git", "fsck", "--strict", "--no-reflogs"],
         capture=True,
         cwd=workspace,
     )
     if checked.returncode:
-        raise RuntimeError("sanitized review object store failed integrity checks")
+        raise RuntimeError("review store integrity failed")
     return workspace_commit
 
 
@@ -2085,7 +2086,7 @@ def sanitized_review_workspace(
             actual_tree = git_output_at(builder, "write-tree").strip()
             integration_tree = expected_integration_tree(change) if not source_status else actual_tree
             if actual_tree != integration_tree:
-                raise RuntimeError("sanitized review tree does not match the synthetic pull-request integration tree")
+                raise RuntimeError("review tree differs from integration")
             root_commit = sanitized_root_commit(builder, integration_tree)
             checkout_sanitized_commit(
                 builder,
@@ -2095,7 +2096,7 @@ def sanitized_review_workspace(
             )
         workspace_tree = git_output_at(workspace, "write-tree").strip()
         if workspace_tree != integration_tree:
-            raise RuntimeError("history-free review workspace tree changed")
+            raise RuntimeError("review workspace tree changed")
         workspace_commit = git_output_at(workspace, "rev-parse", "HEAD").strip()
         topology = verified_review_topology(
             change,
@@ -2116,7 +2117,7 @@ def sanitized_review_workspace(
             ),
         )
         if verified_workspace_commit != topology.workspace_commit:
-            raise RuntimeError("sanitized review root changed during verification")
+            raise RuntimeError("review root changed")
         ensure_workspace_review_safe(workspace, documented)
         yield workspace, root, topology
 
@@ -2147,7 +2148,7 @@ def ensure_workspace_review_safe(
             unsafe_paths.append(name)
         candidate = workspace / name
         if not candidate.is_file() or candidate.is_symlink():
-            raise RuntimeError(f"sanitized review path is not a regular file: {name}")
+            raise RuntimeError(f"review path is not regular: {name}")
         payload = candidate.read_bytes()
         total += len(payload)
         if total > 500_000_000:
@@ -2157,7 +2158,7 @@ def ensure_workspace_review_safe(
         except UnicodeDecodeError as exc:
             raise RuntimeError(f"sanitized review file is not UTF-8: {name}") from exc
         if parts[-1] == ".npmrc" and NPMRC_AUTH_PATTERN.search(text_value):
-            raise RuntimeError("local review refused because tracked .npmrc contains authentication configuration")
+            raise RuntimeError("tracked .npmrc contains authentication")
         scanned_value = mask_documented_secret_fixture_lines(
             text_value,
             documented or {},
@@ -2168,7 +2169,7 @@ def ensure_workspace_review_safe(
                 f"local review refused because the tracked review snapshot contains secret-like content in {name}"
             )
     if unsafe_paths:
-        raise RuntimeError("local review refused for secret-like tracked paths: " + ", ".join(sorted(unsafe_paths)))
+        raise RuntimeError("secret-like tracked paths: " + ", ".join(sorted(unsafe_paths)))
 
 
 def tracked_instruction_bundle(workspace: Path) -> str:
@@ -2178,7 +2179,7 @@ def tracked_instruction_bundle(workspace: Path) -> str:
     for name in sorted(entry for entry in names if entry and INSTRUCTION_PATH_PATTERN.search(entry)):
         candidate = workspace / name
         if not candidate.is_file() or candidate.is_symlink():
-            raise RuntimeError(f"sanitized instruction is not a regular file: {name}")
+            raise RuntimeError(f"instruction is not regular: {name}")
         payload = candidate.read_bytes()
         total += len(payload)
         if total > 2_000_000:
@@ -2189,7 +2190,7 @@ def tracked_instruction_bundle(workspace: Path) -> str:
             raise RuntimeError(f"tracked instruction is not UTF-8: {name}") from exc
         chunks.append(f"----- BEGIN {name} -----\n{text_value}\n----- END {name} -----")
     if not any(chunk.startswith("----- BEGIN AGENTS.md -----") for chunk in chunks):
-        raise RuntimeError("sanitized review repository lacks tracked AGENTS.md")
+        raise RuntimeError("review lacks tracked AGENTS.md")
     return "\n\n".join(chunks)
 
 
@@ -2209,8 +2210,8 @@ def minimal_agent_environment(*, state_root: Path, agent: str, workspace: Path |
         allowed.update(
             {
                 "COPILOT_GH_HOST",
-                "COPILOT_GITHUB_TOKEN",
                 "GH_HOST",
+                "COPILOT_GITHUB_TOKEN",
                 "GH_TOKEN",
                 "GITHUB_TOKEN",
                 "HTTPS_PROXY",
@@ -2228,7 +2229,13 @@ def minimal_agent_environment(*, state_root: Path, agent: str, workspace: Path |
         environment["COPILOT_HOME"] = str(state_root / "copilot-home")
         Path(environment["COPILOT_HOME"]).mkdir(mode=0o700, exist_ok=True)
         environment.update(COPILOT_PROMPT_MODE_BOUNDARY)
-        if not any(environment.get(name) for name in ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")):
+        selected = next((name for name in COPILOT_TOKEN_NAMES if environment.get(name)), None)
+        if selected:
+            value = environment[selected]
+            for name in COPILOT_TOKEN_NAMES:
+                environment.pop(name, None)
+            environment[selected] = value
+        else:
             gh = shutil.which("gh")
             if gh is not None:
                 token = run(
@@ -2310,7 +2317,7 @@ def require_copilot_prompt_mode_boundary(environment: dict[str, str], arguments:
             details.append("environment: " + ", ".join(sorted(invalid_environment)))
         if missing_arguments:
             details.append("arguments: " + ", ".join(missing_arguments))
-        raise RuntimeError("Copilot prompt-mode safety boundary is incomplete: " + "; ".join(details))
+        raise RuntimeError("Copilot safety boundary: " + "; ".join(details))
 
 
 def codex_permission_profile_name(state_root: Path) -> str:
@@ -2321,10 +2328,10 @@ def codex_permission_profile_name(state_root: Path) -> str:
 def require_codex_permission_profile_version(version: str) -> None:
     match = re.search(r"\b(\d+)\.(\d+)\.(\d+)(?:[-+.\w]*)?\b", version)
     if match is None:
-        raise RuntimeError("Codex version is unparseable; permission-profile enforcement cannot be established")
+        raise RuntimeError("Codex version cannot prove permission profiles")
     current = tuple(int(value) for value in match.groups())
     if current < (0, 138, 0):
-        raise RuntimeError("Codex 0.138.0 or newer is required for local permission profiles")
+        raise RuntimeError("Codex 0.138.0+ is required")
 
 
 def verify_codex_permission_profile(
@@ -2337,7 +2344,7 @@ def verify_codex_permission_profile(
     true_command = shutil.which("true")
     cat_command = shutil.which("cat")
     if true_command is None or cat_command is None:
-        raise RuntimeError("Codex permission-profile self-test requires true and cat")
+        raise RuntimeError("Codex self-test requires true and cat")
     profile = codex_permission_profile_name(state_root)
     common = [
         *command,
@@ -2357,7 +2364,7 @@ def verify_codex_permission_profile(
         env=environment,
     )
     if allowed.returncode:
-        raise RuntimeError("Codex permission-profile self-test could not execute a minimal runtime command")
+        raise RuntimeError("Codex self-test execution failed")
     workspace_read = run(
         [*common, cat_command, str(workspace / "AGENTS.md")],
         capture=True,
@@ -2366,7 +2373,7 @@ def verify_codex_permission_profile(
         env=environment,
     )
     if workspace_read.returncode:
-        raise RuntimeError("Codex permission-profile self-test could not read the sanitized review workspace")
+        raise RuntimeError("Codex workspace read failed")
     canary = state_root / "codex-denied-read-canary"
     canary.write_text(
         "LIT_CODEX_PERMISSION_PROFILE_CANARY\n",
@@ -2384,7 +2391,7 @@ def verify_codex_permission_profile(
     finally:
         canary.unlink(missing_ok=True)
     if denied.returncode == 0:
-        raise RuntimeError("Codex permission profile allowed a read outside the sanitized review workspace")
+        raise RuntimeError("Codex read escaped workspace")
 
 
 def resolve_command(command: list[str], name: str) -> list[str]:
@@ -2392,7 +2399,7 @@ def resolve_command(command: list[str], name: str) -> list[str]:
     if "/" not in executable and "\\" not in executable:
         resolved = shutil.which(executable)
         if resolved is None:
-            raise RuntimeError(f"required {name} executable is unavailable")
+            raise RuntimeError(f"{name} executable unavailable")
         return [resolved, *command[1:]]
     candidate = Path(executable)
     if not candidate.is_absolute():
@@ -2401,23 +2408,25 @@ def resolve_command(command: list[str], name: str) -> list[str]:
         try:
             relative_parts = candidate.relative_to(ROOT).parts
         except ValueError as exc:
-            raise RuntimeError(f"required {name} command escapes the repository") from exc
+            raise RuntimeError(f"{name} command escapes repository") from exc
         if any(part in {"", ".", ".."} for part in relative_parts):
-            raise RuntimeError(f"required {name} command uses an unsafe repository path")
+            raise RuntimeError(f"{name} command path is unsafe")
         for part in relative_parts:
             current /= part
             if current.is_symlink():
-                raise RuntimeError(f"required {name} command contains a symbolic link")
+                raise RuntimeError(f"{name} command contains symlink")
         try:
             candidate.resolve(strict=True).relative_to(ROOT)
         except (OSError, ValueError) as exc:
-            raise RuntimeError(f"required {name} command is unavailable or unsafe") from exc
+            raise RuntimeError(f"{name} command unavailable") from exc
     if not candidate.is_file() or candidate.is_symlink():
-        raise RuntimeError(f"required {name} command is unavailable or unsafe")
+        raise RuntimeError(f"{name} command unavailable")
     return [str(candidate.resolve()), *command[1:]]
 
 
-def copilot_container_command(environment: dict[str, str], workspace: Path) -> list[str]:
+def copilot_container_command(
+    environment: dict[str, str], workspace: Path, *, include_credentials: bool = True
+) -> list[str]:
     requested_engine = os.environ.get("WUNDER_CONTAINER_ENGINE")
     if requested_engine and requested_engine not in {"docker", "podman"}:
         raise RuntimeError("invalid WUNDER_CONTAINER_ENGINE")
@@ -2464,7 +2473,7 @@ def copilot_container_command(environment: dict[str, str], workspace: Path) -> l
         or workspace.is_symlink()
         or any(character in str(canonical_workspace) for character in (":", ","))
     ):
-        raise RuntimeError("Copilot review workspace is unsafe to mount")
+        raise RuntimeError("Copilot workspace mount is unsafe")
     workspace_mount = f"{canonical_workspace}:/workspace:ro"
     if Path(engine).name == "podman" and platform.system() == "Linux":
         workspace_mount += ",z"
@@ -2507,11 +2516,12 @@ def copilot_container_command(environment: dict[str, str], workspace: Path) -> l
         command.append("--read-only-tmpfs=false")
     for name, value in COPILOT_PROMPT_MODE_BOUNDARY.items():
         if environment.get(name) != value:
-            raise RuntimeError("Copilot container prompt-mode boundary is incomplete: " + name)
+            raise RuntimeError("Copilot prompt boundary lacks " + name)
         command.extend(["-e", f"{name}={value}"])
-    for name in ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
-        if environment.get(name):
-            command.extend(["-e", name])
+    if include_credentials:
+        for name in COPILOT_TOKEN_NAMES:
+            if environment.get(name):
+                command.extend(["-e", name])
     command.extend([COPILOT_DEVTOOL_IMAGE, "copilot"])
     return command
 
@@ -2603,18 +2613,19 @@ def copilot_review(
         agent="copilot",
     )
     command = copilot_container_command(environment, workspace)
+    version_environment = {name: value for name, value in environment.items() if name not in COPILOT_TOKEN_NAMES}
     container_runtime = Path(command[0]).name
     container_runtime_version = tool_version(
         [command[0]],
         "Copilot container runtime",
         cwd=workspace,
-        env=environment,
+        env=version_environment,
     )
     version = tool_version(
-        command,
+        copilot_container_command(version_environment, workspace, include_credentials=False),
         "Copilot CLI",
         cwd=workspace,
-        env=environment,
+        env=version_environment,
     )
     args = [
         *command,
@@ -2644,7 +2655,7 @@ def copilot_review(
             env=environment,
         )
     except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"Copilot CLI exact-diff review timed out after {agent['timeout_seconds']} seconds") from exc
+        raise RuntimeError(f"Copilot review timed out: {agent['timeout_seconds']}s") from exc
     completed_at = now_utc()
     review = result.stdout
     final_line = next(
@@ -2652,16 +2663,16 @@ def copilot_review(
         "",
     )
     if tree_fingerprint() != expected_tree_fingerprint:
-        raise RuntimeError("Copilot CLI exact-diff review modified the reviewed Git tree")
+        raise RuntimeError("Copilot changed reviewed tree")
     if (
         result.returncode
         or final_line != PASS_MARKER
         or any(line.strip() == BLOCKED_MARKER for line in review.splitlines())
     ):
         print(review)
-        raise RuntimeError("Copilot CLI exact-diff review did not produce a passing result")
+        raise RuntimeError("Copilot review did not pass")
     if COPILOT_DEVTOOL_IMAGE not in command:
-        raise RuntimeError("Copilot CLI is not bound to the pinned Devtool image")
+        raise RuntimeError("Copilot image is not pinned")
     print(review)
     return {
         "agent": "copilot",
@@ -2792,19 +2803,19 @@ def codex_review(
                 env=environment,
             )
         except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(f"Codex review timed out after {agent['timeout_seconds']} seconds") from exc
+            raise RuntimeError(f"Codex review timed out: {agent['timeout_seconds']}s") from exc
         if not output.is_file():
             if result.stdout:
                 print(result.stdout)
-            raise RuntimeError("Codex review did not produce structured output")
+            raise RuntimeError("Codex output is unstructured")
         raw_review = output.read_text(encoding="utf-8")
     completed_at = now_utc()
     if tree_fingerprint() != expected_tree_fingerprint:
-        raise RuntimeError("Codex review modified the reviewed Git tree")
+        raise RuntimeError("Codex changed reviewed tree")
     try:
         review = json.loads(raw_review)
     except json.JSONDecodeError as exc:
-        raise RuntimeError("Codex review output is not valid JSON") from exc
+        raise RuntimeError("Codex output is not JSON") from exc
     valid_shape = (
         isinstance(review, dict)
         and set(review) == {"verdict", "summary", "findings"}
@@ -2819,10 +2830,10 @@ def codex_review(
         )
     )
     if not valid_shape:
-        raise RuntimeError("Codex review output does not match the required schema")
+        raise RuntimeError("Codex output schema is invalid")
     if result.returncode or review.get("verdict") != "pass" or review.get("findings") != []:
         print(raw_review)
-        raise RuntimeError("Codex review did not produce a passing result")
+        raise RuntimeError("Codex review did not pass")
     print(raw_review)
     return {
         "agent": "codex",
@@ -3224,10 +3235,10 @@ def verify_pre_push_updates(
 ) -> None:
     supplied_remote = governed_push_remote_from_url(remote_name, remote_url)
     if payload.get("push_remote") != supplied_remote:
-        raise RuntimeError("pre-push remote does not match the reviewed GitHub origin")
+        raise RuntimeError("pre-push remote differs from evidence")
     updates = [line for line in hook_input.splitlines() if line.strip()]
     if not updates:
-        raise RuntimeError("pre-push requires Git hook update input; use `verify` for a manual evidence check")
+        raise RuntimeError("pre-push update input is missing")
     if len(updates) != 1:
         raise RuntimeError(
             "push-ready evidence authorizes exactly one branch update; push "
@@ -3238,7 +3249,7 @@ def verify_pre_push_updates(
     for line in updates:
         fields = line.split()
         if len(fields) != 4:
-            raise RuntimeError("pre-push received malformed Git hook input")
+            raise RuntimeError("malformed pre-push input")
         local_ref, local_oid, remote_ref, remote_oid = fields
         if (
             local_ref != expected_branch
@@ -3247,7 +3258,7 @@ def verify_pre_push_updates(
             or not is_full_git_object_id(local_oid)
             or not is_full_git_object_id(remote_oid)
         ):
-            raise RuntimeError("pre-push received an unsafe ref update")
+            raise RuntimeError("unsafe pre-push ref update")
         if set(local_oid) == {"0"}:
             raise RuntimeError("evidence forbids ref deletion")
         creates_remote_branch = set(remote_oid) == {"0"}
@@ -3258,7 +3269,7 @@ def verify_pre_push_updates(
             f"{local_oid}^{{commit}}",
         ).strip()
         if pushed_commit != expected_head:
-            raise RuntimeError("pre-push ref update is not bound to the reviewed evidence HEAD")
+            raise RuntimeError("pre-push head is not bound")
         if not creates_remote_branch:
             ancestry = run(
                 ["git", "merge-base", "--is-ancestor", remote_oid, local_oid],
