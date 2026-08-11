@@ -243,6 +243,8 @@ class PushReadyEngineTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "unsafe local Git configuration"):
                 quality["check_embedded_code"]()
             self.assertFalse(canary.exists())
+            with self.assertRaises(subprocess.CalledProcessError):
+                quality["check_embedded_code"](["staged.MD"])
 
             quality["assert_file"].__globals__["ROOT"] = repository
             outside = root / "outside.md"

@@ -383,77 +383,62 @@ def check_markdown() -> None:
             raise AssertionError(f"{path.name} must end with a newline")
 
 
-def check_embedded_code() -> None:
-    git = shutil.which("git")
-    if git is None:
-        raise AssertionError("git is required for embedded-code validation")
-    environment = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
-    environment.update({"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull})
-    configured = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
-        [git, "config", "--local", "--no-includes", "--null", "--name-only", "--list"],
-        cwd=ROOT,
-        env=environment,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    unsafe = []
-    for name in configured.stdout.split("\0"):
-        lowered = name.lower()
-        if (
-            lowered in {"core.attributesfile", "core.fsmonitor", "core.hookspath"}
-            or lowered.startswith(("filter.", "include."))
-            or (lowered.startswith("merge.") and lowered.endswith(".driver"))
-        ):
-            unsafe.append(name)
-    if configured.returncode or unsafe:
-        raise AssertionError("unsafe local Git configuration: " + ", ".join(sorted(unsafe)))
-    merge_base_result = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
-        [
-            git,
-            "merge-base",
-            "refs/remotes/origin/develop",
-            "HEAD",
-        ],
-        cwd=ROOT,
-        env=environment,
-        text=True,
-        encoding="utf-8",
-        capture_output=True,
-        check=False,
-    )
-    merge_base = merge_base_result.stdout.strip()
-    if merge_base_result.returncode or not merge_base:
-        details = merge_base_result.stderr.strip()
-        raise AssertionError(
-            "cannot resolve the authoritative Markdown validation merge base" + (f": {details}" if details else "")
-        )
-    changed_paths: set[str] = set()
-    for scope in ((f"{merge_base}...HEAD",), ("--cached",), ()):
-        result = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
-            [
-                git,
-                "diff",
-                "--name-only",
-                "--diff-filter=ACMR",
-                "-z",
-                *scope,
-                "--",
-            ],
+def check_embedded_code(markdown_paths: list[str] | None = None) -> None:
+    if markdown_paths is None:
+        git = shutil.which("git")
+        if git is None:
+            raise AssertionError("git is required for embedded-code validation")
+        environment = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+        environment.update({"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull})
+        configured = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
+            [git, "config", "--local", "--no-includes", "--null", "--name-only", "--list"],
             cwd=ROOT,
             env=environment,
             text=True,
-            encoding="utf-8",
-            errors="surrogateescape",
             capture_output=True,
             check=False,
         )
-        if result.returncode:
-            details = result.stderr.strip()
-            raise AssertionError(
-                "cannot enumerate committed, staged, and worktree Markdown files" + (f": {details}" if details else "")
+        unsafe = []
+        for name in configured.stdout.split("\0"):
+            lowered = name.lower()
+            if (
+                lowered in {"core.attributesfile", "core.fsmonitor", "core.hookspath"}
+                or lowered.startswith(("filter.", "include."))
+                or (lowered.startswith("merge.") and lowered.endswith(".driver"))
+            ):
+                unsafe.append(name)
+        if configured.returncode or unsafe:
+            details = configured.stderr.strip() or ", ".join(sorted(unsafe))
+            raise AssertionError("unsafe local Git configuration: " + details)
+        merge_base = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
+            [git, "merge-base", "refs/remotes/origin/develop", "HEAD"],
+            cwd=ROOT,
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        ).stdout.strip()
+        if not merge_base:
+            raise AssertionError("cannot resolve Markdown validation merge base")
+        changed_paths: set[str] = set()
+        for scope in ((f"{merge_base}...HEAD",), ("--cached",), ()):
+            result = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
+                [git, "diff", "--name-only", "--diff-filter=ACMR", "-z", *scope, "--"],
+                cwd=ROOT,
+                env=environment,
+                text=True,
+                errors="surrogateescape",
+                capture_output=True,
+                check=False,
             )
-        changed_paths.update(path for path in result.stdout.split("\0") if path)
+            if result.returncode:
+                raise AssertionError("cannot enumerate changed Markdown")
+            changed_paths.update(path for path in result.stdout.split("\0") if path)
+        markdown_paths = list(changed_paths)
+    elif len(markdown_paths) != len(set(markdown_paths)):
+        raise AssertionError("changed Markdown paths must be unique")
+    else:
+        changed_paths = set(markdown_paths)
     markdown_paths = sorted(path for path in changed_paths if Path(path).suffix.lower() == ".md")
     if markdown_paths:
         validator = ROOT / "scripts" / "validate-embedded-code.py"
@@ -579,11 +564,14 @@ def check_managed_assets() -> None:
 
 def main() -> int:
     try:
+        arguments = sys.argv[1:]
+        if arguments and arguments.pop(0) != "--changed-markdown":
+            raise AssertionError("unsupported argument")
         meta = metadata()
         check_generated_docs(meta)
         check_secret_safe_generated_docs()
         check_markdown()
-        check_embedded_code()
+        check_embedded_code(arguments if sys.argv[1:] else None)
         check_managed_assets()
         repo_type = meta.get("repository_type", "")
         check_terraform(repo_type)

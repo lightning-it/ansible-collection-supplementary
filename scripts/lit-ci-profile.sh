@@ -50,6 +50,14 @@ git show-ref --verify --quiet "$BASE_REF" \
 merge_base="$(git merge-base "$BASE_REF" HEAD)" \
   || fail_closed "cannot resolve authoritative merge base"
 [ -n "$merge_base" ] || fail_closed "authoritative merge base is empty"
+changed_markdown=()
+git diff --name-only --diff-filter=ACMR "$merge_base...HEAD" -- >/dev/null \
+  || fail_closed "cannot enumerate changed Markdown"
+while IFS= read -r -d '' path; do
+  case "$path" in
+    *.[mM][dD]) changed_markdown+=("$path") ;;
+  esac
+done < <(git diff --name-only --diff-filter=ACMR -z "$merge_base...HEAD" --)
 
 fingerprint() {
   {
@@ -113,7 +121,8 @@ printf '==> Verify Codex and Copilot instruction binding\n'
 python3 scripts/lit-push-ready.py instructions
 
 printf '==> Run repository quality in the pinned Devtool\n'
-run_devtools "$quality_network" python3 scripts/lit-repository-quality.py
+run_devtools "$quality_network" python3 scripts/lit-repository-quality.py \
+  --changed-markdown "${changed_markdown[@]}"
 
 if [ -d tests ] && find tests -type f -name 'test*.py' -print -quit \
   | grep -q .

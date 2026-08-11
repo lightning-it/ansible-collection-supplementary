@@ -128,29 +128,29 @@ TRUSTED_CHECK_POLICY_PATHS = (
 PARITY_GAPS = (
     {
         "id": "copilot-review-surface",
-        "local": "GitHub Copilot CLI read-only exact-diff review",
-        "remote": "GitHub Copilot pull-request code review on the current head SHA",
-        "status": "not-identical-by-product-design",
+        "local": "Copilot CLI exact-diff review",
+        "remote": "Copilot PR review at current head",
+        "status": "product-specific",
         "remote_gate_required": True,
     },
     {
         "id": "github-actions-runtime",
-        "local": "repository-declared deterministic checks",
-        "remote": "GitHub-hosted or self-hosted workflow runners and services",
-        "status": "remote-only-environment",
+        "local": "repository checks",
+        "remote": "workflow runners and services",
+        "status": "remote-runtime",
         "remote_gate_required": True,
     },
     {
         "id": "github-authorization",
-        "local": "no GitHub write-token or branch-policy exercise",
-        "remote": "GitHub App, token, environment, and branch-policy behavior",
-        "status": "remote-only-authorization",
+        "local": "no GitHub write or policy exercise",
+        "remote": "App, token, environment, and branch policy",
+        "status": "remote-authorization",
         "remote_gate_required": True,
     },
 )
 LOCAL_EVIDENCE_TRUST = {
-    "level": "developer-controlled-advisory",
-    "purpose": "local staleness and workflow enforcement",
+    "level": "developer-advisory",
+    "purpose": "staleness and hook enforcement",
     "security_attestation": False,
     "remote_gate_required": True,
 }
@@ -516,16 +516,13 @@ def reject_hidden_index_entries() -> None:
         if not entry:
             continue
         if len(entry) < 3 or entry[1] != " ":
-            raise RuntimeError("Git returned a malformed index visibility entry")
+            raise RuntimeError("malformed Git index entry")
         marker = entry[0]
         if marker == "S" or marker.islower():
             hidden.append(entry[2:])
     if hidden:
         preview = ", ".join(sorted(hidden)[:20])
-        raise RuntimeError(
-            "push-ready does not support assume-unchanged, skip-worktree, "
-            f"or sparse index entries; clear hidden flags for: {preview}"
-        )
+        raise RuntimeError(f"hidden index entries are forbidden: {preview}")
 
 
 def require_policy_files_committed() -> None:
@@ -562,10 +559,7 @@ def require_clean_head() -> None:
     require_policy_files_committed()
     status_value = git_output("status", "--porcelain=v1", "--untracked-files=all", "-z")
     if status_value:
-        raise RuntimeError(
-            "push-ready requires a clean committed HEAD; commit or remove "
-            "staged, unstaged, and untracked changes, then rerun"
-        )
+        raise RuntimeError("clean committed HEAD required")
 
 
 def current_branch_ref() -> str:
@@ -586,10 +580,10 @@ def github_https_authorization() -> str:
             timeout=30,
         )
         if result.returncode:
-            raise RuntimeError("GitHub HTTPS origin requires GH_TOKEN, GITHUB_TOKEN, or an authenticated gh session")
+            raise RuntimeError("GitHub origin authentication unavailable")
         token = result.stdout.strip()
     if not token or len(token) > 4096 or any(ord(character) < 32 or ord(character) == 127 for character in token):
-        raise RuntimeError("GitHub HTTPS authentication token is invalid")
+        raise RuntimeError("GitHub token is invalid")
     credentials = base64.b64encode(f"x-access-token:{token}".encode()).decode("ascii")
     return f"AUTHORIZATION: basic {credentials}"
 
@@ -1850,14 +1844,14 @@ def checkout_sanitized_commit(
     hooks: Path,
 ) -> None:
     if not is_full_git_object_id(commit):
-        raise RuntimeError("review commit ID is invalid")
+        raise RuntimeError("invalid review commit")
     object_format = git_output_at(
         source,
         "rev-parse",
         "--show-object-format",
     ).strip()
     if object_format not in {"sha1", "sha256"}:
-        raise RuntimeError("unsupported Git object format")
+        raise RuntimeError("unsupported object format")
     initialized = run(
         [
             "git",
@@ -2062,9 +2056,7 @@ def sanitized_review_workspace(
                     cwd=builder,
                 )
                 if applied.returncode:
-                    raise RuntimeError(
-                        "could not apply exact patch in sanitized review builder: " + applied.stdout.strip()
-                    )
+                    raise RuntimeError("review patch failed: " + applied.stdout.strip())
             actual_tree = git_output_at(builder, "write-tree").strip()
             integration_tree = expected_integration_tree(change) if not source_status else actual_tree
             if actual_tree != integration_tree:
@@ -2147,9 +2139,7 @@ def ensure_workspace_review_safe(
             path=name,
         )
         if any(pattern.search(scanned_value) for pattern in SECRET_CONTENT_PATTERNS):
-            raise RuntimeError(
-                f"local review refused because the tracked review snapshot contains secret-like content in {name}"
-            )
+            raise RuntimeError(f"secret-like review content: {name}")
     if unsafe_paths:
         raise RuntimeError("secret-like tracked paths: " + ", ".join(sorted(unsafe_paths)))
 
@@ -2165,11 +2155,11 @@ def tracked_instruction_bundle(workspace: Path) -> str:
         payload = candidate.read_bytes()
         total += len(payload)
         if total > 2_000_000:
-            raise RuntimeError("tracked instruction bundle exceeds 2 MB")
+            raise RuntimeError("instructions exceed 2 MB")
         try:
             text_value = payload.decode("utf-8")
         except UnicodeDecodeError as exc:
-            raise RuntimeError(f"tracked instruction is not UTF-8: {name}") from exc
+            raise RuntimeError(f"instruction is not UTF-8: {name}") from exc
         chunks.append(f"----- BEGIN {name} -----\n{text_value}\n----- END {name} -----")
     if not any(chunk.startswith("----- BEGIN AGENTS.md -----") for chunk in chunks):
         raise RuntimeError("review lacks tracked AGENTS.md")
