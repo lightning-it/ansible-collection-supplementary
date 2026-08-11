@@ -12,6 +12,26 @@
       - alloy_deploy_host_ip | default('', true) | trim | length > 0
       - alloy_deploy_port | int > 0
       - alloy_deploy_loki_url | default('', true) | trim | length > 0
+      - alloy_deploy_loki_tls_enabled is boolean
+      - alloy_deploy_loki_tls_insecure_skip_verify is boolean
+      - >-
+        not alloy_deploy_loki_tls_enabled | bool or
+        alloy_deploy_loki_tls_ca_file | trim | length > 0
+      - >-
+        not alloy_deploy_loki_tls_enabled | bool or
+        alloy_deploy_loki_tls_cert_file | trim | length > 0
+      - >-
+        not alloy_deploy_loki_tls_enabled | bool or
+        alloy_deploy_loki_tls_key_file | trim | length > 0
+      - >-
+        not alloy_deploy_loki_tls_enabled | bool or
+        alloy_deploy_loki_tls_ca_content | trim | length > 0
+      - >-
+        not alloy_deploy_loki_tls_enabled | bool or
+        alloy_deploy_loki_tls_cert_content | trim | length > 0
+      - >-
+        not alloy_deploy_loki_tls_enabled | bool or
+        alloy_deploy_loki_tls_key_content | trim | length > 0
       - alloy_deploy_collect_journald is boolean
       - alloy_deploy_collect_vault_audit_logs is boolean
       - alloy_deploy_install_packages is boolean

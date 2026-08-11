@@ -13,7 +13,34 @@
       mode: '0750'
     - path: "{{ alloy_deploy_pod_manifest_path | dirname }}"
       mode: '0755'
+    - path: "{{ alloy_deploy_tls_dir }}"
+      mode: '0700'
   when: item.path | default('') | length > 0
+  notify:
+    - Recreate Alloy pod
+    - Run Alloy pod
+  tags:
+    - deployment
+
+- name: Install the Alloy Loki mTLS trust and client identity
+  ansible.builtin.copy:
+    dest: "{{ item.dest }}"
+    content: "{{ item.content }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - dest: "{{ alloy_deploy_tls_dir }}/{{ alloy_deploy_loki_tls_ca_file | basename }}"
+      content: "{{ alloy_deploy_loki_tls_ca_content }}"
+      mode: '0644'
+    - dest: "{{ alloy_deploy_tls_dir }}/{{ alloy_deploy_loki_tls_cert_file | basename }}"
+      content: "{{ alloy_deploy_loki_tls_cert_content }}"
+      mode: '0644'
+    - dest: "{{ alloy_deploy_tls_dir }}/{{ alloy_deploy_loki_tls_key_file | basename }}"
+      content: "{{ alloy_deploy_loki_tls_key_content }}"
+      mode: '0600'
+  no_log: true
+  when: alloy_deploy_loki_tls_enabled | bool
   notify:
     - Recreate Alloy pod
     - Run Alloy pod

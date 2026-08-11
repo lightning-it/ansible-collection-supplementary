@@ -21,6 +21,9 @@ Key variables:
 - `nginx_config_tls_certificate_key_file_source`
 - `nginx_config_tls_file_remote_src`
 - `nginx_config_vault_address`
+- `nginx_config_vault_ca_cert`
+- `nginx_config_vault_namespace`
+- `nginx_config_vault_auth_mount_point`
 - `nginx_config_vault_kv_mount`
 - `nginx_config_vault_kv_path`
 - `nginx_config_vault_pki_path`

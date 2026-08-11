@@ -14,6 +14,17 @@ alloy_deploy_container_data_dir: "/var/lib/alloy/data"
 alloy_deploy_host_ip: "127.0.0.1"
 alloy_deploy_port: 12345
 alloy_deploy_loki_url: "http://127.0.0.1:3100/loki/api/v1/push"
+alloy_deploy_loki_tls_enabled: false
+alloy_deploy_loki_tls_ca_file: ""
+alloy_deploy_loki_tls_cert_file: ""
+alloy_deploy_loki_tls_key_file: ""
+alloy_deploy_loki_tls_server_name: ""
+alloy_deploy_loki_tls_insecure_skip_verify: false
+alloy_deploy_tls_dir: "/srv/alloy/tls"
+alloy_deploy_container_tls_dir: "/etc/alloy/tls"
+alloy_deploy_loki_tls_ca_content: ""
+alloy_deploy_loki_tls_cert_content: ""
+alloy_deploy_loki_tls_key_content: ""
 alloy_deploy_ready_url: "http://{{ alloy_deploy_host_ip }}:{{ alloy_deploy_port }}/-/ready"
 alloy_deploy_validate_certs: true
 alloy_deploy_log_level: "info"
