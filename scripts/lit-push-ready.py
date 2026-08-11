@@ -333,6 +333,9 @@ def run(
     resolved_environment = env
     if command and command[0] == "git":
         resolved_environment = isolated_git_environment(env)
+        if cwd is not None and cwd.resolve() != ROOT:
+            for name in ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE"):
+                resolved_environment.pop(name, None)
     return subprocess.run(  # noqa: S603 -- callers provide validated fixed argv.
         command,
         cwd=cwd or ROOT,
