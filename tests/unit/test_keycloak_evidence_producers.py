@@ -363,10 +363,10 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         sanitizer = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(sanitizer)
         typed_value = secrets.token_urlsafe(24)
-        token = "eyJheaderpayload.fixturepayload.signaturepayload-"
+        synthetic_jwt = "eyJheaderpayload.fixturepayload.signaturepayload-"
         authorization_code = secrets.token_urlsafe(24)
         private_cookie = secrets.token_urlsafe(24)
-        self.assertIsNotNone(sanitizer.JWT.fullmatch(token))
+        self.assertIsNotNone(sanitizer.JWT.fullmatch(synthetic_jwt))
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "raw.zip"
@@ -385,18 +385,24 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
                                     "headers": {"Cookie": f"oidc_acceptance_sid={private_cookie}"},
                                 }
                             ),
-                            json.dumps({"type": "after", "token": token, "message": f"Bearer {token}"}),
+                            json.dumps(
+                                {
+                                    "type": "after",
+                                    "token": synthetic_jwt,
+                                    "message": f"Bearer {synthetic_jwt}",
+                                }
+                            ),
                         )
                     ),
                 )
                 archive.writestr("trace.network", f"Cookie: oidc_acceptance_sid={private_cookie}")
-                archive.writestr("resources/body", token)
+                archive.writestr("resources/body", synthetic_jwt)
                 archive.writestr("trace.stacks", json.dumps({"files": ["test_acceptance.py"]}))
 
             with zipfile.ZipFile(source) as archive:
                 raw_trace = archive.read("trace.trace").decode("utf-8")
             self.assertIn(typed_value, raw_trace)
-            self.assertIn(token, raw_trace)
+            self.assertIn(synthetic_jwt, raw_trace)
             self.assertIn(authorization_code, raw_trace)
             self.assertIn(private_cookie, raw_trace)
 
@@ -408,7 +414,7 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
             self.assertIn("locator.fill", rendered)
             self.assertIn("https://id.example/callback", rendered)
             self.assertIn("[REDACTED-JWT]", rendered)
-            for forbidden in (typed_value, token, authorization_code, private_cookie, "?code="):
+            for forbidden in (typed_value, synthetic_jwt, authorization_code, private_cookie, "?code="):
                 self.assertNotIn(forbidden, rendered)
 
 
