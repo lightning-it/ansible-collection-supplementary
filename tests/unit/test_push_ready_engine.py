@@ -22,6 +22,17 @@ class PushReadyEngineTests(unittest.TestCase):
         self.assertIn("scripts/lit-repository-quality.py", trusted_paths)
         self.assertIn("scripts/validate-embedded-code.py", trusted_paths)
 
+    def test_container_engine_fallback(self) -> None:
+        function_globals = ENGINE["copilot_container_command"].__globals__
+        probe = mock.Mock(side_effect=[subprocess.CompletedProcess([], code, "") for code in (1, 0)])
+        with (
+            mock.patch.object(function_globals["shutil"], "which", side_effect=("/docker", "/podman")),
+            mock.patch.dict(function_globals, {"run": probe}),
+            mock.patch.dict(os.environ, {"WUNDER_CONTAINER_ENGINE": ""}),
+        ):
+            command = ENGINE["copilot_container_command"](dict(ENGINE["COPILOT_PROMPT_MODE_BOUNDARY"]), ROOT)
+        self.assertEqual("/podman", command[0])
+
     def test_bootstrap_config(self) -> None:
         change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
         function_globals = ENGINE["require_review_bootstrap_contract"].__globals__

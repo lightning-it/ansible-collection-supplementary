@@ -15,14 +15,14 @@
       "id": "github-actions-service-boundary",
       "workflow": ".github/workflows/collection-ci.yml",
       "job": "lint-sanity",
-      "reason": "The authoritative collection lint, sanity, policy, and evidence gate requires the GitHub Actions event and service context.",
+      "reason": "GitHub Actions owns the collection gate.",
       "owner": "Lightning IT Application Platform Maintainers"
     },
     {
       "id": "copilot-current-head-review",
       "workflow": ".github/workflows/copilot-review.yml",
       "job": "current-revision-reviewed",
-      "reason": "The authoritative Copilot pull-request review is produced and bound to the current head SHA by GitHub.",
+      "reason": "GitHub binds Copilot review to the head.",
       "owner": "Lightning IT Application Platform Maintainers"
     }
   ],

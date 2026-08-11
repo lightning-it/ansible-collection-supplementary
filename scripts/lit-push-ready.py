@@ -2420,27 +2420,26 @@ def resolve_command(command: list[str], name: str) -> list[str]:
 def copilot_container_command(environment: dict[str, str], workspace: Path) -> list[str]:
     requested_engine = os.environ.get("WUNDER_CONTAINER_ENGINE")
     if requested_engine and requested_engine not in {"docker", "podman"}:
-        raise RuntimeError("WUNDER_CONTAINER_ENGINE must be docker or podman when set")
+        raise RuntimeError("invalid WUNDER_CONTAINER_ENGINE")
     engine_names = [requested_engine] if requested_engine else ["docker", "podman"]
-    engine = next(
-        (
-            resolved
-            for name in engine_names
-            if name is not None
-            for resolved in [shutil.which(name)]
-            if resolved is not None
-        ),
-        None,
-    )
+    engine = None
+    for name in engine_names:
+        resolved = shutil.which(name) if name else None
+        if resolved is None:
+            continue
+        try:
+            if run([resolved, "info"], capture=True, timeout=30, env=environment).returncode:
+                continue
+        except subprocess.TimeoutExpired:
+            continue
+        engine = resolved
+        break
     if engine is None:
-        raise RuntimeError(
-            "Copilot CLI requires either the host executable or a usable "
-            "Docker/Podman client for the pinned Devtool fallback"
-        )
+        raise RuntimeError("no usable Docker or Podman")
     if Path(engine).name == "docker":
         configured_host = os.environ.get("DOCKER_HOST")
         if configured_host and not configured_host.startswith("unix://"):
-            raise RuntimeError("containerized Copilot review refuses a non-local DOCKER_HOST")
+            raise RuntimeError("remote DOCKER_HOST is forbidden")
         socket_candidates = []
         if configured_host:
             socket_candidates.append(configured_host)
