@@ -22,6 +22,27 @@ class PushReadyEngineTests(unittest.TestCase):
         self.assertIn("scripts/lit-repository-quality.py", trusted_paths)
         self.assertIn("scripts/validate-embedded-code.py", trusted_paths)
 
+    def test_review_cli_produces_push_evidence(self) -> None:
+        config: dict[str, object] = {}
+        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
+        produced = mock.Mock()
+        replacements = {
+            "check_instruction_contract": mock.Mock(),
+            "load_config": mock.Mock(return_value=config),
+            "require_clean_head": mock.Mock(),
+            "refresh_authoritative_base": mock.Mock(),
+            "planned_change": mock.Mock(return_value=change),
+            "require_review_bootstrap_contract": mock.Mock(),
+            "produce_evidence": produced,
+        }
+        function_globals = ENGINE["main"].__globals__
+        with (
+            mock.patch.dict(function_globals, replacements),
+            mock.patch.object(function_globals["sys"], "argv", ["lit-push-ready.py", "review"]),
+        ):
+            self.assertEqual(0, ENGINE["main"]())
+        produced.assert_called_once_with(config, change, fixture_manifest_bootstrap=False)
+
     def test_pre_push_hook_rejects_stale_head(self) -> None:
         config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
         for marker in ("stages: [pre-push]", "default_install_hook_types: [pre-commit, pre-push]"):
@@ -82,6 +103,11 @@ class PushReadyEngineTests(unittest.TestCase):
                 "entry" if commit == "b" * 40 or path == ".lit/push-ready.json" else ""
             )
             with self.assertRaisesRegex(RuntimeError, "bootstrap is incomplete"):
+                ENGINE["require_review_bootstrap_contract"](change)
+            function_globals["git_tree_entry"] = lambda commit, path: (
+                "" if commit == "b" * 40 and path == ".lit/push-ready.json" else "entry"
+            )
+            with self.assertRaisesRegex(RuntimeError, "lacks policy"):
                 ENGINE["require_review_bootstrap_contract"](change)
         finally:
             function_globals["git_tree_entry"] = original

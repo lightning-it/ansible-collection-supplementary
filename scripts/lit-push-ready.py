@@ -651,13 +651,13 @@ def refresh_authoritative_base(config: dict[str, Any]) -> str:
 
 def require_nonempty_string(value: Any, description: str) -> str:
     if not isinstance(value, str) or not value or "\0" in value:
-        raise RuntimeError(f"{description} must be a non-empty string")
+        raise RuntimeError(f"{description} must be non-empty")
     return value
 
 
 def require_positive_integer(value: Any, description: str, *, maximum: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0 or value > maximum:
-        raise RuntimeError(f"{description} must be an integer between 1 and {maximum}")
+        raise RuntimeError(f"{description} must be 1..{maximum}")
     return value
 
 
@@ -667,7 +667,7 @@ def validate_command(value: Any, description: str) -> list[str]:
         or not value
         or any(not isinstance(argument, str) or not argument for argument in value)
     ):
-        raise RuntimeError(f"{description} must be a non-empty command array of non-empty strings")
+        raise RuntimeError(f"{description} must be a non-empty string array")
     return value
 
 
@@ -677,12 +677,12 @@ def validate_agent_config(name: str, value: Any) -> None:
     enabled = value.get("enabled")
     required = value.get("required")
     if not isinstance(enabled, bool) or not isinstance(required, bool):
-        raise RuntimeError(f"agents.{name}.enabled and agents.{name}.required must be booleans")
+        raise RuntimeError(f"agents.{name} flags must be booleans")
     if enabled is not True or required is not True:
-        raise RuntimeError(f"agents.{name} must be enabled and required by the v2 policy")
+        raise RuntimeError(f"agents.{name} must be required")
     command = validate_command(value.get("command"), f"agents.{name}.command")
     if command != [name]:
-        raise RuntimeError(f"agents.{name}.command is centrally fixed to [{name!r}]")
+        raise RuntimeError(f"agents.{name}.command must be [{name!r}]")
     require_positive_integer(
         value.get("timeout_seconds"),
         f"agents.{name}.timeout_seconds",
@@ -697,12 +697,12 @@ def validate_agent_config(name: str, value: Any) -> None:
 
 def validate_remote_only_checks(value: Any) -> None:
     if not isinstance(value, list) or not value:
-        raise RuntimeError("remote_only_checks must be a non-empty array of gap objects")
+        raise RuntimeError("remote_only_checks must be non-empty")
     identifiers: list[str] = []
     required_keys = {"id", "workflow", "job", "reason", "owner"}
     for item in value:
         if not isinstance(item, dict) or set(item) != required_keys:
-            raise RuntimeError("each remote_only_checks item must define exactly id, workflow, job, reason, and owner")
+            raise RuntimeError("remote_only_checks keys are invalid")
         identifier = require_nonempty_string(item.get("id"), "remote_only_checks id")
         workflow = require_nonempty_string(item.get("workflow"), "remote_only_checks workflow")
         job = require_nonempty_string(item.get("job"), "remote_only_checks job")
@@ -714,11 +714,11 @@ def validate_remote_only_checks(value: Any) -> None:
             r"\.github/workflows/[A-Za-z0-9_.-]+\.(?:yml|yaml)",
             workflow,
         ):
-            raise RuntimeError("remote_only_checks workflow must name a repository workflow")
+            raise RuntimeError("remote_only_checks workflow is invalid")
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", job):
             raise RuntimeError("remote_only_checks job is unsafe")
         if len(reason) > 1_000 or len(owner) > 200:
-            raise RuntimeError("remote_only_checks text is unreasonably large")
+            raise RuntimeError("remote_only_checks text is too large")
         identifiers.append(identifier)
     if len(identifiers) != len(set(identifiers)):
         raise RuntimeError("remote_only_checks ids must be unique")
@@ -727,7 +727,7 @@ def validate_remote_only_checks(value: Any) -> None:
 def load_config() -> dict[str, Any]:
     reject_hidden_index_entries()
     if not CONFIG.is_file() or CONFIG.is_symlink():
-        raise RuntimeError(f"missing required regular configuration: {CONFIG.relative_to(ROOT)}")
+        raise RuntimeError(f"configuration is missing: {CONFIG.relative_to(ROOT)}")
     if CONFIG.stat().st_size > MAX_CONFIG_BYTES:
         raise RuntimeError("configuration is too large")
     data = json.loads(CONFIG.read_text(encoding="utf-8"))
@@ -737,17 +737,15 @@ def load_config() -> dict[str, Any]:
         or not isinstance(data.get("checks"), list)
         or not data.get("checks")
     ):
-        raise RuntimeError("version 2 configuration must define checks")
+        raise RuntimeError("version 2 must define checks")
     base_ref = require_nonempty_string(data.get("base_ref"), "base_ref")
     if base_ref not in AUTHORITATIVE_BASE_REFS:
-        raise RuntimeError(
-            "base_ref must be a centrally governed remote-tracking ref: " + ", ".join(sorted(AUTHORITATIVE_BASE_REFS))
-        )
+        raise RuntimeError("base_ref is not governed: " + ", ".join(sorted(AUTHORITATIVE_BASE_REFS)))
     if data["checks"] != [CHECK_PROFILE]:
-        raise RuntimeError("checks must contain exactly the centrally allowlisted repository-quality profile")
+        raise RuntimeError("checks differ from the quality profile")
     agents = data.get("agents")
     if not isinstance(agents, dict) or set(agents) != {"copilot", "codex"}:
-        raise RuntimeError("agents must define exactly copilot and codex")
+        raise RuntimeError("agents must be copilot and codex")
     for name in ("copilot", "codex"):
         validate_agent_config(name, agents[name])
     review = data.get("review")
@@ -798,15 +796,15 @@ def check_instruction_contract() -> None:
     expected = instructions_digest()
     marker = f"<!-- AGENTS_SHA256: {expected} -->"
     if not COPILOT.is_file() or COPILOT.is_symlink():
-        raise RuntimeError("AGENTS.md and .github/copilot-instructions.md are required regular files")
+        raise RuntimeError("review instructions are missing or unsafe")
     lines = COPILOT.read_text(encoding="utf-8").splitlines()
     if lines[-2:] != [CONTRACT_LINE, marker]:
-        raise RuntimeError("Copilot instructions are stale; run `python3 scripts/lit-push-ready.py sync-instructions`")
+        raise RuntimeError("Copilot instructions are stale; run sync-instructions")
 
 
 def sync_instructions() -> None:
     if not AGENTS.is_file() or AGENTS.is_symlink() or not COPILOT.is_file() or COPILOT.is_symlink():
-        raise RuntimeError("AGENTS.md and .github/copilot-instructions.md are required regular files")
+        raise RuntimeError("review instructions are missing or unsafe")
     lines = COPILOT.read_text(encoding="utf-8").splitlines()
     lines = [line for line in lines if not line.startswith("<!-- AGENTS_SHA256:") and line != CONTRACT_LINE]
     while lines and not lines[-1]:
@@ -954,10 +952,7 @@ def expected_integration_tree(change: PlannedChange) -> str:
     )
     lines = merged.stdout.splitlines()
     if merged.returncode or not lines or not is_full_git_object_id(lines[0]):
-        raise RuntimeError(
-            "the reviewed HEAD does not merge cleanly with the "
-            f"authoritative base {change.base_tip}: {merged.stdout.strip()}"
-        )
+        raise RuntimeError(f"HEAD conflicts with base {change.base_tip}: {merged.stdout.strip()}")
     return lines[0].lower()
 
 
@@ -967,7 +962,7 @@ def git_tree_entry(commit: str, path: str) -> str:
         capture=True,
     )
     if result.returncode:
-        raise RuntimeError(f"cannot inspect governed check-policy path: {path}")
+        raise RuntimeError(f"cannot inspect policy path: {path}")
     return result.stdout
 
 
@@ -992,14 +987,9 @@ def require_trusted_check_policy(
         base_entry = git_tree_entry(change.base_tip, path)
         head_entry = git_tree_entry(change.head_commit, path)
         if path in required_paths and (not base_entry or not head_entry):
-            raise RuntimeError(f"required check-policy path is missing: {path}")
+            raise RuntimeError(f"required policy path is missing: {path}")
         if base_entry != head_entry:
-            raise RuntimeError(
-                "local execution refused because executable check policy "
-                f"differs from authoritative base: {path}. Policy bootstrap "
-                "changes require protected CI review before later feature "
-                "branches can produce push-ready evidence."
-            )
+            raise RuntimeError(f"policy differs from base: {path}; use trust-root review")
 
 
 def require_review_bootstrap_contract(change: PlannedChange) -> None:
@@ -1010,6 +1000,8 @@ def require_review_bootstrap_contract(change: PlannedChange) -> None:
     required_paths = (".lit/push-ready.json", "scripts/lit-ci-profile.sh", running_engine)
     base_entries = [git_tree_entry(change.base_tip, path) for path in required_paths]
     if all(base_entries):
+        if not all(git_tree_entry(change.head_commit, path) for path in required_paths):
+            raise RuntimeError("trust-root review lacks policy")
         return
     if any(base_entries):
         raise RuntimeError("trust-root bootstrap is incomplete on base")
@@ -1128,10 +1120,7 @@ def create_integration_directory() -> tuple[Path, tuple[int, int, int, int]]:
             except FileExistsError:
                 continue
             except OSError as exc:
-                raise RuntimeError(
-                    "could not create a private integration directory below "
-                    "the repository; the checkout must be writable and executable"
-                ) from exc
+                raise RuntimeError("integration directory creation failed") from exc
             created_name = candidate
             break
         if created_name is None:
@@ -1213,9 +1202,7 @@ def remove_integration_directory(directory: Path, identity: tuple[int, int, int,
         try:
             os.rmdir(directory.name, dir_fd=root_descriptor)
         except OSError as exc:
-            raise RuntimeError(
-                "integration directory is not empty; recursive cleanup was refused to protect unrelated data"
-            ) from exc
+            raise RuntimeError("integration directory is not empty") from exc
     finally:
         os.close(root_descriptor)
 
@@ -1231,9 +1218,7 @@ def isolated_integration_directory():
             remove_integration_directory(directory, identity)
         except RuntimeError as cleanup_error:
             if active_error is not None:
-                raise RuntimeError(
-                    f"{active_error}; integration cleanup also failed: {cleanup_error}"
-                ) from active_error
+                raise RuntimeError(f"{active_error}; cleanup failed: {cleanup_error}") from active_error
             raise
 
 
@@ -1304,10 +1289,7 @@ def execute_integration_checks(
             checks = execute_checks(config, cwd=worktree)
             after = integration_worktree_fingerprint(worktree)
             if after != before:
-                raise RuntimeError(
-                    "a deterministic check changed the isolated integration "
-                    "checkout; commit the intended output and rerun"
-                )
+                raise RuntimeError("a check changed the integration checkout")
             return checks, integration_tree, integration_commit, before
         finally:
             if (
@@ -3295,6 +3277,42 @@ def pre_commit_push_context() -> tuple[str, str, str]:
     return remote_name, remote_url, f"{local_ref} {local_oid} {remote_ref} {remote_oid}\n"
 
 
+def produce_evidence(
+    config: dict[str, Any],
+    change: PlannedChange,
+    *,
+    fixture_manifest_bootstrap: bool,
+) -> None:
+    branch = current_branch_ref()
+    started_at, started = now_utc(), time.monotonic()
+    checks, tree, commit, fingerprint = execute_integration_checks(config, change)
+    require_clean_head()
+    if (
+        git_output("rev-parse", "HEAD").strip() != change.head_commit
+        or current_branch_ref() != branch
+        or tree_fingerprint() != change.tree_fingerprint
+    ):
+        raise RuntimeError("checks changed branch or tree")
+    current = planned_change(config, fixture_manifest_bootstrap=fixture_manifest_bootstrap)
+    if current != change:
+        raise RuntimeError("change binding drifted")
+    reviews = run_agent_reviews(config, current, fixture_manifest_bootstrap=fixture_manifest_bootstrap)
+    write_evidence(
+        config,
+        checks,
+        reviews,
+        current,
+        started_at=started_at,
+        started_monotonic=started,
+        integration_tree=tree,
+        integration_commit=commit,
+        integration_fingerprint=fingerprint,
+        fixture_manifest_bootstrap=fixture_manifest_bootstrap,
+    )
+    verify_evidence(config)
+    print(f"Push-ready evidence: {evidence_path()}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -3369,28 +3387,25 @@ def main() -> int:
             require_clean_head()
             refresh_authoritative_base(config)
             change = planned_change(config)
-            require_trusted_check_policy(change)
+            require_review_bootstrap_contract(change)
             execute_integration_checks(config, change)
             return 0
         if args.command == "review":
-            if args.fixture_manifest_bootstrap:
-                require_clean_head()
+            require_clean_head()
+            if not args.base:
+                refresh_authoritative_base(config)
             change = planned_change(
                 config,
                 base_override=args.base,
                 fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
             )
             require_review_bootstrap_contract(change)
-            run_agent_reviews(
-                config,
-                change,
-                fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
-            )
+            if args.base:
+                run_agent_reviews(config, change, fixture_manifest_bootstrap=args.fixture_manifest_bootstrap)
+            else:
+                produce_evidence(config, change, fixture_manifest_bootstrap=args.fixture_manifest_bootstrap)
             return 0
         require_clean_head()
-        original_head = git_output("rev-parse", "HEAD").strip()
-        original_branch = current_branch_ref()
-        original_tree_fingerprint = tree_fingerprint()
         refresh_authoritative_base(config)
         change = planned_change(
             config,
@@ -3400,44 +3415,7 @@ def main() -> int:
             change,
             allow_fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
         )
-        started_at = now_utc()
-        started = time.monotonic()
-        (
-            checks,
-            integration_tree,
-            integration_commit,
-            integration_fingerprint,
-        ) = execute_integration_checks(config, change)
-        require_clean_head()
-        if (
-            git_output("rev-parse", "HEAD").strip() != original_head
-            or current_branch_ref() != original_branch
-            or tree_fingerprint() != original_tree_fingerprint
-        ):
-            raise RuntimeError("checks changed branch or tree")
-        change = planned_change(
-            config,
-            fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
-        )
-        reviews = run_agent_reviews(
-            config,
-            change,
-            fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
-        )
-        write_evidence(
-            config,
-            checks,
-            reviews,
-            change,
-            started_at=started_at,
-            started_monotonic=started,
-            integration_tree=integration_tree,
-            integration_commit=integration_commit,
-            integration_fingerprint=integration_fingerprint,
-            fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
-        )
-        verify_evidence(config)
-        print(f"Push-ready evidence: {evidence_path()}")
+        produce_evidence(config, change, fixture_manifest_bootstrap=args.fixture_manifest_bootstrap)
         return 0
     except (
         OSError,
