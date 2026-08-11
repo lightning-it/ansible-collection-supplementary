@@ -5,4 +5,6 @@ security_fixes:
     current-head patch, rejects unsafe review inputs, and records only
     non-secret integrity evidence before a normal protected-branch push. Its
     temporary working directory also keeps nested container-wrapper probes
-    independent from linked-worktree Git metadata.
+    independent from linked-worktree Git metadata. The initial foundation uses
+    a review-only, all-or-nothing trust-root bootstrap; validate and push-ready
+    evidence become available only after the protected foundation merge.

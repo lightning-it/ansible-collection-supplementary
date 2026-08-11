@@ -18,9 +18,11 @@ import sys
 import tempfile
 import time
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, NamedTuple
+
+UTC = timezone.utc  # noqa: UP017 -- the host-side entrypoint supports Python 3.9.
 
 ENGINE_PATH = Path(__file__)
 if ENGINE_PATH.is_symlink():
@@ -938,136 +940,23 @@ def git_output_at(cwd: Path, *args: str) -> str:
 
 def expected_integration_tree(change: PlannedChange) -> str:
     assert_safe_git_configuration(ROOT)
-    with isolated_integration_directory() as temporary:
-        worktree = temporary / "merge-tree-worktree"
-        disabled_hooks = temporary / "disabled-hooks"
-        disabled_hooks.mkdir(mode=0o700)
-        added = run(
-            [
-                "git",
-                "-c",
-                f"core.hooksPath={disabled_hooks}",
-                "worktree",
-                "add",
-                "--detach",
-                str(worktree),
-                change.base_tip,
-            ],
-            capture=True,
+    merged = run(
+        [
+            "git",
+            "merge-tree",
+            "--write-tree",
+            change.base_tip,
+            change.head_commit,
+        ],
+        capture=True,
+    )
+    lines = merged.stdout.splitlines()
+    if merged.returncode or not lines or not is_full_git_object_id(lines[0]):
+        raise RuntimeError(
+            "the reviewed HEAD does not merge cleanly with the "
+            f"authoritative base {change.base_tip}: {merged.stdout.strip()}"
         )
-        if added.returncode:
-            raise RuntimeError("could not create the compatibility merge worktree: " + added.stdout.strip())
-        worktree_identity = directory_identity(
-            worktree,
-            purpose="compatibility merge worktree",
-        )
-        try:
-            refreshed = run(
-                [
-                    "git",
-                    "-c",
-                    f"core.hooksPath={disabled_hooks}",
-                    "update-index",
-                    "--refresh",
-                ],
-                capture=True,
-                cwd=worktree,
-            )
-            if refreshed.returncode:
-                raise RuntimeError(
-                    "could not refresh the compatibility merge worktree index: " + refreshed.stdout.strip()
-                )
-            merged = run(
-                [
-                    "git",
-                    "-c",
-                    f"core.hooksPath={disabled_hooks}",
-                    "-c",
-                    "merge.autoStash=false",
-                    "-c",
-                    "user.name=Lightning IT push-ready",
-                    "-c",
-                    "user.email=push-ready@invalid",
-                    "merge",
-                    "--no-commit",
-                    "--no-ff",
-                    "--strategy=ort",
-                    change.head_commit,
-                ],
-                capture=True,
-                cwd=worktree,
-            )
-            if merged.returncode:
-                raise RuntimeError(
-                    "the reviewed HEAD does not merge cleanly with the "
-                    f"authoritative base {change.base_tip}: "
-                    f"{merged.stdout.strip()}"
-                )
-            tree = git_output_at(worktree, "write-tree").strip()
-            if not is_full_git_object_id(tree):
-                raise RuntimeError("Git returned an invalid integration tree")
-            return tree
-        finally:
-            active_error = sys.exc_info()[1]
-            cleanup_error: RuntimeError | None = None
-            try:
-                if (
-                    directory_identity(
-                        worktree,
-                        purpose="compatibility merge worktree",
-                    )
-                    != worktree_identity
-                ):
-                    raise RuntimeError("compatibility merge worktree identity changed; cleanup was refused")
-                merge_head = run(
-                    ["git", "rev-parse", "--verify", "--quiet", "MERGE_HEAD"],
-                    capture=True,
-                    cwd=worktree,
-                )
-                if merge_head.returncode == 0:
-                    aborted = run(
-                        [
-                            "git",
-                            "-c",
-                            f"core.hooksPath={disabled_hooks}",
-                            "merge",
-                            "--abort",
-                        ],
-                        capture=True,
-                        cwd=worktree,
-                    )
-                    if aborted.returncode:
-                        raise RuntimeError("could not abort the compatibility merge safely: " + aborted.stdout.strip())
-                elif merge_head.returncode != 1:
-                    raise RuntimeError("could not inspect compatibility merge state")
-                status_value = git_output_at(
-                    worktree,
-                    "status",
-                    "--porcelain=v1",
-                    "--untracked-files=all",
-                    "-z",
-                )
-                if status_value:
-                    raise RuntimeError("compatibility merge cleanup left a modified worktree")
-                removed = run(
-                    ["git", "worktree", "remove", str(worktree)],
-                    capture=True,
-                )
-                if removed.returncode:
-                    raise RuntimeError("could not remove compatibility merge worktree: " + removed.stdout.strip())
-                disabled_hooks.rmdir()
-            except (OSError, RuntimeError) as exc:
-                cleanup_error = (
-                    exc
-                    if isinstance(exc, RuntimeError)
-                    else RuntimeError("compatibility merge cleanup could not finish safely")
-                )
-            if cleanup_error is not None:
-                if active_error is not None:
-                    raise RuntimeError(
-                        f"{active_error}; compatibility merge cleanup also failed: {cleanup_error}"
-                    ) from active_error
-                raise cleanup_error
+    return lines[0].lower()
 
 
 def git_tree_entry(commit: str, path: str) -> str:
@@ -1109,6 +998,21 @@ def require_trusted_check_policy(
                 "changes require protected CI review before later feature "
                 "branches can produce push-ready evidence."
             )
+
+
+def require_review_bootstrap_contract(change: PlannedChange) -> None:
+    try:
+        running_engine = Path(__file__).resolve().relative_to(ROOT).as_posix()
+    except ValueError as exc:
+        raise RuntimeError("push-ready engine is outside the repository root") from exc
+    required_paths = (".lit/push-ready.json", "scripts/lit-ci-profile.sh", running_engine)
+    base_entries = [git_tree_entry(change.base_tip, path) for path in required_paths]
+    if all(base_entries):
+        return
+    if any(base_entries):
+        raise RuntimeError("push-ready trust-root bootstrap is incomplete on the authoritative base")
+    if not all(git_tree_entry(change.head_commit, path) for path in required_paths):
+        raise RuntimeError("push-ready trust-root bootstrap lacks a required policy file")
 
 
 def integration_worktree_fingerprint(cwd: Path, *, include_ignored: bool = False) -> str:
@@ -3220,7 +3124,8 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
     checks = payload.get("checks")
     if not isinstance(checks, list) or len(checks) != len(config["checks"]):
         raise RuntimeError("push-ready evidence skipped a required check")
-    for configured, recorded in zip(config["checks"], checks, strict=True):
+    # Length equality is enforced above; strict= is unavailable on Python 3.9.
+    for configured, recorded in zip(config["checks"], checks):  # noqa: B905
         expected_command = (
             [sys.executable, *configured["command"][1:]]
             if configured["command"][0] in {"python", "python3"}
@@ -3437,6 +3342,7 @@ def main() -> int:
                 base_override=args.base,
                 fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
             )
+            require_review_bootstrap_contract(change)
             run_agent_reviews(
                 config,
                 change,

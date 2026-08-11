@@ -398,31 +398,34 @@ def check_embedded_code() -> None:
         raise AssertionError(
             "cannot resolve the authoritative Markdown validation merge base" + (f": {details}" if details else "")
         )
-    result = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
-        [
-            git,
-            "-c",
-            f"safe.directory={ROOT}",
-            "diff",
-            "--name-only",
-            "--diff-filter=ACMR",
-            "-z",
-            f"{merge_base}...HEAD",
-            "--",
-        ],
-        cwd=ROOT,
-        text=True,
-        encoding="utf-8",
-        errors="surrogateescape",
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode:
-        details = result.stderr.strip()
-        raise AssertionError(
-            "cannot enumerate changed Markdown files with git diff" + (f": {details}" if details else "")
+    changed_paths: set[str] = set()
+    for scope in ((f"{merge_base}...HEAD",), ("--cached",), ()):
+        result = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
+            [
+                git,
+                "-c",
+                f"safe.directory={ROOT}",
+                "diff",
+                "--name-only",
+                "--diff-filter=ACMR",
+                "-z",
+                *scope,
+                "--",
+            ],
+            cwd=ROOT,
+            text=True,
+            encoding="utf-8",
+            errors="surrogateescape",
+            capture_output=True,
+            check=False,
         )
-    markdown_paths = sorted(path for path in result.stdout.split("\0") if path and Path(path).suffix.lower() == ".md")
+        if result.returncode:
+            details = result.stderr.strip()
+            raise AssertionError(
+                "cannot enumerate committed, staged, and worktree Markdown files" + (f": {details}" if details else "")
+            )
+        changed_paths.update(path for path in result.stdout.split("\0") if path)
+    markdown_paths = sorted(path for path in changed_paths if Path(path).suffix.lower() == ".md")
     if markdown_paths:
         validator = ROOT / "scripts" / "validate-embedded-code.py"
         shared_validator = ROOT / "default" / "scripts" / "validate-embedded-code.py"

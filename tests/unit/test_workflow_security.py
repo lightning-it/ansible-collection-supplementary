@@ -1055,6 +1055,22 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertEqual(os.devnull, isolated["GIT_CONFIG_GLOBAL"])
         with self.assertRaisesRegex(RuntimeError, "safety boundary is incomplete"):
             engine["require_copilot_prompt_mode_boundary"]({}, [])
+        bootstrap_globals = engine["require_review_bootstrap_contract"].__globals__
+        original_tree_entry = bootstrap_globals["git_tree_entry"]
+        bootstrap_change = engine["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
+        try:
+            bootstrap_globals["git_tree_entry"] = lambda commit, _path: "entry" if commit == "b" * 40 else ""
+            engine["require_review_bootstrap_contract"](bootstrap_change)
+            bootstrap_globals["git_tree_entry"] = lambda commit, path: (
+                "entry" if commit == "b" * 40 or path == ".lit/push-ready.json" else ""
+            )
+            with self.assertRaisesRegex(RuntimeError, "bootstrap is incomplete"):
+                engine["require_review_bootstrap_contract"](bootstrap_change)
+            bootstrap_globals["git_tree_entry"] = lambda _commit, _path: ""
+            with self.assertRaisesRegex(RuntimeError, "lacks a required policy file"):
+                engine["require_review_bootstrap_contract"](bootstrap_change)
+        finally:
+            bootstrap_globals["git_tree_entry"] = original_tree_entry
         pre_commit = load_yaml(ROOT / ".pre-commit-config.yaml")
         hooks = [hook for repo in pre_commit["repos"] for hook in repo["hooks"]]
         quality_hooks = [hook for hook in hooks if hook.get("id") == "repository-quality"]
@@ -1149,6 +1165,22 @@ class WorkflowSecurityTests(unittest.TestCase):
             root_commit = engine["require_history_free_review_workspace"](repository, source_commits=("f" * 40,))
             self.assertRegex(root_commit, r"^[0-9a-f]{40}$")
 
+            subprocess.run(  # noqa: S603 -- resolved Git and test-owned repository.
+                [git, "-C", repository, "update-ref", "refs/remotes/origin/develop", "HEAD"],
+                check=True,
+                env=git_environment,
+            )
+            (repository / "scripts").mkdir()
+            shutil.copy2(ROOT / "scripts" / "validate-embedded-code.py", repository / "scripts")
+            (repository / "staged.md").write_text("```yaml\ninvalid: [\n```\n", encoding="utf-8")
+            subprocess.run(  # noqa: S603 -- resolved Git and test-owned repository.
+                [git, "-C", repository, "add", "staged.md"], check=True, env=git_environment
+            )
+            quality = __import__("runpy").run_path(str(ROOT / "scripts" / "lit-repository-quality.py"))
+            quality["check_embedded_code"].__globals__["ROOT"] = repository
+            with self.assertRaises(subprocess.CalledProcessError):
+                quality["check_embedded_code"]()
+
             external = temporary_root / "external-evidence"
             external.write_text("unchanged\n", encoding="utf-8")
             evidence = repository / "lit-push-ready-evidence.json"
@@ -1177,12 +1209,26 @@ class WorkflowSecurityTests(unittest.TestCase):
                 run_name="embedded_code_contract_test",
             )
             validator["main"].__globals__["ROOT"] = markdown_root
+            for language in ("yaml", "shell"):
+                blocks = validator["fenced_blocks"](f"````{language}\nsafe\n```\nunsafe\n````\n")
+                self.assertEqual("safe\n```\nunsafe\n", blocks[0][1])
             runtime = __import__("sys")
             original_argv = runtime.argv
             runtime.argv = ["validate-embedded-code.py", "linked.md"]
             try:
                 self.assertEqual(1, validator["main"]())
             finally:
+                runtime.argv = original_argv
+
+            original_which = shutil.which
+            try:
+                shutil.which = lambda _name: None
+                for name, language in (("a.md", "ansible"), ("s.md", "sh")):
+                    (markdown_root / name).write_text(f"```{language}\n[]\n```\n", encoding="utf-8")
+                    runtime.argv = ["validate-embedded-code.py", name]
+                    self.assertEqual(1, validator["main"]())
+            finally:
+                shutil.which = original_which
                 runtime.argv = original_argv
 
     def test_security_publish_requires_nexus_and_signed_validation_before_galaxy(self) -> None:

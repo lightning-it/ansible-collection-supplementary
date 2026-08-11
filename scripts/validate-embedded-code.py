@@ -28,10 +28,9 @@ ROOT = (
     and ((SHARED_ROOT / ".git").exists() or (SHARED_ROOT / "release-model" / "repositories.yml").is_file())
     else DISTRIBUTED_ROOT
 )
-FENCE = re.compile(
-    r"^[ \t]*`{3,}[ \t]*(yaml|yml|bash|sh|shell|ansible)\b[^\r\n]*\r?\n"
-    r"(.*?)^[ \t]*`{3,}[ \t]*$",
-    re.IGNORECASE | re.MULTILINE | re.DOTALL,
+FENCE_OPEN = re.compile(
+    r"^[ \t]*(?P<delimiter>`{3,})[ \t]*(?P<language>yaml|yml|bash|sh|shell|ansible)\b[^\r\n]*$",
+    re.IGNORECASE,
 )
 VALIDATOR_TIMEOUT_SECONDS = 60
 
@@ -45,6 +44,27 @@ def validator_candidate(
 ) -> Path:
     path_digest = hashlib.sha256(markdown_path.encode("utf-8", errors="surrogateescape")).hexdigest()[:12]
     return temporary / f"{kind}-{path_digest}-{fence_index}.{suffix}"
+
+
+def fenced_blocks(source: str) -> list[tuple[str, str]]:
+    blocks: list[tuple[str, str]] = []
+    active: tuple[str, int] | None = None
+    content: list[str] = []
+    for line in source.splitlines(keepends=True):
+        text = line.rstrip("\r\n")
+        if active is None:
+            match = FENCE_OPEN.fullmatch(text)
+            if match:
+                active = match["language"].lower(), len(match["delimiter"])
+                content = []
+        elif re.fullmatch(rf"[ \t]*`{{{active[1]},}}[ \t]*", text):
+            blocks.append((active[0], "".join(content)))
+            active = None
+        else:
+            content.append(line)
+    if active is not None:
+        raise ValueError("unterminated embedded-code fence")
+    return blocks
 
 
 def main() -> int:
@@ -76,9 +96,12 @@ def main() -> int:
             except (OSError, UnicodeDecodeError, ValueError) as error:
                 failures.append(f"{name}: unsafe or unreadable Markdown path: {error}")
                 continue
-            for index, match in enumerate(FENCE.finditer(source), 1):
-                language, content = match.groups()
-                language = language.lower()
+            try:
+                blocks = fenced_blocks(source)
+            except ValueError as error:
+                failures.append(f"{name}: {error}")
+                continue
+            for index, (language, content) in enumerate(blocks, 1):
                 label = f"{name}:fence-{index}"
                 if language in {"yaml", "yml", "ansible"}:
                     try:
@@ -86,8 +109,11 @@ def main() -> int:
                     except yaml.YAMLError as error:
                         failures.append(f"{label}: invalid YAML: {error}")
                         continue
-                    ansible_lint = shutil.which("ansible-lint")
-                    if language == "ansible" and ansible_lint:
+                    if language == "ansible":
+                        ansible_lint = shutil.which("ansible-lint")
+                        if not ansible_lint:
+                            failures.append(f"{label}: ansible-lint is required for Ansible fences")
+                            continue
                         candidate = validator_candidate(
                             temp,
                             "ansible",
@@ -113,7 +139,11 @@ def main() -> int:
                                 output.strip() for output in (result.stdout, result.stderr) if output.strip()
                             )
                             failures.append(f"{label}: ansible-lint failed\n{details}".rstrip())
-                elif shellcheck := shutil.which("shellcheck"):
+                else:
+                    shellcheck = shutil.which("shellcheck")
+                    if not shellcheck:
+                        failures.append(f"{label}: ShellCheck is required for shell fences")
+                        continue
                     candidate = validator_candidate(
                         temp,
                         "shell",
