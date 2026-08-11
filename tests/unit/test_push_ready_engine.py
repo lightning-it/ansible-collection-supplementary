@@ -155,35 +155,35 @@ class PushReadyEngineTests(unittest.TestCase):
             finally:
                 runtime.argv, shutil.which = original_argv, original_which
 
-    def test_evidence_staleness(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            path = Path(temporary_directory) / "evidence.json"
-            path.write_text(
-                json.dumps(
+    def test_evidence_intervals(self) -> None:
+        prefix = "2026-01-01T"
+        bounds = tuple(ENGINE["parse_timestamp"](prefix + value, "test") for value in ("00:01:00Z", "00:10:00Z"))
+        cases = (
+            ("00:05:00Z", "00:04:00Z", 0),
+            ("00:02:00Z", "00:03:00Z", 1),
+            ("00:00:00Z", "00:02:00Z", 120),
+            ("00:09:00Z", "00:11:00Z", 120),
+        )
+        for started, completed, duration in cases:
+            with self.assertRaisesRegex(RuntimeError, "invalid timing"):
+                ENGINE["evidence_interval"](
                     {
-                        "version": 2,
-                        "started_at": "2000-01-01T00:00:00Z",
-                        "completed_at": "2000-01-01T00:00:01Z",
-                        "duration_seconds": 1,
-                    }
-                ),
-                encoding="utf-8",
-            )
-            function_globals = ENGINE["verify_evidence"].__globals__
-            original = function_globals["evidence_path"]
-            function_globals["evidence_path"] = lambda: path
-            try:
-                with self.assertRaisesRegex(RuntimeError, "outside the allowed age"):
-                    ENGINE["verify_evidence"]({"evidence": {"max_age_seconds": 60}})
-            finally:
-                function_globals["evidence_path"] = original
+                        "started_at": prefix + started,
+                        "completed_at": prefix + completed,
+                        "duration_seconds": duration,
+                    },
+                    "test",
+                    bounds,
+                )
 
-    def test_agent_order(self) -> None:
+    def test_review_binding(self) -> None:
         change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "f" * 64)
         function_globals = ENGINE["run_agent_reviews"].__globals__
         replacements = {
             "tree_fingerprint": lambda: "f" * 64,
-            "sanitized_review_workspace": lambda *_args, **_kwargs: contextlib.nullcontext((ROOT, ROOT, object())),
+            "sanitized_review_workspace": lambda *_args, **_kwargs: contextlib.nullcontext(
+                (ROOT, ROOT, type("Topology", (), {"integration_tree": "d" * 40})())
+            ),
             "tracked_instruction_bundle": lambda _workspace: "instructions",
             "integration_worktree_fingerprint": lambda *_args, **_kwargs: "stable",
             "copilot_review": lambda *_args, **_kwargs: {"agent": "copilot", "result": "pass"},
@@ -195,4 +195,8 @@ class PushReadyEngineTests(unittest.TestCase):
             reviews = ENGINE["run_agent_reviews"]({}, change)
         finally:
             function_globals.update(original)
-        self.assertEqual(["copilot", "codex"], [review["agent"] for review in reviews])
+        self.assertEqual(1, len({review["input_sha256"] for review in reviews}))
+        self.assertNotEqual(
+            reviews[0]["input_sha256"],
+            ENGINE["review_input_sha256"](change, "d" * 40, {"changed": "e" * 64}),
+        )

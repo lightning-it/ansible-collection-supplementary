@@ -1454,6 +1454,8 @@ def planned_change(
     base_override: str | None = None,
     fixture_manifest_bootstrap: bool = False,
 ) -> PlannedChange:
+    if any(path.name.startswith(INTEGRATION_DIRECTORY_PREFIX) for path in ROOT.iterdir()):
+        raise RuntimeError("stale integration directory requires manual inspection")
     initial_tree_fingerprint = tree_fingerprint()
     base_ref, base_tip, base_commit = resolve_base(config, base_override)
     head_commit = git_output("rev-parse", "--verify", "HEAD^{commit}").strip()
@@ -2927,6 +2929,13 @@ def run_agent_reviews(
             != workspace_fingerprint
         ):
             raise RuntimeError("Codex review changed the sanitized exact-patch workspace")
+        binding = review_input_sha256(
+            change,
+            topology.integration_tree,
+            instruction_file_hashes(),
+        )
+        for review in reviews:
+            review["input_sha256"] = binding
     if tree_fingerprint() != expected:
         raise RuntimeError("local agent review changed the reviewed Git tree")
     return reviews
@@ -2990,6 +2999,29 @@ def governed_push_remote() -> dict[str, str]:
 
 def config_sha256() -> str:
     return sha256_bytes(CONFIG.read_bytes())
+
+
+def review_input_sha256(
+    change: PlannedChange,
+    integration_tree: str,
+    instruction_files: dict[str, str],
+) -> str:
+    return sha256_text(
+        json.dumps(
+            [
+                change.base_ref,
+                change.base_tip,
+                change.base_commit,
+                change.head_commit,
+                change.tree_fingerprint,
+                integration_tree,
+                change.diff_sha256,
+                instruction_files,
+            ],
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    )
 
 
 def write_evidence(
@@ -3058,6 +3090,25 @@ def parse_timestamp(value: Any, description: str) -> datetime:
     return parsed
 
 
+def evidence_interval(
+    record: dict[str, Any],
+    description: str,
+    bounds: tuple[datetime, datetime] | None = None,
+) -> tuple[datetime, datetime]:
+    started = parse_timestamp(record.get("started_at"), f"{description} started_at")
+    completed = parse_timestamp(record.get("completed_at"), f"{description} completed_at")
+    duration = record.get("duration_seconds")
+    invalid_duration = isinstance(duration, bool) or not isinstance(duration, (int, float)) or duration < 0
+    if (
+        invalid_duration
+        or started > completed
+        or abs((completed - started).total_seconds() - duration) > 5
+        or (bounds is not None and (started < bounds[0] or completed > bounds[1]))
+    ):
+        raise RuntimeError(f"push-ready evidence has invalid timing for {description}")
+    return started, completed
+
+
 def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
     evidence = evidence_path()
     if not evidence.is_file() or evidence.is_symlink():
@@ -3065,13 +3116,7 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
     payload = json.loads(evidence.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or payload.get("version") != 2:
         raise RuntimeError("push-ready evidence must use version 2")
-    completed = parse_timestamp(payload.get("completed_at"), "completed_at")
-    started = parse_timestamp(payload.get("started_at"), "started_at")
-    if started > completed:
-        raise RuntimeError("push-ready evidence timestamps are reversed")
-    duration = payload.get("duration_seconds")
-    if isinstance(duration, bool) or not isinstance(duration, (int, float)) or duration < 0:
-        raise RuntimeError("push-ready evidence duration is invalid")
+    started, completed = evidence_interval(payload, "run")
     age = (datetime.now(UTC) - completed).total_seconds()
     max_age = config["evidence"]["max_age_seconds"]
     if age < -300 or age > max_age:
@@ -3124,6 +3169,11 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
     checks = payload.get("checks")
     if not isinstance(checks, list) or len(checks) != len(config["checks"]):
         raise RuntimeError("push-ready evidence skipped a required check")
+    review_binding = review_input_sha256(
+        change,
+        expected_integration,
+        expected["instruction_files"],
+    )
     # Length equality is enforced above; strict= is unavailable on Python 3.9.
     for configured, recorded in zip(config["checks"], checks):  # noqa: B905
         expected_command = (
@@ -3138,17 +3188,7 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
             or recorded.get("exit_code") != 0
         ):
             raise RuntimeError(f"push-ready evidence lacks passing check {configured['name']}")
-        check_duration = recorded.get("duration_seconds")
-        if isinstance(check_duration, bool) or not isinstance(check_duration, (int, float)) or check_duration < 0:
-            raise RuntimeError(f"push-ready evidence has invalid timing for {configured['name']}")
-        parse_timestamp(
-            recorded.get("started_at"),
-            f"check {configured['name']} started_at",
-        )
-        parse_timestamp(
-            recorded.get("completed_at"),
-            f"check {configured['name']} completed_at",
-        )
+        evidence_interval(recorded, f"check {configured['name']}", (started, completed))
     reviews = payload.get("agent_reviews")
     if not isinstance(reviews, list):
         raise RuntimeError("push-ready evidence has invalid agent reviews")
@@ -3169,6 +3209,7 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
             or review.get("authoritative_pr_review") is not False
             or not isinstance(review.get("output_sha256"), str)
             or not re.fullmatch(r"[0-9a-f]{64}", review["output_sha256"])
+            or review.get("input_sha256") != review_binding
         ):
             raise RuntimeError(f"push-ready evidence lacks a passing local {name} review")
         execution_mode = review.get("execution_mode")
@@ -3189,17 +3230,7 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
             or review.get("container_runtime_version") is not None
         ):
             raise RuntimeError("push-ready evidence has invalid Codex execution mode")
-        review_duration = review.get("duration_seconds")
-        if isinstance(review_duration, bool) or not isinstance(review_duration, (int, float)) or review_duration < 0:
-            raise RuntimeError(f"push-ready evidence has invalid timing for {name} review")
-        parse_timestamp(
-            review.get("started_at"),
-            f"{name} review started_at",
-        )
-        parse_timestamp(
-            review.get("completed_at"),
-            f"{name} review completed_at",
-        )
+        evidence_interval(review, f"{name} review", (started, completed))
     return payload
 
 

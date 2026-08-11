@@ -17,7 +17,6 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
-/.lit-integration-*/
 
 # Node tooling for semantic-release
 node_modules/
