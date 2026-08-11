@@ -118,7 +118,11 @@ SECRET_ASSIGNMENT_RE = re.compile(
 )
 BEARER_RE = re.compile(r"(?i)\bbearer\s+[a-z0-9._~+/=-]{8,}")
 BASIC_AUTH_RE = re.compile(r"(?i)\bbasic\s+[a-z0-9+/]{4,}={0,2}")
-JWT_RE = re.compile(r"\beyJ[a-zA-Z0-9_-]{5,}\.[a-zA-Z0-9_-]{5,}\.[a-zA-Z0-9_-]{5,}\b")
+JWT_RE = re.compile(
+    r"(?<![A-Za-z0-9_-])"
+    r"eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}"
+    r"(?![A-Za-z0-9_-])"
+)
 API_KEY_RE = re.compile(
     r"(?i)\b(?:gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{20,}|"
     r"(?:AKIA|ASIA)[A-Z0-9]{16}|xox[baprs]-[a-z0-9-]{10,}|sk-[a-z0-9_-]{20,})\b"
