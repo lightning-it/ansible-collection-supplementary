@@ -25,6 +25,10 @@ nginx_config_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') 
 nginx_config_vault_kv_path: "{{ inventory_hostname }}/nginx/certificate"
 nginx_config_vault_pki_path: "{{ vault_config_vault_pki_path }}"
 nginx_config_vault_pki_role: "{{ vault_config_vault_pki_role }}"
+nginx_config_vault_issue_missing: true
+# Compatibility default for existing consumers. Security profiles that require
+# Vault-only custody must set this to false explicitly.
+nginx_config_vault_allow_local_fallback: true
 nginx_config_vault_token: "{{ vault_token | default('', true) }}"
 nginx_config_vault_role_id: "{{ ansible_hashi_vault_role_id | default('', true) }}"
 nginx_config_vault_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"

@@ -35,8 +35,10 @@
       - nginx_config_vault_validate_certs is boolean
       - nginx_config_vault_kv_mount | default('', true) | trim | length > 0
       - nginx_config_vault_kv_path | default('', true) | trim | length > 0
-      - nginx_config_vault_pki_path | default('', true) | trim | length > 0
-      - nginx_config_vault_pki_role | default('', true) | trim | length > 0
+      - nginx_config_vault_pki_path is string
+      - nginx_config_vault_pki_role is string
+      - nginx_config_vault_issue_missing is boolean
+      - nginx_config_vault_allow_local_fallback is boolean
       - nginx_config_vault_token is string
       - nginx_config_vault_role_id is string
       - nginx_config_vault_secret_id is string
@@ -51,6 +53,22 @@
       - nginx_config_test is boolean
     fail_msg: "nginx_config variables are missing or invalid."
     quiet: true
+  tags: always
+
+- name: Ensure Vault PKI issue inputs are present when enabled
+  ansible.builtin.assert:
+    that:
+      - nginx_config_vault_pki_path | default('', true) | trim | length > 0
+      - nginx_config_vault_pki_role | default('', true) | trim | length > 0
+    fail_msg: >-
+      nginx_config_vault_issue_missing=true requires a non-empty Vault PKI
+      issue path and role. Disable issuance only when a complete certificate,
+      private key, chain, and identity metadata already exist in Vault KV.
+    quiet: true
+  when:
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+    - nginx_config_vault_issue_missing | bool
   tags: always
 
 - name: Ensure Vault TLS inputs are present when source=vault
