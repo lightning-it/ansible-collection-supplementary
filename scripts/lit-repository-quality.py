@@ -117,12 +117,14 @@ def check_generated_docs(meta: dict[str, str]) -> None:
         raise AssertionError("README.md is missing the managed quality badge block")
     if "[RELEASE.md](./RELEASE.md)" not in readme:
         raise AssertionError("README.md does not link to RELEASE.md")
-    if "## Supported and Tested Platforms" not in readme:
+    if "## Supported and tested platforms" not in readme:
         raise AssertionError("README.md does not include the supported/tested platforms matrix")
     for term in ["Production Ready", "Enterprise Ready", "Battle Tested", "100% Tested", "github/stars", "github/forks"]:
         if term in readme:
             raise AssertionError(f"README.md contains disallowed badge term {term}")
-    if meta.get("repository_type", "") not in release:
+    repository_type = meta.get("repository_type", "")
+    documented_repository_type = repository_type.replace("_", " ").casefold()
+    if not documented_repository_type or documented_repository_type not in release.casefold():
         raise AssertionError("RELEASE.md does not include the repository type")
     if "Release Evidence" not in release:
         raise AssertionError("RELEASE.md does not describe release evidence")
@@ -137,7 +139,7 @@ def check_generated_docs(meta: dict[str, str]) -> None:
         ]:
             if f"`{asset}`" not in release:
                 raise AssertionError(f"RELEASE.md does not list required release asset {asset}")
-    if "Test Profiles" not in testing:
+    if "## Profiles" not in testing:
         raise AssertionError("TESTING.md does not describe test profiles")
     for term in ["OpenSSF Readiness", "Scorecard", "Best Practices Badge", "Security Policy"]:
         if term not in openssf:

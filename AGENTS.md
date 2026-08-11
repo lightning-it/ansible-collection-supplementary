@@ -464,7 +464,9 @@ Good (mapped in defaults, asserted in role namespace):
 # defaults/main.yml
 nginx_ops_systemd_unit_name: "{{ nginx_deploy_systemd_unit_name | default('', true) }}"
 nginx_ops_pod_name: "{{ nginx_deploy_pod_name | default('', true) }}"
+```
 
+```yaml
 # tasks/assert.yml
 - name: Ensure restart variables are set for systemd mode
   ansible.builtin.assert:
