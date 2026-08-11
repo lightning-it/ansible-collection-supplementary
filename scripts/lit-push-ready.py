@@ -15,8 +15,10 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -1459,6 +1461,8 @@ def planned_change(
     untracked_hashes: dict[str, str] = {}
     patches: list[str] = []
     consumed = utf8_size(tracked_diff)
+    if consumed >= max_bytes:
+        raise RuntimeError(f"planned diff exceeds local review limit of {max_bytes} bytes")
     for name in untracked_names():
         remaining = max_bytes - consumed
         if remaining <= 0:
@@ -1471,13 +1475,16 @@ def planned_change(
         patch = render_untracked_patch(name, payload, mode)
         patch_bytes = utf8_size(patch)
         consumed += patch_bytes
-        if consumed > max_bytes:
-            raise RuntimeError(f"diff exceeds {max_bytes} bytes")
+        if consumed >= max_bytes:
+            raise RuntimeError(f"planned diff exceeds local review limit of {max_bytes} bytes")
         patches.append(patch)
         untracked_hashes[name] = sha256_bytes(payload)
     diff = tracked_diff + "".join(patches)
-    if utf8_size(diff) > max_bytes:
-        raise RuntimeError(f"diff exceeds {max_bytes} bytes")
+    review_bytes = utf8_size(diff)
+    if review_bytes <= 0:
+        raise RuntimeError("planned diff is empty")
+    if review_bytes >= max_bytes:
+        raise RuntimeError(f"planned diff exceeds local review limit of {max_bytes} bytes")
     paths = tuple(sorted({path for path in tracked_names if path} | set(untracked_hashes)))
     final_tree_fingerprint = tree_fingerprint()
     if final_tree_fingerprint != initial_tree_fingerprint:
@@ -1500,6 +1507,32 @@ def planned_change(
         ),
     )
     return change
+
+
+def review_size_evidence(config: dict[str, Any], change: PlannedChange) -> dict[str, int]:
+    maximum = require_positive_integer(
+        config["review"]["max_diff_bytes"],
+        "review.max_diff_bytes",
+        maximum=MAX_REVIEW_BYTES,
+    )
+    measured = utf8_size(change.diff)
+    if measured <= 0 or measured >= maximum:
+        raise RuntimeError(f"planned diff exceeds local review limit of {maximum} bytes")
+    return {
+        "bytes": measured,
+        "limit_exclusive": maximum,
+        "path_count": len(change.paths),
+    }
+
+
+def report_review_size(config: dict[str, Any], change: PlannedChange) -> None:
+    measurement = review_size_evidence(config, change)
+    print(
+        "Review input: "
+        f"{measurement['bytes']} < {measurement['limit_exclusive']} bytes; "
+        f"{measurement['path_count']} paths; sha256:{change.diff_sha256}",
+        flush=True,
+    )
 
 
 def changed_paths() -> list[str]:
@@ -2840,69 +2873,151 @@ def run_agent_reviews(
 ) -> list[dict[str, Any]]:
     expected = change.tree_fingerprint
     if tree_fingerprint() != expected:
-        raise RuntimeError("patch is stale before review")
-    reviews: list[dict[str, Any]] = []
-    with sanitized_review_workspace(
+        raise RuntimeError("exact planned push patch is stale before local review")
+    agents = tuple(sorted(name for name, policy in config["agents"].items() if policy["enabled"]))
+    if agents != ("codex", "copilot"):
+        raise RuntimeError("parallel review requires exactly Codex and Copilot")
+    integration_tree = expected_integration_tree(change)
+    binding = review_input_sha256(
         change,
-        fixture_manifest_bootstrap=fixture_manifest_bootstrap,
-    ) as (
-        workspace,
-        state_root,
-        topology,
-    ):
-        instructions = tracked_instruction_bundle(workspace)
-        workspace_fingerprint = integration_worktree_fingerprint(
-            workspace,
-            include_ignored=True,
-        )
-        reviews.append(
-            copilot_review(
-                config,
-                change,
-                expected,
-                workspace=workspace,
-                state_root=state_root,
-                instructions=instructions,
-                topology=topology,
-            )
-        )
-        if (
-            integration_worktree_fingerprint(
-                workspace,
-                include_ignored=True,
-            )
-            != workspace_fingerprint
-        ):
-            raise RuntimeError("Copilot review changed the sanitized exact-patch workspace")
-        reviews.append(
-            codex_review(
-                config,
-                change,
-                expected,
-                workspace=workspace,
-                state_root=state_root,
-                instructions=instructions,
-                topology=topology,
-            )
-        )
-        if (
-            integration_worktree_fingerprint(
-                workspace,
-                include_ignored=True,
-            )
-            != workspace_fingerprint
-        ):
-            raise RuntimeError("Codex review changed the sanitized exact-patch workspace")
-        binding = review_input_sha256(
+        integration_tree,
+        instruction_file_hashes(),
+    )
+    start_barrier = threading.Barrier(len(agents), timeout=60)
+
+    def review_agent(name: str) -> dict[str, Any]:
+        worker_started_at = now_utc()
+        worker_started = time.monotonic()
+        with sanitized_review_workspace(
             change,
-            topology.integration_tree,
-            instruction_file_hashes(),
-        )
-        for review in reviews:
+            fixture_manifest_bootstrap=fixture_manifest_bootstrap,
+        ) as (
+            workspace,
+            state_root,
+            topology,
+        ):
+            if topology.integration_tree != integration_tree:
+                raise RuntimeError(f"{name} review workspace has a different integration tree")
+            instructions = tracked_instruction_bundle(workspace)
+            workspace_fingerprint = integration_worktree_fingerprint(
+                workspace,
+                include_ignored=True,
+            )
+            workspace_sha256 = sha256_text(str(workspace.resolve(strict=True)))
+            try:
+                start_barrier.wait()
+            except threading.BrokenBarrierError as exc:
+                raise RuntimeError("parallel reviewer startup barrier failed") from exc
+            review_function = codex_review if name == "codex" else copilot_review
+            review = review_function(
+                config,
+                change,
+                expected,
+                workspace=workspace,
+                state_root=state_root,
+                instructions=instructions,
+                topology=topology,
+            )
+            if review.get("agent") != name:
+                raise RuntimeError(f"{name} review returned a foreign reviewer identity")
+            if (
+                integration_worktree_fingerprint(
+                    workspace,
+                    include_ignored=True,
+                )
+                != workspace_fingerprint
+            ):
+                raise RuntimeError(f"{name} review changed its sanitized exact-patch workspace")
             review["input_sha256"] = binding
+            review["workspace_sha256"] = workspace_sha256
+        review["worker_started_at"] = worker_started_at
+        review["worker_completed_at"] = now_utc()
+        review["worker_duration_seconds"] = round(time.monotonic() - worker_started, 3)
+        return review
+
+    reviews = []
+    errors: dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=len(agents), thread_name_prefix="lit-review") as executor:
+        futures = {executor.submit(review_agent, name): name for name in agents}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                reviews.append(future.result())
+            except Exception as exc:  # noqa: BLE001 -- aggregate both required reviewer failures.
+                errors[name] = str(exc)
+    if errors:
+        details = "; ".join(f"{name}: {errors[name]}" for name in sorted(errors))
+        raise RuntimeError("required parallel agent review failed: " + details)
     if tree_fingerprint() != expected:
-        raise RuntimeError("agent review changed tree")
+        raise RuntimeError("local agent review changed the reviewed Git tree")
+    reviews.sort(key=lambda review: review["agent"])
+    if len({review["workspace_sha256"] for review in reviews}) != len(reviews):
+        raise RuntimeError("parallel reviewers did not use separate workspaces")
+    if {review["input_sha256"] for review in reviews} != {binding}:
+        raise RuntimeError("parallel reviewers were not bound to identical input")
     return reviews
+
+
+def parallel_review_evidence(reviews: list[dict[str, Any]]) -> dict[str, Any]:
+    if len(reviews) != 2:
+        raise RuntimeError("parallel review evidence requires exactly two reviewers")
+    by_name = {review.get("agent"): review for review in reviews if isinstance(review, dict)}
+    if set(by_name) != {"codex", "copilot"}:
+        raise RuntimeError("parallel review evidence has invalid reviewer identities")
+    workspaces = {review.get("workspace_sha256") for review in reviews}
+    inputs = {review.get("input_sha256") for review in reviews}
+    if (
+        len(workspaces) != 2
+        or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value) for value in workspaces)
+        or len(inputs) != 1
+        or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value) for value in inputs)
+    ):
+        raise RuntimeError("parallel review workspace or input binding is invalid")
+    intervals = [
+        evidence_interval(
+            {
+                "started_at": review.get("started_at"),
+                "completed_at": review.get("completed_at"),
+                "duration_seconds": review.get("duration_seconds"),
+            },
+            f"{review['agent']} external review",
+        )
+        for review in reviews
+    ]
+    overlap = (min(completed for _, completed in intervals) - max(started for started, _ in intervals)).total_seconds()
+    if overlap <= 0:
+        raise RuntimeError("required external reviewers did not execute concurrently")
+    return {
+        "mode": "parallel",
+        "maximum_parallelism": 2,
+        "reviewers": ["codex", "copilot"],
+        "workspace_count": 2,
+        "input_sha256": next(iter(inputs)),
+        "overlap_seconds": round(overlap, 3),
+    }
+
+
+def execution_metrics(checks: list[dict[str, Any]], reviews: list[dict[str, Any]]) -> dict[str, Any]:
+    intervals = [evidence_interval(review, f"{review.get('agent', 'unknown')} metrics review") for review in reviews]
+    review_wall_seconds = (
+        max(completed for _, completed in intervals) - min(started for started, _ in intervals)
+    ).total_seconds()
+    reviewer_seconds = {
+        str(review["agent"]): review["duration_seconds"]
+        for review in sorted(reviews, key=lambda item: str(item.get("agent")))
+    }
+    check_names = [str(check.get("name")) for check in checks]
+    return {
+        "schema_version": 1,
+        "check_executions": len(checks),
+        "repeated_check_executions": len(check_names) - len(set(check_names)),
+        "reviewer_seconds": reviewer_seconds,
+        "review_serial_seconds": round(sum(reviewer_seconds.values()), 3),
+        "review_wall_seconds": round(review_wall_seconds, 3),
+        "cache_hits": 0,
+        "cache_misses": len(reviews),
+        "maximum_parallelism": 2,
+    }
 
 
 def command_version(command: list[str]) -> str:
@@ -3021,6 +3136,7 @@ def write_evidence(
         "integration_commit": integration_commit,
         "integration_fingerprint": integration_fingerprint,
         "planned_diff_sha256": change.diff_sha256,
+        "review_size": review_size_evidence(config, change),
         "planned_paths": list(change.paths),
         "untracked_sha256": change.untracked_sha256,
         "config_sha256": config_sha256(),
@@ -3030,6 +3146,8 @@ def write_evidence(
         "push_remote": governed_push_remote(),
         "checks": checks,
         "agent_reviews": reviews,
+        "parallel_reviews": parallel_review_evidence(reviews),
+        "metrics": execution_metrics(checks, reviews),
         "remote_only_checks": config["remote_only_checks"],
         "parity_gaps": list(PARITY_GAPS),
         "remote_pr_review_authoritative": True,
@@ -3117,6 +3235,7 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
             expected_integration,
         ),
         "planned_diff_sha256": change.diff_sha256,
+        "review_size": review_size_evidence(config, change),
         "planned_paths": list(change.paths),
         "untracked_sha256": change.untracked_sha256,
         "platform": platform_evidence(),
@@ -3180,6 +3299,8 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
             or not isinstance(review.get("output_sha256"), str)
             or not re.fullmatch(r"[0-9a-f]{64}", review["output_sha256"])
             or review.get("input_sha256") != review_binding
+            or not isinstance(review.get("workspace_sha256"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", review["workspace_sha256"])
         ):
             raise RuntimeError(f"evidence lacks passing {name} review")
         execution_mode = review.get("execution_mode")
@@ -3201,6 +3322,19 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
         ):
             raise RuntimeError("invalid Codex execution mode")
         evidence_interval(review, f"{name} review", (started, completed))
+        evidence_interval(
+            {
+                "started_at": review.get("worker_started_at"),
+                "completed_at": review.get("worker_completed_at"),
+                "duration_seconds": review.get("worker_duration_seconds"),
+            },
+            f"{name} review worker",
+            (started, completed),
+        )
+    if payload.get("parallel_reviews") != parallel_review_evidence(reviews):
+        raise RuntimeError("push-ready evidence has invalid parallel review evidence")
+    if payload.get("metrics") != execution_metrics(checks, reviews):
+        raise RuntimeError("push-ready evidence has invalid execution metrics")
     return payload
 
 
@@ -3383,6 +3517,7 @@ def main() -> int:
             require_clean_head()
             refresh_authoritative_base(config)
             change = planned_change(config)
+            report_review_size(config, change)
             require_review_bootstrap_contract(change)
             execute_integration_checks(config, change)
             return 0
@@ -3395,6 +3530,7 @@ def main() -> int:
                 base_override=args.base,
                 fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
             )
+            report_review_size(config, change)
             require_review_bootstrap_contract(change)
             if args.base:
                 run_agent_reviews(config, change, fixture_manifest_bootstrap=args.fixture_manifest_bootstrap)
@@ -3407,6 +3543,7 @@ def main() -> int:
             config,
             fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
         )
+        report_review_size(config, change)
         require_trusted_check_policy(
             change,
             allow_fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,

@@ -7,6 +7,7 @@ import runpy
 import shutil
 import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -39,6 +40,7 @@ class PushReadyEngineTests(unittest.TestCase):
             "require_clean_head": mock.Mock(),
             "refresh_authoritative_base": mock.Mock(),
             "planned_change": mock.Mock(return_value=change),
+            "report_review_size": mock.Mock(),
             "require_review_bootstrap_contract": mock.Mock(),
             "produce_evidence": produced,
         }
@@ -315,24 +317,105 @@ class PushReadyEngineTests(unittest.TestCase):
     def test_review_binding(self) -> None:
         change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "f" * 64)
         function_globals = ENGINE["run_agent_reviews"].__globals__
+        external_start = threading.Barrier(2, timeout=5)
+
+        @contextlib.contextmanager
+        def isolated_workspace(*_args, **_kwargs):
+            with tempfile.TemporaryDirectory() as temporary_directory:
+                workspace = Path(temporary_directory)
+                yield workspace, workspace, type("Topology", (), {"integration_tree": "d" * 40})()
+
+        def passing_review(name):
+            def review(*_args, **_kwargs):
+                external_start.wait()
+                return {"agent": name, "result": "pass"}
+
+            return review
+
         replacements = {
             "tree_fingerprint": lambda: "f" * 64,
-            "sanitized_review_workspace": lambda *_args, **_kwargs: contextlib.nullcontext(
-                (ROOT, ROOT, type("Topology", (), {"integration_tree": "d" * 40})())
-            ),
+            "expected_integration_tree": lambda _change: "d" * 40,
+            "instruction_file_hashes": lambda: {"AGENTS.md": "e" * 64},
+            "sanitized_review_workspace": isolated_workspace,
             "tracked_instruction_bundle": lambda _workspace: "instructions",
             "integration_worktree_fingerprint": lambda *_args, **_kwargs: "stable",
-            "copilot_review": lambda *_args, **_kwargs: {"agent": "copilot", "result": "pass"},
-            "codex_review": lambda *_args, **_kwargs: {"agent": "codex", "result": "pass"},
+            "copilot_review": passing_review("copilot"),
+            "codex_review": passing_review("codex"),
         }
         original = {name: function_globals[name] for name in replacements}
         try:
             function_globals.update(replacements)
-            reviews = ENGINE["run_agent_reviews"]({}, change)
+            reviews = ENGINE["run_agent_reviews"](
+                {"agents": {"codex": {"enabled": True}, "copilot": {"enabled": True}}},
+                change,
+            )
         finally:
             function_globals.update(original)
+        self.assertEqual(["codex", "copilot"], [review["agent"] for review in reviews])
+        self.assertEqual(2, len({review["workspace_sha256"] for review in reviews}))
         self.assertEqual(1, len({review["input_sha256"] for review in reviews}))
         self.assertNotEqual(
             reviews[0]["input_sha256"],
             ENGINE["review_input_sha256"](change, "d" * 40, {"changed": "e" * 64}),
         )
+
+    def test_parallel_review_failure_is_fail_closed(self) -> None:
+        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "f" * 64)
+        function_globals = ENGINE["run_agent_reviews"].__globals__
+
+        @contextlib.contextmanager
+        def isolated_workspace(*_args, **_kwargs):
+            with tempfile.TemporaryDirectory() as temporary_directory:
+                workspace = Path(temporary_directory)
+                yield workspace, workspace, type("Topology", (), {"integration_tree": "d" * 40})()
+
+        def failed_review(*_args, **_kwargs):
+            raise RuntimeError("reviewer unavailable")
+
+        replacements = {
+            "tree_fingerprint": lambda: "f" * 64,
+            "expected_integration_tree": lambda _change: "d" * 40,
+            "instruction_file_hashes": lambda: {"AGENTS.md": "e" * 64},
+            "sanitized_review_workspace": isolated_workspace,
+            "tracked_instruction_bundle": lambda _workspace: "instructions",
+            "integration_worktree_fingerprint": lambda *_args, **_kwargs: "stable",
+            "copilot_review": failed_review,
+            "codex_review": lambda *_args, **_kwargs: {"agent": "codex", "result": "pass"},
+        }
+        original = {name: function_globals[name] for name in replacements}
+        try:
+            function_globals.update(replacements)
+            with self.assertRaisesRegex(RuntimeError, "required parallel agent review failed"):
+                ENGINE["run_agent_reviews"](
+                    {"agents": {"codex": {"enabled": True}, "copilot": {"enabled": True}}},
+                    change,
+                )
+        finally:
+            function_globals.update(original)
+
+    def test_review_size_limit_is_exclusive(self) -> None:
+        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "0123456789", (), {}, "f" * 64)
+        with self.assertRaisesRegex(RuntimeError, "exceeds local review limit"):
+            ENGINE["review_size_evidence"]({"review": {"max_diff_bytes": 10}}, change)
+        self.assertEqual(
+            {"bytes": 10, "limit_exclusive": 11, "path_count": 0},
+            ENGINE["review_size_evidence"]({"review": {"max_diff_bytes": 11}}, change),
+        )
+
+    def test_parallel_review_evidence_rejects_non_overlap(self) -> None:
+        def review(name: str, started: str, completed: str, workspace: str) -> dict[str, object]:
+            return {
+                "agent": name,
+                "started_at": started,
+                "completed_at": completed,
+                "duration_seconds": 1,
+                "workspace_sha256": workspace,
+                "input_sha256": "a" * 64,
+            }
+
+        reviews = [
+            review("codex", "2026-01-01T00:00:00Z", "2026-01-01T00:00:01Z", "b" * 64),
+            review("copilot", "2026-01-01T00:00:02Z", "2026-01-01T00:00:03Z", "c" * 64),
+        ]
+        with self.assertRaisesRegex(RuntimeError, "did not execute concurrently"):
+            ENGINE["parallel_review_evidence"](reviews)
