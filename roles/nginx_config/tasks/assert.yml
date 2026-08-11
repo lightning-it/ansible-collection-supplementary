@@ -66,6 +66,7 @@
       private key, chain, and identity metadata already exist in Vault KV.
     quiet: true
   when:
+    - not nginx_deploy_skip_config | bool
     - nginx_config_has_force_https_vhosts | bool
     - nginx_config_tls_source == 'vault'
     - nginx_config_vault_issue_missing | bool

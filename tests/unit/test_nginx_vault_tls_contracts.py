@@ -26,6 +26,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             item for item in tasks if item.get("name") == "Ensure Vault PKI issue inputs are present when enabled"
         )
 
+        self.assertIn("not nginx_deploy_skip_config | bool", task["when"])
         self.assertIn("nginx_config_vault_issue_missing | bool", task["when"])
         assertions = task["ansible.builtin.assert"]["that"]
         self.assertTrue(any("nginx_config_vault_pki_path" in item for item in assertions))
