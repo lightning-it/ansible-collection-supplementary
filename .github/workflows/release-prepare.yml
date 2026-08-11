@@ -63,6 +63,35 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Resolve immutable pre-consumption binding base
+        id: binding
+        env:
+          BEFORE_SHA: ${{ github.event.before || github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          base_sha="$GITHUB_SHA"
+          if [ "$EVENT_NAME" = push ] && \
+              git diff --name-only --no-renames "$BEFORE_SHA" "$GITHUB_SHA" -- \
+                changelogs/release-preparation.json \
+                | grep -Fxq changelogs/release-preparation.json
+          then
+            receipt=changelogs/release-preparation.json
+            test -f "$receipt"
+            test ! -L "$receipt"
+            base_sha="$(
+              jq -er '.base_sha | select(test("^[0-9a-f]{40}$"))' "$receipt"
+            )"
+          fi
+          git cat-file -e "${base_sha}^{commit}"
+          git merge-base --is-ancestor "$base_sha" "$GITHUB_SHA"
+          echo "base_sha=$base_sha" >>"$GITHUB_OUTPUT"
+      - name: Checkout immutable pre-consumption Security binding
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ steps.binding.outputs.base_sha }}
+          path: security-binding-base
+          persist-credentials: false
       - name: Classify before selecting a protected environment
         id: classify
         env:
@@ -80,12 +109,14 @@ jobs:
               --head-sha "$GITHUB_SHA" \
               --ref "$GITHUB_REF" \
               --commit-message "$commit_message" \
-              --evidence-id "$EVIDENCE_ID"
+              --evidence-id "$EVIDENCE_ID" \
+              --binding-root security-binding-base
           else
             python scripts/classify-security-release.py \
               --event-kind version \
               --version "$VERSION" \
-              --evidence-id "$EVIDENCE_ID"
+              --evidence-id "$EVIDENCE_ID" \
+              --binding-root security-binding-base
           fi
 
   prepare:
@@ -173,6 +204,7 @@ jobs:
           CREATE_GITHUB_RELEASE_INPUT: ${{ github.event.inputs.create_github_release }}
           PUBLISH_GALAXY_INPUT: ${{ github.event.inputs.publish_galaxy }}
           REPOSITORY_ID: ${{ github.repository_id }}
+          SECURITY_RELEASE: ${{ needs.security-classification.outputs.security-release }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
           WORKFLOW_EVENT: ${{ github.event_name }}
           WORKFLOW_ACTOR: ${{ github.actor }}
@@ -242,6 +274,16 @@ jobs:
           )"
           VERSION="$(jq -er '.version' <<< "$version_resolution")"
           RELEASE_IMPACT="$(jq -er '.impact' <<< "$version_resolution")"
+          PREPARATION_MODE="$(jq -er '.release_mode' changelogs/release-preparation.json)"
+          if [ "$SECURITY_RELEASE" = true ]; then
+            test "$PREPARATION_MODE" = security
+            SECURITY_CHAIN_ID="$(jq -er '.chain_id' changelogs/release-preparation.json)"
+            [[ "$SECURITY_CHAIN_ID" =~ ^sha256:[0-9a-f]{64}$ ]]
+          else
+            test "$SECURITY_RELEASE" = false
+            test "$PREPARATION_MODE" = normal
+            SECURITY_CHAIN_ID=""
+          fi
           export VERSION
 
           tag_matches="$(
@@ -379,10 +421,32 @@ jobs:
 
           git add galaxy.yml changelogs CHANGELOG.rst
           git commit -m "chore(release): prepare v${VERSION}"
-          authenticated_push \
-            "--force-with-lease=${release_ref}:${remote_release_sha}" \
-            origin "HEAD:${release_ref}"
           pushed_sha="$(git rev-parse HEAD)"
+          if [ -n "$remote_release_sha" ]; then
+            git fetch --no-tags origin "$release_ref"
+            test "$(git rev-parse FETCH_HEAD)" = "$remote_release_sha"
+            git switch --detach "$remote_release_sha"
+            pushed_sha="$remote_release_sha"
+          fi
+
+          promotion_base="$RUNNER_TEMP/release-promotion-base"
+          test ! -e "$promotion_base"
+          git worktree add --detach "$promotion_base" "$BASE_SHA"
+          python "$promotion_base/scripts/security_main_promotion.py" \
+            --base-root "$promotion_base" \
+            --head-root "$GITHUB_WORKSPACE" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$pushed_sha" \
+            --head-ref "$RELEASE_BRANCH" >/dev/null
+          git worktree remove "$promotion_base"
+
+          if [ -z "$remote_release_sha" ]; then
+            authenticated_push origin "HEAD:${release_ref}"
+            test "$(git ls-remote origin "$release_ref" | awk '{print $1}')" = \
+              "$pushed_sha"
+          else
+            echo "Reusing the already verified immutable release branch head ${pushed_sha}."
+          fi
 
           body_file="$(mktemp)"
           {
@@ -394,6 +458,11 @@ jobs:
             echo "GitHub release creation: \`${CREATE_GITHUB_RELEASE}\`"
             echo "Galaxy publishing: \`${PUBLISH_GALAXY}\`"
             echo "Reviewed semantic impact: \`${RELEASE_IMPACT}\`"
+            echo "Release mode: \`${PREPARATION_MODE}\`"
+            if [ "$PREPARATION_MODE" = security ]; then
+              echo "MLX-90 chain: \`${SECURITY_CHAIN_ID}\`"
+              echo "- Human actions in the successful Security path: \`0\`"
+            fi
             echo "Required merge method: \`merge commit\` (squash and rebase are prohibited)"
             echo
             echo "## Changelog summary"
@@ -521,3 +590,13 @@ jobs:
           gh pr edit "$existing" \
             --title "Release v${VERSION}" \
             --body-file "$body_file"
+
+          if [ "$SECURITY_RELEASE" = true ]; then
+            test "$WORKFLOW_ACTOR" = 'lightning-it-release-automation[bot]'
+            test "$(jq -er '.[0].user.login' <<< "$owned_pulls")" = \
+              'lightning-it-release-automation[bot]'
+            test "$(jq -er '.[0].head.sha' <<< "$owned_pulls")" = "$pushed_sha"
+            gh pr merge "$existing" \
+              --repo "$GITHUB_REPOSITORY" \
+              --auto --merge --match-head-commit "$pushed_sha"
+          fi

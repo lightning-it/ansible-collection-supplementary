@@ -1,0 +1,15 @@
+---
+security_fixes:
+  - >-
+    Replace the 20 centrally classified committed credential-shaped test
+    values with runtime-generated, ephemeral credentials, protected task output, restrictive lookup-file
+    permissions, and explicit before/after redaction assertions. Documentation
+    now lists only required secret variable names and keeps their values in an
+    encrypted Vault or approved external secret manager. Secret-bearing Grafana
+    and Checkmk Pod manifests are now written as `root:root` with mode `0600`
+    and covered by a regression contract. The temporary
+    centrally managed manifest intentionally remains unchanged for this cleanup
+    PR: the review engine reads it from the authoritative base and masks only
+    exact old path, line, and content matches. Shared Assets retires that
+    manifest through its guarded synchronizer only after this cleanup is merged,
+    so replacement or newly introduced lines remain fully scanned.

@@ -7,3 +7,6 @@
 - Require new or modified third-party GitHub Actions dependencies to use immutable commit SHAs.
 - Explain each finding's impact and propose a concrete fix.
 - Prefer a regression test for bugs and security issues.
+
+<!-- Managed contract: Codex and Copilot must apply AGENTS.md. -->
+<!-- AGENTS_SHA256: 49e9517f142f866bb9b337174f992e12cf22e73d4afb08c2a10c10906b72872f -->

@@ -41,6 +41,13 @@ on:
 permissions:
   contents: read
 
+env:
+  RELEASE_VALIDATION_WORST_CASE_MINUTES: "530"
+  RELEASE_VALIDATION_QUEUE_ALLOWANCE_MINUTES: "100"
+  RELEASE_VALIDATION_WINDOW_ONE_ATTEMPTS: "660"
+  RELEASE_VALIDATION_WINDOW_TWO_ATTEMPTS: "600"
+  RELEASE_VALIDATION_POLL_SECONDS: "30"
+
 jobs:
   dispatch:
     if: >-
@@ -135,6 +142,31 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Resolve immutable pre-consumption Security binding
+        id: binding
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.release_version }}
+        run: |
+          set -euo pipefail
+          receipt=changelogs/release-preparation.json
+          test -f "$receipt"
+          test ! -L "$receipt"
+          base_sha="$(
+            jq -er --arg version "$RELEASE_VERSION" '
+              select(.next_version == $version)
+              | .base_sha
+              | select(test("^[0-9a-f]{40}$"))
+            ' "$receipt"
+          )"
+          echo "base_sha=$base_sha" >>"$GITHUB_OUTPUT"
+
+      - name: Checkout immutable pre-consumption Security binding
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ steps.binding.outputs.base_sha }}
+          path: security-binding-base
+          persist-credentials: false
+
       - name: Classify evidence-bound release version
         id: security
         env:
@@ -143,6 +175,7 @@ jobs:
           python scripts/classify-security-release.py
           --event-kind version
           --version "$RELEASE_VERSION"
+          --binding-root security-binding-base
 
       - name: Mint exact publish-dispatch App token
         id: publish-dispatch-app
@@ -186,6 +219,7 @@ jobs:
     permissions:
       contents: read
     outputs:
+      publish-runner: ${{ steps.runner.outputs.labels }}
       security-release: ${{ steps.classify.outputs.security_release }}
       security-evidence-id: ${{ steps.classify.outputs.security_evidence_id }}
       security-version: ${{ steps.classify.outputs.security_version }}
@@ -195,6 +229,31 @@ jobs:
         with:
           ref: ${{ inputs.release_sha }}
           fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve immutable pre-consumption Security binding
+        id: binding
+        env:
+          EVIDENCE_ID: ${{ inputs.security_evidence_id || '' }}
+        run: |
+          set -euo pipefail
+          receipt=changelogs/release-preparation.json
+          test -f "$receipt"
+          test ! -L "$receipt"
+          base_sha="$(
+            jq -er --arg evidence_id "$EVIDENCE_ID" '
+              select(
+                ($evidence_id == "" or .security.evidence_id == $evidence_id)
+              )
+              | .base_sha
+              | select(test("^[0-9a-f]{40}$"))
+            ' "$receipt"
+          )"
+          echo "base_sha=$base_sha" >>"$GITHUB_OUTPUT"
+      - name: Checkout immutable pre-consumption Security binding
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ steps.binding.outputs.base_sha }}
+          path: security-binding-base
           persist-credentials: false
       - name: Verify main identity and classify before environment selection
         id: classify
@@ -221,7 +280,145 @@ jobs:
           python scripts/classify-security-release.py \
             --event-kind version \
             --version "$release_version" \
-            --evidence-id "$EVIDENCE_ID"
+            --evidence-id "$EVIDENCE_ID" \
+            --binding-root security-binding-base
+      - name: Select the immutable publication runner class
+        id: runner
+        env:
+          SECURITY_RELEASE: ${{ steps.classify.outputs.security_release }}
+        run: |
+          set -euo pipefail
+          case "$SECURITY_RELEASE" in
+            true)
+              echo 'labels=["self-hosted","linux","x64","incus"]' >> "$GITHUB_OUTPUT"
+              ;;
+            false)
+              echo 'labels=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Security classification did not return a canonical boolean." >&2
+              exit 1
+              ;;
+          esac
+
+  release-validation-window:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
+    name: Wait for exact-SHA Collection CI terminal state
+    needs: security-classification
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    permissions:
+      actions: read
+    outputs:
+      ci-run-id: ${{ steps.wait.outputs.ci-run-id }}
+    steps:
+      - name: Wait within the first bounded Collection CI window
+        id: wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          total_minutes=$((
+            (RELEASE_VALIDATION_WINDOW_ONE_ATTEMPTS + RELEASE_VALIDATION_WINDOW_TWO_ATTEMPTS) *
+            RELEASE_VALIDATION_POLL_SECONDS / 60
+          ))
+          required_minutes=$((
+            RELEASE_VALIDATION_WORST_CASE_MINUTES + RELEASE_VALIDATION_QUEUE_ALLOWANCE_MINUTES
+          ))
+          test "$total_minutes" -ge "$required_minutes"
+          for attempt in $(seq 1 "$RELEASE_VALIDATION_WINDOW_ONE_ATTEMPTS"); do
+            runs="$(
+              gh api --method GET \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/collection-ci.yml/runs" \
+                -f branch=main -f event=push -f head_sha="$RELEASE_SHA" -f per_page=100 \
+            )"
+            latest="$(
+              jq -c --arg sha "$RELEASE_SHA" '
+                [.workflow_runs[] | select(
+                  .event == "push" and .head_branch == "main" and .head_sha == $sha
+                )] | sort_by(.run_attempt, .id) | last // {}
+              ' <<< "$runs"
+            )"
+            run_id="$(jq -r '.id // empty' <<< "$latest")"
+            status="$(jq -r '.status // empty' <<< "$latest")"
+            if [ "$status" = completed ]; then
+              test -n "$run_id"
+              echo "ci-run-id=$run_id" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            case "$status" in ""|queued|in_progress|pending|requested|waiting) ;; *) exit 1 ;; esac
+            echo "Waiting for Collection CI terminal state ($attempt/$RELEASE_VALIDATION_WINDOW_ONE_ATTEMPTS)."
+            sleep "$RELEASE_VALIDATION_POLL_SECONDS"
+          done
+          echo "First bounded window exhausted; continuing with the final exact-SHA window."
+
+  release-validation:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
+    name: Verify exact-SHA Release Validation
+    needs: [security-classification, release-validation-window]
+    runs-on: ubuntu-latest
+    timeout-minutes: 310
+    permissions:
+      actions: read
+    outputs:
+      ci-run-id: ${{ steps.exact.outputs.ci-run-id }}
+    steps:
+      - name: Verify terminal success within the final bounded window
+        id: exact
+        env:
+          EARLY_RUN_ID: ${{ needs.release-validation-window.outputs.ci-run-id }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          for attempt in $(seq 1 "$RELEASE_VALIDATION_WINDOW_TWO_ATTEMPTS"); do
+            runs="$(
+              gh api --method GET \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/collection-ci.yml/runs" \
+                -f branch=main -f event=push -f head_sha="$RELEASE_SHA" -f per_page=100
+            )"
+            latest="$(
+              jq -c --arg sha "$RELEASE_SHA" '
+                [.workflow_runs[] | select(
+                  .event == "push" and .head_branch == "main" and .head_sha == $sha
+                )] | sort_by(.run_attempt, .id) | last // {}
+              ' <<< "$runs"
+            )"
+            run_id="$(jq -r '.id // empty' <<< "$latest")"
+            status="$(jq -r '.status // empty' <<< "$latest")"
+            conclusion="$(jq -r '.conclusion // empty' <<< "$latest")"
+            if [ -n "$EARLY_RUN_ID" ] && [ -n "$run_id" ]; then
+              test "$EARLY_RUN_ID" = "$run_id"
+            fi
+            if [ "$status" = completed ]; then
+              test "$conclusion" = success
+              jobs="$(
+                gh api --method GET --paginate --slurp \
+                  "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs" -f per_page=100
+              )"
+              gate_count="$(
+                jq '[.[].jobs[] | select(
+                  .name == "Collection / Release Validation"
+                  and .status == "completed" and .conclusion == "success"
+                )] | length' <<< "$jobs"
+              )"
+              test "$gate_count" -eq 1
+              echo "ci-run-id=$run_id" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            case "$status" in ""|queued|in_progress|pending|requested|waiting) ;; *) exit 1 ;; esac
+            echo "Waiting for exact-SHA Release Validation ($attempt/$RELEASE_VALIDATION_WINDOW_TWO_ATTEMPTS)."
+            sleep "$RELEASE_VALIDATION_POLL_SECONDS"
+          done
+          echo "No terminal exact-SHA Release Validation was found." >&2
+          exit 1
 
   publish:
     if: >-
@@ -229,15 +426,17 @@ jobs:
       github.ref == 'refs/heads/main' &&
       (needs.security-classification.outputs.security-release == 'false' ||
        (needs.security-classification.outputs.security-release == 'true' &&
-        github.actor == 'lightning-it-release-automation[bot]'))
+        github.actor == 'lightning-it-release-automation[bot]' &&
+        github.actor_id == '307565056'))
     name: Publish collection release
-    needs: security-classification
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
+    needs: [security-classification, release-validation]
+    runs-on: ${{ fromJSON(needs.security-classification.outputs.publish-runner) }}
+    timeout-minutes: 360
     environment:
       name: >-
         ${{ needs.security-classification.outputs.security-release == 'true' &&
             github.actor == 'lightning-it-release-automation[bot]' &&
+            github.actor_id == '307565056' &&
             'mlx90-security-publish' ||
             'ansible-collections' }}
     concurrency:
@@ -420,24 +619,26 @@ jobs:
           PY
           )"
           test "$released_version" = "$expected_version"
-          python scripts/release-version.py \
+
+          base_tree="$RUNNER_TEMP/release-preparation-base"
+          test ! -e "$base_tree"
+          git worktree add --detach --quiet "$base_tree" "$REVIEWED_BASE_SHA"
+          test "$(git -C "$base_tree" rev-parse HEAD)" = "$REVIEWED_BASE_SHA"
+          python "$base_tree/scripts/release-version.py" \
             --verify-preparation-receipt "$receipt" \
             --repository "$GITHUB_REPOSITORY" \
             --repository-id "$REPOSITORY_ID" \
             --base-sha "$REVIEWED_BASE_SHA" \
-            --expected-version "$expected_version" >/dev/null
+            --expected-version "$expected_version" \
+            --root "$base_tree" >/dev/null
 
-          base_tree="$RUNNER_TEMP/release-preparation-base"
-          rm -rf "$base_tree"
-          mkdir -p "$base_tree/fragments"
-          git show "$REVIEWED_BASE_SHA:galaxy.yml" > "$base_tree/galaxy.yml"
           while IFS= read -r fragment; do
             name="$(jq -er '.path' <<< "$fragment")"
             expected_digest="$(jq -er '.sha256' <<< "$fragment")"
-            git show \
-              "$REVIEWED_BASE_SHA:changelogs/fragments/$name" \
-              > "$base_tree/fragments/$name"
-            test "$(sha256sum "$base_tree/fragments/$name" | awk '{print $1}')" = \
+            fragment_path="$base_tree/changelogs/fragments/$name"
+            test -f "$fragment_path"
+            test ! -L "$fragment_path"
+            test "$(sha256sum "$fragment_path" | awk '{print $1}')" = \
               "$expected_digest"
             if git cat-file -e \
                 "$REVIEWED_HEAD_SHA:changelogs/fragments/$name" 2>/dev/null
@@ -448,9 +649,9 @@ jobs:
           done < <(jq -c '.fragments[]' "$receipt")
 
           recomputed="$(
-            python scripts/release-version.py \
+            python "$base_tree/scripts/release-version.py" \
               --galaxy "$base_tree/galaxy.yml" \
-              --fragments "$base_tree/fragments" \
+              --fragments "$base_tree/changelogs/fragments" \
               --requested-version "$expected_version"
           )"
           jq -e --argjson recomputed "$recomputed" '
@@ -488,69 +689,9 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
 
-      - name: Wait for exact-SHA main Release Validation
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          for attempt in $(seq 1 240); do
-            runs="$(
-              gh api --method GET \
-                "repos/${GITHUB_REPOSITORY}/actions/workflows/collection-ci.yml/runs" \
-                -f branch=main \
-                -f event=push \
-                -f head_sha="$RELEASE_SHA" \
-                -f per_page=100
-            )"
-            run_id="$(
-              jq -r --arg sha "$RELEASE_SHA" '
-                [
-                  .workflow_runs[]
-                  | select(
-                      .event == "push"
-                      and .head_branch == "main"
-                      and .head_sha == $sha
-                      and .status == "completed"
-                      and .conclusion == "success"
-                    )
-                ]
-                | sort_by(.run_attempt, .id)
-                | last
-                | .id // empty
-              ' <<< "$runs"
-            )"
-            if [ -n "$run_id" ]; then
-              jobs="$(
-                gh api --method GET --paginate --slurp \
-                  "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs" \
-                  -f per_page=100
-              )"
-              gate_count="$(
-                jq '[
-                  .[].jobs[]
-                  | select(
-                      .name == "Collection / Release Validation"
-                      and .status == "completed"
-                      and .conclusion == "success"
-                    )
-                ] | length' <<< "$jobs"
-              )"
-              if [ "$gate_count" -eq 1 ]; then
-                echo "CI_RUN_ID=$run_id" >> "$GITHUB_ENV"
-                echo "Using successful exact-SHA Collection CI run $run_id."
-                exit 0
-              fi
-            fi
-            echo "Waiting for exact-SHA main Release Validation (attempt $attempt/240)."
-            sleep 30
-          done
-
-          echo "No successful exact-SHA main Release Validation was found." >&2
-          exit 1
-
       - name: Download exact candidate and evidence from validated run
         env:
+          CI_RUN_ID: ${{ needs.release-validation.outputs.ci-run-id }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -742,6 +883,7 @@ jobs:
           test -s incoming/evidence/release-assets/SHA256SUMS.sigstore.json
           test -s incoming/evidence/release-assets/release-security-receipt.json.sigstore.json
           test -s incoming/evidence/evidence/security/vulnerability-report.json
+          test -s incoming/evidence/evidence/security/trivy-vulnerability-report.json
           test -s incoming/evidence/evidence/security/secret-scan-summary.json
           (
             cd incoming/evidence/long-term
@@ -917,6 +1059,8 @@ jobs:
           test "$(wc -l < dist/release/ci-candidate-SHA256SUMS)" -eq 1
           cp incoming/evidence/evidence/security/vulnerability-report.json \
             dist/release/vulnerability-report.json
+          cp incoming/evidence/evidence/security/trivy-vulnerability-report.json \
+            dist/release/trivy-vulnerability-report.json
           cp incoming/evidence/evidence/security/secret-scan-summary.json \
             dist/release/secret-scan-summary.json
           cp dist/attestation-bundles/*.jsonl dist/release/
@@ -1027,6 +1171,123 @@ jobs:
             --cert-identity "$publish_identity" \
             --source-ref refs/heads/main \
             --source-digest "$RELEASE_SHA"
+
+      - name: Stage exact Security candidate in native Nexus Galaxy v3
+        if: env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'
+        env:
+          NEXUS_GALAXY_PASSWORD: ${{ secrets.NEXUS_GALAXY_PASSWORD }}
+          NEXUS_GALAXY_REPOSITORY: ${{ vars.NEXUS_GALAXY_REPOSITORY }}
+          NEXUS_GALAXY_REPOSITORY_URL: ${{ vars.NEXUS_GALAXY_REPOSITORY_URL }}
+          NEXUS_GALAXY_USERNAME: ${{ secrets.NEXUS_GALAXY_USERNAME }}
+        run: |
+          set -euo pipefail
+          test -n "$NEXUS_GALAXY_REPOSITORY"
+          test -n "$NEXUS_GALAXY_REPOSITORY_URL"
+          test -n "$NEXUS_GALAXY_USERNAME"
+          test -n "$NEXUS_GALAXY_PASSWORD"
+          mkdir -p dist/validation
+          python scripts/nexus-galaxy-v3-stage.py \
+            --candidate "incoming/candidate/${CANDIDATE_NAME}" \
+            --repository-url "$NEXUS_GALAXY_REPOSITORY_URL" \
+            --repository "$NEXUS_GALAXY_REPOSITORY" \
+            --output dist/validation/nexus-stage.json
+
+      - name: Mint read-only release automation installation audit token
+        id: release-automation-audit-app
+        if: env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-actions: read
+
+      - name: Verify exact release automation installation and allowlist
+        if: env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'
+        env:
+          APP_INSTALLATION_ID: ${{ steps.release-automation-audit-app.outputs.installation-id }}
+          APP_SLUG: ${{ steps.release-automation-audit-app.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.release-automation-audit-app.outputs.token }}
+        run: |
+          set -euo pipefail
+          test "$APP_SLUG" = lightning-it-release-automation
+          test "$APP_INSTALLATION_ID" = 148019054
+          installation="$RUNNER_TEMP/release-automation-installation.json"
+          gh api /installation > "$installation"
+          jq -e '
+            .id == 148019054
+            and .app_slug == "lightning-it-release-automation"
+            and .target_type == "Organization"
+            and .account.login == "lightning-it"
+            and .repository_selection == "selected"
+            and .permissions == {
+              "actions": "write",
+              "checks": "read",
+              "contents": "write",
+              "metadata": "read",
+              "pull_requests": "write"
+            }
+          ' "$installation" >/dev/null
+          actual_repositories="$(
+            gh api --paginate 'installation/repositories?per_page=100' \
+              | jq -sc '[.[].repositories[].full_name] | sort | unique'
+          )"
+          expected_repositories='["lightning-it/ansible-collection-supplementary"'
+          expected_repositories+=',"lightning-it/container-ee-wunder-ansible-ubi9"'
+          expected_repositories+=',"lightning-it/github-management-lit"'
+          expected_repositories+=',"lightning-it/modulix-validation"'
+          expected_repositories+=',"lightning-it/shared-assets-lit"]'
+          test "$actual_repositories" = "$expected_repositories"
+
+      - name: Mint exact ModuLix validation App token
+        id: modulix-validation-app
+        if: env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: modulix-validation
+          permission-actions: write
+          permission-contents: read
+
+      - name: Require signed successful ModuLix validation receipt
+        if: env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'
+        env:
+          APP_INSTALLATION_ID: ${{ steps.modulix-validation-app.outputs.installation-id }}
+          APP_SLUG: ${{ steps.modulix-validation-app.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.modulix-validation-app.outputs.token }}
+          SECURITY_EVIDENCE_ID: ${{ needs.security-classification.outputs.security-evidence-id }}
+        run: |
+          set -euo pipefail
+          test "$APP_SLUG" = lightning-it-release-automation
+          test "$APP_INSTALLATION_ID" = 148019054
+          result="$RUNNER_TEMP/modulix-validation-result.json"
+          python scripts/modulix-validation-receipt.py \
+            --nexus-manifest dist/validation/nexus-stage.json \
+            --source-sha "$RELEASE_SHA" \
+            --source-run-id "$GITHUB_RUN_ID" \
+            --source-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --security-evidence-id "$SECURITY_EVIDENCE_ID" \
+            --version "$RELEASE_VERSION" \
+            --app-slug "$APP_SLUG" \
+            --installation-id "$APP_INSTALLATION_ID" \
+            --output-directory dist/validation/modulix > "$result"
+          receipt="$(jq -er '.receipt' "$result")"
+          receipt_sha256="$(jq -er '.receiptSha256' "$result")"
+          validation_run_id="$(jq -er '.controllerRunId' "$result")"
+          validation_run_attempt="$(jq -er '.controllerRunAttempt' "$result")"
+          request_id="$(jq -er '.requestId' "$result")"
+          test "$receipt" = dist/validation/modulix/mlx90-collection-validation-receipt.json
+          test -s "$receipt"
+          test -s "${receipt}.sigstore.json"
+          {
+            echo "MODULIX_VALIDATION_RECEIPT=$receipt"
+            echo "MODULIX_VALIDATION_RECEIPT_SHA256=$receipt_sha256"
+            echo "MODULIX_VALIDATION_RUN_ID=$validation_run_id"
+            echo "MODULIX_VALIDATION_RUN_ATTEMPT=$validation_run_attempt"
+            echo "MODULIX_VALIDATION_REQUEST_ID=$request_id"
+          } >> "$GITHUB_ENV"
 
       - name: Finalize immutable release attachments and notes
         env:
@@ -1399,7 +1660,7 @@ jobs:
           )"
           test "$post_asset_count" -eq 0 || test "$post_asset_count" -eq 2
 
-      - name: Publish or verify exact artifact on Ansible Galaxy
+      - name: Publish or verify validated artifact on Ansible Galaxy
         if: env.GALAXY_REQUIRED == 'true'
         env:
           GALAXY_API_TOKEN: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
@@ -1408,6 +1669,44 @@ jobs:
 
           candidate="incoming/candidate/${CANDIDATE_NAME}"
           candidate_sha="$(sha256sum "$candidate" | awk '{print $1}')"
+          if [ "$SECURITY_RELEASE" = true ]; then
+            test -s "$MODULIX_VALIDATION_RECEIPT"
+            test -s "${MODULIX_VALIDATION_RECEIPT}.sigstore.json"
+            test "$MODULIX_VALIDATION_RECEIPT_SHA256" = \
+              "sha256:$(sha256sum "$MODULIX_VALIDATION_RECEIPT" | awk '{print $1}')"
+            jq -e \
+              --arg digest "sha256:$candidate_sha" \
+              --arg repository "$GITHUB_REPOSITORY" \
+              --arg request_id "$MODULIX_VALIDATION_REQUEST_ID" \
+              --arg run_attempt "$MODULIX_VALIDATION_RUN_ATTEMPT" \
+              --arg run_id "$MODULIX_VALIDATION_RUN_ID" \
+              --arg sha "$RELEASE_SHA" '
+              .apiVersion == "lit.mlx90.collection-validation-receipt/v2"
+              and .kind == "CollectionValidationReceipt"
+              and .request.source.repository == $repository
+              and .request.source.sha == $sha
+              and .request.source.actor == "lightning-it-release-automation[bot]"
+              and .request.source.actorId == 307565056
+              and .request.source.actorType == "Bot"
+              and .request.source.event == "workflow_dispatch"
+              and .request.source.ref == "refs/heads/main"
+              and (.request.source.runId | tostring) == env.GITHUB_RUN_ID
+              and (.request.source.runAttempt | tostring) == env.GITHUB_RUN_ATTEMPT
+              and .request.candidate.sha256 == $digest
+              and .request.security.humanActions == 0
+              and .requestId == $request_id
+              and (.validation.runId | tostring) == $run_id
+              and (.validation.runAttempt | tostring) == $run_attempt
+              and .validation.actor == "lightning-it-release-automation[bot]"
+              and .validation.actorId == 307565056
+              and .validation.actorType == "Bot"
+              and .validation.humanActions == 0
+              and .validation.conclusion == "success"
+              and .decision.candidateUnchanged == true
+              and .decision.galaxyPublicationAuthorized == true
+              and .decision.releaseEligible == true
+            ' "$MODULIX_VALIDATION_RECEIPT" >/dev/null
+          fi
           version_url="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index/lit/supplementary/versions/${RELEASE_VERSION}/"
           response="$RUNNER_TEMP/galaxy-version.json"
           status="$(
@@ -1467,33 +1766,6 @@ jobs:
             "$galaxy_download_url"
           test "$(sha256sum "$RUNNER_TEMP/galaxy-${CANDIDATE_NAME}" | awk '{print $1}')" = \
             "$candidate_sha"
-
-      - name: Mint central validation dispatch token
-        id: transition-app
-        if: env.GALAXY_REQUIRED == 'true'
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
-        with:
-          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: modulix-validation
-          permission-actions: write
-
-      - name: Dispatch transitional central validation
-        if: env.GALAXY_REQUIRED == 'true'
-        env:
-          GH_TOKEN: ${{ steps.transition-app.outputs.token }}
-        run: |
-          set -euo pipefail
-          candidate="incoming/candidate/${CANDIDATE_NAME}"
-          candidate_sha="$(sha256sum "$candidate" | awk '{print $1}')"
-          python scripts/dispatch-transition-validation.py \
-            --source-repository "$GITHUB_REPOSITORY" \
-            --source-sha "$RELEASE_SHA" \
-            --version "$RELEASE_VERSION" \
-            --artifact-name "$CANDIDATE_NAME" \
-            --artifact-sha256 "$candidate_sha" \
-            --ref main
 
       - name: Verify GitHub Release download, install, and smoke
         env:
@@ -1621,6 +1893,33 @@ jobs:
           root = Path(os.environ["RECEIPT_ROOT"])
           candidate = Path("incoming/candidate") / os.environ["CANDIDATE_NAME"]
           galaxy_required = os.environ["GALAXY_REQUIRED"] == "true"
+          security_validation = None
+          if os.environ["SECURITY_RELEASE"] == "true":
+              receipt_path = Path(os.environ["MODULIX_VALIDATION_RECEIPT"])
+              nexus_path = Path("dist/validation/nexus-stage.json")
+              receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+              nexus = json.loads(nexus_path.read_text(encoding="utf-8"))
+              receipt_digest = "sha256:" + hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+              if receipt_digest != os.environ["MODULIX_VALIDATION_RECEIPT_SHA256"]:
+                  raise SystemExit("ModuLix validation receipt changed after verification")
+              security_validation = {
+                  "humanActions": 0,
+                  "nexus": {
+                      "repository": nexus["repository"]["name"],
+                      "readbackSha256": nexus["readback"]["sha256"],
+                  },
+                  "receipt": {
+                      "requestId": receipt["requestId"],
+                      "sha256": receipt_digest,
+                  },
+                  "run": {
+                      "attempt": receipt["validation"]["runAttempt"],
+                      "id": receipt["validation"]["runId"],
+                      "repository": receipt["validation"]["repository"],
+                      "sha": receipt["validation"]["sha"],
+                      "workflow": receipt["validation"]["workflow"],
+                  },
+              }
           gates = {
               "github_release_assets_verified": True,
               "github_release_install_smoke": True,
@@ -1628,8 +1927,10 @@ jobs:
               "galaxy_install_smoke_or_not_required": True,
               "release_back_sync_dispatched": True,
           }
+          if security_validation is not None:
+              gates["security_validation_verified"] = True
           payload = {
-              "schema_version": 1,
+              "schema_version": 2 if security_validation is not None else 1,
               "repository": os.environ["GITHUB_REPOSITORY"],
               "commit_sha": os.environ["RELEASE_SHA"],
               "release_tag": os.environ["RELEASE_TAG"],
@@ -1653,6 +1954,8 @@ jobs:
               "verified": all(gates.values()),
               "gates": gates,
           }
+          if security_validation is not None:
+              payload["security_validation"] = security_validation
           (root / "post-release-verification.json").write_text(
               json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
           )
@@ -1784,5 +2087,6 @@ jobs:
           path: |
             dist/release/
             dist/post-release/
+            dist/validation/
           if-no-files-found: warn
           retention-days: 90

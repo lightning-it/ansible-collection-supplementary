@@ -73,6 +73,52 @@ jobs:
           ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Resolve immutable pre-consumption Security binding
+        id: binding
+        env:
+          BASE_SHA: ${{ env.COMPARE_BASE_SHA }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ env.COMPARE_HEAD_REF }}
+          SECURITY_VERSION: ${{ inputs.security_version || '' }}
+        run: |
+          set -euo pipefail
+          binding_sha="$SOURCE_SHA"
+          receipt=changelogs/release-preparation.json
+          require_receipt=false
+          if [ "$EVENT_NAME" = pull_request ] && [[ "$HEAD_REF" == release/v* ]]; then
+            require_receipt=true
+          elif [ "$EVENT_NAME" = push ] && [ -n "$BASE_SHA" ] && \
+              git diff --name-only --no-renames "$BASE_SHA" "$SOURCE_SHA" -- \
+                "$receipt" | grep -Fxq "$receipt"
+          then
+            require_receipt=true
+          elif [ "$EVENT_NAME" = workflow_dispatch ] && [ -n "$SECURITY_VERSION" ]; then
+            require_receipt=true
+          fi
+          if [ "$require_receipt" = true ]; then
+            test -f "$receipt"
+            test ! -L "$receipt"
+            receipt_version="$SECURITY_VERSION"
+            if [ "$EVENT_NAME" = pull_request ]; then
+              receipt_version="${HEAD_REF#release/v}"
+            fi
+            binding_sha="$(
+              jq -er --arg version "$receipt_version" '
+                select($version == "" or .next_version == $version)
+                | .base_sha
+                | select(test("^[0-9a-f]{40}$"))
+              ' "$receipt"
+            )"
+          fi
+          git cat-file -e "${binding_sha}^{commit}"
+          git merge-base --is-ancestor "$binding_sha" "$SOURCE_SHA"
+          echo "base_sha=$binding_sha" >>"$GITHUB_OUTPUT"
+      - name: Checkout immutable pre-consumption Security binding
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ steps.binding.outputs.base_sha }}
+          path: security-binding-base
+          persist-credentials: false
       - name: Classify exact event without granting an environment
         id: classify
         env:
@@ -94,7 +140,8 @@ jobs:
                 --head-sha "$HEAD_SHA" \
                 --base-ref "$BASE_REF" \
                 --head-ref "$HEAD_REF" \
-                --evidence-id "$EVIDENCE_ID"
+                --evidence-id "$EVIDENCE_ID" \
+                --binding-root security-binding-base
               ;;
             push)
               commit_message="$(git show -s --format=%B "$HEAD_SHA")"
@@ -104,13 +151,15 @@ jobs:
                 --head-sha "$HEAD_SHA" \
                 --ref "$EVENT_REF" \
                 --commit-message "$commit_message" \
-                --evidence-id "$EVIDENCE_ID"
+                --evidence-id "$EVIDENCE_ID" \
+                --binding-root security-binding-base
               ;;
             workflow_dispatch)
               python scripts/classify-security-release.py \
                 --event-kind version \
                 --version "$SECURITY_VERSION" \
-                --evidence-id "$EVIDENCE_ID"
+                --evidence-id "$EVIDENCE_ID" \
+                --binding-root security-binding-base
               ;;
             *)
               echo "Unsupported classification event: $EVENT_NAME" >&2
@@ -784,19 +833,49 @@ jobs:
         uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7
         with:
           sbom: artifacts/evidence/security/sbom.cdx.json
-          vex: security/vex/chrome-linux-151.0.7922.71.openvex.json
           output-format: json
           output-file: artifacts/evidence/security/vulnerability-report.json
           fail-build: true
           severity-cutoff: high
-      - name: Preserve the applied vulnerability-exploitability statement
+      - name: Independently scan the candidate-bound SBOM with Trivy
         if: always()
         run: |
           set -euo pipefail
-          mkdir -p artifacts/evidence/security
-          cp \
-            security/vex/chrome-linux-151.0.7922.71.openvex.json \
-            artifacts/evidence/security/chrome-linux.openvex.json
+          test ! -e .trivyignore
+          test ! -e trivy.yaml
+          cache_dir="$RUNNER_TEMP/trivy-cache-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          test ! -e "$cache_dir"
+          mkdir -m 0700 "$cache_dir"
+          docker run --rm \
+            --read-only \
+            --user "$(id -u):$(id -g)" \
+            --cap-drop ALL \
+            --security-opt no-new-privileges=true \
+            --pids-limit 128 \
+            --network bridge \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777 \
+            -v "$PWD:/workspace:ro" \
+            -v "$cache_dir:/trivy-cache:rw" \
+            -w /workspace \
+            docker.io/aquasec/trivy:0.70.0@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e \
+            --cache-dir /trivy-cache \
+            --config /dev/null \
+            --quiet \
+            --timeout 15m \
+            sbom \
+            --no-progress \
+            --disable-telemetry \
+            --scanners vuln \
+            --pkg-types os,library \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed=false \
+            --skip-vex-repo-update \
+            --ignorefile /dev/null \
+            --exit-code 1 \
+            --format json \
+            artifacts/evidence/security/sbom.cdx.json \
+            > artifacts/evidence/security/trivy-vulnerability-report.json
+          test -s artifacts/evidence/security/trivy-vulnerability-report.json
       - name: Scan the exact collection candidate for secret-like content
         if: always()
         run: |
@@ -1345,6 +1424,8 @@ jobs:
           set -euo pipefail
           cp artifacts/evidence/security/vulnerability-report.json \
             artifacts/release-assets/vulnerability-report.json
+          cp artifacts/evidence/security/trivy-vulnerability-report.json \
+            artifacts/release-assets/trivy-vulnerability-report.json
           cp artifacts/evidence/security/secret-scan-summary.json \
             artifacts/release-assets/secret-scan-summary.json
           python - <<'PY'

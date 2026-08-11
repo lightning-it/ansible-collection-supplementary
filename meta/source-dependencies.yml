@@ -24,28 +24,39 @@ container_images:
     locations:
       - "roles/samba_deploy/defaults/main.yml"
       - "roles/samba_upgrade/defaults/main.yml"
-  - reference: "docker.io/grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308"
+  - reference: "docker.io/grafana/alloy:v1.18.1@sha256:0f4434c92b3e6cdac38bb129b344e1790c246f7b6e2eaffcc16a5fa363240e33"
     locations:
       - "roles/alloy_deploy/defaults/main.yml"
   - reference: "docker.io/grafana/grafana:11.6.16@sha256:d67af92050b8d93b393dc741864752a69c9da1ffa39c1bb9af49ad5d9e47d2c3"
     locations:
       - "roles/grafana_deploy/defaults/main.yml"
-  - reference: "docker.io/grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc"
+  - reference: "docker.io/grafana/loki:3.7.6@sha256:efd47c67f9bac88ca29bcf8cb997d9ab29d1848bd0aff579282295542a745952"
     locations:
       - "roles/loki_deploy/defaults/main.yml"
+  - reference: "docker.io/guacamole/guacamole:1.6.0@sha256:50484043eadd8d9562053940c0ed523dbddaf9086c370127b2f4acabb8bddddc"
+    locations:
+      - "roles/guacamole_deploy/defaults/main.yml"
+  - reference: "docker.io/guacamole/guacd:1.6.0@sha256:f39258e35244b6bf79bc6ac4e60eee176aea6f6a5adb13e8c3090e48df8ae515"
+    locations:
+      - "roles/guacamole_deploy/defaults/main.yml"
   - reference: "docker.io/hashicorp/vault:1.21@sha256:4e33b126a59c0c333b76fb4e894722462659a6bec7c48c9ee8cea56fccfd2569"
     locations:
       - "roles/vault_deploy/defaults/main.yml"
-  - reference: "docker.io/library/nginx:stable@sha256:5cf90903deda2c5981b8ad05e7617ac010e389f0dde0ac83487c02c509281de6"
+  - reference: "docker.io/library/nginx:stable@sha256:46ccc48fbb1f5a43167f2ee2c279c122b96eec5d976e7f4e1e0780f59a51b4d6"
     locations:
       - "roles/nginx_deploy/defaults/main.yml"
-  - reference: "docker.io/library/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20"
+  - reference: "docker.io/library/postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b"
     locations:
       - "manifests/identity-stack.pod.yaml"
       - "roles/forgejo_deploy/defaults/main.yml"
+      - "roles/guacamole_deploy/defaults/main.yml"
       - "roles/keycloak_deploy/defaults/main.yml"
+      - "roles/netbox_deploy/defaults/main.yml"
       - "roles/postgres_deploy/defaults/main.yml"
       - "roles/semaphore_deploy/defaults/main.yml"
+  - reference: "docker.io/netboxcommunity/netbox:v4.6-5.0.2@sha256:74d8417ebaa2bb486b8a8d39bcdc4b92f0d30373a886c5b23074d58663e764c8"
+    locations:
+      - "roles/netbox_deploy/defaults/main.yml"
   - reference: "docker.io/prom/alertmanager:v0.33.1@sha256:9e082985f56f4c8c9f724e18f2288c6708f472e56a5286b8863d080434ea065d"
     locations:
       - "roles/alertmanager_deploy/defaults/main.yml"
@@ -62,19 +73,22 @@ container_images:
   - reference: "docker.io/rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
     locations:
       - ".pre-commit-config.yaml"
-  - reference: "docker.io/semaphoreui/semaphore:latest@sha256:7c7504614c4795b0e0670fb2d4400d35e2302204609664943cb16308b7a6f1e4"
+  - reference: "docker.io/semaphoreui/semaphore:latest@sha256:8886d55da349f6d600f66f2c6dd2be01a3a5b4265542b04cb6c10ae47e4306d2"
     locations:
       - "roles/semaphore_deploy/defaults/main.yml"
-  - reference: "docker.io/smblds/smblds:latest@sha256:066197b8a264329373667af87a384ec5c6c5edb4fd825f39a178775f3a800364"
+  - reference: "docker.io/smblds/smblds:latest@sha256:517c9b749d444df66f25e55876b9e39dcdb0ddad658fbd551658ce4ddad57a19"
     locations:
       - "roles/samba_deploy/defaults/main.yml"
-  - reference: "docker.io/sonatype/nexus3:latest@sha256:f20aca9b5688b9d1bd9550cc4e2daca2591909b39dc0e7dc240b9e065342c3fe"
+  - reference: "docker.io/sonatype/nexus3:latest@sha256:c47083c9e77d87cd7f7c1111a68b53e758644deb54aba2235c8de1b40eebb09a"
     locations:
       - "roles/nexus/defaults/main.yml"
   - reference: "docker.io/tenableofficial/nessus:latest@sha256:c88e43fe1a8ca04a265f127fbfa474e80ab926d21862b6de5972a9465a91d8e6"
     locations:
       - "roles/nessus_deploy/defaults/main.yml"
-  - reference: "quay.io/keycloak/keycloak:26.7.0@sha256:0f198be292568439d700cdbfb893e69a6009bb43a94a06a945b1d3d506c76b13"
+  - reference: "docker.io/valkey/valkey:9.1-alpine@sha256:3fe38a705227d29534a199e876b38d5474dec4d3baca980ac6894df539416562"
+    locations:
+      - "roles/netbox_deploy/defaults/main.yml"
+  - reference: "quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6"
     locations:
       - "manifests/identity-stack.pod.yaml"
       - "roles/keycloak_deploy/defaults/main.yml"

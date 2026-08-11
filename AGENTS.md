@@ -45,6 +45,12 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    tests in `shared-assets-lit`.
 7. The role-quality governance block in this file is enforced by `scripts/validate-role-coverage.py` and recorded in
    `.lit/repository.yml`; a shared-assets sync MUST preserve it.
+8. Until a fresh real Security release proves `humanActions=0`, this repository owns exactly
+   `.github/workflows/copilot-review.yml`, `scripts/security-release-intake.py`,
+   `.github/workflows/security-release-intake.yml`, `scripts/security-release-dispatch.py`,
+   `.github/workflows/security-release-dispatch.yml`, and
+   `tests/unit/test_security_release_request_dispatch.py`. Sync MUST preserve them byte-for-byte; after acceptance,
+   their proven versions are canonicalized once in `shared-assets-lit`.
 
 ## 2. Repository Baseline (This Repo)
 
@@ -254,7 +260,7 @@ The standard branch and release model is:
 Automation safety requirements:
 
 - Protected branches must require pull request review.
-- Only trusted Renovate PRs may be auto-approved by collection automation.
+- Only trusted Renovate PRs may be enabled for auto-merge by collection automation after all required current-head checks pass. The protected `develop` branch requires zero approving reviews; GitHub Actions reviews remain disabled by governance.
 - A trusted Renovate PR must have `renovate[bot]` as both trigger actor and PR author, a `renovate/*` source
   branch, `develop` as the base branch, and both `renovate` and `dependencies` labels.
 - Human, external contributor, and develop-to-main promotion PRs must not be auto-approved or auto-merged by

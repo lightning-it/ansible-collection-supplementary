@@ -1,0 +1,135 @@
+---
+- name: Validate Vault secret bundle contract
+  ansible.builtin.assert:
+    that:
+      - vault_secret_bundle_address | trim | length > 0
+      - vault_secret_bundle_kv_mount | trim | length > 0
+      - vault_secret_bundle_kv_path | trim | length > 0
+      - vault_secret_bundle_items is sequence
+      - vault_secret_bundle_items is not string
+      - vault_secret_bundle_static_data is mapping
+      - >-
+        (vault_secret_bundle_token | trim | length > 0) or
+        ((vault_secret_bundle_role_id | trim | length > 0) and
+         (vault_secret_bundle_secret_id | trim | length > 0))
+    fail_msg: "The Vault secret bundle requires a KV path and complete token or AppRole authentication."
+  no_log: true
+  run_once: true
+
+- name: Validate requested Vault secret fields
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.name | default('', true) is match('^[A-Za-z][A-Za-z0-9_]*$')
+      - item.length | default(40) | int >= 16
+      - item.chars | default('ascii_letters,digits') | string | length > 0
+    fail_msg: >-
+      Each Vault secret item requires a safe name, a minimum length of 16,
+      and a non-empty password character contract.
+    quiet: true
+  loop: "{{ vault_secret_bundle_items }}"
+  loop_control:
+    label: "{{ item.name | default('invalid') }}"
+  no_log: true
+  run_once: true
+
+- name: Read the existing secret bundle before generation
+  delegate_to: localhost
+  become: false
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ vault_secret_bundle_address }}"
+    engine_mount_point: "{{ vault_secret_bundle_kv_mount }}"
+    path: "{{ vault_secret_bundle_kv_path }}"
+    validate_certs: "{{ vault_secret_bundle_validate_certs }}"
+    ca_cert: "{{ vault_secret_bundle_ca_cert if (vault_secret_bundle_ca_cert | trim | length > 0) else omit }}"
+    namespace: "{{ vault_secret_bundle_namespace if (vault_secret_bundle_namespace | trim | length > 0) else omit }}"
+    auth_mount_point: "{{ vault_secret_bundle_auth_mount_point }}"
+    auth_method: "{{ 'token' if (vault_secret_bundle_token | trim | length > 0) else 'approle' }}"
+    token: "{{ vault_secret_bundle_token if (vault_secret_bundle_token | trim | length > 0) else omit }}"
+    role_id: "{{ vault_secret_bundle_role_id if (vault_secret_bundle_token | trim | length == 0) else omit }}"
+    secret_id: "{{ vault_secret_bundle_secret_id if (vault_secret_bundle_token | trim | length == 0) else omit }}"
+  register: vault_secret_bundle_read
+  failed_when: >-
+    (vault_secret_bundle_read.failed | default(false)) and
+    (vault_secret_bundle_read.status | default(0) | int != 404) and
+    ('Invalid or missing path' not in (vault_secret_bundle_read.msg | default(''))) and
+    ('InvalidPath' not in (vault_secret_bundle_read.msg | default(''))) and
+    ('secret not found' not in (vault_secret_bundle_read.msg | default('') | lower)) and
+    ('path not found' not in (vault_secret_bundle_read.msg | default('') | lower))
+  no_log: true
+  run_once: true
+
+- name: Start the effective secret bundle with existing and static values
+  ansible.builtin.set_fact:
+    vault_secret_bundle_effective: >-
+      {{ ((vault_secret_bundle_read.data | default({})).data | default({}))
+         | combine(vault_secret_bundle_static_data) }}
+  changed_when: false
+  no_log: true
+  run_once: true
+
+- name: Generate only missing secret bundle values
+  ansible.builtin.set_fact:
+    vault_secret_bundle_effective: >-
+      {{ vault_secret_bundle_effective | combine({
+           item.name: (
+             vault_secret_bundle_effective[item.name]
+             if (vault_secret_bundle_effective[item.name] | default('', true) | string | length > 0)
+             else lookup(
+               'ansible.builtin.password',
+               '/dev/null length=' ~ (item.length | default(40) | int | string)
+               ~ ' chars=' ~ (item.chars | default('ascii_letters,digits'))
+             )
+           )
+         }) }}
+  loop: "{{ vault_secret_bundle_items }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: false
+  no_log: true
+  run_once: true
+  when: vault_secret_bundle_generate_missing | bool
+
+- name: Reject incomplete read-only secret bundles
+  ansible.builtin.assert:
+    that:
+      - vault_secret_bundle_effective[item.name] | default('', true) | string | length > 0
+    fail_msg: "The requested Vault field is absent and generation is disabled."
+    quiet: true
+  loop: "{{ vault_secret_bundle_items }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+  run_once: true
+  when: not vault_secret_bundle_generate_missing | bool
+
+- name: Persist the complete secret bundle in Vault
+  delegate_to: localhost
+  become: false
+  community.hashi_vault.vault_kv2_write:
+    url: "{{ vault_secret_bundle_address }}"
+    engine_mount_point: "{{ vault_secret_bundle_kv_mount }}"
+    path: "{{ vault_secret_bundle_kv_path }}"
+    validate_certs: "{{ vault_secret_bundle_validate_certs }}"
+    ca_cert: "{{ vault_secret_bundle_ca_cert if (vault_secret_bundle_ca_cert | trim | length > 0) else omit }}"
+    namespace: "{{ vault_secret_bundle_namespace if (vault_secret_bundle_namespace | trim | length > 0) else omit }}"
+    auth_mount_point: "{{ vault_secret_bundle_auth_mount_point }}"
+    auth_method: "{{ 'token' if (vault_secret_bundle_token | trim | length > 0) else 'approle' }}"
+    token: "{{ vault_secret_bundle_token if (vault_secret_bundle_token | trim | length > 0) else omit }}"
+    role_id: "{{ vault_secret_bundle_role_id if (vault_secret_bundle_token | trim | length == 0) else omit }}"
+    secret_id: "{{ vault_secret_bundle_secret_id if (vault_secret_bundle_token | trim | length == 0) else omit }}"
+    data: "{{ vault_secret_bundle_effective }}"
+    cas: "{{ vault_secret_bundle_read.metadata.version | default(0) | int }}"
+  no_log: true
+  run_once: true
+  when: >-
+    vault_secret_bundle_generate_missing | bool and
+    ((vault_secret_bundle_read.data | default({})).data | default({}))
+    != vault_secret_bundle_effective
+
+- name: Publish the in-memory secret bundle to the caller
+  ansible.builtin.set_fact:
+    vault_secret_bundle_result: "{{ vault_secret_bundle_effective }}"
+  changed_when: false
+  no_log: true
+  run_once: true

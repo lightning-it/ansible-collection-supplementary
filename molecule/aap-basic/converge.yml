@@ -11,16 +11,36 @@
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-coverage-mode
     aap_molecule_resolution_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-resolution.yml
+    aap_molecule_shared_password_file: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-shared-admin
+    aap_molecule_next_password_file: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-next-admin
+    aap_molecule_controller_password_file: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-controller-admin
+    aap_molecule_hub_password_file: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-hub-admin
+    aap_molecule_shared_password: >-
+      {{ lookup('ansible.builtin.password', aap_molecule_shared_password_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
+    aap_molecule_next_password: >-
+      {{ lookup('ansible.builtin.password', aap_molecule_next_password_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
+    aap_molecule_controller_password: >-
+      {{ lookup('ansible.builtin.password', aap_molecule_controller_password_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
+    aap_molecule_hub_password: >-
+      {{ lookup('ansible.builtin.password', aap_molecule_hub_password_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
     aap_resolve_admin_passwords: true
-    aap_admin_passwords_no_log: false
+    aap_admin_passwords_no_log: true
     aap_password_require_component_inputs: false
     aap_admin_password_input:
-      active: shared-admin-password
-      next: shared-admin-password-next
+      active: "{{ aap_molecule_shared_password }}"
+      next: "{{ aap_molecule_next_password }}"
     aap_controller_admin_password_input:
-      value: controller-admin-password
+      value: "{{ aap_molecule_controller_password }}"
     aap_hub_admin_password_input:
-      password: hub-admin-password
+      password: "{{ aap_molecule_hub_password }}"
   tasks:
     - name: Import lit.supplementary.aap for password resolution coverage
       ansible.builtin.import_role:
@@ -48,3 +68,4 @@
           aap_eda_admin_password_effective: "{{ aap_eda_admin_password_effective }}"
           aap_postgresql_admin_password_effective: "{{ aap_postgresql_admin_password_effective }}"
           aap_deploy_controller_admin_password_effective: "{{ aap_deploy_controller_admin_password_effective }}"
+      no_log: true

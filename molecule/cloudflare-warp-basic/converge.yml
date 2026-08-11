@@ -13,6 +13,10 @@
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/cloudflare-warp/mdm.xml
     cloudflare_warp_organization: molecule-test-team
     cloudflare_warp_auth_client_id: molecule-auth-client-id
-    cloudflare_warp_auth_client_secret: molecule-placeholder-not-a-real-secret
+    cloudflare_warp_auth_client_secret_file: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/cloudflare-warp-client
+    cloudflare_warp_auth_client_secret: >-
+      {{ lookup('ansible.builtin.password', cloudflare_warp_auth_client_secret_file,
+                length=32, chars=['ascii_letters', 'digits']) }}
   roles:
     - role: lit.supplementary.cloudflare_warp

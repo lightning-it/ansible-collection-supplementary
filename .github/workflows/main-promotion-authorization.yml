@@ -43,6 +43,14 @@ jobs:
           path: policy
           persist-credentials: false
 
+      - name: Checkout exact promotion head as non-executable evidence
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          path: candidate
+          persist-credentials: false
+
       - name: Classify exact live pull request
         id: classify
         env:
@@ -89,11 +97,31 @@ jobs:
           fi
           test -f policy/scripts/main-promotion-authorization.py
           test -f policy/.github/workflows/main-promotion-authorization.yml
+          policy_root_args=()
+          if grep -Fq 'parser.add_argument("--base-root"' \
+            policy/scripts/main-promotion-authorization.py; then
+            policy_root_args=(--base-root policy --head-root candidate)
+          else
+            # Compatibility is limited to the one normal develop promotion
+            # that installs the content-verifying policy into main. Reserved
+            # release/Security heads remain fail-closed until that policy is
+            # part of the immutable event base.
+            jq -e \
+              --arg base "$EVENT_BASE_SHA" \
+              --arg head "$EVENT_HEAD_SHA" \
+              --arg repo "$REPOSITORY" \
+              '(.state == "open") and (.draft == false)
+               and (.base.ref == "main") and (.base.sha == $base)
+               and (.head.ref == "develop") and (.head.sha == $head)
+               and (.head.repo.full_name == $repo)' \
+              live-pull.json >/dev/null
+          fi
           classification="$(python3 policy/scripts/main-promotion-authorization.py \
             --pull live-pull.json \
             --repository "$REPOSITORY" \
             --expected-base "$EVENT_BASE_SHA" \
             --expected-head "$EVENT_HEAD_SHA" \
+            "${policy_root_args[@]}" \
             --classification-only)"
           environment="$(jq -er .environment <<<"$classification")"
           gh api "repos/${REPOSITORY}/environments/${environment}" \
@@ -104,6 +132,7 @@ jobs:
             --repository "$REPOSITORY" \
             --expected-base "$EVENT_BASE_SHA" \
             --expected-head "$EVENT_HEAD_SHA" \
+            "${policy_root_args[@]}" \
             --github-output "$GITHUB_OUTPUT"
           echo 'bootstrap=false' >>"$GITHUB_OUTPUT"
 
@@ -126,6 +155,14 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: policy
+          persist-credentials: false
+
+      - name: Checkout exact promotion head as non-executable evidence
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          path: candidate
           persist-credentials: false
 
       - name: Revalidate exact live state after authorization
@@ -184,12 +221,30 @@ jobs:
             ' live-environment.json >/dev/null
           else
             test "$BOOTSTRAP" = false
+            policy_root_args=()
+            if grep -Fq 'parser.add_argument("--base-root"' \
+              policy/scripts/main-promotion-authorization.py; then
+              policy_root_args=(--base-root policy --head-root candidate)
+            else
+              # Apply the same exact normal-develop compatibility constraint
+              # again after the protected environment approval.
+              jq -e \
+                --arg base "$EVENT_BASE_SHA" \
+                --arg head "$EVENT_HEAD_SHA" \
+                --arg repo "$REPOSITORY" \
+                '(.state == "open") and (.draft == false)
+                 and (.base.ref == "main") and (.base.sha == $base)
+                 and (.head.ref == "develop") and (.head.sha == $head)
+                 and (.head.repo.full_name == $repo)' \
+                live-pull.json >/dev/null
+            fi
             python3 policy/scripts/main-promotion-authorization.py \
               --pull live-pull.json \
               --environment live-environment.json \
               --repository "$REPOSITORY" \
               --expected-base "$EVENT_BASE_SHA" \
               --expected-head "$EVENT_HEAD_SHA" \
+              "${policy_root_args[@]}" \
               --expected-mode "$EXPECTED_MODE"
           fi
           {
@@ -205,3 +260,21 @@ jobs:
               echo '- Approval: protected human environment approval completed'
             fi
           } >>"$GITHUB_STEP_SUMMARY"
+
+  merge-gate:
+    name: Main promotion merge gate
+    if: ${{ always() }}
+    needs: [classify, authorize]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+
+    steps:
+      - name: Require successful protected authorization
+        env:
+          AUTHORIZE_RESULT: ${{ needs.authorize.result }}
+          CLASSIFY_RESULT: ${{ needs.classify.result }}
+        run: |
+          set -euo pipefail
+          test "$CLASSIFY_RESULT" = success
+          test "$AUTHORIZE_RESULT" = success

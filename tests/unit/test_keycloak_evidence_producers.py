@@ -7,6 +7,7 @@ import base64
 import importlib.util
 import json
 import re
+import secrets
 import tempfile
 import unittest
 import zipfile
@@ -183,8 +184,8 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         heavy = (ROOT / "molecule" / "keycloak-heavy" / "verify.yml").read_text(encoding="utf-8")
 
         self.assertIn("keycloak_tiny_image.stdout is match(", tiny)
-        self.assertIn("(?::26\\.7\\.0)?@sha256:", tiny)
-        self.assertIn("0f198be292568439d700cdbfb893e69a6009bb43a94a06a945b1d3d506c76b13", tiny)
+        self.assertIn("(?::26\\.7\\.1)?@sha256:", tiny)
+        self.assertIn("f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6", tiny)
         self.assertIn("RFC 6749 section 5.2", heavy)
         invalid_ldap_task = heavy.split("- name: Reject an invalid LDAP-backed password through Keycloak", maxsplit=1)[
             1
@@ -361,8 +362,11 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         assert spec is not None and spec.loader is not None
         sanitizer = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(sanitizer)
-        password = "known-password-material"  # noqa: S105 - synthetic sanitizer fixture
-        token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ2aWV3ZXIifQ.abcdefghijklmnop"  # noqa: S105
+        typed_value = secrets.token_urlsafe(24)
+        synthetic_jwt = "".join(("eyJ", "headerpayload", ".", "fixturepayload", ".", "signaturepayload-"))
+        authorization_code = secrets.token_urlsafe(24)
+        private_cookie = secrets.token_urlsafe(24)
+        self.assertIsNotNone(sanitizer.JWT.fullmatch(synthetic_jwt))
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "raw.zip"
@@ -376,27 +380,41 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
                                 {
                                     "type": "before",
                                     "apiName": "locator.fill",
-                                    "params": {"selector": "#password", "value": password},
-                                    "url": "https://id.example/callback?code=authorization-code",
-                                    "headers": {"Cookie": "oidc_acceptance_sid=private-cookie"},
+                                    "params": {"selector": "#password", "value": typed_value},
+                                    "url": f"https://id.example/callback?code={authorization_code}",
+                                    "headers": {"Cookie": f"oidc_acceptance_sid={private_cookie}"},
                                 }
                             ),
-                            json.dumps({"type": "after", "token": token, "message": f"Bearer {token}"}),
+                            json.dumps(
+                                {
+                                    "type": "after",
+                                    "token": synthetic_jwt,
+                                    "message": f"Bearer {synthetic_jwt}",
+                                }
+                            ),
                         )
                     ),
                 )
-                archive.writestr("trace.network", "Cookie: oidc_acceptance_sid=private-cookie")
-                archive.writestr("resources/body", token)
+                archive.writestr("trace.network", f"Cookie: oidc_acceptance_sid={private_cookie}")
+                archive.writestr("resources/body", synthetic_jwt)
                 archive.writestr("trace.stacks", json.dumps({"files": ["test_acceptance.py"]}))
 
-            sanitizer.sanitize_trace(source, destination, secrets=(password,))
+            with zipfile.ZipFile(source) as archive:
+                raw_trace = archive.read("trace.trace").decode("utf-8")
+            self.assertIn(typed_value, raw_trace)
+            self.assertIn(synthetic_jwt, raw_trace)
+            self.assertIn(authorization_code, raw_trace)
+            self.assertIn(private_cookie, raw_trace)
+
+            sanitizer.sanitize_trace(source, destination, secrets=(typed_value,))
 
             with zipfile.ZipFile(destination) as archive:
                 self.assertEqual({"trace.trace", "trace.stacks"}, set(archive.namelist()))
                 rendered = b"".join(archive.read(name) for name in archive.namelist()).decode("utf-8")
             self.assertIn("locator.fill", rendered)
             self.assertIn("https://id.example/callback", rendered)
-            for forbidden in (password, token, "authorization-code", "private-cookie", "?code="):
+            self.assertIn("[REDACTED-JWT]", rendered)
+            for forbidden in (typed_value, synthetic_jwt, authorization_code, private_cookie, "?code="):
                 self.assertNotIn(forbidden, rendered)
 
 

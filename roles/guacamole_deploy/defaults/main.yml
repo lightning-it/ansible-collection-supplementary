@@ -1,0 +1,29 @@
+---
+guacamole_deploy_pod_name: "guacamole"
+guacamole_deploy_manifest_path: "/etc/podman/pods/guacamole.yml"
+guacamole_deploy_image: >-
+  docker.io/guacamole/guacamole:1.6.0@sha256:50484043eadd8d9562053940c0ed523dbddaf9086c370127b2f4acabb8bddddc
+guacamole_deploy_guacd_image: >-
+  docker.io/guacamole/guacd:1.6.0@sha256:f39258e35244b6bf79bc6ac4e60eee176aea6f6a5adb13e8c3090e48df8ae515
+guacamole_deploy_postgres_image: >-
+  docker.io/library/postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b
+guacamole_deploy_host_ip: "127.0.0.1"
+guacamole_deploy_port: 8082
+guacamole_deploy_base_dir: "/srv/guacamole"
+guacamole_deploy_db_name: "guacamole"
+guacamole_deploy_db_user: "guacamole"
+guacamole_deploy_breakglass_user: "guacadmin"
+guacamole_deploy_secrets: {}
+guacamole_deploy_oidc_enabled: false
+guacamole_deploy_oidc_authorization_endpoint: ""
+guacamole_deploy_oidc_jwks_endpoint: ""
+guacamole_deploy_oidc_issuer: ""
+guacamole_deploy_oidc_client_id: "guacamole"
+guacamole_deploy_oidc_redirect_uri: ""
+guacamole_deploy_health_url: "http://{{ guacamole_deploy_host_ip }}:{{ guacamole_deploy_port }}/guacamole/"
+guacamole_deploy_api_url: "http://{{ guacamole_deploy_host_ip }}:{{ guacamole_deploy_port }}/guacamole/api"
+guacamole_deploy_connections: []
+guacamole_deploy_validate_certs: true
+guacamole_deploy_install_packages: true
+guacamole_deploy_manage_systemd: true
+guacamole_deploy_skip_runtime: false

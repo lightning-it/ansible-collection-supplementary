@@ -19,6 +19,11 @@ audit log content is safe for the PoC logging backend.
 | `alloy_deploy_config_dir` | `/srv/alloy/config` | Rendered River config. |
 | `alloy_deploy_data_dir` | `/srv/alloy/data` | Alloy storage path. |
 | `alloy_deploy_loki_url` | `http://127.0.0.1:3100/loki/api/v1/push` | Loki push endpoint. |
+| `alloy_deploy_loki_tls_enabled` | `false` | Enable verified client-certificate authentication to Loki. |
+| `alloy_deploy_loki_tls_ca_content` | empty | Vault-sourced CA certificate; installed only on the managed host. |
+| `alloy_deploy_loki_tls_cert_content` | empty | Vault-sourced Alloy client certificate. |
+| `alloy_deploy_loki_tls_key_content` | empty | Vault-sourced Alloy client private key, written with mode `0600`. |
+| `alloy_deploy_loki_tls_server_name` | empty | Expected Loki TLS server identity. |
 | `alloy_deploy_collect_journald` | `true` | Collect systemd journal logs. |
 | `alloy_deploy_collect_vault_audit_logs` | `false` | Include Vault audit logs. |
 | `alloy_deploy_extra_log_paths` | `[]` | Additional file sources. |
@@ -32,3 +37,6 @@ audit log content is safe for the PoC logging backend.
   roles:
     - role: lit.supplementary.alloy_deploy
 ```
+
+When mTLS is enabled, pass certificate material from a secret backend and mark
+the caller `no_log`. Do not place PEM content in inventory.

@@ -1,0 +1,45 @@
+---
+- name: Resolve the existing Guacamole connection identifier
+  ansible.builtin.set_fact:
+    guacamole_deploy_existing_connection_id: >-
+      {{
+        (
+          guacamole_deploy_existing_connections.json
+          | dict2items
+          | selectattr('value.name', 'equalto', guacamole_deploy_connection.name)
+          | map(attribute='key')
+          | first
+        )
+        | default('')
+      }}
+  changed_when: false
+  no_log: true
+
+- name: Create or update the declared Guacamole connection
+  ansible.builtin.uri:
+    url: >-
+      {{
+        guacamole_deploy_api_url
+        ~ '/session/data/'
+        ~ (guacamole_deploy_api_login.json.dataSource | urlencode)
+        ~ '/connections'
+        ~ (
+          '/' ~ (guacamole_deploy_existing_connection_id | urlencode)
+          if guacamole_deploy_existing_connection_id | length > 0
+          else ''
+        )
+        ~ '?token='
+        ~ (guacamole_deploy_api_login.json.authToken | urlencode)
+      }}
+    method: "{{ 'PUT' if guacamole_deploy_existing_connection_id | length > 0 else 'POST' }}"
+    body_format: json
+    body:
+      parentIdentifier: "{{ guacamole_deploy_connection.parent_identifier | default('ROOT') }}"
+      name: "{{ guacamole_deploy_connection.name }}"
+      protocol: "{{ guacamole_deploy_connection.protocol }}"
+      parameters: "{{ guacamole_deploy_connection.parameters | default({}) }}"
+      attributes: "{{ guacamole_deploy_connection.attributes | default({}) }}"
+    status_code: "{{ [200, 204] if guacamole_deploy_existing_connection_id | length > 0 else [200] }}"
+    return_content: true
+    validate_certs: "{{ guacamole_deploy_validate_certs }}"
+  no_log: true

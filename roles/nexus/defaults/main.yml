@@ -30,7 +30,7 @@ nexus_api_host_header: "{{ nexus_nexus_hostname }}"
 nexus_api_delegate_to: "{{ inventory_hostname }}"
 nexus_nexus_disable_anonymous: false
 nexus_nexus_image: >-
-  docker.io/sonatype/nexus3:latest@sha256:f20aca9b5688b9d1bd9550cc4e2daca2591909b39dc0e7dc240b9e065342c3fe
+  docker.io/sonatype/nexus3:latest@sha256:c47083c9e77d87cd7f7c1111a68b53e758644deb54aba2235c8de1b40eebb09a
 nexus_caddy_image: >-
   docker.io/caddy:2@sha256:844f60b64e4724a5aa8245e019dace0d3f199f7433ce6c57676cb30a920dbad9
 

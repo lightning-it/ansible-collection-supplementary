@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
+import secrets
 import tempfile
 import unittest
 import zipfile
@@ -133,6 +135,18 @@ class QualityEvidenceTests(unittest.TestCase):
                         "type": "sbom-file",
                         "target": "artifacts/evidence/security/sbom.cdx.json",
                     },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (security / "trivy-vulnerability-report.json").write_text(
+            json.dumps(
+                {
+                    "SchemaVersion": 2,
+                    "ArtifactName": "artifacts/evidence/security/sbom.cdx.json",
+                    "ArtifactType": "CycloneDX",
+                    "Results": [],
                 }
             )
             + "\n",
@@ -325,16 +339,28 @@ class QualityEvidenceTests(unittest.TestCase):
         self._registry()
         self._junit()
         (self.artifacts / "logs").mkdir()
-        (self.artifacts / "logs" / "molecule.log").write_text("password=never-publish-this\n", encoding="utf-8")
+        synthetic_log_value = secrets.token_urlsafe(24)
+        synthetic_config_value = secrets.token_urlsafe(24)
+        (self.artifacts / "logs" / "molecule.log").write_text(f"password={synthetic_log_value}\n", encoding="utf-8")
         (self.artifacts / "configuration").mkdir()
         (self.artifacts / "configuration" / "inventory.yml").write_text(
-            "client_secret: hidden-value\n", encoding="utf-8"
+            f"client_secret: {synthetic_config_value}\n", encoding="utf-8"
         )
         (self.artifacts / "dependencies").mkdir()
         (self.artifacts / "dependencies" / "python-version.txt").write_text("3.11\n", encoding="utf-8")
         (self.artifacts / "playwright-traces").mkdir()
         with zipfile.ZipFile(self.artifacts / "playwright-traces" / "trace.zip", "w") as archive:
             archive.writestr("network.txt", f"authorization={evidence.CANARY}\n")
+
+        before = evidence.scan_evidence(self.artifacts)
+        self.assertIn(
+            {"path": "logs/molecule.log", "kind": "secret-assignment"},
+            before["findings"],
+        )
+        self.assertIn(
+            {"path": "configuration/inventory.yml", "kind": "secret-assignment"},
+            before["findings"],
+        )
 
         with patch.dict(os.environ, self._environment(), clear=False):
             result = evidence.assemble(
@@ -350,10 +376,12 @@ class QualityEvidenceTests(unittest.TestCase):
         self.assertEqual(len(manifest["results"][0]["allure_results"]), 2)
         self.assertTrue(manifest["secret_scan"]["canary_detected_before_redaction"])
         self.assertTrue(manifest["secret_scan"]["clean"])
-        self.assertNotIn(
-            "never-publish-this",
-            (self.evidence_root / "logs" / "molecule.log").read_text(encoding="utf-8"),
-        )
+        redacted_log = (self.evidence_root / "logs" / "molecule.log").read_text(encoding="utf-8")
+        self.assertNotIn(synthetic_log_value, redacted_log)
+        self.assertIn("password=[REDACTED]", redacted_log)
+        redacted_inventory = (self.evidence_root / "configuration" / "inventory.yml").read_text(encoding="utf-8")
+        self.assertNotIn(synthetic_config_value, redacted_inventory)
+        self.assertIn("client_secret: [REDACTED]", redacted_inventory)
         with zipfile.ZipFile(self.evidence_root / "playwright-traces" / "trace.zip") as archive:
             self.assertNotIn(evidence.CANARY, archive.read("network.txt").decode("utf-8"))
         with patch.dict(os.environ, self._environment(), clear=False):
@@ -376,15 +404,22 @@ class QualityEvidenceTests(unittest.TestCase):
         self._release_security("a" * 40)
         summary_path = self.evidence_root / "security" / "secret-scan-summary.json"
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        synthetic_finding_value = secrets.token_urlsafe(24)
         summary["results"] = {
             "configuration/example.yml": [
                 {
                     "type": "KeywordDetector",
-                    "detail": "password=do-not-persist-in-public-evidence",
+                    "detail": f"password={synthetic_finding_value}",
                 }
             ]
         }
         summary_path.write_text(json.dumps(summary) + "\n", encoding="utf-8")
+        self.assertIn(synthetic_finding_value, summary_path.read_text(encoding="utf-8"))
+        before = evidence.scan_evidence(self.evidence_root)
+        self.assertIn(
+            {"path": "security/secret-scan-summary.json", "kind": "secret-assignment"},
+            before["findings"],
+        )
 
         with patch.dict(os.environ, self._environment(), clear=False):
             result = evidence.assemble(
@@ -399,11 +434,9 @@ class QualityEvidenceTests(unittest.TestCase):
         manifest = json.loads(manifest_text)
         self.assertEqual(manifest["security_evidence"]["external_secret_findings"], 1)
         self.assertTrue(any("external secret scan" in blocker for blocker in manifest["blockers"]))
-        self.assertNotIn("do-not-persist-in-public-evidence", manifest_text)
-        self.assertNotIn(
-            "do-not-persist-in-public-evidence",
-            summary_path.read_text(encoding="utf-8"),
-        )
+        self.assertTrue(manifest["secret_scan"]["clean"])
+        self.assertNotIn(synthetic_finding_value, manifest_text)
+        self.assertNotIn(synthetic_finding_value, summary_path.read_text(encoding="utf-8"))
 
     def test_candidate_evidence_passes_execution_but_is_never_release_eligible(self) -> None:
         registry_path = self._registry()
@@ -732,6 +765,49 @@ class QualityEvidenceTests(unittest.TestCase):
         summary, errors = evidence.assess_security(self.evidence_root, release_mode=True, commit_sha=sha)
         self.assertFalse(summary["semantic_valid"])
         self.assertTrue(any("Grype scanner identity" in error for error in errors), errors)
+
+    def test_trivy_report_must_be_independent_bound_and_high_critical_clean(self) -> None:
+        sha = "c" * 40
+        self._release_security(sha)
+        collection = self.evidence_root / "collection"
+        collection.mkdir()
+        (collection / "galaxy.yml").write_text(
+            (self.repository / "galaxy.yml").read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        report_path = self.evidence_root / "security" / "trivy-vulnerability-report.json"
+        valid_report = json.loads(report_path.read_text(encoding="utf-8"))
+        cases = (
+            ("old schema", {**valid_report, "SchemaVersion": 1}, "schema version"),
+            ("wrong source", {**valid_report, "ArtifactName": "other.cdx.json"}, "sbom.cdx.json"),
+            ("missing results", {key: value for key, value in valid_report.items() if key != "Results"}, "Results"),
+        )
+        for label, changed, expected_error in cases:
+            with self.subTest(label=label):
+                report_path.write_text(json.dumps(changed) + "\n", encoding="utf-8")
+                summary, errors = evidence.assess_security(self.evidence_root, release_mode=True, commit_sha=sha)
+                self.assertFalse(summary["semantic_valid"])
+                self.assertTrue(any(expected_error in error for error in errors), errors)
+
+        blocking = json.loads(json.dumps(valid_report))
+        blocking["Results"] = [
+            {
+                "Target": "sbom.cdx.json",
+                "Class": "lang-pkgs",
+                "Type": "python-pkg",
+                "Vulnerabilities": [
+                    {
+                        "VulnerabilityID": "CVE-2099-0001",
+                        "PkgName": "synthetic-package",
+                        "Severity": "HIGH",
+                    }
+                ],
+            }
+        ]
+        report_path.write_text(json.dumps(blocking) + "\n", encoding="utf-8")
+        summary, errors = evidence.assess_security(self.evidence_root, release_mode=True, commit_sha=sha)
+        self.assertFalse(summary["semantic_valid"])
+        self.assertEqual(1, summary["vulnerability_blocking_findings"])
+        self.assertTrue(any("Trivy scan reports 1" in error for error in errors), errors)
 
     def test_release_dependencies_require_controller_and_dependency_inventories(self) -> None:
         self._release_dependencies(self.evidence_root)
@@ -1375,35 +1451,65 @@ class QualityEvidenceTests(unittest.TestCase):
     def test_structured_headers_basic_auth_and_api_keys_are_redacted_and_scanned(self) -> None:
         root = self.base / "redaction"
         root.mkdir()
+        structured_value = secrets.token_urlsafe(24)
+        private_cookie = secrets.token_urlsafe(24)
+        basic_payload = base64.b64encode(f"fixture:{secrets.token_urlsafe(24)}".encode()).decode()
         structured = root / "structured.json"
         structured.write_text(
             json.dumps(
                 {
                     "properties": [
-                        {"name": "password", "value": "lowentropy-secret-value"},
-                        {"header": "Cookie", "value": "session=private-cookie"},
+                        {"name": "password", "value": structured_value},
+                        {"header": "Cookie", "value": f"session={private_cookie}"},
                     ]
                 }
             ),
             encoding="utf-8",
         )
         headers = root / "headers.txt"
+        synthetic_header_value = secrets.token_urlsafe(24)
         headers.write_text(
-            "Authorization: Basic dXNlcjpwYXNzd29yZA==\n"
-            "Cookie: session=private-cookie\n"
-            "X-API-Key: lowentropy-api-key\n",
+            f"Authorization: Basic {basic_payload}\n"
+            f"Cookie: session={private_cookie}\n"
+            f"X-API-Key: {synthetic_header_value}\n",
             encoding="utf-8",
         )
         before = evidence.scan_evidence(root)
         self.assertFalse(before["clean"])
+        raw_structured = structured.read_text(encoding="utf-8")
+        raw_headers = headers.read_text(encoding="utf-8")
+        for fixture in (structured_value, private_cookie):
+            self.assertIn(fixture, raw_structured)
+        for fixture in (basic_payload, private_cookie, synthetic_header_value):
+            self.assertIn(fixture, raw_headers)
         self.assertIn("structured-secret", {item["kind"] for item in before["findings"]})
         self.assertIn("basic-authorization", {item["kind"] for item in before["findings"]})
+        self.assertIn(
+            {"path": "headers.txt", "kind": "sensitive-header"},
+            before["findings"],
+        )
         evidence.redact_file(structured)
         evidence.redact_file(headers)
         after = evidence.scan_evidence(root)
         self.assertTrue(after["clean"], after)
-        self.assertNotIn("lowentropy-secret-value", structured.read_text(encoding="utf-8"))
-        self.assertNotIn("dXNlcjpwYXNzd29yZA", headers.read_text(encoding="utf-8"))
+        redacted_structured = structured.read_text(encoding="utf-8")
+        self.assertNotIn(structured_value, redacted_structured)
+        self.assertNotIn(private_cookie, redacted_structured)
+        redacted_headers = headers.read_text(encoding="utf-8")
+        self.assertNotIn(basic_payload, redacted_headers)
+        self.assertNotIn(private_cookie, redacted_headers)
+        self.assertNotIn(synthetic_header_value, redacted_headers)
+        self.assertIn("X-API-Key: [REDACTED]", redacted_headers)
+
+    def test_redacts_jwt_with_base64url_terminal_dash(self) -> None:
+        synthetic_jwt = "".join(("eyJ", "headerpayload", ".", "fixturepayload", ".", "signaturepayload-"))
+        source = f"diagnostic token {synthetic_jwt}."
+
+        self.assertIsNotNone(evidence.JWT_RE.fullmatch(synthetic_jwt))
+        rendered = evidence.redact_text(source)
+
+        self.assertNotIn(synthetic_jwt, rendered)
+        self.assertIn("[REDACTED JWT]", rendered)
 
     def test_unknown_junit_commit_is_ineligible(self) -> None:
         self._registry()

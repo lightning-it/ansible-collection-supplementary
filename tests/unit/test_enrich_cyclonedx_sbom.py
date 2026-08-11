@@ -535,6 +535,15 @@ class EnrichCycloneDxSbomTests(unittest.TestCase):
             SBOM._chrome_linux_scanner_cpe("152.0.8000.1"),
         )
 
+    def test_reviewed_chrome_linux_version_uses_paired_scanner_cpe_version(self) -> None:
+        self.assertEqual(
+            (
+                "151.0.7922.109",
+                "https://chromereleases.googleblog.com/2026/08/stable-channel-update-for-desktop_01193673229.html",
+            ),
+            SBOM._chrome_linux_scanner_cpe("151.0.7922.108"),
+        )
+
     def test_root_version_mismatch_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             paths = self._fixture(Path(directory))

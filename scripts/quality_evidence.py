@@ -74,6 +74,7 @@ PROFILE_REGISTRY_KEYS = {
 REQUIRED_RELEASE_SECURITY_FILES = (
     "sbom.cdx.json",
     "vulnerability-report.json",
+    "trivy-vulnerability-report.json",
     "provenance.json",
     "secret-scan-summary.json",
 )
@@ -117,7 +118,11 @@ SECRET_ASSIGNMENT_RE = re.compile(
 )
 BEARER_RE = re.compile(r"(?i)\bbearer\s+[a-z0-9._~+/=-]{8,}")
 BASIC_AUTH_RE = re.compile(r"(?i)\bbasic\s+[a-z0-9+/]{4,}={0,2}")
-JWT_RE = re.compile(r"\beyJ[a-zA-Z0-9_-]{5,}\.[a-zA-Z0-9_-]{5,}\.[a-zA-Z0-9_-]{5,}\b")
+JWT_RE = re.compile(
+    r"(?<![A-Za-z0-9_-])"
+    r"eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}"
+    r"(?![A-Za-z0-9_-])"
+)
 API_KEY_RE = re.compile(
     r"(?i)\b(?:gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{20,}|"
     r"(?:AKIA|ASIA)[A-Z0-9]{16}|xox[baprs]-[a-z0-9-]{10,}|sk-[a-z0-9_-]{20,})\b"
@@ -1961,6 +1966,53 @@ def _validate_vulnerability_report(payload: Any) -> tuple[list[str], int]:
     return errors, blocking
 
 
+def _validate_trivy_vulnerability_report(payload: Any) -> tuple[list[str], int]:
+    errors: list[str] = []
+    report = "security/trivy-vulnerability-report.json"
+    if not isinstance(payload, dict):
+        return [f"{report} must be an object"], 0
+    schema_version = payload.get("SchemaVersion")
+    if not isinstance(schema_version, int) or isinstance(schema_version, bool) or schema_version < 2:
+        errors.append(f"{report} lacks the supported Trivy schema version")
+    artifact_name = payload.get("ArtifactName")
+    if (
+        not _nonempty_text(artifact_name)
+        or "\\" in str(artifact_name)
+        or PurePosixPath(str(artifact_name)).name != "sbom.cdx.json"
+    ):
+        errors.append(f"{report} does not identify security/sbom.cdx.json as its source")
+    if not _nonempty_text(payload.get("ArtifactType")):
+        errors.append(f"{report} lacks the Trivy artifact type")
+    results = payload.get("Results")
+    if not isinstance(results, list):
+        return [*errors, f"{report} lacks a Results array"], 0
+    blocking = 0
+    for result in results:
+        if not isinstance(result, dict) or not _nonempty_text(result.get("Target")):
+            errors.append(f"{report} contains a malformed result")
+            continue
+        vulnerabilities = result.get("Vulnerabilities")
+        if vulnerabilities is None:
+            continue
+        if not isinstance(vulnerabilities, list):
+            errors.append(f"{report} contains malformed vulnerabilities")
+            continue
+        for vulnerability in vulnerabilities:
+            if (
+                not isinstance(vulnerability, dict)
+                or not _nonempty_text(vulnerability.get("VulnerabilityID"))
+                or not _nonempty_text(vulnerability.get("PkgName"))
+                or not _nonempty_text(vulnerability.get("Severity"))
+            ):
+                errors.append(f"{report} contains an incomplete vulnerability")
+                continue
+            if str(vulnerability["Severity"]).casefold() in {"high", "critical"}:
+                blocking += 1
+    if blocking:
+        errors.append(f"Trivy scan reports {blocking} high/critical finding(s)")
+    return errors, blocking
+
+
 def _validate_provenance(
     payload: Any,
     commit_sha: str,
@@ -2064,10 +2116,13 @@ def assess_security(root: Path, *, release_mode: bool, commit_sha: str) -> tuple
             _validate_sbom(parsed["sbom.cdx.json"], collection=collection, candidate_sha256=candidate_sha)
         )
     if "vulnerability-report.json" in parsed:
-        vulnerability_errors, vulnerability_blocking = _validate_vulnerability_report(
-            parsed["vulnerability-report.json"]
-        )
+        vulnerability_errors, grype_blocking = _validate_vulnerability_report(parsed["vulnerability-report.json"])
+        vulnerability_blocking += grype_blocking
         semantic_errors.extend(vulnerability_errors)
+    if "trivy-vulnerability-report.json" in parsed:
+        trivy_errors, trivy_blocking = _validate_trivy_vulnerability_report(parsed["trivy-vulnerability-report.json"])
+        vulnerability_blocking += trivy_blocking
+        semantic_errors.extend(trivy_errors)
     if "secret-scan-summary.json" in parsed:
         semantic_errors.extend(_validate_scan_summary(parsed["secret-scan-summary.json"]))
     if external_findings:

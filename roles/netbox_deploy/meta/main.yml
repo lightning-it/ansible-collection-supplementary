@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: netbox_deploy
+  namespace: lit
+  author: Lightning IT
+  description: Deploy NetBox with PostgreSQL and Valkey in a Podman pod.
+  company: Lightning IT
+  license: MIT
+  min_ansible_version: "2.18"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+  galaxy_tags: [netbox, podman, automation]
+dependencies: []

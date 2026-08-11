@@ -9,60 +9,37 @@ Git diff to reviewed metadata already present in that range.
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-SHA = re.compile(r"^[0-9a-f]{40}$")
-DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
-EVIDENCE_ID = re.compile(r"^MLX90-[A-Z0-9][A-Z0-9._-]{2,127}$")
-SEMVER = re.compile(r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$")
-REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
-PROFILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{2,127}$")
-SECURITY_ID = re.compile(
-    r"^(?:CVE-[0-9]{4}-[0-9]{4,}|"
-    r"GHSA-[23456789cfghjmpqrvwx]{4}(?:-[23456789cfghjmpqrvwx]{4}){2}|"
-    r"LIT-SEC-[A-Z0-9._-]+)$"
-)
+import security_release_contract as CONTRACT  # noqa: E402
+
+SHA = CONTRACT.SHA
+DIGEST = CONTRACT.DIGEST
+EVIDENCE_ID = CONTRACT.EVIDENCE_ID
+SEMVER = CONTRACT.SEMVER
+REF = CONTRACT.REF
+PROFILE = CONTRACT.PROFILE
+SECURITY_ID = CONTRACT.SECURITY_ID
 REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-CANONICAL_TIME = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
-REQUEST_KEYS = {
-    "schemaVersion",
-    "event",
-    "repository",
-    "baseSha",
-    "candidateRef",
-    "candidateBaseSha",
-    "candidateHeadSha",
-    "candidateDiffSha256",
-    "evidenceId",
-    "fixedVersion",
-    "issuedAt",
-    "expiresAt",
-    "humanActions",
-}
-METADATA_KEYS = {
-    "schemaVersion",
-    "evidenceId",
-    "createdAt",
-    "securityIdentifiers",
-    "affectedVersion",
-    "fixedVersion",
-    "consumers",
-    "acceptanceProfile",
-    "validity",
-}
-VALIDITY_KEYS = {"notBefore", "expiresAt", "revoked"}
+CANONICAL_TIME = CONTRACT.CANONICAL_TIME
+REQUEST_KEYS = CONTRACT.REQUEST_KEYS
+METADATA_KEYS = CONTRACT.METADATA_KEYS
+VALIDITY_KEYS = CONTRACT.VALIDITY_KEYS
 FORBIDDEN_PATHS = {
     ".lit/security-release-profiles.json",
+    "scripts/security_release_contract.py",
+    "scripts/security-release-dispatch.py",
     "scripts/security-release-intake.py",
+    "scripts/release-version.py",
     ".github/workflows/security-release-intake.yml",
 }
 RUNTIME_PRODUCT_PREFIXES = (
@@ -89,66 +66,12 @@ FORBIDDEN_SUPPORTING_PATHS = {
 MAX_DIFF_BYTES = 4 * 1024 * 1024
 
 
-class IntakeError(ValueError):
-    """Raised when the intake cannot be proven safe."""
-
-
-def fail(message: str) -> None:
-    raise IntakeError(message)
-
-
-def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            fail(f"duplicate JSON key: {key}")
-        result[key] = value
-    return result
-
-
-def load_json_bytes(raw: bytes, label: str) -> dict[str, Any]:
-    try:
-        value = json.loads(
-            raw.decode("utf-8"),
-            object_pairs_hook=reject_duplicate_keys,
-            parse_constant=lambda value: fail(f"invalid JSON constant: {value}"),
-        )
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise IntakeError(f"{label} is not valid UTF-8 JSON: {exc}") from exc
-    if not isinstance(value, dict):
-        fail(f"{label} must be a JSON object")
-    return value
-
-
-def load_json_file(path: Path, label: str) -> dict[str, Any]:
-    if path.is_symlink() or not path.is_file():
-        fail(f"{label} must be a regular non-symlink file")
-    return load_json_bytes(path.read_bytes(), label)
-
-
-def exact_keys(value: dict[str, Any], expected: set[str], label: str) -> None:
-    if set(value) != expected:
-        missing = sorted(expected - set(value))
-        unknown = sorted(set(value) - expected)
-        fail(f"{label} fields mismatch; missing={missing}, unknown={unknown}")
-
-
-def require_string(value: object, label: str) -> str:
-    if not isinstance(value, str) or not value or value != value.strip():
-        fail(f"{label} must be a non-empty trimmed string")
-    if "\n" in value or "\r" in value or "\x00" in value:
-        fail(f"{label} must be a single-line string")
-    return value
-
-
-def timestamp(value: object, label: str) -> datetime:
-    text = require_string(value, label)
-    if CANONICAL_TIME.fullmatch(text) is None:
-        fail(f"{label} must be canonical UTC RFC3339")
-    try:
-        return datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
-    except ValueError as exc:
-        raise IntakeError(f"{label} is not a valid timestamp") from exc
+IntakeError = CONTRACT.ContractError
+fail = CONTRACT.fail
+reject_duplicate_keys = CONTRACT.reject_duplicate_keys
+load_json_bytes = CONTRACT.load_json_bytes
+require_string = CONTRACT.require_string
+timestamp = CONTRACT.timestamp
 
 
 def git_environment() -> dict[str, str]:
@@ -158,10 +81,17 @@ def git_environment() -> dict[str, str]:
     return environment
 
 
+def git_binary() -> str:
+    executable = shutil.which("git")
+    if executable is None:
+        fail("git executable is unavailable")
+    return executable
+
+
 def run_git(root: Path, *args: str, text: bool = False) -> bytes | str:
     try:
-        result = subprocess.run(
-            ["git", *args],
+        result = subprocess.run(  # noqa: S603 -- arguments are exact validated contract inputs.
+            [git_binary(), *args],
             cwd=root,
             check=True,
             capture_output=True,
@@ -169,11 +99,7 @@ def run_git(root: Path, *args: str, text: bool = False) -> bytes | str:
             env=git_environment(),
         )
     except subprocess.CalledProcessError as exc:
-        stderr = (
-            exc.stderr
-            if isinstance(exc.stderr, str)
-            else exc.stderr.decode("utf-8", errors="replace")
-        )
+        stderr = exc.stderr if isinstance(exc.stderr, str) else exc.stderr.decode("utf-8", errors="replace")
         raise IntakeError(f"git {' '.join(args)} failed: {stderr.strip()}") from exc
     return result.stdout
 
@@ -190,49 +116,25 @@ def git_bytes(root: Path, *args: str) -> bytes:
     return value
 
 
-def validate_request(
-    request: dict[str, Any], repository: str, now: datetime
-) -> dict[str, Any]:
-    exact_keys(request, REQUEST_KEYS, "Security intake request")
-    if request["schemaVersion"] != 1:
-        fail("Security intake schemaVersion must be 1")
-    if request["event"] != "mlx90-security-release":
-        fail("Security intake event is unsupported")
-    if request["repository"] != repository:
-        fail("Security intake repository does not match the live repository")
-    if request["humanActions"] != 0:
-        fail("Security Zero-Touch intake must declare humanActions=0")
+def validate_request(request: dict[str, Any], repository: str, now: datetime) -> dict[str, Any]:
+    return CONTRACT.validate_request(request, repository, now)
 
-    for field in ("baseSha", "candidateBaseSha", "candidateHeadSha"):
-        value = require_string(request[field], field)
-        if SHA.fullmatch(value) is None:
-            fail(f"{field} must be a full lowercase commit SHA")
-    if request["candidateBaseSha"] == request["candidateHeadSha"]:
-        fail("candidate source range must not be empty")
-    if request["candidateBaseSha"] != request["baseSha"]:
-        fail("candidate source range must start at the authorized protected-main SHA")
-    digest = require_string(request["candidateDiffSha256"], "candidateDiffSha256")
-    if DIGEST.fullmatch(digest) is None:
-        fail("candidateDiffSha256 must be a canonical SHA-256 digest")
-    evidence_id = require_string(request["evidenceId"], "evidenceId")
-    if EVIDENCE_ID.fullmatch(evidence_id) is None:
-        fail("evidenceId is invalid")
-    version = require_string(request["fixedVersion"], "fixedVersion")
-    if SEMVER.fullmatch(version) is None:
-        fail("fixedVersion must be stable SemVer")
-    candidate_ref = require_string(request["candidateRef"], "candidateRef")
-    if REF.fullmatch(candidate_ref) is None or candidate_ref.startswith("/"):
-        fail("candidateRef is invalid")
-    if candidate_ref != "develop":
-        fail("candidateRef must be the protected develop integration branch")
 
-    issued = timestamp(request["issuedAt"], "issuedAt")
-    expires = timestamp(request["expiresAt"], "expiresAt")
-    if expires <= issued:
-        fail("Security intake validity interval is empty")
-    if now < issued or now >= expires:
-        fail("Security intake request is not currently valid")
-    return request
+def load_canonical_document(path: Path, label: str) -> dict[str, Any]:
+    raw = CONTRACT.read_bounded_regular_file(
+        path.parent,
+        Path(path.name),
+        label,
+        CONTRACT.MAX_JSON_BYTES,
+    )
+    value = load_json_bytes(raw, label)
+    if raw != CONTRACT.canonical_document_bytes(value):
+        fail(f"{label} must be canonical compact JSON with one trailing newline")
+    return value
+
+
+def load_canonical_request(path: Path) -> dict[str, Any]:
+    return load_canonical_document(path, "Security intake request")
 
 
 def canonical_diff(root: Path, base_sha: str, head_sha: str) -> bytes:
@@ -240,11 +142,24 @@ def canonical_diff(root: Path, base_sha: str, head_sha: str) -> bytes:
         root,
         "-c",
         "core.safecrlf=false",
+        "-c",
+        "core.attributesFile=/dev/null",
+        "-c",
+        "diff.renames=false",
+        "-c",
+        "diff.algorithm=myers",
+        "-c",
+        "diff.indentHeuristic=false",
         "diff",
         "--binary",
         "--full-index",
         "--no-color",
         "--no-ext-diff",
+        "--no-textconv",
+        "--no-renames",
+        "--diff-algorithm=myers",
+        "--no-indent-heuristic",
+        "--unified=3",
         "--src-prefix=a/",
         "--dst-prefix=b/",
         base_sha,
@@ -260,7 +175,7 @@ def canonical_diff(root: Path, base_sha: str, head_sha: str) -> bytes:
 
 
 def sha256(value: bytes) -> str:
-    return "sha256:" + hashlib.sha256(value).hexdigest()
+    return CONTRACT.sha256_bytes(value)
 
 
 def changed_paths(root: Path, base_sha: str, head_sha: str) -> list[tuple[str, str]]:
@@ -311,115 +226,55 @@ def validate_metadata(
     request: dict[str, Any],
     paths: list[tuple[str, str]],
     now: datetime,
-) -> tuple[str, str]:
+) -> tuple[str, str, str, str]:
     version = request["fixedVersion"]
     metadata_path = f".lit/security-releases/{version}.json"
-    if paths.count(("A", metadata_path)) != 1:
-        fail("candidate must add exactly one immutable Security metadata file")
-    if any(path == metadata_path and status != "A" for status, path in paths):
-        fail("existing Security metadata must never be replaced")
-    if any(
-        path.startswith(".github/") or path in FORBIDDEN_PATHS
-        for _path_status, path in paths
-    ):
+    CONTRACT.validate_immutable_marker_changes(paths, version)
+    if any(path.startswith(".github/") or path in FORBIDDEN_PATHS for _path_status, path in paths):
         fail("candidate diff modifies Security controls or workflow policy")
     fragments = [
-        path
-        for status, path in paths
-        if status == "A" and re.fullmatch(r"changelogs/fragments/[^/]+\.ya?ml", path)
+        path for status, path in paths if status == "A" and re.fullmatch(r"changelogs/fragments/[^/]+\.ya?ml", path)
     ]
     if len(fragments) != 1:
         fail("candidate must add exactly one Security changelog fragment")
-    product_paths = [
-        path
-        for _path_status, path in paths
-        if path not in {metadata_path, fragments[0]}
-    ]
+    fragment_raw = git_bytes(root, "show", f"{request['candidateHeadSha']}:{fragments[0]}")
+    CONTRACT.validate_security_fragment(fragment_raw, "Security changelog fragment")
+    fragment_digest = sha256(fragment_raw)
+    product_paths = [path for _path_status, path in paths if path not in {metadata_path, fragments[0]}]
     if not product_paths:
         fail("candidate must contain an evidence-bound product change")
     unsupported_paths = [
         path
         for path in product_paths
         if path in FORBIDDEN_SUPPORTING_PATHS
-        or (
-            path not in SUPPORTING_PRODUCT_PATHS
-            and not path.startswith(PRODUCT_PATH_PREFIXES)
-        )
+        or (path not in SUPPORTING_PRODUCT_PATHS and not path.startswith(PRODUCT_PATH_PREFIXES))
     ]
     if unsupported_paths:
-        fail(
-            "candidate modifies paths outside the Security product allowlist: "
-            + ", ".join(sorted(unsupported_paths))
-        )
+        fail("candidate modifies paths outside the Security product allowlist: " + ", ".join(sorted(unsupported_paths)))
     if not any(path.startswith(RUNTIME_PRODUCT_PREFIXES) for path in product_paths):
         fail("candidate must contain a runtime product change")
 
-    metadata = show_json(
-        root,
-        request["candidateHeadSha"],
-        metadata_path,
-        "Security release metadata",
+    metadata_raw = git_bytes(root, "show", f"{request['candidateHeadSha']}:{metadata_path}")
+    metadata_digest = sha256(metadata_raw)
+    if metadata_digest != request["metadataSha256"]:
+        fail("Security metadata digest does not match the intake request")
+    metadata = load_json_bytes(metadata_raw, "Security release metadata")
+    profile_id = request["acceptanceProfile"]
+    CONTRACT.validate_metadata_payload(
+        metadata,
+        expected_evidence_id=request["evidenceId"],
+        expected_version=version,
+        expected_profile=profile_id,
+        checked_at=now,
     )
-    exact_keys(metadata, METADATA_KEYS, "Security release metadata")
-    if metadata["schemaVersion"] != 1:
-        fail("Security release metadata schemaVersion must be 1")
-    if metadata["evidenceId"] != request["evidenceId"]:
-        fail("Security metadata evidenceId does not match the intake")
-    if metadata["fixedVersion"] != version:
-        fail("Security metadata fixedVersion does not match the intake")
-    identifiers = metadata["securityIdentifiers"]
-    if (
-        not isinstance(identifiers, list)
-        or not identifiers
-        or len(identifiers) != len(set(identifiers))
-        or any(
-            not isinstance(item, str) or SECURITY_ID.fullmatch(item) is None
-            for item in identifiers
-        )
-    ):
-        fail("Security metadata identifiers are invalid")
-    affected_version = require_string(metadata["affectedVersion"], "affectedVersion")
-    if SEMVER.fullmatch(affected_version) is None or affected_version == version:
-        fail("Security metadata affectedVersion is invalid")
-    consumers = metadata["consumers"]
-    if (
-        not isinstance(consumers, list)
-        or not consumers
-        or len(consumers) != len(set(consumers))
-        or any(
-            not isinstance(consumer, str) or REPOSITORY.fullmatch(consumer) is None
-            for consumer in consumers
-        )
-    ):
-        fail("Security metadata consumer allowlist is invalid")
-    if metadata["validity"].__class__ is not dict:
-        fail("Security metadata validity must be an object")
-    exact_keys(metadata["validity"], VALIDITY_KEYS, "Security release validity")
-    if metadata["validity"]["revoked"] is not False:
-        fail("Security release metadata is revoked")
-    created = timestamp(metadata["createdAt"], "createdAt")
-    not_before = timestamp(metadata["validity"]["notBefore"], "validity.notBefore")
-    expires = timestamp(metadata["validity"]["expiresAt"], "validity.expiresAt")
-    if created < not_before or created >= expires:
-        fail("Security metadata createdAt is outside its validity interval")
-    if now < not_before or now >= expires:
-        fail("Security release metadata is not currently valid")
-
-    profile_id = require_string(metadata["acceptanceProfile"], "acceptanceProfile")
-    if PROFILE.fullmatch(profile_id) is None:
-        fail("acceptanceProfile is invalid")
+    CONTRACT.validate_request_metadata_binding(request, metadata)
     profiles = show_json(
         root,
         request["baseSha"],
         ".lit/security-release-profiles.json",
         "protected-main acceptance-profile registry",
     )
-    exact_keys(profiles, {"schemaVersion", "profiles"}, "acceptance-profile registry")
-    if profiles["schemaVersion"] != 1 or not isinstance(profiles["profiles"], dict):
-        fail("acceptance-profile registry is unsupported")
-    profile = profiles["profiles"].get(profile_id)
-    if not isinstance(profile, dict) or profile.get("releaseEligible") is not True:
-        fail("acceptance profile was not pre-approved on protected main")
+    CONTRACT.validate_profile_registry(profiles, profile_id)
 
     galaxy = git_text(root, "show", f"{request['baseSha']}:galaxy.yml")
     match = re.search(r"(?m)^version:\s*[\"']?([^\s\"']+)", galaxy)
@@ -429,7 +284,7 @@ def validate_metadata(
     fixed = tuple(int(part) for part in version.split("."))
     if fixed != (current[0], current[1], current[2] + 1):
         fail("Security intake fixedVersion must be the next patch after protected main")
-    return metadata_path, profile_id
+    return metadata_path, profile_id, fragments[0], fragment_digest
 
 
 def reject_special_modes(root: Path, base_sha: str, head_sha: str) -> None:
@@ -460,13 +315,11 @@ def verify_repository(
     live_main = git_text(root, "rev-parse", "refs/remotes/origin/main").strip()
     if live_main != request["baseSha"]:
         fail("protected main changed after Security intake authorization")
-    live_candidate = git_text(
-        root, "rev-parse", f"refs/remotes/origin/{request['candidateRef']}"
-    ).strip()
+    live_candidate = git_text(root, "rev-parse", f"refs/remotes/origin/{request['candidateRef']}").strip()
     if (
-        subprocess.run(
+        subprocess.run(  # noqa: S603 -- commit identities are exact validated lowercase SHAs.
             [
-                "git",
+                git_binary(),
                 "merge-base",
                 "--is-ancestor",
                 request["candidateHeadSha"],
@@ -480,9 +333,9 @@ def verify_repository(
     ):
         fail("candidateHeadSha is not reachable from the declared live candidateRef")
     if (
-        subprocess.run(
+        subprocess.run(  # noqa: S603 -- commit identities are exact validated lowercase SHAs.
             [
-                "git",
+                git_binary(),
                 "merge-base",
                 "--is-ancestor",
                 request["candidateBaseSha"],
@@ -496,18 +349,16 @@ def verify_repository(
     ):
         fail("candidate source range is not an ancestry-ordered range")
 
-    patch = canonical_diff(
-        root, request["candidateBaseSha"], request["candidateHeadSha"]
-    )
+    patch = canonical_diff(root, request["candidateBaseSha"], request["candidateHeadSha"])
     actual_digest = sha256(patch)
     if actual_digest != request["candidateDiffSha256"]:
         fail("candidate diff digest does not match the approved intake")
-    paths = changed_paths(
-        root, request["candidateBaseSha"], request["candidateHeadSha"]
-    )
+    paths = changed_paths(root, request["candidateBaseSha"], request["candidateHeadSha"])
     reject_special_modes(root, request["candidateBaseSha"], request["candidateHeadSha"])
-    metadata_path, profile_id = validate_metadata(root, request, paths, now)
+    metadata_path, profile_id, fragment_path, fragment_digest = validate_metadata(root, request, paths, now)
     result = {
+        "schemaVersion": CONTRACT.INTAKE_RESULT_SCHEMA_VERSION,
+        "chainId": request["chainId"],
         "branch": f"security-release/{request['evidenceId']}",
         "baseSha": request["baseSha"],
         "candidateBaseSha": request["candidateBaseSha"],
@@ -516,10 +367,14 @@ def verify_repository(
         "evidenceId": request["evidenceId"],
         "fixedVersion": request["fixedVersion"],
         "metadataPath": metadata_path,
+        "metadataSha256": request["metadataSha256"],
         "acceptanceProfile": profile_id,
-        "changedPaths": [path for _path_status, path in paths],
+        "changelogFragmentPath": fragment_path,
+        "changelogFragmentSha256": fragment_digest,
+        "changedPaths": sorted(path for _path_status, path in paths),
         "humanActions": 0,
     }
+    CONTRACT.validate_intake_result(request, result)
     return patch, result
 
 
@@ -543,21 +398,68 @@ def main() -> int:
     parser.add_argument("--now", default="")
     parser.add_argument("--output-patch", type=Path)
     parser.add_argument("--output-json", type=Path)
+    parser.add_argument("--output-intake-receipt", type=Path)
+    parser.add_argument("--workflow-run-id", default=os.environ.get("GITHUB_RUN_ID", ""))
+    parser.add_argument("--workflow-attempt", default=os.environ.get("GITHUB_RUN_ATTEMPT", ""))
+    parser.add_argument("--workflow-ref", default=os.environ.get("GITHUB_WORKFLOW_REF", ""))
+    parser.add_argument("--workflow-event", default=os.environ.get("GITHUB_EVENT_NAME", ""))
+    parser.add_argument("--workflow-actor", default=os.environ.get("GITHUB_ACTOR", ""))
+    parser.add_argument(
+        "--workflow-triggering-actor",
+        default=os.environ.get("GITHUB_TRIGGERING_ACTOR", ""),
+    )
+    parser.add_argument("--observed-app-slug", default="")
+    parser.add_argument("--observed-app-installation-id", default="")
+    parser.add_argument("--observed-app-login", default="")
+    parser.add_argument("--observed-app-account-id", default="")
+    parser.add_argument("--observed-app-permissions", type=Path)
+    parser.add_argument("--observed-app-repository", action="append", default=[])
     args = parser.parse_args()
     try:
         now = timestamp(args.now, "--now") if args.now else datetime.now(UTC)
         request = validate_request(
-            load_json_file(args.request, "Security intake request"),
+            load_canonical_request(args.request),
             require_string(args.repository, "--repository"),
             now,
         )
         patch, result = verify_repository(args.root.resolve(), request, now)
-        serialized = json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n"
+        serialized = CONTRACT.canonical_document_bytes(result)
         if args.output_patch:
             write_exclusive(args.output_patch, patch)
         if args.output_json:
-            write_exclusive(args.output_json, serialized.encode("utf-8"))
-        print(serialized, end="")
+            write_exclusive(args.output_json, serialized)
+        if args.output_intake_receipt:
+            if args.observed_app_permissions is None:
+                fail("--observed-app-permissions is required for an intake receipt")
+            observed_automation = {
+                "slug": args.observed_app_slug,
+                "installationId": args.observed_app_installation_id,
+                "login": args.observed_app_login,
+                "accountId": args.observed_app_account_id,
+                "type": "Bot",
+                "selectedRepositories": sorted(args.observed_app_repository),
+                "permissions": load_canonical_document(
+                    args.observed_app_permissions,
+                    "observed App permissions",
+                ),
+            }
+            receipt = CONTRACT.build_intake_receipt(
+                request,
+                result,
+                checked_at=now,
+                workflow_run_id=args.workflow_run_id,
+                workflow_attempt=args.workflow_attempt,
+                workflow_ref=args.workflow_ref,
+                workflow_event=args.workflow_event,
+                workflow_actor=args.workflow_actor,
+                workflow_triggering_actor=args.workflow_triggering_actor,
+                observed_automation=observed_automation,
+            )
+            write_exclusive(
+                args.output_intake_receipt,
+                CONTRACT.canonical_document_bytes(receipt),
+            )
+        print(serialized.decode("utf-8"), end="")
     except (IntakeError, OSError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2

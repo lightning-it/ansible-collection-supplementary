@@ -27,7 +27,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: release-back-sync-${{ github.repository }}-${{ inputs.tag }}
+  group: main-develop-transition-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
@@ -49,6 +49,32 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Resolve the immutable pre-consumption binding base
+        id: binding
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          receipt=changelogs/release-preparation.json
+          test -f "$receipt"
+          test ! -L "$receipt"
+          version="${TAG_INPUT#v}"
+          base_sha="$(
+            jq -er --arg version "$version" '
+              select(.next_version == $version)
+              | .base_sha
+              | select(test("^[0-9a-f]{40}$"))
+            ' "$receipt"
+          )"
+          git cat-file -e "${base_sha}^{commit}"
+          git merge-base --is-ancestor "$base_sha" "$GITHUB_SHA"
+          echo "base_sha=$base_sha" >>"$GITHUB_OUTPUT"
+      - name: Checkout immutable pre-consumption Security binding
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ steps.binding.outputs.base_sha }}
+          path: security-binding-base
+          persist-credentials: false
       - name: Verify tag-shaped input and classify before environment selection
         id: classify
         env:
@@ -63,7 +89,8 @@ jobs:
           python scripts/classify-security-release.py \
             --event-kind version \
             --version "${TAG_INPUT#v}" \
-            --evidence-id "$EVIDENCE_ID"
+            --evidence-id "$EVIDENCE_ID" \
+            --binding-root security-binding-base
 
   back-sync:
     name: Open release back-sync PR
@@ -124,6 +151,10 @@ jobs:
           EXPECTED_TAG_APP_ID: ${{ github.event.inputs.release_tag_app_id }}
           EXPECTED_TAG_APP_CLIENT_ID: ${{ github.event.inputs.release_tag_app_client_id }}
           REPO: ${{ github.repository }}
+          SECURITY_EVIDENCE_ID: ${{ needs.security-classification.outputs.security-evidence-id }}
+          SECURITY_RELEASE: ${{ needs.security-classification.outputs.security-release }}
+          SECURITY_VERSION: ${{ needs.security-classification.outputs.security-version }}
+          WORKFLOW_ACTOR: ${{ github.actor }}
         run: |
           set -euo pipefail
 
@@ -231,6 +262,15 @@ jobs:
           PY
           )"
           test "$tag" = "v${tagged_version}"
+          if [ "$SECURITY_RELEASE" = true ]; then
+            test "$WORKFLOW_ACTOR" = 'lightning-it-release-automation[bot]'
+            test "$SECURITY_VERSION" = "$tagged_version"
+            [[ "$SECURITY_EVIDENCE_ID" =~ ^MLX90-[A-Z0-9][A-Z0-9._-]{2,127}$ ]]
+          else
+            test "$SECURITY_RELEASE" = false
+            test -z "$SECURITY_VERSION"
+            test -z "$SECURITY_EVIDENCE_ID"
+          fi
 
           if git merge-base --is-ancestor "$release_sha" origin/develop; then
             echo "develop already contains the tagged release; release back-sync not needed."
@@ -256,6 +296,11 @@ jobs:
           body+="\`${tag}\` was published.\n\n"
           body+=$'Merge this PR with a merge commit, not squash or rebase, '
           body+=$'so the exact tagged release becomes an ancestor of `develop`.'
+          if [ "$SECURITY_RELEASE" = true ]; then
+            body+=$'\n\nEvidence-bound MLX-90 Security back-sync: `'
+            body+="${SECURITY_EVIDENCE_ID}"
+            body+=$'`; human actions in the successful path: `0`.'
+          fi
 
           git switch -C "$branch" origin/develop
           git merge --no-ff -X ours "$release_sha" \
@@ -265,8 +310,16 @@ jobs:
             CHANGELOG.rst
             changelogs/.plugin-cache.yaml
             changelogs/changelog.yaml
+            changelogs/release-preparation.json
             galaxy.yml
           )
+          if [ "$SECURITY_RELEASE" = true ]; then
+            security_metadata=".lit/security-releases/${SECURITY_VERSION}.json"
+            security_receipt=".lit/security-release-intakes/${SECURITY_VERSION}.json"
+            git cat-file -e "${release_sha}:${security_metadata}"
+            git cat-file -e "${release_sha}:${security_receipt}"
+            release_paths+=("$security_metadata" "$security_receipt")
+          fi
           for path in "${release_paths[@]}"; do
             if git cat-file -e "${release_sha}:${path}" 2>/dev/null; then
               git checkout "$release_sha" -- "$path"
@@ -280,7 +333,7 @@ jobs:
             "$release_base" "$release_sha" -- changelogs/fragments/ \
             | xargs -r rm -f
 
-          git add -A CHANGELOG.rst changelogs galaxy.yml
+          git add -A -- "${release_paths[@]}" changelogs/fragments/
           if ! git diff --cached --quiet; then
             git commit --amend --no-edit
           fi
@@ -290,14 +343,38 @@ jobs:
             exit 0
           fi
 
-          if ! authenticated_push \
-              "--force-with-lease=${branch_ref}:${remote_branch_sha}" \
-              origin "HEAD:${branch_ref}"
-          then
-            echo "::error::Release back-sync branch changed concurrently; rerun from fresh state."
-            exit 1
-          fi
           pushed_sha="$(git rev-parse HEAD)"
+          if [ -n "$remote_branch_sha" ]; then
+            git fetch --no-tags origin "$branch_ref"
+            test "$(git rev-parse FETCH_HEAD)" = "$remote_branch_sha"
+            git switch --detach "$remote_branch_sha"
+            pushed_sha="$remote_branch_sha"
+          fi
+
+          current_develop="$(git rev-parse origin/develop)"
+          back_sync_policy="$RUNNER_TEMP/release-back-sync-policy"
+          test ! -e "$back_sync_policy"
+          git worktree add --detach "$back_sync_policy" "$release_sha"
+          python "$back_sync_policy/scripts/verify_release_back_sync.py" \
+            --root "$GITHUB_WORKSPACE" \
+            --develop-tip "$current_develop" \
+            --release-sha "$release_sha" \
+            --head-sha "$pushed_sha" \
+            --tag "$tag" \
+            --security-version "$SECURITY_VERSION" \
+            --evidence-id "$SECURITY_EVIDENCE_ID"
+          git worktree remove "$back_sync_policy"
+
+          if [ -z "$remote_branch_sha" ]; then
+            if ! authenticated_push origin "HEAD:${branch_ref}"; then
+              echo "::error::Release back-sync branch appeared concurrently; refusing to overwrite it."
+              exit 1
+            fi
+            test "$(git ls-remote origin "$branch_ref" | awk '{print $1}')" = \
+              "$pushed_sha"
+          else
+            echo "Reusing the already verified immutable back-sync head ${pushed_sha}."
+          fi
 
           owned_pulls="$(
             gh api --method GET "repos/${REPO}/pulls" \
@@ -342,3 +419,12 @@ jobs:
             --repo "$REPO" \
             --title "$title" \
             --body "$body"
+
+          if [ "$SECURITY_RELEASE" = true ]; then
+            test "$(jq -er '.[0].user.login' <<< "$owned_pulls")" = \
+              'lightning-it-release-automation[bot]'
+            test "$(jq -er '.[0].head.sha' <<< "$owned_pulls")" = "$pushed_sha"
+            gh pr merge "$existing" \
+              --repo "$REPO" \
+              --auto --merge --match-head-commit "$pushed_sha"
+          fi

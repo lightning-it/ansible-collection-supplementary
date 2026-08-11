@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/security-release-dispatch.py"
 WORKFLOW = ROOT / ".github/workflows/security-release-dispatch.yml"
+INTAKE_WORKFLOW = ROOT / ".github/workflows/security-release-intake.yml"
 SPEC = importlib.util.spec_from_file_location("security_request_dispatch", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -111,7 +116,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         )
         fragment = self.root / "changelogs/fragments/keycloak-security.yml"
         fragment.parent.mkdir(parents=True)
-        fragment.write_text("---\nsecurity_fixes:\n  - Keycloak fix.\n", encoding="utf-8")
+        fragment.write_bytes(MODULE.INTAKE.CONTRACT.canonical_security_fragment_bytes(["Keycloak fix."]))
         git(self.root, "add", ".")
         git(self.root, "commit", "-q", "-m", "Security candidate")
         self.head = git(self.root, "rev-parse", "HEAD")
@@ -119,6 +124,15 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def commit_candidate_mutation(self, path: Path, content: str) -> str:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        git(self.root, "add", ".")
+        git(self.root, "commit", "-q", "-m", "mutate Security candidate")
+        head = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/develop", head)
+        return head
 
     def test_exact_candidate_builds_a_valid_human_actions_zero_request(self) -> None:
         envelope = MODULE.build_envelope(
@@ -134,6 +148,134 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertEqual(self.head, request["candidateHeadSha"])
         self.assertEqual(EVIDENCE_ID, request["evidenceId"])
         self.assertEqual(0, request["humanActions"])
+        self.assertEqual(2, request["schemaVersion"])
+        self.assertEqual(MODULE.INTAKE.CONTRACT.PRODUCER_REPOSITORY_ID, request["repositoryId"])
+        self.assertEqual(PROFILE, request["acceptanceProfile"])
+        self.assertRegex(request["chainId"], r"^sha256:[0-9a-f]{64}$")
+        self.assertRegex(request["metadataSha256"], r"^sha256:[0-9a-f]{64}$")
+
+    def test_candidate_diff_is_independent_of_hostile_local_git_diff_config(self) -> None:
+        expected = MODULE.INTAKE.canonical_diff(self.root, self.base, self.head)
+        attributes = self.root / "host-global-attributes"
+        attributes.write_text("*.yml diff=hostile\n", encoding="utf-8")
+        git(self.root, "config", "core.attributesFile", str(attributes))
+        git(self.root, "config", "diff.renames", "copies")
+        git(self.root, "config", "diff.algorithm", "histogram")
+        git(self.root, "config", "diff.indentHeuristic", "true")
+        git(self.root, "config", "diff.external", "false")
+        git(self.root, "config", "diff.hostile.textconv", "false")
+        self.assertEqual(
+            expected,
+            MODULE.INTAKE.canonical_diff(self.root, self.base, self.head),
+        )
+
+    def test_dispatch_cli_emits_canonical_request_json_for_workflow_input(self) -> None:
+        envelope_path = self.root / "dispatch-envelope.json"
+        request_path = self.root / "workflow-request.json"
+        arguments = [
+            "security-release-dispatch.py",
+            "--repository",
+            REPOSITORY,
+            "--base-sha",
+            self.base,
+            "--head-sha",
+            self.head,
+            "--root",
+            str(self.root),
+            "--now",
+            "2026-08-08T23:00:00Z",
+            "--output-json",
+            str(envelope_path),
+            "--output-request-json",
+            str(request_path),
+        ]
+        with (
+            mock.patch.object(sys, "argv", arguments),
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(io.StringIO()),
+        ):
+            self.assertEqual(0, MODULE.main())
+        envelope = MODULE.INTAKE.CONTRACT.load_json_file(
+            self.root,
+            envelope_path.relative_to(self.root),
+            "dispatch envelope",
+        )
+        request = MODULE.INTAKE.load_canonical_request(request_path)
+        self.assertEqual(envelope["request"], request)
+        self.assertEqual(request_path.read_bytes(), MODULE.INTAKE.CONTRACT.canonical_document_bytes(request))
+
+    def test_intake_cli_emits_only_canonical_observed_app_receipt(self) -> None:
+        request = MODULE.build_envelope(self.root, REPOSITORY, self.base, self.head, NOW)["request"]
+        request_path = self.root / "intake-request.json"
+        request_path.write_bytes(MODULE.INTAKE.CONTRACT.canonical_document_bytes(request))
+        result_path = self.root / "intake-result.json"
+        receipt_path = self.root / "intake-receipt.json"
+        permissions_path = self.root / "app-permissions.json"
+        permissions_path.write_bytes(
+            MODULE.INTAKE.CONTRACT.canonical_document_bytes(MODULE.INTAKE.CONTRACT.RELEASE_APP_PERMISSIONS)
+        )
+        arguments = [
+            "security-release-intake.py",
+            "--request",
+            str(request_path),
+            "--repository",
+            REPOSITORY,
+            "--root",
+            str(self.root),
+            "--now",
+            "2026-08-08T23:00:00Z",
+            "--output-json",
+            str(result_path),
+            "--output-intake-receipt",
+            str(receipt_path),
+            "--workflow-run-id",
+            "123456",
+            "--workflow-attempt",
+            "1",
+            "--workflow-ref",
+            f"{REPOSITORY}/.github/workflows/security-release-intake.yml@refs/heads/main",
+            "--workflow-event",
+            "workflow_dispatch",
+            "--workflow-actor",
+            MODULE.INTAKE.CONTRACT.RELEASE_APP_LOGIN,
+            "--workflow-triggering-actor",
+            MODULE.INTAKE.CONTRACT.RELEASE_APP_LOGIN,
+            "--observed-app-slug",
+            MODULE.INTAKE.CONTRACT.RELEASE_APP_SLUG,
+            "--observed-app-installation-id",
+            MODULE.INTAKE.CONTRACT.RELEASE_APP_INSTALLATION_ID,
+            "--observed-app-login",
+            MODULE.INTAKE.CONTRACT.RELEASE_APP_LOGIN,
+            "--observed-app-account-id",
+            MODULE.INTAKE.CONTRACT.RELEASE_APP_ACCOUNT_ID,
+            "--observed-app-permissions",
+            str(permissions_path),
+        ]
+        for repository in MODULE.INTAKE.CONTRACT.RELEASE_APP_SELECTED_REPOSITORIES:
+            arguments.extend(("--observed-app-repository", repository))
+        with (
+            mock.patch.object(sys, "argv", arguments),
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(io.StringIO()),
+        ):
+            self.assertEqual(0, MODULE.INTAKE.main())
+        result = MODULE.INTAKE.CONTRACT.load_json_file(
+            self.root,
+            result_path.relative_to(self.root),
+            "intake result",
+        )
+        receipt = MODULE.INTAKE.CONTRACT.load_json_file(
+            self.root,
+            receipt_path.relative_to(self.root),
+            "intake receipt",
+        )
+        self.assertEqual(result_path.read_bytes(), MODULE.INTAKE.CONTRACT.canonical_document_bytes(result))
+        self.assertEqual(receipt_path.read_bytes(), MODULE.INTAKE.CONTRACT.canonical_document_bytes(receipt))
+        self.assertEqual(MODULE.INTAKE.CONTRACT.RELEASE_APP_IDENTITY, receipt["automation"])
+        noncanonical = self.root / "noncanonical-request.json"
+        noncanonical.write_text(json.dumps(request, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        with self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "canonical compact JSON"):
+            MODULE.INTAKE.load_canonical_request(noncanonical)
 
     def test_ordinary_develop_change_does_not_mint_a_dispatch_request(self) -> None:
         git(self.root, "checkout", "-q", self.base)
@@ -148,31 +290,219 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             MODULE.build_envelope(self.root, REPOSITORY, self.base, head, NOW),
         )
 
-    def test_controller_workflow_is_default_branch_bound_and_least_privilege(self) -> None:
-        workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("workflow_run:", workflow)
-        self.assertIn("workflows: [Collection CI]", workflow)
-        self.assertIn("branches: [develop]", workflow)
-        self.assertNotIn("workflow_dispatch:", workflow)
-        self.assertNotIn("pull_request:", workflow)
-        self.assertIn("github.event.workflow_run.event == 'push'", workflow)
-        self.assertEqual(2, workflow.count("ref: ${{ github.sha }}"))
-        self.assertNotIn("ref: ${{ github.event.workflow_run.head_sha }}", workflow)
-        self.assertNotIn("ref: ${{ needs.classify.outputs.source-sha }}", workflow)
-        self.assertIn("needs.classify.outputs['source-sha']", workflow)
-        self.assertIn('test "$(git rev-parse HEAD)" = "$CONTROLLER_SHA"', workflow)
-        self.assertIn('test "$(git rev-parse origin/develop)" = "$SOURCE_SHA"', workflow)
-        self.assertIn("needs.classify.outputs.dispatch == 'true'", workflow)
-        self.assertIn("environment: mlx90-security-release-evidence", workflow)
-        self.assertIn("permission-contents: write", workflow)
-        self.assertIn('test "$APP_INSTALLATION_ID" = 148019054', workflow)
-        self.assertIn(".client_payload.humanActions == 0", workflow)
-        self.assertNotIn("permission-actions", workflow)
-        self.assertNotIn("permission-pull-requests", workflow)
-        self.assertLess(
-            workflow.index("Reconstruct exact validated request before token access"),
-            workflow.index("Mint repository-scoped release automation App token"),
+    def test_wrong_consumer_fails_before_dispatch(self) -> None:
+        metadata_path = self.root / f".lit/security-releases/{VERSION}.json"
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata["consumers"] = [
+            "lightning-it/container-ee-wunder-ansible-ubi9",
+            "example/unapproved",
+        ]
+        head = self.commit_candidate_mutation(
+            metadata_path,
+            json.dumps(metadata, sort_keys=True) + "\n",
         )
+        with self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "exact MLX-90 consumer"):
+            MODULE.build_envelope(self.root, REPOSITORY, self.base, head, NOW)
+
+    def test_noncanonical_security_fragment_fails_before_dispatch(self) -> None:
+        fragment = self.root / "changelogs/fragments/keycloak-security.yml"
+        head = self.commit_candidate_mutation(
+            fragment,
+            "---\nsecurity_fixes:\n  - Non-canonical YAML.\n",
+        )
+        with self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "invalid quoted YAML scalar"):
+            MODULE.build_envelope(self.root, REPOSITORY, self.base, head, NOW)
+
+    def test_candidate_cannot_supply_or_mutate_app_owned_receipts(self) -> None:
+        receipt = self.root / f".lit/security-release-intakes/{VERSION}.json"
+        head = self.commit_candidate_mutation(receipt, '{"forged":true}\n')
+        with self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "App-owned Security intake receipts"):
+            MODULE.build_envelope(self.root, REPOSITORY, self.base, head, NOW)
+
+    def test_duplicate_metadata_keys_fail_closed(self) -> None:
+        metadata_path = self.root / f".lit/security-releases/{VERSION}.json"
+        content = metadata_path.read_text(encoding="utf-8").rstrip()
+        duplicate = content[:-1] + ',"fixedVersion":"3.2.4"}\n'
+        head = self.commit_candidate_mutation(metadata_path, duplicate)
+        with self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "duplicate JSON key"):
+            MODULE.build_envelope(self.root, REPOSITORY, self.base, head, NOW)
+
+    def test_controller_workflow_is_default_branch_bound_and_least_privilege(self) -> None:
+        dispatch = WORKFLOW.read_text(encoding="utf-8")
+        intake = INTAKE_WORKFLOW.read_text(encoding="utf-8")
+        allowlist = tuple(MODULE.INTAKE.CONTRACT.RELEASE_APP_SELECTED_REPOSITORIES)
+
+        self.assertIn("workflow_run:", dispatch)
+        self.assertIn("workflows: [Collection CI]", dispatch)
+        self.assertIn("branches: [develop]", dispatch)
+        self.assertIn("source_run_id:", dispatch)
+        self.assertIn("gh workflow run security-release-dispatch.yml", dispatch)
+        self.assertIn("--ref main", dispatch)
+        self.assertIn("github.actor == 'github-actions[bot]'", dispatch)
+        self.assertIn("github.triggering_actor == 'github-actions[bot]'", dispatch)
+        self.assertIn("github.event.workflow_run.event == 'push'", dispatch)
+        self.assertNotIn("pull_request:", dispatch)
+        self.assertEqual(2, dispatch.count("ref: ${{ github.sha }}"))
+        self.assertNotIn("ref: ${{ github.event.workflow_run.head_sha }}", dispatch)
+        self.assertNotIn("ref: ${{ needs.classify.outputs.source-sha }}", dispatch)
+        self.assertIn("needs.classify.outputs['source-sha']", dispatch)
+        self.assertIn("needs.classify.outputs.dispatch == 'true'", dispatch)
+        self.assertIn("environment: mlx90-security-release-evidence", dispatch)
+        self.assertIn("permission-actions: write", dispatch)
+        self.assertEqual(1, dispatch.count("permission-metadata: read"))
+        self.assertNotIn("permission-contents: write", dispatch)
+        self.assertNotIn("permission-pull-requests: write", dispatch)
+        self.assertNotIn("permission-workflows", dispatch)
+        self.assertNotIn("repository_dispatch", dispatch)
+        self.assertIn("--output-request-json", dispatch)
+        self.assertIn("inputs:{request_json:$request_json}", dispatch)
+        self.assertIn(
+            "actions/workflows/security-release-intake.yml/dispatches",
+            dispatch,
+        )
+        self.assertIn('test "$APP_INSTALLATION_ID" = 148019054', dispatch)
+        self.assertIn(".id == 307565056", dispatch)
+        self.assertIn('gh api "apps/${APP_SLUG}"', dispatch)
+        self.assertIn('"checks": "read"', dispatch)
+        self.assertIn("gh api --paginate --slurp", dispatch)
+        self.assertEqual(
+            1,
+            dispatch.count("repositories: ${{ github.event.repository.name }}"),
+        )
+        dispatch_attestation = dispatch[
+            dispatch.index("- name: Mint installation-wide metadata-only App attestation token") : dispatch.index(
+                "- name: Verify exact App installation and repository scope"
+            )
+        ]
+        dispatch_mutation = dispatch[
+            dispatch.index("- name: Mint repository-scoped release automation App token") : dispatch.index(
+                "- name: Revalidate and dispatch exact request to immutable main intake"
+            )
+        ]
+        self.assertIn("permission-metadata: read", dispatch_attestation)
+        self.assertNotIn("repositories:", dispatch_attestation)
+        self.assertNotIn("permission-actions: write", dispatch_attestation)
+        self.assertIn(
+            "repositories: ${{ github.event.repository.name }}",
+            dispatch_mutation,
+        )
+        self.assertIn("permission-actions: write", dispatch_mutation)
+        self.assertNotIn("permission-metadata: read", dispatch_mutation)
+        for repository in allowlist:
+            self.assertEqual(1, dispatch.count(f'"{repository}"'))
+        self.assertLess(
+            dispatch.index("Reconstruct exact validated request before token access"),
+            dispatch.index("Mint installation-wide metadata-only App attestation token"),
+        )
+        self.assertLess(
+            dispatch.index("Mint installation-wide metadata-only App attestation token"),
+            dispatch.index("Verify exact App installation and repository scope"),
+        )
+        self.assertLess(
+            dispatch.index("Verify exact App installation and repository scope"),
+            dispatch.index("Mint repository-scoped release automation App token"),
+        )
+        self.assertLess(
+            dispatch.index("Mint repository-scoped release automation App token"),
+            dispatch.index("Revalidate and dispatch exact request to immutable main intake"),
+        )
+        relay_run = dispatch[
+            dispatch.index("- name: Dispatch immutable main-ref controller") : dispatch.index("  classify:")
+        ]
+        classify_start = dispatch.index("- name: Construct and fully validate immutable Security request")
+        classify_run = dispatch[classify_start : dispatch.index("\n  dispatch:\n", classify_start)]
+        self.assertNotIn("authenticated_fetch()", relay_run)
+        self.assertIn("authenticated_fetch()", classify_run)
+
+        self.assertIn("workflow_dispatch:", intake)
+        self.assertIn("request_json:", intake)
+        self.assertNotIn("repository_dispatch:", intake)
+        self.assertNotIn("client_payload", intake)
+        self.assertIn("github.ref == 'refs/heads/main'", intake)
+        self.assertGreaterEqual(
+            intake.count("github.actor == 'lightning-it-release-automation[bot]'"),
+            2,
+        )
+        self.assertGreaterEqual(
+            intake.count("github.triggering_actor == 'lightning-it-release-automation[bot]'"),
+            2,
+        )
+        self.assertIn("permission-contents: write", intake)
+        self.assertIn("permission-pull-requests: write", intake)
+        self.assertEqual(1, intake.count("permission-metadata: read"))
+        self.assertNotIn("permission-actions: write", intake)
+        self.assertNotIn("permission-workflows", intake)
+        self.assertEqual(
+            1,
+            intake.count("repositories: ${{ github.event.repository.name }}"),
+        )
+        intake_attestation = intake[
+            intake.index("- name: Mint installation-wide metadata-only App attestation token") : intake.index(
+                "- name: Verify exact App installation identity and complete allowlist"
+            )
+        ]
+        intake_mutation = intake[
+            intake.index("- name: Mint repository-scoped release automation App token") : intake.index(
+                "- name: Revalidate exact request and mint canonical v2 receipt before mutation"
+            )
+        ]
+        self.assertIn("permission-metadata: read", intake_attestation)
+        self.assertNotIn("repositories:", intake_attestation)
+        self.assertNotIn("permission-contents: write", intake_attestation)
+        self.assertNotIn("permission-pull-requests: write", intake_attestation)
+        self.assertIn(
+            "repositories: ${{ github.event.repository.name }}",
+            intake_mutation,
+        )
+        self.assertIn("permission-contents: write", intake_mutation)
+        self.assertIn("permission-pull-requests: write", intake_mutation)
+        self.assertNotIn("permission-metadata: read", intake_mutation)
+        self.assertIn("--output-intake-receipt", intake)
+        self.assertIn("--workflow-triggering-actor", intake)
+        self.assertIn(".schemaVersion == 2", intake)
+        self.assertIn('.controller.event == "workflow_dispatch"', intake)
+        self.assertIn('test "$APP_INSTALLATION_ID" = 148019054', intake)
+        self.assertIn(".id == 307565056", intake)
+        self.assertIn('gh api "apps/${APP_SLUG}"', intake)
+        self.assertIn("--observed-app-permissions", intake)
+        self.assertIn(".automation.permissions == {", intake)
+        self.assertIn("gh api --paginate --slurp", intake)
+        for repository in allowlist:
+            self.assertGreaterEqual(intake.count(repository), 2)
+        self.assertLess(
+            intake.index("Revalidate live request and run before App token access"),
+            intake.index("Mint installation-wide metadata-only App attestation token"),
+        )
+        self.assertLess(
+            intake.index("Mint installation-wide metadata-only App attestation token"),
+            intake.index("Verify exact App installation identity and complete allowlist"),
+        )
+        self.assertLess(
+            intake.index("Verify exact App installation identity and complete allowlist"),
+            intake.index("Mint repository-scoped release automation App token"),
+        )
+        self.assertLess(
+            intake.index("Mint repository-scoped release automation App token"),
+            intake.index("Revalidate exact request and mint canonical v2 receipt before mutation"),
+        )
+        self.assertIn(
+            'test "$MUTATION_APP_INSTALLATION_ID" = "$APP_INSTALLATION_ID"',
+            intake,
+        )
+        self.assertLess(
+            intake.index("Revalidate exact request and mint canonical v2 receipt before mutation"),
+            intake.index("Create or prove exact App-authored isolated commit"),
+        )
+        self.assertIn('test "$(git show -s --format=%P "$head_sha")" = "$BASE_SHA"', intake)
+        self.assertIn('test "$(git show -s --format=%T "$head_sha")" = "$tree_sha"', intake)
+        self.assertIn(".user.id == 307565056", intake)
+        self.assertIn("--auto --merge --match-head-commit", intake)
+        self.assertIn('.auto_merge.merge_method == "merge"', intake)
+        self.assertIn(".merged_by.id == 307565056", intake)
+        self.assertIn('test "$first_parent" = "$BASE_SHA"', intake)
+        self.assertIn('test "$second_parent" = "$HEAD_SHA"', intake)
+        self.assertNotIn("--admin", intake)
+        self.assertNotIn("--force", intake)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,15 @@
-# Managed by lightning-it/shared-assets-lit. MLX-90 Security-only intake.
+# Repository-owned MLX-90 golden-path incubation asset; canonicalize after real humanActions=0 acceptance.
 # yamllint disable rule:truthy
 ---
 name: Security release intake
 
 on:
-  repository_dispatch:
-    types: [mlx90-security-release]
+  workflow_dispatch:
+    inputs:
+      request_json:
+        description: Canonical compact MLX-90 Security intake request v2
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -16,12 +20,17 @@ concurrency:
 
 jobs:
   classify:
-    name: Validate confirmed Security evidence before environment access
+    name: Validate App-dispatched Security evidence before environment access
     if: >-
+      github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main' &&
-      github.actor == 'lightning-it-release-automation[bot]'
+      github.actor == 'lightning-it-release-automation[bot]' &&
+      github.triggering_actor == 'lightning-it-release-automation[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
     outputs:
       base-sha: ${{ steps.request.outputs.base_sha }}
       candidate-head-sha: ${{ steps.request.outputs.candidate_head_sha }}
@@ -35,22 +44,69 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate exact evidence-bound source range
+      - name: Validate canonical request and exact App-authored controller run
         id: request
         env:
-          EVENT_PATH: ${{ github.event_path }}
+          CONTROLLER_SHA: ${{ github.sha }}
+          REQUEST_JSON: ${{ inputs.request_json }}
+          RUN_TOKEN: ${{ github.token }}
+          WORKFLOW_ACTOR: ${{ github.actor }}
+          WORKFLOW_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_EVENT: ${{ github.event_name }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         run: |
           set -euo pipefail
 
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          git fetch --no-tags origin main develop
-          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+          authenticated_fetch() {
+            GH_TOKEN="$RUN_TOKEN" git -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' fetch "$@"
+          }
+
+          [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$WORKFLOW_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$WORKFLOW_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          test "$WORKFLOW_EVENT" = workflow_dispatch
+          test "$WORKFLOW_ACTOR" = 'lightning-it-release-automation[bot]'
+          test "$WORKFLOW_TRIGGERING_ACTOR" = \
+            'lightning-it-release-automation[bot]'
+          test "$WORKFLOW_REF" = \
+            "${GITHUB_REPOSITORY}/.github/workflows/security-release-intake.yml@refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$CONTROLLER_SHA"
+          authenticated_fetch --no-tags origin main develop
+          test "$(git rev-parse origin/main)" = "$CONTROLLER_SHA"
+
+          current_run="$RUNNER_TEMP/security-intake-controller-run.json"
+          GH_TOKEN="$RUN_TOKEN" gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${WORKFLOW_RUN_ID}" \
+            >"$current_run"
+          jq -e \
+            --arg actor "$WORKFLOW_ACTOR" \
+            --arg attempt "$WORKFLOW_ATTEMPT" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg run_id "$WORKFLOW_RUN_ID" \
+            --arg sha "$CONTROLLER_SHA" '
+              (.id | tostring) == $run_id
+              and (.run_attempt | tostring) == $attempt
+              and .name == "Security release intake"
+              and .path == ".github/workflows/security-release-intake.yml"
+              and .event == "workflow_dispatch"
+              and .head_branch == "main"
+              and .head_sha == $sha
+              and .repository.full_name == $repository
+              and .head_repository.full_name == $repository
+              and .actor.login == $actor
+              and .triggering_actor.login == $actor
+              and .status == "in_progress"
+              and .conclusion == null
+            ' "$current_run" >/dev/null
 
           request="$RUNNER_TEMP/security-intake-request.json"
           patch="$RUNNER_TEMP/security-intake.patch"
           result="$RUNNER_TEMP/security-intake-result.json"
           umask 077
-          jq -ce '.client_payload' "$EVENT_PATH" >"$request"
+          printf '%s\n' "$REQUEST_JSON" >"$request"
           python3 scripts/security-release-intake.py \
             --request "$request" \
             --repository "$GITHUB_REPOSITORY" \
@@ -59,7 +115,10 @@ jobs:
             --output-json "$result" >/dev/null
 
           test -s "$patch"
-          jq -e '.humanActions == 0' "$result" >/dev/null
+          test "$(jq -er '.baseSha' "$result")" = "$CONTROLLER_SHA"
+          test "$(git rev-parse origin/develop)" = \
+            "$(jq -er '.candidateHeadSha' "$result")"
+          jq -e '.schemaVersion == 2 and .humanActions == 0' "$result" >/dev/null
           {
             echo "base_sha=$(jq -er '.baseSha' "$result")"
             echo "candidate_head_sha=$(jq -er '.candidateHeadSha' "$result")"
@@ -72,11 +131,15 @@ jobs:
     needs: classify
     if: >-
       needs.classify.result == 'success' &&
-      github.actor == 'lightning-it-release-automation[bot]'
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'lightning-it-release-automation[bot]' &&
+      github.triggering_actor == 'lightning-it-release-automation[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: mlx90-security-release-evidence
     permissions:
+      actions: read
       contents: read
       pull-requests: read
     steps:
@@ -87,26 +150,59 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Revalidate live source and reconstruct exact approved patch
+      - name: Revalidate live request and run before App token access
         id: request
         env:
-          EVENT_PATH: ${{ github.event_path }}
           EXPECTED_BASE_SHA: ${{ needs.classify.outputs.base-sha }}
           EXPECTED_CANDIDATE_HEAD_SHA: ${{ needs.classify.outputs.candidate-head-sha }}
           EXPECTED_EVIDENCE_ID: ${{ needs.classify.outputs.evidence-id }}
           EXPECTED_FIXED_VERSION: ${{ needs.classify.outputs.fixed-version }}
+          REQUEST_JSON: ${{ inputs.request_json }}
+          RUN_TOKEN: ${{ github.token }}
+          WORKFLOW_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
 
-          git fetch --no-tags origin main develop
+          authenticated_fetch() {
+            GH_TOKEN="$RUN_TOKEN" git -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' fetch "$@"
+          }
+
+          authenticated_fetch --no-tags origin main develop
           test "$(git rev-parse HEAD)" = "$EXPECTED_BASE_SHA"
           test "$(git rev-parse origin/main)" = "$EXPECTED_BASE_SHA"
+          test "$(git rev-parse origin/develop)" = "$EXPECTED_CANDIDATE_HEAD_SHA"
 
-          request="$RUNNER_TEMP/security-intake-request.json"
-          patch="$RUNNER_TEMP/security-intake.patch"
-          result="$RUNNER_TEMP/security-intake-result.json"
+          current_run="$RUNNER_TEMP/security-intake-controller-run-pre-token.json"
+          GH_TOKEN="$RUN_TOKEN" gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${WORKFLOW_RUN_ID}" \
+            >"$current_run"
+          jq -e \
+            --arg actor 'lightning-it-release-automation[bot]' \
+            --arg attempt "$WORKFLOW_ATTEMPT" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg run_id "$WORKFLOW_RUN_ID" \
+            --arg sha "$EXPECTED_BASE_SHA" '
+              (.id | tostring) == $run_id
+              and (.run_attempt | tostring) == $attempt
+              and .path == ".github/workflows/security-release-intake.yml"
+              and .event == "workflow_dispatch"
+              and .head_branch == "main"
+              and .head_sha == $sha
+              and .repository.full_name == $repository
+              and .head_repository.full_name == $repository
+              and .actor.login == $actor
+              and .triggering_actor.login == $actor
+              and .status == "in_progress"
+              and .conclusion == null
+            ' "$current_run" >/dev/null
+
+          request="$RUNNER_TEMP/security-intake-request-pre-token.json"
+          patch="$RUNNER_TEMP/security-intake-pre-token.patch"
+          result="$RUNNER_TEMP/security-intake-result-pre-token.json"
           umask 077
-          jq -ce '.client_payload' "$EVENT_PATH" >"$request"
+          printf '%s\n' "$REQUEST_JSON" >"$request"
           python3 scripts/security-release-intake.py \
             --request "$request" \
             --repository "$GITHUB_REPOSITORY" \
@@ -115,18 +211,81 @@ jobs:
             --output-json "$result" >/dev/null
 
           test "$(jq -er '.baseSha' "$result")" = "$EXPECTED_BASE_SHA"
-          test "$(jq -er '.candidateHeadSha' "$result")" = "$EXPECTED_CANDIDATE_HEAD_SHA"
+          test "$(jq -er '.candidateHeadSha' "$result")" = \
+            "$EXPECTED_CANDIDATE_HEAD_SHA"
           test "$(jq -er '.evidenceId' "$result")" = "$EXPECTED_EVIDENCE_ID"
           test "$(jq -er '.fixedVersion' "$result")" = "$EXPECTED_FIXED_VERSION"
           {
             echo "request=$request"
             echo "patch=$patch"
             echo "result=$result"
-            echo "branch=$(jq -er '.branch' "$result")"
-            echo "candidate_diff_sha256=$(jq -er '.candidateDiffSha256' "$result")"
           } >>"$GITHUB_OUTPUT"
 
-      - name: Mint least-privilege release automation App token
+      - name: Mint installation-wide metadata-only App attestation token
+        id: release-app-metadata
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-metadata: read
+
+      - name: Verify exact App installation identity and complete allowlist
+        id: release-bot
+        env:
+          APP_INSTALLATION_ID: ${{ steps.release-app-metadata.outputs.installation-id }}
+          APP_SLUG: ${{ steps.release-app-metadata.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.release-app-metadata.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          test "$APP_SLUG" = lightning-it-release-automation
+          test "$APP_INSTALLATION_ID" = 148019054
+          bot="$RUNNER_TEMP/security-intake-app-bot.json"
+          gh api "users/${APP_SLUG}%5Bbot%5D" >"$bot"
+          jq -e '
+            .login == "lightning-it-release-automation[bot]"
+            and .id == 307565056
+            and .type == "Bot"
+          ' "$bot" >/dev/null
+          app="$RUNNER_TEMP/security-intake-app.json"
+          permissions="$RUNNER_TEMP/security-intake-app-permissions.json"
+          gh api "apps/${APP_SLUG}" >"$app"
+          jq -e '
+            .slug == "lightning-it-release-automation"
+            and .owner.login == "lightning-it"
+            and .permissions == {
+              "actions": "write",
+              "checks": "read",
+              "contents": "write",
+              "metadata": "read",
+              "pull_requests": "write"
+            }
+          ' "$app" >/dev/null
+          jq -ceS '.permissions' "$app" >"$permissions"
+          repositories="$RUNNER_TEMP/security-intake-installation-repositories.json"
+          gh api --paginate --slurp \
+            'installation/repositories?per_page=100' >"$repositories"
+          jq -e '
+            [.[].repositories[].full_name] | sort == [
+              "lightning-it/ansible-collection-supplementary",
+              "lightning-it/container-ee-wunder-ansible-ubi9",
+              "lightning-it/github-management-lit",
+              "lightning-it/modulix-validation",
+              "lightning-it/shared-assets-lit"
+            ]
+          ' "$repositories" >/dev/null
+          {
+            echo "slug=$APP_SLUG"
+            echo "installation_id=$APP_INSTALLATION_ID"
+            echo "login=$(jq -er .login "$bot")"
+            echo "account_id=$(jq -er '.id | tostring' "$bot")"
+            echo "email=307565056+lightning-it-release-automation[bot]@users.noreply.github.com"
+            echo "permissions=$permissions"
+            echo "repositories=$repositories"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Mint repository-scoped release automation App token
         id: release-app
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
@@ -137,95 +296,240 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
-      - name: Resolve exact App bot identity
-        id: release-bot
+      - name: Revalidate exact request and mint canonical v2 receipt before mutation
+        id: final
         env:
-          APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
-          GH_TOKEN: ${{ github.token }}
+          APP_ACCOUNT_ID: ${{ steps.release-bot.outputs.account_id }}
+          APP_INSTALLATION_ID: ${{ steps.release-bot.outputs.installation_id }}
+          APP_LOGIN: ${{ steps.release-bot.outputs.login }}
+          APP_PERMISSIONS: ${{ steps.release-bot.outputs.permissions }}
+          APP_REPOSITORIES: ${{ steps.release-bot.outputs.repositories }}
+          APP_SLUG: ${{ steps.release-bot.outputs.slug }}
+          MUTATION_APP_INSTALLATION_ID: ${{ steps.release-app.outputs.installation-id }}
+          MUTATION_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          EXPECTED_BASE_SHA: ${{ needs.classify.outputs.base-sha }}
+          EXPECTED_CANDIDATE_HEAD_SHA: ${{ needs.classify.outputs.candidate-head-sha }}
+          EXPECTED_EVIDENCE_ID: ${{ needs.classify.outputs.evidence-id }}
+          EXPECTED_FIXED_VERSION: ${{ needs.classify.outputs.fixed-version }}
+          EXPECTED_PATCH: ${{ steps.request.outputs.patch }}
+          EXPECTED_REQUEST: ${{ steps.request.outputs.request }}
+          EXPECTED_RESULT: ${{ steps.request.outputs.result }}
+          REQUEST_JSON: ${{ inputs.request_json }}
+          RUN_TOKEN: ${{ github.token }}
+          WORKFLOW_ACTOR: ${{ github.actor }}
+          WORKFLOW_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_EVENT: ${{ github.event_name }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         run: |
           set -euo pipefail
-          test "$APP_SLUG" = lightning-it-release-automation
-          bot_json="$(gh api "users/${APP_SLUG}%5Bbot%5D")"
-          login="$(jq -er '.login' <<<"$bot_json")"
-          bot_id="$(jq -er '.id' <<<"$bot_json")"
-          test "$login" = 'lightning-it-release-automation[bot]'
-          [[ "$bot_id" =~ ^[1-9][0-9]*$ ]]
-          echo "login=$login" >>"$GITHUB_OUTPUT"
-          echo "email=${bot_id}+${login}@users.noreply.github.com" >>"$GITHUB_OUTPUT"
 
-      - name: Create or prove deterministic isolated branch
+          test "$MUTATION_APP_SLUG" = "$APP_SLUG"
+          test "$MUTATION_APP_INSTALLATION_ID" = "$APP_INSTALLATION_ID"
+
+          authenticated_fetch() {
+            GH_TOKEN="$RUN_TOKEN" git -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' fetch "$@"
+          }
+
+          authenticated_fetch --no-tags origin main develop
+          test "$(git rev-parse HEAD)" = "$EXPECTED_BASE_SHA"
+          test "$(git rev-parse origin/main)" = "$EXPECTED_BASE_SHA"
+          test "$(git rev-parse origin/develop)" = "$EXPECTED_CANDIDATE_HEAD_SHA"
+
+          current_run="$RUNNER_TEMP/security-intake-controller-run-final.json"
+          GH_TOKEN="$RUN_TOKEN" gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${WORKFLOW_RUN_ID}" \
+            >"$current_run"
+          jq -e \
+            --arg actor "$WORKFLOW_ACTOR" \
+            --arg attempt "$WORKFLOW_ATTEMPT" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg run_id "$WORKFLOW_RUN_ID" \
+            --arg sha "$EXPECTED_BASE_SHA" '
+              (.id | tostring) == $run_id
+              and (.run_attempt | tostring) == $attempt
+              and .path == ".github/workflows/security-release-intake.yml"
+              and .event == "workflow_dispatch"
+              and .head_branch == "main"
+              and .head_sha == $sha
+              and .repository.full_name == $repository
+              and .head_repository.full_name == $repository
+              and .actor.login == $actor
+              and .triggering_actor.login == $actor
+              and .status == "in_progress"
+              and .conclusion == null
+            ' "$current_run" >/dev/null
+
+          request="$RUNNER_TEMP/security-intake-request-final.json"
+          patch="$RUNNER_TEMP/security-intake-final.patch"
+          result="$RUNNER_TEMP/security-intake-result-final.json"
+          receipt="$RUNNER_TEMP/security-intake-receipt-v2.json"
+          umask 077
+          printf '%s\n' "$REQUEST_JSON" >"$request"
+          mapfile -t observed_repositories < <(
+            jq -r '[.[].repositories[].full_name] | sort | .[]' \
+              "$APP_REPOSITORIES"
+          )
+          test "${#observed_repositories[@]}" -eq 5
+          repository_arguments=()
+          for observed_repository in "${observed_repositories[@]}"; do
+            repository_arguments+=(
+              --observed-app-repository "$observed_repository"
+            )
+          done
+          python3 scripts/security-release-intake.py \
+            --request "$request" \
+            --repository "$GITHUB_REPOSITORY" \
+            --root . \
+            --output-patch "$patch" \
+            --output-json "$result" \
+            --output-intake-receipt "$receipt" \
+            --workflow-run-id "$WORKFLOW_RUN_ID" \
+            --workflow-attempt "$WORKFLOW_ATTEMPT" \
+            --workflow-ref "$WORKFLOW_REF" \
+            --workflow-event "$WORKFLOW_EVENT" \
+            --workflow-actor "$WORKFLOW_ACTOR" \
+            --workflow-triggering-actor "$WORKFLOW_TRIGGERING_ACTOR" \
+            --observed-app-slug "$APP_SLUG" \
+            --observed-app-installation-id "$APP_INSTALLATION_ID" \
+            --observed-app-login "$APP_LOGIN" \
+            --observed-app-account-id "$APP_ACCOUNT_ID" \
+            --observed-app-permissions "$APP_PERMISSIONS" \
+            "${repository_arguments[@]}" >/dev/null
+
+          cmp "$EXPECTED_REQUEST" "$request"
+          cmp "$EXPECTED_PATCH" "$patch"
+          cmp "$EXPECTED_RESULT" "$result"
+          jq -e '
+            .schemaVersion == 2
+            and .request.schemaVersion == 2
+            and .verified.schemaVersion == 2
+            and .request.humanActions == 0
+            and .verified.humanActions == 0
+            and .automation.slug == "lightning-it-release-automation"
+            and .automation.installationId == "148019054"
+            and .automation.login == "lightning-it-release-automation[bot]"
+            and .automation.accountId == "307565056"
+            and .automation.permissions == {
+              "actions": "write",
+              "checks": "read",
+              "contents": "write",
+              "metadata": "read",
+              "pull_requests": "write"
+            }
+            and .automation.selectedRepositories == [
+              "lightning-it/ansible-collection-supplementary",
+              "lightning-it/container-ee-wunder-ansible-ubi9",
+              "lightning-it/github-management-lit",
+              "lightning-it/modulix-validation",
+              "lightning-it/shared-assets-lit"
+            ]
+            and .controller.event == "workflow_dispatch"
+            and .controller.actor == "lightning-it-release-automation[bot]"
+            and .controller.triggeringActor == "lightning-it-release-automation[bot]"
+          ' "$receipt" >/dev/null
+          {
+            echo "request=$request"
+            echo "patch=$patch"
+            echo "result=$result"
+            echo "receipt=$receipt"
+            echo "branch=$(jq -er '.branch' "$result")"
+            echo "candidate_diff_sha256=$(jq -er '.candidateDiffSha256' "$result")"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Create or prove exact App-authored isolated commit
         id: branch
         env:
           APP_TOKEN: ${{ steps.release-app.outputs.token }}
           BASE_SHA: ${{ needs.classify.outputs.base-sha }}
           BOT_EMAIL: ${{ steps.release-bot.outputs.email }}
           BOT_LOGIN: ${{ steps.release-bot.outputs.login }}
-          BRANCH: ${{ steps.request.outputs.branch }}
+          BRANCH: ${{ steps.final.outputs.branch }}
+          CANDIDATE_HEAD_SHA: ${{ needs.classify.outputs.candidate-head-sha }}
           EVIDENCE_ID: ${{ needs.classify.outputs.evidence-id }}
           FIXED_VERSION: ${{ needs.classify.outputs.fixed-version }}
-          PATCH_FILE: ${{ steps.request.outputs.patch }}
-          REQUEST_FILE: ${{ steps.request.outputs.request }}
-          RESULT_FILE: ${{ steps.request.outputs.result }}
+          PATCH_FILE: ${{ steps.final.outputs.patch }}
+          RECEIPT_FILE: ${{ steps.final.outputs.receipt }}
         run: |
           set -euo pipefail
 
-          authenticated_push() {
+          authenticated_git() {
             GH_TOKEN="$APP_TOKEN" git -c credential.helper= \
-              -c 'credential.helper=!gh auth git-credential' push "$@"
+              -c 'credential.helper=!gh auth git-credential' "$@"
           }
 
           [[ "$BRANCH" == security-release/MLX90-* ]]
+          authenticated_git fetch --no-tags origin main develop
           test "$(git rev-parse origin/main)" = "$BASE_SHA"
+          test "$(git rev-parse origin/develop)" = "$CANDIDATE_HEAD_SHA"
           git switch --detach "$BASE_SHA"
           git switch -c "$BRANCH"
           git apply --binary --index "$PATCH_FILE"
 
           receipt=".lit/security-release-intakes/${FIXED_VERSION}.json"
           test ! -e "$receipt"
+          test ! -L "$receipt"
           mkdir -p "$(dirname "$receipt")"
-          jq -S -n \
-            --slurpfile request "$REQUEST_FILE" \
-            --slurpfile verified "$RESULT_FILE" \
-            '{schemaVersion:1,request:$request[0],verified:$verified[0]}' \
-            >"$receipt"
-          git add "$receipt"
+          cp "$RECEIPT_FILE" "$receipt"
+          chmod 0600 "$receipt"
+          cmp "$RECEIPT_FILE" "$receipt"
+          git add -- "$receipt"
+          git diff --cached --check
 
           git config user.name "$BOT_LOGIN"
           git config user.email "$BOT_EMAIL"
           tree_sha="$(git write-tree)"
-          remote_sha="$(git ls-remote --heads origin "refs/heads/${BRANCH}" | awk 'NR == 1 {print $1}')"
+          remote_sha="$(authenticated_git ls-remote --heads origin \
+            "refs/heads/${BRANCH}" | awk 'NR == 1 {print $1}')"
           if [ -n "$remote_sha" ]; then
             [[ "$remote_sha" =~ ^[0-9a-f]{40}$ ]]
-            git fetch --no-tags origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
-            test "$(git show -s --format=%T "$remote_sha")" = "$tree_sha"
-            test "$(git show -s --format=%P "$remote_sha")" = "$BASE_SHA"
-            test "$(git show -s --format='%an <%ae>' "$remote_sha")" = \
-              "$BOT_LOGIN <$BOT_EMAIL>"
-            test "$(git show -s --format='%cn <%ce>' "$remote_sha")" = \
-              "$BOT_LOGIN <$BOT_EMAIL>"
+            authenticated_git fetch --no-tags origin \
+              "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
             head_sha="$remote_sha"
           else
             git commit -m "fix(security): ${EVIDENCE_ID}"
             head_sha="$(git rev-parse HEAD)"
-            test "$(git show -s --format=%P HEAD)" = "$BASE_SHA"
-            authenticated_push origin "HEAD:refs/heads/${BRANCH}"
+            authenticated_git fetch --no-tags origin main develop
+            test "$(git rev-parse origin/main)" = "$BASE_SHA"
+            test "$(git rev-parse origin/develop)" = "$CANDIDATE_HEAD_SHA"
+            authenticated_git push origin "HEAD:refs/heads/${BRANCH}"
           fi
-          test "$(git ls-remote --heads origin "refs/heads/${BRANCH}" | awk 'NR == 1 {print $1}')" = "$head_sha"
+
+          test "$(git show -s --format=%T "$head_sha")" = "$tree_sha"
+          test "$(git show -s --format=%P "$head_sha")" = "$BASE_SHA"
+          test "$(git show -s --format='%an <%ae>' "$head_sha")" = \
+            "$BOT_LOGIN <$BOT_EMAIL>"
+          test "$(git show -s --format='%cn <%ce>' "$head_sha")" = \
+            "$BOT_LOGIN <$BOT_EMAIL>"
+          test "$(authenticated_git ls-remote --heads origin \
+            "refs/heads/${BRANCH}" | awk 'NR == 1 {print $1}')" = "$head_sha"
           echo "head_sha=$head_sha" >>"$GITHUB_OUTPUT"
 
       - name: Create or prove exact App-authored Security PR
         id: pull
         env:
+          APP_TOKEN: ${{ steps.release-app.outputs.token }}
           BASE_SHA: ${{ needs.classify.outputs.base-sha }}
-          GH_TOKEN: ${{ steps.release-app.outputs.token }}
-          BRANCH: ${{ steps.request.outputs.branch }}
+          BRANCH: ${{ steps.final.outputs.branch }}
           HEAD_SHA: ${{ steps.branch.outputs.head_sha }}
           EVIDENCE_ID: ${{ needs.classify.outputs.evidence-id }}
           FIXED_VERSION: ${{ needs.classify.outputs.fixed-version }}
-          DIFF_SHA256: ${{ steps.request.outputs.candidate_diff_sha256 }}
+          DIFF_SHA256: ${{ steps.final.outputs.candidate_diff_sha256 }}
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
         run: |
           set -euo pipefail
 
+          authenticated_git() {
+            GH_TOKEN="$APP_TOKEN" git -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' "$@"
+          }
+
+          authenticated_git fetch --no-tags origin main \
+            "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
+          test "$(git rev-parse origin/main)" = "$BASE_SHA"
+          test "$(git rev-parse "refs/remotes/origin/${BRANCH}")" = "$HEAD_SHA"
           pulls="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/pulls" \
             -f state=open -f base=main \
             -f "head=${GITHUB_REPOSITORY_OWNER}:${BRANCH}" -f per_page=100)"
@@ -249,27 +553,114 @@ jobs:
               --base main --head "$BRANCH" \
               --title "fix(security): ${EVIDENCE_ID}" --body-file "$body")"
           fi
-          live="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/$(gh pr view "$pr_url" --json number --jq .number)")"
-          # shellcheck disable=SC2016  # jq variables are expanded by jq, not the shell.
-          jq -e --arg repo "$GITHUB_REPOSITORY" --arg branch "$BRANCH" --arg head "$HEAD_SHA" '
-            .user.login == "lightning-it-release-automation[bot]"
-            and .head.repo.full_name == $repo
-            and .head.ref == $branch
-            and .head.sha == $head
-            and .base.ref == "main"
-            and .state == "open"
-          ' <<<"$live" >/dev/null
-          gh pr edit "$pr_url" --repo "$GITHUB_REPOSITORY" \
-            --title "fix(security): ${EVIDENCE_ID}" --body-file "$body"
+          number="$(gh pr view "$pr_url" --repo "$GITHUB_REPOSITORY" \
+            --json number --jq .number)"
+          live="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}")"
+          # shellcheck disable=SC2016  # jq variables are expanded by jq.
+          jq -e \
+            --arg base "$BASE_SHA" \
+            --arg branch "$BRANCH" \
+            --arg head "$HEAD_SHA" \
+            --arg repo "$GITHUB_REPOSITORY" '
+              .user.login == "lightning-it-release-automation[bot]"
+              and .user.id == 307565056
+              and .user.type == "Bot"
+              and .head.repo.full_name == $repo
+              and .head.ref == $branch
+              and .head.sha == $head
+              and .base.ref == "main"
+              and .base.sha == $base
+              and .draft == false
+              and .state == "open"
+            ' <<<"$live" >/dev/null
+          update="$RUNNER_TEMP/security-pr-update.json"
+          jq -n \
+            --arg title "fix(security): ${EVIDENCE_ID}" \
+            --rawfile body "$body" \
+            '{title:$title,body:$body}' >"$update"
+          gh api --method PATCH \
+            "repos/${GITHUB_REPOSITORY}/pulls/${number}" --input "$update" >/dev/null
+          live="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}")"
+          # shellcheck disable=SC2016  # jq variables are expanded by jq.
+          jq -e \
+            --arg base "$BASE_SHA" \
+            --arg branch "$BRANCH" \
+            --arg head "$HEAD_SHA" \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg title "fix(security): ${EVIDENCE_ID}" '
+              .user.login == "lightning-it-release-automation[bot]"
+              and .user.id == 307565056
+              and .user.type == "Bot"
+              and .head.repo.full_name == $repo
+              and .head.ref == $branch
+              and .head.sha == $head
+              and .base.ref == "main"
+              and .base.sha == $base
+              and .title == $title
+              and .draft == false
+              and .state == "open"
+            ' <<<"$live" >/dev/null
+          echo "number=$number" >>"$GITHUB_OUTPUT"
           echo "url=$pr_url" >>"$GITHUB_OUTPUT"
 
-      - name: Enable protected native auto-merge for the exact current head
+      - name: Enable and prove native MERGE auto-merge for exact current head
         env:
+          APP_TOKEN: ${{ steps.release-app.outputs.token }}
+          BASE_SHA: ${{ needs.classify.outputs.base-sha }}
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
-          PR_URL: ${{ steps.pull.outputs.url }}
           HEAD_SHA: ${{ steps.branch.outputs.head_sha }}
+          PR_NUMBER: ${{ steps.pull.outputs.number }}
+          PR_URL: ${{ steps.pull.outputs.url }}
         run: |
           set -euo pipefail
-          test "$(gh pr view "$PR_URL" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)" = "$HEAD_SHA"
+
+          authenticated_git() {
+            GH_TOKEN="$APP_TOKEN" git -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' "$@"
+          }
+
+          live="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+          test "$(jq -er .head.sha <<<"$live")" = "$HEAD_SHA"
+          test "$(jq -er .base.sha <<<"$live")" = "$BASE_SHA"
+          test "$(jq -er .state <<<"$live")" = open
           gh pr merge "$PR_URL" --repo "$GITHUB_REPOSITORY" \
             --auto --merge --match-head-commit "$HEAD_SHA"
+          for attempt in 1 2 3 4 5; do
+            live="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+            if jq -e --arg base "$BASE_SHA" --arg head "$HEAD_SHA" '
+              .state == "open"
+              and .base.sha == $base
+              and .head.sha == $head
+              and .auto_merge.merge_method == "merge"
+              and .auto_merge.enabled_by.login ==
+                "lightning-it-release-automation[bot]"
+              and .auto_merge.enabled_by.id == 307565056
+              and .auto_merge.enabled_by.type == "Bot"
+            ' <<<"$live" >/dev/null; then
+              exit 0
+            fi
+            if jq -e --arg head "$HEAD_SHA" '
+              .state == "closed"
+              and .merged == true
+              and .head.sha == $head
+              and .merged_by.login == "lightning-it-release-automation[bot]"
+              and .merged_by.id == 307565056
+              and .merged_by.type == "Bot"
+              and (.merge_commit_sha | test("^[0-9a-f]{40}$"))
+            ' <<<"$live" >/dev/null; then
+              merge_sha="$(jq -er .merge_commit_sha <<<"$live")"
+              authenticated_git fetch --no-tags origin main
+              test "$(git rev-parse origin/main)" = "$merge_sha"
+              read -r first_parent second_parent extra_parent <<<"$(
+                git show -s --format=%P "$merge_sha"
+              )"
+              test "$first_parent" = "$BASE_SHA"
+              test "$second_parent" = "$HEAD_SHA"
+              test -z "${extra_parent:-}"
+              test "$(git show -s --format=%T "$merge_sha")" = \
+                "$(git show -s --format=%T "$HEAD_SHA")"
+              exit 0
+            fi
+            test "$attempt" -lt 5
+            sleep 2
+          done

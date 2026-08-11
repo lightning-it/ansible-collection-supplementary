@@ -1,0 +1,28 @@
+---
+netbox_deploy_pod_name: "netbox"
+netbox_deploy_manifest_path: "/etc/podman/pods/netbox.yml"
+netbox_deploy_image: >-
+  docker.io/netboxcommunity/netbox:v4.6-5.0.2@sha256:74d8417ebaa2bb486b8a8d39bcdc4b92f0d30373a886c5b23074d58663e764c8
+netbox_deploy_postgres_image: >-
+  docker.io/library/postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b
+netbox_deploy_valkey_image: >-
+  docker.io/valkey/valkey:9.1-alpine@sha256:3fe38a705227d29534a199e876b38d5474dec4d3baca980ac6894df539416562
+netbox_deploy_host_ip: "127.0.0.1"
+netbox_deploy_port: 8081
+netbox_deploy_base_dir: "/srv/netbox"
+netbox_deploy_config_path: "{{ netbox_deploy_base_dir }}/config/goal07-sso.py"
+netbox_deploy_db_name: "netbox"
+netbox_deploy_db_user: "netbox"
+netbox_deploy_superuser_name: "breakglass"
+netbox_deploy_superuser_email: "breakglass@example.invalid"
+netbox_deploy_allowed_hosts: "localhost 127.0.0.1 [::1]"
+netbox_deploy_secrets: {}
+netbox_deploy_oidc_enabled: false
+netbox_deploy_oidc_key: "netbox"
+netbox_deploy_oidc_url: ""
+netbox_deploy_oidc_username_claim: "email"
+netbox_deploy_health_url: "http://{{ netbox_deploy_host_ip }}:{{ netbox_deploy_port }}/login/"
+netbox_deploy_validate_certs: true
+netbox_deploy_install_packages: true
+netbox_deploy_manage_systemd: true
+netbox_deploy_skip_runtime: false

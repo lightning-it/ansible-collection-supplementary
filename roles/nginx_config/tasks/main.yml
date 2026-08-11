@@ -174,6 +174,9 @@
   community.hashi_vault.vault_kv2_get:
     url: "{{ nginx_config_vault_address }}"
     validate_certs: "{{ nginx_config_vault_validate_certs }}"
+    ca_cert: "{{ nginx_config_vault_ca_cert if (nginx_config_vault_ca_cert | trim | length > 0) else omit }}"
+    namespace: "{{ nginx_config_vault_namespace if (nginx_config_vault_namespace | trim | length > 0) else omit }}"
+    auth_mount_point: "{{ nginx_config_vault_auth_mount_point }}"
     engine_mount_point: "{{ nginx_config_vault_kv_mount }}"
     path: "{{ nginx_config_vault_kv_path }}"
     auth_method: "{{ nginx_config_vault_auth_method }}"
@@ -408,6 +411,7 @@
     - not nginx_deploy_skip_config | bool
     - nginx_config_has_force_https_vhosts | bool
     - nginx_config_tls_source == 'vault'
+    - nginx_config_vault_allow_local_fallback | bool
     - not (nginx_config_vault_cert_present | default(false) | bool)
     - nginx_config_local_tls_present | default(false) | bool
   tags:
@@ -422,6 +426,7 @@
     - not nginx_deploy_skip_config | bool
     - nginx_config_has_force_https_vhosts | bool
     - nginx_config_tls_source == 'vault'
+    - nginx_config_vault_allow_local_fallback | bool
     - not (nginx_config_vault_cert_present | default(false) | bool)
     - nginx_config_local_tls_present | default(false) | bool
   tags:
@@ -439,6 +444,7 @@
     - not nginx_deploy_skip_config | bool
     - nginx_config_has_force_https_vhosts | bool
     - nginx_config_tls_source == 'vault'
+    - nginx_config_vault_allow_local_fallback | bool
     - not (nginx_config_vault_cert_present | default(false) | bool)
     - nginx_config_local_tls_present | default(false) | bool
   tags:
@@ -450,6 +456,9 @@
   community.hashi_vault.vault_write:
     url: "{{ nginx_config_vault_address }}"
     validate_certs: "{{ nginx_config_vault_validate_certs }}"
+    ca_cert: "{{ nginx_config_vault_ca_cert if (nginx_config_vault_ca_cert | trim | length > 0) else omit }}"
+    namespace: "{{ nginx_config_vault_namespace if (nginx_config_vault_namespace | trim | length > 0) else omit }}"
+    auth_mount_point: "{{ nginx_config_vault_auth_mount_point }}"
     auth_method: "{{ nginx_config_vault_auth_method }}"
     token: >-
       {{
@@ -479,9 +488,11 @@
     - not nginx_deploy_skip_config | bool
     - nginx_config_has_force_https_vhosts | bool
     - nginx_config_tls_source == 'vault'
+    - nginx_config_vault_issue_missing | bool
     - nginx_config_vault_cert_needs_rotation | default(true) | bool
     - not (
-        (not (nginx_config_vault_cert_present | default(false) | bool))
+        (nginx_config_vault_allow_local_fallback | bool)
+        and (not (nginx_config_vault_cert_present | default(false) | bool))
         and (nginx_config_local_tls_present | default(false) | bool)
       )
     - not ansible_check_mode
@@ -538,12 +549,34 @@
   tags:
     - config
 
+- name: Require a complete stored Vault TLS identity when issuance is disabled
+  ansible.builtin.assert:
+    that:
+      - nginx_config_vault_cert_present | default(false) | bool
+      - nginx_config_vault_cert_identity_match | default(false) | bool
+      - nginx_config_vault_cert_ca_chain_stored | default([], true) | length > 0
+    fail_msg: >-
+      Vault PKI issuance is disabled, but Vault KV does not contain a complete
+      certificate/private-key pair, CA chain, and matching identity metadata.
+      Local host files are not accepted as Vault certificate custody.
+    quiet: true
+  when:
+    - not nginx_deploy_skip_config | bool
+    - nginx_config_has_force_https_vhosts | bool
+    - nginx_config_tls_source == 'vault'
+    - not (nginx_config_vault_issue_missing | bool)
+  tags:
+    - config
+
 - name: Store generated TLS certificate in Vault KV2
   delegate_to: localhost
   become: false
   community.hashi_vault.vault_kv2_write:
     url: "{{ nginx_config_vault_address }}"
     validate_certs: "{{ nginx_config_vault_validate_certs }}"
+    ca_cert: "{{ nginx_config_vault_ca_cert if (nginx_config_vault_ca_cert | trim | length > 0) else omit }}"
+    namespace: "{{ nginx_config_vault_namespace if (nginx_config_vault_namespace | trim | length > 0) else omit }}"
+    auth_mount_point: "{{ nginx_config_vault_auth_mount_point }}"
     engine_mount_point: "{{ nginx_config_vault_kv_mount }}"
     path: "{{ nginx_config_vault_kv_path }}"
     auth_method: "{{ nginx_config_vault_auth_method }}"
@@ -600,7 +633,14 @@
         nginx_config_vault_generated_cert_data.certificate
           | default(
             nginx_config_vault_cert_data.certificate
-              | default(nginx_config_local_tls_certificate_content | default('', true), true),
+              | default(
+                  (
+                    nginx_config_local_tls_certificate_content | default('', true)
+                    if (nginx_config_vault_allow_local_fallback | bool)
+                    else ''
+                  ),
+                  true
+                ),
             true
           )
       }}
@@ -609,7 +649,14 @@
         nginx_config_vault_generated_cert_data.private_key
           | default(
             nginx_config_vault_cert_data.private_key
-              | default(nginx_config_local_tls_certificate_key_content | default('', true), true),
+              | default(
+                  (
+                    nginx_config_local_tls_certificate_key_content | default('', true)
+                    if (nginx_config_vault_allow_local_fallback | bool)
+                    else ''
+                  ),
+                  true
+                ),
             true
           )
       }}

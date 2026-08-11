@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -52,6 +53,19 @@ def docker_action_image(path: Path) -> str | None:
 
 
 class WorkflowSecurityTests(unittest.TestCase):
+    def test_copilot_instructions_bind_the_exact_agent_contract(self) -> None:
+        agents_digest = hashlib.sha256((ROOT / "AGENTS.md").read_bytes()).hexdigest()
+        instructions = (ROOT / ".github" / "copilot-instructions.md").read_text(encoding="utf-8").splitlines()
+        while instructions and not instructions[-1].strip():
+            instructions.pop()
+        self.assertEqual(
+            [
+                "<!-- Managed contract: Codex and Copilot must apply AGENTS.md. -->",
+                f"<!-- AGENTS_SHA256: {agents_digest} -->",
+            ],
+            instructions[-2:],
+        )
+
     def test_quality_cells_install_only_the_prebuilt_exact_candidate(self) -> None:
         action = ACTION.read_text(encoding="utf-8")
         install = re.search(
@@ -148,6 +162,11 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("expected_safe_event=$'labeled\\tsafe-automerge\\trenovate[bot]'", renovate)
         self.assertIn('[ "$safe_event" = "$expected_safe_event" ]', renovate)
         self.assertIn('grep -Fq "$breaking_event_pattern"', renovate)
+        self.assertIn("Enable auto-merge for trusted Renovate PR", renovate)
+        self.assertIn("Enable auto-merge after live-state verification", renovate)
+        self.assertIn('--match-head-commit "$PR_HEAD_SHA"', renovate)
+        self.assertNotIn("gh pr review", renovate)
+        self.assertIn("prohibits Actions from submitting", renovate)
         self.assertIn('[ "$PR_AUTHOR" = "renovate[bot]" ]', changelog)
         self.assertIn('[ "$PR_BASE" = "develop" ]', changelog)
         self.assertIn('[[ "$PR_HEAD" = renovate/* ]]', changelog)
@@ -176,6 +195,56 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("contains(github.event.pull_request.labels.*.name, 'dependencies')", require_fragment)
         self.assertIn("contains(github.event.pull_request.labels.*.name, 'safe-automerge')", require_fragment)
         self.assertIn("!contains(github.event.pull_request.labels.*.name, 'breaking-update')", require_fragment)
+
+    def test_shared_assets_guard_streams_large_check_evidence_via_stdin(self) -> None:
+        workflow = (WORKFLOWS / "shared-assets-guarded-automerge.yml").read_text(encoding="utf-8")
+        self.assertNotIn('--argjson check_pages "$check_runs"', workflow)
+        self.assertNotIn('--argjson status_pages "$status_pages"', workflow)
+
+        start_marker = (
+            '            evidence="$(\n'
+            '              printf \'%s\\n%s\\n\' "$check_runs" "$status_pages" |\n'
+            "                jq -s '\n"
+        )
+        end_marker = "\n              '\n            )\"\n            pending=false"
+        start = workflow.index(start_marker) + len(start_marker)
+        jq_program = workflow[start : workflow.index(end_marker, start)]
+
+        check_pages = [
+            {
+                "check_runs": [
+                    {
+                        "id": 1,
+                        "name": "required / large evidence",
+                        "app": {"id": 15368},
+                        "status": "completed",
+                        "conclusion": "success",
+                        "ignored_payload": "x" * (3 * 1024 * 1024),
+                    }
+                ]
+            }
+        ]
+        jq = shutil.which("jq")
+        if jq is None:
+            self.fail("jq is required for the workflow evidence regression test")
+        result = subprocess.run(  # noqa: S603
+            [jq, "-s", jq_program],
+            input=f"{json.dumps(check_pages)}\n{json.dumps([[]])}\n",
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(
+            [
+                {
+                    "context": "required / large evidence",
+                    "app_id": 15368,
+                    "state": "success",
+                }
+            ],
+            json.loads(result.stdout),
+        )
 
     def test_collection_ci_concurrency_isolated_by_pr_and_exact_head(self) -> None:
         workflow = load_yaml(WORKFLOWS / "collection-ci.yml")
@@ -520,17 +589,21 @@ class WorkflowSecurityTests(unittest.TestCase):
                 self.assertIn("steps.release-bot.outputs.email", text)
 
         back_sync = (WORKFLOWS / "release-back-sync.yml").read_text(encoding="utf-8")
-        self.assertIn('"--force-with-lease=${branch_ref}:${remote_branch_sha}"', back_sync)
+        self.assertNotIn("--force-with-lease", back_sync)
         self.assertNotIn("authenticated_push --force origin", back_sync)
+        self.assertIn('"$back_sync_policy/scripts/verify_release_back_sync.py"', back_sync)
+        self.assertIn('authenticated_push origin "HEAD:${branch_ref}"', back_sync)
         self.assertNotIn("permission-issues:", back_sync)
         self.assertNotIn("gh label ", back_sync)
         self.assertNotIn("--label skip-changelog", back_sync)
         self.assertNotIn("--add-label skip-changelog", back_sync)
         release_prepare = (WORKFLOWS / "release-prepare.yml").read_text(encoding="utf-8")
-        self.assertIn(
-            '"--force-with-lease=${release_ref}:${remote_release_sha}"',
-            release_prepare,
-        )
+        self.assertNotIn("--force-with-lease", release_prepare)
+        self.assertIn('"$promotion_base/scripts/security_main_promotion.py"', release_prepare)
+        self.assertIn('authenticated_push origin "HEAD:${release_ref}"', release_prepare)
+        for workflow in (back_sync, release_prepare, (WORKFLOWS / "collection-ci.yml").read_text()):
+            self.assertIn("git cat-file -e", workflow)
+            self.assertIn("git merge-base --is-ancestor", workflow)
 
     def test_zero_touch_is_security_only_and_normal_promotion_stays_manual(self) -> None:
         ci = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]
@@ -675,50 +748,68 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('git show "$SOURCE_SHA:meta/source-dependencies.yml"', ci)
         self.assertIn("artifacts/evidence/security/source-dependencies.yml", ci)
         self.assertIn("cmp --silent", ci)
-        self.assertIn(
-            "vex: security/vex/chrome-linux-151.0.7922.71.openvex.json",
-            ci,
-        )
-        self.assertIn(
-            "artifacts/evidence/security/chrome-linux.openvex.json",
-            ci,
-        )
-        step_marker = "- name: Preserve the applied vulnerability-exploitability statement"
-        before_step, marker, after_step = ci.partition(step_marker)
-        self.assertTrue(before_step)
-        self.assertEqual(step_marker, marker)
-        preserve_vex, next_marker, remaining_steps = after_step.partition("- name:")
+        self.assertNotRegex(ci, r"(?im)^\s*(?:vex|ignore|allowlist)\s*:")
+        self.assertNotIn("openvex", ci.casefold())
+        self.assertNotIn("vulnerability-exploitability", ci.casefold())
+        self.assertEqual([], list((ROOT / "security" / "vex").glob("*")))
+        trivy_marker = "- name: Independently scan the candidate-bound SBOM with Trivy"
+        before_trivy, marker, after_trivy = ci.partition(trivy_marker)
+        self.assertTrue(before_trivy)
+        self.assertEqual(trivy_marker, marker)
+        trivy_step, next_marker, remaining_steps = after_trivy.partition("- name:")
         self.assertEqual("- name:", next_marker)
         self.assertTrue(remaining_steps)
-        self.assertIn("set -euo pipefail", preserve_vex)
-        self.assertIn("mkdir -p artifacts/evidence/security", preserve_vex)
-
-        vex_path = ROOT / "security" / "vex" / "chrome-linux-151.0.7922.71.openvex.json"
-        vex = json.loads(vex_path.read_text(encoding="utf-8"))
-        expected_cves = {
-            "CVE-2026-17950",
-            "CVE-2026-17952",
-            "CVE-2026-17956",
-            "CVE-2026-17969",
-            "CVE-2026-17979",
-            "CVE-2026-17989",
-            "CVE-2026-17993",
-            "CVE-2026-18012",
-            "CVE-2026-18017",
-        }
-        self.assertEqual(
-            {statement["vulnerability"]["name"] for statement in vex["statements"]},
-            expected_cves,
+        for exact_contract in (
+            "docker run --rm",
+            "--read-only",
+            'cache_dir="$RUNNER_TEMP/trivy-cache-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+            'test ! -e "$cache_dir"',
+            'mkdir -m 0700 "$cache_dir"',
+            '--user "$(id -u):$(id -g)"',
+            "--cap-drop ALL",
+            "--security-opt no-new-privileges=true",
+            "--pids-limit 128",
+            "--network bridge",
+            "--tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777",
+            '-v "$PWD:/workspace:ro"',
+            '-v "$cache_dir:/trivy-cache:rw"',
+            "docker.io/aquasec/trivy:0.70.0@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e",
+            "--cache-dir /trivy-cache",
+            "--config /dev/null",
+            "--quiet",
+            "--timeout 15m",
+            "sbom",
+            "--no-progress",
+            "--disable-telemetry",
+            "--scanners vuln",
+            "--pkg-types os,library",
+            "--severity HIGH,CRITICAL",
+            "--ignore-unfixed=false",
+            "--skip-vex-repo-update",
+            "--ignorefile /dev/null",
+            "--exit-code 1",
+            "--format json",
+            "artifacts/evidence/security/sbom.cdx.json",
+            "> artifacts/evidence/security/trivy-vulnerability-report.json",
+            "test -s artifacts/evidence/security/trivy-vulnerability-report.json",
+        ):
+            self.assertIn(exact_contract, trivy_step)
+        self.assertNotIn("aquasecurity/trivy-action", ci)
+        self.assertIn("test ! -e .trivyignore", trivy_step)
+        self.assertIn("test ! -e trivy.yaml", trivy_step)
+        self.assertNotIn("--ignore-policy", trivy_step)
+        self.assertNotIn("--vex", trivy_step)
+        self.assertIn(
+            "artifacts/release-assets/trivy-vulnerability-report.json",
+            ci,
         )
-        for statement in vex["statements"]:
-            self.assertEqual(statement["status"], "fixed")
-            self.assertEqual(
-                statement["products"],
-                [{"@id": "pkg:generic/google-chrome@151.0.7922.71"}],
-            )
-            self.assertIn("chromereleases.googleblog.com", statement["status_notes"])
 
         publish = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
+        self.assertIn(
+            "incoming/evidence/evidence/security/trivy-vulnerability-report.json",
+            publish,
+        )
+        self.assertIn("dist/release/trivy-vulnerability-report.json", publish)
         self.assertIn("dist/release/SHA256SUMS.sigstore.json", publish)
         self.assertIn("existing-release-checksum-pair", publish)
         self.assertIn('test "$checksum_asset_count" -eq "$bundle_asset_count"', publish)
@@ -797,6 +888,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("Required merge method: \\`merge commit\\`", prepare)
         self.assertIn("Immutable tag v${VERSION} already exists", prepare)
         publish = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
+        copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         self.assertIn("Re-prove fragment-derived version and authorized preparation", publish)
         self.assertIn('test "${#preparation_parents[@]}" -eq 1', publish)
         self.assertIn(
@@ -804,6 +896,26 @@ class WorkflowSecurityTests(unittest.TestCase):
             publish,
         )
         self.assertIn("--verify-preparation-receipt", publish)
+        self.assertIn('git worktree add --detach --quiet "$base_tree" "$REVIEWED_BASE_SHA"', publish)
+        self.assertIn('--root "$base_tree"', publish)
+        self.assertEqual(
+            2,
+            publish.count('python "$base_tree/scripts/release-version.py"'),
+        )
+        self.assertIn(
+            'git worktree add --detach --quiet "$base_tree" "$BASE_SHA"',
+            copilot,
+        )
+        self.assertIn(
+            'python "$base_tree/scripts/release-version.py"',
+            copilot,
+        )
+        self.assertIn('--root "$base_tree"', copilot)
+        self.assertNotIn(".schema_version == 1", copilot)
+        self.assertIn(
+            "Verified schema-v2 preparation against the immutable base tree",
+            copilot,
+        )
         self.assertIn("actions/runs/${preparation_run_id}", publish)
         self.assertIn('.conclusion == "success"', publish)
         action = ACTION.read_text(encoding="utf-8")
@@ -930,36 +1042,23 @@ class WorkflowSecurityTests(unittest.TestCase):
                 arguments,
             )
 
-    def test_publish_dispatches_transition_validation_after_galaxy(self) -> None:
+    def test_security_publish_requires_nexus_and_signed_validation_before_galaxy(self) -> None:
         workflow = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
         publish_steps = yaml.safe_load(workflow)["jobs"]["publish"]["steps"]
         step_names = [step.get("name") for step in publish_steps]
-        publish_index = step_names.index("Publish or verify exact artifact on Ansible Galaxy")
-        dispatch_index = step_names.index("Dispatch transitional central validation")
-        self.assertGreater(dispatch_index, publish_index)
+        nexus_index = step_names.index("Stage exact Security candidate in native Nexus Galaxy v3")
+        receipt_index = step_names.index("Require signed successful ModuLix validation receipt")
+        publish_index = step_names.index("Publish or verify validated artifact on Ansible Galaxy")
+        self.assertLess(nexus_index, receipt_index)
+        self.assertLess(receipt_index, publish_index)
         self.assertIn("RELEASE_AUTOMATION_APP_CLIENT_ID", workflow)
         self.assertIn("RELEASE_AUTOMATION_APP_PRIVATE_KEY", workflow)
         self.assertIn("permission-actions: write", workflow)
-        self.assertIn("steps.transition-app.outputs.token", workflow)
-        self.assertIn("scripts/dispatch-transition-validation.py", workflow)
-        self.assertIn("--ref main", workflow)
-        dispatcher = (ROOT / "scripts/dispatch-transition-validation.py").read_text(encoding="utf-8")
-        self.assertIn("collection-release-transition.yml/dispatches", dispatcher)
-        self.assertIn("inputs[artifact_sha256]", dispatcher)
-        self.assertIn("inputs[artifact_name]", dispatcher)
-        self.assertRegex(
-            dispatcher,
-            r'add_argument\("--ref", default="main"\)',
-        )
-        self.assertIn(
-            'controller_ref = validated(args.ref, REF_RE, "controller ref")',
-            dispatcher,
-        )
-        self.assertIn(
-            r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\Z",
-            dispatcher,
-        )
-        self.assertNotIn(r"(?:[-.][0-9A-Za-z.-]+)?\Z", dispatcher)
+        self.assertIn("steps.modulix-validation-app.outputs.token", workflow)
+        self.assertIn("scripts/nexus-galaxy-v3-stage.py", workflow)
+        self.assertIn("scripts/modulix-validation-receipt.py", workflow)
+        self.assertNotIn("scripts/dispatch-transition-validation.py", workflow)
+        self.assertNotIn("transition-noop", workflow)
 
     def test_publish_security_release_is_metadata_bound_and_dispatches_after_acceptance(self) -> None:
         workflow_path = WORKFLOWS / "collection-publish.yml"
@@ -999,8 +1098,11 @@ class WorkflowSecurityTests(unittest.TestCase):
             "env.SECURITY_RELEASE == 'true'",
             steps["Dispatch immutable Security evidence after Producer acceptance"]["if"],
         )
-        transition_condition = steps["Dispatch transitional central validation"]["if"]
-        self.assertEqual("env.GALAXY_REQUIRED == 'true'", transition_condition)
+        self.assertEqual(
+            "env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'",
+            steps["Require signed successful ModuLix validation receipt"]["if"],
+        )
+        self.assertNotIn('test "$GALAXY_REQUIRED" = true', workflow_text)
         self.assertIn("No exact-version Security metadata", workflow_text)
         self.assertIn(".lit/security-releases/${RELEASE_VERSION}.json", workflow_text)
         self.assertIn('--metadata "$SECURITY_METADATA"', workflow_text)

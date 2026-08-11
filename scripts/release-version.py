@@ -6,10 +6,16 @@ import argparse
 import hashlib
 import json
 import re
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import security_release_contract as CONTRACT  # noqa: E402
 
 SEMVER_RE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 IMPACT_CATEGORIES = {
@@ -20,11 +26,20 @@ IMPACT_CATEGORIES = {
 NEUTRAL_CATEGORIES = {"known_issues", "release_summary", "trivial"}
 KNOWN_CATEGORIES = set().union(*IMPACT_CATEGORIES.values(), NEUTRAL_CATEGORIES)
 MAX_FRAGMENT_BYTES = 1024 * 1024
-RELEASE_PREPARATION_SCHEMA_VERSION = 1
+RELEASE_PREPARATION_SCHEMA_VERSION = 2
 RELEASE_PREPARER = {
-    "login": "lightning-it-release-automation[bot]",
-    "account_id": "307565056",
-    "email": "307565056+lightning-it-release-automation[bot]@users.noreply.github.com",
+    "login": CONTRACT.RELEASE_APP_LOGIN,
+    "account_id": CONTRACT.RELEASE_APP_ACCOUNT_ID,
+    "email": CONTRACT.RELEASE_APP_EMAIL,
+}
+SECURITY_RECEIPT_KEYS = {
+    "evidence_id",
+    "metadata_path",
+    "metadata_sha256",
+    "intake_receipt_path",
+    "intake_receipt_sha256",
+    "candidate_diff_sha256",
+    "human_actions",
 }
 
 
@@ -53,21 +68,33 @@ UniqueKeyLoader.add_constructor(
 
 
 def _load_unique_json(path: Path) -> dict[str, Any]:
-    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        payload: dict[str, Any] = {}
-        for key, value in pairs:
-            if key in payload:
-                raise VersionError(f"duplicate JSON key in release preparation receipt: {key}")
-            payload[key] = value
-        return payload
-
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_object)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        if path.is_symlink() or not path.is_file():
+            raise VersionError("release preparation receipt must be a regular non-symlink file")
+        raw = path.read_bytes()
+        payload = CONTRACT.load_json_bytes(raw, "release preparation receipt")
+        if raw != CONTRACT.canonical_document_bytes(payload):
+            raise VersionError("release preparation receipt is not canonical JSON")
+    except (OSError, CONTRACT.ContractError) as error:
         raise VersionError(f"cannot parse release preparation receipt: {error}") from error
-    if not isinstance(payload, dict):
-        raise VersionError("release preparation receipt must be an object")
     return payload
+
+
+def _security_binding(
+    root: Path,
+    current_version: str,
+    target_version: str,
+    checked_at: datetime,
+) -> dict[str, Any] | None:
+    try:
+        return CONTRACT.load_release_security_binding(
+            root,
+            current_version,
+            target_version,
+            checked_at=checked_at,
+        )
+    except (OSError, CONTRACT.ContractError) as error:
+        raise VersionError(str(error)) from error
 
 
 def parse_stable_version(value: object, *, label: str) -> tuple[int, int, int]:
@@ -84,7 +111,13 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     if path.stat().st_size > MAX_FRAGMENT_BYTES:
         raise VersionError(f"oversized changelog fragment: {path}")
     try:
-        payload = yaml.load(path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader) or {}
+        payload = (
+            yaml.load(
+                path.read_text(encoding="utf-8"),
+                Loader=UniqueKeyLoader,  # noqa: S506 -- subclasses yaml.SafeLoader.
+            )
+            or {}
+        )
     except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:
         raise VersionError(f"cannot parse changelog fragment {path}: {error}") from error
     if not isinstance(payload, dict):
@@ -113,8 +146,10 @@ def derive_impact(fragments_root: Path) -> tuple[str, list[str]]:
         if not payload:
             raise VersionError(f"empty changelog fragment: {path}")
         for category, entries in payload.items():
-            if not isinstance(entries, list) or not entries or any(
-                not isinstance(entry, str) or not entry.strip() for entry in entries
+            if (
+                not isinstance(entries, list)
+                or not entries
+                or any(not isinstance(entry, str) or not entry.strip() for entry in entries)
             ):
                 raise VersionError(f"changelog category {category} must contain nonempty text entries: {path}")
             if category not in NEUTRAL_CATEGORIES:
@@ -150,7 +185,13 @@ def resolve_version(galaxy_path: Path, fragments_root: Path, requested: str = ""
     if galaxy_path.is_symlink() or not galaxy_path.is_file() or galaxy_path.stat().st_size > MAX_FRAGMENT_BYTES:
         raise VersionError(f"unsafe collection metadata: {galaxy_path}")
     try:
-        galaxy = yaml.load(galaxy_path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader) or {}
+        galaxy = (
+            yaml.load(
+                galaxy_path.read_text(encoding="utf-8"),
+                Loader=UniqueKeyLoader,  # noqa: S506 -- subclasses yaml.SafeLoader.
+            )
+            or {}
+        )
     except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:
         raise VersionError(f"cannot parse collection metadata: {error}") from error
     if not isinstance(galaxy, dict):
@@ -188,14 +229,37 @@ def build_preparation_receipt(
     workflow_ref: str,
     workflow_event: str,
     workflow_actor: str,
+    root: Path | None = None,
+    checked_at: datetime | None = None,
 ) -> dict[str, Any]:
     """Bind reviewed fragment inputs to the protected release-preparation run."""
 
+    root = (root or Path.cwd()).resolve()
+    checked_at = checked_at or datetime.now(UTC)
+    version = str(resolution.get("version", ""))
+    current_version = str(resolution.get("current_version", ""))
+    security_binding = _security_binding(root, current_version, version, checked_at)
+    release_mode = "security" if security_binding is not None else "normal"
+    chain_id = security_binding["chain_id"] if security_binding is not None else None
+    security = None
+    if security_binding is not None:
+        security = {
+            "evidence_id": security_binding["evidence_id"],
+            "metadata_path": security_binding["metadata_path"],
+            "metadata_sha256": security_binding["metadata_sha256"],
+            "intake_receipt_path": security_binding["intake_receipt_path"],
+            "intake_receipt_sha256": security_binding["intake_receipt_sha256"],
+            "candidate_diff_sha256": security_binding["candidate_diff_sha256"],
+            "human_actions": security_binding["human_actions"],
+        }
     payload: dict[str, Any] = {
         "schema_version": RELEASE_PREPARATION_SCHEMA_VERSION,
         "repository": repository,
         "repository_id": repository_id,
         "base_sha": base_sha,
+        "release_mode": release_mode,
+        "chain_id": chain_id,
+        "security": security,
         "current_version": resolution.get("current_version"),
         "impact": resolution.get("impact"),
         "next_version": resolution.get("version"),
@@ -217,7 +281,9 @@ def build_preparation_receipt(
         expected_repository=repository,
         expected_repository_id=repository_id,
         expected_base_sha=base_sha,
-        expected_version=str(resolution.get("version", "")),
+        expected_version=version,
+        root=root,
+        checked_at=checked_at,
     )
     return payload
 
@@ -229,6 +295,8 @@ def verify_preparation_receipt(
     expected_repository_id: str,
     expected_base_sha: str,
     expected_version: str,
+    root: Path | None = None,
+    checked_at: datetime | None = None,
 ) -> None:
     """Fail closed unless a preparation receipt is structurally and semantically exact."""
 
@@ -237,6 +305,9 @@ def verify_preparation_receipt(
         "repository",
         "repository_id",
         "base_sha",
+        "release_mode",
+        "chain_id",
+        "security",
         "current_version",
         "impact",
         "next_version",
@@ -246,7 +317,12 @@ def verify_preparation_receipt(
     }
     if set(receipt) != required:
         raise VersionError("release preparation receipt has missing or unknown fields")
-    if receipt.get("schema_version") != RELEASE_PREPARATION_SCHEMA_VERSION:
+    schema_version = receipt.get("schema_version")
+    if (
+        not isinstance(schema_version, int)
+        or isinstance(schema_version, bool)
+        or schema_version != RELEASE_PREPARATION_SCHEMA_VERSION
+    ):
         raise VersionError("release preparation receipt schema is unsupported")
     if receipt.get("repository") != expected_repository or not re.fullmatch(
         r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", expected_repository
@@ -264,6 +340,39 @@ def verify_preparation_receipt(
     parse_stable_version(next_value, label="receipt next version")
     if next_value != calculated or next_value != expected_version:
         raise VersionError("release preparation receipt next version is not fragment-derived")
+
+    root = (root or Path.cwd()).resolve()
+    checked_at = checked_at or datetime.now(UTC)
+    security_binding = _security_binding(root, receipt["current_version"], expected_version, checked_at)
+    expected_mode = "security" if security_binding is not None else "normal"
+    if receipt.get("release_mode") != expected_mode:
+        raise VersionError("release preparation receipt mode differs from immutable Security markers")
+    if security_binding is None:
+        if receipt.get("chain_id") is not None or receipt.get("security") is not None:
+            raise VersionError("normal release preparation receipt contains partial Security markers")
+    else:
+        expected_security = {
+            "evidence_id": security_binding["evidence_id"],
+            "metadata_path": security_binding["metadata_path"],
+            "metadata_sha256": security_binding["metadata_sha256"],
+            "intake_receipt_path": security_binding["intake_receipt_path"],
+            "intake_receipt_sha256": security_binding["intake_receipt_sha256"],
+            "candidate_diff_sha256": security_binding["candidate_diff_sha256"],
+            "human_actions": 0,
+        }
+        security = receipt.get("security")
+        if not isinstance(security, dict) or set(security) != SECURITY_RECEIPT_KEYS:
+            raise VersionError("Security release preparation receipt binding is malformed")
+        human_actions = security.get("human_actions")
+        if not isinstance(human_actions, int) or isinstance(human_actions, bool):
+            raise VersionError("Security release preparation human_actions must be an integer")
+        if security != expected_security or receipt.get("chain_id") != security_binding["chain_id"]:
+            raise VersionError("Security release preparation receipt differs from the immutable intake binding")
+        if (
+            expected_repository != CONTRACT.PRODUCER_REPOSITORY
+            or expected_repository_id != CONTRACT.PRODUCER_REPOSITORY_ID
+        ):
+            raise VersionError("Security release preparation repository identity is unauthorized")
 
     fragments = receipt.get("fragments")
     if not isinstance(fragments, list) or not fragments or len(fragments) > 256:
@@ -285,6 +394,14 @@ def verify_preparation_receipt(
         names.append(name)
     if names != sorted(set(names)):
         raise VersionError("release preparation receipt fragment digests are duplicate or unsorted")
+    if security_binding is not None:
+        expected_fragment = Path(security_binding["changelog_fragment_path"]).name
+        expected_digest = security_binding["changelog_fragment_sha256"].removeprefix("sha256:")
+        bound_fragments = {fragment["path"]: fragment["sha256"] for fragment in fragments}
+        if bound_fragments.get(expected_fragment) != expected_digest:
+            raise VersionError(
+                "Security release preparation fragments do not contain the immutable intake fragment digest"
+            )
     if receipt.get("preparer") != RELEASE_PREPARER:
         raise VersionError("release preparation receipt preparer is unauthorized")
 
@@ -301,9 +418,7 @@ def verify_preparation_receipt(
     }
     if not isinstance(workflow, dict) or set(workflow) != workflow_keys:
         raise VersionError("release preparation receipt workflow identity is malformed")
-    expected_workflow_ref = (
-        f"{expected_repository}/.github/workflows/release-prepare.yml@refs/heads/main"
-    )
+    expected_workflow_ref = f"{expected_repository}/.github/workflows/release-prepare.yml@refs/heads/main"
     if (
         workflow.get("path") != ".github/workflows/release-prepare.yml"
         or workflow.get("ref") != expected_workflow_ref
@@ -312,10 +427,16 @@ def verify_preparation_receipt(
         or workflow.get("event") not in {"push", "workflow_dispatch"}
         or not isinstance(workflow.get("actor"), str)
         or not workflow.get("actor")
-        or re.fullmatch(r"[1-9][0-9]*", str(workflow.get("run_id", ""))) is None
-        or re.fullmatch(r"[1-9][0-9]*", str(workflow.get("run_attempt", ""))) is None
+        or not isinstance(workflow.get("run_id"), str)
+        or re.fullmatch(r"[1-9][0-9]*", workflow["run_id"]) is None
+        or not isinstance(workflow.get("run_attempt"), str)
+        or re.fullmatch(r"[1-9][0-9]*", workflow["run_attempt"]) is None
     ):
         raise VersionError("release preparation receipt does not identify an authorized workflow run")
+    if expected_mode == "security" and (
+        workflow.get("event") != "push" or workflow.get("actor") != CONTRACT.RELEASE_APP_LOGIN
+    ):
+        raise VersionError("Security release preparation must be an App-authored protected-main push")
 
 
 def main() -> int:
@@ -334,8 +455,11 @@ def main() -> int:
     parser.add_argument("--workflow-event", default="")
     parser.add_argument("--workflow-actor", default="")
     parser.add_argument("--expected-version", default="")
+    parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument("--checked-at", default="")
     args = parser.parse_args()
     try:
+        checked_at = CONTRACT.timestamp(args.checked_at, "--checked-at") if args.checked_at else datetime.now(UTC)
         if args.verify_preparation_receipt:
             if args.write_preparation_receipt:
                 raise VersionError("receipt creation and verification are mutually exclusive")
@@ -346,6 +470,8 @@ def main() -> int:
                 expected_repository_id=args.repository_id,
                 expected_base_sha=args.base_sha,
                 expected_version=args.expected_version,
+                root=args.root,
+                checked_at=checked_at,
             )
             print(json.dumps(receipt, sort_keys=True, separators=(",", ":")))
             return 0
@@ -361,13 +487,12 @@ def main() -> int:
                 workflow_ref=args.workflow_ref,
                 workflow_event=args.workflow_event,
                 workflow_actor=args.workflow_actor,
+                root=args.root,
+                checked_at=checked_at,
             )
             args.write_preparation_receipt.parent.mkdir(parents=True, exist_ok=True)
-            args.write_preparation_receipt.write_text(
-                json.dumps(receipt, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
-    except VersionError as error:
+            args.write_preparation_receipt.write_bytes(CONTRACT.canonical_document_bytes(receipt))
+    except (VersionError, CONTRACT.ContractError) as error:
         parser.error(str(error))
     print(json.dumps(payload, sort_keys=True, separators=(",", ":")))
     return 0
