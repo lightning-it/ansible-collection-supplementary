@@ -23,9 +23,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
     def test_pki_inputs_are_required_only_when_issuance_is_enabled(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
         task = next(
-            item
-            for item in tasks
-            if item.get("name") == "Ensure Vault PKI issue inputs are present when enabled"
+            item for item in tasks if item.get("name") == "Ensure Vault PKI issue inputs are present when enabled"
         )
 
         self.assertIn("nginx_config_vault_issue_missing | bool", task["when"])
@@ -59,8 +57,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         task = next(
             item
             for item in tasks
-            if item.get("name")
-            == "Require a complete stored Vault TLS identity when issuance is disabled"
+            if item.get("name") == "Require a complete stored Vault TLS identity when issuance is disabled"
         )
         assertions = task["ansible.builtin.assert"]["that"]
 
@@ -76,9 +73,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
 
     def test_private_key_is_installed_with_mode_0600(self) -> None:
         tasks = yaml.safe_load(TASKS.read_text(encoding="utf-8"))
-        task = next(
-            item for item in tasks if item.get("name") == "Write TLS private key from Vault"
-        )
+        task = next(item for item in tasks if item.get("name") == "Write TLS private key from Vault")
 
         self.assertEqual(task["ansible.builtin.copy"]["mode"], "0600")
         self.assertEqual(task["no_log"], "{{ nginx_config_tls_no_log }}")
