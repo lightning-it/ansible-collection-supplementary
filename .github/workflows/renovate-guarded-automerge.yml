@@ -16,8 +16,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  approve-renovate:
-    name: Approve trusted Renovate PR
+  enable-trusted-renovate-automerge:
+    name: Enable auto-merge for trusted Renovate PR
     runs-on: ubuntu-latest
 
     steps:
@@ -192,7 +192,7 @@ jobs:
               ;;
           esac
 
-      - name: Approve and enable auto-merge
+      - name: Enable auto-merge after live-state verification
         if: steps.guard.outputs.trusted == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -269,15 +269,9 @@ jobs:
             disable_auto_merge
             exit 1
           fi
-          body="Approved a bot-triggered non-major Renovate update with a"
-          body+=" bot-applied safe-automerge label and no breaking-update history."
-          gh pr review "$PR_URL" \
-            --approve \
-            --body "$body"
-
-          if ! assert_live_safe; then
-            disable_auto_merge
-            exit 1
-          fi
+          # The protected develop branch requires zero approving reviews. Its
+          # governance policy deliberately prohibits Actions from submitting
+          # reviews, so a synthetic self-approval would only make this path
+          # fail. Auto-merge still waits for every required current-head check.
           gh pr merge "$PR_URL" --auto --merge \
             --match-head-commit "$PR_HEAD_SHA"

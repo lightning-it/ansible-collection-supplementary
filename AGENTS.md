@@ -260,7 +260,7 @@ The standard branch and release model is:
 Automation safety requirements:
 
 - Protected branches must require pull request review.
-- Only trusted Renovate PRs may be auto-approved by collection automation.
+- Only trusted Renovate PRs may be enabled for auto-merge by collection automation after all required current-head checks pass. The protected `develop` branch requires zero approving reviews; GitHub Actions reviews remain disabled by governance.
 - A trusted Renovate PR must have `renovate[bot]` as both trigger actor and PR author, a `renovate/*` source
   branch, `develop` as the base branch, and both `renovate` and `dependencies` labels.
 - Human, external contributor, and develop-to-main promotion PRs must not be auto-approved or auto-merged by
