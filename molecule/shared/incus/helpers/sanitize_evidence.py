@@ -32,8 +32,9 @@ PROSE_SECRET = re.compile(
 )
 BEARER_TOKEN = re.compile(r"(?i)(\bBearer\s+)[A-Za-z0-9._~+/=-]+")
 JWT = re.compile(
-    r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\."
-    r"[A-Za-z0-9_-]{8,}\b",
+    r"(?<![A-Za-z0-9_-])"
+    r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"
+    r"(?![A-Za-z0-9_-])",
 )
 URL_CREDENTIAL = re.compile(
     r"(?i)(\b[a-z][a-z0-9+.-]*://[^\s/:@]+:)[^\s/@]+(@)",

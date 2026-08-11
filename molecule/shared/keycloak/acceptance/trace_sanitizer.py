@@ -17,9 +17,13 @@ SENSITIVE_KEY = re.compile(
     r"(?i)(authorization|cookie|credential|header|password|post.?data|request.?body|"
     r"response.?body|secret|storage|token|value|text)"
 )
-# A JWT uses base64url, where "_" is a valid final character.  A ``\b``
-# boundary would miss that case because underscore is a word character.
-JWT = re.compile(r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?![A-Za-z0-9_-])")
+# JWT segments use base64url, including both "_" and "-".  ``\b`` uses
+# Python's narrower ``\w`` definition, so it can miss a terminal "-".
+JWT = re.compile(
+    r"(?<![A-Za-z0-9_-])"
+    r"eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}"
+    r"(?![A-Za-z0-9_-])"
+)
 AUTHORIZATION = re.compile(r"(?i)\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}")
 COOKIE_ASSIGNMENT = re.compile(r"(?i)\b(?:cookie|set-cookie)\s*[:=][^\r\n,}]+")
 HTTP_URL = re.compile(r"https?://[^\s\"'<>]+")

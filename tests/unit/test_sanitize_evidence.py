@@ -122,6 +122,16 @@ class SanitizeEvidenceTests(unittest.TestCase):
         self.assertNotIn(environment_fixture, result)
         self.assertGreaterEqual(result.count("[REDACTED]"), 3)
 
+    def test_redacts_jwt_with_base64url_terminal_dash(self) -> None:
+        token = "eyJheaderpayload.fixturepayload.signaturepayload-"
+        source = f"diagnostic token {token}."
+
+        self.assertIsNotNone(SANITIZER.JWT.fullmatch(token))
+        result = SANITIZER.sanitize(source, [])
+
+        self.assertNotIn(token, result)
+        self.assertIn("[REDACTED JWT]", result)
+
     def test_redacts_long_escaped_quoted_values_without_backtracking(self) -> None:
         password = (r"\!" * 4096) + secrets.token_urlsafe(24)
         client_secret = (r"\&" * 4096) + secrets.token_urlsafe(24)
