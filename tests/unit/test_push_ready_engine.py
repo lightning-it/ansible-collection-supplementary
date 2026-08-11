@@ -139,6 +139,18 @@ class PushReadyEngineTests(unittest.TestCase):
                 with self.assertRaises(subprocess.CalledProcessError):
                     quality["check_embedded_code"]()
 
+            quality["assert_file"].__globals__["ROOT"] = repository
+            outside = root / "outside.md"
+            outside.write_text("outside\n", encoding="utf-8")
+            linked_document = repository / "linked.md"
+            linked_document.symlink_to(outside)
+            with self.assertRaisesRegex(AssertionError, "non-symlink regular file"):
+                quality["assert_file"](linked_document)
+            directory = repository / "directory.md"
+            directory.mkdir()
+            with self.assertRaisesRegex(AssertionError, "non-symlink regular file"):
+                quality["assert_file"](directory)
+
             markdown = root / "markdown"
             markdown.mkdir()
             validator["main"].__globals__["ROOT"] = markdown

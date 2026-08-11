@@ -71,9 +71,20 @@ def shutil_which(command: str) -> str | None:
 
 
 def assert_file(path: Path) -> str:
-    if not path.exists():
-        raise AssertionError(f"{path.relative_to(ROOT)} is missing")
-    return path.read_text(encoding="utf-8")
+    relative_path = path.relative_to(ROOT)
+    current_path = ROOT
+    try:
+        for part in relative_path.parts:
+            current_path /= part
+            if current_path.is_symlink():
+                raise AssertionError(f"{relative_path} must be a non-symlink regular file")
+        if not current_path.exists():
+            raise AssertionError(f"{relative_path} is missing")
+        if not current_path.is_file():
+            raise AssertionError(f"{relative_path} must be a non-symlink regular file")
+        return current_path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise AssertionError(f"{relative_path} must be a readable non-symlink regular file: {error}") from error
 
 
 def managed_readme_block(readme: str) -> str:
