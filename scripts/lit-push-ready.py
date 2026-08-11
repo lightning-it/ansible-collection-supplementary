@@ -25,11 +25,11 @@ UTC = timezone.utc  # noqa: UP017 -- the host-side entrypoint supports Python 3.
 
 ENGINE_PATH = Path(__file__)
 if ENGINE_PATH.is_symlink():
-    raise RuntimeError("push-ready engine must not be a symbolic link")
+    raise RuntimeError("engine must not be a symlink")
 try:
     ENGINE_PATH = ENGINE_PATH.resolve(strict=True)
 except OSError as exc:
-    raise RuntimeError("push-ready engine path cannot be resolved safely") from exc
+    raise RuntimeError("engine path is unsafe") from exc
 
 AUTHORIZED_ROOT = globals().get("_LIT_AUTHORIZED_REPOSITORY_ROOT")
 if AUTHORIZED_ROOT is None:
@@ -375,7 +375,7 @@ def write_evidence_text(value: str) -> None:
             pass
         else:
             if not stat.S_ISREG(existing.st_mode) or existing.st_uid != os.geteuid():
-                raise RuntimeError("push-ready evidence target is unsafe")
+                raise RuntimeError("evidence target is unsafe")
         descriptor = os.open(temporary, file_flags, 0o600, dir_fd=directory)
         created = os.fstat(descriptor)
         identity = created.st_dev, created.st_ino
@@ -383,14 +383,14 @@ def write_evidence_text(value: str) -> None:
         while payload:
             written = os.write(descriptor, payload)
             if written <= 0:
-                raise RuntimeError("push-ready evidence write did not progress")
+                raise RuntimeError("evidence write stalled")
             payload = payload[written:]
         os.fsync(descriptor)
         os.replace(temporary, target.name, src_dir_fd=directory, dst_dir_fd=directory)
         temporary = ""
         os.fsync(directory)
     except OSError as exc:
-        raise RuntimeError("push-ready evidence could not be written safely") from exc
+        raise RuntimeError("evidence write failed") from exc
     finally:
         if descriptor >= 0:
             os.close(descriptor)
@@ -532,7 +532,7 @@ def require_policy_files_committed() -> None:
     try:
         running_engine = Path(__file__).resolve().relative_to(ROOT).as_posix()
     except ValueError as exc:
-        raise RuntimeError("push-ready engine is outside the repository root") from exc
+        raise RuntimeError("engine is outside repository") from exc
     for path in (
         ".lit/push-ready.json",
         "AGENTS.md",
@@ -542,9 +542,9 @@ def require_policy_files_committed() -> None:
     ):
         candidate = ROOT / path
         if not candidate.exists():
-            raise RuntimeError(f"required push-ready policy file is missing: {path}")
+            raise RuntimeError(f"policy file is missing: {path}")
         if not candidate.is_file() or candidate.is_symlink():
-            raise RuntimeError(f"required push-ready policy file is unsafe: {path}")
+            raise RuntimeError(f"policy file is unsafe: {path}")
         unstaged = run(
             ["git", "diff", "--quiet", "--", path],
             capture=True,
@@ -554,7 +554,7 @@ def require_policy_files_committed() -> None:
             capture=True,
         )
         if unstaged.returncode or staged.returncode:
-            raise RuntimeError(f"push-ready policy file must match committed HEAD: {path}")
+            raise RuntimeError(f"policy differs from HEAD: {path}")
 
 
 def require_clean_head() -> None:
@@ -570,9 +570,9 @@ def require_clean_head() -> None:
 def current_branch_ref() -> str:
     branch = git_output("symbolic-ref", "--quiet", "HEAD").strip()
     if not branch.startswith("refs/heads/"):
-        raise RuntimeError("push-ready requires an attached local branch")
+        raise RuntimeError("attached branch required")
     if branch in {"refs/heads/develop", "refs/heads/main"}:
-        raise RuntimeError("push-ready requires a feature branch; direct pushes to develop and main are not authorized")
+        raise RuntimeError("develop and main pushes are forbidden")
     return branch
 
 
@@ -728,7 +728,7 @@ def load_config() -> dict[str, Any]:
     if not CONFIG.is_file() or CONFIG.is_symlink():
         raise RuntimeError(f"missing required regular configuration: {CONFIG.relative_to(ROOT)}")
     if CONFIG.stat().st_size > MAX_CONFIG_BYTES:
-        raise RuntimeError("push-ready configuration is unreasonably large")
+        raise RuntimeError("configuration is too large")
     data = json.loads(CONFIG.read_text(encoding="utf-8"))
     if (
         not isinstance(data, dict)
@@ -736,7 +736,7 @@ def load_config() -> dict[str, Any]:
         or not isinstance(data.get("checks"), list)
         or not data.get("checks")
     ):
-        raise RuntimeError("push-ready configuration must use version 2 and define checks")
+        raise RuntimeError("version 2 configuration must define checks")
     base_ref = require_nonempty_string(data.get("base_ref"), "base_ref")
     if base_ref not in AUTHORITATIVE_BASE_REFS:
         raise RuntimeError(
@@ -978,7 +978,7 @@ def require_trusted_check_policy(
     try:
         running_engine = Path(__file__).resolve().relative_to(ROOT).as_posix()
     except ValueError as exc:
-        raise RuntimeError("push-ready engine is outside the repository root") from exc
+        raise RuntimeError("engine is outside repository") from exc
     policy_paths = tuple(dict.fromkeys((*TRUSTED_CHECK_POLICY_PATHS, running_engine)))
     required_paths = {
         ".lit/push-ready.json",
@@ -1005,15 +1005,15 @@ def require_review_bootstrap_contract(change: PlannedChange) -> None:
     try:
         running_engine = Path(__file__).resolve().relative_to(ROOT).as_posix()
     except ValueError as exc:
-        raise RuntimeError("push-ready engine is outside the repository root") from exc
+        raise RuntimeError("engine is outside repository") from exc
     required_paths = (".lit/push-ready.json", "scripts/lit-ci-profile.sh", running_engine)
     base_entries = [git_tree_entry(change.base_tip, path) for path in required_paths]
     if all(base_entries):
         return
     if any(base_entries):
-        raise RuntimeError("push-ready trust-root bootstrap is incomplete on the authoritative base")
+        raise RuntimeError("trust-root bootstrap is incomplete on base")
     if not all(git_tree_entry(change.head_commit, path) for path in required_paths):
-        raise RuntimeError("push-ready trust-root bootstrap lacks a required policy file")
+        raise RuntimeError("trust-root bootstrap lacks policy")
 
 
 def integration_worktree_fingerprint(cwd: Path, *, include_ignored: bool = False) -> str:
@@ -2546,40 +2546,17 @@ def review_prompt(
     instructions: str,
     topology: ReviewTopology,
 ) -> str:
-    local_boundary = (
-        "This is a local pre-push approximation. It is not, and must not be "
-        "reported as, the authoritative GitHub Copilot pull-request review. "
-        "The server-side current-head review and required GitHub Actions "
-        "checks remain mandatory."
-    )
+    local_boundary = "Local only; server current-head review and Actions gates remain mandatory."
     task = (
-        "Review the exact planned push patch below against AGENTS.md, nested "
-        "AGENTS.md files, and .github/copilot-instructions.md. Check "
-        "correctness, security, failure behavior, tests, scope, and likely "
-        "GitHub Actions failures. The patch combines committed, staged, "
-        "unstaged, and safe untracked content relative to the recorded "
-        "merge-base. The mounted workspace is a history-free synthetic root "
-        "commit containing the locally verified review workspace "
-        "tree: a dependency need not have a diff hunk, so verify its presence "
-        "in that workspace before reporting it as missing. Source commits, "
-        "parents, and history objects are intentionally absent from the "
-        "workspace; their absence is a security boundary, not a finding. The "
-        "caller-verified hashes below bind the source topology without "
-        "exposing its content history. Do not modify files, use network "
-        "tools, or expose credentials. The embedded patch is authoritative "
-        "for review scope."
+        "Review the exact patch against tracked instructions for correctness, "
+        "security, tests, scope, and CI. The verified workspace is history-free; "
+        "check dependencies there. Do not modify, use network, or expose credentials."
     )
     if agent == "copilot":
-        verdict = (
-            f"End with exactly {PASS_MARKER!r} only when there is no actionable "
-            f"or unresolved finding of any severity. Otherwise end with exactly "
-            f"{BLOCKED_MARKER!r}."
-        )
+        verdict = f"End exactly {PASS_MARKER!r} only without findings; otherwise {BLOCKED_MARKER!r}."
         prefix = ""
     else:
-        verdict = (
-            "Use the caller-supplied structured verdict schema. A passing verdict requires an empty findings array."
-        )
+        verdict = "Use the supplied schema; PASS requires no findings."
         prefix = ""
     return (
         prefix
@@ -2973,7 +2950,7 @@ def runtime_versions() -> dict[str, str]:
 
 def governed_push_remote_from_url(name: str, url: str) -> dict[str, str]:
     if name != "origin" or not url or any(ord(character) < 32 or ord(character) == 127 for character in url):
-        raise RuntimeError("push-ready requires the governed origin remote")
+        raise RuntimeError("governed origin required")
     value = url[:-4] if url.endswith(".git") else url
     prefixes = (
         "https://github.com/lightning-it/",
@@ -3109,25 +3086,25 @@ def evidence_interval(
         or abs((completed - started).total_seconds() - duration) > 5
         or (bounds is not None and (started < bounds[0] or completed > bounds[1]))
     ):
-        raise RuntimeError(f"push-ready evidence has invalid timing for {description}")
+        raise RuntimeError(f"evidence has invalid timing for {description}")
     return started, completed
 
 
 def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
     evidence = evidence_path()
     if not evidence.is_file() or evidence.is_symlink():
-        raise RuntimeError("push-ready evidence does not exist as a regular file")
+        raise RuntimeError("evidence is not a regular file")
     payload = json.loads(evidence.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or payload.get("version") != 2:
-        raise RuntimeError("push-ready evidence must use version 2")
+        raise RuntimeError("evidence must use version 2")
     started, completed = evidence_interval(payload, "run")
     age = (datetime.now(UTC) - completed).total_seconds()
     max_age = config["evidence"]["max_age_seconds"]
     if age < -300 or age > max_age:
-        raise RuntimeError(f"push-ready evidence is outside the allowed age of {max_age} seconds")
+        raise RuntimeError(f"evidence exceeds age {max_age}")
     fixture_manifest_bootstrap = payload.get("fixture_manifest_bootstrap")
     if not isinstance(fixture_manifest_bootstrap, bool):
-        raise RuntimeError("push-ready evidence fixture_manifest_bootstrap is invalid")
+        raise RuntimeError("evidence fixture bootstrap is invalid")
     change = planned_change(
         config,
         fixture_manifest_bootstrap=fixture_manifest_bootstrap,
@@ -3166,13 +3143,13 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
     }
     for key, value in expected.items():
         if payload.get(key) != value:
-            raise RuntimeError(f"push-ready evidence is stale or malformed for {key}")
+            raise RuntimeError(f"evidence is stale or malformed: {key}")
     integration_fingerprint = payload.get("integration_fingerprint")
     if not isinstance(integration_fingerprint, str) or not re.fullmatch(r"[0-9a-f]{64}", integration_fingerprint):
-        raise RuntimeError("push-ready evidence has an invalid integration fingerprint")
+        raise RuntimeError("evidence integration fingerprint is invalid")
     checks = payload.get("checks")
     if not isinstance(checks, list) or len(checks) != len(config["checks"]):
-        raise RuntimeError("push-ready evidence skipped a required check")
+        raise RuntimeError("evidence skipped a required check")
     review_binding = review_input_sha256(
         change,
         expected_integration,
@@ -3191,15 +3168,15 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
             or recorded.get("command") != expected_command
             or recorded.get("exit_code") != 0
         ):
-            raise RuntimeError(f"push-ready evidence lacks passing check {configured['name']}")
+            raise RuntimeError(f"evidence lacks passing check {configured['name']}")
         evidence_interval(recorded, f"check {configured['name']}", (started, completed))
     reviews = payload.get("agent_reviews")
     if not isinstance(reviews, list):
-        raise RuntimeError("push-ready evidence has invalid agent reviews")
+        raise RuntimeError("evidence agent reviews are invalid")
     by_name = {review.get("agent"): review for review in reviews if isinstance(review, dict)}
     enabled_agents = {name for name, agent in config["agents"].items() if agent["enabled"]}
     if len(by_name) != len(reviews) or set(by_name) != enabled_agents:
-        raise RuntimeError("push-ready evidence has incomplete agent reviews")
+        raise RuntimeError("evidence agent reviews are incomplete")
     for name, agent in config["agents"].items():
         if not agent["enabled"]:
             continue
@@ -3215,25 +3192,25 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
             or not re.fullmatch(r"[0-9a-f]{64}", review["output_sha256"])
             or review.get("input_sha256") != review_binding
         ):
-            raise RuntimeError(f"push-ready evidence lacks a passing local {name} review")
+            raise RuntimeError(f"evidence lacks passing {name} review")
         execution_mode = review.get("execution_mode")
         if name == "copilot":
             if execution_mode != "pinned-devtool-container":
-                raise RuntimeError("push-ready evidence has invalid Copilot execution mode")
+                raise RuntimeError("invalid Copilot execution mode")
             if (
                 review.get("container_image") != COPILOT_DEVTOOL_IMAGE
                 or review.get("container_runtime") not in {"docker", "podman"}
                 or not isinstance(review.get("container_runtime_version"), str)
                 or not review.get("container_runtime_version")
             ):
-                raise RuntimeError("push-ready evidence has invalid Copilot container binding")
+                raise RuntimeError("invalid Copilot container binding")
         elif (
             execution_mode != "host"
             or review.get("container_image") is not None
             or review.get("container_runtime") is not None
             or review.get("container_runtime_version") is not None
         ):
-            raise RuntimeError("push-ready evidence has invalid Codex execution mode")
+            raise RuntimeError("invalid Codex execution mode")
         evidence_interval(review, f"{name} review", (started, completed))
     return payload
 
@@ -3272,7 +3249,7 @@ def verify_pre_push_updates(
         ):
             raise RuntimeError("pre-push received an unsafe ref update")
         if set(local_oid) == {"0"}:
-            raise RuntimeError("push-ready evidence does not authorize ref deletion")
+            raise RuntimeError("evidence forbids ref deletion")
         creates_remote_branch = set(remote_oid) == {"0"}
         pushed_commit = git_output(
             "rev-parse",
@@ -3288,7 +3265,23 @@ def verify_pre_push_updates(
                 capture=True,
             )
             if ancestry.returncode:
-                raise RuntimeError("push-ready evidence does not authorize a non-fast-forward branch update")
+                raise RuntimeError("evidence forbids non-fast-forward push")
+
+
+def pre_commit_push_context() -> tuple[str, str, str]:
+    names = (
+        "PRE_COMMIT_REMOTE_NAME",
+        "PRE_COMMIT_REMOTE_URL",
+        "PRE_COMMIT_LOCAL_BRANCH",
+        "PRE_COMMIT_REMOTE_BRANCH",
+    )
+    values = tuple(os.environ.get(name, "") for name in names)
+    if not all(values):
+        raise RuntimeError("pre-commit did not provide complete pre-push context")
+    remote_name, remote_url, local_ref, remote_ref = values
+    local_oid = os.environ.get("PRE_COMMIT_TO_REF") or git_output("rev-parse", local_ref).strip()
+    remote_oid = os.environ.get("PRE_COMMIT_FROM_REF") or "0" * 40
+    return remote_name, remote_url, f"{local_ref} {local_oid} {remote_ref} {remote_oid}\n"
 
 
 def main() -> int:
@@ -3307,36 +3300,33 @@ def main() -> int:
     )
     parser.add_argument(
         "--base",
-        help="override the configured target ref used to calculate the merge-base",
+        help="diagnostic review base",
     )
     parser.add_argument(
         "--remote-name",
-        help="remote name supplied as pre-push hook argv[1]",
+        help="pre-push remote name",
     )
     parser.add_argument(
         "--remote-url",
-        help="remote URL supplied as pre-push hook argv[2]",
+        help="pre-push remote URL",
     )
     parser.add_argument(
         "--bootstrap-secret-fixtures",
         dest="fixture_manifest_bootstrap",
         action="store_true",
-        help=(
-            "review and evidence-bind one manifest-only classification of "
-            "synthetic lines that already exist on the authoritative base"
-        ),
+        help="review a bounded secret-fixture bootstrap",
     )
     args = parser.parse_args()
     try:
         if args.base and args.command != "review":
-            raise RuntimeError("--base is diagnostic-only and may be used only with `review`")
+            raise RuntimeError("--base requires review")
         if args.fixture_manifest_bootstrap and args.command not in {
             "review",
             "push-ready",
         }:
-            raise RuntimeError("--bootstrap-secret-fixtures may be used only with `review` or `push-ready`")
+            raise RuntimeError("fixture bootstrap requires review or push-ready")
         if args.fixture_manifest_bootstrap and args.base:
-            raise RuntimeError("secret fixture bootstrap may not override the authoritative base")
+            raise RuntimeError("fixture bootstrap cannot override base")
         if args.command == "sync-instructions":
             sync_instructions()
             return 0
@@ -3349,16 +3339,18 @@ def main() -> int:
             print(f"Verified push-ready evidence: {evidence_path()}")
             return 0
         if args.command == "pre-push":
-            if not args.remote_name or not args.remote_url:
-                raise RuntimeError("pre-push requires --remote-name and --remote-url from the Git hook arguments")
+            remote_name, remote_url = args.remote_name, args.remote_url
+            hook_input = sys.stdin.read()
+            if not remote_name or not remote_url:
+                remote_name, remote_url, hook_input = pre_commit_push_context()
             require_clean_head()
             refresh_authoritative_base(config)
             payload = verify_evidence(config)
             verify_pre_push_updates(
                 payload,
-                sys.stdin.read(),
-                remote_name=args.remote_name,
-                remote_url=args.remote_url,
+                hook_input,
+                remote_name=remote_name,
+                remote_url=remote_url,
             )
             print(f"Verified push-ready evidence: {evidence_path()}")
             return 0

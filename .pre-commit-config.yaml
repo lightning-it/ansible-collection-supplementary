@@ -132,6 +132,14 @@ repos:
         pass_filenames: false
         always_run: true
 
+      - id: push-ready-pre-push
+        name: enforce reviewed exact-head push
+        language: python
+        entry: python scripts/lit-push-ready.py pre-push
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+
       - id: role-quality-python-tests
         name: role quality Python unit tests
         language: python
@@ -204,3 +212,5 @@ repos:
         language: system
         entry: bash scripts/wunder-devtools-ee.sh shellcheck
         types: [shell]
+
+default_install_hook_types: [pre-commit, pre-push]

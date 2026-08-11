@@ -22,6 +22,30 @@ class PushReadyEngineTests(unittest.TestCase):
         self.assertIn("scripts/lit-repository-quality.py", trusted_paths)
         self.assertIn("scripts/validate-embedded-code.py", trusted_paths)
 
+    def test_pre_push_hook_rejects_stale_head(self) -> None:
+        config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+        for marker in ("stages: [pre-push]", "default_install_hook_types: [pre-commit, pre-push]"):
+            self.assertIn(marker, config)
+        branch, stale, expected = "refs/heads/test", "b" * 40, "a" * 40
+        payload = {
+            "push_remote": ENGINE["governed_push_remote_from_url"](
+                "origin", "https://github.com/lightning-it/ansible-collection-supplementary.git"
+            ),
+            "head_commit": expected,
+            "local_branch_ref": branch,
+        }
+        function_globals = ENGINE["verify_pre_push_updates"].__globals__
+        with (
+            mock.patch.dict(function_globals, {"git_output": lambda *_args: stale}),
+            self.assertRaisesRegex(RuntimeError, "not bound"),
+        ):
+            ENGINE["verify_pre_push_updates"](
+                payload,
+                f"{branch} {stale} {branch} {'0' * 40}\n",
+                remote_name="origin",
+                remote_url="https://github.com/lightning-it/ansible-collection-supplementary.git",
+            )
+
     def test_container_engine_fallback(self) -> None:
         function_globals = ENGINE["copilot_container_command"].__globals__
         probe = mock.Mock(side_effect=[subprocess.CompletedProcess([], code, "") for code in (1, 0)])
