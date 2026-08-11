@@ -123,6 +123,15 @@ repos:
         pass_filenames: false
         always_run: true
 
+      - id: repository-quality
+        name: canonical repository quality policy
+        language: python
+        entry: python scripts/lit-repository-quality.py
+        additional_dependencies:
+          - PyYAML==6.0.3
+        pass_filenames: false
+        always_run: true
+
       - id: role-quality-python-tests
         name: role quality Python unit tests
         language: python

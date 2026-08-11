@@ -1042,6 +1042,26 @@ class WorkflowSecurityTests(unittest.TestCase):
                 arguments,
             )
 
+    def test_push_ready_foundation_enforces_isolation_and_ci_binding(self) -> None:
+        engine = __import__("runpy").run_path(
+            str(ROOT / "scripts" / "lit-push-ready.py"),
+            run_name="lit_push_ready_contract_test",
+        )
+        isolated = engine["isolated_git_environment"](
+            {"PATH": os.environ["PATH"], "GIT_DIR": "untrusted", "GIT_SSH_COMMAND": "untrusted"}
+        )
+        self.assertTrue({"GIT_DIR", "GIT_SSH_COMMAND"}.isdisjoint(isolated))
+        self.assertEqual("1", isolated["GIT_CONFIG_NOSYSTEM"])
+        self.assertEqual(os.devnull, isolated["GIT_CONFIG_GLOBAL"])
+        with self.assertRaisesRegex(RuntimeError, "safety boundary is incomplete"):
+            engine["require_copilot_prompt_mode_boundary"]({}, [])
+        pre_commit = load_yaml(ROOT / ".pre-commit-config.yaml")
+        hooks = [hook for repo in pre_commit["repos"] for hook in repo["hooks"]]
+        quality_hooks = [hook for hook in hooks if hook.get("id") == "repository-quality"]
+        self.assertEqual(1, len(quality_hooks))
+        self.assertEqual("python scripts/lit-repository-quality.py", quality_hooks[0]["entry"])
+        self.assertTrue(quality_hooks[0]["always_run"])
+
     def test_security_publish_requires_nexus_and_signed_validation_before_galaxy(self) -> None:
         workflow = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
         publish_steps = yaml.safe_load(workflow)["jobs"]["publish"]["steps"]

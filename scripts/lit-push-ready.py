@@ -180,8 +180,6 @@ COPILOT_REQUIRED_SAFETY_ARGUMENTS = (
 
 
 class PlannedChange(NamedTuple):
-    """Immutable description of the repository state intended for the push."""
-
     base_ref: str
     base_tip: str
     base_commit: str
@@ -197,8 +195,6 @@ class PlannedChange(NamedTuple):
 
 
 class ReviewTopology(NamedTuple):
-    """Verified non-content Git topology exposed to isolated reviewers."""
-
     head_tree: str
     head_parents: tuple[str, ...]
     base_tree: str
@@ -207,8 +203,6 @@ class ReviewTopology(NamedTuple):
 
 
 def is_full_git_object_id(value: str) -> bool:
-    """Return whether ``value`` is one complete SHA-1 or SHA-256 object ID."""
-
     return re.fullmatch(
         r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})",
         value,
@@ -255,7 +249,6 @@ GIT_IDENTITY_ENVIRONMENT = frozenset(
 
 
 def trusted_container_git_binding(source: dict[str, str]) -> dict[str, str]:
-    """Retain only the wrapper's fixed, read-only linked-worktree binding."""
     required = ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE")
     if any(name not in source for name in required):
         return {}
@@ -316,7 +309,6 @@ def isolated_git_environment(
 
 
 def assert_safe_git_configuration(cwd: Path) -> None:
-    """Refuse local config that can execute code or change tree materialization."""
     configured = run(
         ["git", "config", "--local", "--null", "--name-only", "--list"],
         capture=True,
@@ -386,7 +378,6 @@ def evidence_path() -> Path:
 
 
 def open_regular_below(root: Path, name: str, *, purpose: str) -> int:
-    """Open a file below root without following any path-component symlink."""
     required_flags = ("O_CLOEXEC", "O_DIRECTORY", "O_NOFOLLOW", "O_NONBLOCK")
     missing_flags = [
         flag for flag in required_flags if not isinstance(getattr(os, flag, None), int)
@@ -438,7 +429,6 @@ def open_regular_below(root: Path, name: str, *, purpose: str) -> int:
 
 
 def open_repository_regular(name: str, *, purpose: str) -> int:
-    """Open a repository file without following any path-component symlink."""
     return open_regular_below(ROOT, name, purpose=purpose)
 
 
@@ -513,7 +503,6 @@ def tree_fingerprint() -> str:
 
 
 def reject_hidden_index_entries() -> None:
-    """Reject index flags that can hide policy or source modifications."""
     entries = git_output("ls-files", "-v", "-z").split("\0")
     hidden: list[str] = []
     for entry in entries:
@@ -571,7 +560,6 @@ def require_policy_files_committed() -> None:
 
 
 def require_clean_head() -> None:
-    """Require that a push can transfer exactly the state being evaluated."""
     require_policy_files_committed()
     status_value = git_output(
         "status", "--porcelain=v1", "--untracked-files=all", "-z"
@@ -665,7 +653,6 @@ def fetch_authoritative_base(branch: str, base_ref: str) -> subprocess.Completed
 
 
 def refresh_authoritative_base(config: dict[str, Any]) -> str:
-    """Fetch the governed base ref so integration checks never use stale state."""
     base_ref = config["base_ref"]
     branch = AUTHORITATIVE_BASE_REFS.get(base_ref)
     if branch is None:
@@ -931,7 +918,6 @@ def existing_unix_socket(value: str) -> Optional[str]:
 
 
 def minimal_check_environment(state_root: Path) -> dict[str, str]:
-    """Return a credential-free host environment for the fixed CI profile."""
     path_value = os.environ.get("PATH")
     if not path_value:
         raise RuntimeError("deterministic checks require PATH")
@@ -1058,7 +1044,6 @@ def git_output_at(cwd: Path, *args: str) -> str:
 
 
 def expected_integration_tree(change: PlannedChange) -> str:
-    """Produce the pull-request merge tree with Git 2.34-compatible commands."""
     assert_safe_git_configuration(ROOT)
     with isolated_integration_directory() as temporary:
         worktree = temporary / "merge-tree-worktree"
@@ -1224,7 +1209,6 @@ def require_trusted_check_policy(
     *,
     allow_fixture_manifest_bootstrap: bool = False,
 ) -> None:
-    """Refuse local host execution when executable policy differs from base."""
     try:
         running_engine = (
             Path(__file__).resolve().relative_to(ROOT).as_posix()
@@ -1320,7 +1304,6 @@ def integration_worktree_fingerprint(
 def synthetic_integration_commit(
     change: PlannedChange, integration_tree: str
 ) -> str:
-    """Create the deterministic two-parent commit Actions checks out for a PR."""
     environment = dict(os.environ)
     environment.update(
         {
@@ -1565,7 +1548,6 @@ def directory_identity(path: Path, *, purpose: str) -> tuple[int, int]:
 def execute_integration_checks(
     config: dict[str, Any], change: PlannedChange
 ) -> tuple[list[dict[str, Any]], str, str, str]:
-    """Run deterministic checks on the same fresh-base merge tree as PR CI."""
     integration_tree = expected_integration_tree(change)
     integration_commit = synthetic_integration_commit(
         change,
@@ -1675,7 +1657,6 @@ def quote_diff_path(prefix: str, name: str) -> str:
 
 
 def unquote_diff_path(value: str, prefix: str) -> Optional[str]:
-    """Decode one Git unified-diff path without consulting repository state."""
     if value == "/dev/null":
         return None
     if value.startswith('"'):
@@ -1883,7 +1864,6 @@ def planned_change(
 
 
 def changed_paths() -> list[str]:
-    """Return all index, worktree, and untracked paths, including rename pairs."""
     values = git_output(
         "status",
         "--porcelain=v1",
@@ -1930,7 +1910,6 @@ def planned_diff(
 
 
 def untracked_review_text(max_bytes: int = 1_000_000) -> str:
-    """Return bounded UTF-8 untracked content for compatibility tests."""
     chunks: list[str] = []
     total = 0
     for name in untracked_names():
@@ -1952,7 +1931,6 @@ def untracked_review_text(max_bytes: int = 1_000_000) -> str:
 def parse_secret_fixture_manifest(
     payload: str,
 ) -> dict[str, dict[int, tuple[str, str]]]:
-    """Validate an auditable, path-bound synthetic fixture manifest."""
     document = json.loads(payload)
     if not isinstance(document, dict) or set(document) != {
         "version",
@@ -2058,7 +2036,6 @@ def repository_blob_at_commit(
     *,
     max_bytes: int,
 ) -> Optional[str]:
-    """Read one bounded UTF-8 blob from an exact local commit."""
     if not is_full_git_object_id(commit):
         raise RuntimeError("secret fixture manifest commit is invalid")
     object_name = f"{commit}:{path}"
@@ -2373,8 +2350,6 @@ def checkout_sanitized_commit(
 
 
 def sanitized_root_commit(repository: Path, tree: str) -> str:
-    """Create a deterministic parentless commit for the scanned review tree."""
-
     environment = dict(os.environ)
     environment.update(
         {
@@ -2412,8 +2387,6 @@ def verified_review_topology(
     integration_tree: str,
     workspace_commit: str,
 ) -> ReviewTopology:
-    """Return validated hash-only topology without exposing source objects."""
-
     head_line = git_output(
         "rev-list", "--parents", "-n", "1", change.head_commit
     ).strip().split()
@@ -2456,8 +2429,6 @@ def require_history_free_review_workspace(
     *,
     source_commits: tuple[str, ...],
 ) -> str:
-    """Require a single-root object store with no imported source history."""
-
     workspace_commit = git_output_at(workspace, "rev-parse", "HEAD").strip()
     root_line = git_output_at(
         workspace, "rev-list", "--parents", "-n", "1", "HEAD"
@@ -2824,7 +2795,6 @@ def minimal_agent_environment(
 def require_copilot_prompt_mode_boundary(
     environment: dict[str, str], arguments: list[str]
 ) -> None:
-    """Fail unless official prompt-mode and CLI isolation controls are active."""
     invalid_environment = [
         name
         for name, expected in COPILOT_PROMPT_MODE_BOUNDARY.items()
