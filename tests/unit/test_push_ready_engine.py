@@ -66,6 +66,7 @@ class PushReadyEngineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             repository = Path(temporary_directory).resolve() / "repository"
             git = shutil.which("git")
+            self.assertIsNotNone(git)
             environment = ENGINE["isolated_git_environment"]({"PATH": os.environ["PATH"]})
             subprocess.run([git, "init", "-q", repository], check=True, env=environment)  # noqa: S603
             command = [git, "-C", repository, "-c", "user.name=Test", "-c", "user.email=test@invalid"]
@@ -103,6 +104,7 @@ class PushReadyEngineTests(unittest.TestCase):
             root = Path(temporary_directory).resolve()
             repository = root / "repository"
             git = shutil.which("git")
+            self.assertIsNotNone(git)
             environment = ENGINE["isolated_git_environment"]({"PATH": os.environ["PATH"]})
             subprocess.run([git, "init", "-q", repository], check=True, env=environment)  # noqa: S603
             subprocess.run(  # noqa: S603
@@ -148,7 +150,7 @@ class PushReadyEngineTests(unittest.TestCase):
             original_argv, original_which = runtime.argv, shutil.which
             try:
                 shutil.which = lambda _name: None
-                for name, language in (("a.md", "ansible"), ("s.md", "sh")):
+                for name, language in (("A.MD", "ansible"), ("s.md", "sh")):
                     (markdown / name).write_text(f"```{language}\n[]\n```\n", encoding="utf-8")
                     runtime.argv = ["validate-embedded-code.py", name]
                     self.assertEqual(1, validator["main"]())

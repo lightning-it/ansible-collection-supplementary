@@ -84,7 +84,7 @@ def main() -> int:
                 failures.append(f"{name}: Markdown path must be normalized and repository-relative")
                 continue
             path = ROOT / relative_path
-            if path.suffix != ".md":
+            if path.suffix.lower() != ".md":
                 continue
             try:
                 resolved = path.resolve(strict=True)
