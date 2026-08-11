@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-"""Create exact-diff local pipeline and dual-agent review evidence."""
-
 from __future__ import annotations
 
 import argparse
@@ -271,12 +269,6 @@ def trusted_container_git_binding(source: Mapping[str, str]) -> dict[str, str]:
 def isolated_git_environment(
     environment: dict[str, str] | None = None,
 ) -> dict[str, str]:
-    """Return an environment that cannot redirect or configure Git externally.
-
-    The tool's root is a Python path binding, not an inherited Git working-tree
-    binding.  In particular, retain only the explicit deterministic commit
-    identity from callers and discard every other ``GIT_*`` variable.
-    """
     source = environment if environment is not None else os.environ
     result = {name: value for name, value in source.items() if not name.startswith("GIT_")}
     for name in GIT_IDENTITY_ENVIRONMENT:
@@ -365,6 +357,50 @@ def evidence_path() -> Path:
     return git_dir.resolve() / "lit-push-ready-evidence.json"
 
 
+def write_evidence_text(value: str) -> None:
+    target = evidence_path()
+    directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
+    file_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW
+    directory = os.open(target.parent, directory_flags)
+    temporary = f".{target.name}.{secrets.token_hex(16)}.tmp"
+    descriptor = -1
+    identity: tuple[int, int] | None = None
+    try:
+        try:
+            existing = os.stat(target.name, dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            if not stat.S_ISREG(existing.st_mode) or existing.st_uid != os.geteuid():
+                raise RuntimeError("push-ready evidence target is unsafe")
+        descriptor = os.open(temporary, file_flags, 0o600, dir_fd=directory)
+        created = os.fstat(descriptor)
+        identity = created.st_dev, created.st_ino
+        payload = value.encode("utf-8")
+        while payload:
+            written = os.write(descriptor, payload)
+            if written <= 0:
+                raise RuntimeError("push-ready evidence write did not progress")
+            payload = payload[written:]
+        os.fsync(descriptor)
+        os.replace(temporary, target.name, src_dir_fd=directory, dst_dir_fd=directory)
+        temporary = ""
+        os.fsync(directory)
+    except OSError as exc:
+        raise RuntimeError("push-ready evidence could not be written safely") from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        if temporary and identity is not None:
+            try:
+                current = os.stat(temporary, dir_fd=directory, follow_symlinks=False)
+                if stat.S_ISREG(current.st_mode) and (current.st_dev, current.st_ino) == identity:
+                    os.unlink(temporary, dir_fd=directory)
+            except FileNotFoundError:
+                pass
+        os.close(directory)
+
+
 def open_regular_below(root: Path, name: str, *, purpose: str) -> int:
     required_flags = ("O_CLOEXEC", "O_DIRECTORY", "O_NOFOLLOW", "O_NONBLOCK")
     missing_flags = [flag for flag in required_flags if not isinstance(getattr(os, flag, None), int)]
@@ -406,7 +442,6 @@ def open_repository_regular(name: str, *, purpose: str) -> int:
     return open_regular_below(ROOT, name, purpose=purpose)
 
 
-# Retain the public helper name used by existing downstream regression tests.
 def open_untracked_regular(name: str, *, purpose: str) -> int:
     return open_repository_regular(name, purpose=purpose)
 
@@ -539,7 +574,6 @@ def current_branch_ref() -> str:
 
 
 def github_https_authorization() -> str:
-    """Return a masked-process-safe GitHub Authorization header value."""
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if token is None:
         result = run(
@@ -557,7 +591,6 @@ def github_https_authorization() -> str:
 
 
 def fetch_authoritative_base(branch: str, base_ref: str) -> subprocess.CompletedProcess[str]:
-    """Fetch one governed base branch without exposing credentials on argv."""
     origin_url = git_output("remote", "get-url", "origin").strip()
     push_url = git_output("remote", "get-url", "--push", "origin").strip()
     fetch_remote = governed_push_remote_from_url("origin", origin_url)
@@ -849,7 +882,6 @@ def execute_checks(config: dict[str, Any], *, cwd: Path | None = None) -> list[d
     with tempfile.TemporaryDirectory(prefix="lit-check-environment-") as temporary:
         environment = minimal_check_environment(Path(temporary))
         for check in config["checks"]:
-            # load_config validates these values; retain validation for direct callers.
             if not isinstance(check, dict):
                 raise RuntimeError("each check must be an object")
             name = require_nonempty_string(check.get("name"), "each check name")
@@ -1160,7 +1192,6 @@ def synthetic_integration_commit(change: PlannedChange, integration_tree: str) -
 
 
 def create_integration_directory() -> tuple[Path, tuple[int, int, int, int]]:
-    """Create a private executable worktree parent strictly below ROOT."""
     required_flags = ("O_CLOEXEC", "O_DIRECTORY", "O_NOFOLLOW")
     missing_flags = [flag for flag in required_flags if not isinstance(getattr(os, flag, None), int)]
     required_dir_fd_calls = (os.mkdir, os.rmdir, os.stat)
@@ -1242,13 +1273,11 @@ def create_integration_directory() -> tuple[Path, tuple[int, int, int, int]]:
                 ):
                     os.rmdir(created_name, dir_fd=root_descriptor)
             except OSError:
-                # Never recurse or follow a changed path during failure cleanup.
                 pass
         os.close(root_descriptor)
 
 
 def remove_integration_directory(directory: Path, identity: tuple[int, int, int, int]) -> None:
-    """Remove only the same empty private directory that this process created."""
     if directory.parent != ROOT or not directory.name.startswith(INTEGRATION_DIRECTORY_PREFIX):
         raise RuntimeError("refused cleanup for an unbound integration directory")
     directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
@@ -1287,7 +1316,6 @@ def remove_integration_directory(directory: Path, identity: tuple[int, int, int,
 
 @contextlib.contextmanager
 def isolated_integration_directory():
-    """Yield a fresh private directory and clean up only its verified inode."""
     directory, identity = create_integration_directory()
     try:
         yield directory
@@ -1760,7 +1788,6 @@ def secret_fixture_manifest_at_commit(
 def bootstrap_secret_fixture_manifest(
     change: PlannedChange,
 ) -> dict[str, dict[int, tuple[str, str]]]:
-    """Authorize only pre-existing synthetic lines for one manifest bootstrap."""
     if SECRET_FIXTURE_MANIFEST_PATH not in change.paths:
         raise RuntimeError("secret fixture bootstrap requires a changed manifest")
     changelog_paths = [path for path in change.paths if re.fullmatch(r"changelogs/fragments/[^/]+\.ya?ml", path)]
@@ -1849,7 +1876,6 @@ def mask_documented_secret_fixture_diff(
     diff: str,
     documented: dict[str, dict[int, tuple[str, str]]],
 ) -> str:
-    """Mask documented lines only inside their exact old/new diff path."""
     if not documented:
         return diff
     masked: list[str] = []
@@ -1933,13 +1959,6 @@ def checkout_sanitized_commit(
     destination: Path,
     hooks: Path,
 ) -> None:
-    """Materialize one exact Git commit without archive transformations.
-
-    ``git archive`` observes export-ignore/export-subst and ZIP cannot preserve
-    Git symlinks.  A clean, local temporary repository checks out the commit
-    directly from its object tree instead.  It deliberately has no templates,
-    global/system config, or hooks.
-    """
     if not is_full_git_object_id(commit):
         raise RuntimeError("sanitized review commit has an invalid object ID")
     object_format = git_output_at(
@@ -2107,7 +2126,6 @@ def sanitized_review_workspace(
     *,
     fixture_manifest_bootstrap: bool = False,
 ):
-    """Yield a scanned, history-free snapshot plus verified hash topology."""
     assert_safe_git_configuration(ROOT)
     documented = secret_fixture_manifest_for_change(
         change,
@@ -2200,7 +2218,6 @@ def ensure_workspace_review_safe(
     workspace: Path,
     documented: dict[str, dict[int, tuple[str, str]]] | None = None,
 ) -> None:
-    """Scan the complete tracked review snapshot before external model use."""
     names = git_output_at(workspace, "ls-files", "-z").split("\0")
     total = 0
     unsafe_paths: list[str] = []
@@ -2228,9 +2245,6 @@ def ensure_workspace_review_safe(
         total += len(payload)
         if total > 500_000_000:
             raise RuntimeError("sanitized review secret scan exceeds 500 MB")
-        # Preserve every ASCII secret marker even when an unchanged tracked
-        # binary contains invalid UTF-8. New or changed binary content is
-        # rejected from the planned diff before workspace creation.
         text_value = payload.decode("utf-8", errors="replace")
         if parts[-1] == ".npmrc" and NPMRC_AUTH_PATTERN.search(text_value):
             raise RuntimeError("local review refused because tracked .npmrc contains authentication configuration")
@@ -2410,7 +2424,6 @@ def verify_codex_permission_profile(
     workspace: Path,
     state_root: Path,
 ) -> None:
-    """Exercise the selected profile before exposing repository content."""
     true_command = shutil.which("true")
     cat_command = shutil.which("cat")
     if true_command is None or cat_command is None:
@@ -2495,7 +2508,6 @@ def resolve_command(command: list[str], name: str) -> list[str]:
 
 
 def copilot_container_command(environment: dict[str, str], workspace: Path) -> list[str]:
-    """Run the pinned Copilot CLI without requiring a host installation."""
     requested_engine = os.environ.get("WUNDER_CONTAINER_ENGINE")
     if requested_engine and requested_engine not in {"docker", "podman"}:
         raise RuntimeError("WUNDER_CONTAINER_ENGINE must be docker or podman when set")
@@ -2729,10 +2741,6 @@ def copilot_review(
     if agent.get("model"):
         args.extend(["--model", agent["model"]])
     require_copilot_prompt_mode_boundary(environment, args)
-    # GitHub's programmatic CLI contract explicitly supports piping a prompt
-    # to `copilot`; `-s` is also documented for captured output in that mode.
-    # Keep the exact private diff on stdin instead of adding `-p`, which would
-    # expose the complete prompt through the process argument list.
     started_at = now_utc()
     started = time.monotonic()
     try:
@@ -3093,8 +3101,6 @@ def write_evidence(
     integration_fingerprint: str,
     fixture_manifest_bootstrap: bool = False,
 ) -> None:
-    evidence = evidence_path()
-    evidence.parent.mkdir(parents=True, exist_ok=True)
     if not isinstance(fixture_manifest_bootstrap, bool):
         raise RuntimeError("secret fixture bootstrap evidence flag is invalid")
     if tree_fingerprint() != change.tree_fingerprint:
@@ -3131,9 +3137,8 @@ def write_evidence(
         "fixture_manifest_bootstrap": fixture_manifest_bootstrap,
         "evidence_trust": LOCAL_EVIDENCE_TRUST,
     }
-    evidence.write_text(
+    write_evidence_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
     )
 
 
@@ -3300,7 +3305,6 @@ def verify_pre_push_updates(
     remote_name: str,
     remote_url: str,
 ) -> None:
-    """Bind every ref update supplied by Git's pre-push hook to reviewed HEAD."""
     supplied_remote = governed_push_remote_from_url(remote_name, remote_url)
     if payload.get("push_remote") != supplied_remote:
         raise RuntimeError("pre-push remote does not match the reviewed GitHub origin")

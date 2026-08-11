@@ -65,12 +65,16 @@ def main() -> int:
                 failures.append(f"{name}: Markdown path must be normalized and repository-relative")
                 continue
             path = ROOT / relative_path
-            if not path.is_file() or path.suffix != ".md":
+            if path.suffix != ".md":
                 continue
             try:
+                resolved = path.resolve(strict=True)
+                resolved.relative_to(ROOT.resolve(strict=True))
+                if path.is_symlink() or not path.is_file():
+                    raise OSError("path is not a non-symlink regular file")
                 source = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError) as error:
-                failures.append(f"{name}: cannot read Markdown as UTF-8: {error}")
+            except (OSError, UnicodeDecodeError, ValueError) as error:
+                failures.append(f"{name}: unsafe or unreadable Markdown path: {error}")
                 continue
             for index, match in enumerate(FENCE.finditer(source), 1):
                 language, content = match.groups()

@@ -1115,7 +1115,8 @@ class WorkflowSecurityTests(unittest.TestCase):
             )
 
         with tempfile.TemporaryDirectory() as temporary_directory:
-            repository = Path(temporary_directory)
+            temporary_root = Path(temporary_directory)
+            repository = temporary_root / "repository"
             git = shutil.which("git")
             self.assertIsNotNone(git)
             git_environment = engine["isolated_git_environment"]({"PATH": os.environ["PATH"]})
@@ -1147,6 +1148,42 @@ class WorkflowSecurityTests(unittest.TestCase):
             )
             root_commit = engine["require_history_free_review_workspace"](repository, source_commits=("f" * 40,))
             self.assertRegex(root_commit, r"^[0-9a-f]{40}$")
+
+            external = temporary_root / "external-evidence"
+            external.write_text("unchanged\n", encoding="utf-8")
+            evidence = repository / "lit-push-ready-evidence.json"
+            evidence.symlink_to(external)
+            evidence_globals = engine["write_evidence_text"].__globals__
+            original_evidence_path = evidence_globals["evidence_path"]
+            evidence_globals["evidence_path"] = lambda: evidence
+            try:
+                with self.assertRaisesRegex(RuntimeError, "target is unsafe"):
+                    engine["write_evidence_text"]("replacement\n")
+                evidence.unlink()
+                engine["write_evidence_text"]("replacement\n")
+                self.assertEqual("replacement\n", evidence.read_text(encoding="utf-8"))
+                self.assertEqual(0o600, evidence.stat().st_mode & 0o777)
+            finally:
+                evidence_globals["evidence_path"] = original_evidence_path
+            self.assertEqual("unchanged\n", external.read_text(encoding="utf-8"))
+
+            markdown_root = temporary_root / "markdown-root"
+            markdown_root.mkdir()
+            external_markdown = temporary_root / "external.md"
+            external_markdown.write_text("```yaml\nsafe: true\n```\n", encoding="utf-8")
+            (markdown_root / "linked.md").symlink_to(external_markdown)
+            validator = __import__("runpy").run_path(
+                str(ROOT / "scripts" / "validate-embedded-code.py"),
+                run_name="embedded_code_contract_test",
+            )
+            validator["main"].__globals__["ROOT"] = markdown_root
+            runtime = __import__("sys")
+            original_argv = runtime.argv
+            runtime.argv = ["validate-embedded-code.py", "linked.md"]
+            try:
+                self.assertEqual(1, validator["main"]())
+            finally:
+                runtime.argv = original_argv
 
     def test_security_publish_requires_nexus_and_signed_validation_before_galaxy(self) -> None:
         workflow = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
