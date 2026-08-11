@@ -1022,7 +1022,7 @@ class WorkflowSecurityTests(unittest.TestCase):
             self.assertIsNotNone(bash, "bash is required for the wrapper contract test")
             subprocess.run(  # noqa: S603 -- execute the repository-owned wrapper under test.
                 [bash, str(wrapper), "true"],
-                cwd=ROOT,
+                cwd=temporary,
                 env=environment,
                 check=True,
                 capture_output=True,

@@ -95,6 +95,7 @@ container_images:
   - reference: "quay.io/l-it/ee-wunder-devtools-ubi9:v1.12.0@sha256:b1189c8d51cb8f9f7b8aa396b8aaf30da7635ebd5d0fc9fe8b0f9f9d3c36d6de"
     locations:
       - "examples/aap-cac.yml"
+      - "scripts/lit-push-ready.py"
       - "scripts/wunder-devtools-ee.sh"
   - reference: "quay.io/minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727"
     locations:
