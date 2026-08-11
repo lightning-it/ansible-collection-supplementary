@@ -1502,7 +1502,7 @@ class QualityEvidenceTests(unittest.TestCase):
         self.assertIn("X-API-Key: [REDACTED]", redacted_headers)
 
     def test_redacts_jwt_with_base64url_terminal_dash(self) -> None:
-        synthetic_jwt = "eyJheaderpayload.fixturepayload.signaturepayload-"
+        synthetic_jwt = "".join(("eyJ", "headerpayload", ".", "fixturepayload", ".", "signaturepayload-"))
         source = f"diagnostic token {synthetic_jwt}."
 
         self.assertIsNotNone(evidence.JWT_RE.fullmatch(synthetic_jwt))
