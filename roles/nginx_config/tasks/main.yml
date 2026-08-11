@@ -560,7 +560,6 @@
       certificate/private-key pair, CA chain, and matching identity metadata.
       Local host files are not accepted as Vault certificate custody.
     quiet: true
-  no_log: "{{ nginx_config_tls_no_log }}"
   when:
     - not nginx_deploy_skip_config | bool
     - nginx_config_has_force_https_vhosts | bool

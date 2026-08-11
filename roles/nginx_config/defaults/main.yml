@@ -23,8 +23,8 @@ nginx_config_vault_namespace: ""
 nginx_config_vault_auth_mount_point: "approle"
 nginx_config_vault_kv_mount: "{{ vault_engine_mount_point | default('stage-2c') }}"
 nginx_config_vault_kv_path: "{{ inventory_hostname }}/nginx/certificate"
-nginx_config_vault_pki_path: "{{ vault_config_vault_pki_path }}"
-nginx_config_vault_pki_role: "{{ vault_config_vault_pki_role }}"
+nginx_config_vault_pki_path: "{{ vault_config_vault_pki_path | default('', true) }}"
+nginx_config_vault_pki_role: "{{ vault_config_vault_pki_role | default('', true) }}"
 nginx_config_vault_issue_missing: true
 # Compatibility default for existing consumers. Security profiles that require
 # Vault-only custody must set this to false explicitly.

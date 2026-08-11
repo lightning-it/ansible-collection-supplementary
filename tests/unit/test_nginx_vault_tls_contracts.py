@@ -70,6 +70,10 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             "nginx_config_vault_cert_identity_match | default(false) | bool",
             assertions,
         )
+        self.assertIn(
+            "nginx_config_vault_cert_ca_chain_stored | default([], true) | length > 0",
+            assertions,
+        )
         self.assertIn("not (nginx_config_vault_issue_missing | bool)", task["when"])
 
     def test_private_key_is_installed_with_mode_0600(self) -> None:

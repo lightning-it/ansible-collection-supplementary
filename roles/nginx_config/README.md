@@ -40,6 +40,11 @@ reject local certificate/key files as a source of record. The compatibility
 default remains enabled for existing consumers and must not be relied upon as
 proof of Vault-only custody.
 
+When `nginx_config_vault_issue_missing: false`, Vault KV must already contain a
+certificate/private-key pair, a CA chain, and matching common-name and
+alternative-name metadata. Local host files do not satisfy that stored-identity
+contract.
+
 ## Dependencies
 
 None.
