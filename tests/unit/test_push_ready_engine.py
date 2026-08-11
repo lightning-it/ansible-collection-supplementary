@@ -11,6 +11,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 ENGINE = runpy.run_path(str(ROOT / "scripts" / "lit-push-ready.py"), run_name="lit_push_ready_engine_test")
 
@@ -45,8 +47,17 @@ class PushReadyEngineTests(unittest.TestCase):
 
     def test_pre_push_hook_rejects_stale_head(self) -> None:
         config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
-        for marker in ("stages: [pre-push]", "default_install_hook_types: [pre-commit, pre-push]"):
+        for marker in (
+            "default_stages: [pre-commit]",
+            "stages: [pre-push]",
+            "default_install_hook_types: [pre-commit, pre-push]",
+        ):
             self.assertIn(marker, config)
+        parsed = yaml.safe_load(config)
+        self.assertEqual(["pre-commit"], parsed["default_stages"])
+        hooks = [hook for repository in parsed["repos"] for hook in repository["hooks"]]
+        pre_push_hooks = [hook["id"] for hook in hooks if "pre-push" in hook.get("stages", parsed["default_stages"])]
+        self.assertEqual(["push-ready-pre-push"], pre_push_hooks)
         branch, stale, expected = "refs/heads/test", "b" * 40, "a" * 40
         payload = {
             "push_remote": ENGINE["governed_push_remote_from_url"](

@@ -1,4 +1,6 @@
 ---
+default_stages: [pre-commit]
+
 repos:
   # >>> BEGIN shared-assets-lit pre-commit
   - repo: local
