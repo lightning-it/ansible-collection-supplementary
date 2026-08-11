@@ -62,6 +62,23 @@ class PushReadyEngineTests(unittest.TestCase):
                 r"^[0-9a-f]{40}$",
             )
 
+    def test_review_workspace_rejects_non_utf8_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repository = Path(temporary_directory).resolve() / "repository"
+            git = shutil.which("git")
+            self.assertIsNotNone(git)
+            environment = ENGINE["isolated_git_environment"]({"PATH": os.environ["PATH"]})
+            subprocess.run([git, "init", "-q", repository], check=True, env=environment)  # noqa: S603
+            (repository / "invalid.bin").write_bytes(b"password=0123456789abcdef\xff")
+            subprocess.run(  # noqa: S603
+                [git, "-C", repository, "add", "invalid.bin"],
+                check=True,
+                env=environment,
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "sanitized review file is not UTF-8: invalid.bin"):
+                ENGINE["ensure_workspace_review_safe"](repository)
+
     def test_integration_checks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repository = Path(temporary_directory).resolve() / "repository"

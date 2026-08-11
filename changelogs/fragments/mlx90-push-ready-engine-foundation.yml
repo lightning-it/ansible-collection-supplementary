@@ -8,3 +8,7 @@ minor_changes:
     independent from linked-worktree Git metadata. The initial foundation uses
     a review-only, all-or-nothing trust-root bootstrap; validate and push-ready
     evidence become available only after the protected foundation merge.
+bugfixes:
+  - >-
+    Reject non-UTF-8 files in the sanitized review workspace instead of
+    replacing undecodable bytes before secret scanning.

@@ -2150,7 +2150,10 @@ def ensure_workspace_review_safe(
         total += len(payload)
         if total > 500_000_000:
             raise RuntimeError("sanitized review secret scan exceeds 500 MB")
-        text_value = payload.decode("utf-8", errors="replace")
+        try:
+            text_value = payload.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise RuntimeError(f"sanitized review file is not UTF-8: {name}") from exc
         if parts[-1] == ".npmrc" and NPMRC_AUTH_PATTERN.search(text_value):
             raise RuntimeError("local review refused because tracked .npmrc contains authentication configuration")
         scanned_value = mask_documented_secret_fixture_lines(
