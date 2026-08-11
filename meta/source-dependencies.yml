@@ -30,7 +30,7 @@ container_images:
   - reference: "docker.io/grafana/grafana:11.6.16@sha256:d67af92050b8d93b393dc741864752a69c9da1ffa39c1bb9af49ad5d9e47d2c3"
     locations:
       - "roles/grafana_deploy/defaults/main.yml"
-  - reference: "docker.io/grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc"
+  - reference: "docker.io/grafana/loki:3.7.6@sha256:efd47c67f9bac88ca29bcf8cb997d9ab29d1848bd0aff579282295542a745952"
     locations:
       - "roles/loki_deploy/defaults/main.yml"
   - reference: "docker.io/hashicorp/vault:1.21@sha256:4e33b126a59c0c333b76fb4e894722462659a6bec7c48c9ee8cea56fccfd2569"
