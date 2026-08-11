@@ -1,5 +1,5 @@
 ---
-security_fixes:
+minor_changes:
   - >-
     Add the bounded MLX-90 push-ready foundation. It validates the exact
     current-head patch, rejects unsafe review inputs, and records only
