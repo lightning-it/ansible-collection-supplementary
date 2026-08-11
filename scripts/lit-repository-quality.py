@@ -426,6 +426,10 @@ def check_embedded_code() -> None:
         shared_validator = ROOT / "default" / "scripts" / "validate-embedded-code.py"
         if not validator.is_file() and shared_validator.is_file():
             validator = shared_validator
+        if not validator.is_file() or validator.is_symlink():
+            raise AssertionError(
+                "embedded-code validator must be a non-symlink regular file"
+            )
         command_prefix = [
             sys.executable,
             validator.relative_to(ROOT).as_posix(),

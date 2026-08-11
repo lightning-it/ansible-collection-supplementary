@@ -13,9 +13,9 @@
   "remote_only_checks": [
     {
       "id": "github-actions-service-boundary",
-      "workflow": ".github/workflows/repository-quality.yml",
-      "job": "quality",
-      "reason": "Checkout and artifact persistence require the GitHub Actions event and service context.",
+      "workflow": ".github/workflows/collection-ci.yml",
+      "job": "lint-sanity",
+      "reason": "The authoritative collection lint, sanity, policy, and evidence gate requires the GitHub Actions event and service context.",
       "owner": "Lightning IT Application Platform Maintainers"
     },
     {

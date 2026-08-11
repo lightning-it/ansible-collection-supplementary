@@ -89,6 +89,7 @@ def main() -> int:
                         yaml.safe_load(content)
                     except yaml.YAMLError as error:
                         failures.append(f"{label}: invalid YAML: {error}")
+                        continue
                     if language == "ansible" and shutil.which("ansible-lint"):
                         candidate = validator_candidate(
                             temp,
