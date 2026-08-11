@@ -13,6 +13,13 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 ENGINE = runpy.run_path(str(ROOT / "scripts" / "lit-push-ready.py"), run_name="lit_push_ready_engine_test")
+GIT = shutil.which("git") or "git"
+
+
+def run_git(repository: Path, *args: str, environment: dict[str, str]) -> None:
+    if args[0] == "init":
+        repository.mkdir()
+    subprocess.run([GIT, "-C", repository, *args], check=True, env=environment)  # noqa: S603
 
 
 class PushReadyEngineTests(unittest.TestCase):
@@ -47,10 +54,16 @@ class PushReadyEngineTests(unittest.TestCase):
         config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
         for marker in ("default_stages: [pre-commit]", "default_install_hook_types: [pre-commit, pre-push]"):
             self.assertIn(marker, config)
+        for hook in ("ansible-lint-ee", "changelog-policy-ee", "molecule-light", "collection-smoke", "galaxy-verify"):
+            self.assertIn(f"- id: {hook}", config)
         self.assertEqual(1, config.count("stages: [pre-push]"))
         profile = (ROOT / "scripts" / "lit-ci-profile.sh").read_text(encoding="utf-8")
         self.assertIn('pre-commit" run --all-files', profile)
         self.assertNotIn("SKIP=molecule-light", profile)
+        scenario = (ROOT / "molecule" / "artifacts-basic" / "converge.yml").read_text(encoding="utf-8")
+        self.assertIn("'id -u'", scenario)
+        self.assertIn("'id -g'", scenario)
+        self.assertNotIn("id -un", scenario)
         branch, stale, expected = "refs/heads/test", "b" * 40, "a" * 40
         payload = {
             "push_remote": ENGINE["governed_push_remote_from_url"](
@@ -134,14 +147,22 @@ class PushReadyEngineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             repository = root / "repository"
-            git = shutil.which("git")
-            self.assertIsNotNone(git)
             environment = ENGINE["isolated_git_environment"]({"PATH": os.environ["PATH"]})
-            subprocess.run([git, "init", "-q", repository], check=True, env=environment)  # noqa: S603
+            run_git(repository, "init", "-q", environment=environment)
             (repository / "safe.txt").write_text("safe\n", encoding="utf-8")
-            subprocess.run([git, "-C", repository, "add", "safe.txt"], check=True, env=environment)  # noqa: S603
-            commit = [git, "-C", repository, "-c", "user.name=Test", "-c", "user.email=test@invalid"]
-            subprocess.run([*commit, "commit", "-q", "-m", "root"], check=True, env=environment)  # noqa: S603
+            run_git(repository, "add", "safe.txt", environment=environment)
+            run_git(
+                repository,
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@invalid",
+                "commit",
+                "-q",
+                "-m",
+                "root",
+                environment=environment,
+            )
             self.assertRegex(
                 ENGINE["require_history_free_review_workspace"](repository, source_commits=("f" * 40,)),
                 r"^[0-9a-f]{40}$",
@@ -167,19 +188,27 @@ class PushReadyEngineTests(unittest.TestCase):
     def test_integration_checks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repository = Path(temporary_directory).resolve() / "repository"
-            git = shutil.which("git")
-            self.assertIsNotNone(git)
             environment = ENGINE["isolated_git_environment"]({"PATH": os.environ["PATH"]})
-            subprocess.run([git, "init", "-q", repository], check=True, env=environment)  # noqa: S603
-            command = [git, "-C", repository, "-c", "user.name=Test", "-c", "user.email=test@invalid"]
+            run_git(repository, "init", "-q", environment=environment)
             commits = []
             for message in ("base", "head"):
                 (repository / "value.txt").write_text(message + "\n", encoding="utf-8")
-                subprocess.run([git, "-C", repository, "add", "value.txt"], check=True, env=environment)  # noqa: S603
-                subprocess.run([*command, "commit", "-q", "-m", message], check=True, env=environment)  # noqa: S603
+                run_git(repository, "add", "value.txt", environment=environment)
+                run_git(
+                    repository,
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "user.email=test@invalid",
+                    "commit",
+                    "-q",
+                    "-m",
+                    message,
+                    environment=environment,
+                )
                 commits.append(
                     subprocess.check_output(  # noqa: S603
-                        [git, "-C", repository, "rev-parse", "HEAD"], env=environment, text=True
+                        [GIT, "-C", repository, "rev-parse", "HEAD"], env=environment, text=True
                     ).strip()
                 )
             function_globals = ENGINE["execute_integration_checks"].__globals__
@@ -205,45 +234,32 @@ class PushReadyEngineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory).resolve()
             repository = root / "repository"
-            git = shutil.which("git")
-            self.assertIsNotNone(git)
             environment = ENGINE["isolated_git_environment"]({"PATH": os.environ["PATH"]})
-            subprocess.run([git, "init", "-q", repository], check=True, env=environment)  # noqa: S603
-            subprocess.run(  # noqa: S603
-                [
-                    git,
-                    "-C",
-                    repository,
-                    "-c",
-                    "user.name=Test",
-                    "-c",
-                    "user.email=test@invalid",
-                    "commit",
-                    "-q",
-                    "--allow-empty",
-                    "-m",
-                    "root",
-                ],
-                check=True,
-                env=environment,
+            run_git(repository, "init", "-q", environment=environment)
+            run_git(
+                repository,
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@invalid",
+                "commit",
+                "-q",
+                "--allow-empty",
+                "-m",
+                "root",
+                environment=environment,
             )
             (repository / "scripts").mkdir()
             shutil.copy2(ROOT / "scripts" / "validate-embedded-code.py", repository / "scripts")
             (repository / "staged.MD").write_text("~~~yaml\ninvalid: [\n~~~\n", encoding="utf-8")
-            subprocess.run([git, "-C", repository, "add", "staged.MD"], check=True, env=environment)  # noqa: S603
-            subprocess.run(  # noqa: S603
-                [git, "-C", repository, "update-ref", "refs/remotes/origin/develop", "HEAD"],
-                check=True,
-                env=environment,
-            )  # noqa: S603
+            run_git(repository, "add", "staged.MD", environment=environment)
+            run_git(repository, "update-ref", "refs/remotes/origin/develop", "HEAD", environment=environment)
             quality["check_embedded_code"].__globals__["ROOT"] = repository
             with mock.patch.dict(os.environ, environment, clear=True):
                 with self.assertRaises(subprocess.CalledProcessError):
                     quality["check_embedded_code"]()
             canary = root / "filter-canary"
-            subprocess.run(  # noqa: S603
-                [git, "-C", repository, "config", "filter.review.clean", f"touch {canary}"], check=True, env=environment
-            )
+            run_git(repository, "config", "filter.review.clean", f"touch {canary}", environment=environment)
             with self.assertRaisesRegex(AssertionError, "unsafe local Git configuration"):
                 quality["check_embedded_code"]()
             self.assertFalse(canary.exists())

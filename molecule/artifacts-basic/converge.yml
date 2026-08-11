@@ -25,8 +25,8 @@
   roles:
     - role: lit.supplementary.artifacts
       vars:
-        artifacts_default_owner: "{{ lookup('ansible.builtin.pipe', 'id -un') }}"
-        artifacts_default_group: "{{ lookup('ansible.builtin.pipe', 'id -gn') }}"
+        artifacts_default_owner: "{{ lookup('ansible.builtin.pipe', 'id -u') }}"
+        artifacts_default_group: "{{ lookup('ansible.builtin.pipe', 'id -g') }}"
         artifacts_items:
           - name: molecule-local-artifact
             source: local

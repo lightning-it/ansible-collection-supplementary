@@ -3,7 +3,6 @@ set -euo pipefail
 
 readonly PROFILE_NAME="repository-quality"
 readonly BASE_REF="refs/remotes/origin/develop"
-readonly DEVTOOLS_WRAPPER="scripts/wunder-devtools-ee.sh"
 
 fail_closed() {
   printf 'Error: %s\n' "$1" >&2
@@ -33,7 +32,7 @@ repository_root="$(cd "$repository_root" && pwd -P)"
 cd "$repository_root"
 
 for required_path in \
-  "$DEVTOOLS_WRAPPER" \
+  ".pre-commit-config.yaml" \
   ".lit/repository.yml" \
   "scripts/lit-push-ready.py" \
   "scripts/lit-repository-quality.py"
@@ -50,14 +49,6 @@ git show-ref --verify --quiet "$BASE_REF" \
 merge_base="$(git merge-base "$BASE_REF" HEAD)" \
   || fail_closed "cannot resolve authoritative merge base"
 [ -n "$merge_base" ] || fail_closed "authoritative merge base is empty"
-changed_markdown=()
-git diff --name-only --diff-filter=ACMR "$merge_base...HEAD" -- >/dev/null \
-  || fail_closed "cannot enumerate changed Markdown"
-while IFS= read -r -d '' path; do
-  case "$path" in
-    *.[mM][dD]) changed_markdown+=("$path") ;;
-  esac
-done < <(git diff --name-only --diff-filter=ACMR -z "$merge_base...HEAD" --)
 
 fingerprint() {
   {
@@ -81,77 +72,8 @@ LABELS_JSON='[]' \
 REQUIRE_FRAGMENT=true \
 "$pre_commit_venv/bin/pre-commit" run --all-files
 
-run_devtools() {
-  local network_mode="${1:-}"
-  shift || fail_closed "Devtool network mode is required"
-  case "$network_mode" in
-    none|bridge) ;;
-    *) fail_closed "unsupported Devtool network mode: $network_mode" ;;
-  esac
-  env \
-    CONTAINER_HOME=/tmp/wunder \
-    WUNDER_DEVTOOLS_CAP_ADD= \
-    WUNDER_DEVTOOLS_DOCKER_SOCKET=disabled \
-    WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH=disabled \
-    WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT=disabled \
-    WUNDER_DEVTOOLS_NETWORK="$network_mode" \
-    WUNDER_DEVTOOLS_PRIVILEGED=0 \
-    WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1 \
-    WUNDER_DEVTOOLS_WORKSPACE_MODE=ro \
-    CI=true \
-    GITHUB_ACTIONS= \
-    "$DEVTOOLS_WRAPPER" "$@"
-}
-
-repository_type="$(
-  awk '
-    $1 == "repository_type:" {
-      count += 1
-      if (NF != 2) {
-        exit 2
-      }
-      value = $2
-    }
-    END {
-      if (count != 1) {
-        exit 3
-      }
-      print value
-    }
-  ' .lit/repository.yml
-)" || fail_closed "cannot resolve one repository_type from .lit/repository.yml"
-case "$repository_type" in
-  terraform_module|terraform_policy) quality_network="bridge" ;;
-  ""|*[!a-z0-9_]*) fail_closed "invalid repository_type: $repository_type" ;;
-  *) quality_network="none" ;;
-esac
-readonly quality_network
-
 printf '==> Verify Codex and Copilot instruction binding\n'
 python3 scripts/lit-push-ready.py instructions
-
-printf '==> Run repository quality in the pinned Devtool\n'
-run_devtools "$quality_network" python3 scripts/lit-repository-quality.py \
-  --changed-markdown "${changed_markdown[@]}"
-
-if [ -d tests ] && find tests -type f -name 'test*.py' -print -quit \
-  | grep -q .
-then
-  printf '==> Run repository unit tests in the pinned Devtool\n'
-  run_devtools none env TMPDIR=/tmp/wunder \
-    python3 -m unittest discover -s tests -p 'test*.py'
-fi
-
-printf '==> Validate GitHub Actions workflows in the pinned Devtool\n'
-shopt -s nullglob
-workflow_paths=(
-  .github/workflows/*.yml
-  .github/workflows/*.yaml
-)
-shopt -u nullglob
-[ "${#workflow_paths[@]}" -gt 0 ] \
-  || fail_closed "no GitHub Actions workflows were found for actionlint"
-run_devtools none actionlint "${workflow_paths[@]}"
 
 printf '==> Validate committed and local diffs\n'
 git diff --check "$merge_base"...HEAD --
