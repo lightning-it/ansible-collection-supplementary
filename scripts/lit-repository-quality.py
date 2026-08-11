@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Repository quality checks for the Lightning IT release model."""
 
 from __future__ import annotations
@@ -53,7 +52,7 @@ def run(command: list[str], *, required: bool = True) -> None:
         return
     print("+ " + " ".join(command))
     result = subprocess.run(  # noqa: S603 -- repository-owned command allowlist.
-        command, cwd=ROOT, text=True, capture_output=True
+        command, cwd=ROOT, text=True, capture_output=True, check=False
     )
     if result.returncode != 0:
         if result.stdout:

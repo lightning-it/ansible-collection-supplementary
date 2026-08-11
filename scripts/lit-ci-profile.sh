@@ -38,8 +38,9 @@ for required_path in \
   "scripts/lit-push-ready.py" \
   "scripts/lit-repository-quality.py"
 do
-  [ -f "$required_path" ] && [ ! -L "$required_path" ] \
-    || fail_closed "required regular profile input is missing: $required_path"
+  if [ ! -f "$required_path" ] || [ -L "$required_path" ]; then
+    fail_closed "required regular profile input is missing: $required_path"
+  fi
 done
 
 [ -z "$(git status --porcelain=v1 --untracked-files=all)" ] \

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Validate fenced YAML, shell, and Ansible examples in changed Markdown."""
 
 from __future__ import annotations
@@ -128,6 +127,7 @@ def main() -> int:
                                 text=True,
                                 capture_output=True,
                                 timeout=VALIDATOR_TIMEOUT_SECONDS,
+                                check=False,
                             )
                         except subprocess.TimeoutExpired:
                             failures.append(
@@ -162,6 +162,7 @@ def main() -> int:
                             text=True,
                             capture_output=True,
                             timeout=VALIDATOR_TIMEOUT_SECONDS,
+                            check=False,
                         )
                     except subprocess.TimeoutExpired:
                         failures.append(f"{label}: ShellCheck timed out after {VALIDATOR_TIMEOUT_SECONDS} seconds")

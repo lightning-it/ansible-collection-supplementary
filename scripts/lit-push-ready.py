@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
@@ -479,7 +478,7 @@ def untracked_file_hashes(max_bytes: int = 100_000_000) -> dict[str, str]:
         remaining = max_bytes - total
         if remaining < 0:
             raise RuntimeError("Fingerprint input exceeds its aggregate byte limit")
-        payload, _ = read_repository_file(
+        payload, _mode = read_repository_file(
             name,
             purpose="Fingerprint",
             max_bytes=remaining,
@@ -782,7 +781,7 @@ def instruction_file_hashes() -> dict[str, str]:
     candidates.update({"AGENTS.md", ".github/copilot-instructions.md"})
     hashes: dict[str, str] = {}
     for name in sorted(candidates):
-        payload, _ = read_repository_file(
+        payload, _mode = read_repository_file(
             name,
             purpose="Instruction hashing",
             max_bytes=MAX_CONFIG_BYTES,
@@ -1573,7 +1572,7 @@ def untracked_review_text(max_bytes: int = 1_000_000) -> str:
     chunks: list[str] = []
     total = 0
     for name in untracked_names():
-        payload, _ = read_repository_file(
+        payload, _mode = read_repository_file(
             name,
             purpose="Local review",
             max_bytes=max_bytes - total,
