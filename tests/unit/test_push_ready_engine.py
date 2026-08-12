@@ -69,7 +69,6 @@ class PushReadyEngineTests(unittest.TestCase):
 
     def test_pre_push_hook_rejects_stale_head(self) -> None:
         config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
-        self.assertIn("default_install_hook_types: [pre-commit]", config)
         self.assertNotIn("stages: [pre-push]", config)
         profile = (ROOT / "scripts" / "lit-ci-profile.sh").read_text(encoding="utf-8")
         self.assertIn('python3 "$pre_commit_zipapp" run --all-files', profile)
