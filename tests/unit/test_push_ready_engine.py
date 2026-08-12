@@ -41,8 +41,6 @@ class PushReadyEngineTests(unittest.TestCase):
             self.assertRaisesRegex(RuntimeError, r"policy differs from base: \.pre-commit-config\.yaml"),
         ):
             ENGINE["require_trusted_check_policy"](change)
-        with mock.patch.dict(function_globals, {"git_tree_entry": entries}):
-            ENGINE["require_trusted_check_policy"](change, allow_trust_root_update=True)
         with (
             mock.patch.dict(
                 function_globals,
@@ -59,13 +57,15 @@ class PushReadyEngineTests(unittest.TestCase):
         validate = source.split('if args.command == "validate":', 1)[1].split('if args.command == "review":', 1)[0]
         self.assertLess(validate.index("require_trusted_check_policy"), validate.index("execute_integration_checks"))
 
-    def test_existing_trust_root_update_reviews_before_checks_and_writes_verifiable_evidence(self) -> None:
+    def test_trust_root_update_cannot_self_certify_evidence(self) -> None:
         source = (ROOT / "scripts" / "lit-push-ready.py").read_text(encoding="utf-8")
         producer = source.split("def produce_evidence(", 1)[1].split("def main()", 1)[0]
-        self.assertLess(producer.index("run_agent_reviews"), producer.index("execute_integration_checks"))
-        self.assertIn("trust_root_update=trust_root_update", producer)
+        self.assertNotIn("trust_root_update", producer)
         verifier = source.split("def verify_evidence(", 1)[1].split("def verify_pre_push_updates(", 1)[0]
-        self.assertIn("require_trusted_check_policy(change, allow_trust_root_update=True)", verifier)
+        self.assertNotIn("trust_root_update", verifier)
+        mode = source.split("if args.trust_root_update:", 1)[1].split("elif args.base:", 1)[0]
+        self.assertIn("run_agent_reviews", mode)
+        self.assertNotIn("produce_evidence", mode)
 
     def test_pre_push_hook_rejects_stale_head(self) -> None:
         config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
