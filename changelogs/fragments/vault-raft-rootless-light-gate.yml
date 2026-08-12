@@ -1,5 +1,6 @@
 ---
 bugfixes:
   - >-
-    Keep the Vault Raft restore scenario executable in the capability-minimized
-    rootless light Molecule gate while preserving root-owned production defaults.
+    Keep artifact staging and Vault Raft restore coverage executable in the
+    capability-minimized rootless light Molecule gate while preserving
+    root-owned production defaults.
