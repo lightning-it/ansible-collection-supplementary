@@ -9,6 +9,9 @@
     aap_tls_selfsigned_delegate_to: localhost
     aap_tls_selfsigned_output_dir: "{{ aap_tls_molecule_root }}/generated"
     aap_tls_selfsigned_ca_trust_path: "{{ aap_tls_molecule_root }}/trust/aap-selfsigned-ca.crt"
+    aap_tls_selfsigned_ca_trust_owner: "{{ lookup('ansible.builtin.pipe', 'id -u') }}"
+    aap_tls_selfsigned_ca_trust_group: "{{ lookup('ansible.builtin.pipe', 'id -g') }}"
+    aap_tls_selfsigned_ca_trust_become: false
     aap_tls_selfsigned_common_name: localhost
     aap_tls_selfsigned_dns_names:
       - localhost
