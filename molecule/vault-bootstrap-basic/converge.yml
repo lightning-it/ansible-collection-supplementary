@@ -22,6 +22,8 @@
       {{ vault_bootstrap_molecule_strict_root }}/target
     vault_bootstrap_molecule_target_file: >-
       {{ vault_bootstrap_molecule_target_dir }}/vault-init.yml.vault
+    vault_bootstrap_target_escrow_owner: "{{ lookup('ansible.builtin.pipe', 'id -u') }}"
+    vault_bootstrap_target_escrow_group: "{{ lookup('ansible.builtin.pipe', 'id -g') }}"
     vault_bootstrap_molecule_scoped_ca_file: >-
       {{ vault_bootstrap_molecule_controller_root }}/scoped-ca.pem
     vault_bootstrap_molecule_scoped_document: >-
@@ -206,6 +208,8 @@
         vault_bootstrap_molecule_key_linebreak_refused: false
         vault_bootstrap_molecule_target_drift_refused: false
         vault_bootstrap_molecule_sibling_prefix_refused: false
+        vault_bootstrap_molecule_invalid_target_owner_refused: false
+        vault_bootstrap_molecule_invalid_target_group_refused: false
       changed_when: false
 
     - name: Ensure the approved test controller escrow hierarchy exists
@@ -549,8 +553,8 @@
           ansible.builtin.copy:
             dest: "{{ vault_bootstrap_molecule_target_file }}"
             content: "unit-test-only-ciphertext-drift\n"
-            owner: root
-            group: root
+            owner: "{{ vault_bootstrap_target_escrow_owner }}"
+            group: "{{ vault_bootstrap_target_escrow_group }}"
             mode: "0600"
           no_log: true
 
@@ -588,6 +592,67 @@
             vault_bootstrap_controller_escrow_result: "{{ vault_bootstrap_molecule_controller_escrow_result }}"
           no_log: true
 
+    - name: Reject an invalid target escrow owner
+      block:
+        - name: Exercise the invalid target escrow owner gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_bootstrap
+            tasks_from: controller_escrow_sync
+          vars:
+            vault_bootstrap_target_escrow_owner: invalid-owner
+            vault_bootstrap_controller_init_file_path: "{{ vault_bootstrap_molecule_controller_file }}"
+            vault_bootstrap_persist_dir: "{{ vault_bootstrap_molecule_target_dir }}"
+            vault_bootstrap_init_file_path: "{{ vault_bootstrap_molecule_target_file }}"
+            vault_bootstrap_controller_escrow_result: "{{ vault_bootstrap_molecule_controller_escrow_result }}"
+          no_log: true
+      rescue:
+        - name: Record invalid target escrow owner refusal
+          ansible.builtin.set_fact:
+            vault_bootstrap_molecule_invalid_target_owner_refused: true
+          changed_when: false
+
+    - name: Reject an invalid target escrow group
+      block:
+        - name: Exercise the invalid target escrow group gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_bootstrap
+            tasks_from: controller_escrow_sync
+          vars:
+            vault_bootstrap_target_escrow_group: invalid-group
+            vault_bootstrap_controller_init_file_path: "{{ vault_bootstrap_molecule_controller_file }}"
+            vault_bootstrap_persist_dir: "{{ vault_bootstrap_molecule_target_dir }}"
+            vault_bootstrap_init_file_path: "{{ vault_bootstrap_molecule_target_file }}"
+            vault_bootstrap_controller_escrow_result: "{{ vault_bootstrap_molecule_controller_escrow_result }}"
+          no_log: true
+      rescue:
+        - name: Record invalid target escrow group refusal
+          ansible.builtin.set_fact:
+            vault_bootstrap_molecule_invalid_target_group_refused: true
+          changed_when: false
+
+    - name: Inspect the numeric-owned target escrow
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      loop:
+        - "{{ vault_bootstrap_molecule_target_dir }}"
+        - "{{ vault_bootstrap_molecule_target_file }}"
+      register: vault_bootstrap_molecule_target_escrow_stats
+      changed_when: false
+      no_log: true
+
+    - name: Require exact numeric target escrow ownership and modes
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists | default(false)
+          - not (item.stat.islnk | default(false))
+          - item.stat.uid | string == vault_bootstrap_target_escrow_owner | string
+          - item.stat.gid | string == vault_bootstrap_target_escrow_group | string
+          - item.stat.mode == ('0700' if item.item == vault_bootstrap_molecule_target_dir else '0600')
+        quiet: true
+      loop: "{{ vault_bootstrap_molecule_target_escrow_stats.results }}"
+      no_log: true
+
     - name: Require strict path, password, state, and drift gates
       ansible.builtin.assert:
         that:
@@ -598,6 +663,8 @@
           - vault_bootstrap_molecule_password_fallback_refused | bool
           - vault_bootstrap_molecule_payload_drift_refused | bool
           - vault_bootstrap_molecule_key_linebreak_refused | bool
+          - vault_bootstrap_molecule_invalid_target_owner_refused | bool
+          - vault_bootstrap_molecule_invalid_target_group_refused | bool
           - >-
             vault_bootstrap_molecule_plaintext_header_refused | bool
             or vault_bootstrap_molecule_strict_marker_stat.stat.exists | default(false)

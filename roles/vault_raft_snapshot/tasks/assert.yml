@@ -77,6 +77,12 @@
         vault_raft_snapshot_restore_api_port | int
         != vault_raft_snapshot_restore_cluster_port | int
       - vault_raft_snapshot_restore_work_root is match('^/run/[A-Za-z0-9._-]+$')
+      - >-
+        vault_raft_snapshot_restore_work_root_owner | string
+        is match('^(root|[0-9]+)$')
+      - >-
+        vault_raft_snapshot_restore_work_root_group | string
+        is match('^(root|[0-9]+)$')
       - vault_raft_snapshot_restore_container_name is match('^[A-Za-z0-9][A-Za-z0-9._-]+$')
       - vault_raft_snapshot_restore_node_id is match('^[A-Za-z0-9][A-Za-z0-9._-]+$')
       - vault_raft_snapshot_restore_timeout is integer
