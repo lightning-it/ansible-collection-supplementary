@@ -2413,6 +2413,24 @@ def resolve_command(command: list[str], name: str) -> list[str]:
     return [str(candidate.resolve()), *command[1:]]
 
 
+def local_container_environment(environment: dict[str, str], engine: str) -> dict[str, str]:
+    result = dict(environment)
+    if engine == "docker":
+        configured_host = os.environ.get("DOCKER_HOST")
+        if configured_host and not configured_host.startswith("unix://"):
+            raise RuntimeError("remote DOCKER_HOST is forbidden")
+        candidates = (configured_host, str(Path.home() / ".docker" / "run" / "docker.sock"), "/var/run/docker.sock")
+        for value in candidates:
+            if value and (socket_path := existing_unix_socket(value)):
+                result["DOCKER_HOST"] = f"unix://{socket_path}"
+                break
+    elif runtime_directory := os.environ.get("XDG_RUNTIME_DIR"):
+        runtime_path = Path(runtime_directory)
+        if runtime_path.is_absolute() and runtime_path.is_dir():
+            result["XDG_RUNTIME_DIR"] = str(runtime_path.resolve())
+    return result
+
+
 def copilot_container_command(
     environment: dict[str, str], workspace: Path, *, include_credentials: bool = True
 ) -> list[str]:
@@ -2421,41 +2439,24 @@ def copilot_container_command(
         raise RuntimeError("invalid WUNDER_CONTAINER_ENGINE")
     engine_names = [requested_engine] if requested_engine else ["docker", "podman"]
     engine = None
+    engine_environment = None
     for name in engine_names:
         resolved = shutil.which(name) if name else None
         if resolved is None:
             continue
+        probe_environment = local_container_environment(environment, name)
         try:
-            if run([resolved, "info"], capture=True, timeout=30, env=environment).returncode:
+            if run([resolved, "info"], capture=True, timeout=30, env=probe_environment).returncode:
                 continue
         except subprocess.TimeoutExpired:
             continue
         engine = resolved
+        engine_environment = probe_environment
         break
-    if engine is None:
+    if engine is None or engine_environment is None:
         raise RuntimeError("no usable Docker or Podman")
-    if Path(engine).name == "docker":
-        configured_host = os.environ.get("DOCKER_HOST")
-        if configured_host and not configured_host.startswith("unix://"):
-            raise RuntimeError("remote DOCKER_HOST is forbidden")
-        socket_candidates = []
-        if configured_host:
-            socket_candidates.append(configured_host)
-        socket_candidates.extend(
-            [
-                str(Path.home() / ".docker" / "run" / "docker.sock"),
-                "/var/run/docker.sock",
-            ]
-        )
-        for value in socket_candidates:
-            socket_path = existing_unix_socket(value)
-            if socket_path:
-                environment["DOCKER_HOST"] = f"unix://{socket_path}"
-                break
-    elif os.environ.get("XDG_RUNTIME_DIR"):
-        runtime_path = Path(os.environ["XDG_RUNTIME_DIR"])
-        if runtime_path.is_absolute() and runtime_path.is_dir():
-            environment["XDG_RUNTIME_DIR"] = str(runtime_path.resolve())
+    environment.clear()
+    environment.update(engine_environment)
     canonical_workspace = workspace.resolve(strict=True)
     if (
         not canonical_workspace.is_dir()

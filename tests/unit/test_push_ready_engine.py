@@ -137,13 +137,18 @@ class PushReadyEngineTests(unittest.TestCase):
 
     def test_container_engine_fallback(self) -> None:
         function_globals = ENGINE["copilot_container_command"].__globals__
-        probe = mock.Mock(side_effect=[subprocess.CompletedProcess([], code, "") for code in (1, 0)])
-        with (
-            mock.patch.object(function_globals["shutil"], "which", side_effect=("/docker", "/podman")),
-            mock.patch.dict(function_globals, {"run": probe}),
-            mock.patch.dict(os.environ, {"WUNDER_CONTAINER_ENGINE": ""}),
-        ):
-            command = ENGINE["copilot_container_command"](dict(ENGINE["COPILOT_PROMPT_MODE_BOUNDARY"]), ROOT)
+        with tempfile.TemporaryDirectory() as runtime:
+            runtime = str(Path(runtime).resolve())
+            host = f"unix://{runtime}/docker.sock"
+            probe = mock.Mock(side_effect=[subprocess.CompletedProcess([], code, "") for code in (1, 0)])
+            with (
+                mock.patch.object(function_globals["shutil"], "which", side_effect=("/docker", "/podman")),
+                mock.patch.dict(function_globals, {"run": probe, "existing_unix_socket": lambda _value: host[7:]}),
+                mock.patch.dict(os.environ, {"DOCKER_HOST": host, "XDG_RUNTIME_DIR": runtime}, clear=True),
+            ):
+                command = ENGINE["copilot_container_command"](dict(ENGINE["COPILOT_PROMPT_MODE_BOUNDARY"]), ROOT)
+            self.assertEqual(host, probe.call_args_list[0].kwargs["env"]["DOCKER_HOST"])
+            self.assertEqual(runtime, probe.call_args_list[1].kwargs["env"]["XDG_RUNTIME_DIR"])
         self.assertEqual("/podman", command[0])
         with (
             tempfile.TemporaryDirectory() as temporary_directory,
