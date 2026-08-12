@@ -30,6 +30,26 @@ data in repository evidence.
 The server-side baseline additionally records the Current-Head Copilot gate,
 Collection CI, and final end-to-end workflow durations for the exact SHA.
 
+### Immutable PR #667 server baseline
+
+The GitHub baseline is [Supplementary PR #667](https://github.com/lightning-it/ansible-collection-supplementary/pull/667),
+final head `f6102f681c9cc2a56090910e485b242a1c5da6c9`, merged normally as
+`7eb8a9e04574650bb4736324bf647ab522e1dc33` at
+`2026-08-11T22:24:58Z`. GitHub records 12 Copilot review submissions bound
+to 11 distinct PR heads. This is the pre-pilot server-side cost proxy; the
+accepted standard-profile pilot must normally produce one Copilot submission
+for its one finalized head.
+
+For the final #667 head, the
+[Copilot gate run](https://github.com/lightning-it/ansible-collection-supplementary/actions/runs/31541388637)
+started its request job at `2026-08-11T22:12:19Z`; the successful exact-head
+gate ran from `22:12:26Z` through `22:19:15Z` (409 seconds). The protected
+[Collection CI run](https://github.com/lightning-it/ansible-collection-supplementary/actions/runs/31541389122)
+ran its final-head gates from `22:13:31Z` through `22:24:55Z` (684 seconds).
+The final request-to-normal-merge interval was 759 seconds. Preserve these
+absolute timestamps, run IDs, head and merge SHA when comparing the live pilot;
+do not substitute total PR age or an unbound average.
+
 ## Parallel reviewer contract
 
 Codex and GitHub Copilot are submitted together. Each reviewer receives its own
