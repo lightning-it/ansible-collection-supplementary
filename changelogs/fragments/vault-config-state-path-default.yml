@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Guard the Vault deploy flavour while resolving the controller-local
+    Terraform state fallback so an inventory-provided state path remains
+    usable when no deploy flavour is defined.
