@@ -666,16 +666,15 @@
               terragrunt_vault_addr: "{{ vault_config_vault_address }}"
               terragrunt_vault_validate_certs: {{ vault_config_vault_validate_certs | bool | to_json }}
               terragrunt_imports: {{ vault_config_terragrunt_imports | default([], true) | to_json }}
-              terragrunt_import_strict: {{ terragrunt_import_strict | default(false) | bool | to_json }}
+              terragrunt_import_strict: {{ vault_config_terragrunt_import_strict | bool | to_json }}
               terragrunt_state_moves: {{ vault_config_terragrunt_state_moves | default([], true) | to_json }}
               terragrunt_state_removals: {{ vault_config_terragrunt_state_removals | default([], true) | to_json }}
               terragrunt_state_migration_strict: {{
-                terragrunt_state_migration_strict
-                | default(false)
+                vault_config_terragrunt_state_migration_strict
                 | bool
                 | to_json
               }}
-              terragrunt_init_upgrade: {{ terragrunt_init_upgrade | default(false) | bool | to_json }}
+              terragrunt_init_upgrade: {{ vault_config_terragrunt_init_upgrade | bool | to_json }}
               terragrunt_delegate_to: "localhost"
           delegate_to: localhost
           become: false
