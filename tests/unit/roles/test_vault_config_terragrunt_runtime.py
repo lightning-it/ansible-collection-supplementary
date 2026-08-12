@@ -27,3 +27,9 @@ def test_vault_config_forwards_guarded_terragrunt_runtime_inputs():
         "vault_config_terragrunt_init_upgrade",
     ):
         assert variable in assertions
+
+
+def test_vault_config_local_state_fallback_guards_deploy_flavour():
+    defaults_text = (ROOT / "roles/vault_config/defaults/main.yml").read_text(encoding="utf-8")
+
+    assert "vault_deploy_flavour | default('vault', true)" in defaults_text
