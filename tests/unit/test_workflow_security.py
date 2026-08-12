@@ -226,6 +226,36 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("Do not manufacture a no-op", prompt)
         self.assertIn("only one final Current-Head", prompt)
 
+    def test_ten_intermediate_synchronize_events_cannot_request_copilot(self) -> None:
+        workflow = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
+        request_job = workflow.split("  request-current-revision-review:", 1)[1].split(
+            "  current-revision-reviewed:", 1
+        )[0]
+        condition = request_job.split("    if: >-", 1)[1].split("    permissions:", 1)[0]
+        self.assertIn("github.event.action == 'ready_for_review'", condition)
+        self.assertNotIn("synchronize", condition)
+        self.assertEqual(1, request_job.count('gh api --method POST "${requested_reviewers_url}"'))
+        events = [{"action": "synchronize", "commit": index} for index in range(10)]
+        self.assertFalse(any(event["action"] == "ready_for_review" for event in events))
+
+    def test_style_only_remediation_cannot_create_a_noop_commit(self) -> None:
+        workflow = (WORKFLOWS / "codex-copilot-remediation.yml").read_text(encoding="utf-8")
+        push_step = workflow.split("      - name: Verify, commit, and push without force", 1)[1].split(
+            "      - name: Explicitly continue after GITHUB_TOKEN push", 1
+        )[0]
+        no_op = "if git diff --quiet && git diff --cached --quiet; then"
+        self.assertLess(push_step.index(no_op), push_step.index("git add -A"))
+        self.assertLess(push_step.index('echo "changed=false"'), push_step.index("git commit -m"))
+        self.assertIn('echo "changed=false" >>"${GITHUB_OUTPUT}"\n            exit 0', push_step)
+        evidence_only = workflow.split("  enable-develop-automerge-after-evidence-only-remediation:", 1)[1].split(
+            "  enable-develop-automerge:", 1
+        )[0]
+        self.assertIn("needs.remediate.outputs.changed == 'false'", evidence_only)
+        self.assertIn("gh pr checks", evidence_only)
+        prompt = (ROOT / ".github" / "codex" / "prompts" / "remediate-copilot.md").read_text(encoding="utf-8")
+        self.assertIn("Formatter-, linter-, or type-only style suggestions require no source edit", prompt)
+        self.assertIn("Do not manufacture a no-op", prompt)
+
     def test_shared_assets_guard_streams_large_check_evidence_via_stdin(self) -> None:
         workflow = (WORKFLOWS / "shared-assets-guarded-automerge.yml").read_text(encoding="utf-8")
         self.assertNotIn('--argjson check_pages "$check_runs"', workflow)
