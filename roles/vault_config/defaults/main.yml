@@ -24,7 +24,12 @@ vault_config_tfstate_key_prefix_default: ""
 vault_config_terraform_state_path_local: >-
   {{
     vault_terraform_state_path
-    | default('/tmp/' ~ vault_deploy_flavour ~ '/bootstrap/terraform.tfstate', true)
+    | default(
+        '/tmp/'
+        ~ (vault_deploy_flavour | default('vault', true))
+        ~ '/bootstrap/terraform.tfstate',
+        true
+      )
   }}
 vault_config_terraform_state_dir_local: "{{ vault_config_terraform_state_path_local | dirname }}"
 
