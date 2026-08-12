@@ -5,6 +5,21 @@
   changed_when: false
   when: not (aap_tls_selfsigned_enabled | bool)
 
+- name: Validate temporary AAP CA trust installation settings
+  ansible.builtin.assert:
+    that:
+      - >-
+        (aap_tls_selfsigned_ca_trust_owner | string) == 'root' or
+        (aap_tls_selfsigned_ca_trust_owner | string) is regex('^[0-9]+$')
+      - >-
+        (aap_tls_selfsigned_ca_trust_group | string) == 'root' or
+        (aap_tls_selfsigned_ca_trust_group | string) is regex('^[0-9]+$')
+      - aap_tls_selfsigned_ca_trust_become is boolean
+    quiet: true
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - aap_tls_selfsigned_install_ca_trust | bool
+
 - name: Ensure temporary TLS output directory exists
   ansible.builtin.file:
     path: "{{ aap_tls_selfsigned_output_dir }}"
@@ -178,10 +193,10 @@
   ansible.builtin.copy:
     content: "{{ aap_tls_selfsigned_ca_content.content | b64decode }}"
     dest: "{{ aap_tls_selfsigned_ca_trust_path }}"
-    owner: root
-    group: root
+    owner: "{{ aap_tls_selfsigned_ca_trust_owner }}"
+    group: "{{ aap_tls_selfsigned_ca_trust_group }}"
     mode: "0644"
-  become: true
+  become: "{{ aap_tls_selfsigned_ca_trust_become }}"
   notify: Refresh system CA trust after installing temporary AAP CA
   when:
     - aap_tls_selfsigned_enabled | bool
