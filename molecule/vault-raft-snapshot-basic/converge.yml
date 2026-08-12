@@ -166,6 +166,46 @@
           - vault_raft_snapshot_molecule_nonlocal_hostname_refused | bool
         quiet: true
 
+    - name: Initialize invalid restore work-root ownership refusals
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_invalid_work_root_owner_refused: false
+        vault_raft_snapshot_molecule_invalid_work_root_group_refused: false
+
+    - name: Reject an invalid restore work-root owner
+      block:
+        - name: Exercise the invalid restore work-root owner gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_work_root_owner: invalid-owner
+          no_log: true
+      rescue:
+        - name: Record invalid restore work-root owner refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_invalid_work_root_owner_refused: true
+
+    - name: Reject an invalid restore work-root group
+      block:
+        - name: Exercise the invalid restore work-root group gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_work_root_group: invalid-group
+          no_log: true
+      rescue:
+        - name: Record invalid restore work-root group refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_invalid_work_root_group_refused: true
+
+    - name: Require invalid restore work-root ownership refusals
+      ansible.builtin.assert:
+        that:
+          - vault_raft_snapshot_molecule_invalid_work_root_owner_refused | bool
+          - vault_raft_snapshot_molecule_invalid_work_root_group_refused | bool
+        quiet: true
+
     - name: Create Vault Raft snapshot test directory
       ansible.builtin.file:
         path: "{{ item }}"

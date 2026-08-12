@@ -161,6 +161,47 @@
       mode: "0700"
   no_log: true
 
+- name: Inspect isolated Vault restore-drill directory metadata
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: false
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  loop:
+    - path: "{{ vault_raft_snapshot_restore_work_root }}"
+      owner: "{{ vault_raft_snapshot_restore_work_root_owner }}"
+      group: "{{ vault_raft_snapshot_restore_work_root_group }}"
+      mode: "0700"
+    - path: "{{ vault_raft_snapshot_restore_work_root }}/data"
+      owner: "{{ vault_raft_snapshot_restore_run_as_user }}"
+      group: "{{ vault_raft_snapshot_restore_run_as_group }}"
+      mode: "0700"
+    - path: "{{ vault_raft_snapshot_restore_work_root }}/config"
+      owner: "{{ vault_raft_snapshot_restore_run_as_user }}"
+      group: "{{ vault_raft_snapshot_restore_run_as_group }}"
+      mode: "0700"
+  register: _vault_raft_snapshot_restore_directory_stats
+  changed_when: false
+  no_log: true
+
+- name: Require exact isolated Vault restore-drill directory metadata
+  ansible.builtin.assert:
+    that:
+      - item.stat.isdir | default(false)
+      - not (item.stat.islnk | default(false))
+      - >-
+        item.stat.pw_name | default('') == item.item.owner | string
+        or item.stat.uid | default(-1) | string == item.item.owner | string
+      - >-
+        item.stat.gr_name | default('') == item.item.group | string
+        or item.stat.gid | default(-1) | string == item.item.group | string
+      - item.stat.mode | default('') == item.item.mode
+    fail_msg: "The isolated restore-drill directory has unsafe metadata."
+    quiet: true
+  loop: "{{ _vault_raft_snapshot_restore_directory_stats.results }}"
+  no_log: true
+
 - name: Run the isolated Vault Raft restore drill
   no_log: true
   block:
