@@ -109,10 +109,9 @@ BASE_SHA="$merge_base" \
 HEAD_SHA="$(git rev-parse HEAD)" \
 LABELS_JSON='[]' \
 REQUIRE_FRAGMENT=true \
-SKIP=molecule-light \
 python3 "$pre_commit_zipapp" run --all-files
 
-printf '==> Run rootless Molecule gate\n'
+printf '==> Run supplemental rootless Molecule parity gate\n'
 bash scripts/devtools-molecule.sh artifacts-basic
 
 printf '==> Verify Codex and Copilot instruction binding\n'

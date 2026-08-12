@@ -73,6 +73,7 @@ class PushReadyEngineTests(unittest.TestCase):
         self.assertNotIn("stages: [pre-push]", config)
         profile = (ROOT / "scripts" / "lit-ci-profile.sh").read_text(encoding="utf-8")
         self.assertIn('python3 "$pre_commit_zipapp" run --all-files', profile)
+        self.assertNotIn("SKIP=molecule-light", profile)
         self.assertRegex(profile, r'readonly PRE_COMMIT_SHA256="[0-9a-f]{64}"')
         self.assertNotIn("pip install", profile)
         branch, stale, expected = "refs/heads/test", "b" * 40, "a" * 40
