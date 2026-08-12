@@ -1,0 +1,7 @@
+---
+bugfixes:
+  - >-
+    Harden the MLX-90 push-ready trust root with complete collection gates,
+    rootless Molecule parity, pinned validation runtimes, enforced reviewed
+    pushes, bounded Markdown and non-UTF-8 review handling, safe container
+    engine selection, and stricter local Git configuration checks.
