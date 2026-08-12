@@ -77,6 +77,33 @@ that closing review stop fail-closed; they do not start a recursive loop.
 Formatter-, linter-, and type-only advice covered by passing deterministic gates
 does not justify a no-op source commit.
 
+## Automation and approval boundary
+
+All repository-local validation, ordinary branch pushes, PR creation, protected
+Current-Head gates, normal merge commits, rollout PRs, Security dispatches, and
+acceptance collection are designed to continue without an interactive human
+step. A previously authorized automation identity is not replaced with a
+personal token, synthetic approval, or privileged bypass.
+
+Private source sent outside the Lightning IT trust boundary is different. The
+external review payload is frozen and identified by repository, branch, exact
+head SHA, base SHA, integration tree, and patch digest. Where the execution
+platform requires payload-specific Egress consent, that consent is collected
+once only after the local finalization gate. It authorizes that immutable
+payload and cannot silently authorize a later correction commit. An ADR or
+repository workflow cannot weaken an enforcement rule owned by the execution
+platform.
+
+The operational target is therefore zero repeated approval requests for an
+unchanged final head, not reuse of consent for different private content.
+Review idempotency prevents duplicate Egress for the same binding. Local checks
+and bundled remediation run before finalization wherever their trust level
+permits, minimizing the chance that external review creates a replacement head.
+If fully non-interactive private Egress is required in the future, the approved
+reviewers must run inside the Lightning IT trust boundary or the platform owner
+must provide a separately governed persistent Egress policy; branch, Ruleset,
+environment, and administrator bypasses remain prohibited.
+
 ## Early review-size contract
 
 The engine renders the exact 40-line-context, binary-aware patch before any
