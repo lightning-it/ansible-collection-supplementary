@@ -965,6 +965,7 @@ def require_trusted_check_policy(
     change: PlannedChange,
     *,
     allow_fixture_manifest_bootstrap: bool = False,
+    allow_trust_root_update: bool = False,
 ) -> None:
     try:
         running_engine = Path(__file__).resolve().relative_to(ROOT).as_posix()
@@ -977,6 +978,7 @@ def require_trusted_check_policy(
         "scripts/lit-ci-profile.sh",
         running_engine,
     }
+    changed = False
     for path in policy_paths:
         if path == SECRET_FIXTURE_MANIFEST_PATH and allow_fixture_manifest_bootstrap:
             continue
@@ -985,7 +987,11 @@ def require_trusted_check_policy(
         if path in required_paths and (not base_entry or not head_entry):
             raise RuntimeError(f"required policy path is missing: {path}")
         if base_entry != head_entry:
-            raise RuntimeError(f"policy differs from base: {path}; use trust-root review")
+            if not allow_trust_root_update:
+                raise RuntimeError(f"policy differs from base: {path}; use trust-root review")
+            changed = True
+    if allow_trust_root_update and not changed:
+        raise RuntimeError("trust-root update changes no governed policy")
 
 
 def require_review_bootstrap_contract(change: PlannedChange) -> bool:
@@ -3007,9 +3013,10 @@ def write_evidence(
     integration_commit: str,
     integration_fingerprint: str,
     fixture_manifest_bootstrap: bool = False,
+    trust_root_update: bool = False,
 ) -> None:
-    if not isinstance(fixture_manifest_bootstrap, bool):
-        raise RuntimeError("secret fixture bootstrap evidence flag is invalid")
+    if not all(isinstance(flag, bool) for flag in (fixture_manifest_bootstrap, trust_root_update)):
+        raise RuntimeError("evidence mode flag is invalid")
     if tree_fingerprint() != change.tree_fingerprint:
         raise RuntimeError("patch is stale before evidence write")
     completed_at = now_utc()
@@ -3043,6 +3050,7 @@ def write_evidence(
         "push_scope": "clean-head",
         "fixture_manifest_bootstrap": fixture_manifest_bootstrap,
         "trust_root_bootstrap": require_review_bootstrap_contract(change),
+        "trust_root_update": trust_root_update,
         "evidence_trust": LOCAL_EVIDENCE_TRUST,
     }
     write_evidence_text(
@@ -3100,13 +3108,18 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
     trust_root_bootstrap = payload.get("trust_root_bootstrap")
     if not isinstance(trust_root_bootstrap, bool):
         raise RuntimeError("evidence trust-root bootstrap is invalid")
+    trust_root_update = payload.get("trust_root_update")
+    if not isinstance(trust_root_update, bool) or trust_root_update and trust_root_bootstrap:
+        raise RuntimeError("evidence trust-root update is invalid")
     change = planned_change(
         config,
         fixture_manifest_bootstrap=fixture_manifest_bootstrap,
     )
     if require_review_bootstrap_contract(change) is not trust_root_bootstrap:
         raise RuntimeError("evidence trust-root bootstrap is stale")
-    if not trust_root_bootstrap:
+    if trust_root_update:
+        require_trusted_check_policy(change, allow_trust_root_update=True)
+    elif not trust_root_bootstrap:
         require_trusted_check_policy(change, allow_fixture_manifest_bootstrap=fixture_manifest_bootstrap)
     expected_integration = expected_integration_tree(change)
     expected = {
@@ -3135,6 +3148,7 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
         "push_scope": "clean-head",
         "fixture_manifest_bootstrap": fixture_manifest_bootstrap,
         "trust_root_bootstrap": trust_root_bootstrap,
+        "trust_root_update": trust_root_update,
         "evidence_trust": LOCAL_EVIDENCE_TRUST,
     }
     for key, value in expected.items():
@@ -3312,10 +3326,19 @@ def produce_evidence(
     change: PlannedChange,
     *,
     fixture_manifest_bootstrap: bool,
+    trust_root_update: bool = False,
 ) -> None:
-    require_trusted_check_policy(change, allow_fixture_manifest_bootstrap=fixture_manifest_bootstrap)
+    if trust_root_update:
+        require_trusted_check_policy(change, allow_trust_root_update=True)
+    else:
+        require_trusted_check_policy(change, allow_fixture_manifest_bootstrap=fixture_manifest_bootstrap)
     branch = current_branch_ref()
     started_at, started = now_utc(), time.monotonic()
+    reviews = (
+        run_agent_reviews(config, change, fixture_manifest_bootstrap=fixture_manifest_bootstrap)
+        if trust_root_update
+        else None
+    )
     checks, tree, commit, fingerprint = execute_integration_checks(config, change)
     require_clean_head()
     if (
@@ -3327,7 +3350,7 @@ def produce_evidence(
     current = planned_change(config, fixture_manifest_bootstrap=fixture_manifest_bootstrap)
     if current != change:
         raise RuntimeError("change binding drifted")
-    reviews = run_agent_reviews(config, current, fixture_manifest_bootstrap=fixture_manifest_bootstrap)
+    reviews = reviews or run_agent_reviews(config, current, fixture_manifest_bootstrap=fixture_manifest_bootstrap)
     install_pre_push_hook()
     write_evidence(
         config,
@@ -3340,6 +3363,7 @@ def produce_evidence(
         integration_commit=commit,
         integration_fingerprint=fingerprint,
         fixture_manifest_bootstrap=fixture_manifest_bootstrap,
+        trust_root_update=trust_root_update,
     )
     verify_evidence(config)
     print(f"Push-ready evidence: {evidence_path()}")
@@ -3377,6 +3401,7 @@ def main() -> int:
         action="store_true",
         help="review a bounded secret-fixture bootstrap",
     )
+    parser.add_argument("--trust-root-update", action="store_true", help="review an existing trust-root update")
     args = parser.parse_args()
     try:
         if args.base and args.command != "review":
@@ -3388,6 +3413,8 @@ def main() -> int:
             raise RuntimeError("fixture bootstrap requires review or push-ready")
         if args.fixture_manifest_bootstrap and args.base:
             raise RuntimeError("fixture bootstrap cannot override base")
+        if args.trust_root_update and (args.command != "review" or args.base or args.fixture_manifest_bootstrap):
+            raise RuntimeError("trust-root update requires review without another mode")
         if args.command == "sync-instructions":
             sync_instructions()
             return 0
@@ -3431,7 +3458,9 @@ def main() -> int:
                 fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
             )
             require_review_bootstrap_contract(change)
-            if args.base:
+            if args.trust_root_update:
+                produce_evidence(config, change, fixture_manifest_bootstrap=False, trust_root_update=True)
+            elif args.base:
                 run_agent_reviews(config, change, fixture_manifest_bootstrap=args.fixture_manifest_bootstrap)
             else:
                 produce_evidence(config, change, fixture_manifest_bootstrap=args.fixture_manifest_bootstrap)

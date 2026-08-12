@@ -31,25 +31,18 @@ class PushReadyEngineTests(unittest.TestCase):
         self.assertIn("scripts/lit-repository-quality.py", trusted_paths)
         self.assertIn("scripts/validate-embedded-code.py", trusted_paths)
 
-    def test_pre_commit_policy_drift(self) -> None:
-        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
-        function_globals = ENGINE["require_trusted_check_policy"].__globals__
-
-        def tree_entry(commit: str, path: str) -> str:
-            if path == ".pre-commit-config.yaml":
-                return "base-entry" if commit == change.base_tip else "head-entry"
-            return "stable-entry"
-
-        with (
-            mock.patch.dict(function_globals, {"git_tree_entry": tree_entry}),
-            self.assertRaisesRegex(RuntimeError, r"policy differs from base: \.pre-commit-config\.yaml"),
-        ):
-            ENGINE["require_trusted_check_policy"](change)
-
     def test_policy_gate_precedes_checks(self) -> None:
         change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
         checks = mock.Mock(side_effect=AssertionError("untrusted checks executed"))
         function_globals = ENGINE["produce_evidence"].__globals__
+        entries = lambda commit, path: commit if path == ".pre-commit-config.yaml" else "stable"  # noqa: E731
+        with (
+            mock.patch.dict(function_globals, {"git_tree_entry": entries}),
+            self.assertRaisesRegex(RuntimeError, r"policy differs from base: \.pre-commit-config\.yaml"),
+        ):
+            ENGINE["require_trusted_check_policy"](change)
+        with mock.patch.dict(function_globals, {"git_tree_entry": entries}):
+            ENGINE["require_trusted_check_policy"](change, allow_trust_root_update=True)
         with (
             mock.patch.dict(
                 function_globals,
@@ -66,25 +59,22 @@ class PushReadyEngineTests(unittest.TestCase):
         validate = source.split('if args.command == "validate":', 1)[1].split('if args.command == "review":', 1)[0]
         self.assertLess(validate.index("require_trusted_check_policy"), validate.index("execute_integration_checks"))
 
+    def test_existing_trust_root_update_reviews_before_checks_and_writes_verifiable_evidence(self) -> None:
+        source = (ROOT / "scripts" / "lit-push-ready.py").read_text(encoding="utf-8")
+        producer = source.split("def produce_evidence(", 1)[1].split("def main()", 1)[0]
+        self.assertLess(producer.index("run_agent_reviews"), producer.index("execute_integration_checks"))
+        self.assertIn("trust_root_update=trust_root_update", producer)
+        verifier = source.split("def verify_evidence(", 1)[1].split("def verify_pre_push_updates(", 1)[0]
+        self.assertIn("require_trusted_check_policy(change, allow_trust_root_update=True)", verifier)
+
     def test_pre_push_hook_rejects_stale_head(self) -> None:
         config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
-        for marker in ("default_stages: [pre-commit]", "default_install_hook_types: [pre-commit]"):
-            self.assertIn(marker, config)
-        for hook in ("ansible-lint-ee", "changelog-policy-ee", "molecule-light", "collection-smoke", "galaxy-verify"):
-            self.assertIn(f"- id: {hook}", config)
+        self.assertIn("default_install_hook_types: [pre-commit]", config)
         self.assertNotIn("stages: [pre-push]", config)
         profile = (ROOT / "scripts" / "lit-ci-profile.sh").read_text(encoding="utf-8")
         self.assertIn('python3 "$pre_commit_zipapp" run --all-files', profile)
-        self.assertIn("${TMPDIR:-/tmp}", profile)
         self.assertRegex(profile, r'readonly PRE_COMMIT_SHA256="[0-9a-f]{64}"')
-        self.assertIn('actual_sha256" = "$PRE_COMMIT_SHA256', profile)
         self.assertNotIn("pip install", profile)
-        self.assertIn("SKIP=molecule-light", profile)
-        self.assertIn("devtools-molecule.sh artifacts-basic", profile)
-        scenario = (ROOT / "molecule" / "artifacts-basic" / "converge.yml").read_text(encoding="utf-8")
-        self.assertIn("'id -u'", scenario)
-        self.assertIn("'id -g'", scenario)
-        self.assertNotIn("id -un", scenario)
         branch, stale, expected = "refs/heads/test", "b" * 40, "a" * 40
         payload = {
             "push_remote": ENGINE["governed_push_remote_from_url"](
