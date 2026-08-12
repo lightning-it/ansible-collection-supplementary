@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import io
 import json
 import os
 import runpy
@@ -68,11 +69,11 @@ class PushReadyEngineTests(unittest.TestCase):
 
     def test_pre_push_hook_rejects_stale_head(self) -> None:
         config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
-        for marker in ("default_stages: [pre-commit]", "default_install_hook_types: [pre-commit, pre-push]"):
+        for marker in ("default_stages: [pre-commit]", "default_install_hook_types: [pre-commit]"):
             self.assertIn(marker, config)
         for hook in ("ansible-lint-ee", "changelog-policy-ee", "molecule-light", "collection-smoke", "galaxy-verify"):
             self.assertIn(f"- id: {hook}", config)
-        self.assertEqual(1, config.count("stages: [pre-push]"))
+        self.assertNotIn("stages: [pre-push]", config)
         profile = (ROOT / "scripts" / "lit-ci-profile.sh").read_text(encoding="utf-8")
         self.assertIn('python3 "$pre_commit_zipapp" run --all-files', profile)
         self.assertIn("${TMPDIR:-/tmp}", profile)
@@ -104,6 +105,46 @@ class PushReadyEngineTests(unittest.TestCase):
                 remote_name="origin",
                 remote_url="https://github.com/lightning-it/ansible-collection-supplementary.git",
             )
+
+    def test_native_pre_push_hook_preserves_git_stdin(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            hooks = Path(temporary_directory)
+            function_globals = ENGINE["install_pre_push_hook"].__globals__
+            with mock.patch.dict(
+                function_globals,
+                {"git_output": mock.Mock(return_value=str(hooks))},
+            ):
+                ENGINE["install_pre_push_hook"]()
+                hook = hooks / "pre-push"
+                self.assertTrue(hook.stat().st_mode & 0o111)
+                self.assertIn('--remote-name "$1" --remote-url "$2"', hook.read_text())
+                ENGINE["install_pre_push_hook"]()
+                hook.write_text("different\n", encoding="utf-8")
+                with self.assertRaisesRegex(RuntimeError, "hook differs"):
+                    ENGINE["install_pre_push_hook"]()
+
+        updates = "refs/heads/a " + "a" * 40 + " refs/heads/a " + "b" * 40 + "\n"
+        verify = mock.Mock()
+        main_globals = ENGINE["main"].__globals__
+        replacements = {
+            "check_instruction_contract": mock.Mock(),
+            "load_config": mock.Mock(return_value={}),
+            "require_clean_head": mock.Mock(),
+            "refresh_authoritative_base": mock.Mock(),
+            "verify_evidence": mock.Mock(return_value={}),
+            "verify_pre_push_updates": verify,
+        }
+        with (
+            mock.patch.dict(main_globals, replacements),
+            mock.patch.object(
+                main_globals["sys"],
+                "argv",
+                ["lit-push-ready.py", "pre-push", "--remote-name", "origin", "--remote-url", "url"],
+            ),
+            mock.patch.object(main_globals["sys"], "stdin", io.StringIO(updates)),
+        ):
+            self.assertEqual(0, ENGINE["main"]())
+        verify.assert_called_once_with({}, updates, remote_name="origin", remote_url="url")
 
     def test_container_engine_fallback(self) -> None:
         function_globals = ENGINE["copilot_container_command"].__globals__

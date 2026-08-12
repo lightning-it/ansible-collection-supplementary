@@ -3264,20 +3264,47 @@ def verify_pre_push_updates(
                 raise RuntimeError("evidence forbids non-fast-forward push")
 
 
-def pre_commit_push_context() -> tuple[str, str, str]:
-    names = (
-        "PRE_COMMIT_REMOTE_NAME",
-        "PRE_COMMIT_REMOTE_URL",
-        "PRE_COMMIT_LOCAL_BRANCH",
-        "PRE_COMMIT_REMOTE_BRANCH",
+def install_pre_push_hook() -> None:
+    hooks = Path(git_output("rev-parse", "--git-path", "hooks").strip())
+    if not hooks.is_absolute():
+        hooks = ROOT / hooks
+    payload = (
+        b'#!/bin/sh\nexec python3 "$(git rev-parse --show-toplevel)/scripts/lit-push-ready.py" pre-push '
+        b'--remote-name "$1" --remote-url "$2"\n'
     )
-    values = tuple(os.environ.get(name, "") for name in names)
-    if not all(values):
-        raise RuntimeError("incomplete pre-commit push context")
-    remote_name, remote_url, local_ref, remote_ref = values
-    local_oid = os.environ.get("PRE_COMMIT_TO_REF") or git_output("rev-parse", local_ref).strip()
-    remote_oid = os.environ.get("PRE_COMMIT_FROM_REF") or "0" * 40
-    return remote_name, remote_url, f"{local_ref} {local_oid} {remote_ref} {remote_oid}\n"
+    directory = os.open(hooks, os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW)
+    descriptor = -1
+    try:
+        try:
+            existing = os.stat("pre-push", dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            descriptor = os.open(
+                "pre-push",
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW,
+                0o700,
+                dir_fd=directory,
+            )
+            with os.fdopen(descriptor, "wb") as stream:
+                descriptor = -1
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.fsync(directory)
+        else:
+            if not stat.S_ISREG(existing.st_mode) or existing.st_uid != os.geteuid():
+                raise RuntimeError("unsafe hook")
+            with os.fdopen(
+                os.open("pre-push", os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW, dir_fd=directory),
+                "rb",
+            ) as stream:
+                if stream.read(len(payload) + 1) != payload or not existing.st_mode & 0o111:
+                    raise RuntimeError("pre-push hook differs")
+    except OSError as exc:
+        raise RuntimeError("hook install failed") from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        os.close(directory)
 
 
 def produce_evidence(
@@ -3300,6 +3327,7 @@ def produce_evidence(
     if current != change:
         raise RuntimeError("change binding drifted")
     reviews = run_agent_reviews(config, current, fixture_manifest_bootstrap=fixture_manifest_bootstrap)
+    install_pre_push_hook()
     write_evidence(
         config,
         checks,
@@ -3371,18 +3399,16 @@ def main() -> int:
             print(f"Verified push-ready evidence: {evidence_path()}")
             return 0
         if args.command == "pre-push":
-            remote_name, remote_url = args.remote_name, args.remote_url
-            hook_input = sys.stdin.read()
-            if not remote_name or not remote_url:
-                remote_name, remote_url, hook_input = pre_commit_push_context()
+            if not args.remote_name or not args.remote_url:
+                raise RuntimeError("pre-push requires the native Git hook arguments")
             require_clean_head()
             refresh_authoritative_base(config)
             payload = verify_evidence(config)
             verify_pre_push_updates(
                 payload,
-                hook_input,
-                remote_name=remote_name,
-                remote_url=remote_url,
+                sys.stdin.read(),
+                remote_name=args.remote_name,
+                remote_url=args.remote_url,
             )
             print(f"Verified push-ready evidence: {evidence_path()}")
             return 0
