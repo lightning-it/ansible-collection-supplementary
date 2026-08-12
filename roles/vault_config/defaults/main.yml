@@ -65,6 +65,11 @@ vault_config_tfstate_s3_insecure: "{{ not (vault_config_vault_validate_certs | b
 # Vault config is a dependency for downstream application roles. A failed
 # Terragrunt run must stop the play unless explicitly relaxed for debugging.
 vault_config_fail_on_terragrunt_error: true
+vault_config_terragrunt_import_strict: false
+vault_config_terragrunt_state_moves: []
+vault_config_terragrunt_state_removals: []
+vault_config_terragrunt_state_migration_strict: false
+vault_config_terragrunt_init_upgrade: false
 vault_config_vault_hostname: "{{ inventory_hostname }}"
 # Run Vault API calls from the same controller/EE delegate used for deployment by default.
 vault_config_api_delegate_to: >-
