@@ -1,4 +1,8 @@
 ---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
 - name: Skip temporary self-signed TLS generation when disabled
   ansible.builtin.debug:
     msg: "AAP temporary self-signed TLS generation skipped."
@@ -178,10 +182,10 @@
   ansible.builtin.copy:
     content: "{{ aap_tls_selfsigned_ca_content.content | b64decode }}"
     dest: "{{ aap_tls_selfsigned_ca_trust_path }}"
-    owner: root
-    group: root
+    owner: "{{ aap_tls_selfsigned_ca_trust_owner }}"
+    group: "{{ aap_tls_selfsigned_ca_trust_group }}"
     mode: "0644"
-  become: true
+  become: "{{ aap_tls_selfsigned_ca_trust_become }}"
   notify: Refresh system CA trust after installing temporary AAP CA
   when:
     - aap_tls_selfsigned_enabled | bool

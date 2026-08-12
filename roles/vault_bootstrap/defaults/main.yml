@@ -36,6 +36,8 @@ vault_bootstrap_persist_dir: >-
   {{ vault_deploy_bootstrap_persist_dir | default('/srv/' ~ vault_deploy_flavour ~ '/bootstrap', true) }}
 vault_bootstrap_init_file_path: >-
   {{ vault_deploy_init_file_path | default(vault_bootstrap_persist_dir ~ '/vault-init.yml.vault', true) }}
+vault_bootstrap_target_escrow_owner: root
+vault_bootstrap_target_escrow_group: root
 
 # Optional strict topology-neutral controller escrow. The controller document is
 # authoritative; vault_bootstrap_init_file_path is a ciphertext-only secondary copy.

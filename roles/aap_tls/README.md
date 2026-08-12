@@ -27,6 +27,11 @@ assets are supplied instead.
   managed AAP host trust store and refreshes system trust; defaults to `true`.
   Generation may remain delegated to the controller because the role transfers
   the public CA certificate to the managed host before installation.
+- `aap_tls_selfsigned_ca_trust_owner`,
+  `aap_tls_selfsigned_ca_trust_group`, and
+  `aap_tls_selfsigned_ca_trust_become` retain the production defaults
+  `root`, `root`, and `true`. Numeric ownership with privilege escalation
+  disabled is reserved for capability-minimized test controllers.
 
 See [`defaults/main.yml`](defaults/main.yml) for the complete interface.
 
