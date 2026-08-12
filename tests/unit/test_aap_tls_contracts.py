@@ -14,6 +14,7 @@ class AapTlsContractsTests(unittest.TestCase):
     def test_generated_ca_is_transferred_to_managed_host_trust(self) -> None:
         defaults = (ROOT / "roles/aap_tls/defaults/main.yml").read_text(encoding="utf-8")
         tasks = (ROOT / "roles/aap_tls/tasks/main.yml").read_text(encoding="utf-8")
+        assertions = (ROOT / "roles/aap_tls/tasks/assert.yml").read_text(encoding="utf-8")
         handlers = (ROOT / "roles/aap_tls/handlers/main.yml").read_text(encoding="utf-8")
 
         self.assertIn("aap_tls_selfsigned_install_ca_trust: true", defaults)
@@ -24,6 +25,20 @@ class AapTlsContractsTests(unittest.TestCase):
         self.assertNotIn("delegate_to:", handlers)
         self.assertIn("cmd: update-ca-trust extract", handlers)
         self.assertIn("ansible.builtin.meta: flush_handlers", tasks)
+        precheck_entrypoint = "---\n- name: Prechecks\n  ansible.builtin.import_tasks: assert.yml\n  tags: always\n"
+        self.assertTrue(tasks.startswith(precheck_entrypoint))
+        self.assertIn("aap_tls_selfsigned_ca_trust_owner", assertions)
+        self.assertIn("aap_tls_selfsigned_ca_trust_group", assertions)
+        self.assertIn("aap_tls_selfsigned_ca_trust_become is boolean", assertions)
+        self.assertNotIn("Validate temporary AAP CA trust installation settings", tasks)
+
+    def test_invalid_trust_inputs_are_exercised_by_molecule(self) -> None:
+        converge = (ROOT / "molecule/aap-tls-basic/converge.yml").read_text(encoding="utf-8")
+
+        self.assertIn("aap_tls_selfsigned_ca_trust_owner: invalid-owner", converge)
+        self.assertIn('aap_tls_selfsigned_ca_trust_become: "false"', converge)
+        self.assertIn("aap_tls_molecule_invalid_owner_rejected", converge)
+        self.assertIn("aap_tls_molecule_invalid_become_rejected", converge)
 
 
 if __name__ == "__main__":

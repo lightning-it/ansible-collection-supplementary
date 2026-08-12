@@ -41,6 +41,52 @@
       ansible.builtin.include_role:
         name: lit.supplementary.aap_tls
 
+    - name: Initialize invalid AAP TLS ownership rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_invalid_owner_rejected: false
+
+    - name: Exercise invalid AAP TLS ownership precheck
+      block:
+        - name: Run AAP TLS precheck with invalid trust owner
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_owner: invalid-owner
+      rescue:
+        - name: Record invalid AAP TLS ownership rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_invalid_owner_rejected: true
+
+    - name: Assert invalid AAP TLS ownership was rejected
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_invalid_owner_rejected
+        quiet: true
+
+    - name: Initialize non-boolean AAP TLS become rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_invalid_become_rejected: false
+
+    - name: Exercise non-boolean AAP TLS become precheck
+      block:
+        - name: Run AAP TLS precheck with non-boolean become value
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_become: "false"
+      rescue:
+        - name: Record non-boolean AAP TLS become rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_invalid_become_rejected: true
+
+    - name: Assert non-boolean AAP TLS become was rejected
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_invalid_become_rejected
+        quiet: true
+
     - name: Read generated AAP CA
       ansible.builtin.slurp:
         src: "{{ aap_tls_selfsigned_output_dir }}/aap-selfsigned-ca.crt"

@@ -1,24 +1,13 @@
 ---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
 - name: Skip temporary self-signed TLS generation when disabled
   ansible.builtin.debug:
     msg: "AAP temporary self-signed TLS generation skipped."
   changed_when: false
   when: not (aap_tls_selfsigned_enabled | bool)
-
-- name: Validate temporary AAP CA trust installation settings
-  ansible.builtin.assert:
-    that:
-      - >-
-        (aap_tls_selfsigned_ca_trust_owner | string) == 'root' or
-        (aap_tls_selfsigned_ca_trust_owner | string) is regex('^[0-9]+$')
-      - >-
-        (aap_tls_selfsigned_ca_trust_group | string) == 'root' or
-        (aap_tls_selfsigned_ca_trust_group | string) is regex('^[0-9]+$')
-      - aap_tls_selfsigned_ca_trust_become is boolean
-    quiet: true
-  when:
-    - aap_tls_selfsigned_enabled | bool
-    - aap_tls_selfsigned_install_ca_trust | bool
 
 - name: Ensure temporary TLS output directory exists
   ansible.builtin.file:
