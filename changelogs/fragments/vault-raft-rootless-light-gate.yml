@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Keep the Vault Raft restore scenario executable in the capability-minimized
+    rootless light Molecule gate while preserving root-owned production defaults.
