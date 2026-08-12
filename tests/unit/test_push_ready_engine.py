@@ -339,8 +339,9 @@ class PushReadyEngineTests(unittest.TestCase):
                     bounds,
                 )
 
-    def test_review_binding(self) -> None:
+    def test_trust_root_profile_runs_both_reviews_in_parallel_and_binds_evidence(self) -> None:
         change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "f" * 64)
+        classification = ENGINE["ReviewClassification"]("trust-root", ("codex", "copilot"), "a" * 64, "test")
         function_globals = ENGINE["run_agent_reviews"].__globals__
         external_start = threading.Barrier(2, timeout=5)
 
@@ -373,6 +374,7 @@ class PushReadyEngineTests(unittest.TestCase):
             reviews = ENGINE["run_agent_reviews"](
                 {"agents": {"codex": {"enabled": True}, "copilot": {"enabled": True}}},
                 change,
+                classification=classification,
             )
         finally:
             function_globals.update(original)

@@ -256,6 +256,29 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("Formatter-, linter-, or type-only style suggestions require no source edit", prompt)
         self.assertIn("Do not manufacture a no-op", prompt)
 
+    def test_material_remediation_invalidates_old_evidence_and_binds_one_rereview(self) -> None:
+        workflow = (WORKFLOWS / "codex-copilot-remediation.yml").read_text(encoding="utf-8")
+        push_step = workflow.split("      - name: Verify, commit, and push without force", 1)[1].split(
+            "      - name: Explicitly continue after GITHUB_TOKEN push", 1
+        )[0]
+        continuation = workflow.split("      - name: Explicitly continue after GITHUB_TOKEN push", 1)[1].split(
+            "  enable-develop-automerge-after-evidence-only-remediation:", 1
+        )[0]
+        dispatch = workflow.split("  continue-after-push:", 1)[1].split("  inspect:", 1)[0]
+
+        self.assertIn('new_head="$(git rev-parse HEAD)"', push_step)
+        self.assertIn(
+            'test "$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha)" = "${new_head}"',
+            push_step,
+        )
+        self.assertIn('echo "new_head=${new_head}"', push_step)
+        self.assertIn("NEW_HEAD: ${{ steps.push.outputs.new_head }}", continuation)
+        self.assertEqual(1, continuation.count("gh workflow run codex-copilot-remediation.yml"))
+        self.assertIn('-f expected_head="${NEW_HEAD}"', continuation)
+        self.assertIn('test "${current_head}" = "${EXPECTED_HEAD}"', dispatch)
+        self.assertEqual(1, dispatch.count("gh api --method POST"))
+        self.assertIn("the one final Current-Head re-review produced new material findings", workflow)
+
     def test_shared_assets_guard_streams_large_check_evidence_via_stdin(self) -> None:
         workflow = (WORKFLOWS / "shared-assets-guarded-automerge.yml").read_text(encoding="utf-8")
         self.assertNotIn('--argjson check_pages "$check_runs"', workflow)
