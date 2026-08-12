@@ -3313,10 +3313,7 @@ def produce_evidence(
     *,
     fixture_manifest_bootstrap: bool,
 ) -> None:
-    require_trusted_check_policy(
-        change,
-        allow_fixture_manifest_bootstrap=fixture_manifest_bootstrap,
-    )
+    require_trusted_check_policy(change, allow_fixture_manifest_bootstrap=fixture_manifest_bootstrap)
     branch = current_branch_ref()
     started_at, started = now_utc(), time.monotonic()
     checks, tree, commit, fingerprint = execute_integration_checks(config, change)

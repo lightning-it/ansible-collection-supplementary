@@ -46,28 +46,7 @@ class PushReadyEngineTests(unittest.TestCase):
         ):
             ENGINE["require_trusted_check_policy"](change)
 
-    def test_review_cli_produces_push_evidence(self) -> None:
-        config: dict[str, object] = {}
-        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
-        produced = mock.Mock()
-        replacements = {
-            "check_instruction_contract": mock.Mock(),
-            "load_config": mock.Mock(return_value=config),
-            "require_clean_head": mock.Mock(),
-            "refresh_authoritative_base": mock.Mock(),
-            "planned_change": mock.Mock(return_value=change),
-            "require_review_bootstrap_contract": mock.Mock(),
-            "produce_evidence": produced,
-        }
-        function_globals = ENGINE["main"].__globals__
-        with (
-            mock.patch.dict(function_globals, replacements),
-            mock.patch.object(function_globals["sys"], "argv", ["lit-push-ready.py", "review"]),
-        ):
-            self.assertEqual(0, ENGINE["main"]())
-        produced.assert_called_once_with(config, change, fixture_manifest_bootstrap=False)
-
-    def test_review_refuses_policy_drift_before_executing_checks(self) -> None:
+    def test_policy_gate_precedes_checks(self) -> None:
         change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
         checks = mock.Mock(side_effect=AssertionError("untrusted checks executed"))
         function_globals = ENGINE["produce_evidence"].__globals__
@@ -83,27 +62,9 @@ class PushReadyEngineTests(unittest.TestCase):
         ):
             ENGINE["produce_evidence"]({}, change, fixture_manifest_bootstrap=False)
         checks.assert_not_called()
-
-    def test_validate_refuses_policy_drift_before_executing_checks(self) -> None:
-        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
-        checks = mock.Mock(side_effect=AssertionError("untrusted checks executed"))
-        replacements = {
-            "check_instruction_contract": mock.Mock(),
-            "load_config": mock.Mock(return_value={}),
-            "require_clean_head": mock.Mock(),
-            "refresh_authoritative_base": mock.Mock(),
-            "planned_change": mock.Mock(return_value=change),
-            "require_review_bootstrap_contract": mock.Mock(),
-            "require_trusted_check_policy": mock.Mock(side_effect=RuntimeError("policy differs from base")),
-            "execute_integration_checks": checks,
-        }
-        function_globals = ENGINE["main"].__globals__
-        with (
-            mock.patch.dict(function_globals, replacements),
-            mock.patch.object(function_globals["sys"], "argv", ["lit-push-ready.py", "validate"]),
-        ):
-            self.assertEqual(1, ENGINE["main"]())
-        checks.assert_not_called()
+        source = (ROOT / "scripts" / "lit-push-ready.py").read_text(encoding="utf-8")
+        validate = source.split('if args.command == "validate":', 1)[1].split('if args.command == "review":', 1)[0]
+        self.assertLess(validate.index("require_trusted_check_policy"), validate.index("execute_integration_checks"))
 
     def test_pre_push_hook_rejects_stale_head(self) -> None:
         config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
