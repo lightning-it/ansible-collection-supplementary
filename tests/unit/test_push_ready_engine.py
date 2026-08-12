@@ -26,8 +26,24 @@ class PushReadyEngineTests(unittest.TestCase):
     def test_trusted_policy_covers_executable_quality_scripts(self) -> None:
         trusted_paths = set(ENGINE["TRUSTED_CHECK_POLICY_PATHS"])
 
+        self.assertIn(".pre-commit-config.yaml", trusted_paths)
         self.assertIn("scripts/lit-repository-quality.py", trusted_paths)
         self.assertIn("scripts/validate-embedded-code.py", trusted_paths)
+
+    def test_pre_commit_policy_drift(self) -> None:
+        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
+        function_globals = ENGINE["require_trusted_check_policy"].__globals__
+
+        def tree_entry(commit: str, path: str) -> str:
+            if path == ".pre-commit-config.yaml":
+                return "base-entry" if commit == change.base_tip else "head-entry"
+            return "stable-entry"
+
+        with (
+            mock.patch.dict(function_globals, {"git_tree_entry": tree_entry}),
+            self.assertRaisesRegex(RuntimeError, r"policy differs from base: \.pre-commit-config\.yaml"),
+        ):
+            ENGINE["require_trusted_check_policy"](change)
 
     def test_review_cli_produces_push_evidence(self) -> None:
         config: dict[str, object] = {}
@@ -58,7 +74,11 @@ class PushReadyEngineTests(unittest.TestCase):
             self.assertIn(f"- id: {hook}", config)
         self.assertEqual(1, config.count("stages: [pre-push]"))
         profile = (ROOT / "scripts" / "lit-ci-profile.sh").read_text(encoding="utf-8")
-        self.assertIn('pre-commit" run --all-files', profile)
+        self.assertIn('python3 "$pre_commit_zipapp" run --all-files', profile)
+        self.assertIn("${TMPDIR:-/tmp}", profile)
+        self.assertRegex(profile, r'readonly PRE_COMMIT_SHA256="[0-9a-f]{64}"')
+        self.assertIn('actual_sha256" = "$PRE_COMMIT_SHA256', profile)
+        self.assertNotIn("pip install", profile)
         self.assertIn("SKIP=molecule-light", profile)
         self.assertIn("devtools-molecule.sh artifacts-basic", profile)
         scenario = (ROOT / "molecule" / "artifacts-basic" / "converge.yml").read_text(encoding="utf-8")

@@ -111,6 +111,7 @@ CHECK_PROFILE = {
     "command": ["scripts/lit-ci-profile.sh", "repository-quality"],
 }
 TRUSTED_CHECK_POLICY_PATHS = (
+    ".pre-commit-config.yaml",
     ".lit/push-ready.json",
     SECRET_FIXTURE_MANIFEST_PATH,
     "scripts/lit-ci-profile.sh",
@@ -971,6 +972,7 @@ def require_trusted_check_policy(
         raise RuntimeError("engine is outside repository") from exc
     policy_paths = tuple(dict.fromkeys((*TRUSTED_CHECK_POLICY_PATHS, running_engine)))
     required_paths = {
+        ".pre-commit-config.yaml",
         ".lit/push-ready.json",
         "scripts/lit-ci-profile.sh",
         running_engine,
@@ -991,7 +993,12 @@ def require_review_bootstrap_contract(change: PlannedChange) -> bool:
         running_engine = Path(__file__).resolve().relative_to(ROOT).as_posix()
     except ValueError as exc:
         raise RuntimeError("engine is outside repository") from exc
-    required_paths = (".lit/push-ready.json", "scripts/lit-ci-profile.sh", running_engine)
+    required_paths = (
+        ".pre-commit-config.yaml",
+        ".lit/push-ready.json",
+        "scripts/lit-ci-profile.sh",
+        running_engine,
+    )
     base_entries = [git_tree_entry(change.base_tip, path) for path in required_paths]
     if all(base_entries):
         if not all(git_tree_entry(change.head_commit, path) for path in required_paths):
