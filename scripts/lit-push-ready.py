@@ -3166,11 +3166,18 @@ def execution_metrics(checks: list[dict[str, Any]], reviews: list[dict[str, Any]
         str(review["agent"]): review["duration_seconds"]
         for review in sorted(reviews, key=lambda item: str(item.get("agent")))
     }
+    review_invocations = {
+        agent: sum(1 for review in reviews if review.get("agent") == agent)
+        for agent in REVIEW_PROFILE_AGENTS["trust-root"]
+    }
     check_names = [str(check.get("name")) for check in checks]
     return {
         "schema_version": 1,
         "check_executions": len(checks),
         "repeated_check_executions": len(check_names) - len(set(check_names)),
+        "local_external_review_invocations": len(reviews),
+        "local_codex_review_invocations": review_invocations["codex"],
+        "local_copilot_review_invocations": review_invocations["copilot"],
         "reviewer_seconds": reviewer_seconds,
         "review_serial_seconds": round(sum(reviewer_seconds.values()), 3),
         "review_wall_seconds": round(review_wall_seconds, 3),

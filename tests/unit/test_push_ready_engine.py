@@ -594,6 +594,24 @@ class PushReadyEngineTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "did not execute concurrently"):
             ENGINE["parallel_review_evidence"](reviews)
 
+    def test_profile_metrics_make_local_review_cost_delta_measurable(self) -> None:
+        def review(agent: str) -> dict[str, object]:
+            return {
+                "agent": agent,
+                "started_at": "2026-01-01T00:00:00Z",
+                "completed_at": "2026-01-01T00:00:01Z",
+                "duration_seconds": 1,
+            }
+
+        standard = ENGINE["execution_metrics"]([], [review("codex")])
+        trust_root = ENGINE["execution_metrics"]([], [review("codex"), review("copilot")])
+        self.assertEqual(1, standard["local_external_review_invocations"])
+        self.assertEqual(1, standard["local_codex_review_invocations"])
+        self.assertEqual(0, standard["local_copilot_review_invocations"])
+        self.assertEqual(2, trust_root["local_external_review_invocations"])
+        self.assertEqual(1, trust_root["local_codex_review_invocations"])
+        self.assertEqual(1, trust_root["local_copilot_review_invocations"])
+
     def test_review_profile_classification_is_base_policy_bound_and_fail_closed(self) -> None:
         base_config = json.loads((ROOT / ".lit" / "push-ready.json").read_text(encoding="utf-8"))
 

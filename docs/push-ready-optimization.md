@@ -22,7 +22,11 @@ python3 scripts/lit-push-ready.py verify
 ```
 
 The evidence records total duration, per-reviewer duration, review bytes,
-executed and repeated checks, cache hits and misses, and maximum parallelism.
+executed and repeated checks, cache hits and misses, maximum parallelism, and
+explicit local external-review invocation counts split between Codex and
+Copilot. Those invocation counts are the stable cost proxy: compare them and
+the measured durations rather than storing account-specific prices or billing
+data in repository evidence.
 The server-side baseline additionally records the Current-Head Copilot gate,
 Collection CI, and final end-to-end workflow durations for the exact SHA.
 
