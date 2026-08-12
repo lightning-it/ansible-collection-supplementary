@@ -279,6 +279,22 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertEqual(1, dispatch.count("gh api --method POST"))
         self.assertIn("the one final Current-Head re-review produced new material findings", workflow)
 
+    def test_review_automation_has_no_privileged_bypass_path(self) -> None:
+        workflows = "\n".join(
+            (WORKFLOWS / name).read_text(encoding="utf-8")
+            for name in ("copilot-review.yml", "codex-copilot-remediation.yml")
+        )
+        for forbidden in (
+            "git push --force",
+            "--force-with-lease",
+            "gh pr merge --admin",
+            "/rulesets",
+            "/protection",
+            "environment:",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, workflows)
+
     def test_shared_assets_guard_streams_large_check_evidence_via_stdin(self) -> None:
         workflow = (WORKFLOWS / "shared-assets-guarded-automerge.yml").read_text(encoding="utf-8")
         self.assertNotIn('--argjson check_pages "$check_runs"', workflow)

@@ -206,6 +206,70 @@ class PushReadyEngineTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "sanitized review file is not UTF-8: invalid.bin"):
                 ENGINE["ensure_workspace_review_safe"](repository)
 
+    def test_review_workspace_rejects_secret_paths_and_secret_like_content(self) -> None:
+        cases = (
+            (".env", "harmless fixture text\n", "secret-like tracked paths"),
+            ("settings.yml", "api_key: abcdefghijklmnop\n", "secret-like review content"),
+        )
+        for name, content, expected_error in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary_directory:
+                repository = Path(temporary_directory).resolve() / "repository"
+                environment = ENGINE["isolated_git_environment"]({"PATH": os.environ["PATH"]})
+                run_git(repository, "init", "-q", environment=environment)
+                (repository / name).write_text(content, encoding="utf-8")
+                run_git(repository, "add", name, environment=environment)
+                with self.assertRaisesRegex(RuntimeError, expected_error):
+                    ENGINE["ensure_workspace_review_safe"](repository)
+
+    def test_evidence_contains_bindings_but_not_the_private_diff(self) -> None:
+        private_diff = "PRIVATE_DIFF_SENTINEL"
+        change = ENGINE["PlannedChange"](
+            "refs/remotes/origin/develop",
+            "a" * 40,
+            "a" * 40,
+            "b" * 40,
+            private_diff,
+            ("roles/example/tasks/main.yml",),
+            {},
+            "c" * 64,
+        )
+        classification = ENGINE["ReviewClassification"]("standard", ("codex",), "d" * 64, "test")
+        captured = mock.Mock()
+        replacements = {
+            "tree_fingerprint": mock.Mock(return_value=change.tree_fingerprint),
+            "config_sha256": mock.Mock(return_value="e" * 64),
+            "instruction_file_hashes": mock.Mock(return_value={"AGENTS.md": "f" * 64}),
+            "platform_evidence": mock.Mock(return_value={}),
+            "runtime_versions": mock.Mock(return_value={}),
+            "governed_push_remote": mock.Mock(return_value={}),
+            "review_execution_evidence": mock.Mock(return_value={}),
+            "execution_metrics": mock.Mock(return_value={}),
+            "require_review_bootstrap_contract": mock.Mock(return_value=False),
+            "current_branch_ref": mock.Mock(return_value="refs/heads/test"),
+            "write_evidence_text": captured,
+        }
+        config = {
+            "review": {"max_diff_bytes": 200_000},
+            "remote_only_checks": [],
+        }
+        with mock.patch.dict(ENGINE["write_evidence"].__globals__, replacements):
+            ENGINE["write_evidence"](
+                config,
+                [],
+                [],
+                change,
+                started_at="2026-01-01T00:00:00Z",
+                started_monotonic=0.0,
+                integration_tree="1" * 40,
+                integration_commit="2" * 40,
+                integration_fingerprint="3" * 64,
+                classification=classification,
+            )
+        serialized = captured.call_args.args[0]
+        self.assertNotIn(private_diff, serialized)
+        self.assertIn(change.diff_sha256, serialized)
+        self.assertIn(change.head_commit, serialized)
+
     def test_integration_checks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repository = Path(temporary_directory).resolve() / "repository"
