@@ -3313,6 +3313,10 @@ def produce_evidence(
     *,
     fixture_manifest_bootstrap: bool,
 ) -> None:
+    require_trusted_check_policy(
+        change,
+        allow_fixture_manifest_bootstrap=fixture_manifest_bootstrap,
+    )
     branch = current_branch_ref()
     started_at, started = now_utc(), time.monotonic()
     checks, tree, commit, fingerprint = execute_integration_checks(config, change)
@@ -3417,6 +3421,7 @@ def main() -> int:
             refresh_authoritative_base(config)
             change = planned_change(config)
             require_review_bootstrap_contract(change)
+            require_trusted_check_policy(change)
             execute_integration_checks(config, change)
             return 0
         if args.command == "review":
@@ -3439,10 +3444,6 @@ def main() -> int:
         change = planned_change(
             config,
             fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
-        )
-        require_trusted_check_policy(
-            change,
-            allow_fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
         )
         produce_evidence(config, change, fixture_manifest_bootstrap=args.fixture_manifest_bootstrap)
         return 0

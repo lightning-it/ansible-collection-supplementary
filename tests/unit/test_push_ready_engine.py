@@ -67,6 +67,44 @@ class PushReadyEngineTests(unittest.TestCase):
             self.assertEqual(0, ENGINE["main"]())
         produced.assert_called_once_with(config, change, fixture_manifest_bootstrap=False)
 
+    def test_review_refuses_policy_drift_before_executing_checks(self) -> None:
+        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
+        checks = mock.Mock(side_effect=AssertionError("untrusted checks executed"))
+        function_globals = ENGINE["produce_evidence"].__globals__
+        with (
+            mock.patch.dict(
+                function_globals,
+                {
+                    "require_trusted_check_policy": mock.Mock(side_effect=RuntimeError("policy differs from base")),
+                    "execute_integration_checks": checks,
+                },
+            ),
+            self.assertRaisesRegex(RuntimeError, "policy differs from base"),
+        ):
+            ENGINE["produce_evidence"]({}, change, fixture_manifest_bootstrap=False)
+        checks.assert_not_called()
+
+    def test_validate_refuses_policy_drift_before_executing_checks(self) -> None:
+        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
+        checks = mock.Mock(side_effect=AssertionError("untrusted checks executed"))
+        replacements = {
+            "check_instruction_contract": mock.Mock(),
+            "load_config": mock.Mock(return_value={}),
+            "require_clean_head": mock.Mock(),
+            "refresh_authoritative_base": mock.Mock(),
+            "planned_change": mock.Mock(return_value=change),
+            "require_review_bootstrap_contract": mock.Mock(),
+            "require_trusted_check_policy": mock.Mock(side_effect=RuntimeError("policy differs from base")),
+            "execute_integration_checks": checks,
+        }
+        function_globals = ENGINE["main"].__globals__
+        with (
+            mock.patch.dict(function_globals, replacements),
+            mock.patch.object(function_globals["sys"], "argv", ["lit-push-ready.py", "validate"]),
+        ):
+            self.assertEqual(1, ENGINE["main"]())
+        checks.assert_not_called()
+
     def test_pre_push_hook_rejects_stale_head(self) -> None:
         config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
         for marker in ("default_stages: [pre-commit]", "default_install_hook_types: [pre-commit]"):
