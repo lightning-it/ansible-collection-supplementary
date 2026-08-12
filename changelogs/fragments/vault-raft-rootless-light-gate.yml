@@ -1,6 +1,7 @@
 ---
 bugfixes:
   - >-
-    Keep artifact staging, AAP TLS trust, and Vault Raft restore coverage
-    executable in the capability-minimized rootless light Molecule gate while
-    preserving root-owned production defaults.
+    Keep artifact staging, AAP TLS trust, Cloudflare WARP rendering, Vault
+    bootstrap, and Vault Raft restore coverage executable in the
+    capability-minimized rootless light Molecule gate while preserving
+    root-owned production defaults.
