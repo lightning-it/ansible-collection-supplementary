@@ -12,6 +12,13 @@
       - vault_config_terraform_state_dir_local | default('', true) | trim | length > 0
       - vault_config_api_delegate_to | default('', true) | trim | length > 0
       - vault_config_vault_validate_certs is boolean
+      - vault_config_terragrunt_import_strict is boolean
+      - vault_config_terragrunt_state_moves is sequence
+      - vault_config_terragrunt_state_moves is not string
+      - vault_config_terragrunt_state_removals is sequence
+      - vault_config_terragrunt_state_removals is not string
+      - vault_config_terragrunt_state_migration_strict is boolean
+      - vault_config_terragrunt_init_upgrade is boolean
       - vault_config_api_ca_cert_path is string
       - >-
         vault_config_api_ca_cert_path | length == 0

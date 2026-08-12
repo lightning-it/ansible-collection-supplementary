@@ -3,6 +3,9 @@ set -euo pipefail
 
 readonly PROFILE_NAME="repository-quality"
 readonly BASE_REF="refs/remotes/origin/develop"
+readonly PRE_COMMIT_VERSION="4.3.0"
+readonly PRE_COMMIT_SHA256="f1d50b97e9ca9167aceb76c14e90b07cde8b6789bc199d5005cfd817a718878c"
+readonly PRE_COMMIT_URL="https://github.com/pre-commit/pre-commit/releases/download/v${PRE_COMMIT_VERSION}/pre-commit-${PRE_COMMIT_VERSION}.pyz"
 
 fail_closed() {
   printf 'Error: %s\n' "$1" >&2
@@ -63,17 +66,52 @@ initial_fingerprint="$(fingerprint)" \
   || fail_closed "cannot fingerprint initial worktree"
 
 printf '==> Run complete repository pre-commit gates\n'
-pre_commit_venv="$TMPDIR/lit-pre-commit"
-python3 -m venv "$pre_commit_venv"
-"$pre_commit_venv/bin/pip" install --disable-pip-version-check --quiet pre-commit==4.3.0
+pre_commit_temp_root="${TMPDIR:-/tmp}"
+case "$pre_commit_temp_root" in
+  /*) ;;
+  *) fail_closed "TMPDIR must be an absolute path" ;;
+esac
+if [ ! -d "$pre_commit_temp_root" ] || [ -L "$pre_commit_temp_root" ]; then
+  fail_closed "TMPDIR must be a non-symlink directory"
+fi
+pre_commit_temp_root="$(cd "$pre_commit_temp_root" && pwd -P)"
+pre_commit_venv="$(mktemp -d "${pre_commit_temp_root%/}/lit-pre-commit.XXXXXXXX")" \
+  || fail_closed "cannot create the isolated pre-commit environment"
+cleanup_pre_commit_venv() {
+  trap - EXIT
+  case "$pre_commit_venv" in
+    "$pre_commit_temp_root"/lit-pre-commit.*) rm -rf -- "$pre_commit_venv" ;;
+    *) fail_closed "refusing to remove an unsafe pre-commit environment" ;;
+  esac
+}
+trap cleanup_pre_commit_venv EXIT
+pre_commit_zipapp="$pre_commit_venv/pre-commit.pyz"
+curl \
+  --fail \
+  --location \
+  --proto '=https' \
+  --tlsv1.2 \
+  --max-time 300 \
+  --retry 3 \
+  --retry-all-errors \
+  --silent \
+  --show-error \
+  --output "$pre_commit_zipapp" \
+  "$PRE_COMMIT_URL"
+actual_sha256="$(
+  python3 -c \
+    'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
+    "$pre_commit_zipapp"
+)" || fail_closed "cannot hash the pre-commit Zipapp"
+[ "$actual_sha256" = "$PRE_COMMIT_SHA256" ] \
+  || fail_closed "pre-commit Zipapp checksum mismatch"
 BASE_SHA="$merge_base" \
 HEAD_SHA="$(git rev-parse HEAD)" \
 LABELS_JSON='[]' \
 REQUIRE_FRAGMENT=true \
-SKIP=molecule-light \
-"$pre_commit_venv/bin/pre-commit" run --all-files
+python3 "$pre_commit_zipapp" run --all-files
 
-printf '==> Run rootless Molecule gate\n'
+printf '==> Run supplemental rootless Molecule parity gate\n'
 bash scripts/devtools-molecule.sh artifacts-basic
 
 printf '==> Verify Codex and Copilot instruction binding\n'

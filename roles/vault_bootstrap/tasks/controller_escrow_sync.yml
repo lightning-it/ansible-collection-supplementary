@@ -1,4 +1,16 @@
 ---
+- name: Validate target secondary escrow ownership
+  ansible.builtin.assert:
+    that:
+      - >-
+        (vault_bootstrap_target_escrow_owner | string) == 'root' or
+        (vault_bootstrap_target_escrow_owner | string) is regex('^[0-9]+$')
+      - >-
+        (vault_bootstrap_target_escrow_group | string) == 'root' or
+        (vault_bootstrap_target_escrow_group | string) is regex('^[0-9]+$')
+    quiet: true
+  no_log: true
+
 - name: Inspect the target secondary escrow directory
   ansible.builtin.stat:
     path: "{{ vault_bootstrap_persist_dir }}"
@@ -15,8 +27,16 @@
     that:
       - vault_bootstrap_target_persist_dir_stat.stat.isdir | default(false)
       - not (vault_bootstrap_target_persist_dir_stat.stat.islnk | default(false))
-      - vault_bootstrap_target_persist_dir_stat.stat.uid | default(-1) | int == 0
-      - vault_bootstrap_target_persist_dir_stat.stat.gid | default(-1) | int == 0
+      - >-
+        vault_bootstrap_target_persist_dir_stat.stat.pw_name | default('')
+        == vault_bootstrap_target_escrow_owner | string
+        or vault_bootstrap_target_persist_dir_stat.stat.uid | default(-1) | string
+        == vault_bootstrap_target_escrow_owner | string
+      - >-
+        vault_bootstrap_target_persist_dir_stat.stat.gr_name | default('')
+        == vault_bootstrap_target_escrow_group | string
+        or vault_bootstrap_target_persist_dir_stat.stat.gid | default(-1) | string
+        == vault_bootstrap_target_escrow_group | string
       - vault_bootstrap_target_persist_dir_stat.stat.mode | default('') == '0700'
     fail_msg: "The existing target secondary escrow directory has unsafe metadata."
     quiet: true
@@ -27,8 +47,8 @@
   ansible.builtin.file:
     path: "{{ vault_bootstrap_persist_dir }}"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ vault_bootstrap_target_escrow_owner }}"
+    group: "{{ vault_bootstrap_target_escrow_group }}"
     mode: "0700"
   when: not (vault_bootstrap_target_persist_dir_stat.stat.exists | default(false))
   no_log: true
@@ -49,8 +69,16 @@
     that:
       - vault_bootstrap_target_init_file_stat.stat.isreg | default(false)
       - not (vault_bootstrap_target_init_file_stat.stat.islnk | default(false))
-      - vault_bootstrap_target_init_file_stat.stat.uid | default(-1) | int == 0
-      - vault_bootstrap_target_init_file_stat.stat.gid | default(-1) | int == 0
+      - >-
+        vault_bootstrap_target_init_file_stat.stat.pw_name | default('')
+        == vault_bootstrap_target_escrow_owner | string
+        or vault_bootstrap_target_init_file_stat.stat.uid | default(-1) | string
+        == vault_bootstrap_target_escrow_owner | string
+      - >-
+        vault_bootstrap_target_init_file_stat.stat.gr_name | default('')
+        == vault_bootstrap_target_escrow_group | string
+        or vault_bootstrap_target_init_file_stat.stat.gid | default(-1) | string
+        == vault_bootstrap_target_escrow_group | string
       - vault_bootstrap_target_init_file_stat.stat.mode | default('') == '0600'
       - vault_bootstrap_target_init_file_stat.stat.nlink | default(0) | int == 1
       - vault_bootstrap_target_init_file_stat.stat.size | default(0) | int > 0
@@ -65,8 +93,8 @@
   ansible.builtin.copy:
     src: "{{ vault_bootstrap_controller_init_file_path }}"
     dest: "{{ vault_bootstrap_init_file_path }}"
-    owner: root
-    group: root
+    owner: "{{ vault_bootstrap_target_escrow_owner }}"
+    group: "{{ vault_bootstrap_target_escrow_group }}"
     mode: "0600"
     force: false
     decrypt: false
@@ -91,8 +119,16 @@
       - vault_bootstrap_target_init_file_verified.stat.exists | default(false)
       - vault_bootstrap_target_init_file_verified.stat.isreg | default(false)
       - not (vault_bootstrap_target_init_file_verified.stat.islnk | default(false))
-      - vault_bootstrap_target_init_file_verified.stat.uid | default(-1) | int == 0
-      - vault_bootstrap_target_init_file_verified.stat.gid | default(-1) | int == 0
+      - >-
+        vault_bootstrap_target_init_file_verified.stat.pw_name | default('')
+        == vault_bootstrap_target_escrow_owner | string
+        or vault_bootstrap_target_init_file_verified.stat.uid | default(-1) | string
+        == vault_bootstrap_target_escrow_owner | string
+      - >-
+        vault_bootstrap_target_init_file_verified.stat.gr_name | default('')
+        == vault_bootstrap_target_escrow_group | string
+        or vault_bootstrap_target_init_file_verified.stat.gid | default(-1) | string
+        == vault_bootstrap_target_escrow_group | string
       - vault_bootstrap_target_init_file_verified.stat.mode | default('') == '0600'
       - vault_bootstrap_target_init_file_verified.stat.nlink | default(0) | int == 1
       - >-

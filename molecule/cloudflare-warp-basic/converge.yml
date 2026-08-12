@@ -9,6 +9,8 @@
     cloudflare_warp_install: false
     cloudflare_warp_manage_service: false
     cloudflare_warp_connection_state: ignore
+    cloudflare_warp_mdm_owner: "{{ lookup('ansible.builtin.pipe', 'id -u') }}"
+    cloudflare_warp_mdm_group: "{{ lookup('ansible.builtin.pipe', 'id -g') }}"
     cloudflare_warp_mdm_path: >-
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/cloudflare-warp/mdm.xml
     cloudflare_warp_organization: molecule-test-team

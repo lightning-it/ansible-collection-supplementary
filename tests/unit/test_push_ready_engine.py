@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import io
 import json
 import os
 import runpy
@@ -27,8 +28,35 @@ class PushReadyEngineTests(unittest.TestCase):
     def test_trusted_policy_covers_executable_quality_scripts(self) -> None:
         trusted_paths = set(ENGINE["TRUSTED_CHECK_POLICY_PATHS"])
 
+        self.assertIn(".pre-commit-config.yaml", trusted_paths)
         self.assertIn("scripts/lit-repository-quality.py", trusted_paths)
         self.assertIn("scripts/validate-embedded-code.py", trusted_paths)
+
+    def test_policy_gate_precedes_checks(self) -> None:
+        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
+        checks = mock.Mock(side_effect=AssertionError("untrusted checks executed"))
+        function_globals = ENGINE["produce_evidence"].__globals__
+        entries = lambda commit, path: commit if path == ".pre-commit-config.yaml" else "stable"  # noqa: E731
+        with (
+            mock.patch.dict(function_globals, {"git_tree_entry": entries}),
+            self.assertRaisesRegex(RuntimeError, r"policy differs from base: \.pre-commit-config\.yaml"),
+        ):
+            ENGINE["require_trusted_check_policy"](change)
+        with (
+            mock.patch.dict(
+                function_globals,
+                {
+                    "require_trusted_check_policy": mock.Mock(side_effect=RuntimeError("policy differs from base")),
+                    "execute_integration_checks": checks,
+                },
+            ),
+            self.assertRaisesRegex(RuntimeError, "policy differs from base"),
+        ):
+            ENGINE["produce_evidence"]({}, change, fixture_manifest_bootstrap=False)
+        checks.assert_not_called()
+        source = (ROOT / "scripts" / "lit-push-ready.py").read_text(encoding="utf-8")
+        validate = source.split('if args.command == "validate":', 1)[1].split('if args.command == "review":', 1)[0]
+        self.assertLess(validate.index("require_trusted_check_policy"), validate.index("execute_integration_checks"))
 
     def test_review_cli_produces_push_evidence(self) -> None:
         config: dict[str, object] = {}
@@ -52,6 +80,16 @@ class PushReadyEngineTests(unittest.TestCase):
             self.assertEqual(0, ENGINE["main"]())
         produced.assert_called_once_with(config, change, fixture_manifest_bootstrap=False)
 
+    def test_trust_root_update_cannot_self_certify_evidence(self) -> None:
+        source = (ROOT / "scripts" / "lit-push-ready.py").read_text(encoding="utf-8")
+        producer = source.split("def produce_evidence(", 1)[1].split("def main()", 1)[0]
+        self.assertNotIn("trust_root_update", producer)
+        verifier = source.split("def verify_evidence(", 1)[1].split("def verify_pre_push_updates(", 1)[0]
+        self.assertNotIn("trust_root_update", verifier)
+        mode = source.split("if args.trust_root_update:", 1)[1].split("elif args.base:", 1)[0]
+        self.assertIn("run_agent_reviews", mode)
+        self.assertNotIn("produce_evidence", mode)
+
     def test_validate_runs_deterministic_gates_without_agent_review(self) -> None:
         config: dict[str, object] = {}
         change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "patch", (), {}, "c" * 64)
@@ -65,6 +103,7 @@ class PushReadyEngineTests(unittest.TestCase):
             "planned_change": mock.Mock(return_value=change),
             "report_review_size": mock.Mock(),
             "require_review_bootstrap_contract": mock.Mock(),
+            "require_trusted_check_policy": mock.Mock(),
             "execute_integration_checks": checked,
             "run_agent_reviews": agent_review,
         }
@@ -79,19 +118,13 @@ class PushReadyEngineTests(unittest.TestCase):
 
     def test_pre_push_hook_rejects_stale_head(self) -> None:
         config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
-        for marker in ("default_stages: [pre-commit]", "default_install_hook_types: [pre-commit, pre-push]"):
-            self.assertIn(marker, config)
-        for hook in ("ansible-lint-ee", "changelog-policy-ee", "molecule-light", "collection-smoke", "galaxy-verify"):
-            self.assertIn(f"- id: {hook}", config)
-        self.assertEqual(1, config.count("stages: [pre-push]"))
+        self.assertIn("default_install_hook_types: [pre-commit]", config)
+        self.assertNotIn("stages: [pre-push]", config)
         profile = (ROOT / "scripts" / "lit-ci-profile.sh").read_text(encoding="utf-8")
-        self.assertIn('pre-commit" run --all-files', profile)
-        self.assertIn("SKIP=molecule-light", profile)
-        self.assertIn("devtools-molecule.sh artifacts-basic", profile)
-        scenario = (ROOT / "molecule" / "artifacts-basic" / "converge.yml").read_text(encoding="utf-8")
-        self.assertIn("'id -u'", scenario)
-        self.assertIn("'id -g'", scenario)
-        self.assertNotIn("id -un", scenario)
+        self.assertIn('python3 "$pre_commit_zipapp" run --all-files', profile)
+        self.assertNotIn("SKIP=molecule-light", profile)
+        self.assertRegex(profile, r'readonly PRE_COMMIT_SHA256="[0-9a-f]{64}"')
+        self.assertNotIn("pip install", profile)
         branch, stale, expected = "refs/heads/test", "b" * 40, "a" * 40
         payload = {
             "push_remote": ENGINE["governed_push_remote_from_url"](
@@ -112,15 +145,60 @@ class PushReadyEngineTests(unittest.TestCase):
                 remote_url="https://github.com/lightning-it/ansible-collection-supplementary.git",
             )
 
+    def test_native_pre_push_hook_preserves_git_stdin(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            hooks = Path(temporary_directory)
+            function_globals = ENGINE["install_pre_push_hook"].__globals__
+            with mock.patch.dict(
+                function_globals,
+                {"git_output": mock.Mock(return_value=str(hooks))},
+            ):
+                ENGINE["install_pre_push_hook"]()
+                hook = hooks / "pre-push"
+                self.assertTrue(hook.stat().st_mode & 0o111)
+                self.assertIn('--remote-name "$1" --remote-url "$2"', hook.read_text())
+                ENGINE["install_pre_push_hook"]()
+                hook.write_text("different\n", encoding="utf-8")
+                with self.assertRaisesRegex(RuntimeError, "hook differs"):
+                    ENGINE["install_pre_push_hook"]()
+
+        updates = "refs/heads/a " + "a" * 40 + " refs/heads/a " + "b" * 40 + "\n"
+        verify = mock.Mock()
+        main_globals = ENGINE["main"].__globals__
+        replacements = {
+            "check_instruction_contract": mock.Mock(),
+            "load_config": mock.Mock(return_value={}),
+            "require_clean_head": mock.Mock(),
+            "refresh_authoritative_base": mock.Mock(),
+            "verify_evidence": mock.Mock(return_value={}),
+            "verify_pre_push_updates": verify,
+        }
+        with (
+            mock.patch.dict(main_globals, replacements),
+            mock.patch.object(
+                main_globals["sys"],
+                "argv",
+                ["lit-push-ready.py", "pre-push", "--remote-name", "origin", "--remote-url", "url"],
+            ),
+            mock.patch.object(main_globals["sys"], "stdin", io.StringIO(updates)),
+        ):
+            self.assertEqual(0, ENGINE["main"]())
+        verify.assert_called_once_with({}, updates, remote_name="origin", remote_url="url")
+
     def test_container_engine_fallback(self) -> None:
         function_globals = ENGINE["copilot_container_command"].__globals__
-        probe = mock.Mock(side_effect=[subprocess.CompletedProcess([], code, "") for code in (1, 0)])
-        with (
-            mock.patch.object(function_globals["shutil"], "which", side_effect=("/docker", "/podman")),
-            mock.patch.dict(function_globals, {"run": probe}),
-            mock.patch.dict(os.environ, {"WUNDER_CONTAINER_ENGINE": ""}),
-        ):
-            command = ENGINE["copilot_container_command"](dict(ENGINE["COPILOT_PROMPT_MODE_BOUNDARY"]), ROOT)
+        with tempfile.TemporaryDirectory() as runtime:
+            runtime = str(Path(runtime).resolve())
+            host = f"unix://{runtime}/docker.sock"
+            probe = mock.Mock(side_effect=[subprocess.CompletedProcess([], code, "") for code in (1, 0)])
+            with (
+                mock.patch.object(function_globals["shutil"], "which", side_effect=("/docker", "/podman")),
+                mock.patch.dict(function_globals, {"run": probe, "existing_unix_socket": lambda _value: host[7:]}),
+                mock.patch.dict(os.environ, {"DOCKER_HOST": host, "XDG_RUNTIME_DIR": runtime}, clear=True),
+            ):
+                command = ENGINE["copilot_container_command"](dict(ENGINE["COPILOT_PROMPT_MODE_BOUNDARY"]), ROOT)
+            self.assertEqual(host, probe.call_args_list[0].kwargs["env"]["DOCKER_HOST"])
+            self.assertEqual(runtime, probe.call_args_list[1].kwargs["env"]["XDG_RUNTIME_DIR"])
         self.assertEqual("/podman", command[0])
         with (
             tempfile.TemporaryDirectory() as temporary_directory,

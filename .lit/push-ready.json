@@ -1,1 +1,85 @@
-{"version":3,"base_ref":"refs/remotes/origin/develop","checks":[{"name":"repository-quality-profile","command":["scripts/lit-ci-profile.sh","repository-quality"]}],"remote_only_checks":[{"id":"actions-gate","workflow":".github/workflows/collection-ci.yml","job":"lint-sanity","reason":"Collection gate.","owner":"LIT Platform"},{"id":"copilot-head-gate","workflow":".github/workflows/copilot-review.yml","job":"current-revision-reviewed","reason":"Copilot head gate.","owner":"LIT Platform"}],"review":{"max_diff_bytes":200000,"profiles":{"standard":{"agents":["codex"]},"trust-root":{"agents":["codex","copilot"]}},"classification":{"version":1,"standard_paths":["CHANGELOG.rst","README.md","galaxy.yml","requirements.yml"],"standard_prefixes":["changelogs/fragments/","docs/","extensions/","meta/","molecule/","plugins/","roles/","tests/"]}},"evidence":{"max_age_seconds":86400},"agents":{"copilot":{"enabled":true,"required":true,"command":["copilot"],"timeout_seconds":900},"codex":{"enabled":true,"required":true,"command":["codex"],"timeout_seconds":900}}}
+{
+  "version": 3,
+  "base_ref": "refs/remotes/origin/develop",
+  "checks": [
+    {
+      "name": "repository-quality-profile",
+      "command": [
+        "scripts/lit-ci-profile.sh",
+        "repository-quality"
+      ]
+    }
+  ],
+  "remote_only_checks": [
+    {
+      "id": "github-actions-service-boundary",
+      "workflow": ".github/workflows/collection-ci.yml",
+      "job": "lint-sanity",
+      "reason": "The authoritative collection lint, sanity, policy, and evidence gate requires the GitHub Actions event and service context.",
+      "owner": "Lightning IT Application Platform Maintainers"
+    },
+    {
+      "id": "copilot-current-head-review",
+      "workflow": ".github/workflows/copilot-review.yml",
+      "job": "current-revision-reviewed",
+      "reason": "The authoritative Copilot pull-request review is produced and bound to the current head SHA by GitHub.",
+      "owner": "Lightning IT Application Platform Maintainers"
+    }
+  ],
+  "review": {
+    "max_diff_bytes": 200000,
+    "profiles": {
+      "standard": {
+        "agents": [
+          "codex"
+        ]
+      },
+      "trust-root": {
+        "agents": [
+          "codex",
+          "copilot"
+        ]
+      }
+    },
+    "classification": {
+      "version": 1,
+      "standard_paths": [
+        "CHANGELOG.rst",
+        "README.md",
+        "galaxy.yml",
+        "requirements.yml"
+      ],
+      "standard_prefixes": [
+        "changelogs/fragments/",
+        "docs/",
+        "extensions/",
+        "meta/",
+        "molecule/",
+        "plugins/",
+        "roles/",
+        "tests/"
+      ]
+    }
+  },
+  "evidence": {
+    "max_age_seconds": 86400
+  },
+  "agents": {
+    "copilot": {
+      "enabled": true,
+      "required": true,
+      "command": [
+        "copilot"
+      ],
+      "timeout_seconds": 900
+    },
+    "codex": {
+      "enabled": true,
+      "required": true,
+      "command": [
+        "codex"
+      ],
+      "timeout_seconds": 900
+    }
+  }
+}

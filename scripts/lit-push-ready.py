@@ -107,12 +107,13 @@ AUTHORITATIVE_BASE_REFS = {
     "refs/remotes/origin/main": "main",
 }
 INTEGRATION_DIRECTORY_PREFIX = ".lit-integration-"
-COPILOT_DEVTOOL_IMAGE = "quay.io/l-it/ee-wunder-devtools-ubi9:v1.12.0@sha256:b1189c8d51cb8f9f7b8aa396b8aaf30da7635ebd5d0fc9fe8b0f9f9d3c36d6de"  # noqa: E501
+COPILOT_DEVTOOL_IMAGE = "quay.io/l-it/ee-wunder-devtools-ubi9:v1.13.0@sha256:d65d9f849e2e18827d37277d25d9c62f6525c5f9a075feee977b9b0d02ec74c9"  # noqa: E501
 CHECK_PROFILE = {
     "name": "repository-quality-profile",
     "command": ["scripts/lit-ci-profile.sh", "repository-quality"],
 }
 TRUSTED_CHECK_POLICY_PATHS = (
+    ".pre-commit-config.yaml",
     ".lit/push-ready.json",
     SECRET_FIXTURE_MANIFEST_PATH,
     "scripts/lit-ci-profile.sh",
@@ -1026,6 +1027,7 @@ def require_trusted_check_policy(
         raise RuntimeError("engine is outside repository") from exc
     policy_paths = tuple(dict.fromkeys((*TRUSTED_CHECK_POLICY_PATHS, running_engine)))
     required_paths = {
+        ".pre-commit-config.yaml",
         ".lit/push-ready.json",
         "scripts/lit-ci-profile.sh",
         running_engine,
@@ -1046,7 +1048,12 @@ def require_review_bootstrap_contract(change: PlannedChange) -> bool:
         running_engine = Path(__file__).resolve().relative_to(ROOT).as_posix()
     except ValueError as exc:
         raise RuntimeError("engine is outside repository") from exc
-    required_paths = (".lit/push-ready.json", "scripts/lit-ci-profile.sh", running_engine)
+    required_paths = (
+        ".pre-commit-config.yaml",
+        ".lit/push-ready.json",
+        "scripts/lit-ci-profile.sh",
+        running_engine,
+    )
     base_entries = [git_tree_entry(change.base_tip, path) for path in required_paths]
     if all(base_entries):
         if not all(git_tree_entry(change.head_commit, path) for path in required_paths):
@@ -1057,6 +1064,15 @@ def require_review_bootstrap_contract(change: PlannedChange) -> bool:
     if not all(git_tree_entry(change.head_commit, path) for path in required_paths):
         raise RuntimeError("trust-root bootstrap lacks policy")
     return True
+
+
+def require_trust_root_update_contract(change: PlannedChange) -> None:
+    if require_review_bootstrap_contract(change):
+        raise RuntimeError("trust-root update requires an existing base policy")
+    running_engine = Path(__file__).resolve().relative_to(ROOT).as_posix()
+    paths = tuple(dict.fromkeys((*TRUSTED_CHECK_POLICY_PATHS, running_engine)))
+    if not any(git_tree_entry(change.base_tip, path) != git_tree_entry(change.head_commit, path) for path in paths):
+        raise RuntimeError("trust-root update changes no governed policy")
 
 
 def integration_worktree_fingerprint(cwd: Path, *, include_ignored: bool = False) -> str:
@@ -2556,6 +2572,24 @@ def resolve_command(command: list[str], name: str) -> list[str]:
     return [str(candidate.resolve()), *command[1:]]
 
 
+def local_container_environment(environment: dict[str, str], engine: str) -> dict[str, str]:
+    result = dict(environment)
+    if engine == "docker":
+        configured_host = os.environ.get("DOCKER_HOST")
+        if configured_host and not configured_host.startswith("unix://"):
+            raise RuntimeError("remote DOCKER_HOST is forbidden")
+        candidates = (configured_host, str(Path.home() / ".docker" / "run" / "docker.sock"), "/var/run/docker.sock")
+        for value in candidates:
+            if value and (socket_path := existing_unix_socket(value)):
+                result["DOCKER_HOST"] = f"unix://{socket_path}"
+                break
+    elif runtime_directory := os.environ.get("XDG_RUNTIME_DIR"):
+        runtime_path = Path(runtime_directory)
+        if runtime_path.is_absolute() and runtime_path.is_dir():
+            result["XDG_RUNTIME_DIR"] = str(runtime_path.resolve())
+    return result
+
+
 def copilot_container_command(
     environment: dict[str, str], workspace: Path, *, include_credentials: bool = True
 ) -> list[str]:
@@ -2564,41 +2598,24 @@ def copilot_container_command(
         raise RuntimeError("invalid WUNDER_CONTAINER_ENGINE")
     engine_names = [requested_engine] if requested_engine else ["docker", "podman"]
     engine = None
+    engine_environment = None
     for name in engine_names:
         resolved = shutil.which(name) if name else None
         if resolved is None:
             continue
+        probe_environment = local_container_environment(environment, name)
         try:
-            if run([resolved, "info"], capture=True, timeout=30, env=environment).returncode:
+            if run([resolved, "info"], capture=True, timeout=30, env=probe_environment).returncode:
                 continue
         except subprocess.TimeoutExpired:
             continue
         engine = resolved
+        engine_environment = probe_environment
         break
-    if engine is None:
+    if engine is None or engine_environment is None:
         raise RuntimeError("no usable Docker or Podman")
-    if Path(engine).name == "docker":
-        configured_host = os.environ.get("DOCKER_HOST")
-        if configured_host and not configured_host.startswith("unix://"):
-            raise RuntimeError("remote DOCKER_HOST is forbidden")
-        socket_candidates = []
-        if configured_host:
-            socket_candidates.append(configured_host)
-        socket_candidates.extend(
-            [
-                str(Path.home() / ".docker" / "run" / "docker.sock"),
-                "/var/run/docker.sock",
-            ]
-        )
-        for value in socket_candidates:
-            socket_path = existing_unix_socket(value)
-            if socket_path:
-                environment["DOCKER_HOST"] = f"unix://{socket_path}"
-                break
-    elif os.environ.get("XDG_RUNTIME_DIR"):
-        runtime_path = Path(os.environ["XDG_RUNTIME_DIR"])
-        if runtime_path.is_absolute() and runtime_path.is_dir():
-            environment["XDG_RUNTIME_DIR"] = str(runtime_path.resolve())
+    environment.clear()
+    environment.update(engine_environment)
     canonical_workspace = workspace.resolve(strict=True)
     if (
         not canonical_workspace.is_dir()
@@ -3540,20 +3557,47 @@ def verify_pre_push_updates(
                 raise RuntimeError("evidence forbids non-fast-forward push")
 
 
-def pre_commit_push_context() -> tuple[str, str, str]:
-    names = (
-        "PRE_COMMIT_REMOTE_NAME",
-        "PRE_COMMIT_REMOTE_URL",
-        "PRE_COMMIT_LOCAL_BRANCH",
-        "PRE_COMMIT_REMOTE_BRANCH",
+def install_pre_push_hook() -> None:
+    hooks = Path(git_output("rev-parse", "--git-path", "hooks").strip())
+    if not hooks.is_absolute():
+        hooks = ROOT / hooks
+    payload = (
+        b'#!/bin/sh\nexec python3 "$(git rev-parse --show-toplevel)/scripts/lit-push-ready.py" pre-push '
+        b'--remote-name "$1" --remote-url "$2"\n'
     )
-    values = tuple(os.environ.get(name, "") for name in names)
-    if not all(values):
-        raise RuntimeError("incomplete pre-commit push context")
-    remote_name, remote_url, local_ref, remote_ref = values
-    local_oid = os.environ.get("PRE_COMMIT_TO_REF") or git_output("rev-parse", local_ref).strip()
-    remote_oid = os.environ.get("PRE_COMMIT_FROM_REF") or "0" * 40
-    return remote_name, remote_url, f"{local_ref} {local_oid} {remote_ref} {remote_oid}\n"
+    directory = os.open(hooks, os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW)
+    descriptor = -1
+    try:
+        try:
+            existing = os.stat("pre-push", dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            descriptor = os.open(
+                "pre-push",
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW,
+                0o700,
+                dir_fd=directory,
+            )
+            with os.fdopen(descriptor, "wb") as stream:
+                descriptor = -1
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.fsync(directory)
+        else:
+            if not stat.S_ISREG(existing.st_mode) or existing.st_uid != os.geteuid():
+                raise RuntimeError("unsafe hook")
+            with os.fdopen(
+                os.open("pre-push", os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW, dir_fd=directory),
+                "rb",
+            ) as stream:
+                if stream.read(len(payload) + 1) != payload or not existing.st_mode & 0o111:
+                    raise RuntimeError("pre-push hook differs")
+    except OSError as exc:
+        raise RuntimeError("hook install failed") from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        os.close(directory)
 
 
 def produce_evidence(
@@ -3562,6 +3606,7 @@ def produce_evidence(
     *,
     fixture_manifest_bootstrap: bool,
 ) -> None:
+    require_trusted_check_policy(change, allow_fixture_manifest_bootstrap=fixture_manifest_bootstrap)
     branch = current_branch_ref()
     started_at, started = now_utc(), time.monotonic()
     checks, tree, commit, fingerprint = execute_integration_checks(config, change)
@@ -3583,6 +3628,7 @@ def produce_evidence(
         classification=classification,
         fixture_manifest_bootstrap=fixture_manifest_bootstrap,
     )
+    install_pre_push_hook()
     write_evidence(
         config,
         checks,
@@ -3632,6 +3678,7 @@ def main() -> int:
         action="store_true",
         help="review a bounded secret-fixture bootstrap",
     )
+    parser.add_argument("--trust-root-update", action="store_true", help="review an existing trust-root update")
     args = parser.parse_args()
     try:
         if args.base and args.command != "review":
@@ -3643,6 +3690,8 @@ def main() -> int:
             raise RuntimeError("fixture bootstrap requires review or push-ready")
         if args.fixture_manifest_bootstrap and args.base:
             raise RuntimeError("fixture bootstrap cannot override base")
+        if args.trust_root_update and (args.command != "review" or args.base or args.fixture_manifest_bootstrap):
+            raise RuntimeError("trust-root update requires review without another mode")
         if args.command == "sync-instructions":
             sync_instructions()
             return 0
@@ -3655,18 +3704,16 @@ def main() -> int:
             print(f"Verified push-ready evidence: {evidence_path()}")
             return 0
         if args.command == "pre-push":
-            remote_name, remote_url = args.remote_name, args.remote_url
-            hook_input = sys.stdin.read()
-            if not remote_name or not remote_url:
-                remote_name, remote_url, hook_input = pre_commit_push_context()
+            if not args.remote_name or not args.remote_url:
+                raise RuntimeError("pre-push requires the native Git hook arguments")
             require_clean_head()
             refresh_authoritative_base(config)
             payload = verify_evidence(config)
             verify_pre_push_updates(
                 payload,
-                hook_input,
-                remote_name=remote_name,
-                remote_url=remote_url,
+                sys.stdin.read(),
+                remote_name=args.remote_name,
+                remote_url=args.remote_url,
             )
             print(f"Verified push-ready evidence: {evidence_path()}")
             return 0
@@ -3676,6 +3723,7 @@ def main() -> int:
             change = planned_change(config)
             report_review_size(config, change)
             require_review_bootstrap_contract(change)
+            require_trusted_check_policy(change)
             execute_integration_checks(config, change)
             return 0
         if args.command == "review":
@@ -3689,8 +3737,20 @@ def main() -> int:
             )
             report_review_size(config, change)
             require_review_bootstrap_contract(change)
-            if args.base:
-                run_agent_reviews(config, change, fixture_manifest_bootstrap=args.fixture_manifest_bootstrap)
+            if args.trust_root_update:
+                require_trust_root_update_contract(change)
+                classification = classify_review_profile(change)
+                print(f"Review profile: {classification.profile} ({classification.reason})", flush=True)
+                run_agent_reviews(config, change, classification=classification)
+            elif args.base:
+                classification = classify_review_profile(change)
+                print(f"Review profile: {classification.profile} ({classification.reason})", flush=True)
+                run_agent_reviews(
+                    config,
+                    change,
+                    classification=classification,
+                    fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
+                )
             else:
                 produce_evidence(config, change, fixture_manifest_bootstrap=args.fixture_manifest_bootstrap)
             return 0
@@ -3701,10 +3761,6 @@ def main() -> int:
             fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
         )
         report_review_size(config, change)
-        require_trusted_check_policy(
-            change,
-            allow_fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
-        )
         produce_evidence(config, change, fixture_manifest_bootstrap=args.fixture_manifest_bootstrap)
         return 0
     except (
