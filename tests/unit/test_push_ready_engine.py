@@ -615,13 +615,13 @@ class PushReadyEngineTests(unittest.TestCase):
     def test_review_profile_classification_is_base_policy_bound_and_fail_closed(self) -> None:
         base_config = json.loads((ROOT / ".lit" / "push-ready.json").read_text(encoding="utf-8"))
 
-        def classify(*paths: str):
+        def classify(*paths: str, diff: str = "benign implementation change"):
             change = ENGINE["PlannedChange"](
                 "base",
                 "a" * 40,
                 "a" * 40,
                 "b" * 40,
-                "patch",
+                diff,
                 paths,
                 {},
                 "f" * 64,
@@ -632,6 +632,18 @@ class PushReadyEngineTests(unittest.TestCase):
 
         self.assertEqual("standard", classify("roles/example/tasks/main.yml").profile)
         self.assertEqual("standard", classify("tests/unit/test_example.py", "README.md").profile)
+        for path in (
+            "roles/vault_bootstrap/tasks/main.yml",
+            "roles/aap_tls/tasks/main.yml",
+            "roles/keycloak_config/tasks/main.yml",
+            "roles/forgejo_cac/tasks/main.yml",
+            "docs/security-boundary.md",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual("trust-root", classify(path).profile)
+        semantic_risk = classify("roles/example/tasks/main.yml", diff="+ api_token: protected")
+        self.assertEqual("trust-root", semantic_risk.profile)
+        self.assertEqual("trust-root-term:token", semantic_risk.reason)
         self.assertEqual("trust-root", classify("scripts/lit-push-ready.py").profile)
         self.assertEqual("trust-root", classify(".lit/push-ready.json").profile)
         self.assertEqual("trust-root", classify("unknown/new-surface.txt").profile)
@@ -644,6 +656,16 @@ class PushReadyEngineTests(unittest.TestCase):
             classification = ENGINE["classify_review_profile"](change)
         self.assertEqual("trust-root", classification.profile)
         self.assertEqual("base-policy-unavailable", classification.reason)
+
+    def test_review_policy_rejects_untrusted_or_unsorted_risk_terms(self) -> None:
+        policy = json.loads((ROOT / ".lit" / "push-ready.json").read_text(encoding="utf-8"))["review"]
+        ENGINE["validate_review_policy"](policy)
+        for terms in (("token", "secret"), ("token", "unsafe/secret"), ("token", "token")):
+            with self.subTest(terms=terms):
+                malformed = json.loads(json.dumps(policy))
+                malformed["classification"]["trust_root_terms"] = list(terms)
+                with self.assertRaisesRegex(RuntimeError, "trust_root_terms"):
+                    ENGINE["validate_review_policy"](malformed)
 
     def test_review_binding_changes_with_profile_and_exact_head(self) -> None:
         standard = ENGINE["ReviewClassification"]("standard", ("codex",), "a" * 64, "all-paths-standard")

@@ -42,7 +42,7 @@
       }
     },
     "classification": {
-      "version": 1,
+      "version": 2,
       "standard_paths": [
         "CHANGELOG.rst",
         "README.md",
@@ -58,6 +58,39 @@
         "plugins/",
         "roles/",
         "tests/"
+      ],
+      "trust_root_terms": [
+        "aap",
+        "acceptance",
+        "authentication",
+        "authorization",
+        "branch_protection",
+        "cac",
+        "credential",
+        "credentials",
+        "github_app",
+        "jwt",
+        "keycloak",
+        "oidc",
+        "permission",
+        "permissions",
+        "policies",
+        "policy",
+        "promotion",
+        "release",
+        "ruleset",
+        "rulesets",
+        "secret",
+        "secrets",
+        "security",
+        "signature",
+        "signatures",
+        "signing",
+        "tls",
+        "token",
+        "tokens",
+        "vault",
+        "workflow_dispatch"
       ]
     }
   },

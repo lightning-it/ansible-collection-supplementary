@@ -81,6 +81,15 @@ history-free workspaces. A missing, malformed, or pre-profile base policy also
 falls back to `trust-root`. Editing the classifier or either profile therefore
 classifies itself as `trust-root`.
 
+The standard path allowlist is necessary but not sufficient. The trusted base
+policy also scans path components and the exact final diff for its sorted
+security-risk vocabulary. Authentication, authorization, AAP, CaC, Keycloak,
+Vault, TLS, credentials, permissions, policies, release/promotion/acceptance,
+signatures, secrets, tokens, Rulesets, and branch-protection changes therefore
+remain `trust-root` even when their files live below an otherwise standard
+role, test, Molecule, or documentation prefix. Unknown or malformed risk
+classification remains fail-closed.
+
 Evidence binds the profile, its trusted base-policy digest, the authoritative
 base tip, merge-base, exact head, integration tree, instructions, and exact
 review input. A head or base movement invalidates the evidence.

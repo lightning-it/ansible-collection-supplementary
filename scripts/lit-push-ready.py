@@ -768,9 +768,10 @@ def validate_review_policy(value: Any) -> None:
         "version",
         "standard_paths",
         "standard_prefixes",
+        "trust_root_terms",
     }:
         raise RuntimeError("review classification keys are invalid")
-    if classification.get("version") != 1:
+    if classification.get("version") != 2:
         raise RuntimeError("review classification version is invalid")
     for key, prefix in (("standard_paths", False), ("standard_prefixes", True)):
         paths = classification.get(key)
@@ -779,6 +780,16 @@ def validate_review_policy(value: Any) -> None:
         normalized = [validate_review_path(path, f"review.classification.{key}", prefix=prefix) for path in paths]
         if normalized != sorted(set(normalized)):
             raise RuntimeError(f"review classification {key} must be sorted and unique")
+    trust_root_terms = classification.get("trust_root_terms")
+    if (
+        not isinstance(trust_root_terms, list)
+        or not trust_root_terms
+        or any(
+            not isinstance(term, str) or not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", term) for term in trust_root_terms
+        )
+        or trust_root_terms != sorted(set(trust_root_terms))
+    ):
+        raise RuntimeError("review classification trust_root_terms must be safe, sorted, and unique")
 
 
 def load_config() -> dict[str, Any]:
@@ -1632,13 +1643,29 @@ def classify_review_profile(change: PlannedChange) -> ReviewClassification:
     )
     standard_paths = set(classification["standard_paths"])
     standard_prefixes = tuple(classification["standard_prefixes"])
-    standard = all(path in standard_paths or path.startswith(standard_prefixes) for path in change.paths)
+    risk_surface = "\n".join((*change.paths, change.diff)).lower()
+    matched_term = next(
+        (
+            term
+            for term in classification["trust_root_terms"]
+            if re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", risk_surface)
+        ),
+        None,
+    )
+    known_standard_paths = all(path in standard_paths or path.startswith(standard_prefixes) for path in change.paths)
+    standard = known_standard_paths and matched_term is None
     profile = "standard" if standard else "trust-root"
+    if matched_term is not None:
+        reason = f"trust-root-term:{matched_term}"
+    elif known_standard_paths:
+        reason = "all-paths-standard"
+    else:
+        reason = "unknown-or-trust-root-path"
     return ReviewClassification(
         profile,
         REVIEW_PROFILE_AGENTS[profile],
         policy_sha256,
-        "all-paths-standard" if standard else "unknown-or-trust-root-path",
+        reason,
     )
 
 
