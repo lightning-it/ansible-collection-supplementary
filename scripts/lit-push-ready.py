@@ -3180,7 +3180,7 @@ def review_execution_evidence(
     overlap = 0.0
     if len(reviews) > 1:
         overlap = (
-            min(completed for _, completed in intervals) - max(started for started, _ in intervals)
+            min(interval[1] for interval in intervals) - max(interval[0] for interval in intervals)
         ).total_seconds()
         if overlap <= 0:
             raise RuntimeError("required external reviewers did not execute concurrently")
@@ -3204,7 +3204,7 @@ def parallel_review_evidence(reviews: list[dict[str, Any]]) -> dict[str, Any]:
 def execution_metrics(checks: list[dict[str, Any]], reviews: list[dict[str, Any]]) -> dict[str, Any]:
     intervals = [evidence_interval(review, f"{review.get('agent', 'unknown')} metrics review") for review in reviews]
     review_wall_seconds = (
-        max(completed for _, completed in intervals) - min(started for started, _ in intervals)
+        max(interval[1] for interval in intervals) - min(interval[0] for interval in intervals)
     ).total_seconds()
     reviewer_seconds = {
         str(review["agent"]): review["duration_seconds"]
