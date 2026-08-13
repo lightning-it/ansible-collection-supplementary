@@ -261,6 +261,21 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertEqual(EVIDENCE_ID, result["evidenceId"])
         self.assertEqual(0, result["humanActions"])
 
+    def test_recovery_build_reads_source_state_from_git_objects(self) -> None:
+        recovery = self.prepare_recovery_topology()
+        git(self.root, "checkout", "-q", self.base)
+        self.assertFalse((self.root / f".lit/security-releases/{VERSION}.json").exists())
+        with mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]):
+            envelope = MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+        self.assertIs(envelope["dispatch"], True)
+        self.assertEqual(recovery["current_main"], envelope["request"]["baseSha"])
+
     def test_recovery_rejects_non_merge_protected_main_topology(self) -> None:
         recovery = self.prepare_recovery_topology()
         git(
@@ -542,8 +557,8 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("github.triggering_actor == 'github-actions[bot]'", dispatch)
         self.assertIn("github.event.workflow_run.event == 'push'", dispatch)
         self.assertNotIn("pull_request:", dispatch)
-        self.assertEqual(2, dispatch.count("ref: ${{ github.sha }}"))
-        self.assertEqual(1, dispatch.count("ref: ${{ github.event.workflow_run.head_sha }}"))
+        self.assertEqual(4, dispatch.count("ref: ${{ github.sha }}"))
+        self.assertNotIn("ref: ${{ github.event.workflow_run.head_sha }}", dispatch)
         self.assertNotIn("ref: ${{ needs.classify.outputs.source-sha }}", dispatch)
         self.assertIn("needs.classify.outputs['source-sha']", dispatch)
         self.assertIn("needs.classify.outputs.dispatch == 'true'", dispatch)
@@ -562,7 +577,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("Dispatch approved recovery as release App", dispatch)
         self.assertNotIn("needs.classify-recovery", dispatch)
         self.assertNotIn("steps.recovery-app", dispatch)
-        self.assertGreaterEqual(dispatch.count("needs['classify-recovery']"), 5)
+        self.assertEqual(4, dispatch.count("needs['classify-recovery']"))
         self.assertGreaterEqual(dispatch.count("steps['recovery-app"), 6)
         self.assertIn("inputs:{request_json:$request_json}", dispatch)
         self.assertIn(

@@ -66,10 +66,10 @@ jobs:
       dispatch: ${{ steps.request.outputs.dispatch }}
       source-sha: ${{ steps.request.outputs.source_sha }}
     steps:
-      - name: Checkout exact protected-main recovery controller
+      - name: Checkout trusted default-branch recovery controller
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -77,6 +77,7 @@ jobs:
         id: request
         env:
           GH_TOKEN: ${{ github.token }}
+          CONTROLLER_SHA: ${{ github.sha }}
           SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
           SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
@@ -88,6 +89,7 @@ jobs:
           }
 
           [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           source_run="$RUNNER_TEMP/security-recovery-source-run.json"
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" \
@@ -107,9 +109,10 @@ jobs:
               and (.status == "completed")
               and (.conclusion == "success")
             ' "$source_run" >/dev/null
-          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse HEAD)" = "$CONTROLLER_SHA"
           authenticated_fetch --no-tags origin main develop
           test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
+          test "$(git rev-parse origin/develop)" = "$CONTROLLER_SHA"
 
           result="$RUNNER_TEMP/security-recovery-envelope.json"
           umask 077
@@ -139,10 +142,10 @@ jobs:
       actions: read
       contents: read
     steps:
-      - name: Checkout exact protected-main recovery controller
+      - name: Checkout trusted default-branch recovery controller
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
-          ref: ${{ needs['classify-recovery'].outputs['source-sha'] }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -150,6 +153,7 @@ jobs:
         id: request
         env:
           RUN_TOKEN: ${{ github.token }}
+          CONTROLLER_SHA: ${{ github.sha }}
           SOURCE_SHA: ${{ needs['classify-recovery'].outputs['source-sha'] }}
         run: |
           set -euo pipefail
@@ -159,10 +163,12 @@ jobs:
               -c 'credential.helper=!gh auth git-credential' fetch "$@"
           }
 
+          [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse HEAD)" = "$CONTROLLER_SHA"
           authenticated_fetch --no-tags origin main develop
           test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
+          test "$(git rev-parse origin/develop)" = "$CONTROLLER_SHA"
           result="$RUNNER_TEMP/security-recovery-envelope.json"
           umask 077
           python3 scripts/security-release-dispatch.py \
@@ -248,10 +254,13 @@ jobs:
           EXPECTED_ENVELOPE: ${{ steps.request.outputs.envelope }}
           GH_TOKEN: ${{ steps['recovery-app'].outputs.token }}
           READ_TOKEN: ${{ github.token }}
+          CONTROLLER_SHA: ${{ github.sha }}
           SOURCE_SHA: ${{ needs['classify-recovery'].outputs['source-sha'] }}
         run: |
           set -euo pipefail
 
+          [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$APP_SLUG" = lightning-it-release-automation
           test "$APP_INSTALLATION_ID" = 148019054
           authenticated_fetch() {
@@ -260,8 +269,9 @@ jobs:
           }
 
           authenticated_fetch --no-tags origin main develop
-          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse HEAD)" = "$CONTROLLER_SHA"
           test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
+          test "$(git rev-parse origin/develop)" = "$CONTROLLER_SHA"
           fresh_envelope="$RUNNER_TEMP/security-recovery-envelope-final.json"
           request="$RUNNER_TEMP/security-recovery-request.json"
           umask 077

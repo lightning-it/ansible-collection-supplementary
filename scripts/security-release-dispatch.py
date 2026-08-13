@@ -134,16 +134,17 @@ def build_recovery_envelope(
     if live_main != base_sha or live_develop != head_sha:
         INTAKE.fail("recovery source refs changed after protected CI")
 
-    receipt_path = root / ".lit" / "security-release-intakes" / f"{INTAKE.CONTRACT.RECOVERY_FIXED_VERSION}.json"
-    if receipt_path.exists() or receipt_path.is_symlink():
+    receipt_path = f".lit/security-release-intakes/{INTAKE.CONTRACT.RECOVERY_FIXED_VERSION}.json"
+    if INTAKE.git_text(root, "ls-tree", "--name-only", base_sha, "--", receipt_path).strip():
         return {"dispatch": False}
-    metadata_path = root / ".lit" / "security-releases" / f"{INTAKE.CONTRACT.RECOVERY_FIXED_VERSION}.json"
-    metadata_raw = INTAKE.CONTRACT.read_bounded_regular_file(
+    metadata_path = f".lit/security-releases/{INTAKE.CONTRACT.RECOVERY_FIXED_VERSION}.json"
+    metadata_raw = INTAKE.git_bytes(
         root,
-        metadata_path.relative_to(root),
-        "Security recovery metadata",
-        INTAKE.CONTRACT.MAX_JSON_BYTES,
+        "show",
+        f"{base_sha}:{metadata_path}",
     )
+    if len(metadata_raw) > INTAKE.CONTRACT.MAX_JSON_BYTES:
+        INTAKE.fail("Security recovery metadata exceeds the size limit")
     if INTAKE.sha256(metadata_raw) != INTAKE.CONTRACT.RECOVERY_METADATA_SHA256:
         INTAKE.fail("Security recovery metadata digest differs from the approved binding")
     metadata = INTAKE.load_json_bytes(metadata_raw, "Security recovery metadata")
