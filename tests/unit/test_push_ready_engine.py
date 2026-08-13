@@ -59,7 +59,11 @@ class PushReadyEngineTests(unittest.TestCase):
         checks.assert_not_called()
         source = (ROOT / "scripts" / "lit-push-ready.py").read_text(encoding="utf-8")
         validate = source.split('if args.command == "validate":', 1)[1].split('if args.command == "review":', 1)[0]
-        self.assertLess(validate.index("require_trusted_review_policy"), validate.index("execute_integration_checks"))
+        self.assertLess(validate.index("classify_review_profile"), validate.index("execute_integration_checks"))
+        self.assertIn('if classification.profile == "standard":', validate)
+        self.assertLess(validate.index("require_trusted_check_policy"), validate.index("execute_integration_checks"))
+        self.assertNotIn("run_agent_reviews", validate)
+        self.assertNotIn("produce_evidence", validate)
 
     def test_trust_root_bootstrap_skips_base_policy_comparison(self) -> None:
         change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)

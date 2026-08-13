@@ -3776,7 +3776,11 @@ def main() -> int:
             refresh_authoritative_base(config)
             change = planned_change(config)
             report_review_size(config, change)
-            require_trusted_review_policy(change)
+            require_review_bootstrap_contract(change)
+            classification = classify_review_profile(change)
+            print(f"Review profile: {classification.profile} ({classification.reason})", flush=True)
+            if classification.profile == "standard":
+                require_trusted_check_policy(change)
             execute_integration_checks(config, change)
             return 0
         if args.command == "review":
