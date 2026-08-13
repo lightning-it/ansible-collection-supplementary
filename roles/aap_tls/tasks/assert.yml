@@ -27,12 +27,12 @@
           and (aap_tls_selfsigned_ca_trust_owner | string) is match('^[0-9]+$')
           and (aap_tls_selfsigned_ca_trust_group | string) is match('^[0-9]+$')
           and aap_tls_selfsigned_ca_trust_test_root
-              is match('^/tmp/[A-Za-z0-9._/-]+$')
+              is match('^/[A-Za-z0-9._/-]+$')
           and not aap_tls_selfsigned_ca_trust_test_root.endswith('/')
           and aap_tls_selfsigned_ca_trust_path.startswith(
             aap_tls_selfsigned_ca_trust_test_root ~ '/'
           )
-          and aap_tls_selfsigned_ca_trust_path is match('^/tmp/[A-Za-z0-9._/-]+\\.crt$')
+          and aap_tls_selfsigned_ca_trust_path is match('^/[A-Za-z0-9._/-]+\\.crt$')
           and '..' not in aap_tls_selfsigned_ca_trust_test_root.split('/')
           and '..' not in aap_tls_selfsigned_ca_trust_path.split('/')
         )

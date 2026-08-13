@@ -37,7 +37,8 @@ class AapTlsContractsTests(unittest.TestCase):
         self.assertIn("aap_tls_selfsigned_ca_trust_test_mode is sameas true", assertions)
         self.assertIn("aap_tls_selfsigned_ca_trust_test_mode is sameas false", assertions)
         self.assertIn("^/etc/pki/ca-trust/source/anchors/", assertions)
-        self.assertIn("^/tmp/", assertions)
+        self.assertIn("^/[A-Za-z0-9._/-]+$", assertions)
+        self.assertNotIn("^/tmp/", assertions)
         self.assertNotIn("MOLECULE_EPHEMERAL_DIRECTORY", assertions)
         self.assertIn("ansible_connection == 'local'", assertions)
         self.assertIn("_aap_tls_test_controller_identity.stdout | int > 0", assertions)
@@ -49,6 +50,7 @@ class AapTlsContractsTests(unittest.TestCase):
     def test_invalid_trust_inputs_are_exercised_by_molecule(self) -> None:
         converge = (ROOT / "molecule/aap-tls-basic/converge.yml").read_text(encoding="utf-8")
 
+        self.assertIn("MOLECULE_EPHEMERAL_DIRECTORY') }}/aap-tls", converge)
         self.assertIn("aap_tls_selfsigned_ca_trust_owner: invalid-owner", converge)
         self.assertIn('aap_tls_selfsigned_ca_trust_become: "false"', converge)
         self.assertIn("aap_tls_molecule_invalid_owner_rejected", converge)
