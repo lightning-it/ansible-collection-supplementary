@@ -51,7 +51,11 @@ jobs:
       issues: write
       pull-requests: write
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # GitHub can take more than the short API propagation window to expose a
+    # requested Copilot reviewer. Keep the finalization operation idempotent
+    # and wait long enough for that eventual consistency, rather than making a
+    # second request or failing a valid frozen head.
+    timeout-minutes: 10
 
     steps:
       - name: Request Copilot review for the current revision
@@ -99,12 +103,15 @@ jobs:
           }
           review_is_visible_for_head() {
             local attempt
-            for attempt in 1 2 3 4 5; do
+            # GitHub Copilot reviewer propagation has been observed to take
+            # more than two minutes. A bounded three-minute window keeps the
+            # request single-shot while still failing closed on non-visibility.
+            for attempt in $(seq 1 36); do
               if reviewer_is_requested || review_exists_for_head; then
                 return 0
               fi
-              if [ "${attempt}" -lt 5 ]; then
-                sleep 2
+              if [ "${attempt}" -lt 36 ]; then
+                sleep 5
               fi
             done
             return 1
