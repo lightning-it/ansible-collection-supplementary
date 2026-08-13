@@ -1324,17 +1324,17 @@ jobs:
           PY
       - name: Attest candidate provenance
         id: attest-candidate
-        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d  # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4
         with:
           subject-path: artifacts/candidate/*.tar.gz
       - name: Attest SBOM provenance
         id: attest-sbom
-        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d  # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4
         with:
           subject-path: artifacts/release-assets/sbom.cdx.json
       - name: Attest evidence provenance
         id: attest-evidence
-        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d  # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4
         with:
           subject-path: artifacts/release-assets/collection-evidence-${{ env.SOURCE_SHA }}.tar.gz
       - name: Capture generated attestation identities and bundles
@@ -1562,7 +1562,7 @@ jobs:
             artifacts/release-assets/SHA256SUMS
       - name: Attest authenticated release-asset checksums
         id: attest-checksums
-        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d  # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4
         with:
           subject-path: artifacts/release-assets/SHA256SUMS
       - name: Capture checksum attestation bundle
@@ -1735,7 +1735,7 @@ jobs:
             artifacts/release-assets/release-security-receipt.json
       - name: Attest final release-security receipt
         id: attest-receipt
-        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d  # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4
         with:
           subject-path: artifacts/release-assets/release-security-receipt.json
       - name: Capture receipt attestation bundle

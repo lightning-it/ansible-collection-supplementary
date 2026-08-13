@@ -18,3 +18,8 @@ aap_tls_selfsigned_key_size: 4096
 aap_tls_selfsigned_force: false
 aap_tls_selfsigned_install_ca_trust: true
 aap_tls_selfsigned_ca_trust_path: /etc/pki/ca-trust/source/anchors/aap-selfsigned-ca.crt
+aap_tls_selfsigned_ca_trust_owner: root
+aap_tls_selfsigned_ca_trust_group: root
+aap_tls_selfsigned_ca_trust_become: true
+aap_tls_selfsigned_ca_trust_test_mode: false
+aap_tls_selfsigned_ca_trust_test_root: ""

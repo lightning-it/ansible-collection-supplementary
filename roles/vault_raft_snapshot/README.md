@@ -48,6 +48,14 @@ must remain within this enforced bound before it is read into protected memory o
 
 The controller document path is immutable. For restore, pin its SHA-256 digest with
 `vault_raft_snapshot_expected_ciphertext_sha256` before the role decrypts it.
+The isolated work root remains below `/run` with `root:root` ownership by default. Numeric owner and group values
+require the explicit `vault_raft_snapshot_restore_test_mode` opt-in, disabled by default, on a non-root local
+controller. Both configured IDs must equal the controller's effective non-zero UID and GID. The configured test root
+must be a real owner-only non-symlink absolute directory with that effective ownership, and the canonical work root
+must remain below it. Localhost execution is verified before any test path is inspected. The test root must not end
+in `/`, and environment variables do not enable this exception. This permits direct Molecule and CI-specific
+ephemeral roots without weakening the path checks.
+Production callers must retain the default path and ownership.
 `vault_raft_snapshot_restore_tls_hostname` and `vault_raft_snapshot_restore_bind_address` are fail-closed to
 `localhost` and `127.0.0.1`, matching the operational Vault PKI contract. The role refuses alternate DNS names or
 bind addresses, derives every certificate-validated restore URL from those invariants, and disables proxy use for

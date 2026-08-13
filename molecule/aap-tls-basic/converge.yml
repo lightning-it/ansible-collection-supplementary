@@ -9,6 +9,11 @@
     aap_tls_selfsigned_delegate_to: localhost
     aap_tls_selfsigned_output_dir: "{{ aap_tls_molecule_root }}/generated"
     aap_tls_selfsigned_ca_trust_path: "{{ aap_tls_molecule_root }}/trust/aap-selfsigned-ca.crt"
+    aap_tls_selfsigned_ca_trust_owner: "{{ lookup('ansible.builtin.pipe', 'id -u') }}"
+    aap_tls_selfsigned_ca_trust_group: "{{ lookup('ansible.builtin.pipe', 'id -g') }}"
+    aap_tls_selfsigned_ca_trust_become: false
+    aap_tls_selfsigned_ca_trust_test_mode: true
+    aap_tls_selfsigned_ca_trust_test_root: "{{ aap_tls_molecule_root }}"
     aap_tls_selfsigned_common_name: localhost
     aap_tls_selfsigned_dns_names:
       - localhost
@@ -19,12 +24,36 @@
   tasks:
     - name: Ensure AAP TLS Molecule directories exist
       ansible.builtin.file:
-        path: "{{ item }}"
+        path: "{{ item.path }}"
         state: directory
-        mode: "0755"
+        mode: "{{ item.mode }}"
       loop:
-        - "{{ aap_tls_molecule_root }}/bin"
-        - "{{ aap_tls_molecule_root }}/trust"
+        - path: "{{ aap_tls_molecule_root }}"
+          mode: "0700"
+        - path: "{{ aap_tls_molecule_root }}/bin"
+          mode: "0700"
+        - path: "{{ aap_tls_molecule_root }}/trust"
+          mode: "0700"
+        - path: "{{ aap_tls_molecule_root }}-external"
+          mode: "0700"
+
+    - name: Create unsafe AAP TLS trust parent symlink fixture
+      ansible.builtin.file:
+        src: "{{ aap_tls_molecule_root }}-external"
+        dest: "{{ aap_tls_molecule_root }}/trust-link"
+        state: link
+
+    - name: Create unsafe external AAP TLS trust target fixture
+      ansible.builtin.copy:
+        dest: "{{ aap_tls_molecule_root }}-external/aap-unsafe-ca.crt"
+        content: unsafe-test-target
+        mode: "0600"
+
+    - name: Create unsafe AAP TLS trust target symlink fixture
+      ansible.builtin.file:
+        src: "{{ aap_tls_molecule_root }}-external/aap-unsafe-ca.crt"
+        dest: "{{ aap_tls_molecule_root }}/trust/aap-symlink-ca.crt"
+        state: link
 
     - name: Install fake update-ca-trust command
       ansible.builtin.copy:
@@ -37,6 +66,238 @@
     - name: Apply lit.supplementary.aap_tls
       ansible.builtin.include_role:
         name: lit.supplementary.aap_tls
+
+    - name: Initialize invalid AAP TLS ownership rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_invalid_owner_rejected: false
+
+    - name: Exercise invalid AAP TLS ownership precheck
+      block:
+        - name: Run AAP TLS precheck with invalid trust owner
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_owner: invalid-owner
+      rescue:
+        - name: Record invalid AAP TLS ownership rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_invalid_owner_rejected: true
+
+    - name: Assert invalid AAP TLS ownership was rejected
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_invalid_owner_rejected
+        quiet: true
+
+    - name: Initialize AAP TLS controller identity rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_zero_identity_rejected: false
+        aap_tls_molecule_mismatched_identity_rejected: false
+
+    - name: Reject zero AAP TLS test ownership
+      block:
+        - name: Exercise zero AAP TLS test ownership gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_owner: "0"
+            aap_tls_selfsigned_ca_trust_group: "0"
+      rescue:
+        - name: Record zero AAP TLS test ownership rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_zero_identity_rejected: true
+
+    - name: Reject mismatched AAP TLS test ownership
+      block:
+        - name: Exercise mismatched AAP TLS test ownership gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_owner: >-
+              {{ (lookup('ansible.builtin.pipe', 'id -u') | int + 1) | string }}
+            aap_tls_selfsigned_ca_trust_group: >-
+              {{ (lookup('ansible.builtin.pipe', 'id -g') | int + 1) | string }}
+      rescue:
+        - name: Record mismatched AAP TLS test ownership rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_mismatched_identity_rejected: true
+
+    - name: Require AAP TLS controller identity rejections
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_zero_identity_rejected
+          - aap_tls_molecule_mismatched_identity_rejected
+        quiet: true
+
+    - name: Initialize non-boolean AAP TLS become rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_invalid_become_rejected: false
+
+    - name: Exercise non-boolean AAP TLS become precheck
+      block:
+        - name: Run AAP TLS precheck with non-boolean become value
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_become: "false"
+      rescue:
+        - name: Record non-boolean AAP TLS become rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_invalid_become_rejected: true
+
+    - name: Assert non-boolean AAP TLS become was rejected
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_invalid_become_rejected
+        quiet: true
+
+    - name: Initialize privileged numeric trust ownership rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_privileged_numeric_owner_rejected: false
+
+    - name: Exercise privileged numeric AAP TLS trust ownership precheck
+      block:
+        - name: Run AAP TLS precheck with unsafe privileged numeric ownership
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_path: /etc/pki/ca-trust/source/anchors/aap-selfsigned-ca.crt
+            aap_tls_selfsigned_ca_trust_become: true
+      rescue:
+        - name: Record privileged numeric AAP TLS ownership rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_privileged_numeric_owner_rejected: true
+
+    - name: Assert privileged numeric AAP TLS ownership was rejected
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_privileged_numeric_owner_rejected
+        quiet: true
+
+    - name: Initialize forged Molecule environment rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_forged_environment_rejected: false
+
+    - name: Reject numeric ownership without explicit AAP TLS test mode
+      environment:
+        MOLECULE_EPHEMERAL_DIRECTORY: "{{ aap_tls_molecule_root }}"
+      block:
+        - name: Exercise forged Molecule environment without test opt-in
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_test_mode: false
+            aap_tls_selfsigned_ca_trust_test_root: ""
+      rescue:
+        - name: Record forged Molecule environment rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_forged_environment_rejected: true
+
+    - name: Require forged Molecule environment rejection
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_forged_environment_rejected
+        quiet: true
+
+    - name: Initialize non-local AAP TLS test-mode rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_non_local_test_mode_rejected: false
+
+    - name: Reject AAP TLS test mode before inspecting paths on a non-local connection
+      block:
+        - name: Exercise non-local AAP TLS test-mode gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            ansible_connection: ssh
+      rescue:
+        - name: Record non-local AAP TLS test-mode rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_non_local_test_mode_rejected: true
+
+    - name: Require non-local AAP TLS test-mode rejection
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_non_local_test_mode_rejected
+        quiet: true
+
+    - name: Initialize trailing-slash AAP TLS test-root rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_trailing_slash_root_rejected: false
+
+    - name: Reject an AAP TLS test root with a trailing slash
+      block:
+        - name: Exercise trailing-slash AAP TLS test-root gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_test_root: "{{ aap_tls_molecule_root }}/"
+      rescue:
+        - name: Record trailing-slash AAP TLS test-root rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_trailing_slash_root_rejected: true
+
+    - name: Require trailing-slash AAP TLS test-root rejection
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_trailing_slash_root_rejected
+        quiet: true
+
+    - name: Initialize symlinked AAP TLS trust parent rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_symlink_parent_rejected: false
+
+    - name: Reject a symlinked AAP TLS trust parent
+      block:
+        - name: Exercise symlinked AAP TLS trust parent gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_path: >-
+              {{ aap_tls_molecule_root }}/trust-link/aap-selfsigned-ca.crt
+      rescue:
+        - name: Record symlinked AAP TLS trust parent rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_symlink_parent_rejected: true
+
+    - name: Require symlinked AAP TLS trust parent rejection
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_symlink_parent_rejected
+        quiet: true
+
+    - name: Initialize symlinked AAP TLS trust target rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_symlink_target_rejected: false
+
+    - name: Reject a symlinked AAP TLS trust target
+      block:
+        - name: Exercise symlinked AAP TLS trust target gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_path: >-
+              {{ aap_tls_molecule_root }}/trust/aap-symlink-ca.crt
+      rescue:
+        - name: Record symlinked AAP TLS trust target rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_symlink_target_rejected: true
+
+    - name: Require symlinked AAP TLS trust target rejection
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_symlink_target_rejected
+        quiet: true
 
     - name: Read generated AAP CA
       ansible.builtin.slurp:

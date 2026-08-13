@@ -36,7 +36,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | aap_preflight | aap | validator | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_validation | — | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | aap-preflight-basic |
 | aap_prepare | aap | infrastructure | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_artifact_staging | artifacts | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | aap-prepare-basic |
 | aap_secrets | aap | secret_management | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_secret_resolution | — | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | — |
-| aap_tls | aap | infrastructure | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_tls_bootstrap | — | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix. | aap-tls-basic |
+| aap_tls | aap | infrastructure | experimental | — | rhel-9, rhel-10 | experimental | blocked-external-license | not-applicable | parent_component_tls_bootstrap | — | Red Hat Ansible Automation Platform entitlement and installer artifacts, Red Hat subscription-backed RHEL test targets | Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix., Tiny explicitly opts into a canonical owner-only local test root; production retains the root-owned trust-store path. | aap-tls-basic |
 | alertmanager_deploy | observability | monitoring_service | experimental | — | ubuntu-22.04, ubuntu-24.04, rhel-9 | experimental | experimental | experimental | deliver_and_verify_a_real_alert | lit.foundational.podman_systemd | — | Current Incus scenario verifies service and port state, not alert delivery. | atlas-observability-incus_heavy |
 | alloy_deploy | observability | agent | experimental | — | ubuntu-22.04, ubuntu-24.04, rhel-9 | experimental | experimental | experimental | generate_deliver_and_query_source_data | lit.foundational.kubeplay, lit.foundational.podman_systemd, loki_deploy | — | Current Incus scenario does not query delivered data from Loki. | atlas-observability-incus_heavy, wunderbox-monitoring-logging-basic |
 | artifacts | artifacts | infrastructure | experimental | — | rhel-9, ubuntu-24.04 | experimental | experimental | experimental | stage_verify_and_consume_a_real_artifact | — | — | Current scenario covers only a local source, not URL or managed-host sources. | artifacts-basic |
@@ -115,12 +115,12 @@ promotion input only and never satisfy the release-required supported-target mat
 | semaphore_cac | semaphore | configuration_as_code | experimental | — | rhel-9 | experimental | experimental | experimental | apply_query_reconcile_and_delete_api_objects | — | — | Current scenario is a syntax stub. | semaphore-cac-basic |
 | semaphore_deploy | semaphore | web_application | experimental | — | rhel-9 | experimental | experimental | experimental | browser_and_authenticated_api | postgres_deploy, lit.foundational.kubeplay | — | Current scenario is a syntax stub. | semaphore-deploy-basic |
 | vault_backup_restore | vault | backup_component | experimental | — | rhel-9 | experimental | experimental | experimental | create_backup_modify_state_restore_and_verify | vault_deploy, vault_ops, vault_validate | — | Current scenario uses a fake runtime rather than real Vault. | vault-backup-restore-basic |
-| vault_bootstrap | vault | secret_management | experimental | — | rhel-9 | experimental | experimental | experimental | initialize_authenticate_and_use_real_test_identity | vault_foundational, vault_ops | — | Current scenarios focus on local escrow contracts and a fake Vault API. | vault-bootstrap-basic, vault-ops-basic |
+| vault_bootstrap | vault | secret_management | experimental | — | rhel-9 | experimental | experimental | experimental | initialize_authenticate_and_use_real_test_identity | vault_foundational, vault_ops | — | Current scenarios focus on local escrow contracts and a fake Vault API., Tiny proves numeric ownership; root-owned production target escrow requires a privileged target. | vault-bootstrap-basic, vault-ops-basic |
 | vault_config | vault | configuration_as_code | experimental | — | rhel-9 | experimental | experimental | experimental | apply_query_reconcile_and_delete_secret_configuration | vault_bootstrap, lit.foundational.terragrunt | — | Current scenario only validates token normalization. | vault-config-basic |
 | vault_deploy | vault | secret_management | experimental | — | rhel-9 | experimental | experimental | experimental | authenticate_write_read_deny_audit_and_persist | — | — | Current scenario is a syntax stub. | vault-deploy-basic |
 | vault_foundational | vault | helper | experimental | — | rhel-9 | experimental | experimental | not-applicable | parent_component_helper | — | — | Current scenario is a syntax stub. | vault-foundational-basic |
 | vault_ops | vault | infrastructure | experimental | — | rhel-9 | experimental | experimental | experimental | restart_unseal_recovery_and_authenticated_read | vault_deploy, vault_validate, lit.foundational.kubeplay | — | Current scenario uses fake Podman and a fake Vault API. | vault-ops-basic |
-| vault_raft_snapshot | vault | backup_component | experimental | — | rhel-9 | experimental | experimental | experimental | snapshot_modify_restore_and_verify_exact_state | — | — | Current scenario uses a fake Vault API rather than an integrated-Raft cluster. | vault-raft-snapshot-basic, vault-security-lifecycle-basic |
+| vault_raft_snapshot | vault | backup_component | experimental | — | rhel-9 | experimental | experimental | experimental | snapshot_modify_restore_and_verify_exact_state | — | — | Current scenario uses a fake Vault API rather than an integrated-Raft cluster., Tiny explicitly proves numeric ownership in a canonical owner-only local test root; production retains /run with root ownership. | vault-raft-snapshot-basic, vault-security-lifecycle-basic |
 | vault_scoped_approle | vault | secret_management | experimental | — | rhel-9 | experimental | experimental | experimental | authenticate_positive_and_negative_policy_workflows | — | — | Current scenario uses a fake Vault API. | vault-bootstrap-basic, vault-scoped-approle-basic, vault-security-lifecycle-basic |
 | vault_secret_bundle | vault | secret_management | experimental | — | ubuntu-24.04, rhel-9 | experimental | experimental | experimental | read_before_generate_persist_and_reuse_secret_fields | community.hashi_vault | Reachable HashiCorp Vault KV v2 service and scoped authentication | No standalone Molecule scenario exists yet. | — |
 | vault_validate | vault | validator | experimental | — | rhel-9 | experimental | experimental | not-applicable | parent_component_validation | — | — | Current scenario uses fake Podman and a fake Vault API. | vault-validate-basic |
@@ -333,7 +333,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Candidate-target execution: no runnable candidate matrix is currently declared.
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
-- Known limitations: Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix.
+- Known limitations: Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix., Tiny explicitly opts into a canonical owner-only local test root; production retains the root-owned trust-store path.
 
 ### `alertmanager_deploy`
 
@@ -1597,7 +1597,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Candidate-target execution: no runnable candidate matrix is currently declared.
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
-- Known limitations: Current scenarios focus on local escrow contracts and a fake Vault API.
+- Known limitations: Current scenarios focus on local escrow contracts and a fake Vault API., Tiny proves numeric ownership; root-owned production target escrow requires a privileged target.
 
 ### `vault_config`
 
@@ -1677,7 +1677,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Candidate-target execution: no runnable candidate matrix is currently declared.
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
-- Known limitations: Current scenario uses a fake Vault API rather than an integrated-Raft cluster.
+- Known limitations: Current scenario uses a fake Vault API rather than an integrated-Raft cluster., Tiny explicitly proves numeric ownership in a canonical owner-only local test root; production retains /run with root ownership.
 
 ### `vault_scoped_approle`
 

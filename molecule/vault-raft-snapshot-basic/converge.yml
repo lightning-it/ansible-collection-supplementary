@@ -23,6 +23,10 @@
       {{ vault_raft_snapshot_molecule_root }}/container-state
     vault_raft_snapshot_molecule_restore_marker: >-
       {{ vault_raft_snapshot_molecule_root }}/restore-complete
+    vault_raft_snapshot_molecule_restore_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-raft-restore
+    vault_raft_snapshot_molecule_restore_external: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-raft-restore-external
     vault_raft_snapshot_molecule_snapshot_state:
       initialized: true
       sealed: true
@@ -57,13 +61,17 @@
     vault_raft_snapshot_restore_tls_hostname: localhost
     vault_raft_snapshot_restore_api_port: "{{ vault_raft_snapshot_molecule_port }}"
     vault_raft_snapshot_restore_cluster_port: 18222
-    vault_raft_snapshot_restore_work_root: /run/lit-vault-raft-molecule
+    vault_raft_snapshot_restore_work_root: >-
+      {{ vault_raft_snapshot_molecule_restore_root }}/work
     vault_raft_snapshot_restore_container_name: molecule-vault-raft-restore
-    # This scenario exercises the role locally inside the capability-minimized
-    # devtools container. Keep its fake runtime directories owned by the
-    # invoking container user; production targets retain the role defaults.
-    vault_raft_snapshot_restore_run_as_user: 0
-    vault_raft_snapshot_restore_run_as_group: 0
+    # The capability-minimized devtools controller cannot chown. Production
+    # targets retain the root-owned work-root defaults.
+    vault_raft_snapshot_restore_work_root_owner: "{{ lookup('ansible.builtin.pipe', 'id -u') }}"
+    vault_raft_snapshot_restore_work_root_group: "{{ lookup('ansible.builtin.pipe', 'id -g') }}"
+    vault_raft_snapshot_restore_test_mode: true
+    vault_raft_snapshot_restore_test_root: "{{ vault_raft_snapshot_molecule_restore_root }}"
+    vault_raft_snapshot_restore_run_as_user: "{{ lookup('ansible.builtin.pipe', 'id -u') }}"
+    vault_raft_snapshot_restore_run_as_group: "{{ lookup('ansible.builtin.pipe', 'id -g') }}"
     vault_raft_snapshot_production_cert_dir: "{{ vault_raft_snapshot_molecule_root }}"
     vault_raft_snapshot_restore_node_id: molecule-restore
     vault_raft_snapshot_restore_unseal_keys:
@@ -81,6 +89,21 @@
     http_proxy: http://127.0.0.1:9
     no_proxy: ""
   tasks:
+    - name: Create private Vault Raft restore test roots
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0700"
+      loop:
+        - "{{ vault_raft_snapshot_molecule_restore_root }}"
+        - "{{ vault_raft_snapshot_molecule_restore_external }}"
+
+    - name: Create unsafe Vault Raft restore parent symlink fixture
+      ansible.builtin.file:
+        src: "{{ vault_raft_snapshot_molecule_restore_external }}"
+        dest: "{{ vault_raft_snapshot_molecule_restore_root }}/link"
+        state: link
+
     - name: Exercise the Vault Raft snapshot no-op action
       ansible.builtin.include_role:
         name: lit.supplementary.vault_raft_snapshot
@@ -163,6 +186,200 @@
       ansible.builtin.assert:
         that:
           - vault_raft_snapshot_molecule_nonlocal_hostname_refused | bool
+        quiet: true
+
+    - name: Initialize invalid restore work-root ownership refusals
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_invalid_work_root_owner_refused: false
+        vault_raft_snapshot_molecule_invalid_work_root_group_refused: false
+
+    - name: Reject an invalid restore work-root owner
+      block:
+        - name: Exercise the invalid restore work-root owner gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_work_root_owner: invalid-owner
+          no_log: true
+      rescue:
+        - name: Record invalid restore work-root owner refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_invalid_work_root_owner_refused: true
+
+    - name: Reject an invalid restore work-root group
+      block:
+        - name: Exercise the invalid restore work-root group gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_work_root_group: invalid-group
+          no_log: true
+      rescue:
+        - name: Record invalid restore work-root group refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_invalid_work_root_group_refused: true
+
+    - name: Require invalid restore work-root ownership refusals
+      ansible.builtin.assert:
+        that:
+          - vault_raft_snapshot_molecule_invalid_work_root_owner_refused | bool
+          - vault_raft_snapshot_molecule_invalid_work_root_group_refused | bool
+        quiet: true
+
+    - name: Initialize Vault Raft controller identity refusals
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_zero_work_root_identity_refused: false
+        vault_raft_snapshot_molecule_mismatched_work_root_identity_refused: false
+
+    - name: Reject zero Vault Raft restore work-root ownership
+      block:
+        - name: Exercise zero restore work-root ownership gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_work_root_owner: "0"
+            vault_raft_snapshot_restore_work_root_group: "0"
+          no_log: true
+      rescue:
+        - name: Record zero restore work-root ownership refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_zero_work_root_identity_refused: true
+
+    - name: Reject mismatched Vault Raft restore work-root ownership
+      block:
+        - name: Exercise mismatched restore work-root ownership gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_work_root_owner: >-
+              {{ (lookup('ansible.builtin.pipe', 'id -u') | int + 1) | string }}
+            vault_raft_snapshot_restore_work_root_group: >-
+              {{ (lookup('ansible.builtin.pipe', 'id -g') | int + 1) | string }}
+          no_log: true
+      rescue:
+        - name: Record mismatched restore work-root ownership refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_mismatched_work_root_identity_refused: true
+
+    - name: Require Vault Raft controller identity refusals
+      ansible.builtin.assert:
+        that:
+          - vault_raft_snapshot_molecule_zero_work_root_identity_refused | bool
+          - vault_raft_snapshot_molecule_mismatched_work_root_identity_refused | bool
+        quiet: true
+
+    - name: Initialize numeric ownership under production work-root refusal
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_numeric_production_root_refused: false
+
+    - name: Reject numeric ownership below the production work-root
+      block:
+        - name: Exercise numeric ownership below the production work-root gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_work_root: /run/lit-vault-raft-molecule
+          no_log: true
+      rescue:
+        - name: Record numeric production work-root refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_numeric_production_root_refused: true
+
+    - name: Require numeric production work-root refusal
+      ansible.builtin.assert:
+        that:
+          - vault_raft_snapshot_molecule_numeric_production_root_refused | bool
+        quiet: true
+
+    - name: Initialize forged Vault Raft Molecule environment refusal
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_forged_environment_refused: false
+
+    - name: Reject numeric ownership without explicit Vault Raft test mode
+      environment:
+        MOLECULE_EPHEMERAL_DIRECTORY: "{{ vault_raft_snapshot_molecule_restore_root }}"
+      block:
+        - name: Exercise forged Vault Raft Molecule environment gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_test_mode: false
+            vault_raft_snapshot_restore_test_root: ""
+          no_log: true
+      rescue:
+        - name: Record forged Vault Raft Molecule environment refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_forged_environment_refused: true
+
+    - name: Initialize non-local Vault Raft test-mode refusal
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_non_local_test_mode_refused: false
+
+    - name: Reject Vault Raft test mode before inspecting paths on a non-local connection
+      block:
+        - name: Exercise non-local Vault Raft test-mode gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            ansible_connection: ssh
+          no_log: true
+      rescue:
+        - name: Record non-local Vault Raft test-mode refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_non_local_test_mode_refused: true
+
+    - name: Initialize trailing-slash Vault Raft test-root refusal
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_trailing_slash_root_refused: false
+
+    - name: Reject a Vault Raft test root with a trailing slash
+      block:
+        - name: Exercise trailing-slash Vault Raft test-root gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_test_root: >-
+              {{ vault_raft_snapshot_molecule_restore_root }}/
+          no_log: true
+      rescue:
+        - name: Record trailing-slash Vault Raft test-root refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_trailing_slash_root_refused: true
+
+    - name: Initialize symlinked Vault Raft work parent refusal
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_symlink_parent_refused: false
+
+    - name: Reject a symlinked Vault Raft work parent
+      block:
+        - name: Exercise symlinked Vault Raft work parent gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_work_root: >-
+              {{ vault_raft_snapshot_molecule_restore_root }}/link/work
+          no_log: true
+      rescue:
+        - name: Record symlinked Vault Raft work parent refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_symlink_parent_refused: true
+
+    - name: Require forged environment, trailing-slash, and symlink refusals
+      ansible.builtin.assert:
+        that:
+          - vault_raft_snapshot_molecule_forged_environment_refused | bool
+          - vault_raft_snapshot_molecule_non_local_test_mode_refused | bool
+          - vault_raft_snapshot_molecule_trailing_slash_root_refused | bool
+          - vault_raft_snapshot_molecule_symlink_parent_refused | bool
         quiet: true
 
     - name: Create Vault Raft snapshot test directory

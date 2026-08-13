@@ -385,6 +385,9 @@ roles:
       - "Red Hat subscription-backed RHEL test targets"
     known_limitations:
       - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
+      - >-
+        Tiny explicitly opts into a canonical owner-only local test root;
+        production retains the root-owned trust-store path.
     deprecation_state: "active"
     scenario_support:
       tiny:
@@ -2222,6 +2225,8 @@ roles:
     external_dependencies: []
     known_limitations:
       - "Current scenarios focus on local escrow contracts and a fake Vault API."
+      - >-
+        Tiny proves numeric ownership; root-owned production target escrow requires a privileged target.
     deprecation_state: "active"
     scenario_support:
       tiny:
@@ -2333,6 +2338,9 @@ roles:
     external_dependencies: []
     known_limitations:
       - "Current scenario uses a fake Vault API rather than an integrated-Raft cluster."
+      - >-
+        Tiny explicitly proves numeric ownership in a canonical owner-only local
+        test root; production retains /run with root ownership.
     deprecation_state: "active"
     scenario_support:
       tiny:

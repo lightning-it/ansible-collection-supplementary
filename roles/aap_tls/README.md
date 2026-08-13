@@ -27,6 +27,23 @@ assets are supplied instead.
   managed AAP host trust store and refreshes system trust; defaults to `true`.
   Generation may remain delegated to the controller because the role transfers
   the public CA certificate to the managed host before installation.
+- `aap_tls_selfsigned_ca_trust_owner`,
+  `aap_tls_selfsigned_ca_trust_group`, and
+  `aap_tls_selfsigned_ca_trust_become` retain the production defaults
+  `root`, `root`, and `true`. Privileged installation is restricted to a
+  `root:root` anchor in the canonical system trust directory. Numeric
+  ownership requires the explicit
+  `aap_tls_selfsigned_ca_trust_test_mode` opt-in, disabled by default, without
+  privilege escalation on a non-root local controller. The configured test
+  owner and group must equal that controller's effective non-zero UID and GID.
+  The configured test root and trust directory must be real, owner-only,
+  non-symlink directories beneath an explicit absolute root with the same
+  effective ownership, and an existing trust target must be a regular file,
+  never a symlink. Localhost execution is verified before any test path is
+  inspected; the test root must not end in `/`, and
+  environment variables do not enable this exception. This keeps direct
+  Molecule and CI-specific ephemeral roots portable without weakening the
+  ownership or canonical-path checks.
 
 See [`defaults/main.yml`](defaults/main.yml) for the complete interface.
 
