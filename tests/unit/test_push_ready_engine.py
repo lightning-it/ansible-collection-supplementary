@@ -25,6 +25,10 @@ def run_git(repository: Path, *args: str, environment: dict[str, str]) -> None:
 
 
 class PushReadyEngineTests(unittest.TestCase):
+    def test_repository_quality_check_has_full_profile_timeout_budget(self) -> None:
+        self.assertEqual(3_600, ENGINE["CHECK_TIMEOUT_SECONDS"])
+        self.assertLessEqual(ENGINE["CHECK_TIMEOUT_SECONDS"], ENGINE["MAX_TIMEOUT_SECONDS"])
+
     def test_trusted_policy_covers_executable_quality_scripts(self) -> None:
         trusted_paths = set(ENGINE["TRUSTED_CHECK_POLICY_PATHS"])
 
