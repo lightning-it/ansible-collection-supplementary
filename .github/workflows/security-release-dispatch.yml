@@ -69,7 +69,7 @@ jobs:
       - name: Checkout trusted default-branch recovery controller
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
-          ref: ${{ github.sha }}
+          ref: develop
           fetch-depth: 0
           persist-credentials: false
 
@@ -77,7 +77,6 @@ jobs:
         id: request
         env:
           GH_TOKEN: ${{ github.token }}
-          CONTROLLER_SHA: ${{ github.sha }}
           SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
           SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
@@ -88,6 +87,7 @@ jobs:
               -c 'credential.helper=!gh auth git-credential' fetch "$@"
           }
 
+          CONTROLLER_SHA="$(git rev-parse HEAD)"
           [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
           [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
@@ -145,7 +145,7 @@ jobs:
       - name: Checkout trusted default-branch recovery controller
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
-          ref: ${{ github.sha }}
+          ref: develop
           fetch-depth: 0
           persist-credentials: false
 
@@ -153,7 +153,6 @@ jobs:
         id: request
         env:
           RUN_TOKEN: ${{ github.token }}
-          CONTROLLER_SHA: ${{ github.sha }}
           SOURCE_SHA: ${{ needs['classify-recovery'].outputs['source-sha'] }}
         run: |
           set -euo pipefail
@@ -163,6 +162,7 @@ jobs:
               -c 'credential.helper=!gh auth git-credential' fetch "$@"
           }
 
+          CONTROLLER_SHA="$(git rev-parse HEAD)"
           [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$CONTROLLER_SHA"
@@ -183,7 +183,10 @@ jobs:
             and .request.event == "mlx90-security-release-recovery"
             and .request.humanActions == 0
           ' "$result" >/dev/null
-          echo "envelope=$result" >>"$GITHUB_OUTPUT"
+          {
+            echo "controller_sha=$CONTROLLER_SHA"
+            echo "envelope=$result"
+          } >>"$GITHUB_OUTPUT"
 
       - name: Mint recovery metadata-only App attestation token
         id: recovery-app-metadata
@@ -254,7 +257,7 @@ jobs:
           EXPECTED_ENVELOPE: ${{ steps.request.outputs.envelope }}
           GH_TOKEN: ${{ steps['recovery-app'].outputs.token }}
           READ_TOKEN: ${{ github.token }}
-          CONTROLLER_SHA: ${{ github.sha }}
+          CONTROLLER_SHA: ${{ steps.request.outputs.controller_sha }}
           SOURCE_SHA: ${{ needs['classify-recovery'].outputs['source-sha'] }}
         run: |
           set -euo pipefail
