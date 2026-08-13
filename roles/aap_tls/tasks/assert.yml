@@ -9,9 +9,31 @@
         (aap_tls_selfsigned_ca_trust_group | string) == 'root' or
         (aap_tls_selfsigned_ca_trust_group | string) is match('^[0-9]+$')
       - aap_tls_selfsigned_ca_trust_become is boolean
+      - >-
+        (
+          aap_tls_selfsigned_ca_trust_become is sameas true
+          and (aap_tls_selfsigned_ca_trust_owner | string) == 'root'
+          and (aap_tls_selfsigned_ca_trust_group | string) == 'root'
+          and aap_tls_selfsigned_ca_trust_path
+              is match('^/etc/pki/ca-trust/source/anchors/[A-Za-z0-9._-]+\\.crt$')
+        )
+        or
+        (
+          aap_tls_selfsigned_ca_trust_become is sameas false
+          and (aap_tls_selfsigned_ca_trust_owner | string) is match('^[0-9]+$')
+          and (aap_tls_selfsigned_ca_trust_group | string) is match('^[0-9]+$')
+          and lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY')
+              is match('^/tmp/[A-Za-z0-9._/-]+$')
+          and aap_tls_selfsigned_ca_trust_path.startswith(
+            lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') ~ '/'
+          )
+          and aap_tls_selfsigned_ca_trust_path is match('^/tmp/[A-Za-z0-9._/-]+\\.crt$')
+          and '..' not in aap_tls_selfsigned_ca_trust_path.split('/')
+        )
     fail_msg: >-
-      AAP TLS trust ownership must be root or a numeric ID, and trust
-      installation privilege escalation must be boolean.
+      Privileged AAP TLS system-trust installation requires root:root and the
+      canonical system anchor directory. Numeric ownership is allowed only
+      without privilege escalation inside the active Molecule directory.
     quiet: true
   when:
     - aap_tls_selfsigned_enabled | bool

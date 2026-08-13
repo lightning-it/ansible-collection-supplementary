@@ -32,6 +32,11 @@ class AapTlsContractsTests(unittest.TestCase):
         self.assertIn("is match('^[0-9]+$')", assertions)
         self.assertNotIn("is regex(", assertions)
         self.assertIn("aap_tls_selfsigned_ca_trust_become is boolean", assertions)
+        self.assertIn("aap_tls_selfsigned_ca_trust_become is sameas true", assertions)
+        self.assertIn("aap_tls_selfsigned_ca_trust_become is sameas false", assertions)
+        self.assertIn("^/etc/pki/ca-trust/source/anchors/", assertions)
+        self.assertIn("^/tmp/", assertions)
+        self.assertIn("MOLECULE_EPHEMERAL_DIRECTORY", assertions)
         self.assertIn("fail_msg:", assertions)
         self.assertNotIn("Validate temporary AAP CA trust installation settings", tasks)
 
@@ -42,6 +47,8 @@ class AapTlsContractsTests(unittest.TestCase):
         self.assertIn('aap_tls_selfsigned_ca_trust_become: "false"', converge)
         self.assertIn("aap_tls_molecule_invalid_owner_rejected", converge)
         self.assertIn("aap_tls_molecule_invalid_become_rejected", converge)
+        self.assertIn("aap_tls_molecule_privileged_numeric_owner_rejected", converge)
+        self.assertIn("unsafe privileged numeric ownership", converge)
 
 
 if __name__ == "__main__":

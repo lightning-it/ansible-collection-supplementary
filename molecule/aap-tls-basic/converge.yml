@@ -87,6 +87,30 @@
           - aap_tls_molecule_invalid_become_rejected
         quiet: true
 
+    - name: Initialize privileged numeric trust ownership rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_privileged_numeric_owner_rejected: false
+
+    - name: Exercise privileged numeric AAP TLS trust ownership precheck
+      block:
+        - name: Run AAP TLS precheck with unsafe privileged numeric ownership
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_path: /etc/pki/ca-trust/source/anchors/aap-selfsigned-ca.crt
+            aap_tls_selfsigned_ca_trust_become: true
+      rescue:
+        - name: Record privileged numeric AAP TLS ownership rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_privileged_numeric_owner_rejected: true
+
+    - name: Assert privileged numeric AAP TLS ownership was rejected
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_privileged_numeric_owner_rejected
+        quiet: true
+
     - name: Read generated AAP CA
       ansible.builtin.slurp:
         src: "{{ aap_tls_selfsigned_output_dir }}/aap-selfsigned-ca.crt"
