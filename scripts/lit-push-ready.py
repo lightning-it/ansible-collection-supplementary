@@ -1011,6 +1011,20 @@ def require_review_bootstrap_contract(change: PlannedChange) -> bool:
     return True
 
 
+def require_trusted_review_policy(
+    change: PlannedChange,
+    *,
+    allow_fixture_manifest_bootstrap: bool = False,
+) -> bool:
+    trust_root_bootstrap = require_review_bootstrap_contract(change)
+    if not trust_root_bootstrap:
+        require_trusted_check_policy(
+            change,
+            allow_fixture_manifest_bootstrap=allow_fixture_manifest_bootstrap,
+        )
+    return trust_root_bootstrap
+
+
 def require_trust_root_update_contract(change: PlannedChange) -> None:
     if require_review_bootstrap_contract(change):
         raise RuntimeError("trust-root update requires an existing base policy")
@@ -3326,7 +3340,10 @@ def produce_evidence(
     *,
     fixture_manifest_bootstrap: bool,
 ) -> None:
-    require_trusted_check_policy(change, allow_fixture_manifest_bootstrap=fixture_manifest_bootstrap)
+    require_trusted_review_policy(
+        change,
+        allow_fixture_manifest_bootstrap=fixture_manifest_bootstrap,
+    )
     branch = current_branch_ref()
     started_at, started = now_utc(), time.monotonic()
     checks, tree, commit, fingerprint = execute_integration_checks(config, change)
@@ -3433,8 +3450,7 @@ def main() -> int:
             require_clean_head()
             refresh_authoritative_base(config)
             change = planned_change(config)
-            require_review_bootstrap_contract(change)
-            require_trusted_check_policy(change)
+            require_trusted_review_policy(change)
             execute_integration_checks(config, change)
             return 0
         if args.command == "review":
