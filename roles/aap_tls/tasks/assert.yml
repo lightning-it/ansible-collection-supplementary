@@ -9,10 +9,163 @@
         (aap_tls_selfsigned_ca_trust_group | string) == 'root' or
         (aap_tls_selfsigned_ca_trust_group | string) is match('^[0-9]+$')
       - aap_tls_selfsigned_ca_trust_become is boolean
+      - aap_tls_selfsigned_ca_trust_test_mode is boolean
+      - >-
+        (
+          aap_tls_selfsigned_ca_trust_test_mode is sameas false
+          and aap_tls_selfsigned_ca_trust_test_root | length == 0
+          and aap_tls_selfsigned_ca_trust_become is sameas true
+          and (aap_tls_selfsigned_ca_trust_owner | string) == 'root'
+          and (aap_tls_selfsigned_ca_trust_group | string) == 'root'
+          and aap_tls_selfsigned_ca_trust_path
+              is match('^/etc/pki/ca-trust/source/anchors/[A-Za-z0-9._-]+\\.crt$')
+        )
+        or
+        (
+          aap_tls_selfsigned_ca_trust_test_mode is sameas true
+          and aap_tls_selfsigned_ca_trust_become is sameas false
+          and (aap_tls_selfsigned_ca_trust_owner | string) is match('^[0-9]+$')
+          and (aap_tls_selfsigned_ca_trust_group | string) is match('^[0-9]+$')
+          and aap_tls_selfsigned_ca_trust_test_root
+              is match('^/[A-Za-z0-9._/-]+$')
+          and not aap_tls_selfsigned_ca_trust_test_root.endswith('/')
+          and aap_tls_selfsigned_ca_trust_path.startswith(
+            aap_tls_selfsigned_ca_trust_test_root ~ '/'
+          )
+          and aap_tls_selfsigned_ca_trust_path is match('^/[A-Za-z0-9._/-]+\\.crt$')
+          and '..' not in aap_tls_selfsigned_ca_trust_test_root.split('/')
+          and '..' not in aap_tls_selfsigned_ca_trust_path.split('/')
+        )
     fail_msg: >-
-      AAP TLS trust ownership must be root or a numeric ID, and trust
-      installation privilege escalation must be boolean.
+      Privileged AAP TLS system-trust installation requires root:root and the
+      canonical system anchor directory. Numeric ownership requires the
+      explicit unprivileged local test mode and a private temporary root
+      without a trailing slash.
     quiet: true
   when:
     - aap_tls_selfsigned_enabled | bool
     - aap_tls_selfsigned_install_ca_trust | bool
+
+- name: Require local controller before inspecting private AAP TLS test paths
+  ansible.builtin.assert:
+    that:
+      - ansible_connection == 'local'
+      - inventory_hostname in ['localhost', '127.0.0.1']
+      - aap_tls_selfsigned_delegate_to == 'localhost'
+    fail_msg: >-
+      AAP TLS test ownership path inspection is permitted only on the local
+      controller with localhost delegation.
+    quiet: true
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - aap_tls_selfsigned_install_ca_trust | bool
+    - aap_tls_selfsigned_ca_trust_test_mode | bool
+
+- name: Inspect private AAP TLS test root, trust directory, and trust target
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  loop:
+    - "{{ aap_tls_selfsigned_ca_trust_test_root }}"
+    - "{{ aap_tls_selfsigned_ca_trust_path | dirname }}"
+    - "{{ aap_tls_selfsigned_ca_trust_path }}"
+  register: _aap_tls_test_path_stats
+  changed_when: false
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - aap_tls_selfsigned_install_ca_trust | bool
+    - aap_tls_selfsigned_ca_trust_test_mode | bool
+
+- name: Resolve private AAP TLS test root and trust directory
+  ansible.builtin.command:
+    argv:
+      - realpath
+      - --canonicalize-existing
+      - "{{ item }}"
+  loop:
+    - "{{ aap_tls_selfsigned_ca_trust_test_root }}"
+    - "{{ aap_tls_selfsigned_ca_trust_path | dirname }}"
+  register: _aap_tls_test_realpaths
+  changed_when: false
+  check_mode: false
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - aap_tls_selfsigned_install_ca_trust | bool
+    - aap_tls_selfsigned_ca_trust_test_mode | bool
+
+- name: Read effective AAP TLS test controller UID
+  ansible.builtin.command:
+    argv:
+      - id
+      - -u
+  register: _aap_tls_test_controller_uid
+  changed_when: false
+  check_mode: false
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - aap_tls_selfsigned_install_ca_trust | bool
+    - aap_tls_selfsigned_ca_trust_test_mode | bool
+
+- name: Read effective AAP TLS test controller GID
+  ansible.builtin.command:
+    argv:
+      - id
+      - -g
+  register: _aap_tls_test_controller_gid
+  changed_when: false
+  check_mode: false
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - aap_tls_selfsigned_install_ca_trust | bool
+    - aap_tls_selfsigned_ca_trust_test_mode | bool
+
+- name: Require private unprivileged local AAP TLS test paths
+  ansible.builtin.assert:
+    that:
+      - ansible_connection == 'local'
+      - inventory_hostname in ['localhost', '127.0.0.1']
+      - aap_tls_selfsigned_delegate_to == 'localhost'
+      - _aap_tls_test_controller_uid.stdout | int > 0
+      - _aap_tls_test_controller_gid.stdout | int > 0
+      - >-
+        aap_tls_selfsigned_ca_trust_owner | int
+        == _aap_tls_test_controller_uid.stdout | int
+      - >-
+        aap_tls_selfsigned_ca_trust_group | int
+        == _aap_tls_test_controller_gid.stdout | int
+      - _aap_tls_test_path_stats.results | length == 3
+      - _aap_tls_test_path_stats.results[0].stat.isdir | default(false)
+      - not (_aap_tls_test_path_stats.results[0].stat.islnk | default(false))
+      - _aap_tls_test_path_stats.results[0].stat.uid | int == _aap_tls_test_controller_uid.stdout | int
+      - _aap_tls_test_path_stats.results[0].stat.gid | int == _aap_tls_test_controller_gid.stdout | int
+      - _aap_tls_test_path_stats.results[0].stat.mode == '0700'
+      - _aap_tls_test_path_stats.results[1].stat.isdir | default(false)
+      - not (_aap_tls_test_path_stats.results[1].stat.islnk | default(false))
+      - _aap_tls_test_path_stats.results[1].stat.uid | int == _aap_tls_test_controller_uid.stdout | int
+      - _aap_tls_test_path_stats.results[1].stat.gid | int == _aap_tls_test_controller_gid.stdout | int
+      - _aap_tls_test_path_stats.results[1].stat.mode == '0700'
+      - not (_aap_tls_test_path_stats.results[2].stat.islnk | default(false))
+      - >-
+        not (_aap_tls_test_path_stats.results[2].stat.exists | default(false))
+        or (_aap_tls_test_path_stats.results[2].stat.isreg | default(false))
+      - _aap_tls_test_realpaths.results | length == 2
+      - _aap_tls_test_realpaths.results[0].stdout == aap_tls_selfsigned_ca_trust_test_root
+      - >-
+        _aap_tls_test_realpaths.results[1].stdout.startswith(
+          _aap_tls_test_realpaths.results[0].stdout ~ '/'
+        )
+      - >-
+        _aap_tls_test_realpaths.results[1].stdout
+        == (aap_tls_selfsigned_ca_trust_path | dirname)
+    fail_msg: >-
+      AAP TLS test ownership requires the exact non-root local controller UID
+      and GID plus real, owner-only, non-symlink directories and a non-symlink
+      trust target beneath the explicit test root.
+    quiet: true
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - aap_tls_selfsigned_install_ca_trust | bool
+    - aap_tls_selfsigned_ca_trust_test_mode | bool

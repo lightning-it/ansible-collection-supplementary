@@ -76,13 +76,40 @@
       - >-
         vault_raft_snapshot_restore_api_port | int
         != vault_raft_snapshot_restore_cluster_port | int
-      - vault_raft_snapshot_restore_work_root is match('^/run/[A-Za-z0-9._-]+$')
       - >-
         vault_raft_snapshot_restore_work_root_owner | string
         is match('^(root|[0-9]+)$')
       - >-
         vault_raft_snapshot_restore_work_root_group | string
         is match('^(root|[0-9]+)$')
+      - vault_raft_snapshot_restore_test_mode is boolean
+      - >-
+        (
+          vault_raft_snapshot_restore_test_mode is sameas false
+          and vault_raft_snapshot_restore_test_root | length == 0
+          and vault_raft_snapshot_restore_work_root
+          is match('^/run/[A-Za-z0-9._-]+$')
+          and (vault_raft_snapshot_restore_work_root_owner | string) == 'root'
+          and (vault_raft_snapshot_restore_work_root_group | string) == 'root'
+        )
+        or
+        (
+          vault_raft_snapshot_restore_test_mode is sameas true
+          and vault_raft_snapshot_restore_work_root
+          is match('^/[A-Za-z0-9._/-]+$')
+          and vault_raft_snapshot_restore_test_root
+              is match('^/[A-Za-z0-9._/-]+$')
+          and not vault_raft_snapshot_restore_test_root.endswith('/')
+          and vault_raft_snapshot_restore_work_root.startswith(
+            vault_raft_snapshot_restore_test_root ~ '/'
+          )
+          and '..' not in vault_raft_snapshot_restore_test_root.split('/')
+          and '..' not in vault_raft_snapshot_restore_work_root.split('/')
+          and (vault_raft_snapshot_restore_work_root_owner | string)
+              is match('^[0-9]+$')
+          and (vault_raft_snapshot_restore_work_root_group | string)
+              is match('^[0-9]+$')
+        )
       - vault_raft_snapshot_restore_container_name is match('^[A-Za-z0-9][A-Za-z0-9._-]+$')
       - vault_raft_snapshot_restore_node_id is match('^[A-Za-z0-9][A-Za-z0-9._-]+$')
       - vault_raft_snapshot_restore_timeout is integer
@@ -105,8 +132,127 @@
         == vault_raft_snapshot_restore_unseal_keys | length
     fail_msg: >-
       Restore drill requires the literal localhost TLS identity, loopback-only
-      ports, a bounded long-running restore timeout, unique production unseal
-      keys, and the exact positive threshold.
+      ports, a root-owned /run production work root or explicit unprivileged
+      local test root without a trailing slash, a bounded timeout, unique
+      unseal keys, and the exact positive threshold.
     quiet: true
   when: vault_raft_snapshot_action == 'restore_drill'
+  no_log: true
+
+- name: Require local controller before inspecting private Vault Raft restore test paths
+  ansible.builtin.assert:
+    that:
+      - ansible_connection == 'local'
+      - inventory_hostname in ['localhost', '127.0.0.1']
+      - vault_raft_snapshot_api_delegate_to == 'localhost'
+    fail_msg: >-
+      Vault Raft restore test path inspection is permitted only on the local
+      controller with localhost API delegation.
+    quiet: true
+  when:
+    - vault_raft_snapshot_action == 'restore_drill'
+    - vault_raft_snapshot_restore_test_mode | bool
+  no_log: true
+
+- name: Inspect private Vault Raft restore test root
+  ansible.builtin.stat:
+    path: "{{ vault_raft_snapshot_restore_test_root }}"
+    follow: false
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  register: _vault_raft_snapshot_restore_test_root_stat
+  changed_when: false
+  when:
+    - vault_raft_snapshot_action == 'restore_drill'
+    - vault_raft_snapshot_restore_test_mode | bool
+  no_log: true
+
+- name: Resolve private Vault Raft restore test paths
+  ansible.builtin.command:
+    argv:
+      - realpath
+      - "{{ item.option }}"
+      - "{{ item.path }}"
+  loop:
+    - option: --canonicalize-existing
+      path: "{{ vault_raft_snapshot_restore_test_root }}"
+    - option: --canonicalize-missing
+      path: "{{ vault_raft_snapshot_restore_work_root }}"
+  register: _vault_raft_snapshot_restore_test_realpaths
+  changed_when: false
+  check_mode: false
+  when:
+    - vault_raft_snapshot_action == 'restore_drill'
+    - vault_raft_snapshot_restore_test_mode | bool
+  no_log: true
+
+- name: Read effective Vault Raft restore test controller UID
+  ansible.builtin.command:
+    argv:
+      - id
+      - -u
+  register: _vault_raft_snapshot_restore_test_controller_uid
+  changed_when: false
+  check_mode: false
+  when:
+    - vault_raft_snapshot_action == 'restore_drill'
+    - vault_raft_snapshot_restore_test_mode | bool
+  no_log: true
+
+- name: Read effective Vault Raft restore test controller GID
+  ansible.builtin.command:
+    argv:
+      - id
+      - -g
+  register: _vault_raft_snapshot_restore_test_controller_gid
+  changed_when: false
+  check_mode: false
+  when:
+    - vault_raft_snapshot_action == 'restore_drill'
+    - vault_raft_snapshot_restore_test_mode | bool
+  no_log: true
+
+- name: Require private unprivileged local Vault Raft restore test paths
+  ansible.builtin.assert:
+    that:
+      - ansible_connection == 'local'
+      - inventory_hostname in ['localhost', '127.0.0.1']
+      - vault_raft_snapshot_api_delegate_to == 'localhost'
+      - _vault_raft_snapshot_restore_test_controller_uid.stdout | int > 0
+      - _vault_raft_snapshot_restore_test_controller_gid.stdout | int > 0
+      - >-
+        vault_raft_snapshot_restore_work_root_owner | int
+        == _vault_raft_snapshot_restore_test_controller_uid.stdout | int
+      - >-
+        vault_raft_snapshot_restore_work_root_group | int
+        == _vault_raft_snapshot_restore_test_controller_gid.stdout | int
+      - _vault_raft_snapshot_restore_test_root_stat.stat.isdir | default(false)
+      - not (_vault_raft_snapshot_restore_test_root_stat.stat.islnk | default(false))
+      - >-
+        _vault_raft_snapshot_restore_test_root_stat.stat.uid | int
+        == _vault_raft_snapshot_restore_test_controller_uid.stdout | int
+      - >-
+        _vault_raft_snapshot_restore_test_root_stat.stat.gid | int
+        == _vault_raft_snapshot_restore_test_controller_gid.stdout | int
+      - _vault_raft_snapshot_restore_test_root_stat.stat.mode == '0700'
+      - _vault_raft_snapshot_restore_test_realpaths.results | length == 2
+      - >-
+        _vault_raft_snapshot_restore_test_realpaths.results[0].stdout
+        == vault_raft_snapshot_restore_test_root
+      - >-
+        _vault_raft_snapshot_restore_test_realpaths.results[1].stdout.startswith(
+          _vault_raft_snapshot_restore_test_realpaths.results[0].stdout ~ '/'
+        )
+      - >-
+        _vault_raft_snapshot_restore_test_realpaths.results[1].stdout
+        == vault_raft_snapshot_restore_work_root
+    fail_msg: >-
+      Vault Raft test ownership requires the exact non-root local controller
+      UID and GID plus a real owner-only non-symlink root containing the
+      canonical work path.
+    quiet: true
+  when:
+    - vault_raft_snapshot_action == 'restore_drill'
+    - vault_raft_snapshot_restore_test_mode | bool
   no_log: true

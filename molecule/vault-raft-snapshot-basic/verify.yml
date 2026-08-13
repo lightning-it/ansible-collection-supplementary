@@ -8,6 +8,8 @@
       {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-raft-snapshot
     vault_raft_snapshot_molecule_document_path: >-
       {{ vault_raft_snapshot_molecule_root }}/vault-raft-fixed.vault.yml
+    vault_raft_snapshot_molecule_restore_work_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-raft-restore/work
   tasks:
     - name: Inspect Vault Raft snapshot TLS fixture SAN
       ansible.builtin.command:
@@ -76,7 +78,7 @@
       ansible.builtin.stat:
         path: "{{ item }}"
       loop:
-        - /run/lit-vault-raft-molecule
+        - "{{ vault_raft_snapshot_molecule_restore_work_root }}"
         - "{{ vault_raft_snapshot_molecule_root }}/container-state"
       register: vault_raft_snapshot_molecule_restore_artifacts
 
