@@ -30,8 +30,10 @@ assets are supplied instead.
 - `aap_tls_selfsigned_ca_trust_owner`,
   `aap_tls_selfsigned_ca_trust_group`, and
   `aap_tls_selfsigned_ca_trust_become` retain the production defaults
-  `root`, `root`, and `true`. Numeric ownership with privilege escalation
-  disabled is reserved for capability-minimized test controllers.
+  `root`, `root`, and `true`. Privileged installation is restricted to a
+  `root:root` anchor in the canonical system trust directory. Numeric
+  ownership is accepted only without privilege escalation inside the active
+  Molecule temporary directory on a capability-minimized test controller.
 
 See [`defaults/main.yml`](defaults/main.yml) for the complete interface.
 

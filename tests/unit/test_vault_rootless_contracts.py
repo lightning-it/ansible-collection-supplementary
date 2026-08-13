@@ -38,12 +38,21 @@ class VaultRootlessContractsTests(unittest.TestCase):
 
     def test_snapshot_molecule_and_role_enforce_exact_work_root_metadata(self) -> None:
         converge = (ROOT / "molecule/vault-raft-snapshot-basic/converge.yml").read_text(encoding="utf-8")
+        verify = (ROOT / "molecule/vault-raft-snapshot-basic/verify.yml").read_text(encoding="utf-8")
         restore = (ROOT / "roles/vault_raft_snapshot/tasks/restore_drill.yml").read_text(encoding="utf-8")
 
         self.assertIn("vault_raft_snapshot_restore_work_root_owner: invalid-owner", converge)
         self.assertIn("vault_raft_snapshot_restore_work_root_group: invalid-group", converge)
+        self.assertIn("MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-raft-restore-work", converge)
+        self.assertIn("vault_raft_snapshot_molecule_numeric_production_root_refused", converge)
+        self.assertIn("vault_raft_snapshot_molecule_restore_work_root", verify)
+        self.assertNotIn("- /run/lit-vault-raft-molecule", verify)
         self.assertIn("Require exact isolated Vault restore-drill directory metadata", restore)
         self.assertIn("item.stat.mode | default('') == item.item.mode", restore)
+        assertions = (ROOT / "roles/vault_raft_snapshot/tasks/assert.yml").read_text(encoding="utf-8")
+        self.assertIn("^/run/[A-Za-z0-9._-]+$", assertions)
+        self.assertIn("^/tmp/[A-Za-z0-9._/-]+$", assertions)
+        self.assertIn("MOLECULE_EPHEMERAL_DIRECTORY", assertions)
 
 
 if __name__ == "__main__":

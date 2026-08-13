@@ -57,7 +57,8 @@
     vault_raft_snapshot_restore_tls_hostname: localhost
     vault_raft_snapshot_restore_api_port: "{{ vault_raft_snapshot_molecule_port }}"
     vault_raft_snapshot_restore_cluster_port: 18222
-    vault_raft_snapshot_restore_work_root: /run/lit-vault-raft-molecule
+    vault_raft_snapshot_restore_work_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-raft-restore-work
     vault_raft_snapshot_restore_container_name: molecule-vault-raft-restore
     # The capability-minimized devtools controller cannot chown. Production
     # targets retain the root-owned work-root defaults.
@@ -204,6 +205,30 @@
         that:
           - vault_raft_snapshot_molecule_invalid_work_root_owner_refused | bool
           - vault_raft_snapshot_molecule_invalid_work_root_group_refused | bool
+        quiet: true
+
+    - name: Initialize numeric ownership under production work-root refusal
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_numeric_production_root_refused: false
+
+    - name: Reject numeric ownership below the production work-root
+      block:
+        - name: Exercise numeric ownership below the production work-root gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_work_root: /run/lit-vault-raft-molecule
+          no_log: true
+      rescue:
+        - name: Record numeric production work-root refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_numeric_production_root_refused: true
+
+    - name: Require numeric production work-root refusal
+      ansible.builtin.assert:
+        that:
+          - vault_raft_snapshot_molecule_numeric_production_root_refused | bool
         quiet: true
 
     - name: Create Vault Raft snapshot test directory

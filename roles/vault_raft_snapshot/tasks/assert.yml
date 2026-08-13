@@ -76,13 +76,34 @@
       - >-
         vault_raft_snapshot_restore_api_port | int
         != vault_raft_snapshot_restore_cluster_port | int
-      - vault_raft_snapshot_restore_work_root is match('^/run/[A-Za-z0-9._-]+$')
       - >-
         vault_raft_snapshot_restore_work_root_owner | string
         is match('^(root|[0-9]+)$')
       - >-
         vault_raft_snapshot_restore_work_root_group | string
         is match('^(root|[0-9]+)$')
+      - >-
+        (
+          vault_raft_snapshot_restore_work_root
+          is match('^/run/[A-Za-z0-9._-]+$')
+          and (vault_raft_snapshot_restore_work_root_owner | string) == 'root'
+          and (vault_raft_snapshot_restore_work_root_group | string) == 'root'
+        )
+        or
+        (
+          vault_raft_snapshot_restore_work_root
+          is match('^/tmp/[A-Za-z0-9._/-]+$')
+          and lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY')
+              is match('^/tmp/[A-Za-z0-9._/-]+$')
+          and vault_raft_snapshot_restore_work_root.startswith(
+            lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') ~ '/'
+          )
+          and '..' not in vault_raft_snapshot_restore_work_root.split('/')
+          and (vault_raft_snapshot_restore_work_root_owner | string)
+              is match('^[0-9]+$')
+          and (vault_raft_snapshot_restore_work_root_group | string)
+              is match('^[0-9]+$')
+        )
       - vault_raft_snapshot_restore_container_name is match('^[A-Za-z0-9][A-Za-z0-9._-]+$')
       - vault_raft_snapshot_restore_node_id is match('^[A-Za-z0-9][A-Za-z0-9._-]+$')
       - vault_raft_snapshot_restore_timeout is integer
@@ -105,8 +126,9 @@
         == vault_raft_snapshot_restore_unseal_keys | length
     fail_msg: >-
       Restore drill requires the literal localhost TLS identity, loopback-only
-      ports, a bounded long-running restore timeout, unique production unseal
-      keys, and the exact positive threshold.
+      ports, a root-owned /run production work root or numeric-owned active
+      Molecule work root, a bounded timeout, unique unseal keys, and the exact
+      positive threshold.
     quiet: true
   when: vault_raft_snapshot_action == 'restore_drill'
   no_log: true
