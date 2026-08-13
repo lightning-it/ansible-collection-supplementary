@@ -2105,7 +2105,7 @@ def checkout_sanitized_commit(
     if fetched.returncode:
         raise RuntimeError("review fetch failed: " + fetched.stdout.strip())
     checked_out = run(
-        ["git", "checkout", "-q", "--detach", "FETCH_HEAD"],
+        ["git", "switch", "-q", "--detach", "FETCH_HEAD"],
         capture=True,
         cwd=destination,
     )

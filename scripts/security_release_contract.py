@@ -72,6 +72,8 @@ RECOVERY_CONTROL_PATHS = frozenset(
         "scripts/security-release-dispatch.py",
         "scripts/security-release-intake.py",
         "scripts/security_release_contract.py",
+        "scripts/lit-push-ready.py",
+        "tests/unit/test_push_ready_engine.py",
         "tests/unit/test_security_release_contract.py",
         "tests/unit/test_security_release_request_dispatch.py",
     }
@@ -548,13 +550,9 @@ def canonical_security_fragment_bytes(entries: list[str]) -> bytes:
     """Serialize security fixes as deterministic repository-standard YAML."""
     if not isinstance(entries, list) or not 1 <= len(entries) <= 64:
         fail("security_fixes entries must be a list containing 1..64 items")
-    validated_entries = [
-        require_string(entry, "security_fixes entry") for entry in entries
-    ]
+    validated_entries = [require_string(entry, "security_fixes entry") for entry in entries]
     lines = ["---", "security_fixes:"]
-    lines.extend(
-        f"  - {json.dumps(entry, ensure_ascii=True)}" for entry in validated_entries
-    )
+    lines.extend(f"  - {json.dumps(entry, ensure_ascii=True)}" for entry in validated_entries)
     raw = ("\n".join(lines) + "\n").encode("utf-8")
     if len(raw) > MAX_SECURITY_FRAGMENT_BYTES:
         fail(f"security_fixes fragment exceeds {MAX_SECURITY_FRAGMENT_BYTES} bytes")
