@@ -151,6 +151,29 @@
           - aap_tls_molecule_forged_environment_rejected
         quiet: true
 
+    - name: Initialize trailing-slash AAP TLS test-root rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_trailing_slash_root_rejected: false
+
+    - name: Reject an AAP TLS test root with a trailing slash
+      block:
+        - name: Exercise trailing-slash AAP TLS test-root gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_test_root: "{{ aap_tls_molecule_root }}/"
+      rescue:
+        - name: Record trailing-slash AAP TLS test-root rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_trailing_slash_root_rejected: true
+
+    - name: Require trailing-slash AAP TLS test-root rejection
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_trailing_slash_root_rejected
+        quiet: true
+
     - name: Initialize symlinked AAP TLS trust parent rejection evidence
       ansible.builtin.set_fact:
         aap_tls_molecule_symlink_parent_rejected: false

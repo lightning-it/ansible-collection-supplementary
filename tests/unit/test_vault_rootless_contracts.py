@@ -49,6 +49,7 @@ class VaultRootlessContractsTests(unittest.TestCase):
         self.assertIn("vault_raft_snapshot_molecule_restore_root }}/work", converge)
         self.assertIn("vault_raft_snapshot_molecule_numeric_production_root_refused", converge)
         self.assertIn("vault_raft_snapshot_molecule_forged_environment_refused", converge)
+        self.assertIn("vault_raft_snapshot_molecule_trailing_slash_root_refused", converge)
         self.assertIn("vault_raft_snapshot_molecule_symlink_parent_refused", converge)
         self.assertIn("vault_raft_snapshot_molecule_restore_work_root", verify)
         self.assertNotIn("- /run/lit-vault-raft-molecule", verify)
@@ -62,6 +63,7 @@ class VaultRootlessContractsTests(unittest.TestCase):
         self.assertIn("ansible_connection == 'local'", assertions)
         self.assertIn("_vault_raft_snapshot_restore_test_controller_identity.stdout | int > 0", assertions)
         self.assertIn("--canonicalize-missing", assertions)
+        self.assertIn("not vault_raft_snapshot_restore_test_root.endswith('/')", assertions)
 
 
 if __name__ == "__main__":

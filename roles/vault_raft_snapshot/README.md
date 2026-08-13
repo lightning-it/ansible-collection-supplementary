@@ -51,8 +51,8 @@ The controller document path is immutable. For restore, pin its SHA-256 digest w
 The isolated work root remains below `/run` with `root:root` ownership by default. Numeric owner and group values
 require the explicit `vault_raft_snapshot_restore_test_mode` opt-in, disabled by default, on a non-root local
 controller. The configured test root must be a real owner-only non-symlink directory beneath `/tmp`, and the
-canonical work root must remain below it; environment variables do not enable this exception. Production callers
-must retain the default path and ownership.
+canonical work root must remain below it. The test root must not end in `/`, and environment variables do not enable
+this exception. Production callers must retain the default path and ownership.
 `vault_raft_snapshot_restore_tls_hostname` and `vault_raft_snapshot_restore_bind_address` are fail-closed to
 `localhost` and `127.0.0.1`, matching the operational Vault PKI contract. The role refuses alternate DNS names or
 bind addresses, derives every certificate-validated restore URL from those invariants, and disables proxy use for

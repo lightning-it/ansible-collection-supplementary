@@ -28,6 +28,7 @@
           and (aap_tls_selfsigned_ca_trust_group | string) is match('^[0-9]+$')
           and aap_tls_selfsigned_ca_trust_test_root
               is match('^/tmp/[A-Za-z0-9._/-]+$')
+          and not aap_tls_selfsigned_ca_trust_test_root.endswith('/')
           and aap_tls_selfsigned_ca_trust_path.startswith(
             aap_tls_selfsigned_ca_trust_test_root ~ '/'
           )
@@ -38,7 +39,8 @@
     fail_msg: >-
       Privileged AAP TLS system-trust installation requires root:root and the
       canonical system anchor directory. Numeric ownership requires the
-      explicit unprivileged local test mode and a private temporary root.
+      explicit unprivileged local test mode and a private temporary root
+      without a trailing slash.
     quiet: true
   when:
     - aap_tls_selfsigned_enabled | bool

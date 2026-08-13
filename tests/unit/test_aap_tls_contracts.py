@@ -42,6 +42,7 @@ class AapTlsContractsTests(unittest.TestCase):
         self.assertIn("ansible_connection == 'local'", assertions)
         self.assertIn("_aap_tls_test_controller_identity.stdout | int > 0", assertions)
         self.assertIn("--canonicalize-existing", assertions)
+        self.assertIn("not aap_tls_selfsigned_ca_trust_test_root.endswith('/')", assertions)
         self.assertIn("fail_msg:", assertions)
         self.assertNotIn("Validate temporary AAP CA trust installation settings", tasks)
 
@@ -55,6 +56,7 @@ class AapTlsContractsTests(unittest.TestCase):
         self.assertIn("aap_tls_molecule_privileged_numeric_owner_rejected", converge)
         self.assertIn("unsafe privileged numeric ownership", converge)
         self.assertIn("aap_tls_molecule_forged_environment_rejected", converge)
+        self.assertIn("aap_tls_molecule_trailing_slash_root_rejected", converge)
         self.assertIn("aap_tls_molecule_symlink_parent_rejected", converge)
 
     def test_test_mode_defaults_fail_closed(self) -> None:

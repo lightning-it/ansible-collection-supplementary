@@ -99,6 +99,7 @@
           is match('^/tmp/[A-Za-z0-9._/-]+$')
           and vault_raft_snapshot_restore_test_root
               is match('^/tmp/[A-Za-z0-9._/-]+$')
+          and not vault_raft_snapshot_restore_test_root.endswith('/')
           and vault_raft_snapshot_restore_work_root.startswith(
             vault_raft_snapshot_restore_test_root ~ '/'
           )
@@ -132,8 +133,8 @@
     fail_msg: >-
       Restore drill requires the literal localhost TLS identity, loopback-only
       ports, a root-owned /run production work root or explicit unprivileged
-      local test root, a bounded timeout, unique unseal keys, and the exact
-      positive threshold.
+      local test root without a trailing slash, a bounded timeout, unique
+      unseal keys, and the exact positive threshold.
     quiet: true
   when: vault_raft_snapshot_action == 'restore_drill'
   no_log: true

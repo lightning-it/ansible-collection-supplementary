@@ -273,6 +273,25 @@
           ansible.builtin.set_fact:
             vault_raft_snapshot_molecule_forged_environment_refused: true
 
+    - name: Initialize trailing-slash Vault Raft test-root refusal
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_trailing_slash_root_refused: false
+
+    - name: Reject a Vault Raft test root with a trailing slash
+      block:
+        - name: Exercise trailing-slash Vault Raft test-root gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_test_root: >-
+              {{ vault_raft_snapshot_molecule_restore_root }}/
+          no_log: true
+      rescue:
+        - name: Record trailing-slash Vault Raft test-root refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_trailing_slash_root_refused: true
+
     - name: Initialize symlinked Vault Raft work parent refusal
       ansible.builtin.set_fact:
         vault_raft_snapshot_molecule_symlink_parent_refused: false
@@ -292,10 +311,11 @@
           ansible.builtin.set_fact:
             vault_raft_snapshot_molecule_symlink_parent_refused: true
 
-    - name: Require forged environment and symlink-parent refusals
+    - name: Require forged environment, trailing-slash, and symlink refusals
       ansible.builtin.assert:
         that:
           - vault_raft_snapshot_molecule_forged_environment_refused | bool
+          - vault_raft_snapshot_molecule_trailing_slash_root_refused | bool
           - vault_raft_snapshot_molecule_symlink_parent_refused | bool
         quiet: true
 
