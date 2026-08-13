@@ -4,5 +4,5 @@ bugfixes:
     Keep artifact staging, AAP TLS trust, Cloudflare WARP rendering, Vault
     bootstrap, and Vault Raft restore coverage executable in the
     capability-minimized rootless light Molecule gate while restricting
-    numeric ownership to unprivileged temporary test paths and preserving
-    root-owned production defaults.
+    numeric ownership to explicit, canonical, owner-only unprivileged local
+    test roots and preserving root-owned production defaults.

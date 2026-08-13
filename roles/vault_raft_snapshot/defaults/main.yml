@@ -31,6 +31,8 @@ vault_raft_snapshot_restore_cluster_port: 18202
 vault_raft_snapshot_restore_work_root: /run/lit-vault-restore-drill
 vault_raft_snapshot_restore_work_root_owner: root
 vault_raft_snapshot_restore_work_root_group: root
+vault_raft_snapshot_restore_test_mode: false
+vault_raft_snapshot_restore_test_root: ""
 vault_raft_snapshot_restore_container_name: vault-restore-drill
 vault_raft_snapshot_restore_node_id: ""
 vault_raft_snapshot_restore_run_as_user: 100

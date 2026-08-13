@@ -21,3 +21,5 @@ aap_tls_selfsigned_ca_trust_path: /etc/pki/ca-trust/source/anchors/aap-selfsigne
 aap_tls_selfsigned_ca_trust_owner: root
 aap_tls_selfsigned_ca_trust_group: root
 aap_tls_selfsigned_ca_trust_become: true
+aap_tls_selfsigned_ca_trust_test_mode: false
+aap_tls_selfsigned_ca_trust_test_root: ""

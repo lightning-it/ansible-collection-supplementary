@@ -23,6 +23,8 @@ class VaultRootlessContractsTests(unittest.TestCase):
         self.assertEqual("root", bootstrap_defaults["vault_bootstrap_target_escrow_group"])
         self.assertEqual("root", snapshot_defaults["vault_raft_snapshot_restore_work_root_owner"])
         self.assertEqual("root", snapshot_defaults["vault_raft_snapshot_restore_work_root_group"])
+        self.assertIs(False, snapshot_defaults["vault_raft_snapshot_restore_test_mode"])
+        self.assertEqual("", snapshot_defaults["vault_raft_snapshot_restore_test_root"])
 
     def test_bootstrap_molecule_rejects_names_and_proves_numeric_metadata(self) -> None:
         converge = (ROOT / "molecule/vault-bootstrap-basic/converge.yml").read_text(encoding="utf-8")
@@ -43,8 +45,11 @@ class VaultRootlessContractsTests(unittest.TestCase):
 
         self.assertIn("vault_raft_snapshot_restore_work_root_owner: invalid-owner", converge)
         self.assertIn("vault_raft_snapshot_restore_work_root_group: invalid-group", converge)
-        self.assertIn("MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-raft-restore-work", converge)
+        self.assertIn("MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-raft-restore", converge)
+        self.assertIn("vault_raft_snapshot_molecule_restore_root }}/work", converge)
         self.assertIn("vault_raft_snapshot_molecule_numeric_production_root_refused", converge)
+        self.assertIn("vault_raft_snapshot_molecule_forged_environment_refused", converge)
+        self.assertIn("vault_raft_snapshot_molecule_symlink_parent_refused", converge)
         self.assertIn("vault_raft_snapshot_molecule_restore_work_root", verify)
         self.assertNotIn("- /run/lit-vault-raft-molecule", verify)
         self.assertIn("Require exact isolated Vault restore-drill directory metadata", restore)
@@ -52,7 +57,11 @@ class VaultRootlessContractsTests(unittest.TestCase):
         assertions = (ROOT / "roles/vault_raft_snapshot/tasks/assert.yml").read_text(encoding="utf-8")
         self.assertIn("^/run/[A-Za-z0-9._-]+$", assertions)
         self.assertIn("^/tmp/[A-Za-z0-9._/-]+$", assertions)
-        self.assertIn("MOLECULE_EPHEMERAL_DIRECTORY", assertions)
+        self.assertNotIn("MOLECULE_EPHEMERAL_DIRECTORY", assertions)
+        self.assertIn("vault_raft_snapshot_restore_test_mode is sameas true", assertions)
+        self.assertIn("ansible_connection == 'local'", assertions)
+        self.assertIn("_vault_raft_snapshot_restore_test_controller_identity.stdout | int > 0", assertions)
+        self.assertIn("--canonicalize-missing", assertions)
 
 
 if __name__ == "__main__":

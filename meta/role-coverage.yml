@@ -386,7 +386,8 @@ roles:
     known_limitations:
       - "Entitlement-gated runtime, upgrade, and recovery behavior is not executed in the public CI matrix."
       - >-
-        Tiny uses the capability-minimized controller identity rather than the root-owned production trust-store path.
+        Tiny explicitly opts into a canonical owner-only local test root;
+        production retains the root-owned trust-store path.
     deprecation_state: "active"
     scenario_support:
       tiny:
@@ -2338,7 +2339,8 @@ roles:
     known_limitations:
       - "Current scenario uses a fake Vault API rather than an integrated-Raft cluster."
       - >-
-        Tiny proves numeric ownership; the root-owned production restore work root requires a privileged target.
+        Tiny explicitly proves numeric ownership in a canonical owner-only local
+        test root; production retains /run with root ownership.
     deprecation_state: "active"
     scenario_support:
       tiny:

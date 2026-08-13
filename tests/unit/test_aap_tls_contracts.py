@@ -34,9 +34,14 @@ class AapTlsContractsTests(unittest.TestCase):
         self.assertIn("aap_tls_selfsigned_ca_trust_become is boolean", assertions)
         self.assertIn("aap_tls_selfsigned_ca_trust_become is sameas true", assertions)
         self.assertIn("aap_tls_selfsigned_ca_trust_become is sameas false", assertions)
+        self.assertIn("aap_tls_selfsigned_ca_trust_test_mode is sameas true", assertions)
+        self.assertIn("aap_tls_selfsigned_ca_trust_test_mode is sameas false", assertions)
         self.assertIn("^/etc/pki/ca-trust/source/anchors/", assertions)
         self.assertIn("^/tmp/", assertions)
-        self.assertIn("MOLECULE_EPHEMERAL_DIRECTORY", assertions)
+        self.assertNotIn("MOLECULE_EPHEMERAL_DIRECTORY", assertions)
+        self.assertIn("ansible_connection == 'local'", assertions)
+        self.assertIn("_aap_tls_test_controller_identity.stdout | int > 0", assertions)
+        self.assertIn("--canonicalize-existing", assertions)
         self.assertIn("fail_msg:", assertions)
         self.assertNotIn("Validate temporary AAP CA trust installation settings", tasks)
 
@@ -49,6 +54,14 @@ class AapTlsContractsTests(unittest.TestCase):
         self.assertIn("aap_tls_molecule_invalid_become_rejected", converge)
         self.assertIn("aap_tls_molecule_privileged_numeric_owner_rejected", converge)
         self.assertIn("unsafe privileged numeric ownership", converge)
+        self.assertIn("aap_tls_molecule_forged_environment_rejected", converge)
+        self.assertIn("aap_tls_molecule_symlink_parent_rejected", converge)
+
+    def test_test_mode_defaults_fail_closed(self) -> None:
+        defaults = (ROOT / "roles/aap_tls/defaults/main.yml").read_text(encoding="utf-8")
+
+        self.assertIn("aap_tls_selfsigned_ca_trust_test_mode: false", defaults)
+        self.assertIn('aap_tls_selfsigned_ca_trust_test_root: ""', defaults)
 
 
 if __name__ == "__main__":
