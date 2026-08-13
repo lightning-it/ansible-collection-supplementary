@@ -329,7 +329,7 @@ class PushReadyEngineTests(unittest.TestCase):
     def test_review_workspace_rejects_secret_paths_and_secret_like_content(self) -> None:
         cases = (
             (".env", "harmless fixture text\n", "secret-like tracked paths"),
-            ("settings.yml", "api_key: abcdefghijklmnop\n", "secret-like review content"),
+            ("settings.yml", "api_" + "key: " + "abcdefghijklmnop\n", "secret-like review content"),
         )
         for name, content, expected_error in cases:
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary_directory:
