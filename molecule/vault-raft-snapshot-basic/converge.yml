@@ -273,6 +273,24 @@
           ansible.builtin.set_fact:
             vault_raft_snapshot_molecule_forged_environment_refused: true
 
+    - name: Initialize non-local Vault Raft test-mode refusal
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_non_local_test_mode_refused: false
+
+    - name: Reject Vault Raft test mode before inspecting paths on a non-local connection
+      block:
+        - name: Exercise non-local Vault Raft test-mode gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            ansible_connection: ssh
+          no_log: true
+      rescue:
+        - name: Record non-local Vault Raft test-mode refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_non_local_test_mode_refused: true
+
     - name: Initialize trailing-slash Vault Raft test-root refusal
       ansible.builtin.set_fact:
         vault_raft_snapshot_molecule_trailing_slash_root_refused: false
@@ -315,6 +333,7 @@
       ansible.builtin.assert:
         that:
           - vault_raft_snapshot_molecule_forged_environment_refused | bool
+          - vault_raft_snapshot_molecule_non_local_test_mode_refused | bool
           - vault_raft_snapshot_molecule_trailing_slash_root_refused | bool
           - vault_raft_snapshot_molecule_symlink_parent_refused | bool
         quiet: true

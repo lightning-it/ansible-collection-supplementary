@@ -139,6 +139,21 @@
   when: vault_raft_snapshot_action == 'restore_drill'
   no_log: true
 
+- name: Require local controller before inspecting private Vault Raft restore test paths
+  ansible.builtin.assert:
+    that:
+      - ansible_connection == 'local'
+      - inventory_hostname in ['localhost', '127.0.0.1']
+      - vault_raft_snapshot_api_delegate_to == 'localhost'
+    fail_msg: >-
+      Vault Raft restore test path inspection is permitted only on the local
+      controller with localhost API delegation.
+    quiet: true
+  when:
+    - vault_raft_snapshot_action == 'restore_drill'
+    - vault_raft_snapshot_restore_test_mode | bool
+  no_log: true
+
 - name: Inspect private Vault Raft restore test root
   ansible.builtin.stat:
     path: "{{ vault_raft_snapshot_restore_test_root }}"

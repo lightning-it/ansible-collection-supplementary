@@ -46,6 +46,21 @@
     - aap_tls_selfsigned_enabled | bool
     - aap_tls_selfsigned_install_ca_trust | bool
 
+- name: Require local controller before inspecting private AAP TLS test paths
+  ansible.builtin.assert:
+    that:
+      - ansible_connection == 'local'
+      - inventory_hostname in ['localhost', '127.0.0.1']
+      - aap_tls_selfsigned_delegate_to == 'localhost'
+    fail_msg: >-
+      AAP TLS test ownership path inspection is permitted only on the local
+      controller with localhost delegation.
+    quiet: true
+  when:
+    - aap_tls_selfsigned_enabled | bool
+    - aap_tls_selfsigned_install_ca_trust | bool
+    - aap_tls_selfsigned_ca_trust_test_mode | bool
+
 - name: Inspect private AAP TLS test root and trust directory
   ansible.builtin.stat:
     path: "{{ item }}"

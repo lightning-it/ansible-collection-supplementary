@@ -36,7 +36,8 @@ assets are supplied instead.
   `aap_tls_selfsigned_ca_trust_test_mode` opt-in, disabled by default, without
   privilege escalation on a non-root local controller. The configured test
   root and trust directory must be real, owner-only, non-symlink directories
-  beneath an explicit absolute root; the test root must not end in `/`, and
+  beneath an explicit absolute root. Localhost execution is verified before
+  any test path is inspected; the test root must not end in `/`, and
   environment variables do not enable this exception. This keeps direct
   Molecule and CI-specific ephemeral roots portable without weakening the
   ownership or canonical-path checks.

@@ -151,6 +151,29 @@
           - aap_tls_molecule_forged_environment_rejected
         quiet: true
 
+    - name: Initialize non-local AAP TLS test-mode rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_non_local_test_mode_rejected: false
+
+    - name: Reject AAP TLS test mode before inspecting paths on a non-local connection
+      block:
+        - name: Exercise non-local AAP TLS test-mode gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            ansible_connection: ssh
+      rescue:
+        - name: Record non-local AAP TLS test-mode rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_non_local_test_mode_rejected: true
+
+    - name: Require non-local AAP TLS test-mode rejection
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_non_local_test_mode_rejected
+        quiet: true
+
     - name: Initialize trailing-slash AAP TLS test-root rejection evidence
       ansible.builtin.set_fact:
         aap_tls_molecule_trailing_slash_root_rejected: false

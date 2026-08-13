@@ -5,5 +5,5 @@ bugfixes:
     bootstrap, and Vault Raft restore coverage executable in the
     capability-minimized rootless light Molecule gate while restricting
     numeric ownership to explicit, portable, canonical, trailing-slash-free,
-    owner-only unprivileged local test roots while preserving root-owned
-    production defaults.
+    owner-only unprivileged local test roots, refusing non-local execution
+    before path inspection, while preserving root-owned production defaults.

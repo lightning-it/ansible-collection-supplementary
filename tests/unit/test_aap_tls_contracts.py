@@ -41,6 +41,10 @@ class AapTlsContractsTests(unittest.TestCase):
         self.assertNotIn("^/tmp/", assertions)
         self.assertNotIn("MOLECULE_EPHEMERAL_DIRECTORY", assertions)
         self.assertIn("ansible_connection == 'local'", assertions)
+        self.assertLess(
+            assertions.index("Require local controller before inspecting private AAP TLS test paths"),
+            assertions.index("Inspect private AAP TLS test root and trust directory"),
+        )
         self.assertIn("_aap_tls_test_controller_identity.stdout | int > 0", assertions)
         self.assertIn("--canonicalize-existing", assertions)
         self.assertIn("not aap_tls_selfsigned_ca_trust_test_root.endswith('/')", assertions)
@@ -58,6 +62,7 @@ class AapTlsContractsTests(unittest.TestCase):
         self.assertIn("aap_tls_molecule_privileged_numeric_owner_rejected", converge)
         self.assertIn("unsafe privileged numeric ownership", converge)
         self.assertIn("aap_tls_molecule_forged_environment_rejected", converge)
+        self.assertIn("aap_tls_molecule_non_local_test_mode_rejected", converge)
         self.assertIn("aap_tls_molecule_trailing_slash_root_rejected", converge)
         self.assertIn("aap_tls_molecule_symlink_parent_rejected", converge)
 
