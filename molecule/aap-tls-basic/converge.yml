@@ -78,6 +78,48 @@
           - aap_tls_molecule_invalid_owner_rejected
         quiet: true
 
+    - name: Initialize AAP TLS controller identity rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_zero_identity_rejected: false
+        aap_tls_molecule_mismatched_identity_rejected: false
+
+    - name: Reject zero AAP TLS test ownership
+      block:
+        - name: Exercise zero AAP TLS test ownership gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_owner: "0"
+            aap_tls_selfsigned_ca_trust_group: "0"
+      rescue:
+        - name: Record zero AAP TLS test ownership rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_zero_identity_rejected: true
+
+    - name: Reject mismatched AAP TLS test ownership
+      block:
+        - name: Exercise mismatched AAP TLS test ownership gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_owner: >-
+              {{ (lookup('ansible.builtin.pipe', 'id -u') | int + 1) | string }}
+            aap_tls_selfsigned_ca_trust_group: >-
+              {{ (lookup('ansible.builtin.pipe', 'id -g') | int + 1) | string }}
+      rescue:
+        - name: Record mismatched AAP TLS test ownership rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_mismatched_identity_rejected: true
+
+    - name: Require AAP TLS controller identity rejections
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_zero_identity_rejected
+          - aap_tls_molecule_mismatched_identity_rejected
+        quiet: true
+
     - name: Initialize non-boolean AAP TLS become rejection evidence
       ansible.builtin.set_fact:
         aap_tls_molecule_invalid_become_rejected: false

@@ -48,6 +48,11 @@ class VaultRootlessContractsTests(unittest.TestCase):
         self.assertIn("MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-raft-restore", converge)
         self.assertIn("vault_raft_snapshot_molecule_restore_root }}/work", converge)
         self.assertIn("vault_raft_snapshot_molecule_numeric_production_root_refused", converge)
+        self.assertIn("vault_raft_snapshot_molecule_zero_work_root_identity_refused", converge)
+        self.assertIn("vault_raft_snapshot_molecule_mismatched_work_root_identity_refused", converge)
+        self.assertIn('vault_raft_snapshot_restore_work_root_owner: "0"', converge)
+        self.assertIn("'id -u') | int + 1", converge)
+        self.assertIn("'id -g') | int + 1", converge)
         self.assertIn("vault_raft_snapshot_molecule_forged_environment_refused", converge)
         self.assertIn("vault_raft_snapshot_molecule_non_local_test_mode_refused", converge)
         self.assertIn("vault_raft_snapshot_molecule_trailing_slash_root_refused", converge)
@@ -67,7 +72,11 @@ class VaultRootlessContractsTests(unittest.TestCase):
             assertions.index("Require local controller before inspecting private Vault Raft restore test paths"),
             assertions.index("Inspect private Vault Raft restore test root"),
         )
-        self.assertIn("_vault_raft_snapshot_restore_test_controller_identity.stdout | int > 0", assertions)
+        self.assertIn("_vault_raft_snapshot_restore_test_controller_uid.stdout | int > 0", assertions)
+        self.assertIn("_vault_raft_snapshot_restore_test_controller_gid.stdout | int > 0", assertions)
+        self.assertIn("== _vault_raft_snapshot_restore_test_controller_uid.stdout | int", assertions)
+        self.assertIn("== _vault_raft_snapshot_restore_test_controller_gid.stdout | int", assertions)
+        self.assertIn(".stat.gid | int", assertions)
         self.assertIn("--canonicalize-missing", assertions)
         self.assertIn("not vault_raft_snapshot_restore_test_root.endswith('/')", assertions)
 

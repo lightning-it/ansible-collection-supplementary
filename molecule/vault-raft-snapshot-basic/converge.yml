@@ -228,6 +228,50 @@
           - vault_raft_snapshot_molecule_invalid_work_root_group_refused | bool
         quiet: true
 
+    - name: Initialize Vault Raft controller identity refusals
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_zero_work_root_identity_refused: false
+        vault_raft_snapshot_molecule_mismatched_work_root_identity_refused: false
+
+    - name: Reject zero Vault Raft restore work-root ownership
+      block:
+        - name: Exercise zero restore work-root ownership gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_work_root_owner: "0"
+            vault_raft_snapshot_restore_work_root_group: "0"
+          no_log: true
+      rescue:
+        - name: Record zero restore work-root ownership refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_zero_work_root_identity_refused: true
+
+    - name: Reject mismatched Vault Raft restore work-root ownership
+      block:
+        - name: Exercise mismatched restore work-root ownership gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_work_root_owner: >-
+              {{ (lookup('ansible.builtin.pipe', 'id -u') | int + 1) | string }}
+            vault_raft_snapshot_restore_work_root_group: >-
+              {{ (lookup('ansible.builtin.pipe', 'id -g') | int + 1) | string }}
+          no_log: true
+      rescue:
+        - name: Record mismatched restore work-root ownership refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_mismatched_work_root_identity_refused: true
+
+    - name: Require Vault Raft controller identity refusals
+      ansible.builtin.assert:
+        that:
+          - vault_raft_snapshot_molecule_zero_work_root_identity_refused | bool
+          - vault_raft_snapshot_molecule_mismatched_work_root_identity_refused | bool
+        quiet: true
+
     - name: Initialize numeric ownership under production work-root refusal
       ansible.builtin.set_fact:
         vault_raft_snapshot_molecule_numeric_production_root_refused: false
