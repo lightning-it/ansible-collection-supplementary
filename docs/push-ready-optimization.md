@@ -21,6 +21,12 @@ python3 scripts/lit-push-ready.py push-ready
 python3 scripts/lit-push-ready.py verify
 ```
 
+The single repository-quality check has a 3600-second fail-closed timeout. This
+budget covers the complete isolated pre-commit suite plus the supplemental
+rootless Molecule parity scenario; it does not skip, shorten, or make either
+gate optional. Exceeding the budget still stops evidence creation and prevents
+the governed push.
+
 The evidence records total duration, per-reviewer duration, review bytes,
 executed and repeated checks, cache hits and misses, maximum parallelism, and
 explicit local external-review invocation counts split between Codex and
