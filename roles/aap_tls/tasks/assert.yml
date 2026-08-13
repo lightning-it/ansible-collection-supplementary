@@ -61,7 +61,7 @@
     - aap_tls_selfsigned_install_ca_trust | bool
     - aap_tls_selfsigned_ca_trust_test_mode | bool
 
-- name: Inspect private AAP TLS test root and trust directory
+- name: Inspect private AAP TLS test root, trust directory, and trust target
   ansible.builtin.stat:
     path: "{{ item }}"
     follow: false
@@ -71,6 +71,7 @@
   loop:
     - "{{ aap_tls_selfsigned_ca_trust_test_root }}"
     - "{{ aap_tls_selfsigned_ca_trust_path | dirname }}"
+    - "{{ aap_tls_selfsigned_ca_trust_path }}"
   register: _aap_tls_test_path_stats
   changed_when: false
   when:
@@ -135,7 +136,7 @@
       - >-
         aap_tls_selfsigned_ca_trust_group | int
         == _aap_tls_test_controller_gid.stdout | int
-      - _aap_tls_test_path_stats.results | length == 2
+      - _aap_tls_test_path_stats.results | length == 3
       - _aap_tls_test_path_stats.results[0].stat.isdir | default(false)
       - not (_aap_tls_test_path_stats.results[0].stat.islnk | default(false))
       - _aap_tls_test_path_stats.results[0].stat.uid | int == _aap_tls_test_controller_uid.stdout | int
@@ -146,6 +147,10 @@
       - _aap_tls_test_path_stats.results[1].stat.uid | int == _aap_tls_test_controller_uid.stdout | int
       - _aap_tls_test_path_stats.results[1].stat.gid | int == _aap_tls_test_controller_gid.stdout | int
       - _aap_tls_test_path_stats.results[1].stat.mode == '0700'
+      - not (_aap_tls_test_path_stats.results[2].stat.islnk | default(false))
+      - >-
+        not (_aap_tls_test_path_stats.results[2].stat.exists | default(false))
+        or (_aap_tls_test_path_stats.results[2].stat.isreg | default(false))
       - _aap_tls_test_realpaths.results | length == 2
       - _aap_tls_test_realpaths.results[0].stdout == aap_tls_selfsigned_ca_trust_test_root
       - >-
@@ -157,8 +162,8 @@
         == (aap_tls_selfsigned_ca_trust_path | dirname)
     fail_msg: >-
       AAP TLS test ownership requires the exact non-root local controller UID
-      and GID plus real, owner-only, non-symlink directories beneath the
-      explicit test root.
+      and GID plus real, owner-only, non-symlink directories and a non-symlink
+      trust target beneath the explicit test root.
     quiet: true
   when:
     - aap_tls_selfsigned_enabled | bool

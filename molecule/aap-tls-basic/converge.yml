@@ -43,6 +43,18 @@
         dest: "{{ aap_tls_molecule_root }}/trust-link"
         state: link
 
+    - name: Create unsafe external AAP TLS trust target fixture
+      ansible.builtin.copy:
+        dest: "{{ aap_tls_molecule_root }}-external/aap-unsafe-ca.crt"
+        content: unsafe-test-target
+        mode: "0600"
+
+    - name: Create unsafe AAP TLS trust target symlink fixture
+      ansible.builtin.file:
+        src: "{{ aap_tls_molecule_root }}-external/aap-unsafe-ca.crt"
+        dest: "{{ aap_tls_molecule_root }}/trust/aap-symlink-ca.crt"
+        state: link
+
     - name: Install fake update-ca-trust command
       ansible.builtin.copy:
         dest: "{{ aap_tls_molecule_root }}/bin/update-ca-trust"
@@ -261,6 +273,30 @@
       ansible.builtin.assert:
         that:
           - aap_tls_molecule_symlink_parent_rejected
+        quiet: true
+
+    - name: Initialize symlinked AAP TLS trust target rejection evidence
+      ansible.builtin.set_fact:
+        aap_tls_molecule_symlink_target_rejected: false
+
+    - name: Reject a symlinked AAP TLS trust target
+      block:
+        - name: Exercise symlinked AAP TLS trust target gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.aap_tls
+            tasks_from: assert.yml
+          vars:
+            aap_tls_selfsigned_ca_trust_path: >-
+              {{ aap_tls_molecule_root }}/trust/aap-symlink-ca.crt
+      rescue:
+        - name: Record symlinked AAP TLS trust target rejection
+          ansible.builtin.set_fact:
+            aap_tls_molecule_symlink_target_rejected: true
+
+    - name: Require symlinked AAP TLS trust target rejection
+      ansible.builtin.assert:
+        that:
+          - aap_tls_molecule_symlink_target_rejected
         quiet: true
 
     - name: Read generated AAP CA

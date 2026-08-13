@@ -43,13 +43,16 @@ class AapTlsContractsTests(unittest.TestCase):
         self.assertIn("ansible_connection == 'local'", assertions)
         self.assertLess(
             assertions.index("Require local controller before inspecting private AAP TLS test paths"),
-            assertions.index("Inspect private AAP TLS test root and trust directory"),
+            assertions.index("Inspect private AAP TLS test root, trust directory, and trust target"),
         )
         self.assertIn("_aap_tls_test_controller_uid.stdout | int > 0", assertions)
         self.assertIn("_aap_tls_test_controller_gid.stdout | int > 0", assertions)
         self.assertIn("== _aap_tls_test_controller_uid.stdout | int", assertions)
         self.assertIn("== _aap_tls_test_controller_gid.stdout | int", assertions)
         self.assertIn(".stat.gid | int", assertions)
+        self.assertIn('- "{{ aap_tls_selfsigned_ca_trust_path }}"', assertions)
+        self.assertIn("_aap_tls_test_path_stats.results[2].stat.islnk", assertions)
+        self.assertIn("_aap_tls_test_path_stats.results[2].stat.isreg", assertions)
         self.assertIn("--canonicalize-existing", assertions)
         self.assertIn("not aap_tls_selfsigned_ca_trust_test_root.endswith('/')", assertions)
         self.assertIn("fail_msg:", assertions)
@@ -74,6 +77,8 @@ class AapTlsContractsTests(unittest.TestCase):
         self.assertIn("aap_tls_molecule_non_local_test_mode_rejected", converge)
         self.assertIn("aap_tls_molecule_trailing_slash_root_rejected", converge)
         self.assertIn("aap_tls_molecule_symlink_parent_rejected", converge)
+        self.assertIn("aap_tls_molecule_symlink_target_rejected", converge)
+        self.assertIn("trust/aap-symlink-ca.crt", converge)
 
     def test_test_mode_defaults_fail_closed(self) -> None:
         defaults = (ROOT / "roles/aap_tls/defaults/main.yml").read_text(encoding="utf-8")

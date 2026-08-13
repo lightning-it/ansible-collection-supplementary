@@ -7,5 +7,5 @@ bugfixes:
     numeric ownership to explicit, portable, canonical, trailing-slash-free,
     owner-only unprivileged local test roots whose configured ownership equals
     the controller's effective non-zero UID and GID, refusing non-local
-    execution before path inspection, while preserving root-owned production
-    defaults.
+    execution before path inspection and symlinked AAP trust targets, while
+    preserving root-owned production defaults.

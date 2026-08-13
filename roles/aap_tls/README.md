@@ -38,7 +38,8 @@ assets are supplied instead.
   owner and group must equal that controller's effective non-zero UID and GID.
   The configured test root and trust directory must be real, owner-only,
   non-symlink directories beneath an explicit absolute root with the same
-  effective ownership. Localhost execution is verified before any test path is
+  effective ownership, and an existing trust target must be a regular file,
+  never a symlink. Localhost execution is verified before any test path is
   inspected; the test root must not end in `/`, and
   environment variables do not enable this exception. This keeps direct
   Molecule and CI-specific ephemeral roots portable without weakening the
