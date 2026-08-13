@@ -64,6 +64,7 @@ RECOVERY_ACCEPTANCE_PROFILE = "lit.supplementary/keycloak-26.7.1-security-v1"
 RECOVERY_ISSUED_AT = "2026-08-08T22:48:24Z"
 RECOVERY_EXPIRES_AT = "2026-09-07T22:48:24Z"
 RECOVERY_FRAGMENT_PATH = "changelogs/fragments/keycloak-26.7.1-security.yml"
+RECOVERY_FRAGMENT_SHA256 = "sha256:bfc051c66d0a8c016fd32bbe3a9f8b2882896a78e9dc121eb8837f3725a318f8"
 RECOVERY_CONTROL_PATHS = frozenset(
     {
         ".github/workflows/security-release-dispatch.yml",

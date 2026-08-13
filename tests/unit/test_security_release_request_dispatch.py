@@ -30,6 +30,13 @@ VERSION = "3.2.4"
 EVIDENCE_ID = "MLX90-KEYCLOAK-26.7.1-3.2.4"
 PROFILE = "lit.supplementary/keycloak-26.7.1-security-v1"
 NOW = datetime(2026, 8, 8, 23, 0, tzinfo=UTC)
+HISTORICAL_FRAGMENT = b"""---
+security_fixes:
+  - >-
+    Update the immutable Keycloak runtime to 26.7.1 to remediate
+    CVE-2026-4629, CVE-2026-9793, CVE-2026-14209, CVE-2026-14614, and
+    CVE-2026-14615.
+"""
 GIT = shutil.which("git")
 assert GIT is not None
 
@@ -143,7 +150,12 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
     ) -> dict[str, Any]:
         """Create the exact protected-promotion shape required by recovery."""
 
-        approved_main = self.head
+        fragment_path = self.root / "changelogs/fragments/keycloak-security.yml"
+        fragment_path.write_bytes(HISTORICAL_FRAGMENT)
+        git(self.root, "add", fragment_path.relative_to(self.root).as_posix())
+        git(self.root, "commit", "-q", "-m", "preserve historical Security fragment")
+        historical_head = git(self.root, "rev-parse", "HEAD")
+        approved_main = historical_head
         control_path = self.root / ".github/workflows/security-release-dispatch.yml"
         control_path.parent.mkdir(parents=True, exist_ok=True)
         control_path.write_text("name: recovered controller\n", encoding="utf-8")
@@ -191,9 +203,9 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             "bindings": {
                 "RECOVERY_APPROVED_MAIN_SHA": approved_main,
                 "RECOVERY_CANDIDATE_BASE_SHA": self.base,
-                "RECOVERY_CANDIDATE_HEAD_SHA": self.head,
+                "RECOVERY_CANDIDATE_HEAD_SHA": historical_head,
                 "RECOVERY_CANDIDATE_DIFF_SHA256": MODULE.INTAKE.sha256(
-                    MODULE.INTAKE.canonical_diff(self.root, self.base, self.head)
+                    MODULE.INTAKE.canonical_diff(self.root, self.base, historical_head)
                 ),
                 "RECOVERY_METADATA_SHA256": MODULE.INTAKE.sha256(metadata_raw),
                 "RECOVERY_EVIDENCE_ID": EVIDENCE_ID,
@@ -202,6 +214,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
                 "RECOVERY_ISSUED_AT": "2026-08-08T22:30:00Z",
                 "RECOVERY_EXPIRES_AT": "2026-09-08T22:30:00Z",
                 "RECOVERY_FRAGMENT_PATH": fragment_path,
+                "RECOVERY_FRAGMENT_SHA256": MODULE.INTAKE.sha256(HISTORICAL_FRAGMENT),
                 "RECOVERY_CONTROL_PATHS": frozenset(control_paths),
             },
         }
@@ -255,7 +268,11 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
                 NOW,
             )
         self.assertEqual(
-            MODULE.INTAKE.canonical_diff(self.root, self.base, self.head),
+            MODULE.INTAKE.canonical_diff(
+                self.root,
+                self.base,
+                recovery["bindings"]["RECOVERY_CANDIDATE_HEAD_SHA"],
+            ),
             patch,
         )
         self.assertEqual(EVIDENCE_ID, result["evidenceId"])
@@ -333,6 +350,22 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         with (
             mock.patch.multiple(MODULE.INTAKE.CONTRACT, **bindings),
             self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "historical Security candidate diff"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+
+    def test_recovery_rejects_historical_fragment_digest_mismatch(self) -> None:
+        recovery = self.prepare_recovery_topology()
+        bindings = dict(recovery["bindings"])
+        bindings["RECOVERY_FRAGMENT_SHA256"] = "sha256:" + ("0" * 64)
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **bindings),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "fragment digest"),
         ):
             MODULE.build_recovery_envelope(
                 self.root,

@@ -442,7 +442,8 @@ def verify_recovery_repository(
     )
     if fragment_raw != candidate_fragment_raw:
         fail("Security recovery changelog fragment differs from the approved historical candidate")
-    CONTRACT.validate_security_fragment(fragment_raw, "Security recovery changelog fragment")
+    if sha256(fragment_raw) != CONTRACT.RECOVERY_FRAGMENT_SHA256:
+        fail("Security recovery changelog fragment digest differs from the approved binding")
 
     result = {
         "schemaVersion": CONTRACT.INTAKE_RESULT_SCHEMA_VERSION,

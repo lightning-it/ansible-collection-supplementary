@@ -170,6 +170,11 @@ class SecurityReleaseContractTests(unittest.TestCase):
         self.assertEqual(expected, CONTRACT.canonical_sha256(reordered))
 
     def test_one_time_recovery_request_is_exact_and_does_not_relax_normal_intake(self) -> None:
+        historical_fragment = ROOT / CONTRACT.RECOVERY_FRAGMENT_PATH
+        self.assertEqual(
+            CONTRACT.RECOVERY_FRAGMENT_SHA256,
+            CONTRACT.sha256_bytes(historical_fragment.read_bytes()),
+        )
         base_sha = "d" * 40
         recovery = {
             "schemaVersion": CONTRACT.INTAKE_REQUEST_SCHEMA_VERSION,
