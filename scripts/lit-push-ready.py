@@ -1077,6 +1077,20 @@ def require_review_bootstrap_contract(change: PlannedChange) -> bool:
     return True
 
 
+def require_trusted_review_policy(
+    change: PlannedChange,
+    *,
+    allow_fixture_manifest_bootstrap: bool = False,
+) -> bool:
+    trust_root_bootstrap = require_review_bootstrap_contract(change)
+    if not trust_root_bootstrap:
+        require_trusted_check_policy(
+            change,
+            allow_fixture_manifest_bootstrap=allow_fixture_manifest_bootstrap,
+        )
+    return trust_root_bootstrap
+
+
 def require_trust_root_update_contract(change: PlannedChange) -> None:
     if require_review_bootstrap_contract(change):
         raise RuntimeError("trust-root update requires an existing base policy")
@@ -2630,14 +2644,17 @@ def copilot_container_command(
         resolved = shutil.which(name) if name else None
         if resolved is None:
             continue
-        probe_environment = local_container_environment(environment, name)
+        engine_candidate_environment = local_container_environment(environment, name)
+        probe_environment = {
+            key: value for key, value in engine_candidate_environment.items() if key not in COPILOT_TOKEN_NAMES
+        }
         try:
             if run([resolved, "info"], capture=True, timeout=30, env=probe_environment).returncode:
                 continue
         except subprocess.TimeoutExpired:
             continue
         engine = resolved
-        engine_environment = probe_environment
+        engine_environment = engine_candidate_environment
         break
     if engine is None or engine_environment is None:
         raise RuntimeError("no usable Docker or Podman")
@@ -3640,7 +3657,10 @@ def produce_evidence(
     *,
     fixture_manifest_bootstrap: bool,
 ) -> None:
-    require_trusted_check_policy(change, allow_fixture_manifest_bootstrap=fixture_manifest_bootstrap)
+    require_trusted_review_policy(
+        change,
+        allow_fixture_manifest_bootstrap=fixture_manifest_bootstrap,
+    )
     branch = current_branch_ref()
     started_at, started = now_utc(), time.monotonic()
     checks, tree, commit, fingerprint = execute_integration_checks(config, change)
@@ -3756,8 +3776,7 @@ def main() -> int:
             refresh_authoritative_base(config)
             change = planned_change(config)
             report_review_size(config, change)
-            require_review_bootstrap_contract(change)
-            require_trusted_check_policy(change)
+            require_trusted_review_policy(change)
             execute_integration_checks(config, change)
             return 0
         if args.command == "review":

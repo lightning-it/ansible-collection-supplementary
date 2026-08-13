@@ -26,11 +26,15 @@ class VaultRootlessContractsTests(unittest.TestCase):
 
     def test_bootstrap_molecule_rejects_names_and_proves_numeric_metadata(self) -> None:
         converge = (ROOT / "molecule/vault-bootstrap-basic/converge.yml").read_text(encoding="utf-8")
+        escrow_sync = (ROOT / "roles/vault_bootstrap/tasks/controller_escrow_sync.yml").read_text(encoding="utf-8")
 
         self.assertIn("vault_bootstrap_target_escrow_owner: invalid-owner", converge)
         self.assertIn("vault_bootstrap_target_escrow_group: invalid-group", converge)
         self.assertIn("Require exact numeric target escrow ownership and modes", converge)
         self.assertIn("item.stat.mode == ('0700' if", converge)
+        self.assertIn("is match('^[0-9]+$')", escrow_sync)
+        self.assertNotIn("is regex(", escrow_sync)
+        self.assertIn("fail_msg:", escrow_sync)
 
     def test_snapshot_molecule_and_role_enforce_exact_work_root_metadata(self) -> None:
         converge = (ROOT / "molecule/vault-raft-snapshot-basic/converge.yml").read_text(encoding="utf-8")

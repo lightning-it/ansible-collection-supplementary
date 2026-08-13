@@ -29,7 +29,10 @@ class AapTlsContractsTests(unittest.TestCase):
         self.assertTrue(tasks.startswith(precheck_entrypoint))
         self.assertIn("aap_tls_selfsigned_ca_trust_owner", assertions)
         self.assertIn("aap_tls_selfsigned_ca_trust_group", assertions)
+        self.assertIn("is match('^[0-9]+$')", assertions)
+        self.assertNotIn("is regex(", assertions)
         self.assertIn("aap_tls_selfsigned_ca_trust_become is boolean", assertions)
+        self.assertIn("fail_msg:", assertions)
         self.assertNotIn("Validate temporary AAP CA trust installation settings", tasks)
 
     def test_invalid_trust_inputs_are_exercised_by_molecule(self) -> None:

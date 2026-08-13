@@ -4,10 +4,11 @@
     that:
       - >-
         (vault_bootstrap_target_escrow_owner | string) == 'root' or
-        (vault_bootstrap_target_escrow_owner | string) is regex('^[0-9]+$')
+        (vault_bootstrap_target_escrow_owner | string) is match('^[0-9]+$')
       - >-
         (vault_bootstrap_target_escrow_group | string) == 'root' or
-        (vault_bootstrap_target_escrow_group | string) is regex('^[0-9]+$')
+        (vault_bootstrap_target_escrow_group | string) is match('^[0-9]+$')
+    fail_msg: "Target escrow owner and group must be root or numeric IDs."
     quiet: true
   no_log: true
 

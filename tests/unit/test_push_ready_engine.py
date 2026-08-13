@@ -36,7 +36,10 @@ class PushReadyEngineTests(unittest.TestCase):
         change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
         checks = mock.Mock(side_effect=AssertionError("untrusted checks executed"))
         function_globals = ENGINE["produce_evidence"].__globals__
-        entries = lambda commit, path: commit if path == ".pre-commit-config.yaml" else "stable"  # noqa: E731
+
+        def entries(commit: str, path: str) -> str:
+            return commit if path == ".pre-commit-config.yaml" else "stable"
+
         with (
             mock.patch.dict(function_globals, {"git_tree_entry": entries}),
             self.assertRaisesRegex(RuntimeError, r"policy differs from base: \.pre-commit-config\.yaml"),
@@ -46,7 +49,7 @@ class PushReadyEngineTests(unittest.TestCase):
             mock.patch.dict(
                 function_globals,
                 {
-                    "require_trusted_check_policy": mock.Mock(side_effect=RuntimeError("policy differs from base")),
+                    "require_trusted_review_policy": mock.Mock(side_effect=RuntimeError("policy differs from base")),
                     "execute_integration_checks": checks,
                 },
             ),
@@ -56,7 +59,40 @@ class PushReadyEngineTests(unittest.TestCase):
         checks.assert_not_called()
         source = (ROOT / "scripts" / "lit-push-ready.py").read_text(encoding="utf-8")
         validate = source.split('if args.command == "validate":', 1)[1].split('if args.command == "review":', 1)[0]
-        self.assertLess(validate.index("require_trusted_check_policy"), validate.index("execute_integration_checks"))
+        self.assertLess(validate.index("require_trusted_review_policy"), validate.index("execute_integration_checks"))
+
+    def test_trust_root_bootstrap_skips_base_policy_comparison(self) -> None:
+        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
+        function_globals = ENGINE["require_trusted_review_policy"].__globals__
+        trusted_policy = mock.Mock()
+        with mock.patch.dict(
+            function_globals,
+            {
+                "require_review_bootstrap_contract": mock.Mock(return_value=True),
+                "require_trusted_check_policy": trusted_policy,
+            },
+        ):
+            self.assertTrue(ENGINE["require_trusted_review_policy"](change))
+        trusted_policy.assert_not_called()
+
+        with mock.patch.dict(
+            function_globals,
+            {
+                "require_review_bootstrap_contract": mock.Mock(return_value=False),
+                "require_trusted_check_policy": trusted_policy,
+            },
+        ):
+            self.assertFalse(ENGINE["require_trusted_review_policy"](change))
+        trusted_policy.assert_called_once_with(change, allow_fixture_manifest_bootstrap=False)
+
+    def test_profile_uses_isolated_pre_commit_home(self) -> None:
+        profile = (ROOT / "scripts" / "lit-ci-profile.sh").read_text(encoding="utf-8")
+        home_export = 'export HOME="$pre_commit_venv/home"'
+        export = 'export PRE_COMMIT_HOME="$pre_commit_venv/home"'
+        self.assertIn(home_export, profile)
+        self.assertIn(export, profile)
+        self.assertLess(profile.index(home_export), profile.index('python3 "$pre_commit_zipapp" run --all-files'))
+        self.assertLess(profile.index(export), profile.index('python3 "$pre_commit_zipapp" run --all-files'))
 
     def test_review_cli_produces_push_evidence(self) -> None:
         config: dict[str, object] = {}
@@ -118,7 +154,6 @@ class PushReadyEngineTests(unittest.TestCase):
 
     def test_pre_push_hook_rejects_stale_head(self) -> None:
         config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
-        self.assertIn("default_install_hook_types: [pre-commit]", config)
         self.assertNotIn("stages: [pre-push]", config)
         profile = (ROOT / "scripts" / "lit-ci-profile.sh").read_text(encoding="utf-8")
         self.assertIn('python3 "$pre_commit_zipapp" run --all-files', profile)
@@ -196,9 +231,16 @@ class PushReadyEngineTests(unittest.TestCase):
                 mock.patch.dict(function_globals, {"run": probe, "existing_unix_socket": lambda _value: host[7:]}),
                 mock.patch.dict(os.environ, {"DOCKER_HOST": host, "XDG_RUNTIME_DIR": runtime}, clear=True),
             ):
-                command = ENGINE["copilot_container_command"](dict(ENGINE["COPILOT_PROMPT_MODE_BOUNDARY"]), ROOT)
+                environment = {
+                    **ENGINE["COPILOT_PROMPT_MODE_BOUNDARY"],
+                    "COPILOT_GITHUB_TOKEN": "secret",
+                }
+                command = ENGINE["copilot_container_command"](environment, ROOT)
             self.assertEqual(host, probe.call_args_list[0].kwargs["env"]["DOCKER_HOST"])
             self.assertEqual(runtime, probe.call_args_list[1].kwargs["env"]["XDG_RUNTIME_DIR"])
+            for call in probe.call_args_list:
+                self.assertTrue(all(name not in call.kwargs["env"] for name in ENGINE["COPILOT_TOKEN_NAMES"]))
+            self.assertEqual("secret", environment["COPILOT_GITHUB_TOKEN"])
         self.assertEqual("/podman", command[0])
         with (
             tempfile.TemporaryDirectory() as temporary_directory,

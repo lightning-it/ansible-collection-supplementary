@@ -204,6 +204,3 @@ repos:
         language: system
         entry: bash scripts/wunder-devtools-ee.sh shellcheck
         types: [shell]
-
-default_stages: [pre-commit]
-default_install_hook_types: [pre-commit]
