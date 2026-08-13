@@ -169,6 +169,59 @@ class SecurityReleaseContractTests(unittest.TestCase):
         reordered = dict(reversed(list(binding.items())))
         self.assertEqual(expected, CONTRACT.canonical_sha256(reordered))
 
+    def test_one_time_recovery_request_is_exact_and_does_not_relax_normal_intake(self) -> None:
+        base_sha = "d" * 40
+        recovery = {
+            "schemaVersion": CONTRACT.INTAKE_REQUEST_SCHEMA_VERSION,
+            "event": CONTRACT.RECOVERY_EVENT,
+            "repository": CONTRACT.PRODUCER_REPOSITORY,
+            "repositoryId": CONTRACT.PRODUCER_REPOSITORY_ID,
+            "baseSha": base_sha,
+            "candidateRef": "develop",
+            "candidateBaseSha": CONTRACT.RECOVERY_CANDIDATE_BASE_SHA,
+            "candidateHeadSha": CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
+            "candidateDiffSha256": CONTRACT.RECOVERY_CANDIDATE_DIFF_SHA256,
+            "evidenceId": CONTRACT.RECOVERY_EVIDENCE_ID,
+            "fixedVersion": CONTRACT.RECOVERY_FIXED_VERSION,
+            "acceptanceProfile": CONTRACT.RECOVERY_ACCEPTANCE_PROFILE,
+            "metadataSha256": CONTRACT.RECOVERY_METADATA_SHA256,
+            "issuedAt": CONTRACT.RECOVERY_ISSUED_AT,
+            "expiresAt": CONTRACT.RECOVERY_EXPIRES_AT,
+            "humanActions": 0,
+        }
+        recovery["chainId"] = CONTRACT.compute_chain_id(
+            repository=CONTRACT.PRODUCER_REPOSITORY,
+            repository_id=CONTRACT.PRODUCER_REPOSITORY_ID,
+            base_sha=base_sha,
+            candidate_head_sha=CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
+            candidate_diff_sha256=CONTRACT.RECOVERY_CANDIDATE_DIFF_SHA256,
+            evidence_id=CONTRACT.RECOVERY_EVIDENCE_ID,
+            fixed_version=CONTRACT.RECOVERY_FIXED_VERSION,
+            acceptance_profile=CONTRACT.RECOVERY_ACCEPTANCE_PROFILE,
+        )
+        checked_at = datetime(2026, 8, 13, 20, 0, tzinfo=UTC)
+        self.assertIs(recovery, CONTRACT.validate_request(recovery, CONTRACT.PRODUCER_REPOSITORY, checked_at))
+
+        for field, invalid in (
+            ("candidateBaseSha", "a" * 40),
+            ("candidateHeadSha", "b" * 40),
+            ("candidateDiffSha256", "sha256:" + "0" * 64),
+            ("metadataSha256", "sha256:" + "0" * 64),
+            ("evidenceId", "MLX90-OTHER-3.2.4"),
+            ("fixedVersion", "3.2.5"),
+            ("acceptanceProfile", "example/other"),
+        ):
+            with self.subTest(field=field):
+                tampered = copy.deepcopy(recovery)
+                tampered[field] = invalid
+                with self.assertRaisesRegex(CONTRACT.ContractError, "one-time approved binding"):
+                    CONTRACT.validate_request(tampered, CONTRACT.PRODUCER_REPOSITORY, checked_at)
+
+        normal = copy.deepcopy(self.request)
+        normal["candidateBaseSha"] = "f" * 40
+        with self.assertRaisesRegex(CONTRACT.ContractError, "authorized protected-main SHA"):
+            CONTRACT.validate_request(normal, CONTRACT.PRODUCER_REPOSITORY, NOW)
+
     def test_request_and_receipt_are_exact_duplicate_safe_and_app_bound(self) -> None:
         CONTRACT.validate_request(self.request, CONTRACT.PRODUCER_REPOSITORY, NOW)
         receipt = self._receipt()

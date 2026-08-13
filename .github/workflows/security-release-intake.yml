@@ -116,8 +116,12 @@ jobs:
 
           test -s "$patch"
           test "$(jq -er '.baseSha' "$result")" = "$CONTROLLER_SHA"
-          test "$(git rev-parse origin/develop)" = \
-            "$(jq -er '.candidateHeadSha' "$result")"
+          candidate_head="$(jq -er '.candidateHeadSha' "$result")"
+          if jq -e '.event == "mlx90-security-release-recovery"' "$request" >/dev/null; then
+            git merge-base --is-ancestor "$candidate_head" origin/develop
+          else
+            test "$(git rev-parse origin/develop)" = "$candidate_head"
+          fi
           jq -e '.schemaVersion == 2 and .humanActions == 0' "$result" >/dev/null
           {
             echo "base_sha=$(jq -er '.baseSha' "$result")"
@@ -172,7 +176,6 @@ jobs:
           authenticated_fetch --no-tags origin main develop
           test "$(git rev-parse HEAD)" = "$EXPECTED_BASE_SHA"
           test "$(git rev-parse origin/main)" = "$EXPECTED_BASE_SHA"
-          test "$(git rev-parse origin/develop)" = "$EXPECTED_CANDIDATE_HEAD_SHA"
 
           current_run="$RUNNER_TEMP/security-intake-controller-run-pre-token.json"
           GH_TOKEN="$RUN_TOKEN" gh api \
@@ -215,6 +218,11 @@ jobs:
             "$EXPECTED_CANDIDATE_HEAD_SHA"
           test "$(jq -er '.evidenceId' "$result")" = "$EXPECTED_EVIDENCE_ID"
           test "$(jq -er '.fixedVersion' "$result")" = "$EXPECTED_FIXED_VERSION"
+          if jq -e '.event == "mlx90-security-release-recovery"' "$request" >/dev/null; then
+            git merge-base --is-ancestor "$EXPECTED_CANDIDATE_HEAD_SHA" origin/develop
+          else
+            test "$(git rev-parse origin/develop)" = "$EXPECTED_CANDIDATE_HEAD_SHA"
+          fi
           {
             echo "request=$request"
             echo "patch=$patch"
@@ -336,7 +344,6 @@ jobs:
           authenticated_fetch --no-tags origin main develop
           test "$(git rev-parse HEAD)" = "$EXPECTED_BASE_SHA"
           test "$(git rev-parse origin/main)" = "$EXPECTED_BASE_SHA"
-          test "$(git rev-parse origin/develop)" = "$EXPECTED_CANDIDATE_HEAD_SHA"
 
           current_run="$RUNNER_TEMP/security-intake-controller-run-final.json"
           GH_TOKEN="$RUN_TOKEN" gh api \
@@ -402,6 +409,11 @@ jobs:
           cmp "$EXPECTED_REQUEST" "$request"
           cmp "$EXPECTED_PATCH" "$patch"
           cmp "$EXPECTED_RESULT" "$result"
+          if jq -e '.event == "mlx90-security-release-recovery"' "$request" >/dev/null; then
+            git merge-base --is-ancestor "$EXPECTED_CANDIDATE_HEAD_SHA" origin/develop
+          else
+            test "$(git rev-parse origin/develop)" = "$EXPECTED_CANDIDATE_HEAD_SHA"
+          fi
           jq -e '
             .schemaVersion == 2
             and .request.schemaVersion == 2
@@ -437,6 +449,7 @@ jobs:
             echo "receipt=$receipt"
             echo "branch=$(jq -er '.branch' "$result")"
             echo "candidate_diff_sha256=$(jq -er '.candidateDiffSha256' "$result")"
+            echo "request_event=$(jq -er '.event' "$request")"
           } >>"$GITHUB_OUTPUT"
 
       - name: Create or prove exact App-authored isolated commit
@@ -452,6 +465,7 @@ jobs:
           FIXED_VERSION: ${{ needs.classify.outputs.fixed-version }}
           PATCH_FILE: ${{ steps.final.outputs.patch }}
           RECEIPT_FILE: ${{ steps.final.outputs.receipt }}
+          REQUEST_EVENT: ${{ steps.final.outputs.request_event }}
         run: |
           set -euo pipefail
 
@@ -463,10 +477,19 @@ jobs:
           [[ "$BRANCH" == security-release/MLX90-* ]]
           authenticated_git fetch --no-tags origin main develop
           test "$(git rev-parse origin/main)" = "$BASE_SHA"
-          test "$(git rev-parse origin/develop)" = "$CANDIDATE_HEAD_SHA"
+          if [ "$REQUEST_EVENT" = mlx90-security-release-recovery ]; then
+            git merge-base --is-ancestor "$CANDIDATE_HEAD_SHA" origin/develop
+          else
+            test "$REQUEST_EVENT" = mlx90-security-release
+            test "$(git rev-parse origin/develop)" = "$CANDIDATE_HEAD_SHA"
+          fi
           git switch --detach "$BASE_SHA"
           git switch -c "$BRANCH"
-          git apply --binary --index "$PATCH_FILE"
+          if [ "$REQUEST_EVENT" = mlx90-security-release ]; then
+            git apply --binary --index "$PATCH_FILE"
+          else
+            test "$REQUEST_EVENT" = mlx90-security-release-recovery
+          fi
 
           receipt=".lit/security-release-intakes/${FIXED_VERSION}.json"
           test ! -e "$receipt"
@@ -493,7 +516,11 @@ jobs:
             head_sha="$(git rev-parse HEAD)"
             authenticated_git fetch --no-tags origin main develop
             test "$(git rev-parse origin/main)" = "$BASE_SHA"
-            test "$(git rev-parse origin/develop)" = "$CANDIDATE_HEAD_SHA"
+            if [ "$REQUEST_EVENT" = mlx90-security-release-recovery ]; then
+              git merge-base --is-ancestor "$CANDIDATE_HEAD_SHA" origin/develop
+            else
+              test "$(git rev-parse origin/develop)" = "$CANDIDATE_HEAD_SHA"
+            fi
             authenticated_git push origin "HEAD:refs/heads/${BRANCH}"
           fi
 

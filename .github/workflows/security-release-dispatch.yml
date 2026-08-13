@@ -7,7 +7,7 @@ on:
   workflow_run:
     workflows: [Collection CI]
     types: [completed]
-    branches: [develop]
+    branches: [develop, main]
   workflow_dispatch:
     inputs:
       source_run_id:
@@ -48,6 +48,245 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --ref main \
             -f "source_run_id=$SOURCE_RUN_ID"
+
+  classify-recovery:
+    name: Bind the single approved existing-marker recovery
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      dispatch: ${{ steps.request.outputs.dispatch }}
+      source-sha: ${{ steps.request.outputs.source_sha }}
+    steps:
+      - name: Checkout exact protected-main recovery controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Construct and fully validate the one-time recovery request
+        id: request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          authenticated_fetch() {
+            git -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' fetch "$@"
+          }
+
+          [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          source_run="$RUNNER_TEMP/security-recovery-source-run.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" \
+            >"$source_run"
+          jq -e \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg run_id "$SOURCE_RUN_ID" \
+            --arg sha "$SOURCE_SHA" '
+              (.id == ($run_id | tonumber))
+              and (.name == "Collection CI")
+              and (.path == ".github/workflows/collection-ci.yml")
+              and (.event == "push")
+              and (.head_branch == "main")
+              and (.head_sha == $sha)
+              and (.head_repository.full_name == $repository)
+              and (.repository.full_name == $repository)
+              and (.status == "completed")
+              and (.conclusion == "success")
+            ' "$source_run" >/dev/null
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          authenticated_fetch --no-tags origin main develop
+          test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
+
+          result="$RUNNER_TEMP/security-recovery-envelope.json"
+          umask 077
+          python3 scripts/security-release-dispatch.py \
+            --recover-existing-marker \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-sha "$SOURCE_SHA" \
+            --head-sha "$(git rev-parse origin/develop)" \
+            --root . \
+            --output-json "$result" >/dev/null
+          dispatch="$(jq -er '.dispatch | if . then "true" else "false" end' "$result")"
+          {
+            echo "dispatch=$dispatch"
+            echo "source_sha=$SOURCE_SHA"
+          } >>"$GITHUB_OUTPUT"
+
+  dispatch-recovery:
+    name: Dispatch approved recovery as release App
+    needs: classify-recovery
+    if: >-
+      needs.classify-recovery.result == 'success' &&
+      needs.classify-recovery.outputs.dispatch == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: mlx90-security-release-evidence
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout exact protected-main recovery controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ needs.classify-recovery.outputs.source-sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Reconstruct approved recovery before token access
+        id: request
+        env:
+          RUN_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.classify-recovery.outputs.source-sha }}
+        run: |
+          set -euo pipefail
+
+          authenticated_fetch() {
+            GH_TOKEN="$RUN_TOKEN" git -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' fetch "$@"
+          }
+
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          authenticated_fetch --no-tags origin main develop
+          test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
+          result="$RUNNER_TEMP/security-recovery-envelope.json"
+          umask 077
+          python3 scripts/security-release-dispatch.py \
+            --recover-existing-marker \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-sha "$SOURCE_SHA" \
+            --head-sha "$(git rev-parse origin/develop)" \
+            --root . \
+            --output-json "$result" >/dev/null
+          jq -e '
+            .dispatch == true
+            and .request.event == "mlx90-security-release-recovery"
+            and .request.humanActions == 0
+          ' "$result" >/dev/null
+          echo "envelope=$result" >>"$GITHUB_OUTPUT"
+
+      - name: Mint recovery metadata-only App attestation token
+        id: recovery-app-metadata
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-metadata: read
+
+      - name: Verify recovery App installation and repository scope
+        env:
+          APP_INSTALLATION_ID: ${{ steps.recovery-app-metadata.outputs.installation-id }}
+          APP_SLUG: ${{ steps.recovery-app-metadata.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.recovery-app-metadata.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          test "$APP_SLUG" = lightning-it-release-automation
+          test "$APP_INSTALLATION_ID" = 148019054
+          bot="$RUNNER_TEMP/security-recovery-app-bot.json"
+          gh api "users/${APP_SLUG}%5Bbot%5D" >"$bot"
+          jq -e '
+            .login == "lightning-it-release-automation[bot]"
+            and .id == 307565056
+            and .type == "Bot"
+          ' "$bot" >/dev/null
+          app="$RUNNER_TEMP/security-recovery-app.json"
+          gh api "apps/${APP_SLUG}" >"$app"
+          jq -e '
+            .slug == "lightning-it-release-automation"
+            and .owner.login == "lightning-it"
+            and .permissions == {
+              "actions": "write",
+              "checks": "read",
+              "contents": "write",
+              "metadata": "read",
+              "pull_requests": "write"
+            }
+          ' "$app" >/dev/null
+          repositories="$RUNNER_TEMP/security-recovery-installation-repositories.json"
+          gh api --paginate --slurp \
+            'installation/repositories?per_page=100' >"$repositories"
+          jq -e '
+            [.[].repositories[].full_name] | sort == [
+              "lightning-it/ansible-collection-supplementary",
+              "lightning-it/container-ee-wunder-ansible-ubi9",
+              "lightning-it/github-management-lit",
+              "lightning-it/modulix-validation",
+              "lightning-it/shared-assets-lit"
+            ]
+          ' "$repositories" >/dev/null
+
+      - name: Mint recovery repository-scoped App token
+        id: recovery-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-actions: write
+
+      - name: Revalidate and dispatch recovery to immutable App-only intake
+        env:
+          APP_INSTALLATION_ID: ${{ steps.recovery-app.outputs.installation-id }}
+          APP_SLUG: ${{ steps.recovery-app.outputs.app-slug }}
+          EXPECTED_ENVELOPE: ${{ steps.request.outputs.envelope }}
+          GH_TOKEN: ${{ steps.recovery-app.outputs.token }}
+          READ_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.classify-recovery.outputs.source-sha }}
+        run: |
+          set -euo pipefail
+
+          test "$APP_SLUG" = lightning-it-release-automation
+          test "$APP_INSTALLATION_ID" = 148019054
+          authenticated_fetch() {
+            GH_TOKEN="$READ_TOKEN" git -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' fetch "$@"
+          }
+
+          authenticated_fetch --no-tags origin main develop
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
+          fresh_envelope="$RUNNER_TEMP/security-recovery-envelope-final.json"
+          request="$RUNNER_TEMP/security-recovery-request.json"
+          umask 077
+          python3 scripts/security-release-dispatch.py \
+            --recover-existing-marker \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-sha "$SOURCE_SHA" \
+            --head-sha "$(git rev-parse origin/develop)" \
+            --root . \
+            --output-json "$fresh_envelope" \
+            --output-request-json "$request" >/dev/null
+          cmp "$EXPECTED_ENVELOPE" "$fresh_envelope"
+          jq -e '
+            .dispatch == true
+            and .request.event == "mlx90-security-release-recovery"
+            and .request.humanActions == 0
+          ' "$fresh_envelope" >/dev/null
+
+          request_json="$(<"$request")"
+          payload="$RUNNER_TEMP/security-recovery-workflow-dispatch.json"
+          jq -n --arg request_json "$request_json" \
+            '{ref:"main",inputs:{request_json:$request_json}}' >"$payload"
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/security-release-intake.yml/dispatches" \
+            --input "$payload"
 
   classify:
     name: Bind successful protected-develop Security candidate

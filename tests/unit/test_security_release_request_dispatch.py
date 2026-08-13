@@ -334,7 +334,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
 
         self.assertIn("workflow_run:", dispatch)
         self.assertIn("workflows: [Collection CI]", dispatch)
-        self.assertIn("branches: [develop]", dispatch)
+        self.assertIn("branches: [develop, main]", dispatch)
         self.assertIn("source_run_id:", dispatch)
         self.assertIn("gh workflow run security-release-dispatch.yml", dispatch)
         self.assertIn("--ref main", dispatch)
@@ -343,18 +343,23 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("github.event.workflow_run.event == 'push'", dispatch)
         self.assertNotIn("pull_request:", dispatch)
         self.assertEqual(2, dispatch.count("ref: ${{ github.sha }}"))
-        self.assertNotIn("ref: ${{ github.event.workflow_run.head_sha }}", dispatch)
+        self.assertEqual(1, dispatch.count("ref: ${{ github.event.workflow_run.head_sha }}"))
         self.assertNotIn("ref: ${{ needs.classify.outputs.source-sha }}", dispatch)
         self.assertIn("needs.classify.outputs['source-sha']", dispatch)
         self.assertIn("needs.classify.outputs.dispatch == 'true'", dispatch)
         self.assertIn("environment: mlx90-security-release-evidence", dispatch)
         self.assertIn("permission-actions: write", dispatch)
-        self.assertEqual(1, dispatch.count("permission-metadata: read"))
+        self.assertEqual(2, dispatch.count("permission-metadata: read"))
         self.assertNotIn("permission-contents: write", dispatch)
         self.assertNotIn("permission-pull-requests: write", dispatch)
         self.assertNotIn("permission-workflows", dispatch)
         self.assertNotIn("repository_dispatch", dispatch)
         self.assertIn("--output-request-json", dispatch)
+        self.assertIn("--recover-existing-marker", dispatch)
+        self.assertIn("mlx90-security-release-recovery", dispatch)
+        self.assertIn("github.event.workflow_run.head_branch == 'main'", dispatch)
+        self.assertIn("Bind the single approved existing-marker recovery", dispatch)
+        self.assertIn("Dispatch approved recovery as release App", dispatch)
         self.assertIn("inputs:{request_json:$request_json}", dispatch)
         self.assertIn(
             "actions/workflows/security-release-intake.yml/dispatches",
@@ -366,7 +371,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn('"checks": "read"', dispatch)
         self.assertIn("gh api --paginate --slurp", dispatch)
         self.assertEqual(
-            1,
+            2,
             dispatch.count("repositories: ${{ github.event.repository.name }}"),
         )
         dispatch_attestation = dispatch[
@@ -389,7 +394,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("permission-actions: write", dispatch_mutation)
         self.assertNotIn("permission-metadata: read", dispatch_mutation)
         for repository in allowlist:
-            self.assertEqual(1, dispatch.count(f'"{repository}"'))
+            self.assertEqual(2, dispatch.count(f'"{repository}"'))
         self.assertLess(
             dispatch.index("Reconstruct exact validated request before token access"),
             dispatch.index("Mint installation-wide metadata-only App attestation token"),
@@ -407,7 +412,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             dispatch.index("Revalidate and dispatch exact request to immutable main intake"),
         )
         relay_run = dispatch[
-            dispatch.index("- name: Dispatch immutable main-ref controller") : dispatch.index("  classify:")
+            dispatch.index("- name: Dispatch immutable main-ref controller") : dispatch.index("  classify-recovery:")
         ]
         classify_start = dispatch.index("- name: Construct and fully validate immutable Security request")
         classify_run = dispatch[classify_start : dispatch.index("\n  dispatch:\n", classify_start)]
@@ -458,6 +463,9 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("permission-pull-requests: write", intake_mutation)
         self.assertNotIn("permission-metadata: read", intake_mutation)
         self.assertIn("--output-intake-receipt", intake)
+        self.assertIn("mlx90-security-release-recovery", intake)
+        self.assertIn('git merge-base --is-ancestor "$candidate_head" origin/develop', intake)
+        self.assertIn('if [ "$REQUEST_EVENT" = mlx90-security-release ]; then', intake)
         self.assertIn("--workflow-triggering-actor", intake)
         self.assertIn(".schemaVersion == 2", intake)
         self.assertIn('.controller.event == "workflow_dispatch"', intake)
