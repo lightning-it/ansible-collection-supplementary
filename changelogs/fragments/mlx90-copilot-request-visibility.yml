@@ -1,6 +1,6 @@
 ---
 bugfixes:
   - >-
-    Keep the final exact-head Copilot reviewer request idempotent while waiting
-    for GitHub reviewer propagation, preventing a valid frozen review from
-    failing only because visibility takes longer than the short API window.
+    Request the final exact-head Copilot review for both a Ready PR opened
+    directly and a draft PR made Ready, while keeping the operation idempotent
+    and waiting for GitHub reviewer propagation.
