@@ -557,8 +557,8 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("github.triggering_actor == 'github-actions[bot]'", dispatch)
         self.assertIn("github.event.workflow_run.event == 'push'", dispatch)
         self.assertNotIn("pull_request:", dispatch)
-        self.assertEqual(2, dispatch.count("ref: ${{ github.sha }}"))
-        self.assertEqual(2, dispatch.count("ref: develop"))
+        self.assertEqual(4, dispatch.count("ref: ${{ github.sha }}"))
+        self.assertNotIn("ref: develop", dispatch)
         self.assertNotIn("ref: ${{ github.event.workflow_run.head_sha }}", dispatch)
         self.assertNotIn("ref: ${{ needs.classify.outputs.source-sha }}", dispatch)
         self.assertIn("needs.classify.outputs['source-sha']", dispatch)
@@ -575,10 +575,13 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("mlx90-security-release-recovery", dispatch)
         self.assertIn("github.event.workflow_run.head_branch == 'main'", dispatch)
         recovery_flow = dispatch[dispatch.index("  classify-recovery:") : dispatch.index("\n  classify:\n")]
-        self.assertNotIn("CONTROLLER_SHA: ${{ github.sha }}", recovery_flow)
-        self.assertEqual(2, recovery_flow.count('CONTROLLER_SHA="$(git rev-parse HEAD)"'))
-        self.assertIn("CONTROLLER_SHA: ${{ steps.request.outputs.controller_sha }}", recovery_flow)
-        self.assertIn('echo "controller_sha=$CONTROLLER_SHA"', recovery_flow)
+        self.assertEqual(3, recovery_flow.count("CONTROLLER_SHA: ${{ github.sha }}"))
+        self.assertNotIn('CONTROLLER_SHA="$(git rev-parse HEAD)"', recovery_flow)
+        self.assertNotIn("steps.request.outputs.controller_sha", recovery_flow)
+        self.assertEqual(
+            3,
+            recovery_flow.count('test "$(git show -s --format=%T "$CONTROLLER_SHA")" ='),
+        )
         self.assertIn("Bind the single approved existing-marker recovery", dispatch)
         self.assertIn("Dispatch approved recovery as release App", dispatch)
         self.assertNotIn("needs.classify-recovery", dispatch)
