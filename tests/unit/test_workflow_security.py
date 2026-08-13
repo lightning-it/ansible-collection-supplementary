@@ -196,6 +196,108 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("contains(github.event.pull_request.labels.*.name, 'safe-automerge')", require_fragment)
         self.assertIn("!contains(github.event.pull_request.labels.*.name, 'breaking-update')", require_fragment)
 
+    def test_copilot_review_is_requested_only_for_one_finalized_exact_head(self) -> None:
+        copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
+        request_job = copilot.split("  request-current-revision-review:", 1)[1].split(
+            "  current-revision-reviewed:", 1
+        )[0]
+        self.assertIn("github.event.action == 'ready_for_review'", request_job)
+        self.assertIn("github.event_name == 'workflow_dispatch'", request_job)
+        self.assertIn("github.ref == 'refs/heads/develop'", request_job)
+        self.assertNotIn("synchronize", request_job)
+        self.assertIn('test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"', request_job)
+        self.assertIn("Copilot already reviewed the exact finalized head", request_job)
+        self.assertIn("mlx90-copilot-request head=${EXPECTED_HEAD}", request_job)
+        self.assertIn("Copilot review is already requested for the exact finalized head", request_job)
+        self.assertIn('gh api --method DELETE "${requested_reviewers_url}"', request_job)
+        self.assertIn("review_is_visible_for_head()", request_job)
+        self.assertIn("for attempt in 1 2 3 4 5", request_job)
+        self.assertIn("Copilot reviewer request did not become visible", request_job)
+        self.assertIn("cancel-in-progress: false", copilot)
+        self.assertIn("pull_request_review:", copilot)
+
+        remediation = (WORKFLOWS / "codex-copilot-remediation.yml").read_text(encoding="utf-8")
+        self.assertIn("reviewThreads(first:100,after:$after)", remediation)
+        self.assertIn('if [ "${round}" -gt 1 ]', remediation)
+        self.assertIn("No recursive repair loop is permitted", remediation)
+        self.assertEqual(1, remediation.count('git commit -m "fix: remediate Copilot findings'))
+        self.assertEqual(1, remediation.count("gh workflow run codex-copilot-remediation.yml"))
+        self.assertNotIn("maximum three automatic repair rounds", remediation)
+        prompt = (ROOT / ".github" / "codex" / "prompts" / "remediate-copilot.md").read_text(encoding="utf-8")
+        self.assertIn("complete thread set", prompt)
+        self.assertIn("one bounded correction package", prompt)
+        self.assertIn("Do not manufacture a no-op", prompt)
+        self.assertIn("only one final Current-Head", prompt)
+
+    def test_ten_intermediate_synchronize_events_cannot_request_copilot(self) -> None:
+        workflow = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
+        request_job = workflow.split("  request-current-revision-review:", 1)[1].split(
+            "  current-revision-reviewed:", 1
+        )[0]
+        condition = request_job.split("    if: >-", 1)[1].split("    permissions:", 1)[0]
+        self.assertIn("github.event.action == 'ready_for_review'", condition)
+        self.assertNotIn("synchronize", condition)
+        self.assertEqual(1, request_job.count('gh api --method POST "${requested_reviewers_url}"'))
+        events = [{"action": "synchronize", "commit": index} for index in range(10)]
+        self.assertFalse(any(event["action"] == "ready_for_review" for event in events))
+
+    def test_style_only_remediation_cannot_create_a_noop_commit(self) -> None:
+        workflow = (WORKFLOWS / "codex-copilot-remediation.yml").read_text(encoding="utf-8")
+        push_step = workflow.split("      - name: Verify, commit, and push without force", 1)[1].split(
+            "      - name: Explicitly continue after GITHUB_TOKEN push", 1
+        )[0]
+        no_op = "if git diff --quiet && git diff --cached --quiet; then"
+        self.assertLess(push_step.index(no_op), push_step.index("git add -A"))
+        self.assertLess(push_step.index('echo "changed=false"'), push_step.index("git commit -m"))
+        self.assertIn('echo "changed=false" >>"${GITHUB_OUTPUT}"\n            exit 0', push_step)
+        evidence_only = workflow.split("  enable-develop-automerge-after-evidence-only-remediation:", 1)[1].split(
+            "  enable-develop-automerge:", 1
+        )[0]
+        self.assertIn("needs.remediate.outputs.changed == 'false'", evidence_only)
+        self.assertIn("gh pr checks", evidence_only)
+        prompt = (ROOT / ".github" / "codex" / "prompts" / "remediate-copilot.md").read_text(encoding="utf-8")
+        self.assertIn("Formatter-, linter-, or type-only style suggestions require no source edit", prompt)
+        self.assertIn("Do not manufacture a no-op", prompt)
+
+    def test_material_remediation_invalidates_old_evidence_and_binds_one_rereview(self) -> None:
+        workflow = (WORKFLOWS / "codex-copilot-remediation.yml").read_text(encoding="utf-8")
+        push_step = workflow.split("      - name: Verify, commit, and push without force", 1)[1].split(
+            "      - name: Explicitly continue after GITHUB_TOKEN push", 1
+        )[0]
+        continuation = workflow.split("      - name: Explicitly continue after GITHUB_TOKEN push", 1)[1].split(
+            "  enable-develop-automerge-after-evidence-only-remediation:", 1
+        )[0]
+        dispatch = workflow.split("  continue-after-push:", 1)[1].split("  inspect:", 1)[0]
+
+        self.assertIn('new_head="$(git rev-parse HEAD)"', push_step)
+        self.assertIn(
+            'test "$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha)" = "${new_head}"',
+            push_step,
+        )
+        self.assertIn('echo "new_head=${new_head}"', push_step)
+        self.assertIn("NEW_HEAD: ${{ steps.push.outputs.new_head }}", continuation)
+        self.assertEqual(1, continuation.count("gh workflow run codex-copilot-remediation.yml"))
+        self.assertIn('-f expected_head="${NEW_HEAD}"', continuation)
+        self.assertIn('test "${current_head}" = "${EXPECTED_HEAD}"', dispatch)
+        self.assertEqual(1, dispatch.count("gh api --method POST"))
+        self.assertIn("the one final Current-Head re-review produced new material findings", workflow)
+
+    def test_review_automation_has_no_privileged_bypass_path(self) -> None:
+        workflows = "\n".join(
+            (WORKFLOWS / name).read_text(encoding="utf-8")
+            for name in ("copilot-review.yml", "codex-copilot-remediation.yml")
+        )
+        for forbidden in (
+            "git push --force",
+            "--force-with-lease",
+            "gh pr merge --admin",
+            "/rulesets",
+            "/protection",
+            "environment:",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, workflows)
+
     def test_shared_assets_guard_streams_large_check_evidence_via_stdin(self) -> None:
         workflow = (WORKFLOWS / "shared-assets-guarded-automerge.yml").read_text(encoding="utf-8")
         self.assertNotIn('--argjson check_pages "$check_runs"', workflow)

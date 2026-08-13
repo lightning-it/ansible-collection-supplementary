@@ -6,6 +6,18 @@ name: Copilot review gate
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled, edited]
+  pull_request_review:
+    types: [submitted, edited]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request to finalize for one exact-head Copilot review
+        required: true
+        type: number
+      expected_head:
+        description: Frozen exact pull request head SHA
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -19,8 +31,8 @@ env:
   QUOTA_EXCEEDED_MARKER: quota exceeded
 
 concurrency:
-  group: copilot-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: copilot-review-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: false
 
 # The stable main-to-develop sync branch can carry release content, is never
 # ancestry-exempt, and uses the history-free exact-revision AI path. Only dynamically named
@@ -29,37 +41,14 @@ jobs:
   request-current-revision-review:
     name: Request Copilot review for current revision
     if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.draft == false &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      !(github.event.pull_request.user.login == 'renovate[bot]' &&
-        startsWith(github.event.pull_request.head.ref, 'renovate/') &&
-        github.event.pull_request.base.ref == 'develop') &&
-      !(github.event.pull_request.user.login == 'lightning-it-shared-assets-sync[bot]' &&
-        startsWith(github.event.pull_request.head.ref, 'chore/sync-shared-assets-lit-') &&
-        github.event.pull_request.base.ref == 'develop' &&
-        (github.event.pull_request.title == 'chore: sync shared-assets-lit' ||
-          github.event.pull_request.title == 'chore: sync shared assets')) &&
-      !(github.event.pull_request.user.login == 'lightning-it-shared-assets-sync[bot]' &&
-        startsWith(github.event.pull_request.head.ref, 'chore/sync-repository-quality-') &&
-        github.event.pull_request.base.ref == 'develop' &&
-        github.event.pull_request.title == 'chore: sync repository quality assets') &&
-      !(github.event.pull_request.user.login == 'lightning-it-release-automation[bot]' &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        startsWith(github.event.pull_request.head.ref, 'backmerge/') &&
-        endsWith(github.event.pull_request.head.ref, '-main') &&
-        github.event.pull_request.base.ref == 'develop' &&
-        startsWith(
-          github.event.pull_request.title,
-          'chore(governance): record main ancestry before '
-        )) &&
-      !(github.event.pull_request.user.login == 'lightning-it-release-automation[bot]' &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        github.event.pull_request.head.ref == 'develop' &&
-        github.event.pull_request.base.ref == 'main' &&
-        github.event.pull_request.title == 'chore(release): promote develop to main')
+      (github.event_name == 'pull_request' &&
+        github.event.action == 'ready_for_review' &&
+        github.event.pull_request.draft == false &&
+        github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop')
     permissions:
       contents: read
+      issues: write
       pull-requests: write
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -68,13 +57,38 @@ jobs:
       - name: Request Copilot review for the current revision
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || inputs.expected_head }}
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+          [[ "${EXPECTED_HEAD}" =~ ^[0-9a-f]{40}$ ]]
+          pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
+          test "$(jq -r .state <<<"${pr}")" = open
+          test "$(jq -r .draft <<<"${pr}")" = false
+          test "$(jq -r .base.ref <<<"${pr}")" = develop
+          test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"
+          test "$(jq -r .head.repo.full_name <<<"${pr}")" = "${REPOSITORY}"
+          author="$(jq -r .user.login <<<"${pr}")"
+          case "${author}" in
+            'renovate[bot]'|'lightning-it-shared-assets-sync[bot]'|'lightning-it-release-automation[bot]')
+              echo "Trusted automation uses its provenance gate; no Copilot request is created."
+              exit 0
+              ;;
+          esac
           reviewer_login="${COPILOT_REVIEWER_LOGIN%\[bot\]}"
           reviewer="${reviewer_login}[bot]"
           requested_reviewers_url="repos/${REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers"
+          marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
+          review_exists_for_head() {
+            gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
+              --jq ".[] | select(.user.login == \"${reviewer}\" and .commit_id == \"${EXPECTED_HEAD}\")" |
+              grep -q .
+          }
+          if review_exists_for_head; then
+            echo "Copilot already reviewed the exact finalized head."
+            exit 0
+          fi
           reviewer_is_requested() {
             local response
             if ! response="$(gh api "${requested_reviewers_url}")"; then
@@ -83,26 +97,38 @@ jobs:
             jq -e --arg reviewer "${reviewer}" \
               'any(.users[]?; .login == $reviewer)' <<<"${response}" >/dev/null
           }
-          if reviewer_is_requested; then
-            echo "Copilot review is already requested for the current PR."
-          else
-            request_status=$?
-            if [ "${request_status}" -ne 1 ]; then
-              exit "${request_status}"
-            fi
-            if ! gh api --method POST "${requested_reviewers_url}" \
-                -f "reviewers[]=${reviewer}"
-            then
-              # A concurrent workflow can win the request race. Accept only
-              # that verified idempotent outcome; fail on absence/API errors.
-              if reviewer_is_requested; then
-                echo "A concurrent workflow already requested Copilot review."
-              else
-                verification_status=$?
-                exit "${verification_status}"
+          review_is_visible_for_head() {
+            local attempt
+            for attempt in 1 2 3 4 5; do
+              if reviewer_is_requested || review_exists_for_head; then
+                return 0
               fi
-            fi
+              if [ "${attempt}" -lt 5 ]; then
+                sleep 2
+              fi
+            done
+            return 1
+          }
+          comments="$(gh api --paginate --slurp "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100")"
+          if jq -e --arg marker "${marker}" 'any(add[]; .body | contains($marker))' \
+            <<<"${comments}" >/dev/null; then
+            review_is_visible_for_head || {
+              echo "Exact-head request marker exists without a pending or completed review." >&2
+              exit 1
+            }
+            echo "Copilot review is already requested for the exact finalized head."
+            exit 0
           fi
+          if reviewer_is_requested; then
+            gh api --method DELETE "${requested_reviewers_url}" -f "reviewers[]=${reviewer}"
+          fi
+          gh api --method POST "${requested_reviewers_url}" -f "reviewers[]=${reviewer}"
+          if ! review_is_visible_for_head; then
+            echo "Copilot reviewer request did not become visible for the exact finalized head." >&2
+            exit 1
+          fi
+          gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            -f body="${marker}Copilot review requested once for finalized head ${EXPECTED_HEAD}." >/dev/null
 
   current-revision-reviewed:
     name: Successful Copilot review

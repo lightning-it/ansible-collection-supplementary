@@ -8,6 +8,7 @@ import runpy
 import shutil
 import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -58,7 +59,11 @@ class PushReadyEngineTests(unittest.TestCase):
         checks.assert_not_called()
         source = (ROOT / "scripts" / "lit-push-ready.py").read_text(encoding="utf-8")
         validate = source.split('if args.command == "validate":', 1)[1].split('if args.command == "review":', 1)[0]
-        self.assertLess(validate.index("require_trusted_review_policy"), validate.index("execute_integration_checks"))
+        self.assertLess(validate.index("classify_review_profile"), validate.index("execute_integration_checks"))
+        self.assertIn('if classification.profile == "standard":', validate)
+        self.assertLess(validate.index("require_trusted_check_policy"), validate.index("execute_integration_checks"))
+        self.assertNotIn("run_agent_reviews", validate)
+        self.assertNotIn("produce_evidence", validate)
 
     def test_trust_root_bootstrap_skips_base_policy_comparison(self) -> None:
         change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
@@ -93,6 +98,28 @@ class PushReadyEngineTests(unittest.TestCase):
         self.assertLess(profile.index(home_export), profile.index('python3 "$pre_commit_zipapp" run --all-files'))
         self.assertLess(profile.index(export), profile.index('python3 "$pre_commit_zipapp" run --all-files'))
 
+    def test_review_cli_produces_push_evidence(self) -> None:
+        config: dict[str, object] = {}
+        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
+        produced = mock.Mock()
+        replacements = {
+            "check_instruction_contract": mock.Mock(),
+            "load_config": mock.Mock(return_value=config),
+            "require_clean_head": mock.Mock(),
+            "refresh_authoritative_base": mock.Mock(),
+            "planned_change": mock.Mock(return_value=change),
+            "report_review_size": mock.Mock(),
+            "require_review_bootstrap_contract": mock.Mock(),
+            "produce_evidence": produced,
+        }
+        function_globals = ENGINE["main"].__globals__
+        with (
+            mock.patch.dict(function_globals, replacements),
+            mock.patch.object(function_globals["sys"], "argv", ["lit-push-ready.py", "review"]),
+        ):
+            self.assertEqual(0, ENGINE["main"]())
+        produced.assert_called_once_with(config, change, fixture_manifest_bootstrap=False)
+
     def test_trust_root_update_cannot_self_certify_evidence(self) -> None:
         source = (ROOT / "scripts" / "lit-push-ready.py").read_text(encoding="utf-8")
         producer = source.split("def produce_evidence(", 1)[1].split("def main()", 1)[0]
@@ -102,6 +129,32 @@ class PushReadyEngineTests(unittest.TestCase):
         mode = source.split("if args.trust_root_update:", 1)[1].split("elif args.base:", 1)[0]
         self.assertIn("run_agent_reviews", mode)
         self.assertNotIn("produce_evidence", mode)
+
+    def test_validate_runs_deterministic_gates_without_agent_review(self) -> None:
+        config: dict[str, object] = {}
+        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "patch", (), {}, "c" * 64)
+        checked = mock.Mock()
+        agent_review = mock.Mock(side_effect=AssertionError("validate invoked an external reviewer"))
+        replacements = {
+            "check_instruction_contract": mock.Mock(),
+            "load_config": mock.Mock(return_value=config),
+            "require_clean_head": mock.Mock(),
+            "refresh_authoritative_base": mock.Mock(),
+            "planned_change": mock.Mock(return_value=change),
+            "report_review_size": mock.Mock(),
+            "require_review_bootstrap_contract": mock.Mock(),
+            "require_trusted_check_policy": mock.Mock(),
+            "execute_integration_checks": checked,
+            "run_agent_reviews": agent_review,
+        }
+        function_globals = ENGINE["main"].__globals__
+        with (
+            mock.patch.dict(function_globals, replacements),
+            mock.patch.object(function_globals["sys"], "argv", ["lit-push-ready.py", "validate"]),
+        ):
+            self.assertEqual(0, ENGINE["main"]())
+        checked.assert_called_once_with(config, change)
+        agent_review.assert_not_called()
 
     def test_pre_push_hook_rejects_stale_head(self) -> None:
         config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
@@ -277,6 +330,70 @@ class PushReadyEngineTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "sanitized review file is not UTF-8: invalid.bin"):
                 ENGINE["ensure_workspace_review_safe"](repository)
 
+    def test_review_workspace_rejects_secret_paths_and_secret_like_content(self) -> None:
+        cases = (
+            (".env", "harmless fixture text\n", "secret-like tracked paths"),
+            ("settings.yml", "api_" + "key: " + "abcdefghijklmnop\n", "secret-like review content"),
+        )
+        for name, content, expected_error in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary_directory:
+                repository = Path(temporary_directory).resolve() / "repository"
+                environment = ENGINE["isolated_git_environment"]({"PATH": os.environ["PATH"]})
+                run_git(repository, "init", "-q", environment=environment)
+                (repository / name).write_text(content, encoding="utf-8")
+                run_git(repository, "add", name, environment=environment)
+                with self.assertRaisesRegex(RuntimeError, expected_error):
+                    ENGINE["ensure_workspace_review_safe"](repository)
+
+    def test_evidence_contains_bindings_but_not_the_private_diff(self) -> None:
+        private_diff = "PRIVATE_DIFF_SENTINEL"
+        change = ENGINE["PlannedChange"](
+            "refs/remotes/origin/develop",
+            "a" * 40,
+            "a" * 40,
+            "b" * 40,
+            private_diff,
+            ("roles/example/tasks/main.yml",),
+            {},
+            "c" * 64,
+        )
+        classification = ENGINE["ReviewClassification"]("standard", ("codex",), "d" * 64, "test")
+        captured = mock.Mock()
+        replacements = {
+            "tree_fingerprint": mock.Mock(return_value=change.tree_fingerprint),
+            "config_sha256": mock.Mock(return_value="e" * 64),
+            "instruction_file_hashes": mock.Mock(return_value={"AGENTS.md": "f" * 64}),
+            "platform_evidence": mock.Mock(return_value={}),
+            "runtime_versions": mock.Mock(return_value={}),
+            "governed_push_remote": mock.Mock(return_value={}),
+            "review_execution_evidence": mock.Mock(return_value={}),
+            "execution_metrics": mock.Mock(return_value={}),
+            "require_review_bootstrap_contract": mock.Mock(return_value=False),
+            "current_branch_ref": mock.Mock(return_value="refs/heads/test"),
+            "write_evidence_text": captured,
+        }
+        config = {
+            "review": {"max_diff_bytes": 200_000},
+            "remote_only_checks": [],
+        }
+        with mock.patch.dict(ENGINE["write_evidence"].__globals__, replacements):
+            ENGINE["write_evidence"](
+                config,
+                [],
+                [],
+                change,
+                started_at="2026-01-01T00:00:00Z",
+                started_monotonic=0.0,
+                integration_tree="1" * 40,
+                integration_commit="2" * 40,
+                integration_fingerprint="3" * 64,
+                classification=classification,
+            )
+        serialized = captured.call_args.args[0]
+        self.assertNotIn(private_diff, serialized)
+        self.assertIn(change.diff_sha256, serialized)
+        self.assertIn(change.head_commit, serialized)
+
     def test_integration_checks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repository = Path(temporary_directory).resolve() / "repository"
@@ -410,27 +527,255 @@ class PushReadyEngineTests(unittest.TestCase):
                     bounds,
                 )
 
-    def test_review_binding(self) -> None:
+    def test_trust_root_profile_runs_both_reviews_in_parallel_and_binds_evidence(self) -> None:
         change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "f" * 64)
+        classification = ENGINE["ReviewClassification"]("trust-root", ("codex", "copilot"), "a" * 64, "test")
         function_globals = ENGINE["run_agent_reviews"].__globals__
+        external_start = threading.Barrier(2, timeout=5)
+
+        @contextlib.contextmanager
+        def isolated_workspace(*_args, **_kwargs):
+            with tempfile.TemporaryDirectory() as temporary_directory:
+                workspace = Path(temporary_directory)
+                yield workspace, workspace, type("Topology", (), {"integration_tree": "d" * 40})()
+
+        def passing_review(name):
+            def review(*_args, **_kwargs):
+                external_start.wait()
+                return {"agent": name, "result": "pass"}
+
+            return review
+
         replacements = {
             "tree_fingerprint": lambda: "f" * 64,
-            "sanitized_review_workspace": lambda *_args, **_kwargs: contextlib.nullcontext(
-                (ROOT, ROOT, type("Topology", (), {"integration_tree": "d" * 40})())
-            ),
+            "expected_integration_tree": lambda _change: "d" * 40,
+            "instruction_file_hashes": lambda: {"AGENTS.md": "e" * 64},
+            "sanitized_review_workspace": isolated_workspace,
             "tracked_instruction_bundle": lambda _workspace: "instructions",
             "integration_worktree_fingerprint": lambda *_args, **_kwargs: "stable",
-            "copilot_review": lambda *_args, **_kwargs: {"agent": "copilot", "result": "pass"},
+            "copilot_review": passing_review("copilot"),
+            "codex_review": passing_review("codex"),
+        }
+        original = {name: function_globals[name] for name in replacements}
+        try:
+            function_globals.update(replacements)
+            reviews = ENGINE["run_agent_reviews"](
+                {"agents": {"codex": {"enabled": True}, "copilot": {"enabled": True}}},
+                change,
+                classification=classification,
+            )
+        finally:
+            function_globals.update(original)
+        self.assertEqual(["codex", "copilot"], [review["agent"] for review in reviews])
+        self.assertEqual(2, len({review["workspace_sha256"] for review in reviews}))
+        self.assertEqual(1, len({review["input_sha256"] for review in reviews}))
+        self.assertNotEqual(
+            reviews[0]["input_sha256"],
+            ENGINE["review_input_sha256"](
+                change,
+                "d" * 40,
+                {"changed": "e" * 64},
+                ENGINE["ReviewClassification"]("trust-root", ("codex", "copilot"), "a" * 64, "test"),
+            ),
+        )
+
+    def test_parallel_review_failure_is_fail_closed(self) -> None:
+        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "f" * 64)
+        function_globals = ENGINE["run_agent_reviews"].__globals__
+
+        @contextlib.contextmanager
+        def isolated_workspace(*_args, **_kwargs):
+            with tempfile.TemporaryDirectory() as temporary_directory:
+                workspace = Path(temporary_directory)
+                yield workspace, workspace, type("Topology", (), {"integration_tree": "d" * 40})()
+
+        def failed_review(*_args, **_kwargs):
+            raise RuntimeError("reviewer unavailable")
+
+        replacements = {
+            "tree_fingerprint": lambda: "f" * 64,
+            "expected_integration_tree": lambda _change: "d" * 40,
+            "instruction_file_hashes": lambda: {"AGENTS.md": "e" * 64},
+            "sanitized_review_workspace": isolated_workspace,
+            "tracked_instruction_bundle": lambda _workspace: "instructions",
+            "integration_worktree_fingerprint": lambda *_args, **_kwargs: "stable",
+            "copilot_review": failed_review,
             "codex_review": lambda *_args, **_kwargs: {"agent": "codex", "result": "pass"},
         }
         original = {name: function_globals[name] for name in replacements}
         try:
             function_globals.update(replacements)
-            reviews = ENGINE["run_agent_reviews"]({}, change)
+            with self.assertRaisesRegex(RuntimeError, "required agent review failed"):
+                ENGINE["run_agent_reviews"](
+                    {"agents": {"codex": {"enabled": True}, "copilot": {"enabled": True}}},
+                    change,
+                )
         finally:
             function_globals.update(original)
-        self.assertEqual(1, len({review["input_sha256"] for review in reviews}))
-        self.assertNotEqual(
-            reviews[0]["input_sha256"],
-            ENGINE["review_input_sha256"](change, "d" * 40, {"changed": "e" * 64}),
+
+    def test_review_size_limit_is_exclusive(self) -> None:
+        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "0123456789", (), {}, "f" * 64)
+        with self.assertRaisesRegex(RuntimeError, "exceeds local review limit"):
+            ENGINE["review_size_evidence"]({"review": {"max_diff_bytes": 10}}, change)
+        self.assertEqual(
+            {"bytes": 10, "limit_exclusive": 11, "path_count": 0},
+            ENGINE["review_size_evidence"]({"review": {"max_diff_bytes": 11}}, change),
         )
+
+    def test_parallel_review_evidence_rejects_non_overlap(self) -> None:
+        def review(name: str, started: str, completed: str, workspace: str) -> dict[str, object]:
+            return {
+                "agent": name,
+                "started_at": started,
+                "completed_at": completed,
+                "duration_seconds": 1,
+                "workspace_sha256": workspace,
+                "input_sha256": "a" * 64,
+            }
+
+        reviews = [
+            review("codex", "2026-01-01T00:00:00Z", "2026-01-01T00:00:01Z", "b" * 64),
+            review("copilot", "2026-01-01T00:00:02Z", "2026-01-01T00:00:03Z", "c" * 64),
+        ]
+        with self.assertRaisesRegex(RuntimeError, "did not execute concurrently"):
+            ENGINE["parallel_review_evidence"](reviews)
+
+    def test_parallel_review_evidence_accepts_subsecond_overlap(self) -> None:
+        def review(name: str, started: str, completed: str, workspace: str) -> dict[str, object]:
+            return {
+                "agent": name,
+                "started_at": started,
+                "completed_at": completed,
+                "duration_seconds": 0.2,
+                "workspace_sha256": workspace,
+                "input_sha256": "a" * 64,
+            }
+
+        evidence = ENGINE["parallel_review_evidence"](
+            [
+                review("codex", "2026-01-01T00:00:00.100Z", "2026-01-01T00:00:00.300Z", "b" * 64),
+                review("copilot", "2026-01-01T00:00:00.150Z", "2026-01-01T00:00:00.350Z", "c" * 64),
+            ]
+        )
+        self.assertEqual(0.15, evidence["overlap_seconds"])
+
+    def test_profile_metrics_make_local_review_cost_delta_measurable(self) -> None:
+        def review(agent: str) -> dict[str, object]:
+            return {
+                "agent": agent,
+                "started_at": "2026-01-01T00:00:00Z",
+                "completed_at": "2026-01-01T00:00:01Z",
+                "duration_seconds": 1,
+            }
+
+        standard = ENGINE["execution_metrics"]([], [review("codex")])
+        trust_root = ENGINE["execution_metrics"]([], [review("codex"), review("copilot")])
+        self.assertEqual(1, standard["local_external_review_invocations"])
+        self.assertEqual(1, standard["local_codex_review_invocations"])
+        self.assertEqual(0, standard["local_copilot_review_invocations"])
+        self.assertEqual(2, trust_root["local_external_review_invocations"])
+        self.assertEqual(1, trust_root["local_codex_review_invocations"])
+        self.assertEqual(1, trust_root["local_copilot_review_invocations"])
+
+    def test_review_profile_classification_is_base_policy_bound_and_fail_closed(self) -> None:
+        base_config = json.loads((ROOT / ".lit" / "push-ready.json").read_text(encoding="utf-8"))
+
+        def classify(*paths: str, diff: str = "benign implementation change"):
+            change = ENGINE["PlannedChange"](
+                "base",
+                "a" * 40,
+                "a" * 40,
+                "b" * 40,
+                diff,
+                paths,
+                {},
+                "f" * 64,
+            )
+            function_globals = ENGINE["classify_review_profile"].__globals__
+            with mock.patch.dict(function_globals, {"config_at_commit": mock.Mock(return_value=base_config)}):
+                return ENGINE["classify_review_profile"](change)
+
+        self.assertEqual("standard", classify("roles/example/tasks/main.yml").profile)
+        self.assertEqual("standard", classify("tests/unit/test_example.py", "README.md").profile)
+        for path in (
+            "roles/vault_bootstrap/tasks/main.yml",
+            "roles/aap_tls/tasks/main.yml",
+            "roles/keycloak_config/tasks/main.yml",
+            "roles/forgejo_cac/tasks/main.yml",
+            "docs/security-boundary.md",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual("trust-root", classify(path).profile)
+        semantic_risk = classify("roles/example/tasks/main.yml", diff="+ api_token: protected")
+        self.assertEqual("trust-root", semantic_risk.profile)
+        self.assertEqual("trust-root-term:token", semantic_risk.reason)
+        self.assertEqual("trust-root", classify("scripts/lit-push-ready.py").profile)
+        self.assertEqual("trust-root", classify(".lit/push-ready.json").profile)
+        self.assertEqual("trust-root", classify("unknown/new-surface.txt").profile)
+
+        change = ENGINE["PlannedChange"](
+            "base", "a" * 40, "a" * 40, "b" * 40, "patch", ("roles/example/tasks/main.yml",), {}, "f" * 64
+        )
+        function_globals = ENGINE["classify_review_profile"].__globals__
+        with mock.patch.dict(function_globals, {"config_at_commit": mock.Mock(return_value=None)}):
+            classification = ENGINE["classify_review_profile"](change)
+        self.assertEqual("trust-root", classification.profile)
+        self.assertEqual("base-policy-unavailable", classification.reason)
+
+    def test_review_policy_rejects_untrusted_or_unsorted_risk_terms(self) -> None:
+        policy = json.loads((ROOT / ".lit" / "push-ready.json").read_text(encoding="utf-8"))["review"]
+        ENGINE["validate_review_policy"](policy)
+        for terms in (("token", "secret"), ("token", "unsafe/secret"), ("token", "token")):
+            with self.subTest(terms=terms):
+                malformed = json.loads(json.dumps(policy))
+                malformed["classification"]["trust_root_terms"] = list(terms)
+                with self.assertRaisesRegex(RuntimeError, "trust_root_terms"):
+                    ENGINE["validate_review_policy"](malformed)
+
+    def test_review_binding_changes_with_profile_and_exact_head(self) -> None:
+        standard = ENGINE["ReviewClassification"]("standard", ("codex",), "a" * 64, "all-paths-standard")
+        trust_root = ENGINE["ReviewClassification"](
+            "trust-root", ("codex", "copilot"), "a" * 64, "unknown-or-trust-root-path"
+        )
+        first = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "patch", (), {}, "f" * 64)
+        second = first._replace(head_commit="c" * 40)
+        instructions = {"AGENTS.md": "d" * 64}
+        standard_binding = ENGINE["review_input_sha256"](first, "e" * 40, instructions, standard)
+        self.assertNotEqual(
+            standard_binding,
+            ENGINE["review_input_sha256"](first, "e" * 40, instructions, trust_root),
+        )
+        self.assertNotEqual(
+            standard_binding,
+            ENGINE["review_input_sha256"](second, "e" * 40, instructions, standard),
+        )
+
+    def test_standard_profile_runs_codex_without_local_copilot(self) -> None:
+        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "f" * 64)
+        classification = ENGINE["ReviewClassification"]("standard", ("codex",), "a" * 64, "test")
+        function_globals = ENGINE["run_agent_reviews"].__globals__
+
+        @contextlib.contextmanager
+        def isolated_workspace(*_args, **_kwargs):
+            with tempfile.TemporaryDirectory() as temporary_directory:
+                workspace = Path(temporary_directory)
+                yield workspace, workspace, type("Topology", (), {"integration_tree": "d" * 40})()
+
+        replacements = {
+            "tree_fingerprint": lambda: "f" * 64,
+            "expected_integration_tree": lambda _change: "d" * 40,
+            "instruction_file_hashes": lambda: {"AGENTS.md": "e" * 64},
+            "sanitized_review_workspace": isolated_workspace,
+            "tracked_instruction_bundle": lambda _workspace: "instructions",
+            "integration_worktree_fingerprint": lambda *_args, **_kwargs: "stable",
+            "copilot_review": mock.Mock(side_effect=AssertionError("standard profile invoked Copilot")),
+            "codex_review": mock.Mock(return_value={"agent": "codex", "result": "pass"}),
+        }
+        with mock.patch.dict(function_globals, replacements):
+            reviews = ENGINE["run_agent_reviews"](
+                {"agents": {"codex": {"enabled": True}, "copilot": {"enabled": True}}},
+                change,
+                classification=classification,
+            )
+        self.assertEqual(["codex"], [review["agent"] for review in reviews])
+        replacements["copilot_review"].assert_not_called()

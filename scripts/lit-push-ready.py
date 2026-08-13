@@ -15,8 +15,10 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -155,6 +157,10 @@ LOCAL_EVIDENCE_TRUST = {
     "security_attestation": False,
     "remote_gate_required": True,
 }
+REVIEW_PROFILE_AGENTS = {
+    "standard": ("codex",),
+    "trust-root": ("codex", "copilot"),
+}
 COPILOT_PROMPT_MODE_BOUNDARY = {
     "COPILOT_MCP_TOOL_CACHE": "false",
     "GITHUB_COPILOT_PROMPT_MODE_EXTENSIONS": "false",
@@ -200,6 +206,13 @@ class ReviewTopology(NamedTuple):
     workspace_commit: str
 
 
+class ReviewClassification(NamedTuple):
+    profile: str
+    agents: tuple[str, ...]
+    policy_sha256: str
+    reason: str
+
+
 def is_full_git_object_id(value: str) -> bool:
     return (
         re.fullmatch(
@@ -211,7 +224,7 @@ def is_full_git_object_id(value: str) -> bool:
 
 
 def now_utc() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def sha256_bytes(payload: bytes) -> str:
@@ -719,6 +732,66 @@ def validate_remote_only_checks(value: Any) -> None:
         raise RuntimeError("remote_only_checks ids must be unique")
 
 
+def validate_review_path(value: Any, description: str, *, prefix: bool) -> str:
+    path = require_nonempty_string(value, description)
+    path_body = path[:-1] if prefix and path.endswith("/") else path
+    if (
+        len(path) > 500
+        or path.startswith("/")
+        or "\\" in path
+        or any(ord(character) < 0x20 or ord(character) == 0x7F for character in path)
+        or Path(path_body).as_posix() != path_body
+        or any(part in {"", ".", "..", ".git"} for part in Path(path_body).parts)
+        or path.endswith("/") != prefix
+    ):
+        raise RuntimeError(f"{description} is unsafe")
+    return path
+
+
+def validate_review_policy(value: Any) -> None:
+    if not isinstance(value, dict) or set(value) != {
+        "max_diff_bytes",
+        "profiles",
+        "classification",
+    }:
+        raise RuntimeError("review policy keys are invalid")
+    require_positive_integer(
+        value.get("max_diff_bytes"),
+        "review.max_diff_bytes",
+        maximum=MAX_REVIEW_BYTES,
+    )
+    expected_profiles = {name: {"agents": list(agents)} for name, agents in REVIEW_PROFILE_AGENTS.items()}
+    if value.get("profiles") != expected_profiles:
+        raise RuntimeError("review profiles must be standard and trust-root")
+    classification = value.get("classification")
+    if not isinstance(classification, dict) or set(classification) != {
+        "version",
+        "standard_paths",
+        "standard_prefixes",
+        "trust_root_terms",
+    }:
+        raise RuntimeError("review classification keys are invalid")
+    if classification.get("version") != 2:
+        raise RuntimeError("review classification version is invalid")
+    for key, prefix in (("standard_paths", False), ("standard_prefixes", True)):
+        paths = classification.get(key)
+        if not isinstance(paths, list) or not paths:
+            raise RuntimeError(f"review classification {key} must be non-empty")
+        normalized = [validate_review_path(path, f"review.classification.{key}", prefix=prefix) for path in paths]
+        if normalized != sorted(set(normalized)):
+            raise RuntimeError(f"review classification {key} must be sorted and unique")
+    trust_root_terms = classification.get("trust_root_terms")
+    if (
+        not isinstance(trust_root_terms, list)
+        or not trust_root_terms
+        or any(
+            not isinstance(term, str) or not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", term) for term in trust_root_terms
+        )
+        or trust_root_terms != sorted(set(trust_root_terms))
+    ):
+        raise RuntimeError("review classification trust_root_terms must be safe, sorted, and unique")
+
+
 def load_config() -> dict[str, Any]:
     reject_hidden_index_entries()
     if not CONFIG.is_file() or CONFIG.is_symlink():
@@ -728,11 +801,11 @@ def load_config() -> dict[str, Any]:
     data = json.loads(CONFIG.read_text(encoding="utf-8"))
     if (
         not isinstance(data, dict)
-        or data.get("version") != 2
+        or data.get("version") != 3
         or not isinstance(data.get("checks"), list)
         or not data.get("checks")
     ):
-        raise RuntimeError("version 2 must define checks")
+        raise RuntimeError("version 3 must define checks")
     base_ref = require_nonempty_string(data.get("base_ref"), "base_ref")
     if base_ref not in AUTHORITATIVE_BASE_REFS:
         raise RuntimeError("base_ref is not governed: " + ", ".join(sorted(AUTHORITATIVE_BASE_REFS)))
@@ -743,14 +816,7 @@ def load_config() -> dict[str, Any]:
         raise RuntimeError("agents must be copilot and codex")
     for name in ("copilot", "codex"):
         validate_agent_config(name, agents[name])
-    review = data.get("review")
-    if not isinstance(review, dict):
-        raise RuntimeError("review must be an object")
-    require_positive_integer(
-        review.get("max_diff_bytes"),
-        "review.max_diff_bytes",
-        maximum=MAX_REVIEW_BYTES,
-    )
+    validate_review_policy(data.get("review"))
     evidence = data.get("evidence")
     if not isinstance(evidence, dict):
         raise RuntimeError("evidence must be an object")
@@ -1489,6 +1555,8 @@ def planned_change(
     untracked_hashes: dict[str, str] = {}
     patches: list[str] = []
     consumed = utf8_size(tracked_diff)
+    if consumed >= max_bytes:
+        raise RuntimeError(f"planned diff exceeds local review limit of {max_bytes} bytes")
     for name in untracked_names():
         remaining = max_bytes - consumed
         if remaining <= 0:
@@ -1501,13 +1569,16 @@ def planned_change(
         patch = render_untracked_patch(name, payload, mode)
         patch_bytes = utf8_size(patch)
         consumed += patch_bytes
-        if consumed > max_bytes:
-            raise RuntimeError(f"diff exceeds {max_bytes} bytes")
+        if consumed >= max_bytes:
+            raise RuntimeError(f"planned diff exceeds local review limit of {max_bytes} bytes")
         patches.append(patch)
         untracked_hashes[name] = sha256_bytes(payload)
     diff = tracked_diff + "".join(patches)
-    if utf8_size(diff) > max_bytes:
-        raise RuntimeError(f"diff exceeds {max_bytes} bytes")
+    review_bytes = utf8_size(diff)
+    if review_bytes <= 0:
+        raise RuntimeError("planned diff is empty")
+    if review_bytes >= max_bytes:
+        raise RuntimeError(f"planned diff exceeds local review limit of {max_bytes} bytes")
     paths = tuple(sorted({path for path in tracked_names if path} | set(untracked_hashes)))
     final_tree_fingerprint = tree_fingerprint()
     if final_tree_fingerprint != initial_tree_fingerprint:
@@ -1530,6 +1601,121 @@ def planned_change(
         ),
     )
     return change
+
+
+def config_at_commit(commit: str) -> dict[str, Any] | None:
+    if not is_full_git_object_id(commit):
+        raise RuntimeError("base policy commit is invalid")
+    relative_config = CONFIG.relative_to(ROOT).as_posix()
+    result = run(
+        ["git", "show", f"{commit}:{relative_config}"],
+        capture=True,
+    )
+    if result.returncode:
+        return None
+    if utf8_size(result.stdout) > MAX_CONFIG_BYTES:
+        return None
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def classify_review_profile(change: PlannedChange) -> ReviewClassification:
+    base_config = config_at_commit(change.base_tip)
+    if base_config is None or base_config.get("version") != 3:
+        policy_sha256 = sha256_text("trust-root-bootstrap-v1")
+        return ReviewClassification(
+            "trust-root",
+            REVIEW_PROFILE_AGENTS["trust-root"],
+            policy_sha256,
+            "base-policy-unavailable",
+        )
+    review = base_config.get("review")
+    try:
+        validate_review_policy(review)
+    except RuntimeError:
+        policy_sha256 = sha256_text("trust-root-invalid-base-policy-v1")
+        return ReviewClassification(
+            "trust-root",
+            REVIEW_PROFILE_AGENTS["trust-root"],
+            policy_sha256,
+            "base-policy-invalid",
+        )
+    assert isinstance(review, dict)
+    classification = review["classification"]
+    policy_sha256 = sha256_text(
+        json.dumps(
+            {
+                "profiles": review["profiles"],
+                "classification": classification,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    )
+    standard_paths = set(classification["standard_paths"])
+    standard_prefixes = tuple(classification["standard_prefixes"])
+    risk_surface = "\n".join((*change.paths, change.diff)).lower()
+    matched_term = next(
+        (
+            term
+            for term in classification["trust_root_terms"]
+            if re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", risk_surface)
+        ),
+        None,
+    )
+    known_standard_paths = all(path in standard_paths or path.startswith(standard_prefixes) for path in change.paths)
+    standard = known_standard_paths and matched_term is None
+    profile = "standard" if standard else "trust-root"
+    if matched_term is not None:
+        reason = f"trust-root-term:{matched_term}"
+    elif known_standard_paths:
+        reason = "all-paths-standard"
+    else:
+        reason = "unknown-or-trust-root-path"
+    return ReviewClassification(
+        profile,
+        REVIEW_PROFILE_AGENTS[profile],
+        policy_sha256,
+        reason,
+    )
+
+
+def review_classification_evidence(classification: ReviewClassification) -> dict[str, Any]:
+    return {
+        "profile": classification.profile,
+        "agents": list(classification.agents),
+        "policy_sha256": classification.policy_sha256,
+        "reason": classification.reason,
+    }
+
+
+def review_size_evidence(config: dict[str, Any], change: PlannedChange) -> dict[str, int]:
+    maximum = require_positive_integer(
+        config["review"]["max_diff_bytes"],
+        "review.max_diff_bytes",
+        maximum=MAX_REVIEW_BYTES,
+    )
+    measured = utf8_size(change.diff)
+    if measured <= 0 or measured >= maximum:
+        raise RuntimeError(f"planned diff exceeds local review limit of {maximum} bytes")
+    return {
+        "bytes": measured,
+        "limit_exclusive": maximum,
+        "path_count": len(change.paths),
+    }
+
+
+def report_review_size(config: dict[str, Any], change: PlannedChange) -> None:
+    measurement = review_size_evidence(config, change)
+    print(
+        "Review input: "
+        f"{measurement['bytes']} < {measurement['limit_exclusive']} bytes; "
+        f"{measurement['path_count']} paths; sha256:{change.diff_sha256}",
+        flush=True,
+    )
 
 
 def changed_paths() -> list[str]:
@@ -2870,73 +3056,179 @@ def run_agent_reviews(
     config: dict[str, Any],
     change: PlannedChange,
     *,
+    classification: ReviewClassification | None = None,
     fixture_manifest_bootstrap: bool = False,
 ) -> list[dict[str, Any]]:
     expected = change.tree_fingerprint
     if tree_fingerprint() != expected:
-        raise RuntimeError("patch is stale before review")
-    reviews: list[dict[str, Any]] = []
-    with sanitized_review_workspace(
+        raise RuntimeError("exact planned push patch is stale before local review")
+    classification = classification or classify_review_profile(change)
+    agents = classification.agents
+    if any(not config["agents"][name]["enabled"] for name in agents):
+        raise RuntimeError("review profile requires a disabled agent")
+    integration_tree = expected_integration_tree(change)
+    binding = review_input_sha256(
         change,
-        fixture_manifest_bootstrap=fixture_manifest_bootstrap,
-    ) as (
-        workspace,
-        state_root,
-        topology,
-    ):
-        instructions = tracked_instruction_bundle(workspace)
-        workspace_fingerprint = integration_worktree_fingerprint(
-            workspace,
-            include_ignored=True,
-        )
-        reviews.append(
-            copilot_review(
-                config,
-                change,
-                expected,
-                workspace=workspace,
-                state_root=state_root,
-                instructions=instructions,
-                topology=topology,
-            )
-        )
-        if (
-            integration_worktree_fingerprint(
-                workspace,
-                include_ignored=True,
-            )
-            != workspace_fingerprint
-        ):
-            raise RuntimeError("Copilot review changed the sanitized exact-patch workspace")
-        reviews.append(
-            codex_review(
-                config,
-                change,
-                expected,
-                workspace=workspace,
-                state_root=state_root,
-                instructions=instructions,
-                topology=topology,
-            )
-        )
-        if (
-            integration_worktree_fingerprint(
-                workspace,
-                include_ignored=True,
-            )
-            != workspace_fingerprint
-        ):
-            raise RuntimeError("Codex review changed the sanitized exact-patch workspace")
-        binding = review_input_sha256(
+        integration_tree,
+        instruction_file_hashes(),
+        classification,
+    )
+    start_barrier = threading.Barrier(len(agents), timeout=60)
+
+    def review_agent(name: str) -> dict[str, Any]:
+        worker_started_at = now_utc()
+        worker_started = time.monotonic()
+        with sanitized_review_workspace(
             change,
-            topology.integration_tree,
-            instruction_file_hashes(),
-        )
-        for review in reviews:
+            fixture_manifest_bootstrap=fixture_manifest_bootstrap,
+        ) as (
+            workspace,
+            state_root,
+            topology,
+        ):
+            if topology.integration_tree != integration_tree:
+                raise RuntimeError(f"{name} review workspace has a different integration tree")
+            instructions = tracked_instruction_bundle(workspace)
+            workspace_fingerprint = integration_worktree_fingerprint(
+                workspace,
+                include_ignored=True,
+            )
+            workspace_sha256 = sha256_text(str(workspace.resolve(strict=True)))
+            try:
+                start_barrier.wait()
+            except threading.BrokenBarrierError as exc:
+                raise RuntimeError("reviewer startup barrier failed") from exc
+            review_function = codex_review if name == "codex" else copilot_review
+            review = review_function(
+                config,
+                change,
+                expected,
+                workspace=workspace,
+                state_root=state_root,
+                instructions=instructions,
+                topology=topology,
+            )
+            if review.get("agent") != name:
+                raise RuntimeError(f"{name} review returned a foreign reviewer identity")
+            if (
+                integration_worktree_fingerprint(
+                    workspace,
+                    include_ignored=True,
+                )
+                != workspace_fingerprint
+            ):
+                raise RuntimeError(f"{name} review changed its sanitized exact-patch workspace")
             review["input_sha256"] = binding
+            review["workspace_sha256"] = workspace_sha256
+        review["worker_started_at"] = worker_started_at
+        review["worker_completed_at"] = now_utc()
+        review["worker_duration_seconds"] = round(time.monotonic() - worker_started, 3)
+        return review
+
+    reviews = []
+    errors: dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=len(agents), thread_name_prefix="lit-review") as executor:
+        futures = {executor.submit(review_agent, name): name for name in agents}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                reviews.append(future.result())
+            except Exception as exc:  # noqa: BLE001 -- aggregate both required reviewer failures.
+                errors[name] = str(exc)
+    if errors:
+        details = "; ".join(f"{name}: {errors[name]}" for name in sorted(errors))
+        raise RuntimeError("required agent review failed: " + details)
     if tree_fingerprint() != expected:
-        raise RuntimeError("agent review changed tree")
+        raise RuntimeError("local agent review changed the reviewed Git tree")
+    reviews.sort(key=lambda review: review["agent"])
+    if len({review["workspace_sha256"] for review in reviews}) != len(reviews):
+        raise RuntimeError("reviewers did not use separate workspaces")
+    if {review["input_sha256"] for review in reviews} != {binding}:
+        raise RuntimeError("parallel reviewers were not bound to identical input")
     return reviews
+
+
+def review_execution_evidence(
+    classification: ReviewClassification,
+    reviews: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if len(reviews) != len(classification.agents):
+        raise RuntimeError("review execution has the wrong reviewer count")
+    by_name = {review.get("agent"): review for review in reviews if isinstance(review, dict)}
+    if set(by_name) != set(classification.agents):
+        raise RuntimeError("review execution has invalid reviewer identities")
+    workspaces = {review.get("workspace_sha256") for review in reviews}
+    inputs = {review.get("input_sha256") for review in reviews}
+    if (
+        len(workspaces) != len(reviews)
+        or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value) for value in workspaces)
+        or len(inputs) != 1
+        or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value) for value in inputs)
+    ):
+        raise RuntimeError("review workspace or input binding is invalid")
+    intervals = [
+        evidence_interval(
+            {
+                "started_at": review.get("started_at"),
+                "completed_at": review.get("completed_at"),
+                "duration_seconds": review.get("duration_seconds"),
+            },
+            f"{review['agent']} external review",
+        )
+        for review in reviews
+    ]
+    overlap = 0.0
+    if len(reviews) > 1:
+        overlap = (
+            min(interval[1] for interval in intervals) - max(interval[0] for interval in intervals)
+        ).total_seconds()
+        if overlap <= 0:
+            raise RuntimeError("required external reviewers did not execute concurrently")
+    return {
+        "mode": "parallel" if len(reviews) > 1 else "single",
+        "maximum_parallelism": len(reviews),
+        "reviewers": list(classification.agents),
+        "workspace_count": len(reviews),
+        "input_sha256": next(iter(inputs)),
+        "overlap_seconds": round(overlap, 3),
+    }
+
+
+def parallel_review_evidence(reviews: list[dict[str, Any]]) -> dict[str, Any]:
+    return review_execution_evidence(
+        ReviewClassification("trust-root", REVIEW_PROFILE_AGENTS["trust-root"], "a" * 64, "test"),
+        reviews,
+    )
+
+
+def execution_metrics(checks: list[dict[str, Any]], reviews: list[dict[str, Any]]) -> dict[str, Any]:
+    intervals = [evidence_interval(review, f"{review.get('agent', 'unknown')} metrics review") for review in reviews]
+    review_wall_seconds = (
+        max(interval[1] for interval in intervals) - min(interval[0] for interval in intervals)
+    ).total_seconds()
+    reviewer_seconds = {
+        str(review["agent"]): review["duration_seconds"]
+        for review in sorted(reviews, key=lambda item: str(item.get("agent")))
+    }
+    review_invocations = {
+        agent: sum(1 for review in reviews if review.get("agent") == agent)
+        for agent in REVIEW_PROFILE_AGENTS["trust-root"]
+    }
+    check_names = [str(check.get("name")) for check in checks]
+    return {
+        "schema_version": 1,
+        "check_executions": len(checks),
+        "repeated_check_executions": len(check_names) - len(set(check_names)),
+        "local_external_review_invocations": len(reviews),
+        "local_codex_review_invocations": review_invocations["codex"],
+        "local_copilot_review_invocations": review_invocations["copilot"],
+        "reviewer_seconds": reviewer_seconds,
+        "review_serial_seconds": round(sum(reviewer_seconds.values()), 3),
+        "review_wall_seconds": round(review_wall_seconds, 3),
+        "cache_hits": 0,
+        "cache_misses": len(reviews),
+        "maximum_parallelism": len(reviews),
+    }
 
 
 def command_version(command: list[str]) -> str:
@@ -3003,6 +3295,7 @@ def review_input_sha256(
     change: PlannedChange,
     integration_tree: str,
     instruction_files: dict[str, str],
+    classification: ReviewClassification,
 ) -> str:
     return sha256_text(
         json.dumps(
@@ -3015,6 +3308,7 @@ def review_input_sha256(
                 integration_tree,
                 change.diff_sha256,
                 instruction_files,
+                review_classification_evidence(classification),
             ],
             sort_keys=True,
             separators=(",", ":"),
@@ -3033,6 +3327,7 @@ def write_evidence(
     integration_tree: str,
     integration_commit: str,
     integration_fingerprint: str,
+    classification: ReviewClassification,
     fixture_manifest_bootstrap: bool = False,
 ) -> None:
     if not isinstance(fixture_manifest_bootstrap, bool):
@@ -3041,7 +3336,7 @@ def write_evidence(
         raise RuntimeError("patch is stale before evidence write")
     completed_at = now_utc()
     payload = {
-        "version": 2,
+        "version": 3,
         "started_at": started_at,
         "completed_at": completed_at,
         "duration_seconds": round(time.monotonic() - started_monotonic, 3),
@@ -3055,6 +3350,7 @@ def write_evidence(
         "integration_commit": integration_commit,
         "integration_fingerprint": integration_fingerprint,
         "planned_diff_sha256": change.diff_sha256,
+        "review_size": review_size_evidence(config, change),
         "planned_paths": list(change.paths),
         "untracked_sha256": change.untracked_sha256,
         "config_sha256": config_sha256(),
@@ -3064,6 +3360,9 @@ def write_evidence(
         "push_remote": governed_push_remote(),
         "checks": checks,
         "agent_reviews": reviews,
+        "review_classification": review_classification_evidence(classification),
+        "review_execution": review_execution_evidence(classification, reviews),
+        "metrics": execution_metrics(checks, reviews),
         "remote_only_checks": config["remote_only_checks"],
         "parity_gaps": list(PARITY_GAPS),
         "remote_pr_review_authoritative": True,
@@ -3114,8 +3413,8 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
     if not evidence.is_file() or evidence.is_symlink():
         raise RuntimeError("evidence is not a regular file")
     payload = json.loads(evidence.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict) or payload.get("version") != 2:
-        raise RuntimeError("evidence must use version 2")
+    if not isinstance(payload, dict) or payload.get("version") != 3:
+        raise RuntimeError("evidence must use version 3")
     started, completed = evidence_interval(payload, "run")
     age = (datetime.now(UTC) - completed).total_seconds()
     max_age = config["evidence"]["max_age_seconds"]
@@ -3131,6 +3430,7 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
         config,
         fixture_manifest_bootstrap=fixture_manifest_bootstrap,
     )
+    classification = classify_review_profile(change)
     if require_review_bootstrap_contract(change) is not trust_root_bootstrap:
         raise RuntimeError("evidence trust-root bootstrap is stale")
     if not trust_root_bootstrap:
@@ -3151,12 +3451,14 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
             expected_integration,
         ),
         "planned_diff_sha256": change.diff_sha256,
+        "review_size": review_size_evidence(config, change),
         "planned_paths": list(change.paths),
         "untracked_sha256": change.untracked_sha256,
         "platform": platform_evidence(),
         "runtime_versions": runtime_versions(),
         "push_remote": governed_push_remote(),
         "remote_only_checks": config["remote_only_checks"],
+        "review_classification": review_classification_evidence(classification),
         "parity_gaps": list(PARITY_GAPS),
         "remote_pr_review_authoritative": True,
         "push_scope": "clean-head",
@@ -3177,6 +3479,7 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
         change,
         expected_integration,
         expected["instruction_files"],
+        classification,
     )
     # Length equality is enforced above; strict= is unavailable on Python 3.9.
     for configured, recorded in zip(config["checks"], checks):  # noqa: B905
@@ -3197,12 +3500,11 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(reviews, list):
         raise RuntimeError("evidence agent reviews are invalid")
     by_name = {review.get("agent"): review for review in reviews if isinstance(review, dict)}
-    enabled_agents = {name for name, agent in config["agents"].items() if agent["enabled"]}
+    enabled_agents = set(classification.agents)
     if len(by_name) != len(reviews) or set(by_name) != enabled_agents:
         raise RuntimeError("evidence agent reviews are incomplete")
-    for name, agent in config["agents"].items():
-        if not agent["enabled"]:
-            continue
+    for name in classification.agents:
+        agent = config["agents"][name]
         review = by_name.get(name)
         if (
             not isinstance(review, dict)
@@ -3214,6 +3516,8 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
             or not isinstance(review.get("output_sha256"), str)
             or not re.fullmatch(r"[0-9a-f]{64}", review["output_sha256"])
             or review.get("input_sha256") != review_binding
+            or not isinstance(review.get("workspace_sha256"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", review["workspace_sha256"])
         ):
             raise RuntimeError(f"evidence lacks passing {name} review")
         execution_mode = review.get("execution_mode")
@@ -3235,6 +3539,19 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
         ):
             raise RuntimeError("invalid Codex execution mode")
         evidence_interval(review, f"{name} review", (started, completed))
+        evidence_interval(
+            {
+                "started_at": review.get("worker_started_at"),
+                "completed_at": review.get("worker_completed_at"),
+                "duration_seconds": review.get("worker_duration_seconds"),
+            },
+            f"{name} review worker",
+            (started, completed),
+        )
+    if payload.get("review_execution") != review_execution_evidence(classification, reviews):
+        raise RuntimeError("push-ready evidence has invalid review execution")
+    if payload.get("metrics") != execution_metrics(checks, reviews):
+        raise RuntimeError("push-ready evidence has invalid execution metrics")
     return payload
 
 
@@ -3357,7 +3674,14 @@ def produce_evidence(
     current = planned_change(config, fixture_manifest_bootstrap=fixture_manifest_bootstrap)
     if current != change:
         raise RuntimeError("change binding drifted")
-    reviews = run_agent_reviews(config, current, fixture_manifest_bootstrap=fixture_manifest_bootstrap)
+    classification = classify_review_profile(current)
+    print(f"Review profile: {classification.profile} ({classification.reason})", flush=True)
+    reviews = run_agent_reviews(
+        config,
+        current,
+        classification=classification,
+        fixture_manifest_bootstrap=fixture_manifest_bootstrap,
+    )
     install_pre_push_hook()
     write_evidence(
         config,
@@ -3369,6 +3693,7 @@ def produce_evidence(
         integration_tree=tree,
         integration_commit=commit,
         integration_fingerprint=fingerprint,
+        classification=classification,
         fixture_manifest_bootstrap=fixture_manifest_bootstrap,
     )
     verify_evidence(config)
@@ -3450,7 +3775,12 @@ def main() -> int:
             require_clean_head()
             refresh_authoritative_base(config)
             change = planned_change(config)
-            require_trusted_review_policy(change)
+            report_review_size(config, change)
+            require_review_bootstrap_contract(change)
+            classification = classify_review_profile(change)
+            print(f"Review profile: {classification.profile} ({classification.reason})", flush=True)
+            if classification.profile == "standard":
+                require_trusted_check_policy(change)
             execute_integration_checks(config, change)
             return 0
         if args.command == "review":
@@ -3462,12 +3792,22 @@ def main() -> int:
                 base_override=args.base,
                 fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
             )
+            report_review_size(config, change)
             require_review_bootstrap_contract(change)
             if args.trust_root_update:
                 require_trust_root_update_contract(change)
-                run_agent_reviews(config, change)
+                classification = classify_review_profile(change)
+                print(f"Review profile: {classification.profile} ({classification.reason})", flush=True)
+                run_agent_reviews(config, change, classification=classification)
             elif args.base:
-                run_agent_reviews(config, change, fixture_manifest_bootstrap=args.fixture_manifest_bootstrap)
+                classification = classify_review_profile(change)
+                print(f"Review profile: {classification.profile} ({classification.reason})", flush=True)
+                run_agent_reviews(
+                    config,
+                    change,
+                    classification=classification,
+                    fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
+                )
             else:
                 produce_evidence(config, change, fixture_manifest_bootstrap=args.fixture_manifest_bootstrap)
             return 0
@@ -3477,6 +3817,7 @@ def main() -> int:
             config,
             fixture_manifest_bootstrap=args.fixture_manifest_bootstrap,
         )
+        report_review_size(config, change)
         produce_evidence(config, change, fixture_manifest_bootstrap=args.fixture_manifest_bootstrap)
         return 0
     except (

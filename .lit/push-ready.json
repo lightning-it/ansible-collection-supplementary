@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "base_ref": "refs/remotes/origin/develop",
   "checks": [
     {
@@ -27,7 +27,72 @@
     }
   ],
   "review": {
-    "max_diff_bytes": 200000
+    "max_diff_bytes": 200000,
+    "profiles": {
+      "standard": {
+        "agents": [
+          "codex"
+        ]
+      },
+      "trust-root": {
+        "agents": [
+          "codex",
+          "copilot"
+        ]
+      }
+    },
+    "classification": {
+      "version": 2,
+      "standard_paths": [
+        "CHANGELOG.rst",
+        "README.md",
+        "galaxy.yml",
+        "requirements.yml"
+      ],
+      "standard_prefixes": [
+        "changelogs/fragments/",
+        "docs/",
+        "extensions/",
+        "meta/",
+        "molecule/",
+        "plugins/",
+        "roles/",
+        "tests/"
+      ],
+      "trust_root_terms": [
+        "aap",
+        "acceptance",
+        "authentication",
+        "authorization",
+        "branch_protection",
+        "cac",
+        "credential",
+        "credentials",
+        "github_app",
+        "jwt",
+        "keycloak",
+        "oidc",
+        "permission",
+        "permissions",
+        "policies",
+        "policy",
+        "promotion",
+        "release",
+        "ruleset",
+        "rulesets",
+        "secret",
+        "secrets",
+        "security",
+        "signature",
+        "signatures",
+        "signing",
+        "tls",
+        "token",
+        "tokens",
+        "vault",
+        "workflow_dispatch"
+      ]
+    }
   },
   "evidence": {
     "max_age_seconds": 86400
