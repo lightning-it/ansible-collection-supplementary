@@ -203,6 +203,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         )[0]
         self.assertIn("github.event.action == 'ready_for_review'", request_job)
         self.assertIn("github.event.action == 'opened'", request_job)
+        self.assertIn("github.event.pull_request.base.ref == 'develop'", request_job)
         self.assertIn("github.event_name == 'workflow_dispatch'", request_job)
         self.assertIn("github.ref == 'refs/heads/develop'", request_job)
         self.assertNotIn("synchronize", request_job)
@@ -239,6 +240,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         condition = request_job.split("    if: >-", 1)[1].split("    permissions:", 1)[0]
         self.assertIn("github.event.action == 'ready_for_review'", condition)
         self.assertIn("github.event.action == 'opened'", condition)
+        self.assertIn("github.event.pull_request.base.ref == 'develop'", condition)
         self.assertNotIn("synchronize", condition)
         self.assertEqual(1, request_job.count('gh api --method POST "${requested_reviewers_url}"'))
         events = [{"action": "synchronize", "commit": index} for index in range(10)]
