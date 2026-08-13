@@ -32,8 +32,11 @@ assets are supplied instead.
   `aap_tls_selfsigned_ca_trust_become` retain the production defaults
   `root`, `root`, and `true`. Privileged installation is restricted to a
   `root:root` anchor in the canonical system trust directory. Numeric
-  ownership is accepted only without privilege escalation inside the active
-  Molecule temporary directory on a capability-minimized test controller.
+  ownership requires the explicit
+  `aap_tls_selfsigned_ca_trust_test_mode` opt-in, disabled by default, without
+  privilege escalation on a non-root local controller. The configured test
+  root and trust directory must be real, owner-only, non-symlink directories
+  beneath `/tmp`; environment variables do not enable this exception.
 
 See [`defaults/main.yml`](defaults/main.yml) for the complete interface.
 

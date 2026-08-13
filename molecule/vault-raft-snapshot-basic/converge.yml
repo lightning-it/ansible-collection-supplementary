@@ -23,6 +23,10 @@
       {{ vault_raft_snapshot_molecule_root }}/container-state
     vault_raft_snapshot_molecule_restore_marker: >-
       {{ vault_raft_snapshot_molecule_root }}/restore-complete
+    vault_raft_snapshot_molecule_restore_root: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-raft-restore
+    vault_raft_snapshot_molecule_restore_external: >-
+      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-raft-restore-external
     vault_raft_snapshot_molecule_snapshot_state:
       initialized: true
       sealed: true
@@ -58,12 +62,14 @@
     vault_raft_snapshot_restore_api_port: "{{ vault_raft_snapshot_molecule_port }}"
     vault_raft_snapshot_restore_cluster_port: 18222
     vault_raft_snapshot_restore_work_root: >-
-      {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/vault-raft-restore-work
+      {{ vault_raft_snapshot_molecule_restore_root }}/work
     vault_raft_snapshot_restore_container_name: molecule-vault-raft-restore
     # The capability-minimized devtools controller cannot chown. Production
     # targets retain the root-owned work-root defaults.
     vault_raft_snapshot_restore_work_root_owner: "{{ lookup('ansible.builtin.pipe', 'id -u') }}"
     vault_raft_snapshot_restore_work_root_group: "{{ lookup('ansible.builtin.pipe', 'id -g') }}"
+    vault_raft_snapshot_restore_test_mode: true
+    vault_raft_snapshot_restore_test_root: "{{ vault_raft_snapshot_molecule_restore_root }}"
     vault_raft_snapshot_restore_run_as_user: "{{ lookup('ansible.builtin.pipe', 'id -u') }}"
     vault_raft_snapshot_restore_run_as_group: "{{ lookup('ansible.builtin.pipe', 'id -g') }}"
     vault_raft_snapshot_production_cert_dir: "{{ vault_raft_snapshot_molecule_root }}"
@@ -83,6 +89,21 @@
     http_proxy: http://127.0.0.1:9
     no_proxy: ""
   tasks:
+    - name: Create private Vault Raft restore test roots
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0700"
+      loop:
+        - "{{ vault_raft_snapshot_molecule_restore_root }}"
+        - "{{ vault_raft_snapshot_molecule_restore_external }}"
+
+    - name: Create unsafe Vault Raft restore parent symlink fixture
+      ansible.builtin.file:
+        src: "{{ vault_raft_snapshot_molecule_restore_external }}"
+        dest: "{{ vault_raft_snapshot_molecule_restore_root }}/link"
+        state: link
+
     - name: Exercise the Vault Raft snapshot no-op action
       ansible.builtin.include_role:
         name: lit.supplementary.vault_raft_snapshot
@@ -229,6 +250,53 @@
       ansible.builtin.assert:
         that:
           - vault_raft_snapshot_molecule_numeric_production_root_refused | bool
+        quiet: true
+
+    - name: Initialize forged Vault Raft Molecule environment refusal
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_forged_environment_refused: false
+
+    - name: Reject numeric ownership without explicit Vault Raft test mode
+      environment:
+        MOLECULE_EPHEMERAL_DIRECTORY: "{{ vault_raft_snapshot_molecule_restore_root }}"
+      block:
+        - name: Exercise forged Vault Raft Molecule environment gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_test_mode: false
+            vault_raft_snapshot_restore_test_root: ""
+          no_log: true
+      rescue:
+        - name: Record forged Vault Raft Molecule environment refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_forged_environment_refused: true
+
+    - name: Initialize symlinked Vault Raft work parent refusal
+      ansible.builtin.set_fact:
+        vault_raft_snapshot_molecule_symlink_parent_refused: false
+
+    - name: Reject a symlinked Vault Raft work parent
+      block:
+        - name: Exercise symlinked Vault Raft work parent gate
+          ansible.builtin.include_role:
+            name: lit.supplementary.vault_raft_snapshot
+            tasks_from: assert
+          vars:
+            vault_raft_snapshot_restore_work_root: >-
+              {{ vault_raft_snapshot_molecule_restore_root }}/link/work
+          no_log: true
+      rescue:
+        - name: Record symlinked Vault Raft work parent refusal
+          ansible.builtin.set_fact:
+            vault_raft_snapshot_molecule_symlink_parent_refused: true
+
+    - name: Require forged environment and symlink-parent refusals
+      ansible.builtin.assert:
+        that:
+          - vault_raft_snapshot_molecule_forged_environment_refused | bool
+          - vault_raft_snapshot_molecule_symlink_parent_refused | bool
         quiet: true
 
     - name: Create Vault Raft snapshot test directory
