@@ -2446,9 +2446,7 @@ def copilot_container_command(
             continue
         engine_candidate_environment = local_container_environment(environment, name)
         probe_environment = {
-            key: value
-            for key, value in engine_candidate_environment.items()
-            if key not in COPILOT_TOKEN_NAMES
+            key: value for key, value in engine_candidate_environment.items() if key not in COPILOT_TOKEN_NAMES
         }
         try:
             if run([resolved, "info"], capture=True, timeout=30, env=probe_environment).returncode:
