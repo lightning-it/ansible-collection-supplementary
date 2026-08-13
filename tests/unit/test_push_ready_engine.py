@@ -324,7 +324,7 @@ class PushReadyEngineTests(unittest.TestCase):
                 r"^[0-9a-f]{40}$",
             )
 
-    def test_sanitized_checkout_uses_detached_switch_without_local_branch_guessing(self) -> None:
+    def test_sanitized_checkout_uses_exact_detached_commit_without_branch_guessing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             source = root / "source"
