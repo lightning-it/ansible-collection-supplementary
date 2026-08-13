@@ -86,8 +86,11 @@ class PushReadyEngineTests(unittest.TestCase):
 
     def test_profile_uses_isolated_pre_commit_home(self) -> None:
         profile = (ROOT / "scripts" / "lit-ci-profile.sh").read_text(encoding="utf-8")
+        home_export = 'export HOME="$pre_commit_venv/home"'
         export = 'export PRE_COMMIT_HOME="$pre_commit_venv/home"'
+        self.assertIn(home_export, profile)
         self.assertIn(export, profile)
+        self.assertLess(profile.index(home_export), profile.index('python3 "$pre_commit_zipapp" run --all-files'))
         self.assertLess(profile.index(export), profile.index('python3 "$pre_commit_zipapp" run --all-files'))
 
     def test_trust_root_update_cannot_self_certify_evidence(self) -> None:

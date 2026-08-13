@@ -106,6 +106,7 @@ actual_sha256="$(
 [ "$actual_sha256" = "$PRE_COMMIT_SHA256" ] \
   || fail_closed "pre-commit Zipapp checksum mismatch"
 mkdir -p "$pre_commit_venv/home"
+export HOME="$pre_commit_venv/home"
 export PRE_COMMIT_HOME="$pre_commit_venv/home"
 BASE_SHA="$merge_base" \
 HEAD_SHA="$(git rev-parse HEAD)" \
