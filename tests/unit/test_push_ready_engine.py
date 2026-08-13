@@ -146,9 +146,16 @@ class PushReadyEngineTests(unittest.TestCase):
                 mock.patch.dict(function_globals, {"run": probe, "existing_unix_socket": lambda _value: host[7:]}),
                 mock.patch.dict(os.environ, {"DOCKER_HOST": host, "XDG_RUNTIME_DIR": runtime}, clear=True),
             ):
-                command = ENGINE["copilot_container_command"](dict(ENGINE["COPILOT_PROMPT_MODE_BOUNDARY"]), ROOT)
+                environment = {
+                    **ENGINE["COPILOT_PROMPT_MODE_BOUNDARY"],
+                    "COPILOT_GITHUB_TOKEN": "secret",
+                }
+                command = ENGINE["copilot_container_command"](environment, ROOT)
             self.assertEqual(host, probe.call_args_list[0].kwargs["env"]["DOCKER_HOST"])
             self.assertEqual(runtime, probe.call_args_list[1].kwargs["env"]["XDG_RUNTIME_DIR"])
+            for call in probe.call_args_list:
+                self.assertTrue(all(name not in call.kwargs["env"] for name in ENGINE["COPILOT_TOKEN_NAMES"]))
+            self.assertEqual("secret", environment["COPILOT_GITHUB_TOKEN"])
         self.assertEqual("/podman", command[0])
         with (
             tempfile.TemporaryDirectory() as temporary_directory,

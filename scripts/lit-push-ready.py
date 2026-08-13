@@ -2444,14 +2444,19 @@ def copilot_container_command(
         resolved = shutil.which(name) if name else None
         if resolved is None:
             continue
-        probe_environment = local_container_environment(environment, name)
+        engine_candidate_environment = local_container_environment(environment, name)
+        probe_environment = {
+            key: value
+            for key, value in engine_candidate_environment.items()
+            if key not in COPILOT_TOKEN_NAMES
+        }
         try:
             if run([resolved, "info"], capture=True, timeout=30, env=probe_environment).returncode:
                 continue
         except subprocess.TimeoutExpired:
             continue
         engine = resolved
-        engine_environment = probe_environment
+        engine_environment = engine_candidate_environment
         break
     if engine is None or engine_environment is None:
         raise RuntimeError("no usable Docker or Podman")
