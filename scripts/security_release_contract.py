@@ -781,8 +781,16 @@ def load_security_binding(
         "Security changelog fragment",
         MAX_SECURITY_FRAGMENT_BYTES,
     )
-    validate_security_fragment(fragment_raw, "Security changelog fragment")
     fragment_digest = sha256_bytes(fragment_raw)
+    if is_recovery_request(request):
+        if (
+            version != RECOVERY_FIXED_VERSION
+            or fragment_path_text != RECOVERY_FRAGMENT_PATH
+            or fragment_digest != RECOVERY_FRAGMENT_SHA256
+        ):
+            fail("Security recovery changelog fragment differs from the one-time approved binding")
+    else:
+        validate_security_fragment(fragment_raw, "Security changelog fragment")
     if verified["changelogFragmentSha256"] != fragment_digest:
         fail("Security changelog fragment digest differs from the immutable intake binding")
     profiles = load_json_file(

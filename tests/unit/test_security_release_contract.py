@@ -406,6 +406,94 @@ class SecurityReleaseContractTests(unittest.TestCase):
         with self.assertRaisesRegex(CONTRACT.ContractError, "digest differs"):
             CONTRACT.load_security_binding(self.root, VERSION, checked_at=NOW)
 
+    def test_recovered_historical_fragment_passes_downstream_release_binding(self) -> None:
+        metadata_raw = (ROOT / f".lit/security-releases/{VERSION}.json").read_bytes()
+        metadata = CONTRACT.load_json_bytes(metadata_raw, "historical Security metadata")
+        base_sha = "d" * 40
+        request = {
+            "schemaVersion": CONTRACT.INTAKE_REQUEST_SCHEMA_VERSION,
+            "event": CONTRACT.RECOVERY_EVENT,
+            "repository": CONTRACT.PRODUCER_REPOSITORY,
+            "repositoryId": CONTRACT.PRODUCER_REPOSITORY_ID,
+            "baseSha": base_sha,
+            "candidateRef": "develop",
+            "candidateBaseSha": CONTRACT.RECOVERY_CANDIDATE_BASE_SHA,
+            "candidateHeadSha": CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
+            "candidateDiffSha256": CONTRACT.RECOVERY_CANDIDATE_DIFF_SHA256,
+            "evidenceId": CONTRACT.RECOVERY_EVIDENCE_ID,
+            "fixedVersion": CONTRACT.RECOVERY_FIXED_VERSION,
+            "acceptanceProfile": CONTRACT.RECOVERY_ACCEPTANCE_PROFILE,
+            "metadataSha256": CONTRACT.RECOVERY_METADATA_SHA256,
+            "issuedAt": CONTRACT.RECOVERY_ISSUED_AT,
+            "expiresAt": CONTRACT.RECOVERY_EXPIRES_AT,
+            "humanActions": 0,
+        }
+        request["chainId"] = CONTRACT.compute_chain_id(
+            repository=CONTRACT.PRODUCER_REPOSITORY,
+            repository_id=CONTRACT.PRODUCER_REPOSITORY_ID,
+            base_sha=base_sha,
+            candidate_head_sha=CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
+            candidate_diff_sha256=CONTRACT.RECOVERY_CANDIDATE_DIFF_SHA256,
+            evidence_id=CONTRACT.RECOVERY_EVIDENCE_ID,
+            fixed_version=CONTRACT.RECOVERY_FIXED_VERSION,
+            acceptance_profile=CONTRACT.RECOVERY_ACCEPTANCE_PROFILE,
+        )
+        fragment_raw = (ROOT / CONTRACT.RECOVERY_FRAGMENT_PATH).read_bytes()
+        verified = {
+            "schemaVersion": CONTRACT.INTAKE_RESULT_SCHEMA_VERSION,
+            "chainId": request["chainId"],
+            "branch": f"security-release/{CONTRACT.RECOVERY_EVIDENCE_ID}",
+            "baseSha": base_sha,
+            "candidateBaseSha": CONTRACT.RECOVERY_CANDIDATE_BASE_SHA,
+            "candidateHeadSha": CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
+            "candidateDiffSha256": CONTRACT.RECOVERY_CANDIDATE_DIFF_SHA256,
+            "evidenceId": CONTRACT.RECOVERY_EVIDENCE_ID,
+            "fixedVersion": VERSION,
+            "metadataPath": f".lit/security-releases/{VERSION}.json",
+            "metadataSha256": CONTRACT.RECOVERY_METADATA_SHA256,
+            "acceptanceProfile": CONTRACT.RECOVERY_ACCEPTANCE_PROFILE,
+            "changelogFragmentPath": CONTRACT.RECOVERY_FRAGMENT_PATH,
+            "changelogFragmentSha256": CONTRACT.RECOVERY_FRAGMENT_SHA256,
+            "changedPaths": [
+                f".lit/security-releases/{VERSION}.json",
+                CONTRACT.RECOVERY_FRAGMENT_PATH,
+            ],
+            "humanActions": 0,
+        }
+        receipt = CONTRACT.build_intake_receipt(
+            request,
+            verified,
+            checked_at=NOW,
+            workflow_run_id="123456",
+            workflow_attempt="1",
+            workflow_ref=(
+                f"{CONTRACT.PRODUCER_REPOSITORY}/.github/workflows/security-release-intake.yml@refs/heads/main"
+            ),
+            workflow_event="workflow_dispatch",
+            workflow_actor=CONTRACT.RELEASE_APP_LOGIN,
+            workflow_triggering_actor=CONTRACT.RELEASE_APP_LOGIN,
+            observed_automation=CONTRACT.RELEASE_APP_IDENTITY,
+        )
+        metadata_path = self.root / f".lit/security-releases/{VERSION}.json"
+        metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        metadata_path.write_bytes(metadata_raw)
+        intake_path = self.root / f".lit/security-release-intakes/{VERSION}.json"
+        intake_path.parent.mkdir(parents=True, exist_ok=True)
+        intake_path.write_bytes(CONTRACT.canonical_document_bytes(receipt))
+        fragment_path = self.root / CONTRACT.RECOVERY_FRAGMENT_PATH
+        fragment_path.parent.mkdir(parents=True, exist_ok=True)
+        fragment_path.write_bytes(fragment_raw)
+
+        binding = CONTRACT.load_security_binding(self.root, VERSION, checked_at=NOW)
+        assert binding is not None
+        self.assertEqual(CONTRACT.RECOVERY_EVIDENCE_ID, binding["evidence_id"])
+        self.assertEqual(CONTRACT.RECOVERY_FRAGMENT_SHA256, binding["changelog_fragment_sha256"])
+        self.assertEqual(metadata["fixedVersion"], binding["fixed_version"])
+
+        fragment_path.write_bytes(fragment_raw + b"\n")
+        with self.assertRaisesRegex(CONTRACT.ContractError, "one-time approved binding"):
+            CONTRACT.load_security_binding(self.root, VERSION, checked_at=NOW)
+
     def test_binding_rejects_oversized_files_before_parsing(self) -> None:
         self._write_binding()
         metadata_path = self.root / f".lit/security-releases/{VERSION}.json"
