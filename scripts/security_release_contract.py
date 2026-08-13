@@ -48,6 +48,38 @@ RELEASE_APP_IDENTITY = {
     "permissions": RELEASE_APP_PERMISSIONS,
 }
 
+# One-time fail-closed recovery for the immutable 3.2.4 Security marker that
+# reached protected main before the release App could mint its intake receipt.
+# The ordinary zero-touch contract remains unchanged; only this exact historic
+# source range and marker binding may use the recovery event.
+RECOVERY_EVENT = "mlx90-security-release-recovery"
+RECOVERY_APPROVED_MAIN_SHA = "990be99032ac3e6f407adbe6a8d3acccf8f6804b"
+RECOVERY_CANDIDATE_BASE_SHA = "cde8e5544d8d787448ff456d51e08deb71c03880"
+RECOVERY_CANDIDATE_HEAD_SHA = "3e1423dc19465d1233196905ef3f48fd6c04f2f1"
+RECOVERY_CANDIDATE_DIFF_SHA256 = "sha256:bd72aa7a6a382ff1537e3223e65552af5ffa24588c09a5596f8e9130ba6a6f23"
+RECOVERY_METADATA_SHA256 = "sha256:66d523781eaa82c496d6c8774f5af1e95bb2991f9d604fc1e29db837bb0dd38f"
+RECOVERY_EVIDENCE_ID = "MLX90-KEYCLOAK-26.7.1-3.2.4"
+RECOVERY_FIXED_VERSION = "3.2.4"
+RECOVERY_ACCEPTANCE_PROFILE = "lit.supplementary/keycloak-26.7.1-security-v1"
+RECOVERY_ISSUED_AT = "2026-08-08T22:48:24Z"
+RECOVERY_EXPIRES_AT = "2026-09-07T22:48:24Z"
+RECOVERY_FRAGMENT_PATH = "changelogs/fragments/keycloak-26.7.1-security.yml"
+RECOVERY_FRAGMENT_SHA256 = "sha256:bfc051c66d0a8c016fd32bbe3a9f8b2882896a78e9dc121eb8837f3725a318f8"
+RECOVERY_CONTROL_PATHS = frozenset(
+    {
+        ".github/workflows/security-release-dispatch.yml",
+        ".github/workflows/security-release-intake.yml",
+        "changelogs/fragments/security-intake-3.2.4-recovery.yml",
+        "scripts/security-release-dispatch.py",
+        "scripts/security-release-intake.py",
+        "scripts/security_release_contract.py",
+        "scripts/lit-push-ready.py",
+        "tests/unit/test_push_ready_engine.py",
+        "tests/unit/test_security_release_contract.py",
+        "tests/unit/test_security_release_request_dispatch.py",
+    }
+)
+
 SHA = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 EVIDENCE_ID = re.compile(r"^MLX90-[A-Z0-9][A-Z0-9._-]{2,127}$")
@@ -349,6 +381,12 @@ def compute_chain_id(
     )
 
 
+def is_recovery_request(request: dict[str, Any]) -> bool:
+    """Return whether ``request`` selects the single approved recovery event."""
+
+    return request.get("event") == RECOVERY_EVENT
+
+
 def validate_request(request: dict[str, Any], repository: str, now: datetime) -> dict[str, Any]:
     exact_keys(request, REQUEST_KEYS, "Security intake request")
     if not is_exact_int(request["schemaVersion"]) or request["schemaVersion"] != INTAKE_REQUEST_SCHEMA_VERSION:
@@ -357,7 +395,8 @@ def validate_request(request: dict[str, Any], repository: str, now: datetime) ->
         fail("Security intake repository does not match the exact producer repository")
     if request["repositoryId"] != PRODUCER_REPOSITORY_ID:
         fail("Security intake repositoryId does not match the exact producer repository")
-    if request["event"] != "mlx90-security-release":
+    recovery = is_recovery_request(request)
+    if request["event"] not in {"mlx90-security-release", RECOVERY_EVENT}:
         fail("Security intake event is unsupported")
     if not is_exact_int(request["humanActions"]) or request["humanActions"] != 0:
         fail("Security Zero-Touch intake must declare humanActions=0")
@@ -368,7 +407,7 @@ def validate_request(request: dict[str, Any], repository: str, now: datetime) ->
             fail(f"{field} must be a full lowercase commit SHA")
     if request["candidateBaseSha"] == request["candidateHeadSha"]:
         fail("candidate source range must not be empty")
-    if request["candidateBaseSha"] != request["baseSha"]:
+    if not recovery and request["candidateBaseSha"] != request["baseSha"]:
         fail("candidate source range must start at the authorized protected-main SHA")
     digest = require_string(request["candidateDiffSha256"], "candidateDiffSha256")
     if DIGEST.fullmatch(digest) is None:
@@ -397,6 +436,21 @@ def validate_request(request: dict[str, Any], repository: str, now: datetime) ->
         fail("Security intake validity interval is empty")
     if now < issued or now >= expires:
         fail("Security intake request is not currently valid")
+
+    if recovery:
+        exact_recovery_binding = {
+            "candidateBaseSha": RECOVERY_CANDIDATE_BASE_SHA,
+            "candidateHeadSha": RECOVERY_CANDIDATE_HEAD_SHA,
+            "candidateDiffSha256": RECOVERY_CANDIDATE_DIFF_SHA256,
+            "evidenceId": RECOVERY_EVIDENCE_ID,
+            "fixedVersion": RECOVERY_FIXED_VERSION,
+            "acceptanceProfile": RECOVERY_ACCEPTANCE_PROFILE,
+            "metadataSha256": RECOVERY_METADATA_SHA256,
+            "issuedAt": RECOVERY_ISSUED_AT,
+            "expiresAt": RECOVERY_EXPIRES_AT,
+        }
+        if any(request[field] != expected for field, expected in exact_recovery_binding.items()):
+            fail("Security recovery request differs from the one-time approved binding")
 
     expected_chain_id = compute_chain_id(
         repository=repository,
@@ -497,13 +551,9 @@ def canonical_security_fragment_bytes(entries: list[str]) -> bytes:
     """Serialize security fixes as deterministic repository-standard YAML."""
     if not isinstance(entries, list) or not 1 <= len(entries) <= 64:
         fail("security_fixes entries must be a list containing 1..64 items")
-    validated_entries = [
-        require_string(entry, "security_fixes entry") for entry in entries
-    ]
+    validated_entries = [require_string(entry, "security_fixes entry") for entry in entries]
     lines = ["---", "security_fixes:"]
-    lines.extend(
-        f"  - {json.dumps(entry, ensure_ascii=True)}" for entry in validated_entries
-    )
+    lines.extend(f"  - {json.dumps(entry, ensure_ascii=True)}" for entry in validated_entries)
     raw = ("\n".join(lines) + "\n").encode("utf-8")
     if len(raw) > MAX_SECURITY_FRAGMENT_BYTES:
         fail(f"security_fixes fragment exceeds {MAX_SECURITY_FRAGMENT_BYTES} bytes")
@@ -731,8 +781,16 @@ def load_security_binding(
         "Security changelog fragment",
         MAX_SECURITY_FRAGMENT_BYTES,
     )
-    validate_security_fragment(fragment_raw, "Security changelog fragment")
     fragment_digest = sha256_bytes(fragment_raw)
+    if is_recovery_request(request):
+        if (
+            version != RECOVERY_FIXED_VERSION
+            or fragment_path_text != RECOVERY_FRAGMENT_PATH
+            or fragment_digest != RECOVERY_FRAGMENT_SHA256
+        ):
+            fail("Security recovery changelog fragment differs from the one-time approved binding")
+    else:
+        validate_security_fragment(fragment_raw, "Security changelog fragment")
     if verified["changelogFragmentSha256"] != fragment_digest:
         fail("Security changelog fragment digest differs from the immutable intake binding")
     profiles = load_json_file(
