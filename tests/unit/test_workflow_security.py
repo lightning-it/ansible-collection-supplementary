@@ -213,7 +213,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('gh api --method DELETE "${requested_reviewers_url}"', request_job)
         self.assertIn("review_is_visible_for_head()", request_job)
         self.assertIn("for attempt in $(seq 1 36)", request_job)
-        self.assertIn('sleep 5', request_job)
+        self.assertIn("sleep 5", request_job)
         self.assertIn("Copilot reviewer request did not become visible", request_job)
         self.assertIn("cancel-in-progress: false", copilot)
         self.assertIn("pull_request_review:", copilot)
