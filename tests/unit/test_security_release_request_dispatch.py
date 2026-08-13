@@ -150,9 +150,11 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
     ) -> dict[str, Any]:
         """Create the exact protected-promotion shape required by recovery."""
 
-        fragment_path = self.root / "changelogs/fragments/keycloak-security.yml"
+        ordinary_fragment = self.root / "changelogs/fragments/keycloak-security.yml"
+        ordinary_fragment.unlink()
+        fragment_path = self.root / MODULE.INTAKE.CONTRACT.RECOVERY_FRAGMENT_PATH
         fragment_path.write_bytes(HISTORICAL_FRAGMENT)
-        git(self.root, "add", fragment_path.relative_to(self.root).as_posix())
+        git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "preserve historical Security fragment")
         historical_head = git(self.root, "rev-parse", "HEAD")
         approved_main = historical_head
@@ -195,7 +197,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         git(self.root, "update-ref", "refs/remotes/origin/main", current_main)
 
         metadata_raw = metadata_path.read_bytes()
-        fragment_path = "changelogs/fragments/keycloak-security.yml"
+        fragment_path = MODULE.INTAKE.CONTRACT.RECOVERY_FRAGMENT_PATH
         return {
             "approved_main": approved_main,
             "current_main": current_main,

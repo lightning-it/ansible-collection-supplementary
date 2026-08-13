@@ -126,7 +126,7 @@ def build_recovery_envelope(
 
     if INTAKE.REPOSITORY.fullmatch(repository) is None:
         INTAKE.fail("recovery repository is invalid")
-    for label, value in (("baseSha", base_sha), ("developHeadSha", head_sha)):
+    for label, value in (("baseSha", base_sha), ("headSha", head_sha)):
         if INTAKE.SHA.fullmatch(value) is None:
             INTAKE.fail(f"{label} must be a full lowercase commit SHA")
     live_main = INTAKE.git_text(root, "rev-parse", "refs/remotes/origin/main").strip()
