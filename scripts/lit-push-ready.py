@@ -224,7 +224,7 @@ def is_full_git_object_id(value: str) -> bool:
 
 
 def now_utc() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def sha256_bytes(payload: bytes) -> str:

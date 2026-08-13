@@ -640,6 +640,25 @@ class PushReadyEngineTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "did not execute concurrently"):
             ENGINE["parallel_review_evidence"](reviews)
 
+    def test_parallel_review_evidence_accepts_subsecond_overlap(self) -> None:
+        def review(name: str, started: str, completed: str, workspace: str) -> dict[str, object]:
+            return {
+                "agent": name,
+                "started_at": started,
+                "completed_at": completed,
+                "duration_seconds": 0.2,
+                "workspace_sha256": workspace,
+                "input_sha256": "a" * 64,
+            }
+
+        evidence = ENGINE["parallel_review_evidence"](
+            [
+                review("codex", "2026-01-01T00:00:00.100Z", "2026-01-01T00:00:00.300Z", "b" * 64),
+                review("copilot", "2026-01-01T00:00:00.150Z", "2026-01-01T00:00:00.350Z", "c" * 64),
+            ]
+        )
+        self.assertEqual(0.15, evidence["overlap_seconds"])
+
     def test_profile_metrics_make_local_review_cost_delta_measurable(self) -> None:
         def review(agent: str) -> dict[str, object]:
             return {

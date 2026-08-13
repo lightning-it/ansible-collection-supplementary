@@ -210,6 +210,9 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("mlx90-copilot-request head=${EXPECTED_HEAD}", request_job)
         self.assertIn("Copilot review is already requested for the exact finalized head", request_job)
         self.assertIn('gh api --method DELETE "${requested_reviewers_url}"', request_job)
+        self.assertIn("review_is_visible_for_head()", request_job)
+        self.assertIn("for attempt in 1 2 3 4 5", request_job)
+        self.assertIn("Copilot reviewer request did not become visible", request_job)
         self.assertIn("cancel-in-progress: false", copilot)
         self.assertIn("pull_request_review:", copilot)
 

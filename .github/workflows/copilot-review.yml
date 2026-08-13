@@ -97,10 +97,22 @@ jobs:
             jq -e --arg reviewer "${reviewer}" \
               'any(.users[]?; .login == $reviewer)' <<<"${response}" >/dev/null
           }
+          review_is_visible_for_head() {
+            local attempt
+            for attempt in 1 2 3 4 5; do
+              if reviewer_is_requested || review_exists_for_head; then
+                return 0
+              fi
+              if [ "${attempt}" -lt 5 ]; then
+                sleep 2
+              fi
+            done
+            return 1
+          }
           comments="$(gh api --paginate --slurp "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100")"
           if jq -e --arg marker "${marker}" 'any(add[]; .body | contains($marker))' \
             <<<"${comments}" >/dev/null; then
-            reviewer_is_requested || {
+            review_is_visible_for_head || {
               echo "Exact-head request marker exists without a pending or completed review." >&2
               exit 1
             }
@@ -111,7 +123,10 @@ jobs:
             gh api --method DELETE "${requested_reviewers_url}" -f "reviewers[]=${reviewer}"
           fi
           gh api --method POST "${requested_reviewers_url}" -f "reviewers[]=${reviewer}"
-          reviewer_is_requested || review_exists_for_head
+          if ! review_is_visible_for_head; then
+            echo "Copilot reviewer request did not become visible for the exact finalized head." >&2
+            exit 1
+          fi
           gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
             -f body="${marker}Copilot review requested once for finalized head ${EXPECTED_HEAD}." >/dev/null
 
