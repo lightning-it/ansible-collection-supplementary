@@ -324,6 +324,53 @@ class PushReadyEngineTests(unittest.TestCase):
                 r"^[0-9a-f]{40}$",
             )
 
+    def test_sanitized_checkout_uses_exact_detached_commit_without_branch_guessing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            source = root / "source"
+            destination = root / "destination"
+            hooks = root / "hooks"
+            hooks.mkdir()
+            environment = ENGINE["isolated_git_environment"]({"PATH": os.environ["PATH"]})
+            run_git(source, "init", "-q", environment=environment)
+            (source / "safe.txt").write_text("safe\n", encoding="utf-8")
+            run_git(source, "add", "safe.txt", environment=environment)
+            run_git(
+                source,
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@invalid",
+                "commit",
+                "-q",
+                "-m",
+                "root",
+                environment=environment,
+            )
+            commit = subprocess.check_output(  # noqa: S603
+                [GIT, "-C", source, "rev-parse", "HEAD"],
+                env=environment,
+                text=True,
+            ).strip()
+            destination.mkdir()
+            ENGINE["checkout_sanitized_commit"](source, commit, destination, hooks)
+            self.assertEqual(
+                commit,
+                subprocess.check_output(  # noqa: S603
+                    [GIT, "-C", destination, "rev-parse", "HEAD"],
+                    env=environment,
+                    text=True,
+                ).strip(),
+            )
+            self.assertEqual(
+                "HEAD",
+                subprocess.check_output(  # noqa: S603
+                    [GIT, "-C", destination, "rev-parse", "--abbrev-ref", "HEAD"],
+                    env=environment,
+                    text=True,
+                ).strip(),
+            )
+
     def test_review_workspace_rejects_non_utf8_content(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repository = Path(tmp).resolve() / "repository"

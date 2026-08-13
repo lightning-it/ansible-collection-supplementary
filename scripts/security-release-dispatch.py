@@ -115,6 +115,83 @@ def build_envelope(
     return {"dispatch": True, "request": request}
 
 
+def build_recovery_envelope(
+    root: Path,
+    repository: str,
+    base_sha: str,
+    head_sha: str,
+    now: datetime,
+) -> dict[str, Any]:
+    """Build only the single approved existing-marker recovery request."""
+
+    if INTAKE.REPOSITORY.fullmatch(repository) is None:
+        INTAKE.fail("recovery repository is invalid")
+    for label, value in (("baseSha", base_sha), ("headSha", head_sha)):
+        if INTAKE.SHA.fullmatch(value) is None:
+            INTAKE.fail(f"{label} must be a full lowercase commit SHA")
+    live_main = INTAKE.git_text(root, "rev-parse", "refs/remotes/origin/main").strip()
+    live_develop = INTAKE.git_text(root, "rev-parse", "refs/remotes/origin/develop").strip()
+    if live_main != base_sha or live_develop != head_sha:
+        INTAKE.fail("recovery source refs changed after protected CI")
+
+    receipt_path = f".lit/security-release-intakes/{INTAKE.CONTRACT.RECOVERY_FIXED_VERSION}.json"
+    if INTAKE.git_text(root, "ls-tree", "--name-only", base_sha, "--", receipt_path).strip():
+        return {"dispatch": False}
+    metadata_path = f".lit/security-releases/{INTAKE.CONTRACT.RECOVERY_FIXED_VERSION}.json"
+    metadata_raw = INTAKE.git_bytes(
+        root,
+        "show",
+        f"{base_sha}:{metadata_path}",
+    )
+    if len(metadata_raw) > INTAKE.CONTRACT.MAX_JSON_BYTES:
+        INTAKE.fail("Security recovery metadata exceeds the size limit")
+    if INTAKE.sha256(metadata_raw) != INTAKE.CONTRACT.RECOVERY_METADATA_SHA256:
+        INTAKE.fail("Security recovery metadata digest differs from the approved binding")
+    metadata = INTAKE.load_json_bytes(metadata_raw, "Security recovery metadata")
+
+    request = {
+        "schemaVersion": INTAKE.CONTRACT.INTAKE_REQUEST_SCHEMA_VERSION,
+        "event": INTAKE.CONTRACT.RECOVERY_EVENT,
+        "repository": repository,
+        "repositoryId": INTAKE.CONTRACT.PRODUCER_REPOSITORY_ID,
+        "baseSha": base_sha,
+        "candidateRef": "develop",
+        "candidateBaseSha": INTAKE.CONTRACT.RECOVERY_CANDIDATE_BASE_SHA,
+        "candidateHeadSha": INTAKE.CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
+        "candidateDiffSha256": INTAKE.CONTRACT.RECOVERY_CANDIDATE_DIFF_SHA256,
+        "evidenceId": INTAKE.CONTRACT.RECOVERY_EVIDENCE_ID,
+        "fixedVersion": INTAKE.CONTRACT.RECOVERY_FIXED_VERSION,
+        "acceptanceProfile": INTAKE.CONTRACT.RECOVERY_ACCEPTANCE_PROFILE,
+        "metadataSha256": INTAKE.CONTRACT.RECOVERY_METADATA_SHA256,
+        "chainId": INTAKE.CONTRACT.compute_chain_id(
+            repository=repository,
+            repository_id=INTAKE.CONTRACT.PRODUCER_REPOSITORY_ID,
+            base_sha=base_sha,
+            candidate_head_sha=INTAKE.CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
+            candidate_diff_sha256=INTAKE.CONTRACT.RECOVERY_CANDIDATE_DIFF_SHA256,
+            evidence_id=INTAKE.CONTRACT.RECOVERY_EVIDENCE_ID,
+            fixed_version=INTAKE.CONTRACT.RECOVERY_FIXED_VERSION,
+            acceptance_profile=INTAKE.CONTRACT.RECOVERY_ACCEPTANCE_PROFILE,
+        ),
+        "issuedAt": metadata.get("createdAt"),
+        "expiresAt": metadata.get("validity", {}).get("expiresAt")
+        if isinstance(metadata.get("validity"), dict)
+        else None,
+        "humanActions": 0,
+    }
+    validated = INTAKE.validate_request(request, repository, now)
+    _patch, result = INTAKE.verify_repository(root, validated, now)
+    if (
+        result["baseSha"] != base_sha
+        or result["evidenceId"] != INTAKE.CONTRACT.RECOVERY_EVIDENCE_ID
+        or result["fixedVersion"] != INTAKE.CONTRACT.RECOVERY_FIXED_VERSION
+        or result["candidateDiffSha256"] != INTAKE.CONTRACT.RECOVERY_CANDIDATE_DIFF_SHA256
+        or result["humanActions"] != 0
+    ):
+        INTAKE.fail("verified Security recovery differs from the approved request")
+    return {"dispatch": True, "request": request}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", required=True)
@@ -122,12 +199,14 @@ def main() -> int:
     parser.add_argument("--head-sha", required=True)
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--now", default="")
+    parser.add_argument("--recover-existing-marker", action="store_true")
     parser.add_argument("--output-json", required=True, type=Path)
     parser.add_argument("--output-request-json", type=Path)
     args = parser.parse_args()
     try:
         now = INTAKE.timestamp(args.now, "--now") if args.now else datetime.now(UTC)
-        envelope = build_envelope(
+        builder = build_recovery_envelope if args.recover_existing_marker else build_envelope
+        envelope = builder(
             args.root.resolve(),
             INTAKE.require_string(args.repository, "--repository"),
             INTAKE.require_string(args.base_sha, "--base-sha"),

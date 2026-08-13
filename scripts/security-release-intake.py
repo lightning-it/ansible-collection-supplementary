@@ -299,11 +299,181 @@ def reject_special_modes(root: Path, base_sha: str, head_sha: str) -> None:
             fail("candidate diff contains a symlink or Gitlink")
 
 
+def git_is_ancestor(root: Path, ancestor: str, descendant: str) -> bool:
+    return (
+        subprocess.run(  # noqa: S603 -- commit identities are exact validated lowercase SHAs.
+            [git_binary(), "merge-base", "--is-ancestor", ancestor, descendant],
+            cwd=root,
+            check=False,
+            env=git_environment(),
+        ).returncode
+        == 0
+    )
+
+
+def verify_recovery_repository(
+    root: Path,
+    request: dict[str, Any],
+    now: datetime,
+) -> tuple[bytes, dict[str, Any]]:
+    """Verify the single approved marker-only intake recovery."""
+
+    if not (root / ".git").exists():
+        fail("--root must be a Git worktree")
+    for sha in (
+        request["baseSha"],
+        CONTRACT.RECOVERY_APPROVED_MAIN_SHA,
+        CONTRACT.RECOVERY_CANDIDATE_BASE_SHA,
+        CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
+    ):
+        git_text(root, "cat-file", "-e", f"{sha}^{{commit}}")
+
+    live_main = git_text(root, "rev-parse", "refs/remotes/origin/main").strip()
+    live_develop = git_text(root, "rev-parse", "refs/remotes/origin/develop").strip()
+    if live_main != request["baseSha"]:
+        fail("protected main changed after Security recovery authorization")
+    if not git_is_ancestor(root, CONTRACT.RECOVERY_APPROVED_MAIN_SHA, live_main):
+        fail("Security recovery controller does not descend from the approved protected-main SHA")
+    if not git_is_ancestor(root, CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA, live_main):
+        fail("approved historical Security candidate is not reachable from protected main")
+    if not git_is_ancestor(root, CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA, live_develop):
+        fail("approved historical Security candidate is not reachable from protected develop")
+
+    parents = git_text(root, "show", "-s", "--format=%P", live_main).split()
+    if len(parents) != 2 or parents[0] != CONTRACT.RECOVERY_APPROVED_MAIN_SHA:
+        fail("Security recovery controller is not the first protected promotion after the approved main SHA")
+    if not git_is_ancestor(root, parents[1], live_develop):
+        fail("Security recovery promotion head is not reachable from protected develop")
+    main_tree = git_text(root, "show", "-s", "--format=%T", live_main).strip()
+    promoted_tree = git_text(root, "show", "-s", "--format=%T", parents[1]).strip()
+    if main_tree != promoted_tree:
+        fail("Security recovery promotion tree differs from its protected develop parent")
+
+    control_changes = changed_paths(root, CONTRACT.RECOVERY_APPROVED_MAIN_SHA, live_main)
+    control_paths = {path for status, path in control_changes if status in {"A", "M"}}
+    if any(status == "D" for status, _path in control_changes):
+        fail("Security recovery controls must not delete repository content")
+    if control_paths != CONTRACT.RECOVERY_CONTROL_PATHS:
+        fail("Security recovery controller changes paths outside the exact approved allowlist")
+
+    intake_path = f".lit/security-release-intakes/{CONTRACT.RECOVERY_FIXED_VERSION}.json"
+    if (
+        subprocess.run(  # noqa: S603 -- object identity is an exact contract path.
+            [git_binary(), "cat-file", "-e", f"{live_main}:{intake_path}"],
+            cwd=root,
+            check=False,
+            env=git_environment(),
+        ).returncode
+        == 0
+    ):
+        fail("Security recovery intake receipt already exists on protected main")
+
+    metadata_path = f".lit/security-releases/{CONTRACT.RECOVERY_FIXED_VERSION}.json"
+    metadata_raw = git_bytes(root, "show", f"{live_main}:{metadata_path}")
+    approved_metadata_raw = git_bytes(
+        root,
+        "show",
+        f"{CONTRACT.RECOVERY_APPROVED_MAIN_SHA}:{metadata_path}",
+    )
+    candidate_metadata_raw = git_bytes(
+        root,
+        "show",
+        f"{CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA}:{metadata_path}",
+    )
+    if metadata_raw != approved_metadata_raw or metadata_raw != candidate_metadata_raw:
+        fail("Security recovery marker differs across the approved immutable Git identities")
+    if sha256(metadata_raw) != CONTRACT.RECOVERY_METADATA_SHA256:
+        fail("Security recovery marker digest differs from the approved binding")
+    metadata = load_json_bytes(metadata_raw, "Security release metadata")
+    CONTRACT.validate_metadata_payload(
+        metadata,
+        expected_evidence_id=CONTRACT.RECOVERY_EVIDENCE_ID,
+        expected_version=CONTRACT.RECOVERY_FIXED_VERSION,
+        expected_profile=CONTRACT.RECOVERY_ACCEPTANCE_PROFILE,
+        checked_at=now,
+    )
+    CONTRACT.validate_request_metadata_binding(request, metadata)
+
+    profiles = show_json(
+        root,
+        CONTRACT.RECOVERY_APPROVED_MAIN_SHA,
+        ".lit/security-release-profiles.json",
+        "approved protected-main acceptance-profile registry",
+    )
+    CONTRACT.validate_profile_registry(profiles, CONTRACT.RECOVERY_ACCEPTANCE_PROFILE)
+    current_profiles = show_json(
+        root,
+        live_main,
+        ".lit/security-release-profiles.json",
+        "current protected-main acceptance-profile registry",
+    )
+    if profiles != current_profiles:
+        fail("Security recovery changed the protected-main acceptance-profile registry")
+
+    galaxy = git_text(root, "show", f"{CONTRACT.RECOVERY_APPROVED_MAIN_SHA}:galaxy.yml")
+    if re.search(r"(?m)^version:\s*[\"']?3\.2\.3(?:\s|$)", galaxy) is None:
+        fail("Security recovery approved main does not declare collection version 3.2.3")
+
+    patch = canonical_diff(
+        root,
+        CONTRACT.RECOVERY_CANDIDATE_BASE_SHA,
+        CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
+    )
+    if sha256(patch) != CONTRACT.RECOVERY_CANDIDATE_DIFF_SHA256:
+        fail("historical Security candidate diff differs from the approved recovery binding")
+    paths = changed_paths(
+        root,
+        CONTRACT.RECOVERY_CANDIDATE_BASE_SHA,
+        CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
+    )
+    reject_special_modes(
+        root,
+        CONTRACT.RECOVERY_CANDIDATE_BASE_SHA,
+        CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
+    )
+    if ("A", metadata_path) not in paths or ("A", CONTRACT.RECOVERY_FRAGMENT_PATH) not in paths:
+        fail("historical Security candidate does not add the approved marker and changelog fragment")
+
+    fragment_raw = git_bytes(root, "show", f"{live_main}:{CONTRACT.RECOVERY_FRAGMENT_PATH}")
+    candidate_fragment_raw = git_bytes(
+        root,
+        "show",
+        f"{CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA}:{CONTRACT.RECOVERY_FRAGMENT_PATH}",
+    )
+    if fragment_raw != candidate_fragment_raw:
+        fail("Security recovery changelog fragment differs from the approved historical candidate")
+    if sha256(fragment_raw) != CONTRACT.RECOVERY_FRAGMENT_SHA256:
+        fail("Security recovery changelog fragment digest differs from the approved binding")
+
+    result = {
+        "schemaVersion": CONTRACT.INTAKE_RESULT_SCHEMA_VERSION,
+        "chainId": request["chainId"],
+        "branch": f"security-release/{request['evidenceId']}",
+        "baseSha": request["baseSha"],
+        "candidateBaseSha": request["candidateBaseSha"],
+        "candidateHeadSha": request["candidateHeadSha"],
+        "candidateDiffSha256": request["candidateDiffSha256"],
+        "evidenceId": request["evidenceId"],
+        "fixedVersion": request["fixedVersion"],
+        "metadataPath": metadata_path,
+        "metadataSha256": request["metadataSha256"],
+        "acceptanceProfile": request["acceptanceProfile"],
+        "changelogFragmentPath": CONTRACT.RECOVERY_FRAGMENT_PATH,
+        "changelogFragmentSha256": sha256(fragment_raw),
+        "changedPaths": sorted(path for _status, path in paths),
+        "humanActions": 0,
+    }
+    CONTRACT.validate_intake_result(request, result)
+    return patch, result
+
+
 def verify_repository(
     root: Path,
     request: dict[str, Any],
     now: datetime,
 ) -> tuple[bytes, dict[str, Any]]:
+    if CONTRACT.is_recovery_request(request):
+        return verify_recovery_repository(root, request, now)
     if not (root / ".git").exists():
         fail("--root must be a Git worktree")
     for sha in (

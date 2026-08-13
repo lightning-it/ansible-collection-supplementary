@@ -14,6 +14,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -29,6 +30,13 @@ VERSION = "3.2.4"
 EVIDENCE_ID = "MLX90-KEYCLOAK-26.7.1-3.2.4"
 PROFILE = "lit.supplementary/keycloak-26.7.1-security-v1"
 NOW = datetime(2026, 8, 8, 23, 0, tzinfo=UTC)
+HISTORICAL_FRAGMENT = b"""---
+security_fixes:
+  - >-
+    Update the immutable Keycloak runtime to 26.7.1 to remediate
+    CVE-2026-4629, CVE-2026-9793, CVE-2026-14209, CVE-2026-14614, and
+    CVE-2026-14615.
+"""
 GIT = shutil.which("git")
 assert GIT is not None
 
@@ -133,6 +141,248 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         head = git(self.root, "rev-parse", "HEAD")
         git(self.root, "update-ref", "refs/remotes/origin/develop", head)
         return head
+
+    def prepare_recovery_topology(
+        self,
+        *,
+        mutate_marker: bool = False,
+        add_receipt: bool = False,
+    ) -> dict[str, Any]:
+        """Create the exact protected-promotion shape required by recovery."""
+
+        ordinary_fragment = self.root / "changelogs/fragments/keycloak-security.yml"
+        ordinary_fragment.unlink()
+        fragment_path = self.root / MODULE.INTAKE.CONTRACT.RECOVERY_FRAGMENT_PATH
+        fragment_path.write_bytes(HISTORICAL_FRAGMENT)
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "preserve historical Security fragment")
+        historical_head = git(self.root, "rev-parse", "HEAD")
+        approved_main = historical_head
+        control_path = self.root / ".github/workflows/security-release-dispatch.yml"
+        control_path.parent.mkdir(parents=True, exist_ok=True)
+        control_path.write_text("name: recovered controller\n", encoding="utf-8")
+        control_paths = {control_path.relative_to(self.root).as_posix()}
+
+        metadata_path = self.root / f".lit/security-releases/{VERSION}.json"
+        if mutate_marker:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata_path.write_text(
+                json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            control_paths.add(metadata_path.relative_to(self.root).as_posix())
+
+        if add_receipt:
+            receipt_path = self.root / f".lit/security-release-intakes/{VERSION}.json"
+            receipt_path.parent.mkdir(parents=True, exist_ok=True)
+            receipt_path.write_text('{"already":"present"}\n', encoding="utf-8")
+            control_paths.add(receipt_path.relative_to(self.root).as_posix())
+
+        git(self.root, "add", ".")
+        git(self.root, "commit", "-q", "-m", "protected recovery controller")
+        promotion_head = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/develop", promotion_head)
+
+        git(self.root, "checkout", "-q", "-B", "recovery-main", approved_main)
+        git(
+            self.root,
+            "merge",
+            "-q",
+            "--no-ff",
+            "-m",
+            "promote protected recovery controller",
+            promotion_head,
+        )
+        current_main = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/main", current_main)
+
+        metadata_raw = metadata_path.read_bytes()
+        fragment_path = MODULE.INTAKE.CONTRACT.RECOVERY_FRAGMENT_PATH
+        return {
+            "approved_main": approved_main,
+            "current_main": current_main,
+            "promotion_head": promotion_head,
+            "bindings": {
+                "RECOVERY_APPROVED_MAIN_SHA": approved_main,
+                "RECOVERY_CANDIDATE_BASE_SHA": self.base,
+                "RECOVERY_CANDIDATE_HEAD_SHA": historical_head,
+                "RECOVERY_CANDIDATE_DIFF_SHA256": MODULE.INTAKE.sha256(
+                    MODULE.INTAKE.canonical_diff(self.root, self.base, historical_head)
+                ),
+                "RECOVERY_METADATA_SHA256": MODULE.INTAKE.sha256(metadata_raw),
+                "RECOVERY_EVIDENCE_ID": EVIDENCE_ID,
+                "RECOVERY_FIXED_VERSION": VERSION,
+                "RECOVERY_ACCEPTANCE_PROFILE": PROFILE,
+                "RECOVERY_ISSUED_AT": "2026-08-08T22:30:00Z",
+                "RECOVERY_EXPIRES_AT": "2026-09-08T22:30:00Z",
+                "RECOVERY_FRAGMENT_PATH": fragment_path,
+                "RECOVERY_FRAGMENT_SHA256": MODULE.INTAKE.sha256(HISTORICAL_FRAGMENT),
+                "RECOVERY_CONTROL_PATHS": frozenset(control_paths),
+            },
+        }
+
+    def recovery_request(self, current_main: str) -> dict[str, Any]:
+        contract = MODULE.INTAKE.CONTRACT
+        request = {
+            "schemaVersion": contract.INTAKE_REQUEST_SCHEMA_VERSION,
+            "event": contract.RECOVERY_EVENT,
+            "repository": REPOSITORY,
+            "repositoryId": contract.PRODUCER_REPOSITORY_ID,
+            "baseSha": current_main,
+            "candidateRef": "develop",
+            "candidateBaseSha": contract.RECOVERY_CANDIDATE_BASE_SHA,
+            "candidateHeadSha": contract.RECOVERY_CANDIDATE_HEAD_SHA,
+            "candidateDiffSha256": contract.RECOVERY_CANDIDATE_DIFF_SHA256,
+            "evidenceId": contract.RECOVERY_EVIDENCE_ID,
+            "fixedVersion": contract.RECOVERY_FIXED_VERSION,
+            "acceptanceProfile": contract.RECOVERY_ACCEPTANCE_PROFILE,
+            "metadataSha256": contract.RECOVERY_METADATA_SHA256,
+            "chainId": contract.compute_chain_id(
+                repository=REPOSITORY,
+                repository_id=contract.PRODUCER_REPOSITORY_ID,
+                base_sha=current_main,
+                candidate_head_sha=contract.RECOVERY_CANDIDATE_HEAD_SHA,
+                candidate_diff_sha256=contract.RECOVERY_CANDIDATE_DIFF_SHA256,
+                evidence_id=contract.RECOVERY_EVIDENCE_ID,
+                fixed_version=contract.RECOVERY_FIXED_VERSION,
+                acceptance_profile=contract.RECOVERY_ACCEPTANCE_PROFILE,
+            ),
+            "issuedAt": contract.RECOVERY_ISSUED_AT,
+            "expiresAt": contract.RECOVERY_EXPIRES_AT,
+            "humanActions": 0,
+        }
+        return MODULE.INTAKE.validate_request(request, REPOSITORY, NOW)
+
+    def test_recovery_build_and_repository_verification_accept_exact_promotion(self) -> None:
+        recovery = self.prepare_recovery_topology()
+        with mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]):
+            envelope = MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+            self.assertIs(envelope["dispatch"], True)
+            patch, result = MODULE.INTAKE.verify_recovery_repository(
+                self.root,
+                envelope["request"],
+                NOW,
+            )
+        self.assertEqual(
+            MODULE.INTAKE.canonical_diff(
+                self.root,
+                self.base,
+                recovery["bindings"]["RECOVERY_CANDIDATE_HEAD_SHA"],
+            ),
+            patch,
+        )
+        self.assertEqual(EVIDENCE_ID, result["evidenceId"])
+        self.assertEqual(0, result["humanActions"])
+
+    def test_recovery_build_reads_source_state_from_git_objects(self) -> None:
+        recovery = self.prepare_recovery_topology()
+        git(self.root, "checkout", "-q", self.base)
+        self.assertFalse((self.root / f".lit/security-releases/{VERSION}.json").exists())
+        with mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]):
+            envelope = MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+        self.assertIs(envelope["dispatch"], True)
+        self.assertEqual(recovery["current_main"], envelope["request"]["baseSha"])
+
+    def test_recovery_rejects_non_merge_protected_main_topology(self) -> None:
+        recovery = self.prepare_recovery_topology()
+        git(
+            self.root,
+            "update-ref",
+            "refs/remotes/origin/main",
+            recovery["promotion_head"],
+        )
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "first protected promotion"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["promotion_head"],
+                recovery["promotion_head"],
+                NOW,
+            )
+
+    def test_recovery_rejects_control_path_outside_exact_allowlist(self) -> None:
+        recovery = self.prepare_recovery_topology()
+        bindings = dict(recovery["bindings"])
+        bindings["RECOVERY_CONTROL_PATHS"] = frozenset()
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **bindings),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "exact approved allowlist"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+
+    def test_recovery_rejects_mutated_immutable_marker(self) -> None:
+        recovery = self.prepare_recovery_topology(mutate_marker=True)
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "immutable Git identities"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+
+    def test_recovery_rejects_historical_diff_digest_mismatch(self) -> None:
+        recovery = self.prepare_recovery_topology()
+        bindings = dict(recovery["bindings"])
+        bindings["RECOVERY_CANDIDATE_DIFF_SHA256"] = "sha256:" + ("0" * 64)
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **bindings),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "historical Security candidate diff"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+
+    def test_recovery_rejects_historical_fragment_digest_mismatch(self) -> None:
+        recovery = self.prepare_recovery_topology()
+        bindings = dict(recovery["bindings"])
+        bindings["RECOVERY_FRAGMENT_SHA256"] = "sha256:" + ("0" * 64)
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **bindings),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "fragment digest"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+
+    def test_recovery_rejects_existing_app_owned_intake_receipt(self) -> None:
+        recovery = self.prepare_recovery_topology(add_receipt=True)
+        with mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]):
+            request = self.recovery_request(recovery["current_main"])
+            with self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "receipt already exists"):
+                MODULE.INTAKE.verify_recovery_repository(self.root, request, NOW)
 
     def test_exact_candidate_builds_a_valid_human_actions_zero_request(self) -> None:
         envelope = MODULE.build_envelope(
@@ -334,7 +584,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
 
         self.assertIn("workflow_run:", dispatch)
         self.assertIn("workflows: [Collection CI]", dispatch)
-        self.assertIn("branches: [develop]", dispatch)
+        self.assertIn("branches: [develop, main]", dispatch)
         self.assertIn("source_run_id:", dispatch)
         self.assertIn("gh workflow run security-release-dispatch.yml", dispatch)
         self.assertIn("--ref main", dispatch)
@@ -342,19 +592,37 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("github.triggering_actor == 'github-actions[bot]'", dispatch)
         self.assertIn("github.event.workflow_run.event == 'push'", dispatch)
         self.assertNotIn("pull_request:", dispatch)
-        self.assertEqual(2, dispatch.count("ref: ${{ github.sha }}"))
+        self.assertEqual(4, dispatch.count("ref: ${{ github.sha }}"))
+        self.assertNotIn("ref: develop", dispatch)
         self.assertNotIn("ref: ${{ github.event.workflow_run.head_sha }}", dispatch)
         self.assertNotIn("ref: ${{ needs.classify.outputs.source-sha }}", dispatch)
         self.assertIn("needs.classify.outputs['source-sha']", dispatch)
         self.assertIn("needs.classify.outputs.dispatch == 'true'", dispatch)
         self.assertIn("environment: mlx90-security-release-evidence", dispatch)
         self.assertIn("permission-actions: write", dispatch)
-        self.assertEqual(1, dispatch.count("permission-metadata: read"))
+        self.assertEqual(2, dispatch.count("permission-metadata: read"))
         self.assertNotIn("permission-contents: write", dispatch)
         self.assertNotIn("permission-pull-requests: write", dispatch)
         self.assertNotIn("permission-workflows", dispatch)
         self.assertNotIn("repository_dispatch", dispatch)
         self.assertIn("--output-request-json", dispatch)
+        self.assertIn("--recover-existing-marker", dispatch)
+        self.assertIn("mlx90-security-release-recovery", dispatch)
+        self.assertIn("github.event.workflow_run.head_branch == 'main'", dispatch)
+        recovery_flow = dispatch[dispatch.index("  classify-recovery:") : dispatch.index("\n  classify:\n")]
+        self.assertEqual(3, recovery_flow.count("CONTROLLER_SHA: ${{ github.sha }}"))
+        self.assertNotIn('CONTROLLER_SHA="$(git rev-parse HEAD)"', recovery_flow)
+        self.assertNotIn("steps.request.outputs.controller_sha", recovery_flow)
+        self.assertEqual(
+            3,
+            recovery_flow.count('test "$(git show -s --format=%T "$CONTROLLER_SHA")" ='),
+        )
+        self.assertIn("Bind the single approved existing-marker recovery", dispatch)
+        self.assertIn("Dispatch approved recovery as release App", dispatch)
+        self.assertNotIn("needs.classify-recovery", dispatch)
+        self.assertNotIn("steps.recovery-app", dispatch)
+        self.assertEqual(4, dispatch.count("needs['classify-recovery']"))
+        self.assertGreaterEqual(dispatch.count("steps['recovery-app"), 6)
         self.assertIn("inputs:{request_json:$request_json}", dispatch)
         self.assertIn(
             "actions/workflows/security-release-intake.yml/dispatches",
@@ -366,7 +634,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn('"checks": "read"', dispatch)
         self.assertIn("gh api --paginate --slurp", dispatch)
         self.assertEqual(
-            1,
+            2,
             dispatch.count("repositories: ${{ github.event.repository.name }}"),
         )
         dispatch_attestation = dispatch[
@@ -389,7 +657,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("permission-actions: write", dispatch_mutation)
         self.assertNotIn("permission-metadata: read", dispatch_mutation)
         for repository in allowlist:
-            self.assertEqual(1, dispatch.count(f'"{repository}"'))
+            self.assertEqual(2, dispatch.count(f'"{repository}"'))
         self.assertLess(
             dispatch.index("Reconstruct exact validated request before token access"),
             dispatch.index("Mint installation-wide metadata-only App attestation token"),
@@ -407,7 +675,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             dispatch.index("Revalidate and dispatch exact request to immutable main intake"),
         )
         relay_run = dispatch[
-            dispatch.index("- name: Dispatch immutable main-ref controller") : dispatch.index("  classify:")
+            dispatch.index("- name: Dispatch immutable main-ref controller") : dispatch.index("  classify-recovery:")
         ]
         classify_start = dispatch.index("- name: Construct and fully validate immutable Security request")
         classify_run = dispatch[classify_start : dispatch.index("\n  dispatch:\n", classify_start)]
@@ -458,6 +726,9 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("permission-pull-requests: write", intake_mutation)
         self.assertNotIn("permission-metadata: read", intake_mutation)
         self.assertIn("--output-intake-receipt", intake)
+        self.assertIn("mlx90-security-release-recovery", intake)
+        self.assertIn('git merge-base --is-ancestor "$candidate_head" origin/develop', intake)
+        self.assertIn('if [ "$REQUEST_EVENT" = mlx90-security-release ]; then', intake)
         self.assertIn("--workflow-triggering-actor", intake)
         self.assertIn(".schemaVersion == 2", intake)
         self.assertIn('.controller.event == "workflow_dispatch"', intake)
