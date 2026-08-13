@@ -14,6 +14,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -133,6 +134,205 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         head = git(self.root, "rev-parse", "HEAD")
         git(self.root, "update-ref", "refs/remotes/origin/develop", head)
         return head
+
+    def prepare_recovery_topology(
+        self,
+        *,
+        mutate_marker: bool = False,
+        add_receipt: bool = False,
+    ) -> dict[str, Any]:
+        """Create the exact protected-promotion shape required by recovery."""
+
+        approved_main = self.head
+        control_path = self.root / ".github/workflows/security-release-dispatch.yml"
+        control_path.parent.mkdir(parents=True, exist_ok=True)
+        control_path.write_text("name: recovered controller\n", encoding="utf-8")
+        control_paths = {control_path.relative_to(self.root).as_posix()}
+
+        metadata_path = self.root / f".lit/security-releases/{VERSION}.json"
+        if mutate_marker:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata_path.write_text(
+                json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            control_paths.add(metadata_path.relative_to(self.root).as_posix())
+
+        if add_receipt:
+            receipt_path = self.root / f".lit/security-release-intakes/{VERSION}.json"
+            receipt_path.parent.mkdir(parents=True, exist_ok=True)
+            receipt_path.write_text('{"already":"present"}\n', encoding="utf-8")
+            control_paths.add(receipt_path.relative_to(self.root).as_posix())
+
+        git(self.root, "add", ".")
+        git(self.root, "commit", "-q", "-m", "protected recovery controller")
+        promotion_head = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/develop", promotion_head)
+
+        git(self.root, "checkout", "-q", "-B", "recovery-main", approved_main)
+        git(
+            self.root,
+            "merge",
+            "-q",
+            "--no-ff",
+            "-m",
+            "promote protected recovery controller",
+            promotion_head,
+        )
+        current_main = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/main", current_main)
+
+        metadata_raw = metadata_path.read_bytes()
+        fragment_path = "changelogs/fragments/keycloak-security.yml"
+        return {
+            "approved_main": approved_main,
+            "current_main": current_main,
+            "promotion_head": promotion_head,
+            "bindings": {
+                "RECOVERY_APPROVED_MAIN_SHA": approved_main,
+                "RECOVERY_CANDIDATE_BASE_SHA": self.base,
+                "RECOVERY_CANDIDATE_HEAD_SHA": self.head,
+                "RECOVERY_CANDIDATE_DIFF_SHA256": MODULE.INTAKE.sha256(
+                    MODULE.INTAKE.canonical_diff(self.root, self.base, self.head)
+                ),
+                "RECOVERY_METADATA_SHA256": MODULE.INTAKE.sha256(metadata_raw),
+                "RECOVERY_EVIDENCE_ID": EVIDENCE_ID,
+                "RECOVERY_FIXED_VERSION": VERSION,
+                "RECOVERY_ACCEPTANCE_PROFILE": PROFILE,
+                "RECOVERY_ISSUED_AT": "2026-08-08T22:30:00Z",
+                "RECOVERY_EXPIRES_AT": "2026-09-08T22:30:00Z",
+                "RECOVERY_FRAGMENT_PATH": fragment_path,
+                "RECOVERY_CONTROL_PATHS": frozenset(control_paths),
+            },
+        }
+
+    def recovery_request(self, current_main: str) -> dict[str, Any]:
+        contract = MODULE.INTAKE.CONTRACT
+        request = {
+            "schemaVersion": contract.INTAKE_REQUEST_SCHEMA_VERSION,
+            "event": contract.RECOVERY_EVENT,
+            "repository": REPOSITORY,
+            "repositoryId": contract.PRODUCER_REPOSITORY_ID,
+            "baseSha": current_main,
+            "candidateRef": "develop",
+            "candidateBaseSha": contract.RECOVERY_CANDIDATE_BASE_SHA,
+            "candidateHeadSha": contract.RECOVERY_CANDIDATE_HEAD_SHA,
+            "candidateDiffSha256": contract.RECOVERY_CANDIDATE_DIFF_SHA256,
+            "evidenceId": contract.RECOVERY_EVIDENCE_ID,
+            "fixedVersion": contract.RECOVERY_FIXED_VERSION,
+            "acceptanceProfile": contract.RECOVERY_ACCEPTANCE_PROFILE,
+            "metadataSha256": contract.RECOVERY_METADATA_SHA256,
+            "chainId": contract.compute_chain_id(
+                repository=REPOSITORY,
+                repository_id=contract.PRODUCER_REPOSITORY_ID,
+                base_sha=current_main,
+                candidate_head_sha=contract.RECOVERY_CANDIDATE_HEAD_SHA,
+                candidate_diff_sha256=contract.RECOVERY_CANDIDATE_DIFF_SHA256,
+                evidence_id=contract.RECOVERY_EVIDENCE_ID,
+                fixed_version=contract.RECOVERY_FIXED_VERSION,
+                acceptance_profile=contract.RECOVERY_ACCEPTANCE_PROFILE,
+            ),
+            "issuedAt": contract.RECOVERY_ISSUED_AT,
+            "expiresAt": contract.RECOVERY_EXPIRES_AT,
+            "humanActions": 0,
+        }
+        return MODULE.INTAKE.validate_request(request, REPOSITORY, NOW)
+
+    def test_recovery_build_and_repository_verification_accept_exact_promotion(self) -> None:
+        recovery = self.prepare_recovery_topology()
+        with mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]):
+            envelope = MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+            self.assertIs(envelope["dispatch"], True)
+            patch, result = MODULE.INTAKE.verify_recovery_repository(
+                self.root,
+                envelope["request"],
+                NOW,
+            )
+        self.assertEqual(
+            MODULE.INTAKE.canonical_diff(self.root, self.base, self.head),
+            patch,
+        )
+        self.assertEqual(EVIDENCE_ID, result["evidenceId"])
+        self.assertEqual(0, result["humanActions"])
+
+    def test_recovery_rejects_non_merge_protected_main_topology(self) -> None:
+        recovery = self.prepare_recovery_topology()
+        git(
+            self.root,
+            "update-ref",
+            "refs/remotes/origin/main",
+            recovery["promotion_head"],
+        )
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "first protected promotion"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["promotion_head"],
+                recovery["promotion_head"],
+                NOW,
+            )
+
+    def test_recovery_rejects_control_path_outside_exact_allowlist(self) -> None:
+        recovery = self.prepare_recovery_topology()
+        bindings = dict(recovery["bindings"])
+        bindings["RECOVERY_CONTROL_PATHS"] = frozenset()
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **bindings),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "exact approved allowlist"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+
+    def test_recovery_rejects_mutated_immutable_marker(self) -> None:
+        recovery = self.prepare_recovery_topology(mutate_marker=True)
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "immutable Git identities"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+
+    def test_recovery_rejects_historical_diff_digest_mismatch(self) -> None:
+        recovery = self.prepare_recovery_topology()
+        bindings = dict(recovery["bindings"])
+        bindings["RECOVERY_CANDIDATE_DIFF_SHA256"] = "sha256:" + ("0" * 64)
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **bindings),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "historical Security candidate diff"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+
+    def test_recovery_rejects_existing_app_owned_intake_receipt(self) -> None:
+        recovery = self.prepare_recovery_topology(add_receipt=True)
+        with mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]):
+            request = self.recovery_request(recovery["current_main"])
+            with self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "receipt already exists"):
+                MODULE.INTAKE.verify_recovery_repository(self.root, request, NOW)
 
     def test_exact_candidate_builds_a_valid_human_actions_zero_request(self) -> None:
         envelope = MODULE.build_envelope(
