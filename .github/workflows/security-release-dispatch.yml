@@ -130,8 +130,8 @@ jobs:
     name: Dispatch approved recovery as release App
     needs: classify-recovery
     if: >-
-      needs.classify-recovery.result == 'success' &&
-      needs.classify-recovery.outputs.dispatch == 'true'
+      needs['classify-recovery'].result == 'success' &&
+      needs['classify-recovery'].outputs.dispatch == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: mlx90-security-release-evidence
@@ -142,7 +142,7 @@ jobs:
       - name: Checkout exact protected-main recovery controller
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
-          ref: ${{ needs.classify-recovery.outputs.source-sha }}
+          ref: ${{ needs['classify-recovery'].outputs['source-sha'] }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -150,7 +150,7 @@ jobs:
         id: request
         env:
           RUN_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ needs.classify-recovery.outputs.source-sha }}
+          SOURCE_SHA: ${{ needs['classify-recovery'].outputs['source-sha'] }}
         run: |
           set -euo pipefail
 
@@ -190,9 +190,9 @@ jobs:
 
       - name: Verify recovery App installation and repository scope
         env:
-          APP_INSTALLATION_ID: ${{ steps.recovery-app-metadata.outputs.installation-id }}
-          APP_SLUG: ${{ steps.recovery-app-metadata.outputs.app-slug }}
-          GH_TOKEN: ${{ steps.recovery-app-metadata.outputs.token }}
+          APP_INSTALLATION_ID: ${{ steps['recovery-app-metadata'].outputs['installation-id'] }}
+          APP_SLUG: ${{ steps['recovery-app-metadata'].outputs['app-slug'] }}
+          GH_TOKEN: ${{ steps['recovery-app-metadata'].outputs.token }}
         run: |
           set -euo pipefail
 
@@ -243,12 +243,12 @@ jobs:
 
       - name: Revalidate and dispatch recovery to immutable App-only intake
         env:
-          APP_INSTALLATION_ID: ${{ steps.recovery-app.outputs.installation-id }}
-          APP_SLUG: ${{ steps.recovery-app.outputs.app-slug }}
+          APP_INSTALLATION_ID: ${{ steps['recovery-app'].outputs['installation-id'] }}
+          APP_SLUG: ${{ steps['recovery-app'].outputs['app-slug'] }}
           EXPECTED_ENVELOPE: ${{ steps.request.outputs.envelope }}
-          GH_TOKEN: ${{ steps.recovery-app.outputs.token }}
+          GH_TOKEN: ${{ steps['recovery-app'].outputs.token }}
           READ_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ needs.classify-recovery.outputs.source-sha }}
+          SOURCE_SHA: ${{ needs['classify-recovery'].outputs['source-sha'] }}
         run: |
           set -euo pipefail
 

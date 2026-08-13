@@ -360,6 +360,10 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("github.event.workflow_run.head_branch == 'main'", dispatch)
         self.assertIn("Bind the single approved existing-marker recovery", dispatch)
         self.assertIn("Dispatch approved recovery as release App", dispatch)
+        self.assertNotIn("needs.classify-recovery", dispatch)
+        self.assertNotIn("steps.recovery-app", dispatch)
+        self.assertGreaterEqual(dispatch.count("needs['classify-recovery']"), 5)
+        self.assertGreaterEqual(dispatch.count("steps['recovery-app"), 6)
         self.assertIn("inputs:{request_json:$request_json}", dispatch)
         self.assertIn(
             "actions/workflows/security-release-intake.yml/dispatches",
