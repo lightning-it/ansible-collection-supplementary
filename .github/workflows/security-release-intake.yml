@@ -527,16 +527,19 @@ jobs:
                 -f state=open -f base=main \
                 -f "head=${GITHUB_REPOSITORY_OWNER}:${BRANCH}" -f per_page=100)"
               test "$(jq 'length' <<<"$existing_pulls")" -eq 1
+              existing_pr_base_sha="$(jq -er '.[0].base.sha' <<<"$existing_pulls")"
+              [[ "$existing_pr_base_sha" =~ ^[0-9a-f]{40}$ ]]
+              git merge-base --is-ancestor "$existing_pr_base_sha" "$BASE_SHA"
               jq -e \
-                --arg base "$BASE_SHA" \
                 --arg branch "$BRANCH" \
                 --arg head "$remote_sha" \
+                --arg pr_base "$existing_pr_base_sha" \
                 --arg repo "$GITHUB_REPOSITORY" '
                   .[0].user.login == "lightning-it-release-automation[bot]"
                   and .[0].user.id == 307565056
                   and .[0].user.type == "Bot"
                   and .[0].base.ref == "main"
-                  and .[0].base.sha == $base
+                  and .[0].base.sha == $pr_base
                   and .[0].head.ref == $branch
                   and .[0].head.sha == $head
                   and .[0].head.repo.full_name == $repo
@@ -567,15 +570,15 @@ jobs:
               live_refresh_pull="$(GH_TOKEN="$APP_TOKEN" gh api \
                 "repos/${GITHUB_REPOSITORY}/pulls/${existing_pr_number}")"
               jq -e \
-                --arg base "$BASE_SHA" \
                 --arg branch "$BRANCH" \
                 --arg head "$remote_sha" \
+                --arg pr_base "$existing_pr_base_sha" \
                 --arg repo "$GITHUB_REPOSITORY" '
                   .user.login == "lightning-it-release-automation[bot]"
                   and .user.id == 307565056
                   and .user.type == "Bot"
                   and .base.ref == "main"
-                  and .base.sha == $base
+                  and .base.sha == $pr_base
                   and .head.ref == $branch
                   and .head.sha == $head
                   and .head.repo.full_name == $repo
@@ -598,15 +601,15 @@ jobs:
               live_refresh_pull="$(GH_TOKEN="$APP_TOKEN" gh api \
                 "repos/${GITHUB_REPOSITORY}/pulls/${existing_pr_number}")"
               jq -e \
-                --arg base "$BASE_SHA" \
                 --arg branch "$BRANCH" \
                 --arg head "$remote_sha" \
+                --arg pr_base "$existing_pr_base_sha" \
                 --arg repo "$GITHUB_REPOSITORY" '
                   .user.login == "lightning-it-release-automation[bot]"
                   and .user.id == 307565056
                   and .user.type == "Bot"
                   and .base.ref == "main"
-                  and .base.sha == $base
+                  and .base.sha == $pr_base
                   and .head.ref == $branch
                   and .head.sha == $head
                   and .head.repo.full_name == $repo
@@ -652,6 +655,7 @@ jobs:
           FIXED_VERSION: ${{ needs.classify.outputs.fixed-version }}
           DIFF_SHA256: ${{ steps.final.outputs.candidate_diff_sha256 }}
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          REQUEST_EVENT: ${{ steps.final.outputs.request_event }}
         run: |
           set -euo pipefail
 
@@ -690,11 +694,19 @@ jobs:
           number="$(gh pr view "$pr_url" --repo "$GITHUB_REPOSITORY" \
             --json number --jq .number)"
           live="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}")"
+          live_base_sha="$(jq -er .base.sha <<<"$live")"
+          [[ "$live_base_sha" =~ ^[0-9a-f]{40}$ ]]
+          if [ "$REQUEST_EVENT" = mlx90-security-release-recovery ]; then
+            git merge-base --is-ancestor "$live_base_sha" "$BASE_SHA"
+          else
+            test "$REQUEST_EVENT" = mlx90-security-release
+            test "$live_base_sha" = "$BASE_SHA"
+          fi
           # shellcheck disable=SC2016  # jq variables are expanded by jq.
           jq -e \
-            --arg base "$BASE_SHA" \
             --arg branch "$BRANCH" \
             --arg head "$HEAD_SHA" \
+            --arg live_base "$live_base_sha" \
             --arg repo "$GITHUB_REPOSITORY" '
               .user.login == "lightning-it-release-automation[bot]"
               and .user.id == 307565056
@@ -703,7 +715,7 @@ jobs:
               and .head.ref == $branch
               and .head.sha == $head
               and .base.ref == "main"
-              and .base.sha == $base
+              and .base.sha == $live_base
               and .draft == false
               and .state == "open"
             ' <<<"$live" >/dev/null
@@ -715,11 +727,12 @@ jobs:
           gh api --method PATCH \
             "repos/${GITHUB_REPOSITORY}/pulls/${number}" --input "$update" >/dev/null
           live="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}")"
+          test "$(jq -er .base.sha <<<"$live")" = "$live_base_sha"
           # shellcheck disable=SC2016  # jq variables are expanded by jq.
           jq -e \
-            --arg base "$BASE_SHA" \
             --arg branch "$BRANCH" \
             --arg head "$HEAD_SHA" \
+            --arg live_base "$live_base_sha" \
             --arg repo "$GITHUB_REPOSITORY" \
             --arg title "fix(security): ${EVIDENCE_ID}" '
               .user.login == "lightning-it-release-automation[bot]"
@@ -729,7 +742,7 @@ jobs:
               and .head.ref == $branch
               and .head.sha == $head
               and .base.ref == "main"
-              and .base.sha == $base
+              and .base.sha == $live_base
               and .title == $title
               and .draft == false
               and .state == "open"
@@ -745,6 +758,7 @@ jobs:
           HEAD_SHA: ${{ steps.branch.outputs.head_sha }}
           PR_NUMBER: ${{ steps.pull.outputs.number }}
           PR_URL: ${{ steps.pull.outputs.url }}
+          REQUEST_EVENT: ${{ steps.final.outputs.request_event }}
         run: |
           set -euo pipefail
 
@@ -753,16 +767,35 @@ jobs:
               -c 'credential.helper=!gh auth git-credential' "$@"
           }
 
+          verify_live_base_snapshot() {
+            local live_payload="$1"
+            local snapshot
+            snapshot="$(jq -er .base.sha <<<"$live_payload")"
+            [[ "$snapshot" =~ ^[0-9a-f]{40}$ ]]
+            if [ "$REQUEST_EVENT" = mlx90-security-release-recovery ]; then
+              git merge-base --is-ancestor "$snapshot" "$BASE_SHA"
+            else
+              test "$REQUEST_EVENT" = mlx90-security-release
+              test "$snapshot" = "$BASE_SHA"
+            fi
+            printf '%s\n' "$snapshot"
+          }
+
+          authenticated_git fetch --no-tags origin main
+          test "$(git rev-parse origin/main)" = "$BASE_SHA"
           live="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
           test "$(jq -er .head.sha <<<"$live")" = "$HEAD_SHA"
-          test "$(jq -er .base.sha <<<"$live")" = "$BASE_SHA"
+          live_base_sha="$(verify_live_base_snapshot "$live")"
+          test "$(jq -er .base.ref <<<"$live")" = main
           test "$(jq -er .state <<<"$live")" = open
           gh pr merge "$PR_URL" --repo "$GITHUB_REPOSITORY" \
             --auto --merge --match-head-commit "$HEAD_SHA"
           for attempt in 1 2 3 4 5; do
             live="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
-            if jq -e --arg base "$BASE_SHA" --arg head "$HEAD_SHA" '
+            live_base_sha="$(verify_live_base_snapshot "$live")"
+            if jq -e --arg base "$live_base_sha" --arg head "$HEAD_SHA" '
               .state == "open"
+              and .base.ref == "main"
               and .base.sha == $base
               and .head.sha == $head
               and .auto_merge.merge_method == "merge"
@@ -771,6 +804,8 @@ jobs:
               and .auto_merge.enabled_by.id == 307565056
               and .auto_merge.enabled_by.type == "Bot"
             ' <<<"$live" >/dev/null; then
+              authenticated_git fetch --no-tags origin main
+              test "$(git rev-parse origin/main)" = "$BASE_SHA"
               exit 0
             fi
             if jq -e --arg head "$HEAD_SHA" '

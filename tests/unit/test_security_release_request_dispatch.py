@@ -149,6 +149,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         add_receipt: bool = False,
         follow_up: bool = False,
         terminal: bool = False,
+        receipt_refresh: bool = False,
     ) -> dict[str, Any]:
         """Create the exact protected-promotion shape required by recovery."""
 
@@ -208,6 +209,9 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         terminal_main_base = current_main
         terminal_develop_base = promotion_head
         terminal_control_paths = set(control_paths)
+        receipt_refresh_main_base = current_main
+        receipt_refresh_develop_base = promotion_head
+        receipt_refresh_control_paths = set(control_paths)
 
         if follow_up:
             git(self.root, "checkout", "-q", "-B", "recovery-follow-up", promotion_head)
@@ -274,6 +278,48 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             )
             current_main = git(self.root, "rev-parse", "HEAD")
 
+        if receipt_refresh:
+            if not terminal:
+                raise ValueError("receipt-refresh recovery topology requires the terminal promotion")
+            receipt_refresh_main_base = current_main
+            git(self.root, "checkout", "-q", "-B", "recovery-receipt-refresh-base", promotion_head)
+            git(
+                self.root,
+                "merge",
+                "-q",
+                "--no-ff",
+                "-m",
+                "back-sync receipt-refresh recovery base",
+                receipt_refresh_main_base,
+            )
+            receipt_refresh_develop_base = git(self.root, "rev-parse", "HEAD")
+            refresh_workflow = self.root / ".github/workflows/security-release-intake.yml"
+            refresh_workflow.write_text("name: receipt-refresh controller\n", encoding="utf-8")
+            contract_path.write_text(
+                'RECOVERY_EVENT = "recovery"\n'
+                'RECOVERY_RECEIPT_REFRESH_CONTROL_DIFF_SHA256 = "sha256:' + ("0" * 64) + '"\n',
+                encoding="utf-8",
+            )
+            receipt_refresh_control_paths = {
+                refresh_workflow.relative_to(self.root).as_posix(),
+                contract_path.relative_to(self.root).as_posix(),
+            }
+            git(self.root, "add", ".")
+            git(self.root, "commit", "-q", "-m", "bind receipt-refresh recovery controller")
+            promotion_head = git(self.root, "rev-parse", "HEAD")
+            git(self.root, "update-ref", "refs/remotes/origin/develop", promotion_head)
+            git(self.root, "checkout", "-q", "recovery-main")
+            git(
+                self.root,
+                "merge",
+                "-q",
+                "--no-ff",
+                "-m",
+                "promote receipt-refresh recovery controller",
+                promotion_head,
+            )
+            current_main = git(self.root, "rev-parse", "HEAD")
+
         git(self.root, "update-ref", "refs/remotes/origin/main", current_main)
 
         metadata_raw = metadata_path.read_bytes()
@@ -328,8 +374,71 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
                 )
                 if terminal
                 else "sha256:" + ("0" * 64),
+                "RECOVERY_RECEIPT_REFRESH_MAIN_BASE_SHA": receipt_refresh_main_base,
+                "RECOVERY_RECEIPT_REFRESH_DEVELOP_BASE_SHA": receipt_refresh_develop_base,
+                "RECOVERY_RECEIPT_REFRESH_CONTROL_PATHS": frozenset(receipt_refresh_control_paths),
+                "RECOVERY_RECEIPT_REFRESH_CONTROL_DIFF_SHA256": MODULE.INTAKE.sha256(
+                    MODULE.INTAKE.recovery_receipt_refresh_control_diff(
+                        self.root,
+                        receipt_refresh_develop_base,
+                        promotion_head,
+                    )
+                )
+                if receipt_refresh
+                else "sha256:" + ("0" * 64),
             },
         }
+
+    def test_recovery_accepts_exact_receipt_refresh_promotion(self) -> None:
+        recovery = self.prepare_recovery_topology(follow_up=True, terminal=True, receipt_refresh=True)
+        with mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]):
+            envelope = MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+            _patch, result = MODULE.INTAKE.verify_recovery_repository(
+                self.root,
+                envelope["request"],
+                NOW,
+            )
+        self.assertIs(envelope["dispatch"], True)
+        self.assertEqual(EVIDENCE_ID, result["evidenceId"])
+        self.assertEqual(recovery["current_main"], result["baseSha"])
+
+    def test_recovery_rejects_modified_receipt_refresh_content(self) -> None:
+        recovery = self.prepare_recovery_topology(follow_up=True, terminal=True, receipt_refresh=True)
+        git(self.root, "checkout", "-q", "-B", "tampered-receipt-refresh", recovery["promotion_head"])
+        workflow = self.root / ".github/workflows/security-release-intake.yml"
+        workflow.write_text("name: tampered receipt-refresh controller\n", encoding="utf-8")
+        git(self.root, "add", ".")
+        git(self.root, "commit", "-q", "-m", "tamper receipt-refresh recovery control")
+        tampered_head = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/develop", tampered_head)
+        git(
+            self.root,
+            "checkout",
+            "-q",
+            "-B",
+            "tampered-receipt-refresh-main",
+            recovery["bindings"]["RECOVERY_RECEIPT_REFRESH_MAIN_BASE_SHA"],
+        )
+        git(self.root, "merge", "-q", "--no-ff", "-m", "promote tampered receipt refresh", tampered_head)
+        tampered_main = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/main", tampered_main)
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "receipt-refresh controller diff differs"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                tampered_main,
+                tampered_head,
+                NOW,
+            )
 
     def test_recovery_accepts_exact_terminal_promotion(self) -> None:
         recovery = self.prepare_recovery_topology(follow_up=True, terminal=True)
@@ -993,7 +1102,15 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             intake,
         )
         self.assertIn("and .[0].user.id == 307565056", intake)
-        self.assertIn("and .[0].base.sha == $base", intake)
+        self.assertIn(
+            'existing_pr_base_sha="$(jq -er \'.[0].base.sha\' <<<"$existing_pulls")"',
+            intake,
+        )
+        self.assertIn(
+            'git merge-base --is-ancestor "$existing_pr_base_sha" "$BASE_SHA"',
+            intake,
+        )
+        self.assertIn("and .[0].base.sha == $pr_base", intake)
         self.assertIn("and .[0].head.sha == $head", intake)
         self.assertIn(
             "existing_pr_number=\"$(jq -er '.[0].number'",
@@ -1008,6 +1125,15 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("--disable-auto", disable_flow)
         self.assertIn('--match-head-commit "$remote_sha"', disable_flow)
         self.assertIn("and .auto_merge == null", intake)
+        self.assertIn(
+            'git merge-base --is-ancestor "$live_base_sha" "$BASE_SHA"',
+            intake,
+        )
+        self.assertIn('test "$live_base_sha" = "$BASE_SHA"', intake)
+        self.assertGreaterEqual(
+            intake.count('if [ "$REQUEST_EVENT" = mlx90-security-release-recovery ]; then'),
+            4,
+        )
         self.assertLess(
             intake.index("--disable-auto"),
             intake.index('--force-with-lease="refs/heads/${BRANCH}:${remote_sha}"'),
@@ -1021,6 +1147,16 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn(".merged_by.id == 307565056", intake)
         self.assertIn('test "$first_parent" = "$BASE_SHA"', intake)
         self.assertIn('test "$second_parent" = "$HEAD_SHA"', intake)
+        poll = intake.split("          for attempt in 1 2 3 4 5; do", 1)[1].split("          done", 1)[0]
+        live_read = poll.index('live="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"')
+        open_validation = poll.index('.state == "open"')
+        open_main_fetch = poll.index("authenticated_git fetch --no-tags origin main")
+        open_exit = poll.index("exit 0")
+        merged_validation = poll.index('.state == "closed"')
+        self.assertLess(live_read, open_validation)
+        self.assertLess(open_validation, open_main_fetch)
+        self.assertLess(open_main_fetch, open_exit)
+        self.assertLess(open_exit, merged_validation)
         self.assertNotIn("--admin", intake)
         self.assertNotIn("git push --force ", intake)
         self.assertNotIn("authenticated_git push --force origin", intake)
