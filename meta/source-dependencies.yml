@@ -76,7 +76,7 @@ container_images:
   - reference: "docker.io/semaphoreui/semaphore:latest@sha256:8886d55da349f6d600f66f2c6dd2be01a3a5b4265542b04cb6c10ae47e4306d2"
     locations:
       - "roles/semaphore_deploy/defaults/main.yml"
-  - reference: "docker.io/smblds/smblds:latest@sha256:054d363d7ea7155199df2ec1a7538a673d96beb2adce13d2b6b70546894673a5"
+  - reference: "docker.io/smblds/smblds:latest@sha256:28786b6df52eac9c5727ba3152a13cb8e4a61d831641fa8d89f53517df2d3ad1"
     locations:
       - "roles/samba_deploy/defaults/main.yml"
   - reference: "docker.io/sonatype/nexus3:latest@sha256:1263e77bd1e7748d3be9028ba6472cca7f534828e92d157cd0f3c13c6909b150"
