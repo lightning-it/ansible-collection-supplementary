@@ -323,6 +323,7 @@ def verify_recovery_repository(
     for sha in (
         request["baseSha"],
         CONTRACT.RECOVERY_APPROVED_MAIN_SHA,
+        CONTRACT.RECOVERY_FIRST_PROMOTION_SHA,
         CONTRACT.RECOVERY_CANDIDATE_BASE_SHA,
         CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
     ):
@@ -339,9 +340,31 @@ def verify_recovery_repository(
     if not git_is_ancestor(root, CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA, live_develop):
         fail("approved historical Security candidate is not reachable from protected develop")
 
+    first_parents = git_text(
+        root,
+        "show",
+        "-s",
+        "--format=%P",
+        CONTRACT.RECOVERY_FIRST_PROMOTION_SHA,
+    ).split()
+    if len(first_parents) != 2 or first_parents[0] != CONTRACT.RECOVERY_APPROVED_MAIN_SHA:
+        fail("Security recovery first promotion differs from the approved protected topology")
+    first_tree = git_text(
+        root,
+        "show",
+        "-s",
+        "--format=%T",
+        CONTRACT.RECOVERY_FIRST_PROMOTION_SHA,
+    ).strip()
+    first_promoted_tree = git_text(root, "show", "-s", "--format=%T", first_parents[1]).strip()
+    if first_tree != first_promoted_tree or not git_is_ancestor(root, first_parents[1], live_develop):
+        fail("Security recovery first promotion is not bound to protected develop")
+
     parents = git_text(root, "show", "-s", "--format=%P", live_main).split()
-    if len(parents) != 2 or parents[0] != CONTRACT.RECOVERY_APPROVED_MAIN_SHA:
-        fail("Security recovery controller is not the first protected promotion after the approved main SHA")
+    if live_main == CONTRACT.RECOVERY_FIRST_PROMOTION_SHA:
+        parents = first_parents
+    elif len(parents) != 2 or parents[0] != CONTRACT.RECOVERY_FIRST_PROMOTION_SHA:
+        fail("Security recovery controller is not the single approved follow-up promotion")
     if not git_is_ancestor(root, parents[1], live_develop):
         fail("Security recovery promotion head is not reachable from protected develop")
     main_tree = git_text(root, "show", "-s", "--format=%T", live_main).strip()

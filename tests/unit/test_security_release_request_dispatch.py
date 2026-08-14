@@ -147,6 +147,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         *,
         mutate_marker: bool = False,
         add_receipt: bool = False,
+        follow_up: bool = False,
     ) -> dict[str, Any]:
         """Create the exact protected-promotion shape required by recovery."""
 
@@ -194,6 +195,27 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             promotion_head,
         )
         current_main = git(self.root, "rev-parse", "HEAD")
+        first_promotion = current_main
+
+        if follow_up:
+            git(self.root, "checkout", "-q", "-B", "recovery-follow-up", promotion_head)
+            control_path.write_text("name: recovered controller with main relay\n", encoding="utf-8")
+            git(self.root, "add", ".")
+            git(self.root, "commit", "-q", "-m", "relay recovery through protected main")
+            promotion_head = git(self.root, "rev-parse", "HEAD")
+            git(self.root, "update-ref", "refs/remotes/origin/develop", promotion_head)
+            git(self.root, "checkout", "-q", "recovery-main")
+            git(
+                self.root,
+                "merge",
+                "-q",
+                "--no-ff",
+                "-m",
+                "promote protected recovery relay",
+                promotion_head,
+            )
+            current_main = git(self.root, "rev-parse", "HEAD")
+
         git(self.root, "update-ref", "refs/remotes/origin/main", current_main)
 
         metadata_raw = metadata_path.read_bytes()
@@ -204,6 +226,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             "promotion_head": promotion_head,
             "bindings": {
                 "RECOVERY_APPROVED_MAIN_SHA": approved_main,
+                "RECOVERY_FIRST_PROMOTION_SHA": first_promotion,
                 "RECOVERY_CANDIDATE_BASE_SHA": self.base,
                 "RECOVERY_CANDIDATE_HEAD_SHA": historical_head,
                 "RECOVERY_CANDIDATE_DIFF_SHA256": MODULE.INTAKE.sha256(
@@ -220,6 +243,18 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
                 "RECOVERY_CONTROL_PATHS": frozenset(control_paths),
             },
         }
+
+    def test_recovery_accepts_single_exact_follow_up_promotion(self) -> None:
+        recovery = self.prepare_recovery_topology(follow_up=True)
+        with mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]):
+            envelope = MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+        self.assertIs(envelope["dispatch"], True)
 
     def recovery_request(self, current_main: str) -> dict[str, Any]:
         contract = MODULE.INTAKE.CONTRACT
@@ -305,7 +340,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         )
         with (
             mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]),
-            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "first protected promotion"),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "follow-up promotion"),
         ):
             MODULE.build_recovery_envelope(
                 self.root,
@@ -586,8 +621,18 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("workflows: [Collection CI]", dispatch)
         self.assertIn("branches: [develop, main]", dispatch)
         self.assertIn("source_run_id:", dispatch)
+        self.assertIn("recovery_source_run_id:", dispatch)
         self.assertIn("gh workflow run security-release-dispatch.yml", dispatch)
         self.assertIn("--ref main", dispatch)
+        self.assertIn("Relay approved recovery to protected main", dispatch)
+        self.assertIn(
+            "inputs.recovery_source_run_id != ''",
+            dispatch,
+        )
+        self.assertIn(
+            '-f "recovery_source_run_id=$SOURCE_RUN_ID"',
+            dispatch,
+        )
         self.assertIn("github.actor == 'github-actions[bot]'", dispatch)
         self.assertIn("github.triggering_actor == 'github-actions[bot]'", dispatch)
         self.assertIn("github.event.workflow_run.event == 'push'", dispatch)
@@ -621,7 +666,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("Dispatch approved recovery as release App", dispatch)
         self.assertNotIn("needs.classify-recovery", dispatch)
         self.assertNotIn("steps.recovery-app", dispatch)
-        self.assertEqual(4, dispatch.count("needs['classify-recovery']"))
+        self.assertEqual(7, dispatch.count("needs['classify-recovery']"))
         self.assertGreaterEqual(dispatch.count("steps['recovery-app"), 6)
         self.assertIn("inputs:{request_json:$request_json}", dispatch)
         self.assertIn(
