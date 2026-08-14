@@ -217,6 +217,28 @@ def changed_paths(root: Path, base_sha: str, head_sha: str) -> list[tuple[str, s
     return result
 
 
+def recovery_follow_up_control_diff(root: Path, base_sha: str, head_sha: str) -> bytes:
+    """Canonicalize the follow-up diff while neutralizing its own digest value."""
+
+    patch = canonical_diff(root, base_sha, head_sha)
+    normalized, replacements = re.subn(
+        rb'(?m)^(\+RECOVERY_FOLLOW_UP_CONTROL_DIFF_SHA256 = ")sha256:[0-9a-f]{64}(".*)$',
+        rb"\1sha256:" + (b"0" * 64) + rb"\2",
+        patch,
+    )
+    if replacements > 1:
+        fail("Security recovery follow-up diff contains duplicate digest bindings")
+    normalized, index_replacements = re.subn(
+        rb"(diff --git a/scripts/security_release_contract\.py b/scripts/security_release_contract\.py\n"
+        rb"index )[0-9a-f]{40}\.\.[0-9a-f]{40}( 100644\n)",
+        rb"\1" + (b"0" * 40) + b".." + (b"0" * 40) + rb"\2",
+        normalized,
+    )
+    if index_replacements != 1:
+        fail("Security recovery follow-up diff lacks its canonical contract index")
+    return normalized
+
+
 def show_json(root: Path, sha: str, path: str, label: str) -> dict[str, Any]:
     return load_json_bytes(git_bytes(root, "show", f"{sha}:{path}"), label)
 
@@ -324,6 +346,7 @@ def verify_recovery_repository(
         request["baseSha"],
         CONTRACT.RECOVERY_APPROVED_MAIN_SHA,
         CONTRACT.RECOVERY_FIRST_PROMOTION_SHA,
+        CONTRACT.RECOVERY_FOLLOW_UP_BASE_SHA,
         CONTRACT.RECOVERY_CANDIDATE_BASE_SHA,
         CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
     ):
@@ -363,8 +386,32 @@ def verify_recovery_repository(
     parents = git_text(root, "show", "-s", "--format=%P", live_main).split()
     if live_main == CONTRACT.RECOVERY_FIRST_PROMOTION_SHA:
         parents = first_parents
+        control_base = CONTRACT.RECOVERY_APPROVED_MAIN_SHA
+        expected_control_paths = CONTRACT.RECOVERY_CONTROL_PATHS
     elif len(parents) != 2 or parents[0] != CONTRACT.RECOVERY_FIRST_PROMOTION_SHA:
         fail("Security recovery controller is not the single approved follow-up promotion")
+    else:
+        if not git_is_ancestor(root, CONTRACT.RECOVERY_FOLLOW_UP_BASE_SHA, parents[1]):
+            fail("Security recovery follow-up does not descend from its exact protected develop base")
+        base_patch = canonical_diff(
+            root,
+            CONTRACT.RECOVERY_FIRST_PROMOTION_SHA,
+            CONTRACT.RECOVERY_FOLLOW_UP_BASE_SHA,
+        )
+        if sha256(base_patch) != CONTRACT.RECOVERY_FOLLOW_UP_BASE_DIFF_SHA256:
+            fail("Security recovery protected develop advance differs from its approved binding")
+        base_changes = changed_paths(
+            root,
+            CONTRACT.RECOVERY_FIRST_PROMOTION_SHA,
+            CONTRACT.RECOVERY_FOLLOW_UP_BASE_SHA,
+        )
+        base_paths = {path for status, path in base_changes if status in {"A", "M"}}
+        if any(status == "D" for status, _path in base_changes):
+            fail("Security recovery protected develop advance must not delete repository content")
+        if base_paths != CONTRACT.RECOVERY_FOLLOW_UP_BASE_PATHS:
+            fail("Security recovery protected develop advance changed unexpected paths")
+        control_base = CONTRACT.RECOVERY_FOLLOW_UP_BASE_SHA
+        expected_control_paths = CONTRACT.RECOVERY_FOLLOW_UP_CONTROL_PATHS
     if not git_is_ancestor(root, parents[1], live_develop):
         fail("Security recovery promotion head is not reachable from protected develop")
     main_tree = git_text(root, "show", "-s", "--format=%T", live_main).strip()
@@ -372,12 +419,16 @@ def verify_recovery_repository(
     if main_tree != promoted_tree:
         fail("Security recovery promotion tree differs from its protected develop parent")
 
-    control_changes = changed_paths(root, CONTRACT.RECOVERY_APPROVED_MAIN_SHA, live_main)
+    control_changes = changed_paths(root, control_base, parents[1])
     control_paths = {path for status, path in control_changes if status in {"A", "M"}}
     if any(status == "D" for status, _path in control_changes):
         fail("Security recovery controls must not delete repository content")
-    if control_paths != CONTRACT.RECOVERY_CONTROL_PATHS:
+    if control_paths != expected_control_paths:
         fail("Security recovery controller changes paths outside the exact approved allowlist")
+    if live_main != CONTRACT.RECOVERY_FIRST_PROMOTION_SHA:
+        control_patch = recovery_follow_up_control_diff(root, control_base, parents[1])
+        if sha256(control_patch) != CONTRACT.RECOVERY_FOLLOW_UP_CONTROL_DIFF_SHA256:
+            fail("Security recovery follow-up controller diff differs from its approved binding")
 
     intake_path = f".lit/security-release-intakes/{CONTRACT.RECOVERY_FIXED_VERSION}.json"
     if (
