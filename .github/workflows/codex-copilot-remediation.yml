@@ -158,9 +158,8 @@ jobs:
             gh api --method POST "repos/${REPOSITORY}/issues/${pr_number}/comments" -f body="Codex remediation stopped: identical Copilot finding set repeated (${finding_hash})." >/dev/null
             exit 0
           fi
-          if [ "${round}" -gt 1 ]; then
-            gh api --method POST "repos/${REPOSITORY}/issues/${pr_number}/comments" \
-              -f body='Codex remediation stopped fail-closed: the one final Current-Head re-review produced new material findings. No recursive repair loop is permitted.' >/dev/null
+          if [ "${round}" -gt 3 ]; then
+            gh api --method POST "repos/${REPOSITORY}/issues/${pr_number}/comments" -f body='Codex remediation stopped: maximum three automatic repair rounds reached.' >/dev/null
             exit 0
           fi
           {
@@ -204,8 +203,6 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
-    outputs:
-      changed: ${{ steps.push.outputs.changed }}
     steps:
       - name: Checkout trusted workflow assets
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -272,7 +269,7 @@ jobs:
           echo "changed=true" >>"${GITHUB_OUTPUT}"
           echo "new_head=${new_head}" >>"${GITHUB_OUTPUT}"
           gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
-            -f body="<!-- codex-remediation round=${ROUND} head=${new_head} finding=${FINDING_HASH} patch=${patch_hash} -->One bundled Codex remediation commit was pushed for all material findings on the reviewed head. One final exact-head Copilot re-review is requested; any new material finding stops fail-closed." >/dev/null
+            -f body="<!-- codex-remediation round=${ROUND} head=${new_head} finding=${FINDING_HASH} patch=${patch_hash} -->Codex remediation round ${ROUND} pushed ${new_head}. A new exact-head Copilot review was requested automatically." >/dev/null
       - name: Explicitly continue after GITHUB_TOKEN push
         if: steps.push.outputs.changed == 'true'
         env:
@@ -284,32 +281,6 @@ jobs:
         run: |
           set -euo pipefail
           gh workflow run codex-copilot-remediation.yml --repo "${REPOSITORY}" --ref "${{ github.event.pull_request.base.ref }}" -f pr_number="${PR_NUMBER}" -f expected_head="${NEW_HEAD}" -f round="${ROUND}"
-
-  enable-develop-automerge-after-evidence-only-remediation:
-    needs: [inspect, remediate]
-    if: >-
-      needs.inspect.outputs.eligible == 'true' &&
-      needs.inspect.outputs.actionable == 'true' &&
-      needs.remediate.outputs.changed == 'false'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - name: Require resolved findings and enable exact-head auto-merge
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EXPECTED_HEAD: ${{ needs.inspect.outputs.head_sha }}
-          PR_NUMBER: ${{ needs.inspect.outputs.pr_number }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          test "$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha)" = "${EXPECTED_HEAD}"
-          gh pr checks "${PR_NUMBER}" --repo "${REPOSITORY}" --required --watch --fail-fast
-          test "$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha)" = "${EXPECTED_HEAD}"
-          gh pr merge "${PR_NUMBER}" --repo "${REPOSITORY}" --auto --merge
-          test "$(gh pr view "${PR_NUMBER}" --repo "${REPOSITORY}" --json autoMergeRequest --jq '.autoMergeRequest != null')" = true
 
   enable-develop-automerge:
     needs: inspect
