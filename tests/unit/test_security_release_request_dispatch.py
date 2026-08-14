@@ -254,7 +254,14 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
                 recovery["promotion_head"],
                 NOW,
             )
+            _patch, result = MODULE.INTAKE.verify_recovery_repository(
+                self.root,
+                envelope["request"],
+                NOW,
+            )
         self.assertIs(envelope["dispatch"], True)
+        self.assertEqual(EVIDENCE_ID, result["evidenceId"])
+        self.assertEqual(recovery["current_main"], result["baseSha"])
 
     def recovery_request(self, current_main: str) -> dict[str, Any]:
         contract = MODULE.INTAKE.CONTRACT
