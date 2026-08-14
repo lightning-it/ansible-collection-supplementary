@@ -217,12 +217,17 @@ def changed_paths(root: Path, base_sha: str, head_sha: str) -> list[tuple[str, s
     return result
 
 
-def recovery_follow_up_control_diff(root: Path, base_sha: str, head_sha: str) -> bytes:
-    """Canonicalize the follow-up diff while neutralizing its own digest value."""
+def recovery_control_diff(
+    root: Path,
+    base_sha: str,
+    head_sha: str,
+    digest_binding: bytes,
+) -> bytes:
+    """Canonicalize a recovery-control diff while neutralizing its own digest."""
 
     patch = canonical_diff(root, base_sha, head_sha)
     normalized, replacements = re.subn(
-        rb'(?m)^(\+RECOVERY_FOLLOW_UP_CONTROL_DIFF_SHA256 = ")sha256:[0-9a-f]{64}(".*)$',
+        rb"(?m)^(\+" + digest_binding + rb' = ")sha256:[0-9a-f]{64}(".*)$',
         rb"\1sha256:" + (b"0" * 64) + rb"\2",
         patch,
     )
@@ -237,6 +242,28 @@ def recovery_follow_up_control_diff(root: Path, base_sha: str, head_sha: str) ->
     if index_replacements != 1:
         fail("Security recovery follow-up diff lacks its canonical contract index")
     return normalized
+
+
+def recovery_follow_up_control_diff(root: Path, base_sha: str, head_sha: str) -> bytes:
+    """Canonicalize the first follow-up recovery-control diff."""
+
+    return recovery_control_diff(
+        root,
+        base_sha,
+        head_sha,
+        b"RECOVERY_FOLLOW_UP_CONTROL_DIFF_SHA256",
+    )
+
+
+def recovery_terminal_control_diff(root: Path, base_sha: str, head_sha: str) -> bytes:
+    """Canonicalize the exact terminal recovery-control diff."""
+
+    return recovery_control_diff(
+        root,
+        base_sha,
+        head_sha,
+        b"RECOVERY_TERMINAL_CONTROL_DIFF_SHA256",
+    )
 
 
 def show_json(root: Path, sha: str, path: str, label: str) -> dict[str, Any]:
@@ -347,6 +374,8 @@ def verify_recovery_repository(
         CONTRACT.RECOVERY_APPROVED_MAIN_SHA,
         CONTRACT.RECOVERY_FIRST_PROMOTION_SHA,
         CONTRACT.RECOVERY_FOLLOW_UP_BASE_SHA,
+        CONTRACT.RECOVERY_TERMINAL_MAIN_BASE_SHA,
+        CONTRACT.RECOVERY_TERMINAL_DEVELOP_BASE_SHA,
         CONTRACT.RECOVERY_CANDIDATE_BASE_SHA,
         CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
     ):
@@ -384,13 +413,12 @@ def verify_recovery_repository(
         fail("Security recovery first promotion is not bound to protected develop")
 
     parents = git_text(root, "show", "-s", "--format=%P", live_main).split()
+    terminal_promotion = False
     if live_main == CONTRACT.RECOVERY_FIRST_PROMOTION_SHA:
         parents = first_parents
         control_base = CONTRACT.RECOVERY_APPROVED_MAIN_SHA
         expected_control_paths = CONTRACT.RECOVERY_CONTROL_PATHS
-    elif len(parents) != 2 or parents[0] != CONTRACT.RECOVERY_FIRST_PROMOTION_SHA:
-        fail("Security recovery controller is not the single approved follow-up promotion")
-    else:
+    elif len(parents) == 2 and parents[0] == CONTRACT.RECOVERY_FIRST_PROMOTION_SHA:
         if not git_is_ancestor(root, CONTRACT.RECOVERY_FOLLOW_UP_BASE_SHA, parents[1]):
             fail("Security recovery follow-up does not descend from its exact protected develop base")
         base_patch = canonical_diff(
@@ -412,6 +440,32 @@ def verify_recovery_repository(
             fail("Security recovery protected develop advance changed unexpected paths")
         control_base = CONTRACT.RECOVERY_FOLLOW_UP_BASE_SHA
         expected_control_paths = CONTRACT.RECOVERY_FOLLOW_UP_CONTROL_PATHS
+    elif len(parents) == 2 and parents[0] == CONTRACT.RECOVERY_TERMINAL_MAIN_BASE_SHA:
+        terminal_promotion = True
+        terminal_main_tree = git_text(
+            root,
+            "show",
+            "-s",
+            "--format=%T",
+            CONTRACT.RECOVERY_TERMINAL_MAIN_BASE_SHA,
+        ).strip()
+        terminal_develop_tree = git_text(
+            root,
+            "show",
+            "-s",
+            "--format=%T",
+            CONTRACT.RECOVERY_TERMINAL_DEVELOP_BASE_SHA,
+        ).strip()
+        if terminal_main_tree != terminal_develop_tree:
+            fail("Security recovery terminal bases do not bind the same protected tree")
+        if not git_is_ancestor(root, CONTRACT.RECOVERY_TERMINAL_MAIN_BASE_SHA, live_main):
+            fail("Security recovery terminal promotion does not descend from its exact main base")
+        if not git_is_ancestor(root, CONTRACT.RECOVERY_TERMINAL_DEVELOP_BASE_SHA, parents[1]):
+            fail("Security recovery terminal promotion does not descend from its exact develop base")
+        control_base = CONTRACT.RECOVERY_TERMINAL_DEVELOP_BASE_SHA
+        expected_control_paths = CONTRACT.RECOVERY_TERMINAL_CONTROL_PATHS
+    else:
+        fail("Security recovery controller is not an exact approved recovery promotion")
     if not git_is_ancestor(root, parents[1], live_develop):
         fail("Security recovery promotion head is not reachable from protected develop")
     main_tree = git_text(root, "show", "-s", "--format=%T", live_main).strip()
@@ -425,7 +479,11 @@ def verify_recovery_repository(
         fail("Security recovery controls must not delete repository content")
     if control_paths != expected_control_paths:
         fail("Security recovery controller changes paths outside the exact approved allowlist")
-    if live_main != CONTRACT.RECOVERY_FIRST_PROMOTION_SHA:
+    if terminal_promotion:
+        control_patch = recovery_terminal_control_diff(root, control_base, parents[1])
+        if sha256(control_patch) != CONTRACT.RECOVERY_TERMINAL_CONTROL_DIFF_SHA256:
+            fail("Security recovery terminal controller diff differs from its approved binding")
+    elif live_main != CONTRACT.RECOVERY_FIRST_PROMOTION_SHA:
         control_patch = recovery_follow_up_control_diff(root, control_base, parents[1])
         if sha256(control_patch) != CONTRACT.RECOVERY_FOLLOW_UP_CONTROL_DIFF_SHA256:
             fail("Security recovery follow-up controller diff differs from its approved binding")
