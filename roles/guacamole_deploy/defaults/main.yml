@@ -6,7 +6,7 @@ guacamole_deploy_image: >-
 guacamole_deploy_guacd_image: >-
   docker.io/guacamole/guacd:1.6.0@sha256:f39258e35244b6bf79bc6ac4e60eee176aea6f6a5adb13e8c3090e48df8ae515
 guacamole_deploy_postgres_image: >-
-  docker.io/library/postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b
+  docker.io/library/postgres:16@sha256:11a9d238fbb48bab14599c57e41123254452b1a2d93c6c8595bce96f346bd082
 guacamole_deploy_host_ip: "127.0.0.1"
 guacamole_deploy_port: 8082
 guacamole_deploy_base_dir: "/srv/guacamole"
