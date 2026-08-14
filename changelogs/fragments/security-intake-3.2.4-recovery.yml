@@ -3,4 +3,5 @@ bugfixes:
   - >-
     Add a one-time fail-closed, release-App-only recovery for the immutable
     3.2.4 Security marker that reached protected main without its intake
-    receipt.
+    receipt, including an immutable main-ref relay for environments restricted
+    to protected main.
