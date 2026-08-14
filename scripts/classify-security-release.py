@@ -249,7 +249,6 @@ def classify_recovery_receipt(
     version: str,
     evidence_id: str,
     base_sha: str,
-    head_ref: str,
     checked_at: datetime,
 ) -> Classification:
     receipt_relative = Path(".lit/security-release-intakes") / f"{version}.json"
@@ -263,18 +262,19 @@ def classify_recovery_receipt(
         raise ClassificationError(str(exc)) from exc
     request = receipt["request"]
     verified = receipt["verified"]
+    expected_evidence_id = evidence_id or request["evidenceId"]
     if (
         not CONTRACT.is_recovery_request(request)
         or request["baseSha"] != base_sha
         or verified["baseSha"] != base_sha
         or request["fixedVersion"] != version
         or verified["fixedVersion"] != version
-        or request["evidenceId"] != evidence_id
-        or verified["evidenceId"] != evidence_id
-        or verified["branch"] != head_ref
+        or request["evidenceId"] != expected_evidence_id
+        or verified["evidenceId"] != expected_evidence_id
+        or verified["branch"] != f"security-release/{expected_evidence_id}"
     ):
         fail("Security recovery receipt binding mismatch")
-    classified = classify_version(root, version, evidence_id, checked_at, None)
+    classified = classify_version(root, version, expected_evidence_id, checked_at, None)
     return Classification(True, classified.evidence_id, classified.version, True)
 
 
@@ -327,7 +327,6 @@ def classify(args: argparse.Namespace, root: Path, checked_at: datetime) -> Clas
             recovery_version,
             security.group(1),
             args.base_sha,
-            args.head_ref,
             checked_at,
         )
 
@@ -342,6 +341,15 @@ def classify(args: argparse.Namespace, root: Path, checked_at: datetime) -> Clas
                 args.evidence_id,
                 checked_at,
                 binding_root,
+            )
+        recovery_version = changed_recovery_receipt_version(root, args.base_sha, args.head_sha)
+        if recovery_version:
+            return classify_recovery_receipt(
+                root,
+                recovery_version,
+                args.evidence_id,
+                args.base_sha,
+                checked_at,
             )
         prepared_version = changed_preparation_version(root, args.base_sha, args.head_sha)
         if prepared_version:

@@ -260,6 +260,7 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
         )
         with (
             mock.patch.object(MODULE, "changed_security_versions", return_value=[]),
+            mock.patch.object(MODULE, "changed_recovery_receipt_version", return_value=""),
             mock.patch.object(MODULE, "changed_preparation_version", return_value=""),
         ):
             self.assertFalse(
@@ -342,9 +343,21 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
                     self.root,
                     CHECKED_AT,
                 )
+            with (
+                mock.patch.object(MODULE, "changed_security_versions", return_value=[]),
+                mock.patch.object(MODULE, "changed_recovery_receipt_version", return_value="3.2.2"),
+            ):
+                pushed = MODULE.classify(
+                    args(event_kind="push", ref="refs/heads/main"),
+                    self.root,
+                    CHECKED_AT,
+                )
         self.assertTrue(result.security_release)
         self.assertTrue(result.recovery_receipt)
         self.assertEqual("3.2.2", result.version)
+        self.assertTrue(pushed.security_release)
+        self.assertTrue(pushed.recovery_receipt)
+        self.assertEqual(EVIDENCE_ID, pushed.evidence_id)
 
     def test_recovery_receipt_change_must_be_the_only_pr_path(self):
         exact = subprocess.CompletedProcess(
@@ -380,6 +393,7 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
         self.assertTrue(promoted.security_release)
         with (
             mock.patch.object(MODULE, "changed_security_versions", return_value=[]),
+            mock.patch.object(MODULE, "changed_recovery_receipt_version", return_value=""),
             mock.patch.object(MODULE, "changed_preparation_version", return_value=""),
         ):
             prepared = MODULE.classify(
@@ -407,6 +421,7 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
         )
         with (
             mock.patch.object(MODULE, "changed_security_versions", return_value=[]),
+            mock.patch.object(MODULE, "changed_recovery_receipt_version", return_value=""),
             mock.patch.object(
                 MODULE,
                 "changed_preparation_version",
