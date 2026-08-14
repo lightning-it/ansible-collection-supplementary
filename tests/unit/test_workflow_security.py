@@ -174,12 +174,23 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('index("dependencies") != null', changelog)
         self.assertIn('index("safe-automerge") != null', changelog)
         self.assertIn('index("breaking-update") == null', changelog)
+        self.assertIn('[ "$PR_AUTHOR" = "lightning-it-release-automation[bot]" ]', changelog)
+        self.assertIn('[ "$PR_BASE" = "main" ]', changelog)
+        self.assertIn('[[ "$PR_HEAD" = security-release/MLX90-* ]]', changelog)
+        self.assertIn("python scripts/classify-security-release.py", changelog)
+        self.assertIn('grep -Fxq "security_recovery_receipt=true"', changelog)
+        self.assertNotIn("skip-changelog", changelog)
         static_steps = [
             step
             for step in collection_ci["jobs"]["lint-sanity"]["steps"]
             if step.get("name") == "Run repository static pre-commit gates"
         ]
         self.assertEqual(1, len(static_steps))
+        self.assertEqual("security-classification", collection_ci["jobs"]["lint-sanity"]["needs"])
+        self.assertEqual(
+            "${{ steps.classify.outputs.security_recovery_receipt }}",
+            collection_ci["jobs"]["security-classification"]["outputs"]["security-recovery-receipt"],
+        )
         static_env = static_steps[0]["env"]
         self.assertEqual("${{ env.COMPARE_BASE_SHA }}", static_env["BASE_SHA"])
         self.assertEqual("${{ env.SOURCE_SHA }}", static_env["HEAD_SHA"])
@@ -188,6 +199,10 @@ class WorkflowSecurityTests(unittest.TestCase):
             static_env["LABELS_JSON"],
         )
         require_fragment = static_env["REQUIRE_FRAGMENT"]
+        self.assertIn(
+            "needs.security-classification.outputs.security-recovery-receipt != 'true'",
+            require_fragment,
+        )
         self.assertIn("github.event.pull_request.base.ref == 'develop'", require_fragment)
         self.assertIn("startsWith(github.event.pull_request.head.ref, 'renovate/')", require_fragment)
         self.assertIn("github.event.pull_request.user.login == 'renovate[bot]'", require_fragment)

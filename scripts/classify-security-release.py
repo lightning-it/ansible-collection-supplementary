@@ -20,6 +20,7 @@ SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 SHA = re.compile(r"^[0-9a-f]{40}$")
 EVIDENCE_ID = re.compile(r"^MLX90-[A-Z0-9][A-Z0-9._-]{2,127}$")
 METADATA_PATH = re.compile(r"^\.lit/security-releases/([0-9]+\.[0-9]+\.[0-9]+)\.json$")
+INTAKE_PATH = re.compile(r"^\.lit/security-release-intakes/([0-9]+\.[0-9]+\.[0-9]+)\.json$")
 RELEASE_BRANCH = re.compile(r"^release/v([0-9]+\.[0-9]+\.[0-9]+)$")
 SECURITY_BRANCH = re.compile(r"^security-release/(MLX90-[A-Z0-9][A-Z0-9._-]{2,127})$")
 PREPARE_TITLE = re.compile(r"(?:^|\n)chore\(release\): prepare v([0-9]+\.[0-9]+\.[0-9]+)(?:$|\n)")
@@ -34,6 +35,7 @@ class Classification:
     security_release: bool
     evidence_id: str = ""
     version: str = ""
+    recovery_receipt: bool = False
 
 
 def fail(message: str) -> NoReturn:
@@ -204,6 +206,78 @@ def changed_security_versions(root: Path, base_sha: str, head_sha: str) -> list[
     return versions
 
 
+def changed_recovery_receipt_version(root: Path, base_sha: str, head_sha: str) -> str:
+    for label, value in (("base SHA", base_sha), ("head SHA", head_sha)):
+        if SHA.fullmatch(value) is None:
+            fail(f"{label} is invalid")
+    result = subprocess.run(  # noqa: S603
+        [
+            git_binary(),
+            "diff",
+            "--name-status",
+            "-z",
+            "--no-renames",
+            base_sha,
+            head_sha,
+            "--",
+            ".",
+        ],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        env=git_environment(),
+        timeout=30,
+    )
+    fields = result.stdout.split(b"\0")
+    if fields and fields[-1] == b"":
+        fields.pop()
+    if len(fields) != 2:
+        return ""
+    try:
+        status = fields[0].decode("ascii")
+        path = fields[1].decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ClassificationError("recovery receipt diff is not canonical UTF-8") from exc
+    match = INTAKE_PATH.fullmatch(path)
+    if status != "A" or match is None:
+        return ""
+    return match.group(1)
+
+
+def classify_recovery_receipt(
+    root: Path,
+    version: str,
+    evidence_id: str,
+    base_sha: str,
+    head_ref: str,
+    checked_at: datetime,
+) -> Classification:
+    receipt_relative = Path(".lit/security-release-intakes") / f"{version}.json"
+    try:
+        receipt = CONTRACT.load_json_file(root, receipt_relative, "Security intake receipt")
+        receipt_raw = (root / receipt_relative).read_bytes()
+        if receipt_raw != CONTRACT.canonical_document_bytes(receipt):
+            fail("Security recovery intake receipt is not canonical")
+        CONTRACT.verify_intake_receipt(receipt, checked_at=checked_at)
+    except CONTRACT.ContractError as exc:
+        raise ClassificationError(str(exc)) from exc
+    request = receipt["request"]
+    verified = receipt["verified"]
+    if (
+        not CONTRACT.is_recovery_request(request)
+        or request["baseSha"] != base_sha
+        or verified["baseSha"] != base_sha
+        or request["fixedVersion"] != version
+        or verified["fixedVersion"] != version
+        or request["evidenceId"] != evidence_id
+        or verified["evidenceId"] != evidence_id
+        or verified["branch"] != head_ref
+    ):
+        fail("Security recovery receipt binding mismatch")
+    classified = classify_version(root, version, evidence_id, checked_at, None)
+    return Classification(True, classified.evidence_id, classified.version, True)
+
+
 def classify(args: argparse.Namespace, root: Path, checked_at: datetime) -> Classification:
     requested_binding_root = getattr(args, "binding_root", None)
     binding_root = requested_binding_root
@@ -236,15 +310,25 @@ def classify(args: argparse.Namespace, root: Path, checked_at: datetime) -> Clas
         if security is None:
             return Classification(False)
         versions = changed_security_versions(root, args.base_sha, args.head_sha)
-        if len(versions) != 1:
+        if len(versions) == 1:
+            # The intake PR creates the binding; its App receipt verifies the candidate diff.
+            return classify_version(
+                root,
+                versions[0],
+                security.group(1),
+                checked_at,
+                None,
+            )
+        recovery_version = changed_recovery_receipt_version(root, args.base_sha, args.head_sha)
+        if not recovery_version:
             fail("metadata mismatch")
-        # The intake PR creates the binding; its signed App receipt verifies the candidate diff.
-        return classify_version(
+        return classify_recovery_receipt(
             root,
-            versions[0],
+            recovery_version,
             security.group(1),
+            args.base_sha,
+            args.head_ref,
             checked_at,
-            None,
         )
 
     if args.event_kind == "push":
@@ -287,6 +371,7 @@ def write_output(classification: Classification, path: str) -> None:
         "security_release": str(classification.security_release).lower(),
         "security_evidence_id": classification.evidence_id,
         "security_version": classification.version,
+        "security_recovery_receipt": str(classification.recovery_receipt).lower(),
     }
     if path:
         output = Path(path)

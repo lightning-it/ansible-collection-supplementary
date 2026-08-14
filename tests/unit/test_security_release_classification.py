@@ -210,6 +210,7 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
         )
         self.assertEqual(0, accepted.returncode, accepted.stderr)
         self.assertIn('"security_release":"true"', accepted.stdout)
+        self.assertIn('"security_recovery_receipt":"false"', accepted.stdout)
 
         metadata_path = self.root / ".lit/security-releases/3.2.2.json"
         metadata_path.write_bytes(metadata_path.read_bytes() + b"\n")
@@ -288,6 +289,86 @@ class SecurityReleaseClassificationTests(unittest.TestCase):
                 CHECKED_AT,
             )
         self.assertTrue(security.security_release)
+
+    def test_security_recovery_branch_accepts_only_the_exact_receipt(self):
+        receipt_path = self.root / ".lit/security-release-intakes/3.2.2.json"
+        original = MODULE.CONTRACT.load_json_file(
+            self.root,
+            Path(".lit/security-release-intakes/3.2.2.json"),
+            "Security intake receipt",
+        )
+        request = dict(original["request"])
+        request["event"] = MODULE.CONTRACT.RECOVERY_EVENT
+        verified = dict(original["verified"])
+        recovery_contract = {
+            "RECOVERY_CANDIDATE_BASE_SHA": request["candidateBaseSha"],
+            "RECOVERY_CANDIDATE_HEAD_SHA": request["candidateHeadSha"],
+            "RECOVERY_CANDIDATE_DIFF_SHA256": request["candidateDiffSha256"],
+            "RECOVERY_METADATA_SHA256": request["metadataSha256"],
+            "RECOVERY_EVIDENCE_ID": request["evidenceId"],
+            "RECOVERY_FIXED_VERSION": request["fixedVersion"],
+            "RECOVERY_ACCEPTANCE_PROFILE": request["acceptanceProfile"],
+            "RECOVERY_ISSUED_AT": request["issuedAt"],
+            "RECOVERY_EXPIRES_AT": request["expiresAt"],
+            "RECOVERY_FRAGMENT_PATH": verified["changelogFragmentPath"],
+            "RECOVERY_FRAGMENT_SHA256": verified["changelogFragmentSha256"],
+        }
+        with mock.patch.multiple(MODULE.CONTRACT, **recovery_contract):
+            receipt = MODULE.CONTRACT.build_intake_receipt(
+                request,
+                verified,
+                checked_at=CHECKED_AT,
+                workflow_run_id="123456",
+                workflow_attempt="1",
+                workflow_ref=(
+                    f"{MODULE.CONTRACT.PRODUCER_REPOSITORY}/.github/workflows/security-release-intake.yml@refs/heads/main"
+                ),
+                workflow_event="workflow_dispatch",
+                workflow_actor=MODULE.CONTRACT.RELEASE_APP_LOGIN,
+                workflow_triggering_actor=MODULE.CONTRACT.RELEASE_APP_LOGIN,
+                observed_automation=MODULE.CONTRACT.RELEASE_APP_IDENTITY,
+            )
+            receipt_path.write_bytes(MODULE.CONTRACT.canonical_document_bytes(receipt))
+            with (
+                mock.patch.object(MODULE, "changed_security_versions", return_value=[]),
+                mock.patch.object(MODULE, "changed_recovery_receipt_version", return_value="3.2.2"),
+            ):
+                result = MODULE.classify(
+                    args(
+                        event_kind="pull_request",
+                        base_ref="main",
+                        head_ref=f"security-release/{EVIDENCE_ID}",
+                    ),
+                    self.root,
+                    CHECKED_AT,
+                )
+        self.assertTrue(result.security_release)
+        self.assertTrue(result.recovery_receipt)
+        self.assertEqual("3.2.2", result.version)
+
+    def test_recovery_receipt_change_must_be_the_only_pr_path(self):
+        exact = subprocess.CompletedProcess(
+            [],
+            0,
+            b"A\0.lit/security-release-intakes/3.2.2.json\0",
+            b"",
+        )
+        extra = subprocess.CompletedProcess(
+            [],
+            0,
+            b"A\0.lit/security-release-intakes/3.2.2.json\0A\0unexpected.txt\0",
+            b"",
+        )
+        with mock.patch.object(MODULE.subprocess, "run", return_value=exact):
+            self.assertEqual(
+                "3.2.2",
+                MODULE.changed_recovery_receipt_version(self.root, "1" * 40, "2" * 40),
+            )
+        with mock.patch.object(MODULE.subprocess, "run", return_value=extra):
+            self.assertEqual(
+                "",
+                MODULE.changed_recovery_receipt_version(self.root, "1" * 40, "2" * 40),
+            )
 
     def test_main_push_classifies_metadata_or_release_prepare_only(self):
         with mock.patch.object(MODULE, "changed_security_versions", return_value=["3.2.2"]):

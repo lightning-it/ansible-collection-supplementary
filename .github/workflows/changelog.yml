@@ -41,6 +41,21 @@ jobs:
               and index("breaking-update") == null' \
               >/dev/null <<<"$LABELS_JSON"; then
             require_fragment=false
+          elif [ "$PR_AUTHOR" = "lightning-it-release-automation[bot]" ] \
+            && [ "$PR_BASE" = "main" ] \
+            && [[ "$PR_HEAD" = security-release/MLX90-* ]]; then
+            classifier_output="$(mktemp)"
+            trap 'rm -f "$classifier_output"' EXIT
+            python scripts/classify-security-release.py \
+              --event-kind pull_request \
+              --base-sha "$BASE_SHA" \
+              --head-sha "$HEAD_SHA" \
+              --base-ref "$PR_BASE" \
+              --head-ref "$PR_HEAD" \
+              --evidence-id "${PR_HEAD#security-release/}" \
+              --github-output "$classifier_output"
+            grep -Fxq "security_recovery_receipt=true" "$classifier_output"
+            require_fragment=false
           fi
 
           REQUIRE_FRAGMENT="$require_fragment" bash scripts/devtools-changelog-check.sh
