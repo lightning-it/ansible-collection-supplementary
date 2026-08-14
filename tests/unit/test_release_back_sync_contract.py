@@ -49,6 +49,8 @@ class ReleaseBackSyncContractTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         git(self.root, "init", "-q")
+        git(self.root, "config", "gc.auto", "0")
+        git(self.root, "config", "maintenance.auto", "false")
         git(self.root, "config", "user.name", "Fixture")
         git(self.root, "config", "user.email", "fixture@example.invalid")
         (self.root / "changelogs/fragments").mkdir(parents=True)

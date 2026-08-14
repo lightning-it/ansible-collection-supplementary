@@ -54,6 +54,25 @@ RELEASE_APP_IDENTITY = {
 # source range and marker binding may use the recovery event.
 RECOVERY_EVENT = "mlx90-security-release-recovery"
 RECOVERY_APPROVED_MAIN_SHA = "990be99032ac3e6f407adbe6a8d3acccf8f6804b"
+RECOVERY_FIRST_PROMOTION_SHA = "0700bfeca41737305a5e3c384fb52590f129e3af"
+RECOVERY_FOLLOW_UP_BASE_SHA = "5715bc30ac3c1654115f9391e91e971a96625af9"
+RECOVERY_FOLLOW_UP_BASE_DIFF_SHA256 = "sha256:4ad4e91c0839c5ca8d1f4185c0604f7d74e3bffb1290fdcb8225642997973b47"
+RECOVERY_FOLLOW_UP_BASE_PATHS = frozenset(
+    {
+        ".github/workflows/openssf-scorecard.yml",
+        "manifests/identity-stack.pod.yaml",
+        "meta/source-dependencies.yml",
+        "roles/forgejo_deploy/defaults/main.yml",
+        "roles/guacamole_deploy/defaults/main.yml",
+        "roles/keycloak_deploy/defaults/main.yml",
+        "roles/netbox_deploy/defaults/main.yml",
+        "roles/nexus/defaults/main.yml",
+        "roles/postgres_deploy/defaults/main.yml",
+        "roles/samba_deploy/defaults/main.yml",
+        "roles/semaphore_deploy/defaults/main.yml",
+        "tests/unit/test_release_back_sync_contract.py",
+    }
+)
 RECOVERY_CANDIDATE_BASE_SHA = "cde8e5544d8d787448ff456d51e08deb71c03880"
 RECOVERY_CANDIDATE_HEAD_SHA = "3e1423dc19465d1233196905ef3f48fd6c04f2f1"
 RECOVERY_CANDIDATE_DIFF_SHA256 = "sha256:bd72aa7a6a382ff1537e3223e65552af5ffa24588c09a5596f8e9130ba6a6f23"
@@ -79,6 +98,16 @@ RECOVERY_CONTROL_PATHS = frozenset(
         "tests/unit/test_security_release_request_dispatch.py",
     }
 )
+RECOVERY_FOLLOW_UP_CONTROL_PATHS = frozenset(
+    {
+        ".github/workflows/security-release-dispatch.yml",
+        "changelogs/fragments/security-intake-3.2.4-recovery.yml",
+        "scripts/security-release-intake.py",
+        "scripts/security_release_contract.py",
+        "tests/unit/test_security_release_request_dispatch.py",
+    }
+)
+RECOVERY_FOLLOW_UP_CONTROL_DIFF_SHA256 = "sha256:7fa3814440e5831b144e59ffae195df25689e1d127403f83016e4598d1607842"
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")

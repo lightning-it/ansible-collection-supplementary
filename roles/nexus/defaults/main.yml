@@ -30,9 +30,9 @@ nexus_api_host_header: "{{ nexus_nexus_hostname }}"
 nexus_api_delegate_to: "{{ inventory_hostname }}"
 nexus_nexus_disable_anonymous: false
 nexus_nexus_image: >-
-  docker.io/sonatype/nexus3:latest@sha256:c47083c9e77d87cd7f7c1111a68b53e758644deb54aba2235c8de1b40eebb09a
+  docker.io/sonatype/nexus3:latest@sha256:1263e77bd1e7748d3be9028ba6472cca7f534828e92d157cd0f3c13c6909b150
 nexus_caddy_image: >-
-  docker.io/caddy:2@sha256:844f60b64e4724a5aa8245e019dace0d3f199f7433ce6c57676cb30a920dbad9
+  docker.io/caddy:2@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d
 
 # Host path bind-mounted into the Nexus container at /nexus-data.
 nexus_nexus_data_dir: /srv/nexus

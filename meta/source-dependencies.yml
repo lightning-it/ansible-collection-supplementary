@@ -11,7 +11,7 @@ container_images:
   - reference: "codeberg.org/forgejo/forgejo:10@sha256:99b6c15a1bc98e623103a83a04023662a93fd035dac4f0a856d781afa9d71095"
     locations:
       - "roles/forgejo_deploy/defaults/main.yml"
-  - reference: "docker.io/caddy:2@sha256:844f60b64e4724a5aa8245e019dace0d3f199f7433ce6c57676cb30a920dbad9"
+  - reference: "docker.io/caddy:2@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d"
     locations:
       - "roles/nexus/defaults/main.yml"
   - reference: "docker.io/checkmk/check-mk-raw:2.4.0-latest@sha256:3b2662d15f996841ed18aa86a24403827746b4b6f56b931fe174c8cb85c2d91e"
@@ -45,7 +45,7 @@ container_images:
   - reference: "docker.io/library/nginx:stable@sha256:46ccc48fbb1f5a43167f2ee2c279c122b96eec5d976e7f4e1e0780f59a51b4d6"
     locations:
       - "roles/nginx_deploy/defaults/main.yml"
-  - reference: "docker.io/library/postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b"
+  - reference: "docker.io/library/postgres:16@sha256:11a9d238fbb48bab14599c57e41123254452b1a2d93c6c8595bce96f346bd082"
     locations:
       - "manifests/identity-stack.pod.yaml"
       - "roles/forgejo_deploy/defaults/main.yml"
@@ -54,7 +54,7 @@ container_images:
       - "roles/netbox_deploy/defaults/main.yml"
       - "roles/postgres_deploy/defaults/main.yml"
       - "roles/semaphore_deploy/defaults/main.yml"
-  - reference: "docker.io/netboxcommunity/netbox:v4.6-5.0.2@sha256:74d8417ebaa2bb486b8a8d39bcdc4b92f0d30373a886c5b23074d58663e764c8"
+  - reference: "docker.io/netboxcommunity/netbox:v4.6-5.0.2@sha256:c59463b79bd22dc8524a88e86382eadace92c39a3fa68805676c96f58d7f3b78"
     locations:
       - "roles/netbox_deploy/defaults/main.yml"
   - reference: "docker.io/prom/alertmanager:v0.33.1@sha256:9e082985f56f4c8c9f724e18f2288c6708f472e56a5286b8863d080434ea065d"
@@ -76,10 +76,10 @@ container_images:
   - reference: "docker.io/semaphoreui/semaphore:latest@sha256:8886d55da349f6d600f66f2c6dd2be01a3a5b4265542b04cb6c10ae47e4306d2"
     locations:
       - "roles/semaphore_deploy/defaults/main.yml"
-  - reference: "docker.io/smblds/smblds:latest@sha256:17e8dc0032712df462ab46ed4db0a06b7689865530886b46502c21c8a4bcd0df"
+  - reference: "docker.io/smblds/smblds:latest@sha256:054d363d7ea7155199df2ec1a7538a673d96beb2adce13d2b6b70546894673a5"
     locations:
       - "roles/samba_deploy/defaults/main.yml"
-  - reference: "docker.io/sonatype/nexus3:latest@sha256:c47083c9e77d87cd7f7c1111a68b53e758644deb54aba2235c8de1b40eebb09a"
+  - reference: "docker.io/sonatype/nexus3:latest@sha256:1263e77bd1e7748d3be9028ba6472cca7f534828e92d157cd0f3c13c6909b150"
     locations:
       - "roles/nexus/defaults/main.yml"
   - reference: "docker.io/tenableofficial/nessus:latest@sha256:c88e43fe1a8ca04a265f127fbfa474e80ab926d21862b6de5972a9465a91d8e6"

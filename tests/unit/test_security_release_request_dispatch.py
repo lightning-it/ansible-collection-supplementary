@@ -147,6 +147,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         *,
         mutate_marker: bool = False,
         add_receipt: bool = False,
+        follow_up: bool = False,
     ) -> dict[str, Any]:
         """Create the exact protected-promotion shape required by recovery."""
 
@@ -161,7 +162,13 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         control_path = self.root / ".github/workflows/security-release-dispatch.yml"
         control_path.parent.mkdir(parents=True, exist_ok=True)
         control_path.write_text("name: recovered controller\n", encoding="utf-8")
-        control_paths = {control_path.relative_to(self.root).as_posix()}
+        contract_path = self.root / "scripts/security_release_contract.py"
+        contract_path.parent.mkdir(parents=True, exist_ok=True)
+        contract_path.write_text('RECOVERY_EVENT = "recovery"\n', encoding="utf-8")
+        control_paths = {
+            control_path.relative_to(self.root).as_posix(),
+            contract_path.relative_to(self.root).as_posix(),
+        }
 
         metadata_path = self.root / f".lit/security-releases/{VERSION}.json"
         if mutate_marker:
@@ -194,6 +201,39 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             promotion_head,
         )
         current_main = git(self.root, "rev-parse", "HEAD")
+        first_promotion = current_main
+        follow_up_base = promotion_head
+        follow_up_base_paths: set[str] = set()
+
+        if follow_up:
+            git(self.root, "checkout", "-q", "-B", "recovery-follow-up", promotion_head)
+            regular_path = self.root / "regular-protected-change.txt"
+            regular_path.write_text("protected develop advance\n", encoding="utf-8")
+            git(self.root, "add", ".")
+            git(self.root, "commit", "-q", "-m", "advance protected develop")
+            follow_up_base = git(self.root, "rev-parse", "HEAD")
+            follow_up_base_paths.add(regular_path.relative_to(self.root).as_posix())
+            control_path.write_text("name: recovered controller with main relay\n", encoding="utf-8")
+            contract_path.write_text(
+                'RECOVERY_EVENT = "recovery"\nRECOVERY_FOLLOW_UP_CONTROL_DIFF_SHA256 = "sha256:' + ("0" * 64) + '"\n',
+                encoding="utf-8",
+            )
+            git(self.root, "add", ".")
+            git(self.root, "commit", "-q", "-m", "relay recovery through protected main")
+            promotion_head = git(self.root, "rev-parse", "HEAD")
+            git(self.root, "update-ref", "refs/remotes/origin/develop", promotion_head)
+            git(self.root, "checkout", "-q", "recovery-main")
+            git(
+                self.root,
+                "merge",
+                "-q",
+                "--no-ff",
+                "-m",
+                "promote protected recovery relay",
+                promotion_head,
+            )
+            current_main = git(self.root, "rev-parse", "HEAD")
+
         git(self.root, "update-ref", "refs/remotes/origin/main", current_main)
 
         metadata_raw = metadata_path.read_bytes()
@@ -204,6 +244,14 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             "promotion_head": promotion_head,
             "bindings": {
                 "RECOVERY_APPROVED_MAIN_SHA": approved_main,
+                "RECOVERY_FIRST_PROMOTION_SHA": first_promotion,
+                "RECOVERY_FOLLOW_UP_BASE_SHA": follow_up_base,
+                "RECOVERY_FOLLOW_UP_BASE_DIFF_SHA256": MODULE.INTAKE.sha256(
+                    MODULE.INTAKE.canonical_diff(self.root, first_promotion, follow_up_base)
+                )
+                if follow_up
+                else "sha256:" + ("0" * 64),
+                "RECOVERY_FOLLOW_UP_BASE_PATHS": frozenset(follow_up_base_paths),
                 "RECOVERY_CANDIDATE_BASE_SHA": self.base,
                 "RECOVERY_CANDIDATE_HEAD_SHA": historical_head,
                 "RECOVERY_CANDIDATE_DIFF_SHA256": MODULE.INTAKE.sha256(
@@ -218,8 +266,62 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
                 "RECOVERY_FRAGMENT_PATH": fragment_path,
                 "RECOVERY_FRAGMENT_SHA256": MODULE.INTAKE.sha256(HISTORICAL_FRAGMENT),
                 "RECOVERY_CONTROL_PATHS": frozenset(control_paths),
+                "RECOVERY_FOLLOW_UP_CONTROL_PATHS": frozenset(control_paths),
+                "RECOVERY_FOLLOW_UP_CONTROL_DIFF_SHA256": MODULE.INTAKE.sha256(
+                    MODULE.INTAKE.recovery_follow_up_control_diff(
+                        self.root,
+                        follow_up_base,
+                        promotion_head,
+                    )
+                )
+                if follow_up
+                else "sha256:" + ("0" * 64),
             },
         }
+
+    def test_recovery_accepts_single_exact_follow_up_promotion(self) -> None:
+        recovery = self.prepare_recovery_topology(follow_up=True)
+        with mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]):
+            envelope = MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+            _patch, result = MODULE.INTAKE.verify_recovery_repository(
+                self.root,
+                envelope["request"],
+                NOW,
+            )
+        self.assertIs(envelope["dispatch"], True)
+        self.assertEqual(EVIDENCE_ID, result["evidenceId"])
+        self.assertEqual(recovery["current_main"], result["baseSha"])
+
+    def test_recovery_rejects_modified_content_inside_follow_up_allowlist(self) -> None:
+        recovery = self.prepare_recovery_topology(follow_up=True)
+        git(self.root, "checkout", "-q", "-B", "tampered-follow-up", recovery["promotion_head"])
+        control_path = self.root / ".github/workflows/security-release-dispatch.yml"
+        control_path.write_text("name: tampered recovered controller\n", encoding="utf-8")
+        git(self.root, "add", ".")
+        git(self.root, "commit", "-q", "-m", "tamper allowed recovery control")
+        tampered_head = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/develop", tampered_head)
+        git(self.root, "checkout", "-q", "-B", "tampered-main", recovery["bindings"]["RECOVERY_FIRST_PROMOTION_SHA"])
+        git(self.root, "merge", "-q", "--no-ff", "-m", "promote tampered recovery", tampered_head)
+        tampered_main = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/main", tampered_main)
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "controller diff differs"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                tampered_main,
+                tampered_head,
+                NOW,
+            )
 
     def recovery_request(self, current_main: str) -> dict[str, Any]:
         contract = MODULE.INTAKE.CONTRACT
@@ -305,7 +407,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         )
         with (
             mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]),
-            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "first protected promotion"),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "follow-up promotion"),
         ):
             MODULE.build_recovery_envelope(
                 self.root,
@@ -586,8 +688,18 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("workflows: [Collection CI]", dispatch)
         self.assertIn("branches: [develop, main]", dispatch)
         self.assertIn("source_run_id:", dispatch)
+        self.assertIn("recovery_source_run_id:", dispatch)
         self.assertIn("gh workflow run security-release-dispatch.yml", dispatch)
         self.assertIn("--ref main", dispatch)
+        self.assertIn("Relay approved recovery to protected main", dispatch)
+        self.assertIn(
+            "inputs.recovery_source_run_id != ''",
+            dispatch,
+        )
+        self.assertIn(
+            '-f "recovery_source_run_id=$SOURCE_RUN_ID"',
+            dispatch,
+        )
         self.assertIn("github.actor == 'github-actions[bot]'", dispatch)
         self.assertIn("github.triggering_actor == 'github-actions[bot]'", dispatch)
         self.assertIn("github.event.workflow_run.event == 'push'", dispatch)
@@ -621,7 +733,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("Dispatch approved recovery as release App", dispatch)
         self.assertNotIn("needs.classify-recovery", dispatch)
         self.assertNotIn("steps.recovery-app", dispatch)
-        self.assertEqual(4, dispatch.count("needs['classify-recovery']"))
+        self.assertEqual(7, dispatch.count("needs['classify-recovery']"))
         self.assertGreaterEqual(dispatch.count("steps['recovery-app"), 6)
         self.assertIn("inputs:{request_json:$request_json}", dispatch)
         self.assertIn(
