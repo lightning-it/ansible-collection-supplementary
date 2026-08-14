@@ -54,8 +54,9 @@ jobs:
               --head-ref "$PR_HEAD" \
               --evidence-id "${PR_HEAD#security-release/}" \
               --github-output "$classifier_output"
-            grep -Fxq "security_recovery_receipt=true" "$classifier_output"
-            require_fragment=false
+            if grep -Fxq "security_recovery_receipt=true" "$classifier_output"; then
+              require_fragment=false
+            fi
           fi
 
           REQUIRE_FRAGMENT="$require_fragment" bash scripts/devtools-changelog-check.sh

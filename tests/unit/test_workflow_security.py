@@ -178,7 +178,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('[ "$PR_BASE" = "main" ]', changelog)
         self.assertIn('[[ "$PR_HEAD" = security-release/MLX90-* ]]', changelog)
         self.assertIn("python scripts/classify-security-release.py", changelog)
-        self.assertIn('grep -Fxq "security_recovery_receipt=true"', changelog)
+        self.assertIn('if grep -Fxq "security_recovery_receipt=true"', changelog)
         self.assertNotIn("skip-changelog", changelog)
         static_steps = [
             step
@@ -210,6 +210,74 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("contains(github.event.pull_request.labels.*.name, 'dependencies')", require_fragment)
         self.assertIn("contains(github.event.pull_request.labels.*.name, 'safe-automerge')", require_fragment)
         self.assertIn("!contains(github.event.pull_request.labels.*.name, 'breaking-update')", require_fragment)
+
+    def test_changelog_recovery_classification_preserves_normal_security_prs(self) -> None:
+        workflow = load_yaml(WORKFLOWS / "changelog.yml")
+        validate = next(
+            step
+            for step in workflow["jobs"]["changelog"]["steps"]
+            if step.get("name") == "Validate changelog policy via devtools"
+        )
+        script = validate["run"]
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            bin_root = temporary_root / "bin"
+            bin_root.mkdir()
+            python = bin_root / "python"
+            python.write_text(
+                """#!/bin/sh
+set -eu
+output=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--github-output" ]; then
+    shift
+    output="$1"
+  fi
+  shift
+done
+test -n "$output"
+printf 'security_recovery_receipt=%s\\n' "$TEST_RECOVERY_RECEIPT" >>"$output"
+""",
+                encoding="utf-8",
+            )
+            bash = bin_root / "bash"
+            bash.write_text(
+                """#!/bin/sh
+set -eu
+printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
+""",
+                encoding="utf-8",
+            )
+            python.chmod(0o700)
+            bash.chmod(0o700)
+            for classified, expected in (("false", "true"), ("true", "false")):
+                with self.subTest(classified=classified):
+                    capture = temporary_root / f"capture-{classified}"
+                    environment = os.environ.copy()
+                    environment.update(
+                        {
+                            "BASE_SHA": "1" * 40,
+                            "HEAD_SHA": "2" * 40,
+                            "LABELS_JSON": "[]",
+                            "PATH": f"{bin_root}:{environment['PATH']}",
+                            "PR_AUTHOR": "lightning-it-release-automation[bot]",
+                            "PR_BASE": "main",
+                            "PR_HEAD": "security-release/MLX90-EXACT-RECOVERY",
+                            "TEST_CAPTURE": str(capture),
+                            "TEST_RECOVERY_RECEIPT": classified,
+                        }
+                    )
+                    result = subprocess.run(  # noqa: S603
+                        ["/bin/bash", "-c", script],
+                        cwd=ROOT,
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        env=environment,
+                        timeout=30,
+                    )
+                    self.assertEqual(0, result.returncode, result.stderr)
+                    self.assertEqual(expected, capture.read_text(encoding="utf-8").strip())
 
     def test_copilot_review_is_requested_only_for_one_finalized_exact_head(self) -> None:
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
