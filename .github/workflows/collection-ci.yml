@@ -66,6 +66,7 @@ jobs:
       security-release: ${{ steps.classify.outputs.security_release }}
       security-evidence-id: ${{ steps.classify.outputs.security_evidence_id }}
       security-version: ${{ steps.classify.outputs.security_version }}
+      security-recovery-receipt: ${{ steps.classify.outputs.security_recovery_receipt }}
     steps:
       - name: Checkout exact source for classification
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
@@ -169,6 +170,7 @@ jobs:
 
   lint-sanity:
     name: Collection / Lint and Sanity
+    needs: security-classification
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -200,7 +202,8 @@ jobs:
             ${{ github.event_name == 'pull_request' &&
             toJson(github.event.pull_request.labels.*.name) || '[]' }}
           REQUIRE_FRAGMENT: >-
-            ${{ !(github.event_name == 'pull_request' &&
+            ${{ needs.security-classification.outputs.security-recovery-receipt != 'true' &&
+            !(github.event_name == 'pull_request' &&
             github.event.pull_request.user.login == 'renovate[bot]' &&
             github.event.pull_request.base.ref == 'develop' &&
             startsWith(github.event.pull_request.head.ref, 'renovate/') &&

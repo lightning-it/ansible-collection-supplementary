@@ -191,6 +191,31 @@ def candidate_diff_without_receipt(
     return value
 
 
+def is_ancestor(root: Path, ancestor: str, descendant: str) -> bool:
+    for label, value in (("ancestor", ancestor), ("descendant", descendant)):
+        if SHA.fullmatch(value) is None:
+            fail(f"{label} SHA is invalid")
+    return (
+        subprocess.run(  # noqa: S603 -- revisions are validated full commit SHAs.
+            [git_binary(), "merge-base", "--is-ancestor", ancestor, descendant],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            env=git_environment(),
+            timeout=30,
+        ).returncode
+        == 0
+    )
+
+
+def object_bytes(root: Path, commit_sha: str, path: str, label: str) -> bytes:
+    if SHA.fullmatch(commit_sha) is None:
+        fail(f"{label} commit SHA is invalid")
+    if not path or path.startswith("/") or any(part in {"", ".", ".."} for part in Path(path).parts):
+        fail(f"{label} path is invalid")
+    return git_bytes(root, "show", f"{commit_sha}:{path}")
+
+
 def load_release_version_module(base_root: Path) -> ModuleType:
     path = base_root / "scripts" / "release-version.py"
     if path.is_symlink() or not path.is_file():
@@ -252,29 +277,86 @@ def verify_intake_promotion(
         raise PromotionError(str(exc)) from exc
     request = receipt["request"]
     verified = receipt["verified"]
+    version = receipts[0][2].group(1)
     if (
         request["baseSha"] != base_sha
-        or request["candidateBaseSha"] != base_sha
         or verified["baseSha"] != base_sha
         or request["evidenceId"] != match.group(1)
         or verified["evidenceId"] != match.group(1)
         or verified["branch"] != head_ref
-        or request["fixedVersion"] != receipts[0][2].group(1)
+        or request["fixedVersion"] != version
+        or verified["fixedVersion"] != version
     ):
         fail("branch/base mismatch")
     CONTRACT.validate_request(request, CONTRACT.PRODUCER_REPOSITORY, checked_at)
-    non_receipt_paths = sorted(path for _status, path in changes if path != receipt_path)
-    if non_receipt_paths != verified["changedPaths"]:
-        fail("paths differ from the verified candidate")
-    materialized = candidate_diff_without_receipt(head_root, base_sha, head_sha, receipt_path)
-    if CONTRACT.sha256_bytes(materialized) != request["candidateDiffSha256"]:
-        fail("diff mismatch")
     require_app_commit(
         head_root,
         base_sha,
         head_sha,
         f"fix(security): {request['evidenceId']}",
     )
+
+    if CONTRACT.is_recovery_request(request):
+        if changes != [("A", receipt_path)]:
+            fail("Security recovery promotion must add only its intake receipt")
+        candidate_base = request["candidateBaseSha"]
+        candidate_head = request["candidateHeadSha"]
+        if (
+            verified["candidateBaseSha"] != candidate_base
+            or verified["candidateHeadSha"] != candidate_head
+            or verified["candidateDiffSha256"] != request["candidateDiffSha256"]
+        ):
+            fail("Security recovery candidate binding mismatch")
+        for candidate_sha, label in (
+            (candidate_base, "Security recovery candidate base"),
+            (candidate_head, "Security recovery candidate head"),
+        ):
+            if git_text(head_root, "cat-file", "-t", candidate_sha) != "commit":
+                fail(f"{label} is not a commit")
+        if not is_ancestor(head_root, candidate_base, candidate_head):
+            fail("Security recovery candidate topology mismatch")
+        if not is_ancestor(head_root, candidate_head, base_sha):
+            fail("Security recovery candidate is not on protected main")
+        historical_paths = changed_paths(head_root, candidate_base, candidate_head)
+        if sorted(path for _status, path in historical_paths) != verified["changedPaths"]:
+            fail("Security recovery paths differ from the verified candidate")
+        materialized = candidate_diff_without_receipt(
+            head_root,
+            candidate_base,
+            candidate_head,
+            receipt_path,
+        )
+        if CONTRACT.sha256_bytes(materialized) != request["candidateDiffSha256"]:
+            fail("Security recovery diff mismatch")
+        metadata_path = f".lit/security-releases/{version}.json"
+        fragment_path = verified["changelogFragmentPath"]
+        if verified["metadataPath"] != metadata_path:
+            fail("Security recovery metadata path mismatch")
+        for path, digest, label in (
+            (metadata_path, verified["metadataSha256"], "Security recovery metadata"),
+            (fragment_path, verified["changelogFragmentSha256"], "Security recovery changelog fragment"),
+        ):
+            historical = object_bytes(head_root, candidate_head, path, label)
+            protected = object_bytes(base_root, base_sha, path, label)
+            if historical != protected or CONTRACT.sha256_bytes(protected) != digest:
+                fail(f"{label} differs from the immutable candidate binding")
+        return Promotion(
+            mode="security",
+            head_ref=head_ref,
+            head_sha=head_sha,
+            chain_id=request["chainId"],
+            evidence_id=request["evidenceId"],
+            version=version,
+        )
+
+    if request["candidateBaseSha"] != base_sha:
+        fail("branch/base mismatch")
+    non_receipt_paths = sorted(path for _status, path in changes if path != receipt_path)
+    if non_receipt_paths != verified["changedPaths"]:
+        fail("paths differ from the verified candidate")
+    materialized = candidate_diff_without_receipt(head_root, base_sha, head_sha, receipt_path)
+    if CONTRACT.sha256_bytes(materialized) != request["candidateDiffSha256"]:
+        fail("diff mismatch")
     return Promotion(
         mode="security",
         head_ref=head_ref,
