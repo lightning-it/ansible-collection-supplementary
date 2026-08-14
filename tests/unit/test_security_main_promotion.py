@@ -12,6 +12,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "scripts"
@@ -224,11 +225,113 @@ class SecurityMainPromotionTests(unittest.TestCase):
             checked_at=CHECKED_AT,
         )
 
+    def _recovery_contract(self):
+        return mock.patch.multiple(
+            CONTRACT,
+            RECOVERY_CANDIDATE_BASE_SHA=self.base_sha,
+            RECOVERY_CANDIDATE_HEAD_SHA=self.candidate_sha,
+            RECOVERY_CANDIDATE_DIFF_SHA256=self.request["candidateDiffSha256"],
+            RECOVERY_METADATA_SHA256=self.request["metadataSha256"],
+            RECOVERY_EVIDENCE_ID=EVIDENCE_ID,
+            RECOVERY_FIXED_VERSION=VERSION,
+            RECOVERY_ACCEPTANCE_PROFILE=PROFILE,
+            RECOVERY_ISSUED_AT=self.request["issuedAt"],
+            RECOVERY_EXPIRES_AT=self.request["expiresAt"],
+            RECOVERY_FRAGMENT_PATH=self.verified["changelogFragmentPath"],
+            RECOVERY_FRAGMENT_SHA256=self.verified["changelogFragmentSha256"],
+        )
+
+    def _materialize_recovery(self, *, tamper_metadata: bool = False, extra_path: str = "") -> tuple[Path, str, str]:
+        git(self.root, "switch", "-q", "--detach", self.candidate_sha)
+        if tamper_metadata:
+            metadata = self.root / f".lit/security-releases/{VERSION}.json"
+            metadata.write_bytes(self.metadata_raw + b"\n")
+            git(self.root, "add", str(metadata))
+            git(self.root, "commit", "-q", "-m", "tamper protected marker")
+        recovery_base = git(self.root, "rev-parse", "HEAD")
+        request = dict(self.request)
+        request.update(
+            {
+                "event": CONTRACT.RECOVERY_EVENT,
+                "baseSha": recovery_base,
+                "chainId": CONTRACT.compute_chain_id(
+                    repository=CONTRACT.PRODUCER_REPOSITORY,
+                    repository_id=CONTRACT.PRODUCER_REPOSITORY_ID,
+                    base_sha=recovery_base,
+                    candidate_head_sha=self.candidate_sha,
+                    candidate_diff_sha256=self.request["candidateDiffSha256"],
+                    evidence_id=EVIDENCE_ID,
+                    fixed_version=VERSION,
+                    acceptance_profile=PROFILE,
+                ),
+            }
+        )
+        verified = dict(self.verified)
+        verified.update({"baseSha": recovery_base, "chainId": request["chainId"]})
+        with self._recovery_contract():
+            receipt = CONTRACT.build_intake_receipt(
+                request,
+                verified,
+                checked_at=CHECKED_AT,
+                workflow_run_id="654321",
+                workflow_attempt="1",
+                workflow_ref=(
+                    f"{CONTRACT.PRODUCER_REPOSITORY}/.github/workflows/security-release-intake.yml@refs/heads/main"
+                ),
+                workflow_event="workflow_dispatch",
+                workflow_actor=CONTRACT.RELEASE_APP_LOGIN,
+                workflow_triggering_actor=CONTRACT.RELEASE_APP_LOGIN,
+                observed_automation=CONTRACT.RELEASE_APP_IDENTITY,
+            )
+        receipt_path = self.root / f".lit/security-release-intakes/{VERSION}.json"
+        receipt_path.parent.mkdir(parents=True, exist_ok=True)
+        receipt_path.write_bytes(CONTRACT.canonical_document_bytes(receipt))
+        if extra_path:
+            unexpected = self.root / extra_path
+            unexpected.parent.mkdir(parents=True, exist_ok=True)
+            unexpected.write_text("unexpected\n", encoding="utf-8")
+        git(self.root, "config", "user.name", CONTRACT.RELEASE_APP_LOGIN)
+        git(self.root, "config", "user.email", CONTRACT.RELEASE_APP_EMAIL)
+        git(self.root, "add", ".")
+        git(self.root, "commit", "-q", "-m", f"fix(security): {EVIDENCE_ID}")
+        recovery_head = git(self.root, "rev-parse", "HEAD")
+        recovery_base_root = self.root.parent / f"{self.root.name}-recovery-base-{recovery_head[:8]}"
+        git(self.root, "worktree", "add", "-q", "--detach", str(recovery_base_root), recovery_base)
+        return recovery_base_root, recovery_base, recovery_head
+
+    def verify_recovery(self, *, tamper_metadata: bool = False, extra_path: str = "") -> PROMOTION.Promotion:
+        base_root, base_sha, head_sha = self._materialize_recovery(
+            tamper_metadata=tamper_metadata,
+            extra_path=extra_path,
+        )
+        with self._recovery_contract():
+            return PROMOTION.verify_promotion(
+                base_root=base_root,
+                head_root=self.root,
+                base_sha=base_sha,
+                head_sha=head_sha,
+                head_ref=f"security-release/{EVIDENCE_ID}",
+                checked_at=CHECKED_AT,
+            )
+
     def test_exact_materialized_candidate_and_receipt_are_accepted(self) -> None:
         result = self.verify()
         self.assertEqual("security", result.mode)
         self.assertEqual(self.request["chainId"], result.chain_id)
         self.assertEqual(VERSION, result.version)
+
+    def test_exact_recovery_receipt_on_protected_candidate_is_accepted(self) -> None:
+        result = self.verify_recovery()
+        self.assertEqual("security", result.mode)
+        self.assertEqual(VERSION, result.version)
+
+    def test_recovery_receipt_with_any_extra_path_is_rejected(self) -> None:
+        with self.assertRaisesRegex(PROMOTION.PromotionError, "must add only its intake receipt"):
+            self.verify_recovery(extra_path="unexpected.txt")
+
+    def test_recovery_rejects_marker_changed_after_historical_candidate(self) -> None:
+        with self.assertRaisesRegex(PROMOTION.PromotionError, "immutable candidate binding"):
+            self.verify_recovery(tamper_metadata=True)
 
     def test_extra_materialized_path_is_rejected(self) -> None:
         head = self._materialize_head(extra_path="unexpected.txt")
