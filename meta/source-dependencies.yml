@@ -11,7 +11,7 @@ container_images:
   - reference: "codeberg.org/forgejo/forgejo:10@sha256:99b6c15a1bc98e623103a83a04023662a93fd035dac4f0a856d781afa9d71095"
     locations:
       - "roles/forgejo_deploy/defaults/main.yml"
-  - reference: "docker.io/caddy:2@sha256:844f60b64e4724a5aa8245e019dace0d3f199f7433ce6c57676cb30a920dbad9"
+  - reference: "docker.io/caddy:2@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d"
     locations:
       - "roles/nexus/defaults/main.yml"
   - reference: "docker.io/checkmk/check-mk-raw:2.4.0-latest@sha256:3b2662d15f996841ed18aa86a24403827746b4b6f56b931fe174c8cb85c2d91e"
