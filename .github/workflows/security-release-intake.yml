@@ -510,7 +510,114 @@ jobs:
             [[ "$remote_sha" =~ ^[0-9a-f]{40}$ ]]
             authenticated_git fetch --no-tags origin \
               "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
-            head_sha="$remote_sha"
+            remote_tree="$(git show -s --format=%T "$remote_sha")"
+            remote_parents="$(git show -s --format=%P "$remote_sha")"
+            if [ "$remote_tree" = "$tree_sha" ] \
+              && [ "$remote_parents" = "$BASE_SHA" ]; then
+              head_sha="$remote_sha"
+            else
+              test "$REQUEST_EVENT" = mlx90-security-release-recovery
+              [[ "$remote_parents" =~ ^[0-9a-f]{40}$ ]]
+              previous_base="$remote_parents"
+              test "$previous_base" != "$BASE_SHA"
+              git merge-base --is-ancestor "$previous_base" "$BASE_SHA"
+
+              existing_pulls="$(GH_TOKEN="$APP_TOKEN" gh api --method GET \
+                "repos/${GITHUB_REPOSITORY}/pulls" \
+                -f state=open -f base=main \
+                -f "head=${GITHUB_REPOSITORY_OWNER}:${BRANCH}" -f per_page=100)"
+              test "$(jq 'length' <<<"$existing_pulls")" -eq 1
+              jq -e \
+                --arg base "$BASE_SHA" \
+                --arg branch "$BRANCH" \
+                --arg head "$remote_sha" \
+                --arg repo "$GITHUB_REPOSITORY" '
+                  .[0].user.login == "lightning-it-release-automation[bot]"
+                  and .[0].user.id == 307565056
+                  and .[0].user.type == "Bot"
+                  and .[0].base.ref == "main"
+                  and .[0].base.sha == $base
+                  and .[0].head.ref == $branch
+                  and .[0].head.sha == $head
+                  and .[0].head.repo.full_name == $repo
+                  and .[0].state == "open"
+                  and .[0].draft == false
+                ' <<<"$existing_pulls" >/dev/null
+              existing_pr_number="$(jq -er '.[0].number' <<<"$existing_pulls")"
+              [[ "$existing_pr_number" =~ ^[1-9][0-9]*$ ]]
+
+              previous_base_root="$RUNNER_TEMP/security-intake-previous-base"
+              previous_head_root="$RUNNER_TEMP/security-intake-previous-head"
+              test ! -e "$previous_base_root"
+              test ! -e "$previous_head_root"
+              git worktree add --detach "$previous_base_root" "$previous_base"
+              git worktree add --detach "$previous_head_root" "$remote_sha"
+              python3 scripts/security_main_promotion.py \
+                --base-root "$previous_base_root" \
+                --head-root "$previous_head_root" \
+                --base-sha "$previous_base" \
+                --head-sha "$remote_sha" \
+                --head-ref "$BRANCH" >/dev/null
+
+              git commit -m "fix(security): ${EVIDENCE_ID}"
+              head_sha="$(git rev-parse HEAD)"
+              authenticated_git fetch --no-tags origin main develop
+              test "$(git rev-parse origin/main)" = "$BASE_SHA"
+              git merge-base --is-ancestor "$CANDIDATE_HEAD_SHA" origin/develop
+              live_refresh_pull="$(GH_TOKEN="$APP_TOKEN" gh api \
+                "repos/${GITHUB_REPOSITORY}/pulls/${existing_pr_number}")"
+              jq -e \
+                --arg base "$BASE_SHA" \
+                --arg branch "$BRANCH" \
+                --arg head "$remote_sha" \
+                --arg repo "$GITHUB_REPOSITORY" '
+                  .user.login == "lightning-it-release-automation[bot]"
+                  and .user.id == 307565056
+                  and .user.type == "Bot"
+                  and .base.ref == "main"
+                  and .base.sha == $base
+                  and .head.ref == $branch
+                  and .head.sha == $head
+                  and .head.repo.full_name == $repo
+                  and .state == "open"
+                  and .draft == false
+                ' <<<"$live_refresh_pull" >/dev/null
+              if jq -e '.auto_merge != null' \
+                <<<"$live_refresh_pull" >/dev/null; then
+                jq -e '
+                  .auto_merge.merge_method == "merge"
+                  and .auto_merge.enabled_by.login ==
+                    "lightning-it-release-automation[bot]"
+                  and .auto_merge.enabled_by.id == 307565056
+                  and .auto_merge.enabled_by.type == "Bot"
+                ' <<<"$live_refresh_pull" >/dev/null
+                GH_TOKEN="$APP_TOKEN" gh pr merge "$existing_pr_number" \
+                  --repo "$GITHUB_REPOSITORY" --disable-auto \
+                  --match-head-commit "$remote_sha"
+              fi
+              live_refresh_pull="$(GH_TOKEN="$APP_TOKEN" gh api \
+                "repos/${GITHUB_REPOSITORY}/pulls/${existing_pr_number}")"
+              jq -e \
+                --arg base "$BASE_SHA" \
+                --arg branch "$BRANCH" \
+                --arg head "$remote_sha" \
+                --arg repo "$GITHUB_REPOSITORY" '
+                  .user.login == "lightning-it-release-automation[bot]"
+                  and .user.id == 307565056
+                  and .user.type == "Bot"
+                  and .base.ref == "main"
+                  and .base.sha == $base
+                  and .head.ref == $branch
+                  and .head.sha == $head
+                  and .head.repo.full_name == $repo
+                  and .state == "open"
+                  and .draft == false
+                  and .auto_merge == null
+                ' <<<"$live_refresh_pull" >/dev/null
+              authenticated_git push \
+                --force-with-lease="refs/heads/${BRANCH}:${remote_sha}" \
+                origin "${head_sha}:refs/heads/${BRANCH}"
+            fi
           else
             git commit -m "fix(security): ${EVIDENCE_ID}"
             head_sha="$(git rev-parse HEAD)"

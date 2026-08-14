@@ -878,14 +878,49 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         )
         self.assertIn('test "$(git show -s --format=%P "$head_sha")" = "$BASE_SHA"', intake)
         self.assertIn('test "$(git show -s --format=%T "$head_sha")" = "$tree_sha"', intake)
+        self.assertIn('test "$REQUEST_EVENT" = mlx90-security-release-recovery', intake)
+        self.assertIn('test "$previous_base" != "$BASE_SHA"', intake)
+        self.assertIn(
+            'git merge-base --is-ancestor "$previous_base" "$BASE_SHA"',
+            intake,
+        )
+        self.assertIn("python3 scripts/security_main_promotion.py", intake)
+        self.assertIn(
+            '--force-with-lease="refs/heads/${BRANCH}:${remote_sha}"',
+            intake,
+        )
+        self.assertIn("and .[0].user.id == 307565056", intake)
+        self.assertIn("and .[0].base.sha == $base", intake)
+        self.assertIn("and .[0].head.sha == $head", intake)
+        self.assertIn(
+            "existing_pr_number=\"$(jq -er '.[0].number'",
+            intake,
+        )
+        self.assertIn("pulls/${existing_pr_number}", intake)
+        self.assertIn('and .state == "open"', intake)
         self.assertIn(".user.id == 307565056", intake)
+        self.assertIn(".auto_merge != null", intake)
+        disable_start = intake.index('GH_TOKEN="$APP_TOKEN" gh pr merge "$existing_pr_number"')
+        disable_flow = intake[disable_start : intake.index("authenticated_git push", disable_start)]
+        self.assertIn("--disable-auto", disable_flow)
+        self.assertIn('--match-head-commit "$remote_sha"', disable_flow)
+        self.assertIn("and .auto_merge == null", intake)
+        self.assertLess(
+            intake.index("--disable-auto"),
+            intake.index('--force-with-lease="refs/heads/${BRANCH}:${remote_sha}"'),
+        )
+        self.assertLess(
+            intake.index("and .auto_merge == null"),
+            intake.index('--force-with-lease="refs/heads/${BRANCH}:${remote_sha}"'),
+        )
         self.assertIn("--auto --merge --match-head-commit", intake)
         self.assertIn('.auto_merge.merge_method == "merge"', intake)
         self.assertIn(".merged_by.id == 307565056", intake)
         self.assertIn('test "$first_parent" = "$BASE_SHA"', intake)
         self.assertIn('test "$second_parent" = "$HEAD_SHA"', intake)
         self.assertNotIn("--admin", intake)
-        self.assertNotIn("--force", intake)
+        self.assertNotIn("git push --force ", intake)
+        self.assertNotIn("authenticated_git push --force origin", intake)
 
 
 if __name__ == "__main__":
