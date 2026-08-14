@@ -148,6 +148,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         mutate_marker: bool = False,
         add_receipt: bool = False,
         follow_up: bool = False,
+        terminal: bool = False,
     ) -> dict[str, Any]:
         """Create the exact protected-promotion shape required by recovery."""
 
@@ -204,6 +205,9 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         first_promotion = current_main
         follow_up_base = promotion_head
         follow_up_base_paths: set[str] = set()
+        terminal_main_base = current_main
+        terminal_develop_base = promotion_head
+        terminal_control_paths = set(control_paths)
 
         if follow_up:
             git(self.root, "checkout", "-q", "-B", "recovery-follow-up", promotion_head)
@@ -230,6 +234,42 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
                 "--no-ff",
                 "-m",
                 "promote protected recovery relay",
+                promotion_head,
+            )
+            current_main = git(self.root, "rev-parse", "HEAD")
+
+        if terminal:
+            if not follow_up:
+                raise ValueError("terminal recovery topology requires the first follow-up")
+            terminal_main_base = current_main
+            git(self.root, "checkout", "-q", "-B", "recovery-terminal-base", promotion_head)
+            git(
+                self.root,
+                "merge",
+                "-q",
+                "--no-ff",
+                "-m",
+                "back-sync terminal recovery base",
+                terminal_main_base,
+            )
+            terminal_develop_base = git(self.root, "rev-parse", "HEAD")
+            control_path.write_text("name: terminal recovered controller\n", encoding="utf-8")
+            contract_path.write_text(
+                'RECOVERY_EVENT = "recovery"\nRECOVERY_TERMINAL_CONTROL_DIFF_SHA256 = "sha256:' + ("0" * 64) + '"\n',
+                encoding="utf-8",
+            )
+            git(self.root, "add", ".")
+            git(self.root, "commit", "-q", "-m", "bind terminal recovery controller")
+            promotion_head = git(self.root, "rev-parse", "HEAD")
+            git(self.root, "update-ref", "refs/remotes/origin/develop", promotion_head)
+            git(self.root, "checkout", "-q", "recovery-main")
+            git(
+                self.root,
+                "merge",
+                "-q",
+                "--no-ff",
+                "-m",
+                "promote terminal recovery controller",
                 promotion_head,
             )
             current_main = git(self.root, "rev-parse", "HEAD")
@@ -276,8 +316,71 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
                 )
                 if follow_up
                 else "sha256:" + ("0" * 64),
+                "RECOVERY_TERMINAL_MAIN_BASE_SHA": terminal_main_base,
+                "RECOVERY_TERMINAL_DEVELOP_BASE_SHA": terminal_develop_base,
+                "RECOVERY_TERMINAL_CONTROL_PATHS": frozenset(terminal_control_paths),
+                "RECOVERY_TERMINAL_CONTROL_DIFF_SHA256": MODULE.INTAKE.sha256(
+                    MODULE.INTAKE.recovery_terminal_control_diff(
+                        self.root,
+                        terminal_develop_base,
+                        promotion_head,
+                    )
+                )
+                if terminal
+                else "sha256:" + ("0" * 64),
             },
         }
+
+    def test_recovery_accepts_exact_terminal_promotion(self) -> None:
+        recovery = self.prepare_recovery_topology(follow_up=True, terminal=True)
+        with mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]):
+            envelope = MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+            _patch, result = MODULE.INTAKE.verify_recovery_repository(
+                self.root,
+                envelope["request"],
+                NOW,
+            )
+        self.assertIs(envelope["dispatch"], True)
+        self.assertEqual(EVIDENCE_ID, result["evidenceId"])
+        self.assertEqual(recovery["current_main"], result["baseSha"])
+
+    def test_recovery_rejects_modified_terminal_allowlisted_content(self) -> None:
+        recovery = self.prepare_recovery_topology(follow_up=True, terminal=True)
+        git(self.root, "checkout", "-q", "-B", "tampered-terminal", recovery["promotion_head"])
+        control_path = self.root / ".github/workflows/security-release-dispatch.yml"
+        control_path.write_text("name: tampered terminal controller\n", encoding="utf-8")
+        git(self.root, "add", ".")
+        git(self.root, "commit", "-q", "-m", "tamper terminal recovery control")
+        tampered_head = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/develop", tampered_head)
+        git(
+            self.root,
+            "checkout",
+            "-q",
+            "-B",
+            "tampered-terminal-main",
+            recovery["bindings"]["RECOVERY_TERMINAL_MAIN_BASE_SHA"],
+        )
+        git(self.root, "merge", "-q", "--no-ff", "-m", "promote tampered terminal", tampered_head)
+        tampered_main = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/main", tampered_main)
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "terminal controller diff differs"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                tampered_main,
+                tampered_head,
+                NOW,
+            )
 
     def test_recovery_accepts_single_exact_follow_up_promotion(self) -> None:
         recovery = self.prepare_recovery_topology(follow_up=True)
@@ -407,7 +510,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         )
         with (
             mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]),
-            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "follow-up promotion"),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "exact approved recovery promotion"),
         ):
             MODULE.build_recovery_envelope(
                 self.root,

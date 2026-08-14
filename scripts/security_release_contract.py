@@ -108,6 +108,21 @@ RECOVERY_FOLLOW_UP_CONTROL_PATHS = frozenset(
     }
 )
 RECOVERY_FOLLOW_UP_CONTROL_DIFF_SHA256 = "sha256:7fa3814440e5831b144e59ffae195df25689e1d127403f83016e4598d1607842"
+# Terminal fail-closed promotion for the final receipt-branch refresh controller.
+# The protected main/develop bases are immutable Git objects. The promoted
+# develop tree may change only the exact paths below and must match the
+# canonical, self-neutralized diff digest.
+RECOVERY_TERMINAL_MAIN_BASE_SHA = "2ccd90a5fbf708498f8dbf6f51bb5ce4b165c8c4"
+RECOVERY_TERMINAL_DEVELOP_BASE_SHA = "87f486c7379a0982ce4e228dea4d0977b2bc14d4"
+RECOVERY_TERMINAL_CONTROL_PATHS = frozenset(
+    {
+        "changelogs/fragments/security-recovery-terminal-promotion.yml",
+        "scripts/security-release-intake.py",
+        "scripts/security_release_contract.py",
+        "tests/unit/test_security_release_request_dispatch.py",
+    }
+)
+RECOVERY_TERMINAL_CONTROL_DIFF_SHA256 = "sha256:6e6c2d81c1a0139c79457172bdc659fdab4b3724e7c1afea1f2576154466cf1f"
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
