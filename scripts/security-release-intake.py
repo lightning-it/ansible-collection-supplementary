@@ -266,6 +266,17 @@ def recovery_terminal_control_diff(root: Path, base_sha: str, head_sha: str) -> 
     )
 
 
+def recovery_receipt_refresh_control_diff(root: Path, base_sha: str, head_sha: str) -> bytes:
+    """Canonicalize the exact receipt-refresh recovery-control diff."""
+
+    return recovery_control_diff(
+        root,
+        base_sha,
+        head_sha,
+        b"RECOVERY_RECEIPT_REFRESH_CONTROL_DIFF_SHA256",
+    )
+
+
 def show_json(root: Path, sha: str, path: str, label: str) -> dict[str, Any]:
     return load_json_bytes(git_bytes(root, "show", f"{sha}:{path}"), label)
 
@@ -376,6 +387,8 @@ def verify_recovery_repository(
         CONTRACT.RECOVERY_FOLLOW_UP_BASE_SHA,
         CONTRACT.RECOVERY_TERMINAL_MAIN_BASE_SHA,
         CONTRACT.RECOVERY_TERMINAL_DEVELOP_BASE_SHA,
+        CONTRACT.RECOVERY_RECEIPT_REFRESH_MAIN_BASE_SHA,
+        CONTRACT.RECOVERY_RECEIPT_REFRESH_DEVELOP_BASE_SHA,
         CONTRACT.RECOVERY_CANDIDATE_BASE_SHA,
         CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
     ):
@@ -414,6 +427,7 @@ def verify_recovery_repository(
 
     parents = git_text(root, "show", "-s", "--format=%P", live_main).split()
     terminal_promotion = False
+    receipt_refresh_promotion = False
     if live_main == CONTRACT.RECOVERY_FIRST_PROMOTION_SHA:
         parents = first_parents
         control_base = CONTRACT.RECOVERY_APPROVED_MAIN_SHA
@@ -464,6 +478,30 @@ def verify_recovery_repository(
             fail("Security recovery terminal promotion does not descend from its exact develop base")
         control_base = CONTRACT.RECOVERY_TERMINAL_DEVELOP_BASE_SHA
         expected_control_paths = CONTRACT.RECOVERY_TERMINAL_CONTROL_PATHS
+    elif len(parents) == 2 and parents[0] == CONTRACT.RECOVERY_RECEIPT_REFRESH_MAIN_BASE_SHA:
+        receipt_refresh_promotion = True
+        refresh_main_tree = git_text(
+            root,
+            "show",
+            "-s",
+            "--format=%T",
+            CONTRACT.RECOVERY_RECEIPT_REFRESH_MAIN_BASE_SHA,
+        ).strip()
+        refresh_develop_tree = git_text(
+            root,
+            "show",
+            "-s",
+            "--format=%T",
+            CONTRACT.RECOVERY_RECEIPT_REFRESH_DEVELOP_BASE_SHA,
+        ).strip()
+        if refresh_main_tree != refresh_develop_tree:
+            fail("Security recovery receipt-refresh bases do not bind the same protected tree")
+        if not git_is_ancestor(root, CONTRACT.RECOVERY_RECEIPT_REFRESH_MAIN_BASE_SHA, live_main):
+            fail("Security recovery receipt-refresh promotion does not descend from its exact main base")
+        if not git_is_ancestor(root, CONTRACT.RECOVERY_RECEIPT_REFRESH_DEVELOP_BASE_SHA, parents[1]):
+            fail("Security recovery receipt-refresh promotion does not descend from its exact develop base")
+        control_base = CONTRACT.RECOVERY_RECEIPT_REFRESH_DEVELOP_BASE_SHA
+        expected_control_paths = CONTRACT.RECOVERY_RECEIPT_REFRESH_CONTROL_PATHS
     else:
         fail("Security recovery controller is not an exact approved recovery promotion")
     if not git_is_ancestor(root, parents[1], live_develop):
@@ -479,7 +517,11 @@ def verify_recovery_repository(
         fail("Security recovery controls must not delete repository content")
     if control_paths != expected_control_paths:
         fail("Security recovery controller changes paths outside the exact approved allowlist")
-    if terminal_promotion:
+    if receipt_refresh_promotion:
+        control_patch = recovery_receipt_refresh_control_diff(root, control_base, parents[1])
+        if sha256(control_patch) != CONTRACT.RECOVERY_RECEIPT_REFRESH_CONTROL_DIFF_SHA256:
+            fail("Security recovery receipt-refresh controller diff differs from its approved binding")
+    elif terminal_promotion:
         control_patch = recovery_terminal_control_diff(root, control_base, parents[1])
         if sha256(control_patch) != CONTRACT.RECOVERY_TERMINAL_CONTROL_DIFF_SHA256:
             fail("Security recovery terminal controller diff differs from its approved binding")
