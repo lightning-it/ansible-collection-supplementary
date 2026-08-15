@@ -610,6 +610,7 @@ jobs:
 
           receipt=changelogs/release-preparation.json
           expected_version="$(jq -er '.next_version' "$receipt")"
+          release_mode="$(jq -er '.release_mode' "$receipt")"
           released_version="$(python - <<'PY'
           from pathlib import Path
           import yaml
@@ -648,11 +649,27 @@ jobs:
             fi
           done < <(jq -c '.fragments[]' "$receipt")
 
+          version_args=()
+          case "$release_mode" in
+            security)
+              version_args=(
+                --security-target-version "$expected_version"
+                --root "$base_tree"
+              )
+              ;;
+            normal)
+              version_args=(--requested-version "$expected_version")
+              ;;
+            *)
+              echo "Unsupported preparation release mode: $release_mode" >&2
+              exit 1
+              ;;
+          esac
           recomputed="$(
             python "$base_tree/scripts/release-version.py" \
               --galaxy "$base_tree/galaxy.yml" \
               --fragments "$base_tree/changelogs/fragments" \
-              --requested-version "$expected_version"
+              "${version_args[@]}"
           )"
           jq -e --argjson recomputed "$recomputed" '
             .current_version == $recomputed.current_version

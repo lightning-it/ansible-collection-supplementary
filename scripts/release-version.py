@@ -125,14 +125,9 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return payload
 
 
-def derive_impact(fragments_root: Path) -> tuple[str, list[str]]:
-    if not fragments_root.is_dir() or fragments_root.is_symlink():
-        raise VersionError(f"unsafe changelog fragment directory: {fragments_root}")
-    candidates = sorted(path for path in fragments_root.iterdir() if path.suffix.lower() in {".yml", ".yaml"})
-    unsafe = [path for path in candidates if path.is_symlink() or not path.is_file()]
-    if unsafe:
-        raise VersionError(f"unsafe changelog fragment: {unsafe[0]}")
-    paths = candidates
+def _derive_impact_from_paths(paths: list[Path]) -> tuple[str, list[str]]:
+    """Derive reviewed impact from an already bounded fragment set."""
+
     if len(paths) > 256:
         raise VersionError("more than 256 changelog fragments require an explicit split release")
     if not paths:
@@ -160,6 +155,16 @@ def derive_impact(fragments_root: Path) -> tuple[str, list[str]]:
     raise VersionError("changelog fragments have no explicit semantic-version impact category")
 
 
+def derive_impact(fragments_root: Path) -> tuple[str, list[str]]:
+    if not fragments_root.is_dir() or fragments_root.is_symlink():
+        raise VersionError(f"unsafe changelog fragment directory: {fragments_root}")
+    candidates = sorted(path for path in fragments_root.iterdir() if path.suffix.lower() in {".yml", ".yaml"})
+    unsafe = [path for path in candidates if path.is_symlink() or not path.is_file()]
+    if unsafe:
+        raise VersionError(f"unsafe changelog fragment: {unsafe[0]}")
+    return _derive_impact_from_paths(candidates)
+
+
 def _fragment_digests(fragments_root: Path, names: list[str]) -> list[dict[str, str]]:
     return [
         {
@@ -181,7 +186,15 @@ def next_version(current: tuple[int, int, int], impact: str) -> tuple[int, int, 
     raise VersionError(f"unsupported release impact: {impact}")
 
 
-def resolve_version(galaxy_path: Path, fragments_root: Path, requested: str = "") -> dict[str, Any]:
+def resolve_version(
+    galaxy_path: Path,
+    fragments_root: Path,
+    requested: str = "",
+    *,
+    security_target: str = "",
+    root: Path | None = None,
+    checked_at: datetime | None = None,
+) -> dict[str, Any]:
     if galaxy_path.is_symlink() or not galaxy_path.is_file() or galaxy_path.stat().st_size > MAX_FRAGMENT_BYTES:
         raise VersionError(f"unsafe collection metadata: {galaxy_path}")
     try:
@@ -197,9 +210,50 @@ def resolve_version(galaxy_path: Path, fragments_root: Path, requested: str = ""
     if not isinstance(galaxy, dict):
         raise VersionError("galaxy.yml must be a mapping")
     current = parse_stable_version(galaxy.get("version"), label="galaxy.yml version")
-    impact, fragments = derive_impact(fragments_root)
+    current_version = ".".join(map(str, current))
+    if requested and security_target:
+        raise VersionError("normal requested version and Security target are mutually exclusive")
+    if security_target:
+        selected_security_version = ".".join(
+            map(str, parse_stable_version(security_target, label="Security target version"))
+        )
+        root = (root or galaxy_path.parent).resolve()
+        checked_at = checked_at or datetime.now(UTC)
+        try:
+            binding = CONTRACT.load_release_security_binding(
+                root,
+                current_version,
+                selected_security_version,
+                checked_at=checked_at,
+            )
+        except (OSError, CONTRACT.ContractError) as error:
+            raise VersionError(str(error)) from error
+        if binding is None:
+            raise VersionError("Security target has no complete immutable intake binding")
+        bound_fragment = root / str(binding["changelog_fragment_path"])
+        try:
+            fragments_directory = fragments_root.resolve(strict=True)
+            bound_parent = bound_fragment.parent.resolve(strict=True)
+        except OSError as error:
+            raise VersionError(f"cannot resolve Security changelog fragment: {error}") from error
+        if bound_parent != fragments_directory:
+            raise VersionError("Security changelog fragment is outside the configured fragment directory")
+        if bound_fragment.suffix.lower() not in {".yml", ".yaml"}:
+            raise VersionError("Security changelog fragment must use a .yml or .yaml extension")
+        impact, fragments = _derive_impact_from_paths([bound_fragment])
+        if impact != "patch":
+            raise VersionError("Security release fragment must resolve to patch impact")
+    else:
+        impact, fragments = derive_impact(fragments_root)
     expected = next_version(current, impact)
-    if requested:
+    if security_target:
+        selected = parse_stable_version(security_target, label="Security target version")
+        if selected != expected:
+            raise VersionError(
+                f"Security target {security_target} does not equal the reviewed patch release "
+                f"{'.'.join(map(str, expected))}"
+            )
+    elif requested:
         selected = parse_stable_version(requested, label="requested version")
         if selected != expected:
             raise VersionError(
@@ -444,6 +498,7 @@ def main() -> int:
     parser.add_argument("--galaxy", type=Path, default=Path("galaxy.yml"))
     parser.add_argument("--fragments", type=Path, default=Path("changelogs/fragments"))
     parser.add_argument("--requested-version", default="")
+    parser.add_argument("--security-target-version", default="")
     parser.add_argument("--write-preparation-receipt", type=Path)
     parser.add_argument("--verify-preparation-receipt", type=Path)
     parser.add_argument("--repository", default="")
@@ -475,7 +530,14 @@ def main() -> int:
             )
             print(json.dumps(receipt, sort_keys=True, separators=(",", ":")))
             return 0
-        payload = resolve_version(args.galaxy, args.fragments, args.requested_version)
+        payload = resolve_version(
+            args.galaxy,
+            args.fragments,
+            args.requested_version,
+            security_target=args.security_target_version,
+            root=args.root,
+            checked_at=checked_at,
+        )
         if args.write_preparation_receipt:
             receipt = build_preparation_receipt(
                 payload,

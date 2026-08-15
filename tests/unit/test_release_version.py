@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "release-version.py"
@@ -390,6 +391,111 @@ class ReleaseVersionTests(unittest.TestCase):
                 root=root,
                 checked_at=checked_at,
             )
+
+    def test_security_target_selects_only_bound_patch_fragment(self) -> None:
+        root = Path(self.temporary.name)
+        galaxy = root / "galaxy.yml"
+        galaxy.write_text(
+            "---\nnamespace: lit\nname: supplementary\nversion: 3.2.3\n",
+            encoding="utf-8",
+        )
+        _intake, checked_at = self._security_contract(root)
+        fragments = root / "changelogs/fragments"
+        future_fragment = fragments / "future-feature.yml"
+        future_fragment.write_text(
+            "---\nminor_changes:\n  - Reviewed future feature.\n",
+            encoding="utf-8",
+        )
+
+        normal = VERSION.resolve_version(galaxy, fragments)
+        self.assertEqual("3.3.0", normal["version"])
+        resolution = VERSION.resolve_version(
+            galaxy,
+            fragments,
+            security_target="3.2.4",
+            root=root,
+            checked_at=checked_at,
+        )
+        self.assertEqual("patch", resolution["impact"])
+        self.assertEqual("3.2.4", resolution["version"])
+        self.assertEqual(["keycloak-security.yml"], resolution["fragments"])
+        self.assertEqual(
+            ["keycloak-security.yml"],
+            [fragment["path"] for fragment in resolution["fragment_sha256"]],
+        )
+
+        receipt = VERSION.build_preparation_receipt(
+            resolution,
+            repository=VERSION.CONTRACT.PRODUCER_REPOSITORY,
+            repository_id=VERSION.CONTRACT.PRODUCER_REPOSITORY_ID,
+            base_sha="d" * 40,
+            workflow_run_id="98765",
+            workflow_attempt="1",
+            workflow_ref=(
+                f"{VERSION.CONTRACT.PRODUCER_REPOSITORY}/.github/workflows/release-prepare.yml@refs/heads/main"
+            ),
+            workflow_event="push",
+            workflow_actor=VERSION.CONTRACT.RELEASE_APP_LOGIN,
+            root=root,
+            checked_at=checked_at,
+        )
+        self.assertEqual(["keycloak-security.yml"], [fragment["path"] for fragment in receipt["fragments"]])
+        self.assertTrue(future_fragment.is_file())
+
+    def test_security_target_rejects_normal_requested_version_and_non_patch_target(self) -> None:
+        root = Path(self.temporary.name)
+        galaxy = root / "galaxy.yml"
+        galaxy.write_text(
+            "---\nnamespace: lit\nname: supplementary\nversion: 3.2.3\n",
+            encoding="utf-8",
+        )
+        _intake, checked_at = self._security_contract(root)
+        fragments = root / "changelogs/fragments"
+        with self.assertRaisesRegex(VERSION.VersionError, "mutually exclusive"):
+            VERSION.resolve_version(
+                galaxy,
+                fragments,
+                "3.2.4",
+                security_target="3.2.4",
+                root=root,
+                checked_at=checked_at,
+            )
+        with self.assertRaisesRegex(VERSION.VersionError, "does not match"):
+            VERSION.resolve_version(
+                galaxy,
+                fragments,
+                security_target="3.2.5",
+                root=root,
+                checked_at=checked_at,
+            )
+
+    def test_security_target_rejects_non_yaml_bound_fragment(self) -> None:
+        root = Path(self.temporary.name)
+        galaxy = root / "galaxy.yml"
+        galaxy.write_text(
+            "---\nnamespace: lit\nname: supplementary\nversion: 3.2.3\n",
+            encoding="utf-8",
+        )
+        _intake, checked_at = self._security_contract(root)
+        fragments = root / "changelogs/fragments"
+        unsafe_fragment = fragments / "keycloak-security.txt"
+        unsafe_fragment.write_text(
+            "---\nsecurity_fixes:\n  - Keycloak fix.\n",
+            encoding="utf-8",
+        )
+        with mock.patch.object(
+            VERSION.CONTRACT,
+            "load_release_security_binding",
+            return_value={"changelog_fragment_path": "changelogs/fragments/keycloak-security.txt"},
+        ):
+            with self.assertRaisesRegex(VERSION.VersionError, r"\.yml or \.yaml extension"):
+                VERSION.resolve_version(
+                    galaxy,
+                    fragments,
+                    security_target="3.2.4",
+                    root=root,
+                    checked_at=checked_at,
+                )
 
     def test_manual_version_must_equal_reviewed_impact(self) -> None:
         galaxy, fragments = self._fixture("major_changes")
