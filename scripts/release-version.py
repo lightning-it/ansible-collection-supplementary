@@ -236,8 +236,10 @@ def resolve_version(
             bound_parent = bound_fragment.parent.resolve(strict=True)
         except OSError as error:
             raise VersionError(f"cannot resolve Security changelog fragment: {error}") from error
-        if bound_parent != fragments_directory or bound_fragment.name != Path(bound_fragment.name).name:
+        if bound_parent != fragments_directory:
             raise VersionError("Security changelog fragment is outside the configured fragment directory")
+        if bound_fragment.suffix.lower() not in {".yml", ".yaml"}:
+            raise VersionError("Security changelog fragment must use a .yml or .yaml extension")
         impact, fragments = _derive_impact_from_paths([bound_fragment])
         if impact != "patch":
             raise VersionError("Security release fragment must resolve to patch impact")

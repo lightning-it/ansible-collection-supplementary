@@ -163,7 +163,7 @@ RECOVERY_RELEASE_PREP_CONTROL_PATHS = frozenset(
         "tests/unit/test_workflow_security.py",
     }
 )
-RECOVERY_RELEASE_PREP_CONTROL_DIFF_SHA256 = "sha256:5b7961562ddbf319c6a6e8630bc7227c04b4e8b5d8a1b388e708df3cb22d7a27"
+RECOVERY_RELEASE_PREP_CONTROL_DIFF_SHA256 = "sha256:1b396f7d2341b267bd6373630221f179a997343038320db233096c8ccae20373"
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
