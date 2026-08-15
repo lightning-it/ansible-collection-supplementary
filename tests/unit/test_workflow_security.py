@@ -1113,14 +1113,13 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             'python "$base_tree/scripts/release-version.py"',
             copilot,
         )
-        release_setup = copilot.split(
-            "      - name: Setup Python for trusted release receipt verification",
-            1,
-        )[1].split(
-            "      - name: Install exact trusted release receipt dependency",
-            1,
-        )[0]
-        self.assertNotIn("cache:", release_setup)
+        copilot_payload = load_yaml(WORKFLOWS / "copilot-review.yml")
+        release_setup = next(
+            step
+            for step in copilot_payload["jobs"]["current-revision-reviewed"]["steps"]
+            if step.get("name") == "Setup Python for trusted release receipt verification"
+        )
+        self.assertNotIn("cache", release_setup["with"])
         self.assertIn('--root "$base_tree"', copilot)
         self.assertNotIn(".schema_version == 1", copilot)
         self.assertIn(
