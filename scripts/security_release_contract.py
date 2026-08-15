@@ -123,6 +123,21 @@ RECOVERY_TERMINAL_CONTROL_PATHS = frozenset(
     }
 )
 RECOVERY_TERMINAL_CONTROL_DIFF_SHA256 = "sha256:6e6c2d81c1a0139c79457172bdc659fdab4b3724e7c1afea1f2576154466cf1f"
+# Final fail-closed correction for GitHub's immutable PR base snapshot. The
+# protected main/develop bases have identical trees, and the next promotion may
+# change only these five paths with the exact self-neutralized diff digest.
+RECOVERY_RECEIPT_REFRESH_MAIN_BASE_SHA = "b321c83d39b995cc4adfacc0f3d9544a52824939"
+RECOVERY_RECEIPT_REFRESH_DEVELOP_BASE_SHA = "74ff30d250efd82765cea95ef6276d6da29ff4e3"
+RECOVERY_RECEIPT_REFRESH_CONTROL_PATHS = frozenset(
+    {
+        ".github/workflows/security-release-intake.yml",
+        "changelogs/fragments/security-recovery-pr-base-snapshot.yml",
+        "scripts/security-release-intake.py",
+        "scripts/security_release_contract.py",
+        "tests/unit/test_security_release_request_dispatch.py",
+    }
+)
+RECOVERY_RECEIPT_REFRESH_CONTROL_DIFF_SHA256 = "sha256:df4c3ca710799b775f8968415a73ddc2c321261f0a87c49722d65881e055ed16"
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
