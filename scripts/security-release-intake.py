@@ -288,6 +288,17 @@ def recovery_release_prep_control_diff(root: Path, base_sha: str, head_sha: str)
     )
 
 
+def recovery_post_changelog_control_diff(root: Path, base_sha: str, head_sha: str) -> bytes:
+    """Canonicalize the exact post-changelog recovery correction."""
+
+    return recovery_control_diff(
+        root,
+        base_sha,
+        head_sha,
+        b"RECOVERY_POST_CHANGELOG_CONTROL_DIFF_SHA256",
+    )
+
+
 def show_json(root: Path, sha: str, path: str, label: str) -> dict[str, Any]:
     return load_json_bytes(git_bytes(root, "show", f"{sha}:{path}"), label)
 
@@ -402,6 +413,8 @@ def verify_recovery_repository(
         CONTRACT.RECOVERY_RECEIPT_REFRESH_DEVELOP_BASE_SHA,
         CONTRACT.RECOVERY_RELEASE_PREP_MAIN_BASE_SHA,
         CONTRACT.RECOVERY_RELEASE_PREP_DEVELOP_BASE_SHA,
+        CONTRACT.RECOVERY_POST_CHANGELOG_MAIN_BASE_SHA,
+        CONTRACT.RECOVERY_POST_CHANGELOG_DEVELOP_BASE_SHA,
         CONTRACT.RECOVERY_CANDIDATE_BASE_SHA,
         CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
     ):
@@ -442,6 +455,7 @@ def verify_recovery_repository(
     terminal_promotion = False
     receipt_refresh_promotion = False
     release_prep_promotion = False
+    post_changelog_promotion = False
     if live_main == CONTRACT.RECOVERY_FIRST_PROMOTION_SHA:
         parents = first_parents
         control_base = CONTRACT.RECOVERY_APPROVED_MAIN_SHA
@@ -539,6 +553,30 @@ def verify_recovery_repository(
             fail("Security recovery release-prep receipt differs from its immutable binding")
         control_base = CONTRACT.RECOVERY_RELEASE_PREP_DEVELOP_BASE_SHA
         expected_control_paths = CONTRACT.RECOVERY_RELEASE_PREP_CONTROL_PATHS
+    elif len(parents) == 2 and parents[0] == CONTRACT.RECOVERY_POST_CHANGELOG_MAIN_BASE_SHA:
+        post_changelog_promotion = True
+        post_changelog_main_tree = git_text(
+            root,
+            "show",
+            "-s",
+            "--format=%T",
+            CONTRACT.RECOVERY_POST_CHANGELOG_MAIN_BASE_SHA,
+        ).strip()
+        post_changelog_develop_tree = git_text(
+            root,
+            "show",
+            "-s",
+            "--format=%T",
+            CONTRACT.RECOVERY_POST_CHANGELOG_DEVELOP_BASE_SHA,
+        ).strip()
+        if post_changelog_main_tree != post_changelog_develop_tree:
+            fail("Security recovery post-changelog bases do not bind the same protected tree")
+        if not git_is_ancestor(root, CONTRACT.RECOVERY_POST_CHANGELOG_MAIN_BASE_SHA, live_main):
+            fail("Security recovery post-changelog promotion does not descend from its exact main base")
+        if not git_is_ancestor(root, CONTRACT.RECOVERY_POST_CHANGELOG_DEVELOP_BASE_SHA, parents[1]):
+            fail("Security recovery post-changelog promotion does not descend from its exact develop base")
+        control_base = CONTRACT.RECOVERY_POST_CHANGELOG_DEVELOP_BASE_SHA
+        expected_control_paths = CONTRACT.RECOVERY_POST_CHANGELOG_CONTROL_PATHS
     else:
         fail("Security recovery controller is not an exact approved recovery promotion")
     if not git_is_ancestor(root, parents[1], live_develop):
@@ -554,7 +592,11 @@ def verify_recovery_repository(
         fail("Security recovery controls must not delete repository content")
     if control_paths != expected_control_paths:
         fail("Security recovery controller changes paths outside the exact approved allowlist")
-    if release_prep_promotion:
+    if post_changelog_promotion:
+        control_patch = recovery_post_changelog_control_diff(root, control_base, parents[1])
+        if sha256(control_patch) != CONTRACT.RECOVERY_POST_CHANGELOG_CONTROL_DIFF_SHA256:
+            fail("Security recovery post-changelog controller diff differs from its approved binding")
+    elif release_prep_promotion:
         control_patch = recovery_release_prep_control_diff(root, control_base, parents[1])
         if sha256(control_patch) != CONTRACT.RECOVERY_RELEASE_PREP_CONTROL_DIFF_SHA256:
             fail("Security recovery release-prep controller diff differs from its approved binding")

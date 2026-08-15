@@ -151,6 +151,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         terminal: bool = False,
         receipt_refresh: bool = False,
         release_prep: bool = False,
+        post_changelog: bool = False,
     ) -> dict[str, Any]:
         """Create the exact protected-promotion shape required by recovery."""
 
@@ -217,6 +218,9 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         release_prep_develop_base = promotion_head
         release_prep_receipt_sha256 = "sha256:" + ("0" * 64)
         release_prep_control_paths = set(control_paths)
+        post_changelog_main_base = current_main
+        post_changelog_develop_base = promotion_head
+        post_changelog_control_paths = set(control_paths)
 
         if follow_up:
             git(self.root, "checkout", "-q", "-B", "recovery-follow-up", promotion_head)
@@ -376,6 +380,51 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             )
             current_main = git(self.root, "rev-parse", "HEAD")
 
+        if post_changelog:
+            if not release_prep:
+                raise ValueError("post-changelog recovery topology requires the release-prep promotion")
+            post_changelog_main_base = current_main
+            git(self.root, "checkout", "-q", "-B", "recovery-post-changelog-base", promotion_head)
+            git(
+                self.root,
+                "merge",
+                "-q",
+                "--no-ff",
+                "--strategy=ours",
+                "-m",
+                "record post-changelog promotion ancestry without changing develop tree",
+                post_changelog_main_base,
+            )
+            post_changelog_develop_base = git(self.root, "rev-parse", "HEAD")
+            control_path.write_text("name: post-changelog recovered controller\n", encoding="utf-8")
+            post_changelog_fragment = self.root / "changelogs/fragments/post-changelog-recovery.yml"
+            post_changelog_fragment.write_text("bugfixes:\n  - Bind exact post-changelog recovery.\n", encoding="utf-8")
+            contract_path.write_text(
+                'RECOVERY_EVENT = "recovery"\n'
+                'RECOVERY_POST_CHANGELOG_CONTROL_DIFF_SHA256 = "sha256:' + ("0" * 64) + '"\n',
+                encoding="utf-8",
+            )
+            post_changelog_control_paths = {
+                control_path.relative_to(self.root).as_posix(),
+                post_changelog_fragment.relative_to(self.root).as_posix(),
+                contract_path.relative_to(self.root).as_posix(),
+            }
+            git(self.root, "add", ".")
+            git(self.root, "commit", "-q", "-m", "bind exact post-changelog recovery")
+            promotion_head = git(self.root, "rev-parse", "HEAD")
+            git(self.root, "update-ref", "refs/remotes/origin/develop", promotion_head)
+            git(self.root, "checkout", "-q", "recovery-main")
+            git(
+                self.root,
+                "merge",
+                "-q",
+                "--no-ff",
+                "-m",
+                "promote exact post-changelog recovery",
+                promotion_head,
+            )
+            current_main = git(self.root, "rev-parse", "HEAD")
+
         git(self.root, "update-ref", "refs/remotes/origin/main", current_main)
 
         metadata_raw = metadata_path.read_bytes()
@@ -455,8 +504,76 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
                 )
                 if release_prep
                 else "sha256:" + ("0" * 64),
+                "RECOVERY_POST_CHANGELOG_MAIN_BASE_SHA": post_changelog_main_base,
+                "RECOVERY_POST_CHANGELOG_DEVELOP_BASE_SHA": post_changelog_develop_base,
+                "RECOVERY_POST_CHANGELOG_CONTROL_PATHS": frozenset(post_changelog_control_paths),
+                "RECOVERY_POST_CHANGELOG_CONTROL_DIFF_SHA256": MODULE.INTAKE.sha256(
+                    MODULE.INTAKE.recovery_post_changelog_control_diff(
+                        self.root,
+                        post_changelog_develop_base,
+                        promotion_head,
+                    )
+                )
+                if post_changelog
+                else "sha256:" + ("0" * 64),
             },
         }
+
+    def test_recovery_accepts_exact_post_changelog_promotion(self) -> None:
+        recovery = self.prepare_recovery_topology(
+            follow_up=True,
+            terminal=True,
+            receipt_refresh=True,
+            release_prep=True,
+            post_changelog=True,
+        )
+        with mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]):
+            envelope = MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+        self.assertIs(envelope["dispatch"], True)
+
+    def test_recovery_rejects_changed_post_changelog_controller(self) -> None:
+        recovery = self.prepare_recovery_topology(
+            follow_up=True,
+            terminal=True,
+            receipt_refresh=True,
+            release_prep=True,
+            post_changelog=True,
+        )
+        git(self.root, "checkout", "-q", "-B", "tampered-post-changelog", recovery["promotion_head"])
+        control = self.root / ".github/workflows/security-release-dispatch.yml"
+        control.write_text("name: tampered post-changelog controller\n", encoding="utf-8")
+        git(self.root, "add", ".")
+        git(self.root, "commit", "-q", "-m", "tamper post-changelog recovery")
+        tampered_head = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/develop", tampered_head)
+        git(
+            self.root,
+            "checkout",
+            "-q",
+            "-B",
+            "tampered-post-changelog-main",
+            recovery["bindings"]["RECOVERY_POST_CHANGELOG_MAIN_BASE_SHA"],
+        )
+        git(self.root, "merge", "-q", "--no-ff", "-m", "promote tampered post-changelog", tampered_head)
+        tampered_main = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/main", tampered_main)
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "post-changelog controller diff differs"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                tampered_main,
+                tampered_head,
+                NOW,
+            )
 
     def test_recovery_accepts_exact_post_receipt_release_prep_promotion(self) -> None:
         recovery = self.prepare_recovery_topology(
