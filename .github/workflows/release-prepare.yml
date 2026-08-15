@@ -205,6 +205,7 @@ jobs:
           PUBLISH_GALAXY_INPUT: ${{ github.event.inputs.publish_galaxy }}
           REPOSITORY_ID: ${{ github.repository_id }}
           SECURITY_RELEASE: ${{ needs.security-classification.outputs.security-release }}
+          SECURITY_VERSION: ${{ needs.security-classification.outputs.security-version }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
           WORKFLOW_EVENT: ${{ github.event_name }}
           WORKFLOW_ACTOR: ${{ github.actor }}
@@ -254,7 +255,11 @@ jobs:
           fi
 
           version_args=()
-          if [ -n "$VERSION" ]; then
+          if [ "$SECURITY_RELEASE" = true ]; then
+            [[ "$SECURITY_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+            test -z "$VERSION" || test "$VERSION" = "$SECURITY_VERSION"
+            version_args=(--security-target-version "$SECURITY_VERSION")
+          elif [ -n "$VERSION" ]; then
             version_args=(--requested-version "$VERSION")
           fi
           version_resolution="$(
@@ -270,6 +275,7 @@ jobs:
               --workflow-ref "$WORKFLOW_REF" \
               --workflow-event "$WORKFLOW_EVENT" \
               --workflow-actor "$WORKFLOW_ACTOR" \
+              --root . \
               "${version_args[@]}"
           )"
           VERSION="$(jq -er '.version' <<< "$version_resolution")"
@@ -381,8 +387,42 @@ jobs:
           write_yaml(path, data)
           PY
 
+          fragment_stash=""
+          selected_fragment=""
+          if [ "$PREPARATION_MODE" = security ]; then
+            selected_fragment="$(
+              jq -er '
+                .fragments
+                | if length == 1 then .[0].path else error("expected one Security fragment") end
+                | select(test("^[A-Za-z0-9][A-Za-z0-9._-]*\\.ya?ml$"))
+              ' changelogs/release-preparation.json
+            )"
+            test -f "changelogs/fragments/$selected_fragment"
+            test ! -L "changelogs/fragments/$selected_fragment"
+            fragment_stash="$RUNNER_TEMP/unselected-release-fragments-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            test ! -e "$fragment_stash"
+            mkdir -m 0700 "$fragment_stash"
+            while IFS= read -r -d '' fragment; do
+              name="${fragment##*/}"
+              if [ "$name" != "$selected_fragment" ]; then
+                mv -- "$fragment" "$fragment_stash/$name"
+              fi
+            done < <(
+              find changelogs/fragments -maxdepth 1 -type f \
+                \( -name '*.yml' -o -name '*.yaml' \) -print0
+            )
+          fi
+
           antsibull-changelog lint
           antsibull-changelog release
+
+          if [ "$PREPARATION_MODE" = security ]; then
+            test ! -e "changelogs/fragments/$selected_fragment"
+            while IFS= read -r -d '' fragment; do
+              mv -- "$fragment" "changelogs/fragments/${fragment##*/}"
+            done < <(find "$fragment_stash" -maxdepth 1 -type f -print0)
+            rmdir "$fragment_stash"
+          fi
 
           python - <<'PY'
           from pathlib import Path

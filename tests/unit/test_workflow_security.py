@@ -1068,13 +1068,31 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         prepare = (WORKFLOWS / "release-prepare.yml").read_text(encoding="utf-8")
         self.assertIn("scripts/release-version.py", prepare)
         self.assertIn("--write-preparation-receipt changelogs/release-preparation.json", prepare)
+        self.assertIn('--security-target-version "$SECURITY_VERSION"', prepare)
+        self.assertIn("unselected-release-fragments-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}", prepare)
+        self.assertIn('test ! -e "changelogs/fragments/$selected_fragment"', prepare)
+        self.assertIn('mv -- "$fragment" "changelogs/fragments/${fragment##*/}"', prepare)
         self.assertIn('--base-sha "$BASE_SHA"', prepare)
         self.assertNotIn("AUTO_RELEASE_BUMP", prepare)
         self.assertIn("Required merge method: \\`merge commit\\`", prepare)
+
+    def test_main_recovery_is_relayed_to_the_immutable_main_controller(self) -> None:
+        dispatch = (WORKFLOWS / "security-release-dispatch.yml").read_text(encoding="utf-8")
+        self.assertIn("Relay successful protected-main run to immutable main controller", dispatch)
+        self.assertIn('-f "recovery_source_run_id=$SOURCE_RUN_ID"', dispatch)
+        self.assertIn("${{ inputs.recovery_source_run_id }}", dispatch)
+        classify = dispatch.split("classify-recovery:", 1)[1].split("dispatch-recovery:", 1)[0]
+        self.assertNotIn("github.event_name == 'workflow_run'", classify)
+        prepare = (WORKFLOWS / "release-prepare.yml").read_text(encoding="utf-8")
         self.assertIn("Immutable tag v${VERSION} already exists", prepare)
         publish = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         self.assertIn("Re-prove fragment-derived version and authorized preparation", publish)
+        self.assertIn('release_mode="$(jq -er \'.release_mode\' "$receipt")"', publish)
+        self.assertIn('--security-target-version "$expected_version"', publish)
+        self.assertIn('--root "$base_tree"', publish)
+        self.assertIn('version_args=(--requested-version "$expected_version")', publish)
+        self.assertIn('"${version_args[@]}"', publish)
         self.assertIn('test "${#preparation_parents[@]}" -eq 1', publish)
         self.assertIn(
             'git diff --quiet "$REVIEWED_HEAD_SHA" "$RELEASE_SHA" -- .',

@@ -55,20 +55,41 @@ jobs:
             --ref main \
             -f "source_run_id=$SOURCE_RUN_ID"
 
+  relay-recovery:
+    name: Relay successful protected-main run to immutable main controller
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch immutable main-ref recovery controller
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+
+          [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          gh workflow run security-release-dispatch.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f "recovery_source_run_id=$SOURCE_RUN_ID"
+
   classify-recovery:
     name: Bind the single approved existing-marker recovery
     if: >-
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_branch == 'main' &&
-       github.event.workflow_run.head_repository.full_name == github.repository) ||
-      (github.event_name == 'workflow_dispatch' &&
+      github.event_name == 'workflow_dispatch' &&
        github.actor == 'github-actions[bot]' &&
        github.triggering_actor == 'github-actions[bot]' &&
        github.ref == 'refs/heads/main' &&
        inputs.source_run_id == '' &&
-       inputs.recovery_source_run_id != '')
+       inputs.recovery_source_run_id != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -92,7 +113,7 @@ jobs:
           CONTROLLER_SHA: ${{ github.sha }}
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN_ID: >-
-            ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.recovery_source_run_id }}
+            ${{ inputs.recovery_source_run_id }}
         run: |
           set -euo pipefail
 
@@ -142,31 +163,6 @@ jobs:
             echo "source_sha=$SOURCE_SHA"
             echo "source_run_id=$SOURCE_RUN_ID"
           } >>"$GITHUB_OUTPUT"
-
-  relay-recovery:
-    name: Relay approved recovery to protected main
-    needs: classify-recovery
-    if: >-
-      github.event_name == 'workflow_run' &&
-      needs['classify-recovery'].result == 'success' &&
-      needs['classify-recovery'].outputs.dispatch == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: write
-    steps:
-      - name: Dispatch validated recovery through immutable main controller
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SOURCE_RUN_ID: ${{ needs['classify-recovery'].outputs['source-run-id'] }}
-        run: |
-          set -euo pipefail
-
-          [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
-          gh workflow run security-release-dispatch.yml \
-            --repo "$GITHUB_REPOSITORY" \
-            --ref main \
-            -f "recovery_source_run_id=$SOURCE_RUN_ID"
 
   dispatch-recovery:
     name: Dispatch approved recovery as release App
