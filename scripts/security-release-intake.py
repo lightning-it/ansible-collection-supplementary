@@ -277,6 +277,17 @@ def recovery_receipt_refresh_control_diff(root: Path, base_sha: str, head_sha: s
     )
 
 
+def recovery_release_prep_control_diff(root: Path, base_sha: str, head_sha: str) -> bytes:
+    """Canonicalize the exact post-receipt release-preparation correction."""
+
+    return recovery_control_diff(
+        root,
+        base_sha,
+        head_sha,
+        b"RECOVERY_RELEASE_PREP_CONTROL_DIFF_SHA256",
+    )
+
+
 def show_json(root: Path, sha: str, path: str, label: str) -> dict[str, Any]:
     return load_json_bytes(git_bytes(root, "show", f"{sha}:{path}"), label)
 
@@ -389,6 +400,8 @@ def verify_recovery_repository(
         CONTRACT.RECOVERY_TERMINAL_DEVELOP_BASE_SHA,
         CONTRACT.RECOVERY_RECEIPT_REFRESH_MAIN_BASE_SHA,
         CONTRACT.RECOVERY_RECEIPT_REFRESH_DEVELOP_BASE_SHA,
+        CONTRACT.RECOVERY_RELEASE_PREP_MAIN_BASE_SHA,
+        CONTRACT.RECOVERY_RELEASE_PREP_DEVELOP_BASE_SHA,
         CONTRACT.RECOVERY_CANDIDATE_BASE_SHA,
         CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
     ):
@@ -428,6 +441,7 @@ def verify_recovery_repository(
     parents = git_text(root, "show", "-s", "--format=%P", live_main).split()
     terminal_promotion = False
     receipt_refresh_promotion = False
+    release_prep_promotion = False
     if live_main == CONTRACT.RECOVERY_FIRST_PROMOTION_SHA:
         parents = first_parents
         control_base = CONTRACT.RECOVERY_APPROVED_MAIN_SHA
@@ -502,6 +516,29 @@ def verify_recovery_repository(
             fail("Security recovery receipt-refresh promotion does not descend from its exact develop base")
         control_base = CONTRACT.RECOVERY_RECEIPT_REFRESH_DEVELOP_BASE_SHA
         expected_control_paths = CONTRACT.RECOVERY_RECEIPT_REFRESH_CONTROL_PATHS
+    elif len(parents) == 2 and parents[0] == CONTRACT.RECOVERY_RELEASE_PREP_MAIN_BASE_SHA:
+        release_prep_promotion = True
+        if not git_is_ancestor(root, CONTRACT.RECOVERY_RELEASE_PREP_MAIN_BASE_SHA, live_main):
+            fail("Security recovery release-prep promotion does not descend from its exact main base")
+        if not git_is_ancestor(root, CONTRACT.RECOVERY_RELEASE_PREP_DEVELOP_BASE_SHA, parents[1]):
+            fail("Security recovery release-prep promotion does not descend from its exact develop base")
+        intake_path = f".lit/security-release-intakes/{CONTRACT.RECOVERY_FIXED_VERSION}.json"
+        base_difference = changed_paths(
+            root,
+            CONTRACT.RECOVERY_RELEASE_PREP_MAIN_BASE_SHA,
+            CONTRACT.RECOVERY_RELEASE_PREP_DEVELOP_BASE_SHA,
+        )
+        if base_difference != [("D", intake_path)]:
+            fail("Security recovery release-prep bases differ beyond the App-owned receipt")
+        receipt_raw = git_bytes(
+            root,
+            "show",
+            f"{CONTRACT.RECOVERY_RELEASE_PREP_MAIN_BASE_SHA}:{intake_path}",
+        )
+        if sha256(receipt_raw) != CONTRACT.RECOVERY_RELEASE_PREP_RECEIPT_SHA256:
+            fail("Security recovery release-prep receipt differs from its immutable binding")
+        control_base = CONTRACT.RECOVERY_RELEASE_PREP_DEVELOP_BASE_SHA
+        expected_control_paths = CONTRACT.RECOVERY_RELEASE_PREP_CONTROL_PATHS
     else:
         fail("Security recovery controller is not an exact approved recovery promotion")
     if not git_is_ancestor(root, parents[1], live_develop):
@@ -517,7 +554,11 @@ def verify_recovery_repository(
         fail("Security recovery controls must not delete repository content")
     if control_paths != expected_control_paths:
         fail("Security recovery controller changes paths outside the exact approved allowlist")
-    if receipt_refresh_promotion:
+    if release_prep_promotion:
+        control_patch = recovery_release_prep_control_diff(root, control_base, parents[1])
+        if sha256(control_patch) != CONTRACT.RECOVERY_RELEASE_PREP_CONTROL_DIFF_SHA256:
+            fail("Security recovery release-prep controller diff differs from its approved binding")
+    elif receipt_refresh_promotion:
         control_patch = recovery_receipt_refresh_control_diff(root, control_base, parents[1])
         if sha256(control_patch) != CONTRACT.RECOVERY_RECEIPT_REFRESH_CONTROL_DIFF_SHA256:
             fail("Security recovery receipt-refresh controller diff differs from its approved binding")

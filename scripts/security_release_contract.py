@@ -138,6 +138,32 @@ RECOVERY_RECEIPT_REFRESH_CONTROL_PATHS = frozenset(
     }
 )
 RECOVERY_RECEIPT_REFRESH_CONTROL_DIFF_SHA256 = "sha256:df4c3ca710799b775f8968415a73ddc2c321261f0a87c49722d65881e055ed16"
+# Exact post-receipt promotion required to repair Security hotfix fragment
+# selection. The protected main base contains the App-owned receipt while the
+# file-identical ancestry backmerge deliberately kept it out of develop. This
+# single extension may promote only the bounded controller change below; the
+# Release App must then recreate the receipt through the ordinary recovery
+# intake before release preparation can continue.
+RECOVERY_RELEASE_PREP_MAIN_BASE_SHA = "23f3cadc1f85f72c486e04082a98f3bed347f0dd"
+RECOVERY_RELEASE_PREP_DEVELOP_BASE_SHA = "c4ee9cc83612f8a5754b9227a5802bc537db2a0e"
+RECOVERY_RELEASE_PREP_RECEIPT_SHA256 = (
+    "sha256:5de9c808e85260dae97f1f7baff08d1199e0e6c2a2e1192c31f2fe9bf229e232"
+)
+RECOVERY_RELEASE_PREP_CONTROL_PATHS = frozenset(
+    {
+        ".github/workflows/collection-publish.yml",
+        ".github/workflows/release-prepare.yml",
+        ".github/workflows/security-release-dispatch.yml",
+        "changelogs/fragments/security-hotfix-fragment-selection.yml",
+        "scripts/release-version.py",
+        "scripts/security-release-intake.py",
+        "scripts/security_release_contract.py",
+        "tests/unit/test_release_version.py",
+        "tests/unit/test_security_release_request_dispatch.py",
+        "tests/unit/test_workflow_security.py",
+    }
+)
+RECOVERY_RELEASE_PREP_CONTROL_DIFF_SHA256 = "sha256:5b7961562ddbf319c6a6e8630bc7227c04b4e8b5d8a1b388e708df3cb22d7a27"
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")

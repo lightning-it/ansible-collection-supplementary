@@ -150,6 +150,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         follow_up: bool = False,
         terminal: bool = False,
         receipt_refresh: bool = False,
+        release_prep: bool = False,
     ) -> dict[str, Any]:
         """Create the exact protected-promotion shape required by recovery."""
 
@@ -212,6 +213,10 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         receipt_refresh_main_base = current_main
         receipt_refresh_develop_base = promotion_head
         receipt_refresh_control_paths = set(control_paths)
+        release_prep_main_base = current_main
+        release_prep_develop_base = promotion_head
+        release_prep_receipt_sha256 = "sha256:" + ("0" * 64)
+        release_prep_control_paths = set(control_paths)
 
         if follow_up:
             git(self.root, "checkout", "-q", "-B", "recovery-follow-up", promotion_head)
@@ -320,6 +325,57 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             )
             current_main = git(self.root, "rev-parse", "HEAD")
 
+        if release_prep:
+            if not receipt_refresh:
+                raise ValueError("release-prep recovery topology requires the receipt-refresh promotion")
+            receipt_path = self.root / f".lit/security-release-intakes/{VERSION}.json"
+            receipt_path.parent.mkdir(parents=True, exist_ok=True)
+            receipt_raw = b'{"appOwned":"recovered"}\n'
+            receipt_path.write_bytes(receipt_raw)
+            git(self.root, "add", ".")
+            git(self.root, "commit", "-q", "-m", "fix(security): recover App receipt")
+            release_prep_main_base = git(self.root, "rev-parse", "HEAD")
+            release_prep_receipt_sha256 = MODULE.INTAKE.sha256(receipt_raw)
+
+            git(self.root, "checkout", "-q", "-B", "recovery-release-prep", promotion_head)
+            git(
+                self.root,
+                "merge",
+                "-q",
+                "--no-ff",
+                "--strategy=ours",
+                "-m",
+                "record recovered receipt ancestry without changing develop tree",
+                release_prep_main_base,
+            )
+            release_prep_develop_base = git(self.root, "rev-parse", "HEAD")
+            release_workflow = self.root / ".github/workflows/release-prepare.yml"
+            release_workflow.write_text("name: exact Security hotfix release\n", encoding="utf-8")
+            contract_path.write_text(
+                'RECOVERY_EVENT = "recovery"\n'
+                'RECOVERY_RELEASE_PREP_CONTROL_DIFF_SHA256 = "sha256:' + ("0" * 64) + '"\n',
+                encoding="utf-8",
+            )
+            release_prep_control_paths = {
+                release_workflow.relative_to(self.root).as_posix(),
+                contract_path.relative_to(self.root).as_posix(),
+            }
+            git(self.root, "add", ".")
+            git(self.root, "commit", "-q", "-m", "bind exact Security hotfix release")
+            promotion_head = git(self.root, "rev-parse", "HEAD")
+            git(self.root, "update-ref", "refs/remotes/origin/develop", promotion_head)
+            git(self.root, "checkout", "-q", "recovery-main")
+            git(
+                self.root,
+                "merge",
+                "-q",
+                "--no-ff",
+                "-m",
+                "promote exact Security hotfix release",
+                promotion_head,
+            )
+            current_main = git(self.root, "rev-parse", "HEAD")
+
         git(self.root, "update-ref", "refs/remotes/origin/main", current_main)
 
         metadata_raw = metadata_path.read_bytes()
@@ -386,8 +442,82 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
                 )
                 if receipt_refresh
                 else "sha256:" + ("0" * 64),
+                "RECOVERY_RELEASE_PREP_MAIN_BASE_SHA": release_prep_main_base,
+                "RECOVERY_RELEASE_PREP_DEVELOP_BASE_SHA": release_prep_develop_base,
+                "RECOVERY_RELEASE_PREP_RECEIPT_SHA256": release_prep_receipt_sha256,
+                "RECOVERY_RELEASE_PREP_CONTROL_PATHS": frozenset(release_prep_control_paths),
+                "RECOVERY_RELEASE_PREP_CONTROL_DIFF_SHA256": MODULE.INTAKE.sha256(
+                    MODULE.INTAKE.recovery_release_prep_control_diff(
+                        self.root,
+                        release_prep_develop_base,
+                        promotion_head,
+                    )
+                )
+                if release_prep
+                else "sha256:" + ("0" * 64),
             },
         }
+
+    def test_recovery_accepts_exact_post_receipt_release_prep_promotion(self) -> None:
+        recovery = self.prepare_recovery_topology(
+            follow_up=True,
+            terminal=True,
+            receipt_refresh=True,
+            release_prep=True,
+        )
+        with mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]):
+            envelope = MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+            _patch, result = MODULE.INTAKE.verify_recovery_repository(
+                self.root,
+                envelope["request"],
+                NOW,
+            )
+        self.assertIs(envelope["dispatch"], True)
+        self.assertEqual(EVIDENCE_ID, result["evidenceId"])
+        self.assertEqual(recovery["current_main"], result["baseSha"])
+
+    def test_recovery_rejects_changed_post_receipt_release_prep_controller(self) -> None:
+        recovery = self.prepare_recovery_topology(
+            follow_up=True,
+            terminal=True,
+            receipt_refresh=True,
+            release_prep=True,
+        )
+        git(self.root, "checkout", "-q", "-B", "tampered-release-prep", recovery["promotion_head"])
+        workflow = self.root / ".github/workflows/release-prepare.yml"
+        workflow.write_text("name: tampered Security hotfix release\n", encoding="utf-8")
+        git(self.root, "add", ".")
+        git(self.root, "commit", "-q", "-m", "tamper exact Security hotfix release")
+        tampered_head = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/develop", tampered_head)
+        git(
+            self.root,
+            "checkout",
+            "-q",
+            "-B",
+            "tampered-release-prep-main",
+            recovery["bindings"]["RECOVERY_RELEASE_PREP_MAIN_BASE_SHA"],
+        )
+        git(self.root, "merge", "-q", "--no-ff", "-m", "promote tampered release prep", tampered_head)
+        tampered_main = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/main", tampered_main)
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "release-prep controller diff differs"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                tampered_main,
+                tampered_head,
+                NOW,
+            )
 
     def test_recovery_accepts_exact_receipt_refresh_promotion(self) -> None:
         recovery = self.prepare_recovery_topology(follow_up=True, terminal=True, receipt_refresh=True)
@@ -903,7 +1033,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("recovery_source_run_id:", dispatch)
         self.assertIn("gh workflow run security-release-dispatch.yml", dispatch)
         self.assertIn("--ref main", dispatch)
-        self.assertIn("Relay approved recovery to protected main", dispatch)
+        self.assertIn("Relay successful protected-main run to immutable main controller", dispatch)
         self.assertIn(
             "inputs.recovery_source_run_id != ''",
             dispatch,
@@ -945,7 +1075,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         self.assertIn("Dispatch approved recovery as release App", dispatch)
         self.assertNotIn("needs.classify-recovery", dispatch)
         self.assertNotIn("steps.recovery-app", dispatch)
-        self.assertEqual(7, dispatch.count("needs['classify-recovery']"))
+        self.assertEqual(4, dispatch.count("needs['classify-recovery']"))
         self.assertGreaterEqual(dispatch.count("steps['recovery-app"), 6)
         self.assertIn("inputs:{request_json:$request_json}", dispatch)
         self.assertIn(
