@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    Update the immutable Samba AD-LDS container image digest and its canonical
+    source-dependency inventory entry to the current approved image artifact.
