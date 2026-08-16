@@ -28,6 +28,13 @@ class PushReadyEngineTests(unittest.TestCase):
         self.assertEqual(3_600, ENGINE["CHECK_TIMEOUT_SECONDS"])
         self.assertLessEqual(ENGINE["CHECK_TIMEOUT_SECONDS"], ENGINE["MAX_TIMEOUT_SECONDS"])
 
+    def test_planned_diff_is_full_index_without_expanded_context(self) -> None:
+        source = (ROOT / "scripts" / "lit-push-ready.py").read_text(encoding="utf-8")
+        planned_change = source.split("def planned_change(", 1)[1].split("def config_at_commit(", 1)[0]
+        self.assertIn('"--binary",', planned_change)
+        self.assertIn('"--full-index",', planned_change)
+        self.assertNotIn('"--unified=40",', planned_change)
+
     def test_trusted_policy_covers_executable_quality_scripts(self) -> None:
         trusted_paths = set(ENGINE["TRUSTED_CHECK_POLICY_PATHS"])
 

@@ -1540,8 +1540,8 @@ def planned_change(
         "--no-ext-diff",
         "--no-textconv",
         "--binary",
+        "--full-index",
         "--no-renames",
-        "--unified=40",
         base_commit,
         "--",
     )
