@@ -18,7 +18,6 @@ from typing import Any, NoReturn
 
 SHA1_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
 RELEASE_BOT = "lightning-it-release-automation[bot]"
 MAX_REVIEW_BYTES = 200_000
 MAX_PROTECTED_ASSET_BYTES = 1_000_000
@@ -99,7 +98,8 @@ def run(
     )
     if result.returncode != 0:
         stderr = result.stderr if isinstance(result.stderr, str) else result.stderr.decode(errors="replace")
-        fail(f"Command failed closed: {arguments[0]} {arguments[1]}: {stderr.strip()}")
+        command = " ".join(arguments[:2]) or "<empty-command>"
+        fail(f"Command failed closed: {command}: {stderr.strip()}")
     return result
 
 
@@ -163,8 +163,8 @@ def validate_inputs(arguments: argparse.Namespace) -> None:
         fail("Repository must use the owner/name form.")
     if arguments.pull_request <= 0:
         fail("Pull-request number must be positive.")
-    if not REF_PATTERN.fullmatch(arguments.base_ref) or ".." in arguments.base_ref:
-        fail("Base ref is invalid.")
+    if arguments.base_ref not in {"develop", "main"}:
+        fail("Base ref must be develop or main.")
     require_sha(arguments.expected_base, "Expected base")
     require_sha(arguments.expected_head, "Expected head")
     require_sha(arguments.trusted_workflow_sha, "Trusted workflow")

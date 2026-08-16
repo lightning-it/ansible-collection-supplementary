@@ -85,6 +85,40 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
             self.assertEqual(len(binary_diff), metadata["review_bytes"])
             self.assertEqual(3, metadata["schema_version"])
 
+    def test_command_failure_with_one_argument_preserves_the_real_error(self) -> None:
+        failed = subprocess.CompletedProcess(["gh"], 1, "", "denied")
+        with (
+            mock.patch.object(self.module.subprocess, "run", return_value=failed),
+            self.assertRaisesRegex(
+                self.module.MaterializationError,
+                "Command failed closed: gh: denied",
+            ),
+        ):
+            self.module.run(["gh"], environment={})
+
+    def test_only_protected_base_refs_are_accepted(self) -> None:
+        for base_ref in ("develop", "main"):
+            with self.subTest(base_ref=base_ref):
+                arguments = argparse.Namespace(
+                    **{
+                        **vars(self.arguments),
+                        "base_ref": base_ref,
+                        "dispatch_ref": f"refs/heads/{base_ref}",
+                    }
+                )
+                self.module.validate_inputs(arguments)
+        arguments = argparse.Namespace(
+            **{
+                **vars(self.arguments),
+                "base_ref": "feature/untrusted",
+            }
+        )
+        with self.assertRaisesRegex(
+            self.module.MaterializationError,
+            "Base ref must be develop or main",
+        ):
+            self.module.validate_inputs(arguments)
+
     def test_complete_input_binds_every_protected_asset_and_detects_tampering(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
