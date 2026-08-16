@@ -195,7 +195,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
     def test_ruleset_workflow_verifies_the_producer_instead_of_trusting_a_check_name(self) -> None:
         rerun = (ROOT / ".github/workflows/current-revision-rerun.yml").read_text(encoding="utf-8")
         self.assertIn("workflow_dispatch:", rerun)
-        self.assertIn("test \"${GITHUB_REF}\" = refs/heads/develop", rerun)
+        self.assertIn('test "${GITHUB_REF}" = refs/heads/develop', rerun)
         self.assertIn(
             '.path == ".github/workflows/supplementary-current-revision-required.yml"',
             rerun,
@@ -204,8 +204,8 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             '.name == "Protected Supplementary current-revision evidence verifier"',
             rerun,
         )
-        self.assertIn("test \"$(jq -r .run_attempt <<<\"${run}\")\" -eq 1", rerun)
-        self.assertEqual(1, rerun.count('/rerun\" >/dev/null'))
+        self.assertIn('test "$(jq -r .run_attempt <<<"${run}")" -eq 1', rerun)
+        self.assertEqual(1, rerun.count('/rerun" >/dev/null'))
 
     def test_review_producers_request_only_the_protected_verifier_rerun(self) -> None:
         for name in ("copilot-review.yml", "release-bot-exact-head-review.yml"):
