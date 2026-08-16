@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Verify Base-bound evidence for a reviewed Trust-Root engine update.
 
 This controller is deliberately separate from ``lit-push-ready.py``.  It loads
