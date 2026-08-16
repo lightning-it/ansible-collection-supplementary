@@ -650,6 +650,45 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
                 NOW,
             )
 
+    def test_recovery_rejects_changed_allowlisted_post_evidence_fix_controller(self) -> None:
+        recovery = self.prepare_recovery_topology(
+            follow_up=True,
+            terminal=True,
+            receipt_refresh=True,
+            release_prep=True,
+            post_changelog=True,
+            post_evidence_fix=True,
+        )
+        git(self.root, "checkout", "-q", "-B", "tampered-post-evidence-fix", recovery["promotion_head"])
+        control = self.root / "scripts/security-release-intake.py"
+        control.write_text("# Tamper with the allowlisted post-evidence-fix controller.\n", encoding="utf-8")
+        git(self.root, "add", ".")
+        git(self.root, "commit", "-q", "-m", "tamper post-evidence-fix recovery")
+        tampered_head = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/develop", tampered_head)
+        git(
+            self.root,
+            "checkout",
+            "-q",
+            "-B",
+            "tampered-post-evidence-fix-main",
+            recovery["bindings"]["RECOVERY_POST_EVIDENCE_FIX_MAIN_BASE_SHA"],
+        )
+        git(self.root, "merge", "-q", "--no-ff", "-m", "promote tampered post-evidence-fix", tampered_head)
+        tampered_main = git(self.root, "rev-parse", "HEAD")
+        git(self.root, "update-ref", "refs/remotes/origin/main", tampered_main)
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "post-evidence-fix controller diff differs"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                tampered_main,
+                tampered_head,
+                NOW,
+            )
+
     def test_recovery_accepts_exact_post_changelog_promotion(self) -> None:
         recovery = self.prepare_recovery_topology(
             follow_up=True,
