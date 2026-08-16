@@ -152,6 +152,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         receipt_refresh: bool = False,
         release_prep: bool = False,
         post_changelog: bool = False,
+        post_evidence_fix: bool = False,
     ) -> dict[str, Any]:
         """Create the exact protected-promotion shape required by recovery."""
 
@@ -221,6 +222,10 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
         post_changelog_main_base = current_main
         post_changelog_develop_base = promotion_head
         post_changelog_control_paths = set(control_paths)
+        post_evidence_fix_main_base = current_main
+        post_evidence_fix_develop_base = promotion_head
+        post_evidence_fix_base_paths: set[str] = set()
+        post_evidence_fix_control_paths = set(control_paths)
 
         if follow_up:
             git(self.root, "checkout", "-q", "-B", "recovery-follow-up", promotion_head)
@@ -430,6 +435,63 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             )
             current_main = git(self.root, "rev-parse", "HEAD")
 
+        if post_evidence_fix:
+            if not post_changelog:
+                raise ValueError("post-evidence-fix topology requires the post-changelog promotion")
+            post_evidence_fix_main_base = current_main
+            git(self.root, "checkout", "-q", "-B", "recovery-post-evidence-fix-base", promotion_head)
+            git(
+                self.root,
+                "merge",
+                "-q",
+                "--no-ff",
+                "--strategy=ours",
+                "-m",
+                "record post-evidence-fix main ancestry",
+                post_evidence_fix_main_base,
+            )
+            regular_path = self.root / "post-evidence-protected-change.txt"
+            regular_path.write_text("independently reviewed protected change\n", encoding="utf-8")
+            git(self.root, "add", ".")
+            git(self.root, "commit", "-q", "-m", "advance protected develop after evidence fix")
+            post_evidence_fix_develop_base = git(self.root, "rev-parse", "HEAD")
+            post_evidence_fix_base_paths.add(regular_path.relative_to(self.root).as_posix())
+            post_evidence_fragment = self.root / "changelogs/fragments/security-recovery-post-evidence-fix.yml"
+            post_evidence_fragment.write_text(
+                "bugfixes:\n  - Bind exact post-evidence-fix recovery.\n",
+                encoding="utf-8",
+            )
+            intake_path = self.root / "scripts/security-release-intake.py"
+            intake_path.write_text("# Bind exact post-evidence-fix recovery.\n", encoding="utf-8")
+            contract_path.write_text(
+                'RECOVERY_EVENT = "recovery"\n'
+                'RECOVERY_POST_EVIDENCE_FIX_CONTROL_DIFF_SHA256 = "sha256:' + ("0" * 64) + '"\n',
+                encoding="utf-8",
+            )
+            test_path = self.root / "tests/unit/test_security_release_request_dispatch.py"
+            test_path.write_text("# Exercise exact post-evidence-fix recovery.\n", encoding="utf-8")
+            post_evidence_fix_control_paths = {
+                post_evidence_fragment.relative_to(self.root).as_posix(),
+                intake_path.relative_to(self.root).as_posix(),
+                contract_path.relative_to(self.root).as_posix(),
+                test_path.relative_to(self.root).as_posix(),
+            }
+            git(self.root, "add", ".")
+            git(self.root, "commit", "-q", "-m", "bind exact post-evidence-fix recovery")
+            promotion_head = git(self.root, "rev-parse", "HEAD")
+            git(self.root, "update-ref", "refs/remotes/origin/develop", promotion_head)
+            git(self.root, "checkout", "-q", "recovery-main")
+            git(
+                self.root,
+                "merge",
+                "-q",
+                "--no-ff",
+                "-m",
+                "promote exact post-evidence-fix recovery",
+                promotion_head,
+            )
+            current_main = git(self.root, "rev-parse", "HEAD")
+
         git(self.root, "update-ref", "refs/remotes/origin/main", current_main)
 
         metadata_raw = metadata_path.read_bytes()
@@ -521,8 +583,72 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
                 )
                 if post_changelog
                 else "sha256:" + ("0" * 64),
+                "RECOVERY_POST_EVIDENCE_FIX_MAIN_BASE_SHA": post_evidence_fix_main_base,
+                "RECOVERY_POST_EVIDENCE_FIX_DEVELOP_BASE_SHA": post_evidence_fix_develop_base,
+                "RECOVERY_POST_EVIDENCE_FIX_BASE_PATHS": frozenset(post_evidence_fix_base_paths),
+                "RECOVERY_POST_EVIDENCE_FIX_BASE_DIFF_SHA256": MODULE.INTAKE.sha256(
+                    MODULE.INTAKE.canonical_diff(
+                        self.root,
+                        post_evidence_fix_main_base,
+                        post_evidence_fix_develop_base,
+                    )
+                )
+                if post_evidence_fix
+                else "sha256:" + ("0" * 64),
+                "RECOVERY_POST_EVIDENCE_FIX_CONTROL_PATHS": frozenset(post_evidence_fix_control_paths),
+                "RECOVERY_POST_EVIDENCE_FIX_CONTROL_DIFF_SHA256": MODULE.INTAKE.sha256(
+                    MODULE.INTAKE.recovery_post_evidence_fix_control_diff(
+                        self.root,
+                        post_evidence_fix_develop_base,
+                        promotion_head,
+                    )
+                )
+                if post_evidence_fix
+                else "sha256:" + ("0" * 64),
             },
         }
+
+    def test_recovery_accepts_exact_post_evidence_fix_promotion(self) -> None:
+        recovery = self.prepare_recovery_topology(
+            follow_up=True,
+            terminal=True,
+            receipt_refresh=True,
+            release_prep=True,
+            post_changelog=True,
+            post_evidence_fix=True,
+        )
+        with mock.patch.multiple(MODULE.INTAKE.CONTRACT, **recovery["bindings"]):
+            envelope = MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
+        self.assertIs(envelope["dispatch"], True)
+
+    def test_recovery_rejects_changed_post_evidence_fix_base_binding(self) -> None:
+        recovery = self.prepare_recovery_topology(
+            follow_up=True,
+            terminal=True,
+            receipt_refresh=True,
+            release_prep=True,
+            post_changelog=True,
+            post_evidence_fix=True,
+        )
+        bindings = dict(recovery["bindings"])
+        bindings["RECOVERY_POST_EVIDENCE_FIX_BASE_DIFF_SHA256"] = "sha256:" + ("f" * 64)
+        with (
+            mock.patch.multiple(MODULE.INTAKE.CONTRACT, **bindings),
+            self.assertRaisesRegex(MODULE.INTAKE.IntakeError, "protected develop advance differs"),
+        ):
+            MODULE.build_recovery_envelope(
+                self.root,
+                REPOSITORY,
+                recovery["current_main"],
+                recovery["promotion_head"],
+                NOW,
+            )
 
     def test_recovery_accepts_exact_post_changelog_promotion(self) -> None:
         recovery = self.prepare_recovery_topology(
