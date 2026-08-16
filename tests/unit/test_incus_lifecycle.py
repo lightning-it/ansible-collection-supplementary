@@ -306,6 +306,11 @@ class IncusLifecycleTests(unittest.TestCase):
         tasks = yaml.safe_load(collection)
         inventory = task_named(tasks, "Read exact in-target container image identities and digests")
         argv = inventory["ansible.builtin.command"]["argv"]
+        dependency_inventory = task_named(tasks, "Record exact sanitized image dependency identities")
+        refreshed_inventory = task_named(
+            tasks,
+            "Refresh the dependency inventory from the populated Podman evidence stream",
+        )
 
         self.assertEqual(["sh", "-c"], argv[-3:-1])
         self.assertIn("e3tqc29uIC59fQ==", argv[-1])
@@ -314,6 +319,13 @@ class IncusLifecycleTests(unittest.TestCase):
         self.assertIn("item.molecule_incus_evidence_command.name == 'podman-inventory'", collection)
         self.assertIn("when: item.rc == 0", collection)
         self.assertNotIn("--format=json", argv)
+        for task in (dependency_inventory, refreshed_inventory):
+            conditions = task["when"]
+            self.assertIn("molecule_incus_evidence_base_image.rc == 0", conditions)
+            self.assertTrue(
+                any("is match('^[0-9a-f]{64}$')" in str(condition) for condition in conditions),
+                conditions,
+            )
 
     def test_firewalld_binding_is_runtime_scoped_and_destroyed_first(self) -> None:
         create_tasks = load_play_tasks("create.yml")
