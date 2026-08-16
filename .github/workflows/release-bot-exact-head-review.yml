@@ -32,7 +32,7 @@ permissions:
 
 concurrency:
   group: >-
-    exact-revision-codex-${{ github.repository }}-${{ github.event.pull_request.number || inputs.pr_number }}-${{ github.event.pull_request.head.sha || inputs.expected_head }}
+    exact-revision-codex-${{ github.repository }}-${{ inputs.pr_number }}-${{ inputs.expected_head }}
   cancel-in-progress: false
 
 # The workflow is accepted only as a Release-App-authenticated dispatch from the

@@ -142,7 +142,8 @@ def bind_protected_assets(metadata: dict[str, Any], asset_paths: dict[str, Path]
         fail("The complete protected review-asset set is required.")
     bound = dict(metadata)
     for metadata_key, path in asset_paths.items():
-        bound[metadata_key] = hashlib.sha256(protected_asset_bytes(path, metadata_key)).hexdigest()
+        asset_name = metadata_key.removesuffix("_sha256").replace("_", " ")
+        bound[metadata_key] = hashlib.sha256(protected_asset_bytes(path, asset_name)).hexdigest()
     canonical = json.dumps(bound, sort_keys=True, separators=(",", ":")).encode("utf-8")
     bound["input_sha256"] = hashlib.sha256(canonical).hexdigest()
     return bound
