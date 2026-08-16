@@ -45,7 +45,7 @@ container_images:
   - reference: "docker.io/library/nginx:stable@sha256:46ccc48fbb1f5a43167f2ee2c279c122b96eec5d976e7f4e1e0780f59a51b4d6"
     locations:
       - "roles/nginx_deploy/defaults/main.yml"
-  - reference: "docker.io/library/postgres:16@sha256:11a9d238fbb48bab14599c57e41123254452b1a2d93c6c8595bce96f346bd082"
+  - reference: "docker.io/library/postgres:16@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5"
     locations:
       - "manifests/identity-stack.pod.yaml"
       - "roles/forgejo_deploy/defaults/main.yml"
@@ -76,7 +76,7 @@ container_images:
   - reference: "docker.io/semaphoreui/semaphore:latest@sha256:8886d55da349f6d600f66f2c6dd2be01a3a5b4265542b04cb6c10ae47e4306d2"
     locations:
       - "roles/semaphore_deploy/defaults/main.yml"
-  - reference: "docker.io/smblds/smblds:latest@sha256:0f0426616c9b2618039891af3ab78339281157402030ef1f5072e1354778a0d4"
+  - reference: "docker.io/smblds/smblds:latest@sha256:045cc867a8762e98ae25777c984bca4300ced367e3d193cf56c06e34122ac204"
     locations:
       - "roles/samba_deploy/defaults/main.yml"
   - reference: "docker.io/sonatype/nexus3:latest@sha256:1263e77bd1e7748d3be9028ba6472cca7f534828e92d157cd0f3c13c6909b150"

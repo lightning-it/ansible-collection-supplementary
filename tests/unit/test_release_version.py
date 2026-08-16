@@ -264,6 +264,10 @@ class ReleaseVersionTests(unittest.TestCase):
         self.assertRegex(str(receipt["chain_id"]), r"^sha256:[0-9a-f]{64}$")
         self.assertEqual(0, receipt["security"]["human_actions"])
         self.assertEqual(
+            ["keycloak-security.yml"],
+            [fragment["path"] for fragment in receipt["fragments"]],
+        )
+        self.assertEqual(
             f".lit/security-release-intakes/{resolution['version']}.json",
             receipt["security"]["intake_receipt_path"],
         )

@@ -26,6 +26,7 @@ VERSION = "3.2.4"
 EVIDENCE_ID = "MLX90-KEYCLOAK-26.7.1-3.2.4"
 PROFILE = "lit.supplementary/keycloak-26.7.1-security-v1"
 NOW = datetime(2026, 8, 8, 23, 0, tzinfo=UTC)
+RECOVERY_FRAGMENT_FIXTURE_PATH = Path("tests/fixtures/security-release/keycloak-26.7.1-security.yml")
 
 
 class SecurityReleaseContractTests(unittest.TestCase):
@@ -151,6 +152,22 @@ class SecurityReleaseContractTests(unittest.TestCase):
         fragment_path.write_bytes(self.fragment_raw)
         return receipt
 
+    def _assert_recovery_fragment_lifecycle(self, root: Path) -> None:
+        fixture_raw = (root / RECOVERY_FRAGMENT_FIXTURE_PATH).read_bytes()
+        self.assertEqual(CONTRACT.RECOVERY_FRAGMENT_SHA256, CONTRACT.sha256_bytes(fixture_raw))
+        historical_fragment = root / CONTRACT.RECOVERY_FRAGMENT_PATH
+        if historical_fragment.exists():
+            self.assertEqual(fixture_raw, historical_fragment.read_bytes())
+            return
+
+        changelog = yaml.safe_load((root / "changelogs/changelog.yaml").read_text(encoding="utf-8"))
+        release = changelog["releases"][VERSION]
+        self.assertIn(Path(CONTRACT.RECOVERY_FRAGMENT_PATH).name, release["fragments"])
+        self.assertEqual(
+            yaml.safe_load(fixture_raw),
+            {"security_fixes": release["changes"]["security_fixes"]},
+        )
+
     def test_chain_id_uses_one_canonical_exact_binding(self) -> None:
         binding = CONTRACT.chain_binding(
             repository=CONTRACT.PRODUCER_REPOSITORY,
@@ -169,12 +186,36 @@ class SecurityReleaseContractTests(unittest.TestCase):
         reordered = dict(reversed(list(binding.items())))
         self.assertEqual(expected, CONTRACT.canonical_sha256(reordered))
 
+    def test_recovery_fragment_lifecycle_matches_repository_state(self) -> None:
+        self._assert_recovery_fragment_lifecycle(ROOT)
+
+    def test_recovery_fragment_lifecycle_accepts_only_recorded_post_release_removal(self) -> None:
+        fixture = self.root / RECOVERY_FRAGMENT_FIXTURE_PATH
+        fixture.parent.mkdir(parents=True)
+        fixture.write_bytes((ROOT / RECOVERY_FRAGMENT_FIXTURE_PATH).read_bytes())
+        changelog = {
+            "releases": {
+                VERSION: {
+                    "changes": yaml.safe_load(fixture.read_bytes()),
+                    "fragments": [Path(CONTRACT.RECOVERY_FRAGMENT_PATH).name],
+                },
+                "3.2.5": {
+                    "changes": {"bugfixes": ["A later release remains independent."]},
+                    "fragments": ["later-release.yml"],
+                },
+            }
+        }
+        changelog_path = self.root / "changelogs/changelog.yaml"
+        changelog_path.parent.mkdir(parents=True)
+        changelog_path.write_text(yaml.safe_dump(changelog), encoding="utf-8")
+        self._assert_recovery_fragment_lifecycle(self.root)
+
+        changelog["releases"][VERSION]["changes"]["security_fixes"] = ["Tampered history."]
+        changelog_path.write_text(yaml.safe_dump(changelog), encoding="utf-8")
+        with self.assertRaises(AssertionError):
+            self._assert_recovery_fragment_lifecycle(self.root)
+
     def test_one_time_recovery_request_is_exact_and_does_not_relax_normal_intake(self) -> None:
-        historical_fragment = ROOT / CONTRACT.RECOVERY_FRAGMENT_PATH
-        self.assertEqual(
-            CONTRACT.RECOVERY_FRAGMENT_SHA256,
-            CONTRACT.sha256_bytes(historical_fragment.read_bytes()),
-        )
         base_sha = "d" * 40
         recovery = {
             "schemaVersion": CONTRACT.INTAKE_REQUEST_SCHEMA_VERSION,
@@ -438,7 +479,7 @@ class SecurityReleaseContractTests(unittest.TestCase):
             fixed_version=CONTRACT.RECOVERY_FIXED_VERSION,
             acceptance_profile=CONTRACT.RECOVERY_ACCEPTANCE_PROFILE,
         )
-        fragment_raw = (ROOT / CONTRACT.RECOVERY_FRAGMENT_PATH).read_bytes()
+        fragment_raw = (ROOT / RECOVERY_FRAGMENT_FIXTURE_PATH).read_bytes()
         verified = {
             "schemaVersion": CONTRACT.INTAKE_RESULT_SCHEMA_VERSION,
             "chainId": request["chainId"],

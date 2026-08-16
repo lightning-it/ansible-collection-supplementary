@@ -153,7 +153,7 @@ repos:
           - ruff==0.15.21
         types: [python]
         files: >-
-          (?x)^(scripts/(enrich-cyclonedx-sbom|keycloak-evidence|lit-push-ready|lit-repository-quality|quality_cell_identity|quality_evidence|source_dependencies|validate-embedded-code|validate-role-coverage)\.py|
+          (?x)^(scripts/(enrich-cyclonedx-sbom|keycloak-evidence|lit-push-ready|lit-repository-quality|lit-trust-root-base-verifier|quality_cell_identity|quality_evidence|source_dependencies|validate-embedded-code|validate-role-coverage)\.py|
           molecule/shared/(incus/helpers|keycloak/acceptance)/.*\.py|tests/.*\.py)$
 
       - id: role-quality-ruff-format
@@ -164,7 +164,7 @@ repos:
           - ruff==0.15.21
         types: [python]
         files: >-
-          (?x)^(scripts/(enrich-cyclonedx-sbom|keycloak-evidence|lit-push-ready|lit-repository-quality|quality_cell_identity|quality_evidence|source_dependencies|validate-embedded-code|validate-role-coverage)\.py|
+          (?x)^(scripts/(enrich-cyclonedx-sbom|keycloak-evidence|lit-push-ready|lit-repository-quality|lit-trust-root-base-verifier|quality_cell_identity|quality_evidence|source_dependencies|validate-embedded-code|validate-role-coverage)\.py|
           molecule/shared/(incus/helpers|keycloak/acceptance)/.*\.py|tests/.*\.py)$
 
       - id: role-quality-mypy
@@ -181,6 +181,7 @@ repos:
           molecule/shared/keycloak/acceptance/browser_inventory\.py|tests/.*\.py)$
         args:
           - scripts/lit-push-ready.py
+          - scripts/lit-trust-root-base-verifier.py
           - scripts/lit-repository-quality.py
           - scripts/validate-embedded-code.py
           - scripts/validate-role-coverage.py
