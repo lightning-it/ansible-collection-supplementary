@@ -1,5 +1,5 @@
-# Managed by lightning-it/shared-assets-lit.
-# Do not edit downstream copies directly.
+# Repository-owned MLX-90 golden-path incubation asset.
+# Canonicalize in shared-assets only after a fresh protected pilot; automated sync must preserve this file.
 # yamllint disable rule:truthy rule:line-length
 ---
 name: Protected Exact-Revision Codex review

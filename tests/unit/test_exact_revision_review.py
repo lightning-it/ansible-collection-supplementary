@@ -218,6 +218,9 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
 class ExactRevisionWorkflowContractTests(unittest.TestCase):
     def test_release_app_review_is_protected_and_final_revision_only(self) -> None:
         workflow = (ROOT / ".github/workflows/release-bot-exact-head-review.yml").read_text(encoding="utf-8")
+        self.assertTrue(workflow.startswith("# Repository-owned MLX-90 golden-path incubation asset."))
+        self.assertIn("Canonicalize in shared-assets only after a fresh protected pilot", workflow)
+        self.assertNotIn("Managed by lightning-it/shared-assets-lit", workflow)
         trigger = workflow.split("on:", 1)[1].split("permissions:", 1)[0]
         self.assertIn("workflow_dispatch:", trigger)
         self.assertNotIn("pull_request_target:", trigger)
