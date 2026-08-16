@@ -178,6 +178,29 @@ RECOVERY_POST_CHANGELOG_CONTROL_PATHS = frozenset(
     }
 )
 RECOVERY_POST_CHANGELOG_CONTROL_DIFF_SHA256 = "sha256:d5b20e93aaad60b8e6048d507fa17fb2ce8b004885dd8fdb9352d18e4965a134"
+# Exact post-evidence-fix promotion required after the Incus runtime-evidence
+# correction and the Release-App-owned main backsync. The protected develop
+# base differs from main only by the independently reviewed Alertmanager
+# update below. Both that base advance and this one-time controller extension
+# are bound by canonical digests and exact path allowlists.
+RECOVERY_POST_EVIDENCE_FIX_MAIN_BASE_SHA = "27f0e15f3191348564d4421daacd8f7c19888e8f"
+RECOVERY_POST_EVIDENCE_FIX_DEVELOP_BASE_SHA = "26243645a4c926814b3470372b9f76648ea1af50"
+RECOVERY_POST_EVIDENCE_FIX_BASE_PATHS = frozenset(
+    {
+        "meta/source-dependencies.yml",
+        "roles/alertmanager_deploy/defaults/main.yml",
+    }
+)
+RECOVERY_POST_EVIDENCE_FIX_BASE_DIFF_SHA256 = "sha256:2d19b9ff730a29ac8e53f9c9cceff26eedb094e2e415721f612e113c8f3f65c1"
+RECOVERY_POST_EVIDENCE_FIX_CONTROL_PATHS = frozenset(
+    {
+        "changelogs/fragments/security-recovery-post-evidence-fix.yml",
+        "scripts/security-release-intake.py",
+        "scripts/security_release_contract.py",
+        "tests/unit/test_security_release_request_dispatch.py",
+    }
+)
+RECOVERY_POST_EVIDENCE_FIX_CONTROL_DIFF_SHA256 = "sha256:44762184f51ba0d94e7f7b80e6e7f51463ea79e6e5be33e35f8655027e061a23"
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
