@@ -217,6 +217,11 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                 self.assertIn("-f ref=develop", rerun_job)
                 self.assertNotIn("openai/codex-action@", rerun_job)
 
+    def test_human_current_revision_path_protects_main_and_develop(self) -> None:
+        workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")
+        binding = 'base_ref="$(jq -er \'.base.ref | select(. == "develop" or . == "main")\''
+        self.assertEqual(workflow.count(binding), 2)
+
     def test_release_app_pull_requests_do_not_enter_the_copilot_job(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")
         request_job = workflow.split("  request-current-revision-review:", 1)[1].split(

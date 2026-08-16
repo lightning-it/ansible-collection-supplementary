@@ -56,7 +56,8 @@ jobs:
           pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
           test "$(jq -r .state <<<"${pr}")" = open
           test "$(jq -r .draft <<<"${pr}")" = false
-          test "$(jq -r .base.ref <<<"${pr}")" = develop
+          base_ref="$(jq -er '.base.ref | select(. == "develop" or . == "main")' <<<"${pr}")"
+          test -n "${base_ref}"
           test "$(jq -r .base.sha <<<"${pr}")" = "${TRUSTED_WORKFLOW_SHA}"
           test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"
           test "$(jq -r .head.repo.full_name <<<"${pr}")" = "${REPOSITORY}"
@@ -634,7 +635,8 @@ jobs:
           test "$(jq -r .head.sha <<<"${pr}")" = "${EVENT_HEAD}"
           test "${EVENT_BASE}" = "${TRUSTED_WORKFLOW_SHA}"
           test "$(jq -r .base.sha <<<"${pr}")" = "${EVENT_BASE}"
-          test "$(jq -r .base.ref <<<"${pr}")" = develop
+          base_ref="$(jq -er '.base.ref | select(. == "develop" or . == "main")' <<<"${pr}")"
+          test -n "${base_ref}"
           test "$(jq -r .base.repo.full_name <<<"${pr}")" = "${REPOSITORY}"
           test "$(jq -r .user.login <<<"${pr}")" != 'lightning-it-release-automation[bot]'
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
