@@ -234,6 +234,10 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("codex-args: '[\"--ephemeral\"]'", workflow)
         self.assertIn("-f name='Current revision review'", workflow)
         self.assertIn("mlx90-exact-revision:v3:${input_sha256}", workflow)
+        self.assertIn('neutral_named="$(jq -c', workflow)
+        self.assertIn('legacy_named="$(jq -c', workflow)
+        self.assertGreaterEqual(workflow.count(".[0].app.id == 15368"), 2)
+        self.assertGreaterEqual(workflow.count(".[0].external_id == $external_id"), 2)
         self.assertIn("automatic retry is forbidden", workflow)
         self.assertIn("input_sha256 == $bound.input_sha256", workflow)
         self.assertIn('and .path == ".github/workflows/release-bot-exact-head-review.yml"', workflow)
@@ -271,6 +275,14 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")
         binding = 'base_ref="$(jq -er \'.base.ref | select(. == "develop" or . == "main")\''
         self.assertEqual(workflow.count(binding), 2)
+        self.assertIn(
+            "mlx90-current-revision:copilot:v3:${EVENT_BASE}:${EVENT_HEAD}",
+            workflow,
+        )
+        self.assertIn("'{schema:3,base_sha:$base,head_sha:$head,", workflow)
+        self.assertIn('named="$(jq -c', workflow)
+        self.assertIn(".[0].app.id == 15368", workflow)
+        self.assertIn(".[0].external_id == $external_id", workflow)
 
     def test_release_app_pull_requests_do_not_enter_the_copilot_job(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")

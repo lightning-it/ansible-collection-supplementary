@@ -305,19 +305,24 @@ jobs:
           neutral_external_id="mlx90-current-revision:v3:${input_sha256}"
           neutral_checks="$(gh api --paginate --slurp \
             "repos/${REPOSITORY}/commits/${EXPECTED_HEAD}/check-runs?check_name=Current%20revision%20review&per_page=100")"
-          neutral_count="$(jq \
-            --arg external_id "${neutral_external_id}" \
+          neutral_named="$(jq -c \
             '[.[].check_runs[]? |
-              select(.name == "Current revision review") |
-              select(.app.slug == "github-actions") |
-              select(.external_id == $external_id) |
-              select(.status == "completed" and .conclusion == "success")] | length' \
+              select(.name == "Current revision review")]' \
             <<<"${neutral_checks}")"
+          neutral_count="$(jq 'length' <<<"${neutral_named}")"
           if [ "${neutral_count}" -gt 1 ]; then
-            echo "Multiple neutral Current revision review checks exist for one immutable input." >&2
+            echo "Multiple neutral Current revision review checks exist for this head." >&2
             exit 1
           fi
-          if [ "${neutral_count}" -eq 0 ]; then
+          if [ "${neutral_count}" -eq 1 ]; then
+            jq -e --arg external_id "${neutral_external_id}" '
+              .[0].app.id == 15368
+              and .[0].app.slug == "github-actions"
+              and .[0].external_id == $external_id
+              and .[0].status == "completed"
+              and .[0].conclusion == "success"
+            ' <<<"${neutral_named}" >/dev/null
+          else
             gh api --method POST "repos/${REPOSITORY}/check-runs" \
               -f name='Current revision review' \
               -f head_sha="${EXPECTED_HEAD}" \
@@ -334,19 +339,24 @@ jobs:
           legacy_external_id="mlx90-legacy-exact-revision:v3:${input_sha256}"
           legacy_checks="$(gh api --paginate --slurp \
             "repos/${REPOSITORY}/commits/${EXPECTED_HEAD}/check-runs?check_name=Successful%20Copilot%20review&per_page=100")"
-          legacy_count="$(jq \
-            --arg external_id "${legacy_external_id}" \
+          legacy_named="$(jq -c \
             '[.[].check_runs[]? |
-              select(.name == "Successful Copilot review") |
-              select(.app.slug == "github-actions") |
-              select(.external_id == $external_id) |
-              select(.status == "completed" and .conclusion == "success")] | length' \
+              select(.name == "Successful Copilot review")]' \
             <<<"${legacy_checks}")"
+          legacy_count="$(jq 'length' <<<"${legacy_named}")"
           if [ "${legacy_count}" -gt 1 ]; then
-            echo "Multiple legacy transition aliases exist for one immutable input." >&2
+            echo "Multiple legacy transition aliases exist for this head." >&2
             exit 1
           fi
-          if [ "${legacy_count}" -eq 0 ]; then
+          if [ "${legacy_count}" -eq 1 ]; then
+            jq -e --arg external_id "${legacy_external_id}" '
+              .[0].app.id == 15368
+              and .[0].app.slug == "github-actions"
+              and .[0].external_id == $external_id
+              and .[0].status == "completed"
+              and .[0].conclusion == "success"
+            ' <<<"${legacy_named}" >/dev/null
+          else
             gh api --method POST "repos/${REPOSITORY}/check-runs" \
               -f name='Successful Copilot review' \
               -f head_sha="${EXPECTED_HEAD}" \
