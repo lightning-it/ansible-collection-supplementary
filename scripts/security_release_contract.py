@@ -164,6 +164,20 @@ RECOVERY_RELEASE_PREP_CONTROL_PATHS = frozenset(
     }
 )
 RECOVERY_RELEASE_PREP_CONTROL_DIFF_SHA256 = "sha256:1b396f7d2341b267bd6373630221f179a997343038320db233096c8ccae20373"
+# Exact post-changelog promotion required after the protected release-review
+# correction. The bases have identical trees and immutable ancestry; only the
+# four paths below may extend the one-time recovery controller.
+RECOVERY_POST_CHANGELOG_MAIN_BASE_SHA = "c63eee7f1105553a7f5e877aea646a2f1ee416df"
+RECOVERY_POST_CHANGELOG_DEVELOP_BASE_SHA = "efbb1b9698fdc69fe9c67aaf84d013629c2d2ccb"
+RECOVERY_POST_CHANGELOG_CONTROL_PATHS = frozenset(
+    {
+        "changelogs/fragments/security-recovery-post-changelog-promotion.yml",
+        "scripts/security-release-intake.py",
+        "scripts/security_release_contract.py",
+        "tests/unit/test_security_release_request_dispatch.py",
+    }
+)
+RECOVERY_POST_CHANGELOG_CONTROL_DIFF_SHA256 = "sha256:d5b20e93aaad60b8e6048d507fa17fb2ce8b004885dd8fdb9352d18e4965a134"
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
