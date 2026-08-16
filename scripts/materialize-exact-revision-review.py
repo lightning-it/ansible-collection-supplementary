@@ -98,7 +98,7 @@ def run(
     )
     if result.returncode != 0:
         stderr = result.stderr if isinstance(result.stderr, str) else result.stderr.decode(errors="replace")
-        command = " ".join(arguments[:2]) or "<empty-command>"
+        command = " ".join(arguments) or "<empty-command>"
         fail(f"Command failed closed: {command}: {stderr.strip()}")
     return result
 
