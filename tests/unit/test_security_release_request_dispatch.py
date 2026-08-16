@@ -396,18 +396,23 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
                 post_changelog_main_base,
             )
             post_changelog_develop_base = git(self.root, "rev-parse", "HEAD")
-            control_path.write_text("name: post-changelog recovered controller\n", encoding="utf-8")
             post_changelog_fragment = self.root / "changelogs/fragments/post-changelog-recovery.yml"
             post_changelog_fragment.write_text("bugfixes:\n  - Bind exact post-changelog recovery.\n", encoding="utf-8")
+            intake_path = self.root / "scripts/security-release-intake.py"
+            intake_path.write_text("# Bind exact post-changelog recovery.\n", encoding="utf-8")
             contract_path.write_text(
                 'RECOVERY_EVENT = "recovery"\n'
                 'RECOVERY_POST_CHANGELOG_CONTROL_DIFF_SHA256 = "sha256:' + ("0" * 64) + '"\n',
                 encoding="utf-8",
             )
+            test_path = self.root / "tests/unit/test_security_release_request_dispatch.py"
+            test_path.parent.mkdir(parents=True, exist_ok=True)
+            test_path.write_text("# Exercise exact post-changelog recovery.\n", encoding="utf-8")
             post_changelog_control_paths = {
-                control_path.relative_to(self.root).as_posix(),
                 post_changelog_fragment.relative_to(self.root).as_posix(),
+                intake_path.relative_to(self.root).as_posix(),
                 contract_path.relative_to(self.root).as_posix(),
+                test_path.relative_to(self.root).as_posix(),
             }
             git(self.root, "add", ".")
             git(self.root, "commit", "-q", "-m", "bind exact post-changelog recovery")
@@ -537,7 +542,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             )
         self.assertIs(envelope["dispatch"], True)
 
-    def test_recovery_rejects_changed_post_changelog_controller(self) -> None:
+    def test_recovery_rejects_changed_allowlisted_post_changelog_controller(self) -> None:
         recovery = self.prepare_recovery_topology(
             follow_up=True,
             terminal=True,
@@ -546,8 +551,8 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
             post_changelog=True,
         )
         git(self.root, "checkout", "-q", "-B", "tampered-post-changelog", recovery["promotion_head"])
-        control = self.root / ".github/workflows/security-release-dispatch.yml"
-        control.write_text("name: tampered post-changelog controller\n", encoding="utf-8")
+        control = self.root / "scripts/security-release-intake.py"
+        control.write_text("# Tamper with the allowlisted post-changelog controller.\n", encoding="utf-8")
         git(self.root, "add", ".")
         git(self.root, "commit", "-q", "-m", "tamper post-changelog recovery")
         tampered_head = git(self.root, "rev-parse", "HEAD")
