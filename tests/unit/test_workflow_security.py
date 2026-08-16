@@ -282,11 +282,11 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
     def test_copilot_review_is_requested_only_for_one_finalized_exact_head(self) -> None:
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         request_job = copilot.split("  request-current-revision-review:", 1)[1].split(
-            "  current-revision-reviewed:", 1
+            "  verify-current-revision-policy:", 1
         )[0]
         self.assertIn("github.event.action == 'ready_for_review'", request_job)
-        self.assertIn("github.event_name == 'workflow_dispatch'", request_job)
-        self.assertIn("github.ref == 'refs/heads/develop'", request_job)
+        self.assertIn("github.event_name == 'pull_request_target'", request_job)
+        self.assertNotIn("workflow_dispatch", request_job)
         self.assertNotIn("synchronize", request_job)
         self.assertIn('test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"', request_job)
         self.assertIn("Copilot already reviewed the exact finalized head", request_job)
@@ -297,7 +297,8 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("for attempt in 1 2 3 4 5", request_job)
         self.assertIn("Copilot reviewer request did not become visible", request_job)
         self.assertIn("cancel-in-progress: false", copilot)
-        self.assertIn("pull_request_review:", copilot)
+        self.assertIn("pull_request_target:", copilot)
+        self.assertNotIn("pull_request_review:", copilot)
 
         remediation = (WORKFLOWS / "codex-copilot-remediation.yml").read_text(encoding="utf-8")
         self.assertIn("reviewThreads(first:100,after:$after)", remediation)
@@ -315,7 +316,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
     def test_ten_intermediate_synchronize_events_cannot_request_copilot(self) -> None:
         workflow = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         request_job = workflow.split("  request-current-revision-review:", 1)[1].split(
-            "  current-revision-reviewed:", 1
+            "  verify-current-revision-policy:", 1
         )[0]
         condition = request_job.split("    if: >-", 1)[1].split("    permissions:", 1)[0]
         self.assertIn("github.event.action == 'ready_for_review'", condition)
@@ -1105,11 +1106,12 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             2,
             publish.count('python "$base_tree/scripts/release-version.py"'),
         )
-        self.assertIn("types: [ready_for_review]", exact_revision)
+        self.assertNotIn("pull_request_target:", exact_revision)
+        self.assertIn("workflow_dispatch:", exact_revision)
         self.assertIn("github.actor == 'lightning-it-release-automation[bot]'", exact_revision)
         self.assertIn("materialize-exact-revision-review.py?ref=${TRUSTED_WORKFLOW_SHA}", exact_revision)
         self.assertIn("-f name='Current revision review'", exact_revision)
-        self.assertNotIn("Successful Copilot review", exact_revision)
+        self.assertIn("Temporary alias: protected Exact-Revision Codex passed", exact_revision)
         self.assertIn("actions/runs/${preparation_run_id}", publish)
         self.assertIn('.conclusion == "success"', publish)
         action = ACTION.read_text(encoding="utf-8")

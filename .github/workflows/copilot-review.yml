@@ -4,20 +4,8 @@
 name: Current revision review gate
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, labeled, edited]
-  pull_request_review:
-    types: [submitted, edited]
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: Pull request to finalize for one exact-head Copilot review
-        required: true
-        type: number
-      expected_head:
-        description: Frozen exact pull request head SHA
-        required: true
-        type: string
+  pull_request_target:
+    types: [ready_for_review]
 
 permissions:
   contents: read
@@ -31,7 +19,7 @@ env:
   QUOTA_EXCEEDED_MARKER: quota exceeded
 
 concurrency:
-  group: copilot-review-${{ github.event.pull_request.number || inputs.pr_number }}
+  group: copilot-review-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 # Release-App pull requests are excluded from this workflow and use only the
@@ -42,14 +30,11 @@ jobs:
   request-current-revision-review:
     name: Request Copilot review for current revision
     if: >-
-      (github.event_name == 'pull_request' &&
-        github.event.action == 'ready_for_review' &&
-        github.event.pull_request.draft == false &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        github.event.pull_request.user.login == 'litroc') ||
-      (github.event_name == 'workflow_dispatch' &&
-        github.actor == 'lightning-it-release-automation[bot]' &&
-        github.ref == 'refs/heads/develop')
+      github.event_name == 'pull_request_target' &&
+      github.event.action == 'ready_for_review' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'litroc'
     permissions:
       contents: read
       issues: write
@@ -61,9 +46,10 @@ jobs:
       - name: Request Copilot review for the current revision
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
-          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || inputs.expected_head }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
           REPOSITORY: ${{ github.repository }}
+          TRUSTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
           [[ "${EXPECTED_HEAD}" =~ ^[0-9a-f]{40}$ ]]
@@ -71,6 +57,7 @@ jobs:
           test "$(jq -r .state <<<"${pr}")" = open
           test "$(jq -r .draft <<<"${pr}")" = false
           test "$(jq -r .base.ref <<<"${pr}")" = develop
+          test "$(jq -r .base.sha <<<"${pr}")" = "${TRUSTED_WORKFLOW_SHA}"
           test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"
           test "$(jq -r .head.repo.full_name <<<"${pr}")" = "${REPOSITORY}"
           author="$(jq -r .user.login <<<"${pr}")"
@@ -132,12 +119,13 @@ jobs:
           gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
             -f body="${marker}Copilot review requested once for finalized head ${EXPECTED_HEAD}." >/dev/null
 
-  current-revision-reviewed:
-    name: Current revision review
+  verify-current-revision-policy:
+    name: Verify current revision policy
     if: >-
       github.event.pull_request.draft == false &&
       github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'
     permissions:
+      checks: write
       contents: read
       pull-requests: read
     runs-on: ubuntu-latest
@@ -630,13 +618,67 @@ jobs:
 
           echo "GitHub Copilot reviewed current head ${head_sha}; no unresolved Copilot findings remain."
 
-  legacy-copilot-review-context:
-    name: Successful Copilot review
-    needs: current-revision-reviewed
-    if: always() && needs.current-revision-reviewed.result == 'success'
-    permissions: {}
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-    steps:
-      - name: Preserve the required context during ruleset migration
-        run: echo "Current revision review passed; legacy context remains only for the migration window."
+      - name: Publish bound neutral result and temporary legacy alias
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+          EVENT_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+          TRUSTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
+          test "$(jq -r .state <<<"${pr}")" = open
+          test "$(jq -r .draft <<<"${pr}")" = false
+          test "$(jq -r .head.sha <<<"${pr}")" = "${EVENT_HEAD}"
+          test "${EVENT_BASE}" = "${TRUSTED_WORKFLOW_SHA}"
+          test "$(jq -r .base.sha <<<"${pr}")" = "${EVENT_BASE}"
+          test "$(jq -r .base.ref <<<"${pr}")" = develop
+          test "$(jq -r .base.repo.full_name <<<"${pr}")" = "${REPOSITORY}"
+          test "$(jq -r .user.login <<<"${pr}")" != 'lightning-it-release-automation[bot]'
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          evidence="$(jq -cn \
+            --arg head "${EVENT_HEAD}" \
+            --arg run_url "${run_url}" \
+            '{schema:3,head_sha:$head,review_path:"applicable Copilot or governed automation exemption",run_url:$run_url}')"
+          publish_once() {
+            local check_name="$1" external_id="$2" title="$3"
+            local checks count
+            checks="$(gh api --paginate --slurp \
+              "repos/${REPOSITORY}/commits/${EVENT_HEAD}/check-runs?check_name=$(jq -rn --arg value "${check_name}" '$value|@uri')&per_page=100")"
+            count="$(jq \
+              --arg name "${check_name}" \
+              --arg external_id "${external_id}" \
+              '[.[].check_runs[]? |
+                select(.name == $name) |
+                select(.app.slug == "github-actions") |
+                select(.external_id == $external_id) |
+                select(.status == "completed" and .conclusion == "success")] | length' \
+              <<<"${checks}")"
+            if [ "${count}" -gt 1 ]; then
+              echo "Multiple protected ${check_name} results exist for ${EVENT_HEAD}." >&2
+              exit 1
+            fi
+            if [ "${count}" -eq 0 ]; then
+              gh api --method POST "repos/${REPOSITORY}/check-runs" \
+                -f name="${check_name}" \
+                -f head_sha="${EVENT_HEAD}" \
+                -f status=completed \
+                -f conclusion=success \
+                -f external_id="${external_id}" \
+                -f details_url="${run_url}" \
+                -f "output[title]=${title}" \
+                -f "output[summary]=${evidence}" >/dev/null
+            fi
+          }
+          publish_once \
+            'Current revision review' \
+            "mlx90-current-revision:copilot:v3:${EVENT_HEAD}" \
+            'Current revision review passed'
+          # Temporary migration alias only. Its evidence states the actual path;
+          # it is removed immediately after the ruleset requires the neutral name.
+          publish_once \
+            'Successful Copilot review' \
+            "mlx90-legacy-copilot:v3:${EVENT_HEAD}" \
+            'Temporary legacy alias for verified current-revision policy'

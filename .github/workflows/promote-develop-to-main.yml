@@ -169,12 +169,26 @@ jobs:
             --body "$body"
           if [ "$(jq -r '.[0].draft' <<< "$promotion_pulls")" = true ]; then
             GH_TOKEN="$RELEASE_TOKEN" gh pr ready "$pr_url" --repo "$REPO"
-          else
-            GH_TOKEN="$RELEASE_TOKEN" gh workflow run release-bot-exact-head-review.yml \
-              --repo "$REPO" \
-              --ref "$(jq -r '.[0].base.ref' <<<"$promotion_pulls")" \
-              -f "pr_number=$(jq -r '.[0].number' <<<"$promotion_pulls")" \
-              -f "base_ref=$(jq -r '.[0].base.ref' <<<"$promotion_pulls")" \
-              -f "expected_base=$(jq -r '.[0].base.sha' <<<"$promotion_pulls")" \
-              -f "expected_head=$(jq -r '.[0].head.sha' <<<"$promotion_pulls")"
           fi
+          promotion_pr_number="$(jq -r '.[0].number' <<<"$promotion_pulls")"
+          promotion_pull="$(GH_TOKEN="$RELEASE_TOKEN" gh api \
+            "repos/${REPO}/pulls/${promotion_pr_number}")"
+          jq -e \
+            --arg repo "$REPO" \
+            --arg sha "$(git rev-parse origin/develop)" '
+              .state == "open"
+              and .draft == false
+              and .head.repo.full_name == $repo
+              and .user.login == "lightning-it-release-automation[bot]"
+              and .user.type == "Bot"
+              and .head.ref == "develop"
+              and .head.sha == $sha
+              and .base.ref == "main"
+            ' <<<"$promotion_pull" >/dev/null
+          GH_TOKEN="$RELEASE_TOKEN" gh workflow run release-bot-exact-head-review.yml \
+            --repo "$REPO" \
+            --ref "$(jq -r .base.ref <<<"$promotion_pull")" \
+            -f "pr_number=${promotion_pr_number}" \
+            -f "base_ref=$(jq -r .base.ref <<<"$promotion_pull")" \
+            -f "expected_base=$(jq -r .base.sha <<<"$promotion_pull")" \
+            -f "expected_head=$(jq -r .head.sha <<<"$promotion_pull")"

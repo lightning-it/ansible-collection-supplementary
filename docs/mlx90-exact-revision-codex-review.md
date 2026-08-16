@@ -19,15 +19,16 @@ closed.
 
 ## Finalization boundary
 
-The review workflow runs only for one of these protected finalization events:
+The reviewer runs only after the Release App dispatches it with the exact
+pull-request number, base ref, base SHA, and head SHA while the workflow itself
+executes from that protected base ref. The producer first creates the PR as a
+draft, marks the verified PR ready, re-reads the live
+author/repository/base/head binding, and only then dispatches the protected Base
+controller.
 
-1. a same-repository pull request authored by `lightning-it-release-automation[bot]` changes from draft to ready; or
-2. that App dispatches the workflow with the exact pull-request number, base ref, base SHA, and head SHA while the
-   workflow itself executes from the protected base ref.
-
-Release-App workflows therefore create pull requests as drafts, re-read the live author, repository, base, and head,
-and mark the verified draft ready once. Opening, synchronizing, editing, reopening, or labeling a pull request does
-not start this reviewer.
+Release-App workflows therefore create pull requests as drafts and mark the
+verified draft ready once. Opening, synchronizing, editing, reopening, labeling,
+or the ready event itself does not directly start this reviewer.
 
 ## Immutable input
 
@@ -39,7 +40,11 @@ binds all of the following values:
 - the unique merge-base object ID;
 - the conflict-free integration-tree object ID;
 - SHA-256 and byte count of the complete `git diff --binary --full-index` from the base tree to the integration tree;
-- protected workflow object ID, repository, pull-request number, base ref, and finalization trigger.
+- SHA-256 of the protected workflow, materializer, prompt, and JSON schema;
+- one canonical complete-input SHA-256 over all immutable metadata and
+  protected-asset digests;
+- protected workflow object ID, repository, pull-request number, base ref, and
+  finalization trigger.
 
 An empty or incomplete input, ambiguous ancestry, merge conflict, changed live binding, or input of 200,000 bytes or
 more fails closed. Binary changes are included in the full diff instead of being exempted.
@@ -50,11 +55,18 @@ Codex receives a new directory containing only the complete diff, immutable meta
 protected schema. It receives no checkout, Git history, repository credentials, or automation token. The pinned
 action runs ephemerally with the read-only permission profile and dropped sudo.
 
-After the reviewer returns, the protected materializer reconstructs and compares the live input again. Only `PASS`
-with zero findings and exact equality of base, head, merge base, integration tree, and full-diff SHA-256 creates the
-neutral `Current revision review` check on the reviewed head. Failures create no passing check and cannot fall back to
+Before invoking Codex, the workflow reserves the complete-input hash. A prior
+protected PASS for that identical input is reused without another AI call. A
+prior failed or incomplete attempt blocks automatic retry. After a new reviewer
+run returns, the protected materializer reconstructs and compares the live
+input and rehashes every protected asset. Only `PASS` with zero findings and
+exact equality of base, head, merge base, integration tree, full-diff SHA-256,
+and complete-input SHA-256 creates the neutral `Current revision review` check
+on the reviewed head. Failures create no passing check and cannot fall back to
 another model, identity, or provider.
 
-The legacy `Successful Copilot review` job remains temporarily for non-Release-App pull requests while the protected
-ruleset is migrated to the neutral context. It is never emitted by the Exact-Revision Codex workflow and is not
-evidence that Codex was GitHub Copilot.
+During the atomic Ruleset migration only, the same already-verified result also
+publishes a temporary `Successful Copilot review` compatibility alias. Its
+machine evidence explicitly identifies the actual Codex path; it never causes a
+second AI call and is not a claim that Codex was GitHub Copilot. The alias is
+removed immediately after the Ruleset requires `Current revision review`.

@@ -83,7 +83,46 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
             self.assertEqual("d" * 40, metadata["integration_tree_sha"])
             self.assertEqual(64, len(metadata["diff_sha256"]))
             self.assertEqual(len(binary_diff), metadata["review_bytes"])
-            self.assertEqual(2, metadata["schema_version"])
+            self.assertEqual(3, metadata["schema_version"])
+
+    def test_complete_input_binds_every_protected_asset_and_detects_tampering(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            assets = {
+                "materializer_sha256": root / "materializer.py",
+                "prompt_sha256": root / "prompt.md",
+                "schema_sha256": root / "schema.json",
+                "workflow_sha256": root / "workflow.yml",
+            }
+            for index, path in enumerate(assets.values(), start=1):
+                path.write_text(f"protected asset {index}\n", encoding="utf-8")
+            metadata = {
+                "schema_version": 3,
+                "base_sha": "a" * 40,
+                "head_sha": "b" * 40,
+                "diff_sha256": "c" * 64,
+            }
+            first = self.module.bind_protected_assets(metadata, assets)
+            second = self.module.bind_protected_assets(metadata, assets)
+            self.assertEqual(first, second)
+            self.assertEqual(64, len(first["input_sha256"]))
+            for key in assets:
+                self.assertEqual(64, len(first[key]))
+
+            assets["prompt_sha256"].write_text("tampered prompt\n", encoding="utf-8")
+            tampered = self.module.bind_protected_assets(metadata, assets)
+            self.assertNotEqual(first["prompt_sha256"], tampered["prompt_sha256"])
+            self.assertNotEqual(first["input_sha256"], tampered["input_sha256"])
+
+    def test_protected_asset_reader_rejects_symlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "target"
+            target.write_text("protected\n", encoding="utf-8")
+            link = root / "link"
+            link.symlink_to(target)
+            with self.assertRaisesRegex(self.module.MaterializationError, "unavailable|non-symlink"):
+                self.module.protected_asset_bytes(link, "prompt")
 
     def test_empty_and_oversized_diffs_fail_closed(self) -> None:
         for name, diff in (("empty", b""), ("oversized", b"x" * 200_000)):
@@ -133,8 +172,8 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
     def test_release_app_review_is_protected_and_final_revision_only(self) -> None:
         workflow = (ROOT / ".github/workflows/release-bot-exact-head-review.yml").read_text(encoding="utf-8")
         trigger = workflow.split("on:", 1)[1].split("permissions:", 1)[0]
-        self.assertIn("types: [ready_for_review]", trigger)
         self.assertIn("workflow_dispatch:", trigger)
+        self.assertNotIn("pull_request_target:", trigger)
         self.assertNotIn("opened", trigger)
         self.assertNotIn("synchronize", trigger)
         self.assertIn("github.actor == 'lightning-it-release-automation[bot]'", workflow)
@@ -144,24 +183,33 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("permission-profile: :read-only", workflow)
         self.assertIn("codex-args: '[\"--ephemeral\"]'", workflow)
         self.assertIn("-f name='Current revision review'", workflow)
-        self.assertNotIn("Successful Copilot review", workflow)
+        self.assertIn("mlx90-exact-revision:v3:${input_sha256}", workflow)
+        self.assertIn("automatic retry is forbidden", workflow)
+        self.assertIn("input_sha256 == $bound.input_sha256", workflow)
+        self.assertIn('and .path == ".github/workflows/release-bot-exact-head-review.yml"', workflow)
+        self.assertIn("and .display_title == $title", workflow)
+        self.assertIn("and .triggering_actor.login == $actor", workflow)
+        self.assertIn("and .run_attempt == 1", workflow)
+        self.assertEqual(1, workflow.count("uses: openai/codex-action@"))
 
     def test_release_app_pull_requests_do_not_enter_the_copilot_job(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")
         request_job = workflow.split("  request-current-revision-review:", 1)[1].split(
-            "  current-revision-reviewed:", 1
+            "  verify-current-revision-policy:", 1
         )[0]
-        review_job = workflow.split("  current-revision-reviewed:", 1)[1].split("  legacy-copilot-review-context:", 1)[
-            0
-        ]
+        review_job = workflow.split("  verify-current-revision-policy:", 1)[1]
         self.assertIn("github.event.pull_request.user.login == 'litroc'", request_job)
-        self.assertIn("github.actor == 'lightning-it-release-automation[bot]'", request_job)
         self.assertIn("Contributor-funded review required", request_job)
+        self.assertIn("pull_request_target:", workflow)
+        self.assertNotIn("pull_request_review:", workflow)
+        self.assertNotIn("workflow_dispatch:", workflow)
         condition = review_job.split("    if: >-", 1)[1].split("    permissions:", 1)[0]
         self.assertIn("github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'", condition)
-        self.assertIn("name: Current revision review", review_job)
-        self.assertIn("name: Successful Copilot review", workflow)
-        self.assertIn("legacy context remains only for the migration window", workflow)
+        self.assertIn("name: Verify current revision policy", review_job)
+        self.assertNotIn("\n    name: Current revision review\n", workflow)
+        self.assertNotIn("\n    name: Successful Copilot review\n", workflow)
+        self.assertIn('-f name="${check_name}"', review_job)
+        self.assertIn('test "${EVENT_BASE}" = "${TRUSTED_WORKFLOW_SHA}"', review_job)
 
     def test_release_app_pr_creators_finalize_draft_once(self) -> None:
         for name in (
@@ -178,11 +226,23 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                 self.assertIn("gh workflow run release-bot-exact-head-review.yml", workflow)
                 self.assertIn("expected_base=", workflow)
                 self.assertIn("expected_head=", workflow)
+                self.assertLess(
+                    workflow.index("gh pr ready"),
+                    workflow.index("gh workflow run release-bot-exact-head-review.yml"),
+                )
+
+    def test_release_app_is_denied_from_copilot_remediation(self) -> None:
+        workflow = (ROOT / ".github/workflows/codex-copilot-remediation.yml").read_text(encoding="utf-8")
+        dispatch = workflow.split("  continue-after-push:", 1)[1].split("  inspect:", 1)[0]
+        inspect = workflow.split("  inspect:", 1)[1].split("  retry-copilot-service:", 1)[0]
+        self.assertIn("!= 'lightning-it-release-automation[bot]'", dispatch)
+        self.assertIn("= 'lightning-it-release-automation[bot]'", inspect)
+        self.assertLess(inspect.index("Release-App pull requests use only"), inspect.index("retry=true"))
 
     def test_external_contributors_are_never_auto_funded(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")
         request_job = workflow.split("  request-current-revision-review:", 1)[1].split(
-            "  current-revision-reviewed:", 1
+            "  verify-current-revision-policy:", 1
         )[0]
         self.assertIn("github.event.pull_request.user.login == 'litroc'", request_job)
         self.assertIn("Contributor-funded review required", request_job)

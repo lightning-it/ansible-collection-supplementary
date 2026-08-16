@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,13 @@ REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
 RELEASE_BOT = "lightning-it-release-automation[bot]"
 MAX_REVIEW_BYTES = 200_000
+MAX_PROTECTED_ASSET_BYTES = 1_000_000
+ASSET_ARGUMENTS = {
+    "materializer_sha256": "materializer_path",
+    "prompt_sha256": "prompt_path",
+    "schema_sha256": "schema_path",
+    "workflow_sha256": "workflow_path",
+}
 IMMUTABLE_METADATA_KEYS = (
     "schema_version",
     "repository",
@@ -34,6 +42,11 @@ IMMUTABLE_METADATA_KEYS = (
     "review_bytes",
     "trusted_workflow_sha",
     "trigger",
+    "materializer_sha256",
+    "prompt_sha256",
+    "schema_sha256",
+    "workflow_sha256",
+    "input_sha256",
 )
 
 
@@ -95,6 +108,52 @@ def require_sha(value: str, name: str) -> str:
     if not SHA1_PATTERN.fullmatch(value):
         fail(f"{name} must be a full lowercase SHA-1 object ID.")
     return value
+
+
+def protected_asset_bytes(path: Path, name: str) -> bytes:
+    """Read one bounded regular protected asset without following a symlink."""
+    flags = os.O_RDONLY
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        fail(f"Protected {name} is unavailable: {error}")
+    try:
+        details = os.fstat(descriptor)
+        if not stat.S_ISREG(details.st_mode):
+            fail(f"Protected {name} must be a regular non-symlink file.")
+        if details.st_size <= 0 or details.st_size > MAX_PROTECTED_ASSET_BYTES:
+            fail(f"Protected {name} must contain 1..{MAX_PROTECTED_ASSET_BYTES} bytes.")
+        with os.fdopen(descriptor, "rb", closefd=False) as protected_asset:
+            payload = protected_asset.read(MAX_PROTECTED_ASSET_BYTES + 1)
+        if len(payload) != details.st_size:
+            fail(f"Protected {name} changed while reading.")
+        return payload
+    finally:
+        os.close(descriptor)
+
+
+def bind_protected_assets(metadata: dict[str, Any], asset_paths: dict[str, Path]) -> dict[str, Any]:
+    """Bind every base-controlled review asset into one canonical input hash."""
+    if set(asset_paths) != set(ASSET_ARGUMENTS):
+        fail("The complete protected review-asset set is required.")
+    bound = dict(metadata)
+    for metadata_key, path in asset_paths.items():
+        bound[metadata_key] = hashlib.sha256(protected_asset_bytes(path, metadata_key)).hexdigest()
+    canonical = json.dumps(bound, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    bound["input_sha256"] = hashlib.sha256(canonical).hexdigest()
+    return bound
+
+
+def asset_paths_from_arguments(arguments: argparse.Namespace) -> dict[str, Path]:
+    paths: dict[str, Path] = {}
+    for metadata_key, argument_name in ASSET_ARGUMENTS.items():
+        path = getattr(arguments, argument_name, None)
+        if not isinstance(path, Path):
+            fail(f"Protected asset argument is required: {argument_name}")
+        paths[metadata_key] = path
+    return paths
 
 
 def validate_inputs(arguments: argparse.Namespace) -> None:
@@ -289,7 +348,7 @@ def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[s
 
         read_live_pull_request(arguments, home=home)
         metadata = {
-            "schema_version": 2,
+            "schema_version": 3,
             "repository": arguments.repository,
             "pull_request": arguments.pull_request,
             "base_ref": arguments.base_ref,
@@ -311,7 +370,26 @@ def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[s
         return metadata
 
 
-def verify(arguments: argparse.Namespace, review_directory: Path) -> dict[str, Any]:
+def bind_assets(review_directory: Path, asset_paths: dict[str, Path]) -> dict[str, Any]:
+    metadata_path = review_directory / "review-metadata.json"
+    if not metadata_path.is_file() or metadata_path.is_symlink():
+        fail("Review metadata must be a regular, non-symlink file.")
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        fail(f"Review metadata is malformed: {error}")
+    if any(key in metadata for key in (*ASSET_ARGUMENTS, "input_sha256")):
+        fail("Review metadata already contains protected asset bindings.")
+    bound = bind_protected_assets(metadata, asset_paths)
+    metadata_path.write_text(json.dumps(bound, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return bound
+
+
+def verify(
+    arguments: argparse.Namespace,
+    review_directory: Path,
+    asset_paths: dict[str, Path],
+) -> dict[str, Any]:
     validate_inputs(arguments)
     patch = review_directory / "change.patch"
     metadata_path = review_directory / "review-metadata.json"
@@ -325,7 +403,7 @@ def verify(arguments: argparse.Namespace, review_directory: Path) -> dict[str, A
     runner_temp = Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())).resolve()
     with tempfile.TemporaryDirectory(prefix="exact-revision-recheck.", dir=runner_temp) as temporary:
         regenerated = Path(temporary) / "review"
-        actual_metadata = materialize(arguments, regenerated)
+        actual_metadata = bind_protected_assets(materialize(arguments, regenerated), asset_paths)
         if patch.read_bytes() != (regenerated / "change.patch").read_bytes():
             fail("The full binary diff changed during exact-revision verification.")
     for key in IMMUTABLE_METADATA_KEYS:
@@ -336,7 +414,7 @@ def verify(arguments: argparse.Namespace, review_directory: Path) -> dict[str, A
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("materialize", "verify"))
+    parser.add_argument("mode", choices=("materialize", "bind-assets", "verify"))
     parser.add_argument("--repository", required=True)
     parser.add_argument("--pull-request", required=True, type=int)
     parser.add_argument("--base-ref", required=True)
@@ -346,6 +424,10 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--trigger", required=True, choices=("ready_for_review", "app_dispatch"))
     parser.add_argument("--dispatch-ref", default="")
     parser.add_argument("--review-directory", required=True, type=Path)
+    parser.add_argument("--materializer-path", type=Path)
+    parser.add_argument("--prompt-path", type=Path)
+    parser.add_argument("--schema-path", type=Path)
+    parser.add_argument("--workflow-path", type=Path)
     return parser.parse_args()
 
 
@@ -354,8 +436,10 @@ def main() -> int:
     try:
         if arguments.mode == "materialize":
             metadata = materialize(arguments, arguments.review_directory)
+        elif arguments.mode == "bind-assets":
+            metadata = bind_assets(arguments.review_directory, asset_paths_from_arguments(arguments))
         else:
-            metadata = verify(arguments, arguments.review_directory)
+            metadata = verify(arguments, arguments.review_directory, asset_paths_from_arguments(arguments))
     except MaterializationError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

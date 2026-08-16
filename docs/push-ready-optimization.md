@@ -32,8 +32,10 @@ checks, cache hits and misses, and explicit local external-review invocation
 counts split between Codex and Copilot. Both invocation counts and all local AI
 timings MUST remain zero. `local_ai_egress=prohibited` is a verified invariant,
 not an optional optimization.
-The server-side baseline additionally records the Current-Head Copilot gate,
-Collection CI, and final end-to-end workflow durations for the exact SHA.
+The server-side baseline additionally records the applicable Current-Revision
+AI gate, Collection CI, and final end-to-end workflow durations for the exact
+SHA. Release-App PRs use only the protected §7.2 Exact-Revision Codex path;
+applicable non-Release-App PRs use their governed Copilot path.
 
 ### Immutable PR #667 server baseline
 
@@ -42,8 +44,9 @@ final head `f6102f681c9cc2a56090910e485b242a1c5da6c9`, merged normally as
 `7eb8a9e04574650bb4736324bf647ab522e1dc33` at
 `2026-08-11T22:24:58Z`. GitHub records 12 Copilot review submissions bound
 to 11 distinct PR heads. This is the pre-pilot server-side cost proxy; the
-accepted standard-profile pilot must normally produce one Copilot submission
-for its one finalized head.
+accepted non-Release-App standard-profile pilot must normally produce one
+Copilot submission for its one finalized head. This historical baseline does
+not authorize Copilot for the Release App.
 
 For the final #667 head, the
 [Copilot gate run](https://github.com/lightning-it/ansible-collection-supplementary/actions/runs/31541388637)
@@ -121,11 +124,24 @@ code is loaded.
 ## Finalization and server review
 
 Local `validate` performs deterministic checks without external review. Drafts,
-ordinary pushes, and `synchronize` events never request GitHub Copilot. They only
-make any old Current-Head result stale. One request is made when a draft becomes
-ready or when the protected `develop` workflow receives a finalization dispatch
-bound to the exact live PR head. A previous request or completed review for that
-same head makes the operation idempotent.
+ordinary pushes, and `synchronize` events never request an AI review. They only
+make any old Current-Revision result stale.
+
+For the exact same-repository Release-App author, the producer re-reads the
+final ready PR and dispatches exactly the protected Base workflow with the live
+base and head binding. That workflow runs only §7.2 Exact-Revision Codex; it
+never requests Copilot and never falls back to another identity, model, or
+provider. A completed protected PASS for the identical full input is reused
+without another AI call. A prior failure or incomplete attempt blocks automatic
+retry.
+
+For applicable non-Release-App PRs, one Copilot request is made only when the
+draft becomes ready. The protected Base controller is triggered through
+`pull_request_target`, never checks out or executes candidate content, and
+binds the live Base and head before publishing a result. Lightning IT funds
+this request only for `litroc`; other contributors provide it under their own
+entitlement. A previous request or completed review for the same head makes the
+operation idempotent.
 
 All unresolved material Copilot findings for one reviewed head are supplied to
 one Codex remediation run and can produce at most one correction commit. That
@@ -173,8 +189,9 @@ The limit is never increased or bypassed automatically.
 
 1. Merge the bounded engine foundation through its protected Current-Head
    gates.
-2. Merge the two-profile, finalization, parallel-review, and measurement pilot
-   after a fresh trust-root dual review.
+2. Merge the two-profile, finalization, protected Current-Revision review, and
+   measurement pilot after the existing protected gates pass. No local AI or
+   dualreview is part of this stage.
 3. Add the signed exact-input review cache as a separate stage only after the
    profile pilot has live evidence.
 4. Add bounded parallel local checks and the explicit Foundation stack schema.
@@ -184,6 +201,6 @@ The limit is never increased or bypassed automatically.
    one guarded sync PR per managed repository.
 
 Each stage is independently reviewable. A stacked stage is not published until
-its immediate predecessor is regularly merged. Cached part-review PASS records
-may accelerate later work but never replace the one full final integration-head
-review or the final end-to-end run.
+its immediate predecessor is regularly merged. Cached deterministic records
+may accelerate later work but never replace the one protected full
+Current-Revision result or the final end-to-end run.
