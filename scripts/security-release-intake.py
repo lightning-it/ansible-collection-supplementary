@@ -299,6 +299,17 @@ def recovery_post_changelog_control_diff(root: Path, base_sha: str, head_sha: st
     )
 
 
+def recovery_post_evidence_fix_control_diff(root: Path, base_sha: str, head_sha: str) -> bytes:
+    """Canonicalize the exact post-evidence-fix recovery correction."""
+
+    return recovery_control_diff(
+        root,
+        base_sha,
+        head_sha,
+        b"RECOVERY_POST_EVIDENCE_FIX_CONTROL_DIFF_SHA256",
+    )
+
+
 def show_json(root: Path, sha: str, path: str, label: str) -> dict[str, Any]:
     return load_json_bytes(git_bytes(root, "show", f"{sha}:{path}"), label)
 
@@ -415,6 +426,8 @@ def verify_recovery_repository(
         CONTRACT.RECOVERY_RELEASE_PREP_DEVELOP_BASE_SHA,
         CONTRACT.RECOVERY_POST_CHANGELOG_MAIN_BASE_SHA,
         CONTRACT.RECOVERY_POST_CHANGELOG_DEVELOP_BASE_SHA,
+        CONTRACT.RECOVERY_POST_EVIDENCE_FIX_MAIN_BASE_SHA,
+        CONTRACT.RECOVERY_POST_EVIDENCE_FIX_DEVELOP_BASE_SHA,
         CONTRACT.RECOVERY_CANDIDATE_BASE_SHA,
         CONTRACT.RECOVERY_CANDIDATE_HEAD_SHA,
     ):
@@ -456,6 +469,7 @@ def verify_recovery_repository(
     receipt_refresh_promotion = False
     release_prep_promotion = False
     post_changelog_promotion = False
+    post_evidence_fix_promotion = False
     if live_main == CONTRACT.RECOVERY_FIRST_PROMOTION_SHA:
         parents = first_parents
         control_base = CONTRACT.RECOVERY_APPROVED_MAIN_SHA
@@ -577,6 +591,31 @@ def verify_recovery_repository(
             fail("Security recovery post-changelog promotion does not descend from its exact develop base")
         control_base = CONTRACT.RECOVERY_POST_CHANGELOG_DEVELOP_BASE_SHA
         expected_control_paths = CONTRACT.RECOVERY_POST_CHANGELOG_CONTROL_PATHS
+    elif len(parents) == 2 and parents[0] == CONTRACT.RECOVERY_POST_EVIDENCE_FIX_MAIN_BASE_SHA:
+        post_evidence_fix_promotion = True
+        if not git_is_ancestor(root, CONTRACT.RECOVERY_POST_EVIDENCE_FIX_MAIN_BASE_SHA, live_main):
+            fail("Security recovery post-evidence-fix promotion does not descend from its exact main base")
+        if not git_is_ancestor(root, CONTRACT.RECOVERY_POST_EVIDENCE_FIX_DEVELOP_BASE_SHA, parents[1]):
+            fail("Security recovery post-evidence-fix promotion does not descend from its exact develop base")
+        base_patch = canonical_diff(
+            root,
+            CONTRACT.RECOVERY_POST_EVIDENCE_FIX_MAIN_BASE_SHA,
+            CONTRACT.RECOVERY_POST_EVIDENCE_FIX_DEVELOP_BASE_SHA,
+        )
+        if sha256(base_patch) != CONTRACT.RECOVERY_POST_EVIDENCE_FIX_BASE_DIFF_SHA256:
+            fail("Security recovery post-evidence-fix protected develop advance differs from its approved binding")
+        base_changes = changed_paths(
+            root,
+            CONTRACT.RECOVERY_POST_EVIDENCE_FIX_MAIN_BASE_SHA,
+            CONTRACT.RECOVERY_POST_EVIDENCE_FIX_DEVELOP_BASE_SHA,
+        )
+        base_paths = {path for status, path in base_changes if status in {"A", "M"}}
+        if any(status == "D" for status, _path in base_changes):
+            fail("Security recovery post-evidence-fix protected develop advance must not delete content")
+        if base_paths != CONTRACT.RECOVERY_POST_EVIDENCE_FIX_BASE_PATHS:
+            fail("Security recovery post-evidence-fix protected develop advance changed unexpected paths")
+        control_base = CONTRACT.RECOVERY_POST_EVIDENCE_FIX_DEVELOP_BASE_SHA
+        expected_control_paths = CONTRACT.RECOVERY_POST_EVIDENCE_FIX_CONTROL_PATHS
     else:
         fail("Security recovery controller is not an exact approved recovery promotion")
     if not git_is_ancestor(root, parents[1], live_develop):
@@ -592,7 +631,11 @@ def verify_recovery_repository(
         fail("Security recovery controls must not delete repository content")
     if control_paths != expected_control_paths:
         fail("Security recovery controller changes paths outside the exact approved allowlist")
-    if post_changelog_promotion:
+    if post_evidence_fix_promotion:
+        control_patch = recovery_post_evidence_fix_control_diff(root, control_base, parents[1])
+        if sha256(control_patch) != CONTRACT.RECOVERY_POST_EVIDENCE_FIX_CONTROL_DIFF_SHA256:
+            fail("Security recovery post-evidence-fix controller diff differs from its approved binding")
+    elif post_changelog_promotion:
         control_patch = recovery_post_changelog_control_diff(root, control_base, parents[1])
         if sha256(control_patch) != CONTRACT.RECOVERY_POST_CHANGELOG_CONTROL_DIFF_SHA256:
             fail("Security recovery post-changelog controller diff differs from its approved binding")
