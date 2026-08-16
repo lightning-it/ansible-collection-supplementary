@@ -123,6 +123,7 @@ TRUSTED_CHECK_POLICY_PATHS = (
     "scripts/lit-push-ready.py",
     "scripts/lit-repository-quality.py",
     "scripts/lit-safe-temp-run.py",
+    "scripts/lit-trust-root-base-verifier.py",
     "scripts/validate-embedded-code.py",
     "scripts/wunder-devtools-ee.sh",
     "scripts/wunder-container-run.sh",
