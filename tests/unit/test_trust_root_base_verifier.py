@@ -19,6 +19,67 @@ SPEC.loader.exec_module(VERIFIER)
 
 
 class TrustRootBaseVerifierTests(unittest.TestCase):
+    def test_repository_discovery_ignores_host_git_and_credential_environment(self) -> None:
+        token_environment = {
+            "GIT_DIR": "/private/attacker.git",
+            "GIT_WORK_TREE": "/private/attacker-tree",
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "credential.helper",
+            "GIT_CONFIG_VALUE_0": "attacker-helper",
+            "GIT_ASKPASS": "/private/attacker-askpass",
+            "HTTPS_PROXY": "https://private.invalid",
+            "LIT_TRUST_ROOT_REPOSITORY": "/private/attacker-tree",
+            "OPENAI_API_KEY": "private",
+            "PATH": "/private/attacker-bin",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            completed = SimpleNamespace(returncode=0, stdout=f"{root}\n", stderr="")
+            with (
+                mock.patch.object(VERIFIER.subprocess, "run", return_value=completed) as run,
+                mock.patch.dict(VERIFIER.os.environ, token_environment, clear=True),
+            ):
+                self.assertEqual(root, VERIFIER.discover_repository_root())
+        command = run.call_args.args[0]
+        self.assertEqual(("rev-parse", "--show-toplevel"), tuple(command[-2:]))
+        self.assertEqual(VERIFIER.isolated_git_environment(), run.call_args.kwargs["env"])
+        self.assertEqual(
+            {"GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_TERMINAL_PROMPT", "LC_ALL", "PATH"},
+            set(run.call_args.kwargs["env"]),
+        )
+
+    def test_local_git_reads_ignore_host_git_and_credential_environment(self) -> None:
+        token_environment = {
+            "GH_TOKEN": "private",
+            "GIT_DIR": "/private/attacker.git",
+            "GIT_WORK_TREE": "/private/attacker-tree",
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_SSH_COMMAND": "private",
+            "HTTPS_PROXY": "https://private.invalid",
+            "OPENAI_API_KEY": "private",
+            "PATH": "/private/attacker-bin",
+        }
+        completed = SimpleNamespace(returncode=0, stdout=b"verified\n", stderr=b"")
+        with (
+            mock.patch.object(VERIFIER.subprocess, "run", return_value=completed) as run,
+            mock.patch.dict(VERIFIER.os.environ, token_environment, clear=True),
+        ):
+            self.assertEqual(b"verified\n", VERIFIER.run_git("rev-parse", "HEAD"))
+        command = run.call_args.args[0]
+        environment = run.call_args.kwargs["env"]
+        self.assertEqual(("rev-parse", "HEAD"), tuple(command[-2:]))
+        self.assertIn("credential.helper=", command)
+        self.assertIn("core.askPass=", command)
+        self.assertIn("http.extraHeader=", command)
+        self.assertIn("http.proxy=", command)
+        self.assertIn("https.proxy=", command)
+        self.assertIn("core.hooksPath=/dev/null", command)
+        self.assertEqual(VERIFIER.isolated_git_environment(), environment)
+        self.assertEqual(
+            {"GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_TERMINAL_PROMPT", "LC_ALL", "PATH"},
+            set(environment),
+        )
+
     def test_requires_full_lowercase_git_object_ids(self) -> None:
         value = "a" * 40
         self.assertEqual(value, VERIFIER.require_full_object_id(value, "test"))
@@ -188,6 +249,21 @@ class TrustRootBaseVerifierTests(unittest.TestCase):
                 engine.unlink()
                 engine.symlink_to(Path(temporary).parent / "outside.py")
                 with self.assertRaisesRegex(RuntimeError, "must not be a symlink"):
+                    VERIFIER.candidate_engine_path()
+
+    def test_candidate_engine_path_rejects_non_regular_files_without_blocking(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            engine = scripts / "lit-push-ready.py"
+            with mock.patch.object(VERIFIER, "ROOT", root):
+                engine.mkdir()
+                with self.assertRaisesRegex(RuntimeError, "must be a regular file"):
+                    VERIFIER.candidate_engine_path()
+                engine.rmdir()
+                os.mkfifo(engine)
+                with self.assertRaisesRegex(RuntimeError, "must be a regular file"):
                     VERIFIER.candidate_engine_path()
 
     def test_cached_controller_check_does_not_require_python_3_10_stat_keyword(self) -> None:

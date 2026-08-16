@@ -27,20 +27,70 @@ import sys
 from pathlib import Path
 from typing import Any
 
-git_binary = shutil.which("git")
+
+def isolated_git_environment() -> dict[str, str]:
+    """Return the complete, deliberately tiny environment for every Git read."""
+    return {
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_TERMINAL_PROMPT": "0",
+        "LC_ALL": "C",
+        "PATH": os.defpath,
+    }
+
+
+git_binary = shutil.which("git", path=os.defpath)
 if not git_binary:
     raise RuntimeError("git executable is unavailable")
 GIT_BINARY: str = git_binary
 
-ROOT = Path(
-    os.environ.get("LIT_TRUST_ROOT_REPOSITORY")
-    or subprocess.run(  # noqa: S603, S607
-        [GIT_BINARY, "rev-parse", "--show-toplevel"],
-        check=True,
-        stdout=subprocess.PIPE,
+
+def git_command(*args: str) -> list[str]:
+    """Build a Git command that neutralizes credential, proxy, and hook config."""
+    return [
+        GIT_BINARY,
+        "-c",
+        "credential.helper=",
+        "-c",
+        "core.askPass=",
+        "-c",
+        "http.extraHeader=",
+        "-c",
+        "http.proxy=",
+        "-c",
+        "https.proxy=",
+        "-c",
+        "core.hooksPath=/dev/null",
+        *args,
+    ]
+
+
+def discover_repository_root() -> Path:
+    result = subprocess.run(  # noqa: S603
+        git_command("rev-parse", "--show-toplevel"),
+        env=isolated_git_environment(),
+        check=False,
+        capture_output=True,
         text=True,
-    ).stdout.strip()
-).resolve()
+    )
+    if result.returncode:
+        raise RuntimeError("authorized repository root is unavailable")
+    value = result.stdout.strip()
+    if not value:
+        raise RuntimeError("authorized repository root is unavailable")
+    root = Path(value)
+    if not root.is_absolute():
+        raise RuntimeError("authorized repository root is not absolute")
+    try:
+        resolved = root.resolve(strict=True)
+    except OSError as exc:
+        raise RuntimeError("authorized repository root is unavailable") from exc
+    if not resolved.is_dir():
+        raise RuntimeError("authorized repository root is not a directory")
+    return resolved
+
+
+ROOT = discover_repository_root()
 BASE_REF = "refs/remotes/origin/develop"
 ENGINE_PATH = "scripts/lit-push-ready.py"
 CONTROLLER_PATH = "scripts/lit-trust-root-base-verifier.py"
@@ -63,12 +113,12 @@ SAFE_LOCAL_BRANCH_CONFIG = re.compile(r"branch\..+\.(?:merge|remote)\Z")
 
 
 def run_git(*args: str, input_bytes: bytes | None = None) -> bytes:
-    result = subprocess.run(  # noqa: S603, S607, UP022
-        [GIT_BINARY, *args],
+    result = subprocess.run(  # noqa: S603
+        git_command(*args),
         cwd=ROOT,
+        env=isolated_git_environment(),
         input=input_bytes,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
     if result.returncode:
@@ -90,11 +140,13 @@ def candidate_engine_path() -> Path:
     authorized_root = ROOT.resolve(strict=True)
     candidate = authorized_root / ENGINE_PATH
     try:
-        candidate.lstat()
+        details = candidate.lstat()
     except OSError as exc:
         raise RuntimeError("candidate engine is unavailable") from exc
-    if candidate.is_symlink():
+    if stat.S_ISLNK(details.st_mode):
         raise RuntimeError("candidate engine must not be a symlink")
+    if not stat.S_ISREG(details.st_mode):
+        raise RuntimeError("candidate engine must be a regular file")
     try:
         resolved = candidate.resolve(strict=True)
     except OSError as exc:
@@ -134,22 +186,11 @@ def require_unchanged_base(expected: str) -> None:
         raise RuntimeError("authoritative Base advanced during Trust-Root preparation")
 
 
-def public_git_environment() -> dict[str, str]:
-    """Return the complete, deliberately tiny environment for public Git reads."""
-    return {
-        "GIT_CONFIG_GLOBAL": os.devnull,
-        "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_TERMINAL_PROMPT": "0",
-        "LC_ALL": "C",
-        "PATH": os.defpath,
-    }
-
-
 def public_git_output(*args: str) -> str:
     result = subprocess.run(  # noqa: S603
-        [GIT_BINARY, *args],
+        git_command(*args),
         cwd=ROOT,
-        env=public_git_environment(),
+        env=isolated_git_environment(),
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         check=False,
@@ -184,27 +225,14 @@ def require_safe_fetch_configuration() -> None:
 def refresh_public_base() -> None:
     require_safe_fetch_configuration()
     result = subprocess.run(  # noqa: S603
-        [
-            GIT_BINARY,
-            "-c",
-            "credential.helper=",
-            "-c",
-            "core.askPass=",
-            "-c",
-            "http.extraHeader=",
-            "-c",
-            "http.proxy=",
-            "-c",
-            "https.proxy=",
-            "-c",
-            "core.hooksPath=/dev/null",
+        git_command(
             "fetch",
             "--no-tags",
             PUBLIC_ORIGIN,
             "refs/heads/develop:refs/remotes/origin/develop",
-        ],
+        ),
         cwd=ROOT,
-        env=public_git_environment(),
+        env=isolated_git_environment(),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         check=False,

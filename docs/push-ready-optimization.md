@@ -120,6 +120,13 @@ server gates remain the only protected acceptance boundary. Its local
 `verify` command can report only on already-produced advisory evidence and
 never authorizes a push or merge.
 
+Repository discovery, local object reads, configuration inspection, and the
+anonymous Base refresh all resolve Git from the system default path and run in
+the same minimal environment without inherited Git, proxy, or credential
+variables. The candidate engine path must be a regular non-symlink file inside
+the authorized repository; any other filesystem type fails closed before Base
+code is loaded.
+
 ## Finalization and server review
 
 Local `validate` performs deterministic checks without external review. Drafts,

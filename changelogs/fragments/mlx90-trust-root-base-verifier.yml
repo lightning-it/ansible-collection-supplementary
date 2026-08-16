@@ -5,4 +5,6 @@ security_fixes:
     candidate engine cannot validate its own Base-bound evidence. The
     verifier must already exist unchanged in the pinned Base and cannot
     bootstrap or approve itself, invoke local external reviewers, or replace
-    shared Git hooks.
+    shared Git hooks. Repository discovery and every Git read use an isolated
+    credential-free environment, while non-regular candidate engines fail
+    closed before Base code is loaded.
