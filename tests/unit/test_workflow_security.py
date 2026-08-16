@@ -285,6 +285,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             "  verify-current-revision-policy:", 1
         )[0]
         self.assertIn("github.event.action == 'ready_for_review'", request_job)
+        self.assertIn("github.event.action == 'opened'", request_job)
         self.assertIn("github.event_name == 'pull_request_target'", request_job)
         self.assertNotIn("workflow_dispatch", request_job)
         self.assertNotIn("synchronize", request_job)
@@ -298,6 +299,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("Copilot reviewer request did not become visible", request_job)
         self.assertIn("cancel-in-progress: false", copilot)
         self.assertIn("pull_request_target:", copilot)
+        self.assertIn("types: [opened, ready_for_review]", copilot)
         self.assertNotIn("pull_request_review:", copilot)
 
         remediation = (WORKFLOWS / "codex-copilot-remediation.yml").read_text(encoding="utf-8")

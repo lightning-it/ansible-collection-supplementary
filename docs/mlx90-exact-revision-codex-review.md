@@ -70,3 +70,24 @@ publishes a temporary `Successful Copilot review` compatibility alias. Its
 machine evidence explicitly identifies the actual Codex path; it never causes a
 second AI call and is not a claim that Codex was GitHub Copilot. The alias is
 removed immediately after the Ruleset requires `Current revision review`.
+
+## Ruleset-bound verifier
+
+The neutral status name is not a trust root by itself. A same-repository
+workflow could otherwise request `checks: write` and publish a look-alike
+result. The organization Ruleset therefore requires the exact public
+`.github/workflows/supplementary-current-revision-required.yml` workflow from
+the protected `main` ref of `lightning-it/.github`, targeted only to the
+Supplementary repository ID and its protected branches. The workflow checks
+its own source repository/ref/SHA and the single result's GitHub Actions App ID,
+external ID, evidence JSON, producer run URL, workflow path, event, base SHA,
+run attempt, and—on the Release-App path—the exact actor and triggering actor.
+
+The required workflow performs no AI call and never checks out candidate code.
+On an intermediate head it fails closed without requesting a review. After a
+final protected producer publishes its bound neutral result, a separate
+base-owned helper may rerun that one failed verifier attempt exactly once. The
+helper cannot create review evidence, cannot invoke AI, and refuses a second
+failed retry. This lets GitHub's default required-workflow events remain the
+immutable enforcement root without turning every synchronize event into an AI
+request.

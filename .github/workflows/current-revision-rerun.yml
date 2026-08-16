@@ -1,0 +1,130 @@
+# Protected helper: it can rerun only the single verifier reservation bound to
+# the exact live PR head, and only once after a neutral PASS exists.
+# yamllint disable rule:truthy rule:line-length
+---
+name: Re-evaluate protected current-revision evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request whose protected verifier must be re-evaluated
+        required: true
+        type: number
+      expected_base:
+        description: Frozen pull-request base SHA
+        required: true
+        type: string
+      expected_head:
+        description: Frozen pull-request head SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rerun-protected-verifier:
+    name: Re-run the one protected verifier attempt
+    permissions:
+      actions: write
+      checks: read
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Validate the live binding and rerun exactly once
+        env:
+          EXPECTED_BASE: ${{ inputs.expected_base }}
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF}" = refs/heads/develop
+          [[ "${EXPECTED_BASE}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${EXPECTED_HEAD}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${PR_NUMBER}" =~ ^[1-9][0-9]*$ ]]
+          pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
+          jq -e \
+            --arg base "${EXPECTED_BASE}" \
+            --arg head "${EXPECTED_HEAD}" \
+            --arg repository "${REPOSITORY}" '
+              .state == "open"
+              and .draft == false
+              and .base.sha == $base
+              and .head.sha == $head
+              and .base.repo.full_name == $repository
+              and (.base.ref == "develop" or .base.ref == "main")
+            ' <<<"${pr}" >/dev/null
+
+          neutral_pages="$(gh api --paginate --slurp \
+            "repos/${REPOSITORY}/commits/${EXPECTED_HEAD}/check-runs?check_name=Current%20revision%20review&per_page=100")"
+          neutral="$(jq -c '
+            [.[].check_runs[]? |
+              select(.name == "Current revision review") |
+              select(.app.id == 15368 and .app.slug == "github-actions") |
+              select(.status == "completed" and .conclusion == "success")]
+          ' <<<"${neutral_pages}")"
+          test "$(jq 'length' <<<"${neutral}")" -eq 1
+          producer_url="$(jq -r '.[0].details_url // empty' <<<"${neutral}")"
+          producer_prefix="${GITHUB_SERVER_URL}/${REPOSITORY}/actions/runs/"
+          case "${producer_url}" in
+            "${producer_prefix}"[1-9][0-9]*) ;;
+            *) echo "Neutral result has an invalid producer run URL." >&2; exit 1 ;;
+          esac
+          producer_id="${producer_url#"${producer_prefix}"}"
+          [[ "${producer_id}" =~ ^[1-9][0-9]*$ ]]
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            producer="$(gh api "repos/${REPOSITORY}/actions/runs/${producer_id}")"
+            if [ "$(jq -r .status <<<"${producer}")" = completed ]; then
+              test "$(jq -r .conclusion <<<"${producer}")" = success
+              break
+            fi
+            test "${attempt}" -lt 10
+            sleep 2
+          done
+
+          external_id="rep60-required-workflow:v1:${PR_NUMBER}:${EXPECTED_HEAD}"
+          reservations_pages="$(gh api --paginate --slurp \
+            "repos/${REPOSITORY}/commits/${EXPECTED_HEAD}/check-runs?check_name=Protected%20current-revision%20verifier&per_page=100")"
+          reservations="$(jq -c \
+            --arg external_id "${external_id}" '
+              [.[].check_runs[]? |
+                select(.name == "Protected current-revision verifier") |
+                select(.app.id == 15368 and .app.slug == "github-actions") |
+                select(.external_id == $external_id)]
+            ' <<<"${reservations_pages}")"
+          test "$(jq 'length' <<<"${reservations}")" -eq 1
+          details_url="$(jq -r '.[0].details_url // empty' <<<"${reservations}")"
+          expected_prefix="${GITHUB_SERVER_URL}/${REPOSITORY}/actions/runs/"
+          case "${details_url}" in
+            "${expected_prefix}"[1-9][0-9]*) ;;
+            *) echo "Protected verifier reservation has an invalid run URL." >&2; exit 1 ;;
+          esac
+          run_id="${details_url#"${expected_prefix}"}"
+          [[ "${run_id}" =~ ^[1-9][0-9]*$ ]]
+          run="$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}")"
+          base_ref="$(jq -r .base.ref <<<"${pr}")"
+          jq -e \
+            --arg base_ref "${base_ref}" \
+            --arg base_sha "${EXPECTED_BASE}" \
+            --arg details_url "${details_url}" '
+              .event == "pull_request_target"
+              and .path == ".github/workflows/supplementary-current-revision-required.yml"
+              and .name == "Protected Supplementary current-revision evidence verifier"
+              and .head_branch == $base_ref
+              and .head_sha == $base_sha
+              and .html_url == $details_url
+              and .status == "completed"
+            ' <<<"${run}" >/dev/null
+          if [ "$(jq -r .conclusion <<<"${run}")" = success ]; then
+            echo "Protected verifier already passed; no rerun is needed."
+            exit 0
+          fi
+          test "$(jq -r .conclusion <<<"${run}")" = failure
+          test "$(jq -r .run_attempt <<<"${run}")" -eq 1
+          gh api --method POST "repos/${REPOSITORY}/actions/runs/${run_id}/rerun" >/dev/null

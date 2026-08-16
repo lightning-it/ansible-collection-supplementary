@@ -192,6 +192,31 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("and .run_attempt == 1", workflow)
         self.assertEqual(1, workflow.count("uses: openai/codex-action@"))
 
+    def test_ruleset_workflow_verifies_the_producer_instead_of_trusting_a_check_name(self) -> None:
+        rerun = (ROOT / ".github/workflows/current-revision-rerun.yml").read_text(encoding="utf-8")
+        self.assertIn("workflow_dispatch:", rerun)
+        self.assertIn("test \"${GITHUB_REF}\" = refs/heads/develop", rerun)
+        self.assertIn(
+            '.path == ".github/workflows/supplementary-current-revision-required.yml"',
+            rerun,
+        )
+        self.assertIn(
+            '.name == "Protected Supplementary current-revision evidence verifier"',
+            rerun,
+        )
+        self.assertIn("test \"$(jq -r .run_attempt <<<\"${run}\")\" -eq 1", rerun)
+        self.assertEqual(1, rerun.count('/rerun\" >/dev/null'))
+
+    def test_review_producers_request_only_the_protected_verifier_rerun(self) -> None:
+        for name in ("copilot-review.yml", "release-bot-exact-head-review.yml"):
+            with self.subTest(workflow=name):
+                workflow = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
+                rerun_job = workflow.split("  request-protected-verifier-reevaluation:", 1)[1]
+                self.assertIn("actions: write", rerun_job)
+                self.assertIn("current-revision-rerun.yml/dispatches", rerun_job)
+                self.assertIn("-f ref=develop", rerun_job)
+                self.assertNotIn("openai/codex-action@", rerun_job)
+
     def test_release_app_pull_requests_do_not_enter_the_copilot_job(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")
         request_job = workflow.split("  request-current-revision-review:", 1)[1].split(

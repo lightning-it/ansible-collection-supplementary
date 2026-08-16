@@ -357,3 +357,30 @@ jobs:
               -f 'output[title]=Temporary alias: protected Exact-Revision Codex passed' \
               -f "output[summary]=${evidence}" >/dev/null
           fi
+
+  request-protected-verifier-reevaluation:
+    name: Request protected verifier re-evaluation
+    needs: exact-revision-codex-review
+    if: needs.exact-revision-codex-review.result == 'success'
+    permissions:
+      actions: write
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Dispatch the protected re-evaluation helper from develop
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          REPOSITORY: ${{ github.repository }}
+          EXPECTED_BASE: ${{ inputs.expected_base }}
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            "repos/${REPOSITORY}/actions/workflows/current-revision-rerun.yml/dispatches" \
+            -f ref=develop \
+            -F "inputs[pr_number]=${PR_NUMBER}" \
+            -f "inputs[expected_base]=${EXPECTED_BASE}" \
+            -f "inputs[expected_head]=${EXPECTED_HEAD}" >/dev/null
