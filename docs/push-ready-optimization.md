@@ -100,6 +100,33 @@ Evidence binds the profile, its trusted base-policy digest, the authoritative
 base tip, merge-base, exact head, integration tree, instructions, and exact
 review input. A head or base movement invalidates the evidence.
 
+## Trust-Root controller boundary
+
+The first introduction or an update of the Trust-Root controller itself follows
+the protected Current-Head Trust-Root review path. It cannot certify,
+install, or approve itself. Only after that controller has been merged through
+the protected Current-Head gates may a controlled environment cache its exact
+blob from the authoritative Base. Later engine and policy changes use that
+cached Base controller: it reloads the pinned Base engine, requires the
+controller to be byte-for-byte unchanged, and verifies existing evidence
+through the immutable Base policy.
+
+Local controller commands never invoke Codex, Copilot, or another external
+reviewer. The optional cache is an owned regular file below the current
+worktree's Git administrative directory and can be installed only from the
+unchanged Base. Missing, altered, symlinked, or unsafe cache content stops
+verification. The controller does not install or replace Git hooks; protected
+server gates remain the only protected acceptance boundary. Its local
+`verify` command can report only on already-produced advisory evidence and
+never authorizes a push or merge.
+
+Repository discovery, local object reads, configuration inspection, and the
+anonymous Base refresh all resolve Git from the system default path and run in
+the same minimal environment without inherited Git, proxy, or credential
+variables. The candidate engine path must be a regular non-symlink file inside
+the authorized repository; any other filesystem type fails closed before Base
+code is loaded.
+
 ## Finalization and server review
 
 Local `validate` performs deterministic checks without external review. Drafts,

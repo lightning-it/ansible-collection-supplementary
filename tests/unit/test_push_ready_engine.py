@@ -34,6 +34,7 @@ class PushReadyEngineTests(unittest.TestCase):
 
         self.assertIn(".pre-commit-config.yaml", trusted_paths)
         self.assertIn("scripts/lit-repository-quality.py", trusted_paths)
+        self.assertIn("scripts/lit-trust-root-base-verifier.py", trusted_paths)
         self.assertIn("scripts/validate-embedded-code.py", trusted_paths)
 
     def test_policy_gate_precedes_checks(self) -> None:
