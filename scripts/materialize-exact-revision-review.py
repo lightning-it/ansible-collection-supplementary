@@ -1,0 +1,367 @@
+#!/usr/bin/env python3
+"""Materialize and re-verify the bounded MLX-90 exact-revision review input."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any, NoReturn
+
+SHA1_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+RELEASE_BOT = "lightning-it-release-automation[bot]"
+MAX_REVIEW_BYTES = 200_000
+IMMUTABLE_METADATA_KEYS = (
+    "schema_version",
+    "repository",
+    "pull_request",
+    "base_ref",
+    "base_sha",
+    "head_sha",
+    "merge_base_sha",
+    "integration_tree_sha",
+    "diff_sha256",
+    "review_bytes",
+    "trusted_workflow_sha",
+    "trigger",
+)
+
+
+class MaterializationError(RuntimeError):
+    """Raised when the exact review input cannot be proven."""
+
+
+def fail(message: str) -> NoReturn:
+    raise MaterializationError(message)
+
+
+def executable(name: str) -> str:
+    resolved = shutil.which(name, path=os.defpath)
+    if resolved is None:
+        fail(f"Required executable is unavailable in the system path: {name}")
+    return resolved
+
+
+def command_environment(*, home: Path, include_token: bool) -> dict[str, str]:
+    environment = {
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "HOME": str(home),
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": os.defpath,
+        "XDG_CONFIG_HOME": str(home / ".config"),
+    }
+    if include_token:
+        token = os.environ.get("GH_TOKEN", "")
+        if not token:
+            fail("GH_TOKEN is required for live GitHub verification.")
+        environment["GH_TOKEN"] = token
+    return environment
+
+
+def run(
+    arguments: Sequence[str],
+    *,
+    environment: dict[str, str],
+    cwd: Path | None = None,
+    binary: bool = False,
+) -> subprocess.CompletedProcess[Any]:
+    result = subprocess.run(  # noqa: S603
+        list(arguments),
+        cwd=cwd,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=not binary,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr if isinstance(result.stderr, str) else result.stderr.decode(errors="replace")
+        fail(f"Command failed closed: {arguments[0]} {arguments[1]}: {stderr.strip()}")
+    return result
+
+
+def require_sha(value: str, name: str) -> str:
+    if not SHA1_PATTERN.fullmatch(value):
+        fail(f"{name} must be a full lowercase SHA-1 object ID.")
+    return value
+
+
+def validate_inputs(arguments: argparse.Namespace) -> None:
+    if not REPOSITORY_PATTERN.fullmatch(arguments.repository):
+        fail("Repository must use the owner/name form.")
+    if arguments.pull_request <= 0:
+        fail("Pull-request number must be positive.")
+    if not REF_PATTERN.fullmatch(arguments.base_ref) or ".." in arguments.base_ref:
+        fail("Base ref is invalid.")
+    require_sha(arguments.expected_base, "Expected base")
+    require_sha(arguments.expected_head, "Expected head")
+    require_sha(arguments.trusted_workflow_sha, "Trusted workflow")
+    if arguments.expected_base != arguments.trusted_workflow_sha:
+        fail("The protected workflow SHA must equal the live pull-request base SHA.")
+    if arguments.trigger not in {"ready_for_review", "app_dispatch"}:
+        fail("Unsupported exact-review trigger.")
+    if arguments.trigger == "app_dispatch" and arguments.dispatch_ref != f"refs/heads/{arguments.base_ref}":
+        fail("App dispatch must execute from the protected pull-request base ref.")
+
+
+def read_live_pull_request(arguments: argparse.Namespace, *, home: Path) -> dict[str, Any]:
+    gh = executable("gh")
+    result = run(
+        [
+            gh,
+            "api",
+            f"repos/{arguments.repository}/pulls/{arguments.pull_request}",
+        ],
+        environment=command_environment(home=home, include_token=True),
+    )
+    try:
+        pull_request = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        fail(f"GitHub returned malformed pull-request JSON: {error}")
+    expected = {
+        "state": "open",
+        "draft": False,
+        "author": RELEASE_BOT,
+        "author_type": "Bot",
+        "base_ref": arguments.base_ref,
+        "base_sha": arguments.expected_base,
+        "base_repository": arguments.repository,
+        "head_sha": arguments.expected_head,
+        "head_repository": arguments.repository,
+    }
+    observed = {
+        "state": pull_request.get("state"),
+        "draft": pull_request.get("draft"),
+        "author": pull_request.get("user", {}).get("login"),
+        "author_type": pull_request.get("user", {}).get("type"),
+        "base_ref": pull_request.get("base", {}).get("ref"),
+        "base_sha": pull_request.get("base", {}).get("sha"),
+        "base_repository": pull_request.get("base", {}).get("repo", {}).get("full_name"),
+        "head_sha": pull_request.get("head", {}).get("sha"),
+        "head_repository": pull_request.get("head", {}).get("repo", {}).get("full_name"),
+    }
+    if observed != expected:
+        fail(f"Live pull-request binding changed or is unauthorized: {json.dumps(observed, sort_keys=True)}")
+    return pull_request
+
+
+def git_output(
+    git: str,
+    git_dir: Path,
+    arguments: Sequence[str],
+    *,
+    environment: dict[str, str],
+    binary: bool = False,
+) -> bytes | str:
+    result = run(
+        [git, f"--git-dir={git_dir}", *arguments],
+        environment=environment,
+        binary=binary,
+    )
+    return result.stdout
+
+
+def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[str, Any]:
+    validate_inputs(arguments)
+    if output_directory.exists():
+        fail(f"Review workspace already exists: {output_directory}")
+    output_directory.mkdir(mode=0o700, parents=False)
+
+    runner_temp = Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())).resolve()
+    if not runner_temp.is_dir():
+        fail("RUNNER_TEMP must identify an existing directory.")
+    with tempfile.TemporaryDirectory(prefix="exact-revision-materializer.", dir=runner_temp) as temporary:
+        temporary_root = Path(temporary)
+        home = temporary_root / "home"
+        home.mkdir(mode=0o700)
+        read_live_pull_request(arguments, home=home)
+
+        git = executable("git")
+        git_dir = temporary_root / "objects.git"
+        git_environment = command_environment(home=home, include_token=True)
+        run([git, "init", "--bare", str(git_dir)], environment=git_environment)
+        git_output(
+            git,
+            git_dir,
+            ["config", "credential.helper", "!gh auth git-credential"],
+            environment=git_environment,
+        )
+        git_output(
+            git,
+            git_dir,
+            ["remote", "add", "origin", f"https://github.com/{arguments.repository}.git"],
+            environment=git_environment,
+        )
+        git_output(
+            git,
+            git_dir,
+            [
+                "fetch",
+                "--quiet",
+                "--no-tags",
+                "--no-recurse-submodules",
+                "--filter=blob:none",
+                "origin",
+                f"+{arguments.expected_base}:refs/review/base",
+                f"+{arguments.expected_head}:refs/review/head",
+            ],
+            environment=git_environment,
+        )
+        for name, expected in (("base", arguments.expected_base), ("head", arguments.expected_head)):
+            resolved = str(
+                git_output(
+                    git,
+                    git_dir,
+                    ["rev-parse", f"refs/review/{name}^{{commit}}"],
+                    environment=git_environment,
+                )
+            ).strip()
+            if resolved != expected:
+                fail(f"Fetched {name} object does not equal the expected object ID.")
+
+        merge_base_output = str(
+            git_output(
+                git,
+                git_dir,
+                ["merge-base", "--all", arguments.expected_base, arguments.expected_head],
+                environment=git_environment,
+            )
+        ).splitlines()
+        if len(merge_base_output) != 1:
+            fail("The exact base/head pair must have one unambiguous merge base.")
+        merge_base = require_sha(merge_base_output[0], "Merge base")
+
+        merge_tree = str(
+            git_output(
+                git,
+                git_dir,
+                ["merge-tree", "--write-tree", arguments.expected_base, arguments.expected_head],
+                environment=git_environment,
+            )
+        ).splitlines()
+        if not merge_tree:
+            fail("Git did not produce an integration tree.")
+        integration_tree = require_sha(merge_tree[0], "Integration tree")
+        object_type = str(
+            git_output(
+                git,
+                git_dir,
+                ["cat-file", "-t", integration_tree],
+                environment=git_environment,
+            )
+        ).strip()
+        if object_type != "tree":
+            fail("The integration object is not a Git tree.")
+
+        diff = git_output(
+            git,
+            git_dir,
+            [
+                "diff",
+                "--binary",
+                "--full-index",
+                "--no-color",
+                "--no-ext-diff",
+                "--no-textconv",
+                f"{arguments.expected_base}^{{tree}}",
+                integration_tree,
+            ],
+            environment=git_environment,
+            binary=True,
+        )
+        if not isinstance(diff, bytes):
+            fail("Git returned an invalid diff representation.")
+        review_bytes = len(diff)
+        if review_bytes <= 0 or review_bytes >= MAX_REVIEW_BYTES:
+            fail(f"Exact-revision review input must contain 1..199999 bytes; observed {review_bytes}.")
+        diff_sha256 = hashlib.sha256(diff).hexdigest()
+
+        read_live_pull_request(arguments, home=home)
+        metadata = {
+            "schema_version": 2,
+            "repository": arguments.repository,
+            "pull_request": arguments.pull_request,
+            "base_ref": arguments.base_ref,
+            "base_sha": arguments.expected_base,
+            "head_sha": arguments.expected_head,
+            "merge_base_sha": merge_base,
+            "integration_tree_sha": integration_tree,
+            "diff_sha256": diff_sha256,
+            "review_bytes": review_bytes,
+            "trusted_workflow_sha": arguments.trusted_workflow_sha,
+            "trigger": arguments.trigger,
+        }
+        patch = output_directory / "change.patch"
+        metadata_path = output_directory / "review-metadata.json"
+        patch.write_bytes(diff)
+        metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        patch.chmod(0o600)
+        metadata_path.chmod(0o600)
+        return metadata
+
+
+def verify(arguments: argparse.Namespace, review_directory: Path) -> dict[str, Any]:
+    validate_inputs(arguments)
+    patch = review_directory / "change.patch"
+    metadata_path = review_directory / "review-metadata.json"
+    if not patch.is_file() or patch.is_symlink() or not metadata_path.is_file() or metadata_path.is_symlink():
+        fail("The review diff and metadata must be regular, non-symlink files.")
+    try:
+        expected_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        fail(f"Review metadata is malformed: {error}")
+
+    runner_temp = Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())).resolve()
+    with tempfile.TemporaryDirectory(prefix="exact-revision-recheck.", dir=runner_temp) as temporary:
+        regenerated = Path(temporary) / "review"
+        actual_metadata = materialize(arguments, regenerated)
+        if patch.read_bytes() != (regenerated / "change.patch").read_bytes():
+            fail("The full binary diff changed during exact-revision verification.")
+    for key in IMMUTABLE_METADATA_KEYS:
+        if expected_metadata.get(key) != actual_metadata.get(key):
+            fail(f"Exact-revision metadata changed during verification: {key}")
+    return actual_metadata
+
+
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("mode", choices=("materialize", "verify"))
+    parser.add_argument("--repository", required=True)
+    parser.add_argument("--pull-request", required=True, type=int)
+    parser.add_argument("--base-ref", required=True)
+    parser.add_argument("--expected-base", required=True)
+    parser.add_argument("--expected-head", required=True)
+    parser.add_argument("--trusted-workflow-sha", required=True)
+    parser.add_argument("--trigger", required=True, choices=("ready_for_review", "app_dispatch"))
+    parser.add_argument("--dispatch-ref", default="")
+    parser.add_argument("--review-directory", required=True, type=Path)
+    return parser.parse_args()
+
+
+def main() -> int:
+    arguments = parse_arguments()
+    try:
+        if arguments.mode == "materialize":
+            metadata = materialize(arguments, arguments.review_directory)
+        else:
+            metadata = verify(arguments, arguments.review_directory)
+    except MaterializationError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps(metadata, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

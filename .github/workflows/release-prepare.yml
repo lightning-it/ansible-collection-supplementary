@@ -532,6 +532,7 @@ jobs:
             gh pr create \
               --base "$TARGET_BRANCH" \
               --head "$RELEASE_BRANCH" \
+              --draft \
               --title "Release v${VERSION}" \
               --body-file "$body_file"
           fi
@@ -580,6 +581,8 @@ jobs:
                 --arg base "$TARGET_BRANCH" \
                 --arg sha "$pushed_sha" '
                   .[0].head.repo.full_name == $repo
+                  and .[0].user.login == "lightning-it-release-automation[bot]"
+                  and .[0].user.type == "Bot"
                   and .[0].head.ref == $branch
                   and .[0].head.sha == $sha
                   and .[0].base.ref == $base
@@ -630,6 +633,16 @@ jobs:
           gh pr edit "$existing" \
             --title "Release v${VERSION}" \
             --body-file "$body_file"
+          if [ "$(jq -r '.[0].draft' <<< "$owned_pulls")" = true ]; then
+            gh pr ready "$existing"
+          else
+            gh workflow run release-bot-exact-head-review.yml \
+              --ref "$(jq -r '.[0].base.ref' <<<"$owned_pulls")" \
+              -f "pr_number=${existing}" \
+              -f "base_ref=$(jq -r '.[0].base.ref' <<<"$owned_pulls")" \
+              -f "expected_base=$(jq -r '.[0].base.sha' <<<"$owned_pulls")" \
+              -f "expected_head=$(jq -r '.[0].head.sha' <<<"$owned_pulls")"
+          fi
 
           if [ "$SECURITY_RELEASE" = true ]; then
             test "$WORKFLOW_ACTOR" = 'lightning-it-release-automation[bot]'

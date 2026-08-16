@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    mlx90 - Add the protected Exact-Revision Codex exception for finalized
+    Release-App pull requests, with immutable base, head, merge-base,
+    integration-tree, and full binary-diff bindings.

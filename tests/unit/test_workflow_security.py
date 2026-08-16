@@ -1086,7 +1086,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         prepare = (WORKFLOWS / "release-prepare.yml").read_text(encoding="utf-8")
         self.assertIn("Immutable tag v${VERSION} already exists", prepare)
         publish = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
-        copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
+        exact_revision = (WORKFLOWS / "release-bot-exact-head-review.yml").read_text(encoding="utf-8")
         self.assertIn("Re-prove fragment-derived version and authorized preparation", publish)
         self.assertIn('release_mode="$(jq -er \'.release_mode\' "$receipt")"', publish)
         self.assertIn('--security-target-version "$expected_version"', publish)
@@ -1105,27 +1105,11 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             2,
             publish.count('python "$base_tree/scripts/release-version.py"'),
         )
-        self.assertIn(
-            'git worktree add --detach --quiet "$base_tree" "$BASE_SHA"',
-            copilot,
-        )
-        self.assertIn(
-            'python "$base_tree/scripts/release-version.py"',
-            copilot,
-        )
-        copilot_payload = load_yaml(WORKFLOWS / "copilot-review.yml")
-        release_setup = next(
-            step
-            for step in copilot_payload["jobs"]["current-revision-reviewed"]["steps"]
-            if step.get("name") == "Setup Python for trusted release receipt verification"
-        )
-        self.assertNotIn("cache", release_setup["with"])
-        self.assertIn('--root "$base_tree"', copilot)
-        self.assertNotIn(".schema_version == 1", copilot)
-        self.assertIn(
-            "Verified schema-v2 preparation against the immutable base tree",
-            copilot,
-        )
+        self.assertIn("types: [ready_for_review]", exact_revision)
+        self.assertIn("github.actor == 'lightning-it-release-automation[bot]'", exact_revision)
+        self.assertIn("materialize-exact-revision-review.py?ref=${TRUSTED_WORKFLOW_SHA}", exact_revision)
+        self.assertIn("-f name='Current revision review'", exact_revision)
+        self.assertNotIn("Successful Copilot review", exact_revision)
         self.assertIn("actions/runs/${preparation_run_id}", publish)
         self.assertIn('.conclusion == "success"', publish)
         action = ACTION.read_text(encoding="utf-8")
