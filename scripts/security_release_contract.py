@@ -177,7 +177,7 @@ RECOVERY_POST_CHANGELOG_CONTROL_PATHS = frozenset(
         "tests/unit/test_security_release_request_dispatch.py",
     }
 )
-RECOVERY_POST_CHANGELOG_CONTROL_DIFF_SHA256 = "sha256:3c32e36d17e131f8d64d8e21ec9fbe13b4525c19aa4d582d4c9ee56faf985b45"
+RECOVERY_POST_CHANGELOG_CONTROL_DIFF_SHA256 = "sha256:a93e60a051cc322e8dd0cf5d14703091a8fee9bac62005bcd3ab554fed6bc15a"
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
