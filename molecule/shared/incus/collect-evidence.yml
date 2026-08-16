@@ -200,6 +200,11 @@
         }}
       }
   no_log: true
+  when:
+    - molecule_incus_evidence_base_image.rc == 0
+    - >-
+      (molecule_incus_evidence_base_image.stdout | trim)
+      is match('^[0-9a-f]{64}$')
 
 - name: Capture configured application and environment log streams
   ansible.builtin.command:
@@ -280,7 +285,12 @@
         "container_inventory_available": true,
         "images": {{ (molecule_incus_evidence_runtime_inventory_candidates | first).stdout | trim }}
       }
-  when: molecule_incus_evidence_runtime_inventory_candidates | length > 0
+  when:
+    - molecule_incus_evidence_runtime_inventory_candidates | length > 0
+    - molecule_incus_evidence_base_image.rc == 0
+    - >-
+      (molecule_incus_evidence_base_image.stdout | trim)
+      is match('^[0-9a-f]{64}$')
   vars:
     molecule_incus_evidence_runtime_inventory_candidates: >-
       {{
