@@ -124,6 +124,19 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
             with self.assertRaisesRegex(self.module.MaterializationError, "unavailable|non-symlink"):
                 self.module.protected_asset_bytes(link, "prompt")
 
+    def test_protected_asset_reader_requires_no_follow_support(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            protected = Path(temporary) / "prompt.md"
+            protected.write_text("protected\n", encoding="utf-8")
+            with (
+                mock.patch.object(self.module.os, "O_NOFOLLOW", None),
+                self.assertRaisesRegex(
+                    self.module.MaterializationError,
+                    "requires O_NOFOLLOW support",
+                ),
+            ):
+                self.module.protected_asset_bytes(protected, "prompt")
+
     def test_empty_and_oversized_diffs_fail_closed(self) -> None:
         for name, diff in (("empty", b""), ("oversized", b"x" * 200_000)):
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:

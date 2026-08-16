@@ -111,9 +111,12 @@ def require_sha(value: str, name: str) -> str:
 
 def protected_asset_bytes(path: Path, name: str) -> bytes:
     """Read one bounded regular protected asset without following a symlink."""
+    no_follow = getattr(os, "O_NOFOLLOW", None)
+    if not isinstance(no_follow, int) or no_follow == 0:
+        fail("Protected asset reading requires O_NOFOLLOW support.")
     flags = os.O_RDONLY
     flags |= getattr(os, "O_CLOEXEC", 0)
-    flags |= getattr(os, "O_NOFOLLOW", 0)
+    flags |= no_follow
     try:
         descriptor = os.open(path, flags)
     except OSError as error:
