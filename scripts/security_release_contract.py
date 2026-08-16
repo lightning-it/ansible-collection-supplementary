@@ -167,8 +167,8 @@ RECOVERY_RELEASE_PREP_CONTROL_DIFF_SHA256 = "sha256:1b396f7d2341b267bd6373630221
 # Exact post-changelog promotion required after the protected release-review
 # correction. The bases have identical trees and immutable ancestry; only the
 # four paths below may extend the one-time recovery controller.
-RECOVERY_POST_CHANGELOG_MAIN_BASE_SHA = "2379cdc66a14102924e77ca69b982cc8fd908d93"
-RECOVERY_POST_CHANGELOG_DEVELOP_BASE_SHA = "0eb607306a335a8fee68ee5849fe92d6d5fca83a"
+RECOVERY_POST_CHANGELOG_MAIN_BASE_SHA = "c63eee7f1105553a7f5e877aea646a2f1ee416df"
+RECOVERY_POST_CHANGELOG_DEVELOP_BASE_SHA = "efbb1b9698fdc69fe9c67aaf84d013629c2d2ccb"
 RECOVERY_POST_CHANGELOG_CONTROL_PATHS = frozenset(
     {
         "changelogs/fragments/security-recovery-post-changelog-promotion.yml",
