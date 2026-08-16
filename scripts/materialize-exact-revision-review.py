@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Materialize and re-verify the bounded MLX-90 exact-revision review input."""
 
 from __future__ import annotations
