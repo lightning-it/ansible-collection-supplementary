@@ -396,9 +396,7 @@ class SecurityReleaseRequestDispatchTests(unittest.TestCase):
                 post_changelog_main_base,
             )
             post_changelog_develop_base = git(self.root, "rev-parse", "HEAD")
-            post_changelog_fragment = (
-                self.root / "changelogs/fragments/security-recovery-post-changelog-promotion.yml"
-            )
+            post_changelog_fragment = self.root / "changelogs/fragments/security-recovery-post-changelog-promotion.yml"
             post_changelog_fragment.write_text("bugfixes:\n  - Bind exact post-changelog recovery.\n", encoding="utf-8")
             intake_path = self.root / "scripts/security-release-intake.py"
             intake_path.write_text("# Bind exact post-changelog recovery.\n", encoding="utf-8")
