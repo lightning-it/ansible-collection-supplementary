@@ -30,15 +30,10 @@
     "max_diff_bytes": 200000,
     "profiles": {
       "standard": {
-        "agents": [
-          "codex"
-        ]
+        "agents": []
       },
       "trust-root": {
-        "agents": [
-          "codex",
-          "copilot"
-        ]
+        "agents": []
       }
     },
     "classification": {
@@ -99,16 +94,16 @@
   },
   "agents": {
     "copilot": {
-      "enabled": true,
-      "required": true,
+      "enabled": false,
+      "required": false,
       "command": [
         "copilot"
       ],
       "timeout_seconds": 900
     },
     "codex": {
-      "enabled": true,
-      "required": true,
+      "enabled": false,
+      "required": false,
       "command": [
         "codex"
       ],

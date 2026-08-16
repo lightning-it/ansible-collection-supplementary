@@ -9,6 +9,14 @@ Lightning-IT automation requests a paid Copilot review only for pull requests au
 entitlement. The protected gate verifies that evidence but never requests or funds it, and no personal token or
 personal provider key enters GitHub Actions.
 
+Local Push-Ready commands never invoke Codex, Copilot, or another external AI service. They build and scan a
+history-free exact-patch snapshot deterministically, record zero local AI invocations and
+`local_ai_egress=prohibited`, and leave authoritative acceptance to the protected GitHub check. A contributor may
+use personal Codex tooling for their own development, but candidate-controlled output is not accepted as a protected
+attestation. Until an identity-bound personal-Codex evidence contract is separately governed and implemented, an
+external contributor must provide supported current-head evidence under their own entitlement or the gate fails
+closed.
+
 ## Finalization boundary
 
 The review workflow runs only for one of these protected finalization events:

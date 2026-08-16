@@ -52,6 +52,22 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    `tests/unit/test_security_release_request_dispatch.py`. Sync MUST preserve them byte-for-byte; after acceptance,
    their proven versions are canonicalized once in `shared-assets-lit`.
 
+## 1.2 Local AI-Egress and Current-Revision Review Boundary (Mandatory)
+
+1. Local Push-Ready commands are deterministic only. They MUST NOT invoke Codex, Copilot, or another external AI
+   service and MUST record `local_ai_egress=prohibited` with zero local AI invocations.
+2. Personal AI credentials, provider keys, and GitHub tokens MUST NOT be copied into repository automation,
+   generated evidence, review workspaces, containers, or GitHub Actions.
+3. The authoritative AI acceptance boundary is the protected `Current revision review` check on the exact live PR
+   head. Local advisory evidence never substitutes for that protected check.
+4. Pull requests authored by the exact Release App use only the MLX-90 §7.2 protected Exact-Revision Codex path.
+   They MUST NOT request, claim, or fall back to GitHub Copilot review.
+5. Lightning IT automation MAY automatically request a paid Copilot review only for the exact personal account
+   `litroc`. External contributors must supply valid current-head evidence using their own entitlement; Lightning IT
+   MUST NOT request or fund their AI usage.
+6. Candidate-controlled Codex output is not a protected attestation. Until a separately governed, identity-bound
+   personal-Codex evidence contract exists, it cannot satisfy `Current revision review`; the gate fails closed.
+
 ## 2. Repository Baseline (This Repo)
 
 1. Repository identity values (namespace, name, license, tags, dependencies) MUST be read from `galaxy.yml`.
@@ -464,6 +480,9 @@ Good (mapped in defaults, asserted in role namespace):
 # defaults/main.yml
 nginx_ops_systemd_unit_name: "{{ nginx_deploy_systemd_unit_name | default('', true) }}"
 nginx_ops_pod_name: "{{ nginx_deploy_pod_name | default('', true) }}"
+```
+
+```yaml
 
 # tasks/assert.yml
 - name: Ensure restart variables are set for systemd mode
