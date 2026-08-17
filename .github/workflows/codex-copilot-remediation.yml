@@ -56,7 +56,9 @@ jobs:
         run: |
           set -euo pipefail
           test "${GITHUB_REPOSITORY_OWNER}" = lightning-it
-          current_head="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha)"
+          pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
+          test "$(jq -r .user.login <<<"${pr}")" != 'lightning-it-release-automation[bot]'
+          current_head="$(jq -r .head.sha <<<"${pr}")"
           test "${current_head}" = "${EXPECTED_HEAD}"
           gh api --method POST "repos/${REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers" \
             -f 'reviewers[]=copilot-pull-request-reviewer[bot]'
@@ -101,6 +103,13 @@ jobs:
             echo "Ignoring review event from ${event_author}; expected ${COPILOT_LOGIN}."
             exit 0
           fi
+
+          pr="$(gh api "repos/${REPOSITORY}/pulls/${pr_number}")"
+          author="$(jq -r .user.login <<<"${pr}")"
+          if [ "${author}" = 'lightning-it-release-automation[bot]' ]; then
+            echo "Release-App pull requests use only the protected MLX-90 §7.2 Exact-Revision Codex path."
+            exit 0
+          fi
           review_body="$(jq -r '.review.body // "" | ascii_downcase' "${GITHUB_EVENT_PATH}")"
           if [[ "${review_body}" == *"unable to review"* || "${review_body}" == *"not able to review"* || "${review_body}" == *"quota exhausted"* || "${review_body}" == *"quota exceeded"* ]]; then
             {
@@ -111,7 +120,6 @@ jobs:
             exit 0
           fi
 
-          pr="$(gh api "repos/${REPOSITORY}/pulls/${pr_number}")"
           test "$(jq -r .state <<<"${pr}")" = open
           test "$(jq -r .draft <<<"${pr}")" = false
           test "$(jq -r .base.ref <<<"${pr}")" = develop
@@ -119,7 +127,6 @@ jobs:
           test "$(jq -r .head.label <<<"${pr}")" != null
           head_sha="$(jq -r .head.sha <<<"${pr}")"
           head_ref="$(jq -r .head.ref <<<"${pr}")"
-          author="$(jq -r .user.login <<<"${pr}")"
           if [ "${reviewed_sha}" != "${head_sha}" ]; then
             echo "Ignoring stale Copilot review for ${reviewed_sha}; current head is ${head_sha}."
             exit 0

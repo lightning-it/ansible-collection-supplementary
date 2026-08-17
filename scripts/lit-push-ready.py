@@ -15,10 +15,8 @@ import stat
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 from collections.abc import Mapping
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -131,10 +129,10 @@ TRUSTED_CHECK_POLICY_PATHS = (
 )
 PARITY_GAPS = (
     {
-        "id": "copilot-review-surface",
-        "local": "Copilot CLI exact-diff review",
-        "remote": "Copilot PR review at current head",
-        "status": "product-specific",
+        "id": "protected-current-revision-review",
+        "local": "deterministic history-free snapshot and secret scan; no external AI egress",
+        "remote": "protected current-revision review selected by verified PR identity",
+        "status": "remote-review-required",
         "remote_gate_required": True,
     },
     {
@@ -158,9 +156,9 @@ LOCAL_EVIDENCE_TRUST = {
     "security_attestation": False,
     "remote_gate_required": True,
 }
-REVIEW_PROFILE_AGENTS = {
-    "standard": ("codex",),
-    "trust-root": ("codex", "copilot"),
+REVIEW_PROFILE_AGENTS: dict[str, tuple[str, ...]] = {
+    "standard": (),
+    "trust-root": (),
 }
 COPILOT_PROMPT_MODE_BOUNDARY = {
     "COPILOT_MCP_TOOL_CACHE": "false",
@@ -687,8 +685,8 @@ def validate_agent_config(name: str, value: Any) -> None:
     required = value.get("required")
     if not isinstance(enabled, bool) or not isinstance(required, bool):
         raise RuntimeError(f"agents.{name} flags must be booleans")
-    if enabled is not True or required is not True:
-        raise RuntimeError(f"agents.{name} must be required")
+    if enabled is not False or required is not False:
+        raise RuntimeError(f"agents.{name} must be disabled because local AI egress is prohibited")
     command = validate_command(value.get("command"), f"agents.{name}.command")
     if command != [name]:
         raise RuntimeError(f"agents.{name}.command must be [{name!r}]")
@@ -761,7 +759,9 @@ def validate_review_policy(value: Any) -> None:
         "review.max_diff_bytes",
         maximum=MAX_REVIEW_BYTES,
     )
-    expected_profiles = {name: {"agents": list(agents)} for name, agents in REVIEW_PROFILE_AGENTS.items()}
+    expected_profiles: dict[str, dict[str, list[str]]] = {
+        name: {"agents": list(agents)} for name, agents in REVIEW_PROFILE_AGENTS.items()
+    }
     if value.get("profiles") != expected_profiles:
         raise RuntimeError("review profiles must be standard and trust-root")
     classification = value.get("classification")
@@ -1540,8 +1540,8 @@ def planned_change(
         "--no-ext-diff",
         "--no-textconv",
         "--binary",
+        "--full-index",
         "--no-renames",
-        "--unified=40",
         base_commit,
         "--",
     )
@@ -3064,95 +3064,49 @@ def run_agent_reviews(
     if tree_fingerprint() != expected:
         raise RuntimeError("exact planned push patch is stale before local review")
     classification = classification or classify_review_profile(change)
-    agents = classification.agents
-    if any(not config["agents"][name]["enabled"] for name in agents):
-        raise RuntimeError("review profile requires a disabled agent")
+    if classification.agents:
+        raise RuntimeError("local external AI reviewers are prohibited")
+    if any(agent["enabled"] or agent["required"] for agent in config["agents"].values()):
+        raise RuntimeError("local external AI reviewers must remain disabled")
     integration_tree = expected_integration_tree(change)
-    binding = review_input_sha256(
+    with sanitized_review_workspace(
         change,
-        integration_tree,
-        instruction_file_hashes(),
-        classification,
-    )
-    start_barrier = threading.Barrier(len(agents), timeout=60)
-
-    def review_agent(name: str) -> dict[str, Any]:
-        worker_started_at = now_utc()
-        worker_started = time.monotonic()
-        with sanitized_review_workspace(
-            change,
-            fixture_manifest_bootstrap=fixture_manifest_bootstrap,
-        ) as (
+        fixture_manifest_bootstrap=fixture_manifest_bootstrap,
+    ) as (workspace, _state_root, topology):
+        if topology.integration_tree != integration_tree:
+            raise RuntimeError("sanitized workspace has a different integration tree")
+        workspace_fingerprint = integration_worktree_fingerprint(
             workspace,
-            state_root,
-            topology,
-        ):
-            if topology.integration_tree != integration_tree:
-                raise RuntimeError(f"{name} review workspace has a different integration tree")
-            instructions = tracked_instruction_bundle(workspace)
-            workspace_fingerprint = integration_worktree_fingerprint(
+            include_ignored=True,
+        )
+        if (
+            integration_worktree_fingerprint(
                 workspace,
                 include_ignored=True,
             )
-            workspace_sha256 = sha256_text(str(workspace.resolve(strict=True)))
-            try:
-                start_barrier.wait()
-            except threading.BrokenBarrierError as exc:
-                raise RuntimeError("reviewer startup barrier failed") from exc
-            review_function = codex_review if name == "codex" else copilot_review
-            review = review_function(
-                config,
-                change,
-                expected,
-                workspace=workspace,
-                state_root=state_root,
-                instructions=instructions,
-                topology=topology,
-            )
-            if review.get("agent") != name:
-                raise RuntimeError(f"{name} review returned a foreign reviewer identity")
-            if (
-                integration_worktree_fingerprint(
-                    workspace,
-                    include_ignored=True,
-                )
-                != workspace_fingerprint
-            ):
-                raise RuntimeError(f"{name} review changed its sanitized exact-patch workspace")
-            review["input_sha256"] = binding
-            review["workspace_sha256"] = workspace_sha256
-        review["worker_started_at"] = worker_started_at
-        review["worker_completed_at"] = now_utc()
-        review["worker_duration_seconds"] = round(time.monotonic() - worker_started, 3)
-        return review
-
-    reviews = []
-    errors: dict[str, str] = {}
-    with ThreadPoolExecutor(max_workers=len(agents), thread_name_prefix="lit-review") as executor:
-        futures = {executor.submit(review_agent, name): name for name in agents}
-        for future in as_completed(futures):
-            name = futures[future]
-            try:
-                reviews.append(future.result())
-            except Exception as exc:  # noqa: BLE001 -- aggregate both required reviewer failures.
-                errors[name] = str(exc)
-    if errors:
-        details = "; ".join(f"{name}: {errors[name]}" for name in sorted(errors))
-        raise RuntimeError("required agent review failed: " + details)
+            != workspace_fingerprint
+        ):
+            raise RuntimeError("deterministic scan changed its sanitized exact-patch workspace")
     if tree_fingerprint() != expected:
-        raise RuntimeError("local agent review changed the reviewed Git tree")
-    reviews.sort(key=lambda review: review["agent"])
-    if len({review["workspace_sha256"] for review in reviews}) != len(reviews):
-        raise RuntimeError("reviewers did not use separate workspaces")
-    if {review["input_sha256"] for review in reviews} != {binding}:
-        raise RuntimeError("parallel reviewers were not bound to identical input")
-    return reviews
+        raise RuntimeError("deterministic review scan changed the reviewed Git tree")
+    return []
 
 
 def review_execution_evidence(
     classification: ReviewClassification,
     reviews: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    if not classification.agents:
+        if reviews:
+            raise RuntimeError("local external AI review evidence is prohibited")
+        return {
+            "mode": "deterministic-only",
+            "maximum_parallelism": 0,
+            "reviewers": [],
+            "workspace_count": 0,
+            "input_sha256": None,
+            "overlap_seconds": 0.0,
+        }
     if len(reviews) != len(classification.agents):
         raise RuntimeError("review execution has the wrong reviewer count")
     by_name = {review.get("agent"): review for review in reviews if isinstance(review, dict)}
@@ -3195,40 +3149,23 @@ def review_execution_evidence(
     }
 
 
-def parallel_review_evidence(reviews: list[dict[str, Any]]) -> dict[str, Any]:
-    return review_execution_evidence(
-        ReviewClassification("trust-root", REVIEW_PROFILE_AGENTS["trust-root"], "a" * 64, "test"),
-        reviews,
-    )
-
-
 def execution_metrics(checks: list[dict[str, Any]], reviews: list[dict[str, Any]]) -> dict[str, Any]:
-    intervals = [evidence_interval(review, f"{review.get('agent', 'unknown')} metrics review") for review in reviews]
-    review_wall_seconds = (
-        max(interval[1] for interval in intervals) - min(interval[0] for interval in intervals)
-    ).total_seconds()
-    reviewer_seconds = {
-        str(review["agent"]): review["duration_seconds"]
-        for review in sorted(reviews, key=lambda item: str(item.get("agent")))
-    }
-    review_invocations = {
-        agent: sum(1 for review in reviews if review.get("agent") == agent)
-        for agent in REVIEW_PROFILE_AGENTS["trust-root"]
-    }
+    if reviews:
+        raise RuntimeError("local external AI review metrics are prohibited")
     check_names = [str(check.get("name")) for check in checks]
     return {
         "schema_version": 1,
         "check_executions": len(checks),
         "repeated_check_executions": len(check_names) - len(set(check_names)),
-        "local_external_review_invocations": len(reviews),
-        "local_codex_review_invocations": review_invocations["codex"],
-        "local_copilot_review_invocations": review_invocations["copilot"],
-        "reviewer_seconds": reviewer_seconds,
-        "review_serial_seconds": round(sum(reviewer_seconds.values()), 3),
-        "review_wall_seconds": round(review_wall_seconds, 3),
+        "local_external_review_invocations": 0,
+        "local_codex_review_invocations": 0,
+        "local_copilot_review_invocations": 0,
+        "reviewer_seconds": {},
+        "review_serial_seconds": 0.0,
+        "review_wall_seconds": 0.0,
         "cache_hits": 0,
-        "cache_misses": len(reviews),
-        "maximum_parallelism": len(reviews),
+        "cache_misses": 0,
+        "maximum_parallelism": 0,
     }
 
 
@@ -3364,6 +3301,7 @@ def write_evidence(
         "review_classification": review_classification_evidence(classification),
         "review_execution": review_execution_evidence(classification, reviews),
         "metrics": execution_metrics(checks, reviews),
+        "local_ai_egress": "prohibited",
         "remote_only_checks": config["remote_only_checks"],
         "parity_gaps": list(PARITY_GAPS),
         "remote_pr_review_authoritative": True,
@@ -3466,6 +3404,7 @@ def verify_evidence(config: dict[str, Any]) -> dict[str, Any]:
         "fixture_manifest_bootstrap": fixture_manifest_bootstrap,
         "trust_root_bootstrap": trust_root_bootstrap,
         "evidence_trust": LOCAL_EVIDENCE_TRUST,
+        "local_ai_egress": "prohibited",
     }
     for key, value in expected.items():
         if payload.get(key) != value:

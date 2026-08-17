@@ -67,6 +67,15 @@ this repository:
 In short: AI-generated changes are welcome, but they must conform to the same
 standards as handwritten code and follow the shared agent specification.
 
+Local Push-Ready validation is deterministic and never sends repository content
+to Codex, Copilot, or another external AI service. Do not place personal AI
+tokens or provider keys in repository automation. The protected current-revision
+check on GitHub is authoritative: Release-App pull requests use the MLX-90 §7.2
+Exact-Revision Codex path, while Lightning IT automatically requests paid
+Copilot review only for pull requests authored by `litroc`. Every other
+contributor must fund and supply supported current-head review evidence under
+their own entitlement.
+
 ## Workflow Checklist
 
 Before opening a pull request:
