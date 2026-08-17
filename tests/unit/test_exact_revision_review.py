@@ -402,10 +402,16 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn('test "${EVENT_BASE}" = "${TRUSTED_WORKFLOW_SHA}"', review_job)
         self.assertIn("${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}", review_job)
         self.assertIn("compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", review_job)
+        self.assertEqual(1, request_job.count("EXPECTED_HEAD_REF: ${{ github.event.pull_request.head.ref }}"))
+        self.assertIn('--arg branch "${EXPECTED_HEAD_REF}"', request_job)
+        self.assertIn('--arg sha "${EXPECTED_HEAD}"', request_job)
+        self.assertIn("EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}", review_job)
+        self.assertIn('--arg branch "${EVENT_HEAD_REF}"', review_job)
+        self.assertIn('--arg sha "${EVENT_HEAD}"', review_job)
         self.assertIn(".head_branch == $branch", review_job)
         self.assertIn(".head_sha == $sha", review_job)
 
-    def test_human_producer_verifier_uses_default_branch_controller_sha(self) -> None:
+    def test_human_producer_verifier_separates_event_head_from_controller_sha(self) -> None:
         rerun = (ROOT / ".github/workflows/current-revision-rerun.yml").read_text(encoding="utf-8")
         author_paths = rerun.split(
             "          if [ \"${author}\" = 'lightning-it-release-automation[bot]' ]; then\n"
@@ -416,10 +422,12 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn(".controller_sha", human_path)
         self.assertIn('test "${default_branch}" = develop', human_path)
         self.assertIn("compare/${controller_sha}...${default_head}", human_path)
-        self.assertIn(".head_branch == $default_branch", human_path)
-        self.assertIn(".head_sha == $controller_sha", human_path)
-        self.assertNotIn(".head_branch == $base_ref", human_path)
-        self.assertNotIn(".head_sha == $base_sha", human_path)
+        self.assertIn('--arg head_ref "${head_ref}"', human_path)
+        self.assertIn('--arg head_sha "${EXPECTED_HEAD}"', human_path)
+        self.assertIn(".head_branch == $head_ref", human_path)
+        self.assertIn(".head_sha == $head_sha", human_path)
+        self.assertNotIn(".head_branch == $default_branch", human_path)
+        self.assertNotIn(".head_sha == $controller_sha", human_path)
 
     def test_release_app_pr_creators_finalize_draft_once(self) -> None:
         for name in (
