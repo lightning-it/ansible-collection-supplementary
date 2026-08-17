@@ -620,3 +620,11 @@ releases:
       - shared-assets-sync-31237016904.yml
       - shared-assets-sync-31241646931.yml
     release_date: '2026-08-08'
+  3.2.4:
+    changes:
+      security_fixes:
+        - Update the immutable Keycloak runtime to 26.7.1 to remediate CVE-2026-4629,
+          CVE-2026-9793, CVE-2026-14209, CVE-2026-14614, and CVE-2026-14615.
+    fragments:
+      - keycloak-26.7.1-security.yml
+    release_date: '2026-08-17'
