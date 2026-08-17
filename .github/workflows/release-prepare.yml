@@ -631,10 +631,11 @@ jobs:
           fi
           existing="$(jq -r '.[0].number' <<< "$owned_pulls")"
           gh pr edit "$existing" \
+            --repo "$GITHUB_REPOSITORY" \
             --title "Release v${VERSION}" \
             --body-file "$body_file"
           if [ "$(jq -r '.[0].draft' <<< "$owned_pulls")" = true ]; then
-            gh pr ready "$existing"
+            gh pr ready "$existing" --repo "$GITHUB_REPOSITORY"
           fi
           owned_pull="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${existing}")"
           jq -e \

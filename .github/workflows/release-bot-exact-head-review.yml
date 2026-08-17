@@ -185,6 +185,7 @@ jobs:
                 echo "check_id=$(jq -r '.[0].id' <<<"${matching}")"
                 echo "input_sha256=${input_sha256}"
                 echo "external_id=${external_id}"
+                echo "producer_run_id=${prior_run_id}"
               } >>"${GITHUB_OUTPUT}"
               exit 0
             fi
@@ -218,6 +219,7 @@ jobs:
             echo "check_id=${check_id}"
             echo "input_sha256=${input_sha256}"
             echo "external_id=${external_id}"
+            echo "producer_run_id=${GITHUB_RUN_ID}"
           } >>"${GITHUB_OUTPUT}"
 
       - name: Run protected history-free Exact-Revision Codex review
@@ -281,6 +283,9 @@ jobs:
           diff_sha256="$(jq -r .diff_sha256 "${metadata}")"
           input_sha256="$(jq -r .input_sha256 "${metadata}")"
           review_bytes="$(jq -r .review_bytes "${metadata}")"
+          producer_run_id="${{ steps.dedupe.outputs.producer_run_id }}"
+          [[ "${producer_run_id}" =~ ^[1-9][0-9]*$ ]]
+          producer_run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${producer_run_id}"
           evidence="$(jq -cn \
             --arg base "${base_sha}" \
             --arg head "${head_sha}" \
@@ -289,8 +294,8 @@ jobs:
             --arg diff_sha256 "${diff_sha256}" \
             --arg input_sha256 "${input_sha256}" \
             --arg workflow_sha "${TRUSTED_WORKFLOW_SHA}" \
-            --argjson run_id "${GITHUB_RUN_ID}" \
-            --arg run_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --argjson run_id "${producer_run_id}" \
+            --arg run_url "${producer_run_url}" \
             '{schema:4,base_sha:$base,head_sha:$head,merge_base_sha:$merge_base,
               integration_tree_sha:$integration_tree,diff_sha256:$diff_sha256,
               input_sha256:$input_sha256,workflow_sha:$workflow_sha,
@@ -307,7 +312,7 @@ jobs:
             echo "- Complete input SHA-256: \`${input_sha256}\`"
             echo "- Verdict: \`${verdict}\`"
             echo "- Findings: \`${findings}\`"
-            echo "- Run: \`${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\`"
+            echo "- Producer run: \`${producer_run_url}\`"
           } >>"${GITHUB_STEP_SUMMARY}"
           if [ "${{ steps.dedupe.outputs.reuse }}" != 'true' ]; then
             conclusion=failure
@@ -387,14 +392,14 @@ jobs:
           }
           publish_once \
             'Current revision review' \
-            "mlx90-current-revision:v4:${GITHUB_RUN_ID}:${input_sha256}" \
+            "mlx90-current-revision:v4:${producer_run_id}:${input_sha256}" \
             'Protected Exact-Revision Codex review passed'
           # Temporary migration alias only. It reuses the exact same protected
           # Codex result and must be removed after the ruleset requires the
           # neutral Current revision review context.
           publish_once \
             'Successful Copilot review' \
-            "mlx90-legacy-exact-revision:v4:${GITHUB_RUN_ID}:${input_sha256}" \
+            "mlx90-legacy-exact-revision:v4:${producer_run_id}:${input_sha256}" \
             'Temporary alias: protected Exact-Revision Codex passed'
 
   request-protected-verifier-reevaluation:

@@ -268,8 +268,13 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("publish_once() {", workflow)
         self.assertIn("            'Current revision review'", workflow)
         self.assertIn("mlx90-exact-revision:v4:${input_sha256}:", workflow)
-        self.assertIn("mlx90-current-revision:v4:${GITHUB_RUN_ID}:${input_sha256}", workflow)
-        self.assertIn("mlx90-legacy-exact-revision:v4:${GITHUB_RUN_ID}:${input_sha256}", workflow)
+        self.assertIn("mlx90-current-revision:v4:${producer_run_id}:${input_sha256}", workflow)
+        self.assertIn("mlx90-legacy-exact-revision:v4:${producer_run_id}:${input_sha256}", workflow)
+        self.assertIn('echo "producer_run_id=${prior_run_id}"', workflow)
+        self.assertIn('echo "producer_run_id=${GITHUB_RUN_ID}"', workflow)
+        self.assertIn('producer_run_id="${{ steps.dedupe.outputs.producer_run_id }}"', workflow)
+        self.assertIn('--argjson run_id "${producer_run_id}"', workflow)
+        self.assertIn('--arg run_url "${producer_run_url}"', workflow)
         self.assertIn("publish_once() {", workflow)
         self.assertGreaterEqual(workflow.count(".app.id == 15368"), 4)
         self.assertGreaterEqual(workflow.count(".external_id == $external_id"), 3)
@@ -400,6 +405,10 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                     workflow.index("gh pr ready"),
                     workflow.index("gh workflow run release-bot-exact-head-review.yml"),
                 )
+        release_prepare = (ROOT / ".github/workflows/release-prepare.yml").read_text(encoding="utf-8")
+        self.assertIn('gh pr ready "$existing" --repo "$GITHUB_REPOSITORY"', release_prepare)
+        release_edit = release_prepare.split('gh pr edit "$existing"', 1)[1].split("--title", 1)[0]
+        self.assertIn('--repo "$GITHUB_REPOSITORY"', release_edit)
 
     def test_release_app_is_denied_from_copilot_remediation(self) -> None:
         workflow = (ROOT / ".github/workflows/codex-copilot-remediation.yml").read_text(encoding="utf-8")
