@@ -249,18 +249,22 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("materialize-exact-revision-review.py?ref=${TRUSTED_WORKFLOW_SHA}", workflow)
         self.assertIn("permission-profile: :read-only", workflow)
         self.assertIn("codex-args: '[\"--ephemeral\"]'", workflow)
-        self.assertIn("-f name='Current revision review'", workflow)
-        self.assertIn("mlx90-exact-revision:v3:${input_sha256}", workflow)
-        self.assertIn('neutral_named="$(jq -c', workflow)
-        self.assertIn('legacy_named="$(jq -c', workflow)
-        self.assertGreaterEqual(workflow.count(".[0].app.id == 15368"), 2)
-        self.assertGreaterEqual(workflow.count(".[0].external_id == $external_id"), 2)
+        self.assertIn("publish_once() {", workflow)
+        self.assertIn("            'Current revision review'", workflow)
+        self.assertIn("mlx90-exact-revision:v4:${input_sha256}:", workflow)
+        self.assertIn("mlx90-current-revision:v4:${GITHUB_RUN_ID}:${input_sha256}", workflow)
+        self.assertIn("mlx90-legacy-exact-revision:v4:${GITHUB_RUN_ID}:${input_sha256}", workflow)
+        self.assertIn('publish_once() {', workflow)
+        self.assertGreaterEqual(workflow.count(".app.id == 15368"), 4)
+        self.assertGreaterEqual(workflow.count(".external_id == $external_id"), 3)
+        self.assertIn('${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}', workflow)
+        self.assertNotIn('-f details_url=', workflow)
         self.assertIn("automatic retry is forbidden", workflow)
         self.assertIn("input_sha256 == $bound.input_sha256", workflow)
         self.assertIn('and .path == ".github/workflows/release-bot-exact-head-review.yml"', workflow)
         self.assertIn("and .display_title == $title", workflow)
         self.assertIn("and .triggering_actor.login == $actor", workflow)
-        self.assertIn("and .run_attempt == 1", workflow)
+        self.assertNotIn("and .run_attempt == 1", workflow)
         self.assertEqual(1, workflow.count("uses: openai/codex-action@"))
 
     def test_ruleset_workflow_verifies_the_producer_instead_of_trusting_a_check_name(self) -> None:
@@ -293,13 +297,16 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         binding = 'base_ref="$(jq -er \'.base.ref | select(. == "develop" or . == "main")\''
         self.assertEqual(workflow.count(binding), 2)
         self.assertIn(
-            "mlx90-current-revision:copilot:v3:${EVENT_BASE}:${EVENT_HEAD}",
+            "mlx90-current-revision:copilot:v4:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}",
             workflow,
         )
-        self.assertIn("'{schema:3,base_sha:$base,head_sha:$head,", workflow)
+        self.assertIn("'{schema:4,base_sha:$base,head_sha:$head,", workflow)
+        self.assertIn("producer_run_id:$run_id", workflow)
         self.assertIn('named="$(jq -c', workflow)
         self.assertIn(".[0].app.id == 15368", workflow)
         self.assertIn(".[0].external_id == $external_id", workflow)
+        self.assertIn('${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}', workflow)
+        self.assertNotIn('-f details_url=', workflow)
 
     def test_release_app_pull_requests_do_not_enter_the_copilot_job(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")

@@ -643,12 +643,13 @@ jobs:
           evidence="$(jq -cn \
             --arg base "${EVENT_BASE}" \
             --arg head "${EVENT_HEAD}" \
+            --argjson run_id "${GITHUB_RUN_ID}" \
             --arg run_url "${run_url}" \
-            '{schema:3,base_sha:$base,head_sha:$head,
+            '{schema:4,base_sha:$base,head_sha:$head,producer_run_id:$run_id,
               review_path:"applicable Copilot or governed automation exemption",run_url:$run_url}')"
           publish_once() {
             local check_name="$1" external_id="$2" title="$3"
-            local checks named count
+            local checks named count check_id check_url created
             checks="$(gh api --paginate --slurp \
               "repos/${REPOSITORY}/commits/${EVENT_HEAD}/check-runs?check_name=$(jq -rn --arg value "${check_name}" '$value|@uri')&per_page=100")"
             named="$(jq -c \
@@ -662,34 +663,62 @@ jobs:
               exit 1
             fi
             if [ "${count}" -eq 1 ]; then
-              jq -e --arg external_id "${external_id}" '
-                .[0].app.id == 15368
+              check_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' <<<"${named}")"
+              check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}"
+              jq -e \
+                --arg evidence "${evidence}" \
+                --arg external_id "${external_id}" \
+                --arg head "${EVENT_HEAD}" \
+                --arg url "${check_url}" \
+                --argjson check_id "${check_id}" '
+                .[0].id == $check_id
+                and .[0].app.id == 15368
                 and .[0].app.slug == "github-actions"
+                and .[0].head_sha == $head
+                and .[0].details_url == $url
                 and .[0].external_id == $external_id
                 and .[0].status == "completed"
                 and .[0].conclusion == "success"
+                and .[0].output.summary == $evidence
               ' <<<"${named}" >/dev/null
               return
             fi
-            gh api --method POST "repos/${REPOSITORY}/check-runs" \
+            created="$(gh api --method POST "repos/${REPOSITORY}/check-runs" \
               -f name="${check_name}" \
               -f head_sha="${EVENT_HEAD}" \
               -f status=completed \
               -f conclusion=success \
               -f external_id="${external_id}" \
-              -f details_url="${run_url}" \
               -f "output[title]=${title}" \
-              -f "output[summary]=${evidence}" >/dev/null
+              -f "output[summary]=${evidence}")"
+            check_id="$(jq -er '.id | select(type == "number" and . > 0)' <<<"${created}")"
+            check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}"
+            jq -e \
+              --arg evidence "${evidence}" \
+              --arg external_id "${external_id}" \
+              --arg head "${EVENT_HEAD}" \
+              --arg url "${check_url}" \
+              --argjson check_id "${check_id}" '
+                .id == $check_id
+                and .app.id == 15368
+                and .app.slug == "github-actions"
+                and .head_sha == $head
+                and .details_url == $url
+                and .external_id == $external_id
+                and .status == "completed"
+                and .conclusion == "success"
+                and .output.summary == $evidence
+              ' <<<"${created}" >/dev/null
           }
           publish_once \
             'Current revision review' \
-            "mlx90-current-revision:copilot:v3:${EVENT_BASE}:${EVENT_HEAD}" \
+            "mlx90-current-revision:copilot:v4:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}" \
             'Current revision review passed'
           # Temporary migration alias only. Its evidence states the actual path;
           # it is removed immediately after the ruleset requires the neutral name.
           publish_once \
             'Successful Copilot review' \
-            "mlx90-legacy-copilot:v3:${EVENT_HEAD}" \
+            "mlx90-legacy-copilot:v4:${GITHUB_RUN_ID}:${EVENT_HEAD}" \
             'Temporary legacy alias for verified current-revision policy'
 
   request-protected-verifier-reevaluation:
