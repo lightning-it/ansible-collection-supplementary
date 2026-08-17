@@ -29,7 +29,7 @@ jobs:
       github.triggering_actor == 'litroc'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment: ansible-collection-release-prepare
+    environment: ansible-collection-runtime-protected
     permissions:
       actions: read
       checks: read

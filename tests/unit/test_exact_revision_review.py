@@ -410,6 +410,14 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn('--arg sha "${EVENT_HEAD}"', review_job)
         self.assertIn(".head_branch == $branch", review_job)
         self.assertIn(".head_sha == $sha", review_job)
+        self.assertIn("Copilot review request is already recorded", request_job)
+        self.assertIn("Copilot review request accepted", request_job)
+        self.assertNotIn("review_is_visible_for_head()", request_job)
+        self.assertNotIn("--method DELETE", request_job)
+
+        rerun_job = workflow.split("  request-protected-verifier-reevaluation:", 1)[1]
+        self.assertIn('-f "inputs[pr_number]=${PR_NUMBER}"', rerun_job)
+        self.assertNotIn('-F "inputs[pr_number]=${PR_NUMBER}"', rerun_job)
 
     def test_human_producer_verifier_separates_event_head_from_controller_sha(self) -> None:
         rerun = (ROOT / ".github/workflows/current-revision-rerun.yml").read_text(encoding="utf-8")
