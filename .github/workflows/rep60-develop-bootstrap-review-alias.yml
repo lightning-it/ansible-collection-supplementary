@@ -83,17 +83,21 @@ jobs:
           protected_run="$(gh api "repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
           jq -e \
             --arg actor "${EVENT_ACTOR}" \
-            --arg default_branch "${DEFAULT_BRANCH}" \
+            --arg head "${EVENT_HEAD}" \
+            --arg head_branch "${target_branch}" \
             --arg path "${workflow_path}" \
             --arg repository "${REPOSITORY}" \
             --arg run_url "${protected_run_url}" \
-            --arg sha "${WORKFLOW_SHA}" \
             --argjson attempt "${GITHUB_RUN_ATTEMPT}" '
               .event == "pull_request_target"
               and .name == "REP-60 protected develop bootstrap alias"
               and .path == $path
-              and .head_branch == $default_branch
-              and .head_sha == $sha
+              # The Actions run API reports the event PR branch and revision
+              # here. WORKFLOW_REF, WORKFLOW_SHA, and the live protected
+              # default-branch lookup above independently bind controller
+              # provenance to the protected base.
+              and .head_branch == $head_branch
+              and .head_sha == $head
               and .repository.full_name == $repository
               and .head_repository.full_name == $repository
               and .actor.login == $actor
@@ -306,15 +310,17 @@ jobs:
             existing_run="$(gh api "repos/${REPOSITORY}/actions/runs/${existing_run_id}")"
             jq -e \
               --arg actor litroc \
+              --arg head "${EVENT_HEAD}" \
+              --arg head_branch "${target_branch}" \
               --arg path "${workflow_path}" \
               --arg repository "${REPOSITORY}" \
               --arg run_url "${existing_run_url}" \
-              --arg sha "${WORKFLOW_SHA}" '
+              '
                 .event == "pull_request_target"
                 and .name == "REP-60 protected develop bootstrap alias"
                 and .path == $path
-                and .head_branch == "develop"
-                and .head_sha == $sha
+                and .head_branch == $head_branch
+                and .head_sha == $head
                 and .repository.full_name == $repository
                 and .head_repository.full_name == $repository
                 and .actor.login == $actor
