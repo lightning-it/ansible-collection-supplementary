@@ -405,6 +405,17 @@ def verify(
         expected_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as error:
         fail(f"Review metadata is malformed: {error}")
+    if not isinstance(expected_metadata, dict):
+        fail("Review metadata must be a JSON object.")
+    expected_keys = set(IMMUTABLE_METADATA_KEYS)
+    observed_keys = set(expected_metadata)
+    if observed_keys != expected_keys:
+        missing = sorted(expected_keys - observed_keys)
+        unexpected = sorted(observed_keys - expected_keys)
+        fail(
+            "Review metadata keys differ from the protected materializer output: "
+            f"missing={missing}, unexpected={unexpected}"
+        )
 
     runner_temp = Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())).resolve()
     if not runner_temp.is_dir():

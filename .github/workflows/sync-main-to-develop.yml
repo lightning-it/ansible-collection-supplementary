@@ -31,6 +31,7 @@ jobs:
           private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-actions: write
           permission-contents: write
           permission-pull-requests: write
 

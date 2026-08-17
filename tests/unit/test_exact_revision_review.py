@@ -195,7 +195,11 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
             review = root / "review"
             review.mkdir()
             (review / "change.patch").write_bytes(b"bounded diff\n")
-            (review / "review-metadata.json").write_text("{}\n", encoding="utf-8")
+            metadata = {key: None for key in self.module.IMMUTABLE_METADATA_KEYS}
+            (review / "review-metadata.json").write_text(
+                json.dumps(metadata) + "\n",
+                encoding="utf-8",
+            )
             with (
                 mock.patch.dict(os.environ, {"RUNNER_TEMP": str(root / "missing")}),
                 self.assertRaisesRegex(
@@ -220,6 +224,26 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
             ):
                 self.module.verify(self.arguments, review, {})
             materialize.assert_not_called()
+
+    def test_verify_requires_the_exact_protected_metadata_shape(self) -> None:
+        for name, metadata, expected_error in (
+            ("non-object", [], "must be a JSON object"),
+            ("unexpected-key", {"attacker_controlled": True}, "unexpected=\\['attacker_controlled'\\]"),
+        ):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                review = Path(temporary) / "review"
+                review.mkdir()
+                (review / "change.patch").write_bytes(b"bounded diff\n")
+                (review / "review-metadata.json").write_text(
+                    json.dumps(metadata) + "\n",
+                    encoding="utf-8",
+                )
+                with (
+                    mock.patch.object(self.module, "materialize") as materialize,
+                    self.assertRaisesRegex(self.module.MaterializationError, expected_error),
+                ):
+                    self.module.verify(self.arguments, review, {})
+                materialize.assert_not_called()
 
     def test_live_binding_rejects_non_release_app_author(self) -> None:
         payload = {
@@ -401,6 +425,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                 self.assertIn("gh pr ready", workflow)
                 self.assertIn("lightning-it-release-automation[bot]", workflow)
                 self.assertIn("gh workflow run release-bot-exact-head-review.yml", workflow)
+                self.assertIn("permission-actions: write", workflow)
                 self.assertIn("expected_base=", workflow)
                 self.assertIn("expected_head=", workflow)
                 self.assertLess(
