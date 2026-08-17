@@ -32,6 +32,7 @@ class Rep60BootstrapAppRearmTests(unittest.TestCase):
         self.assertIn("repositories: ${{ github.event.repository.name }}", workflow)
         self.assertIn("permission-contents: read", workflow)
         self.assertIn("permission-pull-requests: write", workflow)
+        self.assertNotIn("pull-requests: read", workflow)
         self.assertIn("readonly pr_number=777", workflow)
         self.assertIn("readonly expected_base=01afb46890e6d7ac6008e8ed478aa6af91e1b19b", workflow)
         self.assertIn("readonly expected_author='lightning-it-release-automation[bot]'", workflow)

@@ -34,7 +34,6 @@ jobs:
       actions: read
       checks: read
       contents: read
-      pull-requests: read
 
     steps:
       - name: Mint repository-scoped release App token
