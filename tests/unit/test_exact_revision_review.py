@@ -345,7 +345,8 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn(".[0].app.id == 15368", workflow)
         self.assertIn(".[0].external_id == $external_id", workflow)
         self.assertIn("${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}", workflow)
-        self.assertNotIn("-f details_url=", workflow)
+        self.assertEqual(1, workflow.count('-f "details_url=${check_url}"'))
+        self.assertEqual(1, workflow.count('gh api --method PATCH "repos/${REPOSITORY}/check-runs/${check_id}"'))
 
     def test_release_app_pull_requests_do_not_enter_the_copilot_job(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")
