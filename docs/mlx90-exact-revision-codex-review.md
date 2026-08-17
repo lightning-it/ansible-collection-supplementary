@@ -95,8 +95,10 @@ run attempt, and—on the Release-App path—the exact actor and triggering acto
 The required workflow performs no AI call and never checks out candidate code.
 On an intermediate head it fails closed without requesting a review. After a
 final protected producer publishes its bound neutral result, a separate
-base-owned helper may rerun that one failed verifier attempt exactly once. The
-helper cannot create review evidence, cannot invoke AI, and refuses a second
-failed retry. This lets GitHub's default required-workflow events remain the
-immutable enforcement root without turning every synchronize event into an AI
-request.
+base-owned helper may rerun that one failed verifier attempt exactly once. It
+derives the AI producer run only from schema-v4 JSON evidence and the verifier
+run only from the verifier reservation's v2 external ID; both custom-check
+details URLs remain canonical `/runs/<check-id>` links. The helper cannot
+create review evidence, cannot invoke AI, and refuses a second failed retry.
+This lets GitHub's default required-workflow events remain the immutable
+enforcement root without turning every synchronize event into an AI request.

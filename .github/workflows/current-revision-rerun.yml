@@ -70,14 +70,28 @@ jobs:
               select(.status == "completed" and .conclusion == "success")]
           ' <<<"${neutral_pages}")"
           test "$(jq 'length' <<<"${neutral}")" -eq 1
-          producer_url="$(jq -r '.[0].details_url // empty' <<<"${neutral}")"
+          neutral_check_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' <<<"${neutral}")"
+          neutral_details_url="$(jq -r '.[0].details_url // empty' <<<"${neutral}")"
+          test "${neutral_details_url}" = "${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${neutral_check_id}"
+          neutral_external_id="$(jq -er '.[0].external_id | select(type == "string" and length > 0)' <<<"${neutral}")"
+          neutral_summary="$(jq -er '.[0].output.summary | fromjson | select(type == "object")' <<<"${neutral}")"
+          producer_id="$(jq -er '.producer_run_id | select(type == "number" and . > 0)' <<<"${neutral_summary}")"
+          producer_url="$(jq -er '.run_url | select(type == "string" and length > 0)' <<<"${neutral_summary}")"
           producer_prefix="${GITHUB_SERVER_URL}/${REPOSITORY}/actions/runs/"
-          case "${producer_url}" in
-            "${producer_prefix}"[1-9][0-9]*) ;;
-            *) echo "Neutral result has an invalid producer run URL." >&2; exit 1 ;;
-          esac
-          producer_id="${producer_url#"${producer_prefix}"}"
-          [[ "${producer_id}" =~ ^[1-9][0-9]*$ ]]
+          test "${producer_url}" = "${producer_prefix}${producer_id}"
+          author="$(jq -er '.user.login | select(type == "string" and length > 0)' <<<"${pr}")"
+          base_ref="$(jq -er '.base.ref | select(. == "develop" or . == "main")' <<<"${pr}")"
+          jq -e \
+            --arg base "${EXPECTED_BASE}" \
+            --arg head "${EXPECTED_HEAD}" \
+            --arg run_url "${producer_url}" \
+            --argjson run_id "${producer_id}" '
+              .schema == 4
+              and .base_sha == $base
+              and .head_sha == $head
+              and .producer_run_id == $run_id
+              and .run_url == $run_url
+            ' <<<"${neutral_summary}" >/dev/null
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
             producer="$(gh api "repos/${REPOSITORY}/actions/runs/${producer_id}")"
             if [ "$(jq -r .status <<<"${producer}")" = completed ]; then
@@ -87,38 +101,77 @@ jobs:
             test "${attempt}" -lt 10
             sleep 2
           done
+          if [ "${author}" = 'lightning-it-release-automation[bot]' ]; then
+            [[ "${neutral_external_id}" =~ ^mlx90-current-revision:v4:${producer_id}:[0-9a-f]{64}$ ]]
+            expected_title="Exact-Revision Codex PR #${PR_NUMBER} ${EXPECTED_BASE}..${EXPECTED_HEAD}"
+            jq -e \
+              --arg actor "${author}" \
+              --arg base_ref "${base_ref}" \
+              --arg base_sha "${EXPECTED_BASE}" \
+              --arg run_url "${producer_url}" \
+              --arg title "${expected_title}" '
+                .event == "workflow_dispatch"
+                and .path == ".github/workflows/release-bot-exact-head-review.yml"
+                and .display_title == $title
+                and .head_branch == $base_ref
+                and .head_sha == $base_sha
+                and .html_url == $run_url
+                and .actor.login == $actor
+                and .triggering_actor.login == $actor
+              ' <<<"${producer}" >/dev/null
+          else
+            test "${neutral_external_id}" = "mlx90-current-revision:copilot:v4:${producer_id}:${EXPECTED_BASE}:${EXPECTED_HEAD}"
+            jq -e \
+              --arg actor "${author}" \
+              --arg base_ref "${base_ref}" \
+              --arg base_sha "${EXPECTED_BASE}" \
+              --arg run_url "${producer_url}" '
+                .event == "pull_request_target"
+                and .path == ".github/workflows/copilot-review.yml"
+                and .name == "Current revision review gate"
+                and .head_branch == $base_ref
+                and .head_sha == $base_sha
+                and .html_url == $run_url
+                and .actor.login == $actor
+                and .triggering_actor.login == $actor
+              ' <<<"${producer}" >/dev/null
+          fi
 
-          external_id="rep60-required-workflow:v1:${PR_NUMBER}:${EXPECTED_HEAD}"
           reservations_pages="$(gh api --paginate --slurp \
             "repos/${REPOSITORY}/commits/${EXPECTED_HEAD}/check-runs?check_name=Protected%20current-revision%20verifier&per_page=100")"
           reservations="$(jq -c \
-            --arg external_id "${external_id}" '
+            --arg head "${EXPECTED_HEAD}" \
+            --arg prefix "rep60-required-workflow:v2:" \
+            --arg suffix ":${PR_NUMBER}:${EXPECTED_HEAD}" '
               [.[].check_runs[]? |
                 select(.name == "Protected current-revision verifier") |
                 select(.app.id == 15368 and .app.slug == "github-actions") |
-                select(.external_id == $external_id)]
+                select(.head_sha == $head) |
+                select((.external_id | type) == "string") |
+                select(.external_id | startswith($prefix) and endswith($suffix))]
             ' <<<"${reservations_pages}")"
           test "$(jq 'length' <<<"${reservations}")" -eq 1
-          details_url="$(jq -r '.[0].details_url // empty' <<<"${reservations}")"
-          expected_prefix="${GITHUB_SERVER_URL}/${REPOSITORY}/actions/runs/"
-          case "${details_url}" in
-            "${expected_prefix}"[1-9][0-9]*) ;;
-            *) echo "Protected verifier reservation has an invalid run URL." >&2; exit 1 ;;
-          esac
-          run_id="${details_url#"${expected_prefix}"}"
-          [[ "${run_id}" =~ ^[1-9][0-9]*$ ]]
+          reservation_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' <<<"${reservations}")"
+          reservation_url="$(jq -r '.[0].details_url // empty' <<<"${reservations}")"
+          test "${reservation_url}" = "${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${reservation_id}"
+          reservation_external_id="$(jq -er '.[0].external_id | select(type == "string" and length > 0)' <<<"${reservations}")"
+          [[ "${reservation_external_id}" =~ ^rep60-required-workflow:v2:([1-9][0-9]*):${PR_NUMBER}:${EXPECTED_HEAD}$ ]]
+          run_id="${BASH_REMATCH[1]}"
+          verifier_run_url="${GITHUB_SERVER_URL}/${REPOSITORY}/actions/runs/${run_id}"
           run="$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}")"
-          base_ref="$(jq -r .base.ref <<<"${pr}")"
           jq -e \
+            --arg actor "${author}" \
             --arg base_ref "${base_ref}" \
             --arg base_sha "${EXPECTED_BASE}" \
-            --arg details_url "${details_url}" '
+            --arg run_url "${verifier_run_url}" '
               .event == "pull_request_target"
               and .path == ".github/workflows/supplementary-current-revision-required.yml"
               and .name == "Protected Supplementary current-revision evidence verifier"
               and .head_branch == $base_ref
               and .head_sha == $base_sha
-              and .html_url == $details_url
+              and .html_url == $run_url
+              and .actor.login == $actor
+              and .triggering_actor.login == $actor
               and .status == "completed"
             ' <<<"${run}" >/dev/null
           if [ "$(jq -r .conclusion <<<"${run}")" = success ]; then

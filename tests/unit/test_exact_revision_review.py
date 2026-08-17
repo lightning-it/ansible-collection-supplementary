@@ -279,6 +279,22 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             '.name == "Protected Supplementary current-revision evidence verifier"',
             rerun,
         )
+        self.assertIn("rep60-required-workflow:v2:", rerun)
+        self.assertIn(".producer_run_id", rerun)
+        self.assertIn(".output.summary | fromjson", rerun)
+        self.assertIn(
+            '${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${neutral_check_id}',
+            rerun,
+        )
+        self.assertIn(
+            '${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${reservation_id}',
+            rerun,
+        )
+        self.assertNotIn(
+            'producer_url="$(jq -r \'.[0].details_url // empty\'',
+            rerun,
+        )
+        self.assertGreaterEqual(rerun.count(".triggering_actor.login == $actor"), 3)
         self.assertIn('test "$(jq -r .run_attempt <<<"${run}")" -eq 1', rerun)
         self.assertEqual(1, rerun.count('/rerun" >/dev/null'))
 
