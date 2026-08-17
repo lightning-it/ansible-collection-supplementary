@@ -201,6 +201,8 @@ jobs:
             -f "output[summary]=Immutable input SHA-256: ${input_sha256}.")"
           check_id="$(jq -er '.id | select(type == "number" and . > 0)' <<<"${reservation}")"
           check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}"
+          reservation="$(gh api --method PATCH "repos/${REPOSITORY}/check-runs/${check_id}" \
+            -f "details_url=${check_url}")"
           jq -e \
             --arg external_id "${external_id}" \
             --arg head "${EXPECTED_HEAD}" \
@@ -373,6 +375,8 @@ jobs:
               -f "output[summary]=${evidence}")"
             check_id="$(jq -er '.id | select(type == "number" and . > 0)' <<<"${created}")"
             check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}"
+            created="$(gh api --method PATCH "repos/${REPOSITORY}/check-runs/${check_id}" \
+              -f "details_url=${check_url}")"
             jq -e \
               --arg evidence "${evidence}" \
               --arg external_id "${external_id}" \
