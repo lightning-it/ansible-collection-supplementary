@@ -205,6 +205,22 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
             ):
                 self.module.verify(self.arguments, review, {})
 
+    def test_verify_rejects_oversized_stored_diff_before_regeneration(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            review = Path(temporary) / "review"
+            review.mkdir()
+            (review / "change.patch").write_bytes(b"x" * self.module.MAX_REVIEW_BYTES)
+            (review / "review-metadata.json").write_text("{}\n", encoding="utf-8")
+            with (
+                mock.patch.object(self.module, "materialize") as materialize,
+                self.assertRaisesRegex(
+                    self.module.MaterializationError,
+                    "must be between 1 and 199999 bytes",
+                ),
+            ):
+                self.module.verify(self.arguments, review, {})
+            materialize.assert_not_called()
+
     def test_live_binding_rejects_non_release_app_author(self) -> None:
         payload = {
             "state": "open",

@@ -398,6 +398,9 @@ def verify(
     metadata_path = review_directory / "review-metadata.json"
     if not patch.is_file() or patch.is_symlink() or not metadata_path.is_file() or metadata_path.is_symlink():
         fail("The review diff and metadata must be regular, non-symlink files.")
+    patch_size = patch.stat().st_size
+    if patch_size <= 0 or patch_size >= MAX_REVIEW_BYTES:
+        fail(f"The review diff must be between 1 and {MAX_REVIEW_BYTES - 1} bytes.")
     try:
         expected_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as error:
