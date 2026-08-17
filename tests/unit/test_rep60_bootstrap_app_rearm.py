@@ -15,6 +15,8 @@ class Rep60BootstrapAppRearmTests(unittest.TestCase):
         self.assertIn("Temporary REP-60 bootstrap controller", workflow)
         self.assertIn("workflow_dispatch:", workflow)
         self.assertIn("github.ref == 'refs/heads/develop'", workflow)
+        self.assertIn("github.actor == 'litroc'", workflow)
+        self.assertIn("github.triggering_actor == 'litroc'", workflow)
         self.assertIn('test "${GITHUB_SHA}" = "${EXPECTED_HEAD}"', workflow)
         self.assertIn('.path == $workflow', workflow)
         self.assertIn('.head_branch == "develop"', workflow)

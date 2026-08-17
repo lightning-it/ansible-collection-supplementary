@@ -24,7 +24,9 @@ jobs:
     name: Rearm PR 777 as the release App
     if: >-
       github.repository == 'lightning-it/ansible-collection-supplementary' &&
-      github.ref == 'refs/heads/develop'
+      github.ref == 'refs/heads/develop' &&
+      github.actor == 'litroc' &&
+      github.triggering_actor == 'litroc'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: ansible-collection-release-prepare
