@@ -1,5 +1,6 @@
 ---
 bugfixes:
   - >-
-    Bind the temporary REP-60 bootstrap review alias to its exact protected
-    workflow run while accepting GitHub's canonical custom-check URL.
+    Publish the temporary REP-60 bootstrap review alias as an unskippable,
+    protected native job for the exact develop-to-main promotion, without a
+    caller-controlled custom check or an artificial rerun-attempt cap.

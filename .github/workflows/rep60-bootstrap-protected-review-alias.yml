@@ -6,6 +6,7 @@ name: REP-60 protected bootstrap review alias
 
 on:
   pull_request_target:
+    branches: [main]
     types: [opened, synchronize, reopened, ready_for_review, edited]
 
 permissions:
@@ -18,20 +19,12 @@ concurrency:
 
 jobs:
   publish-protected-alias:
-    name: Publish protected bootstrap review alias
-    if: >-
-      github.repository == 'lightning-it/ansible-collection-supplementary' &&
-      github.event.pull_request.draft == false &&
-      github.event.pull_request.user.login == 'litroc' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      ((github.event.pull_request.base.ref == 'develop' &&
-        github.event.pull_request.head.ref == 'agent/mlx90-exact-revision-codex-pilot-20260816') ||
-       (github.event.pull_request.base.ref == 'main' &&
-        github.event.pull_request.head.ref == 'develop' &&
-        github.event.pull_request.title == 'chore(release): promote develop to main'))
+    # Native protected alias. Never add a job-level condition: GitHub reports
+    # a skipped required job as success. The main-branch trigger and the live
+    # verifier below admit only the exact protected develop promotion.
+    name: Successful Copilot review
     permissions:
       actions: read
-      checks: write
       contents: read
       pull-requests: read
     runs-on: ubuntu-latest
@@ -54,35 +47,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          check_id=""
-          check_finalized=false
           protected_run_url="${GITHUB_SERVER_URL}/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-
-          finalize_failed_check() {
-            local result=$?
-            trap - EXIT
-            if [ -n "${check_id}" ] && [ "${check_finalized}" != true ]; then
-              set +e
-              gh api --method PATCH \
-                -H 'Accept: application/vnd.github+json' \
-                "repos/${REPOSITORY}/check-runs/${check_id}" \
-                -f status=completed \
-                -f conclusion=failure \
-                -f completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                -f 'output[title]=REP-60 bootstrap review failed closed' \
-                -f 'output[summary]=The protected bootstrap verifier did not accept this exact revision.' \
-                >/dev/null
-            fi
-            exit "${result}"
-          }
-          trap finalize_failed_check EXIT
 
           [[ "${PR_NUMBER}" =~ ^[1-9][0-9]*$ ]]
           [[ "${EVENT_BASE}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${EVENT_HEAD}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${GITHUB_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
           [[ "${GITHUB_RUN_ATTEMPT}" =~ ^[1-9][0-9]*$ ]]
-          test "${GITHUB_RUN_ATTEMPT}" -le 2
           [[ "${WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
           test "${DEFAULT_BRANCH}" = develop
           # GitHub defines pull_request_target's GITHUB_SHA/GITHUB_REF as the
@@ -129,100 +100,22 @@ jobs:
               and .title == $title
             ' <<<"${live_pr}" >/dev/null
 
-          case "${EVENT_BASE_REF}:${EVENT_HEAD_REF}" in
-            develop:agent/mlx90-exact-revision-codex-pilot-20260816)
-              test "${WORKFLOW_SHA}" = "${EVENT_BASE}"
-              ;;
-            main:develop)
-              test "${EVENT_TITLE}" = 'chore(release): promote develop to main'
-              # The protected controller and the promotion head are both the
-              # exact live default-branch revision in this bounded path.
-              test "${WORKFLOW_SHA}" = "${EVENT_HEAD}"
-              test "$(gh api "repos/${REPOSITORY}/branches/develop" --jq .commit.sha)" = "${EVENT_HEAD}"
-              test "$(gh api "repos/${REPOSITORY}/branches/main" --jq .commit.sha)" = "${EVENT_BASE}"
-              comparison="$(gh api "repos/${REPOSITORY}/compare/${EVENT_BASE}...${EVENT_HEAD}")"
-              jq -e \
-                --arg base "${EVENT_BASE}" '
-                  .status == "ahead"
-                  and .behind_by == 0
-                  and .ahead_by > 0
-                  and .merge_base_commit.sha == $base
-                ' <<<"${comparison}" >/dev/null
-              ;;
-            *)
-              echo 'Event is outside the exact REP-60 bootstrap scope.' >&2
-              false
-              ;;
-          esac
-
-          external_id="rep60-bootstrap-alias:v2:${GITHUB_RUN_ID}:${WORKFLOW_SHA}:${EVENT_BASE}:${EVENT_HEAD}"
-          check_runs="$(
-            gh api --paginate --slurp \
-              -H 'Accept: application/vnd.github+json' \
-              "repos/${REPOSITORY}/commits/${EVENT_HEAD}/check-runs?check_name=Successful%20Copilot%20review&per_page=100"
-          )"
-          matching_checks="$(
-            jq -c \
-              --arg external_id "${external_id}" '
-                [.[].check_runs[] | select(.external_id == $external_id)]
-              ' <<<"${check_runs}"
-          )"
-          test "$(jq 'length' <<<"${matching_checks}")" -le 1
-          if [ "$(jq 'length' <<<"${matching_checks}")" -eq 1 ]; then
-            check_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' <<<"${matching_checks}")"
-            check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}"
-            jq -e \
-              --arg external_id "${external_id}" \
-              --arg head "${EVENT_HEAD}" \
-              --arg url "${check_url}" \
-              --argjson check_id "${check_id}" '
-                .[0].id == $check_id
-                and .[0].name == "Successful Copilot review"
-                and .[0].head_sha == $head
-                and .[0].details_url == $url
-                and .[0].external_id == $external_id
-                and .[0].app.id == 15368
-                and .[0].app.slug == "github-actions"
-              ' <<<"${matching_checks}" >/dev/null
-            reservation="$(
-              gh api --method PATCH \
-                -H 'Accept: application/vnd.github+json' \
-                "repos/${REPOSITORY}/check-runs/${check_id}" \
-                -f status=in_progress \
-                -f started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                -f 'output[title]=REP-60 protected bootstrap review pending' \
-                -f "output[summary]=Protected run ${protected_run_url}; re-verifying the exact current revision."
-            )"
-          else
-            reservation="$(
-              gh api --method POST \
-              -H 'Accept: application/vnd.github+json' \
-              "repos/${REPOSITORY}/check-runs" \
-              -f name='Successful Copilot review' \
-              -f head_sha="${EVENT_HEAD}" \
-              -f status=in_progress \
-              -f started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-              -f external_id="${external_id}" \
-              -f 'output[title]=REP-60 protected bootstrap review pending' \
-              -f "output[summary]=Protected run ${protected_run_url}; verifying the exact current revision."
-            )"
-            check_id="$(jq -er '.id | select(type == "number" and . > 0)' <<<"${reservation}")"
-            check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}"
-          fi
+          test "${EVENT_BASE_REF}" = main
+          test "${EVENT_HEAD_REF}" = develop
+          test "${EVENT_TITLE}" = 'chore(release): promote develop to main'
+          # The protected controller and the promotion head are both the
+          # exact live default-branch revision in this bounded path.
+          test "${WORKFLOW_SHA}" = "${EVENT_HEAD}"
+          test "$(gh api "repos/${REPOSITORY}/branches/develop" --jq .commit.sha)" = "${EVENT_HEAD}"
+          test "$(gh api "repos/${REPOSITORY}/branches/main" --jq .commit.sha)" = "${EVENT_BASE}"
+          comparison="$(gh api "repos/${REPOSITORY}/compare/${EVENT_BASE}...${EVENT_HEAD}")"
           jq -e \
-            --arg external_id "${external_id}" \
-            --arg head "${EVENT_HEAD}" \
-            --arg url "${check_url}" \
-            --argjson check_id "${check_id}" '
-              .id == $check_id
-              and .name == "Successful Copilot review"
-              and .head_sha == $head
-              and .details_url == $url
-              and .external_id == $external_id
-              and .status == "in_progress"
-              and .app.id == 15368
-              and .app.slug == "github-actions"
-            ' <<<"${reservation}" >/dev/null
+            --arg base "${EVENT_BASE}" '
+              .status == "ahead"
+              and .behind_by == 0
+              and .ahead_by > 0
+              and .merge_base_commit.sha == $base
+            ' <<<"${comparison}" >/dev/null
 
           review_complete=false
           for attempt in $(seq 1 40); do
@@ -335,56 +228,4 @@ jobs:
               and .head.repo.full_name == $repository
             ' <<<"${post_pr}" >/dev/null
 
-          final_checks="$(
-            gh api --paginate --slurp \
-              -H 'Accept: application/vnd.github+json' \
-              "repos/${REPOSITORY}/commits/${EVENT_HEAD}/check-runs?check_name=Successful%20Copilot%20review&per_page=100"
-          )"
-          self_prefix="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/"
-          custom_aliases="$(
-            jq -c \
-              --arg prefix "${self_prefix}" '
-                [.[].check_runs[] |
-                  select(.name == "Successful Copilot review") |
-                  select(.app.id == 15368 and .app.slug == "github-actions") |
-                  select((.details_url // "") | startswith($prefix))]
-              ' <<<"${final_checks}"
-          )"
-          test "$(jq 'length' <<<"${custom_aliases}")" -eq 1
-          jq -e \
-            --arg external_id "${external_id}" \
-            --arg url "${check_url}" \
-            --argjson check_id "${check_id}" '
-              .[0].id == $check_id
-              and .[0].details_url == $url
-              and .[0].external_id == $external_id
-            ' <<<"${custom_aliases}" >/dev/null
-
-          summary="Protected run ${protected_run_url}; workflow ${WORKFLOW_SHA}; base ${EVENT_BASE}; head ${EVENT_HEAD}; current-head Copilot review accepted; unresolved findings 0."
-          completed="$(
-            gh api --method PATCH \
-              -H 'Accept: application/vnd.github+json' \
-              "repos/${REPOSITORY}/check-runs/${check_id}" \
-              -f status=completed \
-              -f conclusion=success \
-              -f completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-              -f 'output[title]=REP-60 protected bootstrap review passed' \
-              -f "output[summary]=${summary}"
-          )"
-          jq -e \
-            --arg external_id "${external_id}" \
-            --arg head "${EVENT_HEAD}" \
-            --arg url "${check_url}" \
-            --argjson check_id "${check_id}" '
-              .id == $check_id
-              and .name == "Successful Copilot review"
-              and .head_sha == $head
-              and .details_url == $url
-              and .external_id == $external_id
-              and .status == "completed"
-              and .conclusion == "success"
-              and .app.id == 15368
-              and .app.slug == "github-actions"
-            ' <<<"${completed}" >/dev/null
-          check_finalized=true
-          echo "Published the protected bootstrap alias for exact head ${EVENT_HEAD}."
+          echo "Protected bootstrap alias accepted exact head ${EVENT_HEAD} in run ${protected_run_url}."
