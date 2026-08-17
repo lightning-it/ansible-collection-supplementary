@@ -121,16 +121,29 @@ jobs:
               ' <<<"${producer}" >/dev/null
           else
             test "${neutral_external_id}" = "mlx90-current-revision:copilot:v4:${producer_id}:${EXPECTED_BASE}:${EXPECTED_HEAD}"
+            controller_sha="$(jq -er '.controller_sha | select(type == "string" and test("^[0-9a-f]{40}$"))' \
+              <<<"${neutral_summary}")"
+            default_branch="$(gh api "repos/${REPOSITORY}" --jq .default_branch)"
+            test "${default_branch}" = develop
+            default_head="$(gh api "repos/${REPOSITORY}/branches/${default_branch}" --jq .commit.sha)"
+            controller_ancestry="$(gh api \
+              "repos/${REPOSITORY}/compare/${controller_sha}...${default_head}")"
+            jq -e \
+              --arg controller "${controller_sha}" '
+                .status == "identical"
+                or (.status == "ahead" and .behind_by == 0
+                    and .merge_base_commit.sha == $controller)
+              ' <<<"${controller_ancestry}" >/dev/null
             jq -e \
               --arg actor "${author}" \
-              --arg base_ref "${base_ref}" \
-              --arg base_sha "${EXPECTED_BASE}" \
+              --arg default_branch "${default_branch}" \
+              --arg controller_sha "${controller_sha}" \
               --arg run_url "${producer_url}" '
                 .event == "pull_request_target"
                 and .path == ".github/workflows/copilot-review.yml"
                 and .name == "Current revision review gate"
-                and .head_branch == $base_ref
-                and .head_sha == $base_sha
+                and .head_branch == $default_branch
+                and .head_sha == $controller_sha
                 and .html_url == $run_url
                 and .actor.login == $actor
                 and .triggering_actor.login == $actor

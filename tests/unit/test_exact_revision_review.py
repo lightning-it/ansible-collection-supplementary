@@ -333,6 +333,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             workflow,
         )
         self.assertIn("'{schema:4,base_sha:$base,head_sha:$head,", workflow)
+        self.assertIn("controller_sha:$controller", workflow)
         self.assertIn("producer_run_id:$run_id", workflow)
         self.assertIn('named="$(jq -c', workflow)
         self.assertIn(".[0].app.id == 15368", workflow)
@@ -358,7 +359,22 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("\n    name: Current revision review\n", workflow)
         self.assertNotIn("\n    name: Successful Copilot review\n", workflow)
         self.assertIn('-f name="${check_name}"', review_job)
-        self.assertIn('test "${EVENT_BASE}" = "${TRUSTED_WORKFLOW_SHA}"', review_job)
+        self.assertNotIn('test "${EVENT_BASE}" = "${TRUSTED_WORKFLOW_SHA}"', review_job)
+        self.assertIn("${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}", review_job)
+        self.assertIn("compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", review_job)
+        self.assertIn(".head_branch == $branch", review_job)
+        self.assertIn(".head_sha == $sha", review_job)
+
+    def test_human_producer_verifier_uses_default_branch_controller_sha(self) -> None:
+        rerun = (ROOT / ".github/workflows/current-revision-rerun.yml").read_text(encoding="utf-8")
+        human_path = rerun.split("          else", 1)[1].split("          fi", 1)[0]
+        self.assertIn(".controller_sha", human_path)
+        self.assertIn("test \"${default_branch}\" = develop", human_path)
+        self.assertIn("compare/${controller_sha}...${default_head}", human_path)
+        self.assertIn(".head_branch == $default_branch", human_path)
+        self.assertIn(".head_sha == $controller_sha", human_path)
+        self.assertNotIn(".head_branch == $base_ref", human_path)
+        self.assertNotIn(".head_sha == $base_sha", human_path)
 
     def test_release_app_pr_creators_finalize_draft_once(self) -> None:
         for name in (

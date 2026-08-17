@@ -34,8 +34,11 @@ jobs:
       github.event.action == 'ready_for_review' &&
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.user.login == 'litroc'
+      github.event.pull_request.user.login == 'litroc' &&
+      github.actor == 'litroc' &&
+      github.triggering_actor == 'litroc'
     permissions:
+      actions: read
       contents: read
       issues: write
       pull-requests: write
@@ -47,18 +50,49 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           REPOSITORY: ${{ github.repository }}
           TRUSTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          TRUSTED_WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           set -euo pipefail
+          [[ "${EXPECTED_BASE}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${EXPECTED_HEAD}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${TRUSTED_WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "${DEFAULT_BRANCH}" = develop
+          test "${TRUSTED_WORKFLOW_REF}" = \
+            "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}"
+          default_head="$(gh api "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}" --jq .commit.sha)"
+          controller_ancestry="$(gh api \
+            "repos/${REPOSITORY}/compare/${TRUSTED_WORKFLOW_SHA}...${default_head}")"
+          jq -e \
+            --arg controller "${TRUSTED_WORKFLOW_SHA}" '
+              .status == "identical"
+              or (.status == "ahead" and .behind_by == 0
+                  and .merge_base_commit.sha == $controller)
+            ' <<<"${controller_ancestry}" >/dev/null
+          protected_run="$(gh api "repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
+          jq -e \
+            --arg branch "${DEFAULT_BRANCH}" \
+            --arg repository "${REPOSITORY}" \
+            --arg sha "${TRUSTED_WORKFLOW_SHA}" '
+              .event == "pull_request_target"
+              and .name == "Current revision review gate"
+              and .path == ".github/workflows/copilot-review.yml"
+              and .head_branch == $branch
+              and .head_sha == $sha
+              and .repository.full_name == $repository
+              and .head_repository.full_name == $repository
+            ' <<<"${protected_run}" >/dev/null
           pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
           test "$(jq -r .state <<<"${pr}")" = open
           test "$(jq -r .draft <<<"${pr}")" = false
           base_ref="$(jq -er '.base.ref | select(. == "develop" or . == "main")' <<<"${pr}")"
           test -n "${base_ref}"
-          test "$(jq -r .base.sha <<<"${pr}")" = "${TRUSTED_WORKFLOW_SHA}"
+          test "$(jq -r .base.sha <<<"${pr}")" = "${EXPECTED_BASE}"
+          test "$(jq -r .base.repo.full_name <<<"${pr}")" = "${REPOSITORY}"
           test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"
           test "$(jq -r .head.repo.full_name <<<"${pr}")" = "${REPOSITORY}"
           author="$(jq -r .user.login <<<"${pr}")"
@@ -127,6 +161,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'
     permissions:
+      actions: read
       checks: write
       contents: read
       pull-requests: read
@@ -625,16 +660,45 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
           EVENT_BASE: ${{ github.event.pull_request.base.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}
           TRUSTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          TRUSTED_WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           set -euo pipefail
+          [[ "${EVENT_BASE}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${EVENT_HEAD}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${TRUSTED_WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "${DEFAULT_BRANCH}" = develop
+          test "${TRUSTED_WORKFLOW_REF}" = \
+            "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}"
+          default_head="$(gh api "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}" --jq .commit.sha)"
+          controller_ancestry="$(gh api \
+            "repos/${REPOSITORY}/compare/${TRUSTED_WORKFLOW_SHA}...${default_head}")"
+          jq -e \
+            --arg controller "${TRUSTED_WORKFLOW_SHA}" '
+              .status == "identical"
+              or (.status == "ahead" and .behind_by == 0
+                  and .merge_base_commit.sha == $controller)
+            ' <<<"${controller_ancestry}" >/dev/null
+          protected_run="$(gh api "repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
+          jq -e \
+            --arg branch "${DEFAULT_BRANCH}" \
+            --arg repository "${REPOSITORY}" \
+            --arg sha "${TRUSTED_WORKFLOW_SHA}" '
+              .event == "pull_request_target"
+              and .name == "Current revision review gate"
+              and .path == ".github/workflows/copilot-review.yml"
+              and .head_branch == $branch
+              and .head_sha == $sha
+              and .repository.full_name == $repository
+              and .head_repository.full_name == $repository
+            ' <<<"${protected_run}" >/dev/null
           pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
           test "$(jq -r .state <<<"${pr}")" = open
           test "$(jq -r .draft <<<"${pr}")" = false
           test "$(jq -r .head.sha <<<"${pr}")" = "${EVENT_HEAD}"
-          test "${EVENT_BASE}" = "${TRUSTED_WORKFLOW_SHA}"
           test "$(jq -r .base.sha <<<"${pr}")" = "${EVENT_BASE}"
           base_ref="$(jq -er '.base.ref | select(. == "develop" or . == "main")' <<<"${pr}")"
           test -n "${base_ref}"
@@ -643,10 +707,12 @@ jobs:
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           evidence="$(jq -cn \
             --arg base "${EVENT_BASE}" \
+            --arg controller "${TRUSTED_WORKFLOW_SHA}" \
             --arg head "${EVENT_HEAD}" \
             --argjson run_id "${GITHUB_RUN_ID}" \
             --arg run_url "${run_url}" \
-            '{schema:4,base_sha:$base,head_sha:$head,producer_run_id:$run_id,
+            '{schema:4,base_sha:$base,head_sha:$head,controller_sha:$controller,
+              producer_run_id:$run_id,
               review_path:"applicable Copilot or governed automation exemption",run_url:$run_url}')"
           publish_once() {
             local check_name="$1" external_id="$2" title="$3"
