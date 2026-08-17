@@ -189,6 +189,22 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
         with self.assertRaisesRegex(self.module.MaterializationError, "workflow SHA"):
             self.module.validate_inputs(self.arguments)
 
+    def test_verify_rejects_missing_runner_temp(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            review = root / "review"
+            review.mkdir()
+            (review / "change.patch").write_bytes(b"bounded diff\n")
+            (review / "review-metadata.json").write_text("{}\n", encoding="utf-8")
+            with (
+                mock.patch.dict(os.environ, {"RUNNER_TEMP": str(root / "missing")}),
+                self.assertRaisesRegex(
+                    self.module.MaterializationError,
+                    "RUNNER_TEMP must identify an existing directory",
+                ),
+            ):
+                self.module.verify(self.arguments, review, {})
+
     def test_live_binding_rejects_non_release_app_author(self) -> None:
         payload = {
             "state": "open",
@@ -227,6 +243,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("opened", trigger)
         self.assertNotIn("synchronize", trigger)
         self.assertIn("github.actor == 'lightning-it-release-automation[bot]'", workflow)
+        self.assertIn("      actions: read\n      checks: write", workflow)
         self.assertIn("checks: write", workflow)
         self.assertNotIn("actions/checkout@", workflow)
         self.assertIn("materialize-exact-revision-review.py?ref=${TRUSTED_WORKFLOW_SHA}", workflow)

@@ -404,6 +404,8 @@ def verify(
         fail(f"Review metadata is malformed: {error}")
 
     runner_temp = Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())).resolve()
+    if not runner_temp.is_dir():
+        fail("RUNNER_TEMP must identify an existing directory.")
     with tempfile.TemporaryDirectory(prefix="exact-revision-recheck.", dir=runner_temp) as temporary:
         regenerated = Path(temporary) / "review"
         actual_metadata = bind_protected_assets(materialize(arguments, regenerated), asset_paths)

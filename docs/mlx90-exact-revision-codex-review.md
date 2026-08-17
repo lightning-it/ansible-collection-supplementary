@@ -55,6 +55,15 @@ Codex receives a new directory containing only the complete diff, immutable meta
 protected schema. It receives no checkout, Git history, repository credentials, or automation token. The pinned
 action runs ephemerally with the read-only permission profile and dropped sudo.
 
+The review job's workflow-token permissions are exact and fail-closed:
+`actions: read` to verify a reusable producer run, `checks: write` to reserve
+and publish the bound result, plus `contents: read` and `pull-requests: read`
+for protected controller and live-PR binding. It has no `copilot-requests`,
+repository-content write, issue write, administration, workflow write, or
+ruleset permission. The separate post-PASS helper receives `actions: write`
+only to dispatch the protected verifier's single allowed re-evaluation; it
+cannot publish review evidence or invoke an AI reviewer.
+
 Before invoking Codex, the workflow reserves the complete-input hash. A prior
 protected PASS for that identical input is reused without another AI call. A
 prior failed or incomplete attempt blocks automatic retry. After a new reviewer
