@@ -1,0 +1,319 @@
+# Repository-owned, temporary REP-60 bootstrap controller.
+# Remove after the neutral Current revision review ruleset is live.
+# yamllint disable rule:truthy rule:line-length
+---
+name: REP-60 protected bootstrap review alias
+
+on:
+  pull_request_target:
+    types: [synchronize, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: rep60-bootstrap-review-alias-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  publish-protected-alias:
+    name: Publish protected bootstrap review alias
+    if: >-
+      github.repository == 'lightning-it/ansible-collection-supplementary' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.user.login == 'litroc' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      ((github.event.pull_request.base.ref == 'develop' &&
+        github.event.pull_request.head.ref == 'agent/mlx90-exact-revision-codex-pilot-20260816') ||
+       (github.event.pull_request.base.ref == 'main' &&
+        github.event.pull_request.head.ref == 'develop' &&
+        github.event.pull_request.title == 'chore(release): promote develop to main'))
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Verify exact protected review and publish legacy alias
+        env:
+          EVENT_BASE: ${{ github.event.pull_request.base.sha }}
+          EVENT_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+          EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          EVENT_TITLE: ${{ github.event.pull_request.title }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+
+          check_id=""
+          check_finalized=false
+          check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          finalize_failed_check() {
+            local result=$?
+            trap - EXIT
+            if [ -n "${check_id}" ] && [ "${check_finalized}" != true ]; then
+              set +e
+              gh api --method PATCH \
+                -H 'Accept: application/vnd.github+json' \
+                "repos/${REPOSITORY}/check-runs/${check_id}" \
+                -f status=completed \
+                -f conclusion=failure \
+                -f completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                -f 'output[title]=REP-60 bootstrap review failed closed' \
+                -f 'output[summary]=The protected bootstrap verifier did not accept this exact revision.' \
+                >/dev/null
+            fi
+            exit "${result}"
+          }
+          trap finalize_failed_check EXIT
+
+          [[ "${PR_NUMBER}" =~ ^[1-9][0-9]*$ ]]
+          [[ "${EVENT_BASE}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${EVENT_HEAD}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "${WORKFLOW_REF}" = \
+            "${REPOSITORY}/.github/workflows/rep60-bootstrap-protected-review-alias.yml@refs/heads/develop"
+
+          live_pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
+          jq -e \
+            --arg base "${EVENT_BASE}" \
+            --arg base_ref "${EVENT_BASE_REF}" \
+            --arg head "${EVENT_HEAD}" \
+            --arg head_ref "${EVENT_HEAD_REF}" \
+            --arg repository "${REPOSITORY}" \
+            --arg title "${EVENT_TITLE}" '
+              .state == "open"
+              and .draft == false
+              and .user.login == "litroc"
+              and .base.sha == $base
+              and .base.ref == $base_ref
+              and .base.repo.full_name == $repository
+              and .head.sha == $head
+              and .head.ref == $head_ref
+              and .head.repo.full_name == $repository
+              and .title == $title
+            ' <<<"${live_pr}" >/dev/null
+
+          case "${EVENT_BASE_REF}:${EVENT_HEAD_REF}" in
+            develop:agent/mlx90-exact-revision-codex-pilot-20260816)
+              test "${WORKFLOW_SHA}" = "${EVENT_BASE}"
+              ;;
+            main:develop)
+              test "${EVENT_TITLE}" = 'chore(release): promote develop to main'
+              test "${WORKFLOW_SHA}" = "${EVENT_HEAD}"
+              test "$(gh api "repos/${REPOSITORY}/branches/develop" --jq .commit.sha)" = "${EVENT_HEAD}"
+              test "$(gh api "repos/${REPOSITORY}/branches/main" --jq .commit.sha)" = "${EVENT_BASE}"
+              comparison="$(gh api "repos/${REPOSITORY}/compare/${EVENT_BASE}...${EVENT_HEAD}")"
+              jq -e \
+                --arg base "${EVENT_BASE}" '
+                  .status == "ahead"
+                  and .behind_by == 0
+                  and .ahead_by > 0
+                  and .merge_base_commit.sha == $base
+                ' <<<"${comparison}" >/dev/null
+              ;;
+            *)
+              echo 'Event is outside the exact REP-60 bootstrap scope.' >&2
+              false
+              ;;
+          esac
+
+          external_id="rep60-bootstrap-alias:v1:${WORKFLOW_SHA}:${EVENT_BASE}:${EVENT_HEAD}"
+          check_runs="$(
+            gh api --paginate --slurp \
+              -H 'Accept: application/vnd.github+json' \
+              "repos/${REPOSITORY}/commits/${EVENT_HEAD}/check-runs?check_name=Successful%20Copilot%20review&per_page=100"
+          )"
+          matching_checks="$(
+            jq -c \
+              --arg external_id "${external_id}" '
+                [.[].check_runs[] | select(.external_id == $external_id)]
+              ' <<<"${check_runs}"
+          )"
+          test "$(jq 'length' <<<"${matching_checks}")" -le 1
+          if [ "$(jq 'length' <<<"${matching_checks}")" -eq 1 ]; then
+            jq -e \
+              --arg head "${EVENT_HEAD}" \
+              --arg url "${check_url}" '
+                .[0].name == "Successful Copilot review"
+                and .[0].head_sha == $head
+                and .[0].details_url == $url
+                and .[0].status == "completed"
+                and .[0].conclusion == "success"
+                and .[0].app.id == 15368
+              ' <<<"${matching_checks}" >/dev/null
+            check_finalized=true
+            echo 'The exact protected bootstrap alias already exists.'
+            exit 0
+          fi
+
+          reservation="$(
+            gh api --method POST \
+              -H 'Accept: application/vnd.github+json' \
+              "repos/${REPOSITORY}/check-runs" \
+              -f name='Successful Copilot review' \
+              -f head_sha="${EVENT_HEAD}" \
+              -f status=in_progress \
+              -f started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              -f details_url="${check_url}" \
+              -f external_id="${external_id}" \
+              -f 'output[title]=REP-60 protected bootstrap review pending' \
+              -f 'output[summary]=Verifying the exact current revision from a protected controller.'
+          )"
+          check_id="$(jq -er '.id | select(type == "number" and . > 0)' <<<"${reservation}")"
+          jq -e \
+            --arg external_id "${external_id}" \
+            --arg head "${EVENT_HEAD}" \
+            --arg url "${check_url}" '
+              .name == "Successful Copilot review"
+              and .head_sha == $head
+              and .details_url == $url
+              and .external_id == $external_id
+              and .status == "in_progress"
+              and .app.id == 15368
+            ' <<<"${reservation}" >/dev/null
+
+          review_complete=false
+          for attempt in $(seq 1 40); do
+            reviews="$(
+              gh api --paginate --slurp \
+                "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100"
+            )"
+            accepted_reviews="$(
+              jq \
+                --arg head "${EVENT_HEAD}" '
+                  def normalized:
+                    ascii_downcase
+                    | gsub("wasn[\u0027\u2019]t"; "was not")
+                    | gsub("\\s"; "");
+                  [
+                    .[][]
+                    | select(
+                        (.user.login == "copilot-pull-request-reviewer[bot]"
+                         or .user.login == "copilot-pull-request-reviewer")
+                        and .commit_id == $head
+                        and (.state == "COMMENTED" or .state == "APPROVED")
+                        and ((.body // "") | gsub("\\s"; "") | length > 0)
+                        and (((.body // "") | normalized | contains("wasnotabletoreviewanyfiles")) | not)
+                        and (((.body // "") | normalized | contains("unabletoreviewthispullrequest")) | not)
+                        and (((.body // "") | normalized | contains("quotaexhausted")) | not)
+                        and (((.body // "") | normalized | contains("quotaexceeded")) | not)
+                      )
+                  ] | length
+                ' <<<"${reviews}"
+            )"
+            if [ "${accepted_reviews}" -gt 0 ]; then
+              review_complete=true
+              break
+            fi
+            if [ "${attempt}" -eq 40 ]; then
+              echo "No acceptable Copilot review exists for exact head ${EVENT_HEAD}." >&2
+              false
+            fi
+            sleep 15
+          done
+          test "${review_complete}" = true
+
+          read -r -d '' thread_query <<'GRAPHQL' || true
+          query($owner:String!,$repository:String!,$number:Int!,$after:String) {
+            repository(owner:$owner,name:$repository) {
+              pullRequest(number:$number) {
+                headRefOid
+                reviewThreads(first:100,after:$after) {
+                  pageInfo { hasNextPage endCursor }
+                  nodes {
+                    isResolved
+                    comments(first:1) { nodes { author { login } } }
+                  }
+                }
+              }
+            }
+          }
+          GRAPHQL
+
+          owner="${REPOSITORY%%/*}"
+          repository="${REPOSITORY#*/}"
+          after=""
+          unresolved=0
+          while true; do
+            arguments=(
+              -f query="${thread_query}"
+              -F owner="${owner}"
+              -F repository="${repository}"
+              -F number="${PR_NUMBER}"
+            )
+            if [ -n "${after}" ]; then
+              arguments+=(-f after="${after}")
+            fi
+            response="$(gh api graphql "${arguments[@]}")"
+            jq -e --arg head "${EVENT_HEAD}" \
+              '.data.repository.pullRequest.headRefOid == $head' \
+              <<<"${response}" >/dev/null
+            page_unresolved="$(
+              jq '
+                [
+                  .data.repository.pullRequest.reviewThreads.nodes[]
+                  | select(.isResolved == false)
+                  | select(
+                      .comments.nodes[0].author.login == "copilot-pull-request-reviewer[bot]"
+                      or .comments.nodes[0].author.login == "copilot-pull-request-reviewer"
+                    )
+                ] | length
+              ' <<<"${response}"
+            )"
+            unresolved=$((unresolved + page_unresolved))
+            has_next="$(jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage' <<<"${response}")"
+            if [ "${has_next}" != true ]; then
+              break
+            fi
+            after="$(jq -er '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor | select(type == "string" and length > 0)' <<<"${response}")"
+          done
+          test "${unresolved}" -eq 0
+
+          post_pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
+          jq -e \
+            --arg base "${EVENT_BASE}" \
+            --arg head "${EVENT_HEAD}" \
+            --arg repository "${REPOSITORY}" '
+              .state == "open"
+              and .draft == false
+              and .user.login == "litroc"
+              and .base.sha == $base
+              and .base.repo.full_name == $repository
+              and .head.sha == $head
+              and .head.repo.full_name == $repository
+            ' <<<"${post_pr}" >/dev/null
+
+          summary="Protected workflow ${WORKFLOW_SHA}; base ${EVENT_BASE}; head ${EVENT_HEAD}; current-head Copilot review accepted; unresolved findings 0."
+          completed="$(
+            gh api --method PATCH \
+              -H 'Accept: application/vnd.github+json' \
+              "repos/${REPOSITORY}/check-runs/${check_id}" \
+              -f status=completed \
+              -f conclusion=success \
+              -f completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              -f 'output[title]=REP-60 protected bootstrap review passed' \
+              -f "output[summary]=${summary}"
+          )"
+          jq -e \
+            --arg external_id "${external_id}" \
+            --arg head "${EVENT_HEAD}" \
+            --arg url "${check_url}" '
+              .name == "Successful Copilot review"
+              and .head_sha == $head
+              and .details_url == $url
+              and .external_id == $external_id
+              and .status == "completed"
+              and .conclusion == "success"
+              and .app.id == 15368
+            ' <<<"${completed}" >/dev/null
+          check_finalized=true
+          echo "Published the protected bootstrap alias for exact head ${EVENT_HEAD}."
