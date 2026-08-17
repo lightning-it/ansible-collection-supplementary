@@ -1,0 +1,149 @@
+# Temporary REP-60 bootstrap controller.
+# Remove after PR #777 has merged and the permanent current-revision controller is live on main.
+# yamllint disable rule:truthy
+---
+name: REP-60 bootstrap App rearm
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_head:
+        description: Exact protected develop revision to rearm for PR 777
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rep60-bootstrap-app-rearm-pr-777
+  cancel-in-progress: false
+
+jobs:
+  rearm:
+    name: Rearm PR 777 as the release App
+    if: >-
+      github.repository == 'lightning-it/ansible-collection-supplementary' &&
+      github.ref == 'refs/heads/develop' &&
+      github.actor == 'litroc' &&
+      github.triggering_actor == 'litroc'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: ansible-collection-release-prepare
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Mint repository-scoped release App token
+        id: release-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: read
+          permission-pull-requests: write
+
+      - name: Verify immutable bindings and rearm exactly once
+        env:
+          CONTROL_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+          RELEASE_TOKEN: ${{ steps.release-app.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          readonly pr_number=777
+          readonly expected_base=01afb46890e6d7ac6008e8ed478aa6af91e1b19b
+          readonly expected_author='lightning-it-release-automation[bot]'
+          readonly expected_actor=litroc
+          readonly expected_workflow='.github/workflows/rep60-bootstrap-app-rearm.yml'
+
+          if ! [[ "${EXPECTED_HEAD}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "expected_head must be a full lowercase commit object ID" >&2
+            exit 1
+          fi
+          test "${GITHUB_SHA}" = "${EXPECTED_HEAD}"
+
+          run_json="$(GH_TOKEN="${CONTROL_TOKEN}" gh api \
+            "repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
+          jq -e \
+            --arg actor "${expected_actor}" \
+            --arg head "${EXPECTED_HEAD}" \
+            --arg workflow "${expected_workflow}" '
+              .event == "workflow_dispatch"
+              and .path == $workflow
+              and .head_branch == "develop"
+              and .head_sha == $head
+              and .actor.login == $actor
+              and .triggering_actor.login == $actor
+            ' <<<"${run_json}" >/dev/null
+
+          develop_ref="$(GH_TOKEN="${CONTROL_TOKEN}" gh api \
+            "repos/${REPOSITORY}/git/ref/heads/develop")"
+          test "$(jq -r '.object.type' <<<"${develop_ref}")" = commit
+          test "$(jq -r '.object.sha' <<<"${develop_ref}")" = "${EXPECTED_HEAD}"
+
+          check_inventory="$(GH_TOKEN="${CONTROL_TOKEN}" gh api --paginate --slurp \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${REPOSITORY}/commits/${EXPECTED_HEAD}/check-runs?per_page=100")"
+          existing_bound_checks="$(jq \
+            --arg head "${EXPECTED_HEAD}" \
+            --arg suffix ":${pr_number}:${EXPECTED_HEAD}" '
+              [.[].check_runs[]?
+                | select(.app.id == 15368)
+                | select(
+                    .name == "Current revision review"
+                    or .name == "Protected current-revision verifier"
+                  )
+                | select((.external_id // "") | endswith($suffix))
+                | {id, name, status, conclusion, external_id}
+              ]
+            ' <<<"${check_inventory}")"
+          if [ "$(jq 'length' <<<"${existing_bound_checks}")" -ne 0 ]; then
+            echo "PR 777 already has a current-head REP-60 controller result" >&2
+            jq . <<<"${existing_bound_checks}" >&2
+            exit 1
+          fi
+
+          verify_pr_binding() {
+            local expected_state="$1"
+            local pr
+            pr="$(GH_TOKEN="${RELEASE_TOKEN}" gh api \
+              "repos/${REPOSITORY}/pulls/${pr_number}")"
+            jq -e \
+              --arg author "${expected_author}" \
+              --arg base "${expected_base}" \
+              --arg head "${EXPECTED_HEAD}" \
+              --arg repo "${REPOSITORY}" \
+              --arg state "${expected_state}" '
+                .number == 777
+                and .state == $state
+                and .draft == false
+                and .user.login == $author
+                and .base.ref == "main"
+                and .base.sha == $base
+                and .head.ref == "develop"
+                and .head.sha == $head
+                and .head.repo.full_name == $repo
+                and .base.repo.full_name == $repo
+              ' <<<"${pr}" >/dev/null
+          }
+
+          verify_pr_binding open
+          GH_TOKEN="${RELEASE_TOKEN}" gh api --method PATCH \
+            "repos/${REPOSITORY}/pulls/${pr_number}" \
+            -f state=closed >/dev/null
+          verify_pr_binding closed
+          GH_TOKEN="${RELEASE_TOKEN}" gh api --method PATCH \
+            "repos/${REPOSITORY}/pulls/${pr_number}" \
+            -f state=open >/dev/null
+          verify_pr_binding open
+
+          final_develop_ref="$(GH_TOKEN="${CONTROL_TOKEN}" gh api \
+            "repos/${REPOSITORY}/git/ref/heads/develop")"
+          test "$(jq -r '.object.sha' <<<"${final_develop_ref}")" = "${EXPECTED_HEAD}"

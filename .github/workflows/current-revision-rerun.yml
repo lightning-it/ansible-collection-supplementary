@@ -81,6 +81,7 @@ jobs:
           test "${producer_url}" = "${producer_prefix}${producer_id}"
           author="$(jq -er '.user.login | select(type == "string" and length > 0)' <<<"${pr}")"
           base_ref="$(jq -er '.base.ref | select(. == "develop" or . == "main")' <<<"${pr}")"
+          head_ref="$(jq -er '.head.ref | select(type == "string" and length > 0)' <<<"${pr}")"
           jq -e \
             --arg base "${EXPECTED_BASE}" \
             --arg head "${EXPECTED_HEAD}" \
@@ -136,14 +137,14 @@ jobs:
               ' <<<"${controller_ancestry}" >/dev/null
             jq -e \
               --arg actor "${author}" \
-              --arg default_branch "${default_branch}" \
-              --arg controller_sha "${controller_sha}" \
+              --arg head_ref "${head_ref}" \
+              --arg head_sha "${EXPECTED_HEAD}" \
               --arg run_url "${producer_url}" '
                 .event == "pull_request_target"
                 and .path == ".github/workflows/copilot-review.yml"
                 and .name == "Current revision review gate"
-                and .head_branch == $default_branch
-                and .head_sha == $controller_sha
+                and .head_branch == $head_ref
+                and .head_sha == $head_sha
                 and .html_url == $run_url
                 and .actor.login == $actor
                 and .triggering_actor.login == $actor
