@@ -180,6 +180,15 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
                 ):
                     self.materialize(diff, Path(temporary) / "review")
 
+    def test_workspace_creation_failure_is_deterministic(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "missing-parent" / "review"
+            with self.assertRaisesRegex(
+                self.module.MaterializationError,
+                "Unable to create the exact-revision review workspace",
+            ):
+                self.module.materialize(self.arguments, output)
+
     def test_dispatch_must_run_from_exact_protected_base(self) -> None:
         self.arguments.dispatch_ref = "refs/heads/main"
         with self.assertRaisesRegex(self.module.MaterializationError, "protected pull-request base ref"):

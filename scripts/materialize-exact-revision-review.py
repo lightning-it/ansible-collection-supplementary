@@ -238,7 +238,10 @@ def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[s
     validate_inputs(arguments)
     if output_directory.exists():
         fail(f"Review workspace already exists: {output_directory}")
-    output_directory.mkdir(mode=0o700, parents=False)
+    try:
+        output_directory.mkdir(mode=0o700, parents=False)
+    except OSError as error:
+        fail(f"Unable to create the exact-revision review workspace: {error}")
 
     runner_temp = Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())).resolve()
     if not runner_temp.is_dir():
