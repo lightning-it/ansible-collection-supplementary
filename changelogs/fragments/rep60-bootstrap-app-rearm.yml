@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Add a one-time protected, fail-closed release-App rearm controller for the REP-60 main bootstrap without running
+    candidate code or invoking local or pipeline AI.
