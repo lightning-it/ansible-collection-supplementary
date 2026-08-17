@@ -270,11 +270,11 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("mlx90-exact-revision:v4:${input_sha256}:", workflow)
         self.assertIn("mlx90-current-revision:v4:${GITHUB_RUN_ID}:${input_sha256}", workflow)
         self.assertIn("mlx90-legacy-exact-revision:v4:${GITHUB_RUN_ID}:${input_sha256}", workflow)
-        self.assertIn('publish_once() {', workflow)
+        self.assertIn("publish_once() {", workflow)
         self.assertGreaterEqual(workflow.count(".app.id == 15368"), 4)
         self.assertGreaterEqual(workflow.count(".external_id == $external_id"), 3)
-        self.assertIn('${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}', workflow)
-        self.assertNotIn('-f details_url=', workflow)
+        self.assertIn("${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}", workflow)
+        self.assertNotIn("-f details_url=", workflow)
         self.assertIn("automatic retry is forbidden", workflow)
         self.assertIn("input_sha256 == $bound.input_sha256", workflow)
         self.assertIn('and .path == ".github/workflows/release-bot-exact-head-review.yml"', workflow)
@@ -299,15 +299,15 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn(".producer_run_id", rerun)
         self.assertIn(".output.summary | fromjson", rerun)
         self.assertIn(
-            '${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${neutral_check_id}',
+            "${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${neutral_check_id}",
             rerun,
         )
         self.assertIn(
-            '${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${reservation_id}',
+            "${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${reservation_id}",
             rerun,
         )
         self.assertNotIn(
-            'producer_url="$(jq -r \'.[0].details_url // empty\'',
+            "producer_url=\"$(jq -r '.[0].details_url // empty'",
             rerun,
         )
         self.assertGreaterEqual(rerun.count(".triggering_actor.login == $actor"), 3)
@@ -337,8 +337,8 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn('named="$(jq -c', workflow)
         self.assertIn(".[0].app.id == 15368", workflow)
         self.assertIn(".[0].external_id == $external_id", workflow)
-        self.assertIn('${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}', workflow)
-        self.assertNotIn('-f details_url=', workflow)
+        self.assertIn("${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}", workflow)
+        self.assertNotIn("-f details_url=", workflow)
 
     def test_release_app_pull_requests_do_not_enter_the_copilot_job(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")
