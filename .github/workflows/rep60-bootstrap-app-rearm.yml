@@ -99,12 +99,13 @@ jobs:
                     .name == "Current revision review"
                     or .name == "Protected current-revision verifier"
                   )
+                | select(.status == "completed" and .conclusion == "success")
                 | select((.external_id // "") | endswith($suffix))
                 | {id, name, status, conclusion, external_id}
               ]
             ' <<<"${check_inventory}")"
           if [ "$(jq 'length' <<<"${existing_bound_checks}")" -ne 0 ]; then
-            echo "PR 777 already has a current-head REP-60 controller result" >&2
+            echo "PR 777 already has a successful current-head REP-60 controller result" >&2
             jq . <<<"${existing_bound_checks}" >&2
             exit 1
           fi
