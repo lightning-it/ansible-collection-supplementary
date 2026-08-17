@@ -246,11 +246,12 @@ jobs:
           )"
           check_name='Successful Copilot review'
           external_id="rep60-develop-bootstrap:v1:${PR_NUMBER}:${EVENT_BASE}:${EVENT_HEAD}"
-          checks="$(
-            gh api \
+          check_pages="$(
+            gh api --paginate --slurp \
               -H 'Accept: application/vnd.github+json' \
               "repos/${REPOSITORY}/commits/${EVENT_HEAD}/check-runs?check_name=Successful%20Copilot%20review&filter=all&per_page=100"
           )"
+          checks="$(jq -c '{check_runs: [.[] | .check_runs[]?]}' <<<"${check_pages}")"
           named="$(
             jq -c \
               --arg external_id "${external_id}" \
@@ -340,6 +341,12 @@ jobs:
           )"
           check_id="$(jq -er '.id | select(type == "number" and . > 0)' <<<"${created}")"
           check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}"
+          updated="$(
+            gh api --method PATCH \
+              -H 'Accept: application/vnd.github+json' \
+              "repos/${REPOSITORY}/check-runs/${check_id}" \
+              -f details_url="${check_url}"
+          )"
           jq -e \
             --arg evidence "${evidence}" \
             --arg external_id "${external_id}" \
@@ -355,5 +362,5 @@ jobs:
               and .status == "completed"
               and .conclusion == "success"
               and .output.summary == $evidence
-            ' <<<"${created}" >/dev/null
+            ' <<<"${updated}" >/dev/null
           echo "Protected develop bootstrap alias published for exact head ${EVENT_HEAD}."
