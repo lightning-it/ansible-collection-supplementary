@@ -330,7 +330,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             '.path == ".github/workflows/supplementary-current-revision-required.yml"',
             rerun,
         )
-        self.assertIn('/actions/required_workflows/', rerun)
+        self.assertIn("/actions/required_workflows/", rerun)
         self.assertIn('(.workflow_id | type == "number" and . > 0)', rerun)
         self.assertNotIn(
             '.name == "Protected Supplementary current-revision evidence verifier"',
