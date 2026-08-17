@@ -352,6 +352,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("pull_request_review:", workflow)
         self.assertNotIn("workflow_dispatch:", workflow)
         condition = review_job.split("    if: >-", 1)[1].split("    permissions:", 1)[0]
+        self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", condition)
         self.assertIn("github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'", condition)
         self.assertIn("name: Verify current revision policy", review_job)
         self.assertNotIn("\n    name: Current revision review\n", workflow)
