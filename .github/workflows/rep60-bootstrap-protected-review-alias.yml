@@ -6,7 +6,7 @@ name: REP-60 protected bootstrap review alias
 
 on:
   pull_request_target:
-    types: [synchronize, reopened, ready_for_review, edited]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
 
 permissions:
   contents: read
@@ -44,6 +44,7 @@ jobs:
           EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
           EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           EVENT_TITLE: ${{ github.event.pull_request.title }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}
@@ -79,8 +80,13 @@ jobs:
           [[ "${EVENT_BASE}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${EVENT_HEAD}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "${DEFAULT_BRANCH}" = develop
+          # GitHub defines pull_request_target's GITHUB_SHA/GITHUB_REF as the
+          # current default-branch revision/ref, including for PRs into main.
           test "${WORKFLOW_REF}" = \
-            "${REPOSITORY}/.github/workflows/rep60-bootstrap-protected-review-alias.yml@refs/heads/develop"
+            "${REPOSITORY}/.github/workflows/rep60-bootstrap-protected-review-alias.yml@refs/heads/${DEFAULT_BRANCH}"
+          test "$(gh api "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}" --jq .commit.sha)" = \
+            "${WORKFLOW_SHA}"
 
           live_pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
           jq -e \
@@ -108,6 +114,8 @@ jobs:
               ;;
             main:develop)
               test "${EVENT_TITLE}" = 'chore(release): promote develop to main'
+              # The protected controller and the promotion head are both the
+              # exact live default-branch revision in this bounded path.
               test "${WORKFLOW_SHA}" = "${EVENT_HEAD}"
               test "$(gh api "repos/${REPOSITORY}/branches/develop" --jq .commit.sha)" = "${EVENT_HEAD}"
               test "$(gh api "repos/${REPOSITORY}/branches/main" --jq .commit.sha)" = "${EVENT_BASE}"

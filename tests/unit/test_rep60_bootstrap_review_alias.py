@@ -19,7 +19,16 @@ class Rep60BootstrapReviewAliasTests(unittest.TestCase):
             "agent/mlx90-exact-revision-codex-pilot-20260816", workflow
         )
         self.assertIn("github.event.pull_request.head.ref == 'develop'", workflow)
+        self.assertIn(
+            "types: [opened, synchronize, reopened, ready_for_review, edited]",
+            workflow,
+        )
+        self.assertIn("test \"${DEFAULT_BRANCH}\" = develop", workflow)
+        self.assertIn("branches/${DEFAULT_BRANCH}", workflow)
         self.assertIn("test \"${WORKFLOW_SHA}\" = \"${EVENT_BASE}\"", workflow)
+        # pull_request_target is evaluated from the repository default branch.
+        # For the only admitted main promotion, that protected default-branch
+        # revision is also the exact develop PR head.
         self.assertIn("test \"${WORKFLOW_SHA}\" = \"${EVENT_HEAD}\"", workflow)
         self.assertIn(".merge_base_commit.sha == $base", workflow)
 
