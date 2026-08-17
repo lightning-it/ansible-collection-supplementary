@@ -405,7 +405,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         )[1]
         human_path = author_paths.split("          else", 1)[1].split("          fi", 1)[0]
         self.assertIn(".controller_sha", human_path)
-        self.assertIn("test \"${default_branch}\" = develop", human_path)
+        self.assertIn('test "${default_branch}" = develop', human_path)
         self.assertIn("compare/${controller_sha}...${default_head}", human_path)
         self.assertIn(".head_branch == $default_branch", human_path)
         self.assertIn(".head_sha == $controller_sha", human_path)
@@ -436,9 +436,9 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn('gh pr ready "$existing" --repo "$GITHUB_REPOSITORY"', release_prepare)
         release_edit = release_prepare.split('gh pr edit "$existing"', 1)[1].split("--title", 1)[0]
         self.assertIn('--repo "$GITHUB_REPOSITORY"', release_edit)
-        release_dispatch = release_prepare.split(
-            "gh workflow run release-bot-exact-head-review.yml", 1
-        )[1].split("expected_head", 1)[0]
+        release_dispatch = release_prepare.split("gh workflow run release-bot-exact-head-review.yml", 1)[1].split(
+            "expected_head", 1
+        )[0]
         self.assertIn('--repo "$GITHUB_REPOSITORY"', release_dispatch)
 
     def test_release_app_is_denied_from_copilot_remediation(self) -> None:
