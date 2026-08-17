@@ -36,11 +36,12 @@ class Rep60BootstrapReviewAliasTests(unittest.TestCase):
         self.assertIn("actions: read", workflow)
         self.assertIn("-f name='Successful Copilot review'", workflow)
         self.assertIn("checks: write", workflow)
-        self.assertIn('external_id="rep60-bootstrap-alias:v1:', workflow)
+        self.assertIn('external_id="rep60-bootstrap-alias:v2:${GITHUB_RUN_ID}:', workflow)
 
-    def test_existing_alias_is_bound_to_a_completed_protected_run(self) -> None:
+    def test_alias_is_bound_to_the_current_protected_run(self) -> None:
         workflow = self.workflow
-        self.assertIn('prior_run_id="${prior_url##*/}"', workflow)
+        self.assertIn("actions/runs/${GITHUB_RUN_ID}", workflow)
+        self.assertIn("repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}", workflow)
         self.assertIn('.event == "pull_request_target"', workflow)
         self.assertIn('.name == "REP-60 protected bootstrap review alias"', workflow)
         self.assertIn(
@@ -48,8 +49,15 @@ class Rep60BootstrapReviewAliasTests(unittest.TestCase):
             workflow,
         )
         self.assertIn(".head_sha == $sha", workflow)
-        self.assertIn('.status == "completed"', workflow)
-        self.assertIn('.conclusion == "success"', workflow)
+        self.assertIn(".run_attempt == $attempt", workflow)
+        self.assertIn("${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}", workflow)
+        self.assertNotIn('-f details_url="${check_url}"', workflow)
+
+    def test_alias_rejects_competing_custom_checks(self) -> None:
+        workflow = self.workflow
+        self.assertIn("custom_aliases=", workflow)
+        self.assertIn('select((.details_url // "") | startswith($prefix))', workflow)
+        self.assertIn('test "$(jq \'length\' <<<"${custom_aliases}")" -eq 1', workflow)
 
     def test_alias_never_runs_candidate_code_or_ai(self) -> None:
         workflow = self.workflow.lower()

@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Bind the temporary REP-60 bootstrap review alias to its exact protected
+    workflow run while accepting GitHub's canonical custom-check URL.
