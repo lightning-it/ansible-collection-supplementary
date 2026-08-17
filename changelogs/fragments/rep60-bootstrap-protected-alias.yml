@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    Add a protected, no-AI REP-60 bootstrap verifier that can publish the
+    legacy review alias only for the exact controller introduction and its
+    normal develop-to-main promotion.
