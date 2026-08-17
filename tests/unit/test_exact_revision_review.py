@@ -367,7 +367,12 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
 
     def test_human_producer_verifier_uses_default_branch_controller_sha(self) -> None:
         rerun = (ROOT / ".github/workflows/current-revision-rerun.yml").read_text(encoding="utf-8")
-        human_path = rerun.split("          else", 1)[1].split("          fi", 1)[0]
+        author_paths = rerun.split(
+            "          if [ \"${author}\" = 'lightning-it-release-automation[bot]' ]; then\n"
+            '            [[ "${neutral_external_id}" =~ ^mlx90-current-revision:v4:',
+            1,
+        )[1]
+        human_path = author_paths.split("          else", 1)[1].split("          fi", 1)[0]
         self.assertIn(".controller_sha", human_path)
         self.assertIn("test \"${default_branch}\" = develop", human_path)
         self.assertIn("compare/${controller_sha}...${default_head}", human_path)
