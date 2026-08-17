@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.2.4
+======
+
+Security Fixes
+--------------
+
+- Update the immutable Keycloak runtime to 26.7.1 to remediate CVE-2026-4629, CVE-2026-9793, CVE-2026-14209, CVE-2026-14614, and CVE-2026-14615.
+
 v3.2.3
 ======
 
