@@ -33,6 +33,7 @@ class Rep60BootstrapReviewAliasTests(unittest.TestCase):
         workflow = self.workflow
         self.assertIn("name: Publish protected bootstrap review alias", workflow)
         self.assertNotIn("name: Successful Copilot review\n    if:", workflow)
+        self.assertIn("actions: read", workflow)
         self.assertIn("-f name='Successful Copilot review'", workflow)
         self.assertIn("checks: write", workflow)
         self.assertIn('external_id="rep60-bootstrap-alias:v1:', workflow)

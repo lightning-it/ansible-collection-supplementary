@@ -30,6 +30,7 @@ jobs:
         github.event.pull_request.head.ref == 'develop' &&
         github.event.pull_request.title == 'chore(release): promote develop to main'))
     permissions:
+      actions: read
       checks: write
       contents: read
       pull-requests: read
