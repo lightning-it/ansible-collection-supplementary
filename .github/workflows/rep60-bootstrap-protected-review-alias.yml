@@ -148,9 +148,36 @@ jobs:
           )"
           test "$(jq 'length' <<<"${matching_checks}")" -le 1
           if [ "$(jq 'length' <<<"${matching_checks}")" -eq 1 ]; then
+            prior_url="$(jq -er '.[0].details_url | select(type == "string")' <<<"${matching_checks}")"
+            case "${prior_url}" in
+              "${GITHUB_SERVER_URL}/${REPOSITORY}/actions/runs/"[1-9][0-9]*) ;;
+              *)
+                echo 'Existing alias has no bounded protected-run URL.' >&2
+                false
+                ;;
+            esac
+            prior_run_id="${prior_url##*/}"
+            [[ "${prior_run_id}" =~ ^[1-9][0-9]*$ ]]
+            prior_run="$(gh api "repos/${REPOSITORY}/actions/runs/${prior_run_id}")"
+            jq -e \
+              --arg default_branch "${DEFAULT_BRANCH}" \
+              --arg repository "${REPOSITORY}" \
+              --arg sha "${WORKFLOW_SHA}" \
+              --arg url "${prior_url}" '
+                .event == "pull_request_target"
+                and .name == "REP-60 protected bootstrap review alias"
+                and .path == ".github/workflows/rep60-bootstrap-protected-review-alias.yml"
+                and .head_branch == $default_branch
+                and .head_sha == $sha
+                and .repository.full_name == $repository
+                and .head_repository.full_name == $repository
+                and .html_url == $url
+                and .status == "completed"
+                and .conclusion == "success"
+              ' <<<"${prior_run}" >/dev/null
             jq -e \
               --arg head "${EVENT_HEAD}" \
-              --arg url "${check_url}" '
+              --arg url "${prior_url}" '
                 .[0].name == "Successful Copilot review"
                 and .[0].head_sha == $head
                 and .[0].details_url == $url

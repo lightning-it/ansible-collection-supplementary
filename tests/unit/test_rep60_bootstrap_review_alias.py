@@ -37,6 +37,19 @@ class Rep60BootstrapReviewAliasTests(unittest.TestCase):
         self.assertIn("checks: write", workflow)
         self.assertIn('external_id="rep60-bootstrap-alias:v1:', workflow)
 
+    def test_existing_alias_is_bound_to_a_completed_protected_run(self) -> None:
+        workflow = self.workflow
+        self.assertIn('prior_run_id="${prior_url##*/}"', workflow)
+        self.assertIn('.event == "pull_request_target"', workflow)
+        self.assertIn('.name == "REP-60 protected bootstrap review alias"', workflow)
+        self.assertIn(
+            '.path == ".github/workflows/rep60-bootstrap-protected-review-alias.yml"',
+            workflow,
+        )
+        self.assertIn(".head_sha == $sha", workflow)
+        self.assertIn('.status == "completed"', workflow)
+        self.assertIn('.conclusion == "success"', workflow)
+
     def test_alias_never_runs_candidate_code_or_ai(self) -> None:
         workflow = self.workflow.lower()
         self.assertNotIn("actions/checkout", workflow)
