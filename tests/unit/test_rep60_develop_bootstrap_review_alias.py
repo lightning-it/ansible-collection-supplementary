@@ -26,7 +26,7 @@ class Rep60DevelopBootstrapReviewAliasTests(unittest.TestCase):
         self.assertIn("actions/runs/${GITHUB_RUN_ID}", workflow)
         self.assertIn('.event == "pull_request_target"', workflow)
         self.assertIn('.name == "REP-60 protected develop bootstrap alias"', workflow)
-        self.assertIn('.path == $path', workflow)
+        self.assertIn(".path == $path", workflow)
         self.assertIn(".actor.login == $actor", workflow)
         self.assertIn(".triggering_actor.login == $actor", workflow)
         self.assertIn("verify_pr_binding", workflow)
@@ -35,6 +35,8 @@ class Rep60DevelopBootstrapReviewAliasTests(unittest.TestCase):
     def test_only_a_real_current_head_copilot_review_can_publish(self) -> None:
         workflow = self.workflow
         self.assertIn(".commit_id == $head", workflow)
+        self.assertIn("No acceptable Copilot review exists for exact head", workflow)
+        self.assertIn("jq 'length'", workflow)
         self.assertIn("reviewThreads(first:100,after:$after)", workflow)
         self.assertIn("select(.isResolved == false)", workflow)
         self.assertIn('test "${unresolved}" -eq 0', workflow)

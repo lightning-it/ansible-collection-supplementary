@@ -153,6 +153,10 @@ jobs:
                 ] | sort_by(.submitted_at, .id)
               ' <<<"${reviews}"
           )"
+          if [ "$(jq 'length' <<<"${accepted_reviews}")" -eq 0 ]; then
+            echo "No acceptable Copilot review exists for exact head ${EVENT_HEAD}." >&2
+            exit 1
+          fi
           review_id="$(jq -er 'last.id | select(type == "number" and . > 0)' <<<"${accepted_reviews}")"
 
           read -r -d '' thread_query <<'GRAPHQL' || true
