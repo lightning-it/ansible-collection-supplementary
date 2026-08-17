@@ -53,6 +53,20 @@ def docker_action_image(path: Path) -> str | None:
 
 
 class WorkflowSecurityTests(unittest.TestCase):
+    def test_rep60_bootstrap_separates_event_and_controller_provenance(self) -> None:
+        workflow = (
+            WORKFLOWS / "rep60-develop-bootstrap-review-alias.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn('and .head_branch == $head_branch', workflow)
+        self.assertIn('and .head_sha == $head', workflow)
+        self.assertNotIn('and .head_branch == $default_branch', workflow)
+        self.assertNotIn('and .head_branch == "develop"', workflow)
+        self.assertIn('test "${EVENT_BASE}" = "${WORKFLOW_SHA}"', workflow)
+        self.assertIn(
+            '"${REPOSITORY}/${workflow_path}@refs/heads/${DEFAULT_BRANCH}"',
+            workflow,
+        )
+
     def test_copilot_instructions_bind_the_exact_agent_contract(self) -> None:
         agents_digest = hashlib.sha256((ROOT / "AGENTS.md").read_bytes()).hexdigest()
         instructions = (ROOT / ".github" / "copilot-instructions.md").read_text(encoding="utf-8").splitlines()
