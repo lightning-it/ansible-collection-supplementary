@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Validate the structured Exact-Revision Codex result as the single JSON
+    object required by its schema instead of indexing it as an array.

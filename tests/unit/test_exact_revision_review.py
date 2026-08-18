@@ -489,6 +489,11 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         )[0]
         self.assertIn('--repo "$GITHUB_REPOSITORY"', release_dispatch)
 
+    def test_exact_revision_result_is_validated_as_one_object(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-bot-exact-head-review.yml").read_text(encoding="utf-8")
+        self.assertIn(". as $result | $metadata[0] as $bound |", workflow)
+        self.assertNotIn(".[0] as $result | $metadata[0] as $bound |", workflow)
+
     def test_main_backmerge_has_deterministic_reviewable_evidence(self) -> None:
         workflow = (ROOT / ".github/workflows/sync-main-to-develop.yml").read_text(encoding="utf-8")
         self.assertIn("Create reviewable ancestry backmerge", workflow)
