@@ -378,6 +378,8 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                 self.assertIn("actions: write", rerun_job)
                 self.assertIn("current-revision-rerun.yml/dispatches", rerun_job)
                 self.assertIn("-f ref=develop", rerun_job)
+                self.assertIn('-f "inputs[pr_number]=${PR_NUMBER}"', rerun_job)
+                self.assertNotIn('-F "inputs[pr_number]=${PR_NUMBER}"', rerun_job)
                 self.assertNotIn("openai/codex-action@", rerun_job)
 
     def test_human_current_revision_path_protects_main_and_develop(self) -> None:
