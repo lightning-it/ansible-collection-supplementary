@@ -109,5 +109,8 @@ create review evidence, cannot invoke AI, and refuses a second failed retry.
 Both review producers serialize every `workflow_dispatch` input as a string,
 including the numerically constrained PR number, because GitHub's dispatch API
 rejects a JSON number before the protected helper can validate the input.
+The deterministic back-sync changes only `.lit/main-ancestry.json`; changelog
+policy treats that exact file as non-user-visible governance metadata while
+continuing to require fragments for all user-visible collection changes.
 This lets GitHub's default required-workflow events remain the immutable
 enforcement root without turning every synchronize event into an AI request.

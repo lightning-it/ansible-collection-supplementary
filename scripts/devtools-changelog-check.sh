@@ -95,6 +95,7 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   fi
 
   non_user_visible_re="^(\\.github/|\\.releaserc|\\.pre-commit-config\\.yaml|\\.ansible-lint|"
+  non_user_visible_re+="\\.lit/main-ancestry\\.json$|"
   non_user_visible_re+="\\.yamllint|renovate|README\\.md|docs/|molecule/|tests/|scripts/|"
   non_user_visible_re+="CHANGELOG\\.(md|rst)|changelogs/config\\.yaml|"
   non_user_visible_re+="changelogs/changelog\\.yaml|changelogs/fragments/|"
