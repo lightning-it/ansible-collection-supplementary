@@ -359,6 +359,16 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertGreaterEqual(rerun.count(".triggering_actor.login == $actor"), 3)
         self.assertIn('test "$(jq -r .run_attempt <<<"${run}")" -eq 1', rerun)
         self.assertEqual(1, rerun.count('/rerun" >/dev/null'))
+        required_run = rerun.split(
+            'run="$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}")"',
+            1,
+        )[1].split('if [ "$(jq -r .conclusion <<<"${run}")" = success ]', 1)[0]
+        self.assertIn('--arg head_ref "${head_ref}"', required_run)
+        self.assertIn('--arg head_sha "${EXPECTED_HEAD}"', required_run)
+        self.assertIn(".head_branch == $head_ref", required_run)
+        self.assertIn(".head_sha == $head_sha", required_run)
+        self.assertNotIn(".head_branch == $base_ref", required_run)
+        self.assertNotIn(".head_sha == $base_sha", required_run)
 
     def test_review_producers_request_only_the_protected_verifier_rerun(self) -> None:
         for name in ("copilot-review.yml", "release-bot-exact-head-review.yml"):

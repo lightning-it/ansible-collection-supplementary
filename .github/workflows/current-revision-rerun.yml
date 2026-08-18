@@ -176,8 +176,8 @@ jobs:
           jq -e \
             --arg api_url "${GITHUB_API_URL}" \
             --arg actor "${author}" \
-            --arg base_ref "${base_ref}" \
-            --arg base_sha "${EXPECTED_BASE}" \
+            --arg head_ref "${head_ref}" \
+            --arg head_sha "${EXPECTED_HEAD}" \
             --arg repository "${REPOSITORY}" \
             --arg run_url "${verifier_run_url}" '
               .event == "pull_request_target"
@@ -185,8 +185,8 @@ jobs:
               and (.workflow_id | type == "number" and . > 0)
               and .workflow_url == ($api_url + "/repos/" + $repository
                 + "/actions/required_workflows/" + (.workflow_id | tostring))
-              and .head_branch == $base_ref
-              and .head_sha == $base_sha
+              and .head_branch == $head_ref
+              and .head_sha == $head_sha
               and .html_url == $run_url
               and .actor.login == $actor
               and .triggering_actor.login == $actor
