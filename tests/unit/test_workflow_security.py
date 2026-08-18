@@ -53,17 +53,14 @@ def docker_action_image(path: Path) -> str | None:
 
 
 class WorkflowSecurityTests(unittest.TestCase):
-    def test_rep60_bootstrap_separates_event_and_controller_provenance(self) -> None:
-        workflow = (WORKFLOWS / "rep60-develop-bootstrap-review-alias.yml").read_text(encoding="utf-8")
-        self.assertIn("and .head_branch == $head_branch", workflow)
-        self.assertIn("and .head_sha == $head", workflow)
-        self.assertNotIn("and .head_branch == $default_branch", workflow)
-        self.assertNotIn('and .head_branch == "develop"', workflow)
-        self.assertIn('test "${EVENT_BASE}" = "${WORKFLOW_SHA}"', workflow)
-        self.assertIn(
-            '"${REPOSITORY}/${workflow_path}@refs/heads/${DEFAULT_BRANCH}"',
-            workflow,
-        )
+    def test_rep60_bootstrap_controllers_are_absent_after_cutover(self) -> None:
+        for name in (
+            "rep60-bootstrap-app-rearm.yml",
+            "rep60-bootstrap-protected-review-alias.yml",
+            "rep60-develop-bootstrap-review-alias.yml",
+        ):
+            with self.subTest(workflow=name):
+                self.assertFalse((WORKFLOWS / name).exists())
 
     def test_copilot_instructions_bind_the_exact_agent_contract(self) -> None:
         agents_digest = hashlib.sha256((ROOT / "AGENTS.md").read_bytes()).hexdigest()
@@ -1127,7 +1124,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("materialize-exact-revision-review.py?ref=${TRUSTED_WORKFLOW_SHA}", exact_revision)
         self.assertIn("publish_once() {", exact_revision)
         self.assertIn("            'Current revision review'", exact_revision)
-        self.assertIn("Temporary alias: protected Exact-Revision Codex passed", exact_revision)
+        self.assertNotIn("Successful Copilot review", exact_revision)
         self.assertIn("actions/runs/${preparation_run_id}", publish)
         self.assertIn('.conclusion == "success"', publish)
         action = ACTION.read_text(encoding="utf-8")

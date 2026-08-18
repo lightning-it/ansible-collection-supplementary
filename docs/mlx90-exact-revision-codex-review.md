@@ -74,11 +74,10 @@ and complete-input SHA-256 creates the neutral `Current revision review` check
 on the reviewed head. Failures create no passing check and cannot fall back to
 another model, identity, or provider.
 
-During the atomic Ruleset migration only, the same already-verified result also
-publishes a temporary `Successful Copilot review` compatibility alias. Its
-machine evidence explicitly identifies the actual Codex path; it never causes a
-second AI call and is not a claim that Codex was GitHub Copilot. The alias is
-removed immediately after the Ruleset requires `Current revision review`.
+The atomic Ruleset migration is complete. Producers publish only the neutral
+`Current revision review` result; the temporary `Successful Copilot review`
+compatibility alias has been removed. A Codex result is never presented as a
+GitHub Copilot review.
 
 ## Ruleset-bound verifier
 

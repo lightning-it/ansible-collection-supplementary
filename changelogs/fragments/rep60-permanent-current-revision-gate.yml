@@ -1,0 +1,7 @@
+---
+minor_changes:
+  - >-
+    Complete the REP-60 review-gate cutover by removing the immutable
+    bootstrap controllers and the obsolete Successful Copilot review alias;
+    permanent producers now publish only the protected Current revision review
+    result.
