@@ -302,7 +302,8 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("            'Current revision review'", workflow)
         self.assertIn("mlx90-exact-revision:v4:${input_sha256}:", workflow)
         self.assertIn("mlx90-current-revision:v4:${producer_run_id}:${input_sha256}", workflow)
-        self.assertIn("mlx90-legacy-exact-revision:v4:${producer_run_id}:${input_sha256}", workflow)
+        self.assertNotIn("mlx90-legacy-exact-revision:", workflow)
+        self.assertNotIn("Successful Copilot review", workflow)
         self.assertIn('echo "producer_run_id=${prior_run_id}"', workflow)
         self.assertIn('echo "producer_run_id=${GITHUB_RUN_ID}"', workflow)
         self.assertIn('producer_run_id="${{ steps.dedupe.outputs.producer_run_id }}"', workflow)
@@ -358,6 +359,16 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertGreaterEqual(rerun.count(".triggering_actor.login == $actor"), 3)
         self.assertIn('test "$(jq -r .run_attempt <<<"${run}")" -eq 1', rerun)
         self.assertEqual(1, rerun.count('/rerun" >/dev/null'))
+        required_run = rerun.split(
+            'run="$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}")"',
+            1,
+        )[1].split('if [ "$(jq -r .conclusion <<<"${run}")" = success ]', 1)[0]
+        self.assertIn('--arg head_ref "${head_ref}"', required_run)
+        self.assertIn('--arg head_sha "${EXPECTED_HEAD}"', required_run)
+        self.assertIn(".head_branch == $head_ref", required_run)
+        self.assertIn(".head_sha == $head_sha", required_run)
+        self.assertNotIn(".head_branch == $base_ref", required_run)
+        self.assertNotIn(".head_sha == $base_sha", required_run)
 
     def test_review_producers_request_only_the_protected_verifier_rerun(self) -> None:
         for name in ("copilot-review.yml", "release-bot-exact-head-review.yml"):
@@ -408,6 +419,8 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("name: Verify current revision policy", review_job)
         self.assertNotIn("\n    name: Current revision review\n", workflow)
         self.assertNotIn("\n    name: Successful Copilot review\n", workflow)
+        self.assertNotIn("mlx90-legacy-copilot:", workflow)
+        self.assertNotIn("'Successful Copilot review'", review_job)
         self.assertIn('-f name="${check_name}"', review_job)
         self.assertNotIn('test "${EVENT_BASE}" = "${TRUSTED_WORKFLOW_SHA}"', review_job)
         self.assertIn("${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}", review_job)
