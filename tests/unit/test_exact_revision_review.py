@@ -489,6 +489,22 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         )[0]
         self.assertIn('--repo "$GITHUB_REPOSITORY"', release_dispatch)
 
+    def test_main_backmerge_has_deterministic_reviewable_evidence(self) -> None:
+        workflow = (ROOT / ".github/workflows/sync-main-to-develop.yml").read_text(encoding="utf-8")
+        self.assertIn("Create reviewable ancestry backmerge", workflow)
+        self.assertIn("git merge --no-ff --no-commit --strategy=ours origin/main", workflow)
+        self.assertIn("evidence_path='.lit/main-ancestry.json'", workflow)
+        self.assertIn('test "$(git diff --name-only origin/develop HEAD --)"', workflow)
+        self.assertNotIn("Create file-identical ancestry backmerge", workflow)
+        self.assertNotIn("git diff --quiet origin/develop HEAD", workflow)
+
+        evidence = json.loads((ROOT / ".lit/main-ancestry.json").read_text(encoding="utf-8"))
+        self.assertEqual(evidence["schema_version"], 1)
+        self.assertEqual(evidence["repository"], "lightning-it/ansible-collection-supplementary")
+        self.assertRegex(evidence["main_sha"], r"^[0-9a-f]{40}$")
+        self.assertRegex(evidence["develop_parent_sha"], r"^[0-9a-f]{40}$")
+        self.assertEqual(evidence["purpose"], "Bind the reviewed main ancestry backmerge.")
+
     def test_release_app_is_denied_from_copilot_remediation(self) -> None:
         workflow = (ROOT / ".github/workflows/codex-copilot-remediation.yml").read_text(encoding="utf-8")
         dispatch = workflow.split("  continue-after-push:", 1)[1].split("  inspect:", 1)[0]
