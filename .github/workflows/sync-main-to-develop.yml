@@ -70,7 +70,7 @@ jobs:
           fi
           echo "email=${bot_id}+${login}@users.noreply.github.com" >>"${GITHUB_OUTPUT}"
 
-      - name: Create file-identical ancestry backmerge
+      - name: Create reviewable ancestry backmerge
         env:
           BOT_EMAIL: ${{ steps.release-bot.outputs.email }}
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
@@ -87,6 +87,9 @@ jobs:
             fetch --quiet --no-tags origin main develop
           main_short="$(git rev-parse --short=12 origin/main)"
           develop_short="$(git rev-parse --short=12 origin/develop)"
+          main_sha="$(git rev-parse origin/main)"
+          develop_sha="$(git rev-parse origin/develop)"
+          evidence_path='.lit/main-ancestry.json'
           repository_name="${REPOSITORY#*/}"
           branch="backmerge/${repository_name}-${main_short}-${develop_short}-main"
           title="chore(governance): record main ancestry before ${main_short}"
@@ -101,13 +104,37 @@ jobs:
           # Bind the merge object to an existing Git timestamp so retries
           # reproduce the exact same commit and never require a force-update.
           merge_date="$(git show -s --format=%cI origin/main)"
+          git merge --no-ff --no-commit --strategy=ours origin/main
+          mkdir -p "${evidence_path%/*}"
+          jq --null-input --sort-keys \
+            --arg repository "${REPOSITORY}" \
+            --arg main_sha "${main_sha}" \
+            --arg develop_parent_sha "${develop_sha}" \
+            '{
+              schema_version: 1,
+              repository: $repository,
+              main_sha: $main_sha,
+              develop_parent_sha: $develop_parent_sha,
+              purpose: "Bind the reviewed main ancestry backmerge."
+            }' >"${evidence_path}"
+          git add -- "${evidence_path}"
           GIT_AUTHOR_DATE="${merge_date}" GIT_COMMITTER_DATE="${merge_date}" \
-            git merge --no-ff --strategy=ours origin/main \
+            git commit \
             --message 'merge: preserve develop tree and main ancestry'
           git merge-base --is-ancestor origin/main HEAD
           git merge-base --is-ancestor origin/develop HEAD
           [ "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3 ]
-          git diff --quiet origin/develop HEAD
+          test "$(git diff --name-only origin/develop HEAD --)" = "${evidence_path}"
+          git show "HEAD:${evidence_path}" | jq -e \
+            --arg repository "${REPOSITORY}" \
+            --arg main_sha "${main_sha}" \
+            --arg develop_parent_sha "${develop_sha}" '
+              .schema_version == 1
+              and .repository == $repository
+              and .main_sha == $main_sha
+              and .develop_parent_sha == $develop_parent_sha
+              and .purpose == "Bind the reviewed main ancestry backmerge."
+            ' >/dev/null
           create_backmerge_branch() {
             local branch_name="$1"
             local desired_head="$2"
@@ -158,7 +185,7 @@ jobs:
                 --head "${branch}" \
                 --draft \
                 --title "${title}" \
-                --body 'Automated develop-tree-preserving ancestry backmerge after a protected main promotion.'
+                --body 'Automated ancestry backmerge with a deterministic, reviewable main binding.'
             )"
             pr_number="${pr_url##*/}"
           fi

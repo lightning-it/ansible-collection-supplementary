@@ -49,6 +49,13 @@ binds all of the following values:
 An empty or incomplete input, ambiguous ancestry, merge conflict, changed live binding, or input of 200,000 bytes or
 more fails closed. Binary changes are included in the full diff instead of being exempted.
 
+An ancestry-only backmerge is not exempt from that rule. The protected
+`sync-main-to-develop.yml` controller writes `.lit/main-ancestry.json` as the
+merge commit's sole tree delta. The deterministic record binds the repository,
+the exact protected `main` object, and the exact `develop` parent so the
+Release-App PR always has a non-empty, reviewable diff while preserving every
+other `develop` byte.
+
 ## Reviewer isolation and result
 
 Codex receives a new directory containing only the complete diff, immutable metadata, protected prompt, and
