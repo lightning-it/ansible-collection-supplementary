@@ -3,4 +3,5 @@ bugfixes:
   - >-
     Bind pull-request-target run metadata to the candidate head independently from the protected controller revision,
     add a one-time fail-closed release-App rearm controller for the REP-60 main bootstrap,
-    and deduplicate only the bound bootstrap producer result rather than its protected verifier.
+    deduplicate only the bound bootstrap producer result rather than its protected verifier,
+    and keep native required-workflow checks separate from same-named producer evidence.
