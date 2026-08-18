@@ -490,13 +490,11 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn('--repo "$GITHUB_REPOSITORY"', release_dispatch)
 
     def test_main_backmerge_has_deterministic_reviewable_evidence(self) -> None:
-        workflow = (ROOT / ".github/workflows/sync-main-to-develop.yml").read_text(
-            encoding="utf-8"
-        )
+        workflow = (ROOT / ".github/workflows/sync-main-to-develop.yml").read_text(encoding="utf-8")
         self.assertIn("Create reviewable ancestry backmerge", workflow)
         self.assertIn("git merge --no-ff --no-commit --strategy=ours origin/main", workflow)
         self.assertIn("evidence_path='.lit/main-ancestry.json'", workflow)
-        self.assertIn("test \"$(git diff --name-only origin/develop HEAD --)\"", workflow)
+        self.assertIn('test "$(git diff --name-only origin/develop HEAD --)"', workflow)
         self.assertNotIn("Create file-identical ancestry backmerge", workflow)
         self.assertNotIn("git diff --quiet origin/develop HEAD", workflow)
 
