@@ -1,0 +1,9 @@
+---
+minor_changes:
+  - >-
+    mlx90 - Add the protected Exact-Revision Codex exception for finalized
+    Release-App pull requests, with immutable base, head, merge-base,
+    integration-tree, full binary-diff, protected-review-asset, and idempotent
+    complete-input bindings; bind the neutral result to a protected required
+    workflow and the exact producer run instead of trusting its status name or
+    caller-supplied check URL; local Push-Ready remains AI-free.

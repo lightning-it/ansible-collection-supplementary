@@ -15,14 +15,21 @@
       "id": "github-actions-service-boundary",
       "workflow": ".github/workflows/collection-ci.yml",
       "job": "lint-sanity",
-      "reason": "The authoritative collection lint, sanity, policy, and evidence gate requires the GitHub Actions event and service context.",
+      "reason": "The authoritative collection gate requires the GitHub Actions service context.",
       "owner": "Lightning IT Application Platform Maintainers"
     },
     {
       "id": "copilot-current-head-review",
       "workflow": ".github/workflows/copilot-review.yml",
-      "job": "current-revision-reviewed",
-      "reason": "The authoritative Copilot pull-request review is produced and bound to the current head SHA by GitHub.",
+      "job": "verify-current-revision-policy",
+      "reason": "For non-Release-App authors, the protected pipeline verifies applicable Current-Head review evidence.",
+      "owner": "Lightning IT Application Platform Maintainers"
+    },
+    {
+      "id": "release-app-exact-revision-codex",
+      "workflow": ".github/workflows/release-bot-exact-head-review.yml",
+      "job": "exact-revision-codex-review",
+      "reason": "For the Release App, only the protected MLX-90 §7.2 Exact-Revision Codex check is allowed.",
       "owner": "Lightning IT Application Platform Maintainers"
     }
   ],
@@ -30,15 +37,10 @@
     "max_diff_bytes": 200000,
     "profiles": {
       "standard": {
-        "agents": [
-          "codex"
-        ]
+        "agents": []
       },
       "trust-root": {
-        "agents": [
-          "codex",
-          "copilot"
-        ]
+        "agents": []
       }
     },
     "classification": {
@@ -99,16 +101,16 @@
   },
   "agents": {
     "copilot": {
-      "enabled": true,
-      "required": true,
+      "enabled": false,
+      "required": false,
       "command": [
         "copilot"
       ],
       "timeout_seconds": 900
     },
     "codex": {
-      "enabled": true,
-      "required": true,
+      "enabled": false,
+      "required": false,
       "command": [
         "codex"
       ],

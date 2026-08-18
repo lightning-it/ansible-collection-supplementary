@@ -1,23 +1,11 @@
 # Repository-owned MLX-90 golden-path incubation asset; canonicalize after real humanActions=0 acceptance.
 # yamllint disable rule:truthy rule:line-length
 ---
-name: Copilot review gate
+name: Current revision review gate
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, labeled, edited]
-  pull_request_review:
-    types: [submitted, edited]
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: Pull request to finalize for one exact-head Copilot review
-        required: true
-        type: number
-      expected_head:
-        description: Frozen exact pull request head SHA
-        required: true
-        type: string
+  pull_request_target:
+    types: [ready_for_review]
 
 permissions:
   contents: read
@@ -31,22 +19,26 @@ env:
   QUOTA_EXCEEDED_MARKER: quota exceeded
 
 concurrency:
-  group: copilot-review-${{ github.event.pull_request.number || inputs.pr_number }}
+  group: copilot-review-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
-# The stable main-to-develop sync branch can carry release content, is never
-# ancestry-exempt, and uses the history-free exact-revision AI path. Only dynamically named
-# backmerge/*-main PRs may use the exact file-identical ancestry exemption.
+# Release-App pull requests are excluded from this workflow and use only the
+# protected MLX-90 §7.2 Exact-Revision Codex check. This workflow retains the
+# final-head GitHub Copilot path for applicable human and external PRs plus the
+# existing provenance exemptions for Renovate and managed distribution.
 jobs:
   request-current-revision-review:
     name: Request Copilot review for current revision
     if: >-
-      (github.event_name == 'pull_request' &&
-        github.event.action == 'ready_for_review' &&
-        github.event.pull_request.draft == false &&
-        github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop')
+      github.event_name == 'pull_request_target' &&
+      github.event.action == 'ready_for_review' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'litroc' &&
+      github.actor == 'litroc' &&
+      github.triggering_actor == 'litroc'
     permissions:
+      actions: read
       contents: read
       issues: write
       pull-requests: write
@@ -57,25 +49,58 @@ jobs:
       - name: Request Copilot review for the current revision
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
-          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || inputs.expected_head }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           REPOSITORY: ${{ github.repository }}
+          TRUSTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          TRUSTED_WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           set -euo pipefail
+          [[ "${EXPECTED_BASE}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${EXPECTED_HEAD}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${TRUSTED_WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "${DEFAULT_BRANCH}" = develop
+          test "${TRUSTED_WORKFLOW_REF}" = \
+            "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}"
+          default_head="$(gh api "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}" --jq .commit.sha)"
+          controller_ancestry="$(gh api \
+            "repos/${REPOSITORY}/compare/${TRUSTED_WORKFLOW_SHA}...${default_head}")"
+          jq -e \
+            --arg controller "${TRUSTED_WORKFLOW_SHA}" '
+              .status == "identical"
+              or (.status == "ahead" and .behind_by == 0
+                  and .merge_base_commit.sha == $controller)
+            ' <<<"${controller_ancestry}" >/dev/null
+          protected_run="$(gh api "repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
+          jq -e \
+            --arg branch "${EXPECTED_HEAD_REF}" \
+            --arg repository "${REPOSITORY}" \
+            --arg sha "${EXPECTED_HEAD}" '
+              .event == "pull_request_target"
+              and .name == "Current revision review gate"
+              and .path == ".github/workflows/copilot-review.yml"
+              and .head_branch == $branch
+              and .head_sha == $sha
+              and .repository.full_name == $repository
+              and .head_repository.full_name == $repository
+            ' <<<"${protected_run}" >/dev/null
           pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
           test "$(jq -r .state <<<"${pr}")" = open
           test "$(jq -r .draft <<<"${pr}")" = false
-          test "$(jq -r .base.ref <<<"${pr}")" = develop
+          base_ref="$(jq -er '.base.ref | select(. == "develop" or . == "main")' <<<"${pr}")"
+          test -n "${base_ref}"
+          test "$(jq -r .base.sha <<<"${pr}")" = "${EXPECTED_BASE}"
+          test "$(jq -r .base.repo.full_name <<<"${pr}")" = "${REPOSITORY}"
           test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"
           test "$(jq -r .head.repo.full_name <<<"${pr}")" = "${REPOSITORY}"
           author="$(jq -r .user.login <<<"${pr}")"
-          case "${author}" in
-            'renovate[bot]'|'lightning-it-shared-assets-sync[bot]'|'lightning-it-release-automation[bot]')
-              echo "Trusted automation uses its provenance gate; no Copilot request is created."
-              exit 0
-              ;;
-          esac
+          if [ "${author}" != litroc ]; then
+            echo "Contributor-funded review required; Lightning IT does not request or fund it."
+            exit 0
+          fi
           reviewer_login="${COPILOT_REVIEWER_LOGIN%\[bot\]}"
           reviewer="${reviewer_login}[bot]"
           requested_reviewers_url="repos/${REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers"
@@ -97,47 +122,35 @@ jobs:
             jq -e --arg reviewer "${reviewer}" \
               'any(.users[]?; .login == $reviewer)' <<<"${response}" >/dev/null
           }
-          review_is_visible_for_head() {
-            local attempt
-            for attempt in 1 2 3 4 5; do
-              if reviewer_is_requested || review_exists_for_head; then
-                return 0
-              fi
-              if [ "${attempt}" -lt 5 ]; then
-                sleep 2
-              fi
-            done
-            return 1
-          }
           comments="$(gh api --paginate --slurp "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100")"
           if jq -e --arg marker "${marker}" 'any(add[]; .body | contains($marker))' \
             <<<"${comments}" >/dev/null; then
-            review_is_visible_for_head || {
-              echo "Exact-head request marker exists without a pending or completed review." >&2
-              exit 1
-            }
-            echo "Copilot review is already requested for the exact finalized head."
+            echo "Copilot review request is already recorded for the exact finalized head."
             exit 0
           fi
           if reviewer_is_requested; then
-            gh api --method DELETE "${requested_reviewers_url}" -f "reviewers[]=${reviewer}"
+            gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              -f body="${marker}Copilot review request accepted for finalized head ${EXPECTED_HEAD}." >/dev/null
+            echo "Copilot review is already pending for the exact finalized head."
+            exit 0
           fi
           gh api --method POST "${requested_reviewers_url}" -f "reviewers[]=${reviewer}"
-          if ! review_is_visible_for_head; then
-            echo "Copilot reviewer request did not become visible for the exact finalized head." >&2
-            exit 1
-          fi
           gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
-            -f body="${marker}Copilot review requested once for finalized head ${EXPECTED_HEAD}." >/dev/null
+            -f body="${marker}Copilot review request accepted for finalized head ${EXPECTED_HEAD}." >/dev/null
 
-  current-revision-reviewed:
-    name: Successful Copilot review
-    if: github.event.pull_request.draft == false
+  verify-current-revision-policy:
+    name: Verify current revision policy
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'
     permissions:
+      actions: read
+      checks: write
       contents: read
       pull-requests: read
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Classify trusted automation pull request
@@ -157,7 +170,6 @@ jobs:
           set -euo pipefail
           trusted=false
           trusted_kind=none
-          release_tag=""
           live_pr="{}"
           if [ "${PR_AUTHOR}" = "renovate[bot]" ] \
             && [ "${PR_HEAD_REPO}" = "${REPOSITORY}" ] \
@@ -221,190 +233,14 @@ jobs:
               <<<"${live_pr}" >/dev/null; then
             trusted=true
             trusted_kind=repository-quality
-          elif [ "${PR_AUTHOR}" = "lightning-it-release-automation[bot]" ] \
-            && [ "${PR_HEAD_REPO}" = "${REPOSITORY}" ] \
-            && [[ "${PR_HEAD}" == backmerge/*-main ]] \
-            && [ "${PR_BASE}" = "develop" ] \
-            && [[ "${PR_TITLE}" == "chore(governance): record main ancestry before "* ]]; then
-            trusted=true
-            trusted_kind=ancestry-backmerge
-          elif [ "${PR_AUTHOR}" = "lightning-it-release-automation[bot]" ] \
-            && [ "${PR_HEAD_REPO}" = "${REPOSITORY}" ] \
-            && [[ "${PR_HEAD}" == release/v* ]] \
-            && [ "${PR_BASE}" = "main" ] \
-            && gh api "repos/${REPOSITORY}/contents/galaxy.yml?ref=main" >/dev/null \
-            && gh api "repos/${REPOSITORY}/contents/changelogs/config.yaml?ref=main" >/dev/null; then
-            release_tag="${PR_HEAD#release/}"
-            if [[ "${release_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-              && [ "${PR_TITLE}" = "Release ${release_tag}" ]; then
-              trusted=true
-              trusted_kind=release-preparation
-            fi
-          elif [ "${PR_AUTHOR}" = "lightning-it-release-automation[bot]" ] \
-            && [ "${PR_HEAD_REPO}" = "${REPOSITORY}" ] \
-            && [[ "${PR_HEAD}" == backsync/release-v*-to-develop ]] \
-            && [ "${PR_BASE}" = "develop" ]; then
-            release_tag="${PR_HEAD#backsync/release-}"
-            release_tag="${release_tag%-to-develop}"
-            if [[ "${release_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-              && [ "${PR_TITLE}" = "chore: sync ${release_tag} release back to develop" ]; then
-              trusted=true
-              trusted_kind=release-backsync
-            fi
-          elif [ "${PR_AUTHOR}" = "lightning-it-release-automation[bot]" ] \
-            && [ "${PR_HEAD_REPO}" = "${REPOSITORY}" ] \
-            && [ "${PR_HEAD}" = "develop" ] \
-            && [ "${PR_BASE}" = "main" ] \
-            && [ "${PR_TITLE}" = "chore(release): promote develop to main" ]; then
-            trusted=true
-            trusted_kind=release-promotion
           fi
           {
             echo "trusted=${trusted}"
             echo "kind=${trusted_kind}"
-            echo "release_tag=${release_tag}"
           } >>"${GITHUB_OUTPUT}"
 
-      - name: Verify file-identical ancestry backmerge
-        if: steps.trusted-automation.outputs.kind == 'ancestry-backmerge'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          gh auth setup-git
-          git init --quiet .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --quiet --no-tags origin \
-            "${HEAD_SHA}" "refs/heads/main" "refs/heads/develop"
-          [ "$(git rev-list --parents -n 1 "${HEAD_SHA}" | wc -w)" -eq 3 ]
-          [ "$(git rev-parse "${HEAD_SHA}^1")" = "$(git rev-parse origin/develop)" ]
-          [ "$(git rev-parse "${HEAD_SHA}^2")" = "$(git rev-parse origin/main)" ]
-          git diff --quiet "origin/develop" "${HEAD_SHA}"
-          echo "Verified an exact develop-tree-preserving merge of current develop and main tips."
-
-      - name: Verify protected release promotion
-        if: steps.trusted-automation.outputs.kind == 'release-promotion'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          gh auth setup-git
-          git init --quiet .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --quiet --no-tags origin \
-            "${HEAD_SHA}" "refs/heads/main" "refs/heads/develop"
-          [ "$(git rev-parse origin/develop)" = "${HEAD_SHA}" ]
-          git merge-base --is-ancestor "origin/main" "${HEAD_SHA}"
-          echo "Verified current protected develop head and main ancestry."
-
-      - name: Setup Python for trusted release receipt verification
-        if: steps.trusted-automation.outputs.kind == 'release-preparation'
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
-        with:
-          python-version: "3.14"
-
-      - name: Install exact trusted release receipt dependency
-        if: steps.trusted-automation.outputs.kind == 'release-preparation'
-        run: >-
-          python -m pip install --disable-pip-version-check
-          PyYAML==6.0.3
-
-      - name: Verify release preparation commit and bounded files
-        if: steps.trusted-automation.outputs.kind == 'release-preparation'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RELEASE_TAG: ${{ steps.trusted-automation.outputs.release_tag }}
-          REPOSITORY_ID: ${{ github.repository_id }}
-        run: |
-          set -euo pipefail
-          gh auth setup-git
-          git init --quiet .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --quiet --no-tags origin \
-            "${HEAD_SHA}" "${BASE_SHA}" "refs/heads/main"
-          [ "$(git rev-parse origin/main)" = "${BASE_SHA}" ]
-          [ "$(git rev-list --parents -n 1 "${HEAD_SHA}" | wc -w)" -eq 2 ]
-          [ "$(git rev-parse "${HEAD_SHA}^1")" = "${BASE_SHA}" ]
-          [ "$(git log -1 --format=%s "${HEAD_SHA}")" = \
-            "chore(release): prepare ${RELEASE_TAG}" ]
-          if git diff --quiet "${BASE_SHA}" "${HEAD_SHA}"; then
-            echo "Release preparation does not contain generated release changes." >&2
-            exit 1
-          fi
-          unexpected="$(
-            git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" |
-              awk '$0 != "CHANGELOG.rst" && $0 != "galaxy.yml" && $0 !~ /^changelogs\//'
-          )"
-          [ -z "${unexpected}" ] || {
-            echo "Release preparation contains files outside the allowed release paths:" >&2
-            printf '%s\n' "${unexpected}" >&2
-            exit 1
-          }
-          version="${RELEASE_TAG#v}"
-          [ "$(git show "${HEAD_SHA}:galaxy.yml" | awk '$1 == "version:" {print $2; exit}')" = "${version}" ]
-          receipt="$RUNNER_TEMP/release-preparation-receipt.json"
-          base_tree="$RUNNER_TEMP/release-preparation-base"
-          test ! -e "$receipt"
-          test ! -e "$base_tree"
-          git show "${HEAD_SHA}:changelogs/release-preparation.json" > "$receipt"
-          git worktree add --detach --quiet "$base_tree" "$BASE_SHA"
-          test "$(git -C "$base_tree" rev-parse HEAD)" = "$BASE_SHA"
-          python "$base_tree/scripts/release-version.py" \
-            --verify-preparation-receipt "$receipt" \
-            --repository "$GITHUB_REPOSITORY" \
-            --repository-id "$REPOSITORY_ID" \
-            --base-sha "$BASE_SHA" \
-            --expected-version "$version" \
-            --root "$base_tree" >/dev/null
-          echo "Verified schema-v2 preparation against the immutable base tree and bounded generated files."
-
-      - name: Verify release back-sync merge and bounded files
-        if: steps.trusted-automation.outputs.kind == 'release-backsync'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RELEASE_TAG: ${{ steps.trusted-automation.outputs.release_tag }}
-        run: |
-          set -euo pipefail
-          gh auth setup-git
-          git init --quiet .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --quiet --no-tags origin \
-            "${HEAD_SHA}" "${BASE_SHA}" "refs/heads/main" "refs/heads/develop" \
-            "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
-          [ "$(git rev-parse origin/develop)" = "${BASE_SHA}" ]
-          [ "$(git rev-list --parents -n 1 "${HEAD_SHA}" | wc -w)" -eq 3 ]
-          [ "$(git rev-parse "${HEAD_SHA}^1")" = "${BASE_SHA}" ]
-          release_sha="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
-          [ "$(git rev-parse "${HEAD_SHA}^2")" = "${release_sha}" ]
-          git merge-base --is-ancestor "${release_sha}" origin/main
-          if git diff --quiet "${BASE_SHA}" "${HEAD_SHA}"; then
-            echo "Release back-sync does not contain release-generated changes." >&2
-            exit 1
-          fi
-          unexpected="$(
-            git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" |
-              awk '$0 != "CHANGELOG.rst" && $0 != "galaxy.yml" && $0 !~ /^changelogs\//'
-          )"
-          [ -z "${unexpected}" ] || {
-            echo "Release back-sync contains files outside the allowed release paths:" >&2
-            printf '%s\n' "${unexpected}" >&2
-            exit 1
-          }
-          echo "Verified release-tag merge and bounded release-generated files."
-
       - name: Accept trusted automation exemption
-        if: >-
-          steps.trusted-automation.outputs.trusted == 'true' &&
-          steps.trusted-automation.outputs.kind != 'ancestry-backmerge' &&
-          steps.trusted-automation.outputs.kind != 'release-preparation' &&
-          steps.trusted-automation.outputs.kind != 'release-promotion' &&
-          steps.trusted-automation.outputs.kind != 'release-backsync'
+        if: steps.trusted-automation.outputs.trusted == 'true'
         run: |
           if [ "${{ steps.trusted-automation.outputs.kind }}" = renovate ]; then
             {
@@ -803,161 +639,166 @@ jobs:
 
           echo "GitHub Copilot reviewed current head ${head_sha}; no unresolved Copilot findings remain."
 
-      - name: Materialize bounded history-free exact-head review input
-        if: >-
-          steps.trusted-automation.outputs.trusted != 'true' &&
-          github.event.pull_request.user.login == 'lightning-it-release-automation[bot]'
+      - name: Publish bound neutral result and temporary legacy alias
         env:
           GH_TOKEN: ${{ github.token }}
-          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+          EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          EVENT_BASE: ${{ github.event.pull_request.base.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}
+          TRUSTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          TRUSTED_WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           set -euo pipefail
-          case "${PR_AUTHOR}" in
-            lightning-it-release-automation\[bot\]) ;;
-            *)
-              echo "Untrusted bot author ${PR_AUTHOR}; refusing credentialed AI review." >&2
+          [[ "${EVENT_BASE}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${EVENT_HEAD}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${TRUSTED_WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "${DEFAULT_BRANCH}" = develop
+          test "${TRUSTED_WORKFLOW_REF}" = \
+            "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}"
+          default_head="$(gh api "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}" --jq .commit.sha)"
+          controller_ancestry="$(gh api \
+            "repos/${REPOSITORY}/compare/${TRUSTED_WORKFLOW_SHA}...${default_head}")"
+          jq -e \
+            --arg controller "${TRUSTED_WORKFLOW_SHA}" '
+              .status == "identical"
+              or (.status == "ahead" and .behind_by == 0
+                  and .merge_base_commit.sha == $controller)
+            ' <<<"${controller_ancestry}" >/dev/null
+          protected_run="$(gh api "repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
+          jq -e \
+            --arg branch "${EVENT_HEAD_REF}" \
+            --arg repository "${REPOSITORY}" \
+            --arg sha "${EVENT_HEAD}" '
+              .event == "pull_request_target"
+              and .name == "Current revision review gate"
+              and .path == ".github/workflows/copilot-review.yml"
+              and .head_branch == $branch
+              and .head_sha == $sha
+              and .repository.full_name == $repository
+              and .head_repository.full_name == $repository
+            ' <<<"${protected_run}" >/dev/null
+          pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
+          test "$(jq -r .state <<<"${pr}")" = open
+          test "$(jq -r .draft <<<"${pr}")" = false
+          test "$(jq -r .head.sha <<<"${pr}")" = "${EVENT_HEAD}"
+          test "$(jq -r .base.sha <<<"${pr}")" = "${EVENT_BASE}"
+          base_ref="$(jq -er '.base.ref | select(. == "develop" or . == "main")' <<<"${pr}")"
+          test -n "${base_ref}"
+          test "$(jq -r .base.repo.full_name <<<"${pr}")" = "${REPOSITORY}"
+          test "$(jq -r .user.login <<<"${pr}")" != 'lightning-it-release-automation[bot]'
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          evidence="$(jq -cn \
+            --arg base "${EVENT_BASE}" \
+            --arg controller "${TRUSTED_WORKFLOW_SHA}" \
+            --arg head "${EVENT_HEAD}" \
+            --argjson run_id "${GITHUB_RUN_ID}" \
+            --arg run_url "${run_url}" \
+            '{schema:4,base_sha:$base,head_sha:$head,controller_sha:$controller,
+              producer_run_id:$run_id,
+              review_path:"applicable Copilot or governed automation exemption",run_url:$run_url}')"
+          publish_once() {
+            local check_name="$1" external_id="$2" title="$3"
+            local checks named count check_id check_url created
+            checks="$(gh api --paginate --slurp \
+              "repos/${REPOSITORY}/commits/${EVENT_HEAD}/check-runs?check_name=$(jq -rn --arg value "${check_name}" '$value|@uri')&per_page=100")"
+            named="$(jq -c \
+              --arg name "${check_name}" \
+              --arg external_id "${external_id}" \
+              '[.[].check_runs[]? |
+                select(.name == $name and .external_id == $external_id)]' \
+              <<<"${checks}")"
+            count="$(jq 'length' <<<"${named}")"
+            if [ "${count}" -gt 1 ]; then
+              echo "Multiple protected ${check_name} results exist for ${EVENT_HEAD}." >&2
               exit 1
-              ;;
-          esac
-          live_pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
-          jq -e \
-            --arg author "${PR_AUTHOR}" \
-            --arg base_sha "${PR_BASE_SHA}" \
-            --arg head_sha "${EXPECTED_HEAD}" \
-            --arg repository "${REPOSITORY}" \
-            '(.state == "open") and (.draft == false)
-             and (.user.login == $author) and (.user.type == "Bot")
-             and (.base.sha == $base_sha) and (.head.sha == $head_sha)
-             and (.head.repo.full_name == $repository)' \
-            <<<"${live_pr}" >/dev/null
-
-          install -d -m 0700 exact-head-review
-          git_dir="$(mktemp -d "${RUNNER_TEMP:?}/exact-head-git.XXXXXX")"
-          cleanup_git_dir() {
-            case "${git_dir}" in
-              "${RUNNER_TEMP}/exact-head-git."*) rm -rf -- "${git_dir}" ;;
-              *) echo "Refusing to clean unexpected Git directory: ${git_dir}" >&2; return 1 ;;
-            esac
+            fi
+            if [ "${count}" -eq 1 ]; then
+              check_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' <<<"${named}")"
+              check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}"
+              jq -e \
+                --arg evidence "${evidence}" \
+                --arg external_id "${external_id}" \
+                --arg head "${EVENT_HEAD}" \
+                --arg url "${check_url}" \
+                --argjson check_id "${check_id}" '
+                .[0].id == $check_id
+                and .[0].app.id == 15368
+                and .[0].app.slug == "github-actions"
+                and .[0].head_sha == $head
+                and .[0].details_url == $url
+                and .[0].external_id == $external_id
+                and .[0].status == "completed"
+                and .[0].conclusion == "success"
+                and .[0].output.summary == $evidence
+              ' <<<"${named}" >/dev/null
+              return
+            fi
+            created="$(gh api --method POST "repos/${REPOSITORY}/check-runs" \
+              -f name="${check_name}" \
+              -f head_sha="${EVENT_HEAD}" \
+              -f status=completed \
+              -f conclusion=success \
+              -f external_id="${external_id}" \
+              -f "output[title]=${title}" \
+              -f "output[summary]=${evidence}")"
+            check_id="$(jq -er '.id | select(type == "number" and . > 0)' <<<"${created}")"
+            check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}"
+            created="$(gh api --method PATCH "repos/${REPOSITORY}/check-runs/${check_id}" \
+              -f "details_url=${check_url}")"
+            jq -e \
+              --arg evidence "${evidence}" \
+              --arg external_id "${external_id}" \
+              --arg head "${EVENT_HEAD}" \
+              --arg url "${check_url}" \
+              --argjson check_id "${check_id}" '
+                .id == $check_id
+                and .app.id == 15368
+                and .app.slug == "github-actions"
+                and .head_sha == $head
+                and .details_url == $url
+                and .external_id == $external_id
+                and .status == "completed"
+                and .conclusion == "success"
+                and .output.summary == $evidence
+              ' <<<"${created}" >/dev/null
           }
-          trap cleanup_git_dir EXIT
-          git init --bare "${git_dir}"
-          git -C "${git_dir}" config credential.helper '!gh auth git-credential'
-          git -C "${git_dir}" remote add origin "https://github.com/${REPOSITORY}.git"
-          git -C "${git_dir}" fetch --no-tags --depth=1 origin \
-            "${PR_BASE_SHA}" "${EXPECTED_HEAD}"
-          git -C "${git_dir}" cat-file -e "${PR_BASE_SHA}^{commit}"
-          git -C "${git_dir}" cat-file -e "${EXPECTED_HEAD}^{commit}"
-          git -C "${git_dir}" diff --quiet "${PR_BASE_SHA}" "${EXPECTED_HEAD}" && {
-            echo "Exact base/head Git trees contain no reviewable change." >&2
-            exit 1
-          }
-          if git -C "${git_dir}" diff --numstat "${PR_BASE_SHA}" "${EXPECTED_HEAD}" \
-            | awk '$1 == "-" || $2 == "-" { binary = 1 } END { exit !binary }'; then
-            echo "Binary changes are not eligible for the exact-head AI review path." >&2
-            exit 1
-          fi
-          git -C "${git_dir}" diff --binary --full-index --no-ext-diff \
-            "${PR_BASE_SHA}" "${EXPECTED_HEAD}" \
-            >exact-head-review/change.patch
-          cleanup_git_dir
-          trap - EXIT
-          materialized_pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
-          jq -e \
-            --arg base_sha "${PR_BASE_SHA}" \
-            --arg head_sha "${EXPECTED_HEAD}" \
-            '(.base.sha == $base_sha) and (.head.sha == $head_sha)' \
-            <<<"${materialized_pr}" >/dev/null
-          patch_sha256="$(sha256sum exact-head-review/change.patch | awk '{print $1}')"
-          [[ "${patch_sha256}" =~ ^[0-9a-f]{64}$ ]]
-          review_bytes="$(wc -c <exact-head-review/change.patch | tr -d ' ')"
-          if ! [[ "${review_bytes}" =~ ^[0-9]+$ ]] \
-            || [ "${review_bytes}" -le 0 ] \
-            || [ "${review_bytes}" -ge 200000 ]; then
-            echo "Exact-head review input must contain 1..199999 bytes; observed ${review_bytes}." >&2
-            exit 1
-          fi
-          jq -n \
-            --arg base_sha "${PR_BASE_SHA}" \
-            --arg head_sha "${EXPECTED_HEAD}" \
-            --arg patch_sha256 "${patch_sha256}" \
-            --arg repository "${REPOSITORY}" \
-            --argjson pull_request "${PR_NUMBER}" \
-            --argjson review_bytes "${review_bytes}" \
-            '{schema_version:1,repository:$repository,pull_request:$pull_request,
-              base_sha:$base_sha,head_sha:$head_sha,patch_sha256:$patch_sha256,
-              review_bytes:$review_bytes}' \
-            >exact-head-review/review-metadata.json
-          gh api \
-            "repos/${REPOSITORY}/contents/.github/codex/prompts/review-exact-head.md?ref=${PR_BASE_SHA}" \
-            --jq .content | base64 --decode >exact-head-review/review-prompt.md
-          gh api \
-            "repos/${REPOSITORY}/contents/.github/codex/schemas/exact-head-review.schema.json?ref=${PR_BASE_SHA}" \
-            --jq .content | base64 --decode >exact-head-review/review-schema.json
-          test -s exact-head-review/review-prompt.md
-          jq -e '.type == "object"' exact-head-review/review-schema.json >/dev/null
+          publish_once \
+            'Current revision review' \
+            "mlx90-current-revision:copilot:v4:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}" \
+            'Current revision review passed'
+          # Temporary migration alias only. Its evidence states the actual path;
+          # it is removed immediately after the ruleset requires the neutral name.
+          publish_once \
+            'Successful Copilot review' \
+            "mlx90-legacy-copilot:v4:${GITHUB_RUN_ID}:${EVENT_HEAD}" \
+            'Temporary legacy alias for verified current-revision policy'
 
-      - name: Run history-free exact-head Codex review for unmatched release bot PR
-        id: bot-ai-review
-        if: >-
-          steps.trusted-automation.outputs.trusted != 'true' &&
-          github.event.pull_request.user.login == 'lightning-it-release-automation[bot]'
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
-        with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          prompt-file: exact-head-review/review-prompt.md
-          output-file: exact-head-review/result.json
-          output-schema-file: exact-head-review/review-schema.json
-          working-directory: exact-head-review
-          # The built-in profile technically denies writes and command network access.
-          permission-profile: :read-only
-          safety-strategy: drop-sudo
-          codex-args: '["--ephemeral"]'
-          allow-bots: "true"
-          allow-bot-users: lightning-it-release-automation
+  request-protected-verifier-reevaluation:
+    name: Request protected verifier re-evaluation
+    needs: verify-current-revision-policy
+    if: needs.verify-current-revision-policy.result == 'success'
+    permissions:
+      actions: write
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
 
-      - name: Enforce exact-revision AI verdict and unchanged pull request
-        if: >-
-          steps.trusted-automation.outputs.trusted != 'true' &&
-          github.event.pull_request.user.login == 'lightning-it-release-automation[bot]'
+    steps:
+      - name: Dispatch the protected re-evaluation helper from develop
         env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
           EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          live_pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
-          jq -e \
-            --arg base_sha "${EXPECTED_BASE}" \
-            --arg head_sha "${EXPECTED_HEAD}" \
-            '(.base.sha == $base_sha) and (.head.sha == $head_sha)' \
-            <<<"${live_pr}" >/dev/null
-          patch_sha256="$(sha256sum exact-head-review/change.patch | awk '{print $1}')"
-          [[ "${patch_sha256}" =~ ^[0-9a-f]{64}$ ]]
-          jq -e \
-            --arg base_sha "${EXPECTED_BASE}" \
-            --arg head_sha "${EXPECTED_HEAD}" \
-            --arg patch_sha256 "${patch_sha256}" \
-            '(.base_sha == $base_sha)
-             and (.head_sha == $head_sha)
-             and (.patch_sha256 == $patch_sha256)
-             and ((.verdict == "PASS" and (.findings | length) == 0)
-               or (.verdict == "FAIL" and (.findings | length) > 0))' \
-            exact-head-review/result.json >/dev/null
-          verdict="$(jq -r .verdict exact-head-review/result.json)"
-          findings="$(jq '.findings | length' exact-head-review/result.json)"
-          {
-            echo "### History-free exact-head AI review"
-            echo
-            echo "- Base: \`${EXPECTED_BASE}\`"
-            echo "- Head: \`${EXPECTED_HEAD}\`"
-            echo "- Patch SHA-256: \`${patch_sha256}\`"
-            echo "- Verdict: \`${verdict}\`"
-            echo "- Findings: \`${findings}\`"
-          } >>"${GITHUB_STEP_SUMMARY}"
-          test "${verdict}" = PASS
+          gh api --method POST \
+            "repos/${REPOSITORY}/actions/workflows/current-revision-rerun.yml/dispatches" \
+            -f ref=develop \
+            -f "inputs[pr_number]=${PR_NUMBER}" \
+            -f "inputs[expected_base]=${EXPECTED_BASE}" \
+            -f "inputs[expected_head]=${EXPECTED_HEAD}" >/dev/null

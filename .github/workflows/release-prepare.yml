@@ -154,6 +154,7 @@ jobs:
           private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-actions: write
           permission-contents: write
           permission-pull-requests: write
 
@@ -532,6 +533,7 @@ jobs:
             gh pr create \
               --base "$TARGET_BRANCH" \
               --head "$RELEASE_BRANCH" \
+              --draft \
               --title "Release v${VERSION}" \
               --body-file "$body_file"
           fi
@@ -580,6 +582,8 @@ jobs:
                 --arg base "$TARGET_BRANCH" \
                 --arg sha "$pushed_sha" '
                   .[0].head.repo.full_name == $repo
+                  and .[0].user.login == "lightning-it-release-automation[bot]"
+                  and .[0].user.type == "Bot"
                   and .[0].head.ref == $branch
                   and .[0].head.sha == $sha
                   and .[0].base.ref == $base
@@ -628,8 +632,34 @@ jobs:
           fi
           existing="$(jq -r '.[0].number' <<< "$owned_pulls")"
           gh pr edit "$existing" \
+            --repo "$GITHUB_REPOSITORY" \
             --title "Release v${VERSION}" \
             --body-file "$body_file"
+          if [ "$(jq -r '.[0].draft' <<< "$owned_pulls")" = true ]; then
+            gh pr ready "$existing" --repo "$GITHUB_REPOSITORY"
+          fi
+          owned_pull="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${existing}")"
+          jq -e \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg branch "$RELEASE_BRANCH" \
+            --arg base "$TARGET_BRANCH" \
+            --arg sha "$pushed_sha" '
+              .state == "open"
+              and .draft == false
+              and .head.repo.full_name == $repo
+              and .user.login == "lightning-it-release-automation[bot]"
+              and .user.type == "Bot"
+              and .head.ref == $branch
+              and .head.sha == $sha
+              and .base.ref == $base
+            ' <<<"$owned_pull" >/dev/null
+          gh workflow run release-bot-exact-head-review.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$(jq -r .base.ref <<<"$owned_pull")" \
+            -f "pr_number=${existing}" \
+            -f "base_ref=$(jq -r .base.ref <<<"$owned_pull")" \
+            -f "expected_base=$(jq -r .base.sha <<<"$owned_pull")" \
+            -f "expected_head=$(jq -r .head.sha <<<"$owned_pull")"
 
           if [ "$SECURITY_RELEASE" = true ]; then
             test "$WORKFLOW_ACTOR" = 'lightning-it-release-automation[bot]'
