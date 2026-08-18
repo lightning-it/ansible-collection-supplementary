@@ -265,7 +265,7 @@ jobs:
             result=exact-revision-review/result.json
             jq -e \
               --slurpfile metadata "${metadata}" \
-              '.[0] as $result | $metadata[0] as $bound |
+              '. as $result | $metadata[0] as $bound |
                ($result.base_sha == $bound.base_sha) and
                ($result.head_sha == $bound.head_sha) and
                ($result.merge_base_sha == $bound.merge_base_sha) and

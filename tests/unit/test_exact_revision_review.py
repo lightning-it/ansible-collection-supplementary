@@ -476,6 +476,11 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         )[0]
         self.assertIn('--repo "$GITHUB_REPOSITORY"', release_dispatch)
 
+    def test_exact_revision_result_is_validated_as_one_object(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-bot-exact-head-review.yml").read_text(encoding="utf-8")
+        self.assertIn(". as $result | $metadata[0] as $bound |", workflow)
+        self.assertNotIn(".[0] as $result | $metadata[0] as $bound |", workflow)
+
     def test_release_app_is_denied_from_copilot_remediation(self) -> None:
         workflow = (ROOT / ".github/workflows/codex-copilot-remediation.yml").read_text(encoding="utf-8")
         dispatch = workflow.split("  continue-after-push:", 1)[1].split("  inspect:", 1)[0]
