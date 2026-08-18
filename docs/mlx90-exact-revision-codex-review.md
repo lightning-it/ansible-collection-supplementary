@@ -49,6 +49,13 @@ binds all of the following values:
 An empty or incomplete input, ambiguous ancestry, merge conflict, changed live binding, or input of 200,000 bytes or
 more fails closed. Binary changes are included in the full diff instead of being exempted.
 
+An ancestry-only backmerge is not exempt from that rule. The protected
+`sync-main-to-develop.yml` controller writes `.lit/main-ancestry.json` as the
+merge commit's sole tree delta. The deterministic record binds the repository,
+the exact protected `main` object, and the exact `develop` parent so the
+Release-App PR always has a non-empty, reviewable diff while preserving every
+other `develop` byte.
+
 ## Reviewer isolation and result
 
 Codex receives a new directory containing only the complete diff, immutable metadata, protected prompt, and
@@ -74,11 +81,10 @@ and complete-input SHA-256 creates the neutral `Current revision review` check
 on the reviewed head. Failures create no passing check and cannot fall back to
 another model, identity, or provider.
 
-During the atomic Ruleset migration only, the same already-verified result also
-publishes a temporary `Successful Copilot review` compatibility alias. Its
-machine evidence explicitly identifies the actual Codex path; it never causes a
-second AI call and is not a claim that Codex was GitHub Copilot. The alias is
-removed immediately after the Ruleset requires `Current revision review`.
+The atomic Ruleset migration is complete. Producers publish only the neutral
+`Current revision review` result; the temporary `Successful Copilot review`
+compatibility alias has been removed. A Codex result is never presented as a
+GitHub Copilot review.
 
 ## Ruleset-bound verifier
 

@@ -265,7 +265,7 @@ jobs:
             result=exact-revision-review/result.json
             jq -e \
               --slurpfile metadata "${metadata}" \
-              '.[0] as $result | $metadata[0] as $bound |
+              '. as $result | $metadata[0] as $bound |
                ($result.base_sha == $bound.base_sha) and
                ($result.head_sha == $bound.head_sha) and
                ($result.merge_base_sha == $bound.merge_base_sha) and
@@ -400,13 +400,6 @@ jobs:
             'Current revision review' \
             "mlx90-current-revision:v4:${producer_run_id}:${input_sha256}" \
             'Protected Exact-Revision Codex review passed'
-          # Temporary migration alias only. It reuses the exact same protected
-          # Codex result and must be removed after the ruleset requires the
-          # neutral Current revision review context.
-          publish_once \
-            'Successful Copilot review' \
-            "mlx90-legacy-exact-revision:v4:${producer_run_id}:${input_sha256}" \
-            'Temporary alias: protected Exact-Revision Codex passed'
 
   request-protected-verifier-reevaluation:
     name: Request protected verifier re-evaluation

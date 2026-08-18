@@ -639,7 +639,7 @@ jobs:
 
           echo "GitHub Copilot reviewed current head ${head_sha}; no unresolved Copilot findings remain."
 
-      - name: Publish bound neutral result and temporary legacy alias
+      - name: Publish bound neutral result
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
@@ -769,12 +769,6 @@ jobs:
             'Current revision review' \
             "mlx90-current-revision:copilot:v4:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}" \
             'Current revision review passed'
-          # Temporary migration alias only. Its evidence states the actual path;
-          # it is removed immediately after the ruleset requires the neutral name.
-          publish_once \
-            'Successful Copilot review' \
-            "mlx90-legacy-copilot:v4:${GITHUB_RUN_ID}:${EVENT_HEAD}" \
-            'Temporary legacy alias for verified current-revision policy'
 
   request-protected-verifier-reevaluation:
     name: Request protected verifier re-evaluation
