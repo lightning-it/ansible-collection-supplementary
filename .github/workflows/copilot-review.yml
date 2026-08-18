@@ -706,8 +706,9 @@ jobs:
               "repos/${REPOSITORY}/commits/${EVENT_HEAD}/check-runs?check_name=$(jq -rn --arg value "${check_name}" '$value|@uri')&per_page=100")"
             named="$(jq -c \
               --arg name "${check_name}" \
+              --arg external_id "${external_id}" \
               '[.[].check_runs[]? |
-                select(.name == $name)]' \
+                select(.name == $name and .external_id == $external_id)]' \
               <<<"${checks}")"
             count="$(jq 'length' <<<"${named}")"
             if [ "${count}" -gt 1 ]; then

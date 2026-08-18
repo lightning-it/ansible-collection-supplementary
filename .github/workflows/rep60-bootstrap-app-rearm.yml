@@ -91,16 +91,16 @@ jobs:
             -H 'Accept: application/vnd.github+json' \
             "repos/${REPOSITORY}/commits/${EXPECTED_HEAD}/check-runs?per_page=100")"
           existing_bound_checks="$(jq \
-            --arg head "${EXPECTED_HEAD}" \
-            --arg suffix ":${pr_number}:${EXPECTED_HEAD}" '
+            --arg external_prefix "rep60-main-bootstrap:v1:" \
+            --arg suffix ":${pr_number}:${expected_base}:${EXPECTED_HEAD}" '
               [.[].check_runs[]?
                 | select(.app.id == 15368)
-                | select(
-                    .name == "Current revision review"
-                    or .name == "Protected current-revision verifier"
-                  )
+                | select(.name == "Current revision review")
                 | select(.status == "completed" and .conclusion == "success")
-                | select((.external_id // "") | endswith($suffix))
+                | select(
+                    (.external_id // "")
+                    | (startswith($external_prefix) and endswith($suffix))
+                  )
                 | {id, name, status, conclusion, external_id}
               ]
             ' <<<"${check_inventory}")"

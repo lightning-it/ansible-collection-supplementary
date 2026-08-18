@@ -311,6 +311,10 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("publish_once() {", workflow)
         self.assertGreaterEqual(workflow.count(".app.id == 15368"), 4)
         self.assertGreaterEqual(workflow.count(".external_id == $external_id"), 3)
+        self.assertIn(
+            "select(.name == $name and .external_id == $external_id)",
+            workflow,
+        )
         self.assertIn("${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}", workflow)
         self.assertEqual(2, workflow.count('-f "details_url=${check_url}"'))
         self.assertEqual(2, workflow.count('gh api --method PATCH "repos/${REPOSITORY}/check-runs/${check_id}"'))
@@ -377,6 +381,10 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("controller_sha:$controller", workflow)
         self.assertIn("producer_run_id:$run_id", workflow)
         self.assertIn('named="$(jq -c', workflow)
+        self.assertIn(
+            "select(.name == $name and .external_id == $external_id)",
+            workflow,
+        )
         self.assertIn(".[0].app.id == 15368", workflow)
         self.assertIn(".[0].external_id == $external_id", workflow)
         self.assertIn("${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}", workflow)
