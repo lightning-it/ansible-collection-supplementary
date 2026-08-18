@@ -99,7 +99,7 @@ jobs:
                 | select(.status == "completed" and .conclusion == "success")
                 | select(
                     (.external_id // "")
-                    | startswith($external_prefix) and endswith($suffix)
+                    | (startswith($external_prefix) and endswith($suffix))
                   )
                 | {id, name, status, conclusion, external_id}
               ]

@@ -50,7 +50,7 @@ class Rep60BootstrapAppRearmTests(unittest.TestCase):
         self.assertNotIn('.name == "Protected current-revision verifier"', workflow)
         self.assertIn('.status == "completed" and .conclusion == "success"', workflow)
         self.assertIn('rep60-main-bootstrap:v1:', workflow)
-        self.assertIn('startswith($external_prefix) and endswith($suffix)', workflow)
+        self.assertIn('(startswith($external_prefix) and endswith($suffix))', workflow)
         self.assertIn(':${pr_number}:${expected_base}:${EXPECTED_HEAD}', workflow)
         self.assertIn("already has a successful current-head REP-60 controller result", workflow)
         self.assertIn("verify_pr_binding open", workflow)
