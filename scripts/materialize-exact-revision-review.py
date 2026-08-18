@@ -67,6 +67,7 @@ def command_environment(*, home: Path, include_token: bool) -> dict[str, str]:
     environment = {
         "GIT_CONFIG_GLOBAL": os.devnull,
         "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_TERMINAL_PROMPT": "0",
         "HOME": str(home),
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
@@ -97,7 +98,11 @@ def run(
         text=not binary,
     )
     if result.returncode != 0:
-        stderr = result.stderr if isinstance(result.stderr, str) else result.stderr.decode(errors="replace")
+        stderr = (
+            result.stderr
+            if isinstance(result.stderr, str)
+            else result.stderr.decode(errors="replace")
+        )
         command = " ".join(arguments) or "<empty-command>"
         fail(f"Command failed closed: {command}: {stderr.strip()}")
     return result
@@ -107,6 +112,13 @@ def require_sha(value: str, name: str) -> str:
     if not SHA1_PATTERN.fullmatch(value):
         fail(f"{name} must be a full lowercase SHA-1 object ID.")
     return value
+
+
+def require_single_sha_output(value: str, name: str) -> str:
+    lines = value.splitlines()
+    if len(lines) != 1:
+        fail(f"{name} must contain exactly one Git object ID.")
+    return require_sha(lines[0], name)
 
 
 def protected_asset_bytes(path: Path, name: str) -> bytes:
@@ -136,14 +148,18 @@ def protected_asset_bytes(path: Path, name: str) -> bytes:
         os.close(descriptor)
 
 
-def bind_protected_assets(metadata: dict[str, Any], asset_paths: dict[str, Path]) -> dict[str, Any]:
+def bind_protected_assets(
+    metadata: dict[str, Any], asset_paths: dict[str, Path]
+) -> dict[str, Any]:
     """Bind every base-controlled review asset into one canonical input hash."""
     if set(asset_paths) != set(ASSET_ARGUMENTS):
         fail("The complete protected review-asset set is required.")
     bound = dict(metadata)
     for metadata_key, path in asset_paths.items():
         asset_name = metadata_key.removesuffix("_sha256").replace("_", " ")
-        bound[metadata_key] = hashlib.sha256(protected_asset_bytes(path, asset_name)).hexdigest()
+        bound[metadata_key] = hashlib.sha256(
+            protected_asset_bytes(path, asset_name)
+        ).hexdigest()
     canonical = json.dumps(bound, sort_keys=True, separators=(",", ":")).encode("utf-8")
     bound["input_sha256"] = hashlib.sha256(canonical).hexdigest()
     return bound
@@ -173,11 +189,16 @@ def validate_inputs(arguments: argparse.Namespace) -> None:
         fail("The protected workflow SHA must equal the live pull-request base SHA.")
     if arguments.trigger not in {"ready_for_review", "app_dispatch"}:
         fail("Unsupported exact-review trigger.")
-    if arguments.trigger == "app_dispatch" and arguments.dispatch_ref != f"refs/heads/{arguments.base_ref}":
+    if (
+        arguments.trigger == "app_dispatch"
+        and arguments.dispatch_ref != f"refs/heads/{arguments.base_ref}"
+    ):
         fail("App dispatch must execute from the protected pull-request base ref.")
 
 
-def read_live_pull_request(arguments: argparse.Namespace, *, home: Path) -> dict[str, Any]:
+def read_live_pull_request(
+    arguments: argparse.Namespace, *, home: Path
+) -> dict[str, Any]:
     gh = executable("gh")
     result = run(
         [
@@ -202,19 +223,26 @@ def read_live_pull_request(arguments: argparse.Namespace, *, home: Path) -> dict
         "head_sha": arguments.expected_head,
         "head_repository": arguments.repository,
     }
+    user = pull_request.get("user") or {}
+    base = pull_request.get("base") or {}
+    head = pull_request.get("head") or {}
+    base_repository = base.get("repo") or {}
+    head_repository = head.get("repo") or {}
     observed = {
         "state": pull_request.get("state"),
         "draft": pull_request.get("draft"),
-        "author": pull_request.get("user", {}).get("login"),
-        "author_type": pull_request.get("user", {}).get("type"),
-        "base_ref": pull_request.get("base", {}).get("ref"),
-        "base_sha": pull_request.get("base", {}).get("sha"),
-        "base_repository": pull_request.get("base", {}).get("repo", {}).get("full_name"),
-        "head_sha": pull_request.get("head", {}).get("sha"),
-        "head_repository": pull_request.get("head", {}).get("repo", {}).get("full_name"),
+        "author": user.get("login"),
+        "author_type": user.get("type"),
+        "base_ref": base.get("ref"),
+        "base_sha": base.get("sha"),
+        "base_repository": base_repository.get("full_name"),
+        "head_sha": head.get("sha"),
+        "head_repository": head_repository.get("full_name"),
     }
     if observed != expected:
-        fail(f"Live pull-request binding changed or is unauthorized: {json.dumps(observed, sort_keys=True)}")
+        fail(
+            f"Live pull-request binding changed or is unauthorized: {json.dumps(observed, sort_keys=True)}"
+        )
     return pull_request
 
 
@@ -234,7 +262,9 @@ def git_output(
     return result.stdout
 
 
-def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[str, Any]:
+def materialize(
+    arguments: argparse.Namespace, output_directory: Path
+) -> dict[str, Any]:
     validate_inputs(arguments)
     if output_directory.exists():
         fail(f"Review workspace already exists: {output_directory}")
@@ -246,7 +276,9 @@ def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[s
     runner_temp = Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())).resolve()
     if not runner_temp.is_dir():
         fail("RUNNER_TEMP must identify an existing directory.")
-    with tempfile.TemporaryDirectory(prefix="exact-revision-materializer.", dir=runner_temp) as temporary:
+    with tempfile.TemporaryDirectory(
+        prefix="exact-revision-materializer.", dir=runner_temp
+    ) as temporary:
         temporary_root = Path(temporary)
         home = temporary_root / "home"
         home.mkdir(mode=0o700)
@@ -265,7 +297,12 @@ def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[s
         git_output(
             git,
             git_dir,
-            ["remote", "add", "origin", f"https://github.com/{arguments.repository}.git"],
+            [
+                "remote",
+                "add",
+                "origin",
+                f"https://github.com/{arguments.repository}.git",
+            ],
             environment=git_environment,
         )
         git_output(
@@ -276,14 +313,16 @@ def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[s
                 "--quiet",
                 "--no-tags",
                 "--no-recurse-submodules",
-                "--filter=blob:none",
                 "origin",
                 f"+{arguments.expected_base}:refs/review/base",
                 f"+{arguments.expected_head}:refs/review/head",
             ],
             environment=git_environment,
         )
-        for name, expected in (("base", arguments.expected_base), ("head", arguments.expected_head)):
+        for name, expected in (
+            ("base", arguments.expected_base),
+            ("head", arguments.expected_head),
+        ):
             resolved = str(
                 git_output(
                     git,
@@ -295,29 +334,39 @@ def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[s
             if resolved != expected:
                 fail(f"Fetched {name} object does not equal the expected object ID.")
 
-        merge_base_output = str(
-            git_output(
-                git,
-                git_dir,
-                ["merge-base", "--all", arguments.expected_base, arguments.expected_head],
-                environment=git_environment,
-            )
-        ).splitlines()
-        if len(merge_base_output) != 1:
-            fail("The exact base/head pair must have one unambiguous merge base.")
-        merge_base = require_sha(merge_base_output[0], "Merge base")
+        merge_base = require_single_sha_output(
+            str(
+                git_output(
+                    git,
+                    git_dir,
+                    [
+                        "merge-base",
+                        "--all",
+                        arguments.expected_base,
+                        arguments.expected_head,
+                    ],
+                    environment=git_environment,
+                )
+            ),
+            "Merge base",
+        )
 
-        merge_tree = str(
-            git_output(
-                git,
-                git_dir,
-                ["merge-tree", "--write-tree", arguments.expected_base, arguments.expected_head],
-                environment=git_environment,
-            )
-        ).splitlines()
-        if not merge_tree:
-            fail("Git did not produce an integration tree.")
-        integration_tree = require_sha(merge_tree[0], "Integration tree")
+        integration_tree = require_single_sha_output(
+            str(
+                git_output(
+                    git,
+                    git_dir,
+                    [
+                        "merge-tree",
+                        "--write-tree",
+                        arguments.expected_base,
+                        arguments.expected_head,
+                    ],
+                    environment=git_environment,
+                )
+            ),
+            "Integration tree",
+        )
         object_type = str(
             git_output(
                 git,
@@ -349,7 +398,10 @@ def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[s
             fail("Git returned an invalid diff representation.")
         review_bytes = len(diff)
         if review_bytes <= 0 or review_bytes >= MAX_REVIEW_BYTES:
-            fail(f"Exact-revision review input must contain 1..199999 bytes; observed {review_bytes}.")
+            fail(
+                "Exact-revision review input must contain "
+                f"1..{MAX_REVIEW_BYTES - 1} bytes; observed {review_bytes}."
+            )
         diff_sha256 = hashlib.sha256(diff).hexdigest()
 
         read_live_pull_request(arguments, home=home)
@@ -370,7 +422,9 @@ def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[s
         patch = output_directory / "change.patch"
         metadata_path = output_directory / "review-metadata.json"
         patch.write_bytes(diff)
-        metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        metadata_path.write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         patch.chmod(0o600)
         metadata_path.chmod(0o600)
         return metadata
@@ -387,7 +441,9 @@ def bind_assets(review_directory: Path, asset_paths: dict[str, Path]) -> dict[st
     if any(key in metadata for key in (*ASSET_ARGUMENTS, "input_sha256")):
         fail("Review metadata already contains protected asset bindings.")
     bound = bind_protected_assets(metadata, asset_paths)
-    metadata_path.write_text(json.dumps(bound, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    metadata_path.write_text(
+        json.dumps(bound, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return bound
 
 
@@ -399,7 +455,12 @@ def verify(
     validate_inputs(arguments)
     patch = review_directory / "change.patch"
     metadata_path = review_directory / "review-metadata.json"
-    if not patch.is_file() or patch.is_symlink() or not metadata_path.is_file() or metadata_path.is_symlink():
+    if (
+        not patch.is_file()
+        or patch.is_symlink()
+        or not metadata_path.is_file()
+        or metadata_path.is_symlink()
+    ):
         fail("The review diff and metadata must be regular, non-symlink files.")
     patch_size = patch.stat().st_size
     if patch_size <= 0 or patch_size >= MAX_REVIEW_BYTES:
@@ -423,9 +484,13 @@ def verify(
     runner_temp = Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())).resolve()
     if not runner_temp.is_dir():
         fail("RUNNER_TEMP must identify an existing directory.")
-    with tempfile.TemporaryDirectory(prefix="exact-revision-recheck.", dir=runner_temp) as temporary:
+    with tempfile.TemporaryDirectory(
+        prefix="exact-revision-recheck.", dir=runner_temp
+    ) as temporary:
         regenerated = Path(temporary) / "review"
-        actual_metadata = bind_protected_assets(materialize(arguments, regenerated), asset_paths)
+        actual_metadata = bind_protected_assets(
+            materialize(arguments, regenerated), asset_paths
+        )
         if patch.read_bytes() != (regenerated / "change.patch").read_bytes():
             fail("The full binary diff changed during exact-revision verification.")
     for key in IMMUTABLE_METADATA_KEYS:
@@ -443,7 +508,9 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--expected-base", required=True)
     parser.add_argument("--expected-head", required=True)
     parser.add_argument("--trusted-workflow-sha", required=True)
-    parser.add_argument("--trigger", required=True, choices=("ready_for_review", "app_dispatch"))
+    parser.add_argument(
+        "--trigger", required=True, choices=("ready_for_review", "app_dispatch")
+    )
     parser.add_argument("--dispatch-ref", default="")
     parser.add_argument("--review-directory", required=True, type=Path)
     parser.add_argument("--materializer-path", type=Path)
@@ -459,9 +526,15 @@ def main() -> int:
         if arguments.mode == "materialize":
             metadata = materialize(arguments, arguments.review_directory)
         elif arguments.mode == "bind-assets":
-            metadata = bind_assets(arguments.review_directory, asset_paths_from_arguments(arguments))
+            metadata = bind_assets(
+                arguments.review_directory, asset_paths_from_arguments(arguments)
+            )
         else:
-            metadata = verify(arguments, arguments.review_directory, asset_paths_from_arguments(arguments))
+            metadata = verify(
+                arguments,
+                arguments.review_directory,
+                asset_paths_from_arguments(arguments),
+            )
     except MaterializationError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
