@@ -505,7 +505,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn('test "$(git diff --name-only origin/develop HEAD --)"', workflow)
         self.assertNotIn("Create file-identical ancestry backmerge", workflow)
         self.assertNotIn("git diff --quiet origin/develop HEAD", workflow)
-        self.assertIn('non_user_visible_re+="\\\\.lit/main-ancestry\\\\.json|"', changelog_policy)
+        self.assertIn('non_user_visible_re+="\\\\.lit/main-ancestry\\\\.json$|"', changelog_policy)
 
         evidence = json.loads((ROOT / ".lit/main-ancestry.json").read_text(encoding="utf-8"))
         self.assertEqual(evidence["schema_version"], 1)
