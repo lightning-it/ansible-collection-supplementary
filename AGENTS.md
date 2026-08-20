@@ -31,16 +31,29 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
 
 1. This repository receives centrally managed baseline files rendered from `lightning-it/shared-assets-lit`.
 2. Do not hand-edit these files in downstream repos unless you also update `shared-assets-lit` and run sync.
-3. Automated shared-assets synchronization for this repository is allowlist-only. It may update exactly:
-   1. the marked shared block in `.pre-commit-config.yaml`
-   2. `scripts/wunder-container-run.sh`
-   3. the digest-pinned validation-image custom manager in `renovate.json`
-   4. `scripts/dispatch-transition-validation.py`
-4. The sync MUST preserve every other Renovate setting and all repository-local workflows, scripts, documentation,
-   tests, evidence schemas, and release-model metadata. Generic script/workflow `rsync --delete` and generic release
-   model rendering MUST NOT run against this repository.
-5. Other baseline material may be adopted from `shared-assets-lit` through an ordinary reviewed change, but it is
-   repository-local after adoption and MUST NOT be overwritten by automated synchronization.
+3. Automated synchronization is allowlist-only and MUST use the narrow
+   `scripts/sync-enterprise-collection-assets.py` controller. It may update exactly:
+   1. the marked shared block in `.pre-commit-config.yaml`, while preserving the repository-owned
+      `role-quality-*` block outside the markers byte-for-byte;
+   2. `.yamllint`, `scripts/wunder-container-run.sh`, `scripts/wunder-devtools-ee.sh`,
+      `scripts/devtools-molecule.sh`, and `scripts/dispatch-transition-validation.py`;
+   3. the three managed Renovate image managers, the guarded Renovate/shared-assets workflows, the guarded
+      Renovate ADR, and the OpenSSF Scorecard workflow;
+   4. `.github/workflows/codex-copilot-remediation.yml` and its protected prompt;
+   5. `.github/workflows/release-bot-exact-head-review.yml`,
+      `.github/workflows/current-revision-rerun.yml`, `scripts/materialize-exact-revision-review.py`, and their
+      exact-head prompt/schema;
+   6. `.github/workflows/sync-main-to-develop.yml` for deterministic, non-overwriting ancestry backmerges;
+   7. only the managed image references in `meta/source-dependencies.yml`, `scripts/lit-push-ready.py`, and
+      `examples/aap-cac.yml`, plus the exact launcher/Scorecard assertions in
+      `tests/unit/test_workflow_security.py`; and
+   8. the active `.lit/quality-policy.yml`, `.lit/quality-policy.schema.json`, and
+      `scripts/validate-quality-policy.py` artifacts.
+4. Generic script/workflow `rsync --delete` and generic release-model rendering MUST NOT run against this
+   repository. Every unlisted repository-local workflow, script, document, test, evidence schema, Renovate setting,
+   and release-model asset MUST be preserved byte-for-byte.
+5. Other baseline material may be adopted from `shared-assets-lit` only through an ordinary reviewed change. It
+   remains repository-local afterward unless this allowlist and its central regression tests are changed together.
 6. Repo-local exceptions MUST be explicit in the central sync workflow, documented here, and covered by regression
    tests in `shared-assets-lit`.
 7. The role-quality governance block in this file is enforced by `scripts/validate-role-coverage.py` and recorded in
@@ -49,7 +62,8 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    `.github/workflows/copilot-review.yml`, `scripts/security-release-intake.py`,
    `.github/workflows/security-release-intake.yml`, `scripts/security-release-dispatch.py`,
    `.github/workflows/security-release-dispatch.yml`, and
-   `tests/unit/test_security_release_request_dispatch.py`. Sync MUST preserve them byte-for-byte; after acceptance,
+   `tests/unit/test_security_release_request_dispatch.py`, `scripts/main-promotion-authorization.py`, and
+   `.github/workflows/main-promotion-authorization.yml`. Sync MUST preserve them byte-for-byte; after acceptance,
    their proven versions are canonicalized once in `shared-assets-lit`.
 
 ## 1.2 Local AI-Egress and Current-Revision Review Boundary (Mandatory)
