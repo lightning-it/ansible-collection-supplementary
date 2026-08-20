@@ -1,6 +1,9 @@
 ---
 repos:
   # >>> BEGIN shared-assets-lit pre-commit
+  # This template renders only the marked shared-assets block. Enterprise
+  # role-quality hooks outside that block are repository-local and the narrow
+  # synchronizer must preserve them byte-for-byte.
   - repo: local
     hooks:
       # -------------------------------------------------------------------
