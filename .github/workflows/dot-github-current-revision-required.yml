@@ -1,0 +1,62 @@
+# Cross-repository REP-60 trust root for lightning-it/.github.
+#
+# The organization Required Workflow is sourced from protected public
+# ansible-collection-supplementary/main so the .github repository never
+# certifies itself. shared-assets-lit remains the private canonical asset
+# owner and distributes this file byte-for-byte to that public source.
+# yamllint disable rule:truthy rule:line-length
+---
+name: Protected dot-github current-revision verifier
+
+run-name: >-
+  Cross-protect .github PR #${{ github.event.pull_request.number }}
+  ${{ github.event.action }} ${{ github.event.pull_request.head.sha }}
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: >-
+    protected-dot-github-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: false
+
+jobs:
+  verify-dot-github-current-revision:
+    name: Required dot-github current-revision workflow
+    if: github.repository == 'lightning-it/.github'
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Check out the immutable cross-repository verifier only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: lightning-it/ansible-collection-supplementary
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: protected-source
+          sparse-checkout: |
+            scripts/verify-dot-github-current-revision.py
+          sparse-checkout-cone-mode: false
+
+      - name: Verify the independently protected current-revision result
+        env:
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_BASE: ${{ github.event.pull_request.base.sha }}
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: python3 protected-source/scripts/verify-dot-github-current-revision.py
