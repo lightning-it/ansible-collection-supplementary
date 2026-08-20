@@ -18,6 +18,7 @@ concurrency:
 jobs:
   enable-trusted-renovate-automerge:
     name: Enable auto-merge for trusted Renovate PR
+    if: github.event.pull_request.user.login == 'renovate[bot]'
     runs-on: ubuntu-latest
 
     steps:
@@ -251,19 +252,31 @@ jobs:
 
           owner="${REPO%%/*}"
           name="${REPO#*/}"
-          query="query(\$owner:String!,\$name:String!,\$number:Int!){"
-          query+="repository(owner:\$owner,name:\$name){"
-          query+="pullRequest(number:\$number){autoMergeRequest{__typename}}}}"
-          auto_merge_enabled="$(
+          query_auto_merge() {
+            local query
+            query="query(\$owner:String!,\$name:String!,\$number:Int!){"
+            query+="repository(owner:\$owner,name:\$name){"
+            query+="pullRequest(number:\$number){autoMergeRequest{__typename}}}}"
             gh api graphql \
               -f query="$query" \
               -f owner="$owner" \
               -f name="$name" \
               -F number="$PR_NUMBER" \
               --jq '.data.repository.pullRequest.autoMergeRequest != null'
-          )"
+          }
+          auto_merge_enabled="$(query_auto_merge)"
           case "$auto_merge_enabled" in
-            true) gh pr merge "$PR_URL" --disable-auto ;;
+            true)
+              if ! disable_error="$(
+                gh pr merge "$PR_URL" --disable-auto 2>&1
+              )"; then
+                auto_merge_enabled="$(query_auto_merge)"
+                if [ "$auto_merge_enabled" != false ]; then
+                  printf '%s\n' "$disable_error" >&2
+                  exit 1
+                fi
+              fi
+              ;;
             false) ;;
             *)
               echo "ERROR: unable to determine auto-merge state for ${PR_URL}." >&2
@@ -361,22 +374,40 @@ jobs:
           }
 
           disable_auto_merge() {
-            local auto_merge_enabled name owner query
+            local auto_merge_enabled disable_error name owner
             owner="${REPO%%/*}"
             name="${REPO#*/}"
-            query="query(\$owner:String!,\$name:String!,\$number:Int!){"
-            query+="repository(owner:\$owner,name:\$name){"
-            query+="pullRequest(number:\$number){autoMergeRequest{__typename}}}}"
-            auto_merge_enabled="$(
+            query_auto_merge() {
+              local query
+              query="query(\$owner:String!,\$name:String!,\$number:Int!){"
+              query+="repository(owner:\$owner,name:\$name){"
+              query+="pullRequest(number:\$number){autoMergeRequest{__typename}}}}"
               gh api graphql \
                 -f query="$query" \
                 -f owner="$owner" \
                 -f name="$name" \
                 -F number="$PR_NUMBER" \
                 --jq '.data.repository.pullRequest.autoMergeRequest != null'
-            )"
-            [ "$auto_merge_enabled" = false ] \
-              || gh pr merge "$PR_URL" --disable-auto
+            }
+            auto_merge_enabled="$(query_auto_merge)"
+            case "$auto_merge_enabled" in
+              true)
+                if ! disable_error="$(
+                  gh pr merge "$PR_URL" --disable-auto 2>&1
+                )"; then
+                  auto_merge_enabled="$(query_auto_merge)"
+                  if [ "$auto_merge_enabled" != false ]; then
+                    printf '%s\n' "$disable_error" >&2
+                    return 1
+                  fi
+                fi
+                ;;
+              false) ;;
+              *)
+                echo "ERROR: unable to determine auto-merge state for ${PR_URL}." >&2
+                return 1
+                ;;
+            esac
           }
 
           if ! assert_live_safe; then
@@ -387,5 +418,5 @@ jobs:
           # governance policy deliberately prohibits Actions from submitting
           # reviews, so a synthetic self-approval would only make this path
           # fail. Auto-merge still waits for every required current-head check.
-          gh pr merge "$PR_URL" --auto --merge \
-            --match-head-commit "$PR_HEAD_SHA"
+          gh pr merge "${PR_URL}" --auto --merge --delete-branch \
+            --match-head-commit "${PR_HEAD_SHA}"
