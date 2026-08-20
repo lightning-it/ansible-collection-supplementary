@@ -1,5 +1,7 @@
 """Materialize and re-verify the bounded MLX-90 exact-revision review input."""
 
+# Format contract: Ruff 0.15.21 with line length 120 (Supplementary consumer policy).
+
 from __future__ import annotations
 
 import argparse
@@ -7,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import stat
 import subprocess
@@ -21,6 +24,7 @@ REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 RELEASE_BOT = "lightning-it-release-automation[bot]"
 MAX_REVIEW_BYTES = 200_000
 MAX_PROTECTED_ASSET_BYTES = 1_000_000
+COMMAND_TIMEOUT_SECONDS = 120
 ASSET_ARGUMENTS = {
     "materializer_sha256": "materializer_path",
     "prompt_sha256": "prompt_path",
@@ -67,6 +71,7 @@ def command_environment(*, home: Path, include_token: bool) -> dict[str, str]:
     environment = {
         "GIT_CONFIG_GLOBAL": os.devnull,
         "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_TERMINAL_PROMPT": "0",
         "HOME": str(home),
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
@@ -88,14 +93,19 @@ def run(
     cwd: Path | None = None,
     binary: bool = False,
 ) -> subprocess.CompletedProcess[Any]:
-    result = subprocess.run(  # noqa: S603
-        list(arguments),
-        cwd=cwd,
-        env=environment,
-        check=False,
-        capture_output=True,
-        text=not binary,
-    )
+    try:
+        result = subprocess.run(  # noqa: S603
+            list(arguments),
+            cwd=cwd,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=not binary,
+            timeout=COMMAND_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        command = " ".join(arguments) or "<empty-command>"
+        fail(f"Command timed out after {COMMAND_TIMEOUT_SECONDS} seconds: {command}")
     if result.returncode != 0:
         stderr = result.stderr if isinstance(result.stderr, str) else result.stderr.decode(errors="replace")
         command = " ".join(arguments) or "<empty-command>"
@@ -107,6 +117,13 @@ def require_sha(value: str, name: str) -> str:
     if not SHA1_PATTERN.fullmatch(value):
         fail(f"{name} must be a full lowercase SHA-1 object ID.")
     return value
+
+
+def require_single_sha_output(value: str, name: str) -> str:
+    lines = value.splitlines()
+    if len(lines) != 1:
+        fail(f"{name} must contain exactly one Git object ID.")
+    return require_sha(lines[0], name)
 
 
 def protected_asset_bytes(path: Path, name: str) -> bytes:
@@ -123,8 +140,10 @@ def protected_asset_bytes(path: Path, name: str) -> bytes:
         fail(f"Protected {name} is unavailable: {error}")
     try:
         details = os.fstat(descriptor)
-        if not stat.S_ISREG(details.st_mode):
-            fail(f"Protected {name} must be a regular non-symlink file.")
+        if not stat.S_ISREG(details.st_mode) or details.st_nlink != 1:
+            fail(f"Protected {name} must be one regular non-symlink file.")
+        if details.st_uid != os.geteuid():
+            fail(f"Protected {name} must be owned by the current user.")
         if details.st_size <= 0 or details.st_size > MAX_PROTECTED_ASSET_BYTES:
             fail(f"Protected {name} must contain 1..{MAX_PROTECTED_ASSET_BYTES} bytes.")
         with os.fdopen(descriptor, "rb", closefd=False) as protected_asset:
@@ -134,6 +153,139 @@ def protected_asset_bytes(path: Path, name: str) -> bytes:
         return payload
     finally:
         os.close(descriptor)
+
+
+def write_owned_regular_file(path: Path, payload: bytes, name: str) -> None:
+    """Replace a bounded owned file without following its immediate parent or target."""
+    no_follow = getattr(os, "O_NOFOLLOW", None)
+    if not isinstance(no_follow, int) or no_follow == 0:
+        fail("Protected file writing requires O_NOFOLLOW support.")
+    if len(payload) <= 0 or len(payload) > MAX_PROTECTED_ASSET_BYTES:
+        fail(f"Protected {name} must contain 1..{MAX_PROTECTED_ASSET_BYTES} bytes.")
+    if path.name in {"", ".", ".."}:
+        fail(f"Protected {name} path is invalid.")
+    close_on_exec = getattr(os, "O_CLOEXEC", 0)
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | no_follow
+    directory_flags |= close_on_exec
+    try:
+        directory = os.open(path.parent, directory_flags)
+    except OSError as error:
+        fail(f"Protected {name} parent cannot be opened safely: {error}")
+    temporary_name = f".mlx90-protected-{secrets.token_hex(16)}.tmp"
+    temporary_descriptor = -1
+    replaced = False
+    try:
+        parent_details = os.fstat(directory)
+        if not stat.S_ISDIR(parent_details.st_mode):
+            fail(f"Protected {name} parent must be a directory.")
+        if parent_details.st_uid != os.geteuid():
+            fail(f"Protected {name} parent must be owned by the current user.")
+
+        existing_descriptor = -1
+        try:
+            existing_descriptor = os.open(
+                path.name,
+                os.O_RDONLY | no_follow | close_on_exec,
+                dir_fd=directory,
+            )
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            fail(f"Protected {name} cannot be opened safely: {error}")
+        try:
+            if existing_descriptor >= 0:
+                existing = os.fstat(existing_descriptor)
+                if not stat.S_ISREG(existing.st_mode) or existing.st_nlink != 1:
+                    fail(f"Protected {name} must be one regular non-symlink file.")
+                if existing.st_uid != os.geteuid():
+                    fail(f"Protected {name} must be owned by the current user.")
+        finally:
+            if existing_descriptor >= 0:
+                os.close(existing_descriptor)
+
+        temporary_descriptor = os.open(
+            temporary_name,
+            os.O_RDWR | os.O_CREAT | os.O_EXCL | no_follow | close_on_exec,
+            0o600,
+            dir_fd=directory,
+        )
+        temporary = os.fstat(temporary_descriptor)
+        if not stat.S_ISREG(temporary.st_mode) or temporary.st_nlink != 1:
+            fail(f"Protected {name} temporary file is not a single regular file.")
+        if temporary.st_uid != os.geteuid():
+            fail(f"Protected {name} temporary file has an unexpected owner.")
+        os.fchmod(temporary_descriptor, 0o600)
+        remaining = memoryview(payload)
+        while remaining:
+            written = os.write(temporary_descriptor, remaining)
+            if written <= 0:
+                fail(f"Protected {name} was not written completely.")
+            remaining = remaining[written:]
+        os.fsync(temporary_descriptor)
+        temporary = os.fstat(temporary_descriptor)
+        if (
+            not stat.S_ISREG(temporary.st_mode)
+            or temporary.st_nlink != 1
+            or temporary.st_uid != os.geteuid()
+            or temporary.st_size != len(payload)
+        ):
+            fail(f"Protected {name} temporary file changed while writing.")
+        os.lseek(temporary_descriptor, 0, os.SEEK_SET)
+        with os.fdopen(temporary_descriptor, "rb", closefd=False) as protected_file:
+            if protected_file.read(len(payload) + 1) != payload:
+                fail(f"Protected {name} temporary content changed while writing.")
+        os.close(temporary_descriptor)
+        temporary_descriptor = -1
+
+        os.replace(
+            temporary_name,
+            path.name,
+            src_dir_fd=directory,
+            dst_dir_fd=directory,
+        )
+        replaced = True
+        # The atomic replace is the commit point. Some filesystems do not
+        # support directory fsync; no post-commit durability probe may turn a
+        # complete replacement into a reported partial-write failure.
+        try:
+            os.fsync(directory)
+        except OSError:
+            pass
+    except OSError as error:
+        fail(f"Protected {name} cannot be written atomically: {error}")
+    finally:
+        active_error = sys.exc_info()[1]
+        if temporary_descriptor >= 0:
+            try:
+                os.close(temporary_descriptor)
+            except OSError as cleanup_error:
+                cleanup_message = f"Protected {name} temporary close also failed: {cleanup_error}"
+                if active_error is None:
+                    fail(cleanup_message)
+                add_note = getattr(active_error, "add_note", None)
+                if callable(add_note):
+                    add_note(cleanup_message)
+        if not replaced:
+            try:
+                os.unlink(temporary_name, dir_fd=directory)
+            except FileNotFoundError:
+                pass
+            except OSError as cleanup_error:
+                cleanup_message = f"Protected {name} temporary cleanup also failed: {cleanup_error}"
+                if active_error is None:
+                    fail(cleanup_message)
+                add_note = getattr(active_error, "add_note", None)
+                if callable(add_note):
+                    add_note(cleanup_message)
+        try:
+            os.close(directory)
+        except OSError as cleanup_error:
+            cleanup_message = f"Protected {name} parent directory close also failed: {cleanup_error}"
+            if active_error is None:
+                fail(cleanup_message)
+            add_note = getattr(active_error, "add_note", None)
+            if callable(add_note):
+                add_note(cleanup_message)
 
 
 def bind_protected_assets(metadata: dict[str, Any], asset_paths: dict[str, Path]) -> dict[str, Any]:
@@ -202,16 +354,21 @@ def read_live_pull_request(arguments: argparse.Namespace, *, home: Path) -> dict
         "head_sha": arguments.expected_head,
         "head_repository": arguments.repository,
     }
+    user = pull_request.get("user") or {}
+    base = pull_request.get("base") or {}
+    head = pull_request.get("head") or {}
+    base_repository = base.get("repo") or {}
+    head_repository = head.get("repo") or {}
     observed = {
         "state": pull_request.get("state"),
         "draft": pull_request.get("draft"),
-        "author": pull_request.get("user", {}).get("login"),
-        "author_type": pull_request.get("user", {}).get("type"),
-        "base_ref": pull_request.get("base", {}).get("ref"),
-        "base_sha": pull_request.get("base", {}).get("sha"),
-        "base_repository": pull_request.get("base", {}).get("repo", {}).get("full_name"),
-        "head_sha": pull_request.get("head", {}).get("sha"),
-        "head_repository": pull_request.get("head", {}).get("repo", {}).get("full_name"),
+        "author": user.get("login"),
+        "author_type": user.get("type"),
+        "base_ref": base.get("ref"),
+        "base_sha": base.get("sha"),
+        "base_repository": base_repository.get("full_name"),
+        "head_sha": head.get("sha"),
+        "head_repository": head_repository.get("full_name"),
     }
     if observed != expected:
         fail(f"Live pull-request binding changed or is unauthorized: {json.dumps(observed, sort_keys=True)}")
@@ -265,7 +422,12 @@ def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[s
         git_output(
             git,
             git_dir,
-            ["remote", "add", "origin", f"https://github.com/{arguments.repository}.git"],
+            [
+                "remote",
+                "add",
+                "origin",
+                f"https://github.com/{arguments.repository}.git",
+            ],
             environment=git_environment,
         )
         git_output(
@@ -276,14 +438,16 @@ def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[s
                 "--quiet",
                 "--no-tags",
                 "--no-recurse-submodules",
-                "--filter=blob:none",
                 "origin",
                 f"+{arguments.expected_base}:refs/review/base",
                 f"+{arguments.expected_head}:refs/review/head",
             ],
             environment=git_environment,
         )
-        for name, expected in (("base", arguments.expected_base), ("head", arguments.expected_head)):
+        for name, expected in (
+            ("base", arguments.expected_base),
+            ("head", arguments.expected_head),
+        ):
             resolved = str(
                 git_output(
                     git,
@@ -295,29 +459,39 @@ def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[s
             if resolved != expected:
                 fail(f"Fetched {name} object does not equal the expected object ID.")
 
-        merge_base_output = str(
-            git_output(
-                git,
-                git_dir,
-                ["merge-base", "--all", arguments.expected_base, arguments.expected_head],
-                environment=git_environment,
-            )
-        ).splitlines()
-        if len(merge_base_output) != 1:
-            fail("The exact base/head pair must have one unambiguous merge base.")
-        merge_base = require_sha(merge_base_output[0], "Merge base")
+        merge_base = require_single_sha_output(
+            str(
+                git_output(
+                    git,
+                    git_dir,
+                    [
+                        "merge-base",
+                        "--all",
+                        arguments.expected_base,
+                        arguments.expected_head,
+                    ],
+                    environment=git_environment,
+                )
+            ),
+            "Merge base",
+        )
 
-        merge_tree = str(
-            git_output(
-                git,
-                git_dir,
-                ["merge-tree", "--write-tree", arguments.expected_base, arguments.expected_head],
-                environment=git_environment,
-            )
-        ).splitlines()
-        if not merge_tree:
-            fail("Git did not produce an integration tree.")
-        integration_tree = require_sha(merge_tree[0], "Integration tree")
+        integration_tree = require_single_sha_output(
+            str(
+                git_output(
+                    git,
+                    git_dir,
+                    [
+                        "merge-tree",
+                        "--write-tree",
+                        arguments.expected_base,
+                        arguments.expected_head,
+                    ],
+                    environment=git_environment,
+                )
+            ),
+            "Integration tree",
+        )
         object_type = str(
             git_output(
                 git,
@@ -349,7 +523,7 @@ def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[s
             fail("Git returned an invalid diff representation.")
         review_bytes = len(diff)
         if review_bytes <= 0 or review_bytes >= MAX_REVIEW_BYTES:
-            fail(f"Exact-revision review input must contain 1..199999 bytes; observed {review_bytes}.")
+            fail(f"Exact-revision review input must contain 1..{MAX_REVIEW_BYTES - 1} bytes; observed {review_bytes}.")
         diff_sha256 = hashlib.sha256(diff).hexdigest()
 
         read_live_pull_request(arguments, home=home)
@@ -369,25 +543,31 @@ def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[s
         }
         patch = output_directory / "change.patch"
         metadata_path = output_directory / "review-metadata.json"
-        patch.write_bytes(diff)
-        metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        patch.chmod(0o600)
-        metadata_path.chmod(0o600)
+        write_owned_regular_file(patch, diff, "review diff")
+        write_owned_regular_file(
+            metadata_path,
+            (json.dumps(metadata, indent=2, sort_keys=True) + "\n").encode("utf-8"),
+            "review metadata",
+        )
         return metadata
 
 
 def bind_assets(review_directory: Path, asset_paths: dict[str, Path]) -> dict[str, Any]:
     metadata_path = review_directory / "review-metadata.json"
-    if not metadata_path.is_file() or metadata_path.is_symlink():
-        fail("Review metadata must be a regular, non-symlink file.")
     try:
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata = json.loads(protected_asset_bytes(metadata_path, "review metadata").decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as error:
         fail(f"Review metadata is malformed: {error}")
+    if not isinstance(metadata, dict):
+        fail("Review metadata must be a JSON object.")
     if any(key in metadata for key in (*ASSET_ARGUMENTS, "input_sha256")):
         fail("Review metadata already contains protected asset bindings.")
     bound = bind_protected_assets(metadata, asset_paths)
-    metadata_path.write_text(json.dumps(bound, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_owned_regular_file(
+        metadata_path,
+        (json.dumps(bound, indent=2, sort_keys=True) + "\n").encode("utf-8"),
+        "review metadata",
+    )
     return bound
 
 
@@ -405,7 +585,7 @@ def verify(
     if patch_size <= 0 or patch_size >= MAX_REVIEW_BYTES:
         fail(f"The review diff must be between 1 and {MAX_REVIEW_BYTES - 1} bytes.")
     try:
-        expected_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        expected_metadata = json.loads(protected_asset_bytes(metadata_path, "review metadata").decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as error:
         fail(f"Review metadata is malformed: {error}")
     if not isinstance(expected_metadata, dict):
@@ -426,7 +606,9 @@ def verify(
     with tempfile.TemporaryDirectory(prefix="exact-revision-recheck.", dir=runner_temp) as temporary:
         regenerated = Path(temporary) / "review"
         actual_metadata = bind_protected_assets(materialize(arguments, regenerated), asset_paths)
-        if patch.read_bytes() != (regenerated / "change.patch").read_bytes():
+        if protected_asset_bytes(patch, "review diff") != protected_asset_bytes(
+            regenerated / "change.patch", "regenerated diff"
+        ):
             fail("The full binary diff changed during exact-revision verification.")
     for key in IMMUTABLE_METADATA_KEYS:
         if expected_metadata.get(key) != actual_metadata.get(key):
@@ -461,7 +643,11 @@ def main() -> int:
         elif arguments.mode == "bind-assets":
             metadata = bind_assets(arguments.review_directory, asset_paths_from_arguments(arguments))
         else:
-            metadata = verify(arguments, arguments.review_directory, asset_paths_from_arguments(arguments))
+            metadata = verify(
+                arguments,
+                arguments.review_directory,
+                asset_paths_from_arguments(arguments),
+            )
     except MaterializationError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
