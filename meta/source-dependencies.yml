@@ -79,7 +79,7 @@ container_images:
   - reference: "docker.io/smblds/smblds:latest@sha256:b89a416bc0a0a59218a05ff314d71678308cca55de1c7a1b58b07c6f83fdc5c6"
     locations:
       - "roles/samba_deploy/defaults/main.yml"
-  - reference: "docker.io/sonatype/nexus3:latest@sha256:1263e77bd1e7748d3be9028ba6472cca7f534828e92d157cd0f3c13c6909b150"
+  - reference: "docker.io/sonatype/nexus3:latest@sha256:adb4539e29bcb1c91e5545c853f6c74da5e57efd4c243aa4d5454f309904ab13"
     locations:
       - "roles/nexus/defaults/main.yml"
   - reference: "docker.io/tenableofficial/nessus:latest@sha256:c88e43fe1a8ca04a265f127fbfa474e80ab926d21862b6de5972a9465a91d8e6"
