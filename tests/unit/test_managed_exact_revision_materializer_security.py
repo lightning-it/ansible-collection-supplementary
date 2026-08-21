@@ -278,15 +278,72 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
                 ),
                 self.assertRaisesRegex(
                     self.module.MaterializationError,
-                    "parent directory close also failed",
-                ),
+                    "cleanup failed closed",
+                ) as raised,
             ):
                 self.module.write_owned_regular_file(
                     protected,
                     b"replacement",
                     "test",
                 )
+            notes = getattr(raised.exception, "__notes__", ())
+            if hasattr(raised.exception, "add_note"):
+                self.assertTrue(
+                    any("simulated directory close failure" in note for note in notes)
+                )
             self.assertEqual(b"replacement", protected.read_bytes())
+
+    def test_protected_writer_preserves_existing_close_note_when_fstat_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            protected = Path(temporary).resolve() / "protected"
+            protected.write_bytes(b"unchanged")
+            opened_parent = self.module.open_owned_parent_directory(
+                protected,
+                "test",
+                "Protected file writing",
+            )
+            real_close = self.module.os.close
+            close_attempts: list[int] = []
+
+            def close_then_report_first_failure(descriptor: int) -> None:
+                close_attempts.append(descriptor)
+                real_close(descriptor)
+                if len(close_attempts) == 1:
+                    raise OSError("simulated existing close failure")
+
+            with (
+                mock.patch.object(
+                    self.module,
+                    "open_owned_parent_directory",
+                    return_value=opened_parent,
+                ),
+                mock.patch.object(
+                    self.module.os,
+                    "fstat",
+                    side_effect=OSError("simulated fstat failure"),
+                ),
+                mock.patch.object(
+                    self.module.os,
+                    "close",
+                    side_effect=close_then_report_first_failure,
+                ),
+                self.assertRaisesRegex(
+                    self.module.MaterializationError,
+                    "simulated fstat failure",
+                ) as raised,
+            ):
+                self.module.write_owned_regular_file(
+                    protected,
+                    b"replacement",
+                    "test",
+                )
+            notes = getattr(raised.exception, "__notes__", ())
+            if hasattr(raised.exception, "add_note"):
+                self.assertTrue(
+                    any("simulated existing close failure" in note for note in notes)
+                )
+            self.assertEqual(1, close_attempts.count(close_attempts[0]))
+            self.assertEqual(b"unchanged", protected.read_bytes())
 
     def test_protected_writer_directory_close_does_not_mask_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
