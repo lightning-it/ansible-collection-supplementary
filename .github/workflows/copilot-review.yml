@@ -25,10 +25,9 @@ env:
   SUPPRESSED_COMMENTS_MARKER: suppressed comments
 
 concurrency:
-  # A synchronize/reopened verifier run must never cancel the one-time
-  # opened/ready_for_review request run before that request is recorded. GitHub
-  # can otherwise leave an already successful required check in "expected".
-  group: copilot-review-${{ github.event.pull_request.number }}-${{ github.event.action }}
+  # Serialize every observation for one PR. This preserves the one-time request
+  # and prevents event-specific runs from racing neutral check publication.
+  group: copilot-review-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 # Release-App pull requests use only the protected MLX-90 §7.2 Exact-Revision
