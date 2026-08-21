@@ -106,5 +106,11 @@ derives the AI producer run only from schema-v4 JSON evidence and the verifier
 run only from the verifier reservation's v2 external ID; both custom-check
 details URLs remain canonical `/runs/<check-id>` links. The helper cannot
 create review evidence, cannot invoke AI, and refuses a second failed retry.
+Both review producers serialize every `workflow_dispatch` input as a string,
+including the numerically constrained PR number, because GitHub's dispatch API
+rejects a JSON number before the protected helper can validate the input.
+The deterministic back-sync changes only `.lit/main-ancestry.json`; changelog
+policy treats that exact file as non-user-visible governance metadata while
+continuing to require fragments for all user-visible collection changes.
 This lets GitHub's default required-workflow events remain the immutable
 enforcement root without turning every synchronize event into an AI request.

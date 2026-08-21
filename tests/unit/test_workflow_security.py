@@ -173,7 +173,7 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn('grep -Fq "$breaking_event_pattern"', renovate)
         self.assertIn("Enable auto-merge for trusted Renovate PR", renovate)
         self.assertIn("Enable auto-merge after live-state verification", renovate)
-        self.assertIn('--match-head-commit "$PR_HEAD_SHA"', renovate)
+        self.assertIn('--match-head-commit "${PR_HEAD_SHA}"', renovate)
         self.assertNotIn("gh pr review", renovate)
         self.assertIn("prohibits Actions from submitting", renovate)
         self.assertIn('[ "$PR_AUTHOR" = "renovate[bot]" ]', changelog)
@@ -315,7 +315,8 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         remediation = (WORKFLOWS / "codex-copilot-remediation.yml").read_text(encoding="utf-8")
         self.assertIn("reviewThreads(first:100,after:$after)", remediation)
         self.assertIn('if [ "${round}" -gt 1 ]', remediation)
-        self.assertIn("No recursive repair loop is permitted", remediation)
+        self.assertIn("identical Copilot finding set repeated", remediation)
+        self.assertIn("the single automatic repair round was already consumed", remediation)
         self.assertEqual(1, remediation.count('git commit -m "fix: remediate Copilot findings'))
         self.assertEqual(1, remediation.count("gh workflow run codex-copilot-remediation.yml"))
         self.assertNotIn("maximum three automatic repair rounds", remediation)
@@ -346,11 +347,13 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertLess(push_step.index(no_op), push_step.index("git add -A"))
         self.assertLess(push_step.index('echo "changed=false"'), push_step.index("git commit -m"))
         self.assertIn('echo "changed=false" >>"${GITHUB_OUTPUT}"\n            exit 0', push_step)
-        evidence_only = workflow.split("  enable-develop-automerge-after-evidence-only-remediation:", 1)[1].split(
+        continuation = workflow.split("      - name: Explicitly continue after GITHUB_TOKEN push", 1)[1].split(
             "  enable-develop-automerge:", 1
         )[0]
-        self.assertIn("needs.remediate.outputs.changed == 'false'", evidence_only)
-        self.assertIn("gh pr checks", evidence_only)
+        self.assertIn("if: steps.push.outputs.changed == 'true'", continuation)
+        self.assertNotIn("enable-develop-automerge-after-evidence-only-remediation", workflow)
+        evidence_free_automerge = workflow.split("  enable-develop-automerge:", 1)[1]
+        self.assertIn("needs.inspect.outputs.actionable == 'false'", evidence_free_automerge)
         prompt = (ROOT / ".github" / "codex" / "prompts" / "remediate-copilot.md").read_text(encoding="utf-8")
         self.assertIn("Formatter-, linter-, or type-only style suggestions require no source edit", prompt)
         self.assertIn("Do not manufacture a no-op", prompt)
@@ -361,7 +364,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             "      - name: Explicitly continue after GITHUB_TOKEN push", 1
         )[0]
         continuation = workflow.split("      - name: Explicitly continue after GITHUB_TOKEN push", 1)[1].split(
-            "  enable-develop-automerge-after-evidence-only-remediation:", 1
+            "  enable-develop-automerge:", 1
         )[0]
         dispatch = workflow.split("  continue-after-push:", 1)[1].split("  inspect:", 1)[0]
 
@@ -375,8 +378,10 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertEqual(1, continuation.count("gh workflow run codex-copilot-remediation.yml"))
         self.assertIn('-f expected_head="${NEW_HEAD}"', continuation)
         self.assertIn('test "${current_head}" = "${EXPECTED_HEAD}"', dispatch)
-        self.assertEqual(1, dispatch.count("gh api --method POST"))
-        self.assertIn("the one final Current-Head re-review produced new material findings", workflow)
+        self.assertEqual(1, dispatch.count('"repos/${REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers"'))
+        self.assertEqual(1, dispatch.count("state=consumed"))
+        self.assertLess(dispatch.index("state=consumed"), dispatch.index("requested_reviewers"))
+        self.assertIn("the consumed marker forbids an automatic retry", dispatch)
 
     def test_review_automation_has_no_privileged_bypass_path(self) -> None:
         workflows = "\n".join(
