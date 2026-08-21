@@ -165,6 +165,12 @@ class WorkflowSecurityTests(unittest.TestCase):
 
         self.assertIn('([.labels[].name] | index("safe-automerge") != null)', copilot)
         self.assertIn('([.labels[].name] | index("breaking-update") == null)', copilot)
+        self.assertIn('$events[$last_safe_index].event == "labeled"', copilot)
+        self.assertIn("$events[$last_safe_index].actor == $author", copilot)
+        self.assertNotIn(
+            ".label == $safe_label\n                          and .actor != $author",
+            copilot,
+        )
         self.assertIn("(.head.sha == $head_sha)", copilot)
         self.assertIn("for attempt in $(seq 1 40)", copilot)
         self.assertIn(".isResolved == false", copilot)
@@ -313,19 +319,27 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertNotIn("review_is_visible_for_head()", request_job)
         self.assertNotIn("Copilot reviewer request did not become visible", request_job)
         self.assertIn(
-            "group: copilot-review-${{ github.event.pull_request.number }}",
-            copilot,
+            "group: copilot-review-request-${{ github.event.pull_request.number }}",
+            request_job,
         )
-        self.assertNotIn(
-            "github.event.pull_request.number }}-${{ github.event.action",
-            copilot,
+        verify_job = copilot.split("  verify-current-revision-policy:", 1)[1]
+        self.assertIn(
+            "group: copilot-review-verify-${{ github.event.pull_request.number }}",
+            verify_job,
         )
-        self.assertIn("cancel-in-progress: false", copilot)
+        self.assertNotIn("group: copilot-review-${{", copilot)
+        self.assertEqual(2, copilot.count("cancel-in-progress: false"))
         self.assertIn("pull_request_target:", copilot)
         self.assertIn(
-            "types: [opened, synchronize, reopened, ready_for_review]",
+            "types: [opened, synchronize, reopened, ready_for_review, edited]",
             copilot,
         )
+        self.assertIn("github.event.action == 'edited'", verify_job)
+        self.assertIn(
+            "Invalidate prior result after pull-request metadata edit",
+            verify_job,
+        )
+        self.assertIn("conclusion=failure", verify_job)
         self.assertNotIn("pull_request_review:", copilot)
         documentation = (ROOT / "docs/push-ready-optimization.md").read_text(encoding="utf-8")
         self.assertIn("when `litroc` opens an already-ready PR", documentation)
@@ -384,8 +398,13 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             'external_kind="ancestry-backmerge"',
             "mlx90-current-revision:${external_kind}:v6:${PR_NUMBER}",
             '[ "${TRUSTED_KIND}" = ancestry-backmerge ]',
-            'existing_pr_number="$(jq -er',
+            'if existing_pr_number="$(jq -er',
             'test "${existing_pr_number}" = "${PR_NUMBER}"',
+            'and (has("pull_request_number") | not)',
+            '"repos/${REPOSITORY}/actions/runs/${legacy_run_id}"',
+            ".number == $pr_number",
+            ".head.sha == $head",
+            ".base.sha == $base",
         ):
             with self.subTest(evidence_binding=evidence_binding):
                 self.assertIn(evidence_binding, workflow)
