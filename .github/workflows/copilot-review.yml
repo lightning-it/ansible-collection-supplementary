@@ -1,8 +1,9 @@
 # Repository-owned MLX-90 golden-path incubation asset; canonicalize after real humanActions=0 acceptance.
 # Adopted from the protected shared-assets controller at 309d27c97e89cd60a9ae52d8c606dd1c74270d7b.
 # Protected per-repository MLX-90/REP-60 current-revision controller.
-# Release-App review belongs only to the sibling protected controller at
-# .github/workflows/release-bot-exact-head-review.yml.
+# Release-App AI review belongs only to the sibling protected controller at
+# .github/workflows/release-bot-exact-head-review.yml. This controller separately
+# permits only the deterministic, AI-free evidence-bound ancestry backmerge exemption.
 # yamllint disable rule:truthy rule:line-length
 ---
 name: Current revision review gate

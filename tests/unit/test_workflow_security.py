@@ -322,6 +322,12 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self,
     ) -> None:
         workflow = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
+        self.assertIn("Release-App AI review belongs only", workflow)
+        self.assertIn(
+            "deterministic, AI-free evidence-bound ancestry backmerge exemption",
+            workflow,
+        )
+        self.assertNotIn("Release-App review belongs only", workflow)
         request_condition = workflow.split(
             "\n  request-current-revision-review:",
             1,
