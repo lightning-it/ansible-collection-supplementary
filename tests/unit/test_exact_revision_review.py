@@ -384,8 +384,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         binding = 'base_ref="$(jq -er \'.base.ref | select(. == "develop" or . == "main")\''
         self.assertEqual(workflow.count(binding), 2)
         self.assertIn(
-            "mlx90-current-revision:${external_kind}:v6:${PR_NUMBER}:"
-            "${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}",
+            "mlx90-current-revision:${external_kind}:v6:${PR_NUMBER}:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}",
             workflow,
         )
         self.assertIn("'{schema:4,base_sha:$base,head_sha:$head,", workflow)
