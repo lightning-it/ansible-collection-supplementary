@@ -116,10 +116,12 @@ jobs:
           requested_reviewers_url="repos/${REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers"
           marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
           review_exists_for_head() {
-            local reviews
-            reviews="$(gh api --paginate --slurp \
-              "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100")"
-            jq -e \
+            local reviews review_status
+            if ! reviews="$(gh api --paginate --slurp \
+                "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100")"; then
+              return 2
+            fi
+            if jq -e \
               --arg reviewer "${reviewer}" \
               --arg head "${EXPECTED_HEAD}" \
               --arg retry_unable "${UNABLE_REVIEW_MARKER}" \
@@ -139,11 +141,25 @@ jobs:
                     and ($body | contains($retry_suppressed) | not)
                     and ($body | contains("encountered an error") | not))
                 )
-              ' <<<"${reviews}" >/dev/null
+              ' <<<"${reviews}" >/dev/null; then
+              return 0
+            else
+              review_status=$?
+              if [ "${review_status}" -eq 1 ]; then
+                return 1
+              fi
+              return 2
+            fi
           }
           if review_exists_for_head; then
             echo "Copilot already reviewed the exact finalized head."
             exit 0
+          else
+            review_status=$?
+            if [ "${review_status}" -ne 1 ]; then
+              echo "Unable to verify existing Copilot reviews; refusing a duplicate request." >&2
+              exit "${review_status}"
+            fi
           fi
           reviewer_is_requested() {
             local response
@@ -923,7 +939,8 @@ jobs:
           result_title="Current revision review passed"
           if { [ "${author}" = 'lightning-it-release-automation[bot]' ] \
               || { [ "${REPOSITORY}" = "lightning-it/.github" ] \
-                && [ "${author}" = 'lightning-it-shared-assets-sync[bot]' ]; }; }; then
+                && [ "${author}" = 'lightning-it-shared-assets-sync[bot]' ] \
+                && [ "${TRUSTED_KIND}" = ancestry-backmerge ]; }; }; then
             test "${TRUSTED_KIND}" = ancestry-backmerge
             test "${base_ref}" = develop
             [[ "${EVENT_HEAD_REF}" == backmerge/*-main ]]
@@ -1008,6 +1025,10 @@ jobs:
               exit 1
             fi
             if [ "${count}" -eq 1 ]; then
+              existing_pr_number="$(jq -er \
+                '.[0].output.summary | fromjson | .pull_request_number |
+                 select(type == "number" and . > 0)' <<<"${named}")"
+              test "${existing_pr_number}" = "${PR_NUMBER}"
               check_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' <<<"${named}")"
               check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}"
               # A new bound producer must refresh the terminal timestamp. GitHub's

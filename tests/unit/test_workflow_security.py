@@ -300,6 +300,8 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertNotIn("synchronize", request_job)
         self.assertIn('test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"', request_job)
         self.assertIn("Copilot already reviewed the exact finalized head", request_job)
+        self.assertIn("Unable to verify existing Copilot reviews", request_job)
+        self.assertIn('if [ "${review_status}" -ne 1 ]; then', request_job)
         self.assertIn("mlx90-copilot-request head=${EXPECTED_HEAD}", request_job)
         self.assertIn(
             "The one exact-head Copilot request was already consumed; automatic retry is forbidden.",
@@ -325,6 +327,9 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             copilot,
         )
         self.assertNotIn("pull_request_review:", copilot)
+        documentation = (ROOT / "docs/push-ready-optimization.md").read_text(encoding="utf-8")
+        self.assertIn("when `litroc` opens an already-ready PR", documentation)
+        self.assertIn("Opening a draft and every synchronize event remain AI-free", documentation)
 
     def test_release_app_ancestry_backmerge_is_deterministic_and_never_requests_copilot(
         self,
@@ -378,6 +383,9 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             'review_path="deterministic evidence-bound ancestry exemption"',
             'external_kind="ancestry-backmerge"',
             "mlx90-current-revision:${external_kind}:v6:${PR_NUMBER}",
+            '[ "${TRUSTED_KIND}" = ancestry-backmerge ]',
+            'existing_pr_number="$(jq -er',
+            'test "${existing_pr_number}" = "${PR_NUMBER}"',
         ):
             with self.subTest(evidence_binding=evidence_binding):
                 self.assertIn(evidence_binding, workflow)

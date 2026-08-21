@@ -399,6 +399,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn('select(.app.id == 15368 and .app.slug == "github-actions")', workflow)
         self.assertIn('if [ "${count}" -gt 1 ]; then', workflow)
         self.assertIn("Multiple protected ${check_name} results exist", workflow)
+        self.assertIn('test "${existing_pr_number}" = "${PR_NUMBER}"', workflow)
         self.assertIn("and .external_id == $external_id", workflow)
         self.assertIn("${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}", workflow)
         self.assertGreaterEqual(workflow.count('-f "details_url=${check_url}"'), 2)
