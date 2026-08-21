@@ -384,24 +384,28 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         binding = 'base_ref="$(jq -er \'.base.ref | select(. == "develop" or . == "main")\''
         self.assertEqual(workflow.count(binding), 2)
         self.assertIn(
-            "mlx90-current-revision:copilot:v4:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}",
+            "mlx90-current-revision:${external_kind}:v6:${PR_NUMBER}:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}",
             workflow,
         )
         self.assertIn("'{schema:4,base_sha:$base,head_sha:$head,", workflow)
         self.assertIn("controller_sha:$controller", workflow)
+        self.assertIn("pull_request_number:$pr_number", workflow)
         self.assertIn("producer_run_id:$run_id", workflow)
-        self.assertIn('named="$(jq -c', workflow)
+        self.assertIn("read_named_checks() {", workflow)
         self.assertIn(
-            "select(.name == $name and .external_id == $external_id)",
+            "select(.name == $name)",
             workflow,
         )
-        self.assertIn(".[0].app.id == 15368", workflow)
-        self.assertIn(".[0].external_id == $external_id", workflow)
+        self.assertIn('select(.app.id == 15368 and .app.slug == "github-actions")', workflow)
+        self.assertIn('if [ "${count}" -gt 1 ]; then', workflow)
+        self.assertIn("Multiple protected ${check_name} results exist", workflow)
+        self.assertIn('test "${existing_pr_number}" = "${PR_NUMBER}"', workflow)
+        self.assertIn("and .external_id == $external_id", workflow)
         self.assertIn("${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}", workflow)
-        self.assertEqual(1, workflow.count('-f "details_url=${check_url}"'))
-        self.assertEqual(1, workflow.count('gh api --method PATCH "repos/${REPOSITORY}/check-runs/${check_id}"'))
+        self.assertGreaterEqual(workflow.count('-f "details_url=${check_url}"'), 2)
+        self.assertIn('created="$(api_patch "repos/${REPOSITORY}/check-runs/${check_id}"', workflow)
 
-    def test_release_app_pull_requests_do_not_enter_the_copilot_job(self) -> None:
+    def test_release_app_enters_only_the_deterministic_backmerge_path(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")
         request_job = workflow.split("  request-current-revision-review:", 1)[1].split(
             "  verify-current-revision-policy:", 1
@@ -415,6 +419,10 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         condition = review_job.split("    if: >-", 1)[1].split("    permissions:", 1)[0]
         self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", condition)
         self.assertIn("github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'", condition)
+        self.assertIn("github.event.pull_request.user.login == 'lightning-it-release-automation[bot]'", condition)
+        self.assertIn("github.event.pull_request.base.ref == 'develop'", condition)
+        self.assertIn("startsWith(github.event.pull_request.head.ref, 'backmerge/')", condition)
+        self.assertIn("endsWith(github.event.pull_request.head.ref, '-main')", condition)
         self.assertIn("name: Verify current revision policy", review_job)
         self.assertNotIn("\n    name: Current revision review\n", workflow)
         self.assertNotIn("\n    name: Successful Copilot review\n", workflow)
@@ -432,7 +440,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn('--arg sha "${EVENT_HEAD}"', review_job)
         self.assertIn(".head_branch == $branch", review_job)
         self.assertIn(".head_sha == $sha", review_job)
-        self.assertIn("Copilot review request is already recorded", request_job)
+        self.assertIn("The one exact-head Copilot request was already consumed", request_job)
         self.assertIn("Copilot review request accepted", request_job)
         self.assertNotIn("review_is_visible_for_head()", request_job)
         self.assertNotIn("--method DELETE", request_job)

@@ -165,6 +165,12 @@ class WorkflowSecurityTests(unittest.TestCase):
 
         self.assertIn('([.labels[].name] | index("safe-automerge") != null)', copilot)
         self.assertIn('([.labels[].name] | index("breaking-update") == null)', copilot)
+        self.assertIn('$events[$last_safe_index].event == "labeled"', copilot)
+        self.assertIn("$events[$last_safe_index].actor == $author", copilot)
+        self.assertNotIn(
+            ".label == $safe_label\n                          and .actor != $author",
+            copilot,
+        )
         self.assertIn("(.head.sha == $head_sha)", copilot)
         self.assertIn("for attempt in $(seq 1 40)", copilot)
         self.assertIn(".isResolved == false", copilot)
@@ -294,23 +300,116 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             "  verify-current-revision-policy:", 1
         )[0]
         self.assertIn("github.event.action == 'ready_for_review'", request_job)
-        self.assertNotIn("github.event.action == 'opened'", request_job)
+        self.assertIn("github.event.action == 'opened'", request_job)
         self.assertIn("github.event_name == 'pull_request_target'", request_job)
         self.assertNotIn("workflow_dispatch", request_job)
         self.assertNotIn("synchronize", request_job)
         self.assertIn('test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"', request_job)
         self.assertIn("Copilot already reviewed the exact finalized head", request_job)
+        self.assertIn("Unable to verify existing Copilot reviews", request_job)
+        self.assertIn('if [ "${review_status}" -ne 1 ]; then', request_job)
         self.assertIn("mlx90-copilot-request head=${EXPECTED_HEAD}", request_job)
-        self.assertIn("Copilot review request is already recorded for the exact finalized head", request_job)
+        self.assertIn(
+            "The one exact-head Copilot request was already consumed; automatic retry is forbidden.",
+            request_job,
+        )
         self.assertIn("Copilot review is already pending for the exact finalized head", request_job)
         self.assertIn("Copilot review request accepted for finalized head", request_job)
         self.assertNotIn('gh api --method DELETE "${requested_reviewers_url}"', request_job)
         self.assertNotIn("review_is_visible_for_head()", request_job)
         self.assertNotIn("Copilot reviewer request did not become visible", request_job)
-        self.assertIn("cancel-in-progress: false", copilot)
+        self.assertIn(
+            "group: copilot-review-request-${{ github.event.pull_request.number }}",
+            request_job,
+        )
+        verify_job = copilot.split("  verify-current-revision-policy:", 1)[1]
+        self.assertIn(
+            "group: copilot-review-verify-${{ github.event.pull_request.number }}",
+            verify_job,
+        )
+        self.assertNotIn("group: copilot-review-${{", copilot)
+        self.assertEqual(2, copilot.count("cancel-in-progress: false"))
         self.assertIn("pull_request_target:", copilot)
-        self.assertIn("types: [ready_for_review]", copilot)
+        self.assertIn(
+            "types: [opened, synchronize, reopened, ready_for_review, edited]",
+            copilot,
+        )
+        self.assertIn("github.event.action == 'edited'", verify_job)
+        self.assertIn(
+            "Invalidate prior result after pull-request metadata edit",
+            verify_job,
+        )
+        self.assertIn("conclusion=failure", verify_job)
         self.assertNotIn("pull_request_review:", copilot)
+        documentation = (ROOT / "docs/push-ready-optimization.md").read_text(encoding="utf-8")
+        self.assertIn("when `litroc` opens an already-ready PR", documentation)
+        self.assertIn("Opening a draft and every synchronize event remain AI-free", documentation)
+
+    def test_release_app_ancestry_backmerge_is_deterministic_and_never_requests_copilot(
+        self,
+    ) -> None:
+        workflow = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
+        self.assertIn("Release-App AI review belongs only", workflow)
+        self.assertIn(
+            "deterministic, AI-free evidence-bound ancestry backmerge exemption",
+            workflow,
+        )
+        self.assertNotIn("Release-App review belongs only", workflow)
+        request_condition = workflow.split(
+            "\n  request-current-revision-review:",
+            1,
+        )[1].split("    permissions:", 1)[0]
+        self.assertIn(
+            "github.event.pull_request.user.login == 'litroc'",
+            request_condition,
+        )
+        self.assertNotIn("lightning-it-release-automation[bot]", request_condition)
+        self.assertNotIn("github.event.action == 'synchronize'", request_condition)
+
+        review_condition = workflow.split(
+            "  verify-current-revision-policy:",
+            1,
+        )[1].split("    permissions:", 1)[0]
+        for exact_binding in (
+            "github.event.action == 'opened'",
+            "github.event.action == 'synchronize'",
+            "github.event.action == 'reopened'",
+            "github.event.action == 'ready_for_review'",
+            "github.event.pull_request.user.login == 'lightning-it-release-automation[bot]'",
+            "github.event.pull_request.base.ref == 'develop'",
+            "startsWith(github.event.pull_request.head.ref, 'backmerge/')",
+            "endsWith(github.event.pull_request.head.ref, '-main')",
+            "'chore(governance): record main ancestry before '",
+        ):
+            with self.subTest(exact_binding=exact_binding):
+                self.assertIn(exact_binding, review_condition)
+
+        for evidence_binding in (
+            "Verify evidence-bound ancestry backmerge",
+            "trusted_kind=ancestry-backmerge",
+            '"repos/${REPOSITORY}/git/commits/${HEAD_SHA}"',
+            '"repos/${REPOSITORY}/branches/develop"',
+            '"repos/${REPOSITORY}/branches/main"',
+            ".parents[0].sha == $develop",
+            ".parents[1].sha == $main",
+            '.files[0].filename == ".lit/main-ancestry.json"',
+            "contents/.lit/main-ancestry.json?ref=${HEAD_SHA}",
+            'review_path="deterministic evidence-bound ancestry exemption"',
+            'external_kind="ancestry-backmerge"',
+            "mlx90-current-revision:${external_kind}:v6:${PR_NUMBER}",
+            '[ "${TRUSTED_KIND}" = ancestry-backmerge ]',
+            'if existing_pr_number="$(jq -er',
+            'test "${existing_pr_number}" = "${PR_NUMBER}"',
+            'and (has("pull_request_number") | not)',
+            '"repos/${REPOSITORY}/actions/runs/${legacy_run_id}"',
+            ".number == $pr_number",
+            ".head.sha == $head",
+            ".base.sha == $base",
+        ):
+            with self.subTest(evidence_binding=evidence_binding):
+                self.assertIn(evidence_binding, workflow)
+        self.assertNotIn("gh auth setup-git", workflow)
+        self.assertNotIn("git fetch", workflow)
 
         remediation = (WORKFLOWS / "codex-copilot-remediation.yml").read_text(encoding="utf-8")
         self.assertIn("reviewThreads(first:100,after:$after)", remediation)
