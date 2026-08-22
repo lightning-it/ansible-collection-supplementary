@@ -382,6 +382,14 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("id: review-dispatch-app", ancestry)
         self.assertIn("permission-actions: write", ancestry)
         self.assertIn("release-bot-exact-head-review.yml", ancestry)
+        self.assertIn(
+            'push --porcelain origin "${desired_head}:refs/heads/${upload_branch}"',
+            ancestry,
+        )
+        self.assertNotIn(
+            'push --porcelain origin "HEAD:refs/heads/${upload_branch}"',
+            ancestry,
+        )
         self.assertLess(
             ancestry.index("gh workflow run release-bot-exact-head-review.yml"),
             ancestry.index("Enable protected ancestry auto-merge"),
