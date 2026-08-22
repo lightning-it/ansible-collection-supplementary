@@ -442,13 +442,19 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn('select(.app.id == 15368 and .app.slug == "github-actions")', workflow)
         self.assertIn('if [ "${count}" -gt 1 ]; then', workflow)
         self.assertIn("Multiple protected ${check_name} results exist", workflow)
-        self.assertIn('test "${existing_pr_number}" = "${PR_NUMBER}"', workflow)
+        self.assertIn("read_metadata_revision() {", workflow)
+        self.assertIn("pull_request_last_edited_at", workflow)
+        self.assertIn(
+            "mlx90-current-revision:metadata-edit:v1:${PR_NUMBER}:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}",
+            workflow,
+        )
+        self.assertIn("pull-request metadata changed during result publication", workflow)
         self.assertIn("and .external_id == $external_id", workflow)
         self.assertIn("${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}", workflow)
         self.assertGreaterEqual(workflow.count('-f "details_url=${check_url}"'), 2)
         self.assertIn('created="$(api_patch "repos/${REPOSITORY}/check-runs/${check_id}"', workflow)
 
-    def test_release_app_enters_only_the_deterministic_backmerge_path(self) -> None:
+    def test_release_app_is_excluded_from_the_human_review_controller(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")
         request_job = workflow.split("  request-current-revision-review:", 1)[1].split(
             "  verify-current-revision-policy:", 1
@@ -462,10 +468,14 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         condition = review_job.split("    if: >-", 1)[1].split("    permissions:", 1)[0]
         self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", condition)
         self.assertIn("github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'", condition)
-        self.assertIn("github.event.pull_request.user.login == 'lightning-it-release-automation[bot]'", condition)
-        self.assertIn("github.event.pull_request.base.ref == 'develop'", condition)
-        self.assertIn("startsWith(github.event.pull_request.head.ref, 'backmerge/')", condition)
-        self.assertIn("endsWith(github.event.pull_request.head.ref, '-main')", condition)
+        self.assertNotIn("github.event.pull_request.user.login == 'lightning-it-release-automation[bot]'", condition)
+        self.assertNotIn("github.event.pull_request.base.ref == 'develop'", condition)
+        self.assertNotIn("startsWith(github.event.pull_request.head.ref, 'backmerge/')", condition)
+        self.assertNotIn("endsWith(github.event.pull_request.head.ref, '-main')", condition)
+        self.assertIn(
+            "test \"${author}\" != 'lightning-it-release-automation[bot]'",
+            review_job,
+        )
         self.assertIn("name: Verify current revision policy", review_job)
         self.assertNotIn("\n    name: Current revision review\n", workflow)
         self.assertNotIn("\n    name: Successful Copilot review\n", workflow)
@@ -531,10 +541,15 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         ancestry = (ROOT / ".github/workflows/sync-main-to-develop.yml").read_text(encoding="utf-8")
         self.assertNotIn("--draft", ancestry)
         self.assertNotIn("gh pr ready", ancestry)
-        self.assertNotIn("release-bot-exact-head-review.yml", ancestry)
+        self.assertIn("id: review-dispatch-app", ancestry)
+        self.assertIn("release-bot-exact-head-review.yml", ancestry)
         self.assertIn(".isDraft == false", ancestry)
         self.assertIn("and .headRefOid == $expected_head", ancestry)
         self.assertIn("mergeMethod:MERGE", ancestry)
+        self.assertLess(
+            ancestry.index("gh workflow run release-bot-exact-head-review.yml"),
+            ancestry.index("Enable protected ancestry auto-merge"),
+        )
         release_prepare = (ROOT / ".github/workflows/release-prepare.yml").read_text(encoding="utf-8")
         self.assertIn('gh pr ready "$existing" --repo "$GITHUB_REPOSITORY"', release_prepare)
         release_edit = release_prepare.split('gh pr edit "$existing"', 1)[1].split("--title", 1)[0]

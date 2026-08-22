@@ -165,9 +165,9 @@ class WorkflowSecurityTests(unittest.TestCase):
 
         self.assertIn('([.labels[].name] | index("safe-automerge") != null)', copilot)
         self.assertIn('([.labels[].name] | index("breaking-update") == null)', copilot)
-        self.assertIn('$events[$last_safe_index].event == "labeled"', copilot)
+        self.assertIn('$events[.].event == "labeled"', copilot)
         self.assertIn("$events[$last_safe_index].actor == $author", copilot)
-        self.assertNotIn(
+        self.assertIn(
             ".label == $safe_label\n                          and .actor != $author",
             copilot,
         )
@@ -306,8 +306,8 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertNotIn("synchronize", request_job)
         self.assertIn('test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"', request_job)
         self.assertIn("Copilot already reviewed the exact finalized head", request_job)
-        self.assertIn("Unable to verify existing Copilot reviews", request_job)
-        self.assertIn('if [ "${review_status}" -ne 1 ]; then', request_job)
+        self.assertIn('reviews="$(gh api --paginate --slurp', request_job)
+        self.assertNotIn("review_status", request_job)
         self.assertIn("mlx90-copilot-request head=${EXPECTED_HEAD}", request_job)
         self.assertIn(
             "The one exact-head Copilot request was already consumed; automatic retry is forbidden.",
@@ -318,16 +318,16 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertNotIn('gh api --method DELETE "${requested_reviewers_url}"', request_job)
         self.assertNotIn("review_is_visible_for_head()", request_job)
         self.assertNotIn("Copilot reviewer request did not become visible", request_job)
-        self.assertIn(
-            "group: copilot-review-request-${{ github.event.pull_request.number }}",
-            request_job,
-        )
+        self.assertNotIn("concurrency:", request_job)
         verify_job = copilot.split("  verify-current-revision-policy:", 1)[1]
         self.assertIn(
             "group: copilot-review-verify-${{ github.event.pull_request.number }}",
             verify_job,
         )
-        self.assertNotIn("group: copilot-review-${{", copilot)
+        self.assertIn(
+            "group: copilot-review-${{ github.event.pull_request.number }}-${{ github.event.action }}",
+            copilot,
+        )
         self.assertEqual(2, copilot.count("cancel-in-progress: false"))
         self.assertIn("pull_request_target:", copilot)
         self.assertIn(
@@ -345,16 +345,19 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("when `litroc` opens an already-ready PR", documentation)
         self.assertIn("Opening a draft and every synchronize event remain AI-free", documentation)
 
-    def test_release_app_ancestry_backmerge_is_deterministic_and_never_requests_copilot(
+    def test_release_app_ancestry_backmerge_uses_only_exact_revision_codex(
         self,
     ) -> None:
         workflow = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
-        self.assertIn("Release-App AI review belongs only", workflow)
-        self.assertIn(
+        ancestry = (WORKFLOWS / "sync-main-to-develop.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Release-App review belongs only", workflow)
+        self.assertNotIn("Release-App AI review belongs only", workflow)
+        self.assertNotIn(
             "deterministic, AI-free evidence-bound ancestry backmerge exemption",
             workflow,
         )
-        self.assertNotIn("Release-App review belongs only", workflow)
         request_condition = workflow.split(
             "\n  request-current-revision-review:",
             1,
@@ -370,46 +373,25 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             "  verify-current-revision-policy:",
             1,
         )[1].split("    permissions:", 1)[0]
-        for exact_binding in (
-            "github.event.action == 'opened'",
-            "github.event.action == 'synchronize'",
-            "github.event.action == 'reopened'",
-            "github.event.action == 'ready_for_review'",
-            "github.event.pull_request.user.login == 'lightning-it-release-automation[bot]'",
-            "github.event.pull_request.base.ref == 'develop'",
-            "startsWith(github.event.pull_request.head.ref, 'backmerge/')",
-            "endsWith(github.event.pull_request.head.ref, '-main')",
-            "'chore(governance): record main ancestry before '",
-        ):
-            with self.subTest(exact_binding=exact_binding):
-                self.assertIn(exact_binding, review_condition)
-
-        for evidence_binding in (
-            "Verify evidence-bound ancestry backmerge",
-            "trusted_kind=ancestry-backmerge",
-            '"repos/${REPOSITORY}/git/commits/${HEAD_SHA}"',
-            '"repos/${REPOSITORY}/branches/develop"',
-            '"repos/${REPOSITORY}/branches/main"',
-            ".parents[0].sha == $develop",
-            ".parents[1].sha == $main",
-            '.files[0].filename == ".lit/main-ancestry.json"',
-            "contents/.lit/main-ancestry.json?ref=${HEAD_SHA}",
-            'review_path="deterministic evidence-bound ancestry exemption"',
-            'external_kind="ancestry-backmerge"',
-            "mlx90-current-revision:${external_kind}:v6:${PR_NUMBER}",
-            '[ "${TRUSTED_KIND}" = ancestry-backmerge ]',
-            'if existing_pr_number="$(jq -er',
-            'test "${existing_pr_number}" = "${PR_NUMBER}"',
-            'and (has("pull_request_number") | not)',
-            '"repos/${REPOSITORY}/actions/runs/${legacy_run_id}"',
-            ".number == $pr_number",
-            ".head.sha == $head",
-            ".base.sha == $base",
-        ):
-            with self.subTest(evidence_binding=evidence_binding):
-                self.assertIn(evidence_binding, workflow)
-        self.assertNotIn("gh auth setup-git", workflow)
-        self.assertNotIn("git fetch", workflow)
+        self.assertIn(
+            "github.event.pull_request.user.login != "
+            "'lightning-it-release-automation[bot]'",
+            review_condition,
+        )
+        self.assertNotIn(
+            "github.event.pull_request.user.login == "
+            "'lightning-it-release-automation[bot]'",
+            review_condition,
+        )
+        self.assertIn("id: review-dispatch-app", ancestry)
+        self.assertIn("permission-actions: write", ancestry)
+        self.assertIn("release-bot-exact-head-review.yml", ancestry)
+        self.assertLess(
+            ancestry.index("gh workflow run release-bot-exact-head-review.yml"),
+            ancestry.index("Enable protected ancestry auto-merge"),
+        )
+        self.assertNotIn("openai/codex-action", ancestry)
+        self.assertNotIn("copilot", ancestry.lower())
 
         remediation = (WORKFLOWS / "codex-copilot-remediation.yml").read_text(encoding="utf-8")
         self.assertIn("reviewThreads(first:100,after:$after)", remediation)
