@@ -349,9 +349,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self,
     ) -> None:
         workflow = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
-        ancestry = (WORKFLOWS / "sync-main-to-develop.yml").read_text(
-            encoding="utf-8"
-        )
+        ancestry = (WORKFLOWS / "sync-main-to-develop.yml").read_text(encoding="utf-8")
         self.assertIn("Release-App review belongs only", workflow)
         self.assertNotIn("Release-App AI review belongs only", workflow)
         self.assertNotIn(
@@ -374,13 +372,11 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             1,
         )[1].split("    permissions:", 1)[0]
         self.assertIn(
-            "github.event.pull_request.user.login != "
-            "'lightning-it-release-automation[bot]'",
+            "github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'",
             review_condition,
         )
         self.assertNotIn(
-            "github.event.pull_request.user.login == "
-            "'lightning-it-release-automation[bot]'",
+            "github.event.pull_request.user.login == 'lightning-it-release-automation[bot]'",
             review_condition,
         )
         self.assertIn("id: review-dispatch-app", ancestry)
