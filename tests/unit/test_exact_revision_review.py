@@ -522,6 +522,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
     def test_release_app_pr_creators_finalize_draft_once(self) -> None:
         for name in (
             "promote-develop-to-main.yml",
+            "sync-main-to-develop.yml",
             "release-prepare.yml",
             "release-back-sync.yml",
         ):
