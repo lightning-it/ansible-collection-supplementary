@@ -353,9 +353,52 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             rerun,
         )
         self.assertGreaterEqual(rerun.count(".triggering_actor.login == $actor"), 2)
-        self.assertIn("run_attempt=", rerun)
-        self.assertIn('if [ "${run_attempt}" -ne 1 ]', rerun)
-        self.assertEqual(1, rerun.count('/rerun" >/dev/null'))
+        retry = rerun.split(
+            'test "$(jq -r .conclusion <<<"${run}")" = failure',
+            1,
+        )[1]
+        self.assertIn("run_attempt=", retry)
+        self.assertIn('if [ "${run_attempt}" -gt 2 ]', retry)
+        self.assertIn('if [ "${run_attempt}" -eq 2 ]', retry)
+        self.assertIn(
+            "repos/${REPOSITORY}/actions/runs/${run_id}/attempts/1/jobs?filter=all&per_page=100",
+            retry,
+        )
+        self.assertIn(
+            '[.[].jobs[] | select(.name == "Required current-revision workflow") '
+            "| select(.run_attempt == 1) "
+            '| select(.status == "completed" and .conclusion == "failure")]',
+            retry,
+        )
+        self.assertIn('test "$(jq \'length\' <<<"${rerunnable_jobs}")" -eq 1', retry)
+        self.assertIn(
+            "repos/${REPOSITORY}/actions/jobs/${required_job_id}/rerun",
+            retry,
+        )
+        self.assertNotIn(
+            "repos/${REPOSITORY}/actions/runs/${run_id}/rerun",
+            retry,
+        )
+        self.assertEqual(1, retry.count('/rerun" >/dev/null'))
+        self.assertIn('if [ "${observed_attempt}" -ne 2 ]', retry)
+        self.assertIn('if [ "${observed_attempt}" -gt 2 ]', retry)
+        self.assertIn(
+            'if [ "${observed_attempt}" -eq 2 ] && [ "${status}" = completed ]',
+            retry,
+        )
+        self.assertIn(
+            "repos/${REPOSITORY}/actions/runs/${run_id}/attempts/2/jobs?filter=all&per_page=100",
+            retry,
+        )
+        self.assertIn("select(.run_attempt == 2)", retry)
+        self.assertIn(
+            'test "$(jq \'length\' <<<"${completed_required_jobs}")" -eq 1',
+            retry,
+        )
+        self.assertIn("post_neutral_pages=", retry)
+        self.assertIn(".external_id == $external_id", retry)
+        self.assertIn(".id == $check_id", retry)
+        self.assertIn('test "$(jq \'length\' <<<"${post_neutral}")" -eq 1', retry)
         required_run = rerun.split(
             'run="$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}")"',
             1,
