@@ -1,9 +1,8 @@
-# Repository-owned MLX-90 golden-path incubation asset; canonicalize after real humanActions=0 acceptance.
-# Adopted from the protected shared-assets controller at 309d27c97e89cd60a9ae52d8c606dd1c74270d7b.
+# Managed by lightning-it/shared-assets-lit.
+# Do not edit downstream copies directly.
 # Protected per-repository MLX-90/REP-60 current-revision controller.
-# Release-App AI review belongs only to the sibling protected controller at
-# .github/workflows/release-bot-exact-head-review.yml. This controller separately
-# permits only the deterministic, AI-free evidence-bound ancestry backmerge exemption.
+# Release-App review belongs only to the sibling protected controller at
+# .github/workflows/release-bot-exact-head-review.yml.
 # yamllint disable rule:truthy rule:line-length
 ---
 name: Current revision review gate
@@ -24,11 +23,17 @@ env:
   QUOTA_EXCEEDED_MARKER: quota exceeded
   SUPPRESSED_COMMENTS_MARKER: suppressed comments
 
-# Release-App pull requests use only the protected MLX-90 §7.2 Exact-Revision
-# Codex check, except for a zero-diff ancestry merge proven deterministically
-# against both protected tips and the develop tree. This workflow retains the
-# final-head GitHub Copilot path for applicable human PRs plus the governed
-# automation exemptions.
+concurrency:
+  # A synchronize/reopened verifier run must never cancel the one-time
+  # opened/ready_for_review request run before that request is recorded. GitHub
+  # can otherwise leave an already successful required check in "expected".
+  group: copilot-review-${{ github.event.pull_request.number }}-${{ github.event.action }}
+  cancel-in-progress: false
+
+# Release-App pull requests use only the sibling protected MLX-90 §7.2
+# Exact-Revision Codex check, without an exemption in this controller. This
+# workflow retains the final-head GitHub Copilot path for applicable human PRs
+# plus the separately identified Shared-Assets-App automation exemptions.
 jobs:
   request-current-revision-review:
     name: Request Copilot review for current revision
@@ -41,12 +46,6 @@ jobs:
       github.event.pull_request.user.login == 'litroc' &&
       github.actor == 'litroc' &&
       github.triggering_actor == 'litroc'
-    # Keep finalization requests out of the verifier queue: GitHub replaces an
-    # older pending member of a concurrency group even when cancellation is
-    # disabled, so an ordinary verifier must never evict a Ready request.
-    concurrency:
-      group: copilot-review-request-${{ github.event.pull_request.number }}
-      cancel-in-progress: false
     permissions:
       actions: read
       contents: read
@@ -116,12 +115,10 @@ jobs:
           requested_reviewers_url="repos/${REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers"
           marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
           review_exists_for_head() {
-            local reviews review_status
-            if ! reviews="$(gh api --paginate --slurp \
-                "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100")"; then
-              return 2
-            fi
-            if jq -e \
+            local reviews
+            reviews="$(gh api --paginate --slurp \
+              "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100")"
+            jq -e \
               --arg reviewer "${reviewer}" \
               --arg head "${EXPECTED_HEAD}" \
               --arg retry_unable "${UNABLE_REVIEW_MARKER}" \
@@ -141,25 +138,11 @@ jobs:
                     and ($body | contains($retry_suppressed) | not)
                     and ($body | contains("encountered an error") | not))
                 )
-              ' <<<"${reviews}" >/dev/null; then
-              return 0
-            else
-              review_status=$?
-              if [ "${review_status}" -eq 1 ]; then
-                return 1
-              fi
-              return 2
-            fi
+              ' <<<"${reviews}" >/dev/null
           }
           if review_exists_for_head; then
             echo "Copilot already reviewed the exact finalized head."
             exit 0
-          else
-            review_status=$?
-            if [ "${review_status}" -ne 1 ]; then
-              echo "Unable to verify existing Copilot reviews; refusing a duplicate request." >&2
-              exit "${review_status}"
-            fi
           fi
           reviewer_is_requested() {
             local response
@@ -216,24 +199,15 @@ jobs:
       github.event_name == 'pull_request_target' &&
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'lightning-it-release-automation[bot]' &&
       (github.event.action == 'edited' ||
-        (((github.event.action == 'opened' ||
+        github.event.action == 'opened' ||
         github.event.action == 'synchronize' ||
         github.event.action == 'reopened' ||
-        github.event.action == 'ready_for_review') &&
-        github.event.pull_request.user.login != 'lightning-it-release-automation[bot]') ||
-        ((github.event.action == 'opened' ||
-          github.event.action == 'synchronize' ||
-          github.event.action == 'reopened' ||
-          github.event.action == 'ready_for_review') &&
-          github.event.pull_request.user.login == 'lightning-it-release-automation[bot]' &&
-          github.event.pull_request.base.ref == 'develop' &&
-          startsWith(github.event.pull_request.head.ref, 'backmerge/') &&
-          endsWith(github.event.pull_request.head.ref, '-main') &&
-          startsWith(
-            github.event.pull_request.title,
-            'chore(governance): record main ancestry before '
-          ))))
+        github.event.action == 'ready_for_review')
+    # Serialize every producer for this PR. Different event actions may overlap
+    # at workflow level so the one-time Copilot request is never cancelled, but
+    # no two verifier jobs may invalidate or publish the neutral check at once.
     concurrency:
       group: copilot-review-verify-${{ github.event.pull_request.number }}
       cancel-in-progress: false
@@ -251,6 +225,10 @@ jobs:
         if: github.event.action == 'edited'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EVENT_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          EVENT_BODY: ${{ github.event.pull_request.body }}
+          EVENT_TITLE: ${{ github.event.pull_request.title }}
+          EVENT_EDITED_AT: ${{ github.event.pull_request.updated_at }}
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
@@ -258,21 +236,91 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+          api_read() {
+            local attempt output
+            for attempt in $(seq 1 5); do
+              if output="$(gh api "$@")"; then
+                printf '%s' "${output}"
+                return 0
+              fi
+              if [ "${attempt}" -eq 5 ]; then
+                echo "GitHub API read failed after five attempts." >&2
+                return 1
+              fi
+              sleep 5
+            done
+          }
+          api_patch() {
+            local attempt output
+            for attempt in $(seq 1 5); do
+              if output="$(gh api --method PATCH "$@")"; then
+                printf '%s' "${output}"
+                return 0
+              fi
+              if [ "${attempt}" -eq 5 ]; then
+                echo "Idempotent GitHub check invalidation failed after five attempts." >&2
+                return 1
+              fi
+              sleep 5
+            done
+          }
           [[ "${BASE_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${HEAD_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${PR_NUMBER}" =~ ^[1-9][0-9]*$ ]]
-          pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
-          test "$(jq -r .state <<<"${pr}")" = open
-          test "$(jq -r .draft <<<"${pr}")" = false
-          test "$(jq -r .base.sha <<<"${pr}")" = "${BASE_SHA}"
-          test "$(jq -r .head.sha <<<"${pr}")" = "${HEAD_SHA}"
-          test "$(jq -r .head.ref <<<"${pr}")" = "${HEAD_REF}"
-          test "$(jq -r .head.repo.full_name <<<"${pr}")" = "${REPOSITORY}"
-          checks="$(gh api --paginate --slurp \
+          # For an edited webhook, REST updated_at is the event's edit
+          # revision. Bind it to GraphQL lastEditedAt because unrelated
+          # comments and reviews may advance only the live REST updated_at.
+          [[ "${EVENT_EDITED_AT}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
+          owner="${REPOSITORY%%/*}"
+          repository="${REPOSITORY#*/}"
+          read -r -d '' query <<'GRAPHQL' || true
+          query($owner: String!, $repository: String!, $number: Int!) {
+            repository(owner: $owner, name: $repository) {
+              pullRequest(number: $number) {
+                number
+                lastEditedAt
+              }
+            }
+          }
+          GRAPHQL
+          metadata="$(api_read graphql \
+            -f query="${query}" \
+            -F owner="${owner}" \
+            -F repository="${repository}" \
+            -F number="${PR_NUMBER}")"
+          jq -e \
+            --arg edited_at "${EVENT_EDITED_AT}" \
+            --argjson number "${PR_NUMBER}" '
+              ((.errors // []) | length) == 0
+              and .data.repository.pullRequest.number == $number
+              and .data.repository.pullRequest.lastEditedAt == $edited_at
+            ' <<<"${metadata}" >/dev/null
+          pr="$(api_read "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
+          jq -e \
+            --arg base_ref "${EVENT_BASE_REF}" \
+            --arg base_sha "${BASE_SHA}" \
+            --arg body "${EVENT_BODY}" \
+            --arg head_ref "${HEAD_REF}" \
+            --arg head_sha "${HEAD_SHA}" \
+            --arg repository "${REPOSITORY}" \
+            --arg title "${EVENT_TITLE}" '
+              .state == "open"
+              and .draft == false
+              and .title == $title
+              and (.body // "") == $body
+              and .base.ref == $base_ref
+              and .base.sha == $base_sha
+              and .head.ref == $head_ref
+              and .head.sha == $head_sha
+              and .head.repo.full_name == $repository
+            ' <<<"${pr}" >/dev/null
+          checks="$(api_read --paginate --slurp \
             "repos/${REPOSITORY}/commits/${HEAD_SHA}/check-runs?check_name=Current%20revision%20review&filter=all&per_page=100")"
           named="$(jq -c '[.[].check_runs[]? |
             select(.name == "Current revision review") |
-            select(.app.id == 15368 and .app.slug == "github-actions")]' \
+            select(.app.id == 15368 and .app.slug == "github-actions") |
+            select((.external_id // "") |
+              startswith("mlx90-current-revision:"))]' \
             <<<"${checks}")"
           count="$(jq 'length' <<<"${named}")"
           if [ "${count}" -gt 1 ]; then
@@ -294,7 +342,7 @@ jobs:
             '{schema:4,base_sha:$base,head_sha:$head,pull_request_number:$pr_number,
               producer_run_id:$run_id,reason:$reason,run_url:$run_url}')"
           completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          updated="$(gh api --method PATCH \
+          updated="$(api_patch \
             "repos/${REPOSITORY}/check-runs/${check_id}" \
             -f status=completed \
             -f conclusion=failure \
@@ -316,6 +364,59 @@ jobs:
               and .conclusion == "failure"
               and .output.summary == $evidence
             ' <<<"${updated}" >/dev/null
+
+      - name: Capture live pull-request metadata revision
+        id: metadata-revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          owner="${REPOSITORY%%/*}"
+          repository="${REPOSITORY#*/}"
+          read -r -d '' query <<'GRAPHQL' || true
+          query($owner: String!, $repository: String!, $number: Int!) {
+            repository(owner: $owner, name: $repository) {
+              pullRequest(number: $number) {
+                number
+                lastEditedAt
+              }
+            }
+          }
+          GRAPHQL
+          response=''
+          for attempt in $(seq 1 5); do
+            if response="$(gh api graphql \
+                -f query="${query}" \
+                -F owner="${owner}" \
+                -F repository="${repository}" \
+                -F number="${PR_NUMBER}")" \
+              && jq -e \
+                --argjson number "${PR_NUMBER}" '
+                  ((.errors // []) | length) == 0
+                  and .data.repository.pullRequest.number == $number
+                  and (
+                    .data.repository.pullRequest.lastEditedAt == null
+                    or (
+                      (.data.repository.pullRequest.lastEditedAt | type) == "string"
+                      and (.data.repository.pullRequest.lastEditedAt |
+                        test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))
+                    )
+                  )
+                ' <<<"${response}" >/dev/null; then
+              break
+            fi
+            if [ "${attempt}" -eq 5 ]; then
+              echo "Unable to capture the protected pull-request metadata revision." >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          last_edited_at="$(jq -r \
+            '.data.repository.pullRequest.lastEditedAt // "null"' \
+            <<<"${response}")"
+          echo "last_edited_at=${last_edited_at}" >>"${GITHUB_OUTPUT}"
 
       - name: Classify trusted automation pull request
         id: trusted-automation
@@ -384,16 +485,23 @@ jobs:
                 | ([ range(0; ($events | length))
                     | select(
                         $events[.].label == $safe_label
+                        and $events[.].event == "labeled"
                       )
                   ] | last) as $last_safe_index
                 | $last_safe_index != null
-                and $events[$last_safe_index].event == "labeled"
                 and $events[$last_safe_index].actor == $author
                 and ([
                     $events[]
                     | select(
                         .label == $breaking_label
                         and .event == "labeled"
+                      )
+                  ] | length == 0)
+                and ([
+                    $events[]
+                    | select(
+                        .label == $safe_label
+                          and .actor != $author
                       )
                   ] | length == 0)' \
                 <<<"${policy_label_events}" >/dev/null; then
@@ -439,9 +547,8 @@ jobs:
               <<<"${live_pr}" >/dev/null; then
             trusted=true
             trusted_kind=repository-quality
-          elif { [ "${PR_AUTHOR}" = "lightning-it-release-automation[bot]" ] \
-              || { [ "${REPOSITORY}" = "lightning-it/.github" ] \
-                && [ "${PR_AUTHOR}" = "lightning-it-shared-assets-sync[bot]" ]; }; } \
+          elif [ "${REPOSITORY}" = "lightning-it/.github" ] \
+            && [ "${PR_AUTHOR}" = "lightning-it-shared-assets-sync[bot]" ] \
             && [ "${PR_HEAD_REPO}" = "${REPOSITORY}" ] \
             && [[ "${PR_HEAD}" == backmerge/*-main ]] \
             && [ "${PR_BASE}" = "develop" ] \
@@ -544,9 +651,12 @@ jobs:
           steps.trusted-automation.outputs.trusted != 'true' &&
           github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'
         env:
+          BOUND_LAST_EDITED_AT: ${{ steps.metadata-revision.outputs.last_edited_at }}
+          FRESH_REVIEW_AFTER: ${{ github.event.pull_request.updated_at }}
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}
+          REQUIRE_FRESH_REVIEW: ${{ github.event.action == 'edited' }}
         run: |
           set -euo pipefail
 
@@ -579,6 +689,7 @@ jobs:
             repository(owner: $owner, name: $repository) {
               pullRequest(number: $number) {
                 headRefOid
+                lastEditedAt
                 reviews(last: 100, before: $before) {
                   pageInfo { hasPreviousPage startCursor }
                   nodes {
@@ -586,6 +697,7 @@ jobs:
                     author { login }
                     commit { oid }
                     state
+                    submittedAt
                   }
                 }
               }
@@ -748,11 +860,21 @@ jobs:
                 break
               fi
               head_sha="${page_head_sha}"
+              page_last_edited_at="$(jq -r \
+                '.data.repository.pullRequest.lastEditedAt // "null"' \
+                <<<"${response}")"
+              if [ "${page_last_edited_at}" != "${BOUND_LAST_EDITED_AT}" ]; then
+                echo "Pull-request metadata changed after this review run was bound." >&2
+                exit 1
+              fi
 
               candidate_review_ids="$(
                 jq -r \
                   --arg head "${head_sha}" \
+                  --arg last_edited_at "${BOUND_LAST_EDITED_AT}" \
+                  --arg not_before "${FRESH_REVIEW_AFTER}" \
                   --arg reviewer "${COPILOT_REVIEWER_LOGIN}" \
+                  --arg require_fresh "${REQUIRE_FRESH_REVIEW}" \
                   '(.data.repository.pullRequest.reviews.nodes // [])[]
                     | select(
                         (.author.login // "") as $login
@@ -760,6 +882,14 @@ jobs:
                       )
                     | select(.state == "COMMENTED" or .state == "APPROVED")
                     | select(.commit.oid == $head)
+                    | select(
+                        $last_edited_at == "null"
+                        or ((.submittedAt // "") > $last_edited_at)
+                      )
+                    | select(
+                        $require_fresh != "true"
+                        or ((.submittedAt // "") > $not_before)
+                      )
                     | (.id // empty)' <<<"${response}"
               )"
               while IFS= read -r review_id; do
@@ -923,10 +1053,15 @@ jobs:
 
       - name: Publish bound neutral result
         env:
+          BOUND_LAST_EDITED_AT: ${{ steps.metadata-revision.outputs.last_edited_at }}
+          EVENT_ACTION: ${{ github.event.action }}
           GH_TOKEN: ${{ github.token }}
           EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
           EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           EVENT_BASE: ${{ github.event.pull_request.base.sha }}
+          EVENT_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          EVENT_BODY: ${{ github.event.pull_request.body }}
+          EVENT_TITLE: ${{ github.event.pull_request.title }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}
@@ -963,10 +1098,58 @@ jobs:
               sleep 5
             done
           }
+          read_metadata_revision() {
+            local attempt output
+            local owner="${REPOSITORY%%/*}"
+            local repository="${REPOSITORY#*/}"
+            local query
+            read -r -d '' query <<'GRAPHQL' || true
+          query($owner: String!, $repository: String!, $number: Int!) {
+            repository(owner: $owner, name: $repository) {
+              pullRequest(number: $number) {
+                number
+                lastEditedAt
+              }
+            }
+          }
+          GRAPHQL
+            for attempt in $(seq 1 5); do
+              if output="$(gh api graphql \
+                  -f query="${query}" \
+                  -F owner="${owner}" \
+                  -F repository="${repository}" \
+                  -F number="${PR_NUMBER}")" \
+                && jq -e \
+                  --argjson number "${PR_NUMBER}" '
+                    ((.errors // []) | length) == 0
+                    and .data.repository.pullRequest.number == $number
+                    and (
+                      .data.repository.pullRequest.lastEditedAt == null
+                      or (
+                        (.data.repository.pullRequest.lastEditedAt | type) == "string"
+                        and (.data.repository.pullRequest.lastEditedAt |
+                          test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))
+                      )
+                    )
+                  ' <<<"${output}" >/dev/null; then
+                jq -r '.data.repository.pullRequest.lastEditedAt // "null"' \
+                  <<<"${output}"
+                return 0
+              fi
+              if [ "${attempt}" -eq 5 ]; then
+                echo "Unable to re-prove the protected pull-request metadata revision." >&2
+                return 1
+              fi
+              sleep 5
+            done
+          }
           [[ "${EVENT_BASE}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${EVENT_HEAD}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${PR_NUMBER}" =~ ^[1-9][0-9]*$ ]]
           [[ "${TRUSTED_WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${BOUND_LAST_EDITED_AT}" == null \
+            || "${BOUND_LAST_EDITED_AT}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
+          test "$(read_metadata_revision)" = "${BOUND_LAST_EDITED_AT}"
           test "${DEFAULT_BRANCH}" = develop
           test "${TRUSTED_WORKFLOW_REF}" = \
             "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}"
@@ -993,10 +1176,24 @@ jobs:
               and .head_repository.full_name == $repository
             ' <<<"${protected_run}" >/dev/null
           pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
-          test "$(jq -r .state <<<"${pr}")" = open
-          test "$(jq -r .draft <<<"${pr}")" = false
-          test "$(jq -r .head.sha <<<"${pr}")" = "${EVENT_HEAD}"
-          test "$(jq -r .base.sha <<<"${pr}")" = "${EVENT_BASE}"
+          jq -e \
+            --arg base_ref "${EVENT_BASE_REF}" \
+            --arg base_sha "${EVENT_BASE}" \
+            --arg body "${EVENT_BODY}" \
+            --arg head_ref "${EVENT_HEAD_REF}" \
+            --arg head_sha "${EVENT_HEAD}" \
+            --arg repository "${REPOSITORY}" \
+            --arg title "${EVENT_TITLE}" '
+              .state == "open"
+              and .draft == false
+              and .title == $title
+              and (.body // "") == $body
+              and .base.ref == $base_ref
+              and .base.sha == $base_sha
+              and .head.ref == $head_ref
+              and .head.sha == $head_sha
+              and .head.repo.full_name == $repository
+            ' <<<"${pr}" >/dev/null
           base_ref="$(jq -er '.base.ref | select(. == "develop" or . == "main")' <<<"${pr}")"
           test -n "${base_ref}"
           test "$(jq -r .base.repo.full_name <<<"${pr}")" = "${REPOSITORY}"
@@ -1004,10 +1201,16 @@ jobs:
           review_path="applicable Copilot or governed automation exemption"
           external_kind="copilot"
           result_title="Current revision review passed"
-          if { [ "${author}" = 'lightning-it-release-automation[bot]' ] \
-              || { [ "${REPOSITORY}" = "lightning-it/.github" ] \
-                && [ "${author}" = 'lightning-it-shared-assets-sync[bot]' ] \
-                && [ "${TRUSTED_KIND}" = ancestry-backmerge ]; }; }; then
+          if [[ "${TRUSTED_KIND}" =~ ^(shared-assets|repository-quality)$ ]]; then
+            test "${REPOSITORY}" != 'lightning-it/.github'
+            test "${author}" = 'lightning-it-shared-assets-sync[bot]'
+            test "${base_ref}" = develop
+            review_path="deterministic provenance-bound managed distribution exemption"
+            external_kind="managed-sync"
+            result_title="Current revision managed distribution exemption passed"
+          elif [ "${TRUSTED_KIND}" = ancestry-backmerge ]; then
+            test "${REPOSITORY}" = "lightning-it/.github"
+            test "${author}" = 'lightning-it-shared-assets-sync[bot]'
             test "${TRUSTED_KIND}" = ancestry-backmerge
             test "${base_ref}" = develop
             [[ "${EVENT_HEAD_REF}" == backmerge/*-main ]]
@@ -1057,25 +1260,31 @@ jobs:
             external_kind="ancestry-backmerge"
             result_title="Current revision deterministic exemption passed"
           else
+            test "${TRUSTED_KIND}" != shared-assets
+            test "${TRUSTED_KIND}" != repository-quality
             test "${TRUSTED_KIND}" != ancestry-backmerge
+            test "${author}" != 'lightning-it-shared-assets-sync[bot]'
+            test "${author}" != 'lightning-it-release-automation[bot]'
           fi
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           evidence="$(jq -cn \
             --arg base "${EVENT_BASE}" \
             --arg controller "${TRUSTED_WORKFLOW_SHA}" \
             --arg head "${EVENT_HEAD}" \
+            --arg last_edited_at "${BOUND_LAST_EDITED_AT}" \
             --arg review_path "${review_path}" \
             --argjson pr_number "${PR_NUMBER}" \
             --argjson run_id "${GITHUB_RUN_ID}" \
             --arg run_url "${run_url}" \
             '{schema:4,base_sha:$base,head_sha:$head,controller_sha:$controller,
               pull_request_number:$pr_number,producer_run_id:$run_id,
+              pull_request_last_edited_at:(
+                if $last_edited_at == "null" then null else $last_edited_at end),
               review_path:$review_path,run_url:$run_url}')"
           publish_once() {
             local check_name="$1" external_id="$2" title="$3"
             local checks named count check_id check_url completed_at created
-            local existing_pr_number existing_summary legacy_binding legacy_run
-            local legacy_run_id legacy_run_url recovered recovery_attempt updated
+            local recovered recovery_attempt updated
             read_named_checks() {
               checks="$(api_read --paginate --slurp \
                 "repos/${REPOSITORY}/commits/${EVENT_HEAD}/check-runs?check_name=$(jq -rn --arg value "${check_name}" '$value|@uri')&filter=all&per_page=100")" || return 1
@@ -1093,55 +1302,10 @@ jobs:
               exit 1
             fi
             if [ "${count}" -eq 1 ]; then
-              existing_summary="$(jq -er \
-                '.[0].output.summary | select(type == "string" and length > 0)' \
-                <<<"${named}")"
-              if existing_pr_number="$(jq -er \
-                  'fromjson | .pull_request_number |
-                   select(type == "number" and . > 0)' \
-                  <<<"${existing_summary}")"; then
-                test "${existing_pr_number}" = "${PR_NUMBER}"
-              else
-                # Schema-4 results produced before PR binding are migrated only
-                # after the originating protected run proves the same PR/base/head.
-                legacy_binding="$(jq -cer \
-                  --arg base "${EVENT_BASE}" \
-                  --arg head "${EVENT_HEAD}" '
-                    fromjson
-                    | select(
-                        .schema == 4
-                        and (has("pull_request_number") | not)
-                        and .base_sha == $base
-                        and .head_sha == $head
-                        and (.controller_sha | type == "string" and test("^[0-9a-f]{40}$"))
-                        and (.producer_run_id | type == "number" and . > 0)
-                        and (.run_url | type == "string" and length > 0)
-                      )
-                  ' <<<"${existing_summary}")"
-                legacy_run_id="$(jq -er '.producer_run_id' <<<"${legacy_binding}")"
-                legacy_run_url="$(jq -er '.run_url' <<<"${legacy_binding}")"
-                test "${legacy_run_url}" = \
-                  "${GITHUB_SERVER_URL}/${REPOSITORY}/actions/runs/${legacy_run_id}"
-                legacy_run="$(api_read \
-                  "repos/${REPOSITORY}/actions/runs/${legacy_run_id}")"
-                jq -e \
-                  --arg base "${EVENT_BASE}" \
-                  --arg head "${EVENT_HEAD}" \
-                  --arg repository "${REPOSITORY}" \
-                  --argjson pr_number "${PR_NUMBER}" \
-                  --argjson run_id "${legacy_run_id}" '
-                    .id == $run_id
-                    and .event == "pull_request_target"
-                    and .name == "Current revision review gate"
-                    and .path == ".github/workflows/copilot-review.yml"
-                    and .head_sha == $head
-                    and .repository.full_name == $repository
-                    and .head_repository.full_name == $repository
-                    and any(.pull_requests[]?;
-                      .number == $pr_number
-                      and .head.sha == $head
-                      and .base.sha == $base)
-                  ' <<<"${legacy_run}" >/dev/null
+              if [ "${EVENT_ACTION}" = edited ]; then
+                expected_reservation="mlx90-current-revision:metadata-edit:v1:${PR_NUMBER}:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}"
+                test "$(jq -r '.[0].external_id // empty' <<<"${named}")" = \
+                  "${expected_reservation}"
               fi
               check_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' <<<"${named}")"
               check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}"
@@ -1176,6 +1340,7 @@ jobs:
                   and .conclusion == "success"
                   and .output.summary == $evidence
                 ' <<<"${updated}" >/dev/null
+              printf '%s' "${check_id}"
               return
             fi
             if ! created="$(gh api --method POST "repos/${REPOSITORY}/check-runs" \
@@ -1236,11 +1401,51 @@ jobs:
                 and .conclusion == "success"
                 and .output.summary == $evidence
               ' <<<"${created}" >/dev/null
+            printf '%s' "${check_id}"
           }
-          publish_once \
+          published_check_id="$(publish_once \
             'Current revision review' \
             "mlx90-current-revision:${external_kind}:v6:${PR_NUMBER}:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}" \
-            "${result_title}"
+            "${result_title}")"
+          [[ "${published_check_id}" =~ ^[1-9][0-9]*$ ]]
+          final_last_edited_at=''
+          if ! final_last_edited_at="$(read_metadata_revision)" \
+            || [ "${final_last_edited_at}" != "${BOUND_LAST_EDITED_AT}" ]; then
+            failure_evidence="$(jq -cn \
+              --arg base "${EVENT_BASE}" \
+              --arg head "${EVENT_HEAD}" \
+              --arg reason "pull-request metadata changed during result publication" \
+              --argjson pr_number "${PR_NUMBER}" \
+              --argjson run_id "${GITHUB_RUN_ID}" \
+              --arg run_url "${run_url}" \
+              '{schema:4,base_sha:$base,head_sha:$head,pull_request_number:$pr_number,
+                producer_run_id:$run_id,reason:$reason,run_url:$run_url}')"
+            completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            invalidated="$(api_patch \
+              "repos/${REPOSITORY}/check-runs/${published_check_id}" \
+              -f status=completed \
+              -f conclusion=failure \
+              -f "completed_at=${completed_at}" \
+              -f "details_url=${run_url}" \
+              -f "external_id=mlx90-current-revision:metadata-race:v1:${PR_NUMBER}:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}" \
+              -f 'output[title]=Current revision metadata changed during publication' \
+              -f "output[summary]=${failure_evidence}")"
+            jq -e \
+              --arg evidence "${failure_evidence}" \
+              --arg head "${EVENT_HEAD}" \
+              --argjson check_id "${published_check_id}" '
+                .id == $check_id
+                and .name == "Current revision review"
+                and .app.id == 15368
+                and .app.slug == "github-actions"
+                and .head_sha == $head
+                and .status == "completed"
+                and .conclusion == "failure"
+                and .output.summary == $evidence
+              ' <<<"${invalidated}" >/dev/null
+            echo "Pull-request metadata changed during result publication." >&2
+            exit 1
+          fi
 
   request-protected-verifier-reevaluation:
     name: Request protected verifier re-evaluation
