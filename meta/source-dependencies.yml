@@ -17,7 +17,7 @@ container_images:
   - reference: "docker.io/checkmk/check-mk-raw:2.4.0-latest@sha256:3b2662d15f996841ed18aa86a24403827746b4b6f56b931fe174c8cb85c2d91e"
     locations:
       - "roles/checkmk_deploy/defaults/main.yml"
-  - reference: "docker.io/coredns/coredns:1.14.6@sha256:900f9c109f7a33545d3c811516e8376df9019147b750f5ce3e254468769176ea"
+  - reference: "docker.io/coredns/coredns:1.14.7@sha256:7efd3c635b03efd68c4e8398fc45f0d993d0e9ab016f72c1cefb0fd6d01aa286"
     locations:
       - "roles/coredns_deploy/defaults/main.yml"
   - reference: "docker.io/dperson/samba:latest@sha256:66088b78a19810dd1457a8f39340e95e663c728083efa5fe7dc0d40b2478e869"
@@ -54,13 +54,13 @@ container_images:
       - "roles/netbox_deploy/defaults/main.yml"
       - "roles/postgres_deploy/defaults/main.yml"
       - "roles/semaphore_deploy/defaults/main.yml"
-  - reference: "docker.io/netboxcommunity/netbox:v4.6-5.0.2@sha256:c59463b79bd22dc8524a88e86382eadace92c39a3fa68805676c96f58d7f3b78"
+  - reference: "docker.io/netboxcommunity/netbox:v4.6-5.0.2@sha256:ca71954800b67a6fbac8142bd9a67a646a22b8a02eb564cf53abd1e96d7dadca"
     locations:
       - "roles/netbox_deploy/defaults/main.yml"
   - reference: "docker.io/prom/alertmanager:v0.34.0@sha256:690c7b525f4367aa91f73e2f91c632206d32e97c6384bdbf2fb7a861b420340d"
     locations:
       - "roles/alertmanager_deploy/defaults/main.yml"
-  - reference: "docker.io/prom/prometheus:v3.13.2@sha256:508729e0e2d18e11fd742a5a5ca70e557b940a93948c3c95fd0123a6fd538b69"
+  - reference: "docker.io/prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0"
     locations:
       - "roles/prometheus_deploy/defaults/main.yml"
   - reference: "docker.io/rsyslog/syslog_appliance_alpine:latest@sha256:c0dd7cad9ff3234967ff59879590175b7590e8a5f5621ec49a85aff546b44a3b"
@@ -76,16 +76,16 @@ container_images:
   - reference: "docker.io/semaphoreui/semaphore:latest@sha256:7da3364f331a80d5d47998866f5833c8de978bd57ad49beb69ad2d1d0f3c5f20"
     locations:
       - "roles/semaphore_deploy/defaults/main.yml"
-  - reference: "docker.io/smblds/smblds:latest@sha256:fae69c1aa873402069a68cd3c050c65d218866345151cda3d563b0db3109db5d"
+  - reference: "docker.io/smblds/smblds:latest@sha256:53bbd3f65b260aa9707e64668a2386aff306132e21a470f51d5af8b7e1b39b39"
     locations:
       - "roles/samba_deploy/defaults/main.yml"
-  - reference: "docker.io/sonatype/nexus3:latest@sha256:1263e77bd1e7748d3be9028ba6472cca7f534828e92d157cd0f3c13c6909b150"
+  - reference: "docker.io/sonatype/nexus3:latest@sha256:adb4539e29bcb1c91e5545c853f6c74da5e57efd4c243aa4d5454f309904ab13"
     locations:
       - "roles/nexus/defaults/main.yml"
   - reference: "docker.io/tenableofficial/nessus:latest@sha256:c88e43fe1a8ca04a265f127fbfa474e80ab926d21862b6de5972a9465a91d8e6"
     locations:
       - "roles/nessus_deploy/defaults/main.yml"
-  - reference: "docker.io/valkey/valkey:9.1-alpine@sha256:3fe38a705227d29534a199e876b38d5474dec4d3baca980ac6894df539416562"
+  - reference: "docker.io/valkey/valkey:9.1-alpine@sha256:7bf043f6ff25ea50b557e2f6da8f76fce62775d766d943f076d1e66838099315"
     locations:
       - "roles/netbox_deploy/defaults/main.yml"
   - reference: "quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6"

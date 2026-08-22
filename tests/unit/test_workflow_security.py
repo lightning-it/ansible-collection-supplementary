@@ -165,6 +165,12 @@ class WorkflowSecurityTests(unittest.TestCase):
 
         self.assertIn('([.labels[].name] | index("safe-automerge") != null)', copilot)
         self.assertIn('([.labels[].name] | index("breaking-update") == null)', copilot)
+        self.assertIn('$events[.].event == "labeled"', copilot)
+        self.assertIn("$events[$last_safe_index].actor == $author", copilot)
+        self.assertIn(
+            ".label == $safe_label\n                          and .actor != $author",
+            copilot,
+        )
         self.assertIn("(.head.sha == $head_sha)", copilot)
         self.assertIn("for attempt in $(seq 1 40)", copilot)
         self.assertIn(".isResolved == false", copilot)
@@ -294,23 +300,102 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             "  verify-current-revision-policy:", 1
         )[0]
         self.assertIn("github.event.action == 'ready_for_review'", request_job)
-        self.assertNotIn("github.event.action == 'opened'", request_job)
+        self.assertIn("github.event.action == 'opened'", request_job)
         self.assertIn("github.event_name == 'pull_request_target'", request_job)
         self.assertNotIn("workflow_dispatch", request_job)
         self.assertNotIn("synchronize", request_job)
         self.assertIn('test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"', request_job)
         self.assertIn("Copilot already reviewed the exact finalized head", request_job)
+        self.assertIn('reviews="$(gh api --paginate --slurp', request_job)
+        self.assertNotIn("review_status", request_job)
         self.assertIn("mlx90-copilot-request head=${EXPECTED_HEAD}", request_job)
-        self.assertIn("Copilot review request is already recorded for the exact finalized head", request_job)
+        self.assertIn(
+            "The one exact-head Copilot request was already consumed; automatic retry is forbidden.",
+            request_job,
+        )
         self.assertIn("Copilot review is already pending for the exact finalized head", request_job)
         self.assertIn("Copilot review request accepted for finalized head", request_job)
         self.assertNotIn('gh api --method DELETE "${requested_reviewers_url}"', request_job)
         self.assertNotIn("review_is_visible_for_head()", request_job)
         self.assertNotIn("Copilot reviewer request did not become visible", request_job)
-        self.assertIn("cancel-in-progress: false", copilot)
+        self.assertNotIn("concurrency:", request_job)
+        verify_job = copilot.split("  verify-current-revision-policy:", 1)[1]
+        self.assertIn(
+            "group: copilot-review-verify-${{ github.event.pull_request.number }}",
+            verify_job,
+        )
+        self.assertIn(
+            "group: copilot-review-${{ github.event.pull_request.number }}-${{ github.event.action }}",
+            copilot,
+        )
+        self.assertEqual(2, copilot.count("cancel-in-progress: false"))
         self.assertIn("pull_request_target:", copilot)
-        self.assertIn("types: [ready_for_review]", copilot)
+        self.assertIn(
+            "types: [opened, synchronize, reopened, ready_for_review, edited]",
+            copilot,
+        )
+        self.assertIn("github.event.action == 'edited'", verify_job)
+        self.assertIn(
+            "Invalidate prior result after pull-request metadata edit",
+            verify_job,
+        )
+        self.assertIn("conclusion=failure", verify_job)
         self.assertNotIn("pull_request_review:", copilot)
+        documentation = (ROOT / "docs/push-ready-optimization.md").read_text(encoding="utf-8")
+        self.assertIn("when `litroc` opens an already-ready PR", documentation)
+        self.assertIn("Opening a draft and every synchronize event remain AI-free", documentation)
+
+    def test_release_app_ancestry_backmerge_uses_only_exact_revision_codex(
+        self,
+    ) -> None:
+        workflow = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
+        ancestry = (WORKFLOWS / "sync-main-to-develop.yml").read_text(encoding="utf-8")
+        self.assertIn("Release-App review belongs only", workflow)
+        self.assertNotIn("Release-App AI review belongs only", workflow)
+        self.assertNotIn(
+            "deterministic, AI-free evidence-bound ancestry backmerge exemption",
+            workflow,
+        )
+        request_condition = workflow.split(
+            "\n  request-current-revision-review:",
+            1,
+        )[1].split("    permissions:", 1)[0]
+        self.assertIn(
+            "github.event.pull_request.user.login == 'litroc'",
+            request_condition,
+        )
+        self.assertNotIn("lightning-it-release-automation[bot]", request_condition)
+        self.assertNotIn("github.event.action == 'synchronize'", request_condition)
+
+        review_condition = workflow.split(
+            "  verify-current-revision-policy:",
+            1,
+        )[1].split("    permissions:", 1)[0]
+        self.assertIn(
+            "github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'",
+            review_condition,
+        )
+        self.assertNotIn(
+            "github.event.pull_request.user.login == 'lightning-it-release-automation[bot]'",
+            review_condition,
+        )
+        self.assertIn("id: review-dispatch-app", ancestry)
+        self.assertIn("permission-actions: write", ancestry)
+        self.assertIn("release-bot-exact-head-review.yml", ancestry)
+        self.assertIn(
+            'push --porcelain origin "${desired_head}:refs/heads/${upload_branch}"',
+            ancestry,
+        )
+        self.assertNotIn(
+            'push --porcelain origin "HEAD:refs/heads/${upload_branch}"',
+            ancestry,
+        )
+        self.assertLess(
+            ancestry.index("gh workflow run release-bot-exact-head-review.yml"),
+            ancestry.index("Enable protected ancestry auto-merge"),
+        )
+        self.assertNotIn("openai/codex-action", ancestry)
+        self.assertNotIn("copilot", ancestry.lower())
 
         remediation = (WORKFLOWS / "codex-copilot-remediation.yml").read_text(encoding="utf-8")
         self.assertIn("reviewThreads(first:100,after:$after)", remediation)
