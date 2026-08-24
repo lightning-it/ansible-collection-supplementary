@@ -297,24 +297,54 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("materialize-exact-revision-review.py?ref=${TRUSTED_WORKFLOW_SHA}", workflow)
         self.assertIn("permission-profile: :read-only", workflow)
         self.assertIn("codex-args: '[\"--ephemeral\"]'", workflow)
-        self.assertIn("            'Current revision review'", workflow)
+        self.assertIn("name: Current revision review", workflow)
         self.assertIn("mlx90-exact-revision:v4:${input_sha256}:", workflow)
         self.assertIn("mlx90-current-revision:v4:${producer_run_id}:${input_sha256}", workflow)
         self.assertNotIn("mlx90-legacy-exact-revision:", workflow)
         self.assertNotIn("Successful Copilot review", workflow)
-        publisher = workflow.split("          publish_once() {", 1)[1].split("          publish_once \\", 1)[0]
-        self.assertIn("select(.name == $name)", publisher)
-        self.assertIn('jq -rn --arg value "${check_name}"', publisher)
-        self.assertNotIn('jq -n --arg value "${check_name}"', publisher)
-        self.assertIn('select(.app.id == 15368 and .app.slug == "github-actions")', publisher)
-        self.assertNotIn("select(.name == $name and .external_id == $external_id)", publisher)
-        self.assertNotIn("current_external_id", publisher)
-        self.assertIn("strict status policy", publisher)
-        self.assertIn('completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"', publisher)
-        self.assertIn('-f "completed_at=${completed_at}"', publisher)
-        self.assertIn("and .completed_at == $completed_at", publisher)
-        self.assertIn("filter=all", publisher)
-        self.assertIn("per_page=100", publisher)
+        if "          publish_once() {" in workflow:
+            publisher = workflow.split("          publish_once() {", 1)[1].split(
+                "          publish_once \\", 1
+            )[0]
+            self.assertIn("select(.name == $name)", publisher)
+            self.assertIn('jq -rn --arg value "${check_name}"', publisher)
+            self.assertNotIn('jq -n --arg value "${check_name}"', publisher)
+            self.assertIn(
+                'select(.app.id == 15368 and .app.slug == "github-actions")',
+                publisher,
+            )
+            self.assertNotIn(
+                "select(.name == $name and .external_id == $external_id)",
+                publisher,
+            )
+            self.assertNotIn("current_external_id", publisher)
+            self.assertIn("strict status policy", publisher)
+        else:
+            self.assertIn("create_reservation_once() {", workflow)
+            self.assertIn(
+                "-f name='Protected Exact-Revision Codex result'", workflow
+            )
+            self.assertIn("-f name='Current revision review'", workflow)
+            self.assertIn(
+                "actions/workflows/release-bot-exact-head-review.yml/runs?",
+                workflow,
+            )
+            self.assertIn(
+                "The durable workflow ledger does not contain exactly one "
+                "protected AI invocation",
+                workflow,
+            )
+            self.assertIn(
+                "Reusing the protected PASS for identical input", workflow
+            )
+        self.assertIn(
+            'select(.app.id == 15368 and .app.slug == "github-actions")', workflow
+        )
+        self.assertIn('completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"', workflow)
+        self.assertIn('-f "completed_at=${completed_at}"', workflow)
+        self.assertIn("and .completed_at == $completed_at", workflow)
+        self.assertIn("filter=all", workflow)
+        self.assertIn("per_page=100", workflow)
         self.assertIn("automatic retry is forbidden", workflow)
         self.assertIn("input_sha256 == $bound.input_sha256", workflow)
         self.assertIn('and .path == ".github/workflows/release-bot-exact-head-review.yml"', workflow)
