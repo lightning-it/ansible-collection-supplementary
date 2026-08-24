@@ -306,7 +306,16 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         has_durable_publisher = "create_reservation_once() {" in workflow
         self.assertTrue(has_legacy_publisher or has_durable_publisher)
         if has_legacy_publisher:
-            publisher = workflow.split("publish_once() {", 1)[1].split("publish_once \\", 1)[0]
+            (
+                _before_publisher,
+                definition_marker,
+                publisher_and_invocation,
+            ) = workflow.partition("publish_once() {")
+            self.assertEqual("publish_once() {", definition_marker)
+            publisher, invocation_marker, _after_publisher = publisher_and_invocation.partition(
+                "publish_once \\",
+            )
+            self.assertEqual("publish_once \\", invocation_marker)
             self.assertIn("select(.name == $name)", publisher)
             self.assertIn('jq -rn --arg value "${check_name}"', publisher)
             self.assertNotIn('jq -n --arg value "${check_name}"', publisher)
