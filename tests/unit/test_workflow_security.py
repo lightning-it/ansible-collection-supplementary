@@ -1214,6 +1214,10 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("materialize-exact-revision-review.py?ref=${TRUSTED_WORKFLOW_SHA}", exact_revision)
         self.assertIn("name: Current revision review", exact_revision)
         self.assertTrue("publish_once() {" in exact_revision or "create_reservation_once() {" in exact_revision)
+        self.assertTrue(
+            "'Current revision review'" in exact_revision
+            or "-f name='Current revision review'" in exact_revision
+        )
         self.assertNotIn("Successful Copilot review", exact_revision)
         self.assertIn("actions/runs/${preparation_run_id}", publish)
         self.assertIn('.conclusion == "success"', publish)
