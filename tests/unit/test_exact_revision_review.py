@@ -331,10 +331,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                 workflow,
             )
             self.assertIn("Reusing the protected PASS for identical input", workflow)
-        self.assertTrue(
-            "'Current revision review'" in workflow
-            or "-f name='Current revision review'" in workflow
-        )
+        self.assertTrue("'Current revision review'" in workflow or "-f name='Current revision review'" in workflow)
         self.assertIn('select(.app.id == 15368 and .app.slug == "github-actions")', workflow)
         self.assertIn('completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"', workflow)
         self.assertIn('-f "completed_at=${completed_at}"', workflow)
