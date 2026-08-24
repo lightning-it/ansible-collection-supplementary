@@ -303,9 +303,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("mlx90-legacy-exact-revision:", workflow)
         self.assertNotIn("Successful Copilot review", workflow)
         if "          publish_once() {" in workflow:
-            publisher = workflow.split("          publish_once() {", 1)[1].split(
-                "          publish_once \\", 1
-            )[0]
+            publisher = workflow.split("          publish_once() {", 1)[1].split("          publish_once \\", 1)[0]
             self.assertIn("select(.name == $name)", publisher)
             self.assertIn('jq -rn --arg value "${check_name}"', publisher)
             self.assertNotIn('jq -n --arg value "${check_name}"', publisher)
@@ -321,25 +319,18 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             self.assertIn("strict status policy", publisher)
         else:
             self.assertIn("create_reservation_once() {", workflow)
-            self.assertIn(
-                "-f name='Protected Exact-Revision Codex result'", workflow
-            )
+            self.assertIn("-f name='Protected Exact-Revision Codex result'", workflow)
             self.assertIn("-f name='Current revision review'", workflow)
             self.assertIn(
                 "actions/workflows/release-bot-exact-head-review.yml/runs?",
                 workflow,
             )
             self.assertIn(
-                "The durable workflow ledger does not contain exactly one "
-                "protected AI invocation",
+                "The durable workflow ledger does not contain exactly one protected AI invocation",
                 workflow,
             )
-            self.assertIn(
-                "Reusing the protected PASS for identical input", workflow
-            )
-        self.assertIn(
-            'select(.app.id == 15368 and .app.slug == "github-actions")', workflow
-        )
+            self.assertIn("Reusing the protected PASS for identical input", workflow)
+        self.assertIn('select(.app.id == 15368 and .app.slug == "github-actions")', workflow)
         self.assertIn('completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"', workflow)
         self.assertIn('-f "completed_at=${completed_at}"', workflow)
         self.assertIn("and .completed_at == $completed_at", workflow)
