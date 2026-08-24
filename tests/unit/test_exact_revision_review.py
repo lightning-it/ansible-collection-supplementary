@@ -320,6 +320,9 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             )
             self.assertNotIn("current_external_id", publisher)
             self.assertIn("strict status policy", publisher)
+            self.assertIn('completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"', workflow)
+            self.assertIn('-f "completed_at=${completed_at}"', workflow)
+            self.assertIn("and .completed_at == $completed_at", workflow)
         if has_durable_publisher:
             self.assertIn("-f name='Protected Exact-Revision Codex result'", workflow)
             self.assertIn(
@@ -333,9 +336,6 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             self.assertIn("Reusing the protected PASS for identical input", workflow)
         self.assertTrue("'Current revision review'" in workflow or "-f name='Current revision review'" in workflow)
         self.assertIn('select(.app.id == 15368 and .app.slug == "github-actions")', workflow)
-        self.assertIn('completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"', workflow)
-        self.assertIn('-f "completed_at=${completed_at}"', workflow)
-        self.assertIn("and .completed_at == $completed_at", workflow)
         self.assertIn("filter=all", workflow)
         self.assertIn("per_page=100", workflow)
         self.assertIn("automatic retry is forbidden", workflow)
