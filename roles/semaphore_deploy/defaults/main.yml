@@ -9,7 +9,7 @@ semaphore_deploy_image: >-
 # Default is shared PostgreSQL managed outside this role.
 semaphore_deploy_manage_postgres: false
 semaphore_deploy_postgres_image: >-
-  docker.io/library/postgres:16@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5
+  docker.io/library/postgres:16@sha256:c1b3783309b6499c795eed7c20135a1a4d25cae1b575c3d52c6f536129a1b109
 semaphore_deploy_postgres_pod_name: "{{ semaphore_deploy_pod_name }}-postgres"
 semaphore_deploy_postgres_pod_manifest_path: >-
   /etc/podman/pods/{{ semaphore_deploy_postgres_pod_name }}.yml
