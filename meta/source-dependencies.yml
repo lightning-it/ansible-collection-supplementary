@@ -14,7 +14,7 @@ container_images:
   - reference: "docker.io/caddy:2@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d"
     locations:
       - "roles/nexus/defaults/main.yml"
-  - reference: "docker.io/checkmk/check-mk-raw:2.4.0-latest@sha256:3b2662d15f996841ed18aa86a24403827746b4b6f56b931fe174c8cb85c2d91e"
+  - reference: "docker.io/checkmk/check-mk-raw:2.4.0-latest@sha256:7f279869af2fa651ce6370200d6c2279dbb074c9e46e35df96ab442fa546d2b4"
     locations:
       - "roles/checkmk_deploy/defaults/main.yml"
   - reference: "docker.io/coredns/coredns:1.14.7@sha256:7efd3c635b03efd68c4e8398fc45f0d993d0e9ab016f72c1cefb0fd6d01aa286"
