@@ -384,7 +384,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             "producer_url=\"$(jq -r '.[0].details_url // empty'",
             rerun,
         )
-        self.assertGreaterEqual(rerun.count(".triggering_actor.login == $actor"), 2)
+        self.assertEqual(1, rerun.count(".triggering_actor.login == $actor"))
         retry = rerun.split(
             'test "$(jq -r .conclusion <<<"${run}")" = failure',
             1,
@@ -435,12 +435,27 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             'run="$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}")"',
             1,
         )[1].split('if [ "$(jq -r .conclusion <<<"${run}")" = success ]', 1)[0]
+        self.assertIn(
+            "head_repository=\"$(jq -er '.head.repo.full_name",
+            rerun,
+        )
+        self.assertIn('--arg base_ref "${base_ref}"', required_run)
         self.assertIn('--arg head_ref "${head_ref}"', required_run)
+        self.assertIn('--arg head_repository "${head_repository}"', required_run)
         self.assertIn('--arg head_sha "${EXPECTED_HEAD}"', required_run)
         self.assertIn(".head_branch == $head_ref", required_run)
         self.assertIn(".head_sha == $head_sha", required_run)
+        self.assertIn(".pull_requests[0].base.ref == $base_ref", required_run)
+        self.assertIn(
+            '.pull_requests[0].head.repo.url == ($api_url + "/repos/" + $head_repository)',
+            required_run,
+        )
         self.assertNotIn(".head_branch == $base_ref", required_run)
         self.assertNotIn(".head_sha == $base_sha", required_run)
+        self.assertNotIn(
+            "and .head.repo.full_name == $repository",
+            required_run,
+        )
 
     def test_review_producers_request_only_the_protected_verifier_rerun(self) -> None:
         for name in ("copilot-review.yml", "release-bot-exact-head-review.yml"):
