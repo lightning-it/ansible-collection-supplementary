@@ -105,11 +105,9 @@ jobs:
           test "$(jq -r .base.repo.full_name <<<"${pr}")" = "${REPOSITORY}"
           test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"
           test "$(jq -r .head.repo.full_name <<<"${pr}")" = "${REPOSITORY}"
-          author="$(jq -r .user.login <<<"${pr}")"
-          if [ "${author}" != litroc ]; then
-            echo "Contributor-funded review required; Lightning IT does not request or fund it."
-            exit 0
-          fi
+          # Re-prove the contributor-funding boundary from live PR state even
+          # though the protected job predicate already restricts this path.
+          test "$(jq -r .user.login <<<"${pr}")" = litroc
           reviewer_login="${COPILOT_REVIEWER_LOGIN%\[bot\]}"
           reviewer="${reviewer_login}[bot]"
           requested_reviewers_url="repos/${REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers"
@@ -647,6 +645,7 @@ jobs:
           echo "Verified an exact evidence-bound merge of current develop and main tips."
 
       - name: Verify current Copilot review and resolved findings
+        id: copilot-review
         if: >-
           steps.trusted-automation.outputs.trusted != 'true' &&
           github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'
@@ -1049,11 +1048,14 @@ jobs:
             exit 1
           fi
 
+          [[ "${review_id}" =~ ^[A-Za-z0-9_=-]+$ ]]
+          echo "review_id=${review_id}" >>"${GITHUB_OUTPUT}"
           echo "GitHub Copilot reviewed current head ${head_sha}; no unresolved Copilot findings remain."
 
       - name: Publish bound neutral result
         env:
           BOUND_LAST_EDITED_AT: ${{ steps.metadata-revision.outputs.last_edited_at }}
+          BOUND_REVIEW_ID: ${{ steps.copilot-review.outputs.review_id }}
           EVENT_ACTION: ${{ github.event.action }}
           GH_TOKEN: ${{ github.token }}
           EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
@@ -1141,6 +1143,32 @@ jobs:
                 return 1
               fi
               sleep 5
+            done
+          }
+          validate_bound_review() {
+            local attempt reviews
+            [[ "${BOUND_REVIEW_ID}" =~ ^[A-Za-z0-9_=-]+$ ]] || return 1
+            # GitHub can expose a completed review through GraphQL before the
+            # REST review collection converges. Re-prove the same immutable
+            # review with a bounded read-only wait; never request AI again.
+            for attempt in $(seq 1 10); do
+              if reviews="$(api_read --paginate --slurp \
+                  "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100")" \
+                && jq -e --arg head "${EVENT_HEAD}" --arg review_id "${BOUND_REVIEW_ID}" '
+                  [add[]? | select(.node_id == $review_id)] as $reviews |
+                  ($reviews | length) == 1
+                  and $reviews[0].commit_id == $head
+                  and ($reviews[0].user.login == "copilot-pull-request-reviewer"
+                    or $reviews[0].user.login == "copilot-pull-request-reviewer[bot]")
+                  and ($reviews[0].state == "COMMENTED" or $reviews[0].state == "APPROVED")
+                ' <<<"${reviews}" >/dev/null; then
+                return 0
+              fi
+              if [ "${attempt}" -eq 10 ]; then
+                echo "The exact bound Copilot review did not converge across GitHub review APIs." >&2
+                return 1
+              fi
+              sleep 3
             done
           }
           [[ "${EVENT_BASE}" =~ ^[0-9a-f]{40}$ ]]
@@ -1266,12 +1294,18 @@ jobs:
             test "${author}" != 'lightning-it-shared-assets-sync[bot]'
             test "${author}" != 'lightning-it-release-automation[bot]'
           fi
+          if [ "${external_kind}" = copilot ]; then
+            validate_bound_review
+          else
+            test -z "${BOUND_REVIEW_ID}"
+          fi
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           evidence="$(jq -cn \
             --arg base "${EVENT_BASE}" \
             --arg controller "${TRUSTED_WORKFLOW_SHA}" \
             --arg head "${EVENT_HEAD}" \
             --arg last_edited_at "${BOUND_LAST_EDITED_AT}" \
+            --arg review_id "${BOUND_REVIEW_ID}" \
             --arg review_path "${review_path}" \
             --argjson pr_number "${PR_NUMBER}" \
             --argjson run_id "${GITHUB_RUN_ID}" \
@@ -1280,6 +1314,7 @@ jobs:
               pull_request_number:$pr_number,producer_run_id:$run_id,
               pull_request_last_edited_at:(
                 if $last_edited_at == "null" then null else $last_edited_at end),
+              review_id:(if $review_id == "" then null else $review_id end),
               review_path:$review_path,run_url:$run_url}')"
           publish_once() {
             local check_name="$1" external_id="$2" title="$3"
@@ -1409,12 +1444,17 @@ jobs:
             "${result_title}")"
           [[ "${published_check_id}" =~ ^[1-9][0-9]*$ ]]
           final_last_edited_at=''
+          final_review_valid=true
+          if [ "${external_kind}" = copilot ] && ! validate_bound_review; then
+            final_review_valid=false
+          fi
           if ! final_last_edited_at="$(read_metadata_revision)" \
-            || [ "${final_last_edited_at}" != "${BOUND_LAST_EDITED_AT}" ]; then
+            || [ "${final_last_edited_at}" != "${BOUND_LAST_EDITED_AT}" ] \
+            || [ "${final_review_valid}" != true ]; then
             failure_evidence="$(jq -cn \
               --arg base "${EVENT_BASE}" \
               --arg head "${EVENT_HEAD}" \
-              --arg reason "pull-request metadata changed during result publication" \
+              --arg reason "pull-request metadata changed during result publication or bound review state changed" \
               --argjson pr_number "${PR_NUMBER}" \
               --argjson run_id "${GITHUB_RUN_ID}" \
               --arg run_url "${run_url}" \
@@ -1443,7 +1483,7 @@ jobs:
                 and .conclusion == "failure"
                 and .output.summary == $evidence
               ' <<<"${invalidated}" >/dev/null
-            echo "Pull-request metadata changed during result publication." >&2
+            echo "Pull-request metadata changed during result publication or bound review state changed." >&2
             exit 1
           fi
 

@@ -508,7 +508,8 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         )[0]
         review_job = workflow.split("  verify-current-revision-policy:", 1)[1]
         self.assertIn("github.event.pull_request.user.login == 'litroc'", request_job)
-        self.assertIn("Contributor-funded review required", request_job)
+        self.assertIn('test "$(jq -r .user.login <<<"${pr}")" = litroc', request_job)
+        self.assertNotIn("Contributor-funded review required", request_job)
         self.assertIn("pull_request_target:", workflow)
         self.assertNotIn("pull_request_review:", workflow)
         self.assertNotIn("workflow_dispatch:", workflow)
@@ -650,7 +651,8 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             "  verify-current-revision-policy:", 1
         )[0]
         self.assertIn("github.event.pull_request.user.login == 'litroc'", request_job)
-        self.assertIn("Contributor-funded review required", request_job)
+        self.assertIn('test "$(jq -r .user.login <<<"${pr}")" = litroc', request_job)
+        self.assertNotIn("Contributor-funded review required", request_job)
         policy = (ROOT / "docs/mlx90-exact-revision-codex-review.md").read_text(encoding="utf-8")
         self.assertIn("exact account\n`litroc`", policy)
         self.assertIn("under their own", policy)

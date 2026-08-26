@@ -1,0 +1,3 @@
+---
+security_fixes:
+  - Re-prove the litroc funding boundary and the exact Copilot review identity across GitHub review APIs.

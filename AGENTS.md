@@ -65,7 +65,13 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
 5. Lightning IT automation MAY automatically request a paid Copilot review only for the exact personal account
    `litroc`. External contributors must supply valid current-head evidence using their own entitlement; Lightning IT
    MUST NOT request or fund their AI usage.
-6. Candidate-controlled Codex output is not a protected attestation. Until a separately governed, identity-bound
+6. The protected human Copilot request job MUST restrict its immutable predicate to `litroc` and MUST re-prove the
+   live pull-request author as exactly `litroc` immediately before requesting review. A contributor-funded path may
+   never return success from the Lightning IT-funded request job.
+7. If GitHub exposes a completed Copilot review through GraphQL before the REST review collection converges, the
+   controller MUST bind the exact GraphQL review node ID and re-prove that same ID and head through a bounded,
+   read-only REST convergence wait before and after publishing the protected result. It MUST NOT request AI again.
+8. Candidate-controlled Codex output is not a protected attestation. Until a separately governed, identity-bound
    personal-Codex evidence contract exists, it cannot satisfy `Current revision review`; the gate fails closed.
 
 ## 2. Repository Baseline (This Repo)
