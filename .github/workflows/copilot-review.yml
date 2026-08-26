@@ -120,6 +120,7 @@ jobs:
             reviews="$(gh api --paginate --slurp \
               "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100")"
             jq -e \
+              --arg reviewer_login "${reviewer_login}" \
               --arg reviewer "${reviewer}" \
               --arg head "${EXPECTED_HEAD}" \
               --arg retry_unable "${UNABLE_REVIEW_MARKER}" \
@@ -128,7 +129,7 @@ jobs:
               --arg retry_quota_exceeded "${QUOTA_EXCEEDED_MARKER}" \
               --arg retry_suppressed "${SUPPRESSED_COMMENTS_MARKER}" '
                 any(add[];
-                  .user.login == $reviewer
+                  (.user.login == $reviewer_login or .user.login == $reviewer)
                   and .commit_id == $head
                   and (.state == "COMMENTED" or .state == "APPROVED")
                   and (((.body // "") | ascii_downcase) as $body

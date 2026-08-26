@@ -311,6 +311,8 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertNotIn("Contributor-funded review required", request_job)
         self.assertIn("Copilot already reviewed the exact finalized head", request_job)
         self.assertIn('reviews="$(gh api --paginate --slurp', request_job)
+        self.assertIn('--arg reviewer_login "${reviewer_login}"', request_job)
+        self.assertIn('(.user.login == $reviewer_login or .user.login == $reviewer)', request_job)
         self.assertNotIn("review_status", request_job)
         self.assertIn("mlx90-copilot-request head=${EXPECTED_HEAD}", request_job)
         self.assertIn(
