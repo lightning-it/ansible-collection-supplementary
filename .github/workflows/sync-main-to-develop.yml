@@ -27,7 +27,7 @@ jobs:
       - name: Mint release automation App token
         id: release-app
         if: github.repository != 'lightning-it/.github'
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
@@ -39,7 +39,7 @@ jobs:
       - name: Mint protected workflow-source App token
         id: workflow-source-app
         if: github.repository == 'lightning-it/.github'
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ vars.SHARED_ASSETS_SYNC_APP_CLIENT_ID }}
           private-key: ${{ secrets.SHARED_ASSETS_SYNC_APP_PRIVATE_KEY }}
@@ -229,29 +229,60 @@ jobs:
             BACKMERGE_UPLOAD_ENCODED="${upload_encoded}"
             BACKMERGE_UPLOAD_EXPECTED="${desired_head}"
             trap cleanup_upload_ref_best_effort EXIT
-            upload_head="$(
-              gh api "repos/${REPOSITORY}/git/ref/${upload_encoded}" --jq .object.sha
-            )"
-            test "${upload_head}" = "${desired_head}"
-
-            if ! created="$(gh api --method POST \
-                "repos/${REPOSITORY}/git/refs" \
-                -f "ref=refs/heads/${branch_name}" \
-                -f "sha=${desired_head}")"; then
-              remote_head="$(
-                gh api "repos/${REPOSITORY}/git/ref/${encoded_ref}" --jq .object.sha
-              )"
-              if [ "${remote_head}" != "${desired_head}" ]; then
-                cleanup_upload_ref_best_effort
-                echo "::error::Backmerge branch collision; refusing to overwrite existing history."
-                return 1
+            upload_ref_ready=false
+            for upload_visibility_delay in 0 1 2 4 8; do
+              if [ "${upload_visibility_delay}" -gt 0 ]; then
+                sleep "${upload_visibility_delay}"
               fi
-            else
-              jq -e \
-                --arg ref "refs/heads/${branch_name}" \
-                --arg sha "${desired_head}" '
-                  .ref == $ref and .object.sha == $sha
-                ' <<<"${created}" >/dev/null
+              if upload_head="$(
+                gh api "repos/${REPOSITORY}/git/ref/${upload_encoded}" \
+                  --jq .object.sha 2>/dev/null
+              )"; then
+                if [ "${upload_head}" != "${desired_head}" ]; then
+                  echo '::error::Temporary backmerge upload ref changed unexpectedly.'
+                  return 1
+                fi
+                upload_ref_ready=true
+                break
+              fi
+            done
+            if [ "${upload_ref_ready}" != true ]; then
+              echo '::error::GitHub did not materialize the exact temporary backmerge ref after bounded retries.'
+              return 1
+            fi
+
+            final_ref_ready=false
+            for create_delay in 0 1 2 4 8; do
+              if [ "${create_delay}" -gt 0 ]; then
+                sleep "${create_delay}"
+              fi
+              if created="$(gh api --method POST \
+                  "repos/${REPOSITORY}/git/refs" \
+                  -f "ref=refs/heads/${branch_name}" \
+                  -f "sha=${desired_head}" 2>/dev/null)"; then
+                jq -e \
+                  --arg ref "refs/heads/${branch_name}" \
+                  --arg sha "${desired_head}" '
+                    .ref == $ref and .object.sha == $sha
+                  ' <<<"${created}" >/dev/null
+              fi
+              if remote_head="$(
+                gh api "repos/${REPOSITORY}/git/ref/${encoded_ref}" \
+                  --jq .object.sha 2>/dev/null
+              )"; then
+                if [ "${remote_head}" != "${desired_head}" ]; then
+                  cleanup_upload_ref_best_effort
+                  echo "::error::Backmerge branch collision; refusing to overwrite existing history."
+                  return 1
+                fi
+                final_ref_ready=true
+                break
+              fi
+            done
+            if [ "${final_ref_ready}" != true ]; then
+              cleanup_upload_ref_best_effort
+              echo '::error::GitHub did not materialize the immutable backmerge ref after bounded retries.'
+              return 1
             fi
             test "$(
               gh api "repos/${REPOSITORY}/git/ref/${encoded_ref}" --jq .object.sha
@@ -321,7 +352,7 @@ jobs:
           steps.exact-review-target.outputs.pr_number != '' &&
           github.repository != 'lightning-it/.github'
         id: review-dispatch-app
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
