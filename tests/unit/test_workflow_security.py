@@ -367,7 +367,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("select(.node_id == $review_id)", publisher)
         self.assertIn("$reviews[0].commit_id == $head", publisher)
         self.assertIn('test -z "${BOUND_REVIEW_ID}"', publisher)
-        self.assertIn("review_id:(if $review_id == \"\" then null else $review_id end)", publisher)
+        self.assertIn('review_id:(if $review_id == "" then null else $review_id end)', publisher)
         self.assertEqual(3, publisher.count("validate_bound_review"))
 
     def test_release_app_ancestry_backmerge_uses_only_exact_revision_codex(
