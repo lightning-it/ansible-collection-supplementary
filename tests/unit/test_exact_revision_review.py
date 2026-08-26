@@ -477,8 +477,13 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             "mlx90-current-revision:${external_kind}:v6:${PR_NUMBER}:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}",
             workflow,
         )
-        self.assertIn("'{schema:4,base_sha:$base,head_sha:$head,", workflow)
+        self.assertIn(
+            "'{schema:4,base_sha:$base,head_sha:$head,head_repository:$head_repository,",
+            workflow,
+        )
         self.assertIn("controller_sha:$controller", workflow)
+        self.assertIn("controller_ref:$controller_ref", workflow)
+        self.assertIn("pull_request_labels_sha256:$labels_sha256", workflow)
         self.assertIn("pull_request_number:$pr_number", workflow)
         self.assertIn("producer_run_id:$run_id", workflow)
         self.assertIn("read_named_checks() {", workflow)
@@ -492,10 +497,11 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("read_metadata_revision() {", workflow)
         self.assertIn("pull_request_last_edited_at", workflow)
         self.assertIn(
-            "mlx90-current-revision:metadata-edit:v1:${PR_NUMBER}:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}",
+            "mlx90-current-revision:metadata-${reservation_kind}:v1:${PR_NUMBER}:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}",
             workflow,
         )
-        self.assertIn("pull-request metadata changed during result publication", workflow)
+        self.assertIn("read_labels_sha256() {", workflow)
+        self.assertIn("pull-request metadata, labels, or review state changed during result publication", workflow)
         self.assertIn("and .external_id == $external_id", workflow)
         self.assertIn("${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}", workflow)
         self.assertGreaterEqual(workflow.count('-f "details_url=${check_url}"'), 2)
@@ -514,7 +520,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("pull_request_review:", workflow)
         self.assertNotIn("workflow_dispatch:", workflow)
         condition = review_job.split("    if: >-", 1)[1].split("    permissions:", 1)[0]
-        self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", condition)
+        self.assertNotIn("github.event.pull_request.head.repo.full_name == github.repository", condition)
         self.assertIn("github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'", condition)
         self.assertNotIn("github.event.pull_request.user.login == 'lightning-it-release-automation[bot]'", condition)
         self.assertNotIn("github.event.pull_request.base.ref == 'develop'", condition)
@@ -530,14 +536,19 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("mlx90-legacy-copilot:", workflow)
         self.assertNotIn("'Successful Copilot review'", review_job)
         self.assertIn('-f name="${check_name}"', review_job)
-        self.assertNotIn('test "${EVENT_BASE}" = "${TRUSTED_WORKFLOW_SHA}"', review_job)
-        self.assertIn("${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}", review_job)
-        self.assertIn("compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", review_job)
+        self.assertIn('test "${TRUSTED_WORKFLOW_SHA}" = "${EVENT_BASE}"', review_job)
+        self.assertIn(
+            "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${EVENT_BASE_REF}",
+            review_job,
+        )
+        self.assertNotIn("compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", review_job)
         self.assertEqual(1, request_job.count("EXPECTED_HEAD_REF: ${{ github.event.pull_request.head.ref }}"))
         self.assertIn('--arg branch "${EXPECTED_HEAD_REF}"', request_job)
         self.assertIn('--arg sha "${EXPECTED_HEAD}"', request_job)
         self.assertIn("EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}", review_job)
+        self.assertIn("EVENT_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}", review_job)
         self.assertIn('--arg branch "${EVENT_HEAD_REF}"', review_job)
+        self.assertIn('--arg head_repository "${EVENT_HEAD_REPOSITORY}"', review_job)
         self.assertIn('--arg sha "${EVENT_HEAD}"', review_job)
         self.assertIn(".head_branch == $branch", review_job)
         self.assertIn(".head_sha == $sha", review_job)

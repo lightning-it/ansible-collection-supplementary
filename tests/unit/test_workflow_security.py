@@ -334,15 +334,26 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         )
         self.assertEqual(2, copilot.count("cancel-in-progress: false"))
         self.assertIn("pull_request_target:", copilot)
-        self.assertIn(
-            "types: [opened, synchronize, reopened, ready_for_review, edited]",
-            copilot,
-        )
+        for action in (
+            "opened",
+            "synchronize",
+            "reopened",
+            "ready_for_review",
+            "edited",
+            "labeled",
+            "unlabeled",
+        ):
+            self.assertIn(f"        {action},", copilot)
         self.assertIn("github.event.action == 'edited'", verify_job)
         self.assertIn(
-            "Invalidate prior result after pull-request metadata edit",
+            "Invalidate prior result after pull-request metadata change",
             verify_job,
         )
+        self.assertIn("github.event.action == 'labeled'", verify_job)
+        self.assertIn("github.event.action == 'unlabeled'", verify_job)
+        self.assertIn("pull_request_labels_sha256", verify_job)
+        self.assertIn("head_repository:$head_repository", verify_job)
+        self.assertIn("controller_ref:$controller_ref", verify_job)
         self.assertIn("conclusion=failure", verify_job)
         self.assertNotIn("pull_request_review:", copilot)
         documentation = (ROOT / "docs/push-ready-optimization.md").read_text(encoding="utf-8")
