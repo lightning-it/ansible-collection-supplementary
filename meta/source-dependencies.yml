@@ -54,7 +54,7 @@ container_images:
       - "roles/netbox_deploy/defaults/main.yml"
       - "roles/postgres_deploy/defaults/main.yml"
       - "roles/semaphore_deploy/defaults/main.yml"
-  - reference: "docker.io/netboxcommunity/netbox:v4.6-5.0.2@sha256:ca71954800b67a6fbac8142bd9a67a646a22b8a02eb564cf53abd1e96d7dadca"
+  - reference: "docker.io/netboxcommunity/netbox:v4.6-5.0.2@sha256:b3b5e3ae884d1daa23958bd3b2eb777864c42b8b25a2cb5ce2af857654aba3f7"
     locations:
       - "roles/netbox_deploy/defaults/main.yml"
   - reference: "docker.io/prom/alertmanager:v0.34.0@sha256:690c7b525f4367aa91f73e2f91c632206d32e97c6384bdbf2fb7a861b420340d"
