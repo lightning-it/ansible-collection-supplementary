@@ -380,7 +380,9 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertEqual(2, copilot.count('=~ ^[A-Za-z0-9_+/=-]+$'))
         self.assertNotIn('=~ ^[A-Za-z0-9_=-]+$', copilot)
         self.assertGreater(
-            publisher.index('default_head="$(gh api "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}"'),
+            publisher.index(
+                'default_head="$(gh api "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}"'
+            ),
             publisher.index('elif [ "${TRUSTED_KIND}" = ancestry-backmerge ]; then'),
         )
         self.assertIn('test -z "${BOUND_REVIEW_ID}"', publisher)
