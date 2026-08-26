@@ -2,4 +2,5 @@
 security_fixes:
   - >-
     Re-prove the litroc funding boundary and exact Copilot review identity across GitHub review APIs, bind the
-    protected base controller, head repository, and live label set, and fail closed on every bound metadata change.
+    protected base controller, head repository, and live label set, accept every valid GitHub base64 node-ID
+    character, avoid unrelated branch lookups, and fail closed on every bound metadata change.
