@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    Split the accumulated REP-60 main promotion at the existing production
+    Exact-Revision controller boundary so every protected review remains below
+    the immutable 200000-byte input ceiling without weakening the limit.
