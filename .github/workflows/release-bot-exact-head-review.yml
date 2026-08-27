@@ -137,43 +137,37 @@ jobs:
               "repos/${REPOSITORY}/commits/${EXPECTED_HEAD}/check-runs?check_name=Protected%20Exact-Revision%20Codex%20result&filter=all&per_page=100"
           }
           create_reservation_once() {
-            local title="$1" summary="$2" created recovered recovery_attempt
-            if ! created="$(gh api --method POST "repos/${REPOSITORY}/check-runs" \
+            local created recovered recovery_attempt recovery_count
+            if created="$(gh api --method POST "repos/${REPOSITORY}/check-runs" \
                 -f name='Protected Exact-Revision Codex result' \
                 -f head_sha="${EXPECTED_HEAD}" \
                 -f status=in_progress \
                 -f external_id="${external_id}" \
-                -f "output[title]=${title}" \
-                -f "output[summary]=${summary}")"; then
-              created=''
-              for recovery_attempt in $(seq 1 5); do
-                echo "Recovering immutable reservation creation outcome (attempt ${recovery_attempt}/5)." >&2
-                sleep 5
-                if ! recovered="$(read_reservation_checks | jq -c \
-                  --arg external_id "${external_id}" \
-                  --arg head "${EXPECTED_HEAD}" '
-                    [.[].check_runs[]? |
-                      select(.name == "Protected Exact-Revision Codex result") |
-                      select(.app.id == 15368 and .app.slug == "github-actions") |
-                      select(.head_sha == $head and .external_id == $external_id)]')"; then
-                  echo "Reservation recovery read failed; retrying read-only reconciliation." >&2
-                  continue
-                fi
-                if [ "$(jq 'length' <<<"${recovered}")" -gt 1 ]; then
-                  echo "Ambiguous immutable reservation creation outcome." >&2
-                  return 1
-                fi
-                if [ "$(jq 'length' <<<"${recovered}")" -eq 1 ]; then
-                  created="$(jq -c '.[0]' <<<"${recovered}")"
-                  break
-                fi
-              done
-              if [ -z "${created}" ]; then
-                echo "Reservation creation failed without one materialized exact result." >&2
+                -f "output[title]=$1" -f "output[summary]=$2")"; then
+              printf '%s' "${created}"
+              return
+            fi
+            for recovery_attempt in 1 2 3 4 5; do
+              echo "Recovering immutable reservation creation outcome (${recovery_attempt}/5)." >&2
+              sleep 5
+              if ! recovered="$(read_reservation_checks | jq -c \
+                  --arg external_id "${external_id}" --arg head "${EXPECTED_HEAD}" \
+                  '[.[].check_runs[]? | select(.app.id == 15368 and .app.slug == "github-actions") |
+                    select(.head_sha == $head and .external_id == $external_id)]')"; then
+                continue
+              fi
+              recovery_count="$(jq 'length' <<<"${recovered}")"
+              if [ "${recovery_count}" -eq 1 ]; then
+                jq -c '.[0]' <<<"${recovered}"
+                return
+              fi
+              if [ "${recovery_count}" -gt 1 ]; then
+                echo "Ambiguous immutable reservation creation outcome." >&2
                 return 1
               fi
-            fi
-            printf '%s' "${created}"
+            done
+            echo "Reservation creation failed without one materialized exact result." >&2
+            return 1
           }
           checks="$(read_reservation_checks)"
           matching="$(jq -c \

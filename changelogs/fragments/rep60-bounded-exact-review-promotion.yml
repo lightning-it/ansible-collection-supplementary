@@ -5,4 +5,4 @@ minor_changes:
     below the immutable 200000-byte input ceiling without weakening the limit.
     The first stage retains the bounded-diff materializer, remediation guards,
     prompt, verifier tests, and recoverable check reservation while deferring
-    only documentation and changelog metadata to the second promotion.
+    only changelog metadata and format-only JSON layout to the second promotion.
