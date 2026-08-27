@@ -7,12 +7,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-
-SCRIPT = (
-    Path(__file__).resolve().parents[2]
-    / "scripts"
-    / "verify-dot-github-current-revision.py"
-)
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "verify-dot-github-current-revision.py"
 SPEC = importlib.util.spec_from_file_location("dot_github_verifier", SCRIPT)
 if SPEC is None or SPEC.loader is None:  # pragma: no cover - import contract
     raise RuntimeError("Unable to load the dot-github verifier")
