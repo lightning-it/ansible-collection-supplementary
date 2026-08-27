@@ -302,11 +302,20 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("github.event.action == 'ready_for_review'", request_job)
         self.assertIn("github.event.action == 'opened'", request_job)
         self.assertIn("github.event_name == 'pull_request_target'", request_job)
+        self.assertIn("github.event.pull_request.user.login == 'litroc'", request_job)
         self.assertNotIn("workflow_dispatch", request_job)
         self.assertNotIn("synchronize", request_job)
         self.assertIn('test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"', request_job)
+        self.assertIn('test "$(jq -r .user.login <<<"${pr}")" = litroc', request_job)
+        self.assertNotIn('if [ "${author}" != litroc ]', request_job)
+        self.assertNotIn("Contributor-funded review required", request_job)
         self.assertIn("Copilot already reviewed the exact finalized head", request_job)
         self.assertIn('reviews="$(gh api --paginate --slurp', request_job)
+        self.assertIn('--arg reviewer_login "${reviewer_login}"', request_job)
+        self.assertIn(
+            "(.user.login == $reviewer_login or .user.login == $reviewer)",
+            request_job,
+        )
         self.assertNotIn("review_status", request_job)
         self.assertIn("mlx90-copilot-request head=${EXPECTED_HEAD}", request_job)
         self.assertIn(
@@ -330,20 +339,58 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         )
         self.assertEqual(2, copilot.count("cancel-in-progress: false"))
         self.assertIn("pull_request_target:", copilot)
-        self.assertIn(
-            "types: [opened, synchronize, reopened, ready_for_review, edited]",
-            copilot,
-        )
+        for action in (
+            "opened",
+            "synchronize",
+            "reopened",
+            "ready_for_review",
+            "edited",
+            "labeled",
+            "unlabeled",
+        ):
+            self.assertIn(f"        {action},", copilot)
         self.assertIn("github.event.action == 'edited'", verify_job)
         self.assertIn(
-            "Invalidate prior result after pull-request metadata edit",
+            "Invalidate prior result after pull-request metadata change",
             verify_job,
         )
+        self.assertIn("github.event.action == 'labeled'", verify_job)
+        self.assertIn("github.event.action == 'unlabeled'", verify_job)
+        self.assertIn("pull_request_labels_sha256", verify_job)
+        self.assertIn("head_repository:$head_repository", verify_job)
+        self.assertIn("controller_ref:$controller_ref", verify_job)
         self.assertIn("conclusion=failure", verify_job)
         self.assertNotIn("pull_request_review:", copilot)
         documentation = (ROOT / "docs/push-ready-optimization.md").read_text(encoding="utf-8")
         self.assertIn("when `litroc` opens an already-ready PR", documentation)
         self.assertIn("Opening a draft and every synchronize event remain AI-free", documentation)
+
+    def test_bound_copilot_review_converges_across_graphql_and_rest(self) -> None:
+        copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
+        verifier = copilot.split("      - name: Verify current Copilot review and resolved findings", 1)[1].split(
+            "      - name: Publish bound neutral result", 1
+        )[0]
+        publisher = copilot.split("      - name: Publish bound neutral result", 1)[1].split(
+            "  request-protected-verifier-reevaluation:", 1
+        )[0]
+
+        self.assertIn("id: copilot-review", verifier)
+        self.assertIn('echo "review_id=${review_id}" >>"${GITHUB_OUTPUT}"', verifier)
+        self.assertIn("BOUND_REVIEW_ID: ${{ steps.copilot-review.outputs.review_id }}", publisher)
+        self.assertIn("validate_bound_review() {", publisher)
+        self.assertIn("for attempt in $(seq 1 10); do", publisher)
+        self.assertIn("sleep 3", publisher)
+        self.assertIn("select(.node_id == $review_id)", publisher)
+        self.assertIn("$reviews[0].commit_id == $head", publisher)
+        self.assertEqual(2, copilot.count("=~ ^[A-Za-z0-9_+/=-]+$"))
+        self.assertNotIn("=~ ^[A-Za-z0-9_=-]+$", copilot)
+        self.assertGreater(
+            publisher.index('default_head="$(gh api "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}"'),
+            publisher.index('elif [ "${TRUSTED_KIND}" = ancestry-backmerge ]; then'),
+        )
+        self.assertIn('test -z "${BOUND_REVIEW_ID}"', publisher)
+        self.assertIn('review_id:(if $review_id == "" then null else $review_id end)', publisher)
+        self.assertEqual(3, publisher.count("validate_bound_review"))
 
     def test_release_app_ancestry_backmerge_uses_only_exact_revision_codex(
         self,
