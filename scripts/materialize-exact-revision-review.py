@@ -1,6 +1,6 @@
-"""Materialize and re-verify the bounded MLX-90 exact-revision review input."""
+"""Materialize the bounded REP-60 / MLX-90 section 7.2 review input."""
 
-# Format contract: Ruff 0.15.21 with line length 120 (Supplementary consumer policy).
+# Canonical formatting contract: Ruff-compatible Python with line length 120.
 
 from __future__ import annotations
 
@@ -10,11 +10,13 @@ import json
 import os
 import re
 import secrets
+import selectors
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, NoReturn
@@ -543,9 +545,95 @@ def git_output(
     *,
     environment: dict[str, str],
     binary: bool = False,
+    max_bytes: int | None = None,
 ) -> bytes | str:
+    command = [git, f"--git-dir={git_dir}", *arguments]
+    if max_bytes is not None:
+        if not binary or max_bytes <= 0:
+            fail("Bounded Git output requires a positive binary byte limit.")
+        try:
+            process = subprocess.Popen(  # noqa: S603
+                command,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except OSError as error:
+            fail(f"Command failed to start: {' '.join(command)}: {error}")
+        if process.stdout is None or process.stderr is None:
+            process.kill()
+            process.wait()
+            fail("Bounded Git output pipes could not be created.")
+        selector = selectors.DefaultSelector()
+        stdout = bytearray()
+        stderr = bytearray()
+        limit_exceeded = False
+        deadline = time.monotonic() + COMMAND_TIMEOUT_SECONDS
+        try:
+            for stream, label in (
+                (process.stdout, "stdout"),
+                (process.stderr, "stderr"),
+            ):
+                os.set_blocking(stream.fileno(), False)
+                selector.register(stream, selectors.EVENT_READ, label)
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    process.kill()
+                    process.wait()
+                    fail(f"Command timed out after {COMMAND_TIMEOUT_SECONDS} seconds: {' '.join(command)}")
+                for key, _events in selector.select(remaining):
+                    if key.data == "stdout":
+                        # MLX-90 rejects inputs greater than or equal to the
+                        # protected boundary, so max_bytes is deliberately an
+                        # exclusive limit. Read one sentinel byte beyond the
+                        # remaining allowed payload to detect that boundary.
+                        remaining_allowed = max_bytes - 1 - len(stdout)
+                        read_size = min(65_536, remaining_allowed + 1)
+                    else:
+                        read_size = 65_536
+                    try:
+                        chunk = os.read(key.fd, read_size)
+                    except BlockingIOError:
+                        continue
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        continue
+                    if key.data == "stdout":
+                        remaining_allowed = max_bytes - 1 - len(stdout)
+                        if remaining_allowed > 0:
+                            stdout.extend(chunk[:remaining_allowed])
+                        if len(chunk) > remaining_allowed:
+                            limit_exceeded = True
+                            if process.poll() is None:
+                                process.kill()
+                    elif len(stderr) < 65_536:
+                        stderr.extend(chunk[: 65_536 - len(stderr)])
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                process.kill()
+                process.wait()
+                fail(f"Command timed out after {COMMAND_TIMEOUT_SECONDS} seconds: {' '.join(command)}")
+            try:
+                return_code = process.wait(timeout=remaining)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+                fail(f"Command timed out after {COMMAND_TIMEOUT_SECONDS} seconds: {' '.join(command)}")
+        finally:
+            selector.close()
+            process.stdout.close()
+            process.stderr.close()
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+        if limit_exceeded:
+            fail(f"Exact-revision review input exceeds the protected byte limit of {max_bytes - 1} bytes.")
+        if return_code != 0:
+            fail(f"Command failed closed: {' '.join(command)}: {stderr.decode(errors='replace').strip()}")
+        return bytes(stdout)
     result = run(
-        [git, f"--git-dir={git_dir}", *arguments],
+        command,
         environment=environment,
         binary=binary,
     )
@@ -679,6 +767,7 @@ def materialize(arguments: argparse.Namespace, output_directory: Path) -> dict[s
             ],
             environment=git_environment,
             binary=True,
+            max_bytes=MAX_REVIEW_BYTES,
         )
         if not isinstance(diff, bytes):
             fail("Git returned an invalid diff representation.")

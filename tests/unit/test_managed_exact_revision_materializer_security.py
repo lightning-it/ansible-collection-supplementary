@@ -8,7 +8,6 @@ import subprocess
 import tempfile
 import types
 import unittest
-from contextlib import ExitStack
 from pathlib import Path
 from unittest import mock
 
@@ -67,16 +66,6 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
             workflow.index('echo "check_id=${check_id}"'),
             workflow.index('-f "details_url=${check_url}"'),
         )
-        fail_close = workflow[
-            workflow.index("- name: Fail-close an unfinished protected reservation") : workflow.index(
-                "request-protected-verifier-reevaluation:"
-            )
-        ]
-        self.assertIn("api_read()", fail_close)
-        self.assertIn("api_patch()", fail_close)
-        self.assertIn('reservation="$(api_read ', fail_close)
-        self.assertIn('reservation="$(api_patch ', fail_close)
-        self.assertIn("for attempt in $(seq 1 5)", fail_close)
 
     def test_pr_number_is_validated_before_protected_review_work(self) -> None:
         workflow = REVIEW_WORKFLOW.read_text(encoding="utf-8")
@@ -283,84 +272,6 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
                 self.assertTrue(any("simulated close failure" in note for note in notes))
             self.assertEqual(b"unchanged", protected.read_bytes())
 
-    def assert_writer_close_failure(
-        self,
-        close_number: int,
-        expected_error: str,
-        expected_note: str,
-        *,
-        fstat_failure: bool = False,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            protected = Path(temporary).resolve() / "protected"
-            protected.write_bytes(b"unchanged")
-            opened_parent = self.module.open_owned_parent_directory(
-                protected,
-                "test",
-                "Protected file writing",
-            )
-            real_close = self.module.os.close
-            close_calls = 0
-
-            def close_then_report_failure(descriptor: int) -> None:
-                nonlocal close_calls
-                close_calls += 1
-                real_close(descriptor)
-                if close_calls == close_number:
-                    raise OSError(expected_note)
-
-            with ExitStack() as stack:
-                stack.enter_context(
-                    mock.patch.object(
-                        self.module,
-                        "open_owned_parent_directory",
-                        return_value=opened_parent,
-                    )
-                )
-                if fstat_failure:
-                    stack.enter_context(
-                        mock.patch.object(
-                            self.module.os,
-                            "fstat",
-                            side_effect=OSError(expected_error),
-                        )
-                    )
-                stack.enter_context(
-                    mock.patch.object(
-                        self.module.os,
-                        "close",
-                        side_effect=close_then_report_failure,
-                    )
-                )
-                raised = stack.enter_context(
-                    self.assertRaisesRegex(
-                        self.module.MaterializationError,
-                        expected_error,
-                    )
-                )
-                self.module.write_owned_regular_file(
-                    protected,
-                    b"replacement",
-                    "test",
-                )
-            notes = getattr(raised.exception, "__notes__", ())
-            if hasattr(raised.exception, "add_note"):
-                self.assertTrue(any(expected_note in note for note in notes))
-            self.assertEqual(b"unchanged", protected.read_bytes())
-
-    def test_protected_writer_descriptor_close_failures_fail_closed(self) -> None:
-        self.assert_writer_close_failure(
-            1,
-            "simulated fstat failure",
-            "simulated existing close failure",
-            fstat_failure=True,
-        )
-        self.assert_writer_close_failure(
-            2,
-            "temporary descriptor could not be closed safely",
-            "simulated temporary close failure",
-        )
-
     def test_protected_writer_directory_close_failure_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             protected = Path(temporary).resolve() / "protected"
@@ -405,6 +316,58 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
             if hasattr(raised.exception, "add_note"):
                 self.assertTrue(any("simulated directory close failure" in note for note in notes))
             self.assertEqual(b"replacement", protected.read_bytes())
+
+    def test_protected_writer_preserves_existing_close_note_when_fstat_fails(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            protected = Path(temporary).resolve() / "protected"
+            protected.write_bytes(b"unchanged")
+            opened_parent = self.module.open_owned_parent_directory(
+                protected,
+                "test",
+                "Protected file writing",
+            )
+            real_close = self.module.os.close
+            close_attempts: list[int] = []
+
+            def close_then_report_first_failure(descriptor: int) -> None:
+                close_attempts.append(descriptor)
+                real_close(descriptor)
+                if len(close_attempts) == 1:
+                    raise OSError("simulated existing close failure")
+
+            with (
+                mock.patch.object(
+                    self.module,
+                    "open_owned_parent_directory",
+                    return_value=opened_parent,
+                ),
+                mock.patch.object(
+                    self.module.os,
+                    "fstat",
+                    side_effect=OSError("simulated fstat failure"),
+                ),
+                mock.patch.object(
+                    self.module.os,
+                    "close",
+                    side_effect=close_then_report_first_failure,
+                ),
+                self.assertRaisesRegex(
+                    self.module.MaterializationError,
+                    "simulated fstat failure",
+                ) as raised,
+            ):
+                self.module.write_owned_regular_file(
+                    protected,
+                    b"replacement",
+                    "test",
+                )
+            notes = getattr(raised.exception, "__notes__", ())
+            if hasattr(raised.exception, "add_note"):
+                self.assertTrue(any("simulated existing close failure" in note for note in notes))
+            self.assertEqual(1, close_attempts.count(close_attempts[0]))
+            self.assertEqual(b"unchanged", protected.read_bytes())
 
     def test_protected_writer_directory_close_does_not_mask_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

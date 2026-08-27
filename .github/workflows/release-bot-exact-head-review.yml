@@ -1,5 +1,7 @@
 # Managed by lightning-it/shared-assets-lit.
 # Do not edit downstream copies directly.
+# Bounded repository-local promotion transition under AGENTS.md section 1.1(3-5):
+# automated Shared-Assets sync does not update this adopted workflow path.
 # Protected per-repository MLX-90 §7.2 Exact-Revision Codex controller.
 # yamllint disable rule:truthy rule:line-length
 ---

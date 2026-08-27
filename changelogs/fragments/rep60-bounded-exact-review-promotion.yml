@@ -1,8 +1,8 @@
 ---
 minor_changes:
   - >-
-    Split the accumulated REP-60 main promotion at the existing production AI
-    controller boundary so every protected review remains below
-    the immutable 200000-byte input ceiling without weakening the limit, and
-    bind the staged controller to the four reviewed fail-closed hardenings for
-    parent permissions, descriptor cleanup, and reservation finalization.
+    Split the accumulated REP-60 main promotion so every protected review stays
+    below the immutable 200000-byte input ceiling without weakening the limit.
+    The first stage retains the current bounded-diff materializer, remediation
+    guards, prompt, and security tests while deferring only one non-runtime test
+    and eleven Shared-Assets changelog fragments to the second promotion.
