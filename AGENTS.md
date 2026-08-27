@@ -65,8 +65,23 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
 5. Lightning IT automation MAY automatically request a paid Copilot review only for the exact personal account
    `litroc`. External contributors must supply valid current-head evidence using their own entitlement; Lightning IT
    MUST NOT request or fund their AI usage.
-6. Candidate-controlled Codex output is not a protected attestation. Until a separately governed, identity-bound
+6. The protected human Copilot request job MUST restrict its immutable predicate to `litroc` and MUST re-prove the
+   live pull-request author as exactly `litroc` immediately before requesting review. A contributor-funded path may
+   never return success from the Lightning IT-funded request job.
+7. If GitHub exposes a completed Copilot review through GraphQL before the REST review collection converges, the
+   controller MUST bind the exact GraphQL review node ID and re-prove that same ID and head through a bounded,
+   read-only REST convergence wait before and after publishing the protected result. It MUST NOT request AI again.
+8. Candidate-controlled Codex output is not a protected attestation. Until a separately governed, identity-bound
    personal-Codex evidence contract exists, it cannot satisfy `Current revision review`; the gate fails closed.
+9. The protected controller MUST execute from the exact protected PR base revision (`develop` or `main`), not from
+   a merely descendant default-branch controller. Its attestation MUST bind the base ref, base SHA, head repository,
+   head SHA, and the exact protected workflow SHA.
+10. The neutral result MUST bind the sorted live label set by SHA-256. Every title, body, label, base, head,
+    repository, or bound-review change invalidates prior evidence and requires fail-closed revalidation; it MUST NOT
+    request AI again merely because metadata changed.
+11. Contributor-funded fork reviews MAY be verified, but the Lightning IT-funded request job remains same-repository
+    and `litroc`-only. The verifier MUST preserve and bind the actual head repository instead of silently rewriting
+    fork identity to the base repository.
 
 ## 2. Repository Baseline (This Repo)
 
