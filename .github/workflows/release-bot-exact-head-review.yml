@@ -664,8 +664,36 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          api_read() {
+            local attempt output
+            for attempt in $(seq 1 5); do
+              if output="$(gh api "$@")"; then
+                printf '%s' "${output}"
+                return 0
+              fi
+              if [ "${attempt}" -eq 5 ]; then
+                echo "GitHub API read failed after five attempts." >&2
+                return 1
+              fi
+              sleep 5
+            done
+          }
+          api_patch() {
+            local attempt output
+            for attempt in $(seq 1 5); do
+              if output="$(gh api --method PATCH "$@")"; then
+                printf '%s' "${output}"
+                return 0
+              fi
+              if [ "${attempt}" -eq 5 ]; then
+                echo "GitHub API patch failed after five attempts." >&2
+                return 1
+              fi
+              sleep 5
+            done
+          }
           [[ "${CHECK_ID}" =~ ^[1-9][0-9]*$ ]]
-          reservation="$(gh api "repos/${REPOSITORY}/check-runs/${CHECK_ID}")"
+          reservation="$(api_read "repos/${REPOSITORY}/check-runs/${CHECK_ID}")"
           jq -e \
             --arg external_id "${EXPECTED_EXTERNAL_ID}" \
             --arg head "${EXPECTED_HEAD}" \
@@ -684,7 +712,7 @@ jobs:
             exit 0
           fi
           failure_evidence="The protected producer run ${GITHUB_SERVER_URL}/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID} ended before finalizing this immutable reservation."
-          reservation="$(gh api --method PATCH \
+          reservation="$(api_patch \
             "repos/${REPOSITORY}/check-runs/${CHECK_ID}" \
             -f status=completed \
             -f conclusion=failure \

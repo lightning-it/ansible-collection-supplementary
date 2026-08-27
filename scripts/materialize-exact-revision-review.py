@@ -247,6 +247,12 @@ def open_owned_parent_directory(path: Path, name: str, requirement: str) -> tupl
             directory,
             "Validated parent directory",
         )
+    if parent_details.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+        fail_after_descriptor_cleanup(
+            f"Protected {name} parent must not be group- or world-writable.",
+            directory,
+            "Validated parent directory",
+        )
     return directory, no_follow, close_on_exec
 
 
@@ -336,7 +342,19 @@ def write_owned_regular_file(path: Path, payload: bytes, name: str) -> None:
                     fail(f"Protected {name} must be owned by the current user.")
         finally:
             if existing_descriptor >= 0:
-                os.close(existing_descriptor)
+                descriptor_to_close = existing_descriptor
+                existing_descriptor = -1
+                active_error = sys.exc_info()[1]
+                cleanup_errors = close_descriptor_after_error(
+                    descriptor_to_close,
+                    f"Protected {name} existing descriptor",
+                )
+                if active_error is None and cleanup_errors:
+                    failure = MaterializationError(f"Protected {name} existing descriptor could not be closed safely.")
+                    add_error_notes(failure, cleanup_errors)
+                    raise failure
+                if active_error is not None:
+                    add_error_notes(active_error, cleanup_errors)
 
         temporary_descriptor = os.open(
             temporary_name,
@@ -369,8 +387,16 @@ def write_owned_regular_file(path: Path, payload: bytes, name: str) -> None:
         with os.fdopen(temporary_descriptor, "rb", closefd=False) as protected_file:
             if protected_file.read(len(payload) + 1) != payload:
                 fail(f"Protected {name} temporary content changed while writing.")
-        os.close(temporary_descriptor)
+        descriptor_to_close = temporary_descriptor
         temporary_descriptor = -1
+        cleanup_errors = close_descriptor_after_error(
+            descriptor_to_close,
+            f"Protected {name} temporary descriptor",
+        )
+        if cleanup_errors:
+            failure = MaterializationError(f"Protected {name} temporary descriptor could not be closed safely.")
+            add_error_notes(failure, cleanup_errors)
+            raise failure
 
         os.replace(
             temporary_name,
@@ -387,40 +413,40 @@ def write_owned_regular_file(path: Path, payload: bytes, name: str) -> None:
         except OSError:
             pass
     except OSError as error:
-        fail(f"Protected {name} cannot be written atomically: {error}")
+        failure = MaterializationError(f"Protected {name} cannot be written atomically: {error}")
+        add_error_notes(failure, getattr(error, "__notes__", ()))
+        raise failure from error
     finally:
         active_error = sys.exc_info()[1]
+        final_cleanup_errors: list[str] = []
         if temporary_descriptor >= 0:
-            try:
-                os.close(temporary_descriptor)
-            except OSError as cleanup_error:
-                cleanup_message = f"Protected {name} temporary close also failed: {cleanup_error}"
-                if active_error is None:
-                    fail(cleanup_message)
-                add_note = getattr(active_error, "add_note", None)
-                if callable(add_note):
-                    add_note(cleanup_message)
+            descriptor_to_close = temporary_descriptor
+            temporary_descriptor = -1
+            final_cleanup_errors.extend(
+                close_descriptor_after_error(
+                    descriptor_to_close,
+                    f"Protected {name} temporary descriptor",
+                )
+            )
         if not replaced:
             try:
                 os.unlink(temporary_name, dir_fd=directory)
             except FileNotFoundError:
                 pass
             except OSError as cleanup_error:
-                cleanup_message = f"Protected {name} temporary cleanup also failed: {cleanup_error}"
-                if active_error is None:
-                    fail(cleanup_message)
-                add_note = getattr(active_error, "add_note", None)
-                if callable(add_note):
-                    add_note(cleanup_message)
-        try:
-            os.close(directory)
-        except OSError as cleanup_error:
-            cleanup_message = f"Protected {name} parent directory close also failed: {cleanup_error}"
+                final_cleanup_errors.append(f"Protected {name} temporary cleanup also failed: {cleanup_error}")
+        final_cleanup_errors.extend(
+            close_descriptor_after_error(
+                directory,
+                f"Protected {name} parent directory",
+            )
+        )
+        if final_cleanup_errors:
             if active_error is None:
-                fail(cleanup_message)
-            add_note = getattr(active_error, "add_note", None)
-            if callable(add_note):
-                add_note(cleanup_message)
+                failure = MaterializationError(f"Protected {name} cleanup failed closed.")
+                add_error_notes(failure, final_cleanup_errors)
+                raise failure
+            add_error_notes(active_error, final_cleanup_errors)
 
 
 def bind_protected_assets(metadata: dict[str, Any], asset_paths: dict[str, Path]) -> dict[str, Any]:

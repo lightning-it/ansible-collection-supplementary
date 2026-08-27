@@ -1,6 +1,8 @@
 ---
 minor_changes:
   - >-
-    Split the accumulated REP-60 main promotion at the existing production
-    Exact-Revision controller boundary so every protected review remains below
-    the immutable 200000-byte input ceiling without weakening the limit.
+    Split the accumulated REP-60 main promotion at the existing production AI
+    controller boundary so every protected review remains below
+    the immutable 200000-byte input ceiling without weakening the limit, and
+    bind the staged controller to the four reviewed fail-closed hardenings for
+    parent permissions, descriptor cleanup, and reservation finalization.
