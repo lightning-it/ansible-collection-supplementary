@@ -6,18 +6,17 @@ import hashlib
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 PROTECTED_MAIN = "626f249d5e05a9bdca93f183029f031f6979061b"
 PROTECTED_COMPONENT_SHA256 = {
-    ".github/codex/prompts/review-exact-head.md":
-        "83e5dd32fd96be95f29b01beac2a3a32e49502cabaa11c8d9d717d705899e546",
-    ".github/workflows/release-bot-exact-head-review.yml":
-        "1ba8edb2b6460530099a0ac7f554c8bb76a5953eddd57c59b525925ed7a1661a",
-    "scripts/materialize-exact-revision-review.py":
-        "f511ff5445a2d8e5fc7d050ca409f81b1573730f63ab259c1e1e008df960bd97",
-    "tests/unit/test_managed_exact_revision_materializer_security.py":
-        "63549817c48a11212f87f689f826da9e8204b61589d923834287cc2cf6f6b984",
+    ".github/codex/prompts/review-exact-head.md": "83e5dd32fd96be95f29b01beac2a3a32e49502cabaa11c8d9d717d705899e546",
+    ".github/workflows/release-bot-exact-head-review.yml": (
+        "1ba8edb2b6460530099a0ac7f554c8bb76a5953eddd57c59b525925ed7a1661a"
+    ),
+    "scripts/materialize-exact-revision-review.py": "f511ff5445a2d8e5fc7d050ca409f81b1573730f63ab259c1e1e008df960bd97",
+    "tests/unit/test_managed_exact_revision_materializer_security.py": (
+        "63549817c48a11212f87f689f826da9e8204b61589d923834287cc2cf6f6b984"
+    ),
 }
 
 
