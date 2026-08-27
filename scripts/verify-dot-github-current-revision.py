@@ -265,6 +265,27 @@ def wait_for_reservation(
     raise VerificationError("protected verifier evidence did not become successful")
 
 
+def wait_for_producer_run(
+    client: GitHubClient,
+    producer_run_id: int,
+    *,
+    attempts: int,
+    sleep: Callable[[float], None],
+) -> Mapping[str, Any]:
+    path = f"repos/{TARGET_REPOSITORY}/actions/runs/{producer_run_id}"
+    for attempt in range(1, attempts + 1):
+        producer = require_mapping(client.get(path), "protected verifier run")
+        require_equal(producer.get("id"), producer_run_id, "protected verifier run ID")
+        status = producer.get("status")
+        if status == "completed":
+            return producer
+        if status not in {"queued", "in_progress"}:
+            raise VerificationError("protected verifier run status is invalid")
+        if attempt < attempts:
+            sleep(1)
+    raise VerificationError("protected verifier run did not become completed")
+
+
 def validate_reservation(
     client: GitHubClient,
     check: Mapping[str, Any],
@@ -273,6 +294,9 @@ def validate_reservation(
     event_base: str,
     event_head: str,
     server_url: str,
+    *,
+    attempts: int,
+    sleep: Callable[[float], None],
 ) -> None:
     check_id = check.get("id")
     if not isinstance(check_id, int) or check_id <= 0:
@@ -293,9 +317,14 @@ def validate_reservation(
     require_equal(match.group("base"), event_base, "evidence base")
     require_equal(match.group("head"), event_head, "evidence head")
     producer_run_id = int(match.group("run_id"))
-    producer = require_mapping(
-        client.get(f"repos/{TARGET_REPOSITORY}/actions/runs/{producer_run_id}"),
-        "protected verifier run",
+    # GitHub can expose the finalized custom check a few seconds before the
+    # producing Actions run becomes terminal through the Runs API. Bound the
+    # same immutable run ID and wait only for that API view to converge.
+    producer = wait_for_producer_run(
+        client,
+        producer_run_id,
+        attempts=attempts,
+        sleep=sleep,
     )
     require_equal(producer.get("id"), producer_run_id, "protected verifier run ID")
     require_equal(producer.get("event"), "pull_request_target", "verifier event")
@@ -416,7 +445,15 @@ def verify(
         sleep=sleep,
     )
     validate_reservation(
-        client, check, pr, pr_number, event_base, event_head, server_url
+        client,
+        check,
+        pr,
+        pr_number,
+        event_base,
+        event_head,
+        server_url,
+        attempts=attempts,
+        sleep=sleep,
     )
     # Re-read every mutable binding after evidence verification.
     validate_source(client, workflow_ref, workflow_sha)
