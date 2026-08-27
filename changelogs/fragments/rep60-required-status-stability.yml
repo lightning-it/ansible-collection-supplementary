@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Wait for the immutable protected verifier Actions run to become terminal
+    after its success check is visible, preventing transient GitHub status
+    propagation from blocking the independent REP-60 trust root.
