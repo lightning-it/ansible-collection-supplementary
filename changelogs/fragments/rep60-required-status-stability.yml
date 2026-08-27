@@ -1,3 +1,4 @@
+---
 bugfixes:
   - >-
     Wait for the immutable protected verifier Actions run to become terminal
