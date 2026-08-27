@@ -1,0 +1,8 @@
+---
+minor_changes:
+  - >-
+    Split the accumulated REP-60 main promotion so every protected review stays
+    below the immutable 200000-byte input ceiling without weakening the limit.
+    The first stage retains the bounded-diff materializer, remediation guards,
+    prompt, verifier tests, and recoverable check reservation while deferring
+    only documentation and changelog metadata to the second promotion.

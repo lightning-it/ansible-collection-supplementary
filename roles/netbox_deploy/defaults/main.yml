@@ -2,11 +2,11 @@
 netbox_deploy_pod_name: "netbox"
 netbox_deploy_manifest_path: "/etc/podman/pods/netbox.yml"
 netbox_deploy_image: >-
-  docker.io/netboxcommunity/netbox:v4.6-5.0.2@sha256:c59463b79bd22dc8524a88e86382eadace92c39a3fa68805676c96f58d7f3b78
+  docker.io/netboxcommunity/netbox:v4.6-5.0.2@sha256:b3b5e3ae884d1daa23958bd3b2eb777864c42b8b25a2cb5ce2af857654aba3f7
 netbox_deploy_postgres_image: >-
-  docker.io/library/postgres:16@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5
+  docker.io/library/postgres:16@sha256:c1b3783309b6499c795eed7c20135a1a4d25cae1b575c3d52c6f536129a1b109
 netbox_deploy_valkey_image: >-
-  docker.io/valkey/valkey:9.1-alpine@sha256:3fe38a705227d29534a199e876b38d5474dec4d3baca980ac6894df539416562
+  docker.io/valkey/valkey:9.1-alpine@sha256:7bf043f6ff25ea50b557e2f6da8f76fce62775d766d943f076d1e66838099315
 netbox_deploy_host_ip: "127.0.0.1"
 netbox_deploy_port: 8081
 netbox_deploy_base_dir: "/srv/netbox"
