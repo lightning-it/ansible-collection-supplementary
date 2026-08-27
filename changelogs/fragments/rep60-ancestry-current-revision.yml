@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Evaluate evidence-bound main-to-develop ancestry backmerges when the protected Release App opens them, while
-    keeping the Copilot request path restricted to the finalized litroc head.
