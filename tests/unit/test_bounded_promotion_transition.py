@@ -15,7 +15,7 @@ BOUNDED_COMPONENT_SHA256 = {
     ".github/workflows/release-bot-exact-head-review.yml": (
         "e13a639e02ce2121f34ae5cee46a43d8b323ce525cd41f7da2eb6e811fbb500b"
     ),
-    "docs/push-ready-optimization.md": "f4a53f6febb193d2a1a4cab985ec8cc2dc0a5ba76db63538b693e03b9c3bdbc6",
+    "docs/push-ready-optimization.md": "285a46ff586b2913e2f4087fd8001959296f6a137d45d1407b86e9d92648b814",
     "scripts/materialize-exact-revision-review.py": "b63faab90271b48068ae5368c3e2ccd0a7efcfac0df5b1e987048c56c0c70b94",
     "tests/unit/test_managed_exact_revision_materializer_security.py": (
         "31ba28deb51efea7b6d18d57c48a618623f61702d2712b3cbdd3c40e8bea9ae5"
