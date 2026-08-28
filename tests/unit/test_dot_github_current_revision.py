@@ -1,4 +1,5 @@
-"""Tests for the independent dot-github current-revision verifier."""
+# Managed by lightning-it/shared-assets-lit. Do not edit downstream copies.
+"""Regression tests for the reciprocal dot-github verifier."""
 
 from __future__ import annotations
 
@@ -7,7 +8,11 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "verify-dot-github-current-revision.py"
+SCRIPT = (
+    Path(__file__).resolve().parents[2]
+    / "scripts"
+    / "verify-dot-github-current-revision.py"
+)
 SPEC = importlib.util.spec_from_file_location("dot_github_verifier", SCRIPT)
 if SPEC is None or SPEC.loader is None:  # pragma: no cover - import contract
     raise RuntimeError("Unable to load the dot-github verifier")
@@ -30,41 +35,40 @@ class SequencedClient:
 
 
 class ProducerRunConvergenceTests(unittest.TestCase):
-    def test_waits_for_the_same_producer_run_to_become_completed(self) -> None:
+    def test_waits_for_the_same_in_progress_run_to_complete(self) -> None:
         client = SequencedClient(
             [
-                {"id": 42, "status": "queued"},
                 {"id": 42, "status": "in_progress"},
                 {"id": 42, "status": "completed", "conclusion": "success"},
             ]
         )
         sleeps: list[float] = []
 
-        result = MODULE.wait_for_producer_run(
+        result = MODULE.wait_for_completed_producer(
             client,
             42,
-            attempts=3,
+            attempts=2,
             sleep=sleeps.append,
         )
 
         self.assertEqual("completed", result["status"])
-        self.assertEqual([1, 1], sleeps)
+        self.assertEqual([2], sleeps)
         self.assertEqual(
-            ["repos/lightning-it/.github/actions/runs/42"] * 3,
+            ["repos/lightning-it/.github/actions/runs/42"] * 2,
             client.paths,
         )
 
     def test_rejects_an_unrecognized_nonterminal_status(self) -> None:
-        client = SequencedClient([{"id": 42, "status": "waiting"}])
+        client = SequencedClient([{"id": 42, "status": "queued"}])
 
         with self.assertRaisesRegex(
             MODULE.VerificationError,
-            "protected verifier run status is invalid",
+            "verifier run status is invalid: 'queued'",
         ):
-            MODULE.wait_for_producer_run(
+            MODULE.wait_for_completed_producer(
                 client,
                 42,
-                attempts=3,
+                attempts=2,
                 sleep=lambda _: None,
             )
 
@@ -75,10 +79,10 @@ class ProducerRunConvergenceTests(unittest.TestCase):
             MODULE.VerificationError,
             "protected verifier run ID is not exactly bound",
         ):
-            MODULE.wait_for_producer_run(
+            MODULE.wait_for_completed_producer(
                 client,
                 42,
-                attempts=3,
+                attempts=2,
                 sleep=lambda _: None,
             )
 
@@ -88,17 +92,17 @@ class ProducerRunConvergenceTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             MODULE.VerificationError,
-            "protected verifier run did not become completed",
+            "protected verifier run did not complete",
         ):
-            MODULE.wait_for_producer_run(
+            MODULE.wait_for_completed_producer(
                 client,
                 42,
-                attempts=3,
+                attempts=2,
                 sleep=sleeps.append,
             )
 
-        self.assertEqual([1, 1], sleeps)
-        self.assertEqual(3, len(client.paths))
+        self.assertEqual([2], sleeps)
+        self.assertEqual(2, len(client.paths))
 
 
 if __name__ == "__main__":

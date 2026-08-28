@@ -352,13 +352,14 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn('and .path == ".github/workflows/release-bot-exact-head-review.yml"', workflow)
         self.assertIn("and .display_title == $title", workflow)
         self.assertIn("and .triggering_actor.login == $actor", workflow)
-        self.assertNotIn("and .run_attempt == 1", workflow)
+        self.assertEqual(1, workflow.count("and .run_attempt == 1"))
         self.assertEqual(1, workflow.count("uses: openai/codex-action@"))
 
     def test_ruleset_workflow_verifies_the_producer_instead_of_trusting_a_check_name(self) -> None:
         rerun = (ROOT / ".github/workflows/current-revision-rerun.yml").read_text(encoding="utf-8")
         self.assertIn("workflow_dispatch:", rerun)
-        self.assertIn('test "${GITHUB_REF}" = refs/heads/develop', rerun)
+        self.assertIn('test "${GITHUB_REF}" = "refs/heads/${EVENT_BASE_REF}"', rerun)
+        self.assertIn('[[ "${EVENT_BASE_REF}" =~ ^(develop|main)$ ]]', rerun)
         self.assertIn(
             '.path == ".github/workflows/supplementary-current-revision-required.yml"',
             rerun,
@@ -386,9 +387,10 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         )
         self.assertEqual(1, rerun.count(".triggering_actor.login == $actor"))
         retry = rerun.split(
-            'test "$(jq -r .conclusion <<<"${run}")" = failure',
+            '          case "${verifier_conclusion}" in',
             1,
         )[1]
+        self.assertIn('case "${verifier_conclusion}" in', rerun)
         self.assertIn("run_attempt=", retry)
         self.assertIn('if [ "${run_attempt}" -gt 2 ]', retry)
         self.assertIn('if [ "${run_attempt}" -eq 2 ]', retry)
@@ -396,38 +398,19 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             "repos/${REPOSITORY}/actions/runs/${run_id}/attempts/1/jobs?filter=all&per_page=100",
             retry,
         )
+        self.assertIn("synthetic_evidence_jobs=$(jq -c", retry)
+        self.assertIn("runner_backed_jobs=$(jq -c", retry)
         self.assertIn(
-            '[.[].jobs[] | select(.name == "Required current-revision workflow") '
-            "| select(.run_attempt == 1) "
-            '| select(.status == "completed" and .conclusion == "failure")]',
+            'test "$(jq \'length\' <<<"${runner_backed_jobs}")" -eq 1',
             retry,
         )
-        self.assertIn('test "$(jq \'length\' <<<"${rerunnable_jobs}")" -eq 1', retry)
         self.assertIn(
-            "repos/${REPOSITORY}/actions/jobs/${required_job_id}/rerun",
-            retry,
-        )
-        self.assertNotIn(
             "repos/${REPOSITORY}/actions/runs/${run_id}/rerun",
             retry,
         )
+        self.assertNotIn("repos/${REPOSITORY}/actions/jobs/", retry)
         self.assertEqual(1, retry.count('/rerun" >/dev/null'))
         self.assertIn('if [ "${observed_attempt}" -ne 2 ]', retry)
-        self.assertIn('if [ "${observed_attempt}" -gt 2 ]', retry)
-        self.assertIn(
-            'if [ "${observed_attempt}" -eq 2 ] && [ "${status}" = completed ]',
-            retry,
-        )
-        self.assertIn(
-            "repos/${REPOSITORY}/actions/runs/${run_id}/attempts/2/jobs?filter=all&per_page=100",
-            retry,
-        )
-        self.assertIn("select(.run_attempt == 2)", retry)
-        self.assertIn(
-            'test "$(jq \'length\' <<<"${completed_required_jobs}")" -eq 1',
-            retry,
-        )
-        self.assertIn("post_neutral_pages=", retry)
         self.assertIn(".external_id == $external_id", retry)
         self.assertIn(".id == $check_id", retry)
         self.assertIn('test "$(jq \'length\' <<<"${post_neutral}")" -eq 1', retry)
@@ -464,7 +447,11 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                 rerun_job = workflow.split("  request-protected-verifier-reevaluation:", 1)[1]
                 self.assertIn("actions: write", rerun_job)
                 self.assertIn("current-revision-rerun.yml/dispatches", rerun_job)
-                self.assertIn("-f ref=develop", rerun_job)
+                if name == "copilot-review.yml":
+                    self.assertIn("-f ref=develop", rerun_job)
+                else:
+                    self.assertIn('-f "ref=${BASE_REF}"', rerun_job)
+                    self.assertIn('-f "inputs[base_ref]=${BASE_REF}"', rerun_job)
                 self.assertIn('-f "inputs[pr_number]=${PR_NUMBER}"', rerun_job)
                 self.assertNotIn('-F "inputs[pr_number]=${PR_NUMBER}"', rerun_job)
                 self.assertNotIn("openai/codex-action@", rerun_job)
@@ -564,12 +551,12 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
     def test_human_producer_verifier_separates_event_head_from_controller_sha(self) -> None:
         rerun = (ROOT / ".github/workflows/current-revision-rerun.yml").read_text(encoding="utf-8")
         author_paths = rerun.split(
-            '          else\n            if [ "${external_kind}" = ancestry-backmerge ]; then',
+            '          else\n            if [ "${external_kind}" != copilot ]; then',
             1,
         )[1]
-        human_path = author_paths.split("\n          fi\n\n          reservations_pages", 1)[0]
+        human_path = author_paths.split("\n          fi\n\n          reservations=''", 1)[0]
         self.assertIn(".controller_sha", human_path)
-        self.assertIn('test "${default_branch}" = develop', human_path)
+        self.assertIn('test "${default_branch}" = develop', rerun)
         self.assertIn("compare/${controller_sha}...${default_head}", human_path)
         self.assertIn('--arg head_ref "${head_ref}"', human_path)
         self.assertIn('--arg head_sha "${EXPECTED_HEAD}"', human_path)
