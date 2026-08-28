@@ -511,7 +511,8 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn('-f expected_head="${NEW_HEAD}"', continuation)
         self.assertIn('test "${current_head}" = "${EXPECTED_HEAD}"', dispatch)
         self.assertEqual(1, dispatch.count('"repos/${REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers"'))
-        self.assertEqual(1, dispatch.count("state=consumed"))
+        self.assertEqual(2, dispatch.count("state=consumed"))
+        self.assertEqual(1, dispatch.count('"repos/${REPOSITORY}/issues/${PR_NUMBER}/comments"'))
         self.assertLess(dispatch.index("state=consumed"), dispatch.index("requested_reviewers"))
         self.assertIn("the consumed marker forbids an automatic retry", dispatch)
 
