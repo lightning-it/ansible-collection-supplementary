@@ -59,9 +59,7 @@ class BoundedPromotionTransitionTests(unittest.TestCase):
                 self.assertFalse((ROOT / relative).exists())
 
     def test_reservation_creation_recovers_without_a_blind_retry(self) -> None:
-        workflow = (
-            ROOT / ".github/workflows/release-bot-exact-head-review.yml"
-        ).read_text(encoding="utf-8")
+        workflow = (ROOT / ".github/workflows/release-bot-exact-head-review.yml").read_text(encoding="utf-8")
         self.assertIn("create_reservation_once() {", workflow)
         self.assertIn("Recovering immutable reservation creation outcome", workflow)
         self.assertIn("select(.head_sha == $head and .external_id == $external_id)", workflow)
