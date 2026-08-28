@@ -34,6 +34,7 @@ RESERVATION_PATTERN = re.compile(
 PRODUCER_ACTIONS = frozenset(
     {"opened", "synchronize", "reopened", "ready_for_review", "edited"}
 )
+NONTERMINAL_RUN_STATUSES = frozenset({"in_progress"})
 
 
 class VerificationError(RuntimeError):
@@ -265,7 +266,7 @@ def wait_for_reservation(
     raise VerificationError("protected verifier evidence did not become successful")
 
 
-def wait_for_producer_run(
+def wait_for_completed_producer(
     client: GitHubClient,
     producer_run_id: int,
     *,
@@ -279,11 +280,11 @@ def wait_for_producer_run(
         status = producer.get("status")
         if status == "completed":
             return producer
-        if status not in {"queued", "in_progress"}:
-            raise VerificationError("protected verifier run status is invalid")
+        if status not in NONTERMINAL_RUN_STATUSES:
+            raise VerificationError(f"verifier run status is invalid: {status!r}")
         if attempt < attempts:
-            sleep(1)
-    raise VerificationError("protected verifier run did not become completed")
+            sleep(2)
+    raise VerificationError("protected verifier run did not complete")
 
 
 def validate_reservation(
@@ -317,16 +318,16 @@ def validate_reservation(
     require_equal(match.group("base"), event_base, "evidence base")
     require_equal(match.group("head"), event_head, "evidence head")
     producer_run_id = int(match.group("run_id"))
-    # GitHub can expose the finalized custom check a few seconds before the
-    # producing Actions run becomes terminal through the Runs API. Bound the
-    # same immutable run ID and wait only for that API view to converge.
-    producer = wait_for_producer_run(
+    # GitHub can expose the final successful reservation check a few moments
+    # before the producing workflow run itself transitions from ``in_progress``
+    # to ``completed``. Poll only the already-bound run ID; an earlier workflow
+    # state or alternate evidence is not accepted after that final check exists.
+    producer = wait_for_completed_producer(
         client,
         producer_run_id,
         attempts=attempts,
         sleep=sleep,
     )
-    require_equal(producer.get("id"), producer_run_id, "protected verifier run ID")
     require_equal(producer.get("event"), "pull_request_target", "verifier event")
     require_equal(producer.get("path"), TARGET_VERIFIER_PATH, "verifier path")
     require_equal(producer.get("status"), "completed", "verifier run status")
