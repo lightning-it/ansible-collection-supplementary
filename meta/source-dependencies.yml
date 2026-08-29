@@ -92,7 +92,7 @@ container_images:
     locations:
       - "manifests/identity-stack.pod.yaml"
       - "roles/keycloak_deploy/defaults/main.yml"
-  - reference: "quay.io/l-it/ee-wunder-devtools-ubi9:v1.13.0@sha256:d65d9f849e2e18827d37277d25d9c62f6525c5f9a075feee977b9b0d02ec74c9"
+  - reference: "quay.io/l-it/ee-wunder-devtools-ubi9:v1.14.0@sha256:fca70c475088edd75d1635b11adb4aad9de65995eec455f6fb4e409b969afc60"
     locations:
       - "examples/aap-cac.yml"
       - "scripts/lit-push-ready.py"
