@@ -450,14 +450,22 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                 rerun_job = workflow.split("  request-protected-verifier-reevaluation:", 1)[1]
                 self.assertIn("actions: write", rerun_job)
                 self.assertIn("current-revision-rerun.yml/dispatches", rerun_job)
-                if name == "copilot-review.yml":
-                    self.assertIn("-f ref=develop", rerun_job)
-                else:
-                    self.assertIn('-f "ref=${BASE_REF}"', rerun_job)
-                    self.assertIn('-f "inputs[base_ref]=${BASE_REF}"', rerun_job)
+                self.assertIn('-f "ref=${BASE_REF}"', rerun_job)
+                self.assertIn('-f "inputs[base_ref]=${BASE_REF}"', rerun_job)
                 self.assertIn('-f "inputs[pr_number]=${PR_NUMBER}"', rerun_job)
+                self.assertIn('-f "inputs[expected_base]=${EXPECTED_BASE}"', rerun_job)
+                self.assertIn('-f "inputs[expected_head]=${EXPECTED_HEAD}"', rerun_job)
+                self.assertIn('-f "inputs[producer_run_id]=${PRODUCER_RUN_ID}"', rerun_job)
+                self.assertIn('test "${GITHUB_WORKFLOW_SHA}" = "${EXPECTED_BASE}"', rerun_job)
+                self.assertIn('test "${GITHUB_REF}" = "refs/heads/${BASE_REF}"', rerun_job)
+                self.assertIn('test "${GITHUB_REF_PROTECTED}" = true', rerun_job)
+                self.assertIn('test "${live_base}" = "${EXPECTED_BASE}"', rerun_job)
                 self.assertNotIn('-F "inputs[pr_number]=${PR_NUMBER}"', rerun_job)
                 self.assertNotIn("openai/codex-action@", rerun_job)
+                if name == "copilot-review.yml":
+                    self.assertIn("BASE_REF: ${{ github.event.pull_request.base.ref }}", rerun_job)
+                else:
+                    self.assertIn("BASE_REF: ${{ inputs.base_ref }}", rerun_job)
 
     def test_human_current_revision_path_protects_main_and_develop(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")

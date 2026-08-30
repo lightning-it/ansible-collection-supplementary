@@ -16,6 +16,7 @@ BOUNDED_COMPONENT_SHA256 = {
     ".github/workflows/current-revision-rerun.yml": (
         "c631843139ee2cd47f8bc5958d41c7395bcff4b2b710770d05a11bbee03054df"
     ),
+    ".github/workflows/copilot-review.yml": ("749b5c447efcfb9be421b8c7630241b8a1a84624a4f676495a3d8da164d1b34a"),
     ".github/workflows/release-bot-exact-head-review.yml": (
         "ac2a2bc75c183b856cbb121eeac0e6fc660e5e03fe73cdf2513171114cfc5ecf"
     ),
@@ -30,7 +31,7 @@ BOUNDED_COMPONENT_SHA256 = {
     "tests/unit/test_managed_exact_revision_materializer_security.py": (
         "523ab2222052fc1e9960147f0faabe76fb38727bed22f7287087205ca438cb58"
     ),
-    "tests/unit/test_exact_revision_review.py": ("19267f4c59cd64c386da5ff1fb6bcbbe37f452c7c05f31e11b343409b71fc382"),
+    "tests/unit/test_exact_revision_review.py": ("589243567fe715c65eb4a4be46892f81aaa07bd3cee4410b4429e335be3829cd"),
     "tests/unit/test_workflow_security.py": ("160e2a7003a2f5d33817c1e82791446bd76352b92baa738eddfab09b82184b03"),
 }
 DEFERRED_PATHS = (

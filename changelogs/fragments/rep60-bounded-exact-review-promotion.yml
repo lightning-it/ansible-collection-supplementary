@@ -12,3 +12,7 @@ minor_changes:
     requires a managed runtime that belongs to the protected pipeline. Bind
     every scenario's Molecule ephemeral directory explicitly to container
     tmpfs rather than the read-only workspace.
+  - >-
+    Bind the human Current-Revision producer's protected-verifier handoff to
+    the exact develop or main base ref, base SHA, head SHA, PR number, and
+    producer run so the helper receives its complete fail-closed input contract.
