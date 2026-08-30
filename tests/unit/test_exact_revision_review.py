@@ -551,10 +551,12 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
     def test_human_producer_verifier_separates_event_head_from_controller_sha(self) -> None:
         rerun = (ROOT / ".github/workflows/current-revision-rerun.yml").read_text(encoding="utf-8")
         author_paths = rerun.split(
-            '          else\n            if [ "${external_kind}" != copilot ]; then',
+            '            elif [ "${external_kind}" = managed-sync ]; then',
             1,
         )[1]
-        human_path = author_paths.split("\n          fi\n\n          reservations=''", 1)[0]
+        human_path = author_paths.split("            else\n", 1)[1].split(
+            "\n          fi\n\n          reservations=''", 1
+        )[0]
         self.assertIn(".controller_sha", human_path)
         self.assertIn('test "${default_branch}" = develop', rerun)
         self.assertIn("compare/${controller_sha}...${default_head}", human_path)
