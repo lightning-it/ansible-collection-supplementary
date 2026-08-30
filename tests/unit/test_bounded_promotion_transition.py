@@ -10,15 +10,15 @@ ROOT = Path(__file__).resolve().parents[2]
 BOUNDED_COMPONENT_SHA256 = {
     ".github/codex/prompts/review-exact-head.md": "b3c1816aa72b67b48be434f708036df25d0fa2e5dc5830e0022d37aeb532b1ac",
     ".github/workflows/codex-copilot-remediation.yml": (
-        "1ad04b0b7d046833f809c526e702cd36a2ab4594f9606ba87134b6c5977a7e2a"
+        "972539527b2a1ff3499db34d0d867aadde90313c9120b15b1c273287b7b82e76"
     ),
     ".github/workflows/release-bot-exact-head-review.yml": (
         "e13a639e02ce2121f34ae5cee46a43d8b323ce525cd41f7da2eb6e811fbb500b"
     ),
     "docs/push-ready-optimization.md": "285a46ff586b2913e2f4087fd8001959296f6a137d45d1407b86e9d92648b814",
-    "scripts/materialize-exact-revision-review.py": "b63faab90271b48068ae5368c3e2ccd0a7efcfac0df5b1e987048c56c0c70b94",
+    "scripts/materialize-exact-revision-review.py": "30943308ea3b541c68565511d940ea7ba6be8d0207410ae21e20e3dd60b3ea6a",
     "tests/unit/test_managed_exact_revision_materializer_security.py": (
-        "31ba28deb51efea7b6d18d57c48a618623f61702d2712b3cbdd3c40e8bea9ae5"
+        "523ab2222052fc1e9960147f0faabe76fb38727bed22f7287087205ca438cb58"
     ),
 }
 DEFERRED_PATHS = (

@@ -128,6 +128,30 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
                             )
                     self.assertEqual(b"unchanged", asset.read_bytes())
 
+    def test_protected_io_rejects_group_or_world_writable_file(self) -> None:
+        for mode in (0o620, 0o602, 0o622):
+            for operation in ("read", "write"):
+                with (
+                    self.subTest(mode=oct(mode), operation=operation),
+                    tempfile.TemporaryDirectory() as temporary,
+                ):
+                    asset = Path(temporary).resolve() / "unsafe-asset"
+                    asset.write_bytes(b"unchanged")
+                    asset.chmod(mode)
+                    with self.assertRaisesRegex(
+                        self.module.MaterializationError,
+                        "must not be group- or world-writable",
+                    ):
+                        if operation == "read":
+                            self.module.protected_asset_bytes(asset, "test asset")
+                        else:
+                            self.module.write_owned_regular_file(
+                                asset,
+                                b"replacement",
+                                "test asset",
+                            )
+                    self.assertEqual(b"unchanged", asset.read_bytes())
+
     def test_protected_writer_rejects_replacement_symlink(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary).resolve() / "target"
