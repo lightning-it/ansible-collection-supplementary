@@ -142,12 +142,7 @@ controller is triggered through `pull_request_target`, never checks out or
 executes candidate content, and binds the live Base and head before publishing
 a result. Lightning IT funds this request only for `litroc`; other contributors
 provide it under their own entitlement. A previous request or completed review
-for the same head makes the operation idempotent. The finalization request and
-the ordinary verifier use separate per-PR queues, so a later synchronize event
-cannot displace a queued Ready request. A pull-request metadata edit always
-revalidates the live base, title, and automation classification; it first marks
-any prior same-head Current-Revision result failed so retargeting cannot reuse
-stale base-bound evidence.
+for the same head makes the operation idempotent.
 
 All unresolved material Copilot findings for one reviewed head are supplied to
 one Codex remediation run and can produce at most one correction commit. That

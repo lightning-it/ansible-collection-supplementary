@@ -1332,15 +1332,61 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("No persistent whole-home cache is mounted", contributing)
 
         molecule = (ROOT / "scripts" / "devtools-molecule.sh").read_text(encoding="utf-8")
-        self.assertIn("Docker is required for Molecule tests", molecule)
+        self.assertIn("A Docker-compatible socket must not enter", molecule)
         self.assertNotIn("Skipping Molecule tests because Docker", molecule)
-        self.assertIn("WUNDER_DEVTOOLS_ROOTFS_MODE=rw", molecule)
-        self.assertIn("WUNDER_DEVTOOLS_WORKSPACE_MODE=rw", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_DOCKER_SOCKET=disabled", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_NETWORK=none", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_ROOTFS_MODE=ro", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_WORKSPACE_MODE=ro", molecule)
         self.assertIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1", molecule)
         self.assertIn("WUNDER_DEVTOOLS_RUN_AS_ROOT=0", molecule)
         self.assertIn("WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT=disabled", molecule)
         self.assertIn("WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH=disabled", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1", molecule)
+        self.assertIn("REQUIRE_DECLARED_DEPENDENCIES=0", molecule)
+        self.assertIn("REQUIRE_DECLARED_DEPENDENCIES=1", molecule)
+        self.assertIn(
+            'WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES="${REQUIRE_DECLARED_DEPENDENCIES}"',
+            molecule,
+        )
+        self.assertIn('SCENARIO_FILTER="${1:-artifacts-basic}"', molecule)
+        self.assertIn('driver.get("name") != "default"', molecule)
+        self.assertIn('platform.get("managed") is not False', molecule)
+        self.assertIn('[[ ! "${scen}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]', molecule)
+        self.assertIn('printf "%s\\n" "prerun: false"', molecule)
+        self.assertIn('molecule_ephemeral_root="${HOME}/molecule-ephemeral"', molecule)
+        self.assertIn('MOLECULE_EPHEMERAL_DIRECTORY="${molecule_ephemeral_directory}"', molecule)
+        self.assertIn('molecule -c "${offline_base}" test', molecule)
+        self.assertNotIn("docker info", molecule)
         self.assertNotIn("WUNDER_DEVTOOLS_CAP_ADD=CHOWN", molecule)
+
+        prepare = (ROOT / "scripts" / "devtools-collection-prepare.sh").read_text(encoding="utf-8")
+        self.assertIn('offline_local_only="${WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY:-0}"', prepare)
+        self.assertIn("Offline local-only mode: external collection dependency installation is forbidden.", prepare)
+        self.assertIn("local dependency source roots are intentionally not mounted", prepare)
+        self.assertIn("WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES=0 or 1", prepare)
+        self.assertIn("/usr/share/ansible/collections/ansible_collections/", prepare)
+        self.assertIn("/MANIFEST.json", prepare)
+        self.assertIn("declared galaxy.yml dependencies missing", prepare)
+        self.assertIn("This offline gate requires every declared dependency", prepare)
+        for helper_name in (
+            "devtools-ansible-lint.sh",
+            "devtools-collection-smoke.sh",
+            "devtools-galaxy-verify.sh",
+            "devtools-molecule.sh",
+        ):
+            with self.subTest(offline_helper=helper_name):
+                helper = (ROOT / "scripts" / helper_name).read_text(encoding="utf-8")
+                self.assertIn("WUNDER_DEVTOOLS_NETWORK=none", helper)
+                self.assertIn("WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1", helper)
+                self.assertIn("WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES=", helper)
+                self.assertNotIn("WUNDER_DEVTOOLS_NETWORK=bridge", helper)
+
+        ansible_lint = (ROOT / "scripts" / "devtools-ansible-lint.sh").read_text(encoding="utf-8")
+        self.assertIn("export ANSIBLE_LINT_NODEPS=1", ansible_lint)
+        self.assertIn('ansible-lint --offline "${ansible_lint_args[@]}"', ansible_lint)
+        self.assertIn('"--exclude" "playbooks/rhel_prepare.yml"', ansible_lint)
+        self.assertIn('"--exclude" "playbooks/rhel_teardown.yml"', ansible_lint)
 
     def test_devtools_capability_policy_expands_to_individual_docker_arguments(self) -> None:
         wrapper = ROOT / "scripts" / "wunder-devtools-ee.sh"
