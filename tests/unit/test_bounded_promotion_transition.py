@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 BOUNDED_COMPONENT_SHA256 = {
+    "AGENTS.md": "e2b67d46718d5966f63ceeade8466dbff26ff0aab04600247fbdc35b60af74e9",
     ".github/codex/prompts/review-exact-head.md": "b3c1816aa72b67b48be434f708036df25d0fa2e5dc5830e0022d37aeb532b1ac",
     ".github/workflows/codex-copilot-remediation.yml": (
         "972539527b2a1ff3499db34d0d867aadde90313c9120b15b1c273287b7b82e76"
@@ -20,9 +21,13 @@ BOUNDED_COMPONENT_SHA256 = {
     ),
     "docs/push-ready-optimization.md": "285a46ff586b2913e2f4087fd8001959296f6a137d45d1407b86e9d92648b814",
     "scripts/materialize-exact-revision-review.py": "30943308ea3b541c68565511d940ea7ba6be8d0207410ae21e20e3dd60b3ea6a",
+    "scripts/devtools-collection-prepare.sh": ("149769ec99e1f8a3d5b151c5200c552f8fe317281e51120a71c0d5f3ad6aedec"),
+    "scripts/devtools-molecule.sh": "1d439aa9c15713922e8c54e456bdcf1f65cf2c27e16860147607fae07d2475f1",
+    "scripts/lit-ci-profile.sh": "7020bae6efa5c35c54a85533c840cb206bc2a16e983b08e2f665586b59a43323",
     "tests/unit/test_managed_exact_revision_materializer_security.py": (
         "523ab2222052fc1e9960147f0faabe76fb38727bed22f7287087205ca438cb58"
     ),
+    "tests/unit/test_workflow_security.py": ("0ef40dcdef523e3ef096855cf01e285e0af268310ba5a000538cec2582b5bfc0"),
 }
 DEFERRED_PATHS = (
     "changelogs/fragments/rep60-ancestry-current-revision.yml",

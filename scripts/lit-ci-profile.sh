@@ -114,9 +114,6 @@ LABELS_JSON='[]' \
 REQUIRE_FRAGMENT=true \
 python3 "$pre_commit_zipapp" run --all-files
 
-printf '==> Run supplemental rootless Molecule parity gate\n'
-bash scripts/devtools-molecule.sh artifacts-basic
-
 printf '==> Verify Codex and Copilot instruction binding\n'
 python3 scripts/lit-push-ready.py instructions
 

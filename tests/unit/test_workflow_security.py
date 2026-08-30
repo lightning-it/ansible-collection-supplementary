@@ -1332,15 +1332,28 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("No persistent whole-home cache is mounted", contributing)
 
         molecule = (ROOT / "scripts" / "devtools-molecule.sh").read_text(encoding="utf-8")
-        self.assertIn("Docker is required for Molecule tests", molecule)
+        self.assertIn("A Docker-compatible socket must not enter", molecule)
         self.assertNotIn("Skipping Molecule tests because Docker", molecule)
-        self.assertIn("WUNDER_DEVTOOLS_ROOTFS_MODE=rw", molecule)
-        self.assertIn("WUNDER_DEVTOOLS_WORKSPACE_MODE=rw", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_DOCKER_SOCKET=disabled", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_NETWORK=none", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_ROOTFS_MODE=ro", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_WORKSPACE_MODE=ro", molecule)
         self.assertIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1", molecule)
         self.assertIn("WUNDER_DEVTOOLS_RUN_AS_ROOT=0", molecule)
         self.assertIn("WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT=disabled", molecule)
         self.assertIn("WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH=disabled", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1", molecule)
+        self.assertIn('SCENARIO_FILTER="${1:-artifacts-basic}"', molecule)
+        self.assertIn('driver.get("name") != "default"', molecule)
+        self.assertIn('platform.get("managed") is not False', molecule)
+        self.assertIn('printf "%s\\n" "prerun: false"', molecule)
+        self.assertIn('molecule -c "${offline_base}" test', molecule)
+        self.assertNotIn("docker info", molecule)
         self.assertNotIn("WUNDER_DEVTOOLS_CAP_ADD=CHOWN", molecule)
+
+        prepare = (ROOT / "scripts" / "devtools-collection-prepare.sh").read_text(encoding="utf-8")
+        self.assertIn('offline_local_only="${WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY:-0}"', prepare)
+        self.assertIn("Offline local-only mode: external collection dependency installation is forbidden.", prepare)
 
     def test_devtools_capability_policy_expands_to_individual_docker_arguments(self) -> None:
         wrapper = ROOT / "scripts" / "wunder-devtools-ee.sh"

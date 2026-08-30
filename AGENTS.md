@@ -82,6 +82,11 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
 11. Contributor-funded fork reviews MAY be verified, but the Lightning IT-funded request job remains same-repository
     and `litroc`-only. The verifier MUST preserve and bind the actual head repository instead of silently rewriting
     fork identity to the base repository.
+12. Local deterministic checks MUST use the digest-pinned Devtools container with an offline network, read-only
+    root filesystem and workspace, the invoking non-root UID/GID, all capabilities dropped, and
+    `no-new-privileges`. The host Docker-compatible socket MAY be used only to start that container and MUST NEVER
+    be mounted into it. A scenario that needs a managed runtime belongs to a protected pipeline and MUST fail closed
+    locally instead of weakening this boundary.
 
 ## 2. Repository Baseline (This Repo)
 
@@ -162,7 +167,8 @@ production readiness, Ansible Galaxy readiness, and Red Hat Ansible Automation P
 ### 2.1.4 Testing and Quality Gates
 
 1. `pre-commit run --all-files` MUST be the first local PR preflight for collection repositories. Shared hooks run
-   the PR-equivalent changelog, ansible-lint, Molecule light, and smoke gates through `ee-wunder-devtools-ubi9`.
+   the PR-equivalent changelog, ansible-lint, socket-free `artifacts-basic` parity, and smoke gates through
+   `ee-wunder-devtools-ubi9`; dependency-backed role matrices remain mandatory protected pipeline gates.
 2. `ansible-lint --profile production .` SHOULD pass, or repository-specific devtools lint MUST pass with documented
    equivalent strictness.
 3. `ansible-test sanity --docker` SHOULD pass for custom modules/plugins and collection packaging concerns.
@@ -670,8 +676,10 @@ Molecule scenarios MUST live at repository root under `molecule/`.
 
 ### 8.3 Execution Behavior
 
-1. `scripts/devtools-molecule.sh` runs repository-local light and experimental scenarios. The host-native profile
-   runner and CI matrix run protected Incus Tiny, Heavy, and Application Acceptance scenarios.
+1. `scripts/devtools-molecule.sh` defaults to the offline, socket-free `artifacts-basic` controller parity scenario.
+   An explicitly named unmanaged scenario may run only if the pinned image already contains every dependency. The
+   host-native profile runner and CI matrix run the full dependency-backed and protected Incus Tiny, Heavy, and
+   Application Acceptance scenarios.
 2. Scenarios with `.molecule-mode` set to `protected-incus` are skipped unless
    `MOLECULE_RUN_PROTECTED=true` is set and the devtools container has the `incus` CLI.
 3. A single scenario is run with:

@@ -6,3 +6,7 @@ minor_changes:
     The first stage retains the bounded-diff materializer, remediation guards,
     prompt, verifier tests, and recoverable check reservation while deferring
     only documentation and changelog metadata to the second promotion.
+  - >-
+    Run local unmanaged Molecule scenarios in the pinned Devtools container
+    without network or a mounted Docker socket, and fail closed when a scenario
+    requires a managed runtime that belongs to the protected pipeline.

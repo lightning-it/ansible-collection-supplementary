@@ -5,6 +5,15 @@ set -euo pipefail
 # Installs into a per-run collections dir to avoid stale state.
 # Prints COLLECTIONS_DIR as the last line for callers.
 
+offline_local_only="${WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY:-0}"
+case "${offline_local_only}" in
+  0|1) ;;
+  *)
+    echo "ERROR: WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY must be 0 or 1." >&2
+    exit 1
+    ;;
+esac
+
 # Derive namespace+name from galaxy.yml (authoritative)
 if [ ! -f /workspace/galaxy.yml ]; then
   echo "ERROR: /workspace/galaxy.yml not found." >&2
@@ -84,28 +93,32 @@ install_collection_dependency() {
   ansible-galaxy collection install "$dep_spec" -p "${COLLECTIONS_DIR}" --force >&2
 }
 
-dep_specs=()
-if [ -f /workspace/collections/requirements.yml ]; then
-  echo "Installing collection requirements from collections/requirements.yml into ${COLLECTIONS_DIR}..." >&2
-  ansible-galaxy collection install \
-    -r /workspace/collections/requirements.yml \
-    -p "${COLLECTIONS_DIR}" \
-    --force >&2
-elif [ -f /workspace/galaxy.yml ]; then
-  dependency_output="$(
-    bash /workspace/scripts/devtools-galaxy.sh \
-      dependencies /workspace/galaxy.yml
-  )"
-  while IFS= read -r dep_spec; do
-    dep_specs+=("$dep_spec")
-  done <<< "$dependency_output"
-fi
-
-for dep_spec in "${dep_specs[@]}"; do
-  if [ -n "$dep_spec" ]; then
-    install_collection_dependency "$dep_spec"
+if [ "${offline_local_only}" = 1 ]; then
+  echo "Offline local-only mode: external collection dependency installation is forbidden." >&2
+else
+  dep_specs=()
+  if [ -f /workspace/collections/requirements.yml ]; then
+    echo "Installing collection requirements from collections/requirements.yml into ${COLLECTIONS_DIR}..." >&2
+    ansible-galaxy collection install \
+      -r /workspace/collections/requirements.yml \
+      -p "${COLLECTIONS_DIR}" \
+      --force >&2
+  elif [ -f /workspace/galaxy.yml ]; then
+    dependency_output="$(
+      bash /workspace/scripts/devtools-galaxy.sh \
+        dependencies /workspace/galaxy.yml
+    )"
+    while IFS= read -r dep_spec; do
+      dep_specs+=("$dep_spec")
+    done <<< "$dependency_output"
   fi
-done
+
+  for dep_spec in "${dep_specs[@]}"; do
+    if [ -n "$dep_spec" ]; then
+      install_collection_dependency "$dep_spec"
+    fi
+  done
+fi
 
 # Build artifact and capture the output path
 build_out="$(ansible-galaxy collection build --output-path "${BUILD_OUTPUT_DIR}" --force)"
