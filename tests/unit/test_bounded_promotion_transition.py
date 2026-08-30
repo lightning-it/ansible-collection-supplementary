@@ -26,7 +26,7 @@ BOUNDED_COMPONENT_SHA256 = {
     "scripts/devtools-collection-smoke.sh": "26b9f454f1d7705738f8f2f275ae5c40ff07d1804fd832c7be74d871bd4bf846",
     "scripts/devtools-galaxy-verify.sh": "0f50d2c851cd51bf32585503811c58fd646959cb55f99c6b39e7180159c9620e",
     "scripts/devtools-molecule.sh": "1d439aa9c15713922e8c54e456bdcf1f65cf2c27e16860147607fae07d2475f1",
-    "scripts/lit-ci-profile.sh": "7020bae6efa5c35c54a85533c840cb206bc2a16e983b08e2f665586b59a43323",
+    "scripts/lit-ci-profile.sh": "b2ced9a43284dbdc77e8eb990bc52d50515ad381e138a76591db01e7b0dae19d",
     "tests/unit/test_managed_exact_revision_materializer_security.py": (
         "523ab2222052fc1e9960147f0faabe76fb38727bed22f7287087205ca438cb58"
     ),
