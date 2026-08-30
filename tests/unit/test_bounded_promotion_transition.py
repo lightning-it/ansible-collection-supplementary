@@ -30,9 +30,7 @@ BOUNDED_COMPONENT_SHA256 = {
     "tests/unit/test_managed_exact_revision_materializer_security.py": (
         "523ab2222052fc1e9960147f0faabe76fb38727bed22f7287087205ca438cb58"
     ),
-    "tests/unit/test_exact_revision_review.py": (
-        "19267f4c59cd64c386da5ff1fb6bcbbe37f452c7c05f31e11b343409b71fc382"
-    ),
+    "tests/unit/test_exact_revision_review.py": ("19267f4c59cd64c386da5ff1fb6bcbbe37f452c7c05f31e11b343409b71fc382"),
     "tests/unit/test_workflow_security.py": ("160e2a7003a2f5d33817c1e82791446bd76352b92baa738eddfab09b82184b03"),
 }
 DEFERRED_PATHS = (
