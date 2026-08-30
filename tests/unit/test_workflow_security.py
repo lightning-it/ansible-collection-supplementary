@@ -392,17 +392,16 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn('review_id:(if $review_id == "" then null else $review_id end)', publisher)
         self.assertEqual(3, publisher.count("validate_bound_review"))
 
-    def test_release_app_ancestry_backmerge_uses_only_exact_revision_codex(
+    def test_release_app_ancestry_backmerge_is_deterministic_and_never_requests_copilot(
         self,
     ) -> None:
         workflow = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
-        ancestry = (WORKFLOWS / "sync-main-to-develop.yml").read_text(encoding="utf-8")
-        self.assertIn("Release-App review belongs only", workflow)
-        self.assertNotIn("Release-App AI review belongs only", workflow)
-        self.assertNotIn(
+        self.assertIn("Release-App AI review belongs only", workflow)
+        self.assertIn(
             "deterministic, AI-free evidence-bound ancestry backmerge exemption",
             workflow,
         )
+        self.assertNotIn("Release-App review belongs only", workflow)
         request_condition = workflow.split(
             "\n  request-current-revision-review:",
             1,
@@ -419,30 +418,50 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             1,
         )[1].split("    permissions:", 1)[0]
         self.assertIn(
-            "github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'",
+            "needs.classify-release-app-ancestry-backmerge.outputs.active == "
+            "'true'",
             review_condition,
         )
-        self.assertNotIn(
+        classifier = workflow.split(
+            "  classify-release-app-ancestry-backmerge:", 1
+        )[1].split("  request-current-revision-review:", 1)[0]
+        for exact_binding in (
             "github.event.pull_request.user.login == 'lightning-it-release-automation[bot]'",
-            review_condition,
-        )
-        self.assertIn("id: review-dispatch-app", ancestry)
-        self.assertIn("permission-actions: write", ancestry)
-        self.assertIn("release-bot-exact-head-review.yml", ancestry)
-        self.assertIn(
-            'push --porcelain origin "${desired_head}:refs/heads/${upload_branch}"',
-            ancestry,
-        )
-        self.assertNotIn(
-            'push --porcelain origin "HEAD:refs/heads/${upload_branch}"',
-            ancestry,
-        )
-        self.assertLess(
-            ancestry.index("gh workflow run release-bot-exact-head-review.yml"),
-            ancestry.index("Enable protected ancestry auto-merge"),
-        )
-        self.assertNotIn("openai/codex-action", ancestry)
-        self.assertNotIn("copilot", ancestry.lower())
+            '.base.ref == "develop"',
+            '.head.repo.full_name == $repository',
+            'test("^backmerge/.+-main$")',
+            'startswith("chore(governance): record main ancestry before ")',
+            "echo 'active=true'",
+        ):
+            with self.subTest(exact_binding=exact_binding):
+                self.assertIn(exact_binding, classifier)
+
+        for evidence_binding in (
+            "Verify evidence-bound ancestry backmerge",
+            "trusted_kind=ancestry-backmerge",
+            '"repos/${REPOSITORY}/git/commits/${HEAD_SHA}"',
+            '"repos/${REPOSITORY}/branches/develop"',
+            '"repos/${REPOSITORY}/branches/main"',
+            ".parents[0].sha == $develop",
+            ".parents[1].sha == $main",
+            '.files[0].filename == ".lit/main-ancestry.json"',
+            "contents/.lit/main-ancestry.json?ref=${HEAD_SHA}",
+            'review_path="deterministic evidence-bound ancestry exemption"',
+            'external_kind="ancestry-backmerge"',
+            "mlx90-current-revision:${external_kind}:v6:${PR_NUMBER}",
+            '[ "${TRUSTED_KIND}" = ancestry-backmerge ]',
+            'if existing_pr_number="$(jq -er',
+            'test "${existing_pr_number}" = "${PR_NUMBER}"',
+            'and (has("pull_request_number") | not)',
+            '"repos/${REPOSITORY}/actions/runs/${legacy_run_id}"',
+            ".number == $pr_number",
+            ".head.sha == $head",
+            ".base.sha == $base",
+        ):
+            with self.subTest(evidence_binding=evidence_binding):
+                self.assertIn(evidence_binding, workflow)
+        self.assertNotIn("gh auth setup-git", workflow)
+        self.assertNotIn("git fetch", workflow)
 
         remediation = (WORKFLOWS / "codex-copilot-remediation.yml").read_text(encoding="utf-8")
         self.assertIn("reviewThreads(first:100,after:$after)", remediation)
