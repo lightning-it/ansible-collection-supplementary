@@ -12,8 +12,11 @@ BOUNDED_COMPONENT_SHA256 = {
     ".github/workflows/codex-copilot-remediation.yml": (
         "972539527b2a1ff3499db34d0d867aadde90313c9120b15b1c273287b7b82e76"
     ),
+    ".github/workflows/current-revision-rerun.yml": (
+        "c631843139ee2cd47f8bc5958d41c7395bcff4b2b710770d05a11bbee03054df"
+    ),
     ".github/workflows/release-bot-exact-head-review.yml": (
-        "e13a639e02ce2121f34ae5cee46a43d8b323ce525cd41f7da2eb6e811fbb500b"
+        "bcc1a6444aac2e1d376391f42bec25f14e19a589b3d69f4dee458b00a6add530"
     ),
     "docs/push-ready-optimization.md": "285a46ff586b2913e2f4087fd8001959296f6a137d45d1407b86e9d92648b814",
     "scripts/materialize-exact-revision-review.py": "30943308ea3b541c68565511d940ea7ba6be8d0207410ae21e20e3dd60b3ea6a",
@@ -63,6 +66,17 @@ class BoundedPromotionTransitionTests(unittest.TestCase):
         self.assertIn("create_reservation_once() {", workflow)
         self.assertIn("Recovering immutable reservation creation outcome", workflow)
         self.assertIn("select(.head_sha == $head and .external_id == $external_id)", workflow)
+
+    def test_one_exact_legacy_base_handoff_is_transition_bound(self) -> None:
+        rerun = (ROOT / ".github/workflows/current-revision-rerun.yml").read_text(encoding="utf-8")
+        exact = (ROOT / ".github/workflows/release-bot-exact-head-review.yml").read_text(encoding="utf-8")
+        self.assertEqual(2, rerun.count("626f249d5e05a9bdca93f183029f031f6979061b"))
+        self.assertIn('github.workflow_sha == inputs.expected_head', rerun)
+        self.assertIn('github.sha == inputs.expected_head', rerun)
+        self.assertIn('test "${GITHUB_REF}:${GITHUB_SHA}" = "refs/heads/develop:${EXPECTED_HEAD}"', rerun)
+        self.assertIn('-f "ref=${BASE_REF}"', exact)
+        self.assertIn('-f "inputs[base_ref]=${BASE_REF}"', exact)
+        self.assertIn('-f "inputs[producer_run_id]=${PRODUCER_RUN_ID}"', exact)
 
 
 if __name__ == "__main__":
