@@ -551,10 +551,12 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
     def test_human_producer_verifier_separates_event_head_from_controller_sha(self) -> None:
         rerun = (ROOT / ".github/workflows/current-revision-rerun.yml").read_text(encoding="utf-8")
         author_paths = rerun.split(
-            '          else\n            if [ "${external_kind}" != copilot ]; then',
+            '            elif [ "${external_kind}" = managed-sync ]; then',
             1,
         )[1]
-        human_path = author_paths.split("\n          fi\n\n          reservations=''", 1)[0]
+        human_path = author_paths.split("            else\n", 1)[1].split(
+            "\n          fi\n\n          reservations=''", 1
+        )[0]
         self.assertIn(".controller_sha", human_path)
         self.assertIn('test "${default_branch}" = develop', rerun)
         self.assertIn("compare/${controller_sha}...${default_head}", human_path)
@@ -587,15 +589,10 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         ancestry = (ROOT / ".github/workflows/sync-main-to-develop.yml").read_text(encoding="utf-8")
         self.assertNotIn("--draft", ancestry)
         self.assertNotIn("gh pr ready", ancestry)
-        self.assertIn("id: review-dispatch-app", ancestry)
-        self.assertIn("release-bot-exact-head-review.yml", ancestry)
+        self.assertNotIn("release-bot-exact-head-review.yml", ancestry)
         self.assertIn(".isDraft == false", ancestry)
         self.assertIn("and .headRefOid == $expected_head", ancestry)
         self.assertIn("mergeMethod:MERGE", ancestry)
-        self.assertLess(
-            ancestry.index("gh workflow run release-bot-exact-head-review.yml"),
-            ancestry.index("Enable protected ancestry auto-merge"),
-        )
         release_prepare = (ROOT / ".github/workflows/release-prepare.yml").read_text(encoding="utf-8")
         self.assertIn('gh pr ready "$existing" --repo "$GITHUB_REPOSITORY"', release_prepare)
         release_edit = release_prepare.split('gh pr edit "$existing"', 1)[1].split("--title", 1)[0]
