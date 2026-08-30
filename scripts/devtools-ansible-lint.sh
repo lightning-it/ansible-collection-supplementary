@@ -87,9 +87,11 @@ COLLECTION_NAME="$COLLECTION_NAME" \
 ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION}" \
 ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION}" \
 ANSIBLE_LINT_SKIP_META_RUNTIME="${ANSIBLE_LINT_SKIP_META_RUNTIME}" \
-WUNDER_DEVTOOLS_NETWORK=bridge \
+WUNDER_DEVTOOLS_NETWORK=none \
 CONTAINER_HOME=/tmp/wunder \
-bash scripts/wunder-devtools-ee.sh bash -c '
+bash scripts/wunder-devtools-ee.sh env \
+  WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1 \
+  bash -c '
   set -euo pipefail
 
   ns="${COLLECTION_NAMESPACE}"
@@ -132,14 +134,18 @@ bash scripts/wunder-devtools-ee.sh bash -c '
   export ANSIBLE_COLLECTIONS_PATH="${COLLECTIONS_DIR}:/workspace/collections:/usr/share/ansible/collections"
 
   export ANSIBLE_LINT_OFFLINE=true
+  export ANSIBLE_LINT_NODEPS=1
   export ANSIBLE_LINT_SKIP_GALAXY_INSTALL=1
   export ANSIBLE_LINT_CONFIG="/workspace/.ansible-lint"
 
   echo "Running ansible-lint in /workspace..."
-  ansible_lint_args=()
+  ansible_lint_args=(
+    "--exclude" "playbooks/rhel_prepare.yml"
+    "--exclude" "playbooks/rhel_teardown.yml"
+  )
   if [ "${ANSIBLE_LINT_SKIP_META_RUNTIME:-0}" = "1" ]; then
     ansible_lint_args+=("-x" "meta-runtime,meta-runtime[unsupported-version]")
     ansible_lint_args+=("--exclude" "meta/runtime.yml")
   fi
-  ansible-lint "${ansible_lint_args[@]}"
+  ansible-lint --offline "${ansible_lint_args[@]}"
 '

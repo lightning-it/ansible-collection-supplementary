@@ -1354,6 +1354,23 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         prepare = (ROOT / "scripts" / "devtools-collection-prepare.sh").read_text(encoding="utf-8")
         self.assertIn('offline_local_only="${WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY:-0}"', prepare)
         self.assertIn("Offline local-only mode: external collection dependency installation is forbidden.", prepare)
+        for helper_name in (
+            "devtools-ansible-lint.sh",
+            "devtools-collection-smoke.sh",
+            "devtools-galaxy-verify.sh",
+            "devtools-molecule.sh",
+        ):
+            with self.subTest(offline_helper=helper_name):
+                helper = (ROOT / "scripts" / helper_name).read_text(encoding="utf-8")
+                self.assertIn("WUNDER_DEVTOOLS_NETWORK=none", helper)
+                self.assertIn("WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1", helper)
+                self.assertNotIn("WUNDER_DEVTOOLS_NETWORK=bridge", helper)
+
+        ansible_lint = (ROOT / "scripts" / "devtools-ansible-lint.sh").read_text(encoding="utf-8")
+        self.assertIn("export ANSIBLE_LINT_NODEPS=1", ansible_lint)
+        self.assertIn('ansible-lint --offline "${ansible_lint_args[@]}"', ansible_lint)
+        self.assertIn('"--exclude" "playbooks/rhel_prepare.yml"', ansible_lint)
+        self.assertIn('"--exclude" "playbooks/rhel_teardown.yml"', ansible_lint)
 
     def test_devtools_capability_policy_expands_to_individual_docker_arguments(self) -> None:
         wrapper = ROOT / "scripts" / "wunder-devtools-ee.sh"

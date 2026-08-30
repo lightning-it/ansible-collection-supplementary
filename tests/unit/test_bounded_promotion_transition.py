@@ -22,12 +22,15 @@ BOUNDED_COMPONENT_SHA256 = {
     "docs/push-ready-optimization.md": "285a46ff586b2913e2f4087fd8001959296f6a137d45d1407b86e9d92648b814",
     "scripts/materialize-exact-revision-review.py": "30943308ea3b541c68565511d940ea7ba6be8d0207410ae21e20e3dd60b3ea6a",
     "scripts/devtools-collection-prepare.sh": ("149769ec99e1f8a3d5b151c5200c552f8fe317281e51120a71c0d5f3ad6aedec"),
+    "scripts/devtools-ansible-lint.sh": "3689b5bc1d6d55efaacbbd4bfeda3eec058e61ca48f6b95d8c737f396f3722b2",
+    "scripts/devtools-collection-smoke.sh": "26b9f454f1d7705738f8f2f275ae5c40ff07d1804fd832c7be74d871bd4bf846",
+    "scripts/devtools-galaxy-verify.sh": "0f50d2c851cd51bf32585503811c58fd646959cb55f99c6b39e7180159c9620e",
     "scripts/devtools-molecule.sh": "1d439aa9c15713922e8c54e456bdcf1f65cf2c27e16860147607fae07d2475f1",
     "scripts/lit-ci-profile.sh": "7020bae6efa5c35c54a85533c840cb206bc2a16e983b08e2f665586b59a43323",
     "tests/unit/test_managed_exact_revision_materializer_security.py": (
         "523ab2222052fc1e9960147f0faabe76fb38727bed22f7287087205ca438cb58"
     ),
-    "tests/unit/test_workflow_security.py": ("0ef40dcdef523e3ef096855cf01e285e0af268310ba5a000538cec2582b5bfc0"),
+    "tests/unit/test_workflow_security.py": ("f75e0c7d17ff2abbdf859ac32f7787931536b1fec5a4c84bf19d4d919ddb6d30"),
 }
 DEFERRED_PATHS = (
     "changelogs/fragments/rep60-ancestry-current-revision.yml",

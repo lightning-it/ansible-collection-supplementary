@@ -19,9 +19,11 @@ echo "Using collection: ${COLLECTION_NAMESPACE}.${COLLECTION_NAME}"
 
 COLLECTION_NAMESPACE="$COLLECTION_NAMESPACE" \
 COLLECTION_NAME="$COLLECTION_NAME" \
-WUNDER_DEVTOOLS_NETWORK=bridge \
+WUNDER_DEVTOOLS_NETWORK=none \
 CONTAINER_HOME=/tmp/wunder \
-bash scripts/wunder-devtools-ee.sh bash -c '
+bash scripts/wunder-devtools-ee.sh env \
+  WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1 \
+  bash -c '
   set -euo pipefail
 
   ns="${COLLECTION_NAMESPACE}"
