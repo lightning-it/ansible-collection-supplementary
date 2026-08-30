@@ -17,20 +17,23 @@ BOUNDED_COMPONENT_SHA256 = {
         "c631843139ee2cd47f8bc5958d41c7395bcff4b2b710770d05a11bbee03054df"
     ),
     ".github/workflows/release-bot-exact-head-review.yml": (
-        "bcc1a6444aac2e1d376391f42bec25f14e19a589b3d69f4dee458b00a6add530"
+        "ac2a2bc75c183b856cbb121eeac0e6fc660e5e03fe73cdf2513171114cfc5ecf"
     ),
     "docs/push-ready-optimization.md": "285a46ff586b2913e2f4087fd8001959296f6a137d45d1407b86e9d92648b814",
     "scripts/materialize-exact-revision-review.py": "30943308ea3b541c68565511d940ea7ba6be8d0207410ae21e20e3dd60b3ea6a",
-    "scripts/devtools-collection-prepare.sh": ("149769ec99e1f8a3d5b151c5200c552f8fe317281e51120a71c0d5f3ad6aedec"),
+    "scripts/devtools-collection-prepare.sh": ("6134b951da0d873c5bc15cb525c73eb962d5ff1413d32dca7389977fe98bf3c2"),
     "scripts/devtools-ansible-lint.sh": "3689b5bc1d6d55efaacbbd4bfeda3eec058e61ca48f6b95d8c737f396f3722b2",
     "scripts/devtools-collection-smoke.sh": "26b9f454f1d7705738f8f2f275ae5c40ff07d1804fd832c7be74d871bd4bf846",
     "scripts/devtools-galaxy-verify.sh": "0f50d2c851cd51bf32585503811c58fd646959cb55f99c6b39e7180159c9620e",
-    "scripts/devtools-molecule.sh": "1d439aa9c15713922e8c54e456bdcf1f65cf2c27e16860147607fae07d2475f1",
+    "scripts/devtools-molecule.sh": "8b48cf08b534316e25449e36c1c79f04b40f92c05b0f2cdcef2c5a0ce76a651d",
     "scripts/lit-ci-profile.sh": "b2ced9a43284dbdc77e8eb990bc52d50515ad381e138a76591db01e7b0dae19d",
     "tests/unit/test_managed_exact_revision_materializer_security.py": (
         "523ab2222052fc1e9960147f0faabe76fb38727bed22f7287087205ca438cb58"
     ),
-    "tests/unit/test_workflow_security.py": ("f75e0c7d17ff2abbdf859ac32f7787931536b1fec5a4c84bf19d4d919ddb6d30"),
+    "tests/unit/test_exact_revision_review.py": (
+        "19267f4c59cd64c386da5ff1fb6bcbbe37f452c7c05f31e11b343409b71fc382"
+    ),
+    "tests/unit/test_workflow_security.py": ("160e2a7003a2f5d33817c1e82791446bd76352b92baa738eddfab09b82184b03"),
 }
 DEFERRED_PATHS = (
     "changelogs/fragments/rep60-ancestry-current-revision.yml",

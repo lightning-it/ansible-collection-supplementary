@@ -133,6 +133,11 @@ bash scripts/wunder-devtools-ee.sh env \
     local mode_file="molecule/${scen}/.molecule-mode"
     local mode=""
 
+    if [[ ! "${scen}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+      echo "ERROR: Unsafe Molecule scenario name: ${scen}" >&2
+      exit 1
+    fi
+
     if [ -f "${mode_file}" ]; then
       mode="$(tr -d "[:space:]" < "${mode_file}")"
     fi
@@ -212,12 +217,19 @@ PY
   fi
 
   offline_base="${HOME}/molecule-offline-base.yml"
+  molecule_ephemeral_root="${HOME}/molecule-ephemeral"
   umask 077
+  mkdir -p "${molecule_ephemeral_root}"
+  chmod 0700 "${molecule_ephemeral_root}"
   printf "%s\n" "prerun: false" >"${offline_base}"
   echo "Running Molecule scenarios: ${scenarios[*]}"
 
   for scen in "${scenarios[@]}"; do
+    molecule_ephemeral_directory="${molecule_ephemeral_root}/${scen}"
+    mkdir -p "${molecule_ephemeral_directory}"
+    chmod 0700 "${molecule_ephemeral_directory}"
     echo ">>> molecule test -s ${scen}"
-    molecule -c "${offline_base}" test -s "${scen}"
+    MOLECULE_EPHEMERAL_DIRECTORY="${molecule_ephemeral_directory}" \
+      molecule -c "${offline_base}" test -s "${scen}"
   done
 '

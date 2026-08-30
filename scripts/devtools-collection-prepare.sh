@@ -95,6 +95,7 @@ install_collection_dependency() {
 
 if [ "${offline_local_only}" = 1 ]; then
   echo "Offline local-only mode: external collection dependency installation is forbidden." >&2
+  echo "Offline local-only mode is hermetic: local dependency source roots are intentionally not mounted." >&2
 else
   dep_specs=()
   if [ -f /workspace/collections/requirements.yml ]; then

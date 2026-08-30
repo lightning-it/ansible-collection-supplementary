@@ -1346,7 +1346,10 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn('SCENARIO_FILTER="${1:-artifacts-basic}"', molecule)
         self.assertIn('driver.get("name") != "default"', molecule)
         self.assertIn('platform.get("managed") is not False', molecule)
+        self.assertIn('[[ ! "${scen}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]', molecule)
         self.assertIn('printf "%s\\n" "prerun: false"', molecule)
+        self.assertIn('molecule_ephemeral_root="${HOME}/molecule-ephemeral"', molecule)
+        self.assertIn('MOLECULE_EPHEMERAL_DIRECTORY="${molecule_ephemeral_directory}"', molecule)
         self.assertIn('molecule -c "${offline_base}" test', molecule)
         self.assertNotIn("docker info", molecule)
         self.assertNotIn("WUNDER_DEVTOOLS_CAP_ADD=CHOWN", molecule)
@@ -1354,6 +1357,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         prepare = (ROOT / "scripts" / "devtools-collection-prepare.sh").read_text(encoding="utf-8")
         self.assertIn('offline_local_only="${WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY:-0}"', prepare)
         self.assertIn("Offline local-only mode: external collection dependency installation is forbidden.", prepare)
+        self.assertIn("local dependency source roots are intentionally not mounted", prepare)
         for helper_name in (
             "devtools-ansible-lint.sh",
             "devtools-collection-smoke.sh",
