@@ -32,7 +32,7 @@ BOUNDED_COMPONENT_SHA256 = {
         "523ab2222052fc1e9960147f0faabe76fb38727bed22f7287087205ca438cb58"
     ),
     "tests/unit/test_exact_revision_review.py": ("b5403e5e73db4d89aa77d13cb6d5521aff0e243a6803e792811b1a48b5bb35e1"),
-    "tests/unit/test_workflow_security.py": ("593989c34de6da63263efc944e58ac9a41fa7e34a2f753ceb75ef3d2485eed70"),
+    "tests/unit/test_workflow_security.py": ("c5cd795601a38e04db1cb6a5ed67998d754f4080a6351f8ebfd07b115d222713"),
 }
 DEFERRED_PATHS = (
     "changelogs/fragments/rep60-ancestry-current-revision.yml",

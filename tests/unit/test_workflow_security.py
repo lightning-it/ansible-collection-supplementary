@@ -1343,8 +1343,8 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT=disabled", molecule)
         self.assertIn("WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH=disabled", molecule)
         self.assertIn("WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1", molecule)
-        self.assertIn('REQUIRE_DECLARED_DEPENDENCIES=0', molecule)
-        self.assertIn('REQUIRE_DECLARED_DEPENDENCIES=1', molecule)
+        self.assertIn("REQUIRE_DECLARED_DEPENDENCIES=0", molecule)
+        self.assertIn("REQUIRE_DECLARED_DEPENDENCIES=1", molecule)
         self.assertIn(
             'WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES="${REQUIRE_DECLARED_DEPENDENCIES}"',
             molecule,
