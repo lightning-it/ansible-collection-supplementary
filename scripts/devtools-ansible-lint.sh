@@ -91,6 +91,7 @@ WUNDER_DEVTOOLS_NETWORK=none \
 CONTAINER_HOME=/tmp/wunder \
 bash scripts/wunder-devtools-ee.sh env \
   WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1 \
+  WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES=0 \
   bash -c '
   set -euo pipefail
 

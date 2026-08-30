@@ -1343,6 +1343,12 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT=disabled", molecule)
         self.assertIn("WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH=disabled", molecule)
         self.assertIn("WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1", molecule)
+        self.assertIn('REQUIRE_DECLARED_DEPENDENCIES=0', molecule)
+        self.assertIn('REQUIRE_DECLARED_DEPENDENCIES=1', molecule)
+        self.assertIn(
+            'WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES="${REQUIRE_DECLARED_DEPENDENCIES}"',
+            molecule,
+        )
         self.assertIn('SCENARIO_FILTER="${1:-artifacts-basic}"', molecule)
         self.assertIn('driver.get("name") != "default"', molecule)
         self.assertIn('platform.get("managed") is not False', molecule)
@@ -1358,6 +1364,11 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn('offline_local_only="${WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY:-0}"', prepare)
         self.assertIn("Offline local-only mode: external collection dependency installation is forbidden.", prepare)
         self.assertIn("local dependency source roots are intentionally not mounted", prepare)
+        self.assertIn("WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES=0 or 1", prepare)
+        self.assertIn("/usr/share/ansible/collections/ansible_collections/", prepare)
+        self.assertIn("/MANIFEST.json", prepare)
+        self.assertIn("declared galaxy.yml dependencies missing", prepare)
+        self.assertIn("This offline gate requires every declared dependency", prepare)
         for helper_name in (
             "devtools-ansible-lint.sh",
             "devtools-collection-smoke.sh",
@@ -1368,6 +1379,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
                 helper = (ROOT / "scripts" / helper_name).read_text(encoding="utf-8")
                 self.assertIn("WUNDER_DEVTOOLS_NETWORK=none", helper)
                 self.assertIn("WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1", helper)
+                self.assertIn("WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES=", helper)
                 self.assertNotIn("WUNDER_DEVTOOLS_NETWORK=bridge", helper)
 
         ansible_lint = (ROOT / "scripts" / "devtools-ansible-lint.sh").read_text(encoding="utf-8")

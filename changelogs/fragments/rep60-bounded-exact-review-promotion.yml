@@ -16,3 +16,9 @@ minor_changes:
     Bind the human Current-Revision producer's protected-verifier handoff to
     the exact develop or main base ref, base SHA, head SHA, PR number, and
     producer run so the helper receives its complete fail-closed input contract.
+  - >-
+    Give optional protected-handoff inputs explicit empty defaults and inventory
+    every declared Galaxy dependency before an offline local gate runs. Keep the
+    default artifacts-only scenario explicitly dependency-free, while any other
+    selected Molecule scenario fails immediately when the pinned image lacks a
+    declared dependency.

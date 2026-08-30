@@ -14,7 +14,7 @@ BOUNDED_COMPONENT_SHA256 = {
         "972539527b2a1ff3499db34d0d867aadde90313c9120b15b1c273287b7b82e76"
     ),
     ".github/workflows/current-revision-rerun.yml": (
-        "c631843139ee2cd47f8bc5958d41c7395bcff4b2b710770d05a11bbee03054df"
+        "2dd934c670253acb16766d1ff2f033dec8741ac75204456e205272dd476e5b0d"
     ),
     ".github/workflows/copilot-review.yml": ("749b5c447efcfb9be421b8c7630241b8a1a84624a4f676495a3d8da164d1b34a"),
     ".github/workflows/release-bot-exact-head-review.yml": (
@@ -22,17 +22,17 @@ BOUNDED_COMPONENT_SHA256 = {
     ),
     "docs/push-ready-optimization.md": "285a46ff586b2913e2f4087fd8001959296f6a137d45d1407b86e9d92648b814",
     "scripts/materialize-exact-revision-review.py": "30943308ea3b541c68565511d940ea7ba6be8d0207410ae21e20e3dd60b3ea6a",
-    "scripts/devtools-collection-prepare.sh": ("6134b951da0d873c5bc15cb525c73eb962d5ff1413d32dca7389977fe98bf3c2"),
-    "scripts/devtools-ansible-lint.sh": "3689b5bc1d6d55efaacbbd4bfeda3eec058e61ca48f6b95d8c737f396f3722b2",
-    "scripts/devtools-collection-smoke.sh": "26b9f454f1d7705738f8f2f275ae5c40ff07d1804fd832c7be74d871bd4bf846",
-    "scripts/devtools-galaxy-verify.sh": "0f50d2c851cd51bf32585503811c58fd646959cb55f99c6b39e7180159c9620e",
-    "scripts/devtools-molecule.sh": "8b48cf08b534316e25449e36c1c79f04b40f92c05b0f2cdcef2c5a0ce76a651d",
+    "scripts/devtools-collection-prepare.sh": ("e187a180997a5c9b3de2dde1be0ce619801a43987ca1425366e030e3447b3be2"),
+    "scripts/devtools-ansible-lint.sh": "ba9a002c20842c8bdeb657b7a24e48984c88f0c3479e0640534766cf75f5eaa9",
+    "scripts/devtools-collection-smoke.sh": "af844fe0c99a2675623827fa56173b22f5d691b6f6fc491f28cf3ef851337593",
+    "scripts/devtools-galaxy-verify.sh": "27f5af823ebeb5b3417f9833323d7704bc6ba0935185323f29cbb4c56e87a701",
+    "scripts/devtools-molecule.sh": "0e77de4bc7e1ef4527d7710f944680a0c7e6d390da96da785b5f93e6736b4a9a",
     "scripts/lit-ci-profile.sh": "b2ced9a43284dbdc77e8eb990bc52d50515ad381e138a76591db01e7b0dae19d",
     "tests/unit/test_managed_exact_revision_materializer_security.py": (
         "523ab2222052fc1e9960147f0faabe76fb38727bed22f7287087205ca438cb58"
     ),
-    "tests/unit/test_exact_revision_review.py": ("589243567fe715c65eb4a4be46892f81aaa07bd3cee4410b4429e335be3829cd"),
-    "tests/unit/test_workflow_security.py": ("160e2a7003a2f5d33817c1e82791446bd76352b92baa738eddfab09b82184b03"),
+    "tests/unit/test_exact_revision_review.py": ("b5403e5e73db4d89aa77d13cb6d5521aff0e243a6803e792811b1a48b5bb35e1"),
+    "tests/unit/test_workflow_security.py": ("593989c34de6da63263efc944e58ac9a41fa7e34a2f753ceb75ef3d2485eed70"),
 }
 DEFERRED_PATHS = (
     "changelogs/fragments/rep60-ancestry-current-revision.yml",

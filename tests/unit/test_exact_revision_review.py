@@ -361,6 +361,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
     def test_ruleset_workflow_verifies_the_producer_instead_of_trusting_a_check_name(self) -> None:
         rerun = (ROOT / ".github/workflows/current-revision-rerun.yml").read_text(encoding="utf-8")
         self.assertIn("workflow_dispatch:", rerun)
+        self.assertEqual(4, rerun.count('default: ""'))
         self.assertIn('test "${GITHUB_REF}" = "refs/heads/${EVENT_BASE_REF}"', rerun)
         self.assertIn('[[ "${EVENT_BASE_REF}" =~ ^(develop|main)$ ]]', rerun)
         self.assertIn(

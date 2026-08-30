@@ -17,6 +17,11 @@ fi
 
 SCENARIO_FILTER="${1:-artifacts-basic}"
 COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE:-lit}"
+if [ "${SCENARIO_FILTER}" = artifacts-basic ]; then
+  REQUIRE_DECLARED_DEPENDENCIES=0
+else
+  REQUIRE_DECLARED_DEPENDENCIES=1
+fi
 
 # Prefer authoritative name from galaxy.yml
 if [ -z "${COLLECTION_NAME:-}" ] && [ -f galaxy.yml ]; then
@@ -74,6 +79,7 @@ SCENARIO_FILTER="${SCENARIO_FILTER}" \
 CONTAINER_HOME=/tmp/wunder \
 bash scripts/wunder-devtools-ee.sh env \
   WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1 \
+  WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES="${REQUIRE_DECLARED_DEPENDENCIES}" \
   MOLECULE_RUN_PROTECTED="${MOLECULE_RUN_PROTECTED:-false}" \
   INCUS_MODE="${INCUS_MODE:-}" \
   bash -c '
