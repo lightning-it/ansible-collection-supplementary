@@ -171,25 +171,38 @@ bash scripts/wunder-devtools-ee.sh env \
         ;;
     esac
 
-    if ! python3 - "molecule/${scen}/molecule.yml" <<PY
+    python3 - "molecule/${scen}/molecule.yml" <<PY
 import sys
 from pathlib import Path
 
 import yaml
 
 path = Path(sys.argv[1])
-payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-driver = payload.get("driver") or {}
-platforms = payload.get("platforms") or []
+try:
+    source = path.read_text(encoding="utf-8")
+except (OSError, UnicodeError):
+    raise SystemExit(
+        f"{path}: local offline scenario must be a readable UTF-8 file"
+    ) from None
+try:
+    payload = yaml.safe_load(source)
+except yaml.YAMLError:
+    raise SystemExit(f"{path}: local offline scenario must contain valid YAML") from None
+if not isinstance(payload, dict):
+    raise SystemExit(f"{path}: local offline scenario must be a YAML mapping")
+driver = payload.get("driver")
+if not isinstance(driver, dict):
+    raise SystemExit(f"{path}: local offline scenario driver must be a mapping")
+platforms = payload.get("platforms")
+if not isinstance(platforms, list) or not platforms:
+    raise SystemExit(f"{path}: local offline scenario platforms must be a non-empty list")
+if any(not isinstance(platform, dict) for platform in platforms):
+    raise SystemExit(f"{path}: every local offline scenario platform must be a mapping")
 if driver.get("name") != "default":
     raise SystemExit(f"{path}: local offline scenarios require driver.name=default")
-if not platforms or any(platform.get("managed") is not False for platform in platforms):
+if any(platform.get("managed") is not False for platform in platforms):
     raise SystemExit(f"{path}: local offline scenarios require managed=false for every platform")
 PY
-    then
-      echo "ERROR: Scenario ${scen} requires a managed runtime and must run in a protected pipeline." >&2
-      exit 1
-    fi
 
     scenarios+=("${scen}")
   }
