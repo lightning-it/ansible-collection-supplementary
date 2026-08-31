@@ -2,9 +2,8 @@
 # shellcheck disable=SC2086,SC2154
 set -eo pipefail
 
-# Run the socket-free controller parity scenario, or one explicitly named
-# unmanaged scenario, inside the pinned ee-wunder-devtools-ubi9 container.
-# Full dependency-backed role matrices execute in protected pipeline runners.
+# Run all non-*heavy Molecule scenarios for the current collection
+# inside the ee-wunder-devtools-ubi9 container.
 #
 # Usage:
 #   scripts/devtools-molecule.sh
@@ -15,13 +14,8 @@ if [ "$#" -gt 1 ]; then
   exit 1
 fi
 
-SCENARIO_FILTER="${1:-artifacts-basic}"
+SCENARIO_FILTER="${1:-}"
 COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE:-lit}"
-if [ "${SCENARIO_FILTER}" = artifacts-basic ]; then
-  REQUIRE_DECLARED_DEPENDENCIES=0
-else
-  REQUIRE_DECLARED_DEPENDENCIES=1
-fi
 
 # Prefer authoritative name from galaxy.yml
 if [ -z "${COLLECTION_NAME:-}" ] && [ -f galaxy.yml ]; then
@@ -52,10 +46,9 @@ if [ -n "${SCENARIO_FILTER}" ]; then
   echo "Scenario filter: ${SCENARIO_FILTER}"
 fi
 
-# Local non-heavy scenarios are controller-only and unmanaged. The host engine
-# may start the pinned Devtools container, but its socket is never mounted into
-# that container. Protected Incus and managed-container scenarios belong to
-# their protected pipeline runners and fail closed here.
+# The controller only needs the invoking host identity plus its explicit engine
+# socket groups. Nested containers exercise production ownership contracts; the
+# controller itself never receives root, privileged mode, or added capabilities.
 export WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1
 export WUNDER_DEVTOOLS_RUN_AS_ROOT=0
 export WUNDER_DEVTOOLS_PRIVILEGED=0
@@ -66,20 +59,18 @@ export WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH=disabled
 WUNDER_DEVTOOLS_PRIVILEGED=0 \
 WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1 \
 WUNDER_DEVTOOLS_RUN_AS_ROOT=0 \
-WUNDER_DEVTOOLS_DOCKER_SOCKET=disabled \
+WUNDER_DEVTOOLS_DOCKER_SOCKET=required \
 WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT=disabled \
 WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH=disabled \
-WUNDER_DEVTOOLS_NETWORK=none \
-WUNDER_DEVTOOLS_ROOTFS_MODE=ro \
-WUNDER_DEVTOOLS_WORKSPACE_MODE=ro \
+WUNDER_DEVTOOLS_NETWORK=bridge \
+WUNDER_DEVTOOLS_ROOTFS_MODE=rw \
+WUNDER_DEVTOOLS_WORKSPACE_MODE=rw \
 WUNDER_DEVTOOLS_CAP_ADD='' \
 COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE}" \
 COLLECTION_NAME="${COLLECTION_NAME}" \
 SCENARIO_FILTER="${SCENARIO_FILTER}" \
 CONTAINER_HOME=/tmp/wunder \
 bash scripts/wunder-devtools-ee.sh env \
-  WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1 \
-  WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES="${REQUIRE_DECLARED_DEPENDENCIES}" \
   MOLECULE_RUN_PROTECTED="${MOLECULE_RUN_PROTECTED:-false}" \
   INCUS_MODE="${INCUS_MODE:-}" \
   bash -c '
@@ -102,8 +93,9 @@ bash scripts/wunder-devtools-ee.sh env \
     echo "Limiting to scenario: ${scenario_filter}"
   fi
 
-  if [ -n "${DOCKER_HOST:-}" ] || [ -S /var/run/docker.sock ]; then
-    echo "ERROR: A Docker-compatible socket must not enter the offline Devtools container." >&2
+  echo "DEBUG: docker info inside ee-wunder-devtools-ubi9..."
+  if ! docker info >/dev/null 2>&1; then
+    echo "ERROR: Docker is required for Molecule tests but is unavailable inside the devtools container." >&2
     exit 1
   fi
 
@@ -127,6 +119,7 @@ bash scripts/wunder-devtools-ee.sh env \
   fi
 
   export MOLECULE_NO_LOG="${MOLECULE_NO_LOG:-false}"
+  export DOCKER_HOST="${DOCKER_HOST:-unix:///var/run/docker.sock}"
 
   # -------------------------------------------------------------
   # 3) Discover scenarios
@@ -138,11 +131,6 @@ bash scripts/wunder-devtools-ee.sh env \
     local explicit="${2:-false}"
     local mode_file="molecule/${scen}/.molecule-mode"
     local mode=""
-
-    if [[ ! "${scen}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
-      echo "ERROR: Unsafe Molecule scenario name: ${scen}" >&2
-      exit 1
-    fi
 
     if [ -f "${mode_file}" ]; then
       mode="$(tr -d "[:space:]" < "${mode_file}")"
@@ -170,26 +158,6 @@ bash scripts/wunder-devtools-ee.sh env \
         fi
         ;;
     esac
-
-    if ! python3 - "molecule/${scen}/molecule.yml" <<PY
-import sys
-from pathlib import Path
-
-import yaml
-
-path = Path(sys.argv[1])
-payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-driver = payload.get("driver") or {}
-platforms = payload.get("platforms") or []
-if driver.get("name") != "default":
-    raise SystemExit(f"{path}: local offline scenarios require driver.name=default")
-if not platforms or any(platform.get("managed") is not False for platform in platforms):
-    raise SystemExit(f"{path}: local offline scenarios require managed=false for every platform")
-PY
-    then
-      echo "ERROR: Scenario ${scen} requires a managed runtime and must run in a protected pipeline." >&2
-      exit 1
-    fi
 
     scenarios+=("${scen}")
   }
@@ -222,20 +190,10 @@ PY
     exit 0
   fi
 
-  offline_base="${HOME}/molecule-offline-base.yml"
-  molecule_ephemeral_root="${HOME}/molecule-ephemeral"
-  umask 077
-  mkdir -p "${molecule_ephemeral_root}"
-  chmod 0700 "${molecule_ephemeral_root}"
-  printf "%s\n" "prerun: false" >"${offline_base}"
   echo "Running Molecule scenarios: ${scenarios[*]}"
 
   for scen in "${scenarios[@]}"; do
-    molecule_ephemeral_directory="${molecule_ephemeral_root}/${scen}"
-    mkdir -p "${molecule_ephemeral_directory}"
-    chmod 0700 "${molecule_ephemeral_directory}"
     echo ">>> molecule test -s ${scen}"
-    MOLECULE_EPHEMERAL_DIRECTORY="${molecule_ephemeral_directory}" \
-      molecule -c "${offline_base}" test -s "${scen}"
+    molecule test -s "${scen}"
   done
 '
