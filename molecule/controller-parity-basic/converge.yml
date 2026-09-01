@@ -1,0 +1,23 @@
+---
+- name: Exercise the canonical offline controller
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    parity_root: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY')
+         | default('/tmp/lit-controller-parity-basic', true) }}
+    parity_marker: "{{ parity_root }}/controller-parity.txt"
+  tasks:
+    - name: Create the isolated parity directory
+      ansible.builtin.file:
+        path: "{{ parity_root }}"
+        state: directory
+        mode: "0700"
+
+    - name: Materialize the deterministic parity marker
+      ansible.builtin.copy:
+        dest: "{{ parity_marker }}"
+        content: |
+          lightning-it controller parity
+        mode: "0600"
