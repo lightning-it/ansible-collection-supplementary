@@ -1337,7 +1337,44 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("WUNDER_DEVTOOLS_DOCKER_SOCKET=disabled", molecule)
         self.assertIn("WUNDER_DEVTOOLS_NETWORK=none", molecule)
         self.assertIn("WUNDER_DEVTOOLS_ROOTFS_MODE=ro", molecule)
+        self.assertIn("A Docker-compatible socket must not enter", molecule)
+        self.assertNotIn("Skipping Molecule tests because Docker", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_DOCKER_SOCKET=disabled", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_NETWORK=none", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_ROOTFS_MODE=ro", molecule)
         self.assertIn("WUNDER_DEVTOOLS_WORKSPACE_MODE=ro", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_RUN_AS_ROOT=0", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT=disabled", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH=disabled", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1", molecule)
+        self.assertIn("REQUIRE_DECLARED_DEPENDENCIES=0", molecule)
+        self.assertIn("REQUIRE_DECLARED_DEPENDENCIES=1", molecule)
+        self.assertIn(
+            'WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES="${REQUIRE_DECLARED_DEPENDENCIES}"',
+            molecule,
+        )
+        self.assertIn('SCENARIO_FILTER="${1:-controller-parity-basic}"', molecule)
+        self.assertIn('driver.get("name") != "default"', molecule)
+        self.assertIn("except yaml.YAMLError:", molecule)
+        self.assertIn("if not isinstance(payload, dict):", molecule)
+        self.assertIn("if not isinstance(driver, dict):", molecule)
+        self.assertIn(
+            "if not isinstance(platforms, list) or not platforms:",
+            molecule,
+        )
+        self.assertIn(
+            "if any(not isinstance(platform, dict) for platform in platforms):",
+            molecule,
+        )
+        self.assertIn('platform.get("managed") is not False', molecule)
+        self.assertIn('[[ ! "${scen}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]', molecule)
+        self.assertIn('printf "%s\\n" "prerun: false"', molecule)
+        self.assertIn('molecule_ephemeral_root="${HOME}/molecule-ephemeral"', molecule)
+        self.assertIn('MOLECULE_EPHEMERAL_DIRECTORY="${molecule_ephemeral_directory}"', molecule)
+        self.assertIn('molecule -c "${offline_base}" test', molecule)
+        self.assertNotIn("docker info", molecule)
+        self.assertNotIn("WUNDER_DEVTOOLS_CAP_ADD=CHOWN", molecule)
         self.assertIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1", molecule)
         self.assertIn("WUNDER_DEVTOOLS_RUN_AS_ROOT=0", molecule)
         self.assertIn("WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT=disabled", molecule)
