@@ -32,6 +32,25 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.module = load_materializer()
 
+    def test_invalid_runner_temp_does_not_create_review_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            output = root / "review"
+            missing_runner_temp = root / "missing-runner-temp"
+            with (
+                mock.patch.object(self.module, "validate_inputs"),
+                mock.patch.dict(
+                    os.environ,
+                    {"RUNNER_TEMP": str(missing_runner_temp)},
+                ),
+                self.assertRaisesRegex(
+                    self.module.MaterializationError,
+                    "RUNNER_TEMP must identify an existing directory",
+                ),
+            ):
+                self.module.materialize(types.SimpleNamespace(), output)
+            self.assertFalse(output.exists())
+
     def test_external_commands_are_bounded(self) -> None:
         with (
             mock.patch.object(
