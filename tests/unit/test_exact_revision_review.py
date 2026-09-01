@@ -283,11 +283,8 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
 class ExactRevisionWorkflowContractTests(unittest.TestCase):
     def test_release_app_review_is_protected_and_final_revision_only(self) -> None:
         workflow = (ROOT / ".github/workflows/release-bot-exact-head-review.yml").read_text(encoding="utf-8")
-        self.assertTrue(workflow.startswith("# Adopted repository-local workflow;"))
-        self.assertIn("automated Shared Assets sync does not", workflow)
-        self.assertIn("governance flow defined by AGENTS.md section 1.1(3-5)", workflow)
-        self.assertNotIn("# Managed by lightning-it/shared-assets-lit.", workflow)
-        self.assertNotIn("# Do not edit downstream copies directly.", workflow)
+        self.assertTrue(workflow.startswith("# Managed by lightning-it/shared-assets-lit."))
+        self.assertIn("# Do not edit downstream copies directly.", workflow)
         trigger = workflow.split("on:", 1)[1].split("permissions:", 1)[0]
         self.assertIn("workflow_dispatch:", trigger)
         self.assertNotIn("pull_request_target:", trigger)
@@ -361,7 +358,14 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
     def test_ruleset_workflow_verifies_the_producer_instead_of_trusting_a_check_name(self) -> None:
         rerun = (ROOT / ".github/workflows/current-revision-rerun.yml").read_text(encoding="utf-8")
         self.assertIn("workflow_dispatch:", rerun)
-        self.assertEqual(4, rerun.count('default: ""'))
+        workflow_call_inputs = rerun.split("  workflow_call:", 1)[1].split("  workflow_dispatch:", 1)[0]
+        dispatch_inputs = rerun.split("  workflow_dispatch:", 1)[1].split("\npermissions:", 1)[0]
+        self.assertEqual(2, workflow_call_inputs.count("required: false"))
+        self.assertEqual(3, workflow_call_inputs.count("required: true"))
+        self.assertEqual(0, workflow_call_inputs.count('default: ""'))
+        self.assertEqual(5, dispatch_inputs.count("required: true"))
+        self.assertEqual(0, dispatch_inputs.count("required: false"))
+        self.assertEqual(0, dispatch_inputs.count('default: ""'))
         self.assertIn('test "${GITHUB_REF}" = "refs/heads/${EVENT_BASE_REF}"', rerun)
         self.assertIn('[[ "${EVENT_BASE_REF}" =~ ^(develop|main)$ ]]', rerun)
         self.assertIn(

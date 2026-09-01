@@ -1351,6 +1351,17 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         )
         self.assertIn('SCENARIO_FILTER="${1:-artifacts-basic}"', molecule)
         self.assertIn('driver.get("name") != "default"', molecule)
+        self.assertIn("except yaml.YAMLError:", molecule)
+        self.assertIn("if not isinstance(payload, dict):", molecule)
+        self.assertIn("if not isinstance(driver, dict):", molecule)
+        self.assertIn(
+            "if not isinstance(platforms, list) or not platforms:",
+            molecule,
+        )
+        self.assertIn(
+            "if any(not isinstance(platform, dict) for platform in platforms):",
+            molecule,
+        )
         self.assertIn('platform.get("managed") is not False', molecule)
         self.assertIn('[[ ! "${scen}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]', molecule)
         self.assertIn('printf "%s\\n" "prerun: false"', molecule)
