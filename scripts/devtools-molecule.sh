@@ -2,7 +2,7 @@
 # shellcheck disable=SC2086,SC2154
 set -eo pipefail
 
-# Run the socket-free controller parity scenario, or one explicitly named
+# Run the canonical socket-free controller parity scenario, or one explicitly named
 # unmanaged scenario, inside the pinned ee-wunder-devtools-ubi9 container.
 # Full dependency-backed role matrices execute in protected pipeline runners.
 #
@@ -15,9 +15,9 @@ if [ "$#" -gt 1 ]; then
   exit 1
 fi
 
-SCENARIO_FILTER="${1:-artifacts-basic}"
+SCENARIO_FILTER="${1:-controller-parity-basic}"
 COLLECTION_NAMESPACE="${COLLECTION_NAMESPACE:-lit}"
-if [ "${SCENARIO_FILTER}" = artifacts-basic ]; then
+if [ "${SCENARIO_FILTER}" = controller-parity-basic ]; then
   REQUIRE_DECLARED_DEPENDENCIES=0
 else
   REQUIRE_DECLARED_DEPENDENCIES=1
@@ -211,7 +211,8 @@ PY
     if [ -d "molecule/$scenario_filter" ] && [ -f "molecule/$scenario_filter/molecule.yml" ]; then
       add_scenario "$scenario_filter" true
     else
-      echo "ERROR: Requested scenario '${scenario_filter}' not found under molecule/." >&2
+      printf "ERROR: Requested scenario %s not found under molecule/.\n" \
+        "${scenario_filter}" >&2
       exit 1
     fi
   else

@@ -1,0 +1,27 @@
+---
+- name: Verify the canonical offline controller
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    parity_root: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY')
+         | default('/tmp/lit-controller-parity-basic', true) }}
+    parity_marker: "{{ parity_root }}/controller-parity.txt"
+  tasks:
+    - name: Inspect the deterministic parity marker
+      ansible.builtin.stat:
+        path: "{{ parity_marker }}"
+        checksum_algorithm: sha256
+        get_checksum: true
+      register: parity_marker_stat
+
+    - name: Require the expected isolated controller result
+      ansible.builtin.assert:
+        that:
+          - parity_marker_stat.stat.exists
+          - parity_marker_stat.stat.mode == '0600'
+          - >-
+            parity_marker_stat.stat.checksum
+            == 'c074fe3e1b33a4e1a2b9bb2523bead5dcc8f1261a88be7fafb3cc784d0ccaf40'
+        quiet: true
