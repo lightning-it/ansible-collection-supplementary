@@ -74,12 +74,17 @@ cleanup_linked_worktree_git_pointer() {
 trap cleanup_linked_worktree_git_pointer EXIT
 
 sanitize_docker_host_env() {
-  if [[ "${DOCKER_HOST:-}" == unix://* ]]; then
-    host_sock="${DOCKER_HOST#unix://}"
-    if [ ! -S "$host_sock" ]; then
-      unset DOCKER_HOST
-    fi
-  fi
+  local host_sock
+  case "${DOCKER_HOST:-}" in
+    "") ;;
+    unix://*)
+      host_sock="${DOCKER_HOST#unix://}"
+      if [ ! -S "$host_sock" ]; then
+        unset DOCKER_HOST
+      fi
+      ;;
+    *) fail_closed "DOCKER_HOST must reference a local unix:// socket" ;;
+  esac
 }
 
 docker_usable() {
@@ -92,6 +97,8 @@ podman_usable() {
   command -v podman >/dev/null 2>&1 || return 1
   podman info >/dev/null 2>&1
 }
+
+sanitize_docker_host_env
 
 CONTAINER_BIN="${WUNDER_CONTAINER_ENGINE:-}"
 if [ -z "$CONTAINER_BIN" ]; then
@@ -143,7 +150,7 @@ DOCKER_ARGS=(
   --cap-drop ALL
   --security-opt no-new-privileges=true
   --pids-limit 1024
-  --tmpfs "/tmp:rw,nosuid,nodev,size=2g"
+  --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=2g"
   --tmpfs "$RUN_TMPFS_MOUNT"
   --tmpfs "$HOME_TMPFS_MOUNT"
 )
@@ -343,18 +350,30 @@ elif [ "$RUN_AS_HOST_UID_POLICY" = "1" ]; then
 fi
 
 if [ -n "$DOCKER_SOCKET" ]; then
-  DOCKER_SOCKET_REAL="$DOCKER_SOCKET"
-  if command -v python3 >/dev/null 2>&1; then
-    DOCKER_SOCKET_REAL="$(
-      python3 - "$DOCKER_SOCKET" <<'PY'
-import os
-import sys
-print(os.path.realpath(sys.argv[1]))
-PY
-    )"
+  case "$DOCKER_SOCKET" in
+    /*) ;;
+    *) fail_closed "Docker-compatible socket path must be absolute" ;;
+  esac
+  if ! command -v realpath >/dev/null 2>&1; then
+    fail_closed "realpath is required to validate the Docker-compatible socket path"
+  fi
+  if ! DOCKER_SOCKET_REAL="$(realpath "$DOCKER_SOCKET" 2>/dev/null)"; then
+    fail_closed "unable to resolve Docker-compatible socket path"
   fi
 
-  DOCKER_ARGS+=(-v "$DOCKER_SOCKET_REAL":/var/run/docker.sock)
+  if [ -z "$DOCKER_SOCKET_REAL" ]; then
+    fail_closed "resolved Docker-compatible socket path is empty"
+  fi
+  case "$DOCKER_SOCKET_REAL" in
+    *:*)
+      fail_closed "resolved Docker-compatible socket path contains an unsafe mount delimiter"
+      ;;
+  esac
+  if [ ! -S "$DOCKER_SOCKET_REAL" ]; then
+    fail_closed "resolved Docker-compatible socket path is not a socket"
+  fi
+
+  DOCKER_ARGS+=(-v "${DOCKER_SOCKET_REAL}:/var/run/docker.sock")
   DOCKER_ARGS+=(-e DOCKER_HOST=unix:///var/run/docker.sock)
 
   DOCKER_ARGS+=(
