@@ -869,9 +869,8 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         scorecard = load_yaml(WORKFLOWS / "openssf-scorecard.yml")
         scorecard_job = scorecard["jobs"]["scorecard"]
         self.assertNotIn("id-token", scorecard_job["permissions"])
-        run_step = next(
-            step for step in scorecard_job["steps"] if step.get("name") == "Run immutable OpenSSF Scorecard analysis"
-        )
+        scorecard_step_name = "Run commit-pinned OpenSSF Scorecard analysis"
+        run_step = next(step for step in scorecard_job["steps"] if step.get("name") == scorecard_step_name)
         self.assertEqual(
             "ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc",
             run_step["uses"],
