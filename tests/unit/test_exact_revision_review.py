@@ -461,7 +461,18 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                 self.assertIn('-f "inputs[expected_base]=${EXPECTED_BASE}"', rerun_job)
                 self.assertIn('-f "inputs[expected_head]=${EXPECTED_HEAD}"', rerun_job)
                 self.assertIn('-f "inputs[producer_run_id]=${PRODUCER_RUN_ID}"', rerun_job)
-                self.assertIn('test "${GITHUB_WORKFLOW_SHA}" = "${EXPECTED_BASE}"', rerun_job)
+                legacy_binding = 'test "${GITHUB_WORKFLOW_SHA}" = "${EXPECTED_BASE}"'
+                explicit_binding = 'test "${EXECUTED_WORKFLOW_SHA}" = "${EXPECTED_BASE}"'
+                self.assertEqual(
+                    1,
+                    rerun_job.count(legacy_binding) + rerun_job.count(explicit_binding),
+                    "the protected workflow SHA must have exactly one base binding",
+                )
+                if explicit_binding in rerun_job:
+                    self.assertIn(
+                        "EXECUTED_WORKFLOW_SHA: ${{ github.workflow_sha }}",
+                        rerun_job,
+                    )
                 self.assertIn('test "${GITHUB_REF}" = "refs/heads/${BASE_REF}"', rerun_job)
                 self.assertIn('test "${GITHUB_REF_PROTECTED}" = true', rerun_job)
                 self.assertIn('test "${live_base}" = "${EXPECTED_BASE}"', rerun_job)
