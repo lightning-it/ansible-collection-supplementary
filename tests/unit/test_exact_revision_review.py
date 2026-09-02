@@ -465,7 +465,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                 explicit_binding = 'test "${EXECUTED_WORKFLOW_SHA}" = "${EXPECTED_BASE}"'
                 self.assertEqual(
                     1,
-                    int(legacy_binding in rerun_job) + int(explicit_binding in rerun_job),
+                    rerun_job.count(legacy_binding) + rerun_job.count(explicit_binding),
                     "the protected workflow SHA must have exactly one base binding",
                 )
                 if explicit_binding in rerun_job:
