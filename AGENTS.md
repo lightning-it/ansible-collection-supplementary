@@ -60,8 +60,11 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    generated evidence, review workspaces, containers, or GitHub Actions.
 3. The authoritative AI acceptance boundary is the protected `Current revision review` check on the exact live PR
    head. Local advisory evidence never substitutes for that protected check.
-4. Pull requests authored by the exact Release App use only the MLX-90 §7.2 protected Exact-Revision Codex path.
-   They MUST NOT request, claim, or fall back to GitHub Copilot review.
+4. Pull requests authored by the exact Release App use only the MLX-90 §7.2 protected Exact-Revision Codex path,
+   except for an exact, exhaustively verified ancestry-only `main` to `develop` backmerge. That one REP-60 case
+   uses the deterministic evidence-bound zero-AI exception and MUST NOT dispatch Codex or Copilot. No other
+   deterministic Release-App exception is permitted, and Release-App PRs MUST NOT claim or fall back to GitHub
+   Copilot review.
 5. Lightning IT automation MAY automatically request a paid Copilot review only for the exact personal account
    `litroc`. External contributors must supply valid current-head evidence using their own entitlement; Lightning IT
    MUST NOT request or fund their AI usage.

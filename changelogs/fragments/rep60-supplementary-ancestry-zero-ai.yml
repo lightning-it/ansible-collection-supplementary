@@ -1,0 +1,7 @@
+---
+minor_changes:
+  - >-
+    Route only exhaustively verified Release-App main-to-develop ancestry
+    backmerges through the deterministic REP-60 zero-AI current-revision
+    exception while retaining MLX-90 section 7.2 Codex review for every other
+    Release-App pull request.
