@@ -521,7 +521,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertGreaterEqual(workflow.count('-f "details_url=${check_url}"'), 2)
         self.assertIn('created="$(api_patch "repos/${REPOSITORY}/check-runs/${check_id}"', workflow)
 
-    def test_release_app_is_excluded_from_the_human_review_controller(self) -> None:
+    def test_release_app_is_excluded_except_bound_ancestry_backmerge(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")
         request_job = workflow.split("  request-current-revision-review:", 1)[1].split(
             "  verify-current-revision-policy:", 1
@@ -534,12 +534,21 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("pull_request_review:", workflow)
         self.assertNotIn("workflow_dispatch:", workflow)
         condition = review_job.split("    if: >-", 1)[1].split("    permissions:", 1)[0]
-        self.assertNotIn("github.event.pull_request.head.repo.full_name == github.repository", condition)
+        self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", condition)
         self.assertIn("github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'", condition)
         self.assertNotIn("github.event.pull_request.user.login == 'lightning-it-release-automation[bot]'", condition)
-        self.assertNotIn("github.event.pull_request.base.ref == 'develop'", condition)
-        self.assertNotIn("startsWith(github.event.pull_request.head.ref, 'backmerge/')", condition)
+        self.assertIn("github.event.pull_request.base.ref == 'develop'", condition)
+        self.assertIn("startsWith(github.event.pull_request.head.ref, 'backmerge/')", condition)
+        self.assertIn(
+            "'chore(governance): record main ancestry before '",
+            condition,
+        )
         self.assertNotIn("endsWith(github.event.pull_request.head.ref, '-main')", condition)
+        self.assertIn(
+            "expected_backmerge_author='lightning-it-release-automation[bot]'",
+            review_job,
+        )
+        self.assertIn('test "${author}" = "${expected_backmerge_author}"', review_job)
         self.assertIn(
             "test \"${author}\" != 'lightning-it-release-automation[bot]'",
             review_job,
