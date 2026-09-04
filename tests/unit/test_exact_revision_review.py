@@ -496,9 +496,12 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             workflow,
         )
         self.assertIn("controller_sha:$controller", workflow)
-        producer = workflow.split("      - name: Publish bound neutral result", 1)[1].split(
-            "          publish_once() {", 1
-        )[0]
+        producer_step_marker = "      - name: Publish bound neutral result"
+        _before_producer, found_producer_step, producer_and_following = workflow.partition(producer_step_marker)
+        self.assertEqual(producer_step_marker, found_producer_step)
+        publisher_marker = "          publish_once() {"
+        producer, found_publisher, _following = producer_and_following.partition(publisher_marker)
+        self.assertEqual(publisher_marker, found_publisher)
         for field in (
             "head_repository:$head_repository",
             "controller_ref:$controller_ref",
