@@ -452,9 +452,11 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             with self.subTest(evidence_binding=evidence_binding):
                 self.assertIn(evidence_binding, workflow)
 
-        self.assertIn("id: review-dispatch-app", ancestry)
-        self.assertIn("permission-actions: write", ancestry)
-        self.assertIn("release-bot-exact-head-review.yml", ancestry)
+        self.assertNotIn("id: review-dispatch-app", ancestry)
+        self.assertNotIn("permission-actions: write", ancestry)
+        self.assertNotIn("release-bot-exact-head-review.yml", ancestry)
+        self.assertNotIn("Dispatch protected Exact-Revision review", ancestry)
+        self.assertNotIn("gh workflow run", ancestry)
         self.assertIn(
             'push --porcelain origin "${desired_head}:refs/heads/${upload_branch}"',
             ancestry,
@@ -463,10 +465,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             'push --porcelain origin "HEAD:refs/heads/${upload_branch}"',
             ancestry,
         )
-        self.assertLess(
-            ancestry.index("gh workflow run release-bot-exact-head-review.yml"),
-            ancestry.index("Enable protected ancestry auto-merge"),
-        )
+        self.assertIn("Enable protected ancestry auto-merge", ancestry)
         self.assertNotIn("openai/codex-action", ancestry)
         self.assertNotIn("copilot", ancestry.lower())
         self.assertNotIn("gh auth setup-git", workflow)
