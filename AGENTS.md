@@ -60,15 +60,36 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    generated evidence, review workspaces, containers, or GitHub Actions.
 3. The authoritative AI acceptance boundary is the protected `Current revision review` check on the exact live PR
    head. Local advisory evidence never substitutes for that protected check.
-4. Pull requests authored by the exact Release App use only the MLX-90 §7.2 protected Exact-Revision Codex path.
-   They MUST NOT request, claim, or fall back to GitHub Copilot review.
+4. Pull requests authored by the exact Release App use only the MLX-90 §7.2 protected Exact-Revision Codex path,
+   except for an exact, exhaustively verified ancestry-only `main` to `develop` backmerge. That one REP-60 case
+   uses the deterministic evidence-bound zero-AI exception and MUST NOT dispatch Codex or Copilot. No other
+   deterministic Release-App exception is permitted, and Release-App PRs MUST NOT claim or fall back to GitHub
+   Copilot review.
 5. Lightning IT automation MAY automatically request a paid Copilot review only for the exact personal account
    `litroc`. External contributors must supply valid current-head evidence using their own entitlement; Lightning IT
    MUST NOT request or fund their AI usage.
-6. Candidate-controlled Codex output is not a protected attestation. Until a separately governed, identity-bound
+6. The protected human Copilot request job MUST restrict its immutable predicate to `litroc` and MUST re-prove the
+   live pull-request author as exactly `litroc` immediately before requesting review. A contributor-funded path may
+   never return success from the Lightning IT-funded request job.
+7. If GitHub exposes a completed Copilot review through GraphQL before the REST review collection converges, the
+   controller MUST bind the exact GraphQL review node ID and re-prove that same ID and head through a bounded,
+   read-only REST convergence wait before and after publishing the protected result. It MUST NOT request AI again.
+8. Candidate-controlled Codex output is not a protected attestation. Until a separately governed, identity-bound
    personal-Codex evidence contract exists, it cannot satisfy `Current revision review`; the gate fails closed.
-7. A v6 neutral current-revision result MUST publish the exact head repository, protected controller ref, and
-   SHA-256 of the sorted live PR-label set required and independently revalidated by the protected rerun consumer.
+9. The protected controller MUST execute from the exact protected PR base revision (`develop` or `main`), not from
+   a merely descendant default-branch controller. Its attestation MUST bind the base ref, base SHA, head repository,
+   head SHA, and the exact protected workflow SHA.
+10. The neutral result MUST bind the sorted live label set by SHA-256. Every title, body, label, base, head,
+    repository, or bound-review change invalidates prior evidence and requires fail-closed revalidation; it MUST NOT
+    request AI again merely because metadata changed.
+11. Contributor-funded fork reviews MAY be verified, but the Lightning IT-funded request job remains same-repository
+    and `litroc`-only. The verifier MUST preserve and bind the actual head repository instead of silently rewriting
+    fork identity to the base repository.
+12. Local deterministic checks MUST use the digest-pinned Devtools container with an offline network, read-only
+    root filesystem and workspace, the invoking non-root UID/GID, all capabilities dropped, and
+    `no-new-privileges`. The host Docker-compatible socket MAY be used only to start that container and MUST NEVER
+    be mounted into it. A scenario that needs a managed runtime belongs to a protected pipeline and MUST fail closed
+    locally instead of weakening this boundary.
 
 ## 2. Repository Baseline (This Repo)
 
@@ -149,7 +170,8 @@ production readiness, Ansible Galaxy readiness, and Red Hat Ansible Automation P
 ### 2.1.4 Testing and Quality Gates
 
 1. `pre-commit run --all-files` MUST be the first local PR preflight for collection repositories. Shared hooks run
-   the PR-equivalent changelog, ansible-lint, Molecule light, and smoke gates through `ee-wunder-devtools-ubi9`.
+   the PR-equivalent changelog, ansible-lint, socket-free `artifacts-basic` parity, and smoke gates through
+   `ee-wunder-devtools-ubi9`; dependency-backed role matrices remain mandatory protected pipeline gates.
 2. `ansible-lint --profile production .` SHOULD pass, or repository-specific devtools lint MUST pass with documented
    equivalent strictness.
 3. `ansible-test sanity --docker` SHOULD pass for custom modules/plugins and collection packaging concerns.
@@ -657,8 +679,10 @@ Molecule scenarios MUST live at repository root under `molecule/`.
 
 ### 8.3 Execution Behavior
 
-1. `scripts/devtools-molecule.sh` runs repository-local light and experimental scenarios. The host-native profile
-   runner and CI matrix run protected Incus Tiny, Heavy, and Application Acceptance scenarios.
+1. `scripts/devtools-molecule.sh` defaults to the offline, socket-free `artifacts-basic` controller parity scenario.
+   An explicitly named unmanaged scenario may run only if the pinned image already contains every dependency. The
+   host-native profile runner and CI matrix run the full dependency-backed and protected Incus Tiny, Heavy, and
+   Application Acceptance scenarios.
 2. Scenarios with `.molecule-mode` set to `protected-incus` are skipped unless
    `MOLECULE_RUN_PROTECTED=true` is set and the devtools container has the `incus` CLI.
 3. A single scenario is run with:

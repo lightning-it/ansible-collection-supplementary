@@ -275,7 +275,7 @@ controller_execution_environments:
     description: "Execution environment managed through CaC"
     organization: "Demo Organization"
     image: >-
-      quay.io/l-it/ee-wunder-devtools-ubi9:v1.13.0@sha256:d65d9f849e2e18827d37277d25d9c62f6525c5f9a075feee977b9b0d02ec74c9
+      quay.io/l-it/ee-wunder-devtools-ubi9:v1.16.1@sha256:c5e8707e825fcddb3e7bbc7592ebdc99a02e6ba9fa2cad71b88bcd5c71bd4d08
     pull: "missing"
     state: "present"
 

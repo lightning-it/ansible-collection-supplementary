@@ -34,6 +34,7 @@ RESERVATION_PATTERN = re.compile(
 PRODUCER_ACTIONS = frozenset(
     {"opened", "synchronize", "reopened", "ready_for_review", "edited"}
 )
+NONTERMINAL_RUN_STATUSES = frozenset({"in_progress"})
 
 
 class VerificationError(RuntimeError):
@@ -265,6 +266,27 @@ def wait_for_reservation(
     raise VerificationError("protected verifier evidence did not become successful")
 
 
+def wait_for_completed_producer(
+    client: GitHubClient,
+    producer_run_id: int,
+    *,
+    attempts: int,
+    sleep: Callable[[float], None],
+) -> Mapping[str, Any]:
+    path = f"repos/{TARGET_REPOSITORY}/actions/runs/{producer_run_id}"
+    for attempt in range(1, attempts + 1):
+        producer = require_mapping(client.get(path), "protected verifier run")
+        require_equal(producer.get("id"), producer_run_id, "protected verifier run ID")
+        status = producer.get("status")
+        if status == "completed":
+            return producer
+        if status not in NONTERMINAL_RUN_STATUSES:
+            raise VerificationError(f"verifier run status is invalid: {status!r}")
+        if attempt < attempts:
+            sleep(2)
+    raise VerificationError("protected verifier run did not complete")
+
+
 def validate_reservation(
     client: GitHubClient,
     check: Mapping[str, Any],
@@ -273,6 +295,9 @@ def validate_reservation(
     event_base: str,
     event_head: str,
     server_url: str,
+    *,
+    attempts: int,
+    sleep: Callable[[float], None],
 ) -> None:
     check_id = check.get("id")
     if not isinstance(check_id, int) or check_id <= 0:
@@ -293,11 +318,16 @@ def validate_reservation(
     require_equal(match.group("base"), event_base, "evidence base")
     require_equal(match.group("head"), event_head, "evidence head")
     producer_run_id = int(match.group("run_id"))
-    producer = require_mapping(
-        client.get(f"repos/{TARGET_REPOSITORY}/actions/runs/{producer_run_id}"),
-        "protected verifier run",
+    # GitHub can expose the final successful reservation check a few moments
+    # before the producing workflow run itself transitions from ``in_progress``
+    # to ``completed``. Poll only the already-bound run ID; an earlier workflow
+    # state or alternate evidence is not accepted after that final check exists.
+    producer = wait_for_completed_producer(
+        client,
+        producer_run_id,
+        attempts=attempts,
+        sleep=sleep,
     )
-    require_equal(producer.get("id"), producer_run_id, "protected verifier run ID")
     require_equal(producer.get("event"), "pull_request_target", "verifier event")
     require_equal(producer.get("path"), TARGET_VERIFIER_PATH, "verifier path")
     require_equal(producer.get("status"), "completed", "verifier run status")
@@ -416,7 +446,15 @@ def verify(
         sleep=sleep,
     )
     validate_reservation(
-        client, check, pr, pr_number, event_base, event_head, server_url
+        client,
+        check,
+        pr,
+        pr_number,
+        event_base,
+        event_head,
+        server_url,
+        attempts=attempts,
+        sleep=sleep,
     )
     # Re-read every mutable binding after evidence verification.
     validate_source(client, workflow_ref, workflow_sha)

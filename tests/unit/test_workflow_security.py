@@ -302,11 +302,20 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("github.event.action == 'ready_for_review'", request_job)
         self.assertIn("github.event.action == 'opened'", request_job)
         self.assertIn("github.event_name == 'pull_request_target'", request_job)
+        self.assertIn("github.event.pull_request.user.login == 'litroc'", request_job)
         self.assertNotIn("workflow_dispatch", request_job)
         self.assertNotIn("synchronize", request_job)
         self.assertIn('test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"', request_job)
+        self.assertIn('test "$(jq -r .user.login <<<"${pr}")" = litroc', request_job)
+        self.assertNotIn('if [ "${author}" != litroc ]', request_job)
+        self.assertNotIn("Contributor-funded review required", request_job)
         self.assertIn("Copilot already reviewed the exact finalized head", request_job)
         self.assertIn('reviews="$(gh api --paginate --slurp', request_job)
+        self.assertIn('--arg reviewer_login "${reviewer_login}"', request_job)
+        self.assertIn(
+            "(.user.login == $reviewer_login or .user.login == $reviewer)",
+            request_job,
+        )
         self.assertNotIn("review_status", request_job)
         self.assertIn("mlx90-copilot-request head=${EXPECTED_HEAD}", request_job)
         self.assertIn(
@@ -330,32 +339,66 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         )
         self.assertEqual(2, copilot.count("cancel-in-progress: false"))
         self.assertIn("pull_request_target:", copilot)
-        self.assertIn(
-            "types: [opened, synchronize, reopened, ready_for_review, edited]",
-            copilot,
-        )
+        for action in (
+            "opened",
+            "synchronize",
+            "reopened",
+            "ready_for_review",
+            "edited",
+            "labeled",
+            "unlabeled",
+        ):
+            self.assertIn(f"        {action},", copilot)
         self.assertIn("github.event.action == 'edited'", verify_job)
         self.assertIn(
-            "Invalidate prior result after pull-request metadata edit",
+            "Invalidate prior result after pull-request metadata change",
             verify_job,
         )
+        self.assertIn("github.event.action == 'labeled'", verify_job)
+        self.assertIn("github.event.action == 'unlabeled'", verify_job)
+        self.assertIn("pull_request_labels_sha256", verify_job)
+        self.assertIn("head_repository:$head_repository", verify_job)
+        self.assertIn("controller_ref:$controller_ref", verify_job)
         self.assertIn("conclusion=failure", verify_job)
         self.assertNotIn("pull_request_review:", copilot)
         documentation = (ROOT / "docs/push-ready-optimization.md").read_text(encoding="utf-8")
         self.assertIn("when `litroc` opens an already-ready PR", documentation)
         self.assertIn("Opening a draft and every synchronize event remain AI-free", documentation)
 
-    def test_release_app_ancestry_backmerge_uses_only_exact_revision_codex(
+    def test_bound_copilot_review_converges_across_graphql_and_rest(self) -> None:
+        copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
+        verifier = copilot.split("      - name: Verify current Copilot review and resolved findings", 1)[1].split(
+            "      - name: Publish bound neutral result", 1
+        )[0]
+        publisher = copilot.split("      - name: Publish bound neutral result", 1)[1].split(
+            "  request-protected-verifier-reevaluation:", 1
+        )[0]
+
+        self.assertIn("id: copilot-review", verifier)
+        self.assertIn('echo "review_id=${review_id}" >>"${GITHUB_OUTPUT}"', verifier)
+        self.assertIn("BOUND_REVIEW_ID: ${{ steps.copilot-review.outputs.review_id }}", publisher)
+        self.assertIn("validate_bound_review() {", publisher)
+        self.assertIn("for attempt in $(seq 1 10); do", publisher)
+        self.assertIn("sleep 3", publisher)
+        self.assertIn("select(.node_id == $review_id)", publisher)
+        self.assertIn("$reviews[0].commit_id == $head", publisher)
+        self.assertEqual(2, copilot.count("=~ ^[A-Za-z0-9_+/=-]+$"))
+        self.assertNotIn("=~ ^[A-Za-z0-9_=-]+$", copilot)
+        self.assertGreater(
+            publisher.index('default_head="$(gh api "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}"'),
+            publisher.index('elif [ "${TRUSTED_KIND}" = ancestry-backmerge ]; then'),
+        )
+        self.assertIn('test -z "${BOUND_REVIEW_ID}"', publisher)
+        self.assertIn('review_id:(if $review_id == "" then null else $review_id end)', publisher)
+        self.assertEqual(3, publisher.count("validate_bound_review"))
+
+    def test_release_app_ancestry_backmerge_uses_deterministic_controller(
         self,
     ) -> None:
         workflow = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         ancestry = (WORKFLOWS / "sync-main-to-develop.yml").read_text(encoding="utf-8")
         self.assertIn("Release-App review belongs only", workflow)
         self.assertNotIn("Release-App AI review belongs only", workflow)
-        self.assertNotIn(
-            "deterministic, AI-free evidence-bound ancestry backmerge exemption",
-            workflow,
-        )
         request_condition = workflow.split(
             "\n  request-current-revision-review:",
             1,
@@ -367,21 +410,53 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertNotIn("lightning-it-release-automation[bot]", request_condition)
         self.assertNotIn("github.event.action == 'synchronize'", request_condition)
 
-        review_condition = workflow.split(
-            "  verify-current-revision-policy:",
+        trusted_automation = workflow.split(
+            "      - name: Classify trusted automation pull request",
             1,
-        )[1].split("    permissions:", 1)[0]
-        self.assertIn(
-            "github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'",
-            review_condition,
-        )
-        self.assertNotIn(
-            "github.event.pull_request.user.login == 'lightning-it-release-automation[bot]'",
-            review_condition,
-        )
-        self.assertIn("id: review-dispatch-app", ancestry)
-        self.assertIn("permission-actions: write", ancestry)
-        self.assertIn("release-bot-exact-head-review.yml", ancestry)
+        )[1].split("      - name: Accept trusted automation exemption", 1)[0]
+        for exact_binding in (
+            "expected_backmerge_author='lightning-it-release-automation[bot]'",
+            'if [ "${REPOSITORY}" = "lightning-it/.github" ]; then',
+            "expected_backmerge_author='lightning-it-shared-assets-sync[bot]'",
+            'elif [ "${PR_AUTHOR}" = "${expected_backmerge_author}" ]',
+            '[ "${PR_HEAD_REPO}" = "${REPOSITORY}" ]',
+            '[[ "${PR_HEAD}" == backmerge/*-main ]]',
+            '[ "${PR_BASE}" = "develop" ]',
+            '[[ "${PR_TITLE}" == "chore(governance): record main ancestry before "* ]]',
+            "trusted_kind=ancestry-backmerge",
+        ):
+            with self.subTest(exact_binding=exact_binding):
+                self.assertIn(exact_binding, trusted_automation)
+
+        for evidence_binding in (
+            "Verify evidence-bound ancestry backmerge",
+            "trusted_kind=ancestry-backmerge",
+            '"repos/${REPOSITORY}/git/commits/${HEAD_SHA}"',
+            '"repos/${REPOSITORY}/branches/develop"',
+            '"repos/${REPOSITORY}/branches/main"',
+            ".parents[0].sha == $develop",
+            ".parents[1].sha == $main",
+            '.files[0].filename == ".lit/main-ancestry.json"',
+            "contents/.lit/main-ancestry.json?ref=${HEAD_SHA}",
+            'review_path="deterministic evidence-bound ancestry exemption"',
+            'external_kind="ancestry-backmerge"',
+            "mlx90-current-revision:${external_kind}:v6:${PR_NUMBER}",
+            '[ "${TRUSTED_KIND}" = ancestry-backmerge ]',
+            "expected_backmerge_author='lightning-it-release-automation[bot]'",
+            'test "${author}" = "${expected_backmerge_author}"',
+            'test "${default_head}" = "${EVENT_BASE}"',
+            'test "${BASE_SHA}" = "${current_develop}"',
+            '(keys | sort) == ["develop_parent_sha", "main_sha", "purpose", "repository", "schema_version"]',
+            'test -z "${BOUND_REVIEW_ID}"',
+        ):
+            with self.subTest(evidence_binding=evidence_binding):
+                self.assertIn(evidence_binding, workflow)
+
+        self.assertNotIn("id: review-dispatch-app", ancestry)
+        self.assertNotIn("permission-actions: write", ancestry)
+        self.assertNotIn("release-bot-exact-head-review.yml", ancestry)
+        self.assertNotIn("Dispatch protected Exact-Revision review", ancestry)
+        self.assertNotIn("gh workflow run", ancestry)
         self.assertIn(
             'push --porcelain origin "${desired_head}:refs/heads/${upload_branch}"',
             ancestry,
@@ -390,12 +465,11 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             'push --porcelain origin "HEAD:refs/heads/${upload_branch}"',
             ancestry,
         )
-        self.assertLess(
-            ancestry.index("gh workflow run release-bot-exact-head-review.yml"),
-            ancestry.index("Enable protected ancestry auto-merge"),
-        )
+        self.assertIn("Enable protected ancestry auto-merge", ancestry)
         self.assertNotIn("openai/codex-action", ancestry)
         self.assertNotIn("copilot", ancestry.lower())
+        self.assertNotIn("gh auth setup-git", workflow)
+        self.assertNotIn("git fetch", workflow)
 
         remediation = (WORKFLOWS / "codex-copilot-remediation.yml").read_text(encoding="utf-8")
         self.assertIn("reviewThreads(first:100,after:$after)", remediation)
@@ -464,7 +538,8 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn('-f expected_head="${NEW_HEAD}"', continuation)
         self.assertIn('test "${current_head}" = "${EXPECTED_HEAD}"', dispatch)
         self.assertEqual(1, dispatch.count('"repos/${REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers"'))
-        self.assertEqual(1, dispatch.count("state=consumed"))
+        self.assertEqual(2, dispatch.count("state=consumed"))
+        self.assertEqual(1, dispatch.count('"repos/${REPOSITORY}/issues/${PR_NUMBER}/comments"'))
         self.assertLess(dispatch.index("state=consumed"), dispatch.index("requested_reviewers"))
         self.assertIn("the consumed marker forbids an automatic retry", dispatch)
 
@@ -821,9 +896,8 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         scorecard = load_yaml(WORKFLOWS / "openssf-scorecard.yml")
         scorecard_job = scorecard["jobs"]["scorecard"]
         self.assertNotIn("id-token", scorecard_job["permissions"])
-        run_step = next(
-            step for step in scorecard_job["steps"] if step.get("name") == "Run immutable OpenSSF Scorecard analysis"
-        )
+        scorecard_step_name = "Run commit-pinned OpenSSF Scorecard analysis"
+        run_step = next(step for step in scorecard_job["steps"] if step.get("name") == scorecard_step_name)
         self.assertEqual(
             "ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc",
             run_step["uses"],
@@ -1284,15 +1358,72 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("No persistent whole-home cache is mounted", contributing)
 
         molecule = (ROOT / "scripts" / "devtools-molecule.sh").read_text(encoding="utf-8")
-        self.assertIn("Docker is required for Molecule tests", molecule)
+        self.assertIn("A Docker-compatible socket must not enter", molecule)
         self.assertNotIn("Skipping Molecule tests because Docker", molecule)
-        self.assertIn("WUNDER_DEVTOOLS_ROOTFS_MODE=rw", molecule)
-        self.assertIn("WUNDER_DEVTOOLS_WORKSPACE_MODE=rw", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_DOCKER_SOCKET=disabled", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_NETWORK=none", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_ROOTFS_MODE=ro", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_WORKSPACE_MODE=ro", molecule)
         self.assertIn("WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1", molecule)
         self.assertIn("WUNDER_DEVTOOLS_RUN_AS_ROOT=0", molecule)
         self.assertIn("WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT=disabled", molecule)
         self.assertIn("WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH=disabled", molecule)
+        self.assertIn("WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1", molecule)
+        self.assertIn("REQUIRE_DECLARED_DEPENDENCIES=0", molecule)
+        self.assertIn("REQUIRE_DECLARED_DEPENDENCIES=1", molecule)
+        self.assertIn(
+            'WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES="${REQUIRE_DECLARED_DEPENDENCIES}"',
+            molecule,
+        )
+        self.assertIn('SCENARIO_FILTER="${1:-artifacts-basic}"', molecule)
+        self.assertIn('driver.get("name") != "default"', molecule)
+        self.assertIn("except yaml.YAMLError:", molecule)
+        self.assertIn("if not isinstance(payload, dict):", molecule)
+        self.assertIn("if not isinstance(driver, dict):", molecule)
+        self.assertIn(
+            "if not isinstance(platforms, list) or not platforms:",
+            molecule,
+        )
+        self.assertIn(
+            "if any(not isinstance(platform, dict) for platform in platforms):",
+            molecule,
+        )
+        self.assertIn('platform.get("managed") is not False', molecule)
+        self.assertIn('[[ ! "${scen}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]', molecule)
+        self.assertIn('printf "%s\\n" "prerun: false"', molecule)
+        self.assertIn('molecule_ephemeral_root="${HOME}/molecule-ephemeral"', molecule)
+        self.assertIn('MOLECULE_EPHEMERAL_DIRECTORY="${molecule_ephemeral_directory}"', molecule)
+        self.assertIn('molecule -c "${offline_base}" test', molecule)
+        self.assertNotIn("docker info", molecule)
         self.assertNotIn("WUNDER_DEVTOOLS_CAP_ADD=CHOWN", molecule)
+
+        prepare = (ROOT / "scripts" / "devtools-collection-prepare.sh").read_text(encoding="utf-8")
+        self.assertIn('offline_local_only="${WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY:-0}"', prepare)
+        self.assertIn("Offline local-only mode: external collection dependency installation is forbidden.", prepare)
+        self.assertIn("local dependency source roots are intentionally not mounted", prepare)
+        self.assertIn("WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES=0 or 1", prepare)
+        self.assertIn("/usr/share/ansible/collections/ansible_collections/", prepare)
+        self.assertIn("/MANIFEST.json", prepare)
+        self.assertIn("declared galaxy.yml dependencies missing", prepare)
+        self.assertIn("This offline gate requires every declared dependency", prepare)
+        for helper_name in (
+            "devtools-ansible-lint.sh",
+            "devtools-collection-smoke.sh",
+            "devtools-galaxy-verify.sh",
+            "devtools-molecule.sh",
+        ):
+            with self.subTest(offline_helper=helper_name):
+                helper = (ROOT / "scripts" / helper_name).read_text(encoding="utf-8")
+                self.assertIn("WUNDER_DEVTOOLS_NETWORK=none", helper)
+                self.assertIn("WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1", helper)
+                self.assertIn("WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES=", helper)
+                self.assertNotIn("WUNDER_DEVTOOLS_NETWORK=bridge", helper)
+
+        ansible_lint = (ROOT / "scripts" / "devtools-ansible-lint.sh").read_text(encoding="utf-8")
+        self.assertIn("export ANSIBLE_LINT_NODEPS=1", ansible_lint)
+        self.assertIn('ansible-lint --offline "${ansible_lint_args[@]}"', ansible_lint)
+        self.assertIn('"--exclude" "playbooks/rhel_prepare.yml"', ansible_lint)
+        self.assertIn('"--exclude" "playbooks/rhel_teardown.yml"', ansible_lint)
 
     def test_devtools_capability_policy_expands_to_individual_docker_arguments(self) -> None:
         wrapper = ROOT / "scripts" / "wunder-devtools-ee.sh"

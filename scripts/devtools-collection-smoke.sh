@@ -20,9 +20,12 @@ echo "Running collection smoke test for ${COLLECTION_NAMESPACE}.${COLLECTION_NAM
 COLLECTION_NAMESPACE="$COLLECTION_NAMESPACE" \
 COLLECTION_NAME="$COLLECTION_NAME" \
 EXAMPLE_PLAYBOOK="$EXAMPLE_PLAYBOOK" \
-WUNDER_DEVTOOLS_NETWORK=bridge \
+WUNDER_DEVTOOLS_NETWORK=none \
 CONTAINER_HOME=/tmp/wunder \
-bash scripts/wunder-devtools-ee.sh bash -c '
+bash scripts/wunder-devtools-ee.sh env \
+  WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY=1 \
+  WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES=0 \
+  bash -c '
   set -euo pipefail
 
   ns="${COLLECTION_NAMESPACE}"
