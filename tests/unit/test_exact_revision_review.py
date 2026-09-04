@@ -625,15 +625,17 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         ancestry = (ROOT / ".github/workflows/sync-main-to-develop.yml").read_text(encoding="utf-8")
         self.assertNotIn("--draft", ancestry)
         self.assertNotIn("gh pr ready", ancestry)
-        self.assertIn("id: review-dispatch-app", ancestry)
-        self.assertIn("release-bot-exact-head-review.yml", ancestry)
+        self.assertNotIn("id: review-dispatch-app", ancestry)
+        self.assertNotIn("permission-actions: write", ancestry)
+        self.assertNotIn("release-bot-exact-head-review.yml", ancestry)
+        self.assertNotIn("Dispatch protected Exact-Revision review", ancestry)
+        self.assertNotIn("gh workflow run", ancestry)
         self.assertIn(".isDraft == false", ancestry)
         self.assertIn("and .headRefOid == $expected_head", ancestry)
         self.assertIn("mergeMethod:MERGE", ancestry)
-        self.assertLess(
-            ancestry.index("gh workflow run release-bot-exact-head-review.yml"),
-            ancestry.index("Enable protected ancestry auto-merge"),
-        )
+        self.assertIn("Enable protected ancestry auto-merge", ancestry)
+        self.assertNotIn("openai/codex-action", ancestry)
+        self.assertNotIn("copilot", ancestry.lower())
         release_prepare = (ROOT / ".github/workflows/release-prepare.yml").read_text(encoding="utf-8")
         self.assertIn('gh pr ready "$existing" --repo "$GITHUB_REPOSITORY"', release_prepare)
         release_edit = release_prepare.split('gh pr edit "$existing"', 1)[1].split("--title", 1)[0]
