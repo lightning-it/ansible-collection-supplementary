@@ -135,13 +135,19 @@ provider. A completed protected PASS for the identical full input is reused
 without another AI call. A prior failure or incomplete attempt blocks automatic
 retry.
 
-For applicable non-Release-App PRs, one Copilot request is made only when the
-draft becomes ready. The protected Base controller is triggered through
-`pull_request_target`, never checks out or executes candidate content, and
-binds the live Base and head before publishing a result. Lightning IT funds
-this request only for `litroc`; other contributors provide it under their own
-entitlement. A previous request or completed review for the same head makes the
-operation idempotent.
+For applicable non-Release-App PRs, one Copilot request is made when a draft
+becomes ready or when `litroc` opens an already-ready PR whose head is final.
+Opening a draft and every synchronize event remain AI-free. The protected Base
+controller is triggered through `pull_request_target`, never checks out or
+executes candidate content, and binds the live Base and head before publishing
+a result. Lightning IT funds this request only for `litroc`; other contributors
+provide it under their own entitlement. A previous request or completed review
+for the same head makes the operation idempotent. The finalization request and
+the ordinary verifier use separate per-PR queues, so a later synchronize event
+cannot displace a queued Ready request. A pull-request metadata edit always
+revalidates the live base, title, and automation classification; it first marks
+any prior same-head Current-Revision result failed so retargeting cannot reuse
+stale base-bound evidence.
 
 All unresolved material Copilot findings for one reviewed head are supplied to
 one Codex remediation run and can produce at most one correction commit. That
