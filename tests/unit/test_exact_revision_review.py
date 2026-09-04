@@ -352,13 +352,22 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn('and .path == ".github/workflows/release-bot-exact-head-review.yml"', workflow)
         self.assertIn("and .display_title == $title", workflow)
         self.assertIn("and .triggering_actor.login == $actor", workflow)
-        self.assertNotIn("and .run_attempt == 1", workflow)
+        self.assertEqual(1, workflow.count("and .run_attempt == 1"))
         self.assertEqual(1, workflow.count("uses: openai/codex-action@"))
 
     def test_ruleset_workflow_verifies_the_producer_instead_of_trusting_a_check_name(self) -> None:
         rerun = (ROOT / ".github/workflows/current-revision-rerun.yml").read_text(encoding="utf-8")
         self.assertIn("workflow_dispatch:", rerun)
-        self.assertIn('test "${GITHUB_REF}" = refs/heads/develop', rerun)
+        workflow_call_inputs = rerun.split("  workflow_call:", 1)[1].split("  workflow_dispatch:", 1)[0]
+        dispatch_inputs = rerun.split("  workflow_dispatch:", 1)[1].split("\npermissions:", 1)[0]
+        self.assertEqual(2, workflow_call_inputs.count("required: false"))
+        self.assertEqual(3, workflow_call_inputs.count("required: true"))
+        self.assertEqual(0, workflow_call_inputs.count('default: ""'))
+        self.assertEqual(5, dispatch_inputs.count("required: true"))
+        self.assertEqual(0, dispatch_inputs.count("required: false"))
+        self.assertEqual(0, dispatch_inputs.count('default: ""'))
+        self.assertIn('test "${GITHUB_REF}" = "refs/heads/${EVENT_BASE_REF}"', rerun)
+        self.assertIn('[[ "${EVENT_BASE_REF}" =~ ^(develop|main)$ ]]', rerun)
         self.assertIn(
             '.path == ".github/workflows/supplementary-current-revision-required.yml"',
             rerun,
@@ -386,9 +395,10 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         )
         self.assertEqual(1, rerun.count(".triggering_actor.login == $actor"))
         retry = rerun.split(
-            'test "$(jq -r .conclusion <<<"${run}")" = failure',
+            '          case "${verifier_conclusion}" in',
             1,
         )[1]
+        self.assertIn('case "${verifier_conclusion}" in', rerun)
         self.assertIn("run_attempt=", retry)
         self.assertIn('if [ "${run_attempt}" -gt 2 ]', retry)
         self.assertIn('if [ "${run_attempt}" -eq 2 ]', retry)
@@ -396,38 +406,19 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             "repos/${REPOSITORY}/actions/runs/${run_id}/attempts/1/jobs?filter=all&per_page=100",
             retry,
         )
+        self.assertIn("synthetic_evidence_jobs=$(jq -c", retry)
+        self.assertIn("runner_backed_jobs=$(jq -c", retry)
         self.assertIn(
-            '[.[].jobs[] | select(.name == "Required current-revision workflow") '
-            "| select(.run_attempt == 1) "
-            '| select(.status == "completed" and .conclusion == "failure")]',
+            'test "$(jq \'length\' <<<"${runner_backed_jobs}")" -eq 1',
             retry,
         )
-        self.assertIn('test "$(jq \'length\' <<<"${rerunnable_jobs}")" -eq 1', retry)
         self.assertIn(
-            "repos/${REPOSITORY}/actions/jobs/${required_job_id}/rerun",
-            retry,
-        )
-        self.assertNotIn(
             "repos/${REPOSITORY}/actions/runs/${run_id}/rerun",
             retry,
         )
+        self.assertNotIn("repos/${REPOSITORY}/actions/jobs/", retry)
         self.assertEqual(1, retry.count('/rerun" >/dev/null'))
         self.assertIn('if [ "${observed_attempt}" -ne 2 ]', retry)
-        self.assertIn('if [ "${observed_attempt}" -gt 2 ]', retry)
-        self.assertIn(
-            'if [ "${observed_attempt}" -eq 2 ] && [ "${status}" = completed ]',
-            retry,
-        )
-        self.assertIn(
-            "repos/${REPOSITORY}/actions/runs/${run_id}/attempts/2/jobs?filter=all&per_page=100",
-            retry,
-        )
-        self.assertIn("select(.run_attempt == 2)", retry)
-        self.assertIn(
-            'test "$(jq \'length\' <<<"${completed_required_jobs}")" -eq 1',
-            retry,
-        )
-        self.assertIn("post_neutral_pages=", retry)
         self.assertIn(".external_id == $external_id", retry)
         self.assertIn(".id == $check_id", retry)
         self.assertIn('test "$(jq \'length\' <<<"${post_neutral}")" -eq 1', retry)
@@ -464,10 +455,33 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                 rerun_job = workflow.split("  request-protected-verifier-reevaluation:", 1)[1]
                 self.assertIn("actions: write", rerun_job)
                 self.assertIn("current-revision-rerun.yml/dispatches", rerun_job)
-                self.assertIn("-f ref=develop", rerun_job)
+                self.assertIn('-f "ref=${BASE_REF}"', rerun_job)
+                self.assertIn('-f "inputs[base_ref]=${BASE_REF}"', rerun_job)
                 self.assertIn('-f "inputs[pr_number]=${PR_NUMBER}"', rerun_job)
+                self.assertIn('-f "inputs[expected_base]=${EXPECTED_BASE}"', rerun_job)
+                self.assertIn('-f "inputs[expected_head]=${EXPECTED_HEAD}"', rerun_job)
+                self.assertIn('-f "inputs[producer_run_id]=${PRODUCER_RUN_ID}"', rerun_job)
+                legacy_binding = 'test "${GITHUB_WORKFLOW_SHA}" = "${EXPECTED_BASE}"'
+                explicit_binding = 'test "${EXECUTED_WORKFLOW_SHA}" = "${EXPECTED_BASE}"'
+                self.assertEqual(
+                    1,
+                    rerun_job.count(legacy_binding) + rerun_job.count(explicit_binding),
+                    "the protected workflow SHA must have exactly one base binding",
+                )
+                if explicit_binding in rerun_job:
+                    self.assertIn(
+                        "EXECUTED_WORKFLOW_SHA: ${{ github.workflow_sha }}",
+                        rerun_job,
+                    )
+                self.assertIn('test "${GITHUB_REF}" = "refs/heads/${BASE_REF}"', rerun_job)
+                self.assertIn('test "${GITHUB_REF_PROTECTED}" = true', rerun_job)
+                self.assertIn('test "${live_base}" = "${EXPECTED_BASE}"', rerun_job)
                 self.assertNotIn('-F "inputs[pr_number]=${PR_NUMBER}"', rerun_job)
                 self.assertNotIn("openai/codex-action@", rerun_job)
+                if name == "copilot-review.yml":
+                    self.assertIn("BASE_REF: ${{ github.event.pull_request.base.ref }}", rerun_job)
+                else:
+                    self.assertIn("BASE_REF: ${{ inputs.base_ref }}", rerun_job)
 
     def test_human_current_revision_path_protects_main_and_develop(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")
@@ -482,8 +496,18 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             workflow,
         )
         self.assertIn("controller_sha:$controller", workflow)
-        self.assertIn("controller_ref:$controller_ref", workflow)
-        self.assertIn("pull_request_labels_sha256:$labels_sha256", workflow)
+        producer_step_marker = "      - name: Publish bound neutral result"
+        _before_producer, found_producer_step, producer_and_following = workflow.partition(producer_step_marker)
+        self.assertEqual(producer_step_marker, found_producer_step)
+        publisher_marker = "          publish_once() {"
+        producer, found_publisher, _following = producer_and_following.partition(publisher_marker)
+        self.assertEqual(publisher_marker, found_publisher)
+        for field in (
+            "head_repository:$head_repository",
+            "controller_ref:$controller_ref",
+            "pull_request_labels_sha256:$labels_sha256",
+        ):
+            self.assertIn(field, producer)
         self.assertIn("pull_request_number:$pr_number", workflow)
         self.assertIn("producer_run_id:$run_id", workflow)
         self.assertIn("read_named_checks() {", workflow)
@@ -507,7 +531,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertGreaterEqual(workflow.count('-f "details_url=${check_url}"'), 2)
         self.assertIn('created="$(api_patch "repos/${REPOSITORY}/check-runs/${check_id}"', workflow)
 
-    def test_release_app_is_excluded_from_the_human_review_controller(self) -> None:
+    def test_release_app_is_excluded_except_bound_ancestry_backmerge(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")
         request_job = workflow.split("  request-current-revision-review:", 1)[1].split(
             "  verify-current-revision-policy:", 1
@@ -520,12 +544,21 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("pull_request_review:", workflow)
         self.assertNotIn("workflow_dispatch:", workflow)
         condition = review_job.split("    if: >-", 1)[1].split("    permissions:", 1)[0]
-        self.assertNotIn("github.event.pull_request.head.repo.full_name == github.repository", condition)
+        self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", condition)
         self.assertIn("github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'", condition)
         self.assertNotIn("github.event.pull_request.user.login == 'lightning-it-release-automation[bot]'", condition)
-        self.assertNotIn("github.event.pull_request.base.ref == 'develop'", condition)
-        self.assertNotIn("startsWith(github.event.pull_request.head.ref, 'backmerge/')", condition)
+        self.assertIn("github.event.pull_request.base.ref == 'develop'", condition)
+        self.assertIn("startsWith(github.event.pull_request.head.ref, 'backmerge/')", condition)
+        self.assertIn(
+            "'chore(governance): record main ancestry before '",
+            condition,
+        )
         self.assertNotIn("endsWith(github.event.pull_request.head.ref, '-main')", condition)
+        self.assertIn(
+            "expected_backmerge_author='lightning-it-release-automation[bot]'",
+            review_job,
+        )
+        self.assertIn('test "${author}" = "${expected_backmerge_author}"', review_job)
         self.assertIn(
             "test \"${author}\" != 'lightning-it-release-automation[bot]'",
             review_job,
@@ -564,12 +597,14 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
     def test_human_producer_verifier_separates_event_head_from_controller_sha(self) -> None:
         rerun = (ROOT / ".github/workflows/current-revision-rerun.yml").read_text(encoding="utf-8")
         author_paths = rerun.split(
-            '          else\n            if [ "${external_kind}" = ancestry-backmerge ]; then',
+            '            elif [ "${external_kind}" = managed-sync ]; then',
             1,
         )[1]
-        human_path = author_paths.split("\n          fi\n\n          reservations_pages", 1)[0]
+        human_path = author_paths.split("            else\n", 1)[1].split(
+            "\n          fi\n\n          reservations=''", 1
+        )[0]
         self.assertIn(".controller_sha", human_path)
-        self.assertIn('test "${default_branch}" = develop', human_path)
+        self.assertIn('test "${default_branch}" = develop', rerun)
         self.assertIn("compare/${controller_sha}...${default_head}", human_path)
         self.assertIn('--arg head_ref "${head_ref}"', human_path)
         self.assertIn('--arg head_sha "${EXPECTED_HEAD}"', human_path)
@@ -600,15 +635,17 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         ancestry = (ROOT / ".github/workflows/sync-main-to-develop.yml").read_text(encoding="utf-8")
         self.assertNotIn("--draft", ancestry)
         self.assertNotIn("gh pr ready", ancestry)
-        self.assertIn("id: review-dispatch-app", ancestry)
-        self.assertIn("release-bot-exact-head-review.yml", ancestry)
+        self.assertNotIn("id: review-dispatch-app", ancestry)
+        self.assertNotIn("permission-actions: write", ancestry)
+        self.assertNotIn("release-bot-exact-head-review.yml", ancestry)
+        self.assertNotIn("Dispatch protected Exact-Revision review", ancestry)
+        self.assertNotIn("gh workflow run", ancestry)
         self.assertIn(".isDraft == false", ancestry)
         self.assertIn("and .headRefOid == $expected_head", ancestry)
         self.assertIn("mergeMethod:MERGE", ancestry)
-        self.assertLess(
-            ancestry.index("gh workflow run release-bot-exact-head-review.yml"),
-            ancestry.index("Enable protected ancestry auto-merge"),
-        )
+        self.assertIn("Enable protected ancestry auto-merge", ancestry)
+        self.assertNotIn("openai/codex-action", ancestry)
+        self.assertNotIn("copilot", ancestry.lower())
         release_prepare = (ROOT / ".github/workflows/release-prepare.yml").read_text(encoding="utf-8")
         self.assertIn('gh pr ready "$existing" --repo "$GITHUB_REPOSITORY"', release_prepare)
         release_edit = release_prepare.split('gh pr edit "$existing"', 1)[1].split("--title", 1)[0]

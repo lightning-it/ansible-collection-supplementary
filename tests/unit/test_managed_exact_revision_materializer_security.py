@@ -14,6 +14,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 MATERIALIZER = ROOT / "scripts/materialize-exact-revision-review.py"
 REVIEW_WORKFLOW = ROOT / ".github/workflows/release-bot-exact-head-review.yml"
+RERUN_WORKFLOW = ROOT / ".github/workflows/current-revision-rerun.yml"
 
 
 def load_materializer() -> types.ModuleType:
@@ -31,6 +32,69 @@ def load_materializer() -> types.ModuleType:
 class ExactRevisionMaterializerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.module = load_materializer()
+
+    def test_protected_review_dependency_closure_is_installed(self) -> None:
+        for path in (MATERIALIZER, REVIEW_WORKFLOW, RERUN_WORKFLOW):
+            with self.subTest(path=path):
+                self.assertTrue(path.is_file())
+                self.assertFalse(path.is_symlink())
+        review = REVIEW_WORKFLOW.read_text(encoding="utf-8")
+        rerun = RERUN_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn(
+            "actions/workflows/current-revision-rerun.yml/dispatches",
+            review,
+        )
+        self.assertIn("workflow_dispatch:", rerun)
+        self.assertIn("rerun-protected-verifier:", rerun)
+        self.assertNotIn(
+            "".join(
+                (
+                    "github.ref == format('refs/heads/{0}', ",
+                    "github.event.repository.default_branch)",
+                )
+            ),
+            rerun,
+        )
+        self.assertNotIn(
+            'test "${GITHUB_REF}" = "refs/heads/${EVENT_DEFAULT_BRANCH}"',
+            rerun,
+        )
+        self.assertIn(
+            'test "${EXECUTED_WORKFLOW_SHA}" = "${controller_sha}"',
+            rerun,
+        )
+        self.assertNotIn(
+            "".join(
+                (
+                    "github.ref == format('refs/heads/{0}', ",
+                    "github.event.pull_request.base.ref)",
+                )
+            ),
+            rerun,
+        )
+        self.assertNotIn(
+            'test "${GITHUB_REF}" = "refs/heads/${EVENT_PR_BASE_REF}"',
+            rerun,
+        )
+
+    def test_invalid_runner_temp_does_not_create_review_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            output = root / "review"
+            missing_runner_temp = root / "missing-runner-temp"
+            with (
+                mock.patch.object(self.module, "validate_inputs"),
+                mock.patch.dict(
+                    os.environ,
+                    {"RUNNER_TEMP": str(missing_runner_temp)},
+                ),
+                self.assertRaisesRegex(
+                    self.module.MaterializationError,
+                    "RUNNER_TEMP must identify an existing directory",
+                ),
+            ):
+                self.module.materialize(types.SimpleNamespace(), output)
+            self.assertFalse(output.exists())
 
     def test_external_commands_are_bounded(self) -> None:
         with (
@@ -114,6 +178,30 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
                     asset = parent / "asset"
                     asset.write_bytes(b"unchanged")
                     parent.chmod(mode)
+                    with self.assertRaisesRegex(
+                        self.module.MaterializationError,
+                        "must not be group- or world-writable",
+                    ):
+                        if operation == "read":
+                            self.module.protected_asset_bytes(asset, "test asset")
+                        else:
+                            self.module.write_owned_regular_file(
+                                asset,
+                                b"replacement",
+                                "test asset",
+                            )
+                    self.assertEqual(b"unchanged", asset.read_bytes())
+
+    def test_protected_io_rejects_group_or_world_writable_file(self) -> None:
+        for mode in (0o620, 0o602, 0o622):
+            for operation in ("read", "write"):
+                with (
+                    self.subTest(mode=oct(mode), operation=operation),
+                    tempfile.TemporaryDirectory() as temporary,
+                ):
+                    asset = Path(temporary).resolve() / "unsafe-asset"
+                    asset.write_bytes(b"unchanged")
+                    asset.chmod(mode)
                     with self.assertRaisesRegex(
                         self.module.MaterializationError,
                         "must not be group- or world-writable",
@@ -219,7 +307,9 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
                 )
             notes = getattr(raised.exception, "__notes__", ())
             if hasattr(raised.exception, "add_note"):
-                self.assertTrue(any("simulated cleanup failure" in note for note in notes))
+                self.assertTrue(
+                    any("simulated cleanup failure" in note for note in notes),
+                )
             self.assertEqual(b"unchanged", protected.read_bytes())
 
     def test_protected_writer_close_does_not_mask_write_failure(self) -> None:
@@ -269,7 +359,9 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
                 )
             notes = getattr(raised.exception, "__notes__", ())
             if hasattr(raised.exception, "add_note"):
-                self.assertTrue(any("simulated close failure" in note for note in notes))
+                self.assertTrue(
+                    any("simulated close failure" in note for note in notes),
+                )
             self.assertEqual(b"unchanged", protected.read_bytes())
 
     def test_protected_writer_directory_close_failure_fails_closed(self) -> None:
@@ -314,7 +406,9 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
                 )
             notes = getattr(raised.exception, "__notes__", ())
             if hasattr(raised.exception, "add_note"):
-                self.assertTrue(any("simulated directory close failure" in note for note in notes))
+                self.assertTrue(
+                    any("simulated directory close failure" in note for note in notes),
+                )
             self.assertEqual(b"replacement", protected.read_bytes())
 
     def test_protected_writer_preserves_existing_close_note_when_fstat_fails(
@@ -365,7 +459,9 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
                 )
             notes = getattr(raised.exception, "__notes__", ())
             if hasattr(raised.exception, "add_note"):
-                self.assertTrue(any("simulated existing close failure" in note for note in notes))
+                self.assertTrue(
+                    any("simulated existing close failure" in note for note in notes),
+                )
             self.assertEqual(1, close_attempts.count(close_attempts[0]))
             self.assertEqual(b"unchanged", protected.read_bytes())
 
@@ -416,7 +512,9 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
                 )
             notes = getattr(raised.exception, "__notes__", ())
             if hasattr(raised.exception, "add_note"):
-                self.assertTrue(any("simulated directory close failure" in note for note in notes))
+                self.assertTrue(
+                    any("simulated directory close failure" in note for note in notes),
+                )
             self.assertEqual(b"unchanged", protected.read_bytes())
 
     def test_metadata_binding_rejects_non_object(self) -> None:
