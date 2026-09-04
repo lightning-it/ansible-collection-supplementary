@@ -1193,10 +1193,16 @@ jobs:
               and .head.ref == $head_ref
               and .head.sha == $head_sha
               and .head.repo.full_name == $repository
+              and (.labels | type) == "array"
+              and all(.labels[];
+                type == "object" and (.name | type) == "string")
             ' <<<"${pr}" >/dev/null
           base_ref="$(jq -er '.base.ref | select(. == "develop" or . == "main")' <<<"${pr}")"
           test -n "${base_ref}"
           test "$(jq -r .base.repo.full_name <<<"${pr}")" = "${REPOSITORY}"
+          head_repository="$(jq -er '.head.repo.full_name | select(type == "string" and length > 0)' <<<"${pr}")"
+          labels_json="$(jq -cer '[.labels[].name] | sort' <<<"${pr}")"
+          labels_sha256="$(printf '%s' "${labels_json}" | sha256sum | cut -d ' ' -f 1)"
           author="$(jq -r .user.login <<<"${pr}")"
           review_path="applicable Copilot or governed automation exemption"
           external_kind="copilot"
@@ -1270,13 +1276,18 @@ jobs:
           evidence="$(jq -cn \
             --arg base "${EVENT_BASE}" \
             --arg controller "${TRUSTED_WORKFLOW_SHA}" \
+            --arg controller_ref "${base_ref}" \
             --arg head "${EVENT_HEAD}" \
+            --arg head_repository "${head_repository}" \
+            --arg labels_sha256 "${labels_sha256}" \
             --arg last_edited_at "${BOUND_LAST_EDITED_AT}" \
             --arg review_path "${review_path}" \
             --argjson pr_number "${PR_NUMBER}" \
             --argjson run_id "${GITHUB_RUN_ID}" \
             --arg run_url "${run_url}" \
-            '{schema:4,base_sha:$base,head_sha:$head,controller_sha:$controller,
+            '{schema:4,base_sha:$base,head_sha:$head,
+              head_repository:$head_repository,controller_sha:$controller,
+              controller_ref:$controller_ref,pull_request_labels_sha256:$labels_sha256,
               pull_request_number:$pr_number,producer_run_id:$run_id,
               pull_request_last_edited_at:(
                 if $last_edited_at == "null" then null else $last_edited_at end),

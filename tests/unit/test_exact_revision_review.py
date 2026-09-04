@@ -479,6 +479,15 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         )
         self.assertIn("'{schema:4,base_sha:$base,head_sha:$head,", workflow)
         self.assertIn("controller_sha:$controller", workflow)
+        producer = workflow.split("      - name: Publish bound neutral result", 1)[1].split(
+            "          publish_once() {", 1
+        )[0]
+        for field in (
+            "head_repository:$head_repository",
+            "controller_ref:$controller_ref",
+            "pull_request_labels_sha256:$labels_sha256",
+        ):
+            self.assertIn(field, producer)
         self.assertIn("pull_request_number:$pr_number", workflow)
         self.assertIn("producer_run_id:$run_id", workflow)
         self.assertIn("read_named_checks() {", workflow)
