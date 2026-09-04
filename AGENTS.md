@@ -67,6 +67,8 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    MUST NOT request or fund their AI usage.
 6. Candidate-controlled Codex output is not a protected attestation. Until a separately governed, identity-bound
    personal-Codex evidence contract exists, it cannot satisfy `Current revision review`; the gate fails closed.
+7. A v6 neutral current-revision result MUST publish the exact head repository, protected controller ref, and
+   SHA-256 of the sorted live PR-label set required and independently revalidated by the protected rerun consumer.
 
 ## 2. Repository Baseline (This Repo)
 
