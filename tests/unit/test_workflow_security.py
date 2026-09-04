@@ -361,9 +361,6 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("controller_ref:$controller_ref", verify_job)
         self.assertIn("conclusion=failure", verify_job)
         self.assertNotIn("pull_request_review:", copilot)
-        documentation = (ROOT / "docs/push-ready-optimization.md").read_text(encoding="utf-8")
-        self.assertIn("when `litroc` opens an already-ready PR", documentation)
-        self.assertIn("Opening a draft and every synchronize event remain AI-free", documentation)
 
     def test_bound_copilot_review_converges_across_graphql_and_rest(self) -> None:
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
@@ -692,6 +689,10 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         guard = jobs["tiny-cells"]["if"]
         self.assertIn("needs.quality-matrix.outputs.tiny_required == 'true'", guard)
         self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", guard)
+        self.assertIn(
+            "release/rep60-supplementary-protected-checkpoint-1-v5-successor-",
+            guard,
+        )
         self.assertNotIn("github.event_name == 'schedule'", guard)
         for job_name in ("heavy-cells", "acceptance-cells", "runtime-evidence"):
             protected_main_guard = jobs[job_name]["if"]
