@@ -298,7 +298,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("permission-profile: :read-only", workflow)
         self.assertIn("codex-args: '[\"--ephemeral\"]'", workflow)
         self.assertIn("name: Current revision review", workflow)
-        self.assertIn("mlx90-exact-revision:v4:${input_sha256}:", workflow)
+        self.assertIn("mlx90-exact-revision:v5:${input_sha256}:", workflow)
         self.assertIn("mlx90-current-revision:v4:${producer_run_id}:${input_sha256}", workflow)
         self.assertNotIn("mlx90-legacy-exact-revision:", workflow)
         self.assertNotIn("Successful Copilot review", workflow)
