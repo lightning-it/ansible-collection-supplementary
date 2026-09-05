@@ -407,16 +407,20 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             retry,
         )
         self.assertIn("synthetic_evidence_jobs=$(jq -c", retry)
+        self.assertIn("synthetic_authorization_jobs=$(jq -c", retry)
         self.assertIn("runner_backed_jobs=$(jq -c", retry)
         self.assertIn(
             'test "$(jq \'length\' <<<"${runner_backed_jobs}")" -eq 1',
             retry,
         )
         self.assertIn(
+            "repos/${REPOSITORY}/actions/jobs/${required_job_id}/rerun",
+            retry,
+        )
+        self.assertNotIn(
             "repos/${REPOSITORY}/actions/runs/${run_id}/rerun",
             retry,
         )
-        self.assertNotIn("repos/${REPOSITORY}/actions/jobs/", retry)
         self.assertEqual(1, retry.count('/rerun" >/dev/null'))
         self.assertIn('if [ "${observed_attempt}" -ne 2 ]', retry)
         self.assertIn(".external_id == $external_id", retry)
