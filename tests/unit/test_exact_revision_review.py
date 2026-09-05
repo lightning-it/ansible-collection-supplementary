@@ -83,7 +83,7 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
             self.assertEqual("d" * 40, metadata["integration_tree_sha"])
             self.assertEqual(64, len(metadata["diff_sha256"]))
             self.assertEqual(len(binary_diff), metadata["review_bytes"])
-            self.assertEqual(3, metadata["schema_version"])
+            self.assertEqual(5, metadata["schema_version"])
 
     def test_command_failure_with_one_argument_preserves_the_real_error(self) -> None:
         failed = subprocess.CompletedProcess(["gh"], 1, "", "denied")
@@ -123,15 +123,17 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             assets = {
+                "copilot_workflow_sha256": root / "copilot-workflow.yml",
                 "materializer_sha256": root / "materializer.py",
                 "prompt_sha256": root / "prompt.md",
+                "rerun_workflow_sha256": root / "rerun-workflow.yml",
                 "schema_sha256": root / "schema.json",
                 "workflow_sha256": root / "workflow.yml",
             }
             for index, path in enumerate(assets.values(), start=1):
                 path.write_text(f"protected asset {index}\n", encoding="utf-8")
             metadata = {
-                "schema_version": 3,
+                "schema_version": 5,
                 "base_sha": "a" * 40,
                 "head_sha": "b" * 40,
                 "diff_sha256": "c" * 64,
@@ -187,7 +189,11 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
                 self.module.MaterializationError,
                 "Unable to create the exact-revision review workspace",
             ):
-                self.module.materialize(self.arguments, output)
+                self.module.write_materialized_workspace(
+                    output,
+                    b"bounded diff\n",
+                    {},
+                )
 
     def test_dispatch_must_run_from_exact_protected_base(self) -> None:
         self.arguments.dispatch_ref = "refs/heads/main"
@@ -294,11 +300,21 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("      actions: read\n      checks: write", workflow)
         self.assertIn("checks: write", workflow)
         self.assertNotIn("actions/checkout@", workflow)
-        self.assertIn("materialize-exact-revision-review.py?ref=${TRUSTED_WORKFLOW_SHA}", workflow)
+        self.assertEqual(7, workflow.count("load_protected_asset"))
+        for protected_path in (
+            "scripts/materialize-exact-revision-review.py",
+            ".github/codex/prompts/review-exact-head.md",
+            ".github/codex/schemas/exact-head-review.schema.json",
+            ".github/workflows/release-bot-exact-head-review.yml",
+            ".github/workflows/current-revision-rerun.yml",
+            ".github/workflows/copilot-review.yml",
+        ):
+            self.assertIn(protected_path, workflow)
+        self.assertEqual(1, workflow.count("?ref=${TRUSTED_WORKFLOW_SHA}"))
         self.assertIn("permission-profile: :read-only", workflow)
         self.assertIn("codex-args: '[\"--ephemeral\"]'", workflow)
         self.assertIn("name: Current revision review", workflow)
-        self.assertIn("mlx90-exact-revision:v4:${input_sha256}:", workflow)
+        self.assertIn("mlx90-exact-revision:v5:${input_sha256}:", workflow)
         self.assertIn("mlx90-current-revision:v4:${producer_run_id}:${input_sha256}", workflow)
         self.assertNotIn("mlx90-legacy-exact-revision:", workflow)
         self.assertNotIn("Successful Copilot review", workflow)
