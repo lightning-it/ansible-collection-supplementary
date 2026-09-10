@@ -552,6 +552,8 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             request_job,
         )
         self.assertIn("compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", request_job)
+        self.assertIn("--jq '[.status, .behind_by, .merge_base_commit.sha] | @tsv'", request_job)
+        self.assertIn('[[ "${default_head}" =~ ^[0-9a-f]{40}$ ]]', request_job)
         self.assertIn("pull_request_target:", workflow)
         self.assertNotIn("pull_request_review:", workflow)
         self.assertNotIn("workflow_dispatch:", workflow)
@@ -589,6 +591,8 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             review_job,
         )
         self.assertIn("compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", review_job)
+        self.assertIn("--jq '[.status, .behind_by, .merge_base_commit.sha] | @tsv'", review_job)
+        self.assertIn('[[ "${default_head}" =~ ^[0-9a-f]{40}$ ]]', review_job)
         self.assertIn('--arg controller_ref "${DEFAULT_BRANCH}"', review_job)
         self.assertEqual(1, request_job.count("EXPECTED_HEAD_REF: ${{ github.event.pull_request.head.ref }}"))
         self.assertIn('--arg branch "${EXPECTED_HEAD_REF}"', request_job)

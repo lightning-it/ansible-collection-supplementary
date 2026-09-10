@@ -93,13 +93,16 @@ jobs:
             test "${EXPECTED_BASE_REF}" = main
             default_head="$(gh api \
               "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}" --jq .commit.sha)"
+            [[ "${default_head}" =~ ^[0-9a-f]{40}$ ]]
             controller_ancestry="$(gh api \
-              "repos/${REPOSITORY}/compare/${TRUSTED_WORKFLOW_SHA}...${default_head}")"
-            jq -e --arg controller "${TRUSTED_WORKFLOW_SHA}" '
-              .status == "identical"
-              or (.status == "ahead" and .behind_by == 0
-                  and .merge_base_commit.sha == $controller)
-              ' <<<"${controller_ancestry}" >/dev/null
+              "repos/${REPOSITORY}/compare/${TRUSTED_WORKFLOW_SHA}...${default_head}" \
+              --jq '[.status, .behind_by, .merge_base_commit.sha] | @tsv')"
+            IFS=$'\t' read -r controller_status controller_behind controller_merge_base \
+              <<<"${controller_ancestry}"
+            test "${controller_status}" = identical \
+              || { test "${controller_status}" = ahead \
+                && test "${controller_behind}" = 0 \
+                && test "${controller_merge_base}" = "${TRUSTED_WORKFLOW_SHA}"; }
           fi
           protected_run="$(gh api "repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
           jq -e \
@@ -1295,13 +1298,16 @@ jobs:
             test "${EVENT_BASE_REF}" = main
             default_head="$(gh api \
               "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}" --jq .commit.sha)"
+            [[ "${default_head}" =~ ^[0-9a-f]{40}$ ]]
             controller_ancestry="$(gh api \
-              "repos/${REPOSITORY}/compare/${TRUSTED_WORKFLOW_SHA}...${default_head}")"
-            jq -e --arg controller "${TRUSTED_WORKFLOW_SHA}" '
-              .status == "identical"
-              or (.status == "ahead" and .behind_by == 0
-                  and .merge_base_commit.sha == $controller)
-              ' <<<"${controller_ancestry}" >/dev/null
+              "repos/${REPOSITORY}/compare/${TRUSTED_WORKFLOW_SHA}...${default_head}" \
+              --jq '[.status, .behind_by, .merge_base_commit.sha] | @tsv')"
+            IFS=$'\t' read -r controller_status controller_behind controller_merge_base \
+              <<<"${controller_ancestry}"
+            test "${controller_status}" = identical \
+              || { test "${controller_status}" = ahead \
+                && test "${controller_behind}" = 0 \
+                && test "${controller_merge_base}" = "${TRUSTED_WORKFLOW_SHA}"; }
           fi
           protected_run="$(gh api "repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
           jq -e \
