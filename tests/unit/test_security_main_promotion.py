@@ -378,6 +378,7 @@ class SecurityMainPromotionTests(unittest.TestCase):
             self.head_sha,
             base_root=self.base_root,
             head_root=self.root,
+            checked_at=CHECKED_AT,
         )
         self.assertEqual("security", result.mode)
         pull["user"] = {"login": "human", "id": 1, "type": "User"}
@@ -389,6 +390,7 @@ class SecurityMainPromotionTests(unittest.TestCase):
                 self.head_sha,
                 base_root=self.base_root,
                 head_root=self.root,
+                checked_at=CHECKED_AT,
             )
 
 

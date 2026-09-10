@@ -551,9 +551,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}",
             request_job,
         )
-        self.assertIn(
-            "compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", request_job
-        )
+        self.assertIn("compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", request_job)
         self.assertIn("pull_request_target:", workflow)
         self.assertNotIn("pull_request_review:", workflow)
         self.assertNotIn("workflow_dispatch:", workflow)
@@ -590,9 +588,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}",
             review_job,
         )
-        self.assertIn(
-            "compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", review_job
-        )
+        self.assertIn("compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", review_job)
         self.assertIn('--arg controller_ref "${DEFAULT_BRANCH}"', review_job)
         self.assertEqual(1, request_job.count("EXPECTED_HEAD_REF: ${{ github.event.pull_request.head.ref }}"))
         self.assertIn('--arg branch "${EXPECTED_HEAD_REF}"', request_job)
