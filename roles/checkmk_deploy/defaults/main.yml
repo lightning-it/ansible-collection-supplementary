@@ -2,7 +2,7 @@
 checkmk_deploy_pod_name: "checkmk"
 checkmk_deploy_container_name: "checkmk"
 checkmk_deploy_image: >-
-  docker.io/checkmk/check-mk-raw:2.4.0-latest@sha256:3b2662d15f996841ed18aa86a24403827746b4b6f56b931fe174c8cb85c2d91e
+  docker.io/checkmk/check-mk-raw:2.4.0-latest@sha256:7f279869af2fa651ce6370200d6c2279dbb074c9e46e35df96ab442fa546d2b4
 checkmk_deploy_pod_manifest_path: "/etc/podman/pods/checkmk.yml"
 
 checkmk_deploy_host_data_dir: "/srv/checkmk/data"

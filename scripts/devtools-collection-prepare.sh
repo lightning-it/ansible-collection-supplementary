@@ -5,6 +5,26 @@ set -euo pipefail
 # Installs into a per-run collections dir to avoid stale state.
 # Prints COLLECTIONS_DIR as the last line for callers.
 
+offline_local_only="${WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY:-0}"
+case "${offline_local_only}" in
+  0|1) ;;
+  *)
+    echo "ERROR: WUNDER_DEVTOOLS_OFFLINE_LOCAL_ONLY must be 0 or 1." >&2
+    exit 1
+    ;;
+esac
+
+require_declared_dependencies="${WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES:-}"
+if [ "${offline_local_only}" = 1 ]; then
+  case "${require_declared_dependencies}" in
+    0|1) ;;
+    *)
+      echo "ERROR: Offline mode requires WUNDER_DEVTOOLS_REQUIRE_DECLARED_DEPENDENCIES=0 or 1." >&2
+      exit 1
+      ;;
+  esac
+fi
+
 # Derive namespace+name from galaxy.yml (authoritative)
 if [ ! -f /workspace/galaxy.yml ]; then
   echo "ERROR: /workspace/galaxy.yml not found." >&2
@@ -54,6 +74,55 @@ BUILD_OUTPUT_DIR="$(mktemp -d "${HOME}/build.XXXXXX")"
 
 cd /workspace
 
+dep_specs=()
+if [ -f /workspace/galaxy.yml ]; then
+  dependency_output="$(
+    bash /workspace/scripts/devtools-galaxy.sh \
+      dependencies /workspace/galaxy.yml
+  )"
+  while IFS= read -r dep_spec; do
+    if [ -n "${dep_spec}" ]; then
+      dep_specs+=("${dep_spec}")
+    fi
+  done <<< "${dependency_output}"
+fi
+
+verify_offline_dependency_inventory() {
+  local dep_spec=""
+  local dep_fqcn=""
+  local dep_namespace=""
+  local dep_name=""
+  local manifest=""
+  local missing=()
+
+  for dep_spec in "${dep_specs[@]}"; do
+    dep_fqcn="${dep_spec%%:*}"
+    if [[ ! "${dep_fqcn}" =~ ^[a-z0-9_]+\.[a-z0-9_]+$ ]]; then
+      echo "ERROR: Invalid galaxy.yml dependency name: ${dep_fqcn}" >&2
+      exit 1
+    fi
+    dep_namespace="${dep_fqcn%%.*}"
+    dep_name="${dep_fqcn#*.}"
+    manifest="/usr/share/ansible/collections/ansible_collections/${dep_namespace}/${dep_name}/MANIFEST.json"
+    if [ ! -f "${manifest}" ]; then
+      missing+=("${dep_spec}")
+    fi
+  done
+
+  if [ "${#missing[@]}" -eq 0 ]; then
+    echo "Offline dependency preflight: every declared galaxy.yml dependency is present in the pinned Devtools image." >&2
+    return
+  fi
+
+  echo "Offline dependency preflight: declared galaxy.yml dependencies missing from the pinned Devtools image:" >&2
+  printf '  - %s\n' "${missing[@]}" >&2
+  if [ "${require_declared_dependencies}" = 1 ]; then
+    echo "ERROR: This offline gate requires every declared dependency under /usr/share/ansible/collections." >&2
+    exit 1
+  fi
+  echo "Offline dependency preflight: this explicitly dependency-free gate may continue; dependency-backed checks remain protected-pipeline work." >&2
+}
+
 install_collection_dependency() {
   local dep_spec="$1"
   local dep_fqcn="${dep_spec%%:*}"
@@ -84,28 +153,23 @@ install_collection_dependency() {
   ansible-galaxy collection install "$dep_spec" -p "${COLLECTIONS_DIR}" --force >&2
 }
 
-dep_specs=()
-if [ -f /workspace/collections/requirements.yml ]; then
-  echo "Installing collection requirements from collections/requirements.yml into ${COLLECTIONS_DIR}..." >&2
-  ansible-galaxy collection install \
-    -r /workspace/collections/requirements.yml \
-    -p "${COLLECTIONS_DIR}" \
-    --force >&2
-elif [ -f /workspace/galaxy.yml ]; then
-  dependency_output="$(
-    bash /workspace/scripts/devtools-galaxy.sh \
-      dependencies /workspace/galaxy.yml
-  )"
-  while IFS= read -r dep_spec; do
-    dep_specs+=("$dep_spec")
-  done <<< "$dependency_output"
-fi
-
-for dep_spec in "${dep_specs[@]}"; do
-  if [ -n "$dep_spec" ]; then
-    install_collection_dependency "$dep_spec"
+if [ "${offline_local_only}" = 1 ]; then
+  echo "Offline local-only mode: external collection dependency installation is forbidden." >&2
+  echo "Offline local-only mode is hermetic: local dependency source roots are intentionally not mounted." >&2
+  verify_offline_dependency_inventory
+else
+  if [ -f /workspace/collections/requirements.yml ]; then
+    echo "Installing collection requirements from collections/requirements.yml into ${COLLECTIONS_DIR}..." >&2
+    ansible-galaxy collection install \
+      -r /workspace/collections/requirements.yml \
+      -p "${COLLECTIONS_DIR}" \
+      --force >&2
+  else
+    for dep_spec in "${dep_specs[@]}"; do
+      install_collection_dependency "${dep_spec}"
+    done
   fi
-done
+fi
 
 # Build artifact and capture the output path
 build_out="$(ansible-galaxy collection build --output-path "${BUILD_OUTPUT_DIR}" --force)"

@@ -3,7 +3,7 @@
 nginx_deploy_pod_name: "nginx"
 nginx_deploy_pod_manifest_path: "/etc/podman/pods/nginx.yml"
 nginx_deploy_image: >-
-  docker.io/library/nginx:stable@sha256:46ccc48fbb1f5a43167f2ee2c279c122b96eec5d976e7f4e1e0780f59a51b4d6
+  docker.io/library/nginx:stable@sha256:09cc2702709e6388d979d8030e3ab4eb1ceb699b2dced26d7543e872a822e823
 nginx_deploy_container_name: "{{ nginx_deploy_pod_name }}-nginx"
 nginx_deploy_run_as_user: 0
 nginx_deploy_run_as_group: 0

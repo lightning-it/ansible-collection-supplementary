@@ -1,4 +1,5 @@
-"""Tests for the independent dot-github current-revision verifier."""
+# Managed by lightning-it/shared-assets-lit. Do not edit downstream copies.
+"""Regression tests for the reciprocal dot-github verifier."""
 
 from __future__ import annotations
 
@@ -30,7 +31,7 @@ class SequencedClient:
 
 
 class ProducerRunConvergenceTests(unittest.TestCase):
-    def test_waits_for_the_same_producer_run_to_become_completed(self) -> None:
+    def test_waits_for_the_same_nonterminal_run_to_complete(self) -> None:
         client = SequencedClient(
             [
                 {"id": 42, "status": "pending"},
@@ -43,7 +44,7 @@ class ProducerRunConvergenceTests(unittest.TestCase):
         )
         sleeps: list[float] = []
 
-        result = MODULE.wait_for_producer_run(
+        result = MODULE.wait_for_completed_producer(
             client,
             42,
             attempts=6,
@@ -51,7 +52,7 @@ class ProducerRunConvergenceTests(unittest.TestCase):
         )
 
         self.assertEqual("completed", result["status"])
-        self.assertEqual([1, 1, 1, 1, 1], sleeps)
+        self.assertEqual([2, 2, 2, 2, 2], sleeps)
         self.assertEqual(
             ["repos/lightning-it/.github/actions/runs/42"] * 6,
             client.paths,
@@ -62,12 +63,12 @@ class ProducerRunConvergenceTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             MODULE.VerificationError,
-            "protected verifier run status is invalid",
+            "verifier run status is invalid: 'unknown'",
         ):
-            MODULE.wait_for_producer_run(
+            MODULE.wait_for_completed_producer(
                 client,
                 42,
-                attempts=3,
+                attempts=2,
                 sleep=lambda _: None,
             )
 
@@ -78,10 +79,10 @@ class ProducerRunConvergenceTests(unittest.TestCase):
             MODULE.VerificationError,
             "protected verifier run ID is not exactly bound",
         ):
-            MODULE.wait_for_producer_run(
+            MODULE.wait_for_completed_producer(
                 client,
                 42,
-                attempts=3,
+                attempts=2,
                 sleep=lambda _: None,
             )
 
@@ -91,17 +92,17 @@ class ProducerRunConvergenceTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             MODULE.VerificationError,
-            "protected verifier run did not become completed",
+            "protected verifier run did not complete",
         ):
-            MODULE.wait_for_producer_run(
+            MODULE.wait_for_completed_producer(
                 client,
                 42,
-                attempts=3,
+                attempts=2,
                 sleep=sleeps.append,
             )
 
-        self.assertEqual([1, 1], sleeps)
-        self.assertEqual(3, len(client.paths))
+        self.assertEqual([2], sleeps)
+        self.assertEqual(2, len(client.paths))
 
 
 if __name__ == "__main__":
