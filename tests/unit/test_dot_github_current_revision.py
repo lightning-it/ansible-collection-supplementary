@@ -33,6 +33,9 @@ class ProducerRunConvergenceTests(unittest.TestCase):
     def test_waits_for_the_same_producer_run_to_become_completed(self) -> None:
         client = SequencedClient(
             [
+                {"id": 42, "status": "pending"},
+                {"id": 42, "status": "requested"},
+                {"id": 42, "status": "waiting"},
                 {"id": 42, "status": "queued"},
                 {"id": 42, "status": "in_progress"},
                 {"id": 42, "status": "completed", "conclusion": "success"},
@@ -43,19 +46,19 @@ class ProducerRunConvergenceTests(unittest.TestCase):
         result = MODULE.wait_for_producer_run(
             client,
             42,
-            attempts=3,
+            attempts=6,
             sleep=sleeps.append,
         )
 
         self.assertEqual("completed", result["status"])
-        self.assertEqual([1, 1], sleeps)
+        self.assertEqual([1, 1, 1, 1, 1], sleeps)
         self.assertEqual(
-            ["repos/lightning-it/.github/actions/runs/42"] * 3,
+            ["repos/lightning-it/.github/actions/runs/42"] * 6,
             client.paths,
         )
 
     def test_rejects_an_unrecognized_nonterminal_status(self) -> None:
-        client = SequencedClient([{"id": 42, "status": "waiting"}])
+        client = SequencedClient([{"id": 42, "status": "unknown"}])
 
         with self.assertRaisesRegex(
             MODULE.VerificationError,

@@ -279,7 +279,7 @@ def wait_for_producer_run(
         status = producer.get("status")
         if status == "completed":
             return producer
-        if status not in {"queued", "in_progress"}:
+        if status not in {"pending", "queued", "requested", "waiting", "in_progress"}:
             raise VerificationError("protected verifier run status is invalid")
         if attempt < attempts:
             sleep(1)
