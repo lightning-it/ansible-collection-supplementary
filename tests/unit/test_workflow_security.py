@@ -1286,7 +1286,9 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertNotIn("pull_request_target:", exact_revision)
         self.assertIn("workflow_dispatch:", exact_revision)
         self.assertIn("github.actor == 'lightning-it-release-automation[bot]'", exact_revision)
-        self.assertIn("materialize-exact-revision-review.py?ref=${TRUSTED_WORKFLOW_SHA}", exact_revision)
+        self.assertIn("load_protected_asset() {", exact_revision)
+        self.assertIn("scripts/materialize-exact-revision-review.py", exact_revision)
+        self.assertEqual(1, exact_revision.count("?ref=${TRUSTED_WORKFLOW_SHA}"))
         self.assertIn("name: Current revision review", exact_revision)
         self.assertTrue("publish_once() {" in exact_revision or "create_reservation_once() {" in exact_revision)
         self.assertTrue(
