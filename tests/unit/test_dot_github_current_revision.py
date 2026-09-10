@@ -31,9 +31,13 @@ class SequencedClient:
 
 
 class ProducerRunConvergenceTests(unittest.TestCase):
-    def test_waits_for_the_same_in_progress_run_to_complete(self) -> None:
+    def test_waits_for_the_same_nonterminal_run_to_complete(self) -> None:
         client = SequencedClient(
             [
+                {"id": 42, "status": "pending"},
+                {"id": 42, "status": "requested"},
+                {"id": 42, "status": "waiting"},
+                {"id": 42, "status": "queued"},
                 {"id": 42, "status": "in_progress"},
                 {"id": 42, "status": "completed", "conclusion": "success"},
             ]
@@ -43,23 +47,37 @@ class ProducerRunConvergenceTests(unittest.TestCase):
         result = MODULE.wait_for_completed_producer(
             client,
             42,
-            attempts=2,
+            attempts=6,
             sleep=sleeps.append,
         )
 
         self.assertEqual("completed", result["status"])
-        self.assertEqual([2], sleeps)
+        self.assertEqual([2, 2, 2, 2, 2], sleeps)
         self.assertEqual(
-            ["repos/lightning-it/.github/actions/runs/42"] * 2,
+            ["repos/lightning-it/.github/actions/runs/42"] * 6,
             client.paths,
         )
 
     def test_rejects_an_unrecognized_nonterminal_status(self) -> None:
-        client = SequencedClient([{"id": 42, "status": "queued"}])
+        client = SequencedClient([{"id": 42, "status": "unknown"}])
 
         with self.assertRaisesRegex(
             MODULE.VerificationError,
-            "verifier run status is invalid: 'queued'",
+            "verifier run status is invalid: 'unknown'",
+        ):
+            MODULE.wait_for_completed_producer(
+                client,
+                42,
+                attempts=2,
+                sleep=lambda _: None,
+            )
+
+    def test_rejects_a_malformed_nonterminal_status(self) -> None:
+        client = SequencedClient([{"id": 42, "status": []}])
+
+        with self.assertRaisesRegex(
+            MODULE.VerificationError,
+            r"verifier run status is invalid: \[\]",
         ):
             MODULE.wait_for_completed_producer(
                 client,
