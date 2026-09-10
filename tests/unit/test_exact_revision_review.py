@@ -544,6 +544,16 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("github.event.pull_request.user.login == 'litroc'", request_job)
         self.assertIn('test "$(jq -r .user.login <<<"${pr}")" = litroc', request_job)
         self.assertNotIn("Contributor-funded review required", request_job)
+        self.assertIn('if [ "${EXPECTED_BASE_REF}" = develop ]; then', request_job)
+        self.assertIn('test "${TRUSTED_WORKFLOW_SHA}" = "${EXPECTED_BASE}"', request_job)
+        self.assertIn('test "${EXPECTED_BASE_REF}" = main', request_job)
+        self.assertIn(
+            "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}",
+            request_job,
+        )
+        self.assertIn(
+            "compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", request_job
+        )
         self.assertIn("pull_request_target:", workflow)
         self.assertNotIn("pull_request_review:", workflow)
         self.assertNotIn("workflow_dispatch:", workflow)
@@ -573,12 +583,17 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("mlx90-legacy-copilot:", workflow)
         self.assertNotIn("'Successful Copilot review'", review_job)
         self.assertIn('-f name="${check_name}"', review_job)
+        self.assertIn('if [ "${EVENT_BASE_REF}" = develop ]; then', review_job)
         self.assertIn('test "${TRUSTED_WORKFLOW_SHA}" = "${EVENT_BASE}"', review_job)
+        self.assertIn('test "${EVENT_BASE_REF}" = main', review_job)
         self.assertIn(
-            "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${EVENT_BASE_REF}",
+            "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}",
             review_job,
         )
-        self.assertNotIn("compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", review_job)
+        self.assertIn(
+            "compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", review_job
+        )
+        self.assertIn('--arg controller_ref "${DEFAULT_BRANCH}"', review_job)
         self.assertEqual(1, request_job.count("EXPECTED_HEAD_REF: ${{ github.event.pull_request.head.ref }}"))
         self.assertIn('--arg branch "${EXPECTED_HEAD_REF}"', request_job)
         self.assertIn('--arg sha "${EXPECTED_HEAD}"', request_job)
