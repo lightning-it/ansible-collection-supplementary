@@ -86,8 +86,24 @@ jobs:
           test "${DEFAULT_BRANCH}" = develop
           [[ "${EXPECTED_BASE_REF}" =~ ^(develop|main)$ ]]
           test "${TRUSTED_WORKFLOW_REF}" = \
-            "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${EXPECTED_BASE_REF}"
-          test "${TRUSTED_WORKFLOW_SHA}" = "${EXPECTED_BASE}"
+            "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}"
+          if [ "${EXPECTED_BASE_REF}" = develop ]; then
+            test "${TRUSTED_WORKFLOW_SHA}" = "${EXPECTED_BASE}"
+          else
+            test "${EXPECTED_BASE_REF}" = main
+            default_head="$(gh api \
+              "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}" --jq .commit.sha)"
+            [[ "${default_head}" =~ ^[0-9a-f]{40}$ ]]
+            controller_ancestry="$(gh api \
+              "repos/${REPOSITORY}/compare/${TRUSTED_WORKFLOW_SHA}...${default_head}" \
+              --jq '[.status, .behind_by, .merge_base_commit.sha] | @tsv')"
+            IFS=$'\t' read -r controller_status controller_behind controller_merge_base \
+              <<<"${controller_ancestry}"
+            test "${controller_status}" = identical \
+              || { test "${controller_status}" = ahead \
+                && test "${controller_behind}" = 0 \
+                && test "${controller_merge_base}" = "${TRUSTED_WORKFLOW_SHA}"; }
+          fi
           protected_run="$(gh api "repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
           jq -e \
             --arg branch "${EXPECTED_HEAD_REF}" \
@@ -1275,8 +1291,24 @@ jobs:
           [[ "${EVENT_BASE_REF}" =~ ^(develop|main)$ ]]
           test "${DEFAULT_BRANCH}" = develop
           test "${TRUSTED_WORKFLOW_REF}" = \
-            "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${EVENT_BASE_REF}"
-          test "${TRUSTED_WORKFLOW_SHA}" = "${EVENT_BASE}"
+            "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}"
+          if [ "${EVENT_BASE_REF}" = develop ]; then
+            test "${TRUSTED_WORKFLOW_SHA}" = "${EVENT_BASE}"
+          else
+            test "${EVENT_BASE_REF}" = main
+            default_head="$(gh api \
+              "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}" --jq .commit.sha)"
+            [[ "${default_head}" =~ ^[0-9a-f]{40}$ ]]
+            controller_ancestry="$(gh api \
+              "repos/${REPOSITORY}/compare/${TRUSTED_WORKFLOW_SHA}...${default_head}" \
+              --jq '[.status, .behind_by, .merge_base_commit.sha] | @tsv')"
+            IFS=$'\t' read -r controller_status controller_behind controller_merge_base \
+              <<<"${controller_ancestry}"
+            test "${controller_status}" = identical \
+              || { test "${controller_status}" = ahead \
+                && test "${controller_behind}" = 0 \
+                && test "${controller_merge_base}" = "${TRUSTED_WORKFLOW_SHA}"; }
+          fi
           protected_run="$(gh api "repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
           jq -e \
             --arg branch "${EVENT_HEAD_REF}" \
@@ -1396,7 +1428,7 @@ jobs:
           evidence="$(jq -cn \
             --arg base "${EVENT_BASE}" \
             --arg controller "${TRUSTED_WORKFLOW_SHA}" \
-            --arg controller_ref "${EVENT_BASE_REF}" \
+            --arg controller_ref "${DEFAULT_BRANCH}" \
             --arg head "${EVENT_HEAD}" \
             --arg head_repository "${EVENT_HEAD_REPOSITORY}" \
             --arg last_edited_at "${BOUND_LAST_EDITED_AT}" \
