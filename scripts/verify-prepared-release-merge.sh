@@ -18,8 +18,12 @@ if [ "${#merge_parents[@]}" -ne 1 ]; then
 fi
 
 read -r release_base release_parent <<<"${merge_parents[0]}"
-[ -n "${release_base:-}" ] && [ -n "${release_parent:-}" ] || fail_closed
-[ -f galaxy.yml ] && [ -f changelogs/release-preparation.json ] || fail_closed
+if [ -z "${release_base:-}" ] || [ -z "${release_parent:-}" ]; then
+  fail_closed
+fi
+if [ ! -f galaxy.yml ] || [ ! -f changelogs/release-preparation.json ]; then
+  fail_closed
+fi
 
 release_version="$(sed -nE 's/^version:[[:space:]]*([^[:space:]]+)[[:space:]]*$/\\1/p' galaxy.yml | head -n 1)"
 release_version="$(awk '/^version:/ { print $2; exit }' galaxy.yml)"
