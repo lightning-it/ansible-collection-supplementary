@@ -45,7 +45,7 @@ container_images:
   - reference: "docker.io/library/nginx:stable@sha256:09cc2702709e6388d979d8030e3ab4eb1ceb699b2dced26d7543e872a822e823"
     locations:
       - "roles/nginx_deploy/defaults/main.yml"
-  - reference: "docker.io/library/postgres:16@sha256:c1b3783309b6499c795eed7c20135a1a4d25cae1b575c3d52c6f536129a1b109"
+  - reference: "docker.io/library/postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94"
     locations:
       - "manifests/identity-stack.pod.yaml"
       - "roles/forgejo_deploy/defaults/main.yml"
