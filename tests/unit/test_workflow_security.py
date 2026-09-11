@@ -727,9 +727,13 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             ["quality-matrix", "tiny-cells", "security-classification"],
             tiny_aggregate["needs"],
         )
-        self.assertIn("needs.quality-matrix.outputs.tiny_required == 'true'", tiny_expectation)
-        self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", tiny_expectation)
-        self.assertIn("needs.security-classification.outputs.security-release", tiny_expectation)
+        normalized_tiny_expectation = tiny_expectation.strip().removeprefix("${{").removesuffix("}}")
+        self.assertEqual(" ".join(guard.split()), " ".join(normalized_tiny_expectation.split()))
+        self.assertEqual(
+            "${{ needs.security-classification.result }}",
+            tiny_aggregate["steps"][0]["env"]["CLASSIFICATION_RESULT"],
+        )
+        self.assertIn('test "$CLASSIFICATION_RESULT" = success', tiny_aggregate["steps"][0]["run"])
         self.assertIn('if [ "$TINY_EXECUTION_EXPECTED" = true ]; then', tiny_aggregate["steps"][0]["run"])
         self.assertNotIn("github.event_name == 'schedule'", guard)
         for job_name in ("heavy-cells", "acceptance-cells", "runtime-evidence"):

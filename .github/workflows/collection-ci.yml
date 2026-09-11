@@ -554,6 +554,7 @@ jobs:
         env:
           MATRIX_RESULT: ${{ needs.quality-matrix.result }}
           PROFILE_RESULT: ${{ needs.tiny-cells.result }}
+          CLASSIFICATION_RESULT: ${{ needs.security-classification.result }}
           # Keep this condition equivalent to tiny-cells.if. A skipped Tiny
           # matrix is valid only when the protected runner boundary excludes
           # this event; every eligible required Tiny profile must be green.
@@ -584,6 +585,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$MATRIX_RESULT" = success
+          test "$CLASSIFICATION_RESULT" = success
           if [ "$TINY_EXECUTION_EXPECTED" = true ]; then
             test "$PROFILE_RESULT" = success
           else
