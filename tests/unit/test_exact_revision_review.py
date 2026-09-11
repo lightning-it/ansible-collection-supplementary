@@ -750,5 +750,128 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("never requests or funds", policy)
 
 
+class PreparedReleaseMergeVerifierTests(unittest.TestCase):
+    helper = ROOT / "scripts" / "verify-prepared-release-merge.sh"
+    bot_name = "lightning-it-release-automation[bot]"
+    bot_email = "307565056+lightning-it-release-automation[bot]@users.noreply.github.com"
+
+    def git(self, root: Path, *arguments: str, environment: dict[str, str] | None = None) -> str:
+        completed = subprocess.run(
+            ["git", *arguments],
+            cwd=root,
+            env=environment,
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        return completed.stdout.strip()
+
+    def identity(self, name: str, email: str) -> dict[str, str]:
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "GIT_AUTHOR_NAME": name,
+                "GIT_AUTHOR_EMAIL": email,
+                "GIT_COMMITTER_NAME": name,
+                "GIT_COMMITTER_EMAIL": email,
+            }
+        )
+        return environment
+
+    def create_release_merge(
+        self,
+        root: Path,
+        *,
+        octopus: bool = False,
+        preparation_committer: tuple[str, str] | None = None,
+        receipt_version: str = "3.3.0",
+    ) -> None:
+        self.git(root, "init", "--initial-branch=main")
+        self.git(root, "config", "user.name", self.bot_name)
+        self.git(root, "config", "user.email", self.bot_email)
+        (root / "changelogs").mkdir()
+        (root / "galaxy.yml").write_text("version: 3.3.0\n", encoding="utf-8")
+        (root / "changelogs" / "release-preparation.json").write_text("{}\n", encoding="utf-8")
+        self.git(root, "add", ".")
+        self.git(root, "commit", "--quiet", "-m", "base", environment=self.identity("base", "base@example.test"))
+        base = self.git(root, "rev-parse", "HEAD")
+
+        self.git(root, "checkout", "--quiet", "-b", "release")
+        (root / "changelogs" / "release-preparation.json").write_text(
+            json.dumps(
+                {
+                    "base_sha": base,
+                    "next_version": receipt_version,
+                    "preparer": {"login": self.bot_name},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        self.git(root, "add", "changelogs/release-preparation.json")
+        preparer = self.identity(self.bot_name, self.bot_email)
+        if preparation_committer is not None:
+            preparer["GIT_COMMITTER_NAME"], preparer["GIT_COMMITTER_EMAIL"] = preparation_committer
+        self.git(root, "commit", "--quiet", "-m", "chore(release): prepare v3.3.0", environment=preparer)
+
+        self.git(root, "checkout", "--quiet", "main")
+        branches = ["release"]
+        if octopus:
+            self.git(root, "checkout", "--quiet", "-b", "extra", base)
+            (root / "extra.txt").write_text("extra\n", encoding="utf-8")
+            self.git(root, "add", "extra.txt")
+            self.git(root, "commit", "--quiet", "-m", "extra", environment=self.identity("extra", "extra@example.test"))
+            self.git(root, "checkout", "--quiet", "main")
+            branches.append("extra")
+        self.git(
+            root,
+            "merge",
+            "--no-ff",
+            "-m",
+            "Release v3.3.0",
+            *branches,
+            environment=self.identity(self.bot_name, self.bot_email),
+        )
+
+    def verify(self, root: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["bash", str(self.helper)],
+            cwd=root,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    def test_accepts_exact_two_parent_bot_release_merge(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.create_release_merge(root)
+            result = self.verify(root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "3.3.0\n")
+
+    def test_rejects_octopus_release_merge(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.create_release_merge(root, octopus=True)
+            result = self.verify(root)
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_rejects_preparation_with_non_bot_committer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.create_release_merge(root, preparation_committer=("human", "human@example.test"))
+            result = self.verify(root)
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_rejects_malformed_preparation_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.create_release_merge(root, receipt_version="3.3.1")
+            result = self.verify(root)
+        self.assertNotEqual(result.returncode, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
