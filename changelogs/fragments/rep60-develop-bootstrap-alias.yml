@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Add a protected, narrowly scoped bootstrap controller so the REP-60 Current-Revision workflow can be introduced
-    without candidate self-certification or a required-check bypass.
