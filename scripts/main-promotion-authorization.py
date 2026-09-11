@@ -16,7 +16,13 @@ SHA = re.compile(r"^[0-9a-f]{40}$")
 CONTAINER_SECURITY_BRANCH = re.compile(r"^security/mlx90-(?:cleanup-)?[a-z0-9][a-z0-9._-]*$")
 RELEASE_APP_LOGIN = "lightning-it-release-automation[bot]"
 RELEASE_APP_USER_ID = 307565056
-RELEASE_TEAM_ID = 15545798
+NORMAL_PROMOTION_APPROVERS = {
+    18228613: "svenuthe",
+    76040632: "litroc",
+    114433629: "Deisling",
+    195916407: "dfleischer-work",
+    247824904: "litdeg",
+}
 NORMAL_ENVIRONMENT = "normal-release-promotion-approval"
 SECURITY_ENVIRONMENT = "mlx90-security-promotion-authorization"
 SUPPLEMENTARY = "lightning-it/ansible-collection-supplementary"
@@ -107,15 +113,22 @@ def validate_environment(payload: dict[str, Any], result: Authorization) -> None
     if len(reviewer_rules) != 1:
         fail("normal promotion environment must have one reviewer rule")
     reviewer_rule = reviewer_rules[0]
-    if reviewer_rule.get("prevent_self_review") is not True:
-        fail("normal promotion environment must prevent self-review")
+    if reviewer_rule.get("prevent_self_review") is not False:
+        fail("normal promotion environment must allow small-team self-review")
     reviewers = reviewer_rule.get("reviewers")
-    if not isinstance(reviewers, list) or len(reviewers) != 1:
-        fail("normal promotion environment must have exactly one reviewer")
-    reviewer = require_dict(reviewers[0], "environment reviewer")
-    reviewer_identity = require_dict(reviewer.get("reviewer"), "environment reviewer identity")
-    if reviewer.get("type") != "BusinessTeam" or reviewer_identity.get("id") != RELEASE_TEAM_ID:
-        fail("normal promotion environment reviewer must be the release team")
+    if not isinstance(reviewers, list) or len(reviewers) != len(NORMAL_PROMOTION_APPROVERS):
+        fail("normal promotion environment must have the exact small-team reviewer roster")
+    observed_reviewers: dict[int, str] = {}
+    for reviewer_payload in reviewers:
+        reviewer = require_dict(reviewer_payload, "environment reviewer")
+        reviewer_identity = require_dict(reviewer.get("reviewer"), "environment reviewer identity")
+        reviewer_id = reviewer_identity.get("id")
+        reviewer_login = reviewer_identity.get("login")
+        if reviewer.get("type") != "User" or not isinstance(reviewer_id, int) or not isinstance(reviewer_login, str):
+            fail("normal promotion environment reviewer must be a named human operator")
+        observed_reviewers[reviewer_id] = reviewer_login
+    if observed_reviewers != NORMAL_PROMOTION_APPROVERS:
+        fail("normal promotion environment reviewers must match the exact small-team roster")
 
 
 def classify(
