@@ -862,6 +862,7 @@ class PreparedReleaseMergeVerifierTests(unittest.TestCase):
             cwd=root,
             text=True,
             capture_output=True,
+            check=False,
         )
 
     def test_accepts_exact_two_parent_bot_release_merge(self) -> None:
