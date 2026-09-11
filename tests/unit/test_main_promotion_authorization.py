@@ -23,6 +23,13 @@ def load_module():
 
 
 AUTHORIZATION = load_module()
+EXPECTED_NORMAL_PROMOTION_APPROVERS = {
+    18228613: "svenuthe",
+    76040632: "litroc",
+    114433629: "Deisling",
+    195916407: "dfleischer-work",
+    247824904: "litdeg",
+}
 
 
 class NormalPromotionApprovalTests(unittest.TestCase):
@@ -37,7 +44,7 @@ class NormalPromotionApprovalTests(unittest.TestCase):
     def environment(self, *, prevent_self_review: bool = False, reviewers: list[dict] | None = None):
         roster = reviewers if reviewers is not None else [
             {"type": "User", "reviewer": {"id": user_id, "login": login}}
-            for user_id, login in AUTHORIZATION.NORMAL_PROMOTION_APPROVERS.items()
+            for user_id, login in EXPECTED_NORMAL_PROMOTION_APPROVERS.items()
         ]
         return {
             "name": AUTHORIZATION.NORMAL_ENVIRONMENT,
@@ -48,6 +55,7 @@ class NormalPromotionApprovalTests(unittest.TestCase):
         }
 
     def test_accepts_the_exact_small_team_self_approval_roster(self):
+        self.assertEqual(AUTHORIZATION.NORMAL_PROMOTION_APPROVERS, EXPECTED_NORMAL_PROMOTION_APPROVERS)
         AUTHORIZATION.validate_environment(self.environment(), self.authorization())
 
     def test_rejects_a_self_review_prohibition(self):
@@ -57,7 +65,7 @@ class NormalPromotionApprovalTests(unittest.TestCase):
     def test_rejects_a_changed_reviewer_roster(self):
         reviewers = [
             {"type": "User", "reviewer": {"id": user_id, "login": login}}
-            for user_id, login in AUTHORIZATION.NORMAL_PROMOTION_APPROVERS.items()
+            for user_id, login in EXPECTED_NORMAL_PROMOTION_APPROVERS.items()
         ]
         reviewers[-1] = {"type": "User", "reviewer": {"id": 1, "login": "unexpected"}}
         with self.assertRaisesRegex(AUTHORIZATION.AuthorizationError, "exact small-team roster"):

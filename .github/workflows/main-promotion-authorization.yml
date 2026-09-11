@@ -81,10 +81,15 @@ jobs:
               and (.can_admins_bypass == false)
               and ([.protection_rules[]? | select(.type == "wait_timer")] | length == 0)
               and ([.protection_rules[]? | select(.type == "required_reviewers")] | length == 1)
-              and ([.protection_rules[]? | select(.type == "required_reviewers")][0].prevent_self_review == true)
-              and ([.protection_rules[]? | select(.type == "required_reviewers")][0].reviewers | length == 1)
-              and ([.protection_rules[]? | select(.type == "required_reviewers")][0].reviewers[0].type == "BusinessTeam")
-              and ([.protection_rules[]? | select(.type == "required_reviewers")][0].reviewers[0].reviewer.id == 15545798)
+              and ([.protection_rules[]? | select(.type == "required_reviewers")][0].prevent_self_review == false)
+              and ([.protection_rules[]? | select(.type == "required_reviewers")][0].reviewers
+                   | map({type, id: .reviewer.id, login: .reviewer.login}) | sort_by(.id) == [
+                     {"type": "User", "id": 18228613, "login": "svenuthe"},
+                     {"type": "User", "id": 76040632, "login": "litroc"},
+                     {"type": "User", "id": 114433629, "login": "Deisling"},
+                     {"type": "User", "id": 195916407, "login": "dfleischer-work"},
+                     {"type": "User", "id": 247824904, "login": "litdeg"}
+                   ])
             ' live-environment.json >/dev/null
             {
               echo 'bootstrap=true'
@@ -214,10 +219,15 @@ jobs:
               and (.can_admins_bypass == false)
               and ([.protection_rules[]? | select(.type == "wait_timer")] | length == 0)
               and ([.protection_rules[]? | select(.type == "required_reviewers")] | length == 1)
-              and ([.protection_rules[]? | select(.type == "required_reviewers")][0].prevent_self_review == true)
-              and ([.protection_rules[]? | select(.type == "required_reviewers")][0].reviewers | length == 1)
-              and ([.protection_rules[]? | select(.type == "required_reviewers")][0].reviewers[0].type == "BusinessTeam")
-              and ([.protection_rules[]? | select(.type == "required_reviewers")][0].reviewers[0].reviewer.id == 15545798)
+              and ([.protection_rules[]? | select(.type == "required_reviewers")][0].prevent_self_review == false)
+              and ([.protection_rules[]? | select(.type == "required_reviewers")][0].reviewers
+                   | map({type, id: .reviewer.id, login: .reviewer.login}) | sort_by(.id) == [
+                     {"type": "User", "id": 18228613, "login": "svenuthe"},
+                     {"type": "User", "id": 76040632, "login": "litroc"},
+                     {"type": "User", "id": 114433629, "login": "Deisling"},
+                     {"type": "User", "id": 195916407, "login": "dfleischer-work"},
+                     {"type": "User", "id": 247824904, "login": "litdeg"}
+                   ])
             ' live-environment.json >/dev/null
           else
             test "$BOOTSTRAP" = false

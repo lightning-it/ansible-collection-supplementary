@@ -87,6 +87,28 @@ class MainPromotionMergeGateTests(unittest.TestCase):
                 self.assertIn("and (.head.repo.full_name == $repo)", command)
                 self.assertIn('"${policy_root_args[@]}"', command)
 
+    def test_workflow_enforces_the_exact_small_team_environment_contract(self) -> None:
+        jobs = load_workflow()["jobs"]
+        expected_literals = (
+            'prevent_self_review == false',
+            '"type": "User", "id": 18228613, "login": "svenuthe"',
+            '"type": "User", "id": 76040632, "login": "litroc"',
+            '"type": "User", "id": 114433629, "login": "Deisling"',
+            '"type": "User", "id": 195916407, "login": "dfleischer-work"',
+            '"type": "User", "id": 247824904, "login": "litdeg"',
+        )
+        for job_name, step_name in (
+            ("classify", "Classify exact live pull request"),
+            ("authorize", "Revalidate exact live state after authorization"),
+        ):
+            with self.subTest(job=job_name):
+                command = next(
+                    step["run"] for step in jobs[job_name]["steps"] if step["name"] == step_name
+                )
+                for expected in expected_literals:
+                    self.assertIn(expected, command)
+                self.assertNotIn('type == "BusinessTeam"', command)
+
     def test_final_gate_succeeds_only_when_both_upstreams_succeed(self) -> None:
         command = FINAL_STEP["run"]
         bash = shutil.which("bash")
