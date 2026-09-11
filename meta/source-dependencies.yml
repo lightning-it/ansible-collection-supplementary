@@ -88,7 +88,7 @@ container_images:
   - reference: "docker.io/valkey/valkey:9.1-alpine@sha256:7bf043f6ff25ea50b557e2f6da8f76fce62775d766d943f076d1e66838099315"
     locations:
       - "roles/netbox_deploy/defaults/main.yml"
-  - reference: "quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6"
+  - reference: "quay.io/keycloak/keycloak:26.7.3@sha256:ff4257d0d64efbe99ed1ddfaf07765cc3c36dc7518bf8324d41961327f441c54"
     locations:
       - "manifests/identity-stack.pod.yaml"
       - "roles/keycloak_deploy/defaults/main.yml"
