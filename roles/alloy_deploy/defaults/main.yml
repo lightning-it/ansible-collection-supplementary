@@ -2,7 +2,7 @@
 alloy_deploy_pod_name: "alloy"
 alloy_deploy_container_name: "alloy"
 alloy_deploy_image: >-
-  docker.io/grafana/alloy:v1.19.0@sha256:c958aef7294bc40c67caadb2bcecc93b95ab7961ff8afae3abee170d77426193
+  docker.io/grafana/alloy:v1.19.2@sha256:b8ec653c44235fbe910879145dac3597d66b0aaecf60bcbbe82580767771a839
 alloy_deploy_pod_manifest_path: "/etc/podman/pods/alloy.yml"
 
 alloy_deploy_config_dir: "/srv/alloy/config"
