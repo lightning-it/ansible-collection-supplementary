@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import types
 import unittest
@@ -785,35 +786,53 @@ class PreparedReleaseMergeVerifierTests(unittest.TestCase):
         *,
         octopus: bool = False,
         preparation_committer: tuple[str, str] | None = None,
-        receipt_version: str = "3.3.0",
+        receipt_version: str = "3.2.3",
     ) -> None:
         self.git(root, "init", "--initial-branch=main")
         self.git(root, "config", "user.name", self.bot_name)
         self.git(root, "config", "user.email", self.bot_email)
-        (root / "changelogs").mkdir()
-        (root / "galaxy.yml").write_text("version: 3.3.0\n", encoding="utf-8")
-        (root / "changelogs" / "release-preparation.json").write_text("{}\n", encoding="utf-8")
+        (root / "changelogs" / "fragments").mkdir(parents=True)
+        (root / "galaxy.yml").write_text("version: 3.2.2\n", encoding="utf-8")
+        (root / "changelogs" / "fragments" / "fixture.yml").write_text("bugfixes:\n  - fixture\n", encoding="utf-8")
         self.git(root, "add", ".")
         self.git(root, "commit", "--quiet", "-m", "base", environment=self.identity("base", "base@example.test"))
         base = self.git(root, "rev-parse", "HEAD")
 
         self.git(root, "checkout", "--quiet", "-b", "release")
-        (root / "changelogs" / "release-preparation.json").write_text(
-            json.dumps(
-                {
-                    "base_sha": base,
-                    "next_version": receipt_version,
-                    "preparer": {"login": self.bot_name},
-                }
-            )
-            + "\n",
-            encoding="utf-8",
+        subprocess.run(  # noqa: S603
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "release-version.py"),
+                "--requested-version",
+                receipt_version,
+                "--write-preparation-receipt",
+                "changelogs/release-preparation.json",
+                "--repository",
+                "lightning-it/ansible-collection-supplementary",
+                "--repository-id",
+                "1103407173",
+                "--base-sha",
+                base,
+                "--workflow-run-id",
+                "1",
+                "--workflow-attempt",
+                "1",
+                "--workflow-ref",
+                "lightning-it/ansible-collection-supplementary/.github/workflows/release-prepare.yml@refs/heads/main",
+                "--workflow-event",
+                "push",
+                "--workflow-actor",
+                self.bot_name,
+            ],
+            cwd=root,
+            check=True,
         )
-        self.git(root, "add", "changelogs/release-preparation.json")
+        (root / "galaxy.yml").write_text(f"version: {receipt_version}\n", encoding="utf-8")
+        self.git(root, "add", "galaxy.yml", "changelogs/release-preparation.json")
         preparer = self.identity(self.bot_name, self.bot_email)
         if preparation_committer is not None:
             preparer["GIT_COMMITTER_NAME"], preparer["GIT_COMMITTER_EMAIL"] = preparation_committer
-        self.git(root, "commit", "--quiet", "-m", "chore(release): prepare v3.3.0", environment=preparer)
+        self.git(root, "commit", "--quiet", "-m", f"chore(release): prepare v{receipt_version}", environment=preparer)
 
         self.git(root, "checkout", "--quiet", "main")
         branches = ["release"]
@@ -829,7 +848,7 @@ class PreparedReleaseMergeVerifierTests(unittest.TestCase):
             "merge",
             "--no-ff",
             "-m",
-            "Release v3.3.0",
+            "custom protected release merge",
             *branches,
             environment=self.identity(self.bot_name, self.bot_email),
         )
@@ -851,7 +870,7 @@ class PreparedReleaseMergeVerifierTests(unittest.TestCase):
             self.create_release_merge(root)
             result = self.verify(root)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "3.3.0\n")
+        self.assertEqual(result.stdout, "3.2.3\n")
 
     def test_rejects_octopus_release_merge(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -870,7 +889,8 @@ class PreparedReleaseMergeVerifierTests(unittest.TestCase):
     def test_rejects_malformed_preparation_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            self.create_release_merge(root, receipt_version="3.3.1")
+            self.create_release_merge(root)
+            (root / "changelogs" / "release-preparation.json").write_text("{not valid json}\n", encoding="utf-8")
             result = self.verify(root)
         self.assertNotEqual(result.returncode, 0)
 

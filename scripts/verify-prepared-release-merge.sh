@@ -6,8 +6,11 @@ set -euo pipefail
 # A human-controlled merge title is intentionally insufficient evidence.
 
 readonly RELEASE_BOT_EMAIL='307565056+lightning-it-release-automation[bot]@users.noreply.github.com'
-readonly RELEASE_BOT_LOGIN='lightning-it-release-automation[bot]'
 readonly RELEASE_BOT_NAME='lightning-it-release-automation[bot]'
+readonly RELEASE_REPOSITORY='lightning-it/ansible-collection-supplementary'
+readonly RELEASE_REPOSITORY_ID='1103407173'
+HELPER_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly HELPER_ROOT
 
 fail_closed() {
   exit 1
@@ -31,27 +34,27 @@ if [ ! -f galaxy.yml ] || [ ! -f changelogs/release-preparation.json ]; then
 fi
 
 release_version="$(awk '/^version:/ { print $2; exit }' galaxy.yml)"
-[[ "${release_version:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail_closed
+[[ "${release_version:-}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || fail_closed
 
 parent_version="$(git show "${release_parent}:galaxy.yml" 2>/dev/null | awk '/^version:/ { print $2; exit }' || true)"
 parent_subject="$(git show -s --format=%s "${release_parent}")"
 parent_author="$(git show -s --format='%an <%ae>' "${release_parent}")"
 parent_committer="$(git show -s --format='%cn <%ce>' "${release_parent}")"
 parent_parent="$(git show -s --format=%P "${release_parent}")"
-merge_subject="$(git show -s --format=%s HEAD)"
-prepared_base="$(jq -r '.base_sha // empty' changelogs/release-preparation.json)"
-prepared_version="$(jq -r '.next_version // empty' changelogs/release-preparation.json)"
-prepared_by="$(jq -r '.preparer.login // empty' changelogs/release-preparation.json)"
 
 [ "${parent_parent}" = "${release_base}" ] || fail_closed
-[ "${merge_subject}" = "Release v${release_version}" ] || fail_closed
 [ "${parent_subject}" = "chore(release): prepare v${release_version}" ] || fail_closed
 [ "${parent_author}" = "${RELEASE_BOT_NAME} <${RELEASE_BOT_EMAIL}>" ] || fail_closed
 [ "${parent_committer}" = "${RELEASE_BOT_NAME} <${RELEASE_BOT_EMAIL}>" ] || fail_closed
-[ "${prepared_by}" = "${RELEASE_BOT_LOGIN}" ] || fail_closed
-[ "${prepared_base}" = "${release_base}" ] || fail_closed
-[ "${prepared_version}" = "${release_version}" ] || fail_closed
 [ "${parent_version}" = "${release_version}" ] || fail_closed
 git diff --quiet "${release_base}" "${release_parent}" -- galaxy.yml changelogs/release-preparation.json && fail_closed
+git diff --quiet "${release_parent}" HEAD -- . || fail_closed
+python3 "${HELPER_ROOT}/scripts/release-version.py" \
+  --verify-preparation-receipt changelogs/release-preparation.json \
+  --repository "${RELEASE_REPOSITORY}" \
+  --repository-id "${RELEASE_REPOSITORY_ID}" \
+  --base-sha "${release_base}" \
+  --expected-version "${release_version}" \
+  --root . >/dev/null || fail_closed
 
 printf '%s\n' "${release_version}"
