@@ -7,7 +7,6 @@ import sys
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "main-promotion-authorization.py"
 sys.path.insert(0, str(SCRIPT.parent))
@@ -23,13 +22,7 @@ def load_module():
 
 
 AUTHORIZATION = load_module()
-EXPECTED_NORMAL_PROMOTION_APPROVERS = {
-    18228613: "svenuthe",
-    76040632: "litroc",
-    114433629: "Deisling",
-    195916407: "dfleischer-work",
-    247824904: "litdeg",
-}
+EXPECTED_RELEASE_TEAM_ID = 15545798
 
 
 class NormalPromotionApprovalTests(unittest.TestCase):
@@ -42,10 +35,11 @@ class NormalPromotionApprovalTests(unittest.TestCase):
         )
 
     def environment(self, *, prevent_self_review: bool = False, reviewers: list[dict] | None = None):
-        roster = reviewers if reviewers is not None else [
-            {"type": "User", "reviewer": {"id": user_id, "login": login}}
-            for user_id, login in EXPECTED_NORMAL_PROMOTION_APPROVERS.items()
-        ]
+        roster = (
+            reviewers
+            if reviewers is not None
+            else [{"type": "BusinessTeam", "reviewer": {"id": EXPECTED_RELEASE_TEAM_ID}}]
+        )
         return {
             "name": AUTHORIZATION.NORMAL_ENVIRONMENT,
             "can_admins_bypass": False,
@@ -54,21 +48,17 @@ class NormalPromotionApprovalTests(unittest.TestCase):
             ],
         }
 
-    def test_accepts_the_exact_small_team_self_approval_roster(self):
-        self.assertEqual(AUTHORIZATION.NORMAL_PROMOTION_APPROVERS, EXPECTED_NORMAL_PROMOTION_APPROVERS)
+    def test_accepts_the_release_team_small_team_self_approval_contract(self):
+        self.assertEqual(AUTHORIZATION.RELEASE_TEAM_ID, EXPECTED_RELEASE_TEAM_ID)
         AUTHORIZATION.validate_environment(self.environment(), self.authorization())
 
     def test_rejects_a_self_review_prohibition(self):
         with self.assertRaisesRegex(AUTHORIZATION.AuthorizationError, "allow small-team self-review"):
             AUTHORIZATION.validate_environment(self.environment(prevent_self_review=True), self.authorization())
 
-    def test_rejects_a_changed_reviewer_roster(self):
-        reviewers = [
-            {"type": "User", "reviewer": {"id": user_id, "login": login}}
-            for user_id, login in EXPECTED_NORMAL_PROMOTION_APPROVERS.items()
-        ]
-        reviewers[-1] = {"type": "User", "reviewer": {"id": 1, "login": "unexpected"}}
-        with self.assertRaisesRegex(AUTHORIZATION.AuthorizationError, "exact small-team roster"):
+    def test_rejects_a_different_release_team(self):
+        reviewers = [{"type": "BusinessTeam", "reviewer": {"id": 1}}]
+        with self.assertRaisesRegex(AUTHORIZATION.AuthorizationError, "release team"):
             AUTHORIZATION.validate_environment(self.environment(reviewers=reviewers), self.authorization())
 
 

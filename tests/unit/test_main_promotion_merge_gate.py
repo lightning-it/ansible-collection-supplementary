@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -87,27 +88,63 @@ class MainPromotionMergeGateTests(unittest.TestCase):
                 self.assertIn("and (.head.repo.full_name == $repo)", command)
                 self.assertIn('"${policy_root_args[@]}"', command)
 
-    def test_workflow_enforces_the_exact_small_team_environment_contract(self) -> None:
+    def test_workflow_enforces_the_exact_release_team_environment_contract(self) -> None:
         jobs = load_workflow()["jobs"]
-        expected_literals = (
-            'prevent_self_review == false',
-            '"type": "User", "id": 18228613, "login": "svenuthe"',
-            '"type": "User", "id": 76040632, "login": "litroc"',
-            '"type": "User", "id": 114433629, "login": "Deisling"',
-            '"type": "User", "id": 195916407, "login": "dfleischer-work"',
-            '"type": "User", "id": 247824904, "login": "litdeg"',
+        jq = shutil.which("jq")
+        if jq is None:
+            self.fail("jq is required for the environment-contract regression test")
+        payloads = (
+            (self.normal_environment(), True),
+            (self.normal_environment(prevent_self_review=True), False),
+            (self.normal_environment(team_id=1), False),
+            (self.normal_environment(reviewer_type="User"), False),
         )
         for job_name, step_name in (
             ("classify", "Classify exact live pull request"),
             ("authorize", "Revalidate exact live state after authorization"),
         ):
             with self.subTest(job=job_name):
-                command = next(
-                    step["run"] for step in jobs[job_name]["steps"] if step["name"] == step_name
-                )
-                for expected in expected_literals:
-                    self.assertIn(expected, command)
-                self.assertNotIn('type == "BusinessTeam"', command)
+                command = next(step["run"] for step in jobs[job_name]["steps"] if step["name"] == step_name)
+                predicate = self.jq_environment_predicate(command)
+                for payload, expected_success in payloads:
+                    result = subprocess.run(  # noqa: S603 -- fixed jq binary and workflow-owned predicate.
+                        [jq, "-e", predicate],
+                        check=False,
+                        input=json.dumps(payload),
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(result.returncode == 0, expected_success, result.stderr)
+
+    @staticmethod
+    def normal_environment(
+        *,
+        prevent_self_review: bool = False,
+        team_id: int = 15545798,
+        reviewer_type: str = "BusinessTeam",
+    ) -> dict[str, Any]:
+        return {
+            "name": "normal-release-promotion-approval",
+            "can_admins_bypass": False,
+            "protection_rules": [
+                {
+                    "type": "required_reviewers",
+                    "prevent_self_review": prevent_self_review,
+                    "reviewers": [{"type": reviewer_type, "reviewer": {"id": team_id}}],
+                }
+            ],
+        }
+
+    @staticmethod
+    def jq_environment_predicate(command: str) -> str:
+        environment_name = '(.name == "normal-release-promotion-approval")'
+        condition_start = command.index(environment_name)
+        predicate_start = command.rfind("jq -e '\n", 0, condition_start)
+        if predicate_start < 0:
+            raise AssertionError("workflow is missing the normal-environment jq predicate")
+        predicate_start += len("jq -e '\n")
+        predicate_end = command.index("' live-environment.json >/dev/null", condition_start)
+        return command[predicate_start:predicate_end]
 
     def test_final_gate_succeeds_only_when_both_upstreams_succeed(self) -> None:
         command = FINAL_STEP["run"]
