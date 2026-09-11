@@ -1,0 +1,8 @@
+---
+bugfixes:
+  - >-
+    vault_config - forward strict Terragrunt import handling through the
+    temporary runtime-variable boundary so failed state adoption stops apply.
+  - >-
+    vault_config - forward explicit state-only module upgrade migrations to the
+    Terragrunt runner while keeping target-side state as the source of truth.

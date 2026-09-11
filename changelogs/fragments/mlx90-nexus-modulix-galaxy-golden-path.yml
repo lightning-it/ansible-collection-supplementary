@@ -1,0 +1,11 @@
+---
+minor_changes:
+  - >-
+    Route evidence-bound MLX-90 Security releases through an exact-byte native
+    Nexus Galaxy v3 stage and signed ModuLix Heavy/Application validation
+    receipt before publishing the unchanged candidate to Ansible Galaxy.
+security_fixes:
+  - >-
+    Remove the Galaxy-first transition no-op and fail closed on missing Nexus
+    configuration, foreign GitHub App/run identity, ambiguous validation runs,
+    unsigned or substituted receipts, and Nexus or Galaxy readback mismatch.

@@ -1,0 +1,6 @@
+---
+security_fixes:
+  - >-
+    Allow the Release Automation App to refresh the one-time recovery receipt
+    branch onto a newer protected-main base only after revalidating the prior
+    App commit, its complete receipt contract, and an exact force-with-lease.

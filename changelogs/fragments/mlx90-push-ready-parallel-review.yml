@@ -1,0 +1,7 @@
+---
+minor_changes:
+  - >-
+    mlx90 - Run required history-free Codex and Copilot push-ready reviews in
+    parallel, bind their evidence to distinct workspaces and identical inputs,
+    and reject review payloads at the exclusive size boundary before expensive
+    checks.

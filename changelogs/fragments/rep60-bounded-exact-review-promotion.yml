@@ -1,0 +1,24 @@
+---
+minor_changes:
+  - >-
+    Split the accumulated REP-60 main promotion so every protected review stays
+    below the immutable 200000-byte input ceiling without weakening the limit.
+    The first stage retains the bounded-diff materializer, remediation guards,
+    prompt, verifier tests, and recoverable check reservation while deferring
+    only documentation and changelog metadata to the second promotion.
+  - >-
+    Run local unmanaged Molecule scenarios in the pinned Devtools container
+    without network or a mounted Docker socket, and fail closed when a scenario
+    requires a managed runtime that belongs to the protected pipeline. Bind
+    every scenario's Molecule ephemeral directory explicitly to container
+    tmpfs rather than the read-only workspace.
+  - >-
+    Bind the human Current-Revision producer's protected-verifier handoff to
+    the exact develop or main base ref, base SHA, head SHA, PR number, and
+    producer run so the helper receives its complete fail-closed input contract.
+  - >-
+    Give optional protected-handoff inputs explicit empty defaults and inventory
+    every declared Galaxy dependency before an offline local gate runs. Keep the
+    default artifacts-only scenario explicitly dependency-free, while any other
+    selected Molecule scenario fails immediately when the pinned image lacks a
+    declared dependency.

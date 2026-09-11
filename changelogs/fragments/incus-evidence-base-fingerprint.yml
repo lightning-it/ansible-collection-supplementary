@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Stop emitting release dependency inventories when a late Incus cleanup
+    snapshot can no longer prove the immutable base-image fingerprint.

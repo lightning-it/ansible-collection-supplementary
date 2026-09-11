@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Bind Copilot review instructions to the exact repository agent contract so
+    history-free review fails closed on instruction drift.

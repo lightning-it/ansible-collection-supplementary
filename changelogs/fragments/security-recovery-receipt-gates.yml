@@ -1,0 +1,7 @@
+---
+security_fixes:
+  - >-
+    Recognize the one-time App-only Security recovery receipt in collection,
+    changelog, and protected-main promotion gates only after revalidating its
+    exact historical candidate topology, canonical diff, paths, and immutable
+    metadata and changelog bindings.

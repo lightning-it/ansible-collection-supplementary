@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Bind the one-time Security recovery continuation to the exact protected
+    main and develop state after the Incus runtime-evidence correction.

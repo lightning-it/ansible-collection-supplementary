@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Initialize Python for the trusted release-bot Copilot review without an
+    unavailable pre-checkout dependency cache, so protected release and
+    promotion pull requests can complete their exact-head review gate.

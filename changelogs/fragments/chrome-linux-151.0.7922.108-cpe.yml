@@ -1,0 +1,6 @@
+---
+security_fixes:
+  - >-
+    Bind the observed Chrome for Linux 151.0.7922.108 runtime to the reviewed
+    paired 151.0.7922.109 platform-neutral scanner CPE while preserving the
+    observed package URL, binary digest, and source evidence.

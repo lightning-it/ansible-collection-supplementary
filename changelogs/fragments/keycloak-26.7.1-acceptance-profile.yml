@@ -1,0 +1,7 @@
+---
+security_fixes:
+  - >-
+    Pre-register the fail-closed, immutable acceptance profile and offline
+    verifier for the Keycloak 26.7.1 CVE remediation before any release
+    candidate can claim that profile, and allow only the exact canonical
+    source-dependency inventory path required by an image Security update.

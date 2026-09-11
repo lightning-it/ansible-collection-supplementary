@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Accept an existing App-authored Security PR's immutable GitHub base snapshot only when it is a verified ancestor
+    of the exact protected main revision, allowing the recovery receipt branch to refresh without weakening its
+    current-head, author, topology, allowlist, or native auto-merge checks.

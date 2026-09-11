@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    Make main-to-develop ancestry backmerges permanently reviewable under the
+    MLX-90 section 7.2 empty-input rule by adding a deterministic protected
+    main binding as the merge commit's only develop-tree change.

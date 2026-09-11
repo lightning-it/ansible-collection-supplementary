@@ -1,0 +1,17 @@
+---
+minor_changes:
+  - >-
+    Add the bounded MLX-90 push-ready foundation. It validates the exact
+    current-head patch, rejects unsafe review inputs, and records only
+    non-secret integrity evidence before a normal protected-branch push. Its
+    temporary working directory also keeps nested container-wrapper probes
+    independent from linked-worktree Git metadata. The initial foundation uses
+    a review-only, all-or-nothing trust-root bootstrap; validate and push-ready
+    evidence become available only after the protected foundation merge.
+bugfixes:
+  - >-
+    Reject non-UTF-8 files in the sanitized review workspace instead of
+    replacing undecodable bytes before secret scanning.
+  - >-
+    Bind every repository-owned executable used by the repository-quality
+    profile to the immutable check-policy trust root.

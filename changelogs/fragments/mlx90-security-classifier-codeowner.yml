@@ -1,0 +1,6 @@
+---
+security_fixes:
+  - >-
+    Make the MLX-90 Security-release classifier an explicit Security &
+    Compliance CODEOWNERS trust root so its reviewed governance digest cannot
+    be changed without the protected ownership path.

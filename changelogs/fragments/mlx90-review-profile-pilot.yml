@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    Add base-policy-bound standard and trust-root review profiles, exact-head
+    finalization, parallel dual review, and a single bounded remediation round.

@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Construct synthetic JWT test values at runtime so the history-free MLX-90
+    review bootstrap does not classify committed test literals as credentials.
