@@ -282,7 +282,7 @@ def wait_for_completed_producer(
         status = producer.get("status")
         if status == "completed":
             return producer
-        if status not in NONTERMINAL_RUN_STATUSES:
+        if not isinstance(status, str) or status not in NONTERMINAL_RUN_STATUSES:
             raise VerificationError(f"verifier run status is invalid: {status!r}")
         if attempt < attempts:
             sleep(2)

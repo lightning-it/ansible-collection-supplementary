@@ -72,6 +72,20 @@ class ProducerRunConvergenceTests(unittest.TestCase):
                 sleep=lambda _: None,
             )
 
+    def test_rejects_a_malformed_nonterminal_status(self) -> None:
+        client = SequencedClient([{"id": 42, "status": []}])
+
+        with self.assertRaisesRegex(
+            MODULE.VerificationError,
+            r"verifier run status is invalid: \[\]",
+        ):
+            MODULE.wait_for_completed_producer(
+                client,
+                42,
+                attempts=2,
+                sleep=lambda _: None,
+            )
+
     def test_rejects_run_identity_drift_while_waiting(self) -> None:
         client = SequencedClient([{"id": 43, "status": "in_progress"}])
 
