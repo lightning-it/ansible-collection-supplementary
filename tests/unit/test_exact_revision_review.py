@@ -711,6 +711,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("verify-prepared-release-merge.sh", changelog_policy)
         self.assertIn("release-preparation.json", release_merge_verifier)
         self.assertIn("lightning-it-release-automation[bot]", release_merge_verifier)
+        self.assertIn('[ -L galaxy.yml ] || [ -L changelogs/release-preparation.json ]', release_merge_verifier)
         self.assertIn('"${parent_parent}" = "${release_base}"', release_merge_verifier)
 
         evidence = json.loads((ROOT / ".lit/main-ancestry.json").read_text(encoding="utf-8"))

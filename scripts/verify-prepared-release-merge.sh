@@ -21,15 +21,16 @@ read -r release_base release_parent <<<"${merge_parents[0]}"
 if [ -z "${release_base:-}" ] || [ -z "${release_parent:-}" ]; then
   fail_closed
 fi
+if [ -L galaxy.yml ] || [ -L changelogs/release-preparation.json ]; then
+  fail_closed
+fi
 if [ ! -f galaxy.yml ] || [ ! -f changelogs/release-preparation.json ]; then
   fail_closed
 fi
 
-release_version="$(sed -nE 's/^version:[[:space:]]*([^[:space:]]+)[[:space:]]*$/\\1/p' galaxy.yml | head -n 1)"
 release_version="$(awk '/^version:/ { print $2; exit }' galaxy.yml)"
 [[ "${release_version:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail_closed
 
-parent_version="$(git show "${release_parent}:galaxy.yml" 2>/dev/null | sed -nE 's/^version:[[:space:]]*([^[:space:]]+)[[:space:]]*$/\\1/p' | head -n 1 || true)"
 parent_version="$(git show "${release_parent}:galaxy.yml" 2>/dev/null | awk '/^version:/ { print $2; exit }' || true)"
 parent_subject="$(git show -s --format=%s "${release_parent}")"
 parent_email="$(git show -s --format=%ae "${release_parent}")"
