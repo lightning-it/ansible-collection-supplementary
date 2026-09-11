@@ -706,6 +706,13 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("git diff --quiet origin/develop HEAD", workflow)
         self.assertIn('non_user_visible_re+="\\\\.lit/main-ancestry\\\\.json$|"', changelog_policy)
 
+        release_merge_verifier = (ROOT / "scripts/verify-prepared-release-merge.sh").read_text(encoding="utf-8")
+        self.assertIn("Verified prepared release merge provenance", changelog_policy)
+        self.assertIn("verify-prepared-release-merge.sh", changelog_policy)
+        self.assertIn("release-preparation.json", release_merge_verifier)
+        self.assertIn("lightning-it-release-automation[bot]", release_merge_verifier)
+        self.assertIn('"${parent_parent}" = "${release_base}"', release_merge_verifier)
+
         evidence = json.loads((ROOT / ".lit/main-ancestry.json").read_text(encoding="utf-8"))
         self.assertEqual(evidence["schema_version"], 1)
         self.assertEqual(evidence["repository"], "lightning-it/ansible-collection-supplementary")

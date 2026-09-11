@@ -69,6 +69,16 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
     if [[ "$merge_subject" =~ ^Merge\ pull\ request\ \#[0-9]+\ from\ [^/]+/(release/v[^[:space:]]+|backsync/release-[^[:space:]]+)$ ]]; then
       head_ref="${BASH_REMATCH[1]}"
     fi
+
+    # A protected release merge may use its release title rather than the GitHub
+    # default merge subject. The helper verifies the exact two-parent,
+    # automation-authored preparation provenance; the title alone never passes.
+    if [[ "$head_ref" == HEAD ]]; then
+      if prepared_release_version="$(bash scripts/verify-prepared-release-merge.sh)"; then
+        head_ref="release/v${prepared_release_version}"
+        echo "Verified prepared release merge provenance for v${prepared_release_version}."
+      fi
+    fi
   fi
 
   if [[ "$head_ref" == release/v* || "$head_ref" == backsync/release-* ]]; then
