@@ -547,18 +547,44 @@ jobs:
   tiny:
     name: Collection / Tiny
     if: always()
-    needs: [quality-matrix, tiny-cells]
+    needs: [quality-matrix, tiny-cells, security-classification]
     runs-on: ubuntu-latest
     steps:
       - name: Require every Tiny matrix cell
         env:
           MATRIX_RESULT: ${{ needs.quality-matrix.result }}
           PROFILE_RESULT: ${{ needs.tiny-cells.result }}
-          REQUIRED: ${{ needs.quality-matrix.outputs.tiny_required }}
+          # Keep this condition equivalent to tiny-cells.if. A skipped Tiny
+          # matrix is valid only when the protected runner boundary excludes
+          # this event; every eligible required Tiny profile must be green.
+          TINY_EXECUTION_EXPECTED: >-
+            ${{ needs.quality-matrix.outputs.tiny_required == 'true' &&
+            ((github.event_name == 'pull_request' &&
+             github.event.pull_request.head.repo.full_name == github.repository &&
+             (github.event.pull_request.base.ref == 'develop' ||
+              (github.event.pull_request.base.ref == 'main' &&
+               (github.event.pull_request.head.ref == 'develop' ||
+                startsWith(github.event.pull_request.head.ref, 'release/v') ||
+                startsWith(github.event.pull_request.head.ref,
+                  'release/rep60-supplementary-protected-checkpoint-1-v5-successor-') ||
+                startsWith(github.event.pull_request.head.ref, 'security-release/'))))) ||
+            (github.event_name == 'push' &&
+             (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) ||
+            (github.event_name == 'workflow_dispatch' &&
+             ((inputs.execution_mode == 'manual-main' && github.ref == 'refs/heads/main') ||
+              (inputs.execution_mode == 'nightly-develop' && github.ref == 'refs/heads/develop')))) &&
+            (needs.security-classification.outputs.security-release == 'false' ||
+             (needs.security-classification.outputs.security-release == 'true' &&
+              ((github.event_name == 'pull_request' &&
+                github.event.pull_request.user.login ==
+                  'lightning-it-release-automation[bot]' &&
+                github.event.pull_request.head.repo.full_name == github.repository) ||
+               (github.event_name != 'pull_request' &&
+                github.actor == 'lightning-it-release-automation[bot]')))) }}
         run: |
           set -euo pipefail
           test "$MATRIX_RESULT" = success
-          if [ "$REQUIRED" = true ]; then
+          if [ "$TINY_EXECUTION_EXPECTED" = true ]; then
             test "$PROFILE_RESULT" = success
           else
             test "$PROFILE_RESULT" = skipped
