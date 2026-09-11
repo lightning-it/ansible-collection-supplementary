@@ -1,6 +1,6 @@
 {
-  "develop_parent_sha": "31b32fc85ffcc687f5348d28df0275fc68bb63b5",
-  "main_sha": "37bfc8ae670e5cc32a299bab2bf8bf071188f921",
+  "develop_parent_sha": "1c46f50e762a2018d568ee71437467441bec0669",
+  "main_sha": "2710c06c4482d4d626b84237db865bbc6504897f",
   "purpose": "Bind the reviewed main ancestry backmerge.",
   "repository": "lightning-it/ansible-collection-supplementary",
   "schema_version": 1
