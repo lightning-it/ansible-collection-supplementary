@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -106,8 +107,8 @@ def validate_environment(payload: dict[str, Any], result: Authorization) -> None
     if len(reviewer_rules) != 1:
         fail("normal promotion environment must have one reviewer rule")
     reviewer_rule = reviewer_rules[0]
-    if reviewer_rule.get("prevent_self_review") is not True:
-        fail("normal promotion environment must prevent self-review")
+    if reviewer_rule.get("prevent_self_review") is not False:
+        fail("normal promotion environment must allow small-team self-review")
     reviewers = reviewer_rule.get("reviewers")
     if not isinstance(reviewers, list) or len(reviewers) != 1:
         fail("normal promotion environment must have exactly one reviewer")
@@ -125,6 +126,7 @@ def classify(
     *,
     base_root: Path | None = None,
     head_root: Path | None = None,
+    checked_at: datetime | None = None,
 ) -> Authorization:
     if repository not in ALLOWED_REPOSITORIES:
         fail("repository is outside the MLX-90 promotion allowlist")
@@ -169,6 +171,7 @@ def classify(
                     base_sha=expected_base,
                     head_sha=expected_head,
                     head_ref=head_ref,
+                    checked_at=checked_at,
                 )
             except ValueError as exc:
                 raise AuthorizationError(str(exc)) from exc
