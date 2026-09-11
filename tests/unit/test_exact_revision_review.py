@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import types
@@ -711,7 +712,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("verify-prepared-release-merge.sh", changelog_policy)
         self.assertIn("release-preparation.json", release_merge_verifier)
         self.assertIn("lightning-it-release-automation[bot]", release_merge_verifier)
-        self.assertIn('[ -L galaxy.yml ] || [ -L changelogs/release-preparation.json ]', release_merge_verifier)
+        self.assertIn("[ -L galaxy.yml ] || [ -L changelogs/release-preparation.json ]", release_merge_verifier)
         self.assertIn('"${parent_parent}" = "${release_base}"', release_merge_verifier)
 
         evidence = json.loads((ROOT / ".lit/main-ancestry.json").read_text(encoding="utf-8"))
@@ -756,14 +757,13 @@ class PreparedReleaseMergeVerifierTests(unittest.TestCase):
     bot_email = "307565056+lightning-it-release-automation[bot]@users.noreply.github.com"
 
     def git(self, root: Path, *arguments: str, environment: dict[str, str] | None = None) -> str:
-        completed = subprocess.run(
-            ["git", *arguments],
+        completed = subprocess.run(  # noqa: S603
+            ["/usr/bin/git", *arguments],
             cwd=root,
             env=environment,
             check=True,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         )
         return completed.stdout.strip()
 
@@ -835,12 +835,14 @@ class PreparedReleaseMergeVerifierTests(unittest.TestCase):
         )
 
     def verify(self, root: Path) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            ["bash", str(self.helper)],
+        bash = shutil.which("bash")
+        if bash is None:
+            self.fail("bash is required to execute the release merge verifier")
+        return subprocess.run(  # noqa: S603
+            [bash, str(self.helper)],
             cwd=root,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         )
 
     def test_accepts_exact_two_parent_bot_release_merge(self) -> None:
