@@ -715,12 +715,26 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
     def test_self_hosted_pr_cells_require_exact_head_and_protected_environment(self) -> None:
         jobs = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]
         guard = jobs["tiny-cells"]["if"]
+        tiny_aggregate = jobs["tiny"]
+        tiny_expectation = tiny_aggregate["steps"][0]["env"]["TINY_EXECUTION_EXPECTED"]
         self.assertIn("needs.quality-matrix.outputs.tiny_required == 'true'", guard)
         self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", guard)
         self.assertIn(
             "release/rep60-supplementary-protected-checkpoint-1-v5-successor-",
             guard,
         )
+        self.assertEqual(
+            ["quality-matrix", "tiny-cells", "security-classification"],
+            tiny_aggregate["needs"],
+        )
+        normalized_tiny_expectation = tiny_expectation.strip().removeprefix("${{").removesuffix("}}")
+        self.assertEqual(" ".join(guard.split()), " ".join(normalized_tiny_expectation.split()))
+        self.assertEqual(
+            "${{ needs.security-classification.result }}",
+            tiny_aggregate["steps"][0]["env"]["CLASSIFICATION_RESULT"],
+        )
+        self.assertIn('test "$CLASSIFICATION_RESULT" = success', tiny_aggregate["steps"][0]["run"])
+        self.assertIn('if [ "$TINY_EXECUTION_EXPECTED" = true ]; then', tiny_aggregate["steps"][0]["run"])
         self.assertNotIn("github.event_name == 'schedule'", guard)
         for job_name in ("heavy-cells", "acceptance-cells", "runtime-evidence"):
             protected_main_guard = jobs[job_name]["if"]
