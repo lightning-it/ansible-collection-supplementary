@@ -56,6 +56,18 @@ enterprise_role_quality:
   long_term_archive_required: false
   release_eligibility: fail-closed
 local_managed_file_exceptions:
+  - path: scripts/main-promotion-authorization.py
+    owner: ansible-collection-supplementary
+    reason: >-
+      Repository-owned normal-promotion verifier. The enterprise collection
+      synchronizer preserves this exact file byte-for-byte and never installs
+      or overwrites it.
+  - path: .github/workflows/main-promotion-authorization.yml
+    owner: ansible-collection-supplementary
+    reason: >-
+      Repository-owned normal-promotion workflow. The enterprise collection
+      synchronizer preserves this exact file byte-for-byte and never installs
+      or overwrites it.
   - path: .github/workflows/copilot-review.yml
     owner: ansible-collection-supplementary
     reason: MLX-90 golden-path incubation until real humanActions=0 acceptance.
