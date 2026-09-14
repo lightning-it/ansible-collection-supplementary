@@ -4,7 +4,9 @@ import argparse
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
+import sys
 import tempfile
 import types
 import unittest
@@ -706,6 +708,14 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("git diff --quiet origin/develop HEAD", workflow)
         self.assertIn('non_user_visible_re+="\\\\.lit/main-ancestry\\\\.json$|"', changelog_policy)
 
+        release_merge_verifier = (ROOT / "scripts/verify-prepared-release-merge.sh").read_text(encoding="utf-8")
+        self.assertIn("Verified prepared release merge provenance", changelog_policy)
+        self.assertIn("verify-prepared-release-merge.sh", changelog_policy)
+        self.assertIn("release-preparation.json", release_merge_verifier)
+        self.assertIn("lightning-it-release-automation[bot]", release_merge_verifier)
+        self.assertIn("[ -L galaxy.yml ] || [ -L changelogs/release-preparation.json ]", release_merge_verifier)
+        self.assertIn('"${parent_parent}" = "${release_base}"', release_merge_verifier)
+
         evidence = json.loads((ROOT / ".lit/main-ancestry.json").read_text(encoding="utf-8"))
         self.assertEqual(evidence["schema_version"], 1)
         self.assertEqual(evidence["repository"], "lightning-it/ansible-collection-supplementary")
@@ -740,6 +750,150 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("exact account\n`litroc`", policy)
         self.assertIn("under their own", policy)
         self.assertIn("never requests or funds", policy)
+
+
+class PreparedReleaseMergeVerifierTests(unittest.TestCase):
+    helper = ROOT / "scripts" / "verify-prepared-release-merge.sh"
+    bot_name = "lightning-it-release-automation[bot]"
+    bot_email = "307565056+lightning-it-release-automation[bot]@users.noreply.github.com"
+
+    def git(self, root: Path, *arguments: str, environment: dict[str, str] | None = None) -> str:
+        completed = subprocess.run(  # noqa: S603
+            ["/usr/bin/git", *arguments],
+            cwd=root,
+            env=environment,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        return completed.stdout.strip()
+
+    def identity(self, name: str, email: str) -> dict[str, str]:
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "GIT_AUTHOR_NAME": name,
+                "GIT_AUTHOR_EMAIL": email,
+                "GIT_COMMITTER_NAME": name,
+                "GIT_COMMITTER_EMAIL": email,
+            }
+        )
+        return environment
+
+    def create_release_merge(
+        self,
+        root: Path,
+        *,
+        octopus: bool = False,
+        preparation_committer: tuple[str, str] | None = None,
+        receipt_version: str = "3.2.3",
+    ) -> None:
+        self.git(root, "init", "--initial-branch=main")
+        self.git(root, "config", "user.name", self.bot_name)
+        self.git(root, "config", "user.email", self.bot_email)
+        (root / "changelogs" / "fragments").mkdir(parents=True)
+        (root / "galaxy.yml").write_text("version: 3.2.2\n", encoding="utf-8")
+        (root / "changelogs" / "fragments" / "fixture.yml").write_text("bugfixes:\n  - fixture\n", encoding="utf-8")
+        self.git(root, "add", ".")
+        self.git(root, "commit", "--quiet", "-m", "base", environment=self.identity("base", "base@example.test"))
+        base = self.git(root, "rev-parse", "HEAD")
+
+        self.git(root, "checkout", "--quiet", "-b", "release")
+        subprocess.run(  # noqa: S603
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "release-version.py"),
+                "--requested-version",
+                receipt_version,
+                "--write-preparation-receipt",
+                "changelogs/release-preparation.json",
+                "--repository",
+                "lightning-it/ansible-collection-supplementary",
+                "--repository-id",
+                "1103407173",
+                "--base-sha",
+                base,
+                "--workflow-run-id",
+                "1",
+                "--workflow-attempt",
+                "1",
+                "--workflow-ref",
+                "lightning-it/ansible-collection-supplementary/.github/workflows/release-prepare.yml@refs/heads/main",
+                "--workflow-event",
+                "push",
+                "--workflow-actor",
+                self.bot_name,
+            ],
+            cwd=root,
+            check=True,
+        )
+        (root / "galaxy.yml").write_text(f"version: {receipt_version}\n", encoding="utf-8")
+        self.git(root, "add", "galaxy.yml", "changelogs/release-preparation.json")
+        preparer = self.identity(self.bot_name, self.bot_email)
+        if preparation_committer is not None:
+            preparer["GIT_COMMITTER_NAME"], preparer["GIT_COMMITTER_EMAIL"] = preparation_committer
+        self.git(root, "commit", "--quiet", "-m", f"chore(release): prepare v{receipt_version}", environment=preparer)
+
+        self.git(root, "checkout", "--quiet", "main")
+        branches = ["release"]
+        if octopus:
+            self.git(root, "checkout", "--quiet", "-b", "extra", base)
+            (root / "extra.txt").write_text("extra\n", encoding="utf-8")
+            self.git(root, "add", "extra.txt")
+            self.git(root, "commit", "--quiet", "-m", "extra", environment=self.identity("extra", "extra@example.test"))
+            self.git(root, "checkout", "--quiet", "main")
+            branches.append("extra")
+        self.git(
+            root,
+            "merge",
+            "--no-ff",
+            "-m",
+            "custom protected release merge",
+            *branches,
+            environment=self.identity(self.bot_name, self.bot_email),
+        )
+
+    def verify(self, root: Path) -> subprocess.CompletedProcess[str]:
+        bash = shutil.which("bash")
+        if bash is None:
+            self.fail("bash is required to execute the release merge verifier")
+        return subprocess.run(  # noqa: S603
+            [bash, str(self.helper)],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def test_accepts_exact_two_parent_bot_release_merge(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.create_release_merge(root)
+            result = self.verify(root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "3.2.3\n")
+
+    def test_rejects_octopus_release_merge(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.create_release_merge(root, octopus=True)
+            result = self.verify(root)
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_rejects_preparation_with_non_bot_committer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.create_release_merge(root, preparation_committer=("human", "human@example.test"))
+            result = self.verify(root)
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_rejects_malformed_preparation_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.create_release_merge(root)
+            (root / "changelogs" / "release-preparation.json").write_text("{not valid json}\n", encoding="utf-8")
+            result = self.verify(root)
+        self.assertNotEqual(result.returncode, 0)
 
 
 if __name__ == "__main__":
