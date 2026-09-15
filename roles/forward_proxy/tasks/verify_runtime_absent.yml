@@ -1,0 +1,24 @@
+---
+- name: Verify the forward proxy systemd unit is not active
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - --system
+      - is-active
+      - "{{ forward_proxy_unit_name }}.service"
+  register: forward_proxy_runtime_systemd_absence
+  changed_when: false
+  failed_when: forward_proxy_runtime_systemd_absence.rc not in [3, 4]
+  check_mode: false
+
+- name: Verify the forward proxy Podman pod is absent
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - pod
+      - exists
+      - "{{ forward_proxy_unit_name }}"
+  register: forward_proxy_runtime_pod_absence
+  changed_when: false
+  failed_when: forward_proxy_runtime_pod_absence.rc != 1
+  check_mode: false

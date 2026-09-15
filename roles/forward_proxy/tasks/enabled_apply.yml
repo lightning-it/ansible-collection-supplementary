@@ -15,6 +15,14 @@
     - not forward_proxy_manage_runtime | bool
     - not ansible_check_mode
 
+- name: Prove the previous runtime is absent before rendering replacement state
+  ansible.builtin.include_tasks: verify_runtime_absent.yml
+  when:
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
 - name: Create forward proxy managed directories
   ansible.builtin.file:
     path: "{{ item }}"

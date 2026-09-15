@@ -115,6 +115,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("first-run rollback", tasks)
         self.assertIn("enabled_first_run_rollback.yml", tasks)
         self.assertIn("enabled_existing_rollback.yml", tasks)
+        self.assertIn("verify_runtime_absent.yml", tasks)
         self.assertIn("runtime_managed", tasks)
         self.assertIn("forward_proxy_previous_state_manifest.quadlet_checksum", tasks)
         self.assertIn("forward_proxy_manage_runtime | bool", tasks)
@@ -123,10 +124,28 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("Refuse an absent anchor or unsafe existing proxy directory", tasks)
         self.assertNotIn("_forward_proxy_managed_paths", tasks)
         rollback = (ROLE_ROOT / "tasks" / "enabled_first_run_rollback.yml").read_text()
-        self.assertIn("Require exact first-run ownership before rollback", rollback)
+        self.assertIn("Require exact transaction checksum and ownership before rollback", rollback)
         self.assertIn("item.stat.isreg", rollback)
         self.assertIn("item.stat.islnk", rollback)
+        self.assertIn("item.stat.checksum", rollback)
+        self.assertIn("forward_proxy_managed_asset_stats.results", rollback)
         self.assertIn("forward_proxy_directory_creation_allowed: false", rollback)
+
+    def test_every_runtime_removal_has_an_explicit_absence_postcondition(self) -> None:
+        main = (ROLE_ROOT / "tasks" / "main.yml").read_text()
+        apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
+        first_rollback = (ROLE_ROOT / "tasks" / "enabled_first_run_rollback.yml").read_text()
+        existing_rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
+        absence = (ROLE_ROOT / "tasks" / "verify_runtime_absent.yml").read_text()
+        for task_text in (main, apply_tasks, first_rollback, existing_rollback):
+            self.assertIn("verify_runtime_absent.yml", task_text)
+        self.assertIn("/usr/bin/systemctl", absence)
+        self.assertIn("is-active", absence)
+        self.assertIn("forward_proxy_runtime_systemd_absence.rc not in [3, 4]", absence)
+        self.assertIn("/usr/bin/podman", absence)
+        self.assertIn("pod", absence)
+        self.assertIn("exists", absence)
+        self.assertIn("forward_proxy_runtime_pod_absence.rc != 1", absence)
 
     def test_managed_files_cannot_overlap_directories_or_each_other(self) -> None:
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()

@@ -7,10 +7,29 @@
   vars:
     forward_proxy_directory_creation_allowed: false
 
-- name: Inspect first-run rollback targets before removing anything
+- name: Remove a partially created forward proxy runtime
+  ansible.builtin.include_role:
+    name: lit.foundational.podman_systemd
+  vars:
+    podman_systemd_action: absent
+    podman_systemd_unit_name: "{{ forward_proxy_unit_name }}"
+    podman_systemd_description: LIT Squid forward proxy
+    podman_systemd_manifest_path: "{{ forward_proxy_pod_manifest_path }}"
+    podman_systemd_scope: "{{ forward_proxy_systemd_scope }}"
+    podman_systemd_quadlet_dir: "{{ forward_proxy_quadlet_dir }}"
+  when: forward_proxy_manage_runtime | bool
+
+- name: Prove the partial first-run runtime is absent before file rollback
+  ansible.builtin.include_tasks: verify_runtime_absent.yml
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Reinspect first-run rollback targets immediately before deletion
   ansible.builtin.stat:
     path: "{{ item.0 }}"
     follow: false
+    checksum_algorithm: sha256
   loop: >-
     {{
       (forward_proxy_managed_paths_internal | zip(forward_proxy_managed_modes_internal) | list)
@@ -18,7 +37,7 @@
     }}
   register: forward_proxy_first_run_owned_stats
 
-- name: Require exact first-run ownership before rollback
+- name: Require exact transaction checksum and ownership before rollback
   ansible.builtin.assert:
     that:
       - >-
@@ -27,6 +46,20 @@
           item.stat.isreg | default(false)
           and not item.stat.islnk | default(false)
           and item.stat.mode == item.item.1
+          and item.stat.checksum
+            == (
+              (
+                forward_proxy_managed_asset_stats.results | default([])
+                | selectattr('item', 'equalto', item.item.0)
+                | map(attribute='stat.checksum') | first | default('')
+              )
+              if item.item.0 in forward_proxy_managed_paths_internal
+              else (
+                forward_proxy_quadlet_stat.stat.checksum | default('')
+                if item.item.0 == forward_proxy_quadlet_path
+                else ''
+              )
+            )
           and (
             (
               item.item.0 == forward_proxy_quadlet_path
@@ -47,21 +80,9 @@
           )
         )
     fail_msg: >-
-      A first-run rollback target cannot be proven to be a role-created regular
-      file. Leave it untouched for operator recovery.
+      A first-run rollback target cannot be bound to the exact transaction
+      checksum and ownership. Leave it untouched for operator recovery.
   loop: "{{ forward_proxy_first_run_owned_stats.results }}"
-
-- name: Remove a partially created forward proxy runtime
-  ansible.builtin.include_role:
-    name: lit.foundational.podman_systemd
-  vars:
-    podman_systemd_action: absent
-    podman_systemd_unit_name: "{{ forward_proxy_unit_name }}"
-    podman_systemd_description: LIT Squid forward proxy
-    podman_systemd_manifest_path: "{{ forward_proxy_pod_manifest_path }}"
-    podman_systemd_scope: "{{ forward_proxy_systemd_scope }}"
-    podman_systemd_quadlet_dir: "{{ forward_proxy_quadlet_dir }}"
-  when: forward_proxy_manage_runtime | bool
 
 - name: Remove verified partial first-run forward proxy files
   ansible.builtin.file:

@@ -13,6 +13,13 @@
     - forward_proxy_manage_runtime | bool
     - not forward_proxy_previous_state_manifest.runtime_managed | bool
 
+- name: Prove the failed newly introduced runtime is absent before restoration
+  ansible.builtin.include_tasks: verify_runtime_absent.yml
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not ansible_check_mode
+
 - name: Restore previous forward proxy managed files
   ansible.builtin.copy:
     content: "{{ item.0.content | b64decode }}"
