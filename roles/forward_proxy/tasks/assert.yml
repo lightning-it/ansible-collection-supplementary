@@ -11,7 +11,7 @@
         or (
           not forward_proxy_manage_runtime
           and (
-            (_forward_proxy_managed_paths + [forward_proxy_state_marker_path])
+            (forward_proxy_managed_paths_internal + [forward_proxy_state_marker_path])
             | reject('match', '^/tmp/') | list | length == 0
           )
         )
@@ -20,7 +20,7 @@
         or (
           not forward_proxy_manage_runtime
           and (
-            (_forward_proxy_managed_paths + [forward_proxy_state_marker_path])
+            (forward_proxy_managed_paths_internal + [forward_proxy_state_marker_path])
             | reject('match', '^/tmp/') | list | length == 0
           )
         )
@@ -103,7 +103,16 @@
       - >-
         item == '127.0.0.1/32'
         or item is match(
-          '^(?:10\.|192\.168\.|172\.(?:1[6-9]|2[0-9]|3[01])\.)'
+          '^10\.(?:[0-9]{1,3}\.){2}[0-9]{1,3}'
+          '/(?:[89]|[12][0-9]|3[0-2])$'
+        )
+        or item is match(
+          '^172\.(?:1[6-9]|2[0-9]|3[01])\.(?:[0-9]{1,3}\.)'
+          '[0-9]{1,3}/(?:1[2-9]|2[0-9]|3[0-2])$'
+        )
+        or item is match(
+          '^192\.168\.(?:[0-9]{1,3}\.)[0-9]{1,3}'
+          '/(?:1[6-9]|2[0-9]|3[0-2])$'
         )
     fail_msg: >-
       Forward proxy clients must be exact loopback or RFC1918 IPv4 CIDRs;
@@ -142,17 +151,28 @@
     - "{{ forward_proxy_pod_manifest_path }}"
     - "{{ forward_proxy_state_marker_path }}"
     - "{{ forward_proxy_quadlet_dir }}"
+    - "{{ forward_proxy_quadlet_path }}"
     - "{{ forward_proxy_podman_binary }}"
+
+- name: Require the exact delegated Quadlet path
+  ansible.builtin.assert:
+    that:
+      - >-
+        forward_proxy_quadlet_path
+        == forward_proxy_quadlet_dir ~ '/' ~ forward_proxy_unit_name ~ '.kube'
+    fail_msg: >-
+      The Quadlet ownership path must be derived from the exact directory and
+      unit name passed to lit.foundational.podman_systemd.
 
 - name: Require distinct managed forward proxy paths
   ansible.builtin.assert:
     that:
       - >-
         (
-          _forward_proxy_managed_paths
+          forward_proxy_managed_paths_internal
           + [forward_proxy_state_marker_path, forward_proxy_quadlet_path]
         ) | unique | list | length
-        == (_forward_proxy_managed_paths | length) + 2
+        == (forward_proxy_managed_paths_internal | length) + 2
     fail_msg: >-
       Proxy configuration, manifest, state marker, and Quadlet paths must all
       be distinct.

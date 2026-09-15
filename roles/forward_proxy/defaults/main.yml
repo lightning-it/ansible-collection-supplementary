@@ -12,7 +12,6 @@ forward_proxy_runtime_gid: 13
 forward_proxy_unit_name: lit-forward-proxy
 forward_proxy_systemd_scope: system
 forward_proxy_quadlet_dir: /etc/containers/systemd
-forward_proxy_quadlet_path: "{{ forward_proxy_quadlet_dir }}/{{ forward_proxy_unit_name }}.kube"
 forward_proxy_podman_binary: /usr/bin/podman
 forward_proxy_readiness_timeout: 30
 

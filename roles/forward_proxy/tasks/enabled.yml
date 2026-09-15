@@ -12,12 +12,12 @@
 
 - name: Create forward proxy managed directories
   ansible.builtin.file:
-    path: "{{ item | dirname }}"
+    path: "{{ item }}"
     state: directory
     owner: "{{ forward_proxy_file_owner }}"
     group: "{{ forward_proxy_file_group }}"
     mode: "0755"
-  loop: "{{ (_forward_proxy_managed_paths + [forward_proxy_state_marker_path]) | unique | list }}"
+  loop: "{{ forward_proxy_managed_directories_internal }}"
 
 - name: Render the Squid policy for the non-root container
   ansible.builtin.template:
@@ -42,7 +42,7 @@
     path: "{{ item }}"
     follow: false
     checksum_algorithm: sha256
-  loop: "{{ _forward_proxy_managed_paths }}"
+  loop: "{{ forward_proxy_managed_paths_internal }}"
   register: forward_proxy_managed_asset_stats
   when: not ansible_check_mode
 
@@ -76,16 +76,6 @@
     - forward_proxy_manage_runtime | bool
     - not ansible_check_mode
 
-- name: Wait for the local Squid listener
-  ansible.builtin.wait_for:
-    host: 127.0.0.1
-    port: "{{ forward_proxy_port }}"
-    state: started
-    timeout: "{{ forward_proxy_readiness_timeout }}"
-  when:
-    - forward_proxy_manage_runtime | bool
-    - not ansible_check_mode
-
 - name: Inspect the managed forward proxy Quadlet
   ansible.builtin.stat:
     path: "{{ forward_proxy_quadlet_path }}"
@@ -115,7 +105,7 @@
           'schema': 'lit.supplementary.forward_proxy.managed-state/v2',
           'owner': 'lit.supplementary.forward_proxy',
           'unit_name': forward_proxy_unit_name,
-          'managed_paths': _forward_proxy_managed_paths,
+          'managed_paths': forward_proxy_managed_paths_internal,
           'managed_checksums': (
             forward_proxy_managed_asset_stats.results
             | map(attribute='stat.checksum') | list
@@ -133,3 +123,13 @@
     group: "{{ forward_proxy_file_group }}"
     mode: "0600"
   when: not ansible_check_mode
+
+- name: Wait for the local Squid listener
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ forward_proxy_port }}"
+    state: started
+    timeout: "{{ forward_proxy_readiness_timeout }}"
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode

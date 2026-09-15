@@ -1,4 +1,11 @@
 ---
-_forward_proxy_managed_paths:
+forward_proxy_quadlet_path: >-
+  {{ forward_proxy_quadlet_dir }}/{{ forward_proxy_unit_name }}.kube
+forward_proxy_managed_paths_internal:
   - "{{ forward_proxy_config_path }}"
   - "{{ forward_proxy_pod_manifest_path }}"
+forward_proxy_managed_directories_internal: >-
+  {{
+    (forward_proxy_managed_paths_internal + [forward_proxy_state_marker_path])
+    | map('dirname') | unique | list
+  }}

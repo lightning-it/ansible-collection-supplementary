@@ -3,7 +3,6 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 ROLE_ROOT = REPOSITORY_ROOT / "roles" / "forward_proxy"
 
@@ -28,6 +27,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_image_pull_policy: Never", defaults)
         self.assertIn("hostNetwork: true", pod)
         self.assertIn("runAsUser: {{ forward_proxy_runtime_uid }}", pod)
+        self.assertIn("initContainers:", pod)
+        self.assertIn("chmod 1777 /squid-tmp", pod)
         self.assertIn("readOnlyRootFilesystem: true", pod)
         self.assertIn("capabilities:", pod)
         self.assertIn("name: lit.foundational.podman_systemd", tasks)
@@ -47,6 +48,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("/(?:[1-9]|[12][0-9]|3[0-2])$", assertions)
         self.assertIn("192\\.168\\.", assertions)
         self.assertIn("172\\.(?:1[6-9]|2[0-9]|3[01])\\.", assertions)
+        self.assertIn("/(?:[89]|[12][0-9]|3[0-2])$", assertions)
+        self.assertIn("/(?:1[6-9]|2[0-9]|3[0-2])$", assertions)
 
     def test_upstream_hostname_is_validated_label_by_label(self) -> None:
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
@@ -65,8 +68,11 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("item.stat.isreg", tasks)
         self.assertIn("item.stat.islnk", tasks)
         self.assertIn("forward_proxy_previous_state_manifest.quadlet_checksum", tasks)
+        self.assertIn("forward_proxy_manage_runtime | bool", tasks)
         self.assertIn("Refuse to adopt unowned forward proxy target paths", tasks)
         self.assertIn("not item.stat.exists", tasks)
+        self.assertIn("Refuse unsafe forward proxy managed directories", tasks)
+        self.assertNotIn("_forward_proxy_managed_paths", tasks)
 
     def test_check_mode_still_checks_image_without_waiting_for_listener(self) -> None:
         tasks = (ROLE_ROOT / "tasks" / "enabled.yml").read_text()
@@ -81,6 +87,13 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("access_log stdio:/dev/stdout", template)
         self.assertIn("cache_log /dev/stderr", template)
         self.assertNotIn("/var/log/squid", template)
+
+    def test_quadlet_identity_and_el_volume_contract_are_exact(self) -> None:
+        assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+        pod = (ROLE_ROOT / "templates" / "squid-pod.yml.j2").read_text()
+        self.assertIn("forward_proxy_quadlet_dir ~ '/' ~ forward_proxy_unit_name", assertions)
+        self.assertIn("selinuxRelabel: true", pod)
+        self.assertIn("emptyDir: {}", pod)
 
 
 if __name__ == "__main__":

@@ -14,7 +14,6 @@ argument_specs:
       forward_proxy_unit_name: {type: str, default: lit-forward-proxy}
       forward_proxy_systemd_scope: {type: str, default: system}
       forward_proxy_quadlet_dir: {type: path, default: /etc/containers/systemd}
-      forward_proxy_quadlet_path: {type: path}
       forward_proxy_podman_binary: {type: path, default: /usr/bin/podman}
       forward_proxy_readiness_timeout: {type: int, default: 30}
       forward_proxy_listen_addresses: {type: list, elements: str}
