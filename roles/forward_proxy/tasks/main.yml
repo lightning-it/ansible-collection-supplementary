@@ -30,13 +30,30 @@
   loop_control:
     loop_var: forward_proxy_directory_path
   vars:
-    forward_proxy_directory_creation_allowed: true
+    forward_proxy_directory_creation_allowed: >-
+      {{
+        forward_proxy_enabled | bool
+        and (
+          (
+            forward_proxy_file_owner in ['root', '0']
+            and forward_proxy_file_group in ['root', '0']
+          )
+          or forward_proxy_directory_path == forward_proxy_render_root
+          or forward_proxy_directory_path.startswith(forward_proxy_render_root.rstrip('/') ~ '/')
+        )
+      }}
+  when:
+    - forward_proxy_enabled | bool or forward_proxy_state_marker.stat.exists
 
 - name: Inspect unowned forward proxy target paths
   ansible.builtin.stat:
     path: "{{ item }}"
     follow: false
-  loop: "{{ forward_proxy_managed_paths_internal + [forward_proxy_quadlet_path] }}"
+  loop: >-
+    {{
+      forward_proxy_managed_paths_internal
+      + ([forward_proxy_quadlet_path] if forward_proxy_manage_runtime | bool else [])
+    }}
   register: forward_proxy_unowned_target_stats
   when: not forward_proxy_state_marker.stat.exists
 

@@ -186,6 +186,19 @@
       from an existing canonical anchor toward each managed target.
   loop: "{{ forward_proxy_trusted_parent_paths }}"
 
+- name: Require parent-before-child trusted directory ordering
+  ansible.builtin.assert:
+    that:
+      - >-
+        item | dirname not in forward_proxy_trusted_parent_paths
+        or item | dirname in forward_proxy_trusted_parent_paths[:ansible_loop.index0]
+    fail_msg: >-
+      Every trusted parent that is part of the declared chain must appear
+      before its child, before any directory creation can begin.
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  loop_control:
+    extended: true
+
 - name: Require complete trusted parent coverage before side effects
   ansible.builtin.assert:
     that:

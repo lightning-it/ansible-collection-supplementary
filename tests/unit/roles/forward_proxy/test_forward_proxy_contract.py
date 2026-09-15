@@ -90,8 +90,13 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_trusted_parent_paths", defaults)
         self.assertIn("forward_proxy_trusted_parent_paths", argument_spec)
         self.assertIn("Create and revalidate every trusted forward proxy parent boundary", main)
+        self.assertIn("forward_proxy_enabled | bool or forward_proxy_state_marker.stat.exists", main)
+        self.assertIn("forward_proxy_directory_path == forward_proxy_render_root", main)
+        self.assertIn("forward_proxy_directory_path.startswith(forward_proxy_render_root", main)
         self.assertIn("realpath", directory_guard)
         self.assertIn("forward_proxy_directory_realpath.stdout == forward_proxy_directory_path", directory_guard)
+        self.assertIn("Require parent-before-child trusted directory ordering", assertions)
+        self.assertIn("forward_proxy_trusted_parent_paths[:ansible_loop.index0]", assertions)
 
     def test_upstream_hostname_is_validated_label_by_label(self) -> None:
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
@@ -130,6 +135,20 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("item.stat.checksum", rollback)
         self.assertIn("forward_proxy_managed_asset_stats.results", rollback)
         self.assertIn("forward_proxy_directory_creation_allowed: false", rollback)
+
+    def test_render_only_does_not_probe_or_create_runtime_state(self) -> None:
+        main = (ROLE_ROOT / "tasks" / "main.yml").read_text()
+        verify = (
+            REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml"
+        ).read_text()
+        self.assertIn(
+            "([forward_proxy_quadlet_path] if forward_proxy_manage_runtime | bool else [])",
+            main,
+        )
+        self.assertIn("forward_proxy_manage_runtime: false", verify)
+        self.assertIn("forward_proxy_config_path:", verify)
+        self.assertIn("forward_proxy_pod_manifest_path:", verify)
+        self.assertIn("forward_proxy_state_marker_path:", verify)
 
     def test_every_runtime_removal_has_an_explicit_absence_postcondition(self) -> None:
         main = (ROLE_ROOT / "tasks" / "main.yml").read_text()
