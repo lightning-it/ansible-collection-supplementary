@@ -1,0 +1,142 @@
+---
+- name: Create forward proxy managed directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ forward_proxy_file_owner }}"
+    group: "{{ forward_proxy_file_group }}"
+    mode: "0755"
+  loop: "{{ forward_proxy_managed_directories_internal }}"
+
+- name: Render the Squid policy for the non-root container
+  ansible.builtin.template:
+    src: squid.conf.j2
+    dest: "{{ forward_proxy_config_path }}"
+    owner: "{{ forward_proxy_file_owner }}"
+    group: "{{ forward_proxy_file_group }}"
+    mode: "0644"
+  register: forward_proxy_squid_config_result
+
+- name: Render the digest-pinned Squid Pod manifest
+  ansible.builtin.template:
+    src: squid-pod.yml.j2
+    dest: "{{ forward_proxy_pod_manifest_path }}"
+    owner: "{{ forward_proxy_file_owner }}"
+    group: "{{ forward_proxy_file_group }}"
+    mode: "0640"
+  register: forward_proxy_pod_manifest_result
+
+- name: Inspect rendered forward proxy files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    checksum_algorithm: sha256
+  loop: "{{ forward_proxy_managed_paths_internal }}"
+  register: forward_proxy_managed_asset_stats
+  when: not ansible_check_mode
+
+- name: Verify rendered forward proxy files before recording ownership
+  ansible.builtin.assert:
+    that:
+      - item.0.stat.isreg | default(false)
+      - not item.0.stat.islnk | default(false)
+      - item.0.stat.checksum is match('^[a-f0-9]{64}\Z')
+      - item.0.stat.mode == item.1
+      - >-
+        item.0.stat.pw_name | default('') == forward_proxy_file_owner | string
+        or item.0.stat.uid | string == forward_proxy_file_owner | string
+      - >-
+        item.0.stat.gr_name | default('') == forward_proxy_file_group | string
+        or item.0.stat.gid | string == forward_proxy_file_group | string
+    fail_msg: >-
+      Every recorded forward proxy asset must retain the exact regular-file,
+      owner, group, mode, and checksum boundary.
+  loop: >-
+    {{ forward_proxy_managed_asset_stats.results | zip(forward_proxy_managed_modes_internal) | list }}
+  loop_control:
+    label: "{{ item.0.item }}"
+  when: not ansible_check_mode
+
+- name: Manage the persistent Squid container service
+  ansible.builtin.include_role:
+    name: lit.foundational.podman_systemd
+  vars:
+    podman_systemd_action: >-
+      {{
+        'restarted'
+        if (forward_proxy_squid_config_result.changed or forward_proxy_pod_manifest_result.changed)
+        else 'present'
+      }}
+    podman_systemd_unit_name: "{{ forward_proxy_unit_name }}"
+    podman_systemd_description: LIT Squid forward proxy
+    podman_systemd_manifest_path: "{{ forward_proxy_pod_manifest_path }}"
+    podman_systemd_scope: "{{ forward_proxy_systemd_scope }}"
+    podman_systemd_quadlet_dir: "{{ forward_proxy_quadlet_dir }}"
+    podman_systemd_enabled: true
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Inspect the managed forward proxy Quadlet
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_quadlet_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_quadlet_stat
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Verify the managed forward proxy Quadlet before recording ownership
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_quadlet_stat.stat.isreg | default(false)
+      - not forward_proxy_quadlet_stat.stat.islnk | default(false)
+      - forward_proxy_quadlet_stat.stat.checksum is match('^[a-f0-9]{64}\Z')
+      - forward_proxy_quadlet_stat.stat.mode == '0644'
+      - forward_proxy_quadlet_stat.stat.pw_name | default('') == 'root'
+      - forward_proxy_quadlet_stat.stat.gr_name | default('') == 'root'
+    fail_msg: >-
+      The managed forward proxy Quadlet must retain the exact root-owned,
+      mode-0644 regular-file boundary.
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Record exact forward proxy file and Quadlet ownership
+  ansible.builtin.copy:
+    content: >-
+      {{
+        {
+          'schema': 'lit.supplementary.forward_proxy.managed-state/v3',
+          'owner': 'lit.supplementary.forward_proxy',
+          'unit_name': forward_proxy_unit_name,
+          'managed_paths': forward_proxy_managed_paths_internal,
+          'managed_checksums': (
+            forward_proxy_managed_asset_stats.results
+            | map(attribute='stat.checksum') | list
+          ),
+          'managed_modes': forward_proxy_managed_modes_internal,
+          'quadlet_path': forward_proxy_quadlet_path,
+          'quadlet_checksum': (
+            forward_proxy_quadlet_stat.stat.checksum
+            if forward_proxy_manage_runtime | bool
+            else ''
+          )
+        } | to_nice_json
+      }}
+    dest: "{{ forward_proxy_state_marker_path }}"
+    owner: "{{ forward_proxy_file_owner }}"
+    group: "{{ forward_proxy_file_group }}"
+    mode: "0600"
+  when: not ansible_check_mode
+
+- name: Wait for the local Squid listener
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ forward_proxy_port }}"
+    state: started
+    timeout: "{{ forward_proxy_readiness_timeout }}"
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode

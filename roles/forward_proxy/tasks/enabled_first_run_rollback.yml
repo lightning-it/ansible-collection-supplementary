@@ -1,0 +1,36 @@
+---
+- name: Remove a partially created forward proxy runtime
+  ansible.builtin.include_role:
+    name: lit.foundational.podman_systemd
+  vars:
+    podman_systemd_action: absent
+    podman_systemd_unit_name: "{{ forward_proxy_unit_name }}"
+    podman_systemd_description: LIT Squid forward proxy
+    podman_systemd_manifest_path: "{{ forward_proxy_pod_manifest_path }}"
+    podman_systemd_scope: "{{ forward_proxy_systemd_scope }}"
+    podman_systemd_quadlet_dir: "{{ forward_proxy_quadlet_dir }}"
+  when: forward_proxy_manage_runtime | bool
+
+- name: Remove partial first-run forward proxy files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: >-
+    {{ forward_proxy_managed_paths_internal + [forward_proxy_quadlet_path, forward_proxy_state_marker_path] }}
+
+- name: Inspect first-run rollback targets
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: >-
+    {{ forward_proxy_managed_paths_internal + [forward_proxy_quadlet_path, forward_proxy_state_marker_path] }}
+  register: forward_proxy_first_run_rollback_stats
+
+- name: Verify first-run rollback completed
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists
+    fail_msg: >-
+      A partial first-run forward proxy target remains after rollback. Stop for
+      operator recovery without adopting or overwriting it.
+  loop: "{{ forward_proxy_first_run_rollback_stats.results }}"

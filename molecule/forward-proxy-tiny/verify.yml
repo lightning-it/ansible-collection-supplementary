@@ -6,6 +6,16 @@
   gather_facts: false
   vars:
     forward_proxy_test_root: /tmp/wunder/lit-forward-proxy-molecule
+  pre_tasks:
+    - name: Read rootless verification UID
+      ansible.builtin.command: id -u
+      register: forward_proxy_verify_uid
+      changed_when: false
+
+    - name: Read rootless verification GID
+      ansible.builtin.command: id -g
+      register: forward_proxy_verify_gid
+      changed_when: false
   tasks:
     - name: Read rendered Squid policy
       ansible.builtin.slurp:
@@ -46,6 +56,8 @@
       vars:
         forward_proxy_enabled: false
         forward_proxy_manage_runtime: false
+        forward_proxy_file_owner: "{{ forward_proxy_verify_uid.stdout }}"
+        forward_proxy_file_group: "{{ forward_proxy_verify_gid.stdout }}"
         forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
         forward_proxy_pod_manifest_path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
         forward_proxy_state_marker_path: "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
