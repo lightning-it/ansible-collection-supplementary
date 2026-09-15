@@ -68,6 +68,14 @@ The example assumes the pinned image was preloaded and the matching host
 firewall owner rule was approved. Activation and firewall cutover remain
 controlled operational steps.
 
+## Verification status
+
+`forward-proxy-tiny` provides local render, policy, cleanup, JUnit, and
+redacted-evidence checks. While the role remains experimental, this scenario
+is manual pre-merge evidence and is deliberately not represented as a protected
+CI matrix cell. Protected live Podman, firewall, allowed-proxy, and denied-direct
+traffic acceptance follows on the Wunderbox target before production maturity.
+
 ## License
 
 MIT

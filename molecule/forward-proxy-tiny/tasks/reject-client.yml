@@ -19,7 +19,13 @@
       ansible.builtin.set_fact:
         forward_proxy_invalid_client_rejected: true
         forward_proxy_invalid_client_rejection_message: >-
-          {{ ansible_failed_result.msg | default('') }}
+          {{
+            (
+              ansible_failed_result.results | default([])
+              | selectattr('failed', 'equalto', true)
+              | map(attribute='msg') | list | first
+            ) | default(ansible_failed_result.msg | default(''), true)
+          }}
 
 - name: Require unsafe client rejection
   ansible.builtin.assert:

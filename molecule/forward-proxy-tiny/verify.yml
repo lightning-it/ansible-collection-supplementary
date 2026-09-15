@@ -40,7 +40,7 @@
         forward_proxy_rendered_pod: "{{ forward_proxy_pod_manifest.content | b64decode }}"
 
     - name: Prove unsafe client networks are rejected before rendering
-      ansible.builtin.include_tasks: reject-client.yml
+      ansible.builtin.include_tasks: tasks/reject-client.yml
       loop:
         - 8.8.8.0/24
         - 10.89.0.1/24
@@ -93,17 +93,31 @@
       register: forward_proxy_policy_results
       ignore_errors: true
 
-    - name: Disable the previously managed forward proxy service
-      ansible.builtin.include_role:
-        name: lit.supplementary.forward_proxy
-      vars:
-        forward_proxy_enabled: false
-        forward_proxy_manage_runtime: false
-        forward_proxy_file_owner: "{{ forward_proxy_verify_uid.stdout }}"
-        forward_proxy_file_group: "{{ forward_proxy_verify_gid.stdout }}"
-        forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
-        forward_proxy_pod_manifest_path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
-        forward_proxy_state_marker_path: "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
+    - name: Initialize forward proxy cleanup execution evidence
+      ansible.builtin.set_fact:
+        forward_proxy_cleanup_execution_result:
+          name: disable managed service
+          failed: false
+
+    - name: Exercise cleanup without losing its failure evidence
+      block:
+        - name: Disable the previously managed forward proxy service
+          ansible.builtin.include_role:
+            name: lit.supplementary.forward_proxy
+          vars:
+            forward_proxy_enabled: false
+            forward_proxy_manage_runtime: false
+            forward_proxy_file_owner: "{{ forward_proxy_verify_uid.stdout }}"
+            forward_proxy_file_group: "{{ forward_proxy_verify_gid.stdout }}"
+            forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+            forward_proxy_pod_manifest_path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
+            forward_proxy_state_marker_path: "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
+      rescue:
+        - name: Record the cleanup execution failure for JUnit
+          ansible.builtin.set_fact:
+            forward_proxy_cleanup_execution_result:
+              name: disable managed service
+              failed: true
 
     - name: Inspect disabled forward proxy paths
       ansible.builtin.stat:
@@ -128,10 +142,18 @@
     - name: Assemble complete forward proxy assertion evidence
       ansible.builtin.set_fact:
         forward_proxy_all_results: >-
-          {{ forward_proxy_policy_results.results + forward_proxy_cleanup_results.results }}
+          {{
+            forward_proxy_policy_results.results
+            + [forward_proxy_cleanup_execution_result]
+            + forward_proxy_cleanup_results.results
+          }}
         forward_proxy_failure_count: >-
           {{
-            (forward_proxy_policy_results.results + forward_proxy_cleanup_results.results)
+            (
+              forward_proxy_policy_results.results
+              + [forward_proxy_cleanup_execution_result]
+              + forward_proxy_cleanup_results.results
+            )
             | selectattr('failed', 'equalto', true) | list | length
           }}
 
@@ -161,6 +183,12 @@
               <failure message="contract assertion failed"/>{% endif %}
             </testcase>
           {% endfor %}
+            <testcase
+              classname="forward_proxy.lifecycle"
+              name="{{ forward_proxy_cleanup_execution_result.name | e }}"
+              role="forward_proxy">{% if forward_proxy_cleanup_execution_result.failed | default(false) %}
+              <failure message="managed cleanup execution failed"/>{% endif %}
+            </testcase>
           {% for result in forward_proxy_cleanup_results.results %}
             <testcase
               classname="forward_proxy.lifecycle"

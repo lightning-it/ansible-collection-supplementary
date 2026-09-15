@@ -2779,7 +2779,9 @@ scenarios:
       mode: "not-applicable"
       reason: >-
         Scenario renders and reconciles the real service configuration without
-        starting a privileged Podman or systemd runtime.
+        starting a privileged Podman or systemd runtime. It is executed as
+        local pre-merge evidence only and is not part of the protected quality
+        matrix until the Wunderbox runtime acceptance target is available.
       dependencies: []
   gitlab-runner-basic:
     profile: "tiny"

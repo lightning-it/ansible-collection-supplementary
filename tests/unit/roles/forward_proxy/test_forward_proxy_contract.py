@@ -23,7 +23,11 @@ class ForwardProxyContractTests(unittest.TestCase):
         defaults = (ROLE_ROOT / "defaults" / "main.yml").read_text()
         pod = (ROLE_ROOT / "templates" / "squid-pod.yml.j2").read_text()
         tasks = "".join(path.read_text() for path in sorted((ROLE_ROOT / "tasks").glob("enabled*.yml")))
-        self.assertIn("docker.io/ubuntu/squid:6.6-24.04_beta@sha256:", defaults)
+        self.assertRegex(
+            defaults,
+            r"docker\.io/ubuntu/squid:[A-Za-z0-9][A-Za-z0-9._-]*"
+            r"@sha256:[a-f0-9]{64}",
+        )
         self.assertIn("forward_proxy_image_pull_policy: Never", defaults)
         self.assertIn("hostNetwork: true", pod)
         self.assertIn("runAsUser: {{ forward_proxy_runtime_uid }}", pod)
@@ -62,7 +66,13 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("\\Z", assertions)
 
         verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
-        rejection = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "reject-client.yml").read_text()
+        rejection = (
+            REPOSITORY_ROOT
+            / "molecule"
+            / "forward-proxy-tiny"
+            / "tasks"
+            / "reject-client.yml"
+        ).read_text()
         self.assertIn("Prove unsafe client networks are rejected before rendering", verify)
         self.assertIn("Unsafe client network", rejection)
 
@@ -146,9 +156,14 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("junit: true", scenario)
         self.assertIn("allure: false", scenario)
         self.assertIn("evidence: true", scenario)
+        self.assertIn('state: "experimental"', scenario)
+        self.assertIn('implementation: "partial"', scenario)
+        self.assertIn("local pre-merge evidence only", scenario)
         self.assertIn("cleanup: cleanup.yml", molecule)
         self.assertIn("forward-proxy-tiny.xml", verify)
         self.assertIn("Evaluate each service and upstream contract independently", verify)
+        self.assertIn("Exercise cleanup without losing its failure evidence", verify)
+        self.assertIn("forward_proxy_cleanup_execution_result", verify)
         self.assertIn("Fail after preserving every forward proxy assertion result", verify)
         self.assertIn("evidence/forward-proxy-tiny.yml", cleanup)
         self.assertIn("forward_proxy_junit_passed", cleanup)
