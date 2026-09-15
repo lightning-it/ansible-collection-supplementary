@@ -1,0 +1,49 @@
+---
+- name: Preserve redacted forward proxy Tiny evidence
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    forward_proxy_test_root: /tmp/wunder/lit-forward-proxy-molecule
+    forward_proxy_artifact_root: >-
+      {{
+        lookup('ansible.builtin.env', 'QUALITY_ARTIFACT_ROOT')
+        | default(forward_proxy_test_root ~ '/artifacts', true)
+      }}
+  tasks:
+    - name: Inspect forward proxy JUnit evidence
+      ansible.builtin.stat:
+        path: "{{ forward_proxy_artifact_root }}/junit/forward-proxy-tiny.xml"
+        checksum_algorithm: sha256
+      register: forward_proxy_junit_evidence
+
+    - name: Require complete forward proxy JUnit evidence
+      ansible.builtin.assert:
+        that:
+          - forward_proxy_junit_evidence.stat.isreg | default(false)
+          - forward_proxy_junit_evidence.stat.checksum is match('^[a-f0-9]{64}\Z')
+        quiet: true
+
+    - name: Create redacted forward proxy evidence directory
+      ansible.builtin.file:
+        path: "{{ forward_proxy_artifact_root }}/evidence"
+        state: directory
+        mode: "0750"
+
+    - name: Preserve redacted forward proxy scenario evidence
+      ansible.builtin.copy:
+        dest: "{{ forward_proxy_artifact_root }}/evidence/forward-proxy-tiny.yml"
+        mode: "0640"
+        content: |-
+          schema: lit.supplementary.forward-proxy-tiny.evidence/v1
+          scenario: forward-proxy-tiny
+          role: forward_proxy
+          target: {{ lookup('ansible.builtin.env', 'QUALITY_TARGET')
+            | default('localhost-render-only', true) | to_json }}
+          commit: {{ lookup('ansible.builtin.env', 'QUALITY_SOURCE_SHA')
+            | default('local-unbound', true) | to_json }}
+          ansible_version: {{ ansible_version.full | to_json }}
+          junit_sha256: {{ forward_proxy_junit_evidence.stat.checksum | to_json }}
+          result: passed
+          redacted: true

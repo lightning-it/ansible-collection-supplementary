@@ -2,7 +2,7 @@
 - name: Verify the pinned Squid image was preloaded
   ansible.builtin.command:
     argv:
-      - "{{ forward_proxy_podman_binary }}"
+      - /usr/bin/podman
       - image
       - exists
       - "{{ forward_proxy_image }}"

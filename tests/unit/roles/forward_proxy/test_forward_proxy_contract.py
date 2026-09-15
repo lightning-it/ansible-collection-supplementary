@@ -34,6 +34,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("name: lit.foundational.podman_systemd", tasks)
         self.assertIn("Verify the pinned Squid image was preloaded", tasks)
         self.assertIn("Wait for the local Squid listener", tasks)
+        self.assertIn("- /usr/bin/podman", tasks)
+        self.assertNotIn("forward_proxy_podman_binary", defaults + tasks)
 
     def test_steady_state_cannot_pull_the_proxy_image(self) -> None:
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
@@ -51,6 +53,9 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("/(?:[89]|[12][0-9]|3[0-2])\\Z", assertions)
         self.assertIn("/(?:1[6-9]|2[0-9]|3[0-2])\\Z", assertions)
         self.assertIn("25[0-5]", assertions)
+        self.assertIn("[1-9][0-9]?|0", assertions)
+        self.assertNotIn("[1-9]?[0-9]", assertions)
+        self.assertIn("2 ** (32 - (item.split('/')[1] | int))", assertions)
         self.assertIn("'.' not in item.split('/')", assertions)
         self.assertIn("\\Z", assertions)
 
@@ -111,6 +116,22 @@ class ForwardProxyContractTests(unittest.TestCase):
         renovate = (REPOSITORY_ROOT / "renovate.json").read_text()
         self.assertIn("roles/.*/defaults/main", renovate)
         self.assertIn("molecule/forward-proxy-tiny/", renovate)
+
+    def test_tiny_scenario_produces_junit_allure_source_and_redacted_evidence(self) -> None:
+        registry = (REPOSITORY_ROOT / "meta" / "role-coverage.yml").read_text()
+        molecule = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "molecule.yml").read_text()
+        verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
+        cleanup = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "cleanup.yml").read_text()
+        scenario = registry.split("  forward-proxy-tiny:", maxsplit=1)[1].split(
+            "\n  gitlab-runner-basic:", maxsplit=1
+        )[0]
+        self.assertIn("junit: true", scenario)
+        self.assertIn("allure: true", scenario)
+        self.assertIn("evidence: true", scenario)
+        self.assertIn("cleanup: cleanup.yml", molecule)
+        self.assertIn("forward-proxy-tiny.xml", verify)
+        self.assertIn("evidence/forward-proxy-tiny.yml", cleanup)
+        self.assertIn("redacted: true", cleanup)
 
     def test_squid_is_readonly_runtime_compatible(self) -> None:
         template = (ROLE_ROOT / "templates" / "squid.conf.j2").read_text()

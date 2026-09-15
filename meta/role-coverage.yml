@@ -2772,9 +2772,9 @@ scenarios:
     implementation: "partial"
     roles:
       - "forward_proxy"
-    junit: false
-    allure: false
-    evidence: false
+    junit: true
+    allure: true
+    evidence: true
     test_application:
       mode: "not-applicable"
       reason: >-

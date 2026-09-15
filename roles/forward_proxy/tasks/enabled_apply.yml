@@ -122,7 +122,7 @@
 - name: Verify the managed Squid Pod is running
   ansible.builtin.command:
     argv:
-      - "{{ forward_proxy_podman_binary }}"
+      - /usr/bin/podman
       - pod
       - ps
       - --filter

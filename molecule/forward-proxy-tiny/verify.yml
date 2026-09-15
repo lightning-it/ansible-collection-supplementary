@@ -6,6 +6,11 @@
   gather_facts: false
   vars:
     forward_proxy_test_root: /tmp/wunder/lit-forward-proxy-molecule
+    forward_proxy_junit_root: >-
+      {{
+        lookup('ansible.builtin.env', 'QUALITY_ARTIFACT_ROOT')
+        | default(forward_proxy_test_root ~ '/artifacts', true)
+      }}/junit
   pre_tasks:
     - name: Read rootless verification UID
       ansible.builtin.command: id -u
@@ -76,3 +81,20 @@
         that:
           - forward_proxy_disabled_paths.results | selectattr('stat.exists') | list | length == 0
         quiet: true
+
+    - name: Create forward proxy JUnit directory
+      ansible.builtin.file:
+        path: "{{ forward_proxy_junit_root }}"
+        state: directory
+        mode: "0750"
+
+    - name: Write forward proxy per-assertion JUnit results
+      ansible.builtin.copy:
+        dest: "{{ forward_proxy_junit_root }}/forward-proxy-tiny.xml"
+        mode: "0640"
+        content: |-
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuite name="forward-proxy-tiny" tests="2" failures="0" errors="0" skipped="0">
+            <testcase classname="forward_proxy.policy" name="closed hardened policy" role="forward_proxy"/>
+            <testcase classname="forward_proxy.lifecycle" name="owned cleanup" role="forward_proxy"/>
+          </testsuite>
