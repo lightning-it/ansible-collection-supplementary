@@ -2773,7 +2773,7 @@ scenarios:
     roles:
       - "forward_proxy"
     junit: true
-    allure: true
+    allure: false
     evidence: true
     test_application:
       mode: "not-applicable"

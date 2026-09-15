@@ -5,7 +5,8 @@
   become: false
   gather_facts: false
   vars:
-    forward_proxy_test_root: /tmp/wunder/lit-forward-proxy-molecule
+    forward_proxy_test_root: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/forward-proxy-state
     forward_proxy_artifact_root: >-
       {{
         lookup('ansible.builtin.env', 'QUALITY_ARTIFACT_ROOT')

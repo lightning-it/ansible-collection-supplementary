@@ -128,7 +128,7 @@
       - --filter
       - "name=^{{ forward_proxy_unit_name }}$"
       - --filter
-      - status=Running
+      - status=running
       - --format
       - "{{ '{{.Name}}' }}"
   register: forward_proxy_running_pod

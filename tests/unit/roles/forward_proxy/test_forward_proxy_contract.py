@@ -110,26 +110,28 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("Restart the restored previous forward proxy runtime", rollback)
         self.assertIn("Refuse to adopt a foreign Quadlet during runtime activation", main_tasks)
         self.assertNotIn("Remove a partial Quadlet", rollback)
-        self.assertIn("regex_replace('^\\\\.', '') | length <= 253", assertions)
+        self.assertIn("regex_replace('^\\.', '') | length <= 253", assertions)
 
     def test_proxy_digest_is_renovated_in_defaults_and_molecule(self) -> None:
         renovate = (REPOSITORY_ROOT / "renovate.json").read_text()
         self.assertIn("roles/.*/defaults/main", renovate)
         self.assertIn("molecule/forward-proxy-tiny/", renovate)
 
-    def test_tiny_scenario_produces_junit_allure_source_and_redacted_evidence(self) -> None:
+    def test_tiny_scenario_produces_junit_and_redacted_evidence(self) -> None:
         registry = (REPOSITORY_ROOT / "meta" / "role-coverage.yml").read_text()
         molecule = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "molecule.yml").read_text()
         verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
         cleanup = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "cleanup.yml").read_text()
-        scenario = registry.split("  forward-proxy-tiny:", maxsplit=1)[1].split(
-            "\n  gitlab-runner-basic:", maxsplit=1
-        )[0]
+        scenario = registry.split("  forward-proxy-tiny:", maxsplit=1)[1].split("\n  gitlab-runner-basic:", maxsplit=1)[
+            0
+        ]
         self.assertIn("junit: true", scenario)
-        self.assertIn("allure: true", scenario)
+        self.assertIn("allure: false", scenario)
         self.assertIn("evidence: true", scenario)
         self.assertIn("cleanup: cleanup.yml", molecule)
         self.assertIn("forward-proxy-tiny.xml", verify)
+        self.assertIn("Evaluate each service and upstream contract independently", verify)
+        self.assertIn("Fail after preserving every forward proxy assertion result", verify)
         self.assertIn("evidence/forward-proxy-tiny.yml", cleanup)
         self.assertIn("redacted: true", cleanup)
 

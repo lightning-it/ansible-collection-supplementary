@@ -161,6 +161,7 @@
     follow: false
   register: forward_proxy_render_only_quadlet_stat
   when:
+    - forward_proxy_manage_runtime | bool
     - forward_proxy_state_marker.stat.exists
     - not forward_proxy_previous_state_manifest.runtime_managed | bool
 
@@ -172,6 +173,7 @@
       A Quadlet exists without checksum-bound runtime ownership. Stop before
       enabling, updating, or rolling back the managed proxy runtime.
   when:
+    - forward_proxy_manage_runtime | bool
     - forward_proxy_state_marker.stat.exists
     - not forward_proxy_previous_state_manifest.runtime_managed | bool
 

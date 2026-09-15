@@ -5,7 +5,8 @@
   become: false
   gather_facts: false
   vars:
-    forward_proxy_test_root: /tmp/wunder/lit-forward-proxy-molecule
+    forward_proxy_test_root: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/forward-proxy-state
   pre_tasks:
     - name: Read rootless test UID
       ansible.builtin.command: id -u

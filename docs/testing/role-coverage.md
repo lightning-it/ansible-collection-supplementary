@@ -556,7 +556,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Required-secret policy: Protected non-production credentials or licensed inputs are required for the declared external dependencies.
 - Local execution: `molecule test -s forward-proxy-tiny`; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
 - Candidate-target execution: no runnable candidate matrix is currently declared.
-- Reports/evidence: Allure, JUnit, structured evidence. Failed mandatory runs remain failures or infrastructure errors.
+- Reports/evidence: JUnit, structured evidence. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
 - Known limitations: Tiny renders and validates the exact service contract without starting Podman; live proxy traffic and host-firewall enforcement require the protected Wunderbox acceptance target.
 
@@ -1770,7 +1770,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | dhcp-deploy-basic | Tiny | experimental | partial | dhcp_deploy | — | not-applicable | — | Scenario exercises controller-side role behavior without deploying an independently versioned application. | False | False | False |
 | forgejo-cac-basic | Tiny | experimental | stub | forgejo_cac | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | forgejo-deploy-basic | Tiny | experimental | stub | forgejo_deploy | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
-| forward-proxy-tiny | Tiny | experimental | partial | forward_proxy | — | not-applicable | — | Scenario renders and reconciles the real service configuration without starting a privileged Podman or systemd runtime. | True | True | True |
+| forward-proxy-tiny | Tiny | experimental | partial | forward_proxy | — | not-applicable | — | Scenario renders and reconciles the real service configuration without starting a privileged Podman or systemd runtime. | True | False | True |
 | gitlab-runner-basic | Tiny | deprecated | deprecation-contract | gitlab_runner | — | not-applicable | — | Scenario enforces a deprecation contract and intentionally does not deploy an independently versioned application. | False | False | False |
 | hetzner-object-storage-tiny | Tiny | experimental | partial | hetzner_object_storage_cac | — | not-applicable | — | Scenario validates the real provider contract and plan path without mutating a paid external service. | False | False | False |
 | incus-esxi-image-basic | Tiny | experimental | partial | incus_esxi_image | — | not-applicable | — | Scenario exercises controller-side role behavior without deploying an independently versioned application. | False | False | False |
