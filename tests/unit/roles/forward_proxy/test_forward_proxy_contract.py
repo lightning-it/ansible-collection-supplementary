@@ -93,6 +93,7 @@ class ForwardProxyContractTests(unittest.TestCase):
 
     def test_readiness_and_updates_are_transactional(self) -> None:
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
+        main_tasks = (ROLE_ROOT / "tasks" / "main.yml").read_text()
         rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
         self.assertIn("Verify the managed Squid Pod is running", apply_tasks)
@@ -102,7 +103,14 @@ class ForwardProxyContractTests(unittest.TestCase):
         )
         self.assertIn("Restore previous forward proxy managed files", rollback)
         self.assertIn("Restart the restored previous forward proxy runtime", rollback)
+        self.assertIn("Refuse to adopt a foreign Quadlet during runtime activation", main_tasks)
+        self.assertNotIn("Remove a partial Quadlet", rollback)
         self.assertIn("regex_replace('^\\\\.', '') | length <= 253", assertions)
+
+    def test_proxy_digest_is_renovated_in_defaults_and_molecule(self) -> None:
+        renovate = (REPOSITORY_ROOT / "renovate.json").read_text()
+        self.assertIn("roles/.*/defaults/main", renovate)
+        self.assertIn("molecule/forward-proxy-tiny/", renovate)
 
     def test_squid_is_readonly_runtime_compatible(self) -> None:
         template = (ROLE_ROOT / "templates" / "squid.conf.j2").read_text()

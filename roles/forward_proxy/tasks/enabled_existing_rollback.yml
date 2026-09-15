@@ -37,12 +37,6 @@
     mode: "0644"
   when: forward_proxy_previous_state_manifest.runtime_managed | bool
 
-- name: Remove a partial Quadlet from a previous render-only deployment
-  ansible.builtin.file:
-    path: "{{ forward_proxy_quadlet_path }}"
-    state: absent
-  when: not forward_proxy_previous_state_manifest.runtime_managed | bool
-
 - name: Restore the previous forward proxy ownership marker
   ansible.builtin.copy:
     content: "{{ forward_proxy_state_marker_content.content | b64decode }}"
