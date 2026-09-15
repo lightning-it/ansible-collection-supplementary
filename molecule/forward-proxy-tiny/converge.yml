@@ -8,6 +8,14 @@
     forward_proxy_test_root: >-
       {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/forward-proxy-state
     forward_proxy_render_root: "{{ forward_proxy_test_root }}"
+    forward_proxy_trusted_parent_paths:
+      - "{{ forward_proxy_test_root | dirname }}"
+      - "{{ forward_proxy_test_root }}"
+      - "{{ forward_proxy_test_root }}/etc"
+      - "{{ forward_proxy_test_root }}/etc/squid"
+      - "{{ forward_proxy_test_root }}/var"
+      - "{{ forward_proxy_test_root }}/var/lib"
+      - "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy"
   pre_tasks:
     - name: Read rootless test UID
       ansible.builtin.command: id -u

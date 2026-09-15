@@ -58,6 +58,12 @@
         )
       - forward_proxy_upstream_port | int >= 1
       - forward_proxy_upstream_port | int <= 65535
+      - forward_proxy_trusted_parent_paths is sequence
+      - forward_proxy_trusted_parent_paths is not string
+      - forward_proxy_trusted_parent_paths | length > 0
+      - >-
+        forward_proxy_trusted_parent_paths | unique | list | length
+        == forward_proxy_trusted_parent_paths | length
     fail_msg: >-
       Forward proxy inputs must define a digest-pinned non-root Squid
       container with explicit clients, destinations, and optional upstream.
@@ -167,6 +173,32 @@
       - "'//' not in forward_proxy_render_root"
     fail_msg: "The render-only root must be one exact, non-root absolute path."
 
+- name: Validate trusted forward proxy directory boundaries
+  ansible.builtin.assert:
+    that:
+      - item is match('^/[A-Za-z0-9_./-]+\Z')
+      - item != '/'
+      - "'.' not in item.split('/')"
+      - "'..' not in item.split('/')"
+      - "'//' not in item"
+    fail_msg: >-
+      Trusted proxy parent paths must be unique exact absolute paths ordered
+      from an existing canonical anchor toward each managed target.
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+
+- name: Require complete trusted parent coverage before side effects
+  ansible.builtin.assert:
+    that:
+      - >-
+        forward_proxy_managed_directories_internal
+        | difference(forward_proxy_trusted_parent_paths) | length == 0
+      - >-
+        not forward_proxy_manage_runtime
+        or forward_proxy_quadlet_dir in forward_proxy_trusted_parent_paths
+    fail_msg: >-
+      Every managed file parent and the active Quadlet directory must be in
+      the explicit canonical parent chain before any directory is created.
+
 - name: Contain non-root render-only output beneath its explicit root
   ansible.builtin.assert:
     that:
@@ -201,6 +233,23 @@
           + [forward_proxy_state_marker_path, forward_proxy_quadlet_path]
         ) | unique | list | length
         == (forward_proxy_managed_paths_internal | length) + 2
+      - >-
+        (
+          forward_proxy_managed_paths_internal
+          + [forward_proxy_state_marker_path, forward_proxy_quadlet_path]
+        )
+        | difference([item])
+        | select('match', '^' ~ (item | regex_escape) ~ '/')
+        | list | length == 0
+      - >-
+        item == forward_proxy_quadlet_path
+        or (
+          item != forward_proxy_quadlet_dir
+          and not item.startswith(forward_proxy_quadlet_dir.rstrip('/') ~ '/')
+          and not forward_proxy_quadlet_dir.startswith(item.rstrip('/') ~ '/')
+        )
     fail_msg: >-
-      Proxy configuration, manifest, state marker, and Quadlet paths must all
-      be distinct.
+      Proxy files must be distinct non-ancestor paths and must not overlap the
+      delegated Quadlet directory boundary.
+  loop: >-
+    {{ forward_proxy_managed_paths_internal + [forward_proxy_state_marker_path, forward_proxy_quadlet_path] }}

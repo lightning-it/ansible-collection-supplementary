@@ -78,6 +78,8 @@ class ForwardProxyContractTests(unittest.TestCase):
     def test_non_root_rendering_is_contained_and_numeric_owners_are_canonical(self) -> None:
         defaults = (ROLE_ROOT / "defaults" / "main.yml").read_text()
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+        main = (ROLE_ROOT / "tasks" / "main.yml").read_text()
+        directory_guard = (ROLE_ROOT / "tasks" / "ensure_directory.yml").read_text()
         argument_spec = (ROLE_ROOT / "meta" / "argument_specs.yml").read_text()
         self.assertIn("forward_proxy_render_root: /tmp", defaults)
         self.assertIn("forward_proxy_render_root", argument_spec)
@@ -85,6 +87,11 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("item.startswith(forward_proxy_render_root.rstrip('/') ~ '/')", assertions)
         self.assertIn("|0|[1-9][0-9]{0,9}", assertions)
         self.assertNotIn("|[0-9]{1,10}", assertions)
+        self.assertIn("forward_proxy_trusted_parent_paths", defaults)
+        self.assertIn("forward_proxy_trusted_parent_paths", argument_spec)
+        self.assertIn("Create and revalidate every trusted forward proxy parent boundary", main)
+        self.assertIn("realpath", directory_guard)
+        self.assertIn("forward_proxy_directory_realpath.stdout == forward_proxy_directory_path", directory_guard)
 
     def test_upstream_hostname_is_validated_label_by_label(self) -> None:
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
@@ -113,8 +120,20 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_manage_runtime | bool", tasks)
         self.assertIn("Refuse to adopt unowned forward proxy target paths", tasks)
         self.assertIn("not item.stat.exists", tasks)
-        self.assertIn("Refuse unsafe forward proxy managed directories", tasks)
+        self.assertIn("Refuse an absent anchor or unsafe existing proxy directory", tasks)
         self.assertNotIn("_forward_proxy_managed_paths", tasks)
+        rollback = (ROLE_ROOT / "tasks" / "enabled_first_run_rollback.yml").read_text()
+        self.assertIn("Require exact first-run ownership before rollback", rollback)
+        self.assertIn("item.stat.isreg", rollback)
+        self.assertIn("item.stat.islnk", rollback)
+        self.assertIn("forward_proxy_directory_creation_allowed: false", rollback)
+
+    def test_managed_files_cannot_overlap_directories_or_each_other(self) -> None:
+        assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+        self.assertIn("select('match', '^' ~ (item | regex_escape) ~ '/')", assertions)
+        self.assertIn("item != forward_proxy_quadlet_dir", assertions)
+        self.assertIn("not forward_proxy_quadlet_dir.startswith", assertions)
+        self.assertIn("not item.startswith(forward_proxy_quadlet_dir.rstrip('/')", assertions)
 
     def test_check_mode_still_checks_image_without_waiting_for_listener(self) -> None:
         image_task = (ROLE_ROOT / "tasks" / "enabled.yml").read_text()
@@ -163,6 +182,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("Evaluate each service and upstream contract independently", verify)
         self.assertIn("Exercise cleanup without losing its failure evidence", verify)
         self.assertIn("forward_proxy_cleanup_execution_result", verify)
+        self.assertIn("follow: false", verify)
+        self.assertIn("not item.stat.islnk", verify)
         self.assertIn("Fail after preserving every forward proxy assertion result", verify)
         self.assertIn("evidence/forward-proxy-tiny.yml", cleanup)
         self.assertIn("forward_proxy_junit_passed", cleanup)

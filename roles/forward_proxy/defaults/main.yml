@@ -35,3 +35,15 @@ forward_proxy_upstream_port: 3128
 forward_proxy_config_path: /etc/lit-forward-proxy/squid.conf
 forward_proxy_pod_manifest_path: /etc/lit-forward-proxy/squid-pod.yml
 forward_proxy_state_marker_path: /var/lib/lit-forward-proxy/managed.json
+
+# Complete parent chains for every managed file and the delegated Quadlet
+# directory. A path whose parent is not listed is an existing canonical anchor;
+# descendants must follow it in parent-before-child order.
+forward_proxy_trusted_parent_paths:
+  - /etc
+  - /etc/lit-forward-proxy
+  - /etc/containers
+  - /etc/containers/systemd
+  - /var
+  - /var/lib
+  - /var/lib/lit-forward-proxy

@@ -1,4 +1,56 @@
 ---
+- name: Revalidate trusted proxy directories before first-run rollback
+  ansible.builtin.include_tasks: ensure_directory.yml
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  loop_control:
+    loop_var: forward_proxy_directory_path
+  vars:
+    forward_proxy_directory_creation_allowed: false
+
+- name: Inspect first-run rollback targets before removing anything
+  ansible.builtin.stat:
+    path: "{{ item.0 }}"
+    follow: false
+  loop: >-
+    {{
+      (forward_proxy_managed_paths_internal | zip(forward_proxy_managed_modes_internal) | list)
+      + [[forward_proxy_quadlet_path, '0644'], [forward_proxy_state_marker_path, '0600']]
+    }}
+  register: forward_proxy_first_run_owned_stats
+
+- name: Require exact first-run ownership before rollback
+  ansible.builtin.assert:
+    that:
+      - >-
+        not item.stat.exists
+        or (
+          item.stat.isreg | default(false)
+          and not item.stat.islnk | default(false)
+          and item.stat.mode == item.item.1
+          and (
+            (
+              item.item.0 == forward_proxy_quadlet_path
+              and item.stat.pw_name | default('') == 'root'
+              and item.stat.gr_name | default('') == 'root'
+            )
+            or (
+              item.item.0 != forward_proxy_quadlet_path
+              and (
+                item.stat.pw_name | default('') == forward_proxy_file_owner | string
+                or item.stat.uid | string == forward_proxy_file_owner | string
+              )
+              and (
+                item.stat.gr_name | default('') == forward_proxy_file_group | string
+                or item.stat.gid | string == forward_proxy_file_group | string
+              )
+            )
+          )
+        )
+    fail_msg: >-
+      A first-run rollback target cannot be proven to be a role-created regular
+      file. Leave it untouched for operator recovery.
+  loop: "{{ forward_proxy_first_run_owned_stats.results }}"
+
 - name: Remove a partially created forward proxy runtime
   ansible.builtin.include_role:
     name: lit.foundational.podman_systemd
@@ -11,12 +63,12 @@
     podman_systemd_quadlet_dir: "{{ forward_proxy_quadlet_dir }}"
   when: forward_proxy_manage_runtime | bool
 
-- name: Remove partial first-run forward proxy files
+- name: Remove verified partial first-run forward proxy files
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: "{{ item.item.0 }}"
     state: absent
-  loop: >-
-    {{ forward_proxy_managed_paths_internal + [forward_proxy_quadlet_path, forward_proxy_state_marker_path] }}
+  loop: "{{ forward_proxy_first_run_owned_stats.results }}"
+  when: item.stat.exists
 
 - name: Inspect first-run rollback targets
   ansible.builtin.stat:

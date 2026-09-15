@@ -27,3 +27,4 @@ argument_specs:
       forward_proxy_config_path: {type: path}
       forward_proxy_pod_manifest_path: {type: path}
       forward_proxy_state_marker_path: {type: path}
+      forward_proxy_trusted_parent_paths: {type: list, elements: path}
