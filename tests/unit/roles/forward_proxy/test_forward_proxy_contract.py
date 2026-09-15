@@ -51,6 +51,7 @@ class ForwardProxyContractTests(unittest.TestCase):
 
     def test_service_contract_requires_loopback_and_explicit_networks(self) -> None:
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+        policy = (ROLE_ROOT / "templates" / "squid.conf.j2").read_text()
         self.assertIn("'127.0.0.1' in forward_proxy_listen_addresses", assertions)
         self.assertIn("'127.0.0.1/32' in forward_proxy_allowed_clients", assertions)
         self.assertIn("/(?:[1-9]|[12][0-9]|3[0-2])\\Z", assertions)
@@ -64,6 +65,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("2 ** (32 - (item.split('/')[1] | int))", assertions)
         self.assertIn("'.' not in item.split('/')", assertions)
         self.assertIn("\\Z", assertions)
+        self.assertIn("acl lit_allowed_domains dstdomain -n", policy)
+        self.assertNotIn("acl lit_allowed_domains dstdomain {{", policy)
 
         verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
         rejection = (
@@ -74,7 +77,9 @@ class ForwardProxyContractTests(unittest.TestCase):
             / "reject-client.yml"
         ).read_text()
         self.assertIn("Prove unsafe client networks are rejected before rendering", verify)
-        self.assertIn("Unsafe client network", rejection)
+        self.assertIn("forward_proxy_negative_results", verify)
+        self.assertIn("forward_proxy.negative_policy", verify)
+        self.assertIn("Preserve unsafe client rejection result", rejection)
 
     def test_non_root_rendering_is_contained_and_numeric_owners_are_canonical(self) -> None:
         defaults = (ROLE_ROOT / "defaults" / "main.yml").read_text()
@@ -167,6 +172,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("Fail after preserving every forward proxy assertion result", verify)
         self.assertIn("evidence/forward-proxy-tiny.yml", cleanup)
         self.assertIn("forward_proxy_junit_passed", cleanup)
+        self.assertIn("scripts.quality_evidence import parse_junit", cleanup)
+        self.assertIn("junit_status:", cleanup)
         self.assertIn("release_eligible:", cleanup)
         self.assertIn("redacted: true", cleanup)
 

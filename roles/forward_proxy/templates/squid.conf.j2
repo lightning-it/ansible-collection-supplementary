@@ -8,7 +8,7 @@ acl lit_safe_ports port {{ forward_proxy_allowed_destination_ports | join(' ') }
 acl lit_http_ports port 80
 acl lit_ssl_ports port 443
 acl lit_connect method CONNECT
-acl lit_allowed_domains dstdomain {{ forward_proxy_allowed_destination_domains | join(' ') }}
+acl lit_allowed_domains dstdomain -n {{ forward_proxy_allowed_destination_domains | join(' ') }}
 
 http_access deny !lit_safe_ports
 http_access deny lit_connect !lit_ssl_ports

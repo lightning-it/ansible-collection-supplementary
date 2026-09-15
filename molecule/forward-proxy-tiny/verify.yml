@@ -39,6 +39,10 @@
         forward_proxy_rendered_policy: "{{ forward_proxy_squid_config.content | b64decode }}"
         forward_proxy_rendered_pod: "{{ forward_proxy_pod_manifest.content | b64decode }}"
 
+    - name: Initialize aggregate unsafe-client evidence
+      ansible.builtin.set_fact:
+        forward_proxy_negative_results: []
+
     - name: Prove unsafe client networks are rejected before rendering
       ansible.builtin.include_tasks: tasks/reject-client.yml
       loop:
@@ -61,9 +65,12 @@
         - name: exact destination allowlist
           passed: >-
             {{
-              'acl lit_allowed_domains dstdomain .ubuntu.com registry.example.com'
+              'acl lit_allowed_domains dstdomain -n .ubuntu.com registry.example.com'
               in forward_proxy_rendered_policy
             }}
+        - name: reject reverse-DNS conversion for IP literals
+          passed: >-
+            {{ 'acl lit_allowed_domains dstdomain -n ' in forward_proxy_rendered_policy }}
         - name: upstream proxy peer
           passed: >-
             {{
@@ -144,6 +151,7 @@
         forward_proxy_all_results: >-
           {{
             forward_proxy_policy_results.results
+            + forward_proxy_negative_results
             + [forward_proxy_cleanup_execution_result]
             + forward_proxy_cleanup_results.results
           }}
@@ -151,6 +159,7 @@
           {{
             (
               forward_proxy_policy_results.results
+              + forward_proxy_negative_results
               + [forward_proxy_cleanup_execution_result]
               + forward_proxy_cleanup_results.results
             )
@@ -181,6 +190,14 @@
               name="{{ result.item.name | e }}"
               role="forward_proxy">{% if result.failed | default(false) %}
               <failure message="contract assertion failed"/>{% endif %}
+            </testcase>
+          {% endfor %}
+          {% for result in forward_proxy_negative_results %}
+            <testcase
+              classname="forward_proxy.negative_policy"
+              name="{{ result.item.name | e }}"
+              role="forward_proxy">{% if result.failed | default(false) %}
+              <failure message="unsafe client network was not rejected"/>{% endif %}
             </testcase>
           {% endfor %}
             <testcase
