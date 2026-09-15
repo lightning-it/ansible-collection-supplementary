@@ -699,6 +699,36 @@ roles:
         - "forgejo-deploy-basic"
       heavy: []
       application_acceptance: []
+  forward_proxy:
+    component: "forward_proxy"
+    classification: "network_service"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-8"
+      - "rhel-9"
+      - "rhel-10"
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "blocked-external-infrastructure"
+    application_acceptance: "blocked-external-infrastructure"
+    acceptance_surface: "proxy_allowed_destinations_and_deny_direct_or_disallowed_traffic"
+    dependencies:
+      - "lit.foundational.podman_systemd"
+    external_dependencies:
+      - "A prepared rootful Podman and systemd host with governed outbound access"
+    known_limitations:
+      - >-
+        Tiny renders and validates the exact service contract without starting
+        Podman; live proxy traffic and host-firewall enforcement require the
+        protected Wunderbox acceptance target.
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "forward-proxy-tiny"
+      heavy: []
+      application_acceptance: []
   gitlab_runner:
     component: "gitlab_runner"
     classification: "runner"
@@ -2735,6 +2765,21 @@ scenarios:
       reason: >-
         Scenario is a role contract or assertion stub and does not deploy an independently versioned
         application.
+      dependencies: []
+  forward-proxy-tiny:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "forward_proxy"
+    junit: false
+    allure: false
+    evidence: false
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario renders and reconciles the real service configuration without
+        starting a privileged Podman or systemd runtime.
       dependencies: []
   gitlab-runner-basic:
     profile: "tiny"

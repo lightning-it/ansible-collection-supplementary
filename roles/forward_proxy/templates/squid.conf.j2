@@ -1,0 +1,33 @@
+# Managed by lit.supplementary.forward_proxy. Local changes are overwritten.
+{% for address in forward_proxy_listen_addresses %}
+http_port {{ address }}:{{ forward_proxy_port }}
+{% endfor %}
+
+acl lit_clients src {{ forward_proxy_allowed_clients | join(' ') }}
+acl lit_safe_ports port {{ forward_proxy_allowed_destination_ports | join(' ') }}
+acl lit_http_ports port 80
+acl lit_ssl_ports port 443
+acl lit_connect method CONNECT
+acl lit_allowed_domains dstdomain {{ forward_proxy_allowed_destination_domains | join(' ') }}
+
+http_access deny !lit_safe_ports
+http_access deny lit_connect !lit_ssl_ports
+http_access deny !lit_connect !lit_http_ports
+http_access allow lit_clients lit_allowed_domains
+http_access deny all
+
+cache deny all
+cache_dir null /tmp
+pid_filename /tmp/squid.pid
+forwarded_for delete
+via off
+{% if forward_proxy_upstream_enabled %}
+cache_peer {{ forward_proxy_upstream_host }} parent {{ forward_proxy_upstream_port }} 0 no-query default
+never_direct allow all
+{% else %}
+always_direct allow all
+{% endif %}
+
+access_log stdio:/dev/stdout
+cache_log /dev/stderr
+coredump_dir /tmp

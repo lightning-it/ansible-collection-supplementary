@@ -1,0 +1,158 @@
+---
+- name: Validate forward proxy interface
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_enabled is boolean
+      - forward_proxy_manage_runtime is boolean
+      - forward_proxy_file_owner is match('^(?:[a-z_][a-z0-9_-]{0,31}|[0-9]{1,10})$')
+      - forward_proxy_file_group is match('^(?:[a-z_][a-z0-9_-]{0,31}|[0-9]{1,10})$')
+      - >-
+        forward_proxy_file_owner in ['root', '0']
+        or (
+          not forward_proxy_manage_runtime
+          and (
+            (_forward_proxy_managed_paths + [forward_proxy_state_marker_path])
+            | reject('match', '^/tmp/') | list | length == 0
+          )
+        )
+      - >-
+        forward_proxy_file_group in ['root', '0']
+        or (
+          not forward_proxy_manage_runtime
+          and (
+            (_forward_proxy_managed_paths + [forward_proxy_state_marker_path])
+            | reject('match', '^/tmp/') | list | length == 0
+          )
+        )
+      - >-
+        forward_proxy_image
+        is match('^docker\.io/ubuntu/squid:6\.6-24\.04_beta@sha256:[a-f0-9]{64}\Z')
+      - forward_proxy_image_pull_policy == 'Never'
+      - forward_proxy_runtime_uid == 13
+      - forward_proxy_runtime_gid == 13
+      - forward_proxy_unit_name is match('^[a-z][a-z0-9-]{1,61}[a-z0-9]\Z')
+      - forward_proxy_systemd_scope == 'system'
+      - forward_proxy_podman_binary is match('^/[A-Za-z0-9_./-]+$')
+      - forward_proxy_readiness_timeout | int >= 1
+      - forward_proxy_readiness_timeout | int <= 300
+      - forward_proxy_listen_addresses is sequence
+      - forward_proxy_listen_addresses is not string
+      - forward_proxy_listen_addresses | length > 0
+      - forward_proxy_listen_addresses | unique | list | length == forward_proxy_listen_addresses | length
+      - "'127.0.0.1' in forward_proxy_listen_addresses"
+      - forward_proxy_port | int >= 1024
+      - forward_proxy_port | int <= 65535
+      - forward_proxy_allowed_clients is sequence
+      - forward_proxy_allowed_clients is not string
+      - forward_proxy_allowed_clients | length > 0
+      - forward_proxy_allowed_clients | unique | list | length == forward_proxy_allowed_clients | length
+      - "'127.0.0.1/32' in forward_proxy_allowed_clients"
+      - forward_proxy_allowed_destination_domains is sequence
+      - forward_proxy_allowed_destination_domains is not string
+      - not forward_proxy_enabled or forward_proxy_allowed_destination_domains | length > 0
+      - forward_proxy_allowed_destination_ports is sequence
+      - forward_proxy_allowed_destination_ports is not string
+      - forward_proxy_allowed_destination_ports | length > 0
+      - 443 in forward_proxy_allowed_destination_ports
+      - >-
+        forward_proxy_allowed_destination_ports | unique | list | length
+        == forward_proxy_allowed_destination_ports | length
+      - forward_proxy_upstream_enabled is boolean
+      - >-
+        not forward_proxy_upstream_enabled
+        or (
+          forward_proxy_upstream_host | length >= 1
+          and forward_proxy_upstream_host | length <= 253
+          and not forward_proxy_upstream_host.startswith('.')
+          and not forward_proxy_upstream_host.endswith('.')
+        )
+      - forward_proxy_upstream_port | int >= 1
+      - forward_proxy_upstream_port | int <= 65535
+    fail_msg: >-
+      Forward proxy inputs must define a digest-pinned non-root Squid
+      container with explicit clients, destinations, and optional upstream.
+
+- name: Validate upstream hostname labels
+  ansible.builtin.assert:
+    that:
+      - item is match('^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$')
+    fail_msg: "The upstream proxy must be an exact DNS name with valid labels."
+  loop: "{{ forward_proxy_upstream_host.split('.') }}"
+  when: forward_proxy_upstream_enabled | bool
+
+- name: Validate forward proxy listen addresses
+  ansible.builtin.assert:
+    that:
+      - >-
+        item is match(
+          '^(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])'
+          '(?:\\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}$'
+        )
+    fail_msg: "Forward proxy listen addresses must be exact IPv4 addresses."
+  loop: "{{ forward_proxy_listen_addresses }}"
+
+- name: Validate forward proxy client networks
+  ansible.builtin.assert:
+    that:
+      - >-
+        item is match(
+          '^(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])'
+          '(?:\\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}'
+          '/(?:[1-9]|[12][0-9]|3[0-2])$'
+        )
+      - >-
+        item == '127.0.0.1/32'
+        or item is match(
+          '^(?:10\.|192\.168\.|172\.(?:1[6-9]|2[0-9]|3[01])\.)'
+        )
+    fail_msg: >-
+      Forward proxy clients must be exact loopback or RFC1918 IPv4 CIDRs;
+      globally routable networks are forbidden.
+  loop: "{{ forward_proxy_allowed_clients }}"
+
+- name: Validate forward proxy destination domains
+  ansible.builtin.assert:
+    that:
+      - >-
+        item is match(
+          '^\\.?(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+'
+          '[A-Za-z]{2,63}$'
+        )
+    fail_msg: "Forward proxy destinations must be exact DNS names or dotted domain suffixes."
+  loop: "{{ forward_proxy_allowed_destination_domains }}"
+
+- name: Validate forward proxy destination ports
+  ansible.builtin.assert:
+    that:
+      - item is integer
+      - item in [80, 443]
+    fail_msg: "The standard LIT forward proxy permits only HTTP 80 and HTTPS CONNECT 443."
+  loop: "{{ forward_proxy_allowed_destination_ports }}"
+
+- name: Validate managed forward proxy paths
+  ansible.builtin.assert:
+    that:
+      - item is match('^/[A-Za-z0-9_./-]+$')
+      - item != '/'
+      - "'..' not in item.split('/')"
+      - "'//' not in item"
+    fail_msg: "Managed forward proxy paths must be exact absolute paths."
+  loop:
+    - "{{ forward_proxy_config_path }}"
+    - "{{ forward_proxy_pod_manifest_path }}"
+    - "{{ forward_proxy_state_marker_path }}"
+    - "{{ forward_proxy_quadlet_dir }}"
+    - "{{ forward_proxy_podman_binary }}"
+
+- name: Require distinct managed forward proxy paths
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          _forward_proxy_managed_paths
+          + [forward_proxy_state_marker_path, forward_proxy_quadlet_path]
+        ) | unique | list | length
+        == (_forward_proxy_managed_paths | length) + 2
+    fail_msg: >-
+      Proxy configuration, manifest, state marker, and Quadlet paths must all
+      be distinct.
