@@ -6,6 +6,24 @@
     loop_var: forward_proxy_directory_path
   vars:
     forward_proxy_directory_creation_allowed: false
+  when:
+    - >-
+      forward_proxy_directory_path in forward_proxy_managed_directories_internal
+      or (
+        forward_proxy_managed_directories_internal
+        | select(
+            'match',
+            '^' ~ (forward_proxy_directory_path | regex_escape) ~ '/'
+          )
+        | list | length > 0
+      )
+      or (
+        forward_proxy_manage_runtime | bool
+        and (
+          forward_proxy_directory_path == forward_proxy_quadlet_dir
+          or forward_proxy_quadlet_dir.startswith(forward_proxy_directory_path.rstrip('/') ~ '/')
+        )
+      )
 
 - name: Remove a partially created forward proxy runtime
   ansible.builtin.include_role:
@@ -33,7 +51,8 @@
   loop: >-
     {{
       (forward_proxy_managed_paths_internal | zip(forward_proxy_managed_modes_internal) | list)
-      + [[forward_proxy_quadlet_path, '0644'], [forward_proxy_state_marker_path, '0600']]
+      + ([[forward_proxy_quadlet_path, '0644']] if forward_proxy_manage_runtime | bool else [])
+      + [[forward_proxy_state_marker_path, '0600']]
     }}
   register: forward_proxy_first_run_owned_stats
 
@@ -41,7 +60,10 @@
   ansible.builtin.assert:
     that:
       - >-
-        not item.stat.exists
+        (
+          not item.stat.exists
+          and not item.stat.islnk | default(false)
+        )
         or (
           item.stat.isreg | default(false)
           and not item.stat.islnk | default(false)
@@ -96,13 +118,18 @@
     path: "{{ item }}"
     follow: false
   loop: >-
-    {{ forward_proxy_managed_paths_internal + [forward_proxy_quadlet_path, forward_proxy_state_marker_path] }}
+    {{
+      forward_proxy_managed_paths_internal
+      + ([forward_proxy_quadlet_path] if forward_proxy_manage_runtime | bool else [])
+      + [forward_proxy_state_marker_path]
+    }}
   register: forward_proxy_first_run_rollback_stats
 
 - name: Verify first-run rollback completed
   ansible.builtin.assert:
     that:
       - not item.stat.exists
+      - not item.stat.islnk | default(false)
     fail_msg: >-
       A partial first-run forward proxy target remains after rollback. Stop for
       operator recovery without adopting or overwriting it.

@@ -39,7 +39,10 @@
         forward_proxy_directory_creation_allowed | bool
         or forward_proxy_directory_before.stat.exists
       - >-
-        not forward_proxy_directory_before.stat.exists
+        (
+          not forward_proxy_directory_before.stat.exists
+          and not forward_proxy_directory_before.stat.islnk | default(false)
+        )
         or (
           forward_proxy_directory_before.stat.isdir | default(false)
           and not forward_proxy_directory_before.stat.islnk | default(false)
@@ -82,6 +85,7 @@
     - forward_proxy_directory_creation_allowed | bool
     - forward_proxy_directory_path | dirname in forward_proxy_trusted_parent_paths
     - not forward_proxy_directory_before.stat.exists
+    - not forward_proxy_directory_before.stat.islnk | default(false)
 
 - name: Carry the planned forward proxy directory through check mode
   ansible.builtin.set_fact:
@@ -94,6 +98,7 @@
     - ansible_check_mode
     - forward_proxy_directory_creation_allowed | bool
     - not forward_proxy_directory_before.stat.exists
+    - not forward_proxy_directory_before.stat.islnk | default(false)
 
 - name: Reinspect the trusted proxy directory before privileged writes
   ansible.builtin.stat:

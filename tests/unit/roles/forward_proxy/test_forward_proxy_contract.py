@@ -138,12 +138,31 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_managed_asset_stats.results", rollback)
         self.assertIn("forward_proxy_directory_creation_allowed: false", rollback)
 
+    def test_dangling_symlinks_cannot_cross_first_run_boundaries(self) -> None:
+        main = (ROLE_ROOT / "tasks" / "main.yml").read_text()
+        directory_guard = (ROLE_ROOT / "tasks" / "ensure_directory.yml").read_text()
+        rollback = (ROLE_ROOT / "tasks" / "enabled_first_run_rollback.yml").read_text()
+        self.assertIn("+ [forward_proxy_state_marker_path]", main)
+        self.assertIn("not item.stat.islnk | default(false)", main)
+        self.assertGreaterEqual(
+            directory_guard.count("not forward_proxy_directory_before.stat.islnk | default(false)"),
+            3,
+        )
+        self.assertGreaterEqual(rollback.count("not item.stat.islnk | default(false)"), 2)
+
+    def test_first_run_rollback_matches_the_selected_runtime_mode(self) -> None:
+        rollback = (ROLE_ROOT / "tasks" / "enabled_first_run_rollback.yml").read_text()
+        self.assertIn("forward_proxy_managed_directories_internal", rollback)
+        self.assertIn("forward_proxy_manage_runtime | bool", rollback)
+        self.assertEqual(
+            rollback.count("if forward_proxy_manage_runtime | bool else []"),
+            2,
+        )
+
     def test_render_only_does_not_probe_or_create_runtime_state(self) -> None:
         main = (ROLE_ROOT / "tasks" / "main.yml").read_text()
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
-        verify = (
-            REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml"
-        ).read_text()
+        verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
         self.assertIn(
             "([forward_proxy_quadlet_path] if forward_proxy_manage_runtime | bool else [])",
             main,
@@ -156,16 +175,10 @@ class ForwardProxyContractTests(unittest.TestCase):
 
     def test_runtime_removal_revalidates_the_quadlet_parent_chain(self) -> None:
         main = (ROLE_ROOT / "tasks" / "main.yml").read_text()
-        self.assertIn(
-            "Require the declared Quadlet parent chain before runtime removal", main
-        )
-        self.assertIn(
-            "Revalidate the Quadlet parent chain before runtime removal", main
-        )
+        self.assertIn("Require the declared Quadlet parent chain before runtime removal", main)
+        self.assertIn("Revalidate the Quadlet parent chain before runtime removal", main)
         self.assertIn("forward_proxy_directory_creation_allowed: false", main)
-        self.assertIn(
-            "forward_proxy_previous_state_manifest.runtime_managed | bool", main
-        )
+        self.assertIn("forward_proxy_previous_state_manifest.runtime_managed | bool", main)
         self.assertIn("not forward_proxy_manage_runtime | bool", main)
 
     def test_every_runtime_removal_has_an_explicit_absence_postcondition(self) -> None:
