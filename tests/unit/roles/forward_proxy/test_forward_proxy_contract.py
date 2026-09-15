@@ -69,13 +69,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertNotIn("acl lit_allowed_domains dstdomain {{", policy)
 
         verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
-        rejection = (
-            REPOSITORY_ROOT
-            / "molecule"
-            / "forward-proxy-tiny"
-            / "tasks"
-            / "reject-client.yml"
-        ).read_text()
+        rejection = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "tasks" / "reject-client.yml").read_text()
         self.assertIn("Prove unsafe client networks are rejected before rendering", verify)
         self.assertIn("forward_proxy_negative_results", verify)
         self.assertIn("forward_proxy.negative_policy", verify)
