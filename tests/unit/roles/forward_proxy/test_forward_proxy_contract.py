@@ -176,6 +176,39 @@ class ForwardProxyContractTests(unittest.TestCase):
             2,
         )
 
+    def test_first_runtime_activation_never_adopts_or_removes_a_foreign_identity(
+        self,
+    ) -> None:
+        apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
+        rollback = (ROLE_ROOT / "tasks" / "enabled_first_run_rollback.yml").read_text()
+        self.assertIn(
+            "Inspect a same-named systemd unit before first runtime activation",
+            apply_tasks,
+        )
+        self.assertIn("list-unit-files", apply_tasks)
+        self.assertIn(
+            "forward_proxy_first_run_systemd_unit_files.stdout_lines | length == 0",
+            apply_tasks,
+        )
+        self.assertIn("forward_proxy_first_run_pod_state.rc == 1", apply_tasks)
+        self.assertIn(
+            "Authorize rollback only for the proven-absent first-run runtime identity",
+            apply_tasks,
+        )
+        authorization = (
+            "forward_proxy_first_run_runtime_removal_authorized_internal "
+            "| default(false) | bool"
+        )
+        self.assertGreaterEqual(rollback.count(authorization), 2)
+
+    def test_check_mode_never_materializes_the_runtime_ownership_payload(self) -> None:
+        apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
+        marker_task = apply_tasks.split(
+            "- name: Prepare the exact forward proxy ownership marker payload",
+            maxsplit=1,
+        )[1].split("- name: Record exact forward proxy file", maxsplit=1)[0]
+        self.assertIn("when: not ansible_check_mode", marker_task)
+
     def test_render_only_does_not_probe_or_create_runtime_state(self) -> None:
         main = (ROLE_ROOT / "tasks" / "main.yml").read_text()
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
