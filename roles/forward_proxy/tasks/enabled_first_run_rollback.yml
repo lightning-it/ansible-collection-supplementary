@@ -79,7 +79,14 @@
               else (
                 forward_proxy_quadlet_stat.stat.checksum | default('')
                 if item.item.0 == forward_proxy_quadlet_path
-                else ''
+                else (
+                  forward_proxy_state_marker_payload_internal | hash('sha256')
+                  if (
+                    item.item.0 == forward_proxy_state_marker_path
+                    and forward_proxy_state_marker_payload_internal is defined
+                  )
+                  else ''
+                )
               )
             )
           and (

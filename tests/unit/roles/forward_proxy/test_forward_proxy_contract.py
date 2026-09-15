@@ -147,6 +147,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertNotIn("_forward_proxy_managed_paths", tasks)
         rollback = (ROLE_ROOT / "tasks" / "enabled_first_run_rollback.yml").read_text()
         self.assertIn("Require exact transaction checksum and ownership before rollback", rollback)
+        self.assertIn("forward_proxy_state_marker_payload_internal | hash('sha256')", rollback)
+        self.assertIn("forward_proxy_state_marker_payload_internal is defined", rollback)
         self.assertIn("item.stat.isreg", rollback)
         self.assertIn("item.stat.islnk", rollback)
         self.assertIn("item.stat.checksum", rollback)
@@ -227,6 +229,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
         self.assertIn("check_mode: false", image_task)
         self.assertIn("verify_runtime_ready.yml", apply_tasks)
+        self.assertIn("Prepare the exact forward proxy ownership marker payload", apply_tasks)
+        self.assertIn('content: "{{ forward_proxy_state_marker_payload_internal }}"', apply_tasks)
         self.assertIn("not ansible_check_mode", apply_tasks)
 
     def test_readiness_and_updates_are_transactional(self) -> None:

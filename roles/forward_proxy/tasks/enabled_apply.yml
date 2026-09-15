@@ -124,9 +124,9 @@
     - forward_proxy_manage_runtime | bool
     - not ansible_check_mode
 
-- name: Record exact forward proxy file and Quadlet ownership
-  ansible.builtin.copy:
-    content: >-
+- name: Prepare the exact forward proxy ownership marker payload
+  ansible.builtin.set_fact:
+    forward_proxy_state_marker_payload_internal: >-
       {{
         {
           'schema': 'lit.supplementary.forward_proxy.managed-state/v4',
@@ -147,6 +147,10 @@
           )
         } | to_nice_json
       }}
+
+- name: Record exact forward proxy file and Quadlet ownership
+  ansible.builtin.copy:
+    content: "{{ forward_proxy_state_marker_payload_internal }}"
     dest: "{{ forward_proxy_state_marker_path }}"
     owner: "{{ forward_proxy_file_owner }}"
     group: "{{ forward_proxy_file_group }}"
