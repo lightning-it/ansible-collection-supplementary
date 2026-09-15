@@ -65,7 +65,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         variables = (ROLE_ROOT / "vars" / "main.yml").read_text()
         self.assertIn("Inspect the forward proxy managed-state marker", tasks)
         self.assertIn("forward_proxy_previous_state_manifest.managed_paths", tasks)
-        self.assertIn("lit.supplementary.forward_proxy.managed-state/v3", tasks)
+        self.assertIn("lit.supplementary.forward_proxy.managed-state/v4", tasks)
         self.assertNotIn("managed-state/v1", variables)
         self.assertIn("checksum_algorithm: sha256", tasks)
         self.assertIn("item.stat.isreg", tasks)
@@ -75,6 +75,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("item.stat.gr_name", tasks)
         self.assertIn("first-run rollback", tasks)
         self.assertIn("enabled_first_run_rollback.yml", tasks)
+        self.assertIn("enabled_existing_rollback.yml", tasks)
+        self.assertIn("runtime_managed", tasks)
         self.assertIn("forward_proxy_previous_state_manifest.quadlet_checksum", tasks)
         self.assertIn("forward_proxy_manage_runtime | bool", tasks)
         self.assertIn("Refuse to adopt unowned forward proxy target paths", tasks)
@@ -85,9 +87,22 @@ class ForwardProxyContractTests(unittest.TestCase):
     def test_check_mode_still_checks_image_without_waiting_for_listener(self) -> None:
         image_task = (ROLE_ROOT / "tasks" / "enabled.yml").read_text()
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
-        _, wait_task = apply_tasks.split("- name: Wait for the local Squid listener", maxsplit=1)
+        wait_task = apply_tasks.split("- name: Wait for the local Squid listener", maxsplit=1)[1]
         self.assertIn("check_mode: false", image_task)
         self.assertIn("not ansible_check_mode", wait_task)
+
+    def test_readiness_and_updates_are_transactional(self) -> None:
+        apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
+        rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
+        assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+        self.assertIn("Verify the managed Squid Pod is running", apply_tasks)
+        self.assertLess(
+            apply_tasks.index("Wait for the local Squid listener"),
+            apply_tasks.index("Record exact forward proxy file and Quadlet ownership"),
+        )
+        self.assertIn("Restore previous forward proxy managed files", rollback)
+        self.assertIn("Restart the restored previous forward proxy runtime", rollback)
+        self.assertIn("regex_replace('^\\\\.', '') | length <= 253", assertions)
 
     def test_squid_is_readonly_runtime_compatible(self) -> None:
         template = (ROLE_ROOT / "templates" / "squid.conf.j2").read_text()

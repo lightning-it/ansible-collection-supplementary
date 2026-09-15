@@ -21,8 +21,17 @@
         - not forward_proxy_state_marker.stat.exists
         - not ansible_check_mode
 
+    - name: Restore a failed existing forward proxy deployment
+      ansible.builtin.include_tasks: enabled_existing_rollback.yml
+      when:
+        - forward_proxy_state_marker.stat.exists
+        - not ansible_check_mode
+
     - name: Stop after the forward proxy transaction failed
       ansible.builtin.fail:
         msg: >-
-          Forward proxy activation failed. A first deployment was rolled back;
-          an existing owned deployment was preserved for operator recovery.
+          {{
+            'Forward proxy activation failed. The first deployment was rolled back.'
+            if not forward_proxy_state_marker.stat.exists
+            else 'Forward proxy activation failed. The previous owned deployment was restored.'
+          }}

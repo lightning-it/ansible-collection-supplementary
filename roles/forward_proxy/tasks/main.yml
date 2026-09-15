@@ -84,6 +84,11 @@
       {{ forward_proxy_state_marker_content.content | b64decode | from_json }}
   when: forward_proxy_state_marker.stat.exists
 
+- name: Initialize empty previous forward proxy state
+  ansible.builtin.set_fact:
+    forward_proxy_previous_state_manifest: {}
+  when: not forward_proxy_state_marker.stat.exists
+
 - name: Validate the exact previous forward proxy ownership manifest
   ansible.builtin.assert:
     that:
@@ -97,23 +102,25 @@
           'owner',
           'quadlet_checksum',
           'quadlet_path',
+          'runtime_managed',
           'schema',
           'unit_name'
         ]
-      - forward_proxy_previous_state_manifest.schema == 'lit.supplementary.forward_proxy.managed-state/v3'
+      - forward_proxy_previous_state_manifest.schema == 'lit.supplementary.forward_proxy.managed-state/v4'
       - forward_proxy_previous_state_manifest.owner == 'lit.supplementary.forward_proxy'
       - forward_proxy_previous_state_manifest.unit_name == forward_proxy_unit_name
       - forward_proxy_previous_state_manifest.quadlet_path == forward_proxy_quadlet_path
       - >-
         (
-          forward_proxy_manage_runtime | bool
+          forward_proxy_previous_state_manifest.runtime_managed | bool
           and forward_proxy_previous_state_manifest.quadlet_checksum
             is match('^[a-f0-9]{64}\Z')
         )
         or (
-          not forward_proxy_manage_runtime | bool
+          not forward_proxy_previous_state_manifest.runtime_managed | bool
           and forward_proxy_previous_state_manifest.quadlet_checksum == ''
         )
+      - forward_proxy_previous_state_manifest.runtime_managed is boolean
       - forward_proxy_previous_state_manifest.managed_paths is sequence
       - forward_proxy_previous_state_manifest.managed_paths is not string
       - forward_proxy_previous_state_manifest.managed_checksums is sequence
@@ -167,8 +174,8 @@
   ansible.builtin.assert:
     that:
       - >-
-        not item.stat.exists
-        or (
+        item.stat.exists
+        and (
           item.stat.isreg | default(false)
           and not item.stat.islnk | default(false)
           and item.stat.checksum == item.item.0.1
@@ -187,6 +194,13 @@
       overwriting or deleting it.
   loop: "{{ forward_proxy_previous_asset_stats.results | default([]) }}"
 
+- name: Preserve previously managed forward proxy file content
+  ansible.builtin.slurp:
+    src: "{{ item.item.0.0 }}"
+  loop: "{{ forward_proxy_previous_asset_stats.results | default([]) }}"
+  register: forward_proxy_previous_asset_contents
+  when: forward_proxy_state_marker.stat.exists
+
 - name: Inspect the previously managed forward proxy Quadlet
   ansible.builtin.stat:
     path: "{{ forward_proxy_previous_state_manifest.quadlet_path }}"
@@ -201,8 +215,8 @@
   ansible.builtin.assert:
     that:
       - >-
-        not forward_proxy_previous_quadlet_stat.stat.exists
-        or (
+        forward_proxy_previous_quadlet_stat.stat.exists
+        and (
           forward_proxy_previous_quadlet_stat.stat.isreg | default(false)
           and not forward_proxy_previous_quadlet_stat.stat.islnk | default(false)
           and forward_proxy_previous_quadlet_stat.stat.checksum
@@ -218,6 +232,14 @@
     - forward_proxy_state_marker.stat.exists
     - forward_proxy_previous_state_manifest.quadlet_checksum | length > 0
 
+- name: Preserve the previously managed forward proxy Quadlet
+  ansible.builtin.slurp:
+    src: "{{ forward_proxy_previous_state_manifest.quadlet_path }}"
+  register: forward_proxy_previous_quadlet_content
+  when:
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+
 - name: Require owned Quadlet evidence before runtime removal
   ansible.builtin.assert:
     that:
@@ -225,7 +247,7 @@
     fail_msg: "Runtime removal requires the exact previously recorded Quadlet checksum."
   when:
     - not forward_proxy_enabled | bool
-    - forward_proxy_manage_runtime | bool
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
     - forward_proxy_state_marker.stat.exists
 
 - name: Remove a previously managed forward proxy runtime when disabled
@@ -241,7 +263,7 @@
   when:
     - not forward_proxy_enabled | bool
     - forward_proxy_state_marker.stat.exists
-    - forward_proxy_manage_runtime | bool
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
 
 - name: Remove forward proxy managed configuration when disabled
   ansible.builtin.file:

@@ -1,4 +1,20 @@
 ---
+- name: Remove the previous runtime when switching to render-only mode
+  ansible.builtin.include_role:
+    name: lit.foundational.podman_systemd
+  vars:
+    podman_systemd_action: absent
+    podman_systemd_unit_name: "{{ forward_proxy_unit_name }}"
+    podman_systemd_description: LIT Squid forward proxy
+    podman_systemd_manifest_path: "{{ forward_proxy_pod_manifest_path }}"
+    podman_systemd_scope: "{{ forward_proxy_systemd_scope }}"
+    podman_systemd_quadlet_dir: "{{ forward_proxy_quadlet_dir }}"
+  when:
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
 - name: Create forward proxy managed directories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -103,14 +119,44 @@
     - forward_proxy_manage_runtime | bool
     - not ansible_check_mode
 
+- name: Verify the managed Squid Pod is running
+  ansible.builtin.command:
+    argv:
+      - "{{ forward_proxy_podman_binary }}"
+      - pod
+      - ps
+      - --filter
+      - "name=^{{ forward_proxy_unit_name }}$"
+      - --filter
+      - status=Running
+      - --format
+      - "{{ '{{.Name}}' }}"
+  register: forward_proxy_running_pod
+  changed_when: false
+  failed_when: forward_proxy_running_pod.stdout_lines != [forward_proxy_unit_name]
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Wait for the local Squid listener
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ forward_proxy_port }}"
+    state: started
+    timeout: "{{ forward_proxy_readiness_timeout }}"
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
 - name: Record exact forward proxy file and Quadlet ownership
   ansible.builtin.copy:
     content: >-
       {{
         {
-          'schema': 'lit.supplementary.forward_proxy.managed-state/v3',
+          'schema': 'lit.supplementary.forward_proxy.managed-state/v4',
           'owner': 'lit.supplementary.forward_proxy',
           'unit_name': forward_proxy_unit_name,
+          'runtime_managed': forward_proxy_manage_runtime | bool,
           'managed_paths': forward_proxy_managed_paths_internal,
           'managed_checksums': (
             forward_proxy_managed_asset_stats.results
@@ -130,13 +176,3 @@
     group: "{{ forward_proxy_file_group }}"
     mode: "0600"
   when: not ansible_check_mode
-
-- name: Wait for the local Squid listener
-  ansible.builtin.wait_for:
-    host: 127.0.0.1
-    port: "{{ forward_proxy_port }}"
-    state: started
-    timeout: "{{ forward_proxy_readiness_timeout }}"
-  when:
-    - forward_proxy_manage_runtime | bool
-    - not ansible_check_mode
