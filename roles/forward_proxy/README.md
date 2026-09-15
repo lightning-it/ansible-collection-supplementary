@@ -27,6 +27,7 @@ Important inputs include:
 
 - `forward_proxy_enabled`: enable or safely remove the role-owned service.
 - `forward_proxy_manage_runtime`: manage Quadlet/systemd or only render test fixtures.
+- `forward_proxy_render_root`: exact containment root for non-root render-only output.
 - `forward_proxy_image`: immutable `docker.io/ubuntu/squid:6.6-24.04_beta@sha256:...` image.
 - `forward_proxy_image_pull_policy`: fixed to `Never`; image preload is a separate bootstrap step.
 - `forward_proxy_listen_addresses` and `forward_proxy_allowed_clients`: exact ingress boundary.

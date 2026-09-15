@@ -7,6 +7,7 @@ argument_specs:
       forward_proxy_manage_runtime: {type: bool, default: true}
       forward_proxy_file_owner: {type: str, default: root}
       forward_proxy_file_group: {type: str, default: root}
+      forward_proxy_render_root: {type: path, default: /tmp}
       forward_proxy_image: {type: str}
       forward_proxy_image_pull_policy: {type: str, default: Never}
       forward_proxy_runtime_uid: {type: int, default: 13}

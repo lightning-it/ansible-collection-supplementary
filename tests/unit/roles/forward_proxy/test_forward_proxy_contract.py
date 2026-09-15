@@ -42,6 +42,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         pod = (ROLE_ROOT / "templates" / "squid-pod.yml.j2").read_text()
         self.assertIn("forward_proxy_image_pull_policy == 'Never'", assertions)
         self.assertIn("imagePullPolicy: {{ forward_proxy_image_pull_policy }}", pod)
+        self.assertIn("[A-Za-z0-9._-]{0,127}", assertions)
+        self.assertNotIn("squid:6\\.6-24\\.04_beta", assertions)
 
     def test_service_contract_requires_loopback_and_explicit_networks(self) -> None:
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
@@ -58,6 +60,22 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("2 ** (32 - (item.split('/')[1] | int))", assertions)
         self.assertIn("'.' not in item.split('/')", assertions)
         self.assertIn("\\Z", assertions)
+
+        verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
+        rejection = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "reject-client.yml").read_text()
+        self.assertIn("Prove unsafe client networks are rejected before rendering", verify)
+        self.assertIn("Unsafe client network", rejection)
+
+    def test_non_root_rendering_is_contained_and_numeric_owners_are_canonical(self) -> None:
+        defaults = (ROLE_ROOT / "defaults" / "main.yml").read_text()
+        assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+        argument_spec = (ROLE_ROOT / "meta" / "argument_specs.yml").read_text()
+        self.assertIn("forward_proxy_render_root: /tmp", defaults)
+        self.assertIn("forward_proxy_render_root", argument_spec)
+        self.assertIn("Contain non-root render-only output beneath its explicit root", assertions)
+        self.assertIn("item.startswith(forward_proxy_render_root.rstrip('/') ~ '/')", assertions)
+        self.assertIn("|0|[1-9][0-9]{0,9}", assertions)
+        self.assertNotIn("|[0-9]{1,10}", assertions)
 
     def test_upstream_hostname_is_validated_label_by_label(self) -> None:
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
@@ -133,6 +151,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("Evaluate each service and upstream contract independently", verify)
         self.assertIn("Fail after preserving every forward proxy assertion result", verify)
         self.assertIn("evidence/forward-proxy-tiny.yml", cleanup)
+        self.assertIn("forward_proxy_junit_passed", cleanup)
+        self.assertIn("release_eligible:", cleanup)
         self.assertIn("redacted: true", cleanup)
 
     def test_squid_is_readonly_runtime_compatible(self) -> None:

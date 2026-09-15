@@ -26,6 +26,19 @@
           - forward_proxy_junit_evidence.stat.checksum is match('^[a-f0-9]{64}\Z')
         quiet: true
 
+    - name: Read forward proxy JUnit evidence outcome
+      ansible.builtin.slurp:
+        src: "{{ forward_proxy_artifact_root }}/junit/forward-proxy-tiny.xml"
+      register: forward_proxy_junit_content
+
+    - name: Derive the structured evidence verdict from JUnit
+      ansible.builtin.set_fact:
+        forward_proxy_junit_passed: >-
+          {{
+            'failures="0"' in (forward_proxy_junit_content.content | b64decode)
+            and 'errors="0"' in (forward_proxy_junit_content.content | b64decode)
+          }}
+
     - name: Create redacted forward proxy evidence directory
       ansible.builtin.file:
         path: "{{ forward_proxy_artifact_root }}/evidence"
@@ -46,5 +59,6 @@
             | default('local-unbound', true) | to_json }}
           ansible_version: {{ ansible_version.full | to_json }}
           junit_sha256: {{ forward_proxy_junit_evidence.stat.checksum | to_json }}
-          result: passed
+          result: {{ ('passed' if forward_proxy_junit_passed else 'failed') | to_json }}
+          release_eligible: {{ forward_proxy_junit_passed | bool | to_json }}
           redacted: true

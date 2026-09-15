@@ -1,0 +1,33 @@
+---
+- name: Initialize unsafe client rejection evidence
+  ansible.builtin.set_fact:
+    forward_proxy_invalid_client_rejected: false
+    forward_proxy_invalid_client_rejection_message: ""
+
+- name: Exercise unsafe client rejection
+  block:
+    - name: Validate the unsafe client through the real role contract
+      ansible.builtin.include_role:
+        name: lit.supplementary.forward_proxy
+        tasks_from: assert.yml
+      vars:
+        forward_proxy_allowed_clients:
+          - 127.0.0.1/32
+          - "{{ forward_proxy_invalid_client }}"
+  rescue:
+    - name: Record expected unsafe client rejection
+      ansible.builtin.set_fact:
+        forward_proxy_invalid_client_rejected: true
+        forward_proxy_invalid_client_rejection_message: >-
+          {{ ansible_failed_result.msg | default('') }}
+
+- name: Require unsafe client rejection
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_invalid_client_rejected | bool
+      - >-
+        'Forward proxy clients must be exact loopback or RFC1918 IPv4 CIDRs'
+        in forward_proxy_invalid_client_rejection_message
+    fail_msg: >-
+      Unsafe client network {{ forward_proxy_invalid_client }} unexpectedly
+      passed the forward proxy contract.
