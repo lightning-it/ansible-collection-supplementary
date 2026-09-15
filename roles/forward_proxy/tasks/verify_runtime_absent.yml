@@ -22,3 +22,19 @@
   changed_when: false
   failed_when: forward_proxy_runtime_pod_absence.rc != 1
   check_mode: false
+
+- name: Inspect the removed forward proxy Quadlet
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_quadlet_path }}"
+    follow: false
+  register: forward_proxy_runtime_quadlet_absence
+  check_mode: false
+
+- name: Verify the forward proxy Quadlet is absent
+  ansible.builtin.assert:
+    that:
+      - not forward_proxy_runtime_quadlet_absence.stat.exists
+      - not forward_proxy_runtime_quadlet_absence.stat.islnk | default(false)
+    fail_msg: >-
+      The forward proxy runtime removal left its managed Quadlet or a dangling
+      symlink behind. Stop before recording an absent or render-only state.

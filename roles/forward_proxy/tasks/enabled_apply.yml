@@ -118,31 +118,8 @@
     - forward_proxy_manage_runtime | bool
     - not ansible_check_mode
 
-- name: Verify the managed Squid Pod is running
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/podman
-      - pod
-      - ps
-      - --filter
-      - "name=^{{ forward_proxy_unit_name }}$"
-      - --filter
-      - status=running
-      - --format
-      - "{{ '{{.Name}}' }}"
-  register: forward_proxy_running_pod
-  changed_when: false
-  failed_when: forward_proxy_running_pod.stdout_lines != [forward_proxy_unit_name]
-  when:
-    - forward_proxy_manage_runtime | bool
-    - not ansible_check_mode
-
-- name: Wait for the local Squid listener
-  ansible.builtin.wait_for:
-    host: 127.0.0.1
-    port: "{{ forward_proxy_port }}"
-    state: started
-    timeout: "{{ forward_proxy_readiness_timeout }}"
+- name: Prove the managed forward proxy runtime is ready
+  ansible.builtin.include_tasks: verify_runtime_ready.yml
   when:
     - forward_proxy_manage_runtime | bool
     - not ansible_check_mode

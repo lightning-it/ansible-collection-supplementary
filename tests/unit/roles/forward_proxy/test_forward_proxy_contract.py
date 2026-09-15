@@ -23,6 +23,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         defaults = (ROLE_ROOT / "defaults" / "main.yml").read_text()
         pod = (ROLE_ROOT / "templates" / "squid-pod.yml.j2").read_text()
         tasks = "".join(path.read_text() for path in sorted((ROLE_ROOT / "tasks").glob("enabled*.yml")))
+        tasks += (ROLE_ROOT / "tasks" / "verify_runtime_ready.yml").read_text()
         self.assertRegex(
             defaults,
             r"docker\.io/ubuntu/squid:[A-Za-z0-9][A-Za-z0-9._-]*"
@@ -40,6 +41,20 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("Wait for the local Squid listener", tasks)
         self.assertIn("- /usr/bin/podman", tasks)
         self.assertNotIn("forward_proxy_podman_binary", defaults + tasks)
+
+    def test_readme_keeps_the_mandatory_role_section_order(self) -> None:
+        readme = (ROLE_ROOT / "README.md").read_text()
+        ordered_headers = [
+            "## Requirements",
+            "## Variables",
+            "## Dependencies",
+            "## Example Playbook",
+            "## License",
+            "## Author",
+        ]
+        positions = [readme.index(header) for header in ordered_headers]
+        self.assertEqual(positions, sorted(positions))
+        self.assertGreater(readme.index("## Verification status"), readme.index("## Author"))
 
     def test_steady_state_cannot_pull_the_proxy_image(self) -> None:
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
@@ -196,6 +211,9 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("pod", absence)
         self.assertIn("exists", absence)
         self.assertIn("forward_proxy_runtime_pod_absence.rc != 1", absence)
+        self.assertIn("Inspect the removed forward proxy Quadlet", absence)
+        self.assertIn("not forward_proxy_runtime_quadlet_absence.stat.exists", absence)
+        self.assertIn("not forward_proxy_runtime_quadlet_absence.stat.islnk", absence)
 
     def test_managed_files_cannot_overlap_directories_or_each_other(self) -> None:
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
@@ -207,22 +225,27 @@ class ForwardProxyContractTests(unittest.TestCase):
     def test_check_mode_still_checks_image_without_waiting_for_listener(self) -> None:
         image_task = (ROLE_ROOT / "tasks" / "enabled.yml").read_text()
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
-        wait_task = apply_tasks.split("- name: Wait for the local Squid listener", maxsplit=1)[1]
         self.assertIn("check_mode: false", image_task)
-        self.assertIn("not ansible_check_mode", wait_task)
+        self.assertIn("verify_runtime_ready.yml", apply_tasks)
+        self.assertIn("not ansible_check_mode", apply_tasks)
 
     def test_readiness_and_updates_are_transactional(self) -> None:
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
+        readiness = (ROLE_ROOT / "tasks" / "verify_runtime_ready.yml").read_text()
         main_tasks = (ROLE_ROOT / "tasks" / "main.yml").read_text()
         rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
-        self.assertIn("Verify the managed Squid Pod is running", apply_tasks)
+        self.assertIn("verify_runtime_ready.yml", apply_tasks)
+        self.assertIn("Verify the managed Squid Pod is running", readiness)
         self.assertLess(
-            apply_tasks.index("Wait for the local Squid listener"),
+            apply_tasks.index("Prove the managed forward proxy runtime is ready"),
             apply_tasks.index("Record exact forward proxy file and Quadlet ownership"),
         )
         self.assertIn("Restore previous forward proxy managed files", rollback)
         self.assertIn("Restart the restored previous forward proxy runtime", rollback)
+        self.assertIn("Prove the restored previous forward proxy runtime is ready", rollback)
+        self.assertIn("verify_runtime_ready.yml", rollback)
+        self.assertIn("Wait for the local Squid listener", readiness)
         self.assertIn("Refuse to adopt a foreign Quadlet during runtime activation", main_tasks)
         self.assertNotIn("Remove a partial Quadlet", rollback)
         self.assertIn("regex_replace('^\\.', '') | length <= 253", assertions)
