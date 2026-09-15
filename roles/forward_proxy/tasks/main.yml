@@ -24,6 +24,10 @@
     fail_msg: "The forward proxy state marker must be a regular non-symlink file."
   when: forward_proxy_state_marker.stat.exists
 
+- name: Initialize the check-mode forward proxy directory plan
+  ansible.builtin.set_fact:
+    forward_proxy_planned_directories_internal: []
+
 - name: Create and revalidate every trusted forward proxy parent boundary
   ansible.builtin.include_tasks: ensure_directory.yml
   loop: "{{ forward_proxy_trusted_parent_paths }}"
@@ -44,6 +48,23 @@
       }}
   when:
     - forward_proxy_enabled | bool or forward_proxy_state_marker.stat.exists
+    - >-
+      forward_proxy_directory_path in forward_proxy_managed_directories_internal
+      or (
+        forward_proxy_managed_directories_internal
+        | select(
+            'match',
+            '^' ~ (forward_proxy_directory_path | regex_escape) ~ '/'
+          )
+        | list | length > 0
+      )
+      or (
+        forward_proxy_manage_runtime | bool
+        and (
+          forward_proxy_directory_path == forward_proxy_quadlet_dir
+          or forward_proxy_quadlet_dir.startswith(forward_proxy_directory_path.rstrip('/') ~ '/')
+        )
+      )
 
 - name: Inspect unowned forward proxy target paths
   ansible.builtin.stat:
@@ -149,6 +170,33 @@
       this unit, runtime mode, and path set. Stop before removing or replacing
       any file.
   when: forward_proxy_state_marker.stat.exists
+
+- name: Require the declared Quadlet parent chain before runtime removal
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_quadlet_dir in forward_proxy_trusted_parent_paths
+    fail_msg: >-
+      Removing a previously managed runtime requires the exact Quadlet
+      directory and its ordered canonical parent chain.
+  when:
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+
+- name: Revalidate the Quadlet parent chain before runtime removal
+  ansible.builtin.include_tasks: ensure_directory.yml
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  loop_control:
+    loop_var: forward_proxy_directory_path
+  vars:
+    forward_proxy_directory_creation_allowed: false
+  when:
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+    - >-
+      forward_proxy_directory_path == forward_proxy_quadlet_dir
+      or forward_proxy_quadlet_dir.startswith(forward_proxy_directory_path.rstrip('/') ~ '/')
 
 - name: Inspect the render-only Quadlet ownership boundary
   ansible.builtin.stat:

@@ -8,9 +8,17 @@
 - name: Require a real immediate parent before touching the proxy directory
   ansible.builtin.assert:
     that:
-      - forward_proxy_directory_parent.stat.exists
-      - forward_proxy_directory_parent.stat.isdir | default(false)
-      - not forward_proxy_directory_parent.stat.islnk | default(false)
+      - >-
+        (
+          forward_proxy_directory_parent.stat.exists
+          and forward_proxy_directory_parent.stat.isdir | default(false)
+          and not forward_proxy_directory_parent.stat.islnk | default(false)
+        )
+        or (
+          ansible_check_mode
+          and forward_proxy_directory_path | dirname
+            in forward_proxy_planned_directories_internal
+        )
     fail_msg: >-
       Every trusted proxy directory requires an existing non-symlink immediate
       parent. Parent chains must be complete and ordered before child paths.
@@ -75,6 +83,18 @@
     - forward_proxy_directory_path | dirname in forward_proxy_trusted_parent_paths
     - not forward_proxy_directory_before.stat.exists
 
+- name: Carry the planned forward proxy directory through check mode
+  ansible.builtin.set_fact:
+    forward_proxy_planned_directories_internal: >-
+      {{
+        forward_proxy_planned_directories_internal
+        + [forward_proxy_directory_path]
+      }}
+  when:
+    - ansible_check_mode
+    - forward_proxy_directory_creation_allowed | bool
+    - not forward_proxy_directory_before.stat.exists
+
 - name: Reinspect the trusted proxy directory before privileged writes
   ansible.builtin.stat:
     path: "{{ forward_proxy_directory_path }}"
@@ -87,7 +107,7 @@
 - name: Resolve the trusted proxy directory without following hidden ancestors
   ansible.builtin.command:
     argv:
-      - realpath
+      - /usr/bin/realpath
       - "{{ forward_proxy_directory_path }}"
   register: forward_proxy_directory_realpath
   changed_when: false

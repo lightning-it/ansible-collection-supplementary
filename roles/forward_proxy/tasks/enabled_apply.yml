@@ -23,15 +23,6 @@
     - not forward_proxy_manage_runtime | bool
     - not ansible_check_mode
 
-- name: Create forward proxy managed directories
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    owner: "{{ forward_proxy_file_owner }}"
-    group: "{{ forward_proxy_file_group }}"
-    mode: "0755"
-  loop: "{{ forward_proxy_managed_directories_internal }}"
-
 - name: Render the Squid policy for the non-root container
   ansible.builtin.template:
     src: squid.conf.j2
