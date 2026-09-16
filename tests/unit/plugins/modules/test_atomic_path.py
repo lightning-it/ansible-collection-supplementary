@@ -212,6 +212,84 @@ class AtomicPathTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertEqual([], list(self.root.glob(".atomic-path-*")))
 
+    def test_required_no_follow_flag_must_be_nonzero(self) -> None:
+        with mock.patch.object(MODULE.os, "O_NOFOLLOW", 0):
+            with self.assertRaisesRegex(OSError, "descriptor-relative no-follow"):
+                MODULE._require_capabilities()
+
+    def test_private_workspace_probe_failure_closes_and_cleans_creation(self) -> None:
+        parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        real_open = os.open
+        real_fstat = os.fstat
+        workspace_descriptor = -1
+
+        def track_workspace(path: object, flags: int, *args: object, **kwargs: object) -> int:
+            nonlocal workspace_descriptor
+            descriptor = real_open(path, flags, *args, **kwargs)
+            if str(path).startswith(".atomic-path-"):
+                workspace_descriptor = descriptor
+            return descriptor
+
+        def fail_workspace_probe(descriptor: int) -> os.stat_result:
+            if descriptor == workspace_descriptor:
+                raise OSError("workspace probe denied")
+            return real_fstat(descriptor)
+
+        try:
+            with (
+                mock.patch.object(MODULE.os, "open", side_effect=track_workspace),
+                mock.patch.object(MODULE.os, "fstat", side_effect=fail_workspace_probe),
+            ):
+                with self.assertRaisesRegex(OSError, "workspace probe denied"):
+                    MODULE._private_workspace(parent)
+        finally:
+            os.close(parent)
+        self.assertEqual([], list(self.root.glob(".atomic-path-*")))
+
+    def test_nonreadable_file_mode_is_verified_via_bound_descriptor(self) -> None:
+        target = self.root / "sealed"
+        parameters = self.common(target, "file")
+        parameters.update(content="sealed\n", mode="0000")
+        try:
+            self.assertTrue(self.execute(parameters)["changed"])
+            self.assertEqual(0, target.stat().st_mode & 0o777)
+        finally:
+            if target.exists():
+                target.chmod(0o600)
+        self.assertEqual("sealed\n", target.read_text(encoding="utf-8"))
+
+    def test_uninspectable_failed_payload_is_preserved_without_masking_failure(self) -> None:
+        target = self.root / "policy"
+        parameters = self.common(target, "file")
+        parameters["content"] = "blocked\n"
+        real_open = os.open
+        real_fstat = os.fstat
+        payload_descriptor = -1
+
+        def track_payload(path: object, flags: int, *args: object, **kwargs: object) -> int:
+            nonlocal payload_descriptor
+            descriptor = real_open(path, flags, *args, **kwargs)
+            if path == "payload":
+                payload_descriptor = descriptor
+            return descriptor
+
+        def fail_payload_probe(descriptor: int) -> os.stat_result:
+            if descriptor == payload_descriptor:
+                raise OSError("payload probe denied")
+            return real_fstat(descriptor)
+
+        with (
+            mock.patch.object(MODULE, "_require_capabilities"),
+            mock.patch.object(MODULE.os, "open", side_effect=track_payload),
+            mock.patch.object(MODULE.os, "fchown", side_effect=OSError("metadata denied")),
+            mock.patch.object(MODULE.os, "fstat", side_effect=fail_payload_probe),
+        ):
+            result = self.execute(parameters, failure=True)
+        recovery = Path(str(result["recovery_path"]))
+        self.assertIn("metadata denied", str(result["msg"]))
+        self.assertTrue(recovery.is_file())
+        self.assertFalse(target.exists())
+
     def test_file_metadata_failure_preserves_uncleanable_private_creation(self) -> None:
         target = self.root / "policy"
         parameters = self.common(target, "file")
