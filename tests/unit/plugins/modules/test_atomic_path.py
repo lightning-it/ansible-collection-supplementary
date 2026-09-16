@@ -212,6 +212,33 @@ class AtomicPathTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertEqual([], list(self.root.glob(".atomic-path-*")))
 
+    def test_file_metadata_failure_preserves_uncleanable_private_creation(self) -> None:
+        target = self.root / "policy"
+        parameters = self.common(target, "file")
+        parameters["content"] = "blocked\n"
+        with (
+            mock.patch.object(MODULE.os, "fchown", side_effect=OSError("denied")),
+            mock.patch.object(MODULE, "_remove_private_if_same", return_value=False),
+        ):
+            result = self.execute(parameters, failure=True)
+        recovery = Path(str(result["recovery_path"]))
+        self.assertIn("recovery workspace preserved", str(result["msg"]))
+        self.assertEqual("", recovery.read_text(encoding="utf-8"))
+        self.assertFalse(target.exists())
+
+    def test_directory_metadata_failure_preserves_uncleanable_private_creation(self) -> None:
+        target = self.root / "managed"
+        parameters = self.common(target, "directory")
+        with (
+            mock.patch.object(MODULE.os, "fchown", side_effect=OSError("denied")),
+            mock.patch.object(MODULE, "_remove_private_if_same", return_value=False),
+        ):
+            result = self.execute(parameters, failure=True)
+        recovery = Path(str(result["recovery_path"]))
+        self.assertIn("recovery workspace preserved", str(result["msg"]))
+        self.assertTrue(recovery.is_dir())
+        self.assertFalse(target.exists())
+
     def test_successful_file_write_reports_workspace_cleanup_failure(self) -> None:
         target = self.root / "policy"
         parameters = self.common(target, "file")
@@ -221,6 +248,50 @@ class AtomicPathTests(unittest.TestCase):
         self.assertIn("workspace cleanup failed", str(result["msg"]))
         self.assertTrue(Path(str(result["recovery_path"])).is_dir())
         self.assertEqual("managed\n", target.read_text(encoding="utf-8"))
+
+    def test_capture_preserves_changed_content_when_restore_is_blocked(self) -> None:
+        target = self.root / "policy"
+        target.write_text("managed\n", encoding="utf-8")
+        expected = target.stat()
+        expected_checksum = hashlib.sha256(b"managed\n").hexdigest()
+        target.write_text("foreign\n", encoding="utf-8")
+        os.utime(target, ns=(expected.st_atime_ns, expected.st_mtime_ns))
+        workspace_path = self.root / "workspace"
+        workspace_path.mkdir()
+        parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        workspace = os.open(workspace_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        real_rename = MODULE._renameat
+        calls = 0
+
+        def block_restore(
+            source_fd: int,
+            source: str,
+            target_fd: int,
+            target_name: str,
+            operation: str,
+        ) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                target.write_text("newer\n", encoding="utf-8")
+            real_rename(source_fd, source, target_fd, target_name, operation)
+
+        try:
+            with mock.patch.object(MODULE, "_renameat", side_effect=block_restore):
+                with self.assertRaises(MODULE._PreservedRecovery):
+                    MODULE._capture_and_remove(
+                        parent,
+                        target.name,
+                        expected,
+                        workspace,
+                        "failed",
+                        checksum=expected_checksum,
+                    )
+        finally:
+            os.close(workspace)
+            os.close(parent)
+        self.assertEqual("newer\n", target.read_text(encoding="utf-8"))
+        self.assertEqual("foreign\n", (workspace_path / "failed").read_text(encoding="utf-8"))
 
     def test_workspace_probe_failure_preserves_uncertain_creation(self) -> None:
         parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
