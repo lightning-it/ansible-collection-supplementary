@@ -247,7 +247,12 @@ def _renameat(source_fd: int, source: str, target_fd: int, target: str, operatio
 def _require_capabilities() -> None:
     flags = ("O_DIRECTORY", "O_NOFOLLOW", "O_NONBLOCK")
     functions = (os.open, os.stat, os.mkdir, os.rename, os.unlink, os.rmdir)
-    if any(not hasattr(os, flag) for flag in flags) or any(
+    if any(
+        not isinstance(getattr(os, flag, None), int)
+        or isinstance(getattr(os, flag, None), bool)
+        or getattr(os, flag) == 0
+        for flag in flags
+    ) or any(
         function not in getattr(os, "supports_dir_fd", ()) for function in functions
     ):
         raise OSError("descriptor-relative no-follow filesystem operations are unavailable")
@@ -291,7 +296,13 @@ def _private_workspace(parent: int) -> Tuple[int, str, os.stat_result]:
             if not _remove_private_if_same(parent, name, expected, directory=True):
                 raise _PreservedWorkspace(os.path.join(_descriptor_path(parent), name)) from exc
             raise
-        opened = os.fstat(descriptor)
+        try:
+            opened = os.fstat(descriptor)
+        except OSError as exc:
+            os.close(descriptor)
+            if not _remove_private_if_same(parent, name, expected, directory=True):
+                raise _PreservedWorkspace(os.path.join(_descriptor_path(parent), name)) from exc
+            raise
         if opened.st_uid != os.geteuid() or stat.S_IMODE(opened.st_mode) != 0o700:
             os.close(descriptor)
             if not _remove_private_if_same(parent, name, expected, directory=True):
@@ -386,6 +397,14 @@ def _verified_file(parent: int, name: str, expected: os.stat_result, checksum: s
         return _same_snapshot(opened, os.fstat(descriptor))
     finally:
         os.close(descriptor)
+
+
+def _verified_descriptor(descriptor: int, expected: os.stat_result, checksum: str) -> bool:
+    """Verify a file through an already-open readable descriptor."""
+    opened = os.fstat(descriptor)
+    if not _same_snapshot(opened, expected) or _checksum(descriptor) != checksum:
+        return False
+    return _same_snapshot(opened, os.fstat(descriptor))
 
 
 def _existing(parent: int, name: str) -> Optional[os.stat_result]:
@@ -566,7 +585,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
     try:
         descriptor = os.open(
             "payload",
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
             0o600,
             dir_fd=workspace,
         )
@@ -597,7 +616,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
         if (
             staged_identity is None
             or not _same_identity(installed_details, staged_identity)
-            or not _verified_file(parent, name, installed_details, desired)
+            or not _verified_descriptor(descriptor, installed_details, desired)
         ):
             preserve_workspace = displaced_identity is not None
             recovery_name = "payload" if preserve_workspace else None
@@ -638,14 +657,34 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
                 preserve_workspace = True
                 recovery_name = "payload"
     finally:
-        cleanup_identity = os.fstat(descriptor) if descriptor >= 0 else None
+        cleanup_identity: Optional[os.stat_result] = None
+        cleanup_exception: Optional[Exception] = None
         if descriptor >= 0:
-            os.close(descriptor)
+            try:
+                if not installed:
+                    cleanup_identity = os.fstat(descriptor)
+            except OSError as exc:
+                cleanup_exception = exc
+                preserve_workspace = True
+                recovery_name = "payload"
+            finally:
+                try:
+                    os.close(descriptor)
+                except OSError as exc:
+                    cleanup_exception = cleanup_exception or exc
+                    preserve_workspace = True
+                    recovery_name = "payload"
         if not installed and cleanup_identity is not None:
             if not _remove_private_if_same(workspace, "payload", cleanup_identity):
                 preserve_workspace = True
                 recovery_name = "payload"
-        os.close(workspace)
+        try:
+            os.close(workspace)
+        except OSError as exc:
+            cleanup_exception = cleanup_exception or exc
+            preserve_workspace = True
+        if failure is None and cleanup_exception is not None:
+            failure = cleanup_exception
         if not preserve_workspace:
             cleanup_failed = not _remove_private_if_same(
                 parent, workspace_name, workspace_identity, directory=True
