@@ -143,6 +143,12 @@ class AtomicUnlinkTests(unittest.TestCase):
                 self.parameters["group"] = str(details.st_gid)
                 self.parameters[field] = "-1"
                 self.assertIn("cannot bind trusted parent chain", str(self.execute(failure=True)["msg"]))
+        self.parameters["owner"] = str(2**32)
+        self.assertIn("cannot bind trusted parent chain", str(self.execute(failure=True)["msg"]))
+
+    def test_double_root_path_is_rejected(self) -> None:
+        self.parameters["path"] = "//"
+        self.assertIn("canonical absolute file path", str(self.execute(failure=True)["msg"]))
 
     @unittest.skipUnless(Path("/proc/self/fd").is_dir(), "descriptor linking requires procfs")
     def test_real_descriptor_preservation_helper(self) -> None:
@@ -174,6 +180,20 @@ class AtomicUnlinkTests(unittest.TestCase):
         self.assertIn("atomic quarantine boundary", str(result["msg"]))
         self.assertEqual("foreign\n", self.target.read_text(encoding="utf-8"))
         self.assertEqual("owned\n", recovery.read_text(encoding="utf-8"))
+
+    def test_verified_cleanup_failure_reports_recovery_copy(self) -> None:
+        real_unlink = os.unlink
+
+        def fail_verified(path: str, *args: object, **kwargs: object) -> None:
+            if path == "verified":
+                raise OSError("cleanup denied")
+            real_unlink(path, *args, **kwargs)
+
+        with mock.patch.object(MODULE.os, "unlink", side_effect=fail_verified):
+            result = self.execute()
+        self.assertTrue(result["changed"])
+        self.assertFalse(self.target.exists())
+        self.assertEqual("owned\n", Path(str(result["recovery_path"])).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

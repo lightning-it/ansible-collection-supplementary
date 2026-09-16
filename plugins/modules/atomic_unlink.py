@@ -95,16 +95,16 @@ from ansible.module_utils.basic import AnsibleModule
 def _numeric_identity(value: str, database: object, kind: str) -> int:
     if re.fullmatch(r"[+-]?\d+", value):
         identity = int(value, 10)
-        if identity < 0:
-            raise ValueError(f"{kind} ID must be non-negative")
+        if identity < 0 or identity >= 2**32 - 1:
+            raise ValueError(f"{kind} ID must fit a non-negative 32-bit identity")
         return identity
     try:
         record = database(value)
     except KeyError as exc:
         raise ValueError(f"unknown {kind}: {value}") from exc
     identity = record.pw_uid if kind == "owner" else record.gr_gid
-    if identity < 0:
-        raise ValueError(f"{kind} ID must be non-negative")
+    if identity < 0 or identity >= 2**32 - 1:
+        raise ValueError(f"{kind} ID must fit a non-negative 32-bit identity")
     return identity
 
 
@@ -279,7 +279,13 @@ def main() -> None:
         supports_check_mode=True,
     )
     path = module.params["path"]
-    if not os.path.isabs(path) or os.path.normpath(path) != path or path == "/" or "\x00" in path:
+    if (
+        not os.path.isabs(path)
+        or os.path.normpath(path) != path
+        or not os.path.basename(path)
+        or path == "/"
+        or "\x00" in path
+    ):
         module.fail_json(msg="path must be one canonical absolute file path", path=path)
 
     try:
@@ -292,7 +298,7 @@ def main() -> None:
         if expected_mode > 0o7777:
             raise ValueError("mode exceeds the POSIX permission-bit range")
         parent_fd, name = _open_parent(path, module.params["parent_identities"])
-    except (KeyError, OSError, TypeError, ValueError) as exc:
+    except (KeyError, OSError, OverflowError, TypeError, ValueError) as exc:
         module.fail_json(msg=f"cannot bind trusted parent chain: {exc}", path=path)
 
     file_fd = -1
@@ -315,7 +321,7 @@ def main() -> None:
 
         file_fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd)
         opened = os.fstat(file_fd)
-        if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+        if not _same_identity(opened, before):
             module.fail_json(msg="removal target changed while opening", path=path)
         if _checksum_fd(file_fd) != module.params["checksum"]:
             module.fail_json(msg="removal target checksum changed", path=path)
@@ -453,7 +459,15 @@ def main() -> None:
                 path=path,
                 recovery_path=recovery_path,
             )
-        os.unlink("verified", dir_fd=quarantine_fd)
+        try:
+            os.unlink("verified", dir_fd=quarantine_fd)
+        except OSError as exc:
+            module.exit_json(
+                changed=True,
+                path=path,
+                quarantine_cleanup_warning=str(exc),
+                recovery_path=os.path.join(os.path.dirname(path), quarantine_name, "verified"),
+            )
         os.close(quarantine_fd)
         quarantine_fd = -1
         try:
