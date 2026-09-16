@@ -23,25 +23,10 @@ management.
 
 See `roles/forward_proxy/defaults/main.yml`.
 
-Important inputs include:
-
-- `forward_proxy_enabled`: enable or safely remove the role-owned service.
-- `forward_proxy_manage_runtime`: manage Quadlet/systemd or only render test fixtures.
-- `forward_proxy_experimental_runtime_acceptance`: explicit opt-in used only for
-  the controlled Wunderbox runtime acceptance until protected live Podman,
-  systemd, listener, rollback, allowed-proxy, and denied-direct evidence exists.
-- `forward_proxy_lock_path` and `forward_proxy_lock_timeout`: bounded per-host
-  mutual exclusion for the complete inspect, transition, runtime, rollback,
-  disable, and marker-commit transaction. Stale locks require operator review.
-- `forward_proxy_render_root`: exact containment root for non-root render-only output.
-- `forward_proxy_trusted_parent_paths`: complete parent chains, rooted at
-  existing canonical anchors and ordered parent before child. Every component
-  is revalidated as a non-symlink before a write or rollback.
-- `forward_proxy_image`: immutable digest-pinned image defined by the role defaults.
-- `forward_proxy_image_pull_policy`: fixed to `Never`; image preload is a separate bootstrap step.
-- `forward_proxy_listen_addresses` and `forward_proxy_allowed_clients`: exact ingress boundary.
-- `forward_proxy_allowed_destination_domains`: mandatory closed destination allowlist when enabled.
-- `forward_proxy_upstream_*`: optional unauthenticated customer/site parent proxy.
+The role requires an immutable image, explicit client and destination
+allowlists, trusted parent identities, and a bounded per-host transaction lock.
+Runtime activation additionally requires the temporary experimental acceptance
+flag. Image preload and host firewall approval are separate controlled steps.
 
 The container uses host networking and runs as UID/GID 13 from the pinned
 image. It drops every capability, prohibits privilege escalation, and uses a
