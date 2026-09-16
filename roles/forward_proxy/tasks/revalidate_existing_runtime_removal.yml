@@ -13,7 +13,8 @@
       - pod
       - inspect
       - --format
-      - "{{ '{{.Id}}' }}"
+      - >-
+        {{ '{{.Id}}|{{ index .Labels "io.lightning-it.owner" }}' }}
       - "{{ forward_proxy_unit_name }}"
   register: forward_proxy_existing_runtime_removal_pod
   changed_when: false
@@ -44,7 +45,8 @@
           'unit_name': forward_proxy_unit_name,
           'quadlet_path': forward_proxy_quadlet_path,
           'quadlet_checksum': forward_proxy_existing_runtime_removal_quadlet.stat.checksum,
-          'pod_id': forward_proxy_existing_runtime_removal_pod.stdout | trim,
+          'pod_id': (forward_proxy_existing_runtime_removal_pod.stdout | trim).split('|')[0],
+          'owner_label': (forward_proxy_existing_runtime_removal_pod.stdout | trim).split('|')[1],
           'unit_fragment_path': forward_proxy_existing_runtime_removal_unit.stdout | trim
         }
       - forward_proxy_existing_runtime_removal_quadlet.stat.isreg | default(false)
@@ -52,8 +54,19 @@
       - forward_proxy_existing_runtime_removal_quadlet.stat.mode == '0644'
       - forward_proxy_existing_runtime_removal_quadlet.stat.pw_name | default('') == 'root'
       - forward_proxy_existing_runtime_removal_quadlet.stat.gr_name | default('') == 'root'
-      - forward_proxy_existing_runtime_removal_pod.stdout | trim is match('^[a-f0-9]{12,64}\Z')
-      - forward_proxy_existing_runtime_removal_unit.stdout | trim | length > 0
+      - >-
+        (forward_proxy_existing_runtime_removal_pod.stdout | trim).split('|')[0]
+        is match('^[a-f0-9]{12,64}\Z')
+      - >-
+        (forward_proxy_existing_runtime_removal_pod.stdout | trim).split('|')[1]
+        == 'lit.supplementary.forward_proxy'
+      - >-
+        forward_proxy_existing_runtime_removal_unit.stdout | trim
+        is match(
+          '^/run/systemd/generator(?:\\.early|\\.late)?/'
+          ~ (forward_proxy_unit_name | regex_escape)
+          ~ '\\.service\\Z'
+        )
     fail_msg: >-
       The existing runtime no longer matches the captured Quadlet checksum, Pod
       ID, and systemd fragment. Leave it intact for operator recovery.

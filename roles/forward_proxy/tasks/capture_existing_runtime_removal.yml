@@ -13,7 +13,8 @@
       - pod
       - inspect
       - --format
-      - "{{ '{{.Id}}' }}"
+      - >-
+        {{ '{{.Id}}|{{ index .Labels "io.lightning-it.owner" }}' }}
       - "{{ forward_proxy_unit_name }}"
   register: forward_proxy_existing_runtime_capture_pod
   changed_when: false
@@ -45,8 +46,22 @@
       - forward_proxy_existing_runtime_capture_quadlet.stat.mode == '0644'
       - forward_proxy_existing_runtime_capture_quadlet.stat.pw_name | default('') == 'root'
       - forward_proxy_existing_runtime_capture_quadlet.stat.gr_name | default('') == 'root'
-      - forward_proxy_existing_runtime_capture_pod.stdout | trim is match('^[a-f0-9]{12,64}\Z')
-      - forward_proxy_existing_runtime_capture_unit.stdout | trim | length > 0
+      - >-
+        (forward_proxy_existing_runtime_capture_pod.stdout | trim).split('|')
+        == [
+          (forward_proxy_existing_runtime_capture_pod.stdout | trim).split('|')[0],
+          'lit.supplementary.forward_proxy'
+        ]
+      - >-
+        (forward_proxy_existing_runtime_capture_pod.stdout | trim).split('|')[0]
+        is match('^[a-f0-9]{12,64}\Z')
+      - >-
+        forward_proxy_existing_runtime_capture_unit.stdout | trim
+        is match(
+          '^/run/systemd/generator(?:\\.early|\\.late)?/'
+          ~ (forward_proxy_unit_name | regex_escape)
+          ~ '\\.service\\Z'
+        )
     fail_msg: >-
       Runtime removal requires the exact role-owned Quadlet plus stable Pod and
       systemd fragment identities. Leave mismatched state intact.
@@ -58,5 +73,8 @@
       unit_name: "{{ forward_proxy_unit_name }}"
       quadlet_path: "{{ forward_proxy_quadlet_path }}"
       quadlet_checksum: "{{ forward_proxy_existing_runtime_capture_quadlet.stat.checksum }}"
-      pod_id: "{{ forward_proxy_existing_runtime_capture_pod.stdout | trim }}"
+      pod_id: >-
+        {{ (forward_proxy_existing_runtime_capture_pod.stdout | trim).split('|')[0] }}
+      owner_label: >-
+        {{ (forward_proxy_existing_runtime_capture_pod.stdout | trim).split('|')[1] }}
       unit_fragment_path: "{{ forward_proxy_existing_runtime_capture_unit.stdout | trim }}"

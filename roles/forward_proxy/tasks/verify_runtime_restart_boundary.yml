@@ -1,0 +1,66 @@
+---
+- name: Reinspect the restored Quadlet before restarting an absent runtime
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_previous_state_manifest.quadlet_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_restart_boundary_quadlet
+
+- name: Reinspect the systemd load state before restarting an absent runtime
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - --system
+      - show
+      - "{{ forward_proxy_unit_name }}.service"
+      - --property=LoadState
+      - --value
+  register: forward_proxy_restart_boundary_load_state
+  changed_when: false
+  failed_when: forward_proxy_restart_boundary_load_state.rc != 0
+  check_mode: false
+
+- name: Reinspect installed unit files before restarting an absent runtime
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - --system
+      - list-unit-files
+      - "{{ forward_proxy_unit_name }}.service"
+      - --no-legend
+      - --no-pager
+  register: forward_proxy_restart_boundary_unit_files
+  changed_when: false
+  failed_when: forward_proxy_restart_boundary_unit_files.rc != 0
+  check_mode: false
+
+- name: Reinspect the Podman pod before restarting an absent runtime
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - pod
+      - exists
+      - "{{ forward_proxy_unit_name }}"
+  register: forward_proxy_restart_boundary_pod
+  changed_when: false
+  failed_when: forward_proxy_restart_boundary_pod.rc not in [0, 1]
+  check_mode: false
+
+- name: Require the exact restored Quadlet and an otherwise empty runtime boundary
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_restart_boundary_quadlet.stat.isreg | default(false)
+      - not forward_proxy_restart_boundary_quadlet.stat.islnk | default(false)
+      - forward_proxy_restart_boundary_quadlet.stat.mode == '0644'
+      - forward_proxy_restart_boundary_quadlet.stat.pw_name | default('') == 'root'
+      - forward_proxy_restart_boundary_quadlet.stat.gr_name | default('') == 'root'
+      - >-
+        forward_proxy_restart_boundary_quadlet.stat.checksum
+        == forward_proxy_previous_state_manifest.quadlet_checksum
+      - forward_proxy_restart_boundary_load_state.stdout | trim == 'not-found'
+      - forward_proxy_restart_boundary_unit_files.stdout_lines | length == 0
+      - forward_proxy_restart_boundary_pod.rc == 1
+    fail_msg: >-
+      The empty runtime boundary changed after the previous Quadlet was
+      restored. Stop before restarting or adopting a same-named foreign
+      systemd unit or Podman pod.

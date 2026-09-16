@@ -21,6 +21,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_lock_timeout: 30", defaults)
         self.assertIn("forward_proxy_lock_timeout <= 300", assertions)
         self.assertIn("[A-Za-z0-9][A-Za-z0-9_.-]*", assertions)
+        self.assertIn("forward_proxy_lock_path | dirname == '/run/lock'", wrapper)
+        self.assertIn("forward_proxy_lock_parent.stat.mode in ['0775', '1777']", wrapper)
 
     def test_role_contains_only_distribution_neutral_service_state(self) -> None:
         defaults = (ROLE_ROOT / "defaults" / "main.yml").read_text()
@@ -128,6 +130,21 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_planned_directories_internal", directory_guard)
         self.assertIn("Initialize the check-mode forward proxy directory plan", main)
         self.assertIn("Require parent-before-child trusted directory ordering", assertions)
+        self.assertIn("forward_proxy_file_owner in ['root', '0']", assertions)
+        self.assertIn(
+            "forward_proxy_lock_path.startswith(forward_proxy_render_root.rstrip('/') ~ '/')",
+            assertions,
+        )
+
+    def test_numeric_runtime_inputs_reject_coercible_non_integers(self) -> None:
+        assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+        for variable in (
+            "forward_proxy_readiness_timeout",
+            "forward_proxy_port",
+            "forward_proxy_upstream_port",
+        ):
+            self.assertIn(f"{variable} is integer", assertions)
+            self.assertNotIn(f"{variable} | int >=", assertions)
         self.assertIn("forward_proxy_trusted_parent_paths[:ansible_loop.index0]", assertions)
 
     def test_upstream_hostname_is_validated_label_by_label(self) -> None:
@@ -198,8 +215,12 @@ class ForwardProxyContractTests(unittest.TestCase):
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
         rollback = (ROLE_ROOT / "tasks" / "enabled_first_run_rollback.yml").read_text()
         self.assertIn(
-            "Inspect a same-named systemd unit before first runtime activation",
+            "Inspect a same-named systemd unit before any first activation writes",
             apply_tasks,
+        )
+        self.assertLess(
+            apply_tasks.index("Refuse a foreign same-named runtime before any managed-file write"),
+            apply_tasks.index("Render the Squid policy with an atomic no-follow write"),
         )
         self.assertIn("list-unit-files", apply_tasks)
         self.assertIn(
@@ -234,14 +255,11 @@ class ForwardProxyContractTests(unittest.TestCase):
         )[1].split("- name: Record exact forward proxy file", maxsplit=1)[0]
         self.assertIn("when: not ansible_check_mode", marker_task)
 
-    def test_render_only_does_not_probe_or_create_runtime_state(self) -> None:
+    def test_render_only_rejects_foreign_quadlets_without_creating_runtime_state(self) -> None:
         main = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
         verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
-        self.assertIn(
-            "([forward_proxy_quadlet_path] if forward_proxy_manage_runtime | bool else [])",
-            main,
-        )
+        self.assertIn("+ [forward_proxy_quadlet_path]", main)
         self.assertIn("forward_proxy_manage_runtime: false", verify)
         self.assertIn("forward_proxy_config_path:", verify)
         self.assertIn("forward_proxy_pod_manifest_path:", verify)
@@ -298,6 +316,8 @@ class ForwardProxyContractTests(unittest.TestCase):
             "not forward_proxy_lock_path.startswith(item.rstrip('/') ~ '/')",
             assertions,
         )
+        self.assertIn("+ forward_proxy_managed_directories_internal", assertions)
+        self.assertIn("forward_proxy_quadlet_dir", assertions)
 
     def test_render_writes_revalidate_parents_and_never_follow_links(self) -> None:
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
@@ -310,6 +330,10 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("lookup('ansible.builtin.template', 'squid.conf.j2')", apply_tasks)
         self.assertIn("lookup('ansible.builtin.template', 'squid-pod.yml.j2')", apply_tasks)
         self.assertIn("Revalidate the state marker parent chain", apply_tasks)
+        self.assertIn(
+            "Recheck the empty runtime boundary immediately before first activation",
+            apply_tasks,
+        )
 
     def test_existing_rollback_revalidates_every_write_boundary(self) -> None:
         rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
@@ -335,15 +359,20 @@ class ForwardProxyContractTests(unittest.TestCase):
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
         rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
         runtime_guard = (ROLE_ROOT / "tasks" / "revalidate_new_runtime_removal.yml").read_text()
+        active_runtime_guard = (ROLE_ROOT / "tasks" / "revalidate_active_runtime_identity.yml").read_text()
         existing_runtime_capture = (ROLE_ROOT / "tasks" / "capture_existing_runtime_removal.yml").read_text()
         existing_runtime_guard = (ROLE_ROOT / "tasks" / "revalidate_existing_runtime_removal.yml").read_text()
         removal_helper = (ROLE_ROOT / "tasks" / "remove_owned_file.yml").read_text()
+        atomic_unlink = (REPOSITORY_ROOT / "plugins" / "modules" / "atomic_unlink.py").read_text()
         restore_helper = (ROLE_ROOT / "tasks" / "restore_managed_file.yml").read_text()
+        directory_guard = (ROLE_ROOT / "tasks" / "ensure_directory.yml").read_text()
         wrapper = (ROLE_ROOT / "tasks" / "main.yml").read_text()
         converge = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "converge.yml").read_text()
         verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
         rejection = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "tasks" / "reject-client.yml").read_text()
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+        transition = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
+        squid_template = (ROLE_ROOT / "templates" / "squid.conf.j2").read_text()
 
         self.assertIn("Reinspect the Squid policy at the mutation boundary", apply_tasks)
         self.assertIn("Reinspect the Pod manifest at the mutation boundary", apply_tasks)
@@ -351,8 +380,14 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_manifest_write_boundary.stat.checksum", apply_tasks)
         self.assertIn("forward_proxy_final_state_marker.stat.checksum", apply_tasks)
         self.assertIn("forward_proxy_state_marker_content.content", apply_tasks)
+        self.assertIn(
+            "forward_proxy_previous_state_manifest.managed_modes\n        == forward_proxy_managed_modes_internal",
+            transition,
+        )
         self.assertIn("Reinspect one managed file at its rollback mutation boundary", restore_helper)
         self.assertIn("forward_proxy_restore_file_boundary.stat.checksum", restore_helper)
+        self.assertIn("forward_proxy_restore_entry.0.item.0.0", restore_helper)
+        self.assertNotIn("forward_proxy_restore_entry.0.item.item", restore_helper)
         self.assertIn("forward_proxy_restore_marker_boundary.stat.checksum", rollback)
         self.assertIn("forward_proxy_restore_quadlet_boundary.stat.checksum", rollback)
         self.assertIn("pod\n      - inspect", runtime_guard)
@@ -374,9 +409,30 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("Capture the existing Podman pod identity", existing_runtime_capture)
         self.assertIn("Capture the existing systemd fragment identity", existing_runtime_capture)
         self.assertIn("Require the exact captured existing runtime", existing_runtime_guard)
-        self.assertIn("/usr/bin/unlink", removal_helper)
+        self.assertIn("forward_proxy_active_rollback_quadlet.stat.mode == '0644'", active_runtime_guard)
+        self.assertIn(
+            "forward_proxy_active_rollback_quadlet.stat.pw_name | default('') == 'root'",
+            active_runtime_guard,
+        )
+        self.assertIn(
+            "forward_proxy_active_rollback_quadlet.stat.gr_name | default('') == 'root'",
+            active_runtime_guard,
+        )
+        self.assertIn("lit.supplementary.atomic_unlink", removal_helper)
+        self.assertIn("parent_identities:", removal_helper)
+        self.assertIn("trusted parent identity changed", atomic_unlink)
         self.assertNotIn("state: absent", removal_helper)
         self.assertIn("not forward_proxy_state_marker.stat.exists", apply_tasks)
+        self.assertIn(
+            "acl lit_safe_ports port {{ forward_proxy_allowed_destination_ports | join(' ') }}",
+            squid_template,
+        )
+        self.assertIn("exact destination port ACL", verify)
+        self.assertIn("tasks/reject-port.yml", verify)
+        self.assertIn("Prove every managed file is absent before deleting ownership evidence", transition)
+        self.assertIn("Capture every trusted proxy directory identity", transition)
+        self.assertIn("Require the transaction-bound trusted directory identity", directory_guard)
+        self.assertIn("Isolate every render-only proxy and Quadlet boundary", assertions)
 
     def test_trusted_parent_chains_are_complete_and_canonical(self) -> None:
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
@@ -408,9 +464,26 @@ class ForwardProxyContractTests(unittest.TestCase):
         )
         self.assertIn("Reinspect managed files before disabled-state deletion", transition)
         self.assertIn("Reinspect the state marker before disabled-state deletion", transition)
+        self.assertIn("not forward_proxy_enabled | bool", transition)
+        self.assertIn("forward_proxy_previous_quadlet_stat.stat.exists", transition)
         self.assertIn("not item.endswith('/')", assertions)
         self.assertIn("forward_proxy_planned_directories_internal", directory_guard)
         self.assertIn("not forward_proxy_manage_runtime | bool", rollback)
+        self.assertIn(
+            "Revalidate or prove absence after a failed render-only transition",
+            rollback,
+        )
+        self.assertIn("verify_runtime_restart_boundary.yml", rollback)
+        restart_boundary = (ROLE_ROOT / "tasks" / "verify_runtime_restart_boundary.yml").read_text()
+        self.assertIn(
+            "forward_proxy_restart_boundary_quadlet.stat.checksum",
+            restart_boundary,
+        )
+        self.assertIn("forward_proxy_restart_boundary_pod.rc == 1", restart_boundary)
+        self.assertIn(
+            "Revalidate the managed runtime identity immediately before restart",
+            rollback,
+        )
 
     def test_disable_runtime_removal_is_skipped_in_check_mode(self) -> None:
         transition = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
@@ -445,7 +518,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
         self.assertIn("verify_runtime_ready.yml", apply_tasks)
-        self.assertIn("Verify the managed Squid Pod is running", readiness)
+        self.assertIn("Verify the exact managed Squid Pod is running", readiness)
         self.assertLess(
             apply_tasks.index("Prove the managed forward proxy runtime is ready"),
             apply_tasks.index("Record exact forward proxy file and Quadlet ownership"),
@@ -455,6 +528,16 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("Prove the restored previous forward proxy runtime is ready", rollback)
         self.assertIn("verify_runtime_ready.yml", rollback)
         self.assertIn("Wait for the local Squid listener", readiness)
+        self.assertIn("- --no-trunc", readiness)
+        self.assertIn('"id={{ forward_proxy_active_runtime_identity_internal.pod_id }}"', readiness)
+        self.assertIn("forward_proxy_active_runtime_identity_internal.pod_id]", readiness)
+        self.assertNotIn('"name=^{{ forward_proxy_unit_name }}$"', readiness)
+        self.assertIn("forward_proxy_readiness_quadlet.stat.mode == '0644'", readiness)
+        self.assertIn("forward_proxy_readiness_quadlet.stat.pw_name | default('') == 'root'", readiness)
+        self.assertIn("forward_proxy_readiness_quadlet.stat.gr_name | default('') == 'root'", readiness)
+        self.assertIn("forward_proxy_runtime_absence_verified_internal | bool", rollback)
+        self.assertIn("not forward_proxy_restore_quadlet_boundary.stat.exists", rollback)
+        self.assertIn("Record verified runtime absence for render-only rollback", apply_tasks)
         self.assertIn("Refuse to adopt a foreign Quadlet during runtime activation", main_tasks)
         self.assertNotIn("Remove a partial Quadlet", rollback)
         self.assertIn("regex_replace('^\\.', '') | length <= 253", assertions)
@@ -479,6 +562,10 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn('implementation: "partial"', scenario)
         self.assertIn("local pre-merge evidence only", scenario)
         self.assertIn("cleanup: cleanup.yml", molecule)
+        self.assertIn(
+            "Simulate one completed unlink from an interrupted disable transaction",
+            verify,
+        )
         self.assertIn("forward-proxy-tiny.xml", verify)
         self.assertIn("Evaluate each service and upstream contract independently", verify)
         self.assertIn("Exercise cleanup without losing its failure evidence", verify)
@@ -490,7 +577,9 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_junit_passed", cleanup)
         self.assertIn("scripts.quality_evidence import parse_junit", cleanup)
         self.assertIn("junit_status:", cleanup)
-        self.assertIn("release_eligible: false", cleanup)
+        self.assertIn("forward_proxy_coverage_contract", cleanup)
+        self.assertIn("forward_proxy_release_eligible", cleanup)
+        self.assertIn("release_eligible: {{ forward_proxy_release_eligible", cleanup)
         self.assertIn("redacted: true", cleanup)
 
     def test_live_runtime_remains_explicitly_blocked_until_acceptance(self) -> None:

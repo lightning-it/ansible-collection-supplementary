@@ -12,49 +12,12 @@
       forward_proxy_directory_path.rstrip('/') ~ '/'
     )
 
-- name: Reinspect one owned file at the exact removal boundary
-  ansible.builtin.stat:
+- name: Atomically unlink the exact verified owned file
+  lit.supplementary.atomic_unlink:
     path: "{{ forward_proxy_removal_path }}"
-    follow: false
-    checksum_algorithm: sha256
-  register: forward_proxy_removal_boundary
-
-- name: Require exact file identity at the removal boundary
-  ansible.builtin.assert:
-    that:
-      - >-
-        (
-          forward_proxy_removal_allow_absent | bool
-          and not forward_proxy_removal_boundary.stat.exists
-          and not forward_proxy_removal_boundary.stat.islnk | default(false)
-        )
-        or (
-          forward_proxy_removal_boundary.stat.isreg | default(false)
-          and not forward_proxy_removal_boundary.stat.islnk | default(false)
-          and forward_proxy_removal_boundary.stat.checksum == forward_proxy_removal_checksum
-          and forward_proxy_removal_boundary.stat.mode == forward_proxy_removal_mode
-          and (
-            forward_proxy_removal_boundary.stat.pw_name | default('')
-              == forward_proxy_removal_owner | string
-            or forward_proxy_removal_boundary.stat.uid | string
-              == forward_proxy_removal_owner | string
-          )
-          and (
-            forward_proxy_removal_boundary.stat.gr_name | default('')
-              == forward_proxy_removal_group | string
-            or forward_proxy_removal_boundary.stat.gid | string
-              == forward_proxy_removal_group | string
-          )
-        )
-    fail_msg: >-
-      The removal target changed type, checksum, owner, group, or mode. Leave it
-      intact rather than recursively deleting foreign state.
-
-- name: Unlink the exact verified owned file without recursive deletion
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/unlink
-      - --
-      - "{{ forward_proxy_removal_path }}"
-  changed_when: true
-  when: forward_proxy_removal_boundary.stat.exists
+    checksum: "{{ forward_proxy_removal_checksum }}"
+    mode: "{{ forward_proxy_removal_mode }}"
+    owner: "{{ forward_proxy_removal_owner }}"
+    group: "{{ forward_proxy_removal_group }}"
+    allow_absent: "{{ forward_proxy_removal_allow_absent | bool }}"
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"

@@ -1,19 +1,90 @@
 ---
-- name: Verify the managed Squid Pod is running
+- name: Reinspect the readiness Quadlet identity
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_quadlet_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_readiness_quadlet
+
+- name: Reinspect the readiness Pod identity and provenance
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - pod
+      - inspect
+      - --format
+      - >-
+        {{ '{{.Id}}|{{ index .Labels "io.lightning-it.owner" }}' }}
+      - "{{ forward_proxy_unit_name }}"
+  register: forward_proxy_readiness_pod_identity
+  changed_when: false
+  failed_when: forward_proxy_readiness_pod_identity.rc != 0
+  check_mode: false
+
+- name: Reinspect the readiness systemd fragment
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - --system
+      - show
+      - "{{ forward_proxy_unit_name }}.service"
+      - --property=FragmentPath
+      - --value
+  register: forward_proxy_readiness_unit
+  changed_when: false
+  failed_when: forward_proxy_readiness_unit.rc != 0
+  check_mode: false
+
+- name: Require the exact captured runtime at the readiness boundary
+  ansible.builtin.assert:
+    that:
+      - >-
+        forward_proxy_active_runtime_identity_internal
+        == {
+          'unit_name': forward_proxy_unit_name,
+          'quadlet_path': forward_proxy_quadlet_path,
+          'quadlet_checksum': forward_proxy_readiness_quadlet.stat.checksum,
+          'pod_id': (forward_proxy_readiness_pod_identity.stdout | trim).split('|')[0],
+          'owner_label': (forward_proxy_readiness_pod_identity.stdout | trim).split('|')[1],
+          'unit_fragment_path': forward_proxy_readiness_unit.stdout | trim
+        }
+      - forward_proxy_readiness_quadlet.stat.isreg | default(false)
+      - not forward_proxy_readiness_quadlet.stat.islnk | default(false)
+      - forward_proxy_readiness_quadlet.stat.mode == '0644'
+      - forward_proxy_readiness_quadlet.stat.pw_name | default('') == 'root'
+      - forward_proxy_readiness_quadlet.stat.gr_name | default('') == 'root'
+      - >-
+        forward_proxy_readiness_pod_identity.stdout | trim
+        is match('^[a-f0-9]{12,64}\\|lit\\.supplementary\\.forward_proxy\Z')
+      - >-
+        forward_proxy_readiness_unit.stdout | trim
+        is match(
+          '^/run/systemd/generator(?:\\.early|\\.late)?/'
+          ~ (forward_proxy_unit_name | regex_escape)
+          ~ '\\.service\\Z'
+        )
+    fail_msg: >-
+      Readiness is not bound to the exact Pod ID, ownership label, Quadlet
+      checksum, and Quadlet-generated systemd fragment captured after mutation.
+
+- name: Verify the exact managed Squid Pod is running
   ansible.builtin.command:
     argv:
       - /usr/bin/podman
       - pod
       - ps
       - --filter
-      - "name=^{{ forward_proxy_unit_name }}$"
+      - "id={{ forward_proxy_active_runtime_identity_internal.pod_id }}"
       - --filter
       - status=running
+      - --no-trunc
       - --format
-      - "{{ '{{.Name}}' }}"
+      - "{{ '{{.ID}}' }}"
   register: forward_proxy_running_pod
   changed_when: false
-  failed_when: forward_proxy_running_pod.stdout_lines != [forward_proxy_unit_name]
+  failed_when: >-
+    forward_proxy_running_pod.stdout_lines
+    != [forward_proxy_active_runtime_identity_internal.pod_id]
   check_mode: false
 
 - name: Wait for the local Squid listener

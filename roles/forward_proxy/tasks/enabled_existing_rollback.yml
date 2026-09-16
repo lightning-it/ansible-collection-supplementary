@@ -1,4 +1,40 @@
 ---
+- name: Revalidate a captured active runtime before existing-state rollback
+  ansible.builtin.include_tasks: revalidate_active_runtime_identity.yml
+  when:
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - forward_proxy_manage_runtime | bool
+    - forward_proxy_active_runtime_identity_internal | length > 0
+    - not ansible_check_mode
+
+- name: Revalidate the original runtime if activation failed before recapture
+  ansible.builtin.include_tasks: revalidate_existing_runtime_removal.yml
+  when:
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - forward_proxy_manage_runtime | bool
+    - forward_proxy_active_runtime_identity_internal | length == 0
+    - not ansible_check_mode
+
+- name: Revalidate or prove absence after a failed render-only transition
+  when:
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+  block:
+    - name: Revalidate the captured runtime after failed removal
+      ansible.builtin.include_tasks: revalidate_existing_runtime_removal.yml
+
+    - name: Record the exact existing runtime identity for rollback
+      ansible.builtin.set_fact:
+        forward_proxy_existing_runtime_identity_verified_internal: true
+  rescue:
+    - name: Prove the failed removal left an empty runtime boundary
+      ansible.builtin.include_tasks: verify_runtime_absent.yml
+
+    - name: Record the empty runtime boundary for rollback
+      ansible.builtin.set_fact:
+        forward_proxy_runtime_absence_verified_internal: true
+
 - name: Revalidate the exact newly created runtime before existing-state rollback
   ansible.builtin.include_tasks: revalidate_new_runtime_removal.yml
   when:
@@ -217,17 +253,25 @@
 - name: Require the previous or failed-transaction Quadlet before restoration
   ansible.builtin.assert:
     that:
-      - forward_proxy_restore_quadlet_boundary.stat.isreg | default(false)
-      - not forward_proxy_restore_quadlet_boundary.stat.islnk | default(false)
-      - forward_proxy_restore_quadlet_boundary.stat.mode == '0644'
-      - forward_proxy_restore_quadlet_boundary.stat.pw_name | default('') == 'root'
-      - forward_proxy_restore_quadlet_boundary.stat.gr_name | default('') == 'root'
       - >-
-        forward_proxy_restore_quadlet_boundary.stat.checksum
-        in [
-          forward_proxy_previous_state_manifest.quadlet_checksum,
-          forward_proxy_quadlet_stat.stat.checksum | default('')
-        ]
+        (
+          not forward_proxy_manage_runtime | bool
+          and forward_proxy_runtime_absence_verified_internal | bool
+          and not forward_proxy_restore_quadlet_boundary.stat.exists
+          and not forward_proxy_restore_quadlet_boundary.stat.islnk | default(false)
+        )
+        or (
+          forward_proxy_restore_quadlet_boundary.stat.isreg | default(false)
+          and not forward_proxy_restore_quadlet_boundary.stat.islnk | default(false)
+          and forward_proxy_restore_quadlet_boundary.stat.mode == '0644'
+          and forward_proxy_restore_quadlet_boundary.stat.pw_name | default('') == 'root'
+          and forward_proxy_restore_quadlet_boundary.stat.gr_name | default('') == 'root'
+          and forward_proxy_restore_quadlet_boundary.stat.checksum
+            in [
+              forward_proxy_previous_state_manifest.quadlet_checksum,
+              forward_proxy_quadlet_stat.stat.checksum | default('')
+            ]
+        )
     fail_msg: >-
       The Quadlet changed outside the previous or failed transaction. Leave it
       untouched for operator recovery.
@@ -296,6 +340,42 @@
     unsafe_writes: false
   no_log: true
 
+- name: Revalidate the preserved runtime immediately before restart
+  ansible.builtin.include_tasks: revalidate_existing_runtime_removal.yml
+  when:
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+    - forward_proxy_existing_runtime_identity_verified_internal | bool
+    - not ansible_check_mode
+
+- name: Recheck the empty runtime boundary immediately before restart
+  ansible.builtin.include_tasks: verify_runtime_restart_boundary.yml
+  when:
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+    - forward_proxy_runtime_absence_verified_internal | bool
+    - not ansible_check_mode
+
+- name: Revalidate the managed runtime identity immediately before restart
+  ansible.builtin.include_tasks: revalidate_active_runtime_identity.yml
+  vars:
+    forward_proxy_active_runtime_allowed_quadlet_checksums_internal:
+      - "{{ forward_proxy_active_runtime_identity_internal.quadlet_checksum }}"
+      - "{{ forward_proxy_previous_state_manifest.quadlet_checksum }}"
+  when:
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - forward_proxy_manage_runtime | bool
+    - forward_proxy_active_runtime_identity_internal | length > 0
+    - not ansible_check_mode
+
+- name: Revalidate the original managed runtime immediately before restart
+  ansible.builtin.include_tasks: revalidate_existing_runtime_removal.yml
+  when:
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - forward_proxy_manage_runtime | bool
+    - forward_proxy_active_runtime_identity_internal | length == 0
+    - not ansible_check_mode
+
 - name: Restart the restored previous forward proxy runtime
   ansible.builtin.include_role:
     name: lit.foundational.podman_systemd
@@ -307,6 +387,12 @@
     podman_systemd_scope: "{{ forward_proxy_systemd_scope }}"
     podman_systemd_quadlet_dir: "{{ forward_proxy_quadlet_dir }}"
     podman_systemd_enabled: true
+  when:
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not ansible_check_mode
+
+- name: Capture the restored runtime identity after rollback
+  ansible.builtin.include_tasks: capture_active_runtime_identity.yml
   when:
     - forward_proxy_previous_state_manifest.runtime_managed | bool
     - not ansible_check_mode

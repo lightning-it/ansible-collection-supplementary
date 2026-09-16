@@ -173,3 +173,20 @@
   when: >-
     not ansible_check_mode
     or forward_proxy_directory_before.stat.exists
+
+- name: Require the transaction-bound trusted directory identity
+  ansible.builtin.assert:
+    that:
+      - >-
+        forward_proxy_directory_after.stat.dev
+        == forward_proxy_trusted_parent_identity_map_internal[forward_proxy_directory_path].device
+      - >-
+        forward_proxy_directory_after.stat.inode
+        == forward_proxy_trusted_parent_identity_map_internal[forward_proxy_directory_path].inode
+    fail_msg: >-
+      A trusted proxy directory was replaced after the transaction captured
+      its device and inode. Stop before any pathname-based mutation.
+  when:
+    - not ansible_check_mode
+    - forward_proxy_trusted_parent_identity_map_internal is defined
+    - forward_proxy_directory_path in forward_proxy_trusted_parent_identity_map_internal

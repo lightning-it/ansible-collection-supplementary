@@ -13,10 +13,13 @@
     forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
     forward_proxy_pod_manifest_path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
     forward_proxy_state_marker_path: "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
+    forward_proxy_quadlet_dir: "{{ forward_proxy_test_root }}/etc/containers/systemd"
     forward_proxy_trusted_parent_paths:
       - "{{ forward_proxy_test_root | dirname }}"
       - "{{ forward_proxy_test_root }}"
       - "{{ forward_proxy_test_root }}/etc"
+      - "{{ forward_proxy_test_root }}/etc/containers"
+      - "{{ forward_proxy_test_root }}/etc/containers/systemd"
       - "{{ forward_proxy_test_root }}/etc/squid"
       - "{{ forward_proxy_test_root }}/var"
       - "{{ forward_proxy_test_root }}/var/lib"
@@ -65,6 +68,9 @@
       loop_control:
         loop_var: forward_proxy_invalid_client
 
+    - name: Prove a non-standard destination port is rejected before rendering
+      ansible.builtin.include_tasks: tasks/reject-port.yml
+
     - name: Evaluate each service and upstream contract independently
       ansible.builtin.assert:
         that:
@@ -81,6 +87,8 @@
               'acl lit_allowed_domains dstdomain -n .ubuntu.com registry.example.com'
               in forward_proxy_rendered_policy
             }}
+        - name: exact destination port ACL
+          passed: "{{ 'acl lit_safe_ports port 80 443' in forward_proxy_rendered_policy }}"
         - name: reject reverse-DNS conversion for IP literals
           passed: >-
             {{ 'acl lit_allowed_domains dstdomain -n ' in forward_proxy_rendered_policy }}
@@ -113,6 +121,11 @@
       register: forward_proxy_policy_results
       ignore_errors: true
 
+    - name: Simulate one completed unlink from an interrupted disable transaction
+      ansible.builtin.file:
+        path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
+        state: absent
+
     - name: Initialize forward proxy cleanup execution evidence
       ansible.builtin.set_fact:
         forward_proxy_cleanup_execution_result:
@@ -132,6 +145,7 @@
             forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
             forward_proxy_pod_manifest_path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
             forward_proxy_state_marker_path: "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
+            forward_proxy_quadlet_dir: "{{ forward_proxy_test_root }}/etc/containers/systemd"
       rescue:
         - name: Record the cleanup execution failure for JUnit
           ansible.builtin.set_fact:
@@ -212,7 +226,7 @@
               classname="forward_proxy.negative_policy"
               name="{{ result.item.name | e }}"
               role="forward_proxy">{% if result.failed | default(false) %}
-              <failure message="unsafe client network was not rejected"/>{% endif %}
+              <failure message="unsafe policy input was not rejected"/>{% endif %}
             </testcase>
           {% endfor %}
             <testcase

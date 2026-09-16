@@ -38,19 +38,21 @@
         forward_proxy_lock_path.startswith('/run/lock/')
         or forward_proxy_lock_path.startswith(forward_proxy_render_root.rstrip('/') ~ '/')
       - >-
-        forward_proxy_file_owner not in ['root', '0']
-        or forward_proxy_lock_path.startswith('/run/lock/')
+        forward_proxy_file_owner in ['root', '0']
+        or forward_proxy_lock_path.startswith(forward_proxy_render_root.rstrip('/') ~ '/')
       - forward_proxy_lock_path not in forward_proxy_managed_paths_internal
       - forward_proxy_lock_path != forward_proxy_state_marker_path
-      - forward_proxy_readiness_timeout | int >= 1
-      - forward_proxy_readiness_timeout | int <= 300
+      - forward_proxy_readiness_timeout is integer
+      - forward_proxy_readiness_timeout >= 1
+      - forward_proxy_readiness_timeout <= 300
       - forward_proxy_listen_addresses is sequence
       - forward_proxy_listen_addresses is not string
       - forward_proxy_listen_addresses | length > 0
       - forward_proxy_listen_addresses | unique | list | length == forward_proxy_listen_addresses | length
       - "'127.0.0.1' in forward_proxy_listen_addresses"
-      - forward_proxy_port | int >= 1024
-      - forward_proxy_port | int <= 65535
+      - forward_proxy_port is integer
+      - forward_proxy_port >= 1024
+      - forward_proxy_port <= 65535
       - forward_proxy_allowed_clients is sequence
       - forward_proxy_allowed_clients is not string
       - forward_proxy_allowed_clients | length > 0
@@ -75,8 +77,9 @@
           and not forward_proxy_upstream_host.startswith('.')
           and not forward_proxy_upstream_host.endswith('.')
         )
-      - forward_proxy_upstream_port | int >= 1
-      - forward_proxy_upstream_port | int <= 65535
+      - forward_proxy_upstream_port is integer
+      - forward_proxy_upstream_port >= 1
+      - forward_proxy_upstream_port <= 65535
       - forward_proxy_trusted_parent_paths is sequence
       - forward_proxy_trusted_parent_paths is not string
       - forward_proxy_trusted_parent_paths | length > 0
@@ -269,6 +272,23 @@
     - forward_proxy_file_owner not in ['root', '0']
       or forward_proxy_file_group not in ['root', '0']
 
+- name: Isolate every render-only proxy and Quadlet boundary
+  ansible.builtin.assert:
+    that:
+      - >-
+        item == forward_proxy_render_root
+        or item.startswith(forward_proxy_render_root.rstrip('/') ~ '/')
+    fail_msg: >-
+      Render-only mode must isolate every managed path and the derived Quadlet
+      boundary beneath the exact render root so a foreign host runtime cannot
+      consume rendered files.
+  loop: >-
+    {{
+      forward_proxy_managed_paths_internal
+      + [forward_proxy_state_marker_path, forward_proxy_quadlet_dir, forward_proxy_quadlet_path]
+    }}
+  when: not forward_proxy_manage_runtime | bool
+
 - name: Require the exact delegated Quadlet path
   ansible.builtin.assert:
     that:
@@ -317,6 +337,17 @@
       - not forward_proxy_lock_path.startswith(item.rstrip('/') ~ '/')
     fail_msg: >-
       The transition lock must be neither an ancestor nor a descendant of any
-      managed file, state marker, or delegated Quadlet path.
+      managed file, managed directory, state marker, or delegated Quadlet
+      boundary.
   loop: >-
-    {{ forward_proxy_managed_paths_internal + [forward_proxy_state_marker_path, forward_proxy_quadlet_path] }}
+    {{
+      (
+        forward_proxy_managed_paths_internal
+        + forward_proxy_managed_directories_internal
+        + [
+            forward_proxy_state_marker_path,
+            forward_proxy_quadlet_path,
+            forward_proxy_quadlet_dir
+          ]
+      ) | unique | list
+    }}

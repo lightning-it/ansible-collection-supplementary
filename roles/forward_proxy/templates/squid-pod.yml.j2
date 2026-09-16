@@ -3,6 +3,8 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: {{ forward_proxy_unit_name }}
+  labels:
+    io.lightning-it.owner: lit.supplementary.forward_proxy
 spec:
   hostNetwork: true
   restartPolicy: Always
