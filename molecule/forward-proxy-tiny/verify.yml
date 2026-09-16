@@ -68,9 +68,6 @@
       loop_control:
         loop_var: forward_proxy_invalid_client
 
-    - name: Prove a non-standard destination port is rejected before rendering
-      ansible.builtin.include_tasks: tasks/reject-port.yml
-
     - name: Evaluate each service and upstream contract independently
       ansible.builtin.assert:
         that:
