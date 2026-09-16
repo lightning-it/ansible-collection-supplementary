@@ -8,48 +8,16 @@ DOCUMENTATION = r"""
 module: atomic_unlink
 short_description: Unlink one exactly identified regular file
 description:
-  - Opens every parent component without following symlinks.
-  - Binds the target to a file descriptor, verifies its complete identity, and
-    atomically moves it into a private quarantine before revalidation and
-    deletion.
+  - Descriptor-binds and verifies one file before quarantined removal.
 options:
-  path:
-    description:
-      - Canonical absolute path of the regular file to remove.
-    type: path
-    required: true
-  checksum:
-    description:
-      - Expected SHA-256 checksum of the file contents.
-    type: str
-    required: true
-  mode:
-    description:
-      - Expected octal permission mode.
-    type: str
-    required: true
-  owner:
-    description:
-      - Expected owner name or numeric UID.
-    type: str
-    required: true
-  group:
-    description:
-      - Expected group name or numeric GID.
-    type: str
-    required: true
-  allow_absent:
-    description:
-      - Treat an already absent path as an unchanged success.
-    type: bool
-    default: false
-  parent_identities:
-    description:
-      - Transaction-bound device and inode values for trusted parent paths.
-    type: dict
-    required: true
-author:
-  - Lightning IT (@lightning-it)
+  path: {type: path, required: true}
+  checksum: {type: str, required: true}
+  mode: {type: str, required: true}
+  owner: {type: str, required: true}
+  group: {type: str, required: true}
+  allow_absent: {type: bool, default: false}
+  parent_identities: {type: dict, required: true}
+author: [Lightning IT]
 """
 
 EXAMPLES = r"""
@@ -68,15 +36,12 @@ EXAMPLES = r"""
 
 RETURN = r"""
 path:
-  description: Absolute path considered by the module.
   type: str
   returned: always
 recovery_path:
-  description: Recoverable quarantine path when an external replacement cannot be restored.
   type: str
   returned: on failure after quarantine
 quarantine_cleanup_warning:
-  description: Cleanup error when the verified target was removed but the empty private quarantine could not be removed.
   type: str
   returned: on successful unlink with a quarantine cleanup error
 """
@@ -145,6 +110,14 @@ def _open_parent(path: str, parent_identities: dict) -> tuple[int, str]:
         parent_path = os.path.dirname(path)
         if parent_path not in parent_identities:
             raise OSError("exact parent identity binding is missing")
+        if parent_path == "/":
+            expected = parent_identities[parent_path]
+            opened = os.fstat(current_fd)
+            if (opened.st_dev, opened.st_ino) != (
+                _strict_integer(expected["device"], "device"),
+                _strict_integer(expected["inode"], "inode"),
+            ):
+                raise OSError("trusted parent identity changed: /")
         return current_fd, name
     except Exception:
         os.close(current_fd)
@@ -175,6 +148,23 @@ IDENTITY_FIELDS = (
 
 def _same_identity(left: os.stat_result, right: os.stat_result) -> bool:
     return all(getattr(left, field) == getattr(right, field) for field in IDENTITY_FIELDS)
+
+
+def _same_snapshot(left: os.stat_result, right: os.stat_result) -> bool:
+    return _same_identity(left, right) and left.st_ctime_ns == right.st_ctime_ns
+
+
+def _require_capabilities() -> None:
+    flags = ("O_DIRECTORY", "O_NOFOLLOW", "O_NONBLOCK")
+    functions = (os.open, os.stat, os.mkdir, os.rename, os.link, os.unlink, os.rmdir)
+    if any(not hasattr(os, flag) for flag in flags) or any(
+        function not in getattr(os, "supports_dir_fd", ()) for function in functions
+    ):
+        raise OSError("descriptor-relative no-follow filesystem operations are unavailable")
+    if os.stat not in getattr(os, "supports_follow_symlinks", ()):
+        raise OSError("no-follow stat is unavailable")
+    if not os.path.isdir("/proc/self/fd"):
+        raise OSError("descriptor-linking procfs is unavailable")
 
 
 def _make_private_quarantine(parent_fd: int) -> tuple[int, str]:
@@ -289,6 +279,7 @@ def main() -> None:
         module.fail_json(msg="path must be one canonical absolute file path", path=path)
 
     try:
+        _require_capabilities()
         expected_uid = _numeric_identity(str(module.params["owner"]), pwd.getpwnam, "owner")
         expected_gid = _numeric_identity(str(module.params["group"]), grp.getgrnam, "group")
         mode_value = str(module.params["mode"])
@@ -319,16 +310,16 @@ def main() -> None:
         if before.st_uid != expected_uid or before.st_gid != expected_gid:
             module.fail_json(msg="removal target ownership changed", path=path)
 
-        file_fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd)
+        file_fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent_fd)
         opened = os.fstat(file_fd)
-        if not _same_identity(opened, before):
+        if not _same_snapshot(opened, before):
             module.fail_json(msg="removal target changed while opening", path=path)
         if _checksum_fd(file_fd) != module.params["checksum"]:
             module.fail_json(msg="removal target checksum changed", path=path)
 
         final_fd = os.fstat(file_fd)
         final_name = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
-        if not _same_identity(final_fd, final_name):
+        if not _same_snapshot(final_fd, final_name):
             module.fail_json(msg="removal target changed at the unlink boundary", path=path)
         if (
             not stat.S_ISREG(final_fd.st_mode)

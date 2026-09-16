@@ -93,7 +93,11 @@ class AtomicUnlinkTests(unittest.TestCase):
             if not preserve_real
             else mock.patch.object(MODULE, "_preserve_open_file", wraps=MODULE._preserve_open_file)
         )
-        with mock.patch.object(MODULE, "AnsibleModule", FakeModule), preservation:
+        with (
+            mock.patch.object(MODULE, "AnsibleModule", FakeModule),
+            mock.patch.object(MODULE, "_require_capabilities"),
+            preservation,
+        ):
             with self.assertRaises(expected) as result:
                 MODULE.main()
         return result.exception.result
@@ -125,6 +129,14 @@ class AtomicUnlinkTests(unittest.TestCase):
     def test_rejects_malformed_parent_identity(self) -> None:
         self.parameters["parent_identities"] = {str(self.root): {"device": self.root.stat().st_dev}}
         self.assertIn("cannot bind trusted parent chain", str(self.execute(failure=True)["msg"]))
+
+    def test_root_parent_identity_is_validated(self) -> None:
+        root = Path("/").stat()
+        with self.assertRaisesRegex(OSError, "identity changed"):
+            MODULE._open_parent(
+                "/owned.conf",
+                {"/": {"device": root.st_dev, "inode": root.st_ino + 1}},
+            )
 
     def test_rejects_boolean_float_and_negative_identity_inputs(self) -> None:
         for field, value in (("inode", True), ("device", 1.9)):
