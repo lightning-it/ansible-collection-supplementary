@@ -92,6 +92,7 @@ import pwd
 import re
 import secrets
 import stat
+from typing import Optional
 
 from ansible.module_utils.basic import AnsibleModule
 
@@ -299,6 +300,14 @@ def _remove_private_if_same(parent: int, name: str, expected: os.stat_result, *,
     return True
 
 
+class _PreservedRecovery(OSError):
+    """Signal that an entry remains in the private workspace."""
+
+    def __init__(self, entry: str) -> None:
+        super().__init__(f"recovery entry preserved as {entry}")
+        self.entry = entry
+
+
 def _capture_and_remove(
     parent: int,
     name: str,
@@ -307,6 +316,7 @@ def _capture_and_remove(
     capture: str,
     *,
     directory: bool = False,
+    checksum: Optional[str] = None,
 ) -> bool:
     """Move a public entry atomically before identity-bound private cleanup."""
     try:
@@ -314,13 +324,19 @@ def _capture_and_remove(
     except FileNotFoundError:
         return True
     captured = os.stat(capture, dir_fd=workspace, follow_symlinks=False)
-    matches = _same_inode(captured, expected) if directory else _same_identity(captured, expected)
+    matches = (
+        _same_inode(captured, expected)
+        if directory
+        else checksum is not None
+        and _same_identity(captured, expected)
+        and _verified_file(workspace, capture, captured, checksum)
+    )
     if matches:
         return _remove_private_if_same(workspace, capture, captured, directory=directory)
     try:
         _renameat(workspace, capture, parent, name, "noreplace")
-    except OSError:
-        pass
+    except OSError as exc:
+        raise _PreservedRecovery(capture) from exc
     return False
 
 
@@ -338,7 +354,7 @@ def _verified_file(parent: int, name: str, expected: os.stat_result, checksum: s
         os.close(descriptor)
 
 
-def _existing(parent: int, name: str) -> os.stat_result | None:
+def _existing(parent: int, name: str) -> Optional[os.stat_result]:
     try:
         return os.stat(name, dir_fd=parent, follow_symlinks=False)
     except FileNotFoundError:
@@ -355,19 +371,7 @@ def _require_exclusive_parent(parent: int) -> None:
         raise OSError("another atomic path transaction holds the mutation parent") from exc
 
 
-def _revalidate_parent(module: AnsibleModule, parent: int) -> None:
-    parent_path = os.path.dirname(module.params["path"])
-    reopened = _open_bound_directory(parent_path, module.params["parent_identities"])
-    try:
-        original = os.fstat(parent)
-        current = os.fstat(reopened)
-        if (original.st_dev, original.st_ino) != (current.st_dev, current.st_ino):
-            raise OSError("parent identity changed across mutation")
-    finally:
-        os.close(reopened)
-
-
-def _revalidated_entry(module: AnsibleModule, parent: int, name: str) -> os.stat_result | None:
+def _revalidated_entry(module: AnsibleModule, parent: int, name: str) -> Optional[os.stat_result]:
     """Read the target through a freshly identity-bound canonical parent."""
     parent_path = os.path.dirname(module.params["path"])
     reopened = _open_bound_directory(parent_path, module.params["parent_identities"])
@@ -397,9 +401,12 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
         module.exit_json(changed=True, path=module.params["path"])
     workspace, workspace_name, workspace_identity = _private_workspace(parent)
     directory = -1
-    created_identity: os.stat_result | None = None
+    created_identity: Optional[os.stat_result] = None
     installed = False
+    preserve_workspace = False
+    recovery_name: Optional[str] = None
     cleanup_failed = False
+    failure: Optional[Exception] = None
     try:
         os.mkdir("payload", 0o700, dir_fd=workspace)
         created_identity = os.stat("payload", dir_fd=workspace, follow_symlinks=False)
@@ -422,26 +429,43 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
         canonical = _revalidated_entry(module, parent, name)
         if canonical is None or not _same_snapshot(canonical, final):
             raise OSError("created directory identity changed at the canonical boundary")
-    except Exception:
+    except Exception as exc:
+        failure = exc
         if installed and created_identity is not None:
-            installed = not _capture_and_remove(
-                parent, name, created_identity, workspace, "failed", directory=True
-            )
-        raise
+            try:
+                installed = not _capture_and_remove(
+                    parent, name, created_identity, workspace, "failed", directory=True
+                )
+            except _PreservedRecovery as recovery:
+                preserve_workspace = True
+                recovery_name = recovery.entry
     finally:
         if directory >= 0:
             os.close(directory)
         if not installed and created_identity is not None:
-            _remove_private_if_same(workspace, "payload", created_identity, directory=True)
+            if not _remove_private_if_same(workspace, "payload", created_identity, directory=True):
+                preserve_workspace = True
+                recovery_name = "payload"
         os.close(workspace)
-        cleanup_failed = not _remove_private_if_same(
-            parent, workspace_name, workspace_identity, directory=True
-        )
+        if not preserve_workspace:
+            cleanup_failed = not _remove_private_if_same(
+                parent, workspace_name, workspace_identity, directory=True
+            )
+    if failure is not None:
+        if preserve_workspace or cleanup_failed:
+            recovery_root = os.path.join(_descriptor_path(parent), workspace_name)
+            module.fail_json(
+                msg=f"atomic directory mutation failed: {failure}; recovery workspace preserved",
+                path=module.params["path"],
+                recovery_path=os.path.join(recovery_root, recovery_name) if recovery_name else recovery_root,
+            )
+        raise failure
     if cleanup_failed:
+        recovery_root = os.path.join(_descriptor_path(parent), workspace_name)
         module.fail_json(
             msg="created directory but private workspace cleanup failed",
             path=module.params["path"],
-            recovery_path=os.path.join(_descriptor_path(parent), workspace_name),
+            recovery_path=recovery_root,
         )
     module.exit_json(changed=True, path=module.params["path"])
 
@@ -489,11 +513,13 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
         module.exit_json(changed=True, path=module.params["path"], checksum=desired)
     workspace, workspace_name, workspace_identity = _private_workspace(parent)
     descriptor = -1
-    staged_identity: os.stat_result | None = None
-    displaced_identity: os.stat_result | None = None
+    staged_identity: Optional[os.stat_result] = None
+    displaced_identity: Optional[os.stat_result] = None
     installed = False
     preserve_workspace = False
+    recovery_name: Optional[str] = None
     cleanup_failed = False
+    failure: Optional[Exception] = None
     try:
         descriptor = os.open(
             "payload",
@@ -520,6 +546,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             _renameat(workspace, "payload", parent, name, "exchange")
             installed = True
             preserve_workspace = True
+            recovery_name = "payload"
             displaced_identity = os.stat("payload", dir_fd=workspace, follow_symlinks=False)
             if not _verified_file(workspace, "payload", before, expected_checksum):
                 raise OSError("file boundary changed during replacement; both entries were preserved")
@@ -530,49 +557,71 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             or not _verified_file(parent, name, installed_details, desired)
         ):
             preserve_workspace = displaced_identity is not None
+            recovery_name = "payload" if preserve_workspace else None
             raise OSError("installed file identity changed after replacement")
         os.fsync(parent)
         final = _existing(parent, name)
         if staged_identity is None or final is None or not _same_snapshot(final, installed_details):
             preserve_workspace = displaced_identity is not None
+            recovery_name = "payload" if preserve_workspace else None
             raise OSError("installed file identity changed before completion")
         canonical = _revalidated_entry(module, parent, name)
         if canonical is None or not _same_snapshot(canonical, final):
             preserve_workspace = displaced_identity is not None
             raise OSError("installed file identity changed at the canonical boundary")
         if displaced_identity is not None and not _remove_private_if_same(workspace, "payload", displaced_identity):
+            preserve_workspace = True
+            recovery_name = "payload"
             raise OSError("replaced file could not be removed from the private recovery workspace")
         preserve_workspace = False
+        recovery_name = None
     except Exception as exc:
+        failure = exc
         if installed and staged_identity is not None:
             if displaced_identity is None:
-                installed = not _capture_and_remove(parent, name, staged_identity, workspace, "failed")
+                try:
+                    installed = not _capture_and_remove(
+                        parent,
+                        name,
+                        staged_identity,
+                        workspace,
+                        "failed",
+                        checksum=desired,
+                    )
+                except _PreservedRecovery as recovery:
+                    preserve_workspace = True
+                    recovery_name = recovery.entry
             else:
                 preserve_workspace = True
-        if preserve_workspace:
-            recovery_parent = _descriptor_path(parent)
-            module.fail_json(
-                msg=f"atomic path mutation failed: {exc}; recovery workspace preserved",
-                path=module.params["path"],
-                recovery_path=os.path.join(recovery_parent, workspace_name, "payload"),
-            )
-        raise
+                recovery_name = "payload"
     finally:
         cleanup_identity = os.fstat(descriptor) if descriptor >= 0 else None
         if descriptor >= 0:
             os.close(descriptor)
         if not installed and cleanup_identity is not None:
-            _remove_private_if_same(workspace, "payload", cleanup_identity)
+            if not _remove_private_if_same(workspace, "payload", cleanup_identity):
+                preserve_workspace = True
+                recovery_name = "payload"
         os.close(workspace)
         if not preserve_workspace:
             cleanup_failed = not _remove_private_if_same(
                 parent, workspace_name, workspace_identity, directory=True
             )
+    if failure is not None:
+        if preserve_workspace or cleanup_failed:
+            recovery_root = os.path.join(_descriptor_path(parent), workspace_name)
+            module.fail_json(
+                msg=f"atomic path mutation failed: {failure}; recovery workspace preserved",
+                path=module.params["path"],
+                recovery_path=os.path.join(recovery_root, recovery_name) if recovery_name else recovery_root,
+            )
+        raise failure
     if cleanup_failed:
+        recovery_root = os.path.join(_descriptor_path(parent), workspace_name)
         module.fail_json(
             msg="file mutation completed but private workspace cleanup failed",
             path=module.params["path"],
-            recovery_path=os.path.join(_descriptor_path(parent), workspace_name),
+            recovery_path=recovery_root,
         )
     module.exit_json(changed=True, path=module.params["path"], checksum=desired)
 
