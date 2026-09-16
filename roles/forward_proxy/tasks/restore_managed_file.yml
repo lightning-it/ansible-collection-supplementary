@@ -37,12 +37,14 @@
       transaction checksum. Leave it untouched for operator recovery.
 
 - name: Restore one exact previous forward proxy managed file
-  ansible.builtin.copy:
+  lit.supplementary.atomic_path:
     content: "{{ forward_proxy_restore_entry.0.content | b64decode }}"
-    dest: "{{ forward_proxy_restore_entry.0.item.0.0 }}"
+    path: "{{ forward_proxy_restore_entry.0.item.0.0 }}"
+    state: file
     owner: "{{ forward_proxy_file_owner }}"
     group: "{{ forward_proxy_file_group }}"
     mode: "{{ forward_proxy_restore_entry.1 }}"
-    follow: false
-    unsafe_writes: false
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"
+    allow_absent: false
+    expected_checksum: "{{ forward_proxy_restore_file_boundary.stat.checksum }}"
   no_log: true

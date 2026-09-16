@@ -85,6 +85,7 @@ import grp
 import hashlib
 import os
 import pwd
+import re
 import secrets
 import stat
 
@@ -92,14 +93,30 @@ from ansible.module_utils.basic import AnsibleModule
 
 
 def _numeric_identity(value: str, database: object, kind: str) -> int:
+    if re.fullmatch(r"[+-]?\d+", value):
+        identity = int(value, 10)
+        if identity < 0:
+            raise ValueError(f"{kind} ID must be non-negative")
+        return identity
     try:
-        return int(value, 10)
-    except ValueError:
-        try:
-            record = database(value)
-        except KeyError as exc:
-            raise ValueError(f"unknown {kind}: {value}") from exc
-        return record.pw_uid if kind == "owner" else record.gr_gid
+        record = database(value)
+    except KeyError as exc:
+        raise ValueError(f"unknown {kind}: {value}") from exc
+    identity = record.pw_uid if kind == "owner" else record.gr_gid
+    if identity < 0:
+        raise ValueError(f"{kind} ID must be non-negative")
+    return identity
+
+
+def _strict_integer(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise ValueError(f"{label} must be a non-negative integer")
+    if isinstance(value, str) and not re.fullmatch(r"\d+", value):
+        raise ValueError(f"{label} must be a non-negative integer")
+    result = int(value)
+    if result < 0:
+        raise ValueError(f"{label} must be a non-negative integer")
+    return result
 
 
 def _open_parent(path: str, parent_identities: dict) -> tuple[int, str]:
@@ -121,8 +138,8 @@ def _open_parent(path: str, parent_identities: dict) -> tuple[int, str]:
                 opened = os.fstat(current_fd)
                 expected = parent_identities[current_path]
                 if (opened.st_dev, opened.st_ino) != (
-                    int(expected["device"]),
-                    int(expected["inode"]),
+                    _strict_integer(expected["device"], "device"),
+                    _strict_integer(expected["inode"], "inode"),
                 ):
                     raise OSError(f"trusted parent identity changed: {current_path}")
         parent_path = os.path.dirname(path)
@@ -268,9 +285,14 @@ def main() -> None:
     try:
         expected_uid = _numeric_identity(str(module.params["owner"]), pwd.getpwnam, "owner")
         expected_gid = _numeric_identity(str(module.params["group"]), grp.getgrnam, "group")
-        expected_mode = int(str(module.params["mode"]), 8)
+        mode_value = str(module.params["mode"])
+        if not re.fullmatch(r"[0-7]{3,4}", mode_value):
+            raise ValueError("mode must contain three or four octal permission digits")
+        expected_mode = int(mode_value, 8)
+        if expected_mode > 0o7777:
+            raise ValueError("mode exceeds the POSIX permission-bit range")
         parent_fd, name = _open_parent(path, module.params["parent_identities"])
-    except (OSError, TypeError, ValueError) as exc:
+    except (KeyError, OSError, TypeError, ValueError) as exc:
         module.fail_json(msg=f"cannot bind trusted parent chain: {exc}", path=path)
 
     file_fd = -1
@@ -302,18 +324,32 @@ def main() -> None:
         final_name = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         if not _same_identity(final_fd, final_name):
             module.fail_json(msg="removal target changed at the unlink boundary", path=path)
+        if (
+            not stat.S_ISREG(final_fd.st_mode)
+            or stat.S_IMODE(final_fd.st_mode) != expected_mode
+            or final_fd.st_uid != expected_uid
+            or final_fd.st_gid != expected_gid
+        ):
+            module.fail_json(msg="removal target metadata changed at the unlink boundary", path=path)
 
         if module.check_mode:
             module.exit_json(changed=True, path=path)
 
         quarantine_fd, quarantine_name = _make_private_quarantine(parent_fd)
         _preserve_open_file(file_fd, quarantine_fd, final_fd)
-        os.rename(
-            name,
-            "target",
-            src_dir_fd=parent_fd,
-            dst_dir_fd=quarantine_fd,
-        )
+        try:
+            os.rename(
+                name,
+                "target",
+                src_dir_fd=parent_fd,
+                dst_dir_fd=quarantine_fd,
+            )
+        except OSError as exc:
+            module.fail_json(
+                msg=f"cannot quarantine the removal target: {exc}; verified inode preserved in quarantine",
+                path=path,
+                recovery_path=os.path.join(os.path.dirname(path), quarantine_name, "verified"),
+            )
         try:
             quarantined = os.stat("target", dir_fd=quarantine_fd, follow_symlinks=False)
         except OSError as exc:
@@ -373,7 +409,14 @@ def main() -> None:
                 path=path,
                 recovery_path=recovery_path,
             )
-        if not _same_identity(final_fd, final_quarantine) or final_checksum != module.params["checksum"]:
+        if (
+            not _same_identity(final_fd, final_quarantine)
+            or not stat.S_ISREG(final_quarantine.st_mode)
+            or stat.S_IMODE(final_quarantine.st_mode) != expected_mode
+            or final_quarantine.st_uid != expected_uid
+            or final_quarantine.st_gid != expected_gid
+            or final_checksum != module.params["checksum"]
+        ):
             restored, cleaned = _recover_quarantine(
                 parent_fd,
                 name,

@@ -280,14 +280,21 @@
     - not ansible_check_mode
 
 - name: Restore the previous managed forward proxy Quadlet
-  ansible.builtin.copy:
+  lit.supplementary.atomic_path:
     content: "{{ forward_proxy_previous_quadlet_content.content | b64decode }}"
-    dest: "{{ forward_proxy_previous_state_manifest.quadlet_path }}"
+    path: "{{ forward_proxy_previous_state_manifest.quadlet_path }}"
+    state: file
     owner: root
     group: root
     mode: "0644"
-    follow: false
-    unsafe_writes: false
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"
+    allow_absent: "{{ not forward_proxy_restore_quadlet_boundary.stat.exists }}"
+    expected_checksum: >-
+      {{
+        forward_proxy_restore_quadlet_boundary.stat.checksum
+        if forward_proxy_restore_quadlet_boundary.stat.exists
+        else omit
+      }}
   when:
     - forward_proxy_previous_state_manifest.runtime_managed | bool
     - not ansible_check_mode
@@ -330,14 +337,16 @@
   when: not ansible_check_mode
 
 - name: Restore the previous forward proxy ownership marker
-  ansible.builtin.copy:
+  lit.supplementary.atomic_path:
     content: "{{ forward_proxy_state_marker_content.content | b64decode }}"
-    dest: "{{ forward_proxy_state_marker_path }}"
+    path: "{{ forward_proxy_state_marker_path }}"
+    state: file
     owner: "{{ forward_proxy_file_owner }}"
     group: "{{ forward_proxy_file_group }}"
     mode: "0600"
-    follow: false
-    unsafe_writes: false
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"
+    allow_absent: false
+    expected_checksum: "{{ forward_proxy_restore_marker_boundary.stat.checksum }}"
   no_log: true
 
 - name: Revalidate the preserved runtime immediately before restart

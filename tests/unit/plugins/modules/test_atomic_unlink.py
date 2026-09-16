@@ -78,16 +78,24 @@ class AtomicUnlinkTests(unittest.TestCase):
         os.link(self.target, "verified", dst_dir_fd=quarantine_fd, follow_symlinks=False)
         self.assertTrue(MODULE._same_identity(expected, os.stat("verified", dir_fd=quarantine_fd)))
 
-    def execute(self, *, check_mode: bool = False, failure: bool = False) -> dict[str, object]:
+    def execute(
+        self,
+        *,
+        check_mode: bool = False,
+        failure: bool = False,
+        preserve_real: bool = False,
+    ) -> dict[str, object]:
         FakeModule.params = self.parameters
         FakeModule.requested_check_mode = check_mode
         expected = Failure if failure else Exit
-        with (
-            mock.patch.object(MODULE, "AnsibleModule", FakeModule),
-            mock.patch.object(MODULE, "_preserve_open_file", side_effect=self.preserve),
-            self.assertRaises(expected) as result,
-        ):
-            MODULE.main()
+        preservation = (
+            mock.patch.object(MODULE, "_preserve_open_file", side_effect=self.preserve)
+            if not preserve_real
+            else mock.patch.object(MODULE, "_preserve_open_file", wraps=MODULE._preserve_open_file)
+        )
+        with mock.patch.object(MODULE, "AnsibleModule", FakeModule), preservation:
+            with self.assertRaises(expected) as result:
+                MODULE.main()
         return result.exception.result
 
     def test_check_mode_keeps_the_bound_file(self) -> None:
@@ -113,6 +121,42 @@ class AtomicUnlinkTests(unittest.TestCase):
         self.assertIsInstance(identities, dict)
         identities[str(self.root)]["inode"] = self.root.stat().st_ino + 1
         self.assertIn("trusted parent identity changed", str(self.execute(failure=True)["msg"]))
+
+    def test_rejects_malformed_parent_identity(self) -> None:
+        self.parameters["parent_identities"] = {str(self.root): {"device": self.root.stat().st_dev}}
+        self.assertIn("cannot bind trusted parent chain", str(self.execute(failure=True)["msg"]))
+
+    def test_rejects_boolean_float_and_negative_identity_inputs(self) -> None:
+        for field, value in (("inode", True), ("device", 1.9)):
+            with self.subTest(field=field):
+                details = self.root.stat()
+                self.parameters["parent_identities"] = {
+                    str(self.root): {"device": details.st_dev, "inode": details.st_ino}
+                }
+                self.parameters["parent_identities"][str(self.root)][field] = value
+                self.assertIn("cannot bind trusted parent chain", str(self.execute(failure=True)["msg"]))
+        details = self.root.stat()
+        self.parameters["parent_identities"] = {str(self.root): {"device": details.st_dev, "inode": details.st_ino}}
+        for field in ("owner", "group"):
+            with self.subTest(field=field):
+                self.parameters["owner"] = str(details.st_uid)
+                self.parameters["group"] = str(details.st_gid)
+                self.parameters[field] = "-1"
+                self.assertIn("cannot bind trusted parent chain", str(self.execute(failure=True)["msg"]))
+
+    @unittest.skipUnless(Path("/proc/self/fd").is_dir(), "descriptor linking requires procfs")
+    def test_real_descriptor_preservation_helper(self) -> None:
+        self.assertTrue(self.execute(preserve_real=True)["changed"])
+        self.assertFalse(self.target.exists())
+
+    def test_rename_failure_preserves_verified_inode_for_recovery(self) -> None:
+        with mock.patch.object(MODULE.os, "rename", side_effect=OSError("rename denied")):
+            result = self.execute(failure=True)
+
+        recovery = Path(str(result["recovery_path"]))
+        self.assertIn("verified inode preserved", str(result["msg"]))
+        self.assertEqual("owned\n", self.target.read_text(encoding="utf-8"))
+        self.assertEqual("owned\n", recovery.read_text(encoding="utf-8"))
 
     def test_race_restores_foreign_path_and_preserves_verified_inode(self) -> None:
         replacement = self.root / "replacement.conf"

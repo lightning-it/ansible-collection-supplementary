@@ -115,17 +115,21 @@
       an unsafe type, owner, group, or mode.
 
 - name: Create one validated forward proxy directory component
-  ansible.builtin.file:
+  lit.supplementary.atomic_path:
     path: "{{ forward_proxy_directory_path }}"
     state: directory
     owner: "{{ forward_proxy_file_owner }}"
     group: "{{ forward_proxy_file_group }}"
     mode: "0755"
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"
   when:
     - forward_proxy_directory_creation_allowed | bool
     - forward_proxy_directory_path | dirname in forward_proxy_trusted_parent_paths
     - not forward_proxy_directory_before.stat.exists
     - not forward_proxy_directory_before.stat.islnk | default(false)
+    - >-
+      not ansible_check_mode
+      or forward_proxy_directory_path | dirname not in forward_proxy_planned_directories_internal
 
 - name: Carry the planned forward proxy directory through check mode
   ansible.builtin.set_fact:

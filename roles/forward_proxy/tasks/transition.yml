@@ -68,14 +68,11 @@
     follow: false
   loop: "{{ forward_proxy_trusted_parent_paths }}"
   register: forward_proxy_trusted_parent_identity_stats
-  when:
-    - forward_proxy_enabled | bool or forward_proxy_state_marker.stat.exists
-    - not ansible_check_mode
+  when: forward_proxy_enabled | bool or forward_proxy_state_marker.stat.exists
 
 - name: Initialize trusted proxy directory identity bindings
   ansible.builtin.set_fact:
     forward_proxy_trusted_parent_identity_map_internal: {}
-  when: not ansible_check_mode
 
 - name: Bind trusted proxy directory devices and inodes to this transaction
   ansible.builtin.set_fact:
@@ -92,9 +89,7 @@
           )
       }}
   loop: "{{ forward_proxy_trusted_parent_identity_stats.results | default([]) }}"
-  when:
-    - not ansible_check_mode
-    - item.stat.isdir | default(false)
+  when: item.stat.isdir | default(false)
 
 - name: Inspect unowned forward proxy target paths
   ansible.builtin.stat:

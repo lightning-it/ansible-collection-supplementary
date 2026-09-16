@@ -176,15 +176,28 @@
       foreign or concurrent write.
 
 - name: Render the Squid policy with an atomic no-follow write
-  ansible.builtin.copy:
+  lit.supplementary.atomic_path:
     content: "{{ lookup('ansible.builtin.template', 'squid.conf.j2') }}"
-    dest: "{{ forward_proxy_config_path }}"
+    path: "{{ forward_proxy_config_path }}"
+    state: file
     owner: "{{ forward_proxy_file_owner }}"
     group: "{{ forward_proxy_file_group }}"
     mode: "0644"
-    follow: false
-    unsafe_writes: false
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"
+    allow_absent: "{{ not forward_proxy_state_marker.stat.exists }}"
+    expected_checksum: >-
+      {{
+        dict(
+          forward_proxy_previous_state_manifest.managed_paths
+          | zip(forward_proxy_previous_state_manifest.managed_checksums)
+        )[forward_proxy_config_path]
+        if forward_proxy_state_marker.stat.exists
+        else omit
+      }}
   register: forward_proxy_squid_config_result
+  when: >-
+    not ansible_check_mode
+    or forward_proxy_config_path | dirname not in forward_proxy_planned_directories_internal
 
 - name: Bind the rendered Squid policy to this transaction
   ansible.builtin.stat:
@@ -255,15 +268,28 @@
       foreign or concurrent write.
 
 - name: Render the digest-pinned Squid Pod manifest with an atomic no-follow write
-  ansible.builtin.copy:
+  lit.supplementary.atomic_path:
     content: "{{ lookup('ansible.builtin.template', 'squid-pod.yml.j2') }}"
-    dest: "{{ forward_proxy_pod_manifest_path }}"
+    path: "{{ forward_proxy_pod_manifest_path }}"
+    state: file
     owner: "{{ forward_proxy_file_owner }}"
     group: "{{ forward_proxy_file_group }}"
     mode: "0640"
-    follow: false
-    unsafe_writes: false
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"
+    allow_absent: "{{ not forward_proxy_state_marker.stat.exists }}"
+    expected_checksum: >-
+      {{
+        dict(
+          forward_proxy_previous_state_manifest.managed_paths
+          | zip(forward_proxy_previous_state_manifest.managed_checksums)
+        )[forward_proxy_pod_manifest_path]
+        if forward_proxy_state_marker.stat.exists
+        else omit
+      }}
   register: forward_proxy_pod_manifest_result
+  when: >-
+    not ansible_check_mode
+    or forward_proxy_pod_manifest_path | dirname not in forward_proxy_planned_directories_internal
 
 - name: Bind the rendered Pod manifest to this transaction
   ansible.builtin.stat:
@@ -514,12 +540,19 @@
   when: not ansible_check_mode
 
 - name: Record exact forward proxy file and Quadlet ownership
-  ansible.builtin.copy:
+  lit.supplementary.atomic_path:
     content: "{{ forward_proxy_state_marker_payload_internal }}"
-    dest: "{{ forward_proxy_state_marker_path }}"
+    path: "{{ forward_proxy_state_marker_path }}"
+    state: file
     owner: "{{ forward_proxy_file_owner }}"
     group: "{{ forward_proxy_file_group }}"
     mode: "0600"
-    follow: false
-    unsafe_writes: false
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"
+    allow_absent: "{{ not forward_proxy_state_marker.stat.exists }}"
+    expected_checksum: >-
+      {{
+        (forward_proxy_state_marker_content.content | b64decode | hash('sha256'))
+        if forward_proxy_state_marker.stat.exists
+        else omit
+      }}
   when: not ansible_check_mode
