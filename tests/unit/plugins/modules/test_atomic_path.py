@@ -364,6 +364,49 @@ class AtomicPathTests(unittest.TestCase):
         self.assertFalse((recovery / "payload").exists())
         self.assertTrue(target.is_dir())
 
+    def test_directory_rollback_close_failure_reports_workspace_root(self) -> None:
+        target = self.root / "managed-rollback-close"
+        parameters = self.common(target, "directory")
+        real_open = os.open
+        real_close = os.close
+        real_fsync = os.fsync
+        real_fstat = os.fstat
+        payload_descriptor = -1
+        close_failed = False
+
+        def track_payload(path: object, flags: int, *args: object, **kwargs: object) -> int:
+            nonlocal payload_descriptor
+            descriptor = real_open(path, flags, *args, **kwargs)
+            if path == "payload":
+                payload_descriptor = descriptor
+            return descriptor
+
+        def fail_directory_fsync(descriptor: int) -> None:
+            if stat.S_ISDIR(real_fstat(descriptor).st_mode):
+                raise OSError(errno.EIO, "directory fsync failed")
+            real_fsync(descriptor)
+
+        def fail_payload_close(descriptor: int) -> None:
+            nonlocal close_failed
+            if descriptor == payload_descriptor and not close_failed:
+                close_failed = True
+                real_close(descriptor)
+                raise OSError("directory payload close outcome uncertain")
+            real_close(descriptor)
+
+        with (
+            mock.patch.object(MODULE, "_require_capabilities"),
+            mock.patch.object(MODULE.os, "open", side_effect=track_payload),
+            mock.patch.object(MODULE.os, "fsync", side_effect=fail_directory_fsync),
+            mock.patch.object(MODULE.os, "close", side_effect=fail_payload_close),
+        ):
+            result = self.execute(parameters, failure=True)
+        recovery = Path(str(result["recovery_path"]))
+        self.assertTrue(recovery.is_dir())
+        self.assertFalse((recovery / "payload").exists())
+        self.assertFalse((recovery / "failed").exists())
+        self.assertFalse(target.exists())
+
     def test_successful_file_close_failure_reports_workspace_root(self) -> None:
         target = self.root / "policy"
         parameters = self.common(target, "file")

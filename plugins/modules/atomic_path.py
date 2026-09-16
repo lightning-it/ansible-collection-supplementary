@@ -14,6 +14,15 @@ description:
   - Binds every mutation to descriptor-opened, no-follow parent identities.
   - Requires exclusive trust in the effective UID; hostile concurrent processes
     with that same UID are outside the isolation boundary.
+  - The exact target parent must be owned by the effective UID and must not be
+    writable by its group or by other users.
+  - Every canonical parent component, including the exact target parent, must
+    have a matching device and inode entry in C(parent_identities).
+requirements:
+  - Python and operating-system support for descriptor-relative C(dir_fd) APIs,
+    C(O_DIRECTORY), C(O_NOFOLLOW), and C(O_NONBLOCK).
+  - C(renameat2) on Linux or C(renameatx_np) on macOS.
+  - A descriptor path facility at C(/proc/self/fd) or C(/dev/fd).
 options:
   path:
     description: Canonical absolute target path.
@@ -504,12 +513,14 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
     directory = -1
     created_identity: Optional[os.stat_result] = None
     installed = False
+    private_entry: Optional[str] = None
     preserve_workspace = False
     recovery_name: Optional[str] = None
     cleanup_failed = False
     failure: Optional[Exception] = None
     try:
         os.mkdir("payload", 0o700, dir_fd=workspace)
+        private_entry = "payload"
         created_identity = os.stat("payload", dir_fd=workspace, follow_symlinks=False)
         directory = os.open("payload", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=workspace)
         if not _same_inode(created_identity, os.fstat(directory)):
@@ -521,6 +532,7 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
             raise OSError("created directory metadata could not be bound")
         _renameat(workspace, "payload", parent, name, "noreplace")
         installed = True
+        private_entry = None
         if not _same_directory_identity(created_identity, os.stat(name, dir_fd=parent, follow_symlinks=False)):
             raise OSError("created directory identity changed while installing")
         _fsync_directory(parent)
@@ -534,12 +546,19 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
         failure = exc
         if installed and created_identity is not None:
             try:
-                installed = not _capture_and_remove(
+                removed = _capture_and_remove(
                     parent, name, created_identity, workspace, "failed", directory=True
                 )
+                installed = False
+                if not removed:
+                    preserve_workspace = True
+                    private_entry = "failed"
+                    recovery_name = private_entry
             except _PreservedRecovery as recovery:
+                installed = False
                 preserve_workspace = True
-                recovery_name = recovery.entry
+                private_entry = recovery.entry
+                recovery_name = private_entry
     finally:
         cleanup_exception: Optional[Exception] = None
         if directory >= 0:
@@ -548,12 +567,19 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
             except OSError as exc:
                 cleanup_exception = exc
                 preserve_workspace = True
-                if not installed:
-                    recovery_name = "payload"
-        if cleanup_exception is None and not installed and created_identity is not None:
+                if not installed and private_entry is not None:
+                    recovery_name = private_entry
+        if (
+            cleanup_exception is None
+            and not installed
+            and private_entry == "payload"
+            and created_identity is not None
+        ):
             if not _remove_private_if_same(workspace, "payload", created_identity, directory=True):
                 preserve_workspace = True
                 recovery_name = "payload"
+            else:
+                private_entry = None
         try:
             os.close(workspace)
         except OSError as exc:
