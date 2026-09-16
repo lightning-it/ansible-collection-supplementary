@@ -903,6 +903,9 @@ def minimal_check_environment(state_root: Path) -> dict[str, str]:
     home.mkdir(mode=0o700)
     temporary.mkdir(mode=0o700)
     runner_temporary.mkdir(mode=0o700)
+    home.chmod(0o700)
+    temporary.chmod(0o700)
+    runner_temporary.chmod(0o700)
     environment = {
         "CI": "1",
         "HOME": str(home),
