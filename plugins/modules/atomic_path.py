@@ -560,6 +560,7 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
             raise OSError("private directory payload identity changed while opening")
         os.fchown(directory, uid, gid)
         os.fchmod(directory, mode)
+        _fsync_directory(directory)
         created_identity = os.fstat(directory)
         if not _matches(created_identity, mode, uid, gid):
             raise OSError("created directory metadata could not be bound")

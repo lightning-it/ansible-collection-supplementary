@@ -239,6 +239,34 @@ class AtomicPathTests(unittest.TestCase):
         self.assertNotEqual(workspace_descriptor, fsync_order[1])
         self.assertEqual("second\n", target.read_text(encoding="utf-8"))
 
+    def test_directory_metadata_is_fsynced_before_publication(self) -> None:
+        target = self.root / "managed-directory"
+        parameters = self.common(target, "directory")
+        real_renameat = MODULE._renameat
+        events: list[tuple[str, int]] = []
+
+        def track_renameat(
+            source_parent: int, source_name: str, target_parent: int, target_name: str, mode: str
+        ) -> None:
+            events.append(("rename", target_parent))
+            real_renameat(source_parent, source_name, target_parent, target_name, mode)
+
+        with (
+            mock.patch.object(MODULE, "_renameat", side_effect=track_renameat),
+            mock.patch.object(
+                MODULE, "_fsync_directory", side_effect=lambda descriptor: events.append(("fsync", descriptor))
+            ),
+        ):
+            result = self.execute(parameters)
+
+        self.assertTrue(result["changed"])
+        self.assertGreaterEqual(len(events), 3)
+        self.assertEqual("fsync", events[0][0])
+        self.assertEqual("rename", events[1][0])
+        self.assertEqual("fsync", events[2][0])
+        self.assertNotEqual(events[0][1], events[2][1])
+        self.assertTrue(target.is_dir())
+
     def test_symlink_parent_and_malformed_identity_fail_closed(self) -> None:
         foreign = self.root / "foreign"
         foreign.mkdir()
@@ -476,8 +504,16 @@ class AtomicPathTests(unittest.TestCase):
                 parameters = self.common(target, state)
                 if state == "file":
                     parameters["content"] = "managed\n"
+                fsync_calls = 0
+
+                def fail_commit_fsync(_descriptor: int, managed_state: str = state) -> None:
+                    nonlocal fsync_calls
+                    fsync_calls += 1
+                    if managed_state == "file" or fsync_calls == 2:
+                        raise OSError("commit probe failed")
+
                 with (
-                    mock.patch.object(MODULE, "_fsync_directory", side_effect=OSError("commit probe failed")),
+                    mock.patch.object(MODULE, "_fsync_directory", side_effect=fail_commit_fsync),
                     mock.patch.object(MODULE, "_capture_and_remove", side_effect=OSError("rollback failed")),
                 ):
                     result = self.execute(parameters, failure=True)
@@ -495,6 +531,13 @@ class AtomicPathTests(unittest.TestCase):
                     parameters["content"] = "managed\n"
                 real_renameat = MODULE._renameat
                 rename_calls = 0
+                fsync_calls = 0
+
+                def fail_commit_fsync(_descriptor: int, managed_state: str = state) -> None:
+                    nonlocal fsync_calls
+                    fsync_calls += 1
+                    if managed_state == "file" or fsync_calls == 2:
+                        raise OSError("commit probe failed")
 
                 def remove_before_rollback(
                     source_fd: int,
@@ -515,7 +558,7 @@ class AtomicPathTests(unittest.TestCase):
                     real_rename(source_fd, source, target_fd, target_name, operation)
 
                 with (
-                    mock.patch.object(MODULE, "_fsync_directory", side_effect=OSError("commit probe failed")),
+                    mock.patch.object(MODULE, "_fsync_directory", side_effect=fail_commit_fsync),
                     mock.patch.object(MODULE, "_renameat", side_effect=remove_before_rollback),
                 ):
                     result = self.execute(parameters, failure=True)
