@@ -10,14 +10,36 @@ short_description: Unlink one exactly identified regular file
 description:
   - Descriptor-binds and verifies one file before quarantined removal.
 options:
-  path: {type: path, required: true}
-  checksum: {type: str, required: true}
-  mode: {type: str, required: true}
-  owner: {type: str, required: true}
-  group: {type: str, required: true}
-  allow_absent: {type: bool, default: false}
-  parent_identities: {type: dict, required: true}
-author: [Lightning IT]
+  path:
+    description: Canonical absolute path of the regular file to remove.
+    type: path
+    required: true
+  checksum:
+    description: Exact lowercase SHA-256 checksum required before removal.
+    type: str
+    required: true
+  mode:
+    description: Exact octal permissions required before removal.
+    type: str
+    required: true
+  owner:
+    description: Exact owner name or numeric UID required before removal.
+    type: str
+    required: true
+  group:
+    description: Exact group name or numeric GID required before removal.
+    type: str
+    required: true
+  allow_absent:
+    description: Treat an already absent path as an unchanged success.
+    type: bool
+    default: false
+  parent_identities:
+    description: Canonical parent paths mapped to their device and inode identities.
+    type: dict
+    required: true
+author:
+  - Lightning IT (@lightning-it)
 """
 
 EXAMPLES = r"""
@@ -36,12 +58,15 @@ EXAMPLES = r"""
 
 RETURN = r"""
 path:
+  description: Canonical path that was verified for removal.
   type: str
   returned: always
 recovery_path:
+  description: Descriptor-stable quarantine path retained after uncertain cleanup.
   type: str
   returned: on failure after quarantine
 quarantine_cleanup_warning:
+  description: Warning emitted when removal succeeded but private cleanup did not.
   type: str
   returned: on successful unlink with a quarantine cleanup error
 """

@@ -7,25 +7,6 @@
   vars:
     forward_proxy_test_root: >-
       {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/forward-proxy-state
-    forward_proxy_render_root: "{{ forward_proxy_test_root | dirname }}"
-    forward_proxy_lock_path: "{{ forward_proxy_test_root }}.lock"
-    forward_proxy_manage_runtime: false
-    forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
-    forward_proxy_pod_manifest_path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
-    forward_proxy_state_marker_path: "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
-    forward_proxy_quadlet_dir: "{{ forward_proxy_test_root }}/etc/containers/systemd"
-    forward_proxy_verify_uid: "{{ lookup('pipe', 'id -u') }}"
-    forward_proxy_verify_gid: "{{ lookup('pipe', 'id -g') }}"
-    forward_proxy_trusted_parent_paths:
-      - "{{ forward_proxy_test_root | dirname }}"
-      - "{{ forward_proxy_test_root }}"
-      - "{{ forward_proxy_test_root }}/etc"
-      - "{{ forward_proxy_test_root }}/etc/containers"
-      - "{{ forward_proxy_test_root }}/etc/containers/systemd"
-      - "{{ forward_proxy_test_root }}/etc/squid"
-      - "{{ forward_proxy_test_root }}/var"
-      - "{{ forward_proxy_test_root }}/var/lib"
-      - "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy"
     forward_proxy_junit_root: >-
       {{
         lookup('ansible.builtin.env', 'QUALITY_ARTIFACT_ROOT')
