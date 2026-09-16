@@ -121,6 +121,12 @@ class AtomicPathTests(unittest.TestCase):
         parameters["parent_identities"] = {}
         self.assertIn("exact parent identity is missing", str(self.execute(parameters, failure=True)["msg"]))
 
+    def test_root_parent_identity_is_validated(self) -> None:
+        parameters = self.common(Path("/policy"), "directory")
+        root = Path("/").stat()
+        parameters["parent_identities"] = {"/": {"device": root.st_dev, "inode": root.st_ino + 1}}
+        self.assertIn("parent identity changed", str(self.execute(parameters, check=True, failure=True)["msg"]))
+
     def test_atomic_file_create_update_and_checksum_binding(self) -> None:
         target = self.root / "policy.conf"
         parameters = self.common(target, "file")
@@ -150,7 +156,7 @@ class AtomicPathTests(unittest.TestCase):
         self.assertIn("malformed", str(self.execute(parameters, failure=True)["msg"]))
 
     def test_boolean_and_float_parent_identities_fail_closed(self) -> None:
-        for malformed in (True, 1.9):
+        for malformed in (True, 1.9, None):
             with self.subTest(malformed=malformed):
                 target = self.root / f"blocked-{malformed}"
                 parameters = self.common(target, "file")
@@ -190,6 +196,52 @@ class AtomicPathTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertEqual([], list(self.root.glob(".atomic-path-*")))
 
+    def test_workspace_probe_failure_cleans_private_creation(self) -> None:
+        parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        real_stat = os.stat
+        failed = False
+
+        def fail_first_probe(path: object, *args: object, **kwargs: object) -> os.stat_result:
+            nonlocal failed
+            if not failed and str(path).startswith(".atomic-path-"):
+                failed = True
+                raise OSError("probe denied")
+            return real_stat(path, *args, **kwargs)
+
+        try:
+            with mock.patch.object(MODULE.os, "stat", side_effect=fail_first_probe):
+                with self.assertRaisesRegex(OSError, "probe denied"):
+                    MODULE._private_workspace(parent)
+        finally:
+            os.close(parent)
+        self.assertEqual([], list(self.root.glob(".atomic-path-*")))
+
+    def test_raced_fifo_open_is_nonblocking(self) -> None:
+        target = self.root / "policy"
+        target.write_text("owned\n", encoding="utf-8")
+        parameters = self.common(target, "file")
+        parameters.update(
+            content="new\n",
+            allow_absent=False,
+            expected_checksum=hashlib.sha256(b"owned\n").hexdigest(),
+        )
+        real_open = os.open
+        observed = 0
+
+        def reject_raced_open(path: object, flags: int, *args: object, **kwargs: object) -> int:
+            nonlocal observed
+            if path == target.name:
+                observed = flags
+                raise OSError("raced FIFO")
+            return real_open(path, flags, *args, **kwargs)
+
+        with (
+            mock.patch.object(MODULE, "_require_capabilities"),
+            mock.patch.object(MODULE.os, "open", side_effect=reject_raced_open),
+        ):
+            self.assertIn("raced FIFO", str(self.execute(parameters, failure=True)["msg"]))
+        self.assertTrue(observed & os.O_NONBLOCK)
+
     def test_replaced_parent_never_redirects_write_to_foreign_directory(self) -> None:
         managed = self.root / "managed"
         managed.mkdir()
@@ -217,7 +269,7 @@ class AtomicPathTests(unittest.TestCase):
         self.assertFalse((managed / "policy").exists())
         self.assertFalse((self.root / "detached/policy").exists())
 
-    def test_concurrent_target_replacement_is_restored_without_data_loss(self) -> None:
+    def test_concurrent_target_replacement_is_preserved_without_data_loss(self) -> None:
         target = self.root / "policy"
         target.write_text("owned\n", encoding="utf-8")
         parameters = self.common(target, "file")
@@ -227,7 +279,9 @@ class AtomicPathTests(unittest.TestCase):
             expected_checksum=hashlib.sha256(b"owned\n").hexdigest(),
         )
         replacement = self.root / "replacement"
-        replacement.write_text("foreign\n", encoding="utf-8")
+        replacement.write_text("other\n", encoding="utf-8")
+        before = target.stat()
+        os.utime(replacement, ns=(before.st_atime_ns, before.st_mtime_ns))
         real_rename = MODULE._renameat
         replaced = False
 
@@ -246,9 +300,11 @@ class AtomicPathTests(unittest.TestCase):
 
         with mock.patch.object(MODULE, "_renameat", side_effect=replace_before_commit):
             result = self.execute(parameters, failure=True)
-        self.assertIn("concurrent entry restored", str(result["msg"]))
-        self.assertEqual("foreign\n", target.read_text(encoding="utf-8"))
-        self.assertEqual([], list(self.root.glob(".atomic-path-*")))
+        self.assertIn("entries preserved", str(result["msg"]))
+        self.assertEqual("new\n", target.read_text(encoding="utf-8"))
+        workspaces = list(self.root.glob(".atomic-path-*"))
+        self.assertEqual(1, len(workspaces))
+        self.assertEqual("other\n", (workspaces[0] / "payload").read_text(encoding="utf-8"))
 
     def test_noop_revalidates_the_canonical_file_path(self) -> None:
         target = self.root / "policy"
