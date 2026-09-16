@@ -255,14 +255,11 @@ class ForwardProxyContractTests(unittest.TestCase):
         )[1].split("- name: Record exact forward proxy file", maxsplit=1)[0]
         self.assertIn("when: not ansible_check_mode", marker_task)
 
-    def test_render_only_does_not_probe_or_create_runtime_state(self) -> None:
+    def test_render_only_rejects_foreign_quadlets_without_creating_runtime_state(self) -> None:
         main = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
         verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
-        self.assertIn(
-            "([forward_proxy_quadlet_path] if forward_proxy_manage_runtime | bool else [])",
-            main,
-        )
+        self.assertIn("+ [forward_proxy_quadlet_path]", main)
         self.assertIn("forward_proxy_manage_runtime: false", verify)
         self.assertIn("forward_proxy_config_path:", verify)
         self.assertIn("forward_proxy_pod_manifest_path:", verify)
@@ -333,6 +330,10 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("lookup('ansible.builtin.template', 'squid.conf.j2')", apply_tasks)
         self.assertIn("lookup('ansible.builtin.template', 'squid-pod.yml.j2')", apply_tasks)
         self.assertIn("Revalidate the state marker parent chain", apply_tasks)
+        self.assertIn(
+            "Recheck the empty runtime boundary immediately before first activation",
+            apply_tasks,
+        )
 
     def test_existing_rollback_revalidates_every_write_boundary(self) -> None:
         rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
@@ -362,7 +363,9 @@ class ForwardProxyContractTests(unittest.TestCase):
         existing_runtime_capture = (ROLE_ROOT / "tasks" / "capture_existing_runtime_removal.yml").read_text()
         existing_runtime_guard = (ROLE_ROOT / "tasks" / "revalidate_existing_runtime_removal.yml").read_text()
         removal_helper = (ROLE_ROOT / "tasks" / "remove_owned_file.yml").read_text()
+        atomic_unlink = (REPOSITORY_ROOT / "plugins" / "modules" / "atomic_unlink.py").read_text()
         restore_helper = (ROLE_ROOT / "tasks" / "restore_managed_file.yml").read_text()
+        directory_guard = (ROLE_ROOT / "tasks" / "ensure_directory.yml").read_text()
         wrapper = (ROLE_ROOT / "tasks" / "main.yml").read_text()
         converge = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "converge.yml").read_text()
         verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
@@ -416,6 +419,8 @@ class ForwardProxyContractTests(unittest.TestCase):
             active_runtime_guard,
         )
         self.assertIn("lit.supplementary.atomic_unlink", removal_helper)
+        self.assertIn("parent_identities:", removal_helper)
+        self.assertIn("trusted parent identity changed", atomic_unlink)
         self.assertNotIn("state: absent", removal_helper)
         self.assertIn("not forward_proxy_state_marker.stat.exists", apply_tasks)
         self.assertIn(
@@ -425,6 +430,9 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("exact destination port ACL", verify)
         self.assertIn("tasks/reject-port.yml", verify)
         self.assertIn("Prove every managed file is absent before deleting ownership evidence", transition)
+        self.assertIn("Capture every trusted proxy directory identity", transition)
+        self.assertIn("Require the transaction-bound trusted directory identity", directory_guard)
+        self.assertIn("Isolate every render-only proxy and Quadlet boundary", assertions)
 
     def test_trusted_parent_chains_are_complete_and_canonical(self) -> None:
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
@@ -472,6 +480,10 @@ class ForwardProxyContractTests(unittest.TestCase):
             restart_boundary,
         )
         self.assertIn("forward_proxy_restart_boundary_pod.rc == 1", restart_boundary)
+        self.assertIn(
+            "Revalidate the managed runtime identity immediately before restart",
+            rollback,
+        )
 
     def test_disable_runtime_removal_is_skipped_in_check_mode(self) -> None:
         transition = (ROLE_ROOT / "tasks" / "transition.yml").read_text()

@@ -356,6 +356,26 @@
     - forward_proxy_runtime_absence_verified_internal | bool
     - not ansible_check_mode
 
+- name: Revalidate the managed runtime identity immediately before restart
+  ansible.builtin.include_tasks: revalidate_active_runtime_identity.yml
+  vars:
+    forward_proxy_active_runtime_allowed_quadlet_checksums_internal:
+      - "{{ forward_proxy_active_runtime_identity_internal.quadlet_checksum }}"
+      - "{{ forward_proxy_previous_state_manifest.quadlet_checksum }}"
+  when:
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - forward_proxy_manage_runtime | bool
+    - forward_proxy_active_runtime_identity_internal | length > 0
+    - not ansible_check_mode
+
+- name: Revalidate the original managed runtime immediately before restart
+  ansible.builtin.include_tasks: revalidate_existing_runtime_removal.yml
+  when:
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - forward_proxy_manage_runtime | bool
+    - forward_proxy_active_runtime_identity_internal | length == 0
+    - not ansible_check_mode
+
 - name: Restart the restored previous forward proxy runtime
   ansible.builtin.include_role:
     name: lit.foundational.podman_systemd

@@ -82,6 +82,12 @@ class AtomicUnlinkModuleTests(unittest.TestCase):
             "owner": str(self.target.stat().st_uid),
             "group": str(self.target.stat().st_gid),
             "allow_absent": False,
+            "parent_identities": {
+                str(self.root): {
+                    "device": self.root.stat().st_dev,
+                    "inode": self.root.stat().st_ino,
+                }
+            },
         }
 
     def tearDown(self) -> None:
@@ -129,6 +135,14 @@ class AtomicUnlinkModuleTests(unittest.TestCase):
         self.parameters["checksum"] = "0" * 64
         result = self.execute_failure()
         self.assertIn("checksum changed", str(result["msg"]))
+        self.assertTrue(self.target.exists())
+
+    def test_rejects_changed_trusted_parent_identity(self) -> None:
+        parent_identities = self.parameters["parent_identities"]
+        self.assertIsInstance(parent_identities, dict)
+        parent_identities[str(self.root)]["inode"] = self.root.stat().st_ino + 1
+        result = self.execute_failure()
+        self.assertIn("trusted parent identity changed", str(result["msg"]))
         self.assertTrue(self.target.exists())
 
     def test_check_mode_reports_change_without_unlinking(self) -> None:

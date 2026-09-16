@@ -20,3 +20,4 @@
     owner: "{{ forward_proxy_removal_owner }}"
     group: "{{ forward_proxy_removal_group }}"
     allow_absent: "{{ forward_proxy_removal_allow_absent | bool }}"
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"

@@ -13,10 +13,13 @@
     forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
     forward_proxy_pod_manifest_path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
     forward_proxy_state_marker_path: "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
+    forward_proxy_quadlet_dir: "{{ forward_proxy_test_root }}/etc/containers/systemd"
     forward_proxy_trusted_parent_paths:
       - "{{ forward_proxy_test_root | dirname }}"
       - "{{ forward_proxy_test_root }}"
       - "{{ forward_proxy_test_root }}/etc"
+      - "{{ forward_proxy_test_root }}/etc/containers"
+      - "{{ forward_proxy_test_root }}/etc/containers/systemd"
       - "{{ forward_proxy_test_root }}/etc/squid"
       - "{{ forward_proxy_test_root }}/var"
       - "{{ forward_proxy_test_root }}/var/lib"
@@ -142,6 +145,7 @@
             forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
             forward_proxy_pod_manifest_path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
             forward_proxy_state_marker_path: "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
+            forward_proxy_quadlet_dir: "{{ forward_proxy_test_root }}/etc/containers/systemd"
       rescue:
         - name: Record the cleanup execution failure for JUnit
           ansible.builtin.set_fact:

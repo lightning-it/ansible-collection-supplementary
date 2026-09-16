@@ -43,6 +43,11 @@ options:
       - Treat an already absent path as an unchanged success.
     type: bool
     default: false
+  parent_identities:
+    description:
+      - Transaction-bound device and inode values for trusted parent paths.
+    type: dict
+    required: true
 author:
   - Lightning IT (@lightning-it)
 """
@@ -93,10 +98,11 @@ def _numeric_identity(value: str, database: object, kind: str) -> int:
         return record.pw_uid if kind == "owner" else record.gr_gid
 
 
-def _open_parent(path: str) -> tuple[int, str]:
+def _open_parent(path: str, parent_identities: dict) -> tuple[int, str]:
     parts = path[1:].split("/")
     name = parts.pop()
     current_fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    current_path = ""
     try:
         for component in parts:
             next_fd = os.open(
@@ -106,6 +112,18 @@ def _open_parent(path: str) -> tuple[int, str]:
             )
             os.close(current_fd)
             current_fd = next_fd
+            current_path += "/" + component
+            if current_path in parent_identities:
+                opened = os.fstat(current_fd)
+                expected = parent_identities[current_path]
+                if (opened.st_dev, opened.st_ino) != (
+                    int(expected["device"]),
+                    int(expected["inode"]),
+                ):
+                    raise OSError(f"trusted parent identity changed: {current_path}")
+        parent_path = os.path.dirname(path)
+        if parent_path not in parent_identities:
+            raise OSError("exact parent identity binding is missing")
         return current_fd, name
     except Exception:
         os.close(current_fd)
@@ -221,6 +239,7 @@ def main() -> None:
             "owner": {"type": "str", "required": True},
             "group": {"type": "str", "required": True},
             "allow_absent": {"type": "bool", "default": False},
+            "parent_identities": {"type": "dict", "required": True},
         },
         supports_check_mode=True,
     )
@@ -232,7 +251,7 @@ def main() -> None:
         expected_uid = _numeric_identity(str(module.params["owner"]), pwd.getpwnam, "owner")
         expected_gid = _numeric_identity(str(module.params["group"]), grp.getgrnam, "group")
         expected_mode = int(str(module.params["mode"]), 8)
-        parent_fd, name = _open_parent(path)
+        parent_fd, name = _open_parent(path, module.params["parent_identities"])
     except (OSError, TypeError, ValueError) as exc:
         module.fail_json(msg=f"cannot bind trusted parent chain: {exc}", path=path)
 
@@ -290,8 +309,7 @@ def main() -> None:
                 quarantine_name = ""
             module.fail_json(
                 msg=(
-                    f"cannot inspect the atomic quarantine: {exc}; "
-                    + _quarantine_recovery_summary(restored, cleaned)
+                    f"cannot inspect the atomic quarantine: {exc}; " + _quarantine_recovery_summary(restored, cleaned)
                 ),
                 path=path,
                 recovery_path=recovery_path,
@@ -368,8 +386,7 @@ def main() -> None:
             recovery_path = _quarantine_recovery_path(path, quarantine_name, cleaned)
             module.fail_json(
                 msg=(
-                    f"atomic unlink failed after quarantine: {exc}; "
-                    + _quarantine_recovery_summary(restored, cleaned)
+                    f"atomic unlink failed after quarantine: {exc}; " + _quarantine_recovery_summary(restored, cleaned)
                 ),
                 path=path,
                 recovery_path=recovery_path,

@@ -346,6 +346,15 @@
     - forward_proxy_previous_state_manifest.runtime_managed | bool
     - not ansible_check_mode
 
+- name: Recheck the empty runtime boundary immediately before first activation
+  ansible.builtin.include_tasks: verify_runtime_absent.yml
+  when:
+    - forward_proxy_manage_runtime | bool
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
+    - not ansible_check_mode
+
 - name: Manage the persistent Squid container service
   ansible.builtin.include_role:
     name: lit.foundational.podman_systemd

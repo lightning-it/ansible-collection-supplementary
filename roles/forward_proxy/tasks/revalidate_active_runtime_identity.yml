@@ -44,15 +44,24 @@
       - forward_proxy_active_rollback_quadlet.stat.pw_name | default('') == 'root'
       - forward_proxy_active_rollback_quadlet.stat.gr_name | default('') == 'root'
       - >-
-        forward_proxy_active_runtime_identity_internal
-        == {
-          'unit_name': forward_proxy_unit_name,
-          'quadlet_path': forward_proxy_quadlet_path,
-          'quadlet_checksum': forward_proxy_active_rollback_quadlet.stat.checksum,
-          'pod_id': (forward_proxy_active_rollback_pod.stdout | trim).split('|')[0],
-          'owner_label': (forward_proxy_active_rollback_pod.stdout | trim).split('|')[1],
-          'unit_fragment_path': forward_proxy_active_rollback_unit.stdout | trim
-        }
+        forward_proxy_active_runtime_identity_internal.unit_name == forward_proxy_unit_name
+      - >-
+        forward_proxy_active_runtime_identity_internal.quadlet_path == forward_proxy_quadlet_path
+      - >-
+        forward_proxy_active_rollback_quadlet.stat.checksum
+        in (
+          forward_proxy_active_runtime_allowed_quadlet_checksums_internal
+          | default([forward_proxy_active_runtime_identity_internal.quadlet_checksum])
+        )
+      - >-
+        forward_proxy_active_runtime_identity_internal.pod_id
+        == (forward_proxy_active_rollback_pod.stdout | trim).split('|')[0]
+      - >-
+        forward_proxy_active_runtime_identity_internal.owner_label
+        == (forward_proxy_active_rollback_pod.stdout | trim).split('|')[1]
+      - >-
+        forward_proxy_active_runtime_identity_internal.unit_fragment_path
+        == (forward_proxy_active_rollback_unit.stdout | trim)
       - >-
         forward_proxy_active_rollback_pod.stdout | trim
         is match('^[a-f0-9]{12,64}\\|lit\\.supplementary\\.forward_proxy\Z')

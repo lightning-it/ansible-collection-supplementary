@@ -272,6 +272,23 @@
     - forward_proxy_file_owner not in ['root', '0']
       or forward_proxy_file_group not in ['root', '0']
 
+- name: Isolate every render-only proxy and Quadlet boundary
+  ansible.builtin.assert:
+    that:
+      - >-
+        item == forward_proxy_render_root
+        or item.startswith(forward_proxy_render_root.rstrip('/') ~ '/')
+    fail_msg: >-
+      Render-only mode must isolate every managed path and the derived Quadlet
+      boundary beneath the exact render root so a foreign host runtime cannot
+      consume rendered files.
+  loop: >-
+    {{
+      forward_proxy_managed_paths_internal
+      + [forward_proxy_state_marker_path, forward_proxy_quadlet_dir, forward_proxy_quadlet_path]
+    }}
+  when: not forward_proxy_manage_runtime | bool
+
 - name: Require the exact delegated Quadlet path
   ansible.builtin.assert:
     that:
