@@ -69,8 +69,10 @@ def _open_bound_directory(path: str, identities: dict) -> int:
             current = following
             walked += "/" + component
             expected = identities.get(walked)
+            if expected is None:
+                continue
             if not isinstance(expected, dict):
-                raise OSError(f"parent identity is missing: {walked}")
+                raise OSError(f"parent identity is malformed: {walked}")
             opened = os.fstat(current)
             try:
                 identity = (
@@ -81,6 +83,8 @@ def _open_bound_directory(path: str, identities: dict) -> int:
                 raise OSError(f"parent identity is malformed: {walked}") from exc
             if (opened.st_dev, opened.st_ino) != identity:
                 raise OSError(f"parent identity changed: {walked}")
+        if path not in identities:
+            raise OSError(f"exact parent identity is missing: {path}")
         return current
     except Exception:
         os.close(current)
