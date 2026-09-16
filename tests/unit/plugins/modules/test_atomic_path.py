@@ -109,6 +109,16 @@ class AtomicPathTests(unittest.TestCase):
         self.assertTrue(target.is_dir())
         self.assertFalse(self.execute(parameters)["changed"])
 
+    def test_only_the_exact_parent_identity_is_mandatory(self) -> None:
+        target = self.root / "policy"
+        parameters = self.common(target, "file")
+        details = self.root.stat()
+        parameters["parent_identities"] = {str(self.root): {"device": details.st_dev, "inode": details.st_ino}}
+        parameters["content"] = "safe\n"
+        self.assertTrue(self.execute(parameters)["changed"])
+        parameters["parent_identities"] = {}
+        self.assertIn("exact parent identity is missing", str(self.execute(parameters, failure=True)["msg"]))
+
     def test_atomic_file_create_update_and_checksum_binding(self) -> None:
         target = self.root / "policy.conf"
         parameters = self.common(target, "file")
