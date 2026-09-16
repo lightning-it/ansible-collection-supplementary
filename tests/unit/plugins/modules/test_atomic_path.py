@@ -137,6 +137,42 @@ class AtomicPathTests(unittest.TestCase):
         parameters["parent_identities"][str(self.root)] = {"device": self.root.stat().st_dev}
         self.assertIn("malformed", str(self.execute(parameters, failure=True)["msg"]))
 
+    def test_boolean_and_float_parent_identities_fail_closed(self) -> None:
+        for malformed in (True, 1.9):
+            with self.subTest(malformed=malformed):
+                target = self.root / f"blocked-{malformed}"
+                parameters = self.common(target, "file")
+                parameters["content"] = "blocked\n"
+                parameters["parent_identities"][str(self.root)]["inode"] = malformed
+                self.assertIn("malformed", str(self.execute(parameters, failure=True)["msg"]))
+                self.assertFalse(target.exists())
+
+    def test_invalid_mode_and_negative_identity_never_mutate(self) -> None:
+        for field, value in (("mode", "10000"), ("owner", "-1"), ("group", "-1")):
+            with self.subTest(field=field):
+                target = self.root / f"blocked-{field}"
+                parameters = self.common(target, "directory")
+                parameters[field] = value
+                self.assertIn("atomic path mutation failed", str(self.execute(parameters, failure=True)["msg"]))
+                self.assertFalse(target.exists())
+
+    def test_directory_metadata_failure_cleans_private_creation(self) -> None:
+        target = self.root / "managed"
+        parameters = self.common(target, "directory")
+        with mock.patch.object(MODULE.os, "fchown", side_effect=OSError("denied")):
+            self.assertIn("denied", str(self.execute(parameters, failure=True)["msg"]))
+        self.assertFalse(target.exists())
+        self.assertEqual([], list(self.root.glob(".atomic-path-*")))
+
+    def test_file_metadata_failure_cleans_private_creation(self) -> None:
+        target = self.root / "policy"
+        parameters = self.common(target, "file")
+        parameters["content"] = "blocked\n"
+        with mock.patch.object(MODULE.os, "fchown", side_effect=OSError("denied")):
+            self.assertIn("denied", str(self.execute(parameters, failure=True)["msg"]))
+        self.assertFalse(target.exists())
+        self.assertEqual([], list(self.root.glob(".atomic-path-*")))
+
     def test_replaced_parent_never_redirects_write_to_foreign_directory(self) -> None:
         managed = self.root / "managed"
         managed.mkdir()
@@ -162,7 +198,40 @@ class AtomicPathTests(unittest.TestCase):
             result = self.execute(parameters, failure=True)
         self.assertIn("identity changed", str(result["msg"]))
         self.assertFalse((managed / "policy").exists())
-        self.assertEqual("safe\n", (self.root / "detached/policy").read_text(encoding="utf-8"))
+        self.assertFalse((self.root / "detached/policy").exists())
+
+    def test_concurrent_target_replacement_is_restored_without_data_loss(self) -> None:
+        target = self.root / "policy"
+        target.write_text("owned\n", encoding="utf-8")
+        parameters = self.common(target, "file")
+        parameters.update(
+            content="new\n",
+            allow_absent=False,
+            expected_checksum=hashlib.sha256(b"owned\n").hexdigest(),
+        )
+        replacement = self.root / "replacement"
+        replacement.write_text("foreign\n", encoding="utf-8")
+        real_rename = MODULE._renameat
+        replaced = False
+
+        def replace_before_commit(
+            source_fd: int,
+            source: str,
+            target_fd: int,
+            target_name: str,
+            operation: str,
+        ) -> None:
+            nonlocal replaced
+            if operation == "exchange" and not replaced:
+                replaced = True
+                os.replace(replacement, target)
+            real_rename(source_fd, source, target_fd, target_name, operation)
+
+        with mock.patch.object(MODULE, "_renameat", side_effect=replace_before_commit):
+            result = self.execute(parameters, failure=True)
+        self.assertIn("concurrent entry restored", str(result["msg"]))
+        self.assertEqual("foreign\n", target.read_text(encoding="utf-8"))
+        self.assertEqual([], list(self.root.glob(".atomic-path-*")))
 
 
 if __name__ == "__main__":
