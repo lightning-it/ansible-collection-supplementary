@@ -95,7 +95,7 @@ import pwd
 import re
 import secrets
 import stat
-from typing import Optional
+from typing import Optional, Tuple
 
 from ansible.module_utils.basic import AnsibleModule
 
@@ -274,7 +274,7 @@ def _descriptor_path(descriptor: int) -> str:
     return resolved
 
 
-def _private_workspace(parent: int) -> tuple[int, str, os.stat_result]:
+def _private_workspace(parent: int) -> Tuple[int, str, os.stat_result]:
     for _attempt in range(10):
         name = f".atomic-path-{os.getpid()}-{secrets.token_hex(16)}"
         try:
@@ -360,7 +360,7 @@ def _capture_and_remove(
     except OSError as exc:
         raise _PreservedRecovery(capture) from exc
     matches = (
-        _same_inode(captured, expected)
+        _same_directory_identity(captured, expected)
         if directory
         else checksum is not None
         and _same_identity(captured, expected)

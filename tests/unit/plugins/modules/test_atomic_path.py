@@ -548,6 +548,31 @@ class AtomicPathTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertEqual("managed\n", (workspace_path / "failed").read_text(encoding="utf-8"))
 
+    def test_directory_capture_preserves_metadata_drift(self) -> None:
+        target = self.root / "managed"
+        target.mkdir(mode=0o755)
+        expected = target.stat()
+        target.chmod(0o700)
+        workspace_path = self.root / "workspace"
+        workspace_path.mkdir()
+        parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        workspace = os.open(workspace_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            with self.assertRaises(MODULE._PreservedRecovery):
+                MODULE._capture_and_remove(
+                    parent,
+                    target.name,
+                    expected,
+                    workspace,
+                    "failed",
+                    directory=True,
+                )
+        finally:
+            os.close(workspace)
+            os.close(parent)
+        self.assertFalse(target.exists())
+        self.assertEqual(0o700, (workspace_path / "failed").stat().st_mode & 0o777)
+
     def test_update_failure_reports_preserved_recovery_path(self) -> None:
         target = self.root / "policy"
         target.write_text("owned\n", encoding="utf-8")
