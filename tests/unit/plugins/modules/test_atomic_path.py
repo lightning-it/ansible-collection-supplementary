@@ -278,6 +278,40 @@ class AtomicPathTests(unittest.TestCase):
                     self.assertTrue(self.execute(parameters)["changed"])
                 self.assertTrue(target.exists())
 
+    def test_directory_payload_close_failure_reports_workspace_root(self) -> None:
+        target = self.root / "managed-close"
+        parameters = self.common(target, "directory")
+        real_open = os.open
+        real_close = os.close
+        payload_descriptor = -1
+        close_failed = False
+
+        def track_payload(path: object, flags: int, *args: object, **kwargs: object) -> int:
+            nonlocal payload_descriptor
+            descriptor = real_open(path, flags, *args, **kwargs)
+            if path == "payload":
+                payload_descriptor = descriptor
+            return descriptor
+
+        def fail_payload_close(descriptor: int) -> None:
+            nonlocal close_failed
+            if descriptor == payload_descriptor and not close_failed:
+                close_failed = True
+                real_close(descriptor)
+                raise OSError("directory payload close outcome uncertain")
+            real_close(descriptor)
+
+        with (
+            mock.patch.object(MODULE, "_require_capabilities"),
+            mock.patch.object(MODULE.os, "open", side_effect=track_payload),
+            mock.patch.object(MODULE.os, "close", side_effect=fail_payload_close),
+        ):
+            result = self.execute(parameters, failure=True)
+        recovery = Path(str(result["recovery_path"]))
+        self.assertTrue(recovery.is_dir())
+        self.assertFalse((recovery / "payload").exists())
+        self.assertTrue(target.is_dir())
+
     def test_successful_file_close_failure_reports_workspace_root(self) -> None:
         target = self.root / "policy"
         parameters = self.common(target, "file")
@@ -379,6 +413,46 @@ class AtomicPathTests(unittest.TestCase):
         finally:
             os.close(parent)
         self.assertEqual([], list(self.root.glob(".atomic-path-*")))
+
+    def test_private_workspace_probe_and_close_failure_preserves_creation(self) -> None:
+        parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        real_open = os.open
+        real_fstat = os.fstat
+        real_close = os.close
+        workspace_descriptor = -1
+        close_failed = False
+
+        def track_workspace(path: object, flags: int, *args: object, **kwargs: object) -> int:
+            nonlocal workspace_descriptor
+            descriptor = real_open(path, flags, *args, **kwargs)
+            if str(path).startswith(".atomic-path-"):
+                workspace_descriptor = descriptor
+            return descriptor
+
+        def fail_workspace_probe(descriptor: int) -> os.stat_result:
+            if descriptor == workspace_descriptor:
+                raise OSError("workspace probe denied")
+            return real_fstat(descriptor)
+
+        def fail_workspace_close(descriptor: int) -> None:
+            nonlocal close_failed
+            if descriptor == workspace_descriptor and not close_failed:
+                close_failed = True
+                real_close(descriptor)
+                raise OSError("workspace close outcome uncertain")
+            real_close(descriptor)
+
+        try:
+            with (
+                mock.patch.object(MODULE.os, "open", side_effect=track_workspace),
+                mock.patch.object(MODULE.os, "fstat", side_effect=fail_workspace_probe),
+                mock.patch.object(MODULE.os, "close", side_effect=fail_workspace_close),
+            ):
+                with self.assertRaises(MODULE._PreservedWorkspace) as result:
+                    MODULE._private_workspace(parent)
+        finally:
+            os.close(parent)
+        self.assertTrue(Path(result.exception.path).is_dir())
 
     def test_nonreadable_file_mode_is_verified_via_bound_descriptor(self) -> None:
         target = self.root / "sealed"

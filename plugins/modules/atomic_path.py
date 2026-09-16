@@ -63,7 +63,7 @@ EXAMPLES = r"""
     mode: "0644"
     owner: root
     group: root
-    expected_checksum: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    expected_checksum: 9070ed193a574a857cc619cfbfee6c89bfe03d9af481e62f6c85f9ee0a3fb09c
     parent_identities:
       /etc/lit/forward-proxy:
         device: 2049
@@ -302,17 +302,26 @@ def _private_workspace(parent: int) -> Tuple[int, str, os.stat_result]:
         try:
             opened = os.fstat(descriptor)
         except OSError as exc:
-            os.close(descriptor)
+            try:
+                os.close(descriptor)
+            except OSError as close_exc:
+                raise _PreservedWorkspace(os.path.join(_descriptor_path(parent), name)) from close_exc
             if not _remove_private_if_same(parent, name, expected, directory=True):
                 raise _PreservedWorkspace(os.path.join(_descriptor_path(parent), name)) from exc
             raise
         if opened.st_uid != os.geteuid() or stat.S_IMODE(opened.st_mode) != 0o700:
-            os.close(descriptor)
+            try:
+                os.close(descriptor)
+            except OSError as exc:
+                raise _PreservedWorkspace(os.path.join(_descriptor_path(parent), name)) from exc
             if not _remove_private_if_same(parent, name, expected, directory=True):
                 raise _PreservedWorkspace(os.path.join(_descriptor_path(parent), name))
             raise OSError("private workspace ownership or mode changed")
         if not _same_inode(expected, opened):
-            os.close(descriptor)
+            try:
+                os.close(descriptor)
+            except OSError as exc:
+                raise _PreservedWorkspace(os.path.join(_descriptor_path(parent), name)) from exc
             if not _remove_private_if_same(parent, name, expected, directory=True):
                 raise _PreservedWorkspace(os.path.join(_descriptor_path(parent), name))
             raise OSError("private workspace identity changed while opening")
@@ -513,13 +522,26 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
                 preserve_workspace = True
                 recovery_name = recovery.entry
     finally:
+        cleanup_exception: Optional[Exception] = None
         if directory >= 0:
-            os.close(directory)
-        if not installed and created_identity is not None:
+            try:
+                os.close(directory)
+            except OSError as exc:
+                cleanup_exception = exc
+                preserve_workspace = True
+                if not installed:
+                    recovery_name = "payload"
+        if cleanup_exception is None and not installed and created_identity is not None:
             if not _remove_private_if_same(workspace, "payload", created_identity, directory=True):
                 preserve_workspace = True
                 recovery_name = "payload"
-        os.close(workspace)
+        try:
+            os.close(workspace)
+        except OSError as exc:
+            cleanup_exception = cleanup_exception or exc
+            preserve_workspace = True
+        if failure is None and cleanup_exception is not None:
+            failure = cleanup_exception
         if not preserve_workspace:
             cleanup_failed = not _remove_private_if_same(
                 parent, workspace_name, workspace_identity, directory=True
