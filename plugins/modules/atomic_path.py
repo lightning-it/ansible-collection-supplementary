@@ -104,12 +104,12 @@ import pwd
 import re
 import secrets
 import stat
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 from ansible.module_utils.basic import AnsibleModule
 
 
-def _identity(value: str, database: object, attribute: str) -> int:
+def _identity(value: str, database: Callable[[str], object], attribute: str) -> int:
     if re.fullmatch(r"[+-]?\d+", value):
         identity = int(value, 10)
         if identity < 0 or identity >= 2**32 - 1:
@@ -137,10 +137,10 @@ def _open_bound_directory(path: str, identities: dict) -> int:
     current = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     walked = ""
     try:
-        if path == "/":
-            if path not in identities or not isinstance(identities[path], dict):
+        if path == "/" or "/" in identities:
+            if "/" not in identities or not isinstance(identities["/"], dict):
                 raise OSError("exact parent identity is missing or malformed: /")
-            expected = identities[path]
+            expected = identities["/"]
             try:
                 identity = (
                     _strict_integer(expected["device"], "device"),
@@ -151,6 +151,7 @@ def _open_bound_directory(path: str, identities: dict) -> int:
             opened = os.fstat(current)
             if (opened.st_dev, opened.st_ino) != identity:
                 raise OSError("parent identity changed: /")
+        if path == "/":
             return current
         for component in path[1:].split("/"):
             if not component:
@@ -294,15 +295,25 @@ def _require_capabilities() -> None:
 
 
 def _descriptor_path(descriptor: int) -> str:
+    def usable(resolved: str) -> bool:
+        if not os.path.isabs(resolved):
+            return False
+        if not resolved.endswith(" (deleted)"):
+            return True
+        try:
+            return _same_inode(os.stat(resolved), os.fstat(descriptor))
+        except OSError:
+            return False
+
     for root in ("/proc/self/fd", "/dev/fd"):
         try:
             resolved = os.readlink(f"{root}/{descriptor}")
         except OSError:
             continue
-        if os.path.isabs(resolved) and not resolved.endswith(" (deleted)"):
+        if usable(resolved):
             return resolved
     resolved = fcntl.fcntl(descriptor, 50, b"\0" * 1024).split(b"\0", 1)[0].decode()
-    if os.path.isabs(resolved) and not resolved.endswith(" (deleted)"):
+    if usable(resolved):
         return resolved
     raise OSError("descriptor path cannot be reported for recovery")
 

@@ -140,6 +140,38 @@ class AtomicPathTests(unittest.TestCase):
             self.assertEqual(str(self.root), MODULE._descriptor_path(descriptor))
         fallback.assert_not_called()
 
+    def test_descriptor_path_accepts_existing_literal_deleted_suffix(self) -> None:
+        literal = self.root / "literal (deleted)"
+        literal.mkdir()
+        descriptor = os.open(literal, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            with mock.patch.object(MODULE.os, "readlink", return_value=str(literal)):
+                self.assertEqual(str(literal), MODULE._descriptor_path(descriptor))
+        finally:
+            os.close(descriptor)
+
+    def test_supplied_root_identity_is_enforced_for_deeper_parent(self) -> None:
+        target = self.root / "policy"
+        parameters = self.common(target, "file")
+        parameters["content"] = "blocked\n"
+        root = Path("/").stat()
+        parameters["parent_identities"]["/"] = {
+            "device": root.st_dev,
+            "inode": root.st_ino + 1,
+        }
+        result = self.execute(parameters, failure=True)
+        self.assertIn("parent identity changed: /", str(result["msg"]))
+        self.assertFalse(target.exists())
+
+    def test_macos_rename_flags_are_bound_to_the_requested_operation(self) -> None:
+        renameatx_np = mock.Mock(return_value=0)
+        library = types.SimpleNamespace(renameatx_np=renameatx_np)
+        with mock.patch.object(MODULE.ctypes, "CDLL", return_value=library):
+            MODULE._renameat(3, "source", 4, "target", "noreplace")
+            MODULE._renameat(3, "source", 4, "target", "exchange")
+        self.assertEqual(4, renameatx_np.call_args_list[0].args[-1])
+        self.assertEqual(2, renameatx_np.call_args_list[1].args[-1])
+
     def test_root_parent_identity_is_validated(self) -> None:
         parameters = self.common(Path("/policy"), "directory")
         root = Path("/").stat()
