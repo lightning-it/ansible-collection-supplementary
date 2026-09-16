@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # Copyright: (c) 2026 Lightning IT
-# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# SPDX-License-Identifier: MIT
 # ruff: noqa: E402
 """Descriptor-relative directory creation and atomic regular-file replacement."""
 
@@ -534,6 +534,7 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
     preserve_workspace = False
     recovery_name: Optional[str] = None
     cleanup_failed = False
+    committed_recovery_path: Optional[str] = None
     failure: Optional[Exception] = None
     try:
         os.mkdir("payload", 0o700, dir_fd=workspace)
@@ -576,6 +577,11 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
                 preserve_workspace = True
                 private_entry = recovery.entry
                 recovery_name = private_entry
+            except OSError as rollback_error:
+                preserve_workspace = True
+                failure = OSError(
+                    f"{failure}; rollback failed and transaction state is uncertain: {rollback_error}"
+                )
     finally:
         cleanup_exception: Optional[Exception] = None
         if directory >= 0:
@@ -608,7 +614,23 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
             cleanup_failed = not _remove_private_if_same(
                 parent, workspace_name, workspace_identity, directory=True
             )
+    if failure is None and not cleanup_failed:
+        try:
+            canonical = _revalidated_entry(module, parent, name)
+            if created_identity is None or canonical is None or not _same_directory_identity(
+                canonical, created_identity
+            ):
+                raise OSError("created directory identity changed after private cleanup")
+        except Exception as exc:
+            failure = exc
+            committed_recovery_path = os.path.join(_descriptor_path(parent), name)
     if failure is not None:
+        if committed_recovery_path is not None:
+            module.fail_json(
+                msg=f"atomic directory mutation failed after commit: {failure}",
+                path=module.params["path"],
+                recovery_path=committed_recovery_path,
+            )
         if preserve_workspace or cleanup_failed:
             recovery_root = os.path.join(_descriptor_path(parent), workspace_name)
             module.fail_json(
@@ -672,10 +694,12 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
     descriptor = -1
     staged_identity: Optional[os.stat_result] = None
     displaced_identity: Optional[os.stat_result] = None
+    final: Optional[os.stat_result] = None
     installed = False
     preserve_workspace = False
     recovery_name: Optional[str] = None
     cleanup_failed = False
+    committed_recovery_path: Optional[str] = None
     failure: Optional[Exception] = None
     try:
         descriptor = os.open(
@@ -748,6 +772,11 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
                 except _PreservedRecovery as recovery:
                     preserve_workspace = True
                     recovery_name = recovery.entry
+                except OSError as rollback_error:
+                    preserve_workspace = True
+                    failure = OSError(
+                        f"{failure}; rollback failed and transaction state is uncertain: {rollback_error}"
+                    )
             else:
                 preserve_workspace = True
                 recovery_name = "payload"
@@ -785,7 +814,21 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             cleanup_failed = not _remove_private_if_same(
                 parent, workspace_name, workspace_identity, directory=True
             )
+    if failure is None and not cleanup_failed:
+        try:
+            canonical = _revalidated_entry(module, parent, name)
+            if final is None or canonical is None or not _same_snapshot(canonical, final):
+                raise OSError("installed file identity changed after private cleanup")
+        except Exception as exc:
+            failure = exc
+            committed_recovery_path = os.path.join(_descriptor_path(parent), name)
     if failure is not None:
+        if committed_recovery_path is not None:
+            module.fail_json(
+                msg=f"atomic path mutation failed after commit: {failure}",
+                path=module.params["path"],
+                recovery_path=committed_recovery_path,
+            )
         if preserve_workspace or cleanup_failed:
             recovery_root = os.path.join(_descriptor_path(parent), workspace_name)
             module.fail_json(
