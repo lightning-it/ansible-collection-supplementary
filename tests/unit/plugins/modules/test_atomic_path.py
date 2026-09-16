@@ -249,7 +249,7 @@ class AtomicPathTests(unittest.TestCase):
         self.assertTrue(Path(str(result["recovery_path"])).is_dir())
         self.assertEqual("managed\n", target.read_text(encoding="utf-8"))
 
-    def test_capture_preserves_changed_content_when_restore_is_blocked(self) -> None:
+    def test_capture_never_restores_changed_content_to_public_path(self) -> None:
         target = self.root / "policy"
         target.write_text("managed\n", encoding="utf-8")
         expected = target.stat()
@@ -260,37 +260,20 @@ class AtomicPathTests(unittest.TestCase):
         workspace_path.mkdir()
         parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         workspace = os.open(workspace_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        real_rename = MODULE._renameat
-        calls = 0
-
-        def block_restore(
-            source_fd: int,
-            source: str,
-            target_fd: int,
-            target_name: str,
-            operation: str,
-        ) -> None:
-            nonlocal calls
-            calls += 1
-            if calls == 2:
-                target.write_text("newer\n", encoding="utf-8")
-            real_rename(source_fd, source, target_fd, target_name, operation)
-
         try:
-            with mock.patch.object(MODULE, "_renameat", side_effect=block_restore):
-                with self.assertRaises(MODULE._PreservedRecovery):
-                    MODULE._capture_and_remove(
-                        parent,
-                        target.name,
-                        expected,
-                        workspace,
-                        "failed",
-                        checksum=expected_checksum,
-                    )
+            with self.assertRaises(MODULE._PreservedRecovery):
+                MODULE._capture_and_remove(
+                    parent,
+                    target.name,
+                    expected,
+                    workspace,
+                    "failed",
+                    checksum=expected_checksum,
+                )
         finally:
             os.close(workspace)
             os.close(parent)
-        self.assertEqual("newer\n", target.read_text(encoding="utf-8"))
+        self.assertFalse(target.exists())
         self.assertEqual("foreign\n", (workspace_path / "failed").read_text(encoding="utf-8"))
 
     def test_workspace_probe_failure_preserves_uncertain_creation(self) -> None:
@@ -483,7 +466,8 @@ class AtomicPathTests(unittest.TestCase):
         with mock.patch.object(MODULE, "_revalidated_entry", side_effect=replace_during_parent_check):
             result = self.execute(parameters, failure=True)
         self.assertIn("identity changed at the canonical boundary", str(result["msg"]))
-        self.assertEqual("foreign\n", target.read_text(encoding="utf-8"))
+        self.assertFalse(target.exists())
+        self.assertEqual("foreign\n", Path(str(result["recovery_path"])).read_text(encoding="utf-8"))
         self.assertEqual("managed\n", detached.read_text(encoding="utf-8"))
 
     def test_directory_creation_tolerates_first_consumer_child(self) -> None:

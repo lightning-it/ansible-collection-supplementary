@@ -7,10 +7,13 @@
 DOCUMENTATION = r"""
 ---
 module: atomic_path
+version_added: "3.3.0"
 short_description: Mutate one path below an identity-bound parent chain
 description:
   - Creates one directory or atomically replaces one regular file.
   - Binds every mutation to descriptor-opened, no-follow parent identities.
+  - Requires exclusive trust in the effective UID; hostile concurrent processes
+    with that same UID are outside the isolation boundary.
 options:
   path:
     description: Canonical absolute target path.
@@ -281,9 +284,7 @@ def _private_workspace(parent: int) -> tuple[int, str, os.stat_result]:
         try:
             expected = os.stat(name, dir_fd=parent, follow_symlinks=False)
         except OSError as exc:
-            raise OSError(
-                f"private workspace identity could not be captured; preserved as {_descriptor_path(parent)}/{name}"
-            ) from exc
+            raise _PreservedWorkspace(os.path.join(_descriptor_path(parent), name)) from exc
         try:
             descriptor = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
         except OSError as exc:
@@ -293,11 +294,13 @@ def _private_workspace(parent: int) -> tuple[int, str, os.stat_result]:
         opened = os.fstat(descriptor)
         if opened.st_uid != os.geteuid() or stat.S_IMODE(opened.st_mode) != 0o700:
             os.close(descriptor)
-            _remove_private_if_same(parent, name, expected, directory=True)
+            if not _remove_private_if_same(parent, name, expected, directory=True):
+                raise _PreservedWorkspace(os.path.join(_descriptor_path(parent), name))
             raise OSError("private workspace ownership or mode changed")
         if not _same_inode(expected, opened):
             os.close(descriptor)
-            _remove_private_if_same(parent, name, expected, directory=True)
+            if not _remove_private_if_same(parent, name, expected, directory=True):
+                raise _PreservedWorkspace(os.path.join(_descriptor_path(parent), name))
             raise OSError("private workspace identity changed while opening")
         return descriptor, name, opened
     raise OSError("cannot allocate a private atomic-path workspace")
@@ -365,11 +368,10 @@ def _capture_and_remove(
     )
     if matches:
         return _remove_private_if_same(workspace, capture, captured, directory=directory)
-    try:
-        _renameat(workspace, capture, parent, name, "noreplace")
-    except OSError as exc:
-        raise _PreservedRecovery(capture) from exc
-    return False
+    # Never restore a workspace pathname after its one-time verification. A
+    # same-UID process could replace it between verification and rename. Keep
+    # the uncertain entry private and require explicit operator recovery.
+    raise _PreservedRecovery(capture)
 
 
 def _verified_file(parent: int, name: str, expected: os.stat_result, checksum: str) -> bool:
