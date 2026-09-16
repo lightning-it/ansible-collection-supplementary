@@ -157,6 +157,24 @@ class AtomicUnlinkModuleTests(unittest.TestCase):
         self.assertEqual("foreign\n", self.target.read_text(encoding="utf-8"))
         self.assertEqual([], list(self.root.glob(".atomic-unlink-*")))
 
+    def test_quarantine_open_failure_removes_the_private_directory(self) -> None:
+        parent_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+        real_open = os.open
+
+        def fail_quarantine_open(*args: object, **kwargs: object) -> int:
+            if args and str(args[0]).startswith(".atomic-unlink-"):
+                raise OSError("injected quarantine open failure")
+            return real_open(*args, **kwargs)
+
+        try:
+            with mock.patch.object(ATOMIC_UNLINK.os, "open", fail_quarantine_open):
+                with self.assertRaisesRegex(OSError, "injected quarantine open failure"):
+                    ATOMIC_UNLINK._make_private_quarantine(parent_fd)
+        finally:
+            os.close(parent_fd)
+
+        self.assertEqual([], list(self.root.glob(".atomic-unlink-*")))
+
     def test_final_checksum_failure_restores_the_quarantined_file(self) -> None:
         expected_checksum = str(self.parameters["checksum"])
         with mock.patch.object(

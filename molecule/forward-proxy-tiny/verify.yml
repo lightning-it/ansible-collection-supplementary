@@ -65,6 +65,9 @@
       loop_control:
         loop_var: forward_proxy_invalid_client
 
+    - name: Prove a non-standard destination port is rejected before rendering
+      ansible.builtin.include_tasks: tasks/reject-port.yml
+
     - name: Evaluate each service and upstream contract independently
       ansible.builtin.assert:
         that:
@@ -81,6 +84,8 @@
               'acl lit_allowed_domains dstdomain -n .ubuntu.com registry.example.com'
               in forward_proxy_rendered_policy
             }}
+        - name: exact destination port ACL
+          passed: "{{ 'acl lit_safe_ports port 80 443' in forward_proxy_rendered_policy }}"
         - name: reject reverse-DNS conversion for IP literals
           passed: >-
             {{ 'acl lit_allowed_domains dstdomain -n ' in forward_proxy_rendered_policy }}
@@ -212,7 +217,7 @@
               classname="forward_proxy.negative_policy"
               name="{{ result.item.name | e }}"
               role="forward_proxy">{% if result.failed | default(false) %}
-              <failure message="unsafe client network was not rejected"/>{% endif %}
+              <failure message="unsafe policy input was not rejected"/>{% endif %}
             </testcase>
           {% endfor %}
             <testcase

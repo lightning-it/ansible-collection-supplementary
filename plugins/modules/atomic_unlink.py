@@ -145,11 +145,18 @@ def _make_private_quarantine(parent_fd: int) -> tuple[int, str]:
             os.mkdir(quarantine_name, 0o700, dir_fd=parent_fd)
         except FileExistsError:
             continue
-        quarantine_fd = os.open(
-            quarantine_name,
-            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-            dir_fd=parent_fd,
-        )
+        try:
+            quarantine_fd = os.open(
+                quarantine_name,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=parent_fd,
+            )
+        except OSError:
+            try:
+                os.rmdir(quarantine_name, dir_fd=parent_fd)
+            except OSError:
+                pass
+            raise
         return quarantine_fd, quarantine_name
     raise OSError("cannot allocate a private atomic-unlink quarantine")
 

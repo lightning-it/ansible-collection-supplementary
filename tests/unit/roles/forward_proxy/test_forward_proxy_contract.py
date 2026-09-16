@@ -367,6 +367,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         rejection = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "tasks" / "reject-client.yml").read_text()
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
         transition = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
+        squid_template = (ROLE_ROOT / "templates" / "squid.conf.j2").read_text()
 
         self.assertIn("Reinspect the Squid policy at the mutation boundary", apply_tasks)
         self.assertIn("Reinspect the Pod manifest at the mutation boundary", apply_tasks)
@@ -380,6 +381,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         )
         self.assertIn("Reinspect one managed file at its rollback mutation boundary", restore_helper)
         self.assertIn("forward_proxy_restore_file_boundary.stat.checksum", restore_helper)
+        self.assertIn("forward_proxy_restore_entry.0.item.0.0", restore_helper)
+        self.assertNotIn("forward_proxy_restore_entry.0.item.item", restore_helper)
         self.assertIn("forward_proxy_restore_marker_boundary.stat.checksum", rollback)
         self.assertIn("forward_proxy_restore_quadlet_boundary.stat.checksum", rollback)
         self.assertIn("pod\n      - inspect", runtime_guard)
@@ -413,6 +416,10 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("lit.supplementary.atomic_unlink", removal_helper)
         self.assertNotIn("state: absent", removal_helper)
         self.assertIn("not forward_proxy_state_marker.stat.exists", apply_tasks)
+        self.assertIn("acl lit_safe_ports port {{ forward_proxy_allowed_destination_ports | join(' ') }}", squid_template)
+        self.assertIn("exact destination port ACL", verify)
+        self.assertIn("tasks/reject-port.yml", verify)
+        self.assertIn("Prove every managed file is absent before deleting ownership evidence", transition)
 
     def test_trusted_parent_chains_are_complete_and_canonical(self) -> None:
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()

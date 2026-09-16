@@ -474,6 +474,33 @@
     - forward_proxy_state_marker.stat.exists
     - not ansible_check_mode
 
+- name: Reinspect every managed file after disabled-state unlink
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: "{{ forward_proxy_previous_state_manifest.managed_paths | default([]) }}"
+  register: forward_proxy_disabled_asset_absence
+  when:
+    - not forward_proxy_enabled | bool
+    - forward_proxy_state_marker.stat.exists
+    - not ansible_check_mode
+
+- name: Prove every managed file is absent before deleting ownership evidence
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists
+      - not item.stat.islnk | default(false)
+    fail_msg: >-
+      A managed path was recreated after its verified unlink. Preserve the
+      ownership marker and stop for operator recovery.
+  loop: "{{ forward_proxy_disabled_asset_absence.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - not forward_proxy_enabled | bool
+    - forward_proxy_state_marker.stat.exists
+    - not ansible_check_mode
+
 - name: Remove the ownership marker at its exact disabled-state mutation boundary
   ansible.builtin.include_tasks: remove_owned_file.yml
   vars:
