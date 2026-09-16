@@ -420,13 +420,16 @@ def _capture_and_remove(
         captured = os.stat(capture, dir_fd=workspace, follow_symlinks=False)
     except OSError as exc:
         raise _PreservedRecovery(capture) from exc
-    matches = (
-        _same_directory_identity(captured, expected)
-        if directory
-        else checksum is not None
-        and _same_identity(captured, expected)
-        and _verified_file(workspace, capture, captured, checksum)
-    )
+    try:
+        matches = (
+            _same_directory_identity(captured, expected)
+            if directory
+            else checksum is not None
+            and _same_identity(captured, expected)
+            and _verified_file(workspace, capture, captured, checksum)
+        )
+    except OSError as exc:
+        raise _PreservedRecovery(capture) from exc
     if matches:
         return _remove_private_if_same(workspace, capture, captured, directory=directory)
     # Never restore a workspace pathname after its one-time verification. A
