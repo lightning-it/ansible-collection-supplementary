@@ -8,6 +8,20 @@ ROLE_ROOT = REPOSITORY_ROOT / "roles" / "forward_proxy"
 
 
 class ForwardProxyContractTests(unittest.TestCase):
+    def test_complete_state_transition_has_bounded_per_host_mutual_exclusion(
+        self,
+    ) -> None:
+        wrapper = (ROLE_ROOT / "tasks" / "main.yml").read_text()
+        assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+        defaults = (ROLE_ROOT / "defaults" / "main.yml").read_text()
+        self.assertIn("Acquire the bounded per-host forward proxy transition lock", wrapper)
+        self.assertIn("forward_proxy_lock_acquisition.rc == 0", wrapper)
+        self.assertIn("include_tasks: transition.yml", wrapper)
+        self.assertIn("Release the per-host forward proxy transition lock", wrapper)
+        self.assertIn("forward_proxy_lock_timeout: 30", defaults)
+        self.assertIn("forward_proxy_lock_timeout <= 300", assertions)
+        self.assertIn("[A-Za-z0-9][A-Za-z0-9_.-]*", assertions)
+
     def test_role_contains_only_distribution_neutral_service_state(self) -> None:
         defaults = (ROLE_ROOT / "defaults" / "main.yml").read_text()
         tasks = "".join(path.read_text() for path in sorted((ROLE_ROOT / "tasks").glob("*.yml")))
@@ -93,7 +107,7 @@ class ForwardProxyContractTests(unittest.TestCase):
     def test_non_root_rendering_is_contained_and_numeric_owners_are_canonical(self) -> None:
         defaults = (ROLE_ROOT / "defaults" / "main.yml").read_text()
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
-        main = (ROLE_ROOT / "tasks" / "main.yml").read_text()
+        main = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
         directory_guard = (ROLE_ROOT / "tasks" / "ensure_directory.yml").read_text()
         argument_spec = (ROLE_ROOT / "meta" / "argument_specs.yml").read_text()
         self.assertIn("forward_proxy_render_root: /tmp", defaults)
@@ -156,7 +170,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_directory_creation_allowed: false", rollback)
 
     def test_dangling_symlinks_cannot_cross_first_run_boundaries(self) -> None:
-        main = (ROLE_ROOT / "tasks" / "main.yml").read_text()
+        main = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
         directory_guard = (ROLE_ROOT / "tasks" / "ensure_directory.yml").read_text()
         rollback = (ROLE_ROOT / "tasks" / "enabled_first_run_rollback.yml").read_text()
         self.assertIn("+ [forward_proxy_state_marker_path]", main)
@@ -192,14 +206,22 @@ class ForwardProxyContractTests(unittest.TestCase):
         )
         self.assertIn("forward_proxy_first_run_pod_state.rc == 1", apply_tasks)
         self.assertIn(
-            "Authorize rollback only for the proven-absent first-run runtime identity",
+            "Authorize rollback only for the proven-absent new runtime identity",
             apply_tasks,
         )
         authorization = (
-            "forward_proxy_first_run_runtime_removal_authorized_internal "
+            "forward_proxy_new_runtime_removal_authorized_internal "
             "| default(false) | bool"
         )
         self.assertGreaterEqual(rollback.count(authorization), 2)
+        existing_rollback = (
+            ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml"
+        ).read_text()
+        self.assertGreaterEqual(existing_rollback.count(authorization), 2)
+        self.assertIn(
+            "not forward_proxy_previous_state_manifest.runtime_managed",
+            apply_tasks,
+        )
 
     def test_check_mode_never_materializes_the_runtime_ownership_payload(self) -> None:
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
@@ -210,7 +232,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("when: not ansible_check_mode", marker_task)
 
     def test_render_only_does_not_probe_or_create_runtime_state(self) -> None:
-        main = (ROLE_ROOT / "tasks" / "main.yml").read_text()
+        main = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
         verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
         self.assertIn(
@@ -224,7 +246,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertNotIn("Create forward proxy managed directories", apply_tasks)
 
     def test_runtime_removal_revalidates_the_quadlet_parent_chain(self) -> None:
-        main = (ROLE_ROOT / "tasks" / "main.yml").read_text()
+        main = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
         self.assertIn("Require the declared Quadlet parent chain before runtime removal", main)
         self.assertIn("Revalidate the Quadlet parent chain before runtime removal", main)
         self.assertIn("forward_proxy_directory_creation_allowed: false", main)
@@ -232,7 +254,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("not forward_proxy_manage_runtime | bool", main)
 
     def test_every_runtime_removal_has_an_explicit_absence_postcondition(self) -> None:
-        main = (ROLE_ROOT / "tasks" / "main.yml").read_text()
+        main = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
         first_rollback = (ROLE_ROOT / "tasks" / "enabled_first_run_rollback.yml").read_text()
         existing_rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
@@ -269,7 +291,7 @@ class ForwardProxyContractTests(unittest.TestCase):
     def test_readiness_and_updates_are_transactional(self) -> None:
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
         readiness = (ROLE_ROOT / "tasks" / "verify_runtime_ready.yml").read_text()
-        main_tasks = (ROLE_ROOT / "tasks" / "main.yml").read_text()
+        main_tasks = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
         rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
         self.assertIn("verify_runtime_ready.yml", apply_tasks)
@@ -318,8 +340,19 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_junit_passed", cleanup)
         self.assertIn("scripts.quality_evidence import parse_junit", cleanup)
         self.assertIn("junit_status:", cleanup)
-        self.assertIn("release_eligible:", cleanup)
+        self.assertIn("release_eligible: false", cleanup)
         self.assertIn("redacted: true", cleanup)
+
+    def test_live_runtime_remains_explicitly_blocked_until_acceptance(self) -> None:
+        defaults = (ROLE_ROOT / "defaults" / "main.yml").read_text()
+        assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+        argument_spec = (ROLE_ROOT / "meta" / "argument_specs.yml").read_text()
+        readme = (ROLE_ROOT / "README.md").read_text()
+        self.assertIn("forward_proxy_experimental_runtime_acceptance: false", defaults)
+        self.assertIn("forward_proxy_experimental_runtime_acceptance is boolean", assertions)
+        self.assertIn("or forward_proxy_experimental_runtime_acceptance", assertions)
+        self.assertIn("forward_proxy_experimental_runtime_acceptance", argument_spec)
+        self.assertIn("controlled Wunderbox runtime acceptance", readme)
 
     def test_squid_is_readonly_runtime_compatible(self) -> None:
         template = (ROLE_ROOT / "templates" / "squid.conf.j2").read_text()

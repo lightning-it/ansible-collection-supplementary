@@ -27,6 +27,12 @@ Important inputs include:
 
 - `forward_proxy_enabled`: enable or safely remove the role-owned service.
 - `forward_proxy_manage_runtime`: manage Quadlet/systemd or only render test fixtures.
+- `forward_proxy_experimental_runtime_acceptance`: explicit opt-in used only for
+  the controlled Wunderbox runtime acceptance until protected live Podman,
+  systemd, listener, rollback, allowed-proxy, and denied-direct evidence exists.
+- `forward_proxy_lock_path` and `forward_proxy_lock_timeout`: bounded per-host
+  mutual exclusion for the complete inspect, transition, runtime, rollback,
+  disable, and marker-commit transaction. Stale locks require operator review.
 - `forward_proxy_render_root`: exact containment root for non-root render-only output.
 - `forward_proxy_trusted_parent_paths`: complete parent chains, rooted at
   existing canonical anchors and ordered parent before child. Every component
@@ -61,6 +67,7 @@ interface exists. Credentials must not be placed in inventory.
   roles:
     - role: lit.supplementary.forward_proxy
       forward_proxy_enabled: true
+      forward_proxy_manage_runtime: false
       forward_proxy_allowed_destination_domains:
         - .ubuntu.com
         - .quay.io

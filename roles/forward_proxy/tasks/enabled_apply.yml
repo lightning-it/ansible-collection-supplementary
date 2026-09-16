@@ -87,7 +87,9 @@
   check_mode: false
   when:
     - forward_proxy_manage_runtime | bool
-    - not forward_proxy_state_marker.stat.exists
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
     - not ansible_check_mode
 
 - name: Inspect a same-named installed unit file before first runtime activation
@@ -105,7 +107,9 @@
   check_mode: false
   when:
     - forward_proxy_manage_runtime | bool
-    - not forward_proxy_state_marker.stat.exists
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
     - not ansible_check_mode
 
 - name: Inspect a same-named Podman pod before first runtime activation
@@ -121,7 +125,9 @@
   check_mode: false
   when:
     - forward_proxy_manage_runtime | bool
-    - not forward_proxy_state_marker.stat.exists
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
     - not ansible_check_mode
 
 - name: Refuse to adopt a foreign same-named runtime during first activation
@@ -136,15 +142,19 @@
       restarting, or removing that foreign runtime.
   when:
     - forward_proxy_manage_runtime | bool
-    - not forward_proxy_state_marker.stat.exists
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
     - not ansible_check_mode
 
-- name: Authorize rollback only for the proven-absent first-run runtime identity
+- name: Authorize rollback only for the proven-absent new runtime identity
   ansible.builtin.set_fact:
-    forward_proxy_first_run_runtime_removal_authorized_internal: true
+    forward_proxy_new_runtime_removal_authorized_internal: true
   when:
     - forward_proxy_manage_runtime | bool
-    - not forward_proxy_state_marker.stat.exists
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
     - not ansible_check_mode
 
 - name: Manage the persistent Squid container service

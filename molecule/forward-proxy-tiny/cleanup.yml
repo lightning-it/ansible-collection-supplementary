@@ -68,5 +68,5 @@
           junit_sha256: {{ forward_proxy_junit_evidence.stat.checksum | to_json }}
           junit_status: {{ forward_proxy_junit_report.status | to_json }}
           result: {{ ('passed' if forward_proxy_junit_passed else 'failed') | to_json }}
-          release_eligible: {{ forward_proxy_junit_passed | bool | to_json }}
+          release_eligible: false
           redacted: true

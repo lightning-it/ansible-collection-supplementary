@@ -4,6 +4,11 @@
     that:
       - forward_proxy_enabled is boolean
       - forward_proxy_manage_runtime is boolean
+      - forward_proxy_experimental_runtime_acceptance is boolean
+      - >-
+        not forward_proxy_enabled
+        or not forward_proxy_manage_runtime
+        or forward_proxy_experimental_runtime_acceptance
       - forward_proxy_file_owner is match('^(?:[a-z_][a-z0-9_-]{0,31}|0|[1-9][0-9]{0,9})\Z')
       - forward_proxy_file_group is match('^(?:[a-z_][a-z0-9_-]{0,31}|0|[1-9][0-9]{0,9})\Z')
       - >-
@@ -23,6 +28,20 @@
       - forward_proxy_runtime_gid == 13
       - forward_proxy_unit_name is match('^[a-z][a-z0-9-]{1,61}[a-z0-9]\Z')
       - forward_proxy_systemd_scope == 'system'
+      - forward_proxy_lock_timeout is integer
+      - forward_proxy_lock_timeout >= 1
+      - forward_proxy_lock_timeout <= 300
+      - >-
+        forward_proxy_lock_path
+        is match('^/[A-Za-z0-9][A-Za-z0-9_.-]*(?:/[A-Za-z0-9][A-Za-z0-9_.-]*)*\.lock\Z')
+      - >-
+        forward_proxy_lock_path.startswith('/run/lock/')
+        or forward_proxy_lock_path.startswith(forward_proxy_render_root.rstrip('/') ~ '/')
+      - >-
+        forward_proxy_file_owner not in ['root', '0']
+        or forward_proxy_lock_path.startswith('/run/lock/')
+      - forward_proxy_lock_path not in forward_proxy_managed_paths_internal
+      - forward_proxy_lock_path != forward_proxy_state_marker_path
       - forward_proxy_readiness_timeout | int >= 1
       - forward_proxy_readiness_timeout | int <= 300
       - forward_proxy_listen_addresses is sequence

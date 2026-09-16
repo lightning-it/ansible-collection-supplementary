@@ -37,13 +37,13 @@
     podman_systemd_quadlet_dir: "{{ forward_proxy_quadlet_dir }}"
   when:
     - forward_proxy_manage_runtime | bool
-    - forward_proxy_first_run_runtime_removal_authorized_internal | default(false) | bool
+    - forward_proxy_new_runtime_removal_authorized_internal | default(false) | bool
 
 - name: Prove the partial first-run runtime is absent before file rollback
   ansible.builtin.include_tasks: verify_runtime_absent.yml
   when:
     - forward_proxy_manage_runtime | bool
-    - forward_proxy_first_run_runtime_removal_authorized_internal | default(false) | bool
+    - forward_proxy_new_runtime_removal_authorized_internal | default(false) | bool
     - not ansible_check_mode
 
 - name: Reinspect first-run rollback targets immediately before deletion
