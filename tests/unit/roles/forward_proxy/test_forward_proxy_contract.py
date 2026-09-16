@@ -128,6 +128,21 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_planned_directories_internal", directory_guard)
         self.assertIn("Initialize the check-mode forward proxy directory plan", main)
         self.assertIn("Require parent-before-child trusted directory ordering", assertions)
+        self.assertIn("forward_proxy_file_owner in ['root', '0']", assertions)
+        self.assertIn(
+            "forward_proxy_lock_path.startswith(forward_proxy_render_root.rstrip('/') ~ '/')",
+            assertions,
+        )
+
+    def test_numeric_runtime_inputs_reject_coercible_non_integers(self) -> None:
+        assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+        for variable in (
+            "forward_proxy_readiness_timeout",
+            "forward_proxy_port",
+            "forward_proxy_upstream_port",
+        ):
+            self.assertIn(f"{variable} is integer", assertions)
+            self.assertNotIn(f"{variable} | int >=", assertions)
         self.assertIn("forward_proxy_trusted_parent_paths[:ansible_loop.index0]", assertions)
 
     def test_upstream_hostname_is_validated_label_by_label(self) -> None:
@@ -455,6 +470,9 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("Prove the restored previous forward proxy runtime is ready", rollback)
         self.assertIn("verify_runtime_ready.yml", rollback)
         self.assertIn("Wait for the local Squid listener", readiness)
+        self.assertIn('"id={{ forward_proxy_active_runtime_identity_internal.pod_id }}"', readiness)
+        self.assertIn("forward_proxy_active_runtime_identity_internal.pod_id]", readiness)
+        self.assertNotIn('"name=^{{ forward_proxy_unit_name }}$"', readiness)
         self.assertIn("Refuse to adopt a foreign Quadlet during runtime activation", main_tasks)
         self.assertNotIn("Remove a partial Quadlet", rollback)
         self.assertIn("regex_replace('^\\.', '') | length <= 253", assertions)

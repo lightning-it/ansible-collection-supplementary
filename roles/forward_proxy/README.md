@@ -37,7 +37,7 @@ Important inputs include:
 - `forward_proxy_trusted_parent_paths`: complete parent chains, rooted at
   existing canonical anchors and ordered parent before child. Every component
   is revalidated as a non-symlink before a write or rollback.
-- `forward_proxy_image`: immutable `docker.io/ubuntu/squid:6.6-24.04_beta@sha256:...` image.
+- `forward_proxy_image`: immutable digest-pinned image defined by the role defaults.
 - `forward_proxy_image_pull_policy`: fixed to `Never`; image preload is a separate bootstrap step.
 - `forward_proxy_listen_addresses` and `forward_proxy_allowed_clients`: exact ingress boundary.
 - `forward_proxy_allowed_destination_domains`: mandatory closed destination allowlist when enabled.

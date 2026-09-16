@@ -71,14 +71,16 @@
       - pod
       - ps
       - --filter
-      - "name=^{{ forward_proxy_unit_name }}$"
+      - "id={{ forward_proxy_active_runtime_identity_internal.pod_id }}"
       - --filter
       - status=running
       - --format
-      - "{{ '{{.Name}}' }}"
+      - "{{ '{{.ID}}' }}"
   register: forward_proxy_running_pod
   changed_when: false
-  failed_when: forward_proxy_running_pod.stdout_lines != [forward_proxy_unit_name]
+  failed_when: >-
+    forward_proxy_running_pod.stdout_lines
+    != [forward_proxy_active_runtime_identity_internal.pod_id]
   check_mode: false
 
 - name: Wait for the local Squid listener
