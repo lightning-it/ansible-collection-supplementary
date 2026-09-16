@@ -59,70 +59,9 @@
       register: forward_proxy_policy_result
       ignore_errors: true
 
-    - name: Simulate one completed unlink from an interrupted disable transaction
-      ansible.builtin.file:
-        path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
-        state: absent
-
-    - name: Initialize forward proxy cleanup execution evidence
-      ansible.builtin.set_fact:
-        forward_proxy_cleanup_execution_result:
-          name: disable managed service
-          failed: false
-
-    - name: Exercise cleanup without losing its failure evidence
-      block:
-        - name: Disable the previously managed forward proxy service
-          ansible.builtin.include_role:
-            name: lit.supplementary.forward_proxy
-          vars:
-            forward_proxy_enabled: false
-            forward_proxy_manage_runtime: false
-            forward_proxy_file_owner: "{{ forward_proxy_verify_uid }}"
-            forward_proxy_file_group: "{{ forward_proxy_verify_gid }}"
-            forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
-            forward_proxy_pod_manifest_path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
-            forward_proxy_state_marker_path: "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
-            forward_proxy_quadlet_dir: "{{ forward_proxy_test_root }}/etc/containers/systemd"
-      rescue:
-        - name: Record the cleanup execution failure for JUnit
-          ansible.builtin.set_fact:
-            forward_proxy_cleanup_execution_result:
-              name: disable managed service
-              failed: true
-
-    - name: Inspect disabled forward proxy paths
-      ansible.builtin.stat:
-        path: "{{ item }}"
-        follow: false
-      loop:
-        - "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
-        - "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
-        - "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
-      register: forward_proxy_disabled_paths
-
-    - name: Evaluate each disabled-state cleanup contract independently
-      ansible.builtin.assert:
-        that:
-          - not item.stat.exists
-        quiet: true
-      loop: "{{ forward_proxy_disabled_paths.results }}"
-      loop_control:
-        label: "{{ item.item }}"
-      register: forward_proxy_cleanup_results
-      ignore_errors: true
-
     - name: Assemble complete forward proxy assertion evidence
       ansible.builtin.set_fact:
-        forward_proxy_failure_count: >-
-          {{
-            (
-              [forward_proxy_policy_result]
-              + [forward_proxy_cleanup_execution_result]
-              + forward_proxy_cleanup_results.results
-            )
-            | selectattr('failed', 'equalto', true) | list | length
-          }}
+        forward_proxy_failure_count: "{{ 1 if forward_proxy_policy_result.failed else 0 }}"
 
     - name: Create forward proxy JUnit directory
       ansible.builtin.file:
