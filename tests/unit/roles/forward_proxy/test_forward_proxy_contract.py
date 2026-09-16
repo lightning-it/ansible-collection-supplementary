@@ -21,6 +21,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_lock_timeout: 30", defaults)
         self.assertIn("forward_proxy_lock_timeout <= 300", assertions)
         self.assertIn("[A-Za-z0-9][A-Za-z0-9_.-]*", assertions)
+        self.assertIn("forward_proxy_lock_path | dirname == '/run/lock'", wrapper)
+        self.assertIn("forward_proxy_lock_parent.stat.mode in ['0775', '1777']", wrapper)
 
     def test_role_contains_only_distribution_neutral_service_state(self) -> None:
         defaults = (ROLE_ROOT / "defaults" / "main.yml").read_text()
@@ -213,8 +215,12 @@ class ForwardProxyContractTests(unittest.TestCase):
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
         rollback = (ROLE_ROOT / "tasks" / "enabled_first_run_rollback.yml").read_text()
         self.assertIn(
-            "Inspect a same-named systemd unit before first runtime activation",
+            "Inspect a same-named systemd unit before any first activation writes",
             apply_tasks,
+        )
+        self.assertLess(
+            apply_tasks.index("Refuse a foreign same-named runtime before any managed-file write"),
+            apply_tasks.index("Render the Squid policy with an atomic no-follow write"),
         )
         self.assertIn("list-unit-files", apply_tasks)
         self.assertIn(
@@ -350,6 +356,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
         rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
         runtime_guard = (ROLE_ROOT / "tasks" / "revalidate_new_runtime_removal.yml").read_text()
+        active_runtime_guard = (ROLE_ROOT / "tasks" / "revalidate_active_runtime_identity.yml").read_text()
         existing_runtime_capture = (ROLE_ROOT / "tasks" / "capture_existing_runtime_removal.yml").read_text()
         existing_runtime_guard = (ROLE_ROOT / "tasks" / "revalidate_existing_runtime_removal.yml").read_text()
         removal_helper = (ROLE_ROOT / "tasks" / "remove_owned_file.yml").read_text()
@@ -394,6 +401,15 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("Capture the existing Podman pod identity", existing_runtime_capture)
         self.assertIn("Capture the existing systemd fragment identity", existing_runtime_capture)
         self.assertIn("Require the exact captured existing runtime", existing_runtime_guard)
+        self.assertIn("forward_proxy_active_rollback_quadlet.stat.mode == '0644'", active_runtime_guard)
+        self.assertIn(
+            "forward_proxy_active_rollback_quadlet.stat.pw_name | default('') == 'root'",
+            active_runtime_guard,
+        )
+        self.assertIn(
+            "forward_proxy_active_rollback_quadlet.stat.gr_name | default('') == 'root'",
+            active_runtime_guard,
+        )
         self.assertIn("lit.supplementary.atomic_unlink", removal_helper)
         self.assertNotIn("state: absent", removal_helper)
         self.assertIn("not forward_proxy_state_marker.stat.exists", apply_tasks)
@@ -475,12 +491,16 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("Prove the restored previous forward proxy runtime is ready", rollback)
         self.assertIn("verify_runtime_ready.yml", rollback)
         self.assertIn("Wait for the local Squid listener", readiness)
+        self.assertIn("- --no-trunc", readiness)
         self.assertIn('"id={{ forward_proxy_active_runtime_identity_internal.pod_id }}"', readiness)
         self.assertIn("forward_proxy_active_runtime_identity_internal.pod_id]", readiness)
         self.assertNotIn('"name=^{{ forward_proxy_unit_name }}$"', readiness)
         self.assertIn("forward_proxy_readiness_quadlet.stat.mode == '0644'", readiness)
         self.assertIn("forward_proxy_readiness_quadlet.stat.pw_name | default('') == 'root'", readiness)
         self.assertIn("forward_proxy_readiness_quadlet.stat.gr_name | default('') == 'root'", readiness)
+        self.assertIn("forward_proxy_runtime_absence_verified_internal | bool", rollback)
+        self.assertIn("not forward_proxy_restore_quadlet_boundary.stat.exists", rollback)
+        self.assertIn("Record verified runtime absence for render-only rollback", apply_tasks)
         self.assertIn("Refuse to adopt a foreign Quadlet during runtime activation", main_tasks)
         self.assertNotIn("Remove a partial Quadlet", rollback)
         self.assertIn("regex_replace('^\\.', '') | length <= 253", assertions)

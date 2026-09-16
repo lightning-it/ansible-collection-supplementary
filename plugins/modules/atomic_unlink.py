@@ -62,6 +62,14 @@ path:
   description: Absolute path considered by the module.
   type: str
   returned: always
+recovery_path:
+  description: Recoverable quarantine path when an external replacement cannot be restored.
+  type: str
+  returned: on failure after quarantine
+quarantine_cleanup_warning:
+  description: Cleanup error when the verified target was removed but the empty private quarantine could not be removed.
+  type: str
+  returned: on successful unlink with a quarantine cleanup error
 """
 
 import grp
@@ -70,7 +78,6 @@ import os
 import pwd
 import secrets
 import stat
-from typing import Tuple
 
 from ansible.module_utils.basic import AnsibleModule
 
@@ -86,7 +93,7 @@ def _numeric_identity(value: str, database: object, kind: str) -> int:
         return record.pw_uid if kind == "owner" else record.gr_gid
 
 
-def _open_parent(path: str) -> Tuple[int, str]:
+def _open_parent(path: str) -> tuple[int, str]:
     parts = path[1:].split("/")
     name = parts.pop()
     current_fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -131,7 +138,7 @@ def _same_identity(left: os.stat_result, right: os.stat_result) -> bool:
     return all(getattr(left, field) == getattr(right, field) for field in IDENTITY_FIELDS)
 
 
-def _make_private_quarantine(parent_fd: int) -> Tuple[int, str]:
+def _make_private_quarantine(parent_fd: int) -> tuple[int, str]:
     for _attempt in range(10):
         quarantine_name = f".atomic-unlink-{os.getpid()}-{secrets.token_hex(16)}"
         try:
@@ -156,10 +163,32 @@ def _restore_quarantined_file(parent_fd: int, name: str, quarantine_fd: int) -> 
             dst_dir_fd=parent_fd,
             follow_symlinks=False,
         )
-    except FileExistsError:
+    except OSError:
         return False
-    os.unlink("target", dir_fd=quarantine_fd)
+    try:
+        os.unlink("target", dir_fd=quarantine_fd)
+    except OSError:
+        # The canonical path is already restored as a hard link. Preserve the
+        # quarantined second link for operator recovery rather than undoing it.
+        pass
     return True
+
+
+def _recover_quarantine(
+    parent_fd: int,
+    name: str,
+    quarantine_fd: int,
+    quarantine_name: str,
+) -> tuple[bool, bool]:
+    restored = _restore_quarantined_file(parent_fd, name, quarantine_fd)
+    cleaned = False
+    if restored:
+        try:
+            os.rmdir(quarantine_name, dir_fd=parent_fd)
+            cleaned = True
+        except OSError:
+            pass
+    return restored, cleaned
 
 
 def main() -> None:
@@ -226,32 +255,114 @@ def main() -> None:
             src_dir_fd=parent_fd,
             dst_dir_fd=quarantine_fd,
         )
-        quarantined = os.stat("target", dir_fd=quarantine_fd, follow_symlinks=False)
-        if not _same_identity(final_fd, quarantined):
-            restored = _restore_quarantined_file(parent_fd, name, quarantine_fd)
-            if restored:
-                os.close(quarantine_fd)
-                quarantine_fd = -1
-                os.rmdir(quarantine_name, dir_fd=parent_fd)
+        try:
+            quarantined = os.stat("target", dir_fd=quarantine_fd, follow_symlinks=False)
+        except OSError as exc:
+            restored, cleaned = _recover_quarantine(
+                parent_fd,
+                name,
+                quarantine_fd,
+                quarantine_name,
+            )
+            recovery_path = "" if restored else os.path.join(os.path.dirname(path), quarantine_name, "target")
+            if cleaned:
                 quarantine_name = ""
+            module.fail_json(
+                msg=(
+                    f"cannot inspect the atomic quarantine: {exc}; "
+                    + ("entry restored" if restored else "entry preserved in quarantine")
+                ),
+                path=path,
+                recovery_path=recovery_path,
+            )
+        if not _same_identity(final_fd, quarantined):
+            restored, cleaned = _recover_quarantine(
+                parent_fd,
+                name,
+                quarantine_fd,
+                quarantine_name,
+            )
+            if cleaned:
+                quarantine_name = ""
+            recovery_path = "" if restored else os.path.join(os.path.dirname(path), quarantine_name, "target")
             module.fail_json(
                 msg=(
                     "removal target changed at the atomic quarantine boundary; "
                     + ("foreign entry restored" if restored else "foreign entry preserved in quarantine")
                 ),
                 path=path,
+                recovery_path=recovery_path,
             )
 
-        final_quarantine = os.stat("target", dir_fd=quarantine_fd, follow_symlinks=False)
-        if not _same_identity(final_fd, final_quarantine):
-            module.fail_json(
-                msg="quarantined removal target changed before deletion",
-                path=path,
+        try:
+            final_quarantine = os.stat("target", dir_fd=quarantine_fd, follow_symlinks=False)
+            final_checksum = _checksum_fd(file_fd)
+        except OSError as exc:
+            restored, cleaned = _recover_quarantine(
+                parent_fd,
+                name,
+                quarantine_fd,
+                quarantine_name,
             )
-        os.unlink("target", dir_fd=quarantine_fd)
+            recovery_path = "" if restored else os.path.join(os.path.dirname(path), quarantine_name, "target")
+            if cleaned:
+                quarantine_name = ""
+            module.fail_json(
+                msg=(
+                    f"cannot revalidate the quarantined target: {exc}; "
+                    + ("entry restored" if restored else "entry preserved in quarantine")
+                ),
+                path=path,
+                recovery_path=recovery_path,
+            )
+        if not _same_identity(final_fd, final_quarantine) or final_checksum != module.params["checksum"]:
+            restored, cleaned = _recover_quarantine(
+                parent_fd,
+                name,
+                quarantine_fd,
+                quarantine_name,
+            )
+            if cleaned:
+                quarantine_name = ""
+            recovery_path = "" if restored else os.path.join(os.path.dirname(path), quarantine_name, "target")
+            module.fail_json(
+                msg=(
+                    "quarantined removal target changed before deletion; "
+                    + ("entry restored" if restored else "entry preserved in quarantine")
+                ),
+                path=path,
+                recovery_path=recovery_path,
+            )
+        try:
+            os.unlink("target", dir_fd=quarantine_fd)
+        except OSError as exc:
+            restored, cleaned = _recover_quarantine(
+                parent_fd,
+                name,
+                quarantine_fd,
+                quarantine_name,
+            )
+            if cleaned:
+                quarantine_name = ""
+            recovery_path = "" if restored else os.path.join(os.path.dirname(path), quarantine_name, "target")
+            module.fail_json(
+                msg=(
+                    f"atomic unlink failed after quarantine: {exc}; "
+                    + ("entry restored" if restored else "entry preserved in quarantine")
+                ),
+                path=path,
+                recovery_path=recovery_path,
+            )
         os.close(quarantine_fd)
         quarantine_fd = -1
-        os.rmdir(quarantine_name, dir_fd=parent_fd)
+        try:
+            os.rmdir(quarantine_name, dir_fd=parent_fd)
+        except OSError as exc:
+            module.exit_json(
+                changed=True,
+                path=path,
+                quarantine_cleanup_warning=str(exc),
+            )
         quarantine_name = ""
         module.exit_json(changed=True, path=path)
     except OSError as exc:

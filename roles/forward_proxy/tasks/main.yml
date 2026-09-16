@@ -51,8 +51,14 @@
       - >-
         forward_proxy_lock_parent.stat.mode is match('^0[0-7][0145][0145]\Z')
         or (
-          forward_proxy_lock_path | dirname in ['/tmp', '/run/lock']
+          forward_proxy_lock_path | dirname == '/tmp'
           and forward_proxy_lock_parent.stat.mode == '1777'
+          and forward_proxy_lock_parent.stat.uid == 0
+          and forward_proxy_lock_parent.stat.gid == 0
+        )
+        or (
+          forward_proxy_lock_path | dirname == '/run/lock'
+          and forward_proxy_lock_parent.stat.mode in ['0775', '1777']
           and forward_proxy_lock_parent.stat.uid == 0
           and forward_proxy_lock_parent.stat.gid == 0
         )

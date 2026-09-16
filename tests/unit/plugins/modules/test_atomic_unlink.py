@@ -157,6 +157,37 @@ class AtomicUnlinkModuleTests(unittest.TestCase):
         self.assertEqual("foreign\n", self.target.read_text(encoding="utf-8"))
         self.assertEqual([], list(self.root.glob(".atomic-unlink-*")))
 
+    def test_final_checksum_failure_restores_the_quarantined_file(self) -> None:
+        expected_checksum = str(self.parameters["checksum"])
+        with mock.patch.object(
+            ATOMIC_UNLINK,
+            "_checksum_fd",
+            side_effect=[expected_checksum, "0" * 64],
+        ):
+            result = self.execute_failure()
+
+        self.assertIn("changed before deletion", str(result["msg"]))
+        self.assertEqual("owned\n", self.target.read_text(encoding="utf-8"))
+        self.assertEqual([], list(self.root.glob(".atomic-unlink-*")))
+
+    def test_unlink_failure_restores_the_quarantined_file(self) -> None:
+        real_unlink = os.unlink
+        failure_injected = False
+
+        def fail_first_quarantine_unlink(*args: object, **kwargs: object) -> None:
+            nonlocal failure_injected
+            if args and args[0] == "target" and not failure_injected:
+                failure_injected = True
+                raise OSError("injected unlink failure")
+            real_unlink(*args, **kwargs)
+
+        with mock.patch.object(ATOMIC_UNLINK.os, "unlink", fail_first_quarantine_unlink):
+            result = self.execute_failure()
+
+        self.assertIn("atomic unlink failed after quarantine", str(result["msg"]))
+        self.assertEqual("owned\n", self.target.read_text(encoding="utf-8"))
+        self.assertEqual([], list(self.root.glob(".atomic-unlink-*")))
+
 
 if __name__ == "__main__":
     unittest.main()

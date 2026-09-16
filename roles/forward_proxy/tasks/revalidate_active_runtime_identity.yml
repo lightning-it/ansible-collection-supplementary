@@ -38,6 +38,11 @@
 - name: Require the captured role-owned runtime before rollback
   ansible.builtin.assert:
     that:
+      - forward_proxy_active_rollback_quadlet.stat.isreg | default(false)
+      - not forward_proxy_active_rollback_quadlet.stat.islnk | default(false)
+      - forward_proxy_active_rollback_quadlet.stat.mode == '0644'
+      - forward_proxy_active_rollback_quadlet.stat.pw_name | default('') == 'root'
+      - forward_proxy_active_rollback_quadlet.stat.gr_name | default('') == 'root'
       - >-
         forward_proxy_active_runtime_identity_internal
         == {

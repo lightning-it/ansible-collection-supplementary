@@ -1,4 +1,79 @@
 ---
+- name: Inspect a same-named systemd unit before any first activation writes
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - --system
+      - show
+      - "{{ forward_proxy_unit_name }}.service"
+      - --property=LoadState
+      - --value
+  register: forward_proxy_first_run_systemd_load_state
+  changed_when: false
+  failed_when: forward_proxy_first_run_systemd_load_state.rc != 0
+  check_mode: false
+  when:
+    - forward_proxy_manage_runtime | bool
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
+    - not ansible_check_mode
+
+- name: Inspect a same-named installed unit file before any first activation writes
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - --system
+      - list-unit-files
+      - "{{ forward_proxy_unit_name }}.service"
+      - --no-legend
+      - --no-pager
+  register: forward_proxy_first_run_systemd_unit_files
+  changed_when: false
+  failed_when: forward_proxy_first_run_systemd_unit_files.rc != 0
+  check_mode: false
+  when:
+    - forward_proxy_manage_runtime | bool
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
+    - not ansible_check_mode
+
+- name: Inspect a same-named Podman pod before any first activation writes
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - pod
+      - exists
+      - "{{ forward_proxy_unit_name }}"
+  register: forward_proxy_first_run_pod_state
+  changed_when: false
+  failed_when: forward_proxy_first_run_pod_state.rc not in [0, 1]
+  check_mode: false
+  when:
+    - forward_proxy_manage_runtime | bool
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
+    - not ansible_check_mode
+
+- name: Refuse a foreign same-named runtime before any managed-file write
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_first_run_systemd_load_state.stdout | trim == 'not-found'
+      - forward_proxy_first_run_systemd_unit_files.stdout_lines | length == 0
+      - forward_proxy_first_run_pod_state.rc == 1
+    fail_msg: >-
+      A same-named systemd unit, installed unit file, or Podman pod already
+      exists without this role's ownership marker. Stop before writing files,
+      adopting, restarting, or removing that foreign runtime.
+  when:
+    - forward_proxy_manage_runtime | bool
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
+    - not ansible_check_mode
+
 - name: Revalidate the existing runtime before switching to render-only mode
   ansible.builtin.include_tasks: revalidate_existing_runtime_removal.yml
   when:
@@ -25,6 +100,15 @@
 
 - name: Prove the previous runtime is absent before rendering replacement state
   ansible.builtin.include_tasks: verify_runtime_absent.yml
+  when:
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Record verified runtime absence for render-only rollback
+  ansible.builtin.set_fact:
+    forward_proxy_runtime_absence_verified_internal: true
   when:
     - forward_proxy_state_marker.stat.exists
     - forward_proxy_previous_state_manifest.runtime_managed | bool
@@ -219,81 +303,6 @@
   loop_control:
     label: "{{ item.0.item }}"
   when: not ansible_check_mode
-
-- name: Inspect a same-named systemd unit before first runtime activation
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/systemctl
-      - --system
-      - show
-      - "{{ forward_proxy_unit_name }}.service"
-      - --property=LoadState
-      - --value
-  register: forward_proxy_first_run_systemd_load_state
-  changed_when: false
-  failed_when: forward_proxy_first_run_systemd_load_state.rc != 0
-  check_mode: false
-  when:
-    - forward_proxy_manage_runtime | bool
-    - >-
-      not forward_proxy_state_marker.stat.exists
-      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
-    - not ansible_check_mode
-
-- name: Inspect a same-named installed unit file before first runtime activation
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/systemctl
-      - --system
-      - list-unit-files
-      - "{{ forward_proxy_unit_name }}.service"
-      - --no-legend
-      - --no-pager
-  register: forward_proxy_first_run_systemd_unit_files
-  changed_when: false
-  failed_when: forward_proxy_first_run_systemd_unit_files.rc != 0
-  check_mode: false
-  when:
-    - forward_proxy_manage_runtime | bool
-    - >-
-      not forward_proxy_state_marker.stat.exists
-      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
-    - not ansible_check_mode
-
-- name: Inspect a same-named Podman pod before first runtime activation
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/podman
-      - pod
-      - exists
-      - "{{ forward_proxy_unit_name }}"
-  register: forward_proxy_first_run_pod_state
-  changed_when: false
-  failed_when: forward_proxy_first_run_pod_state.rc not in [0, 1]
-  check_mode: false
-  when:
-    - forward_proxy_manage_runtime | bool
-    - >-
-      not forward_proxy_state_marker.stat.exists
-      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
-    - not ansible_check_mode
-
-- name: Refuse to adopt a foreign same-named runtime during first activation
-  ansible.builtin.assert:
-    that:
-      - forward_proxy_first_run_systemd_load_state.stdout | trim == 'not-found'
-      - forward_proxy_first_run_systemd_unit_files.stdout_lines | length == 0
-      - forward_proxy_first_run_pod_state.rc == 1
-    fail_msg: >-
-      A same-named systemd unit, installed unit file, or Podman pod already
-      exists without this role's ownership marker. Stop without adopting,
-      restarting, or removing that foreign runtime.
-  when:
-    - forward_proxy_manage_runtime | bool
-    - >-
-      not forward_proxy_state_marker.stat.exists
-      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
-    - not ansible_check_mode
 
 - name: Record the proven-absent pre-activation runtime boundary
   ansible.builtin.set_fact:

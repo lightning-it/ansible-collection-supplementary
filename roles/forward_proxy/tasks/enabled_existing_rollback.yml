@@ -233,17 +233,25 @@
 - name: Require the previous or failed-transaction Quadlet before restoration
   ansible.builtin.assert:
     that:
-      - forward_proxy_restore_quadlet_boundary.stat.isreg | default(false)
-      - not forward_proxy_restore_quadlet_boundary.stat.islnk | default(false)
-      - forward_proxy_restore_quadlet_boundary.stat.mode == '0644'
-      - forward_proxy_restore_quadlet_boundary.stat.pw_name | default('') == 'root'
-      - forward_proxy_restore_quadlet_boundary.stat.gr_name | default('') == 'root'
       - >-
-        forward_proxy_restore_quadlet_boundary.stat.checksum
-        in [
-          forward_proxy_previous_state_manifest.quadlet_checksum,
-          forward_proxy_quadlet_stat.stat.checksum | default('')
-        ]
+        (
+          not forward_proxy_manage_runtime | bool
+          and forward_proxy_runtime_absence_verified_internal | bool
+          and not forward_proxy_restore_quadlet_boundary.stat.exists
+          and not forward_proxy_restore_quadlet_boundary.stat.islnk | default(false)
+        )
+        or (
+          forward_proxy_restore_quadlet_boundary.stat.isreg | default(false)
+          and not forward_proxy_restore_quadlet_boundary.stat.islnk | default(false)
+          and forward_proxy_restore_quadlet_boundary.stat.mode == '0644'
+          and forward_proxy_restore_quadlet_boundary.stat.pw_name | default('') == 'root'
+          and forward_proxy_restore_quadlet_boundary.stat.gr_name | default('') == 'root'
+          and forward_proxy_restore_quadlet_boundary.stat.checksum
+            in [
+              forward_proxy_previous_state_manifest.quadlet_checksum,
+              forward_proxy_quadlet_stat.stat.checksum | default('')
+            ]
+        )
     fail_msg: >-
       The Quadlet changed outside the previous or failed transaction. Leave it
       untouched for operator recovery.
