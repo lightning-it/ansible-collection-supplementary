@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import os
+import stat
 import sys
 import tempfile
 import types
@@ -127,6 +128,15 @@ class AtomicPathTests(unittest.TestCase):
         parameters["parent_identities"] = {"/": {"device": root.st_dev, "inode": root.st_ino + 1}}
         self.assertIn("parent identity changed", str(self.execute(parameters, check=True, failure=True)["msg"]))
 
+    def test_malformed_root_parent_identity_uses_the_stable_contract(self) -> None:
+        parameters = self.common(Path("/policy"), "directory")
+        root = Path("/").stat()
+        for identity in ({"inode": root.st_ino}, {"device": True, "inode": root.st_ino}):
+            with self.subTest(identity=identity):
+                parameters["parent_identities"] = {"/": identity}
+                result = self.execute(parameters, check=True, failure=True)
+                self.assertIn("parent identity is malformed: /", str(result["msg"]))
+
     def test_atomic_file_create_update_and_checksum_binding(self) -> None:
         target = self.root / "policy.conf"
         parameters = self.common(target, "file")
@@ -211,6 +221,130 @@ class AtomicPathTests(unittest.TestCase):
             self.assertIn("denied", str(self.execute(parameters, failure=True)["msg"]))
         self.assertFalse(target.exists())
         self.assertEqual([], list(self.root.glob(".atomic-path-*")))
+
+    def test_file_check_mode_never_creates_or_changes_payloads(self) -> None:
+        target = self.root / "policy"
+        parameters = self.common(target, "file")
+        parameters["content"] = "planned\n"
+        self.assertTrue(self.execute(parameters, check=True)["changed"])
+        self.assertFalse(target.exists())
+        self.assertEqual([], list(self.root.glob(".atomic-path-*")))
+
+        target.write_text("existing\n", encoding="utf-8")
+        parameters.update(
+            content="replacement\n",
+            allow_absent=False,
+            expected_checksum=hashlib.sha256(b"existing\n").hexdigest(),
+        )
+        self.assertTrue(self.execute(parameters, check=True)["changed"])
+        self.assertEqual("existing\n", target.read_text(encoding="utf-8"))
+        self.assertEqual([], list(self.root.glob(".atomic-path-*")))
+
+    def test_private_cleanup_stat_error_reports_uncertain_entry(self) -> None:
+        target = self.root / "payload"
+        target.write_text("owned\n", encoding="utf-8")
+        expected = target.stat()
+        parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        real_stat = os.stat
+
+        def fail_payload_stat(path: object, *args: object, **kwargs: object) -> os.stat_result:
+            if path == target.name and kwargs.get("dir_fd") == parent:
+                raise OSError("cleanup inspection denied")
+            return real_stat(path, *args, **kwargs)
+
+        try:
+            with mock.patch.object(MODULE.os, "stat", side_effect=fail_payload_stat):
+                self.assertFalse(MODULE._remove_private_if_same(parent, target.name, expected))
+        finally:
+            os.close(parent)
+        self.assertEqual("owned\n", target.read_text(encoding="utf-8"))
+
+    def test_post_commit_directory_fsync_is_best_effort(self) -> None:
+        real_fsync = os.fsync
+        real_fstat = os.fstat
+
+        def reject_directory_fsync(descriptor: int) -> None:
+            if stat.S_ISDIR(real_fstat(descriptor).st_mode):
+                raise OSError("directory fsync unsupported")
+            real_fsync(descriptor)
+
+        for state in ("directory", "file"):
+            with self.subTest(state=state):
+                target = self.root / f"managed-{state}"
+                parameters = self.common(target, state)
+                if state == "file":
+                    parameters["content"] = "durable\n"
+                with mock.patch.object(MODULE.os, "fsync", side_effect=reject_directory_fsync):
+                    self.assertTrue(self.execute(parameters)["changed"])
+                self.assertTrue(target.exists())
+
+    def test_successful_file_close_failure_reports_workspace_root(self) -> None:
+        target = self.root / "policy"
+        parameters = self.common(target, "file")
+        parameters["content"] = "managed\n"
+        real_open = os.open
+        real_close = os.close
+        payload_descriptor = -1
+        close_failed = False
+
+        def track_payload(path: object, flags: int, *args: object, **kwargs: object) -> int:
+            nonlocal payload_descriptor
+            descriptor = real_open(path, flags, *args, **kwargs)
+            if path == "payload":
+                payload_descriptor = descriptor
+            return descriptor
+
+        def fail_payload_close(descriptor: int) -> None:
+            nonlocal close_failed
+            if descriptor == payload_descriptor and not close_failed:
+                close_failed = True
+                real_close(descriptor)
+                raise OSError("payload close outcome uncertain")
+            real_close(descriptor)
+
+        with (
+            mock.patch.object(MODULE, "_require_capabilities"),
+            mock.patch.object(MODULE.os, "open", side_effect=track_payload),
+            mock.patch.object(MODULE.os, "close", side_effect=fail_payload_close),
+        ):
+            result = self.execute(parameters, failure=True)
+        recovery = Path(str(result["recovery_path"]))
+        self.assertTrue(recovery.is_dir())
+        self.assertFalse((recovery / "payload").exists())
+        self.assertEqual("managed\n", target.read_text(encoding="utf-8"))
+
+    def test_successful_workspace_close_failure_reports_workspace_root(self) -> None:
+        target = self.root / "policy-workspace-close"
+        parameters = self.common(target, "file")
+        parameters["content"] = "managed\n"
+        real_private_workspace = MODULE._private_workspace
+        real_close = os.close
+        workspace_descriptor = -1
+        close_failed = False
+
+        def track_workspace(parent: int) -> tuple[int, str, os.stat_result]:
+            nonlocal workspace_descriptor
+            result = real_private_workspace(parent)
+            workspace_descriptor = result[0]
+            return result
+
+        def fail_workspace_close(descriptor: int) -> None:
+            nonlocal close_failed
+            if descriptor == workspace_descriptor and not close_failed:
+                close_failed = True
+                real_close(descriptor)
+                raise OSError("workspace close outcome uncertain")
+            real_close(descriptor)
+
+        with (
+            mock.patch.object(MODULE, "_private_workspace", side_effect=track_workspace),
+            mock.patch.object(MODULE.os, "close", side_effect=fail_workspace_close),
+        ):
+            result = self.execute(parameters, failure=True)
+        recovery = Path(str(result["recovery_path"]))
+        self.assertTrue(recovery.is_dir())
+        self.assertFalse((recovery / "payload").exists())
+        self.assertEqual("managed\n", target.read_text(encoding="utf-8"))
 
     def test_required_no_follow_flag_must_be_nonzero(self) -> None:
         with mock.patch.object(MODULE.os, "O_NOFOLLOW", 0):
