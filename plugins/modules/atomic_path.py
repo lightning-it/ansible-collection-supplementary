@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ctypes
 import errno
+import fcntl
 import grp
 import hashlib
 import os
@@ -169,6 +170,22 @@ def _require_capabilities() -> None:
     library = ctypes.CDLL(None, use_errno=True)
     if not (hasattr(library, "renameat2") or hasattr(library, "renameatx_np")):
         raise OSError("kernel-conditional rename is unavailable")
+    probe = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        _descriptor_path(probe)
+    finally:
+        os.close(probe)
+
+
+def _descriptor_path(descriptor: int) -> str:
+    proc_path = f"/proc/self/fd/{descriptor}"
+    try:
+        resolved = os.readlink(proc_path)
+    except OSError:
+        resolved = fcntl.fcntl(descriptor, 50, b"\0" * 1024).split(b"\0", 1)[0].decode()
+    if not os.path.isabs(resolved) or resolved.endswith(" (deleted)"):
+        raise OSError("descriptor path cannot be reported for recovery")
+    return resolved
 
 
 def _private_workspace(parent: int) -> tuple[int, str, os.stat_result]:
@@ -180,18 +197,20 @@ def _private_workspace(parent: int) -> tuple[int, str, os.stat_result]:
             continue
         try:
             expected = os.stat(name, dir_fd=parent, follow_symlinks=False)
-        except OSError:
-            try:
-                os.rmdir(name, dir_fd=parent)
-            except OSError:
-                pass
-            raise
+        except OSError as exc:
+            raise OSError(
+                f"private workspace identity could not be captured; preserved as {_descriptor_path(parent)}/{name}"
+            ) from exc
         try:
             descriptor = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
         except OSError:
             _remove_private_if_same(parent, name, expected, directory=True)
             raise
         opened = os.fstat(descriptor)
+        if opened.st_uid != os.geteuid() or stat.S_IMODE(opened.st_mode) != 0o700:
+            os.close(descriptor)
+            _remove_private_if_same(parent, name, expected, directory=True)
+            raise OSError("private workspace ownership or mode changed")
         if not _same_inode(expected, opened):
             os.close(descriptor)
             _remove_private_if_same(parent, name, expected, directory=True)
@@ -201,7 +220,7 @@ def _private_workspace(parent: int) -> tuple[int, str, os.stat_result]:
 
 
 def _remove_private_if_same(parent: int, name: str, expected: os.stat_result, *, directory: bool = False) -> bool:
-    """Best-effort cleanup inside a random private 0700 workspace."""
+    """Clean an entry below a locked exclusive parent or private workspace."""
     try:
         current = os.stat(name, dir_fd=parent, follow_symlinks=False)
     except FileNotFoundError:
@@ -264,6 +283,16 @@ def _existing(parent: int, name: str) -> os.stat_result | None:
         return None
 
 
+def _require_exclusive_parent(parent: int) -> None:
+    details = os.fstat(parent)
+    if details.st_uid != os.geteuid() or stat.S_IMODE(details.st_mode) & 0o022:
+        raise OSError("mutation parent must be owned by the effective user and not group/world writable")
+    try:
+        fcntl.flock(parent, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as exc:
+        raise OSError("another atomic path transaction holds the mutation parent") from exc
+
+
 def _revalidate_parent(module: AnsibleModule, parent: int) -> None:
     parent_path = os.path.dirname(module.params["path"])
     reopened = _open_bound_directory(parent_path, module.params["parent_identities"])
@@ -277,6 +306,7 @@ def _revalidate_parent(module: AnsibleModule, parent: int) -> None:
 
 
 def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, uid: int, gid: int) -> None:
+    _require_exclusive_parent(parent)
     before = _existing(parent, name)
     if before is not None:
         if not stat.S_ISDIR(before.st_mode) or not _matches(before, mode, uid, gid):
@@ -329,6 +359,7 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
 
 
 def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: int, gid: int) -> None:
+    _require_exclusive_parent(parent)
     content = module.params.get("content")
     if not isinstance(content, str):
         module.fail_json(msg="content is required for file state", path=module.params["path"])
@@ -398,25 +429,30 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
         else:
             _renameat(workspace, "payload", parent, name, "exchange")
             installed = True
+            preserve_workspace = True
             displaced_identity = os.stat("payload", dir_fd=workspace, follow_symlinks=False)
             if not _verified_file(workspace, "payload", before, expected_checksum):
-                preserve_workspace = True
                 raise OSError(
                     f"file boundary changed during replacement; entries preserved at "
                     f"{os.path.dirname(module.params['path'])}/{workspace_name}"
                 )
         installed_details = os.stat(name, dir_fd=parent, follow_symlinks=False)
-        if staged_identity is None or not _same_identity(installed_details, staged_identity):
-            preserve_workspace = True
+        if (
+            staged_identity is None
+            or not _same_identity(installed_details, staged_identity)
+            or not _verified_file(parent, name, installed_details, desired)
+        ):
+            preserve_workspace = displaced_identity is not None
             raise OSError("installed file identity changed after replacement")
         os.fsync(parent)
         _revalidate_parent(module, parent)
         final = _existing(parent, name)
-        if staged_identity is None or final is None or not _same_identity(final, staged_identity):
+        if staged_identity is None or final is None or not _same_snapshot(final, installed_details):
             preserve_workspace = displaced_identity is not None
             raise OSError("installed file identity changed before completion")
         if displaced_identity is not None and not _remove_private_if_same(workspace, "payload", displaced_identity):
             raise OSError("replaced file could not be removed from the private recovery workspace")
+        preserve_workspace = False
     except Exception as exc:
         if installed and staged_identity is not None:
             if displaced_identity is None:
@@ -424,10 +460,11 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             else:
                 preserve_workspace = True
         if preserve_workspace:
+            recovery_parent = _descriptor_path(parent)
             module.fail_json(
                 msg=f"atomic path mutation failed: {exc}; recovery workspace preserved",
                 path=module.params["path"],
-                recovery_path=f"{os.path.dirname(module.params['path'])}/{workspace_name}/payload",
+                recovery_path=f"{recovery_parent}/{workspace_name}/payload",
             )
         raise
     finally:
