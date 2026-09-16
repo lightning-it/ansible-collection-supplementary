@@ -123,6 +123,23 @@ class AtomicPathTests(unittest.TestCase):
         parameters["parent_identities"] = {}
         self.assertIn("exact parent identity is missing", str(self.execute(parameters, failure=True)["msg"]))
 
+    def test_descriptor_path_uses_dev_fd_before_platform_fallback(self) -> None:
+        descriptor = 42
+
+        def read_descriptor_link(path: str) -> str:
+            if path == f"/proc/self/fd/{descriptor}":
+                raise FileNotFoundError(path)
+            if path == f"/dev/fd/{descriptor}":
+                return str(self.root)
+            raise AssertionError(path)
+
+        with (
+            mock.patch.object(MODULE.os, "readlink", side_effect=read_descriptor_link),
+            mock.patch.object(MODULE.fcntl, "fcntl") as fallback,
+        ):
+            self.assertEqual(str(self.root), MODULE._descriptor_path(descriptor))
+        fallback.assert_not_called()
+
     def test_root_parent_identity_is_validated(self) -> None:
         parameters = self.common(Path("/policy"), "directory")
         root = Path("/").stat()

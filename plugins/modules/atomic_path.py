@@ -16,8 +16,8 @@ description:
     with that same UID are outside the isolation boundary.
   - The exact target parent must be owned by the effective UID and must not be
     writable by its group or by other users.
-  - Every canonical parent component, including the exact target parent, must
-    have a matching device and inode entry in C(parent_identities).
+  - The exact target parent must have a matching device and inode entry in
+    C(parent_identities). Supplied ancestor identities are also enforced.
 requirements:
   - Python and operating-system support for descriptor-relative C(dir_fd) APIs,
     C(O_DIRECTORY), C(O_NOFOLLOW), and C(O_NONBLOCK).
@@ -294,14 +294,17 @@ def _require_capabilities() -> None:
 
 
 def _descriptor_path(descriptor: int) -> str:
-    proc_path = f"/proc/self/fd/{descriptor}"
-    try:
-        resolved = os.readlink(proc_path)
-    except OSError:
-        resolved = fcntl.fcntl(descriptor, 50, b"\0" * 1024).split(b"\0", 1)[0].decode()
-    if not os.path.isabs(resolved) or resolved.endswith(" (deleted)"):
-        raise OSError("descriptor path cannot be reported for recovery")
-    return resolved
+    for root in ("/proc/self/fd", "/dev/fd"):
+        try:
+            resolved = os.readlink(f"{root}/{descriptor}")
+        except OSError:
+            continue
+        if os.path.isabs(resolved) and not resolved.endswith(" (deleted)"):
+            return resolved
+    resolved = fcntl.fcntl(descriptor, 50, b"\0" * 1024).split(b"\0", 1)[0].decode()
+    if os.path.isabs(resolved) and not resolved.endswith(" (deleted)"):
+        return resolved
+    raise OSError("descriptor path cannot be reported for recovery")
 
 
 def _private_workspace(parent: int) -> Tuple[int, str, os.stat_result]:
