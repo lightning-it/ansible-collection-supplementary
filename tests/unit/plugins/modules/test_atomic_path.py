@@ -1347,6 +1347,24 @@ class AtomicPathTests(unittest.TestCase):
         self.assertEqual("new\n", target.read_text(encoding="utf-8"))
         self.assertEqual("owned\n", Path(str(result["recovery_path"])).read_text(encoding="utf-8"))
 
+    def test_workspace_fsync_failure_after_exchange_preserves_both_revisions(self) -> None:
+        target = self.root / "policy-fsync"
+        target.write_text("owned\n", encoding="utf-8")
+        parameters = self.common(target, "file")
+        parameters.update(
+            content="new\n",
+            allow_absent=False,
+            expected_checksum=hashlib.sha256(b"owned\n").hexdigest(),
+        )
+
+        with mock.patch.object(MODULE, "_fsync_directory", side_effect=OSError("workspace fsync failed")):
+            result = self.execute(parameters, failure=True)
+
+        recovery = Path(str(result["recovery_path"]))
+        self.assertIn("workspace fsync failed", str(result["msg"]))
+        self.assertEqual("new\n", target.read_text(encoding="utf-8"))
+        self.assertEqual("owned\n", recovery.read_text(encoding="utf-8"))
+
     def test_parent_replacement_reports_descriptor_stable_recovery_path(self) -> None:
         managed = self.root / "managed"
         managed.mkdir()
