@@ -46,27 +46,6 @@
         forward_proxy_junit_passed: >-
           {{ (forward_proxy_junit_parse.stdout | from_json).status == 'passed' }}
 
-    - name: Read the canonical forward proxy coverage disposition
-      ansible.builtin.set_fact:
-        forward_proxy_coverage_contract: >-
-          {{
-            (
-              lookup('ansible.builtin.file', playbook_dir ~ '/../../meta/role-coverage.yml')
-              | from_yaml
-            ).scenarios['forward-proxy-tiny']
-          }}
-
-    - name: Calculate release eligibility from evidence and coverage policy
-      ansible.builtin.set_fact:
-        forward_proxy_release_eligible: >-
-          {{
-            forward_proxy_junit_passed
-            and forward_proxy_coverage_contract.state == 'supported'
-            and forward_proxy_coverage_contract.implementation == 'complete'
-            and forward_proxy_coverage_contract.junit | bool
-            and forward_proxy_coverage_contract.evidence | bool
-          }}
-
     - name: Create redacted forward proxy evidence directory
       ansible.builtin.file:
         path: "{{ forward_proxy_artifact_root }}/evidence"
@@ -89,5 +68,5 @@
           junit_sha256: {{ forward_proxy_junit_evidence.stat.checksum | to_json }}
           junit_status: {{ forward_proxy_junit_report.status | to_json }}
           result: {{ ('passed' if forward_proxy_junit_passed else 'failed') | to_json }}
-          release_eligible: {{ forward_proxy_release_eligible | bool | to_json }}
+          release_eligible: false
           redacted: true
