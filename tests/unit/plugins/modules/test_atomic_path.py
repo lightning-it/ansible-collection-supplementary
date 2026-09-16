@@ -43,8 +43,10 @@ class Failure(Result):
 class FakeModule:
     params: dict[str, object] = {}
     check = False
+    options: dict[str, object] = {}
 
-    def __init__(self, **_: object) -> None:
+    def __init__(self, **options: object) -> None:
+        type(self).options = options
         self.params = dict(type(self).params)
         self.check_mode = type(self).check
 
@@ -237,6 +239,34 @@ class AtomicPathTests(unittest.TestCase):
         self.assertNotEqual(workspace_descriptor, fsync_order[1])
         self.assertEqual("second\n", target.read_text(encoding="utf-8"))
 
+    def test_directory_metadata_is_fsynced_before_publication(self) -> None:
+        target = self.root / "managed-directory"
+        parameters = self.common(target, "directory")
+        real_renameat = MODULE._renameat
+        events: list[tuple[str, int]] = []
+
+        def track_renameat(
+            source_parent: int, source_name: str, target_parent: int, target_name: str, mode: str
+        ) -> None:
+            events.append(("rename", target_parent))
+            real_renameat(source_parent, source_name, target_parent, target_name, mode)
+
+        with (
+            mock.patch.object(MODULE, "_renameat", side_effect=track_renameat),
+            mock.patch.object(
+                MODULE, "_fsync_directory", side_effect=lambda descriptor: events.append(("fsync", descriptor))
+            ),
+        ):
+            result = self.execute(parameters)
+
+        self.assertTrue(result["changed"])
+        self.assertGreaterEqual(len(events), 3)
+        self.assertEqual("fsync", events[0][0])
+        self.assertEqual("rename", events[1][0])
+        self.assertEqual("fsync", events[2][0])
+        self.assertNotEqual(events[0][1], events[2][1])
+        self.assertTrue(target.is_dir())
+
     def test_symlink_parent_and_malformed_identity_fail_closed(self) -> None:
         foreign = self.root / "foreign"
         foreign.mkdir()
@@ -315,6 +345,29 @@ class AtomicPathTests(unittest.TestCase):
             self.assertFalse(target.exists())
         finally:
             self.root.chmod(0o700)
+
+    def test_private_workspace_accepts_inherited_setgid_without_group_access(self) -> None:
+        parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        real_fstat = os.fstat
+
+        def inherited_setgid(descriptor: int) -> os.stat_result:
+            current = real_fstat(descriptor)
+            values = list(current)
+            values[stat.ST_MODE] |= stat.S_ISGID
+            return os.stat_result(values)
+
+        descriptor = -1
+        name = ""
+        try:
+            with mock.patch.object(MODULE.os, "fstat", side_effect=inherited_setgid):
+                descriptor, name, opened = MODULE._private_workspace(parent)
+            self.assertEqual(0o700, stat.S_IMODE(opened.st_mode) & 0o777)
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+            if name:
+                os.rmdir(name, dir_fd=parent)
+            os.close(parent)
 
     def test_directory_metadata_failure_cleans_private_creation(self) -> None:
         target = self.root / "managed"
@@ -410,6 +463,40 @@ class AtomicPathTests(unittest.TestCase):
                 self.assertFalse(target.exists())
                 self.assertEqual([], list(self.root.glob(".atomic-path-*")))
 
+    def test_rollback_cleanup_failure_reports_the_captured_entry(self) -> None:
+        target = self.root / "captured"
+        parameters = self.common(target, "file")
+        parameters["content"] = "managed\n"
+        real_remove = MODULE._remove_private_if_same
+        fsync_calls = 0
+
+        def fail_parent_fsync(_descriptor: int) -> None:
+            nonlocal fsync_calls
+            fsync_calls += 1
+            if fsync_calls == 1:
+                raise OSError(errno.EIO, "parent fsync failed")
+
+        def preserve_capture(
+            parent: int,
+            name: str,
+            expected: os.stat_result,
+            *,
+            directory: bool = False,
+        ) -> bool:
+            if name == "failed":
+                return False
+            return real_remove(parent, name, expected, directory=directory)
+
+        with (
+            mock.patch.object(MODULE, "_fsync_directory", side_effect=fail_parent_fsync),
+            mock.patch.object(MODULE, "_remove_private_if_same", side_effect=preserve_capture),
+        ):
+            result = self.execute(parameters, failure=True)
+        recovery = Path(str(result["recovery_path"]))
+        self.assertEqual("failed", recovery.name)
+        self.assertEqual("managed\n", recovery.read_text(encoding="utf-8"))
+        self.assertFalse(target.exists())
+
     def test_rollback_error_preserves_uncertain_transaction_workspace(self) -> None:
         for state in ("directory", "file"):
             with self.subTest(state=state):
@@ -417,8 +504,16 @@ class AtomicPathTests(unittest.TestCase):
                 parameters = self.common(target, state)
                 if state == "file":
                     parameters["content"] = "managed\n"
+                fsync_calls = 0
+
+                def fail_commit_fsync(_descriptor: int, managed_state: str = state) -> None:
+                    nonlocal fsync_calls
+                    fsync_calls += 1
+                    if managed_state == "file" or fsync_calls == 2:
+                        raise OSError("commit probe failed")
+
                 with (
-                    mock.patch.object(MODULE, "_fsync_directory", side_effect=OSError("commit probe failed")),
+                    mock.patch.object(MODULE, "_fsync_directory", side_effect=fail_commit_fsync),
                     mock.patch.object(MODULE, "_capture_and_remove", side_effect=OSError("rollback failed")),
                 ):
                     result = self.execute(parameters, failure=True)
@@ -436,6 +531,13 @@ class AtomicPathTests(unittest.TestCase):
                     parameters["content"] = "managed\n"
                 real_renameat = MODULE._renameat
                 rename_calls = 0
+                fsync_calls = 0
+
+                def fail_commit_fsync(_descriptor: int, managed_state: str = state) -> None:
+                    nonlocal fsync_calls
+                    fsync_calls += 1
+                    if managed_state == "file" or fsync_calls == 2:
+                        raise OSError("commit probe failed")
 
                 def remove_before_rollback(
                     source_fd: int,
@@ -456,7 +558,7 @@ class AtomicPathTests(unittest.TestCase):
                     real_rename(source_fd, source, target_fd, target_name, operation)
 
                 with (
-                    mock.patch.object(MODULE, "_fsync_directory", side_effect=OSError("commit probe failed")),
+                    mock.patch.object(MODULE, "_fsync_directory", side_effect=fail_commit_fsync),
                     mock.patch.object(MODULE, "_renameat", side_effect=remove_before_rollback),
                 ):
                     result = self.execute(parameters, failure=True)
@@ -754,17 +856,43 @@ class AtomicPathTests(unittest.TestCase):
             os.close(parent)
         self.assertTrue(Path(result.exception.path).is_dir())
 
-    def test_nonreadable_file_mode_is_verified_via_bound_descriptor(self) -> None:
+    def test_unprivileged_unreadable_file_mode_is_rejected_before_mutation(self) -> None:
         target = self.root / "sealed"
         parameters = self.common(target, "file")
         parameters.update(content="sealed\n", mode="0000")
+        result = self.execute(parameters, failure=True)
+        self.assertIn("must remain readable", str(result["msg"]))
+        self.assertFalse(target.exists())
+
+        target.write_text("sealed\n", encoding="utf-8")
+        target.chmod(0o000)
         try:
-            self.assertTrue(self.execute(parameters)["changed"])
+            parameters.update(
+                allow_absent=False,
+                expected_checksum=hashlib.sha256(b"sealed\n").hexdigest(),
+            )
+            result = self.execute(parameters, failure=True)
+            self.assertIn("must remain readable", str(result["msg"]))
             self.assertEqual(0, target.stat().st_mode & 0o777)
         finally:
-            if target.exists():
-                target.chmod(0o600)
+            target.chmod(0o600)
         self.assertEqual("sealed\n", target.read_text(encoding="utf-8"))
+
+    def test_root_can_verify_a_nonreadable_file_mode(self) -> None:
+        with mock.patch.object(MODULE.os, "geteuid", return_value=0):
+            self.assertTrue(MODULE._effective_user_can_read(0o000, os.getuid(), os.getgid()))
+
+    @unittest.skipIf(sys.platform == "darwin", "macOS does not retain set-ID bits on temporary files")
+    def test_special_file_mode_bits_are_applied_after_payload_write(self) -> None:
+        target = self.root / "executable"
+        parameters = self.common(target, "file")
+        parameters.update(content="#!/bin/true\n", mode="4755")
+        try:
+            self.assertTrue(self.execute(parameters)["changed"])
+            self.assertEqual(0o4755, stat.S_IMODE(target.stat().st_mode))
+        finally:
+            if target.exists():
+                target.chmod(0o700)
 
     def test_uninspectable_failed_payload_is_preserved_without_masking_failure(self) -> None:
         target = self.root / "policy"
@@ -809,7 +937,7 @@ class AtomicPathTests(unittest.TestCase):
             result = self.execute(parameters, failure=True)
         recovery = Path(str(result["recovery_path"]))
         self.assertIn("recovery workspace preserved", str(result["msg"]))
-        self.assertEqual("", recovery.read_text(encoding="utf-8"))
+        self.assertEqual("blocked\n", recovery.read_text(encoding="utf-8"))
         self.assertFalse(target.exists())
 
     def test_directory_metadata_failure_preserves_uncleanable_private_creation(self) -> None:
@@ -1268,6 +1396,15 @@ class AtomicPathTests(unittest.TestCase):
             parameters = self.common(self.root / "unused", "directory")
             parameters["path"] = path
             self.assertIn("canonical absolute path", str(self.execute(parameters, failure=True)["msg"]))
+
+    def test_path_aliases_are_rejected_before_ansible_can_expand_them(self) -> None:
+        for path in ("~/managed", "$HOME/managed"):
+            parameters = self.common(self.root / "unused", "directory")
+            parameters["path"] = path
+            self.assertIn("canonical absolute path", str(self.execute(parameters, failure=True)["msg"]))
+            argument_spec = FakeModule.options["argument_spec"]
+            self.assertIsInstance(argument_spec, dict)
+            self.assertEqual("str", argument_spec["path"]["type"])
 
 
 if __name__ == "__main__":

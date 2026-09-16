@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # Copyright: (c) 2026 Lightning IT
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: MIT OR GPL-3.0-or-later
+# GNU General Public License v3.0+ alternative: https://www.gnu.org/licenses/gpl-3.0.txt
 # ruff: noqa: E402
 """Descriptor-relative directory creation and atomic regular-file replacement."""
 
@@ -26,7 +27,7 @@ requirements:
 options:
   path:
     description: Canonical absolute target path.
-    type: path
+    type: str
     required: true
   state:
     description: Target type to create or replace.
@@ -37,7 +38,10 @@ options:
     description: UTF-8 content required for C(state=file).
     type: str
   mode:
-    description: Exact octal permissions required on the target.
+    description:
+      - Exact octal permissions required on the target.
+      - For C(state=file), a non-root effective user must retain read access so
+        later checksum verification remains idempotent.
     type: str
     required: true
   owner:
@@ -120,6 +124,17 @@ def _identity(value: str, database: Callable[[str], object], attribute: str) -> 
     if identity < 0 or identity >= 2**32 - 1:
         raise ValueError("owner and group IDs must fit a non-negative 32-bit identity")
     return identity
+
+
+def _effective_user_can_read(mode: int, uid: int, gid: int) -> bool:
+    effective_uid = os.geteuid()
+    if effective_uid == 0:
+        return True
+    if effective_uid == uid:
+        return bool(mode & stat.S_IRUSR)
+    if gid == os.getegid() or gid in os.getgroups():
+        return bool(mode & stat.S_IRGRP)
+    return bool(mode & stat.S_IROTH)
 
 
 def _strict_integer(value: object, label: str) -> int:
@@ -345,7 +360,7 @@ def _private_workspace(parent: int) -> Tuple[int, str, os.stat_result]:
             if not _remove_private_if_same(parent, name, expected, directory=True):
                 raise _PreservedWorkspace(os.path.join(_descriptor_path(parent), name)) from exc
             raise
-        if opened.st_uid != os.geteuid() or stat.S_IMODE(opened.st_mode) != 0o700:
+        if opened.st_uid != os.geteuid() or stat.S_IMODE(opened.st_mode) & 0o777 != 0o700:
             try:
                 os.close(descriptor)
             except OSError as exc:
@@ -545,6 +560,7 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
             raise OSError("private directory payload identity changed while opening")
         os.fchown(directory, uid, gid)
         os.fchmod(directory, mode)
+        _fsync_directory(directory)
         created_identity = os.fstat(directory)
         if not _matches(created_identity, mode, uid, gid):
             raise OSError("created directory metadata could not be bound")
@@ -708,14 +724,15 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             0o600,
             dir_fd=workspace,
         )
-        os.fchown(descriptor, uid, gid)
-        os.fchmod(descriptor, mode)
         view = memoryview(payload)
         while view:
             written = os.write(descriptor, view)
             if written <= 0:
                 raise OSError("atomic file write made no progress")
             view = view[written:]
+        os.fsync(descriptor)
+        os.fchown(descriptor, uid, gid)
+        os.fchmod(descriptor, mode)
         os.fsync(descriptor)
         staged_identity = os.fstat(descriptor)
         if not _matches(staged_identity, mode, uid, gid):
@@ -762,7 +779,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
         if installed and staged_identity is not None:
             if displaced_identity is None:
                 try:
-                    installed = not _capture_and_remove(
+                    removed = _capture_and_remove(
                         parent,
                         name,
                         staged_identity,
@@ -770,6 +787,10 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
                         "failed",
                         checksum=desired,
                     )
+                    installed = False
+                    if not removed:
+                        preserve_workspace = True
+                        recovery_name = "failed"
                 except _PreservedRecovery as recovery:
                     preserve_workspace = True
                     recovery_name = recovery.entry
@@ -800,7 +821,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
                     preserve_workspace = True
                     if not installed:
                         recovery_name = "payload"
-        if not installed and cleanup_identity is not None:
+        if not installed and cleanup_identity is not None and recovery_name != "failed":
             if not _remove_private_if_same(workspace, "payload", cleanup_identity):
                 preserve_workspace = True
                 recovery_name = "payload"
@@ -853,7 +874,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
 def main() -> None:
     module = AnsibleModule(
         argument_spec={
-            "path": {"type": "path", "required": True},
+            "path": {"type": "str", "required": True},
             "state": {"type": "str", "choices": ["directory", "file"], "required": True},
             "content": {"type": "str", "no_log": True},
             "mode": {"type": "str", "required": True},
@@ -885,6 +906,8 @@ def main() -> None:
             raise ValueError("mode exceeds the POSIX permission-bit range")
         uid = _identity(str(module.params["owner"]), pwd.getpwnam, "pw_uid")
         gid = _identity(str(module.params["group"]), grp.getgrnam, "gr_gid")
+        if module.params["state"] == "file" and not _effective_user_can_read(mode, uid, gid):
+            raise ValueError("file mode must remain readable by the effective user for idempotent verification")
         parent_path, name = os.path.split(path)
         parent = _open_bound_directory(parent_path, module.params["parent_identities"])
         try:
