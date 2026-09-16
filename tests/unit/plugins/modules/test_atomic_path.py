@@ -397,6 +397,45 @@ class AtomicPathTests(unittest.TestCase):
                 self.assertTrue(recovery.is_dir())
                 self.assertTrue(target.exists())
 
+    def test_target_disappearance_during_rollback_is_uncertain(self) -> None:
+        for state in ("directory", "file"):
+            with self.subTest(state=state):
+                target = self.root / f"rollback-disappearance-{state}"
+                parameters = self.common(target, state)
+                if state == "file":
+                    parameters["content"] = "managed\n"
+                real_renameat = MODULE._renameat
+                rename_calls = 0
+
+                def remove_before_rollback(
+                    source_fd: int,
+                    source: str,
+                    target_fd: int,
+                    target_name: str,
+                    operation: str,
+                    real_rename: Callable[[int, str, int, str, str], None] = real_renameat,
+                    managed_state: str = state,
+                ) -> None:
+                    nonlocal rename_calls
+                    rename_calls += 1
+                    if rename_calls == 2:
+                        if managed_state == "directory":
+                            os.rmdir(source, dir_fd=source_fd)
+                        else:
+                            os.unlink(source, dir_fd=source_fd)
+                    real_rename(source_fd, source, target_fd, target_name, operation)
+
+                with (
+                    mock.patch.object(MODULE, "_fsync_directory", side_effect=OSError("commit probe failed")),
+                    mock.patch.object(MODULE, "_renameat", side_effect=remove_before_rollback),
+                ):
+                    result = self.execute(parameters, failure=True)
+                recovery = Path(str(result["recovery_path"]))
+                self.assertIn("target disappeared", str(result["msg"]))
+                self.assertIn("transaction state is uncertain", str(result["msg"]))
+                self.assertTrue(recovery.is_dir())
+                self.assertFalse(target.exists())
+
     def test_directory_payload_close_failure_reports_workspace_root(self) -> None:
         target = self.root / "managed-close"
         parameters = self.common(target, "directory")
