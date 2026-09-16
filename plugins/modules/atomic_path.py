@@ -77,9 +77,9 @@ checksum:
   type: str
   returned: for file state
 recovery_path:
-  description: Preserved displaced file location after an uncertain replacement failure.
+  description: Preserved workspace or entry location whenever private cleanup is uncertain.
   type: str
-  returned: on failure after replacement
+  returned: on failure with preserved recovery state
 """
 
 import ctypes
@@ -202,6 +202,26 @@ def _same_inode(left: os.stat_result, right: os.stat_result) -> bool:
     return (left.st_dev, left.st_ino) == (right.st_dev, right.st_ino)
 
 
+def _same_directory_identity(left: os.stat_result, right: os.stat_result) -> bool:
+    """Compare directory identity and managed metadata, not mutable contents."""
+    return (
+        _same_inode(left, right)
+        and stat.S_ISDIR(left.st_mode)
+        and stat.S_ISDIR(right.st_mode)
+        and stat.S_IMODE(left.st_mode) == stat.S_IMODE(right.st_mode)
+        and left.st_uid == right.st_uid
+        and left.st_gid == right.st_gid
+    )
+
+
+def _same_entry_snapshot(left: Optional[os.stat_result], right: Optional[os.stat_result]) -> bool:
+    if left is None or right is None:
+        return left is right
+    if stat.S_ISDIR(left.st_mode) or stat.S_ISDIR(right.st_mode):
+        return _same_directory_identity(left, right)
+    return _same_snapshot(left, right)
+
+
 def _renameat(source_fd: int, source: str, target_fd: int, target: str, operation: str) -> None:
     library = ctypes.CDLL(None, use_errno=True)
     source_name = os.fsencode(source)
@@ -266,8 +286,9 @@ def _private_workspace(parent: int) -> tuple[int, str, os.stat_result]:
             ) from exc
         try:
             descriptor = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
-        except OSError:
-            _remove_private_if_same(parent, name, expected, directory=True)
+        except OSError as exc:
+            if not _remove_private_if_same(parent, name, expected, directory=True):
+                raise _PreservedWorkspace(os.path.join(_descriptor_path(parent), name)) from exc
             raise
         opened = os.fstat(descriptor)
         if opened.st_uid != os.geteuid() or stat.S_IMODE(opened.st_mode) != 0o700:
@@ -308,6 +329,14 @@ class _PreservedRecovery(OSError):
         self.entry = entry
 
 
+class _PreservedWorkspace(OSError):
+    """Signal that a private workspace could not be safely removed."""
+
+    def __init__(self, path: str) -> None:
+        super().__init__(f"private workspace preserved as {path}")
+        self.path = path
+
+
 def _capture_and_remove(
     parent: int,
     name: str,
@@ -323,7 +352,10 @@ def _capture_and_remove(
         _renameat(parent, name, workspace, capture, "noreplace")
     except FileNotFoundError:
         return True
-    captured = os.stat(capture, dir_fd=workspace, follow_symlinks=False)
+    try:
+        captured = os.stat(capture, dir_fd=workspace, follow_symlinks=False)
+    except OSError as exc:
+        raise _PreservedRecovery(capture) from exc
     matches = (
         _same_inode(captured, expected)
         if directory
@@ -372,17 +404,26 @@ def _require_exclusive_parent(parent: int) -> None:
 
 
 def _revalidated_entry(module: AnsibleModule, parent: int, name: str) -> Optional[os.stat_result]:
-    """Read the target through a freshly identity-bound canonical parent."""
+    """Read the target between two independently bound canonical-parent opens."""
     parent_path = os.path.dirname(module.params["path"])
-    reopened = _open_bound_directory(parent_path, module.params["parent_identities"])
+    original = os.fstat(parent)
+    first = _open_bound_directory(parent_path, module.params["parent_identities"])
     try:
-        original = os.fstat(parent)
-        current = os.fstat(reopened)
-        if (original.st_dev, original.st_ino) != (current.st_dev, current.st_ino):
+        if not _same_inode(original, os.fstat(first)):
             raise OSError("parent identity changed across mutation")
-        return _existing(reopened, name)
+        observed = _existing(first, name)
     finally:
-        os.close(reopened)
+        os.close(first)
+    second = _open_bound_directory(parent_path, module.params["parent_identities"])
+    try:
+        if not _same_inode(original, os.fstat(second)):
+            raise OSError("parent identity changed across mutation")
+        confirmed = _existing(second, name)
+        if not _same_entry_snapshot(observed, confirmed):
+            raise OSError("target changed across canonical revalidation")
+        return confirmed
+    finally:
+        os.close(second)
 
 
 def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, uid: int, gid: int) -> None:
@@ -394,7 +435,7 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
                 msg="directory boundary has an unexpected identity or metadata", path=module.params["path"]
             )
         current = _revalidated_entry(module, parent, name)
-        if current is None or not _same_snapshot(current, before):
+        if current is None or not _same_directory_identity(current, before):
             module.fail_json(msg="directory boundary changed before no-op completion", path=module.params["path"])
         module.exit_json(changed=False, path=module.params["path"])
     if module.check_mode:
@@ -420,14 +461,14 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
             raise OSError("created directory metadata could not be bound")
         _renameat(workspace, "payload", parent, name, "noreplace")
         installed = True
-        if not _same_identity(created_identity, os.stat(name, dir_fd=parent, follow_symlinks=False)):
+        if not _same_directory_identity(created_identity, os.stat(name, dir_fd=parent, follow_symlinks=False)):
             raise OSError("created directory identity changed while installing")
         os.fsync(parent)
         final = _existing(parent, name)
-        if final is None or not _same_identity(final, created_identity):
+        if final is None or not _same_directory_identity(final, created_identity):
             raise OSError("created directory identity changed before completion")
         canonical = _revalidated_entry(module, parent, name)
-        if canonical is None or not _same_snapshot(canonical, final):
+        if canonical is None or not _same_directory_identity(canonical, final):
             raise OSError("created directory identity changed at the canonical boundary")
     except Exception as exc:
         failure = exc
@@ -669,6 +710,8 @@ def main() -> None:
             _write_file(module, parent, name, mode, uid, gid)
         finally:
             os.close(parent)
+    except _PreservedWorkspace as exc:
+        module.fail_json(msg=f"atomic path mutation failed: {exc}", path=path, recovery_path=exc.path)
     except (KeyError, OSError, OverflowError, TypeError, ValueError) as exc:
         module.fail_json(msg=f"atomic path mutation failed: {exc}", path=path)
 
