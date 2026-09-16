@@ -24,6 +24,35 @@
   ansible.builtin.set_fact:
     forward_proxy_planned_directories_internal: []
 
+- name: Capture every existing trusted proxy directory identity for this transaction
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  register: forward_proxy_trusted_parent_identity_stats
+  when: forward_proxy_enabled | bool or forward_proxy_state_marker.stat.exists
+
+- name: Initialize trusted proxy directory identity bindings
+  ansible.builtin.set_fact:
+    forward_proxy_trusted_parent_identity_map_internal: {}
+
+- name: Bind existing trusted proxy directory devices and inodes to this transaction
+  ansible.builtin.set_fact:
+    forward_proxy_trusted_parent_identity_map_internal: >-
+      {{
+        forward_proxy_trusted_parent_identity_map_internal
+        | combine(
+            {
+              item.item: {
+                'device': item.stat.dev,
+                'inode': item.stat.inode
+              }
+            }
+          )
+      }}
+  loop: "{{ forward_proxy_trusted_parent_identity_stats.results | default([]) }}"
+  when: item.stat.isdir | default(false)
+
 - name: Create and revalidate every trusted forward proxy parent boundary
   ansible.builtin.include_tasks: ensure_directory.yml
   loop: "{{ forward_proxy_trusted_parent_paths }}"
@@ -61,35 +90,6 @@
           or forward_proxy_quadlet_dir.startswith(forward_proxy_directory_path.rstrip('/') ~ '/')
         )
       )
-
-- name: Capture every trusted proxy directory identity for this transaction
-  ansible.builtin.stat:
-    path: "{{ item }}"
-    follow: false
-  loop: "{{ forward_proxy_trusted_parent_paths }}"
-  register: forward_proxy_trusted_parent_identity_stats
-  when: forward_proxy_enabled | bool or forward_proxy_state_marker.stat.exists
-
-- name: Initialize trusted proxy directory identity bindings
-  ansible.builtin.set_fact:
-    forward_proxy_trusted_parent_identity_map_internal: {}
-
-- name: Bind trusted proxy directory devices and inodes to this transaction
-  ansible.builtin.set_fact:
-    forward_proxy_trusted_parent_identity_map_internal: >-
-      {{
-        forward_proxy_trusted_parent_identity_map_internal
-        | combine(
-            {
-              item.item: {
-                'device': item.stat.dev,
-                'inode': item.stat.inode
-              }
-            }
-          )
-      }}
-  loop: "{{ forward_proxy_trusted_parent_identity_stats.results | default([]) }}"
-  when: item.stat.isdir | default(false)
 
 - name: Inspect unowned forward proxy target paths
   ansible.builtin.stat:

@@ -178,6 +178,24 @@
     not ansible_check_mode
     or forward_proxy_directory_before.stat.exists
 
+- name: Bind a newly created trusted directory to this transaction
+  ansible.builtin.set_fact:
+    forward_proxy_trusted_parent_identity_map_internal: >-
+      {{
+        forward_proxy_trusted_parent_identity_map_internal
+        | combine(
+            {
+              forward_proxy_directory_path: {
+                'device': forward_proxy_directory_after.stat.dev,
+                'inode': forward_proxy_directory_after.stat.inode
+              }
+            }
+          )
+      }}
+  when:
+    - not ansible_check_mode
+    - forward_proxy_directory_path not in forward_proxy_trusted_parent_identity_map_internal
+
 - name: Require the transaction-bound trusted directory identity
   ansible.builtin.assert:
     that:
