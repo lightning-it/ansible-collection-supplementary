@@ -46,7 +46,7 @@ interface exists. Credentials must not be placed in inventory.
 ## Example Playbook
 
 ```yaml
-    - name: Run the LIT forward proxy service
+- name: Run the LIT forward proxy service
   hosts: edge
   become: true
   roles:
