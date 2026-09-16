@@ -132,10 +132,13 @@ def _open_bound_directory(path: str, identities: dict) -> int:
             if path not in identities or not isinstance(identities[path], dict):
                 raise OSError("exact parent identity is missing or malformed: /")
             expected = identities[path]
-            identity = (
-                _strict_integer(expected["device"], "device"),
-                _strict_integer(expected["inode"], "inode"),
-            )
+            try:
+                identity = (
+                    _strict_integer(expected["device"], "device"),
+                    _strict_integer(expected["inode"], "inode"),
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                raise OSError("parent identity is malformed: /") from exc
             opened = os.fstat(current)
             if (opened.st_dev, opened.st_ino) != identity:
                 raise OSError("parent identity changed: /")
@@ -323,6 +326,8 @@ def _remove_private_if_same(parent: int, name: str, expected: os.stat_result, *,
         current = os.stat(name, dir_fd=parent, follow_symlinks=False)
     except FileNotFoundError:
         return True
+    except OSError:
+        return False
     if not (_same_inode(current, expected) if directory else _same_identity(current, expected)):
         return False
     try:
@@ -484,7 +489,13 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
         installed = True
         if not _same_directory_identity(created_identity, os.stat(name, dir_fd=parent, follow_symlinks=False)):
             raise OSError("created directory identity changed while installing")
-        os.fsync(parent)
+        try:
+            os.fsync(parent)
+        except OSError:
+            # The rename is the commit point. Some filesystems do not support
+            # directory fsync, so a durability probe cannot report a complete
+            # mutation as a failed or rolled-back transaction.
+            pass
         final = _existing(parent, name)
         if final is None or not _same_directory_identity(final, created_identity):
             raise OSError("created directory identity changed before completion")
@@ -621,7 +632,13 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             preserve_workspace = displaced_identity is not None
             recovery_name = "payload" if preserve_workspace else None
             raise OSError("installed file identity changed after replacement")
-        os.fsync(parent)
+        try:
+            os.fsync(parent)
+        except OSError:
+            # The atomic rename/exchange is already committed. Directory
+            # fsync is a best-effort durability enhancement on filesystems
+            # that support it, not a second mutation outcome.
+            pass
         final = _existing(parent, name)
         if staged_identity is None or final is None or not _same_snapshot(final, installed_details):
             preserve_workspace = displaced_identity is not None
@@ -673,7 +690,8 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
                 except OSError as exc:
                     cleanup_exception = cleanup_exception or exc
                     preserve_workspace = True
-                    recovery_name = "payload"
+                    if not installed:
+                        recovery_name = "payload"
         if not installed and cleanup_identity is not None:
             if not _remove_private_if_same(workspace, "payload", cleanup_identity):
                 preserve_workspace = True
