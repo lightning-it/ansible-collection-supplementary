@@ -285,3 +285,15 @@
       delegated Quadlet directory boundary.
   loop: >-
     {{ forward_proxy_managed_paths_internal + [forward_proxy_state_marker_path, forward_proxy_quadlet_path] }}
+
+- name: Keep the transition lock outside every managed proxy boundary
+  ansible.builtin.assert:
+    that:
+      - item != forward_proxy_lock_path
+      - not item.startswith(forward_proxy_lock_path.rstrip('/') ~ '/')
+      - not forward_proxy_lock_path.startswith(item.rstrip('/') ~ '/')
+    fail_msg: >-
+      The transition lock must be neither an ancestor nor a descendant of any
+      managed file, state marker, or delegated Quadlet path.
+  loop: >-
+    {{ forward_proxy_managed_paths_internal + [forward_proxy_state_marker_path, forward_proxy_quadlet_path] }}

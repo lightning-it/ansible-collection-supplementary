@@ -61,7 +61,7 @@ interface exists. Credentials must not be placed in inventory.
 ## Example Playbook
 
 ```yaml
-- name: Run the LIT forward proxy service
+- name: Render the LIT forward proxy service definition
   hosts: edge
   become: true
   roles:
@@ -74,8 +74,12 @@ interface exists. Credentials must not be placed in inventory.
         - .redhat.com
 ```
 
-The example assumes the pinned image was preloaded and the matching host
-firewall owner rule was approved. Activation and firewall cutover remain
+The render-only example assumes the pinned image was preloaded and the matching
+host firewall owner rule was approved. It does not create a Quadlet or start
+systemd. Runtime activation additionally requires
+`forward_proxy_manage_runtime: true` and the temporary explicit
+`forward_proxy_experimental_runtime_acceptance: true` opt-in until protected
+Wunderbox live acceptance is recorded. Activation and firewall cutover remain
 controlled operational steps.
 
 ## License

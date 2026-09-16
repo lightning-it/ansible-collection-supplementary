@@ -1,15 +1,42 @@
 ---
-- name: Verify the forward proxy systemd unit is not active
+- name: Inspect the removed forward proxy systemd unit load state
   ansible.builtin.command:
     argv:
       - /usr/bin/systemctl
       - --system
-      - is-active
+      - show
       - "{{ forward_proxy_unit_name }}.service"
-  register: forward_proxy_runtime_systemd_absence
+      - --property=LoadState
+      - --value
+  register: forward_proxy_runtime_systemd_load_state
   changed_when: false
-  failed_when: forward_proxy_runtime_systemd_absence.rc not in [3, 4]
+  failed_when: >-
+    forward_proxy_runtime_systemd_load_state.rc != 0
+    or (forward_proxy_runtime_systemd_load_state.stdout | trim) != 'not-found'
   check_mode: false
+
+- name: Inspect installed forward proxy systemd unit files
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - --system
+      - list-unit-files
+      - "{{ forward_proxy_unit_name }}.service"
+      - --no-legend
+      - --no-pager
+  register: forward_proxy_runtime_systemd_unit_files
+  changed_when: false
+  failed_when: forward_proxy_runtime_systemd_unit_files.rc != 0
+  check_mode: false
+
+- name: Prove the forward proxy systemd unit was removed
+  ansible.builtin.assert:
+    that:
+      - (forward_proxy_runtime_systemd_load_state.stdout | trim) == 'not-found'
+      - forward_proxy_runtime_systemd_unit_files.stdout_lines | length == 0
+    fail_msg: >-
+      Runtime removal left a loaded or installed systemd unit. Stop before
+      deleting ownership evidence.
 
 - name: Verify the forward proxy Podman pod is absent
   ansible.builtin.command:

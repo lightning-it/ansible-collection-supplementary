@@ -49,6 +49,7 @@ spec:
             - ALL
       livenessProbe:
         tcpSocket:
+          host: 127.0.0.1
           port: {{ forward_proxy_port }}
         initialDelaySeconds: 10
         periodSeconds: 30

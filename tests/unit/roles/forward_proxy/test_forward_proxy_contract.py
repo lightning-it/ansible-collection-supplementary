@@ -45,6 +45,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         )
         self.assertIn("forward_proxy_image_pull_policy: Never", defaults)
         self.assertIn("hostNetwork: true", pod)
+        self.assertIn("host: 127.0.0.1", pod)
         self.assertIn("runAsUser: {{ forward_proxy_runtime_uid }}", pod)
         self.assertIn("initContainers:", pod)
         self.assertIn("chmod 1777 /squid-tmp", pod)
@@ -262,8 +263,10 @@ class ForwardProxyContractTests(unittest.TestCase):
         for task_text in (main, apply_tasks, first_rollback, existing_rollback):
             self.assertIn("verify_runtime_absent.yml", task_text)
         self.assertIn("/usr/bin/systemctl", absence)
-        self.assertIn("is-active", absence)
-        self.assertIn("forward_proxy_runtime_systemd_absence.rc not in [3, 4]", absence)
+        self.assertIn("--property=LoadState", absence)
+        self.assertIn("list-unit-files", absence)
+        self.assertIn("stdout | trim) == 'not-found'", absence)
+        self.assertIn("stdout_lines | length == 0", absence)
         self.assertIn("/usr/bin/podman", absence)
         self.assertIn("pod", absence)
         self.assertIn("exists", absence)
@@ -278,6 +281,49 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("item != forward_proxy_quadlet_dir", assertions)
         self.assertIn("not forward_proxy_quadlet_dir.startswith", assertions)
         self.assertIn("not item.startswith(forward_proxy_quadlet_dir.rstrip('/')", assertions)
+
+    def test_lock_cleanup_cannot_remove_managed_state(self) -> None:
+        assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+        self.assertIn(
+            "Keep the transition lock outside every managed proxy boundary",
+            assertions,
+        )
+        self.assertIn(
+            "not item.startswith(forward_proxy_lock_path.rstrip('/') ~ '/')",
+            assertions,
+        )
+        self.assertIn(
+            "not forward_proxy_lock_path.startswith(item.rstrip('/') ~ '/')",
+            assertions,
+        )
+
+    def test_render_writes_revalidate_parents_and_never_follow_links(self) -> None:
+        apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
+        self.assertEqual(
+            apply_tasks.count("forward_proxy_directory_creation_allowed: false"),
+            2,
+        )
+        self.assertGreaterEqual(apply_tasks.count("follow: false"), 2)
+        self.assertEqual(apply_tasks.count("unsafe_writes: false"), 2)
+        self.assertIn("lookup('ansible.builtin.template', 'squid.conf.j2')", apply_tasks)
+        self.assertIn("lookup('ansible.builtin.template', 'squid-pod.yml.j2')", apply_tasks)
+
+    def test_disable_runtime_removal_is_skipped_in_check_mode(self) -> None:
+        transition = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
+        removal = transition.split(
+            "- name: Remove a previously managed forward proxy runtime when disabled",
+            maxsplit=1,
+        )[1].split(
+            "- name: Prove the disabled runtime is absent before deleting owned state",
+            maxsplit=1,
+        )[0]
+        self.assertIn("not ansible_check_mode", removal)
+
+    def test_readme_labels_render_only_example_without_claiming_activation(self) -> None:
+        readme = (ROLE_ROOT / "README.md").read_text()
+        self.assertIn("Render the LIT forward proxy service definition", readme)
+        self.assertIn("It does not create a Quadlet or start", readme)
+        self.assertIn("forward_proxy_experimental_runtime_acceptance: true", readme)
 
     def test_check_mode_still_checks_image_without_waiting_for_listener(self) -> None:
         image_task = (ROLE_ROOT / "tasks" / "enabled.yml").read_text()

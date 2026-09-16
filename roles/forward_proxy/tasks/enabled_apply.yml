@@ -23,22 +23,52 @@
     - not forward_proxy_manage_runtime | bool
     - not ansible_check_mode
 
-- name: Render the Squid policy for the non-root container
-  ansible.builtin.template:
-    src: squid.conf.j2
+- name: Revalidate the Squid policy parent chain at the mutation boundary
+  ansible.builtin.include_tasks: ensure_directory.yml
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  loop_control:
+    loop_var: forward_proxy_directory_path
+  vars:
+    forward_proxy_directory_creation_allowed: false
+  when: >-
+    forward_proxy_directory_path == (forward_proxy_config_path | dirname)
+    or (forward_proxy_config_path | dirname).startswith(
+      forward_proxy_directory_path.rstrip('/') ~ '/'
+    )
+
+- name: Render the Squid policy with an atomic no-follow write
+  ansible.builtin.copy:
+    content: "{{ lookup('ansible.builtin.template', 'squid.conf.j2') }}"
     dest: "{{ forward_proxy_config_path }}"
     owner: "{{ forward_proxy_file_owner }}"
     group: "{{ forward_proxy_file_group }}"
     mode: "0644"
+    follow: false
+    unsafe_writes: false
   register: forward_proxy_squid_config_result
 
-- name: Render the digest-pinned Squid Pod manifest
-  ansible.builtin.template:
-    src: squid-pod.yml.j2
+- name: Revalidate the Pod manifest parent chain at the mutation boundary
+  ansible.builtin.include_tasks: ensure_directory.yml
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  loop_control:
+    loop_var: forward_proxy_directory_path
+  vars:
+    forward_proxy_directory_creation_allowed: false
+  when: >-
+    forward_proxy_directory_path == (forward_proxy_pod_manifest_path | dirname)
+    or (forward_proxy_pod_manifest_path | dirname).startswith(
+      forward_proxy_directory_path.rstrip('/') ~ '/'
+    )
+
+- name: Render the digest-pinned Squid Pod manifest with an atomic no-follow write
+  ansible.builtin.copy:
+    content: "{{ lookup('ansible.builtin.template', 'squid-pod.yml.j2') }}"
     dest: "{{ forward_proxy_pod_manifest_path }}"
     owner: "{{ forward_proxy_file_owner }}"
     group: "{{ forward_proxy_file_group }}"
     mode: "0640"
+    follow: false
+    unsafe_writes: false
   register: forward_proxy_pod_manifest_result
 
 - name: Inspect rendered forward proxy files
