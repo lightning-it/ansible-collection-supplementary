@@ -254,6 +254,11 @@ class AtomicPathTests(unittest.TestCase):
         with (
             mock.patch.object(MODULE, "_renameat", side_effect=track_renameat),
             mock.patch.object(
+                MODULE,
+                "_fsync_directory_strict",
+                side_effect=lambda descriptor: events.append(("fsync-strict", descriptor)),
+            ),
+            mock.patch.object(
                 MODULE, "_fsync_directory", side_effect=lambda descriptor: events.append(("fsync", descriptor))
             ),
         ):
@@ -261,7 +266,7 @@ class AtomicPathTests(unittest.TestCase):
 
         self.assertTrue(result["changed"])
         self.assertGreaterEqual(len(events), 3)
-        self.assertEqual("fsync", events[0][0])
+        self.assertEqual("fsync-strict", events[0][0])
         self.assertEqual("rename", events[1][0])
         self.assertEqual("fsync", events[2][0])
         self.assertNotEqual(events[0][1], events[2][1])
@@ -427,20 +432,49 @@ class AtomicPathTests(unittest.TestCase):
         real_fsync = os.fsync
         real_fstat = os.fstat
 
-        def reject_directory_fsync(descriptor: int) -> None:
-            if stat.S_ISDIR(real_fstat(descriptor).st_mode):
-                raise OSError(errno.EINVAL, "directory fsync unsupported")
-            real_fsync(descriptor)
-
         for state in ("directory", "file"):
             with self.subTest(state=state):
                 target = self.root / f"managed-{state}"
                 parameters = self.common(target, state)
                 if state == "file":
                     parameters["content"] = "durable\n"
-                with mock.patch.object(MODULE.os, "fsync", side_effect=reject_directory_fsync):
+                directory_fsync_calls = 0
+
+                def reject_post_commit_directory_fsync(descriptor: int, managed_state: str = state) -> None:
+                    nonlocal directory_fsync_calls
+                    if stat.S_ISDIR(real_fstat(descriptor).st_mode):
+                        directory_fsync_calls += 1
+                        if managed_state == "directory" and directory_fsync_calls == 1:
+                            real_fsync(descriptor)
+                            return
+                        raise OSError(errno.EINVAL, "directory fsync unsupported")
+                    real_fsync(descriptor)
+
+                with mock.patch.object(MODULE.os, "fsync", side_effect=reject_post_commit_directory_fsync):
                     self.assertTrue(self.execute(parameters)["changed"])
                 self.assertTrue(target.exists())
+
+    def test_pre_publication_directory_fsync_is_strict(self) -> None:
+        target = self.root / "strict-directory"
+        parameters = self.common(target, "directory")
+        real_fsync = os.fsync
+        real_fstat = os.fstat
+        directory_fsync_calls = 0
+
+        def reject_private_directory_fsync(descriptor: int) -> None:
+            nonlocal directory_fsync_calls
+            if stat.S_ISDIR(real_fstat(descriptor).st_mode):
+                directory_fsync_calls += 1
+                if directory_fsync_calls == 1:
+                    raise OSError(errno.EINVAL, "directory fsync unsupported")
+            real_fsync(descriptor)
+
+        with mock.patch.object(MODULE.os, "fsync", side_effect=reject_private_directory_fsync):
+            result = self.execute(parameters, failure=True)
+
+        self.assertIn("directory fsync unsupported", str(result["msg"]))
+        self.assertFalse(target.exists())
+        self.assertEqual([], list(self.root.glob(".atomic-path-*")))
 
     def test_post_commit_directory_fsync_io_error_fails_closed(self) -> None:
         real_fsync = os.fsync
@@ -504,16 +538,8 @@ class AtomicPathTests(unittest.TestCase):
                 parameters = self.common(target, state)
                 if state == "file":
                     parameters["content"] = "managed\n"
-                fsync_calls = 0
-
-                def fail_commit_fsync(_descriptor: int, managed_state: str = state) -> None:
-                    nonlocal fsync_calls
-                    fsync_calls += 1
-                    if managed_state == "file" or fsync_calls == 2:
-                        raise OSError("commit probe failed")
-
                 with (
-                    mock.patch.object(MODULE, "_fsync_directory", side_effect=fail_commit_fsync),
+                    mock.patch.object(MODULE, "_fsync_directory", side_effect=OSError("commit probe failed")),
                     mock.patch.object(MODULE, "_capture_and_remove", side_effect=OSError("rollback failed")),
                 ):
                     result = self.execute(parameters, failure=True)
@@ -531,13 +557,6 @@ class AtomicPathTests(unittest.TestCase):
                     parameters["content"] = "managed\n"
                 real_renameat = MODULE._renameat
                 rename_calls = 0
-                fsync_calls = 0
-
-                def fail_commit_fsync(_descriptor: int, managed_state: str = state) -> None:
-                    nonlocal fsync_calls
-                    fsync_calls += 1
-                    if managed_state == "file" or fsync_calls == 2:
-                        raise OSError("commit probe failed")
 
                 def remove_before_rollback(
                     source_fd: int,
@@ -558,7 +577,7 @@ class AtomicPathTests(unittest.TestCase):
                     real_rename(source_fd, source, target_fd, target_name, operation)
 
                 with (
-                    mock.patch.object(MODULE, "_fsync_directory", side_effect=fail_commit_fsync),
+                    mock.patch.object(MODULE, "_fsync_directory", side_effect=OSError("commit probe failed")),
                     mock.patch.object(MODULE, "_renameat", side_effect=remove_before_rollback),
                 ):
                     result = self.execute(parameters, failure=True)

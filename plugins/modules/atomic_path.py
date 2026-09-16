@@ -504,6 +504,11 @@ def _fsync_directory(parent: int) -> None:
             raise
 
 
+def _fsync_directory_strict(directory: int) -> None:
+    """Persist private directory metadata before publication or fail closed."""
+    os.fsync(directory)
+
+
 def _revalidated_entry(module: AnsibleModule, parent: int, name: str) -> Optional[os.stat_result]:
     """Read the target between two independently bound canonical-parent opens."""
     parent_path = os.path.dirname(module.params["path"])
@@ -560,7 +565,7 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
             raise OSError("private directory payload identity changed while opening")
         os.fchown(directory, uid, gid)
         os.fchmod(directory, mode)
-        _fsync_directory(directory)
+        _fsync_directory_strict(directory)
         created_identity = os.fstat(directory)
         if not _matches(created_identity, mode, uid, gid):
             raise OSError("created directory metadata could not be bound")
