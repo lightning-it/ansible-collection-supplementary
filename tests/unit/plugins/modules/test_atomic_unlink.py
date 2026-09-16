@@ -68,9 +68,10 @@ class AtomicUnlinkModuleTests(unittest.TestCase):
     """Execute canonical-path, identity, check-mode, and unlink boundaries."""
 
     def setUp(self) -> None:
-        # macOS exposes /var through a symlink; use its canonical backing tree so
-        # the no-follow parent walk exercises directories rather than that alias.
-        self.temporary_directory = tempfile.TemporaryDirectory(dir="/private/tmp")
+        # Resolve platform aliases such as macOS /var -> /private/var while
+        # retaining the native canonical temporary directory on Linux.
+        canonical_temp_root = os.path.realpath(tempfile.gettempdir())
+        self.temporary_directory = tempfile.TemporaryDirectory(dir=canonical_temp_root)
         self.root = Path(self.temporary_directory.name)
         self.target = self.root / "owned.conf"
         self.target.write_text("owned\n", encoding="utf-8")
