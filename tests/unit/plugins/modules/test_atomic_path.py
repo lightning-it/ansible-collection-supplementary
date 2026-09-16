@@ -43,8 +43,10 @@ class Failure(Result):
 class FakeModule:
     params: dict[str, object] = {}
     check = False
+    options: dict[str, object] = {}
 
-    def __init__(self, **_: object) -> None:
+    def __init__(self, **options: object) -> None:
+        type(self).options = options
         self.params = dict(type(self).params)
         self.check_mode = type(self).check
 
@@ -1268,6 +1270,15 @@ class AtomicPathTests(unittest.TestCase):
             parameters = self.common(self.root / "unused", "directory")
             parameters["path"] = path
             self.assertIn("canonical absolute path", str(self.execute(parameters, failure=True)["msg"]))
+
+    def test_path_aliases_are_rejected_before_ansible_can_expand_them(self) -> None:
+        for path in ("~/managed", "$HOME/managed"):
+            parameters = self.common(self.root / "unused", "directory")
+            parameters["path"] = path
+            self.assertIn("canonical absolute path", str(self.execute(parameters, failure=True)["msg"]))
+            argument_spec = FakeModule.options["argument_spec"]
+            self.assertIsInstance(argument_spec, dict)
+            self.assertEqual("str", argument_spec["path"]["type"])
 
 
 if __name__ == "__main__":

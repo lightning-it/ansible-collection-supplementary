@@ -26,7 +26,7 @@ requirements:
 options:
   path:
     description: Canonical absolute target path.
-    type: path
+    type: str
     required: true
   state:
     description: Target type to create or replace.
@@ -853,7 +853,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
 def main() -> None:
     module = AnsibleModule(
         argument_spec={
-            "path": {"type": "path", "required": True},
+            "path": {"type": "str", "required": True},
             "state": {"type": "str", "choices": ["directory", "file"], "required": True},
             "content": {"type": "str", "no_log": True},
             "mode": {"type": "str", "required": True},
