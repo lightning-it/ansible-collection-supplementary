@@ -897,6 +897,7 @@ def minimal_check_environment(state_root: Path) -> dict[str, str]:
     path_value = os.environ.get("PATH")
     if not path_value:
         raise RuntimeError("deterministic checks require PATH")
+    state_root.chmod(0o700)
     home = state_root / "home"
     temporary = state_root / "tmp"
     runner_temporary = state_root / "runner-temp"
