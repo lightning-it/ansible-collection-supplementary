@@ -709,14 +709,15 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             0o600,
             dir_fd=workspace,
         )
-        os.fchown(descriptor, uid, gid)
-        os.fchmod(descriptor, mode)
         view = memoryview(payload)
         while view:
             written = os.write(descriptor, view)
             if written <= 0:
                 raise OSError("atomic file write made no progress")
             view = view[written:]
+        os.fsync(descriptor)
+        os.fchown(descriptor, uid, gid)
+        os.fchmod(descriptor, mode)
         os.fsync(descriptor)
         staged_identity = os.fstat(descriptor)
         if not _matches(staged_identity, mode, uid, gid):

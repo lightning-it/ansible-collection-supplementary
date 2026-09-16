@@ -825,6 +825,18 @@ class AtomicPathTests(unittest.TestCase):
                 target.chmod(0o600)
         self.assertEqual("sealed\n", target.read_text(encoding="utf-8"))
 
+    @unittest.skipIf(sys.platform == "darwin", "macOS does not retain set-ID bits on temporary files")
+    def test_special_file_mode_bits_are_applied_after_payload_write(self) -> None:
+        target = self.root / "executable"
+        parameters = self.common(target, "file")
+        parameters.update(content="#!/bin/true\n", mode="4755")
+        try:
+            self.assertTrue(self.execute(parameters)["changed"])
+            self.assertEqual(0o4755, stat.S_IMODE(target.stat().st_mode))
+        finally:
+            if target.exists():
+                target.chmod(0o700)
+
     def test_uninspectable_failed_payload_is_preserved_without_masking_failure(self) -> None:
         target = self.root / "policy"
         parameters = self.common(target, "file")
@@ -868,7 +880,7 @@ class AtomicPathTests(unittest.TestCase):
             result = self.execute(parameters, failure=True)
         recovery = Path(str(result["recovery_path"]))
         self.assertIn("recovery workspace preserved", str(result["msg"]))
-        self.assertEqual("", recovery.read_text(encoding="utf-8"))
+        self.assertEqual("blocked\n", recovery.read_text(encoding="utf-8"))
         self.assertFalse(target.exists())
 
     def test_directory_metadata_failure_preserves_uncleanable_private_creation(self) -> None:
