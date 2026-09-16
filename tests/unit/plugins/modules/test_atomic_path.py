@@ -9,6 +9,7 @@ import sys
 import tempfile
 import types
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
@@ -378,6 +379,23 @@ class AtomicPathTests(unittest.TestCase):
                 self.assertIn("directory fsync failed", str(result["msg"]))
                 self.assertFalse(target.exists())
                 self.assertEqual([], list(self.root.glob(".atomic-path-*")))
+
+    def test_rollback_error_preserves_uncertain_transaction_workspace(self) -> None:
+        for state in ("directory", "file"):
+            with self.subTest(state=state):
+                target = self.root / f"rollback-error-{state}"
+                parameters = self.common(target, state)
+                if state == "file":
+                    parameters["content"] = "managed\n"
+                with (
+                    mock.patch.object(MODULE, "_fsync_directory", side_effect=OSError("commit probe failed")),
+                    mock.patch.object(MODULE, "_capture_and_remove", side_effect=OSError("rollback failed")),
+                ):
+                    result = self.execute(parameters, failure=True)
+                recovery = Path(str(result["recovery_path"]))
+                self.assertIn("transaction state is uncertain", str(result["msg"]))
+                self.assertTrue(recovery.is_dir())
+                self.assertTrue(target.exists())
 
     def test_directory_payload_close_failure_reports_workspace_root(self) -> None:
         target = self.root / "managed-close"
@@ -1100,6 +1118,44 @@ class AtomicPathTests(unittest.TestCase):
         recovery = Path(str(result["recovery_path"]))
         self.assertTrue(str(recovery).startswith(str(detached)))
         self.assertEqual("owned\n", recovery.read_text(encoding="utf-8"))
+
+    def test_parent_replacement_after_private_cleanup_fails_with_stable_recovery_path(self) -> None:
+        for state in ("directory", "file"):
+            with self.subTest(state=state):
+                managed = self.root / f"managed-{state}"
+                managed.mkdir()
+                target = managed / "target"
+                parameters = self.common(target, state)
+                parameters["parent_identities"] = self.identities(self.root, managed)
+                if state == "file":
+                    parameters["content"] = "managed\n"
+                detached = self.root / f"detached-{state}"
+                real_revalidated_entry = MODULE._revalidated_entry
+                calls = 0
+
+                def replace_after_cleanup(
+                    module: object,
+                    parent: int,
+                    name: str,
+                    real_revalidate: Callable[[object, int, str], os.stat_result | None] = real_revalidated_entry,
+                    managed_path: Path = managed,
+                    detached_path: Path = detached,
+                ) -> os.stat_result | None:
+                    nonlocal calls
+                    calls += 1
+                    if calls == 1:
+                        return real_revalidate(module, parent, name)
+                    managed_path.rename(detached_path)
+                    managed_path.mkdir()
+                    raise OSError("parent moved after private cleanup")
+
+                with mock.patch.object(MODULE, "_revalidated_entry", side_effect=replace_after_cleanup):
+                    result = self.execute(parameters, failure=True)
+                recovery = Path(str(result["recovery_path"]))
+                self.assertIn("failed after commit", str(result["msg"]))
+                self.assertTrue(str(recovery).startswith(str(detached)))
+                self.assertTrue(recovery.exists())
+                self.assertFalse(target.exists())
 
     def test_double_root_path_is_rejected(self) -> None:
         for path in ("//", "//tmp/file"):
