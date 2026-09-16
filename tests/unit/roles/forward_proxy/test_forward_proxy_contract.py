@@ -319,6 +319,8 @@ class ForwardProxyContractTests(unittest.TestCase):
             "not forward_proxy_lock_path.startswith(item.rstrip('/') ~ '/')",
             assertions,
         )
+        self.assertIn("+ forward_proxy_managed_directories_internal", assertions)
+        self.assertIn("forward_proxy_quadlet_dir", assertions)
 
     def test_render_writes_revalidate_parents_and_never_follow_links(self) -> None:
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
@@ -454,9 +456,22 @@ class ForwardProxyContractTests(unittest.TestCase):
         )
         self.assertIn("Reinspect managed files before disabled-state deletion", transition)
         self.assertIn("Reinspect the state marker before disabled-state deletion", transition)
+        self.assertIn("not forward_proxy_enabled | bool", transition)
+        self.assertIn("forward_proxy_previous_quadlet_stat.stat.exists", transition)
         self.assertIn("not item.endswith('/')", assertions)
         self.assertIn("forward_proxy_planned_directories_internal", directory_guard)
         self.assertIn("not forward_proxy_manage_runtime | bool", rollback)
+        self.assertIn(
+            "Revalidate or prove absence after a failed render-only transition",
+            rollback,
+        )
+        self.assertIn("verify_runtime_restart_boundary.yml", rollback)
+        restart_boundary = (ROLE_ROOT / "tasks" / "verify_runtime_restart_boundary.yml").read_text()
+        self.assertIn(
+            "forward_proxy_restart_boundary_quadlet.stat.checksum",
+            restart_boundary,
+        )
+        self.assertIn("forward_proxy_restart_boundary_pod.rc == 1", restart_boundary)
 
     def test_disable_runtime_removal_is_skipped_in_check_mode(self) -> None:
         transition = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
@@ -535,6 +550,10 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn('implementation: "partial"', scenario)
         self.assertIn("local pre-merge evidence only", scenario)
         self.assertIn("cleanup: cleanup.yml", molecule)
+        self.assertIn(
+            "Simulate one completed unlink from an interrupted disable transaction",
+            verify,
+        )
         self.assertIn("forward-proxy-tiny.xml", verify)
         self.assertIn("Evaluate each service and upstream contract independently", verify)
         self.assertIn("Exercise cleanup without losing its failure evidence", verify)

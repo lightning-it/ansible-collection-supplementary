@@ -118,6 +118,11 @@
       register: forward_proxy_policy_results
       ignore_errors: true
 
+    - name: Simulate one completed unlink from an interrupted disable transaction
+      ansible.builtin.file:
+        path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
+        state: absent
+
     - name: Initialize forward proxy cleanup execution evidence
       ansible.builtin.set_fact:
         forward_proxy_cleanup_execution_result:

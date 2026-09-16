@@ -198,6 +198,20 @@ def _recover_quarantine(
     return restored, cleaned
 
 
+def _quarantine_recovery_path(path: str, quarantine_name: str, cleaned: bool) -> str:
+    if cleaned:
+        return ""
+    return os.path.join(os.path.dirname(path), quarantine_name, "target")
+
+
+def _quarantine_recovery_summary(restored: bool, cleaned: bool) -> str:
+    if restored and cleaned:
+        return "entry restored"
+    if restored:
+        return "entry restored; recovery copy preserved in quarantine"
+    return "entry preserved in quarantine"
+
+
 def main() -> None:
     module = AnsibleModule(
         argument_spec={
@@ -271,13 +285,13 @@ def main() -> None:
                 quarantine_fd,
                 quarantine_name,
             )
-            recovery_path = "" if restored else os.path.join(os.path.dirname(path), quarantine_name, "target")
+            recovery_path = _quarantine_recovery_path(path, quarantine_name, cleaned)
             if cleaned:
                 quarantine_name = ""
             module.fail_json(
                 msg=(
                     f"cannot inspect the atomic quarantine: {exc}; "
-                    + ("entry restored" if restored else "entry preserved in quarantine")
+                    + _quarantine_recovery_summary(restored, cleaned)
                 ),
                 path=path,
                 recovery_path=recovery_path,
@@ -291,11 +305,11 @@ def main() -> None:
             )
             if cleaned:
                 quarantine_name = ""
-            recovery_path = "" if restored else os.path.join(os.path.dirname(path), quarantine_name, "target")
+            recovery_path = _quarantine_recovery_path(path, quarantine_name, cleaned)
             module.fail_json(
                 msg=(
                     "removal target changed at the atomic quarantine boundary; "
-                    + ("foreign entry restored" if restored else "foreign entry preserved in quarantine")
+                    + _quarantine_recovery_summary(restored, cleaned)
                 ),
                 path=path,
                 recovery_path=recovery_path,
@@ -311,13 +325,13 @@ def main() -> None:
                 quarantine_fd,
                 quarantine_name,
             )
-            recovery_path = "" if restored else os.path.join(os.path.dirname(path), quarantine_name, "target")
+            recovery_path = _quarantine_recovery_path(path, quarantine_name, cleaned)
             if cleaned:
                 quarantine_name = ""
             module.fail_json(
                 msg=(
                     f"cannot revalidate the quarantined target: {exc}; "
-                    + ("entry restored" if restored else "entry preserved in quarantine")
+                    + _quarantine_recovery_summary(restored, cleaned)
                 ),
                 path=path,
                 recovery_path=recovery_path,
@@ -331,11 +345,11 @@ def main() -> None:
             )
             if cleaned:
                 quarantine_name = ""
-            recovery_path = "" if restored else os.path.join(os.path.dirname(path), quarantine_name, "target")
+            recovery_path = _quarantine_recovery_path(path, quarantine_name, cleaned)
             module.fail_json(
                 msg=(
                     "quarantined removal target changed before deletion; "
-                    + ("entry restored" if restored else "entry preserved in quarantine")
+                    + _quarantine_recovery_summary(restored, cleaned)
                 ),
                 path=path,
                 recovery_path=recovery_path,
@@ -351,11 +365,11 @@ def main() -> None:
             )
             if cleaned:
                 quarantine_name = ""
-            recovery_path = "" if restored else os.path.join(os.path.dirname(path), quarantine_name, "target")
+            recovery_path = _quarantine_recovery_path(path, quarantine_name, cleaned)
             module.fail_json(
                 msg=(
                     f"atomic unlink failed after quarantine: {exc}; "
-                    + ("entry restored" if restored else "entry preserved in quarantine")
+                    + _quarantine_recovery_summary(restored, cleaned)
                 ),
                 path=path,
                 recovery_path=recovery_path,

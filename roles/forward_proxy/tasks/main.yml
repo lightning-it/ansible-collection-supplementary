@@ -16,6 +16,7 @@
       unit_fragment_path: ""
     forward_proxy_active_runtime_identity_internal: {}
     forward_proxy_runtime_absence_verified_internal: false
+    forward_proxy_existing_runtime_identity_verified_internal: false
     forward_proxy_existing_runtime_removal_authorization_internal:
       authorized: false
       unit_name: ""

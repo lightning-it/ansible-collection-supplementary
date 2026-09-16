@@ -206,6 +206,23 @@ class AtomicUnlinkModuleTests(unittest.TestCase):
         self.assertEqual("owned\n", self.target.read_text(encoding="utf-8"))
         self.assertEqual([], list(self.root.glob(".atomic-unlink-*")))
 
+    def test_failed_recovery_cleanup_reports_the_preserved_quarantine(self) -> None:
+        real_unlink = os.unlink
+
+        def fail_every_quarantine_unlink(*args: object, **kwargs: object) -> None:
+            if args and args[0] == "target":
+                raise OSError("injected persistent quarantine unlink failure")
+            real_unlink(*args, **kwargs)
+
+        with mock.patch.object(ATOMIC_UNLINK.os, "unlink", fail_every_quarantine_unlink):
+            result = self.execute_failure()
+
+        recovery_path = Path(str(result["recovery_path"]))
+        self.assertIn("recovery copy preserved", str(result["msg"]))
+        self.assertEqual("owned\n", self.target.read_text(encoding="utf-8"))
+        self.assertTrue(recovery_path.is_file())
+        self.assertEqual("owned\n", recovery_path.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()
