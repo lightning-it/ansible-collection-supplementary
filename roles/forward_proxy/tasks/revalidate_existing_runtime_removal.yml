@@ -1,0 +1,59 @@
+---
+- name: Reinspect the owned Quadlet at the runtime removal boundary
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_quadlet_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_existing_runtime_removal_quadlet
+
+- name: Reinspect the existing Podman pod at the removal boundary
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - pod
+      - inspect
+      - --format
+      - "{{ '{{.Id}}' }}"
+      - "{{ forward_proxy_unit_name }}"
+  register: forward_proxy_existing_runtime_removal_pod
+  changed_when: false
+  failed_when: forward_proxy_existing_runtime_removal_pod.rc != 0
+  check_mode: false
+
+- name: Reinspect the existing systemd fragment at the removal boundary
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - --system
+      - show
+      - "{{ forward_proxy_unit_name }}.service"
+      - --property=FragmentPath
+      - --value
+  register: forward_proxy_existing_runtime_removal_unit
+  changed_when: false
+  failed_when: forward_proxy_existing_runtime_removal_unit.rc != 0
+  check_mode: false
+
+- name: Require the exact captured existing runtime before removal
+  ansible.builtin.assert:
+    that:
+      - >-
+        forward_proxy_existing_runtime_removal_authorization_internal | default({})
+        == {
+          'authorized': true,
+          'unit_name': forward_proxy_unit_name,
+          'quadlet_path': forward_proxy_quadlet_path,
+          'quadlet_checksum': forward_proxy_existing_runtime_removal_quadlet.stat.checksum,
+          'pod_id': forward_proxy_existing_runtime_removal_pod.stdout | trim,
+          'unit_fragment_path': forward_proxy_existing_runtime_removal_unit.stdout | trim
+        }
+      - forward_proxy_existing_runtime_removal_quadlet.stat.isreg | default(false)
+      - not forward_proxy_existing_runtime_removal_quadlet.stat.islnk | default(false)
+      - forward_proxy_existing_runtime_removal_quadlet.stat.mode == '0644'
+      - forward_proxy_existing_runtime_removal_quadlet.stat.pw_name | default('') == 'root'
+      - forward_proxy_existing_runtime_removal_quadlet.stat.gr_name | default('') == 'root'
+      - forward_proxy_existing_runtime_removal_pod.stdout | trim is match('^[a-f0-9]{12,64}\Z')
+      - forward_proxy_existing_runtime_removal_unit.stdout | trim | length > 0
+    fail_msg: >-
+      The existing runtime no longer matches the captured Quadlet checksum, Pod
+      ID, and systemd fragment. Leave it intact for operator recovery.

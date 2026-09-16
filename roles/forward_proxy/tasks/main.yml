@@ -14,6 +14,13 @@
       pod_id: ""
       unit_fragment_path: ""
     forward_proxy_runtime_absence_verified_internal: false
+    forward_proxy_existing_runtime_removal_authorization_internal:
+      authorized: false
+      unit_name: ""
+      quadlet_path: ""
+      quadlet_checksum: ""
+      pod_id: ""
+      unit_fragment_path: ""
 
 - name: Inspect the required forward proxy lock parent
   ansible.builtin.stat:
@@ -22,14 +29,45 @@
   register: forward_proxy_lock_parent
   when: not ansible_check_mode
 
+- name: Resolve the required forward proxy lock parent canonically
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - "{{ forward_proxy_lock_path | dirname }}"
+  register: forward_proxy_lock_parent_realpath
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
 - name: Require a pre-existing non-symlink forward proxy lock parent
   ansible.builtin.assert:
     that:
       - forward_proxy_lock_parent.stat.isdir | default(false)
       - not forward_proxy_lock_parent.stat.islnk | default(false)
+      - forward_proxy_lock_parent_realpath.stdout == (forward_proxy_lock_path | dirname)
+      - >-
+        forward_proxy_lock_parent.stat.mode is match('^0[0-7][0145][0145]\Z')
+        or (
+          forward_proxy_lock_path | dirname == '/tmp'
+          and forward_proxy_lock_parent.stat.mode == '1777'
+          and forward_proxy_lock_parent.stat.uid == 0
+          and forward_proxy_lock_parent.stat.gid == 0
+        )
+      - >-
+        forward_proxy_lock_parent.stat.uid == 0
+        or forward_proxy_lock_parent.stat.pw_name | default('')
+          == forward_proxy_file_owner | string
+        or forward_proxy_lock_parent.stat.uid | string
+          == forward_proxy_file_owner | string
+      - >-
+        forward_proxy_lock_parent.stat.gid == 0
+        or forward_proxy_lock_parent.stat.gr_name | default('')
+          == forward_proxy_file_group | string
+        or forward_proxy_lock_parent.stat.gid | string
+          == forward_proxy_file_group | string
     fail_msg: >-
-      The configured forward proxy lock parent must already exist as a trusted
-      non-symlink directory.
+      The configured forward proxy lock parent must already exist as a trusted,
+      canonical, non-symlink directory with safe owner, group, and mode.
   when: not ansible_check_mode
 
 - name: Acquire the bounded per-host forward proxy transition lock

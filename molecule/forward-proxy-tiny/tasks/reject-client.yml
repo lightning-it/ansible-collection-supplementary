@@ -11,6 +11,7 @@
         name: lit.supplementary.forward_proxy
         tasks_from: assert.yml
       vars:
+        forward_proxy_manage_runtime: false
         forward_proxy_file_owner: "{{ forward_proxy_verify_uid.stdout }}"
         forward_proxy_file_group: "{{ forward_proxy_verify_gid.stdout }}"
         forward_proxy_allowed_clients:

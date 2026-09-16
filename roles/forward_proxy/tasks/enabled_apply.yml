@@ -1,4 +1,12 @@
 ---
+- name: Revalidate the existing runtime before switching to render-only mode
+  ansible.builtin.include_tasks: revalidate_existing_runtime_removal.yml
+  when:
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
 - name: Remove the previous runtime when switching to render-only mode
   ansible.builtin.include_role:
     name: lit.foundational.podman_systemd
@@ -498,6 +506,8 @@
     that:
       - >-
         (
+          not forward_proxy_state_marker.stat.exists
+          and
           not forward_proxy_final_state_marker.stat.exists
           and not forward_proxy_final_state_marker.stat.islnk | default(false)
         )

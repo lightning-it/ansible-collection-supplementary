@@ -153,12 +153,20 @@
       checksum and ownership. Leave it untouched for operator recovery.
   loop: "{{ forward_proxy_first_run_owned_stats.results }}"
 
-- name: Remove verified partial first-run forward proxy files
-  ansible.builtin.file:
-    path: "{{ item.item.0 }}"
-    state: absent
+- name: Remove each verified first-run file at its exact mutation boundary
+  ansible.builtin.include_tasks: remove_owned_file.yml
   loop: "{{ forward_proxy_first_run_owned_stats.results }}"
-  when: item.stat.exists
+  loop_control:
+    loop_var: forward_proxy_removal_entry
+  vars:
+    forward_proxy_removal_path: "{{ forward_proxy_removal_entry.item.0 }}"
+    forward_proxy_removal_checksum: "{{ forward_proxy_removal_entry.stat.checksum | default('') }}"
+    forward_proxy_removal_mode: "{{ forward_proxy_removal_entry.item.1 }}"
+    forward_proxy_removal_owner: >-
+      {{ 'root' if forward_proxy_removal_entry.item.0 == forward_proxy_quadlet_path else forward_proxy_file_owner }}
+    forward_proxy_removal_group: >-
+      {{ 'root' if forward_proxy_removal_entry.item.0 == forward_proxy_quadlet_path else forward_proxy_file_group }}
+    forward_proxy_removal_allow_absent: true
 
 - name: Inspect first-run rollback targets
   ansible.builtin.stat:
