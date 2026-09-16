@@ -1,13 +1,7 @@
 #!/usr/bin/python
-from __future__ import annotations
-
-import grp
-import hashlib
-import os
-import pwd
-import stat
-
-from ansible.module_utils.basic import AnsibleModule
+# Copyright: (c) 2026 Lightning IT
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# ruff: noqa: E402
 
 DOCUMENTATION = r"""
 ---
@@ -19,25 +13,37 @@ description:
     performs a descriptor-relative unlink from the already-open parent.
 options:
   path:
+    description:
+      - Canonical absolute path of the regular file to remove.
     type: path
     required: true
   checksum:
+    description:
+      - Expected SHA-256 checksum of the file contents.
     type: str
     required: true
   mode:
+    description:
+      - Expected octal permission mode.
     type: str
     required: true
   owner:
+    description:
+      - Expected owner name or numeric UID.
     type: str
     required: true
   group:
+    description:
+      - Expected group name or numeric GID.
     type: str
     required: true
   allow_absent:
+    description:
+      - Treat an already absent path as an unchanged success.
     type: bool
     default: false
 author:
-  - Lightning IT
+  - Lightning IT (@lightning-it)
 """
 
 EXAMPLES = r"""
@@ -56,6 +62,14 @@ path:
   type: str
   returned: always
 """
+
+import grp
+import hashlib
+import os
+import pwd
+import stat
+
+from ansible.module_utils.basic import AnsibleModule
 
 
 def _numeric_identity(value: str, database: object, kind: str) -> int:
