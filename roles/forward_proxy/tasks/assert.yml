@@ -209,7 +209,7 @@
   ansible.builtin.assert:
     that:
       - >-
-        item | dirname not in forward_proxy_trusted_parent_paths
+        item | dirname == '/'
         or item | dirname in forward_proxy_trusted_parent_paths[:ansible_loop.index0]
     fail_msg: >-
       Every trusted parent that is part of the declared chain must appear
@@ -217,6 +217,25 @@
   loop: "{{ forward_proxy_trusted_parent_paths }}"
   loop_control:
     extended: true
+
+- name: Bind internal proxy paths to their canonical derivation
+  ansible.builtin.assert:
+    that:
+      - >-
+        forward_proxy_quadlet_path
+        == forward_proxy_quadlet_dir ~ '/' ~ forward_proxy_unit_name ~ '.kube'
+      - >-
+        forward_proxy_managed_paths_internal
+        == [forward_proxy_config_path, forward_proxy_pod_manifest_path]
+      - forward_proxy_managed_modes_internal == ['0644', '0640']
+      - >-
+        forward_proxy_managed_directories_internal
+        == (
+          forward_proxy_managed_paths_internal + [forward_proxy_state_marker_path]
+        ) | map('dirname') | unique | list
+    fail_msg: >-
+      Internal proxy paths are derived security boundaries and cannot be
+      overridden independently of their validated public inputs.
 
 - name: Require complete trusted parent coverage before side effects
   ansible.builtin.assert:

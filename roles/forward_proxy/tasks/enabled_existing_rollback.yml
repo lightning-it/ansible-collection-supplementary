@@ -12,15 +12,101 @@
   when:
     - forward_proxy_manage_runtime | bool
     - not forward_proxy_previous_state_manifest.runtime_managed | bool
-    - forward_proxy_new_runtime_removal_authorized_internal | default(false) | bool
+    - >-
+      forward_proxy_new_runtime_removal_authorization_internal | default({})
+      == {
+        'authorized': true,
+        'unit_name': forward_proxy_unit_name,
+        'state_marker_path': forward_proxy_state_marker_path,
+        'quadlet_path': forward_proxy_quadlet_path
+      }
+    - not ansible_check_mode
 
 - name: Prove the failed newly introduced runtime is absent before restoration
   ansible.builtin.include_tasks: verify_runtime_absent.yml
   when:
     - forward_proxy_manage_runtime | bool
     - not forward_proxy_previous_state_manifest.runtime_managed | bool
-    - forward_proxy_new_runtime_removal_authorized_internal | default(false) | bool
+    - >-
+      forward_proxy_new_runtime_removal_authorization_internal | default({})
+      == {
+        'authorized': true,
+        'unit_name': forward_proxy_unit_name,
+        'state_marker_path': forward_proxy_state_marker_path,
+        'quadlet_path': forward_proxy_quadlet_path
+      }
     - not ansible_check_mode
+
+- name: Revalidate trusted proxy directories before existing-state rollback
+  ansible.builtin.include_tasks: ensure_directory.yml
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  loop_control:
+    loop_var: forward_proxy_directory_path
+  vars:
+    forward_proxy_directory_creation_allowed: false
+  when:
+    - not ansible_check_mode
+    - >-
+      forward_proxy_directory_path in forward_proxy_managed_directories_internal
+      or forward_proxy_managed_directories_internal
+        | select('match', '^' ~ (forward_proxy_directory_path | regex_escape) ~ '/')
+        | list | length > 0
+      or (
+        forward_proxy_previous_state_manifest.runtime_managed | bool
+        and (
+          forward_proxy_directory_path == forward_proxy_quadlet_dir
+          or forward_proxy_quadlet_dir.startswith(
+            forward_proxy_directory_path.rstrip('/') ~ '/'
+          )
+        )
+      )
+
+- name: Reinspect existing-state rollback destinations
+  ansible.builtin.stat:
+    path: "{{ item.0 }}"
+    follow: false
+  loop: >-
+    {{
+      (forward_proxy_previous_state_manifest.managed_paths
+        | zip(forward_proxy_previous_state_manifest.managed_modes) | list)
+      + [[forward_proxy_state_marker_path, '0600']]
+      + (
+          [[forward_proxy_previous_state_manifest.quadlet_path, '0644']]
+          if forward_proxy_previous_state_manifest.runtime_managed | bool
+          else []
+        )
+    }}
+  register: forward_proxy_existing_rollback_target_stats
+  when: not ansible_check_mode
+
+- name: Require safe existing-state rollback destinations
+  ansible.builtin.assert:
+    that:
+      - item.stat.isreg | default(false)
+      - not item.stat.islnk | default(false)
+      - item.stat.mode == item.item.1
+      - >-
+        (
+          item.item.0 == forward_proxy_previous_state_manifest.quadlet_path
+          and item.stat.pw_name | default('') == 'root'
+          and item.stat.gr_name | default('') == 'root'
+        )
+        or (
+          item.item.0 != forward_proxy_previous_state_manifest.quadlet_path
+          and (
+            item.stat.pw_name | default('') == forward_proxy_file_owner | string
+            or item.stat.uid | string == forward_proxy_file_owner | string
+          )
+          and (
+            item.stat.gr_name | default('') == forward_proxy_file_group | string
+            or item.stat.gid | string == forward_proxy_file_group | string
+          )
+        )
+    fail_msg: >-
+      A rollback destination changed type, owner, group, or mode after the
+      failed transition. Stop without restoring through a foreign boundary.
+  loop: "{{ forward_proxy_existing_rollback_target_stats.results | default([]) }}"
+  when: not ansible_check_mode
 
 - name: Restore previous forward proxy managed files
   ansible.builtin.copy:
@@ -29,6 +115,8 @@
     owner: "{{ forward_proxy_file_owner }}"
     group: "{{ forward_proxy_file_group }}"
     mode: "{{ item.1 }}"
+    follow: false
+    unsafe_writes: false
   loop: >-
     {{
       forward_proxy_previous_asset_contents.results
@@ -44,7 +132,11 @@
     owner: root
     group: root
     mode: "0644"
-  when: forward_proxy_previous_state_manifest.runtime_managed | bool
+    follow: false
+    unsafe_writes: false
+  when:
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not ansible_check_mode
 
 - name: Restore the previous forward proxy ownership marker
   ansible.builtin.copy:
@@ -53,6 +145,8 @@
     owner: "{{ forward_proxy_file_owner }}"
     group: "{{ forward_proxy_file_group }}"
     mode: "0600"
+    follow: false
+    unsafe_writes: false
   no_log: true
 
 - name: Restart the restored previous forward proxy runtime
@@ -66,7 +160,9 @@
     podman_systemd_scope: "{{ forward_proxy_systemd_scope }}"
     podman_systemd_quadlet_dir: "{{ forward_proxy_quadlet_dir }}"
     podman_systemd_enabled: true
-  when: forward_proxy_previous_state_manifest.runtime_managed | bool
+  when:
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not ansible_check_mode
 
 - name: Prove the restored previous forward proxy runtime is ready
   ansible.builtin.include_tasks: verify_runtime_ready.yml

@@ -5,6 +5,16 @@
     follow: false
   register: forward_proxy_directory_parent
 
+- name: Resolve the existing immediate parent canonically
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - "{{ forward_proxy_directory_path | dirname }}"
+  register: forward_proxy_directory_parent_realpath
+  changed_when: false
+  check_mode: false
+  when: forward_proxy_directory_parent.stat.exists
+
 - name: Require a real immediate parent before touching the proxy directory
   ansible.builtin.assert:
     that:
@@ -13,6 +23,31 @@
           forward_proxy_directory_parent.stat.exists
           and forward_proxy_directory_parent.stat.isdir | default(false)
           and not forward_proxy_directory_parent.stat.islnk | default(false)
+          and forward_proxy_directory_parent_realpath.stdout
+            == (forward_proxy_directory_path | dirname)
+          and (
+            forward_proxy_directory_parent.stat.mode is match('^0[0-7][0145][0145]\Z')
+            or (
+              forward_proxy_directory_path | dirname == '/tmp'
+              and forward_proxy_directory_parent.stat.mode == '1777'
+              and forward_proxy_directory_parent.stat.uid == 0
+              and forward_proxy_directory_parent.stat.gid == 0
+            )
+          )
+          and (
+            forward_proxy_directory_parent.stat.uid == 0
+            or forward_proxy_directory_parent.stat.pw_name | default('')
+              == forward_proxy_file_owner | string
+            or forward_proxy_directory_parent.stat.uid | string
+              == forward_proxy_file_owner | string
+          )
+          and (
+            forward_proxy_directory_parent.stat.gid == 0
+            or forward_proxy_directory_parent.stat.gr_name | default('')
+              == forward_proxy_file_group | string
+            or forward_proxy_directory_parent.stat.gid | string
+              == forward_proxy_file_group | string
+          )
         )
         or (
           ansible_check_mode
@@ -20,8 +55,9 @@
             in forward_proxy_planned_directories_internal
         )
     fail_msg: >-
-      Every trusted proxy directory requires an existing non-symlink immediate
-      parent. Parent chains must be complete and ordered before child paths.
+      Every trusted proxy directory requires an existing canonical immediate
+      parent with a safe type, owner, group, and mode. Parent chains must be
+      complete and ordered before child paths.
 
 - name: Inspect the trusted proxy directory before creation
   ansible.builtin.stat:

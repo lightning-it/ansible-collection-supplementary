@@ -3,6 +3,31 @@
   ansible.builtin.import_tasks: assert.yml
   tags: always
 
+- name: Reset runtime rollback authorization for this role invocation
+  ansible.builtin.set_fact:
+    forward_proxy_new_runtime_removal_authorization_internal:
+      authorized: false
+      unit_name: ""
+      state_marker_path: ""
+      quadlet_path: ""
+
+- name: Inspect the required forward proxy lock parent
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_lock_path | dirname }}"
+    follow: false
+  register: forward_proxy_lock_parent
+  when: not ansible_check_mode
+
+- name: Require a pre-existing non-symlink forward proxy lock parent
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_lock_parent.stat.isdir | default(false)
+      - not forward_proxy_lock_parent.stat.islnk | default(false)
+    fail_msg: >-
+      The configured forward proxy lock parent must already exist as a trusted
+      non-symlink directory.
+  when: not ansible_check_mode
+
 - name: Acquire the bounded per-host forward proxy transition lock
   ansible.builtin.command:
     argv:

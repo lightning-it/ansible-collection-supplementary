@@ -210,15 +210,15 @@ class ForwardProxyContractTests(unittest.TestCase):
             "Authorize rollback only for the proven-absent new runtime identity",
             apply_tasks,
         )
-        authorization = (
-            "forward_proxy_new_runtime_removal_authorized_internal "
-            "| default(false) | bool"
-        )
+        authorization = "forward_proxy_new_runtime_removal_authorization_internal | default({})"
         self.assertGreaterEqual(rollback.count(authorization), 2)
-        existing_rollback = (
-            ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml"
-        ).read_text()
+        existing_rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
         self.assertGreaterEqual(existing_rollback.count(authorization), 2)
+        wrapper = (ROLE_ROOT / "tasks" / "main.yml").read_text()
+        self.assertIn("Reset runtime rollback authorization", wrapper)
+        self.assertIn("authorized: false", wrapper)
+        self.assertIn("state_marker_path:", apply_tasks)
+        self.assertIn("quadlet_path:", apply_tasks)
         self.assertIn(
             "not forward_proxy_previous_state_manifest.runtime_managed",
             apply_tasks,
@@ -299,14 +299,46 @@ class ForwardProxyContractTests(unittest.TestCase):
 
     def test_render_writes_revalidate_parents_and_never_follow_links(self) -> None:
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
-        self.assertEqual(
+        self.assertGreaterEqual(
             apply_tasks.count("forward_proxy_directory_creation_allowed: false"),
-            2,
+            3,
         )
         self.assertGreaterEqual(apply_tasks.count("follow: false"), 2)
-        self.assertEqual(apply_tasks.count("unsafe_writes: false"), 2)
+        self.assertGreaterEqual(apply_tasks.count("unsafe_writes: false"), 3)
         self.assertIn("lookup('ansible.builtin.template', 'squid.conf.j2')", apply_tasks)
         self.assertIn("lookup('ansible.builtin.template', 'squid-pod.yml.j2')", apply_tasks)
+        self.assertIn("Revalidate the state marker parent chain", apply_tasks)
+
+    def test_existing_rollback_revalidates_every_write_boundary(self) -> None:
+        rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
+        self.assertIn(
+            "Revalidate trusted proxy directories before existing-state rollback",
+            rollback,
+        )
+        self.assertIn("Reinspect existing-state rollback destinations", rollback)
+        self.assertIn("Require safe existing-state rollback destinations", rollback)
+        self.assertGreaterEqual(rollback.count("follow: false"), 4)
+        self.assertGreaterEqual(rollback.count("unsafe_writes: false"), 3)
+        restored_runtime = rollback.split(
+            "- name: Restart the restored previous forward proxy runtime",
+            maxsplit=1,
+        )[1].split(
+            "- name: Prove the restored previous forward proxy runtime is ready",
+            maxsplit=1,
+        )[0]
+        self.assertIn("not ansible_check_mode", restored_runtime)
+
+    def test_trusted_parent_chains_are_complete_and_canonical(self) -> None:
+        assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+        directory_guard = (ROLE_ROOT / "tasks" / "ensure_directory.yml").read_text()
+        wrapper = (ROLE_ROOT / "tasks" / "main.yml").read_text()
+        self.assertIn("item | dirname == '/'", assertions)
+        self.assertIn("Bind internal proxy paths to their canonical derivation", assertions)
+        self.assertIn("Resolve the existing immediate parent canonically", directory_guard)
+        self.assertIn("forward_proxy_directory_parent.stat.mode", directory_guard)
+        self.assertIn("forward_proxy_directory_parent_realpath.stdout", directory_guard)
+        self.assertIn("Inspect the required forward proxy lock parent", wrapper)
+        self.assertIn("not ansible_check_mode", wrapper)
 
     def test_disable_runtime_removal_is_skipped_in_check_mode(self) -> None:
         transition = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
