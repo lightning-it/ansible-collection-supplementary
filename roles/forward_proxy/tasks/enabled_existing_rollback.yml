@@ -82,14 +82,32 @@
 - name: Require safe existing-state rollback destinations
   ansible.builtin.assert:
     that:
-      - item.stat.isreg | default(false)
-      - not item.stat.islnk | default(false)
-      - item.stat.mode == item.item.1
       - >-
         (
           item.item.0 == forward_proxy_previous_state_manifest.quadlet_path
-          and item.stat.pw_name | default('') == 'root'
-          and item.stat.gr_name | default('') == 'root'
+          and not forward_proxy_manage_runtime | bool
+          and not item.stat.exists
+          and not item.stat.islnk | default(false)
+        )
+        or (
+          item.stat.isreg | default(false)
+          and not item.stat.islnk | default(false)
+          and item.stat.mode == item.item.1
+        )
+      - >-
+        (
+          item.item.0 == forward_proxy_previous_state_manifest.quadlet_path
+          and (
+            (
+              not forward_proxy_manage_runtime | bool
+              and not item.stat.exists
+              and not item.stat.islnk | default(false)
+            )
+            or (
+              item.stat.pw_name | default('') == 'root'
+              and item.stat.gr_name | default('') == 'root'
+            )
+          )
         )
         or (
           item.item.0 != forward_proxy_previous_state_manifest.quadlet_path

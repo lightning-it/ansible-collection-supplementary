@@ -74,6 +74,10 @@
       - >-
         forward_proxy_directory_creation_allowed | bool
         or forward_proxy_directory_before.stat.exists
+        or (
+          ansible_check_mode
+          and forward_proxy_directory_path in forward_proxy_planned_directories_internal
+        )
       - >-
         (
           not forward_proxy_directory_before.stat.exists

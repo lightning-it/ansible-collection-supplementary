@@ -47,6 +47,14 @@
     unsafe_writes: false
   register: forward_proxy_squid_config_result
 
+- name: Bind the rendered Squid policy to this transaction
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_config_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_squid_config_transaction_stat
+  when: not ansible_check_mode
+
 - name: Revalidate the Pod manifest parent chain at the mutation boundary
   ansible.builtin.include_tasks: ensure_directory.yml
   loop: "{{ forward_proxy_trusted_parent_paths }}"
@@ -70,6 +78,14 @@
     follow: false
     unsafe_writes: false
   register: forward_proxy_pod_manifest_result
+
+- name: Bind the rendered Pod manifest to this transaction
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_pod_manifest_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_pod_manifest_transaction_stat
+  when: not ansible_check_mode
 
 - name: Inspect rendered forward proxy files
   ansible.builtin.stat:
@@ -190,6 +206,22 @@
       not forward_proxy_state_marker.stat.exists
       or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
     - not ansible_check_mode
+
+- name: Revalidate the Quadlet parent chain at the runtime mutation boundary
+  ansible.builtin.include_tasks: ensure_directory.yml
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  loop_control:
+    loop_var: forward_proxy_directory_path
+  vars:
+    forward_proxy_directory_creation_allowed: false
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+    - >-
+      forward_proxy_directory_path == forward_proxy_quadlet_dir
+      or forward_proxy_quadlet_dir.startswith(
+        forward_proxy_directory_path.rstrip('/') ~ '/'
+      )
 
 - name: Manage the persistent Squid container service
   ansible.builtin.include_role:

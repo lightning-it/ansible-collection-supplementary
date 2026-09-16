@@ -171,6 +171,7 @@
     that:
       - item is match('^/[A-Za-z0-9_./-]+\Z')
       - item != '/'
+      - not item.endswith('/')
       - "'.' not in item.split('/')"
       - "'..' not in item.split('/')"
       - "'//' not in item"
@@ -187,6 +188,7 @@
     that:
       - forward_proxy_render_root is match('^/[A-Za-z0-9_./-]+\Z')
       - forward_proxy_render_root != '/'
+      - not forward_proxy_render_root.endswith('/')
       - "'.' not in forward_proxy_render_root.split('/')"
       - "'..' not in forward_proxy_render_root.split('/')"
       - "'//' not in forward_proxy_render_root"
@@ -197,6 +199,7 @@
     that:
       - item is match('^/[A-Za-z0-9_./-]+\Z')
       - item != '/'
+      - not item.endswith('/')
       - "'.' not in item.split('/')"
       - "'..' not in item.split('/')"
       - "'//' not in item"

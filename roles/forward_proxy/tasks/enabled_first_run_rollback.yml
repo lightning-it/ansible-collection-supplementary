@@ -89,9 +89,9 @@
           and item.stat.checksum
             == (
               (
-                forward_proxy_managed_asset_stats.results | default([])
-                | selectattr('item', 'equalto', item.item.0)
-                | map(attribute='stat.checksum') | first | default('')
+                forward_proxy_squid_config_transaction_stat.stat.checksum | default('')
+                if item.item.0 == forward_proxy_config_path
+                else forward_proxy_pod_manifest_transaction_stat.stat.checksum | default('')
               )
               if item.item.0 in forward_proxy_managed_paths_internal
               else (

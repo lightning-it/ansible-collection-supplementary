@@ -167,7 +167,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("item.stat.isreg", rollback)
         self.assertIn("item.stat.islnk", rollback)
         self.assertIn("item.stat.checksum", rollback)
-        self.assertIn("forward_proxy_managed_asset_stats.results", rollback)
+        self.assertIn("forward_proxy_squid_config_transaction_stat", rollback)
+        self.assertIn("forward_proxy_pod_manifest_transaction_stat", rollback)
         self.assertIn("forward_proxy_directory_creation_allowed: false", rollback)
 
     def test_dangling_symlinks_cannot_cross_first_run_boundaries(self) -> None:
@@ -339,6 +340,28 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_directory_parent_realpath.stdout", directory_guard)
         self.assertIn("Inspect the required forward proxy lock parent", wrapper)
         self.assertIn("not ansible_check_mode", wrapper)
+
+    def test_final_runtime_and_deletion_boundaries_are_revalidated(self) -> None:
+        apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
+        transition = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
+        rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
+        assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+        directory_guard = (ROLE_ROOT / "tasks" / "ensure_directory.yml").read_text()
+        self.assertIn(
+            "Revalidate the Quadlet parent chain at the runtime mutation boundary",
+            apply_tasks,
+        )
+        self.assertIn("Bind the rendered Squid policy to this transaction", apply_tasks)
+        self.assertIn("Bind the rendered Pod manifest to this transaction", apply_tasks)
+        self.assertIn(
+            "Revalidate managed parent chains before disabled-state deletion",
+            transition,
+        )
+        self.assertIn("Reinspect managed files before disabled-state deletion", transition)
+        self.assertIn("Reinspect the state marker before disabled-state deletion", transition)
+        self.assertIn("not item.endswith('/')", assertions)
+        self.assertIn("forward_proxy_planned_directories_internal", directory_guard)
+        self.assertIn("not forward_proxy_manage_runtime | bool", rollback)
 
     def test_disable_runtime_removal_is_skipped_in_check_mode(self) -> None:
         transition = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
