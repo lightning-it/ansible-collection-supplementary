@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import importlib.util
 import os
@@ -171,6 +172,36 @@ class AtomicPathTests(unittest.TestCase):
         parameters["parent_identities"][str(self.root)] = {"device": self.root.stat().st_dev}
         self.assertIn("malformed", str(self.execute(parameters, failure=True)["msg"]))
 
+    def test_parent_walk_close_failure_closes_the_new_descriptor(self) -> None:
+        real_open = os.open
+        real_close = os.close
+        opened: list[int] = []
+        close_failed = False
+
+        def track_open(path: object, flags: int, *args: object, **kwargs: object) -> int:
+            descriptor = real_open(path, flags, *args, **kwargs)
+            opened.append(descriptor)
+            return descriptor
+
+        def fail_first_close(descriptor: int) -> None:
+            nonlocal close_failed
+            if not close_failed:
+                close_failed = True
+                real_close(descriptor)
+                raise OSError("parent descriptor close outcome uncertain")
+            real_close(descriptor)
+
+        with (
+            mock.patch.object(MODULE.os, "open", side_effect=track_open),
+            mock.patch.object(MODULE.os, "close", side_effect=fail_first_close),
+        ):
+            with self.assertRaisesRegex(OSError, "parent descriptor close outcome uncertain"):
+                MODULE._open_bound_directory(str(self.root), self.identities(self.root))
+        self.assertGreaterEqual(len(opened), 2)
+        for descriptor in opened:
+            with self.assertRaises(OSError):
+                os.fstat(descriptor)
+
     def test_boolean_and_float_parent_identities_fail_closed(self) -> None:
         for malformed in (True, 1.9, None):
             with self.subTest(malformed=malformed):
@@ -265,7 +296,7 @@ class AtomicPathTests(unittest.TestCase):
 
         def reject_directory_fsync(descriptor: int) -> None:
             if stat.S_ISDIR(real_fstat(descriptor).st_mode):
-                raise OSError("directory fsync unsupported")
+                raise OSError(errno.EINVAL, "directory fsync unsupported")
             real_fsync(descriptor)
 
         for state in ("directory", "file"):
@@ -277,6 +308,27 @@ class AtomicPathTests(unittest.TestCase):
                 with mock.patch.object(MODULE.os, "fsync", side_effect=reject_directory_fsync):
                     self.assertTrue(self.execute(parameters)["changed"])
                 self.assertTrue(target.exists())
+
+    def test_post_commit_directory_fsync_io_error_fails_closed(self) -> None:
+        real_fsync = os.fsync
+        real_fstat = os.fstat
+
+        def fail_directory_fsync(descriptor: int) -> None:
+            if stat.S_ISDIR(real_fstat(descriptor).st_mode):
+                raise OSError(errno.EIO, "directory fsync failed")
+            real_fsync(descriptor)
+
+        for state in ("directory", "file"):
+            with self.subTest(state=state):
+                target = self.root / f"failed-{state}"
+                parameters = self.common(target, state)
+                if state == "file":
+                    parameters["content"] = "not-durable\n"
+                with mock.patch.object(MODULE.os, "fsync", side_effect=fail_directory_fsync):
+                    result = self.execute(parameters, failure=True)
+                self.assertIn("directory fsync failed", str(result["msg"]))
+                self.assertFalse(target.exists())
+                self.assertEqual([], list(self.root.glob(".atomic-path-*")))
 
     def test_directory_payload_close_failure_reports_workspace_root(self) -> None:
         target = self.root / "managed-close"
@@ -378,6 +430,38 @@ class AtomicPathTests(unittest.TestCase):
         recovery = Path(str(result["recovery_path"]))
         self.assertTrue(recovery.is_dir())
         self.assertFalse((recovery / "payload").exists())
+        self.assertEqual("managed\n", target.read_text(encoding="utf-8"))
+
+    def test_parent_close_failure_does_not_replace_success_result(self) -> None:
+        target = self.root / "policy-parent-close"
+        parameters = self.common(target, "file")
+        parameters["content"] = "managed\n"
+        real_open_bound = MODULE._open_bound_directory
+        real_close = os.close
+        parent_descriptor = -1
+        close_failed = False
+
+        def track_initial_parent(path: str, identities: dict) -> int:
+            nonlocal parent_descriptor
+            descriptor = real_open_bound(path, identities)
+            if parent_descriptor < 0:
+                parent_descriptor = descriptor
+            return descriptor
+
+        def fail_parent_close(descriptor: int) -> None:
+            nonlocal close_failed
+            if descriptor == parent_descriptor and not close_failed:
+                close_failed = True
+                real_close(descriptor)
+                raise OSError("parent close outcome uncertain")
+            real_close(descriptor)
+
+        with (
+            mock.patch.object(MODULE, "_open_bound_directory", side_effect=track_initial_parent),
+            mock.patch.object(MODULE.os, "close", side_effect=fail_parent_close),
+        ):
+            result = self.execute(parameters)
+        self.assertTrue(result["changed"])
         self.assertEqual("managed\n", target.read_text(encoding="utf-8"))
 
     def test_required_no_follow_flag_must_be_nonzero(self) -> None:

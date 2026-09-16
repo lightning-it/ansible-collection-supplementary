@@ -147,7 +147,16 @@ def _open_bound_directory(path: str, identities: dict) -> int:
             if not component:
                 continue
             following = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current)
-            os.close(current)
+            previous = current
+            current = -1
+            try:
+                os.close(previous)
+            except OSError:
+                try:
+                    os.close(following)
+                except OSError:
+                    pass
+                raise
             current = following
             walked += "/" + component
             if walked not in identities:
@@ -169,7 +178,11 @@ def _open_bound_directory(path: str, identities: dict) -> int:
             raise OSError(f"exact parent identity is missing: {path}")
         return current
     except Exception:
-        os.close(current)
+        if current >= 0:
+            try:
+                os.close(current)
+            except OSError:
+                pass
         raise
 
 
@@ -438,6 +451,18 @@ def _require_exclusive_parent(parent: int) -> None:
         raise OSError("another atomic path transaction holds the mutation parent") from exc
 
 
+def _fsync_directory(parent: int) -> None:
+    """Persist a committed directory entry when the filesystem supports it."""
+    try:
+        os.fsync(parent)
+    except OSError as exc:
+        unsupported = {errno.EINVAL, errno.ENOTSUP}
+        if hasattr(errno, "EOPNOTSUPP"):
+            unsupported.add(errno.EOPNOTSUPP)
+        if exc.errno not in unsupported:
+            raise
+
+
 def _revalidated_entry(module: AnsibleModule, parent: int, name: str) -> Optional[os.stat_result]:
     """Read the target between two independently bound canonical-parent opens."""
     parent_path = os.path.dirname(module.params["path"])
@@ -498,13 +523,7 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
         installed = True
         if not _same_directory_identity(created_identity, os.stat(name, dir_fd=parent, follow_symlinks=False)):
             raise OSError("created directory identity changed while installing")
-        try:
-            os.fsync(parent)
-        except OSError:
-            # The rename is the commit point. Some filesystems do not support
-            # directory fsync, so a durability probe cannot report a complete
-            # mutation as a failed or rolled-back transaction.
-            pass
+        _fsync_directory(parent)
         final = _existing(parent, name)
         if final is None or not _same_directory_identity(final, created_identity):
             raise OSError("created directory identity changed before completion")
@@ -654,13 +673,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             preserve_workspace = displaced_identity is not None
             recovery_name = "payload" if preserve_workspace else None
             raise OSError("installed file identity changed after replacement")
-        try:
-            os.fsync(parent)
-        except OSError:
-            # The atomic rename/exchange is already committed. Directory
-            # fsync is a best-effort durability enhancement on filesystems
-            # that support it, not a second mutation outcome.
-            pass
+        _fsync_directory(parent)
         final = _existing(parent, name)
         if staged_identity is None or final is None or not _same_snapshot(final, installed_details):
             preserve_workspace = displaced_identity is not None
@@ -790,7 +803,13 @@ def main() -> None:
                 _create_directory(module, parent, name, mode, uid, gid)
             _write_file(module, parent, name, mode, uid, gid)
         finally:
-            os.close(parent)
+            try:
+                os.close(parent)
+            except OSError:
+                # The helper has already selected the Ansible result and,
+                # where needed, its bound recovery path. A close outcome must
+                # not replace that transaction result.
+                pass
     except _PreservedWorkspace as exc:
         module.fail_json(msg=f"atomic path mutation failed: {exc}", path=path, recovery_path=exc.path)
     except (KeyError, OSError, OverflowError, TypeError, ValueError) as exc:
