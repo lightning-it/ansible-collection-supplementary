@@ -804,6 +804,8 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             if not _remove_private_if_same(workspace, "payload", cleanup_identity):
                 preserve_workspace = True
                 recovery_name = "payload"
+            else:
+                recovery_name = None
         try:
             os.close(workspace)
         except OSError as exc:

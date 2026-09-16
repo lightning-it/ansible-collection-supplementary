@@ -578,6 +578,43 @@ class AtomicPathTests(unittest.TestCase):
         self.assertFalse((recovery / "payload").exists())
         self.assertEqual("managed\n", target.read_text(encoding="utf-8"))
 
+    def test_staging_failure_and_close_error_reports_workspace_root(self) -> None:
+        target = self.root / "staging-close-failure"
+        parameters = self.common(target, "file")
+        parameters["content"] = "managed\n"
+        real_open = os.open
+        real_close = os.close
+        payload_descriptor = -1
+        close_failed = False
+
+        def track_payload(path: object, flags: int, *args: object, **kwargs: object) -> int:
+            nonlocal payload_descriptor
+            descriptor = real_open(path, flags, *args, **kwargs)
+            if path == "payload":
+                payload_descriptor = descriptor
+            return descriptor
+
+        def fail_payload_close(descriptor: int) -> None:
+            nonlocal close_failed
+            if descriptor == payload_descriptor and not close_failed:
+                close_failed = True
+                real_close(descriptor)
+                raise OSError("payload close outcome uncertain")
+            real_close(descriptor)
+
+        with (
+            mock.patch.object(MODULE, "_require_capabilities"),
+            mock.patch.object(MODULE.os, "open", side_effect=track_payload),
+            mock.patch.object(MODULE.os, "fchown", side_effect=OSError("staging metadata failed")),
+            mock.patch.object(MODULE.os, "close", side_effect=fail_payload_close),
+        ):
+            result = self.execute(parameters, failure=True)
+        recovery = Path(str(result["recovery_path"]))
+        self.assertIn("staging metadata failed", str(result["msg"]))
+        self.assertTrue(recovery.is_dir())
+        self.assertFalse((recovery / "payload").exists())
+        self.assertFalse(target.exists())
+
     def test_successful_workspace_close_failure_reports_workspace_root(self) -> None:
         target = self.root / "policy-workspace-close"
         parameters = self.common(target, "file")
