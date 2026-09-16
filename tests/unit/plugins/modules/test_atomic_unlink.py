@@ -118,6 +118,21 @@ class AtomicUnlinkTests(unittest.TestCase):
         self.assertIn("checksum changed", str(self.execute(failure=True)["msg"]))
         self.assertTrue(self.target.exists())
 
+    def test_rejects_metadata_drift_after_checksum_validation(self) -> None:
+        expected_checksum = MODULE._checksum_fd
+
+        def change_mode_after_checksum(descriptor: int) -> str:
+            checksum = expected_checksum(descriptor)
+            self.target.chmod(0o600)
+            return checksum
+
+        with mock.patch.object(MODULE, "_checksum_fd", side_effect=change_mode_after_checksum):
+            result = self.execute(failure=True)
+
+        self.assertIn("metadata changed at the unlink boundary", str(result["msg"]))
+        self.assertTrue(self.target.exists())
+        self.assertEqual([], list(self.root.glob(".atomic-unlink-*")))
+
     def test_rejects_symlink_and_changed_parent_identity(self) -> None:
         link = self.root / "linked.conf"
         link.symlink_to(self.target.name)
