@@ -111,6 +111,9 @@ class AtomicUnlinkTests(unittest.TestCase):
         self.assertFalse(self.target.exists())
 
     def test_rejects_checksum_and_metadata_changes(self) -> None:
+        self.parameters["checksum"] = "invalid"
+        self.assertIn("lowercase SHA-256", str(self.execute(failure=True)["msg"]))
+        self.assertTrue(self.target.exists())
         self.parameters["checksum"] = "0" * 64
         self.assertIn("checksum changed", str(self.execute(failure=True)["msg"]))
         self.assertTrue(self.target.exists())
@@ -159,8 +162,10 @@ class AtomicUnlinkTests(unittest.TestCase):
         self.assertIn("cannot bind trusted parent chain", str(self.execute(failure=True)["msg"]))
 
     def test_double_root_path_is_rejected(self) -> None:
-        self.parameters["path"] = "//"
-        self.assertIn("canonical absolute file path", str(self.execute(failure=True)["msg"]))
+        for path in ("//", "//tmp/owned.conf"):
+            with self.subTest(path=path):
+                self.parameters["path"] = path
+                self.assertIn("canonical absolute file path", str(self.execute(failure=True)["msg"]))
 
     @unittest.skipUnless(Path("/proc/self/fd").is_dir(), "descriptor linking requires procfs")
     def test_real_descriptor_preservation_helper(self) -> None:

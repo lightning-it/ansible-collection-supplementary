@@ -6,9 +6,12 @@
 DOCUMENTATION = r"""
 ---
 module: atomic_unlink
+version_added: "3.3.0"
 short_description: Unlink one exactly identified regular file
 description:
   - Descriptor-binds and verifies one file before quarantined removal.
+  - Requires exclusive trust in the effective UID; hostile concurrent processes
+    with that same UID are outside the isolation boundary.
 options:
   path:
     description: Canonical absolute path of the regular file to remove.
@@ -296,6 +299,7 @@ def main() -> None:
     path = module.params["path"]
     if (
         not os.path.isabs(path)
+        or path.startswith("//")
         or os.path.normpath(path) != path
         or not os.path.basename(path)
         or path == "/"
@@ -305,6 +309,8 @@ def main() -> None:
 
     try:
         _require_capabilities()
+        if not re.fullmatch(r"[0-9a-f]{64}", str(module.params["checksum"])):
+            raise ValueError("checksum must be one lowercase SHA-256 digest")
         expected_uid = _numeric_identity(str(module.params["owner"]), pwd.getpwnam, "owner")
         expected_gid = _numeric_identity(str(module.params["group"]), grp.getgrnam, "group")
         mode_value = str(module.params["mode"])
