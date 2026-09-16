@@ -85,6 +85,8 @@ class AtomicPathTests(unittest.TestCase):
             self.assertRaises(Failure if failure else Result) as result,
         ):
             MODULE.main()
+        if not failure:
+            self.assertNotIsInstance(result.exception, Failure)
         return result.exception.value
 
     def common(self, path: Path, state: str) -> dict[str, object]:
@@ -158,7 +160,12 @@ class AtomicPathTests(unittest.TestCase):
                 self.assertFalse(target.exists())
 
     def test_invalid_mode_and_negative_identity_never_mutate(self) -> None:
-        for field, value in (("mode", "10000"), ("owner", "-1"), ("group", "-1")):
+        for field, value in (
+            ("mode", "10000"),
+            ("owner", "-1"),
+            ("group", "-1"),
+            ("owner", str(2**32)),
+        ):
             with self.subTest(field=field):
                 target = self.root / f"blocked-{field}"
                 parameters = self.common(target, "directory")
@@ -242,6 +249,47 @@ class AtomicPathTests(unittest.TestCase):
         self.assertIn("concurrent entry restored", str(result["msg"]))
         self.assertEqual("foreign\n", target.read_text(encoding="utf-8"))
         self.assertEqual([], list(self.root.glob(".atomic-path-*")))
+
+    def test_noop_revalidates_the_canonical_file_path(self) -> None:
+        target = self.root / "policy"
+        target.write_text("same\n", encoding="utf-8")
+        parameters = self.common(target, "file")
+        parameters.update(
+            content="same\n",
+            allow_absent=False,
+            expected_checksum=hashlib.sha256(b"same\n").hexdigest(),
+        )
+        replacement = self.root / "replacement"
+        replacement.write_text("foreign\n", encoding="utf-8")
+
+        def replace_during_parent_check(_module: object, _parent: int) -> None:
+            os.replace(replacement, target)
+
+        with mock.patch.object(MODULE, "_revalidate_parent", side_effect=replace_during_parent_check):
+            result = self.execute(parameters, failure=True)
+        self.assertIn("changed before no-op completion", str(result["msg"]))
+        self.assertEqual("foreign\n", target.read_text(encoding="utf-8"))
+
+    def test_noop_revalidates_the_canonical_directory_path(self) -> None:
+        target = self.root / "managed"
+        parameters = self.common(target, "directory")
+        self.execute(parameters)
+        foreign = self.root / "foreign"
+        foreign.mkdir(mode=0o755)
+
+        def replace_during_parent_check(_module: object, _parent: int) -> None:
+            target.rename(self.root / "detached")
+            foreign.rename(target)
+
+        with mock.patch.object(MODULE, "_revalidate_parent", side_effect=replace_during_parent_check):
+            result = self.execute(parameters, failure=True)
+        self.assertIn("changed before no-op completion", str(result["msg"]))
+        self.assertTrue(target.is_dir())
+
+    def test_double_root_path_is_rejected(self) -> None:
+        parameters = self.common(self.root / "unused", "directory")
+        parameters["path"] = "//"
+        self.assertIn("canonical absolute path", str(self.execute(parameters, failure=True)["msg"]))
 
 
 if __name__ == "__main__":
