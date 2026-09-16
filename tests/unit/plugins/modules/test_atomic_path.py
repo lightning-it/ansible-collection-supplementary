@@ -738,6 +738,32 @@ class AtomicPathTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertEqual("foreign\n", (workspace_path / "failed").read_text(encoding="utf-8"))
 
+    def test_capture_verification_error_preserves_recovery_entry(self) -> None:
+        target = self.root / "policy"
+        target.write_text("managed\n", encoding="utf-8")
+        expected = target.stat()
+        workspace_path = self.root / "workspace"
+        workspace_path.mkdir()
+        parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        workspace = os.open(workspace_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            with mock.patch.object(MODULE, "_verified_file", side_effect=OSError("verification failed")):
+                with self.assertRaises(MODULE._PreservedRecovery) as result:
+                    MODULE._capture_and_remove(
+                        parent,
+                        target.name,
+                        expected,
+                        workspace,
+                        "failed",
+                        checksum=hashlib.sha256(b"managed\n").hexdigest(),
+                    )
+        finally:
+            os.close(workspace)
+            os.close(parent)
+        self.assertEqual("failed", result.exception.entry)
+        self.assertFalse(target.exists())
+        self.assertEqual("managed\n", (workspace_path / "failed").read_text(encoding="utf-8"))
+
     def test_workspace_probe_failure_preserves_uncertain_creation(self) -> None:
         parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         real_stat = os.stat
