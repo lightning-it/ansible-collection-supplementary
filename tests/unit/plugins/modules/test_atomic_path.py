@@ -813,17 +813,31 @@ class AtomicPathTests(unittest.TestCase):
             os.close(parent)
         self.assertTrue(Path(result.exception.path).is_dir())
 
-    def test_nonreadable_file_mode_is_verified_via_bound_descriptor(self) -> None:
+    def test_unprivileged_unreadable_file_mode_is_rejected_before_mutation(self) -> None:
         target = self.root / "sealed"
         parameters = self.common(target, "file")
         parameters.update(content="sealed\n", mode="0000")
+        result = self.execute(parameters, failure=True)
+        self.assertIn("must remain readable", str(result["msg"]))
+        self.assertFalse(target.exists())
+
+        target.write_text("sealed\n", encoding="utf-8")
+        target.chmod(0o000)
         try:
-            self.assertTrue(self.execute(parameters)["changed"])
+            parameters.update(
+                allow_absent=False,
+                expected_checksum=hashlib.sha256(b"sealed\n").hexdigest(),
+            )
+            result = self.execute(parameters, failure=True)
+            self.assertIn("must remain readable", str(result["msg"]))
             self.assertEqual(0, target.stat().st_mode & 0o777)
         finally:
-            if target.exists():
-                target.chmod(0o600)
+            target.chmod(0o600)
         self.assertEqual("sealed\n", target.read_text(encoding="utf-8"))
+
+    def test_root_can_verify_a_nonreadable_file_mode(self) -> None:
+        with mock.patch.object(MODULE.os, "geteuid", return_value=0):
+            self.assertTrue(MODULE._effective_user_can_read(0o000, os.getuid(), os.getgid()))
 
     @unittest.skipIf(sys.platform == "darwin", "macOS does not retain set-ID bits on temporary files")
     def test_special_file_mode_bits_are_applied_after_payload_write(self) -> None:

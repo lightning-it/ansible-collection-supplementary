@@ -38,7 +38,10 @@ options:
     description: UTF-8 content required for C(state=file).
     type: str
   mode:
-    description: Exact octal permissions required on the target.
+    description:
+      - Exact octal permissions required on the target.
+      - For C(state=file), a non-root effective user must retain read access so
+        later checksum verification remains idempotent.
     type: str
     required: true
   owner:
@@ -121,6 +124,17 @@ def _identity(value: str, database: Callable[[str], object], attribute: str) -> 
     if identity < 0 or identity >= 2**32 - 1:
         raise ValueError("owner and group IDs must fit a non-negative 32-bit identity")
     return identity
+
+
+def _effective_user_can_read(mode: int, uid: int, gid: int) -> bool:
+    effective_uid = os.geteuid()
+    if effective_uid == 0:
+        return True
+    if effective_uid == uid:
+        return bool(mode & stat.S_IRUSR)
+    if gid == os.getegid() or gid in os.getgroups():
+        return bool(mode & stat.S_IRGRP)
+    return bool(mode & stat.S_IROTH)
 
 
 def _strict_integer(value: object, label: str) -> int:
@@ -891,6 +905,8 @@ def main() -> None:
             raise ValueError("mode exceeds the POSIX permission-bit range")
         uid = _identity(str(module.params["owner"]), pwd.getpwnam, "pw_uid")
         gid = _identity(str(module.params["group"]), grp.getgrnam, "gr_gid")
+        if module.params["state"] == "file" and not _effective_user_can_read(mode, uid, gid):
+            raise ValueError("file mode must remain readable by the effective user for idempotent verification")
         parent_path, name = os.path.split(path)
         parent = _open_bound_directory(parent_path, module.params["parent_identities"])
         try:
