@@ -36,13 +36,13 @@ author: [Lightning IT]
 def _identity(value: str, database: object, attribute: str) -> int:
     if re.fullmatch(r"[+-]?\d+", value):
         identity = int(value, 10)
-        if identity < 0:
-            raise ValueError("owner and group IDs must be non-negative")
+        if identity < 0 or identity >= 2**32 - 1:
+            raise ValueError("owner and group IDs must fit a non-negative 32-bit identity")
         return identity
     record = database(value)
     identity = int(getattr(record, attribute))
-    if identity < 0:
-        raise ValueError("owner and group IDs must be non-negative")
+    if identity < 0 or identity >= 2**32 - 1:
+        raise ValueError("owner and group IDs must fit a non-negative 32-bit identity")
     return identity
 
 
@@ -199,6 +199,9 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
                 msg="directory boundary has an unexpected identity or metadata", path=module.params["path"]
             )
         _revalidate_parent(module, parent)
+        current = _existing(parent, name)
+        if current is None or not _same_identity(current, before):
+            module.fail_json(msg="directory boundary changed before no-op completion", path=module.params["path"])
         module.exit_json(changed=False, path=module.params["path"])
     if module.check_mode:
         module.exit_json(changed=True, path=module.params["path"])
@@ -251,12 +254,14 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
     else:
         if not stat.S_ISREG(before.st_mode) or not _matches(before, mode, uid, gid):
             module.fail_json(msg="file boundary has unexpected type or metadata", path=module.params["path"])
+        if not isinstance(expected_checksum, str):
+            module.fail_json(msg="expected_checksum is required for an existing file", path=module.params["path"])
         bound = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent)
         try:
             opened = os.fstat(bound)
-            if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+            if not _same_identity(opened, before):
                 module.fail_json(msg="file boundary changed while opening", path=module.params["path"])
-            if not isinstance(expected_checksum, str) or _checksum(bound) != expected_checksum:
+            if _checksum(bound) != expected_checksum:
                 module.fail_json(msg="file boundary checksum changed", path=module.params["path"])
             final_bound = os.fstat(bound)
             if not _same_identity(opened, final_bound):
@@ -266,6 +271,9 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             os.close(bound)
     if before is not None and expected_checksum == desired:
         _revalidate_parent(module, parent)
+        current = _existing(parent, name)
+        if current is None or not _same_identity(current, before):
+            module.fail_json(msg="file boundary changed before no-op completion", path=module.params["path"])
         module.exit_json(changed=False, path=module.params["path"], checksum=desired)
     if module.check_mode:
         module.exit_json(changed=True, path=module.params["path"], checksum=desired)
@@ -337,7 +345,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
                         preserve_workspace = True
                 else:
                     installed = not _remove_if_same(parent, name, staged_identity)
-            if installed:
+            if installed and displaced_identity is not None and _existing(workspace, "payload") is not None:
                 preserve_workspace = True
         raise
     finally:
@@ -368,7 +376,13 @@ def main() -> None:
         supports_check_mode=True,
     )
     path = module.params["path"]
-    if not os.path.isabs(path) or os.path.normpath(path) != path or path == "/" or "\x00" in path:
+    if (
+        not os.path.isabs(path)
+        or os.path.normpath(path) != path
+        or not os.path.basename(path)
+        or path == "/"
+        or "\x00" in path
+    ):
         module.fail_json(msg="path must be one canonical absolute path", path=path)
     try:
         mode_value = str(module.params["mode"])
@@ -387,7 +401,7 @@ def main() -> None:
             _write_file(module, parent, name, mode, uid, gid)
         finally:
             os.close(parent)
-    except (KeyError, OSError, TypeError, ValueError) as exc:
+    except (KeyError, OSError, OverflowError, TypeError, ValueError) as exc:
         module.fail_json(msg=f"atomic path mutation failed: {exc}", path=path)
 
 
