@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    Add a descriptor-relative atomic_path module for identity-bound directory
+    creation and regular-file replacement without following parent symlinks.
