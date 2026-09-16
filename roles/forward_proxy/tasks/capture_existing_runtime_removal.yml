@@ -1,0 +1,80 @@
+---
+- name: Reinspect the owned Quadlet before capturing runtime removal identity
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_quadlet_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_existing_runtime_capture_quadlet
+
+- name: Capture the existing Podman pod identity
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - pod
+      - inspect
+      - --format
+      - >-
+        {{ '{{.Id}}|{{ index .Labels "io.lightning-it.owner" }}' }}
+      - "{{ forward_proxy_unit_name }}"
+  register: forward_proxy_existing_runtime_capture_pod
+  changed_when: false
+  failed_when: forward_proxy_existing_runtime_capture_pod.rc != 0
+  check_mode: false
+
+- name: Capture the existing systemd fragment identity
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - --system
+      - show
+      - "{{ forward_proxy_unit_name }}.service"
+      - --property=FragmentPath
+      - --value
+  register: forward_proxy_existing_runtime_capture_unit
+  changed_when: false
+  failed_when: forward_proxy_existing_runtime_capture_unit.rc != 0
+  check_mode: false
+
+- name: Require exact owned runtime identity before authorizing removal
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_existing_runtime_capture_quadlet.stat.isreg | default(false)
+      - not forward_proxy_existing_runtime_capture_quadlet.stat.islnk | default(false)
+      - >-
+        forward_proxy_existing_runtime_capture_quadlet.stat.checksum
+        == forward_proxy_previous_state_manifest.quadlet_checksum
+      - forward_proxy_existing_runtime_capture_quadlet.stat.mode == '0644'
+      - forward_proxy_existing_runtime_capture_quadlet.stat.pw_name | default('') == 'root'
+      - forward_proxy_existing_runtime_capture_quadlet.stat.gr_name | default('') == 'root'
+      - >-
+        (forward_proxy_existing_runtime_capture_pod.stdout | trim).split('|')
+        == [
+          (forward_proxy_existing_runtime_capture_pod.stdout | trim).split('|')[0],
+          'lit.supplementary.forward_proxy'
+        ]
+      - >-
+        (forward_proxy_existing_runtime_capture_pod.stdout | trim).split('|')[0]
+        is match('^[a-f0-9]{12,64}\Z')
+      - >-
+        forward_proxy_existing_runtime_capture_unit.stdout | trim
+        is match(
+          '^/run/systemd/generator(?:\\.early|\\.late)?/'
+          ~ (forward_proxy_unit_name | regex_escape)
+          ~ '\\.service\\Z'
+        )
+    fail_msg: >-
+      Runtime removal requires the exact role-owned Quadlet plus stable Pod and
+      systemd fragment identities. Leave mismatched state intact.
+
+- name: Authorize removal of the exact captured existing runtime
+  ansible.builtin.set_fact:
+    forward_proxy_existing_runtime_removal_authorization_internal:
+      authorized: true
+      unit_name: "{{ forward_proxy_unit_name }}"
+      quadlet_path: "{{ forward_proxy_quadlet_path }}"
+      quadlet_checksum: "{{ forward_proxy_existing_runtime_capture_quadlet.stat.checksum }}"
+      pod_id: >-
+        {{ (forward_proxy_existing_runtime_capture_pod.stdout | trim).split('|')[0] }}
+      owner_label: >-
+        {{ (forward_proxy_existing_runtime_capture_pod.stdout | trim).split('|')[1] }}
+      unit_fragment_path: "{{ forward_proxy_existing_runtime_capture_unit.stdout | trim }}"

@@ -1,0 +1,69 @@
+---
+- name: Inspect the active transaction-owned Quadlet
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_quadlet_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_active_runtime_quadlet
+
+- name: Capture the active Podman pod identity and provenance
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - pod
+      - inspect
+      - --format
+      - >-
+        {{ '{{.Id}}|{{ index .Labels "io.lightning-it.owner" }}' }}
+      - "{{ forward_proxy_unit_name }}"
+  register: forward_proxy_active_runtime_pod
+  changed_when: false
+  failed_when: forward_proxy_active_runtime_pod.rc != 0
+  check_mode: false
+
+- name: Capture the active Quadlet-generated systemd fragment
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - --system
+      - show
+      - "{{ forward_proxy_unit_name }}.service"
+      - --property=FragmentPath
+      - --value
+  register: forward_proxy_active_runtime_unit
+  changed_when: false
+  failed_when: forward_proxy_active_runtime_unit.rc != 0
+  check_mode: false
+
+- name: Require exact provenance for the active managed runtime
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_active_runtime_quadlet.stat.isreg | default(false)
+      - not forward_proxy_active_runtime_quadlet.stat.islnk | default(false)
+      - forward_proxy_active_runtime_quadlet.stat.checksum is match('^[a-f0-9]{64}\Z')
+      - forward_proxy_active_runtime_quadlet.stat.mode == '0644'
+      - forward_proxy_active_runtime_quadlet.stat.pw_name | default('') == 'root'
+      - forward_proxy_active_runtime_quadlet.stat.gr_name | default('') == 'root'
+      - >-
+        forward_proxy_active_runtime_pod.stdout | trim
+        is match('^[a-f0-9]{12,64}\\|lit\\.supplementary\\.forward_proxy\Z')
+      - >-
+        forward_proxy_active_runtime_unit.stdout | trim
+        is match(
+          '^/run/systemd/generator(?:\\.early|\\.late)?/'
+          ~ (forward_proxy_unit_name | regex_escape)
+          ~ '\\.service\\Z'
+        )
+    fail_msg: >-
+      The active same-named runtime is not bound to this role's Pod label,
+      exact Quadlet, and Quadlet-generated systemd fragment.
+
+- name: Bind readiness and rollback to the active runtime identity
+  ansible.builtin.set_fact:
+    forward_proxy_active_runtime_identity_internal:
+      unit_name: "{{ forward_proxy_unit_name }}"
+      quadlet_path: "{{ forward_proxy_quadlet_path }}"
+      quadlet_checksum: "{{ forward_proxy_active_runtime_quadlet.stat.checksum }}"
+      pod_id: "{{ (forward_proxy_active_runtime_pod.stdout | trim).split('|')[0] }}"
+      owner_label: "{{ (forward_proxy_active_runtime_pod.stdout | trim).split('|')[1] }}"
+      unit_fragment_path: "{{ forward_proxy_active_runtime_unit.stdout | trim }}"

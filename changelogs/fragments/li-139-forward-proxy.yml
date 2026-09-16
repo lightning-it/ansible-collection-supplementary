@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    Add the distribution-neutral lit.supplementary.forward_proxy role for a
+    closed, digest-pinned, hardened Squid Podman service on Ubuntu and
+    Enterprise Linux hosts.

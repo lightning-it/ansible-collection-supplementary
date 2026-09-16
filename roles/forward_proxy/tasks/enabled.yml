@@ -1,0 +1,37 @@
+---
+- name: Verify the pinned Squid image was preloaded
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - image
+      - exists
+      - "{{ forward_proxy_image }}"
+  changed_when: false
+  check_mode: false
+  when: forward_proxy_manage_runtime | bool
+
+- name: Apply forward proxy state with first-run rollback
+  block:
+    - name: Apply the requested forward proxy state
+      ansible.builtin.include_tasks: enabled_apply.yml
+  rescue:
+    - name: Roll back a failed first forward proxy deployment
+      ansible.builtin.include_tasks: enabled_first_run_rollback.yml
+      when:
+        - not forward_proxy_state_marker.stat.exists
+        - not ansible_check_mode
+
+    - name: Restore a failed existing forward proxy deployment
+      ansible.builtin.include_tasks: enabled_existing_rollback.yml
+      when:
+        - forward_proxy_state_marker.stat.exists
+        - not ansible_check_mode
+
+    - name: Stop after the forward proxy transaction failed
+      ansible.builtin.fail:
+        msg: >-
+          {{
+            'Forward proxy activation failed. The first deployment was rolled back.'
+            if not forward_proxy_state_marker.stat.exists
+            else 'Forward proxy activation failed. The previous owned deployment was restored.'
+          }}

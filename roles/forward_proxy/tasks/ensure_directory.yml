@@ -1,0 +1,214 @@
+---
+- name: Inspect the immediate parent of the trusted proxy directory
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_directory_path | dirname }}"
+    follow: false
+  register: forward_proxy_directory_parent
+
+- name: Resolve the existing immediate parent canonically
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - "{{ forward_proxy_directory_path | dirname }}"
+  register: forward_proxy_directory_parent_realpath
+  changed_when: false
+  check_mode: false
+  when: forward_proxy_directory_parent.stat.exists
+
+- name: Require a real immediate parent before touching the proxy directory
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          forward_proxy_directory_parent.stat.exists
+          and forward_proxy_directory_parent.stat.isdir | default(false)
+          and not forward_proxy_directory_parent.stat.islnk | default(false)
+          and forward_proxy_directory_parent_realpath.stdout
+            == (forward_proxy_directory_path | dirname)
+          and (
+            forward_proxy_directory_parent.stat.mode is match('^0[0-7][0145][0145]\Z')
+            or (
+              forward_proxy_directory_path | dirname == '/tmp'
+              and forward_proxy_directory_parent.stat.mode == '1777'
+              and forward_proxy_directory_parent.stat.uid == 0
+              and forward_proxy_directory_parent.stat.gid == 0
+            )
+          )
+          and (
+            forward_proxy_directory_parent.stat.uid == 0
+            or forward_proxy_directory_parent.stat.pw_name | default('')
+              == forward_proxy_file_owner | string
+            or forward_proxy_directory_parent.stat.uid | string
+              == forward_proxy_file_owner | string
+          )
+          and (
+            forward_proxy_directory_parent.stat.gid == 0
+            or forward_proxy_directory_parent.stat.gr_name | default('')
+              == forward_proxy_file_group | string
+            or forward_proxy_directory_parent.stat.gid | string
+              == forward_proxy_file_group | string
+          )
+        )
+        or (
+          ansible_check_mode
+          and forward_proxy_directory_path | dirname
+            in forward_proxy_planned_directories_internal
+        )
+    fail_msg: >-
+      Every trusted proxy directory requires an existing canonical immediate
+      parent with a safe type, owner, group, and mode. Parent chains must be
+      complete and ordered before child paths.
+
+- name: Inspect the trusted proxy directory before creation
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_directory_path }}"
+    follow: false
+  register: forward_proxy_directory_before
+
+- name: Refuse an absent anchor or unsafe existing proxy directory
+  ansible.builtin.assert:
+    that:
+      - >-
+        forward_proxy_directory_path | dirname in forward_proxy_trusted_parent_paths
+        or forward_proxy_directory_before.stat.exists
+      - >-
+        forward_proxy_directory_creation_allowed | bool
+        or forward_proxy_directory_before.stat.exists
+        or (
+          ansible_check_mode
+          and forward_proxy_directory_path in forward_proxy_planned_directories_internal
+        )
+      - >-
+        (
+          not forward_proxy_directory_before.stat.exists
+          and not forward_proxy_directory_before.stat.islnk | default(false)
+        )
+        or (
+          forward_proxy_directory_before.stat.isdir | default(false)
+          and not forward_proxy_directory_before.stat.islnk | default(false)
+          and (
+            forward_proxy_directory_before.stat.mode is match('^0[0-7][0145][0145]\Z')
+            or (
+              forward_proxy_directory_path == '/tmp'
+              and forward_proxy_directory_before.stat.mode == '1777'
+              and forward_proxy_directory_before.stat.uid == 0
+              and forward_proxy_directory_before.stat.gid == 0
+            )
+          )
+          and (
+            forward_proxy_directory_before.stat.uid == 0
+            or forward_proxy_directory_before.stat.pw_name | default('')
+              == forward_proxy_file_owner | string
+            or forward_proxy_directory_before.stat.uid | string
+              == forward_proxy_file_owner | string
+          )
+          and (
+            forward_proxy_directory_before.stat.gid == 0
+            or forward_proxy_directory_before.stat.gr_name | default('')
+              == forward_proxy_file_group | string
+            or forward_proxy_directory_before.stat.gid | string
+              == forward_proxy_file_group | string
+          )
+        )
+    fail_msg: >-
+      A trusted proxy directory anchor is absent or an existing directory has
+      an unsafe type, owner, group, or mode.
+
+- name: Create one validated forward proxy directory component
+  lit.supplementary.atomic_path:
+    path: "{{ forward_proxy_directory_path }}"
+    state: directory
+    owner: "{{ forward_proxy_file_owner }}"
+    group: "{{ forward_proxy_file_group }}"
+    mode: "0755"
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"
+  when:
+    - forward_proxy_directory_creation_allowed | bool
+    - forward_proxy_directory_path | dirname in forward_proxy_trusted_parent_paths
+    - not forward_proxy_directory_before.stat.exists
+    - not forward_proxy_directory_before.stat.islnk | default(false)
+    - >-
+      not ansible_check_mode
+      or forward_proxy_directory_path | dirname not in forward_proxy_planned_directories_internal
+
+- name: Carry the planned forward proxy directory through check mode
+  ansible.builtin.set_fact:
+    forward_proxy_planned_directories_internal: >-
+      {{
+        forward_proxy_planned_directories_internal
+        + [forward_proxy_directory_path]
+      }}
+  when:
+    - ansible_check_mode
+    - forward_proxy_directory_creation_allowed | bool
+    - not forward_proxy_directory_before.stat.exists
+    - not forward_proxy_directory_before.stat.islnk | default(false)
+
+- name: Reinspect the trusted proxy directory before privileged writes
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_directory_path }}"
+    follow: false
+  register: forward_proxy_directory_after
+  when: >-
+    not ansible_check_mode
+    or forward_proxy_directory_before.stat.exists
+
+- name: Resolve the trusted proxy directory without following hidden ancestors
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - "{{ forward_proxy_directory_path }}"
+  register: forward_proxy_directory_realpath
+  changed_when: false
+  check_mode: false
+  when: >-
+    not ansible_check_mode
+    or forward_proxy_directory_before.stat.exists
+
+- name: Require the exact canonical proxy directory boundary
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_directory_after.stat.isdir | default(false)
+      - not forward_proxy_directory_after.stat.islnk | default(false)
+      - forward_proxy_directory_realpath.stdout == forward_proxy_directory_path
+    fail_msg: >-
+      A trusted proxy directory or one of its ancestors is a symlink or resolves
+      outside its exact configured path.
+  when: >-
+    not ansible_check_mode
+    or forward_proxy_directory_before.stat.exists
+
+- name: Bind a newly created trusted directory to this transaction
+  ansible.builtin.set_fact:
+    forward_proxy_trusted_parent_identity_map_internal: >-
+      {{
+        forward_proxy_trusted_parent_identity_map_internal
+        | combine(
+            {
+              forward_proxy_directory_path: {
+                'device': forward_proxy_directory_after.stat.dev,
+                'inode': forward_proxy_directory_after.stat.inode
+              }
+            }
+          )
+      }}
+  when:
+    - not ansible_check_mode
+    - forward_proxy_directory_path not in forward_proxy_trusted_parent_identity_map_internal
+
+- name: Require the transaction-bound trusted directory identity
+  ansible.builtin.assert:
+    that:
+      - >-
+        forward_proxy_directory_after.stat.dev
+        == forward_proxy_trusted_parent_identity_map_internal[forward_proxy_directory_path].device
+      - >-
+        forward_proxy_directory_after.stat.inode
+        == forward_proxy_trusted_parent_identity_map_internal[forward_proxy_directory_path].inode
+    fail_msg: >-
+      A trusted proxy directory was replaced after the transaction captured
+      its device and inode. Stop before any pathname-based mutation.
+  when:
+    - not ansible_check_mode
+    - forward_proxy_trusted_parent_identity_map_internal is defined
+    - forward_proxy_directory_path in forward_proxy_trusted_parent_identity_map_internal

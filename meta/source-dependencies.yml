@@ -70,6 +70,9 @@ container_images:
   - reference: "docker.io/renovate/renovate:43.288.0@sha256:3b72fc4274c56f65f53dcd4dcbed3143289358e0a2d96f7af215e6cf1923e5f6"
     locations:
       - ".pre-commit-config.yaml"
+  - reference: "docker.io/ubuntu/squid:6.6-24.04_beta@sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029"
+    locations:
+      - "roles/forward_proxy/defaults/main.yml"
   - reference: "docker.io/rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
     locations:
       - ".pre-commit-config.yaml"
@@ -142,7 +145,7 @@ collections:
     requirement: "5.10.0"
     source: "galaxy.yml"
   - name: "lit.foundational"
-    requirement: ">=1.31.0"
+    requirement: ">=1.32.0"
     source: "galaxy.yml"
   - name: "lit.rhel"
     requirement: ">=1.17.1"

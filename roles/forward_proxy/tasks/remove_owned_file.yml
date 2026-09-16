@@ -1,0 +1,23 @@
+---
+- name: Revalidate the owned file parent chain at the removal boundary
+  ansible.builtin.include_tasks: ensure_directory.yml
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  loop_control:
+    loop_var: forward_proxy_directory_path
+  vars:
+    forward_proxy_directory_creation_allowed: false
+  when: >-
+    forward_proxy_directory_path == (forward_proxy_removal_path | dirname)
+    or (forward_proxy_removal_path | dirname).startswith(
+      forward_proxy_directory_path.rstrip('/') ~ '/'
+    )
+
+- name: Atomically unlink the exact verified owned file
+  lit.supplementary.atomic_unlink:
+    path: "{{ forward_proxy_removal_path }}"
+    checksum: "{{ forward_proxy_removal_checksum }}"
+    mode: "{{ forward_proxy_removal_mode }}"
+    owner: "{{ forward_proxy_removal_owner }}"
+    group: "{{ forward_proxy_removal_group }}"
+    allow_absent: "{{ forward_proxy_removal_allow_absent | bool }}"
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"

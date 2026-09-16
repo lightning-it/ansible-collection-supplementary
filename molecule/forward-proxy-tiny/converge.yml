@@ -1,0 +1,59 @@
+---
+- name: Converge forward proxy service configuration
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    forward_proxy_test_root: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/forward-proxy-state
+    forward_proxy_render_root: "{{ forward_proxy_test_root | dirname }}"
+    forward_proxy_lock_path: "{{ forward_proxy_test_root }}.lock"
+    forward_proxy_trusted_parent_paths:
+      - "{{ forward_proxy_test_root | dirname }}"
+      - "{{ forward_proxy_test_root }}"
+      - "{{ forward_proxy_test_root }}/etc"
+      - "{{ forward_proxy_test_root }}/etc/containers"
+      - "{{ forward_proxy_test_root }}/etc/containers/systemd"
+      - "{{ forward_proxy_test_root }}/etc/squid"
+      - "{{ forward_proxy_test_root }}/var"
+      - "{{ forward_proxy_test_root }}/var/lib"
+      - "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy"
+  pre_tasks:
+    - name: Remove only the scenario-owned stale forward proxy lock
+      ansible.builtin.file:
+        path: "{{ forward_proxy_lock_path }}"
+        state: absent
+      check_mode: false
+
+    - name: Read rootless test UID
+      ansible.builtin.command: id -u
+      register: forward_proxy_test_uid
+      changed_when: false
+
+    - name: Read rootless test GID
+      ansible.builtin.command: id -g
+      register: forward_proxy_test_gid
+      changed_when: false
+  roles:
+    - role: lit.supplementary.forward_proxy
+      forward_proxy_enabled: true
+      forward_proxy_manage_runtime: false
+      forward_proxy_file_owner: "{{ forward_proxy_test_uid.stdout }}"
+      forward_proxy_file_group: "{{ forward_proxy_test_gid.stdout }}"
+      forward_proxy_listen_addresses:
+        - 127.0.0.1
+        - 10.89.0.1
+      forward_proxy_allowed_clients:
+        - 127.0.0.1/32
+        - 10.89.0.0/24
+      forward_proxy_allowed_destination_domains:
+        - .ubuntu.com
+        - registry.example.com
+      forward_proxy_upstream_enabled: true
+      forward_proxy_upstream_host: proxy.customer.example
+      forward_proxy_upstream_port: 8080
+      forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+      forward_proxy_pod_manifest_path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
+      forward_proxy_state_marker_path: "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
+      forward_proxy_quadlet_dir: "{{ forward_proxy_test_root }}/etc/containers/systemd"
