@@ -10,6 +10,10 @@
       unit_name: ""
       state_marker_path: ""
       quadlet_path: ""
+      quadlet_checksum: ""
+      pod_id: ""
+      unit_fragment_path: ""
+    forward_proxy_runtime_absence_verified_internal: false
 
 - name: Inspect the required forward proxy lock parent
   ansible.builtin.stat:
@@ -35,7 +39,7 @@
       - --mode=0700
       - "{{ forward_proxy_lock_path }}"
   register: forward_proxy_lock_acquisition
-  changed_when: forward_proxy_lock_acquisition.rc == 0
+  changed_when: false
   failed_when: false
   retries: "{{ forward_proxy_lock_timeout }}"
   delay: 1
@@ -57,9 +61,14 @@
       ansible.builtin.include_tasks: transition.yml
   always:
     - name: Release the per-host forward proxy transition lock
-      ansible.builtin.file:
-        path: "{{ forward_proxy_lock_path }}"
-        state: absent
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/rmdir
+          - --
+          - "{{ forward_proxy_lock_path }}"
+      register: forward_proxy_lock_release
+      changed_when: false
+      failed_when: forward_proxy_lock_release.rc != 0
       when:
         - not ansible_check_mode
         - forward_proxy_lock_acquisition.rc | default(1) == 0

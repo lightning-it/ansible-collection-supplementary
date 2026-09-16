@@ -208,13 +208,14 @@ class ForwardProxyContractTests(unittest.TestCase):
         )
         self.assertIn("forward_proxy_first_run_pod_state.rc == 1", apply_tasks)
         self.assertIn(
-            "Authorize rollback only for the proven-absent new runtime identity",
+            "Authorize rollback for the exact newly created runtime identity",
             apply_tasks,
         )
-        authorization = "forward_proxy_new_runtime_removal_authorization_internal | default({})"
-        self.assertGreaterEqual(rollback.count(authorization), 2)
+        self.assertIn("revalidate_new_runtime_removal.yml", rollback)
+        self.assertIn("pod_id:", apply_tasks)
+        self.assertIn("unit_fragment_path:", apply_tasks)
         existing_rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
-        self.assertGreaterEqual(existing_rollback.count(authorization), 2)
+        self.assertIn("revalidate_new_runtime_removal.yml", existing_rollback)
         wrapper = (ROLE_ROOT / "tasks" / "main.yml").read_text()
         self.assertIn("Reset runtime rollback authorization", wrapper)
         self.assertIn("authorized: false", wrapper)
@@ -312,6 +313,7 @@ class ForwardProxyContractTests(unittest.TestCase):
 
     def test_existing_rollback_revalidates_every_write_boundary(self) -> None:
         rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
+        restore_helper = (ROLE_ROOT / "tasks" / "restore_managed_file.yml").read_text()
         self.assertIn(
             "Revalidate trusted proxy directories before existing-state rollback",
             rollback,
@@ -319,7 +321,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("Reinspect existing-state rollback destinations", rollback)
         self.assertIn("Require safe existing-state rollback destinations", rollback)
         self.assertGreaterEqual(rollback.count("follow: false"), 4)
-        self.assertGreaterEqual(rollback.count("unsafe_writes: false"), 3)
+        self.assertGreaterEqual((rollback + restore_helper).count("unsafe_writes: false"), 3)
         restored_runtime = rollback.split(
             "- name: Restart the restored previous forward proxy runtime",
             maxsplit=1,
@@ -328,6 +330,41 @@ class ForwardProxyContractTests(unittest.TestCase):
             maxsplit=1,
         )[0]
         self.assertIn("not ansible_check_mode", restored_runtime)
+
+    def test_current_head_review_findings_are_bound_at_mutation_time(self) -> None:
+        apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
+        rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
+        runtime_guard = (ROLE_ROOT / "tasks" / "revalidate_new_runtime_removal.yml").read_text()
+        restore_helper = (ROLE_ROOT / "tasks" / "restore_managed_file.yml").read_text()
+        wrapper = (ROLE_ROOT / "tasks" / "main.yml").read_text()
+        converge = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "converge.yml").read_text()
+        verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
+        assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+
+        self.assertIn("Reinspect the Squid policy at the mutation boundary", apply_tasks)
+        self.assertIn("Reinspect the Pod manifest at the mutation boundary", apply_tasks)
+        self.assertIn("forward_proxy_config_write_boundary.stat.checksum", apply_tasks)
+        self.assertIn("forward_proxy_manifest_write_boundary.stat.checksum", apply_tasks)
+        self.assertIn("forward_proxy_final_state_marker.stat.checksum", apply_tasks)
+        self.assertIn("forward_proxy_state_marker_content.content", apply_tasks)
+        self.assertIn("Reinspect one managed file at its rollback mutation boundary", restore_helper)
+        self.assertIn("forward_proxy_restore_file_boundary.stat.checksum", restore_helper)
+        self.assertIn("forward_proxy_restore_marker_boundary.stat.checksum", rollback)
+        self.assertIn("forward_proxy_restore_quadlet_boundary.stat.checksum", rollback)
+        self.assertIn("pod\n      - inspect", runtime_guard)
+        self.assertIn("--property=FragmentPath", runtime_guard)
+        self.assertIn("quadlet_checksum", runtime_guard)
+        self.assertIn("pod_id", runtime_guard)
+        self.assertIn("unit_fragment_path", runtime_guard)
+        self.assertIn("/usr/bin/rmdir", wrapper)
+        self.assertEqual(wrapper.count("changed_when: false"), 2)
+        self.assertNotIn("molecule-idempotence-notest", wrapper)
+        self.assertNotIn("state: absent", wrapper.split("Release the per-host", maxsplit=1)[1])
+        self.assertIn('- "{{ forward_proxy_test_root | dirname }}"', converge)
+        self.assertIn('- "{{ forward_proxy_test_root | dirname }}"', verify)
+        self.assertNotIn("forward_proxy_test_root | dirname | dirname", converge)
+        self.assertNotIn("forward_proxy_test_root | dirname | dirname", verify)
+        self.assertIn("or ansible_loop.index0 == 0", assertions)
 
     def test_trusted_parent_chains_are_complete_and_canonical(self) -> None:
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()

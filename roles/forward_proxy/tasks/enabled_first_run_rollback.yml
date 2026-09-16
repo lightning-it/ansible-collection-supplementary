@@ -25,6 +25,42 @@
         )
       )
 
+- name: Revalidate the exact newly created runtime before first-run rollback
+  ansible.builtin.include_tasks: revalidate_new_runtime_removal.yml
+  when:
+    - forward_proxy_manage_runtime | bool
+    - forward_proxy_new_runtime_removal_authorization_internal.authorized | default(false) | bool
+    - not ansible_check_mode
+
+- name: Prove runtime absence when activation failed before identity capture
+  ansible.builtin.include_tasks: verify_runtime_absent.yml
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not forward_proxy_new_runtime_removal_authorization_internal.authorized | default(false) | bool
+    - not ansible_check_mode
+
+- name: Record safe runtime absence before first-run file rollback
+  ansible.builtin.set_fact:
+    forward_proxy_runtime_absence_verified_internal: true
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not forward_proxy_new_runtime_removal_authorization_internal.authorized | default(false) | bool
+    - not ansible_check_mode
+
+- name: Require rollback authorization or proven absence before touching first-run files
+  ansible.builtin.assert:
+    that:
+      - >-
+        forward_proxy_new_runtime_removal_authorization_internal.authorized | default(false) | bool
+        or forward_proxy_runtime_absence_verified_internal | bool
+    fail_msg: >-
+      Runtime activation failed before its exact removal identity was captured.
+      Runtime absence also could not be proven. Leave runtime and files intact
+      for operator recovery.
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
 - name: Remove a partially created forward proxy runtime
   ansible.builtin.include_role:
     name: lit.foundational.podman_systemd
@@ -37,28 +73,14 @@
     podman_systemd_quadlet_dir: "{{ forward_proxy_quadlet_dir }}"
   when:
     - forward_proxy_manage_runtime | bool
-    - >-
-      forward_proxy_new_runtime_removal_authorization_internal | default({})
-      == {
-        'authorized': true,
-        'unit_name': forward_proxy_unit_name,
-        'state_marker_path': forward_proxy_state_marker_path,
-        'quadlet_path': forward_proxy_quadlet_path
-      }
+    - forward_proxy_new_runtime_removal_authorization_internal.authorized | default(false) | bool
     - not ansible_check_mode
 
 - name: Prove the partial first-run runtime is absent before file rollback
   ansible.builtin.include_tasks: verify_runtime_absent.yml
   when:
     - forward_proxy_manage_runtime | bool
-    - >-
-      forward_proxy_new_runtime_removal_authorization_internal | default({})
-      == {
-        'authorized': true,
-        'unit_name': forward_proxy_unit_name,
-        'state_marker_path': forward_proxy_state_marker_path,
-        'quadlet_path': forward_proxy_quadlet_path
-      }
+    - forward_proxy_new_runtime_removal_authorization_internal.authorized | default(false) | bool
     - not ansible_check_mode
 
 - name: Reinspect first-run rollback targets immediately before deletion

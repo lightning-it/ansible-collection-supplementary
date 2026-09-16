@@ -213,6 +213,7 @@
     that:
       - >-
         item | dirname == '/'
+        or ansible_loop.index0 == 0
         or item | dirname in forward_proxy_trusted_parent_paths[:ansible_loop.index0]
     fail_msg: >-
       Every trusted parent that is part of the declared chain must appear
