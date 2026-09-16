@@ -178,25 +178,23 @@ def _private_workspace(parent: int) -> tuple[int, str, os.stat_result]:
             os.mkdir(name, 0o700, dir_fd=parent)
         except FileExistsError:
             continue
-        descriptor = -1
         try:
-            descriptor = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+            expected = os.stat(name, dir_fd=parent, follow_symlinks=False)
         except OSError:
             try:
                 os.rmdir(name, dir_fd=parent)
             except OSError:
                 pass
             raise
-        opened = os.fstat(descriptor)
         try:
-            named = os.stat(name, dir_fd=parent, follow_symlinks=False)
+            descriptor = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
         except OSError:
-            os.close(descriptor)
-            _remove_private_if_same(parent, name, opened, directory=True)
+            _remove_private_if_same(parent, name, expected, directory=True)
             raise
-        if not _same_inode(named, opened):
+        opened = os.fstat(descriptor)
+        if not _same_inode(expected, opened):
             os.close(descriptor)
-            _remove_private_if_same(parent, name, opened, directory=True)
+            _remove_private_if_same(parent, name, expected, directory=True)
             raise OSError("private workspace identity changed while opening")
         return descriptor, name, opened
     raise OSError("cannot allocate a private atomic-path workspace")
@@ -313,6 +311,9 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
             raise OSError("created directory identity changed while installing")
         os.fsync(parent)
         _revalidate_parent(module, parent)
+        final = _existing(parent, name)
+        if final is None or not _same_identity(final, created_identity):
+            raise OSError("created directory identity changed before completion")
     except Exception:
         if installed and created_identity is not None:
             _capture_and_remove(parent, name, created_identity, workspace, "failed", directory=True)
@@ -343,6 +344,8 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             module.fail_json(msg="file boundary has unexpected type or metadata", path=module.params["path"])
         if not isinstance(expected_checksum, str):
             module.fail_json(msg="expected_checksum is required for an existing file", path=module.params["path"])
+        if not re.fullmatch(r"[0-9a-f]{64}", expected_checksum):
+            module.fail_json(msg="expected_checksum must be one lowercase SHA-256 digest", path=module.params["path"])
         bound = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
         try:
             opened = os.fstat(bound)
@@ -408,14 +411,24 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             raise OSError("installed file identity changed after replacement")
         os.fsync(parent)
         _revalidate_parent(module, parent)
+        final = _existing(parent, name)
+        if staged_identity is None or final is None or not _same_identity(final, staged_identity):
+            preserve_workspace = displaced_identity is not None
+            raise OSError("installed file identity changed before completion")
         if displaced_identity is not None and not _remove_private_if_same(workspace, "payload", displaced_identity):
             raise OSError("replaced file could not be removed from the private recovery workspace")
-    except Exception:
+    except Exception as exc:
         if installed and staged_identity is not None:
             if displaced_identity is None:
                 installed = not _capture_and_remove(parent, name, staged_identity, workspace, "failed")
             else:
                 preserve_workspace = True
+        if preserve_workspace:
+            module.fail_json(
+                msg=f"atomic path mutation failed: {exc}; recovery workspace preserved",
+                path=module.params["path"],
+                recovery_path=f"{os.path.dirname(module.params['path'])}/{workspace_name}/payload",
+            )
         raise
     finally:
         cleanup_identity = os.fstat(descriptor) if descriptor >= 0 else None
@@ -447,6 +460,7 @@ def main() -> None:
     path = module.params["path"]
     if (
         not os.path.isabs(path)
+        or path.startswith("//")
         or os.path.normpath(path) != path
         or not os.path.basename(path)
         or path == "/"
