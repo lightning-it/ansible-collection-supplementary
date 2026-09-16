@@ -726,6 +726,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
         else:
             _renameat(workspace, "payload", parent, name, "exchange")
             installed = True
+            _fsync_directory(workspace)
             preserve_workspace = True
             recovery_name = "payload"
             displaced_identity = os.stat("payload", dir_fd=workspace, follow_symlinks=False)

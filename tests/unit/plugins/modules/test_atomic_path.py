@@ -207,6 +207,36 @@ class AtomicPathTests(unittest.TestCase):
         parameters["expected_checksum"] = "abc"
         self.assertIn("lowercase SHA-256", str(self.execute(parameters, check=True, failure=True)["msg"]))
 
+    def test_file_exchange_fsyncs_recovery_workspace_before_parent(self) -> None:
+        target = self.root / "policy.conf"
+        target.write_text("first\n", encoding="utf-8")
+        parameters = self.common(target, "file")
+        parameters.update(
+            content="second\n",
+            allow_absent=False,
+            expected_checksum=hashlib.sha256(b"first\n").hexdigest(),
+        )
+        real_private_workspace = MODULE._private_workspace
+        workspace_descriptor = -1
+        fsync_order: list[int] = []
+
+        def track_workspace(parent: int) -> tuple[int, str, os.stat_result]:
+            nonlocal workspace_descriptor
+            result = real_private_workspace(parent)
+            workspace_descriptor = result[0]
+            return result
+
+        with (
+            mock.patch.object(MODULE, "_private_workspace", side_effect=track_workspace),
+            mock.patch.object(MODULE, "_fsync_directory", side_effect=fsync_order.append),
+        ):
+            result = self.execute(parameters)
+        self.assertTrue(result["changed"])
+        self.assertGreaterEqual(len(fsync_order), 2)
+        self.assertEqual(workspace_descriptor, fsync_order[0])
+        self.assertNotEqual(workspace_descriptor, fsync_order[1])
+        self.assertEqual("second\n", target.read_text(encoding="utf-8"))
+
     def test_symlink_parent_and_malformed_identity_fail_closed(self) -> None:
         foreign = self.root / "foreign"
         foreign.mkdir()
