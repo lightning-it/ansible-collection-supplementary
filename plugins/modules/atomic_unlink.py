@@ -309,8 +309,6 @@ def main() -> None:
 
     try:
         _require_capabilities()
-        if not re.fullmatch(r"[0-9a-f]{64}", str(module.params["checksum"])):
-            raise ValueError("checksum must be one lowercase SHA-256 digest")
         expected_uid = _numeric_identity(str(module.params["owner"]), pwd.getpwnam, "owner")
         expected_gid = _numeric_identity(str(module.params["group"]), grp.getgrnam, "group")
         mode_value = str(module.params["mode"])
@@ -333,6 +331,9 @@ def main() -> None:
             if module.params["allow_absent"]:
                 module.exit_json(changed=False, path=path)
             module.fail_json(msg="owned file is absent", path=path)
+
+        if not re.fullmatch(r"[0-9a-f]{64}", str(module.params["checksum"])):
+            module.fail_json(msg="checksum must be one lowercase SHA-256 digest", path=path)
 
         if not stat.S_ISREG(before.st_mode):
             module.fail_json(msg="removal target is not a regular file", path=path)

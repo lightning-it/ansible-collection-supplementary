@@ -106,6 +106,11 @@ class AtomicUnlinkTests(unittest.TestCase):
         self.assertTrue(self.execute(check_mode=True)["changed"])
         self.assertTrue(self.target.exists())
 
+    def test_allow_absent_does_not_require_a_synthetic_checksum(self) -> None:
+        self.target.unlink()
+        self.parameters.update(checksum="", allow_absent=True)
+        self.assertFalse(self.execute()["changed"])
+
     def test_unlinks_the_exact_bound_file(self) -> None:
         self.assertTrue(self.execute()["changed"])
         self.assertFalse(self.target.exists())

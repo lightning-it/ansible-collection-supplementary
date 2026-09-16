@@ -1,14 +1,29 @@
-# lit.supplementary.forward_proxy
+# forward_proxy
 
-Runs the distribution-neutral LIT Squid forward proxy as a digest-pinned Podman
-container. Platform collections retain OS preparation, firewall, and client
-configuration; this role never installs an OS Squid package.
+## Requirements
 
-## Requirements and security boundary
+Rootful Podman, systemd, preloaded image, allowlists, trusted parents and opt-in.
+UID/GID 13, no capabilities, read-only rootfs; host firewall authoritative.
 
-Requires rootful Podman/Quadlet, systemd, a preloaded immutable image, explicit
-allowlists, trusted parent identities, and the experimental runtime opt-in. The
-container runs as UID/GID 13 without capabilities or privilege escalation and
-with a read-only root filesystem. The host firewall remains authoritative.
+## Variables
 
-MIT — Lightning IT
+`defaults/main.yml`.
+
+## Dependencies
+
+`galaxy.yml`.
+
+## Example Playbook
+
+```yaml
+- hosts: proxies
+  roles: [lit.supplementary.forward_proxy]
+```
+
+## License
+
+MIT
+
+## Author
+
+Lightning IT
