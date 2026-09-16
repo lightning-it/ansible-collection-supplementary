@@ -509,6 +509,7 @@ synthesized as passes.
 | dhcp_deploy | experimental | — | experimental | experimental | experimental |
 | forgejo_cac | experimental | — | experimental | experimental | experimental |
 | forgejo_deploy | experimental | — | experimental | experimental | experimental |
+| forward_proxy | experimental | — | experimental | blocked-external-infrastructure | blocked-external-infrastructure |
 | gitlab_runner | deprecated | — | deprecated | deprecated | deprecated |
 | grafana_deploy | experimental | — | experimental | experimental | experimental |
 | guacamole_deploy | experimental | — | experimental | experimental | experimental |

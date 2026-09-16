@@ -1,0 +1,40 @@
+---
+- name: Validate forward proxy configuration
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Acquire the bounded per-host forward proxy transition lock
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mkdir
+      - --mode=0700
+      - "{{ forward_proxy_lock_path }}"
+  register: forward_proxy_lock_acquisition
+  changed_when: forward_proxy_lock_acquisition.rc == 0
+  failed_when: false
+  retries: "{{ forward_proxy_lock_timeout }}"
+  delay: 1
+  until: forward_proxy_lock_acquisition.rc == 0
+  when: not ansible_check_mode
+
+- name: Require the exclusive forward proxy transition lock
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_lock_acquisition.rc == 0
+    fail_msg: >-
+      The per-host forward proxy transition lock was not acquired within the
+      bounded timeout. Stop without inspecting or changing managed state.
+  when: not ansible_check_mode
+
+- name: Apply the complete forward proxy transition under one host lock
+  block:
+    - name: Inspect, transition, activate, roll back, and finalize forward proxy state
+      ansible.builtin.include_tasks: transition.yml
+  always:
+    - name: Release the per-host forward proxy transition lock
+      ansible.builtin.file:
+        path: "{{ forward_proxy_lock_path }}"
+        state: absent
+      when:
+        - not ansible_check_mode
+        - forward_proxy_lock_acquisition.rc | default(1) == 0

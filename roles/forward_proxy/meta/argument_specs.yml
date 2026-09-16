@@ -1,0 +1,33 @@
+---
+argument_specs:
+  main:
+    short_description: Run the standard containerized LIT Squid forward proxy.
+    options:
+      forward_proxy_enabled: {type: bool, default: false}
+      forward_proxy_manage_runtime: {type: bool, default: true}
+      forward_proxy_file_owner: {type: str, default: root}
+      forward_proxy_file_group: {type: str, default: root}
+      forward_proxy_render_root: {type: path, default: /tmp}
+      forward_proxy_lock_path: {type: path, default: /run/lock/lit-supplementary-forward-proxy.lock}
+      forward_proxy_lock_timeout: {type: int, default: 30}
+      forward_proxy_experimental_runtime_acceptance: {type: bool, default: false}
+      forward_proxy_image: {type: str}
+      forward_proxy_image_pull_policy: {type: str, default: Never}
+      forward_proxy_runtime_uid: {type: int, default: 13}
+      forward_proxy_runtime_gid: {type: int, default: 13}
+      forward_proxy_unit_name: {type: str, default: lit-forward-proxy}
+      forward_proxy_systemd_scope: {type: str, default: system}
+      forward_proxy_quadlet_dir: {type: path, default: /etc/containers/systemd}
+      forward_proxy_readiness_timeout: {type: int, default: 30}
+      forward_proxy_listen_addresses: {type: list, elements: str}
+      forward_proxy_port: {type: int, default: 3128}
+      forward_proxy_allowed_clients: {type: list, elements: str}
+      forward_proxy_allowed_destination_domains: {type: list, elements: str}
+      forward_proxy_allowed_destination_ports: {type: list, elements: int}
+      forward_proxy_upstream_enabled: {type: bool, default: false}
+      forward_proxy_upstream_host: {type: str, default: ""}
+      forward_proxy_upstream_port: {type: int, default: 3128}
+      forward_proxy_config_path: {type: path}
+      forward_proxy_pod_manifest_path: {type: path}
+      forward_proxy_state_marker_path: {type: path}
+      forward_proxy_trusted_parent_paths: {type: list, elements: path}

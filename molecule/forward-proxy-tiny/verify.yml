@@ -1,0 +1,241 @@
+---
+- name: Verify forward proxy service configuration
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    forward_proxy_test_root: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/forward-proxy-state
+    forward_proxy_render_root: "{{ forward_proxy_test_root | dirname }}"
+    forward_proxy_lock_path: "{{ forward_proxy_test_root }}.lock"
+    forward_proxy_manage_runtime: false
+    forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+    forward_proxy_pod_manifest_path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
+    forward_proxy_state_marker_path: "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
+    forward_proxy_trusted_parent_paths:
+      - "{{ forward_proxy_test_root | dirname }}"
+      - "{{ forward_proxy_test_root }}"
+      - "{{ forward_proxy_test_root }}/etc"
+      - "{{ forward_proxy_test_root }}/etc/squid"
+      - "{{ forward_proxy_test_root }}/var"
+      - "{{ forward_proxy_test_root }}/var/lib"
+      - "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy"
+    forward_proxy_junit_root: >-
+      {{
+        lookup('ansible.builtin.env', 'QUALITY_ARTIFACT_ROOT')
+        | default(forward_proxy_test_root ~ '/artifacts', true)
+      }}/junit
+  pre_tasks:
+    - name: Read rootless verification UID
+      ansible.builtin.command: id -u
+      register: forward_proxy_verify_uid
+      changed_when: false
+
+    - name: Read rootless verification GID
+      ansible.builtin.command: id -g
+      register: forward_proxy_verify_gid
+      changed_when: false
+  tasks:
+    - name: Read rendered Squid policy
+      ansible.builtin.slurp:
+        src: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+      register: forward_proxy_squid_config
+
+    - name: Read rendered Squid Pod manifest
+      ansible.builtin.slurp:
+        src: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
+      register: forward_proxy_pod_manifest
+
+    - name: Decode rendered forward proxy configuration
+      ansible.builtin.set_fact:
+        forward_proxy_rendered_policy: "{{ forward_proxy_squid_config.content | b64decode }}"
+        forward_proxy_rendered_pod: "{{ forward_proxy_pod_manifest.content | b64decode }}"
+
+    - name: Initialize aggregate unsafe-client evidence
+      ansible.builtin.set_fact:
+        forward_proxy_negative_results: []
+
+    - name: Prove unsafe client networks are rejected before rendering
+      ansible.builtin.include_tasks: tasks/reject-client.yml
+      loop:
+        - 8.8.8.0/24
+        - 10.89.0.1/24
+        - 10.0.0.0/7
+      loop_control:
+        loop_var: forward_proxy_invalid_client
+
+    - name: Evaluate each service and upstream contract independently
+      ansible.builtin.assert:
+        that:
+          - item.passed | bool
+        quiet: true
+      loop:
+        - name: loopback listener
+          passed: "{{ 'http_port 127.0.0.1:3128' in forward_proxy_rendered_policy }}"
+        - name: exact client allowlist
+          passed: "{{ 'acl lit_clients src 127.0.0.1/32 10.89.0.0/24' in forward_proxy_rendered_policy }}"
+        - name: exact destination allowlist
+          passed: >-
+            {{
+              'acl lit_allowed_domains dstdomain -n .ubuntu.com registry.example.com'
+              in forward_proxy_rendered_policy
+            }}
+        - name: reject reverse-DNS conversion for IP literals
+          passed: >-
+            {{ 'acl lit_allowed_domains dstdomain -n ' in forward_proxy_rendered_policy }}
+        - name: upstream proxy peer
+          passed: >-
+            {{
+              'cache_peer proxy.customer.example parent 8080 0 no-query default'
+              in forward_proxy_rendered_policy
+            }}
+        - name: upstream-only routing
+          passed: "{{ 'never_direct allow all' in forward_proxy_rendered_policy }}"
+        - name: default deny policy
+          passed: "{{ 'http_access deny all' in forward_proxy_rendered_policy }}"
+        - name: writable runtime pid path
+          passed: "{{ 'pid_filename /tmp/squid.pid' in forward_proxy_rendered_policy }}"
+        - name: exact immutable Squid image
+          passed: >-
+            {{
+              'docker.io/ubuntu/squid:6.6-24.04_beta@sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029'
+              in forward_proxy_rendered_pod
+            }}
+        - name: offline image policy
+          passed: "{{ 'imagePullPolicy: Never' in forward_proxy_rendered_pod }}"
+        - name: host network attachment
+          passed: "{{ 'hostNetwork: true' in forward_proxy_rendered_pod }}"
+        - name: non-root runtime user
+          passed: "{{ 'runAsUser: 13' in forward_proxy_rendered_pod }}"
+        - name: read-only root filesystem
+          passed: "{{ 'readOnlyRootFilesystem: true' in forward_proxy_rendered_pod }}"
+      register: forward_proxy_policy_results
+      ignore_errors: true
+
+    - name: Initialize forward proxy cleanup execution evidence
+      ansible.builtin.set_fact:
+        forward_proxy_cleanup_execution_result:
+          name: disable managed service
+          failed: false
+
+    - name: Exercise cleanup without losing its failure evidence
+      block:
+        - name: Disable the previously managed forward proxy service
+          ansible.builtin.include_role:
+            name: lit.supplementary.forward_proxy
+          vars:
+            forward_proxy_enabled: false
+            forward_proxy_manage_runtime: false
+            forward_proxy_file_owner: "{{ forward_proxy_verify_uid.stdout }}"
+            forward_proxy_file_group: "{{ forward_proxy_verify_gid.stdout }}"
+            forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+            forward_proxy_pod_manifest_path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
+            forward_proxy_state_marker_path: "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
+      rescue:
+        - name: Record the cleanup execution failure for JUnit
+          ansible.builtin.set_fact:
+            forward_proxy_cleanup_execution_result:
+              name: disable managed service
+              failed: true
+
+    - name: Inspect disabled forward proxy paths
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      loop:
+        - "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+        - "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
+        - "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
+      register: forward_proxy_disabled_paths
+
+    - name: Evaluate each disabled-state cleanup contract independently
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists
+          - not item.stat.islnk | default(false)
+        quiet: true
+      loop: "{{ forward_proxy_disabled_paths.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      register: forward_proxy_cleanup_results
+      ignore_errors: true
+
+    - name: Assemble complete forward proxy assertion evidence
+      ansible.builtin.set_fact:
+        forward_proxy_all_results: >-
+          {{
+            forward_proxy_policy_results.results
+            + forward_proxy_negative_results
+            + [forward_proxy_cleanup_execution_result]
+            + forward_proxy_cleanup_results.results
+          }}
+        forward_proxy_failure_count: >-
+          {{
+            (
+              forward_proxy_policy_results.results
+              + forward_proxy_negative_results
+              + [forward_proxy_cleanup_execution_result]
+              + forward_proxy_cleanup_results.results
+            )
+            | selectattr('failed', 'equalto', true) | list | length
+          }}
+
+    - name: Create forward proxy JUnit directory
+      ansible.builtin.file:
+        path: "{{ forward_proxy_junit_root }}"
+        state: directory
+        mode: "0750"
+
+    - name: Write forward proxy per-assertion JUnit results
+      ansible.builtin.copy:
+        dest: "{{ forward_proxy_junit_root }}/forward-proxy-tiny.xml"
+        mode: "0640"
+        content: |-
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuite
+            name="forward-proxy-tiny"
+            tests="{{ forward_proxy_all_results | length }}"
+            failures="{{ forward_proxy_failure_count }}"
+            errors="0"
+            skipped="0">
+          {% for result in forward_proxy_policy_results.results %}
+            <testcase
+              classname="forward_proxy.policy"
+              name="{{ result.item.name | e }}"
+              role="forward_proxy">{% if result.failed | default(false) %}
+              <failure message="contract assertion failed"/>{% endif %}
+            </testcase>
+          {% endfor %}
+          {% for result in forward_proxy_negative_results %}
+            <testcase
+              classname="forward_proxy.negative_policy"
+              name="{{ result.item.name | e }}"
+              role="forward_proxy">{% if result.failed | default(false) %}
+              <failure message="unsafe client network was not rejected"/>{% endif %}
+            </testcase>
+          {% endfor %}
+            <testcase
+              classname="forward_proxy.lifecycle"
+              name="{{ forward_proxy_cleanup_execution_result.name | e }}"
+              role="forward_proxy">{% if forward_proxy_cleanup_execution_result.failed | default(false) %}
+              <failure message="managed cleanup execution failed"/>{% endif %}
+            </testcase>
+          {% for result in forward_proxy_cleanup_results.results %}
+            <testcase
+              classname="forward_proxy.lifecycle"
+              name="remove {{ result.item.item | basename | e }}"
+              role="forward_proxy">{% if result.failed | default(false) %}
+              <failure message="owned path remains after disable"/>{% endif %}
+            </testcase>
+          {% endfor %}
+          </testsuite>
+
+    - name: Fail after preserving every forward proxy assertion result
+      ansible.builtin.assert:
+        that:
+          - >-
+            forward_proxy_failure_count | int == 0
+        fail_msg: >-
+          One or more forward proxy contracts failed; the complete per-assertion
+          result set is preserved in JUnit evidence.

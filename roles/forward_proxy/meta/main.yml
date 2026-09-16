@@ -1,0 +1,26 @@
+---
+galaxy_info:
+  role_name: forward_proxy
+  namespace: lit
+  author: Lightning IT
+  company: Lightning IT
+  description: Run a closed, digest-pinned Squid forward proxy container.
+  license: MIT
+  min_ansible_version: "2.18"
+  platforms:
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+        - "10"
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+  galaxy_tags:
+    - proxy
+    - security
+    - squid
+    - containers
+
+dependencies: []

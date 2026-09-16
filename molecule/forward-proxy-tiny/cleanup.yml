@@ -1,0 +1,72 @@
+---
+- name: Preserve redacted forward proxy Tiny evidence
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    forward_proxy_test_root: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/forward-proxy-state
+    forward_proxy_artifact_root: >-
+      {{
+        lookup('ansible.builtin.env', 'QUALITY_ARTIFACT_ROOT')
+        | default(forward_proxy_test_root ~ '/artifacts', true)
+      }}
+  tasks:
+    - name: Inspect forward proxy JUnit evidence
+      ansible.builtin.stat:
+        path: "{{ forward_proxy_artifact_root }}/junit/forward-proxy-tiny.xml"
+        checksum_algorithm: sha256
+      register: forward_proxy_junit_evidence
+
+    - name: Require complete forward proxy JUnit evidence
+      ansible.builtin.assert:
+        that:
+          - forward_proxy_junit_evidence.stat.isreg | default(false)
+          - forward_proxy_junit_evidence.stat.checksum is match('^[a-f0-9]{64}\Z')
+        quiet: true
+
+    - name: Parse forward proxy JUnit with the fail-closed repository parser
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - >-
+            import json, sys; from pathlib import Path; from
+            scripts.quality_evidence import parse_junit;
+            print(json.dumps(parse_junit(Path(sys.argv[1]))))
+          - "{{ forward_proxy_artifact_root }}/junit/forward-proxy-tiny.xml"
+        chdir: "{{ playbook_dir }}/../.."
+      register: forward_proxy_junit_parse
+      changed_when: false
+
+    - name: Derive the structured evidence verdict from JUnit
+      ansible.builtin.set_fact:
+        forward_proxy_junit_report: "{{ forward_proxy_junit_parse.stdout | from_json }}"
+        forward_proxy_junit_passed: >-
+          {{ (forward_proxy_junit_parse.stdout | from_json).status == 'passed' }}
+
+    - name: Create redacted forward proxy evidence directory
+      ansible.builtin.file:
+        path: "{{ forward_proxy_artifact_root }}/evidence"
+        state: directory
+        mode: "0750"
+
+    - name: Preserve redacted forward proxy scenario evidence
+      ansible.builtin.copy:
+        dest: "{{ forward_proxy_artifact_root }}/evidence/forward-proxy-tiny.yml"
+        mode: "0640"
+        content: |-
+          schema: lit.supplementary.forward-proxy-tiny.evidence/v1
+          scenario: forward-proxy-tiny
+          role: forward_proxy
+          target: {{ lookup('ansible.builtin.env', 'QUALITY_TARGET')
+            | default('localhost-render-only', true) | to_json }}
+          commit: {{ lookup('ansible.builtin.env', 'QUALITY_SOURCE_SHA')
+            | default('local-unbound', true) | to_json }}
+          ansible_version: {{ ansible_version.full | to_json }}
+          junit_sha256: {{ forward_proxy_junit_evidence.stat.checksum | to_json }}
+          junit_status: {{ forward_proxy_junit_report.status | to_json }}
+          result: {{ ('passed' if forward_proxy_junit_passed else 'failed') | to_json }}
+          release_eligible: false
+          redacted: true
