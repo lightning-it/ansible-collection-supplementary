@@ -24,6 +24,15 @@ def run_git(repository: Path, *args: str, environment: dict[str, str]) -> None:
 
 
 class PushReadyEngineTests(unittest.TestCase):
+    def test_check_environment_provides_private_runner_temp(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            environment = ENGINE["minimal_check_environment"](Path(temporary))
+            runner_temp = Path(environment["RUNNER_TEMP"])
+
+            self.assertTrue(runner_temp.is_dir())
+            self.assertEqual(0o700, runner_temp.stat().st_mode & 0o777)
+            self.assertTrue(runner_temp.is_relative_to(Path(temporary)))
+
     def test_repository_quality_check_has_full_profile_timeout_budget(self) -> None:
         self.assertEqual(3_600, ENGINE["CHECK_TIMEOUT_SECONDS"])
         self.assertLessEqual(ENGINE["CHECK_TIMEOUT_SECONDS"], ENGINE["MAX_TIMEOUT_SECONDS"])
