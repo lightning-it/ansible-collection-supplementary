@@ -131,6 +131,10 @@ class AtomicPathTests(unittest.TestCase):
         target = self.root / "policy.conf"
         parameters = self.common(target, "file")
         parameters["content"] = "first\n"
+        parameters["expected_checksum"] = "abc"
+        self.assertIn("lowercase SHA-256", str(self.execute(parameters, failure=True)["msg"]))
+        self.assertFalse(target.exists())
+        parameters["expected_checksum"] = None
         self.execute(parameters)
         first = hashlib.sha256(b"first\n").hexdigest()
         parameters.update(content="second\n", allow_absent=False, expected_checksum=first)
@@ -207,6 +211,16 @@ class AtomicPathTests(unittest.TestCase):
             self.assertIn("denied", str(self.execute(parameters, failure=True)["msg"]))
         self.assertFalse(target.exists())
         self.assertEqual([], list(self.root.glob(".atomic-path-*")))
+
+    def test_successful_file_write_reports_workspace_cleanup_failure(self) -> None:
+        target = self.root / "policy"
+        parameters = self.common(target, "file")
+        parameters["content"] = "managed\n"
+        with mock.patch.object(MODULE, "_remove_private_if_same", return_value=False):
+            result = self.execute(parameters, failure=True)
+        self.assertIn("workspace cleanup failed", str(result["msg"]))
+        self.assertTrue(Path(str(result["recovery_path"])).is_dir())
+        self.assertEqual("managed\n", target.read_text(encoding="utf-8"))
 
     def test_workspace_probe_failure_preserves_uncertain_creation(self) -> None:
         parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -312,7 +326,7 @@ class AtomicPathTests(unittest.TestCase):
 
         with mock.patch.object(MODULE, "_renameat", side_effect=replace_before_commit):
             result = self.execute(parameters, failure=True)
-        self.assertIn("entries preserved", str(result["msg"]))
+        self.assertIn("both entries were preserved", str(result["msg"]))
         self.assertEqual("new\n", target.read_text(encoding="utf-8"))
         workspaces = list(self.root.glob(".atomic-path-*"))
         self.assertEqual(1, len(workspaces))
@@ -330,10 +344,13 @@ class AtomicPathTests(unittest.TestCase):
         replacement = self.root / "replacement"
         replacement.write_text("foreign\n", encoding="utf-8")
 
-        def replace_during_parent_check(_module: object, _parent: int) -> None:
-            os.replace(replacement, target)
+        real_revalidated_entry = MODULE._revalidated_entry
 
-        with mock.patch.object(MODULE, "_revalidate_parent", side_effect=replace_during_parent_check):
+        def replace_during_parent_check(module: object, parent: int, name: str) -> os.stat_result | None:
+            os.replace(replacement, target)
+            return real_revalidated_entry(module, parent, name)
+
+        with mock.patch.object(MODULE, "_revalidated_entry", side_effect=replace_during_parent_check):
             result = self.execute(parameters, failure=True)
         self.assertIn("changed before no-op completion", str(result["msg"]))
         self.assertEqual("foreign\n", target.read_text(encoding="utf-8"))
@@ -345,11 +362,14 @@ class AtomicPathTests(unittest.TestCase):
         foreign = self.root / "foreign"
         foreign.mkdir(mode=0o755)
 
-        def replace_during_parent_check(_module: object, _parent: int) -> None:
+        real_revalidated_entry = MODULE._revalidated_entry
+
+        def replace_during_parent_check(module: object, parent: int, name: str) -> os.stat_result | None:
             target.rename(self.root / "detached")
             foreign.rename(target)
+            return real_revalidated_entry(module, parent, name)
 
-        with mock.patch.object(MODULE, "_revalidate_parent", side_effect=replace_during_parent_check):
+        with mock.patch.object(MODULE, "_revalidated_entry", side_effect=replace_during_parent_check):
             result = self.execute(parameters, failure=True)
         self.assertIn("changed before no-op completion", str(result["msg"]))
         self.assertTrue(target.is_dir())
@@ -362,13 +382,16 @@ class AtomicPathTests(unittest.TestCase):
         parameters = self.common(target, "file")
         parameters["content"] = "managed\n"
 
-        def replace_during_parent_check(_module: object, _parent: int) -> None:
+        real_revalidated_entry = MODULE._revalidated_entry
+
+        def replace_during_parent_check(module: object, parent: int, name: str) -> os.stat_result | None:
             target.rename(detached)
             foreign.rename(target)
+            return real_revalidated_entry(module, parent, name)
 
-        with mock.patch.object(MODULE, "_revalidate_parent", side_effect=replace_during_parent_check):
+        with mock.patch.object(MODULE, "_revalidated_entry", side_effect=replace_during_parent_check):
             result = self.execute(parameters, failure=True)
-        self.assertIn("identity changed before completion", str(result["msg"]))
+        self.assertIn("identity changed at the canonical boundary", str(result["msg"]))
         self.assertEqual("foreign\n", target.read_text(encoding="utf-8"))
         self.assertEqual("managed\n", detached.read_text(encoding="utf-8"))
 
@@ -381,7 +404,7 @@ class AtomicPathTests(unittest.TestCase):
             allow_absent=False,
             expected_checksum=hashlib.sha256(b"owned\n").hexdigest(),
         )
-        with mock.patch.object(MODULE, "_revalidate_parent", side_effect=OSError("parent moved")):
+        with mock.patch.object(MODULE, "_revalidated_entry", side_effect=OSError("parent moved")):
             result = self.execute(parameters, failure=True)
         self.assertIn("recovery workspace preserved", str(result["msg"]))
         self.assertEqual("new\n", target.read_text(encoding="utf-8"))
@@ -401,12 +424,12 @@ class AtomicPathTests(unittest.TestCase):
         )
         detached = self.root / "detached"
 
-        def replace_parent(_module: object, _parent: int) -> None:
+        def replace_parent(_module: object, _parent: int, _name: str) -> os.stat_result | None:
             managed.rename(detached)
             managed.mkdir()
             raise OSError("parent moved")
 
-        with mock.patch.object(MODULE, "_revalidate_parent", side_effect=replace_parent):
+        with mock.patch.object(MODULE, "_revalidated_entry", side_effect=replace_parent):
             result = self.execute(parameters, failure=True)
         recovery = Path(str(result["recovery_path"]))
         self.assertTrue(str(recovery).startswith(str(detached)))

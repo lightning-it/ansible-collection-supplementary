@@ -1,7 +1,86 @@
 #!/usr/bin/python
+# Copyright: (c) 2026 Lightning IT
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# ruff: noqa: E402
 """Descriptor-relative directory creation and atomic regular-file replacement."""
 
-from __future__ import annotations
+DOCUMENTATION = r"""
+---
+module: atomic_path
+short_description: Mutate one path below an identity-bound parent chain
+description:
+  - Creates one directory or atomically replaces one regular file.
+  - Binds every mutation to descriptor-opened, no-follow parent identities.
+options:
+  path:
+    description: Canonical absolute target path.
+    type: path
+    required: true
+  state:
+    description: Target type to create or replace.
+    type: str
+    choices: [directory, file]
+    required: true
+  content:
+    description: UTF-8 content required for C(state=file).
+    type: str
+  mode:
+    description: Exact octal permissions required on the target.
+    type: str
+    required: true
+  owner:
+    description: Exact owner name or numeric UID required on the target.
+    type: str
+    required: true
+  group:
+    description: Exact group name or numeric GID required on the target.
+    type: str
+    required: true
+  parent_identities:
+    description: Canonical parent paths mapped to their device and inode identities.
+    type: dict
+    required: true
+  expected_checksum:
+    description: Existing lowercase SHA-256 checksum required for replacement.
+    type: str
+  allow_absent:
+    description: Permit creation when a file target does not yet exist.
+    type: bool
+    default: false
+author:
+  - Lightning IT (@lightning-it)
+"""
+
+EXAMPLES = r"""
+- name: Replace one exact role-owned file
+  lit.supplementary.atomic_path:
+    path: /etc/lit/forward-proxy/squid.conf
+    state: file
+    content: "http_access deny all\n"
+    mode: "0644"
+    owner: root
+    group: root
+    expected_checksum: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    parent_identities:
+      /etc/lit/forward-proxy:
+        device: 2049
+        inode: 123456
+"""
+
+RETURN = r"""
+path:
+  description: Canonical target path.
+  type: str
+  returned: always
+checksum:
+  description: SHA-256 checksum of the requested file content.
+  type: str
+  returned: for file state
+recovery_path:
+  description: Preserved displaced file location after an uncertain replacement failure.
+  type: str
+  returned: on failure after replacement
+"""
 
 import ctypes
 import errno
@@ -15,23 +94,6 @@ import secrets
 import stat
 
 from ansible.module_utils.basic import AnsibleModule
-
-DOCUMENTATION = r"""
----
-module: atomic_path
-short_description: Mutate one path below an identity-bound parent chain
-options:
-  path: {type: path, required: true}
-  state: {type: str, choices: [directory, file], required: true}
-  content: {type: str, no_log: true}
-  mode: {type: str, required: true}
-  owner: {type: str, required: true}
-  group: {type: str, required: true}
-  parent_identities: {type: dict, required: true}
-  expected_checksum: {type: str}
-  allow_absent: {type: bool, default: false}
-author: [Lightning IT]
-"""
 
 
 def _identity(value: str, database: object, attribute: str) -> int:
@@ -305,6 +367,20 @@ def _revalidate_parent(module: AnsibleModule, parent: int) -> None:
         os.close(reopened)
 
 
+def _revalidated_entry(module: AnsibleModule, parent: int, name: str) -> os.stat_result | None:
+    """Read the target through a freshly identity-bound canonical parent."""
+    parent_path = os.path.dirname(module.params["path"])
+    reopened = _open_bound_directory(parent_path, module.params["parent_identities"])
+    try:
+        original = os.fstat(parent)
+        current = os.fstat(reopened)
+        if (original.st_dev, original.st_ino) != (current.st_dev, current.st_ino):
+            raise OSError("parent identity changed across mutation")
+        return _existing(reopened, name)
+    finally:
+        os.close(reopened)
+
+
 def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, uid: int, gid: int) -> None:
     _require_exclusive_parent(parent)
     before = _existing(parent, name)
@@ -313,8 +389,7 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
             module.fail_json(
                 msg="directory boundary has an unexpected identity or metadata", path=module.params["path"]
             )
-        _revalidate_parent(module, parent)
-        current = _existing(parent, name)
+        current = _revalidated_entry(module, parent, name)
         if current is None or not _same_snapshot(current, before):
             module.fail_json(msg="directory boundary changed before no-op completion", path=module.params["path"])
         module.exit_json(changed=False, path=module.params["path"])
@@ -324,6 +399,7 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
     directory = -1
     created_identity: os.stat_result | None = None
     installed = False
+    cleanup_failed = False
     try:
         os.mkdir("payload", 0o700, dir_fd=workspace)
         created_identity = os.stat("payload", dir_fd=workspace, follow_symlinks=False)
@@ -340,13 +416,17 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
         if not _same_identity(created_identity, os.stat(name, dir_fd=parent, follow_symlinks=False)):
             raise OSError("created directory identity changed while installing")
         os.fsync(parent)
-        _revalidate_parent(module, parent)
         final = _existing(parent, name)
         if final is None or not _same_identity(final, created_identity):
             raise OSError("created directory identity changed before completion")
+        canonical = _revalidated_entry(module, parent, name)
+        if canonical is None or not _same_snapshot(canonical, final):
+            raise OSError("created directory identity changed at the canonical boundary")
     except Exception:
         if installed and created_identity is not None:
-            _capture_and_remove(parent, name, created_identity, workspace, "failed", directory=True)
+            installed = not _capture_and_remove(
+                parent, name, created_identity, workspace, "failed", directory=True
+            )
         raise
     finally:
         if directory >= 0:
@@ -354,7 +434,15 @@ def _create_directory(module: AnsibleModule, parent: int, name: str, mode: int, 
         if not installed and created_identity is not None:
             _remove_private_if_same(workspace, "payload", created_identity, directory=True)
         os.close(workspace)
-        _remove_private_if_same(parent, workspace_name, workspace_identity, directory=True)
+        cleanup_failed = not _remove_private_if_same(
+            parent, workspace_name, workspace_identity, directory=True
+        )
+    if cleanup_failed:
+        module.fail_json(
+            msg="created directory but private workspace cleanup failed",
+            path=module.params["path"],
+            recovery_path=os.path.join(_descriptor_path(parent), workspace_name),
+        )
     module.exit_json(changed=True, path=module.params["path"])
 
 
@@ -367,16 +455,18 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
     desired = hashlib.sha256(payload).hexdigest()
     before = _existing(parent, name)
     expected_checksum = module.params.get("expected_checksum")
+    if expected_checksum is not None and (
+        not isinstance(expected_checksum, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_checksum)
+    ):
+        module.fail_json(msg="expected_checksum must be one lowercase SHA-256 digest", path=module.params["path"])
     if before is None:
         if not module.params["allow_absent"]:
             module.fail_json(msg="file boundary is absent", path=module.params["path"])
     else:
         if not stat.S_ISREG(before.st_mode) or not _matches(before, mode, uid, gid):
             module.fail_json(msg="file boundary has unexpected type or metadata", path=module.params["path"])
-        if not isinstance(expected_checksum, str):
+        if expected_checksum is None:
             module.fail_json(msg="expected_checksum is required for an existing file", path=module.params["path"])
-        if not re.fullmatch(r"[0-9a-f]{64}", expected_checksum):
-            module.fail_json(msg="expected_checksum must be one lowercase SHA-256 digest", path=module.params["path"])
         bound = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
         try:
             opened = os.fstat(bound)
@@ -391,8 +481,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
         finally:
             os.close(bound)
     if before is not None and expected_checksum == desired:
-        _revalidate_parent(module, parent)
-        current = _existing(parent, name)
+        current = _revalidated_entry(module, parent, name)
         if current is None or not _same_snapshot(current, before):
             module.fail_json(msg="file boundary changed before no-op completion", path=module.params["path"])
         module.exit_json(changed=False, path=module.params["path"], checksum=desired)
@@ -404,6 +493,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
     displaced_identity: os.stat_result | None = None
     installed = False
     preserve_workspace = False
+    cleanup_failed = False
     try:
         descriptor = os.open(
             "payload",
@@ -432,10 +522,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             preserve_workspace = True
             displaced_identity = os.stat("payload", dir_fd=workspace, follow_symlinks=False)
             if not _verified_file(workspace, "payload", before, expected_checksum):
-                raise OSError(
-                    f"file boundary changed during replacement; entries preserved at "
-                    f"{os.path.dirname(module.params['path'])}/{workspace_name}"
-                )
+                raise OSError("file boundary changed during replacement; both entries were preserved")
         installed_details = os.stat(name, dir_fd=parent, follow_symlinks=False)
         if (
             staged_identity is None
@@ -445,11 +532,14 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             preserve_workspace = displaced_identity is not None
             raise OSError("installed file identity changed after replacement")
         os.fsync(parent)
-        _revalidate_parent(module, parent)
         final = _existing(parent, name)
         if staged_identity is None or final is None or not _same_snapshot(final, installed_details):
             preserve_workspace = displaced_identity is not None
             raise OSError("installed file identity changed before completion")
+        canonical = _revalidated_entry(module, parent, name)
+        if canonical is None or not _same_snapshot(canonical, final):
+            preserve_workspace = displaced_identity is not None
+            raise OSError("installed file identity changed at the canonical boundary")
         if displaced_identity is not None and not _remove_private_if_same(workspace, "payload", displaced_identity):
             raise OSError("replaced file could not be removed from the private recovery workspace")
         preserve_workspace = False
@@ -464,7 +554,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             module.fail_json(
                 msg=f"atomic path mutation failed: {exc}; recovery workspace preserved",
                 path=module.params["path"],
-                recovery_path=f"{recovery_parent}/{workspace_name}/payload",
+                recovery_path=os.path.join(recovery_parent, workspace_name, "payload"),
             )
         raise
     finally:
@@ -475,7 +565,15 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
             _remove_private_if_same(workspace, "payload", cleanup_identity)
         os.close(workspace)
         if not preserve_workspace:
-            _remove_private_if_same(parent, workspace_name, workspace_identity, directory=True)
+            cleanup_failed = not _remove_private_if_same(
+                parent, workspace_name, workspace_identity, directory=True
+            )
+    if cleanup_failed:
+        module.fail_json(
+            msg="file mutation completed but private workspace cleanup failed",
+            path=module.params["path"],
+            recovery_path=os.path.join(_descriptor_path(parent), workspace_name),
+        )
     module.exit_json(changed=True, path=module.params["path"], checksum=desired)
 
 
