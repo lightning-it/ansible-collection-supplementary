@@ -139,6 +139,8 @@ class AtomicPathTests(unittest.TestCase):
         self.assertEqual("second\n", target.read_text(encoding="utf-8"))
         parameters["expected_checksum"] = "0" * 64
         self.assertIn("checksum changed", str(self.execute(parameters, failure=True)["msg"]))
+        parameters["expected_checksum"] = "abc"
+        self.assertIn("lowercase SHA-256", str(self.execute(parameters, check=True, failure=True)["msg"]))
 
     def test_symlink_parent_and_malformed_identity_fail_closed(self) -> None:
         foreign = self.root / "foreign"
@@ -342,10 +344,44 @@ class AtomicPathTests(unittest.TestCase):
         self.assertIn("changed before no-op completion", str(result["msg"]))
         self.assertTrue(target.is_dir())
 
+    def test_create_revalidates_the_final_canonical_file(self) -> None:
+        target = self.root / "policy"
+        detached = self.root / "detached"
+        foreign = self.root / "foreign"
+        foreign.write_text("foreign\n", encoding="utf-8")
+        parameters = self.common(target, "file")
+        parameters["content"] = "managed\n"
+
+        def replace_during_parent_check(_module: object, _parent: int) -> None:
+            target.rename(detached)
+            foreign.rename(target)
+
+        with mock.patch.object(MODULE, "_revalidate_parent", side_effect=replace_during_parent_check):
+            result = self.execute(parameters, failure=True)
+        self.assertIn("identity changed before completion", str(result["msg"]))
+        self.assertEqual("foreign\n", target.read_text(encoding="utf-8"))
+        self.assertEqual("managed\n", detached.read_text(encoding="utf-8"))
+
+    def test_update_failure_reports_preserved_recovery_path(self) -> None:
+        target = self.root / "policy"
+        target.write_text("owned\n", encoding="utf-8")
+        parameters = self.common(target, "file")
+        parameters.update(
+            content="new\n",
+            allow_absent=False,
+            expected_checksum=hashlib.sha256(b"owned\n").hexdigest(),
+        )
+        with mock.patch.object(MODULE, "_revalidate_parent", side_effect=OSError("parent moved")):
+            result = self.execute(parameters, failure=True)
+        self.assertIn("recovery workspace preserved", str(result["msg"]))
+        self.assertEqual("new\n", target.read_text(encoding="utf-8"))
+        self.assertEqual("owned\n", Path(str(result["recovery_path"])).read_text(encoding="utf-8"))
+
     def test_double_root_path_is_rejected(self) -> None:
-        parameters = self.common(self.root / "unused", "directory")
-        parameters["path"] = "//"
-        self.assertIn("canonical absolute path", str(self.execute(parameters, failure=True)["msg"]))
+        for path in ("//", "//tmp/file"):
+            parameters = self.common(self.root / "unused", "directory")
+            parameters["path"] = path
+            self.assertIn("canonical absolute path", str(self.execute(parameters, failure=True)["msg"]))
 
 
 if __name__ == "__main__":
