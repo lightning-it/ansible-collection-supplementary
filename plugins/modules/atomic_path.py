@@ -748,9 +748,9 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
         else:
             _renameat(workspace, "payload", parent, name, "exchange")
             installed = True
-            _fsync_directory(workspace)
             preserve_workspace = True
             recovery_name = "payload"
+            _fsync_directory(workspace)
             displaced_identity = os.stat("payload", dir_fd=workspace, follow_symlinks=False)
             if not _verified_file(workspace, "payload", before, expected_checksum):
                 raise OSError("file boundary changed during replacement; both entries were preserved")
@@ -782,7 +782,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
     except Exception as exc:
         failure = exc
         if installed and staged_identity is not None:
-            if displaced_identity is None:
+            if before is None:
                 try:
                     removed = _capture_and_remove(
                         parent,
