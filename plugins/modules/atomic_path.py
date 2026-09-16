@@ -414,8 +414,8 @@ def _capture_and_remove(
     """Move a public entry atomically before identity-bound private cleanup."""
     try:
         _renameat(parent, name, workspace, capture, "noreplace")
-    except FileNotFoundError:
-        return True
+    except FileNotFoundError as exc:
+        raise OSError("installed target disappeared before rollback capture") from exc
     try:
         captured = os.stat(capture, dir_fd=workspace, follow_symlinks=False)
     except OSError as exc:
