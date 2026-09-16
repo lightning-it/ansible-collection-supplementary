@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Push-Ready now provides a private per-run RUNNER_TEMP so protected
+    Exact-Revision materializer tests can execute inside the hermetic check
+    environment.
