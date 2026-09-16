@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # Copyright: (c) 2026 Lightning IT
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: MIT OR GPL-3.0-or-later
+# GNU General Public License v3.0+ alternative: https://www.gnu.org/licenses/gpl-3.0.txt
 # ruff: noqa: E402
 """Descriptor-relative directory creation and atomic regular-file replacement."""
 
@@ -345,7 +346,7 @@ def _private_workspace(parent: int) -> Tuple[int, str, os.stat_result]:
             if not _remove_private_if_same(parent, name, expected, directory=True):
                 raise _PreservedWorkspace(os.path.join(_descriptor_path(parent), name)) from exc
             raise
-        if opened.st_uid != os.geteuid() or stat.S_IMODE(opened.st_mode) != 0o700:
+        if opened.st_uid != os.geteuid() or stat.S_IMODE(opened.st_mode) & 0o777 != 0o700:
             try:
                 os.close(descriptor)
             except OSError as exc:
@@ -762,7 +763,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
         if installed and staged_identity is not None:
             if displaced_identity is None:
                 try:
-                    installed = not _capture_and_remove(
+                    removed = _capture_and_remove(
                         parent,
                         name,
                         staged_identity,
@@ -770,6 +771,10 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
                         "failed",
                         checksum=desired,
                     )
+                    installed = False
+                    if not removed:
+                        preserve_workspace = True
+                        recovery_name = "failed"
                 except _PreservedRecovery as recovery:
                     preserve_workspace = True
                     recovery_name = recovery.entry
@@ -800,7 +805,7 @@ def _write_file(module: AnsibleModule, parent: int, name: str, mode: int, uid: i
                     preserve_workspace = True
                     if not installed:
                         recovery_name = "payload"
-        if not installed and cleanup_identity is not None:
+        if not installed and cleanup_identity is not None and recovery_name != "failed":
             if not _remove_private_if_same(workspace, "payload", cleanup_identity):
                 preserve_workspace = True
                 recovery_name = "payload"

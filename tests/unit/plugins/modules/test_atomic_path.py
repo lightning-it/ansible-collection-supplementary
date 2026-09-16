@@ -318,6 +318,29 @@ class AtomicPathTests(unittest.TestCase):
         finally:
             self.root.chmod(0o700)
 
+    def test_private_workspace_accepts_inherited_setgid_without_group_access(self) -> None:
+        parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        real_fstat = os.fstat
+
+        def inherited_setgid(descriptor: int) -> os.stat_result:
+            current = real_fstat(descriptor)
+            values = list(current)
+            values[stat.ST_MODE] |= stat.S_ISGID
+            return os.stat_result(values)
+
+        descriptor = -1
+        name = ""
+        try:
+            with mock.patch.object(MODULE.os, "fstat", side_effect=inherited_setgid):
+                descriptor, name, opened = MODULE._private_workspace(parent)
+            self.assertEqual(0o700, stat.S_IMODE(opened.st_mode) & 0o777)
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+            if name:
+                os.rmdir(name, dir_fd=parent)
+            os.close(parent)
+
     def test_directory_metadata_failure_cleans_private_creation(self) -> None:
         target = self.root / "managed"
         parameters = self.common(target, "directory")
@@ -411,6 +434,40 @@ class AtomicPathTests(unittest.TestCase):
                 self.assertIn("directory fsync failed", str(result["msg"]))
                 self.assertFalse(target.exists())
                 self.assertEqual([], list(self.root.glob(".atomic-path-*")))
+
+    def test_rollback_cleanup_failure_reports_the_captured_entry(self) -> None:
+        target = self.root / "captured"
+        parameters = self.common(target, "file")
+        parameters["content"] = "managed\n"
+        real_remove = MODULE._remove_private_if_same
+        fsync_calls = 0
+
+        def fail_parent_fsync(_descriptor: int) -> None:
+            nonlocal fsync_calls
+            fsync_calls += 1
+            if fsync_calls == 1:
+                raise OSError(errno.EIO, "parent fsync failed")
+
+        def preserve_capture(
+            parent: int,
+            name: str,
+            expected: os.stat_result,
+            *,
+            directory: bool = False,
+        ) -> bool:
+            if name == "failed":
+                return False
+            return real_remove(parent, name, expected, directory=directory)
+
+        with (
+            mock.patch.object(MODULE, "_fsync_directory", side_effect=fail_parent_fsync),
+            mock.patch.object(MODULE, "_remove_private_if_same", side_effect=preserve_capture),
+        ):
+            result = self.execute(parameters, failure=True)
+        recovery = Path(str(result["recovery_path"]))
+        self.assertEqual("failed", recovery.name)
+        self.assertEqual("managed\n", recovery.read_text(encoding="utf-8"))
+        self.assertFalse(target.exists())
 
     def test_rollback_error_preserves_uncertain_transaction_workspace(self) -> None:
         for state in ("directory", "file"):
