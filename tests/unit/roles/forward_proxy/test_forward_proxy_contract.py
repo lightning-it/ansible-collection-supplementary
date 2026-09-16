@@ -368,8 +368,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_final_state_marker.stat.checksum", apply_tasks)
         self.assertIn("forward_proxy_state_marker_content.content", apply_tasks)
         self.assertIn(
-            "forward_proxy_previous_state_manifest.managed_modes\n"
-            "        == forward_proxy_managed_modes_internal",
+            "forward_proxy_previous_state_manifest.managed_modes\n        == forward_proxy_managed_modes_internal",
             transition,
         )
         self.assertIn("Reinspect one managed file at its rollback mutation boundary", restore_helper)
