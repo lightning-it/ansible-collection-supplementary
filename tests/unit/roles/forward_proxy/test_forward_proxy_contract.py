@@ -416,7 +416,10 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("lit.supplementary.atomic_unlink", removal_helper)
         self.assertNotIn("state: absent", removal_helper)
         self.assertIn("not forward_proxy_state_marker.stat.exists", apply_tasks)
-        self.assertIn("acl lit_safe_ports port {{ forward_proxy_allowed_destination_ports | join(' ') }}", squid_template)
+        self.assertIn(
+            "acl lit_safe_ports port {{ forward_proxy_allowed_destination_ports | join(' ') }}",
+            squid_template,
+        )
         self.assertIn("exact destination port ACL", verify)
         self.assertIn("tasks/reject-port.yml", verify)
         self.assertIn("Prove every managed file is absent before deleting ownership evidence", transition)
