@@ -313,6 +313,26 @@ class AtomicPathTests(unittest.TestCase):
             os.close(parent)
         self.assertEqual(1, len(list(self.root.glob(".atomic-path-*"))))
 
+    def test_workspace_open_failure_reports_uncertain_cleanup_path(self) -> None:
+        parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        real_open = os.open
+
+        def fail_workspace_open(path: object, flags: int, *args: object, **kwargs: object) -> int:
+            if str(path).startswith(".atomic-path-"):
+                raise OSError("open denied")
+            return real_open(path, flags, *args, **kwargs)
+
+        try:
+            with (
+                mock.patch.object(MODULE.os, "open", side_effect=fail_workspace_open),
+                mock.patch.object(MODULE, "_remove_private_if_same", return_value=False),
+            ):
+                with self.assertRaises(MODULE._PreservedWorkspace) as result:
+                    MODULE._private_workspace(parent)
+        finally:
+            os.close(parent)
+        self.assertTrue(Path(result.exception.path).is_dir())
+
     def test_raced_fifo_open_is_nonblocking(self) -> None:
         target = self.root / "policy"
         target.write_text("owned\n", encoding="utf-8")
@@ -465,6 +485,84 @@ class AtomicPathTests(unittest.TestCase):
         self.assertIn("identity changed at the canonical boundary", str(result["msg"]))
         self.assertEqual("foreign\n", target.read_text(encoding="utf-8"))
         self.assertEqual("managed\n", detached.read_text(encoding="utf-8"))
+
+    def test_directory_creation_tolerates_first_consumer_child(self) -> None:
+        target = self.root / "managed"
+        parameters = self.common(target, "directory")
+        real_revalidated_entry = MODULE._revalidated_entry
+
+        def add_first_child(module: object, parent: int, name: str) -> os.stat_result | None:
+            (target / "consumer").write_text("ready\n", encoding="utf-8")
+            return real_revalidated_entry(module, parent, name)
+
+        with mock.patch.object(MODULE, "_revalidated_entry", side_effect=add_first_child):
+            result = self.execute(parameters)
+        self.assertTrue(result["changed"])
+        self.assertEqual("ready\n", (target / "consumer").read_text(encoding="utf-8"))
+
+    def test_canonical_revalidation_detects_parent_replacement_after_first_open(self) -> None:
+        managed = self.root / "managed"
+        managed.mkdir()
+        target = managed / "policy"
+        target.write_text("same\n", encoding="utf-8")
+        foreign = self.root / "foreign"
+        foreign.mkdir()
+        (foreign / "policy").write_text("foreign\n", encoding="utf-8")
+        parameters = self.common(target, "file")
+        parameters["parent_identities"] = self.identities(self.root, managed)
+        parameters.update(
+            content="same\n",
+            allow_absent=False,
+            expected_checksum=hashlib.sha256(b"same\n").hexdigest(),
+        )
+        real_open_bound = MODULE._open_bound_directory
+        calls = 0
+
+        def replace_after_first_open(path: str, identities: dict) -> int:
+            nonlocal calls
+            descriptor = real_open_bound(path, identities)
+            calls += 1
+            if calls == 2:
+                managed.rename(self.root / "detached")
+                foreign.rename(managed)
+            return descriptor
+
+        with mock.patch.object(MODULE, "_open_bound_directory", side_effect=replace_after_first_open):
+            result = self.execute(parameters, failure=True)
+        self.assertIn("parent identity changed", str(result["msg"]))
+        self.assertEqual("foreign\n", (managed / "policy").read_text(encoding="utf-8"))
+
+    def test_post_capture_inspection_failure_preserves_recovery_entry(self) -> None:
+        target = self.root / "policy"
+        target.write_text("managed\n", encoding="utf-8")
+        expected = target.stat()
+        workspace_path = self.root / "workspace"
+        workspace_path.mkdir()
+        parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        workspace = os.open(workspace_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        real_stat = os.stat
+
+        def fail_capture_stat(path: object, *args: object, **kwargs: object) -> os.stat_result:
+            if path == "failed" and kwargs.get("dir_fd") == workspace:
+                raise OSError("inspection denied")
+            return real_stat(path, *args, **kwargs)
+
+        try:
+            with mock.patch.object(MODULE.os, "stat", side_effect=fail_capture_stat):
+                with self.assertRaises(MODULE._PreservedRecovery):
+                    MODULE._capture_and_remove(
+                        parent,
+                        target.name,
+                        expected,
+                        workspace,
+                        "failed",
+                        checksum=hashlib.sha256(b"managed\n").hexdigest(),
+                    )
+        finally:
+            os.close(workspace)
+            os.close(parent)
+        self.assertFalse(target.exists())
+        self.assertEqual("managed\n", (workspace_path / "failed").read_text(encoding="utf-8"))
 
     def test_update_failure_reports_preserved_recovery_path(self) -> None:
         target = self.root / "policy"
