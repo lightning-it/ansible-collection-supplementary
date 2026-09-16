@@ -304,6 +304,7 @@
       quadlet_path: "{{ forward_proxy_quadlet_path }}"
       quadlet_checksum: ""
       pod_id: ""
+      owner_label: ""
       unit_fragment_path: ""
   when:
     - forward_proxy_manage_runtime | bool
@@ -327,6 +328,14 @@
       or forward_proxy_quadlet_dir.startswith(
         forward_proxy_directory_path.rstrip('/') ~ '/'
       )
+
+- name: Revalidate the existing runtime immediately before an update
+  ansible.builtin.include_tasks: revalidate_existing_runtime_removal.yml
+  when:
+    - forward_proxy_manage_runtime | bool
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not ansible_check_mode
 
 - name: Manage the persistent Squid container service
   ansible.builtin.include_role:
@@ -374,60 +383,10 @@
     - forward_proxy_manage_runtime | bool
     - not ansible_check_mode
 
-- name: Capture the transaction-owned Podman pod identity
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/podman
-      - pod
-      - inspect
-      - --format
-      - "{{ '{{.Id}}' }}"
-      - "{{ forward_proxy_unit_name }}"
-  register: forward_proxy_transaction_pod_identity
-  changed_when: false
-  failed_when: forward_proxy_transaction_pod_identity.rc != 0
-  check_mode: false
+- name: Capture exact identity and provenance after every runtime mutation
+  ansible.builtin.include_tasks: capture_active_runtime_identity.yml
   when:
     - forward_proxy_manage_runtime | bool
-    - >-
-      not forward_proxy_state_marker.stat.exists
-      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
-    - not ansible_check_mode
-
-- name: Capture the transaction-owned systemd fragment identity
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/systemctl
-      - --system
-      - show
-      - "{{ forward_proxy_unit_name }}.service"
-      - --property=FragmentPath
-      - --value
-  register: forward_proxy_transaction_unit_identity
-  changed_when: false
-  failed_when: forward_proxy_transaction_unit_identity.rc != 0
-  check_mode: false
-  when:
-    - forward_proxy_manage_runtime | bool
-    - >-
-      not forward_proxy_state_marker.stat.exists
-      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
-    - not ansible_check_mode
-
-- name: Require stable identities for the newly created runtime
-  ansible.builtin.assert:
-    that:
-      - forward_proxy_transaction_pod_identity.stdout | trim is match('^[a-f0-9]{12,64}\Z')
-      - forward_proxy_transaction_unit_identity.stdout | trim | length > 0
-      - forward_proxy_quadlet_stat.stat.checksum is match('^[a-f0-9]{64}\Z')
-    fail_msg: >-
-      The newly created runtime did not expose a stable Pod ID, systemd
-      fragment, and Quadlet checksum for rollback authorization.
-  when:
-    - forward_proxy_manage_runtime | bool
-    - >-
-      not forward_proxy_state_marker.stat.exists
-      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
     - not ansible_check_mode
 
 - name: Authorize rollback for the exact newly created runtime identity
@@ -437,9 +396,10 @@
       unit_name: "{{ forward_proxy_unit_name }}"
       state_marker_path: "{{ forward_proxy_state_marker_path }}"
       quadlet_path: "{{ forward_proxy_quadlet_path }}"
-      quadlet_checksum: "{{ forward_proxy_quadlet_stat.stat.checksum }}"
-      pod_id: "{{ forward_proxy_transaction_pod_identity.stdout | trim }}"
-      unit_fragment_path: "{{ forward_proxy_transaction_unit_identity.stdout | trim }}"
+      quadlet_checksum: "{{ forward_proxy_active_runtime_identity_internal.quadlet_checksum }}"
+      pod_id: "{{ forward_proxy_active_runtime_identity_internal.pod_id }}"
+      owner_label: "{{ forward_proxy_active_runtime_identity_internal.owner_label }}"
+      unit_fragment_path: "{{ forward_proxy_active_runtime_identity_internal.unit_fragment_path }}"
   when:
     - forward_proxy_manage_runtime | bool
     - >-

@@ -99,13 +99,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertNotIn("acl lit_allowed_domains dstdomain {{", policy)
 
         verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
-        rejection = (
-            REPOSITORY_ROOT
-            / "molecule"
-            / "forward-proxy-tiny"
-            / "tasks"
-            / "reject-client.yml"
-        ).read_text()
+        rejection = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "tasks" / "reject-client.yml").read_text()
         self.assertIn("Prove unsafe client networks are rejected before rendering", verify)
         self.assertIn("forward_proxy_negative_results", verify)
         self.assertIn("forward_proxy.negative_policy", verify)
@@ -341,24 +335,14 @@ class ForwardProxyContractTests(unittest.TestCase):
         apply_tasks = (ROLE_ROOT / "tasks" / "enabled_apply.yml").read_text()
         rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
         runtime_guard = (ROLE_ROOT / "tasks" / "revalidate_new_runtime_removal.yml").read_text()
-        existing_runtime_capture = (
-            ROLE_ROOT / "tasks" / "capture_existing_runtime_removal.yml"
-        ).read_text()
-        existing_runtime_guard = (
-            ROLE_ROOT / "tasks" / "revalidate_existing_runtime_removal.yml"
-        ).read_text()
+        existing_runtime_capture = (ROLE_ROOT / "tasks" / "capture_existing_runtime_removal.yml").read_text()
+        existing_runtime_guard = (ROLE_ROOT / "tasks" / "revalidate_existing_runtime_removal.yml").read_text()
         removal_helper = (ROLE_ROOT / "tasks" / "remove_owned_file.yml").read_text()
         restore_helper = (ROLE_ROOT / "tasks" / "restore_managed_file.yml").read_text()
         wrapper = (ROLE_ROOT / "tasks" / "main.yml").read_text()
         converge = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "converge.yml").read_text()
         verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
-        rejection = (
-            REPOSITORY_ROOT
-            / "molecule"
-            / "forward-proxy-tiny"
-            / "tasks"
-            / "reject-client.yml"
-        ).read_text()
+        rejection = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "tasks" / "reject-client.yml").read_text()
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
 
         self.assertIn("Reinspect the Squid policy at the mutation boundary", apply_tasks)
@@ -390,7 +374,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("Capture the existing Podman pod identity", existing_runtime_capture)
         self.assertIn("Capture the existing systemd fragment identity", existing_runtime_capture)
         self.assertIn("Require the exact captured existing runtime", existing_runtime_guard)
-        self.assertIn("/usr/bin/unlink", removal_helper)
+        self.assertIn("lit.supplementary.atomic_unlink", removal_helper)
         self.assertNotIn("state: absent", removal_helper)
         self.assertIn("not forward_proxy_state_marker.stat.exists", apply_tasks)
 
@@ -461,7 +445,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         rollback = (ROLE_ROOT / "tasks" / "enabled_existing_rollback.yml").read_text()
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
         self.assertIn("verify_runtime_ready.yml", apply_tasks)
-        self.assertIn("Verify the managed Squid Pod is running", readiness)
+        self.assertIn("Verify the exact managed Squid Pod is running", readiness)
         self.assertLess(
             apply_tasks.index("Prove the managed forward proxy runtime is ready"),
             apply_tasks.index("Record exact forward proxy file and Quadlet ownership"),
@@ -506,7 +490,9 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_junit_passed", cleanup)
         self.assertIn("scripts.quality_evidence import parse_junit", cleanup)
         self.assertIn("junit_status:", cleanup)
-        self.assertIn("release_eligible: false", cleanup)
+        self.assertIn("forward_proxy_coverage_contract", cleanup)
+        self.assertIn("forward_proxy_release_eligible", cleanup)
+        self.assertIn("release_eligible: {{ forward_proxy_release_eligible", cleanup)
         self.assertIn("redacted: true", cleanup)
 
     def test_live_runtime_remains_explicitly_blocked_until_acceptance(self) -> None:

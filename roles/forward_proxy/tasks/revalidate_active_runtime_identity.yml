@@ -1,0 +1,63 @@
+---
+- name: Reinspect the active rollback Quadlet
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_quadlet_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_active_rollback_quadlet
+
+- name: Reinspect the active rollback Pod identity
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - pod
+      - inspect
+      - --format
+      - >-
+        {{ '{{.Id}}|{{ index .Labels "io.lightning-it.owner" }}' }}
+      - "{{ forward_proxy_unit_name }}"
+  register: forward_proxy_active_rollback_pod
+  changed_when: false
+  failed_when: forward_proxy_active_rollback_pod.rc != 0
+  check_mode: false
+
+- name: Reinspect the active rollback systemd fragment
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - --system
+      - show
+      - "{{ forward_proxy_unit_name }}.service"
+      - --property=FragmentPath
+      - --value
+  register: forward_proxy_active_rollback_unit
+  changed_when: false
+  failed_when: forward_proxy_active_rollback_unit.rc != 0
+  check_mode: false
+
+- name: Require the captured role-owned runtime before rollback
+  ansible.builtin.assert:
+    that:
+      - >-
+        forward_proxy_active_runtime_identity_internal
+        == {
+          'unit_name': forward_proxy_unit_name,
+          'quadlet_path': forward_proxy_quadlet_path,
+          'quadlet_checksum': forward_proxy_active_rollback_quadlet.stat.checksum,
+          'pod_id': (forward_proxy_active_rollback_pod.stdout | trim).split('|')[0],
+          'owner_label': (forward_proxy_active_rollback_pod.stdout | trim).split('|')[1],
+          'unit_fragment_path': forward_proxy_active_rollback_unit.stdout | trim
+        }
+      - >-
+        forward_proxy_active_rollback_pod.stdout | trim
+        is match('^[a-f0-9]{12,64}\\|lit\\.supplementary\\.forward_proxy\Z')
+      - >-
+        forward_proxy_active_rollback_unit.stdout | trim
+        is match(
+          '^/run/systemd/generator(?:\\.early|\\.late)?/'
+          ~ (forward_proxy_unit_name | regex_escape)
+          ~ '\\.service\\Z'
+        )
+    fail_msg: >-
+      The active runtime changed after the failed transaction. Stop before
+      restoring files or restarting a potentially foreign runtime.

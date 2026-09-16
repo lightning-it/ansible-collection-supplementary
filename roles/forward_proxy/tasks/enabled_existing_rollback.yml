@@ -1,4 +1,20 @@
 ---
+- name: Revalidate a captured active runtime before existing-state rollback
+  ansible.builtin.include_tasks: revalidate_active_runtime_identity.yml
+  when:
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - forward_proxy_manage_runtime | bool
+    - forward_proxy_active_runtime_identity_internal | length > 0
+    - not ansible_check_mode
+
+- name: Revalidate the original runtime if activation failed before recapture
+  ansible.builtin.include_tasks: revalidate_existing_runtime_removal.yml
+  when:
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - forward_proxy_manage_runtime | bool
+    - forward_proxy_active_runtime_identity_internal | length == 0
+    - not ansible_check_mode
+
 - name: Revalidate the exact newly created runtime before existing-state rollback
   ansible.builtin.include_tasks: revalidate_new_runtime_removal.yml
   when:
@@ -307,6 +323,12 @@
     podman_systemd_scope: "{{ forward_proxy_systemd_scope }}"
     podman_systemd_quadlet_dir: "{{ forward_proxy_quadlet_dir }}"
     podman_systemd_enabled: true
+  when:
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not ansible_check_mode
+
+- name: Capture the restored runtime identity after rollback
+  ansible.builtin.include_tasks: capture_active_runtime_identity.yml
   when:
     - forward_proxy_previous_state_manifest.runtime_managed | bool
     - not ansible_check_mode

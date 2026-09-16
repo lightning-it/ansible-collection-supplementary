@@ -12,7 +12,9 @@
       quadlet_path: ""
       quadlet_checksum: ""
       pod_id: ""
+      owner_label: ""
       unit_fragment_path: ""
+    forward_proxy_active_runtime_identity_internal: {}
     forward_proxy_runtime_absence_verified_internal: false
     forward_proxy_existing_runtime_removal_authorization_internal:
       authorized: false
@@ -20,6 +22,7 @@
       quadlet_path: ""
       quadlet_checksum: ""
       pod_id: ""
+      owner_label: ""
       unit_fragment_path: ""
 
 - name: Inspect the required forward proxy lock parent
@@ -48,7 +51,7 @@
       - >-
         forward_proxy_lock_parent.stat.mode is match('^0[0-7][0145][0145]\Z')
         or (
-          forward_proxy_lock_path | dirname == '/tmp'
+          forward_proxy_lock_path | dirname in ['/tmp', '/run/lock']
           and forward_proxy_lock_parent.stat.mode == '1777'
           and forward_proxy_lock_parent.stat.uid == 0
           and forward_proxy_lock_parent.stat.gid == 0

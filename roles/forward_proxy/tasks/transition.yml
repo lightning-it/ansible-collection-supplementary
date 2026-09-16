@@ -304,12 +304,11 @@
     - forward_proxy_state_marker.stat.exists
     - forward_proxy_previous_state_manifest.runtime_managed | bool
 
-- name: Capture the existing runtime identity before a destructive transition
+- name: Capture the existing runtime identity before any runtime mutation
   ansible.builtin.include_tasks: capture_existing_runtime_removal.yml
   when:
     - forward_proxy_state_marker.stat.exists
     - forward_proxy_previous_state_manifest.runtime_managed | bool
-    - not forward_proxy_enabled | bool or not forward_proxy_manage_runtime | bool
     - not ansible_check_mode
 
 - name: Require owned Quadlet evidence before runtime removal
