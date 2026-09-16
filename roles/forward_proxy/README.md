@@ -61,26 +61,23 @@ interface exists. Credentials must not be placed in inventory.
 ## Example Playbook
 
 ```yaml
-- name: Render the LIT forward proxy service definition
+    - name: Run the LIT forward proxy service
   hosts: edge
   become: true
   roles:
     - role: lit.supplementary.forward_proxy
       forward_proxy_enabled: true
-      forward_proxy_manage_runtime: false
+      forward_proxy_experimental_runtime_acceptance: true
       forward_proxy_allowed_destination_domains:
         - .ubuntu.com
         - .quay.io
         - .redhat.com
 ```
 
-The render-only example assumes the pinned image was preloaded and the matching
-host firewall owner rule was approved. It does not create a Quadlet or start
-systemd. Runtime activation additionally requires
-`forward_proxy_manage_runtime: true` and the temporary explicit
-`forward_proxy_experimental_runtime_acceptance: true` opt-in until protected
-Wunderbox live acceptance is recorded. Activation and firewall cutover remain
-controlled operational steps.
+The runtime example assumes the pinned image was preloaded and the matching
+host firewall owner rule was approved. The temporary explicit acceptance opt-in
+remains required until protected Wunderbox live acceptance is recorded.
+Activation and firewall cutover remain controlled operational steps.
 
 ## License
 

@@ -60,6 +60,10 @@ EXAMPLES = r"""
     mode: "0644"
     owner: root
     group: root
+    parent_identities:
+      /etc/lit/forward-proxy:
+        device: 2049
+        inode: 123456
 """
 
 RETURN = r"""
@@ -179,6 +183,20 @@ def _make_private_quarantine(parent_fd: int) -> tuple[int, str]:
     raise OSError("cannot allocate a private atomic-unlink quarantine")
 
 
+def _preserve_open_file(file_fd: int, quarantine_fd: int, expected: os.stat_result) -> None:
+    """Hard-link the descriptor-bound inode before any pathname mutation."""
+    os.link(
+        f"/proc/self/fd/{file_fd}",
+        "verified",
+        dst_dir_fd=quarantine_fd,
+        follow_symlinks=True,
+    )
+    preserved = os.stat("verified", dir_fd=quarantine_fd, follow_symlinks=False)
+    if not _same_identity(expected, preserved):
+        os.unlink("verified", dir_fd=quarantine_fd)
+        raise OSError("descriptor-bound quarantine identity changed")
+
+
 def _restore_quarantined_file(parent_fd: int, name: str, quarantine_fd: int) -> bool:
     try:
         os.link(
@@ -219,7 +237,7 @@ def _recover_quarantine(
 def _quarantine_recovery_path(path: str, quarantine_name: str, cleaned: bool) -> str:
     if cleaned:
         return ""
-    return os.path.join(os.path.dirname(path), quarantine_name, "target")
+    return os.path.join(os.path.dirname(path), quarantine_name, "verified")
 
 
 def _quarantine_recovery_summary(restored: bool, cleaned: bool) -> str:
@@ -289,6 +307,7 @@ def main() -> None:
             module.exit_json(changed=True, path=path)
 
         quarantine_fd, quarantine_name = _make_private_quarantine(parent_fd)
+        _preserve_open_file(file_fd, quarantine_fd, final_fd)
         os.rename(
             name,
             "target",
@@ -391,6 +410,7 @@ def main() -> None:
                 path=path,
                 recovery_path=recovery_path,
             )
+        os.unlink("verified", dir_fd=quarantine_fd)
         os.close(quarantine_fd)
         quarantine_fd = -1
         try:
