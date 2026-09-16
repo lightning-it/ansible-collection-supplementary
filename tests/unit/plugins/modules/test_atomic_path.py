@@ -181,6 +181,16 @@ class AtomicPathTests(unittest.TestCase):
                 self.assertIn("atomic path mutation failed", str(self.execute(parameters, failure=True)["msg"]))
                 self.assertFalse(target.exists())
 
+    def test_group_or_world_writable_parent_is_rejected(self) -> None:
+        target = self.root / "blocked"
+        parameters = self.common(target, "directory")
+        self.root.chmod(0o777)
+        try:
+            self.assertIn("not group/world writable", str(self.execute(parameters, check=True, failure=True)["msg"]))
+            self.assertFalse(target.exists())
+        finally:
+            self.root.chmod(0o700)
+
     def test_directory_metadata_failure_cleans_private_creation(self) -> None:
         target = self.root / "managed"
         parameters = self.common(target, "directory")
@@ -198,7 +208,7 @@ class AtomicPathTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertEqual([], list(self.root.glob(".atomic-path-*")))
 
-    def test_workspace_probe_failure_cleans_private_creation(self) -> None:
+    def test_workspace_probe_failure_preserves_uncertain_creation(self) -> None:
         parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         real_stat = os.stat
         failed = False
@@ -212,11 +222,11 @@ class AtomicPathTests(unittest.TestCase):
 
         try:
             with mock.patch.object(MODULE.os, "stat", side_effect=fail_first_probe):
-                with self.assertRaisesRegex(OSError, "probe denied"):
+                with self.assertRaisesRegex(OSError, "preserved as"):
                     MODULE._private_workspace(parent)
         finally:
             os.close(parent)
-        self.assertEqual([], list(self.root.glob(".atomic-path-*")))
+        self.assertEqual(1, len(list(self.root.glob(".atomic-path-*"))))
 
     def test_raced_fifo_open_is_nonblocking(self) -> None:
         target = self.root / "policy"
@@ -376,6 +386,31 @@ class AtomicPathTests(unittest.TestCase):
         self.assertIn("recovery workspace preserved", str(result["msg"]))
         self.assertEqual("new\n", target.read_text(encoding="utf-8"))
         self.assertEqual("owned\n", Path(str(result["recovery_path"])).read_text(encoding="utf-8"))
+
+    def test_parent_replacement_reports_descriptor_stable_recovery_path(self) -> None:
+        managed = self.root / "managed"
+        managed.mkdir()
+        target = managed / "policy"
+        target.write_text("owned\n", encoding="utf-8")
+        parameters = self.common(target, "file")
+        parameters["parent_identities"] = self.identities(self.root, managed)
+        parameters.update(
+            content="new\n",
+            allow_absent=False,
+            expected_checksum=hashlib.sha256(b"owned\n").hexdigest(),
+        )
+        detached = self.root / "detached"
+
+        def replace_parent(_module: object, _parent: int) -> None:
+            managed.rename(detached)
+            managed.mkdir()
+            raise OSError("parent moved")
+
+        with mock.patch.object(MODULE, "_revalidate_parent", side_effect=replace_parent):
+            result = self.execute(parameters, failure=True)
+        recovery = Path(str(result["recovery_path"]))
+        self.assertTrue(str(recovery).startswith(str(detached)))
+        self.assertEqual("owned\n", recovery.read_text(encoding="utf-8"))
 
     def test_double_root_path_is_rejected(self) -> None:
         for path in ("//", "//tmp/file"):
