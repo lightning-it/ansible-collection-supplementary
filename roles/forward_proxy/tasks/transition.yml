@@ -149,7 +149,7 @@
         == forward_proxy_previous_state_manifest.managed_paths | length
       - >-
         forward_proxy_previous_state_manifest.managed_modes
-        | reject('match', '^0[0-7]{3}\Z') | list | length == 0
+        == forward_proxy_managed_modes_internal
       - >-
         forward_proxy_previous_state_manifest.managed_checksums
         | reject('match', '^[a-f0-9]{64}\Z') | list | length == 0

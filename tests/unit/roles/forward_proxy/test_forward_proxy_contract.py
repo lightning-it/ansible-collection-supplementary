@@ -359,6 +359,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         verify = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml").read_text()
         rejection = (REPOSITORY_ROOT / "molecule" / "forward-proxy-tiny" / "tasks" / "reject-client.yml").read_text()
         assertions = (ROLE_ROOT / "tasks" / "assert.yml").read_text()
+        transition = (ROLE_ROOT / "tasks" / "transition.yml").read_text()
 
         self.assertIn("Reinspect the Squid policy at the mutation boundary", apply_tasks)
         self.assertIn("Reinspect the Pod manifest at the mutation boundary", apply_tasks)
@@ -366,6 +367,11 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_manifest_write_boundary.stat.checksum", apply_tasks)
         self.assertIn("forward_proxy_final_state_marker.stat.checksum", apply_tasks)
         self.assertIn("forward_proxy_state_marker_content.content", apply_tasks)
+        self.assertIn(
+            "forward_proxy_previous_state_manifest.managed_modes\n"
+            "        == forward_proxy_managed_modes_internal",
+            transition,
+        )
         self.assertIn("Reinspect one managed file at its rollback mutation boundary", restore_helper)
         self.assertIn("forward_proxy_restore_file_boundary.stat.checksum", restore_helper)
         self.assertIn("forward_proxy_restore_marker_boundary.stat.checksum", rollback)
@@ -473,6 +479,9 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn('"id={{ forward_proxy_active_runtime_identity_internal.pod_id }}"', readiness)
         self.assertIn("forward_proxy_active_runtime_identity_internal.pod_id]", readiness)
         self.assertNotIn('"name=^{{ forward_proxy_unit_name }}$"', readiness)
+        self.assertIn("forward_proxy_readiness_quadlet.stat.mode == '0644'", readiness)
+        self.assertIn("forward_proxy_readiness_quadlet.stat.pw_name | default('') == 'root'", readiness)
+        self.assertIn("forward_proxy_readiness_quadlet.stat.gr_name | default('') == 'root'", readiness)
         self.assertIn("Refuse to adopt a foreign Quadlet during runtime activation", main_tasks)
         self.assertNotIn("Remove a partial Quadlet", rollback)
         self.assertIn("regex_replace('^\\.', '') | length <= 253", assertions)

@@ -10,7 +10,8 @@ short_description: Unlink one exactly identified regular file
 description:
   - Opens every parent component without following symlinks.
   - Binds the target to a file descriptor, verifies its complete identity, and
-    performs a descriptor-relative unlink from the already-open parent.
+    atomically moves it into a private quarantine before revalidation and
+    deletion.
 options:
   path:
     description:
@@ -67,7 +68,9 @@ import grp
 import hashlib
 import os
 import pwd
+import secrets
 import stat
+from typing import Tuple
 
 from ansible.module_utils.basic import AnsibleModule
 
@@ -83,8 +86,8 @@ def _numeric_identity(value: str, database: object, kind: str) -> int:
         return record.pw_uid if kind == "owner" else record.gr_gid
 
 
-def _open_parent(path: str) -> tuple[int, str]:
-    parts = path.removeprefix("/").split("/")
+def _open_parent(path: str) -> Tuple[int, str]:
+    parts = path[1:].split("/")
     name = parts.pop()
     current_fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
@@ -113,6 +116,52 @@ def _checksum_fd(file_fd: int) -> str:
     return digest.hexdigest()
 
 
+IDENTITY_FIELDS = (
+    "st_dev",
+    "st_ino",
+    "st_mode",
+    "st_uid",
+    "st_gid",
+    "st_size",
+    "st_mtime_ns",
+)
+
+
+def _same_identity(left: os.stat_result, right: os.stat_result) -> bool:
+    return all(getattr(left, field) == getattr(right, field) for field in IDENTITY_FIELDS)
+
+
+def _make_private_quarantine(parent_fd: int) -> Tuple[int, str]:
+    for _attempt in range(10):
+        quarantine_name = f".atomic-unlink-{os.getpid()}-{secrets.token_hex(16)}"
+        try:
+            os.mkdir(quarantine_name, 0o700, dir_fd=parent_fd)
+        except FileExistsError:
+            continue
+        quarantine_fd = os.open(
+            quarantine_name,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+            dir_fd=parent_fd,
+        )
+        return quarantine_fd, quarantine_name
+    raise OSError("cannot allocate a private atomic-unlink quarantine")
+
+
+def _restore_quarantined_file(parent_fd: int, name: str, quarantine_fd: int) -> bool:
+    try:
+        os.link(
+            "target",
+            name,
+            src_dir_fd=quarantine_fd,
+            dst_dir_fd=parent_fd,
+            follow_symlinks=False,
+        )
+    except FileExistsError:
+        return False
+    os.unlink("target", dir_fd=quarantine_fd)
+    return True
+
+
 def main() -> None:
     module = AnsibleModule(
         argument_spec={
@@ -138,6 +187,8 @@ def main() -> None:
         module.fail_json(msg=f"cannot bind trusted parent chain: {exc}", path=path)
 
     file_fd = -1
+    quarantine_fd = -1
+    quarantine_name = ""
     try:
         try:
             before = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
@@ -162,29 +213,59 @@ def main() -> None:
 
         final_fd = os.fstat(file_fd)
         final_name = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
-        identity_fields = (
-            "st_dev",
-            "st_ino",
-            "st_mode",
-            "st_uid",
-            "st_gid",
-            "st_size",
-            "st_mtime_ns",
-            "st_ctime_ns",
-        )
-        if any(getattr(final_fd, field) != getattr(final_name, field) for field in identity_fields):
+        if not _same_identity(final_fd, final_name):
             module.fail_json(msg="removal target changed at the unlink boundary", path=path)
 
         if module.check_mode:
             module.exit_json(changed=True, path=path)
 
-        os.unlink(name, dir_fd=parent_fd)
+        quarantine_fd, quarantine_name = _make_private_quarantine(parent_fd)
+        os.rename(
+            name,
+            "target",
+            src_dir_fd=parent_fd,
+            dst_dir_fd=quarantine_fd,
+        )
+        quarantined = os.stat("target", dir_fd=quarantine_fd, follow_symlinks=False)
+        if not _same_identity(final_fd, quarantined):
+            restored = _restore_quarantined_file(parent_fd, name, quarantine_fd)
+            if restored:
+                os.close(quarantine_fd)
+                quarantine_fd = -1
+                os.rmdir(quarantine_name, dir_fd=parent_fd)
+                quarantine_name = ""
+            module.fail_json(
+                msg=(
+                    "removal target changed at the atomic quarantine boundary; "
+                    + ("foreign entry restored" if restored else "foreign entry preserved in quarantine")
+                ),
+                path=path,
+            )
+
+        final_quarantine = os.stat("target", dir_fd=quarantine_fd, follow_symlinks=False)
+        if not _same_identity(final_fd, final_quarantine):
+            module.fail_json(
+                msg="quarantined removal target changed before deletion",
+                path=path,
+            )
+        os.unlink("target", dir_fd=quarantine_fd)
+        os.close(quarantine_fd)
+        quarantine_fd = -1
+        os.rmdir(quarantine_name, dir_fd=parent_fd)
+        quarantine_name = ""
         module.exit_json(changed=True, path=path)
     except OSError as exc:
         module.fail_json(msg=f"atomic unlink failed: {exc}", path=path)
     finally:
         if file_fd >= 0:
             os.close(file_fd)
+        if quarantine_fd >= 0:
+            os.close(quarantine_fd)
+        if quarantine_name:
+            try:
+                os.rmdir(quarantine_name, dir_fd=parent_fd)
+            except OSError:
+                pass
         os.close(parent_fd)
 
 

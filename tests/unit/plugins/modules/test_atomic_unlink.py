@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import os
 import sys
 import tempfile
 import types
@@ -138,6 +139,22 @@ class AtomicUnlinkModuleTests(unittest.TestCase):
         result = self.execute()
         self.assertEqual({"changed": True, "path": str(self.target)}, result)
         self.assertFalse(self.target.exists())
+
+    def test_external_replacement_is_restored_instead_of_deleted(self) -> None:
+        replacement = self.root / "replacement.conf"
+        replacement.write_text("foreign\n", encoding="utf-8")
+        real_rename = os.rename
+
+        def replace_before_quarantine(*args: object, **kwargs: object) -> None:
+            os.replace(replacement, self.target)
+            real_rename(*args, **kwargs)
+
+        with mock.patch.object(ATOMIC_UNLINK.os, "rename", replace_before_quarantine):
+            result = self.execute_failure()
+
+        self.assertIn("atomic quarantine boundary", str(result["msg"]))
+        self.assertEqual("foreign\n", self.target.read_text(encoding="utf-8"))
+        self.assertEqual([], list(self.root.glob(".atomic-unlink-*")))
 
 
 if __name__ == "__main__":
