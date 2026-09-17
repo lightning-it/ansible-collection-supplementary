@@ -795,6 +795,9 @@ roles:
       - "RDP destination reachable through the management VLAN"
     known_limitations:
       - "Goal 07 production acceptance is maintained in the consumer automation repository."
+      - >-
+        Absolute RDP session duration remains a consumer or backend policy;
+        the role controls the inactive Guacamole web/API session timeout.
     deprecation_state: "active"
     scenario_support:
       tiny: []

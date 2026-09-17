@@ -1,49 +1,13 @@
 ---
-- name: Validate Guacamole deployment contract
-  ansible.builtin.assert:
-    that:
-      - guacamole_deploy_image is search('@sha256:')
-      - guacamole_deploy_guacd_image is search('@sha256:')
-      - guacamole_deploy_postgres_image is search('@sha256:')
-      - guacamole_deploy_host_ip | trim | length > 0
-      - guacamole_deploy_port | int > 0
-      - guacamole_deploy_breakglass_user is match('^[A-Za-z0-9_.@-]+$')
-      - guacamole_deploy_secrets.db_password | default('', true) | length >= 16
-      - guacamole_deploy_secrets.breakglass_password | default('', true) | length >= 16
-      - guacamole_deploy_secrets.breakglass_salt | default('', true) | length >= 16
-      - guacamole_deploy_connections is sequence
-      - guacamole_deploy_connections is not string
-      - not guacamole_deploy_oidc_enabled | bool or guacamole_deploy_oidc_authorization_endpoint | trim | length > 0
-      - not guacamole_deploy_oidc_enabled | bool or guacamole_deploy_oidc_jwks_endpoint | trim | length > 0
-      - not guacamole_deploy_oidc_enabled | bool or guacamole_deploy_oidc_issuer | trim | length > 0
-      - not guacamole_deploy_oidc_enabled | bool or guacamole_deploy_oidc_redirect_uri | trim | length > 0
-    fail_msg: "Guacamole requires immutable images, Vault secrets, and complete OIDC settings."
-  no_log: true
+- name: Run Guacamole deployment prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
 
 - name: Install the Podman runtime for Guacamole
   ansible.builtin.package:
     name: podman
     state: present
   when: guacamole_deploy_install_packages | bool
-
-- name: Validate declared Guacamole connection contracts
-  ansible.builtin.assert:
-    that:
-      - item is mapping
-      - item.name | default('', true) | trim | length > 0
-      - item.protocol | default('', true) in ['rdp', 'ssh', 'vnc']
-      - item.parameters | default({}) is mapping
-      - item.attributes | default({}) is mapping
-      - "'password' not in (item.parameters | default({}))"
-      - "'private-key' not in (item.parameters | default({}))"
-      - "'passphrase' not in (item.parameters | default({}))"
-    fail_msg: >-
-      Each Guacamole connection requires a name, supported protocol,
-      parameters, and attributes; credentials must not be stored in inventory.
-    quiet: true
-  loop: "{{ guacamole_deploy_connections }}"
-  loop_control:
-    label: "{{ item.name | default('unnamed') }}"
 
 - name: Create Guacamole persistent directories
   ansible.builtin.file:
