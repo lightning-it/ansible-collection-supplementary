@@ -68,6 +68,20 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
     merge_subject="$(git log -1 --format=%s HEAD)"
     if [[ "$merge_subject" =~ ^Merge\ pull\ request\ \#[0-9]+\ from\ [^/]+/(release/v[^[:space:]]+|backsync/release-[^[:space:]]+)$ ]]; then
       head_ref="${BASH_REMATCH[1]}"
+    elif [ "$merge_subject" = "Synthetic pull-request integration" ]; then
+      read -r -a integration_commit <<<"$(git rev-list --parents -n 1 HEAD)"
+      if [ "${#integration_commit[@]}" -eq 3 ]; then
+        mapfile -t release_refs < <(
+          git for-each-ref \
+            --format="%(refname:short)" \
+            --points-at "${integration_commit[2]}" \
+            "refs/heads/release/v*" \
+            "refs/heads/backsync/release-*"
+        )
+        if [ "${#release_refs[@]}" -eq 1 ]; then
+          head_ref="${release_refs[0]}"
+        fi
+      fi
     fi
   fi
 
