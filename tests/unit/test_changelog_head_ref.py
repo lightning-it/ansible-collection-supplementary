@@ -82,6 +82,11 @@ class ChangelogHeadRefTests(unittest.TestCase):
         repository, _base, _candidate = self.synthetic_repository()
         self.assertEqual("HEAD", self.resolve(repository))
 
+    def test_remote_tracking_release_ref_remains_detached(self) -> None:
+        repository, _base, candidate = self.synthetic_repository()
+        self.git(repository, "update-ref", "refs/remotes/origin/release/v3.3.0", candidate)
+        self.assertEqual("HEAD", self.resolve(repository))
+
     def test_multiple_candidate_release_refs_remain_detached(self) -> None:
         repository, _base, candidate = self.synthetic_repository()
         self.git(repository, "branch", "release/v3.3.0", candidate)
