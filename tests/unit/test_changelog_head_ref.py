@@ -89,6 +89,11 @@ class ChangelogHeadRefTests(unittest.TestCase):
         self.git(repository, "branch", "backsync/release-v3.3.0-to-develop", candidate)
         self.assertEqual("backsync/release-v3.3.0-to-develop", self.resolve(repository))
 
+    def test_exact_local_release_ref_is_recovered(self) -> None:
+        repository, _base, candidate = self.synthetic_repository()
+        self.git(repository, "branch", "release/v3.3.0", candidate)
+        self.assertEqual("release/v3.3.0", self.resolve(repository))
+
     def test_missing_release_ref_remains_detached(self) -> None:
         repository, _base, _candidate = self.synthetic_repository()
         self.assertEqual("HEAD", self.resolve(repository))
