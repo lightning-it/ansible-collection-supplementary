@@ -29,6 +29,7 @@
       - forward_proxy_unit_name is match('^[a-z][a-z0-9-]{1,61}[a-z0-9]\Z')
       - forward_proxy_systemd_scope == 'system'
       - forward_proxy_lock_timeout is integer
+      - forward_proxy_lock_timeout is not boolean
       - forward_proxy_lock_timeout >= 1
       - forward_proxy_lock_timeout <= 300
       - >-
@@ -43,6 +44,7 @@
       - forward_proxy_lock_path not in forward_proxy_managed_paths_internal
       - forward_proxy_lock_path != forward_proxy_state_marker_path
       - forward_proxy_readiness_timeout is integer
+      - forward_proxy_readiness_timeout is not boolean
       - forward_proxy_readiness_timeout >= 1
       - forward_proxy_readiness_timeout <= 300
       - forward_proxy_listen_addresses is sequence
@@ -78,6 +80,7 @@
           and not forward_proxy_upstream_host.endswith('.')
         )
       - forward_proxy_upstream_port is integer
+      - forward_proxy_upstream_port is not boolean
       - forward_proxy_upstream_port >= 1
       - forward_proxy_upstream_port <= 65535
       - forward_proxy_trusted_parent_paths is sequence
