@@ -28,11 +28,41 @@
         forward_proxy_rendered_policy: "{{ forward_proxy_squid_config.content | b64decode }}"
         forward_proxy_rendered_pod: "{{ forward_proxy_pod_manifest.content | b64decode }}"
 
-    - name: Evaluate the minimal rendered proxy contract
+    - name: Evaluate the complete rendered proxy security contract
       ansible.builtin.assert:
         that:
           - "'acl lit_clients src 127.0.0.1/32 10.89.0.0/24' in forward_proxy_rendered_policy"
+          - "'acl lit_safe_ports port 80 443' in forward_proxy_rendered_policy"
+          - "'acl lit_http_ports port 80' in forward_proxy_rendered_policy"
+          - "'acl lit_ssl_ports port 443' in forward_proxy_rendered_policy"
+          - "'acl lit_connect method CONNECT' in forward_proxy_rendered_policy"
+          - >-
+            'acl lit_allowed_domains dstdomain -n .ubuntu.com registry.example.com'
+            in forward_proxy_rendered_policy
+          - "'http_access deny !lit_safe_ports' in forward_proxy_rendered_policy"
+          - "'http_access deny lit_connect !lit_ssl_ports' in forward_proxy_rendered_policy"
+          - "'http_access deny !lit_connect !lit_http_ports' in forward_proxy_rendered_policy"
+          - >-
+            'http_access allow lit_clients lit_allowed_domains'
+            in forward_proxy_rendered_policy
           - "'http_access deny all' in forward_proxy_rendered_policy"
+          - >-
+            forward_proxy_rendered_policy.index('http_access deny !lit_safe_ports')
+            < forward_proxy_rendered_policy.index('http_access allow lit_clients lit_allowed_domains')
+          - >-
+            forward_proxy_rendered_policy.index('http_access deny lit_connect !lit_ssl_ports')
+            < forward_proxy_rendered_policy.index('http_access allow lit_clients lit_allowed_domains')
+          - >-
+            forward_proxy_rendered_policy.index('http_access deny !lit_connect !lit_http_ports')
+            < forward_proxy_rendered_policy.index('http_access allow lit_clients lit_allowed_domains')
+          - >-
+            forward_proxy_rendered_policy.index('http_access allow lit_clients lit_allowed_domains')
+            < forward_proxy_rendered_policy.index('http_access deny all')
+          - >-
+            'cache_peer proxy.customer.example parent 8080 0 no-query default'
+            in forward_proxy_rendered_policy
+          - "'never_direct allow all' in forward_proxy_rendered_policy"
+          - "'always_direct allow all' not in forward_proxy_rendered_policy"
           - >-
             'docker.io/ubuntu/squid:6.6-24.04_beta@sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029'
             in forward_proxy_rendered_pod
