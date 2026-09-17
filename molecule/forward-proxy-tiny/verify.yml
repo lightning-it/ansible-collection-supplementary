@@ -18,6 +18,13 @@
         src: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
       register: forward_proxy_squid_config
 
+    - name: Inspect rendered Squid policy metadata
+      ansible.builtin.stat:
+        path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+        follow: false
+        checksum_algorithm: sha256
+      register: forward_proxy_squid_config_stat
+
     - name: Read rendered Squid Pod manifest
       ansible.builtin.slurp:
         src: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
@@ -87,7 +94,142 @@
                   ~ '6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029')
                  in forward_proxy_rendered_pod }}
 
-    - name: Derive failed forward proxy contracts
+    - name: Initialize managed-file rollback evidence
+      ansible.builtin.set_fact:
+        forward_proxy_rollback_passed: false
+        forward_proxy_rollback_fixture_restored: false
+
+    - name: Exercise rollback and preserve the original rendered policy
+      block:
+        - name: Write a transaction candidate for rollback-path verification
+          ansible.builtin.copy:
+            dest: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+            content: "# transaction candidate for rollback verification\n"
+            owner: "{{ forward_proxy_squid_config_stat.stat.uid }}"
+            group: "{{ forward_proxy_squid_config_stat.stat.gid }}"
+            mode: "{{ forward_proxy_squid_config_stat.stat.mode }}"
+
+        - name: Bind the rollback mutation parent identity
+          ansible.builtin.stat:
+            path: "{{ forward_proxy_test_root }}/etc/squid"
+            follow: false
+          register: forward_proxy_rollback_parent
+
+        - name: Assemble the exact rollback parent identity map
+          ansible.builtin.set_fact:
+            forward_proxy_rollback_parent_identities: >-
+              {{
+                {
+                  forward_proxy_test_root ~ '/etc/squid': {
+                    'device': forward_proxy_rollback_parent.stat.dev,
+                    'inode': forward_proxy_rollback_parent.stat.inode
+                  }
+                }
+              }}
+
+        - name: Inspect the rollback transaction candidate
+          ansible.builtin.stat:
+            path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+            follow: false
+            checksum_algorithm: sha256
+          register: forward_proxy_rollback_candidate
+
+        - name: Exercise the existing-state managed-file rollback path
+          ansible.builtin.include_role:
+            name: lit.supplementary.forward_proxy
+            tasks_from: restore_managed_file.yml
+          vars:
+            forward_proxy_file_owner: "{{ forward_proxy_rollback_candidate.stat.uid }}"
+            forward_proxy_file_group: "{{ forward_proxy_rollback_candidate.stat.gid }}"
+            forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+            forward_proxy_trusted_parent_identity_map_internal: >-
+              {{ forward_proxy_rollback_parent_identities }}
+            forward_proxy_restore_entry:
+              - content: "{{ forward_proxy_squid_config.content }}"
+                item:
+                  item:
+                    - - "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+                      - "{{ forward_proxy_squid_config_stat.stat.checksum }}"
+                    - "{{ forward_proxy_squid_config_stat.stat.mode }}"
+              - "{{ forward_proxy_squid_config_stat.stat.mode }}"
+              - "{{ forward_proxy_squid_config_stat.stat.checksum }}"
+            forward_proxy_squid_config_transaction_stat:
+              stat:
+                checksum: "{{ forward_proxy_rollback_candidate.stat.checksum }}"
+
+        - name: Read the restored forward proxy policy
+          ansible.builtin.slurp:
+            src: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+          register: forward_proxy_restored_policy
+
+        - name: Require exact rollback of the transaction candidate
+          ansible.builtin.assert:
+            that:
+              - forward_proxy_restored_policy.content == forward_proxy_squid_config.content
+            quiet: true
+
+        - name: Record successful production rollback execution
+          ansible.builtin.set_fact:
+            forward_proxy_rollback_passed: true
+      rescue:
+        - name: Record failed production rollback execution
+          ansible.builtin.set_fact:
+            forward_proxy_rollback_passed: false
+      always:
+        - name: Restore the original rendered policy after rollback verification
+          ansible.builtin.copy:
+            dest: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+            content: "{{ forward_proxy_squid_config.content | b64decode }}"
+            owner: "{{ forward_proxy_squid_config_stat.stat.uid }}"
+            group: "{{ forward_proxy_squid_config_stat.stat.gid }}"
+            mode: "{{ forward_proxy_squid_config_stat.stat.mode }}"
+          register: forward_proxy_rollback_fixture_restore
+          failed_when: false
+
+        - name: Inspect the final rollback fixture state
+          ansible.builtin.stat:
+            path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+            follow: false
+            checksum_algorithm: sha256
+          register: forward_proxy_rollback_fixture_final
+          failed_when: false
+
+        - name: Record exact rollback fixture restoration
+          ansible.builtin.set_fact:
+            forward_proxy_rollback_fixture_restored: >-
+              {{
+                not (forward_proxy_rollback_fixture_restore.failed | default(true))
+                and not (forward_proxy_rollback_fixture_final.failed | default(true))
+                and (forward_proxy_rollback_fixture_final.stat.isreg | default(false))
+                and not (forward_proxy_rollback_fixture_final.stat.islnk | default(false))
+                and forward_proxy_rollback_fixture_final.stat.checksum
+                  == forward_proxy_squid_config_stat.stat.checksum
+                and forward_proxy_rollback_fixture_final.stat.mode
+                  == forward_proxy_squid_config_stat.stat.mode
+                and forward_proxy_rollback_fixture_final.stat.uid
+                  == forward_proxy_squid_config_stat.stat.uid
+                and forward_proxy_rollback_fixture_final.stat.gid
+                  == forward_proxy_squid_config_stat.stat.gid
+              }}
+
+    - name: Add rollback execution to forward proxy assertion evidence
+      ansible.builtin.set_fact:
+        forward_proxy_contract_results: >-
+          {{
+            forward_proxy_contract_results
+            + [
+              {
+                'name': 'managed-file-rollback',
+                'passed': forward_proxy_rollback_passed | bool
+              },
+              {
+                'name': 'rollback-fixture-restored',
+                'passed': forward_proxy_rollback_fixture_restored | bool
+              }
+            ]
+          }}
+
+    - name: Derive failed forward proxy contracts after rollback verification
       ansible.builtin.set_fact:
         forward_proxy_failed_contracts: >-
           {{ forward_proxy_contract_results | selectattr('passed', 'equalto', false) | list }}
@@ -98,7 +240,7 @@
         state: directory
         mode: "0750"
 
-    - name: Write per-contract forward proxy JUnit result
+    - name: Write final per-contract forward proxy JUnit result
       ansible.builtin.copy:
         dest: "{{ forward_proxy_junit_root }}/forward-proxy-tiny.xml"
         mode: "0640"
@@ -113,82 +255,6 @@
             </testcase>
           {% endfor %}
           </testsuite>
-
-    - name: Write a safe rollback baseline
-      ansible.builtin.copy:
-        dest: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
-        content: "# rollback baseline\n"
-        mode: "0644"
-
-    - name: Read the safe rollback baseline
-      ansible.builtin.slurp:
-        src: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
-      register: forward_proxy_rollback_baseline
-
-    - name: Write a transaction candidate for rollback-path verification
-      ansible.builtin.copy:
-        dest: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
-        content: "# transaction candidate for rollback verification\n"
-        mode: "0644"
-
-    - name: Bind the rollback mutation parent identity
-      ansible.builtin.stat:
-        path: "{{ forward_proxy_test_root }}/etc/squid"
-        follow: false
-      register: forward_proxy_rollback_parent
-
-    - name: Assemble the exact rollback parent identity map
-      ansible.builtin.set_fact:
-        forward_proxy_rollback_parent_identities: >-
-          {{
-            {
-              forward_proxy_test_root ~ '/etc/squid': {
-                'device': forward_proxy_rollback_parent.stat.dev,
-                'inode': forward_proxy_rollback_parent.stat.inode
-              }
-            }
-          }}
-
-    - name: Inspect the rollback transaction candidate
-      ansible.builtin.stat:
-        path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
-        follow: false
-        checksum_algorithm: sha256
-      register: forward_proxy_rollback_candidate
-
-    - name: Exercise the existing-state managed-file rollback path
-      ansible.builtin.include_role:
-        name: lit.supplementary.forward_proxy
-        tasks_from: restore_managed_file.yml
-      vars:
-        forward_proxy_file_owner: "{{ forward_proxy_rollback_candidate.stat.uid }}"
-        forward_proxy_file_group: "{{ forward_proxy_rollback_candidate.stat.gid }}"
-        forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
-        forward_proxy_trusted_parent_identity_map_internal: >-
-          {{ forward_proxy_rollback_parent_identities }}
-        forward_proxy_restore_entry:
-          - content: "{{ forward_proxy_rollback_baseline.content }}"
-            item:
-              item:
-                - - "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
-                  - "{{ forward_proxy_rollback_baseline.content | b64decode | hash('sha256') }}"
-                - "0644"
-          - "0644"
-          - "{{ forward_proxy_rollback_baseline.content | b64decode | hash('sha256') }}"
-        forward_proxy_squid_config_transaction_stat:
-          stat:
-            checksum: "{{ forward_proxy_rollback_candidate.stat.checksum }}"
-
-    - name: Read the restored forward proxy policy
-      ansible.builtin.slurp:
-        src: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
-      register: forward_proxy_restored_policy
-
-    - name: Require exact rollback of the transaction candidate
-      ansible.builtin.assert:
-        that:
-          - forward_proxy_restored_policy.content == forward_proxy_rollback_baseline.content
-        quiet: true
 
     - name: Fail after preserving every forward proxy assertion result
       ansible.builtin.assert:

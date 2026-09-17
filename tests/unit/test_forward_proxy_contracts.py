@@ -46,6 +46,13 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_failed_contracts", verify)
         self.assertIn("tasks_from: restore_managed_file.yml", verify)
         self.assertIn("Require exact rollback of the transaction candidate", verify)
+        self.assertIn("managed-file-rollback", verify)
+        self.assertIn("rollback-fixture-restored", verify)
+        self.assertIn("Restore the original rendered policy after rollback verification", verify)
+        self.assertLess(
+            verify.index("Require exact rollback of the transaction candidate"),
+            verify.index("Write final per-contract forward proxy JUnit result"),
+        )
         self.assertIn("meta/role-coverage.yml", cleanup)
         self.assertIn("forward_proxy_junit_passed", cleanup)
         self.assertIn("== 'supported'", cleanup)
