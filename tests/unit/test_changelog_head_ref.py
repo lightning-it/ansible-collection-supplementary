@@ -34,7 +34,12 @@ class ChangelogHeadRefTests(unittest.TestCase):
         )
         return result.stdout.strip()
 
-    def synthetic_repository(self, subject: str = "Synthetic pull-request integration") -> tuple[Path, str, str]:
+    def synthetic_repository(
+        self,
+        subject: str = "Synthetic pull-request integration",
+        *,
+        matching_tree: bool = True,
+    ) -> tuple[Path, str, str]:
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         repository = Path(temporary.name)
@@ -48,7 +53,13 @@ class ChangelogHeadRefTests(unittest.TestCase):
         (repository / "fixture.txt").write_text("candidate\n", encoding="utf-8")
         self.git(repository, "commit", "--quiet", "-am", "candidate")
         candidate = self.git(repository, "rev-parse", "HEAD")
-        tree = self.git(repository, "rev-parse", f"{candidate}^{{tree}}")
+        if matching_tree:
+            tree = self.git(repository, "rev-parse", f"{candidate}^{{tree}}")
+        else:
+            (repository / "fixture.txt").write_text("integration-only\n", encoding="utf-8")
+            self.git(repository, "add", "fixture.txt")
+            tree = self.git(repository, "write-tree")
+            self.git(repository, "reset", "--quiet", "--hard", candidate)
         integration = self.git(
             repository,
             "commit-tree",
@@ -85,6 +96,11 @@ class ChangelogHeadRefTests(unittest.TestCase):
     def test_remote_tracking_release_ref_remains_detached(self) -> None:
         repository, _base, candidate = self.synthetic_repository()
         self.git(repository, "update-ref", "refs/remotes/origin/release/v3.3.0", candidate)
+        self.assertEqual("HEAD", self.resolve(repository))
+
+    def test_mismatched_synthetic_tree_remains_detached(self) -> None:
+        repository, _base, candidate = self.synthetic_repository(matching_tree=False)
+        self.git(repository, "branch", "backsync/release-v3.3.0-to-develop", candidate)
         self.assertEqual("HEAD", self.resolve(repository))
 
     def test_multiple_candidate_release_refs_remain_detached(self) -> None:

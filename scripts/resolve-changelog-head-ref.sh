@@ -21,20 +21,24 @@ if [[ "$head_ref" == HEAD ]]; then
   elif [ "$merge_subject" = "Synthetic pull-request integration" ]; then
     read -r -a integration_commit <<<"$(git rev-list --parents -n 1 HEAD)"
     if [ "${#integration_commit[@]}" -eq 3 ]; then
-      release_refs=()
-      while IFS= read -r release_ref; do
-        if [ -n "$release_ref" ]; then
-          release_refs+=("$release_ref")
+      integration_tree="$(git rev-parse "${integration_commit[0]}^{tree}")"
+      candidate_tree="$(git rev-parse "${integration_commit[2]}^{tree}")"
+      if [ "$integration_tree" = "$candidate_tree" ]; then
+        release_refs=()
+        while IFS= read -r release_ref; do
+          if [ -n "$release_ref" ]; then
+            release_refs+=("$release_ref")
+          fi
+        done < <(
+          git for-each-ref \
+            --format="%(refname:short)" \
+            --points-at "${integration_commit[2]}" \
+            "refs/heads/release/v*" \
+            "refs/heads/backsync/release-*"
+        )
+        if [ "${#release_refs[@]}" -eq 1 ]; then
+          head_ref="${release_refs[0]}"
         fi
-      done < <(
-        git for-each-ref \
-          --format="%(refname:short)" \
-          --points-at "${integration_commit[2]}" \
-          "refs/heads/release/v*" \
-          "refs/heads/backsync/release-*"
-      )
-      if [ "${#release_refs[@]}" -eq 1 ]; then
-        head_ref="${release_refs[0]}"
       fi
     fi
   fi
