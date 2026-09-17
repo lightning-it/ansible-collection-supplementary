@@ -13,8 +13,10 @@
       - guacamole_deploy_secrets.breakglass_salt | default('', true) | length >= 16
       - guacamole_deploy_connections is sequence
       - guacamole_deploy_connections is not string
-      - guacamole_deploy_api_session_timeout_minutes | int >= 1
-      - guacamole_deploy_api_session_timeout_minutes | int <= 1440
+      - guacamole_deploy_api_session_timeout_minutes is integer
+      - guacamole_deploy_api_session_timeout_minutes is not boolean
+      - guacamole_deploy_api_session_timeout_minutes >= 1
+      - guacamole_deploy_api_session_timeout_minutes <= 1440
       - >-
         not guacamole_deploy_oidc_enabled | bool
         or guacamole_deploy_oidc_authorization_endpoint | trim | length > 0

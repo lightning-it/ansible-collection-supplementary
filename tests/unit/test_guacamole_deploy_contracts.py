@@ -37,8 +37,11 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         pod = POD.read_text(encoding="utf-8")
 
         self.assertIn("guacamole_deploy_api_session_timeout_minutes: 60", defaults)
-        self.assertIn("guacamole_deploy_api_session_timeout_minutes | int >= 1", asserts)
-        self.assertIn("guacamole_deploy_api_session_timeout_minutes | int <= 1440", asserts)
+        self.assertIn("guacamole_deploy_api_session_timeout_minutes is integer", asserts)
+        self.assertIn("guacamole_deploy_api_session_timeout_minutes is not boolean", asserts)
+        self.assertIn("guacamole_deploy_api_session_timeout_minutes >= 1", asserts)
+        self.assertIn("guacamole_deploy_api_session_timeout_minutes <= 1440", asserts)
+        self.assertNotIn("guacamole_deploy_api_session_timeout_minutes | int", asserts)
         self.assertIn("name: API_SESSION_TIMEOUT", pod)
         self.assertIn("guacamole_deploy_api_session_timeout_minutes | string | to_json", pod)
 
