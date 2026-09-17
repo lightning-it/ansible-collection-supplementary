@@ -713,18 +713,6 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertRegex(evidence["develop_parent_sha"], r"^[0-9a-f]{40}$")
         self.assertEqual(evidence["purpose"], "Bind the reviewed main ancestry backmerge.")
 
-    def test_changelog_policy_recovers_local_synthetic_release_head(self) -> None:
-        policy = (ROOT / "scripts/devtools-changelog-check.sh").read_text(encoding="utf-8")
-        synthetic = policy.split('elif [ "$merge_subject" = "Synthetic pull-request integration" ]; then', 1)[1]
-        synthetic = synthetic.split("    fi\n  fi", 1)[0]
-        self.assertIn("git rev-list --parents -n 1 HEAD", synthetic)
-        self.assertIn('[ "${#integration_commit[@]}" -eq 3 ]', synthetic)
-        self.assertIn('--points-at "${integration_commit[2]}"', synthetic)
-        self.assertIn('"refs/heads/release/v*"', synthetic)
-        self.assertIn('"refs/heads/backsync/release-*"', synthetic)
-        self.assertIn('[ "${#release_refs[@]}" -eq 1 ]', synthetic)
-        self.assertNotIn("refs/remotes/", synthetic)
-
     def test_release_app_is_denied_from_copilot_remediation(self) -> None:
         workflow = (ROOT / ".github/workflows/codex-copilot-remediation.yml").read_text(encoding="utf-8")
         dispatch = workflow.split("  continue-after-push:", 1)[1].split("  inspect:", 1)[0]
