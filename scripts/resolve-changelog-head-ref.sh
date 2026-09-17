@@ -7,6 +7,8 @@ if [ "$#" -ne 1 ] || [ -z "$1" ]; then
 fi
 
 head_ref="$1"
+release_ref_pattern='^(release/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)|backsync/release-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-to-develop)$'
+merge_subject_pattern='^Merge pull request #[0-9]+ from [^/]+/(release/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)|backsync/release-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-to-develop)$'
 
 # Push CI checks out the reviewed merge commit in detached-HEAD mode. Recover
 # the reviewed release branch from the GitHub merge subject so the same
@@ -16,7 +18,7 @@ head_ref="$1"
 # at that exact object.
 if [[ "$head_ref" == HEAD ]]; then
   merge_subject="$(git log -1 --format=%s HEAD)"
-  if [[ "$merge_subject" =~ ^Merge\ pull\ request\ \#[0-9]+\ from\ [^/]+/(release/v[^[:space:]]+|backsync/release-[^[:space:]]+)$ ]]; then
+  if [[ "$merge_subject" =~ $merge_subject_pattern ]]; then
     head_ref="${BASH_REMATCH[1]}"
   elif [ "$merge_subject" = "Synthetic pull-request integration" ]; then
     read -r -a integration_commit <<<"$(git rev-list --parents -n 1 HEAD)"
@@ -26,7 +28,7 @@ if [[ "$head_ref" == HEAD ]]; then
       if [ "$integration_tree" = "$candidate_tree" ]; then
         release_refs=()
         while IFS= read -r release_ref; do
-          if [ -n "$release_ref" ]; then
+          if [[ "$release_ref" =~ $release_ref_pattern ]]; then
             release_refs+=("$release_ref")
           fi
         done < <(

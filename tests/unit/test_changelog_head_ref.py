@@ -120,6 +120,29 @@ class ChangelogHeadRefTests(unittest.TestCase):
         )
         self.assertEqual("release/v3.3.0", self.resolve(repository))
 
+    def test_github_backsync_merge_subject_remains_supported(self) -> None:
+        repository, _base, _candidate = self.synthetic_repository(
+            "Merge pull request #991 from lightning-it/backsync/release-v3.3.0-to-develop"
+        )
+        self.assertEqual("backsync/release-v3.3.0-to-develop", self.resolve(repository))
+
+    def test_malformed_github_release_merge_subject_remains_detached(self) -> None:
+        repository, _base, _candidate = self.synthetic_repository(
+            "Merge pull request #992 from lightning-it/release/v3.3"
+        )
+        self.assertEqual("HEAD", self.resolve(repository))
+
+    def test_malformed_github_backsync_merge_subject_remains_detached(self) -> None:
+        repository, _base, _candidate = self.synthetic_repository(
+            "Merge pull request #993 from lightning-it/backsync/release-v3.3.0"
+        )
+        self.assertEqual("HEAD", self.resolve(repository))
+
+    def test_malformed_local_candidate_ref_remains_detached(self) -> None:
+        repository, _base, candidate = self.synthetic_repository()
+        self.git(repository, "branch", "release/v03.3.0", candidate)
+        self.assertEqual("HEAD", self.resolve(repository))
+
     def test_attached_head_is_unchanged(self) -> None:
         repository, _base, _candidate = self.synthetic_repository()
         self.assertEqual("feature/example", self.resolve(repository, "feature/example"))
