@@ -322,17 +322,21 @@ class ForwardProxyContractTests(unittest.TestCase):
         )
 
     def test_tiny_evidence_is_per_contract_and_disposition_bound(self) -> None:
+        converge = CONVERGE.read_text(encoding="utf-8")
         verify = VERIFY.read_text(encoding="utf-8")
         cleanup = CLEANUP.read_text(encoding="utf-8")
         release_eligibility = RELEASE_ELIGIBILITY.read_text(encoding="utf-8")
         self.assertIn("forward_proxy_contract_results", verify)
-        self.assertIn("Write provisional fail-closed forward proxy JUnit result", verify)
-        self.assertIn("forward proxy Tiny verification did not complete", verify)
-        self.assertIn('errors="1"', verify)
-        self.assertIn('<error message="forward proxy Tiny verification did not complete"/>', verify)
+        self.assertIn("Write provisional fail-closed forward proxy JUnit result before convergence", converge)
+        self.assertIn("forward proxy Tiny convergence or verification did not complete", converge)
+        self.assertIn('errors="1"', converge)
+        self.assertIn(
+            '<error message="forward proxy Tiny convergence or verification did not complete"/>',
+            converge,
+        )
         self.assertLess(
-            verify.index("Write provisional fail-closed forward proxy JUnit result"),
-            verify.index("Read rendered Squid policy"),
+            converge.index("Write provisional fail-closed forward proxy JUnit result before convergence"),
+            converge.index("Remove only the scenario-owned stale forward proxy lock"),
         )
         self.assertLess(
             verify.index("Read rendered Squid policy"),

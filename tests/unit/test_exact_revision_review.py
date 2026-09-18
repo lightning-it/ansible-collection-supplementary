@@ -501,9 +501,14 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                     )
                     self.assertIn('test "${BASE_REF}" = main', rerun_job)
                     self.assertIn(
-                        "compare/${TRUSTED_WORKFLOW_SHA}...${default_head}",
+                        'test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"',
                         rerun_job,
                     )
+                    self.assertIn(
+                        "contents/.github/workflows/current-revision-rerun.yml?ref=${EXPECTED_BASE}",
+                        rerun_job,
+                    )
+                    self.assertIn('git hash-object "${exact_base_helper_path}"', rerun_job)
                     self.assertIn(".protected == true", rerun_job)
                 else:
                     self.assertEqual(
@@ -590,12 +595,13 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}",
             request_job,
         )
-        self.assertIn("compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", request_job)
-        self.assertIn("--jq '[.status, .behind_by, .merge_base_commit.sha] | @tsv'", request_job)
+        self.assertNotIn("compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", request_job)
+        self.assertIn('test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"', request_job)
         self.assertIn('[[ "${default_head}" =~ ^[0-9a-f]{40}$ ]]', request_job)
         self.assertIn("pull_request_target:", workflow)
         self.assertNotIn("pull_request_review:", workflow)
-        self.assertNotIn("workflow_dispatch:", workflow)
+        self.assertNotIn("\n  workflow_dispatch:", workflow)
+        self.assertIn("grep -Fq 'workflow_dispatch:'", workflow)
         condition = review_job.split("    if: >-", 1)[1].split("    permissions:", 1)[0]
         self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", condition)
         self.assertIn("github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'", condition)
@@ -629,8 +635,8 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}",
             review_job,
         )
-        self.assertIn("compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", review_job)
-        self.assertIn("--jq '[.status, .behind_by, .merge_base_commit.sha] | @tsv'", review_job)
+        self.assertNotIn("compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", review_job)
+        self.assertIn('test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"', review_job)
         self.assertIn('[[ "${default_head}" =~ ^[0-9a-f]{40}$ ]]', review_job)
         self.assertIn('--arg controller_ref "${DEFAULT_BRANCH}"', review_job)
         self.assertEqual(1, request_job.count("EXPECTED_HEAD_REF: ${{ github.event.pull_request.head.ref }}"))

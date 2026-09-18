@@ -94,15 +94,7 @@ jobs:
             default_head="$(gh api \
               "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}" --jq .commit.sha)"
             [[ "${default_head}" =~ ^[0-9a-f]{40}$ ]]
-            controller_ancestry="$(gh api \
-              "repos/${REPOSITORY}/compare/${TRUSTED_WORKFLOW_SHA}...${default_head}" \
-              --jq '[.status, .behind_by, .merge_base_commit.sha] | @tsv')"
-            IFS=$'\t' read -r controller_status controller_behind controller_merge_base \
-              <<<"${controller_ancestry}"
-            test "${controller_status}" = identical \
-              || { test "${controller_status}" = ahead \
-                && test "${controller_behind}" = 0 \
-                && test "${controller_merge_base}" = "${TRUSTED_WORKFLOW_SHA}"; }
+            test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"
           fi
           protected_run="$(gh api "repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
           jq -e \
@@ -1299,15 +1291,7 @@ jobs:
             default_head="$(gh api \
               "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}" --jq .commit.sha)"
             [[ "${default_head}" =~ ^[0-9a-f]{40}$ ]]
-            controller_ancestry="$(gh api \
-              "repos/${REPOSITORY}/compare/${TRUSTED_WORKFLOW_SHA}...${default_head}" \
-              --jq '[.status, .behind_by, .merge_base_commit.sha] | @tsv')"
-            IFS=$'\t' read -r controller_status controller_behind controller_merge_base \
-              <<<"${controller_ancestry}"
-            test "${controller_status}" = identical \
-              || { test "${controller_status}" = ahead \
-                && test "${controller_behind}" = 0 \
-                && test "${controller_merge_base}" = "${TRUSTED_WORKFLOW_SHA}"; }
+            test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"
           fi
           protected_run="$(gh api "repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
           jq -e \
@@ -1674,15 +1658,35 @@ jobs:
                 and .protected == true
                 and .commit.sha == $default_head
               ' <<<"${default_branch}" >/dev/null
-            controller_ancestry="$(gh api \
-              "repos/${REPOSITORY}/compare/${TRUSTED_WORKFLOW_SHA}...${default_head}" \
-              --jq '[.status, .behind_by, .merge_base_commit.sha] | @tsv')"
-            IFS=$'\t' read -r controller_status controller_behind controller_merge_base \
-              <<<"${controller_ancestry}"
-            test "${controller_status}" = identical \
-              || { test "${controller_status}" = ahead \
-                && test "${controller_behind}" = 0 \
-                && test "${controller_merge_base}" = "${TRUSTED_WORKFLOW_SHA}"; }
+            test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"
+
+            exact_base_helper="$(gh api \
+              "repos/${REPOSITORY}/contents/.github/workflows/current-revision-rerun.yml?ref=${EXPECTED_BASE}")"
+            exact_base_helper_sha="$(jq -er \
+              '.sha | select(test("^[0-9a-f]{40}$"))' \
+              <<<"${exact_base_helper}")"
+            exact_base_helper_b64="$(jq -er \
+              '.content | gsub("\\n"; "")' \
+              <<<"${exact_base_helper}")"
+            jq -e '
+              .type == "file"
+              and .encoding == "base64"
+              and .path == ".github/workflows/current-revision-rerun.yml"
+              and .name == "current-revision-rerun.yml"
+              and .size > 0
+            ' <<<"${exact_base_helper}" >/dev/null
+            exact_base_helper_path="$(mktemp \
+              "${RUNNER_TEMP}/current-revision-rerun-${EXPECTED_BASE}.XXXXXX.yml")"
+            trap 'rm -f -- "${exact_base_helper_path}"' EXIT
+            printf '%s' "${exact_base_helper_b64}" | base64 --decode > \
+              "${exact_base_helper_path}"
+            test "$(git hash-object "${exact_base_helper_path}")" = "${exact_base_helper_sha}"
+            grep -Fq 'workflow_dispatch:' "${exact_base_helper_path}"
+            for required_input in \
+              base_ref pr_number expected_base expected_head producer_run_id; do
+              grep -Eq "^[[:space:]]+${required_input}:" \
+                "${exact_base_helper_path}"
+            done
           fi
           test "${GITHUB_REF}" = "refs/heads/${BASE_REF}"
           test "${GITHUB_REF_PROTECTED}" = true

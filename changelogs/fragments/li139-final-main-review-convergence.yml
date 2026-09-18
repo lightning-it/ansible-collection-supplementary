@@ -1,0 +1,7 @@
+---
+bugfixes:
+  - >-
+    Bind main-promotion review dispatch to the exact current protected controller and materialize the verifier helper
+    from the immutable main base before dispatch.
+  - >-
+    Preserve fail-closed forward-proxy Tiny JUnit evidence when convergence fails before verification starts.

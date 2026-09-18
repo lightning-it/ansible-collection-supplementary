@@ -389,6 +389,28 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn('review_id:(if $review_id == "" then null else $review_id end)', publisher)
         self.assertEqual(3, publisher.count("validate_bound_review"))
 
+    def test_main_review_controller_is_exact_and_dispatches_materialized_base_helper(self) -> None:
+        copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
+        self.assertNotIn("controller_ancestry", copilot)
+        self.assertEqual(3, copilot.count('test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"'))
+
+        dispatch = copilot.split("  request-protected-verifier-reevaluation:", 1)[1]
+        self.assertIn(
+            "contents/.github/workflows/current-revision-rerun.yml?ref=${EXPECTED_BASE}",
+            dispatch,
+        )
+        self.assertIn("exact_base_helper_sha", dispatch)
+        self.assertIn('git hash-object "${exact_base_helper_path}"', dispatch)
+        self.assertIn("workflow_dispatch:", dispatch)
+        for required_input in (
+            "base_ref",
+            "pr_number",
+            "expected_base",
+            "expected_head",
+            "producer_run_id",
+        ):
+            self.assertIn(required_input, dispatch)
+
     def test_release_app_ancestry_backmerge_uses_deterministic_controller(
         self,
     ) -> None:
