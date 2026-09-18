@@ -37,10 +37,12 @@ class ChangelogHeadRefTests(unittest.TestCase):
         policy = (ROOT / "scripts" / "devtools-changelog-check.sh").read_text(encoding="utf-8")
         runner = (ROOT / "scripts" / "wunder-devtools-ee.sh").read_text(encoding="utf-8")
         workflow = (ROOT / ".github" / "workflows" / "collection-ci.yml").read_text(encoding="utf-8")
+        changelog_workflow = (ROOT / ".github" / "workflows" / "changelog.yml").read_text(encoding="utf-8")
 
         self.assertIn('[ "${GITHUB_EVENT_NAME:-}" = pull_request ]', policy)
         self.assertIn('[ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ]', policy)
-        self.assertIn('[ "${GITHUB_PR_AUTHOR:-}" = "lightning-it-release-automation[bot]" ]', policy)
+        self.assertIn('release_pr_author="${GITHUB_PR_AUTHOR:-${PR_AUTHOR:-}}"', policy)
+        self.assertIn('[ "$release_pr_author" = "lightning-it-release-automation[bot]" ]', policy)
         self.assertIn("is_trusted_release_branch", policy)
         self.assertIn("A release-shaped branch name alone grants no privilege.", policy)
         for variable in (
@@ -48,11 +50,16 @@ class ChangelogHeadRefTests(unittest.TestCase):
             "GITHUB_REPOSITORY",
             "GITHUB_HEAD_REPOSITORY",
             "GITHUB_PR_AUTHOR",
+            "PR_AUTHOR",
         ):
             with self.subTest(variable=variable):
                 self.assertIn(f"${{{variable}:+-e {variable}}}", runner)
         self.assertIn("github.event.pull_request.head.repo.full_name", workflow)
         self.assertIn("github.event.pull_request.user.login", workflow)
+        self.assertIn(
+            "GITHUB_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}", changelog_workflow
+        )
+        self.assertIn("GITHUB_PR_AUTHOR: ${{ github.event.pull_request.user.login }}", changelog_workflow)
 
     def git(self, repository: Path, *arguments: str) -> str:
         result = subprocess.run(  # noqa: S603 - fixed executable and test-owned arguments

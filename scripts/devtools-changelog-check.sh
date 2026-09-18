@@ -61,6 +61,7 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   is_release_promotion=false
   head_ref="${GITHUB_HEAD_REF:-$(git rev-parse --abbrev-ref HEAD)}"
   base_ref="${GITHUB_BASE_REF:-}"
+  release_pr_author="${GITHUB_PR_AUTHOR:-${PR_AUTHOR:-}}"
   head_ref="$(bash scripts/resolve-changelog-head-ref.sh "$head_ref")"
 
   if [[ "$head_ref" == release/v* || "$head_ref" == backsync/release-* ]]; then
@@ -70,7 +71,7 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
       is_trusted_release_branch=false
       if [ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ] && \
           [ -n "${GITHUB_REPOSITORY:-}" ] && \
-          [ "${GITHUB_PR_AUTHOR:-}" = "lightning-it-release-automation[bot]" ]; then
+          [ "$release_pr_author" = "lightning-it-release-automation[bot]" ]; then
         is_trusted_release_branch=true
       fi
     fi
