@@ -64,7 +64,6 @@ class ChangelogHeadRefTests(unittest.TestCase):
             "GITHUB_EVENT_NAME",
             "GITHUB_REPOSITORY",
             "GITHUB_HEAD_REPOSITORY",
-            "GITHUB_REF_NAME",
             "GITHUB_PR_AUTHOR",
             "PR_AUTHOR",
         ):
@@ -239,6 +238,9 @@ class ChangelogHeadRefTests(unittest.TestCase):
                         compare_head=merge_commit,
                     ).returncode,
                 )
+
+        policy = (ROOT / "scripts" / "devtools-changelog-check.sh").read_text(encoding="utf-8")
+        self.assertIn('export GITHUB_BASE_REF="${GITHUB_REF_NAME:-}"', policy)
 
     def git(self, repository: Path, *arguments: str) -> str:
         result = subprocess.run(  # noqa: S603 - fixed executable and test-owned arguments

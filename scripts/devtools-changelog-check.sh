@@ -6,6 +6,14 @@ set -euo pipefail
 # script compares the current branch with origin/develop when possible and adds
 # staged changes so pre-commit can catch missing fragments before commit.
 
+# GitHub push events expose the protected target through GITHUB_REF_NAME while
+# the container contract already forwards GITHUB_BASE_REF. Bind the former to
+# the latter before entering the pinned container instead of widening the
+# centrally governed container environment surface.
+if [ "${GITHUB_EVENT_NAME:-}" = push ] && [ -z "${GITHUB_BASE_REF:-}" ]; then
+  export GITHUB_BASE_REF="${GITHUB_REF_NAME:-}"
+fi
+
 bash scripts/wunder-devtools-ee.sh bash -lc '
   set -euo pipefail
 
