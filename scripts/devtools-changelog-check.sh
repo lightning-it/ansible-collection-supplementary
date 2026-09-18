@@ -55,27 +55,39 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   is_trusted_release_branch=false
   is_release_promotion=false
   head_ref="${GITHUB_HEAD_REF:-$(git rev-parse --abbrev-ref HEAD)}"
-  base_ref="${GITHUB_BASE_REF:-}"
+  base_ref="${GITHUB_BASE_REF:-${GITHUB_REF_NAME:-}}"
   release_pr_author="${GITHUB_PR_AUTHOR:-${PR_AUTHOR:-}}"
   head_ref="$(bash scripts/resolve-changelog-head-ref.sh "$head_ref")"
 
   if [[ "$head_ref" == release/v* || "$head_ref" == backsync/release-* ]]; then
     is_release_branch=true
     is_trusted_release_branch=true
-    if [ "${GITHUB_EVENT_NAME:-}" = pull_request ]; then
-      is_trusted_release_branch=false
-      if [ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ] && \
-          [ -n "${GITHUB_REPOSITORY:-}" ] && \
-          [ "$release_pr_author" = "lightning-it-release-automation[bot]" ] && \
-          { \
-            { [[ "$head_ref" == release/v* ]] && [ "$base_ref" = main ]; \
-            } || \
-            { [[ "$head_ref" == backsync/release-* ]] && [ "$base_ref" = develop ]; \
-            }; \
-          }; then
-        is_trusted_release_branch=true
-      fi
-    fi
+    case "${GITHUB_EVENT_NAME:-}" in
+      pull_request)
+        is_trusted_release_branch=false
+        if [ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ] && \
+            [ -n "${GITHUB_REPOSITORY:-}" ] && \
+            [ "$release_pr_author" = "lightning-it-release-automation[bot]" ] && \
+            { \
+              { [[ "$head_ref" == release/v* ]] && [ "$base_ref" = main ]; \
+              } || \
+              { [[ "$head_ref" == backsync/release-* ]] && [ "$base_ref" = develop ]; \
+              }; \
+            }; then
+          is_trusted_release_branch=true
+        fi
+        ;;
+      push)
+        if ! { \
+          { [[ "$head_ref" == release/v* ]] && [ "$base_ref" = main ]; \
+          } || \
+          { [[ "$head_ref" == backsync/release-* ]] && [ "$base_ref" = develop ]; \
+          }; \
+        }; then
+          is_trusted_release_branch=false
+        fi
+        ;;
+    esac
   fi
   if [[ "$head_ref" == develop && "$base_ref" == main ]]; then
     if [ "${GITHUB_EVENT_NAME:-}" != pull_request ] || {

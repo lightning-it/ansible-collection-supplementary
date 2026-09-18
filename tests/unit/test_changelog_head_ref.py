@@ -48,7 +48,7 @@ class ChangelogHeadRefTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "collection-ci.yml").read_text(encoding="utf-8")
         changelog_workflow = (ROOT / ".github" / "workflows" / "changelog.yml").read_text(encoding="utf-8")
 
-        self.assertIn('[ "${GITHUB_EVENT_NAME:-}" = pull_request ]', policy)
+        self.assertIn('case "${GITHUB_EVENT_NAME:-}" in', policy)
         self.assertIn('[ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ]', policy)
         self.assertIn('release_pr_author="${GITHUB_PR_AUTHOR:-${PR_AUTHOR:-}}"', policy)
         self.assertIn('[ "$release_pr_author" = "lightning-it-release-automation[bot]" ]', policy)
@@ -64,6 +64,7 @@ class ChangelogHeadRefTests(unittest.TestCase):
             "GITHUB_EVENT_NAME",
             "GITHUB_REPOSITORY",
             "GITHUB_HEAD_REPOSITORY",
+            "GITHUB_REF_NAME",
             "GITHUB_PR_AUTHOR",
             "PR_AUTHOR",
         ):
@@ -113,17 +114,22 @@ class ChangelogHeadRefTests(unittest.TestCase):
             base_ref: str,
             head_repository: str = "lightning-it/ansible-collection-supplementary",
             labels: str = "[]",
+            event_name: str = "pull_request",
+            ref_name: str = "",
+            compare_base: str = base,
+            compare_head: str = head,
         ) -> subprocess.CompletedProcess[str]:
             environment = isolated_git_environment()
             environment.update(
                 {
-                    "BASE_SHA": base,
-                    "HEAD_SHA": head,
-                    "GITHUB_EVENT_NAME": "pull_request",
+                    "BASE_SHA": compare_base,
+                    "HEAD_SHA": compare_head,
+                    "GITHUB_EVENT_NAME": event_name,
                     "GITHUB_REPOSITORY": "lightning-it/ansible-collection-supplementary",
                     "GITHUB_HEAD_REPOSITORY": head_repository,
                     "GITHUB_HEAD_REF": head_ref,
                     "GITHUB_BASE_REF": base_ref,
+                    "GITHUB_REF_NAME": ref_name,
                     "GITHUB_PR_AUTHOR": "lightning-it-release-automation[bot]",
                     "LABELS_JSON": labels,
                     "HOME": str(repository),
@@ -169,6 +175,70 @@ class ChangelogHeadRefTests(unittest.TestCase):
             0,
             policy_result(head_ref="develop", base_ref="main", head_repository="").returncode,
         )
+
+        candidate_tree = self.git(repository, "rev-parse", f"{head}^{{tree}}")
+        release_merge = self.git(
+            repository,
+            "commit-tree",
+            candidate_tree,
+            "-p",
+            base,
+            "-p",
+            head,
+            "-m",
+            "Merge pull request #1001 from lightning-it/release/v3.3.1",
+        )
+        backsync_merge = self.git(
+            repository,
+            "commit-tree",
+            candidate_tree,
+            "-p",
+            base,
+            "-p",
+            head,
+            "-m",
+            "Merge pull request #1002 from lightning-it/backsync/release-v3.3.1-to-develop",
+        )
+        promotion_merge = self.git(
+            repository,
+            "commit-tree",
+            candidate_tree,
+            "-p",
+            base,
+            "-p",
+            head,
+            "-m",
+            "chore(release): promote develop to main (#1003)",
+        )
+        self.git(repository, "update-ref", "refs/remotes/origin/develop", head)
+
+        for merge_commit, canonical_target, wrong_target in (
+            (release_merge, "main", "develop"),
+            (backsync_merge, "develop", "main"),
+            (promotion_merge, "main", "develop"),
+        ):
+            with self.subTest(merge_commit=merge_commit, target=canonical_target):
+                self.git(repository, "checkout", "--quiet", "--detach", merge_commit)
+                self.assertEqual(
+                    0,
+                    policy_result(
+                        head_ref="",
+                        base_ref="",
+                        event_name="push",
+                        ref_name=canonical_target,
+                        compare_head=merge_commit,
+                    ).returncode,
+                )
+                self.assertNotEqual(
+                    0,
+                    policy_result(
+                        head_ref="",
+                        base_ref="",
+                        event_name="push",
+                        ref_name=wrong_target,
+                        compare_head=merge_commit,
+                    ).returncode,
+                )
 
     def git(self, repository: Path, *arguments: str) -> str:
         result = subprocess.run(  # noqa: S603 - fixed executable and test-owned arguments
@@ -278,6 +348,14 @@ class ChangelogHeadRefTests(unittest.TestCase):
             "Merge pull request #991 from lightning-it/backsync/release-v3.3.0-to-develop"
         )
         self.assertEqual("backsync/release-v3.3.0-to-develop", self.resolve(repository))
+
+    def test_exact_remote_develop_parent_and_tree_recovers_promotion(self) -> None:
+        repository, base, candidate = self.synthetic_repository("chore(release): promote develop to main (#1003)")
+        self.git(repository, "update-ref", "refs/remotes/origin/develop", candidate)
+        self.assertEqual("develop", self.resolve(repository))
+
+        self.git(repository, "update-ref", "refs/remotes/origin/develop", base)
+        self.assertEqual("HEAD", self.resolve(repository))
 
     def test_malformed_github_release_merge_subject_remains_detached(self) -> None:
         repository, _base, _candidate = self.synthetic_repository(

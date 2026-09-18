@@ -6,5 +6,8 @@ bugfixes:
     identity and the canonical base branch before a release-named pull request
     receives changelog privileges. Generated changelog authorization now runs
     before fragment-exemption labels, protocol readiness uses Ansible's
-    discovered Python interpreter and complete HTTP headers, and connection
-    validation remains redacted.
+    configured-or-discovered Python interpreter and complete HTTP headers, and connection
+    validation remains redacted. Explicitly configured target Python
+    interpreters remain supported, while release, back-sync, and develop-to-main
+    promotion privileges are bound to canonical repositories and target branches
+    on both pull-request and post-merge push checks.
