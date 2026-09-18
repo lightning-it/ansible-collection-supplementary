@@ -91,9 +91,17 @@ jobs:
             test "${TRUSTED_WORKFLOW_SHA}" = "${EXPECTED_BASE}"
           else
             test "${EXPECTED_BASE_REF}" = main
-            default_head="$(gh api \
-              "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}" --jq .commit.sha)"
+            default_branch="$(gh api \
+              "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}")"
+            default_head="$(jq -er .commit.sha <<<"${default_branch}")"
             [[ "${default_head}" =~ ^[0-9a-f]{40}$ ]]
+            jq -e \
+              --arg default_branch "${DEFAULT_BRANCH}" \
+              --arg default_head "${default_head}" '
+                .name == $default_branch
+                and .protected == true
+                and .commit.sha == $default_head
+              ' <<<"${default_branch}" >/dev/null
             test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"
           fi
           protected_run="$(gh api "repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
@@ -1288,9 +1296,17 @@ jobs:
             test "${TRUSTED_WORKFLOW_SHA}" = "${EVENT_BASE}"
           else
             test "${EVENT_BASE_REF}" = main
-            default_head="$(gh api \
-              "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}" --jq .commit.sha)"
+            default_branch="$(gh api \
+              "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}")"
+            default_head="$(jq -er .commit.sha <<<"${default_branch}")"
             [[ "${default_head}" =~ ^[0-9a-f]{40}$ ]]
+            jq -e \
+              --arg default_branch "${DEFAULT_BRANCH}" \
+              --arg default_head "${default_head}" '
+                .name == $default_branch
+                and .protected == true
+                and .commit.sha == $default_head
+              ' <<<"${default_branch}" >/dev/null
             test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"
           fi
           protected_run="$(gh api "repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"

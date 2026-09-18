@@ -393,6 +393,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         self.assertNotIn("controller_ancestry", copilot)
         self.assertEqual(3, copilot.count('test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"'))
+        self.assertEqual(3, copilot.count("and .protected == true"))
 
         dispatch = copilot.split("  request-protected-verifier-reevaluation:", 1)[1]
         self.assertIn(
