@@ -250,7 +250,7 @@
             forward_proxy_trusted_parent_identity_map_internal: >-
               {{ forward_proxy_rollback_parent_identities }}
             forward_proxy_restore_entry:
-              - content: "{{ forward_proxy_squid_config.content }}"
+              - content: "{{ forward_proxy_squid_config.content | b64decode }}"
                 item:
                   item:
                     - - "{{ forward_proxy_test_root }}/etc/squid/squid.conf"

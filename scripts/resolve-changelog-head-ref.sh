@@ -23,7 +23,7 @@ if [[ "$head_ref" == HEAD ]]; then
   elif [ "$merge_subject" = "Synthetic pull-request integration" ]; then
     read -r -a integration_commit <<<"$(git rev-list --parents -n 1 HEAD)"
     if [ "${#integration_commit[@]}" -eq 3 ]; then
-      integration_tree="$(git rev-parse "${integration_commit[0]}^{tree}")"
+      integration_tree="$(git rev-parse "HEAD^{tree}")"
       candidate_tree="$(git rev-parse "${integration_commit[2]}^{tree}")"
       if [ "$integration_tree" = "$candidate_tree" ]; then
         release_refs=()

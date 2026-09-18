@@ -17,6 +17,15 @@ if GIT is None or BASH is None:
 
 
 class ChangelogHeadRefTests(unittest.TestCase):
+    def test_synthetic_integration_uses_the_checked_out_head_tree(self) -> None:
+        resolver = SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn('integration_tree="$(git rev-parse "HEAD^{tree}")"', resolver)
+        self.assertNotIn(
+            'integration_tree="$(git rev-parse "${integration_commit[0]}^{tree}")"',
+            resolver,
+        )
+
     def test_changelog_policy_uses_the_tested_resolver(self) -> None:
         policy = (ROOT / "scripts" / "devtools-changelog-check.sh").read_text(encoding="utf-8")
         self.assertIn(

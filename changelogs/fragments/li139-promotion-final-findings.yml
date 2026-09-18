@@ -1,0 +1,4 @@
+---
+bugfixes:
+  - Decode slurped Squid policy content before exercising the atomic rollback path.
+  - Compare the checked-out synthetic integration tree when resolving a detached release head.

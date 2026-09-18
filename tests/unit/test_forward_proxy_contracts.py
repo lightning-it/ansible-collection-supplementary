@@ -38,6 +38,18 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertEqual(3, restore.count("forward_proxy_restore_entry.0.item.item.0.0"))
         self.assertNotIn("forward_proxy_restore_entry.0.item.0.0", restore)
 
+    def test_tiny_rollback_decodes_slurped_content_before_restore(self) -> None:
+        verify = VERIFY.read_text(encoding="utf-8")
+
+        self.assertIn(
+            'content: "{{ forward_proxy_squid_config.content | b64decode }}"',
+            verify,
+        )
+        self.assertNotIn(
+            'forward_proxy_restore_entry:\n              - content: "{{ forward_proxy_squid_config.content }}"',
+            verify,
+        )
+
     def test_readme_example_is_an_explicit_runnable_opt_in(self) -> None:
         readme = README.read_text(encoding="utf-8")
         self.assertIn("forward_proxy_enabled: true", readme)
