@@ -86,7 +86,10 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
         fi
         ;;
       push)
-        if ! { \
+        if [ "${GITHUB_HEAD_REPOSITORY:-}" != "${GITHUB_REPOSITORY:-}" ] || \
+            [ -z "${GITHUB_REPOSITORY:-}" ] || \
+            [ "$release_pr_author" != "lightning-it-release-automation[bot]" ] || \
+            ! { \
           { [[ "$head_ref" == release/v* ]] && [ "$base_ref" = main ]; \
           } || \
           { [[ "$head_ref" == backsync/release-* ]] && [ "$base_ref" = develop ]; \
