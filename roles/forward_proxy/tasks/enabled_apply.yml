@@ -421,6 +421,8 @@
     - >-
       not forward_proxy_state_marker.stat.exists
       or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
+      or forward_proxy_config_path | dirname in forward_proxy_planned_directories_internal
+      or forward_proxy_pod_manifest_path | dirname in forward_proxy_planned_directories_internal
       or forward_proxy_squid_config_result.changed | default(false) | bool
       or forward_proxy_pod_manifest_result.changed | default(false) | bool
 

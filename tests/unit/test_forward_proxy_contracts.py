@@ -164,6 +164,10 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("changed_when: true", section)
         self.assertIn("ansible_check_mode", section)
         self.assertIn("not forward_proxy_state_marker.stat.exists", section)
+        self.assertIn("forward_proxy_config_path | dirname in forward_proxy_planned_directories_internal", section)
+        self.assertIn(
+            "forward_proxy_pod_manifest_path | dirname in forward_proxy_planned_directories_internal", section
+        )
         self.assertIn("forward_proxy_squid_config_result.changed | default(false) | bool", section)
         self.assertIn("forward_proxy_pod_manifest_result.changed | default(false) | bool", section)
 
