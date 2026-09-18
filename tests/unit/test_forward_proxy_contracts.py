@@ -99,23 +99,30 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertLess(transition.index(preflight), transition.index(enabled_transition))
         self.assertNotIn("Verify the pinned Squid image was preloaded", enabled)
         self.assertNotIn("forward_proxy_transition_initialized_internal: true", transition)
-        self.assertEqual(4, enabled_apply.count("forward_proxy_transition_initialized_internal: true"))
+        self.assertEqual(2, enabled_apply.count("forward_proxy_transition_initialized_internal: true"))
         self.assertLess(
+            enabled_apply.index("Refuse a foreign same-named runtime before any managed-file write"),
+            enabled_apply.index("Enter the rollback boundary before writing the Squid policy"),
+        )
+        self.assertLess(
+            enabled_apply.index("Enter the rollback boundary before writing the Squid policy"),
             enabled_apply.index("Render the Squid policy with an atomic no-follow write"),
-            enabled_apply.index("Authorize rollback after the Squid policy was mutated"),
         )
         self.assertLess(
+            enabled_apply.index("Enter the rollback boundary before writing the Squid policy"),
             enabled_apply.index("Render the digest-pinned Squid Pod manifest with an atomic no-follow write"),
-            enabled_apply.index("Authorize rollback after the Pod manifest was mutated"),
         )
         self.assertLess(
+            enabled_apply.index("Enter the rollback boundary before writing the Squid policy"),
             enabled_apply.index("Manage the persistent Squid container service"),
-            enabled_apply.index("Authorize rollback after the runtime transition completed"),
         )
-        self.assertIn("forward_proxy_squid_config_result.changed | default(false) | bool", enabled_apply)
-        self.assertIn("forward_proxy_pod_manifest_result.changed | default(false) | bool", enabled_apply)
+        self.assertLess(
+            enabled_apply.index("Enter the rollback boundary before removing the previous runtime"),
+            enabled_apply.index("Remove the previous runtime when switching to render-only mode"),
+        )
+        self.assertIn("No rollback was attempted", enabled)
         self.assertEqual(
-            2,
+            3,
             enabled.count("forward_proxy_transition_initialized_internal | default(false) | bool"),
         )
 

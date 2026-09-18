@@ -5,6 +5,6 @@ bugfixes:
     verification aborts before the final per-contract report is assembled,
     without publishing successful test counters for an incomplete run.
   - >-
-    Bind forward-proxy rollback handlers to an explicit completed transition
-    initialization boundary so failures before the first mutation cannot
-    invoke rollback.
+    Bind forward-proxy rollback handlers to the explicit first mutation
+    boundary after read-only preflight, including failures that occur inside
+    a mutating operation.

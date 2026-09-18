@@ -723,10 +723,11 @@ roles:
         Tiny renders and validates the exact service contract, preserves
         fail-closed JUnit before contract evaluation, directly exercises the
         descriptor-safe managed-file restore primitive, and statically checks
-        that enabled-state rescue is authorized only after a successful
-        mutation. It does not drive the full enabled-state rescue or start
-        Podman; live proxy traffic and host-firewall enforcement require the
-        protected Wunderbox acceptance target.
+        that enabled-state rescue is authorized only at the first mutation
+        boundary after read-only preflight. It does not drive the full
+        enabled-state rescue or start Podman; live proxy traffic and
+        host-firewall enforcement require the protected Wunderbox acceptance
+        target.
     deprecation_state: "active"
     scenario_support:
       tiny:

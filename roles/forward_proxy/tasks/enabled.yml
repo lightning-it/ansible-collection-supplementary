@@ -22,7 +22,14 @@
       ansible.builtin.fail:
         msg: >-
           {{
-            'Forward proxy activation failed. The first deployment was rolled back.'
-            if not forward_proxy_state_marker.stat.exists
-            else 'Forward proxy activation failed. The previous owned deployment was restored.'
+            (
+              'Forward proxy activation failed before the rollback-authorized '
+              'mutation boundary. No rollback was attempted.'
+            )
+            if not forward_proxy_transition_initialized_internal | default(false) | bool
+            else (
+              'Forward proxy activation failed. The first deployment was rolled back.'
+              if not forward_proxy_state_marker.stat.exists
+              else 'Forward proxy activation failed. The previous owned deployment was restored.'
+            )
           }}
