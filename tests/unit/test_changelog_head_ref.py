@@ -160,6 +160,15 @@ class ChangelogHeadRefTests(unittest.TestCase):
             0,
             policy_result(head_ref="release/v3.3.1", base_ref="develop", labels='["skip-changelog"]').returncode,
         )
+        self.assertEqual(0, policy_result(head_ref="develop", base_ref="main").returncode)
+        self.assertNotEqual(
+            0,
+            policy_result(head_ref="develop", base_ref="main", head_repository="fork/repository").returncode,
+        )
+        self.assertNotEqual(
+            0,
+            policy_result(head_ref="develop", base_ref="main", head_repository="").returncode,
+        )
 
     def git(self, repository: Path, *arguments: str) -> str:
         result = subprocess.run(  # noqa: S603 - fixed executable and test-owned arguments

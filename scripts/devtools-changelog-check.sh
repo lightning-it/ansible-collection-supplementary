@@ -78,7 +78,12 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
     fi
   fi
   if [[ "$head_ref" == develop && "$base_ref" == main ]]; then
-    is_release_promotion=true
+    if [ "${GITHUB_EVENT_NAME:-}" != pull_request ] || {
+      [ -n "${GITHUB_REPOSITORY:-}" ] &&
+      [ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ]
+    }; then
+      is_release_promotion=true
+    fi
   fi
 
   if grep -E "$generated_re" <<<"$changed"; then
