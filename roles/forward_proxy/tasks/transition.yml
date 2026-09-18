@@ -687,6 +687,13 @@
     - forward_proxy_state_marker.stat.exists
     - not ansible_check_mode
 
+- name: Reprove the empty runtime boundary immediately before deleting ownership evidence
+  ansible.builtin.include_tasks: verify_runtime_absent.yml
+  when:
+    - not forward_proxy_enabled | bool
+    - forward_proxy_state_marker.stat.exists
+    - not ansible_check_mode
+
 - name: Remove the ownership marker at its exact disabled-state mutation boundary
   ansible.builtin.include_tasks: remove_owned_file.yml
   vars:

@@ -19,6 +19,8 @@ TRANSITION = ROOT / "roles" / "forward_proxy" / "tasks" / "transition.yml"
 ENSURE_DIRECTORY = ROOT / "roles" / "forward_proxy" / "tasks" / "ensure_directory.yml"
 ENABLED = ROOT / "roles" / "forward_proxy" / "tasks" / "enabled.yml"
 ENABLED_APPLY = ROOT / "roles" / "forward_proxy" / "tasks" / "enabled_apply.yml"
+ENABLED_EXISTING_ROLLBACK = ROOT / "roles" / "forward_proxy" / "tasks" / "enabled_existing_rollback.yml"
+ENABLED_FIRST_RUN_ROLLBACK = ROOT / "roles" / "forward_proxy" / "tasks" / "enabled_first_run_rollback.yml"
 READINESS = ROOT / "roles" / "forward_proxy" / "tasks" / "verify_runtime_ready.yml"
 RESTORE = ROOT / "roles" / "forward_proxy" / "tasks" / "restore_managed_file.yml"
 README = ROOT / "roles" / "forward_proxy" / "README.md"
@@ -188,6 +190,32 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_pre_checkpoint_state_marker.stat.checksum", section)
         self.assertIn("'runtime_managed': false", transition[runtime_absent:checkpoint])
         self.assertIn("'quadlet_checksum': ''", transition[runtime_absent:checkpoint])
+
+    def test_rollback_reproves_runtime_absence_at_each_final_file_boundary(self) -> None:
+        existing = ENABLED_EXISTING_ROLLBACK.read_text(encoding="utf-8")
+        first_run = ENABLED_FIRST_RUN_ROLLBACK.read_text(encoding="utf-8")
+        transition = TRANSITION.read_text(encoding="utf-8")
+
+        existing_reproof = existing.index(
+            "Reprove the empty runtime boundary immediately before existing-state rollback mutation"
+        )
+        existing_restore = existing.index("Restore previous forward proxy managed files")
+        self.assertLess(existing_reproof, existing_restore)
+        self.assertIn("verify_runtime_absent.yml", existing[existing_reproof:existing_restore])
+
+        first_run_reproof = first_run.index(
+            "Reprove the empty runtime boundary immediately before first-run file rollback"
+        )
+        first_run_unlink = first_run.index("Remove each verified first-run file at its exact mutation boundary")
+        self.assertLess(first_run_reproof, first_run_unlink)
+        self.assertIn("verify_runtime_absent.yml", first_run[first_run_reproof:first_run_unlink])
+
+        marker_reproof = transition.index(
+            "Reprove the empty runtime boundary immediately before deleting ownership evidence"
+        )
+        marker_unlink = transition.index("Remove the ownership marker at its exact disabled-state mutation boundary")
+        self.assertLess(marker_reproof, marker_unlink)
+        self.assertIn("verify_runtime_absent.yml", transition[marker_reproof:marker_unlink])
 
     def test_readiness_uses_protocol_evidence_and_revalidates_runtime(self) -> None:
         readiness = READINESS.read_text(encoding="utf-8")

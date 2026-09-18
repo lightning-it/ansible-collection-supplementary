@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Revalidate forward proxy runtime absence immediately before rollback file
+    mutations and ownership-marker deletion so a concurrently recreated
+    same-named runtime fails closed.
