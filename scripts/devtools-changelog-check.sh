@@ -6,6 +6,14 @@ set -euo pipefail
 # script compares the current branch with origin/develop when possible and adds
 # staged changes so pre-commit can catch missing fragments before commit.
 
+# GitHub push events expose the protected target through GITHUB_REF_NAME while
+# the container contract already forwards GITHUB_BASE_REF. Bind the former to
+# the latter before entering the pinned container instead of widening the
+# centrally governed container environment surface.
+if [ "${GITHUB_EVENT_NAME:-}" = push ] && [ -z "${GITHUB_BASE_REF:-}" ]; then
+  export GITHUB_BASE_REF="${GITHUB_REF_NAME:-}"
+fi
+
 bash scripts/wunder-devtools-ee.sh bash -lc '
   set -euo pipefail
 
@@ -50,34 +58,63 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
     grep -Fxq "$1" <<<"$labels"
   }
 
-  if has_label skip-changelog || has_label documentation || has_label ci || has_label tests; then
-    echo "Changelog fragment requirement skipped by PR label."
-    exit 0
-  fi
-
   generated_re="^(CHANGELOG\\.(md|rst)|changelogs/(changelog|\\.plugin-cache)\\.yaml)$"
   is_release_branch=false
   is_trusted_release_branch=false
   is_release_promotion=false
   head_ref="${GITHUB_HEAD_REF:-$(git rev-parse --abbrev-ref HEAD)}"
-  base_ref="${GITHUB_BASE_REF:-}"
+  base_ref="${GITHUB_BASE_REF:-${GITHUB_REF_NAME:-}}"
   release_pr_author="${GITHUB_PR_AUTHOR:-${PR_AUTHOR:-}}"
   head_ref="$(bash scripts/resolve-changelog-head-ref.sh "$head_ref")"
 
   if [[ "$head_ref" == release/v* || "$head_ref" == backsync/release-* ]]; then
     is_release_branch=true
     is_trusted_release_branch=true
-    if [ "${GITHUB_EVENT_NAME:-}" = pull_request ]; then
-      is_trusted_release_branch=false
-      if [ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ] && \
-          [ -n "${GITHUB_REPOSITORY:-}" ] && \
-          [ "$release_pr_author" = "lightning-it-release-automation[bot]" ]; then
-        is_trusted_release_branch=true
-      fi
-    fi
+    case "${GITHUB_EVENT_NAME:-}" in
+      pull_request)
+        is_trusted_release_branch=false
+        if [ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ] && \
+            [ -n "${GITHUB_REPOSITORY:-}" ] && \
+            [ "$release_pr_author" = "lightning-it-release-automation[bot]" ] && \
+            { \
+              { [[ "$head_ref" == release/v* ]] && [ "$base_ref" = main ]; \
+              } || \
+              { [[ "$head_ref" == backsync/release-* ]] && [ "$base_ref" = develop ]; \
+              }; \
+            }; then
+          is_trusted_release_branch=true
+        fi
+        ;;
+      push)
+        if ! { \
+          { [[ "$head_ref" == release/v* ]] && [ "$base_ref" = main ]; \
+          } || \
+          { [[ "$head_ref" == backsync/release-* ]] && [ "$base_ref" = develop ]; \
+          }; \
+        }; then
+          is_trusted_release_branch=false
+        fi
+        ;;
+      "")
+        # Preserve deterministic local checks outside GitHub Actions.
+        ;;
+      *)
+        is_trusted_release_branch=false
+        ;;
+    esac
   fi
   if [[ "$head_ref" == develop && "$base_ref" == main ]]; then
-    is_release_promotion=true
+    case "${GITHUB_EVENT_NAME:-}" in
+      pull_request)
+        if [ -n "${GITHUB_REPOSITORY:-}" ] && \
+            [ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ]; then
+          is_release_promotion=true
+        fi
+        ;;
+      push|"")
+        is_release_promotion=true
+        ;;
+    esac
   fi
 
   if grep -E "$generated_re" <<<"$changed"; then
@@ -94,6 +131,11 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
       exit 1
     fi
     echo "Release and release back-sync PRs manage generated changelog files."
+    exit 0
+  fi
+
+  if has_label skip-changelog || has_label documentation || has_label ci || has_label tests; then
+    echo "Changelog fragment requirement skipped by PR label."
     exit 0
   fi
 

@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+import socket
+import subprocess
+import sys
+import threading
 import unittest
 from pathlib import Path
+
+import yaml
+from jinja2 import Environment, StrictUndefined
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSERTS = ROOT / "roles" / "forward_proxy" / "tasks" / "assert.yml"
@@ -60,6 +67,8 @@ class ForwardProxyContractTests(unittest.TestCase):
 
     def test_readme_example_is_an_explicit_runnable_opt_in(self) -> None:
         readme = README.read_text(encoding="utf-8")
+        self.assertIn("`lit.foundational` 1.32.0 or newer", readme)
+        self.assertIn("`podman_systemd`", readme)
         self.assertIn("forward_proxy_enabled: true", readme)
         self.assertIn("forward_proxy_experimental_runtime_acceptance: true", readme)
         self.assertIn("forward_proxy_allowed_destination_domains:", readme)
@@ -131,11 +140,88 @@ class ForwardProxyContractTests(unittest.TestCase):
         readiness = READINESS.read_text(encoding="utf-8")
 
         self.assertIn("Require a Squid protocol response", readiness)
+        self.assertIn("Resolve the target Python interpreter", readiness)
+        self.assertIn('"{{ forward_proxy_probe_interpreter_internal }}"', readiness)
+        self.assertNotIn("- /usr/bin/python3", readiness)
         self.assertIn("x-squid-error", readiness)
         self.assertIn('while b"\\r\\n\\r\\n" not in response', readiness)
+        self.assertIn('has_complete_headers = b"\\r\\n\\r\\n" in response', readiness)
+        self.assertIn("if has_complete_headers and response.startswith", readiness)
         self.assertIn("len(response) > 65536", readiness)
         self.assertIn("Reinspect the Pod identity after the Squid protocol probe", readiness)
         self.assertIn("Require the same captured runtime after the Squid protocol probe", readiness)
+
+    def test_readiness_interpreter_resolution_supports_explicit_and_discovered_modes(self) -> None:
+        tasks = yaml.safe_load(READINESS.read_text(encoding="utf-8"))
+        resolve_task = next(
+            task for task in tasks if task["name"] == "Resolve the target Python interpreter for the protocol probe"
+        )
+        expression = resolve_task["ansible.builtin.set_fact"]["forward_proxy_probe_interpreter_internal"]
+        template = Environment(undefined=StrictUndefined, autoescape=True).from_string(expression)
+
+        self.assertEqual(
+            "/opt/managed/python",
+            template.render(ansible_python_interpreter="/opt/managed/python", ansible_facts={}).strip(),
+        )
+        self.assertEqual(
+            "/usr/libexec/platform-python",
+            template.render(
+                ansible_python_interpreter="auto_silent",
+                ansible_facts={"discovered_interpreter_python": "/usr/libexec/platform-python"},
+            ).strip(),
+        )
+        self.assertEqual(
+            "/usr/bin/python3",
+            template.render(ansible_facts={"discovered_interpreter_python": "/usr/bin/python3"}).strip(),
+        )
+        self.assertEqual("", template.render(ansible_facts={}).strip())
+
+    def test_readiness_protocol_probe_accepts_only_complete_squid_headers(self) -> None:
+        tasks = yaml.safe_load(READINESS.read_text(encoding="utf-8"))
+        probe_task = next(
+            task for task in tasks if task["name"] == "Require a Squid protocol response from the configured proxy port"
+        )
+        probe = probe_task["ansible.builtin.command"]["argv"][2]
+
+        def run_probe(response: bytes) -> subprocess.CompletedProcess[str]:
+            listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            listener.bind(("127.0.0.1", 0))
+            listener.listen(1)
+            port = listener.getsockname()[1]
+
+            def serve_once() -> None:
+                try:
+                    connection, _address = listener.accept()
+                    with connection:
+                        connection.recv(4096)
+                        connection.sendall(response)
+                finally:
+                    listener.close()
+
+            server = threading.Thread(target=serve_once, daemon=True)
+            server.start()
+            result = subprocess.run(  # noqa: S603 - fixed interpreter and test-owned arguments
+                [sys.executable, "-c", probe, "127.0.0.1", str(port)],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            server.join(timeout=2)
+            return result
+
+        self.assertEqual(
+            0,
+            run_probe(b"HTTP/1.1 403 Forbidden\r\nServer: squid/6.10\r\nContent-Length: 0\r\n\r\n").returncode,
+        )
+        self.assertNotEqual(
+            0,
+            run_probe(b"HTTP/1.1 403 Forbidden\r\nServer: squid/6.10\r\n").returncode,
+        )
+        self.assertNotEqual(
+            0,
+            run_probe(b"HTTP/1.1 403 Forbidden\r\nServer: other/1.0\r\n\r\n").returncode,
+        )
 
     def test_runtime_image_preflight_precedes_every_enabled_state_mutation(self) -> None:
         transition = TRANSITION.read_text(encoding="utf-8")

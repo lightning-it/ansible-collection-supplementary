@@ -20,6 +20,14 @@ if [[ "$head_ref" == HEAD ]]; then
   merge_subject="$(git log -1 --format=%s HEAD)"
   if [[ "$merge_subject" =~ $merge_subject_pattern ]]; then
     head_ref="${BASH_REMATCH[1]}"
+  elif read -r -a merge_commit <<<"$(git rev-list --parents -n 1 HEAD)" &&
+    [ "${#merge_commit[@]}" -eq 3 ] &&
+    develop_commit="$(git rev-parse --verify refs/remotes/origin/develop 2>/dev/null)" &&
+    [ "${merge_commit[2]}" = "$develop_commit" ] &&
+    [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "${merge_commit[2]}^{tree}")" ]; then
+    # A protected main promotion is a two-parent merge whose result tree and
+    # exact second parent both match the fetched canonical develop ref.
+    head_ref=develop
   elif [ "$merge_subject" = "Synthetic pull-request integration" ]; then
     read -r -a integration_commit <<<"$(git rev-list --parents -n 1 HEAD)"
     if [ "${#integration_commit[@]}" -eq 3 ]; then

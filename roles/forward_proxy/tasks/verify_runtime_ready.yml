@@ -95,10 +95,36 @@
     timeout: "{{ forward_proxy_readiness_timeout }}"
   check_mode: false
 
+- name: Resolve the target Python interpreter for the protocol probe
+  ansible.builtin.set_fact:
+    forward_proxy_probe_interpreter_internal: >-
+      {{
+        (ansible_python_interpreter | string | trim)
+        if (
+          ansible_python_interpreter | default('', true) | string | trim
+        ) not in ['', 'auto', 'auto_silent', 'auto_legacy', 'auto_legacy_silent']
+        else (
+          ansible_facts.discovered_interpreter_python
+          | default('', true)
+          | string
+          | trim
+        )
+      }}
+  changed_when: false
+
+- name: Require a resolved target Python interpreter for the protocol probe
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_probe_interpreter_internal | length > 0
+      - forward_proxy_probe_interpreter_internal is match('^/')
+    fail_msg: >-
+      The Squid protocol probe requires an absolute explicitly configured or
+      Ansible-discovered Python interpreter on the managed host.
+
 - name: Require a Squid protocol response from the configured proxy port
   ansible.builtin.command:
     argv:
-      - /usr/bin/python3
+      - "{{ forward_proxy_probe_interpreter_internal }}"
       - -c
       - |-
         import socket
@@ -119,9 +145,10 @@
             if len(response) > 65536:
                 raise SystemExit(1)
         connection.close()
+        has_complete_headers = b"\r\n\r\n" in response
         normalized = bytes(response).replace(b"\r\n", b"\n").lower()
         is_squid = b"\nserver: squid/" in normalized or b"\nx-squid-error:" in normalized
-        raise SystemExit(0 if response.startswith(b"HTTP/1.") and is_squid else 1)
+        raise SystemExit(0 if has_complete_headers and response.startswith(b"HTTP/1.") and is_squid else 1)
       - 127.0.0.1
       - "{{ forward_proxy_port }}"
   register: forward_proxy_protocol_probe

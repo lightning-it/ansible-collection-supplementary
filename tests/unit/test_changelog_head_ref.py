@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -14,6 +15,14 @@ GIT = shutil.which("git")
 BASH = shutil.which("bash")
 if GIT is None or BASH is None:
     raise RuntimeError("git and bash are required for changelog-head-ref tests")
+
+
+def isolated_git_environment() -> dict[str, str]:
+    """Detach temporary repositories from a linked-worktree controller environment."""
+    environment = os.environ.copy()
+    for variable in ("GIT_COMMON_DIR", "GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"):
+        environment.pop(variable, None)
+    return environment
 
 
 class ChangelogHeadRefTests(unittest.TestCase):
@@ -39,12 +48,18 @@ class ChangelogHeadRefTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "collection-ci.yml").read_text(encoding="utf-8")
         changelog_workflow = (ROOT / ".github" / "workflows" / "changelog.yml").read_text(encoding="utf-8")
 
-        self.assertIn('[ "${GITHUB_EVENT_NAME:-}" = pull_request ]', policy)
+        self.assertIn('case "${GITHUB_EVENT_NAME:-}" in', policy)
         self.assertIn('[ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ]', policy)
         self.assertIn('release_pr_author="${GITHUB_PR_AUTHOR:-${PR_AUTHOR:-}}"', policy)
         self.assertIn('[ "$release_pr_author" = "lightning-it-release-automation[bot]" ]', policy)
         self.assertIn("is_trusted_release_branch", policy)
         self.assertIn("A release-shaped branch name alone grants no privilege.", policy)
+        self.assertIn('[[ "$head_ref" == release/v* ]] && [ "$base_ref" = main ]', policy)
+        self.assertIn('[[ "$head_ref" == backsync/release-* ]] && [ "$base_ref" = develop ]', policy)
+        self.assertLess(
+            policy.index('if grep -E "$generated_re"'),
+            policy.index("if has_label skip-changelog"),
+        )
         for variable in (
             "GITHUB_EVENT_NAME",
             "GITHUB_REPOSITORY",
@@ -56,15 +71,200 @@ class ChangelogHeadRefTests(unittest.TestCase):
                 self.assertIn(f"${{{variable}:+-e {variable}}}", runner)
         self.assertIn("github.event.pull_request.head.repo.full_name", workflow)
         self.assertIn("github.event.pull_request.user.login", workflow)
+        self.assertIn("github.event_name != 'pull_request' && github.repository || ''", workflow)
         self.assertIn(
             "GITHUB_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}", changelog_workflow
         )
         self.assertIn("GITHUB_PR_AUTHOR: ${{ github.event.pull_request.user.login }}", changelog_workflow)
 
+    def test_generated_changelog_authorization_matrix_is_enforced_behaviorally(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        repository = Path(temporary.name)
+        scripts = repository / "scripts"
+        scripts.mkdir()
+        shutil.copy2(ROOT / "scripts" / "devtools-changelog-check.sh", scripts)
+        shutil.copy2(ROOT / "scripts" / "resolve-changelog-head-ref.sh", scripts)
+        (scripts / "wunder-devtools-ee.sh").write_text(
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            'test "$1" = bash\ntest "$2" = -lc\n'
+            "body=${3//\\/workspace/$PWD}\n"
+            "body=${body//antsibull-changelog lint/true}\n"
+            'exec bash -c "$body"\n',
+            encoding="utf-8",
+        )
+        (repository / "changelogs").mkdir()
+        (repository / "changelogs" / "changelog.yaml").write_text("releases: {}\n", encoding="utf-8")
+        self.git(repository, "init", "--quiet")
+        self.git(repository, "config", "user.name", "LI test")
+        self.git(repository, "config", "user.email", "li-test@invalid")
+        self.git(repository, "add", ".")
+        self.git(repository, "commit", "--quiet", "-m", "base")
+        base = self.git(repository, "rev-parse", "HEAD")
+        (repository / "changelogs" / "changelog.yaml").write_text(
+            "releases:\n  3.3.1:\n    changes: []\n", encoding="utf-8"
+        )
+        self.git(repository, "commit", "--quiet", "-am", "generated changelog")
+        head = self.git(repository, "rev-parse", "HEAD")
+
+        def policy_result(
+            *,
+            head_ref: str,
+            base_ref: str,
+            head_repository: str = "lightning-it/ansible-collection-supplementary",
+            labels: str = "[]",
+            event_name: str = "pull_request",
+            ref_name: str = "",
+            compare_base: str = base,
+            compare_head: str = head,
+        ) -> subprocess.CompletedProcess[str]:
+            environment = isolated_git_environment()
+            environment.update(
+                {
+                    "BASE_SHA": compare_base,
+                    "HEAD_SHA": compare_head,
+                    "GITHUB_EVENT_NAME": event_name,
+                    "GITHUB_REPOSITORY": "lightning-it/ansible-collection-supplementary",
+                    "GITHUB_HEAD_REPOSITORY": head_repository,
+                    "GITHUB_HEAD_REF": head_ref,
+                    "GITHUB_BASE_REF": base_ref,
+                    "GITHUB_REF_NAME": ref_name,
+                    "GITHUB_PR_AUTHOR": "lightning-it-release-automation[bot]",
+                    "LABELS_JSON": labels,
+                    "HOME": str(repository),
+                }
+            )
+            return subprocess.run(  # noqa: S603 - fixed shell and repository-owned script
+                [BASH, "scripts/devtools-changelog-check.sh"],
+                cwd=repository,
+                env=environment,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(0, policy_result(head_ref="release/v3.3.1", base_ref="main").returncode)
+        self.assertEqual(
+            0,
+            policy_result(head_ref="backsync/release-v3.3.1-to-develop", base_ref="develop").returncode,
+        )
+        self.assertNotEqual(0, policy_result(head_ref="release/v3.3.1", base_ref="develop").returncode)
+        self.assertNotEqual(
+            0,
+            policy_result(head_ref="backsync/release-v3.3.1-to-develop", base_ref="main").returncode,
+        )
+        self.assertNotEqual(
+            0,
+            policy_result(head_ref="release/v3.3.1", base_ref="main", head_repository="fork/repository").returncode,
+        )
+        self.assertNotEqual(
+            0,
+            policy_result(head_ref="release/v3.3.1", base_ref="main", head_repository="").returncode,
+        )
+        self.assertNotEqual(
+            0,
+            policy_result(head_ref="release/v3.3.1", base_ref="develop", labels='["skip-changelog"]').returncode,
+        )
+        self.assertEqual(0, policy_result(head_ref="develop", base_ref="main").returncode)
+        self.assertNotEqual(
+            0,
+            policy_result(head_ref="develop", base_ref="main", head_repository="fork/repository").returncode,
+        )
+        self.assertNotEqual(
+            0,
+            policy_result(head_ref="develop", base_ref="main", head_repository="").returncode,
+        )
+        for unsupported_event in ("workflow_dispatch", "schedule"):
+            with self.subTest(event=unsupported_event):
+                self.assertNotEqual(
+                    0,
+                    policy_result(
+                        head_ref="release/v3.3.1",
+                        base_ref="main",
+                        event_name=unsupported_event,
+                    ).returncode,
+                )
+                self.assertNotEqual(
+                    0,
+                    policy_result(
+                        head_ref="develop",
+                        base_ref="main",
+                        event_name=unsupported_event,
+                    ).returncode,
+                )
+
+        candidate_tree = self.git(repository, "rev-parse", f"{head}^{{tree}}")
+        release_merge = self.git(
+            repository,
+            "commit-tree",
+            candidate_tree,
+            "-p",
+            base,
+            "-p",
+            head,
+            "-m",
+            "Merge pull request #1001 from lightning-it/release/v3.3.1",
+        )
+        backsync_merge = self.git(
+            repository,
+            "commit-tree",
+            candidate_tree,
+            "-p",
+            base,
+            "-p",
+            head,
+            "-m",
+            "Merge pull request #1002 from lightning-it/backsync/release-v3.3.1-to-develop",
+        )
+        promotion_merge = self.git(
+            repository,
+            "commit-tree",
+            candidate_tree,
+            "-p",
+            base,
+            "-p",
+            head,
+            "-m",
+            "chore(release): promote develop to main (#1003)",
+        )
+        self.git(repository, "update-ref", "refs/remotes/origin/develop", head)
+
+        for merge_commit, canonical_target, wrong_target in (
+            (release_merge, "main", "develop"),
+            (backsync_merge, "develop", "main"),
+            (promotion_merge, "main", "develop"),
+        ):
+            with self.subTest(merge_commit=merge_commit, target=canonical_target):
+                self.git(repository, "checkout", "--quiet", "--detach", merge_commit)
+                self.assertEqual(
+                    0,
+                    policy_result(
+                        head_ref="",
+                        base_ref="",
+                        event_name="push",
+                        ref_name=canonical_target,
+                        compare_head=merge_commit,
+                    ).returncode,
+                )
+                self.assertNotEqual(
+                    0,
+                    policy_result(
+                        head_ref="",
+                        base_ref="",
+                        event_name="push",
+                        ref_name=wrong_target,
+                        compare_head=merge_commit,
+                    ).returncode,
+                )
+
+        policy = (ROOT / "scripts" / "devtools-changelog-check.sh").read_text(encoding="utf-8")
+        self.assertIn('export GITHUB_BASE_REF="${GITHUB_REF_NAME:-}"', policy)
+
     def git(self, repository: Path, *arguments: str) -> str:
         result = subprocess.run(  # noqa: S603 - fixed executable and test-owned arguments
             [GIT, *arguments],
             cwd=repository,
+            env=isolated_git_environment(),
             check=True,
             capture_output=True,
             text=True,
@@ -115,6 +315,7 @@ class ChangelogHeadRefTests(unittest.TestCase):
         result = subprocess.run(  # noqa: S603 - fixed executable and test-owned arguments
             [BASH, str(SCRIPT), value],
             cwd=repository,
+            env=isolated_git_environment(),
             check=True,
             capture_output=True,
             text=True,
@@ -167,6 +368,14 @@ class ChangelogHeadRefTests(unittest.TestCase):
             "Merge pull request #991 from lightning-it/backsync/release-v3.3.0-to-develop"
         )
         self.assertEqual("backsync/release-v3.3.0-to-develop", self.resolve(repository))
+
+    def test_exact_remote_develop_parent_and_tree_recovers_promotion(self) -> None:
+        repository, base, candidate = self.synthetic_repository("chore(release): promote develop to main (#1003)")
+        self.git(repository, "update-ref", "refs/remotes/origin/develop", candidate)
+        self.assertEqual("develop", self.resolve(repository))
+
+        self.git(repository, "update-ref", "refs/remotes/origin/develop", base)
+        self.assertEqual("HEAD", self.resolve(repository))
 
     def test_malformed_github_release_merge_subject_remains_detached(self) -> None:
         repository, _base, _candidate = self.synthetic_repository(

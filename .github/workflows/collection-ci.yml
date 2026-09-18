@@ -200,7 +200,8 @@ jobs:
           WUNDER_CONTAINER_ENGINE: docker
           GITHUB_HEAD_REPOSITORY: >-
             ${{ github.event_name == 'pull_request' &&
-            github.event.pull_request.head.repo.full_name || github.repository }}
+            github.event.pull_request.head.repo.full_name ||
+            github.event_name != 'pull_request' && github.repository || '' }}
           GITHUB_PR_AUTHOR: >-
             ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login || '' }}
           LABELS_JSON: >-

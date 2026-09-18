@@ -55,3 +55,4 @@
   loop: "{{ guacamole_deploy_connections }}"
   loop_control:
     label: "{{ item.name | default('unnamed') }}"
+  no_log: true

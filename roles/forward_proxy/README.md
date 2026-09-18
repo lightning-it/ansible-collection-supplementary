@@ -11,7 +11,8 @@ UID/GID 13, no capabilities, read-only rootfs; host firewall authoritative.
 
 ## Dependencies
 
-`galaxy.yml`.
+`lit.foundational` 1.32.0 or newer, specifically its `podman_systemd`
+role. The authoritative collection constraint remains in `galaxy.yml`.
 
 ## Example Playbook
 
