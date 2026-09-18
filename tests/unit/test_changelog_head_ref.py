@@ -148,6 +148,20 @@ class ChangelogHeadRefTests(unittest.TestCase):
         self.git(repository, "branch", "release/v03.3.0", candidate)
         self.assertEqual("HEAD", self.resolve(repository))
 
+    def test_exact_direct_release_ref_is_accepted(self) -> None:
+        repository, _base, _candidate = self.synthetic_repository()
+        self.assertEqual("release/v3.3.0", self.resolve(repository, "release/v3.3.0"))
+
+    def test_noncanonical_direct_release_ref_is_rejected(self) -> None:
+        repository, _base, _candidate = self.synthetic_repository()
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.resolve(repository, "release/v03.3.0")
+
+    def test_noncanonical_direct_backsync_ref_is_rejected(self) -> None:
+        repository, _base, _candidate = self.synthetic_repository()
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.resolve(repository, "backsync/release-v3.3-to-develop")
+
     def test_attached_head_is_unchanged(self) -> None:
         repository, _base, _candidate = self.synthetic_repository()
         self.assertEqual("feature/example", self.resolve(repository, "feature/example"))

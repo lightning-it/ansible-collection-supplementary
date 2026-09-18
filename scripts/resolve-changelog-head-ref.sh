@@ -44,6 +44,10 @@ if [[ "$head_ref" == HEAD ]]; then
       fi
     fi
   fi
+elif [[ "$head_ref" == release/v* || "$head_ref" == backsync/release-* ]] &&
+  [[ ! "$head_ref" =~ $release_ref_pattern ]]; then
+  echo "invalid non-canonical release head ref: $head_ref" >&2
+  exit 1
 fi
 
 printf "%s\n" "$head_ref"
