@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - Validate non-empty atomic-unlink checksums before the absent-target fast path.
+  - Report planned nested forward-proxy directories as changed in check mode.
+  - Fail closed before removing ownership evidence when a managed runtime loses its Quadlet.

@@ -111,6 +111,11 @@ class AtomicUnlinkTests(unittest.TestCase):
         self.parameters.update(checksum="", allow_absent=True)
         self.assertFalse(self.execute()["changed"])
 
+    def test_allow_absent_rejects_a_malformed_nonempty_checksum(self) -> None:
+        self.target.unlink()
+        self.parameters.update(checksum="invalid", allow_absent=True)
+        self.assertIn("lowercase SHA-256", str(self.execute(failure=True)["msg"]))
+
     def test_unlinks_the_exact_bound_file(self) -> None:
         self.assertTrue(self.execute()["changed"])
         self.assertFalse(self.target.exists())

@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ASSERTS = ROOT / "roles" / "forward_proxy" / "tasks" / "assert.yml"
 MAIN = ROOT / "roles" / "forward_proxy" / "tasks" / "main.yml"
 TRANSITION = ROOT / "roles" / "forward_proxy" / "tasks" / "transition.yml"
+ENSURE_DIRECTORY = ROOT / "roles" / "forward_proxy" / "tasks" / "ensure_directory.yml"
 ENABLED = ROOT / "roles" / "forward_proxy" / "tasks" / "enabled.yml"
 ENABLED_APPLY = ROOT / "roles" / "forward_proxy" / "tasks" / "enabled_apply.yml"
 READINESS = ROOT / "roles" / "forward_proxy" / "tasks" / "verify_runtime_ready.yml"
@@ -88,6 +89,31 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_transition_initialized_internal: false", main)
         self.assertIn("Exercise a disabled unowned invocation without a lock parent", converge)
         self.assertIn("disabled unowned invocation to remain mutation-free", converge)
+
+    def test_check_mode_reports_each_planned_directory_creation(self) -> None:
+        ensure_directory = ENSURE_DIRECTORY.read_text(encoding="utf-8")
+
+        planned = ensure_directory.index("Carry the planned forward proxy directory through check mode")
+        following = ensure_directory.index("Reinspect the trusted proxy directory before privileged writes")
+        self.assertIn("changed_when: true", ensure_directory[planned:following])
+
+    def test_disabled_runtime_fails_closed_without_owned_quadlet_evidence(self) -> None:
+        transition = TRANSITION.read_text(encoding="utf-8")
+
+        missing = transition.index("Fail closed when runtime-managed Quadlet evidence is missing")
+        capture = transition.index("Capture the existing runtime identity before any runtime mutation")
+        revalidate = transition.index("Revalidate the existing runtime at the disabled-state removal boundary")
+        remove = transition.index("Remove a previously managed forward proxy runtime when disabled")
+        absent = transition.index("Prove the disabled runtime is absent before deleting owned state")
+        self.assertLess(missing, capture)
+        self.assertLess(capture, revalidate)
+        self.assertLess(revalidate, remove)
+        self.assertLess(remove, absent)
+        self.assertIn("forward_proxy_previous_quadlet_stat.stat.exists", transition[missing:capture])
+        self.assertNotIn(
+            "or forward_proxy_previous_quadlet_stat.stat.exists",
+            transition[capture:revalidate],
+        )
 
     def test_readiness_uses_protocol_evidence_and_revalidates_runtime(self) -> None:
         readiness = READINESS.read_text(encoding="utf-8")
