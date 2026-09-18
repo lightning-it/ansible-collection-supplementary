@@ -26,12 +26,46 @@
       owner_label: ""
       unit_fragment_path: ""
 
+- name: Inspect forward proxy state before entering the mutation boundary
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_state_marker_path }}"
+    follow: false
+  register: forward_proxy_invocation_state_marker_before_lock
+
+- name: Inspect a concurrent forward proxy transition without creating a lock
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_lock_path }}"
+    follow: false
+  register: forward_proxy_invocation_lock
+
+- name: Reinspect forward proxy state after the concurrent-lock observation
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_state_marker_path }}"
+    follow: false
+  register: forward_proxy_invocation_state_marker_after_lock
+
+- name: Bind whether this invocation requires a forward proxy transition
+  ansible.builtin.set_fact:
+    forward_proxy_transition_scope_internal: >-
+      {{
+        {
+          'required': (
+            (forward_proxy_enabled | bool)
+            or (forward_proxy_invocation_state_marker_before_lock.stat.exists | default(false))
+            or (forward_proxy_invocation_lock.stat.exists | default(false))
+            or (forward_proxy_invocation_state_marker_after_lock.stat.exists | default(false))
+          )
+        }
+      }}
+
 - name: Inspect the required forward proxy lock parent
   ansible.builtin.stat:
     path: "{{ forward_proxy_lock_path | dirname }}"
     follow: false
   register: forward_proxy_lock_parent
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - forward_proxy_transition_scope_internal.required | bool
 
 - name: Resolve the required forward proxy lock parent canonically
   ansible.builtin.command:
@@ -41,7 +75,9 @@
   register: forward_proxy_lock_parent_realpath
   changed_when: false
   check_mode: false
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - forward_proxy_transition_scope_internal.required | bool
 
 - name: Require a pre-existing non-symlink forward proxy lock parent
   ansible.builtin.assert:
@@ -78,7 +114,9 @@
     fail_msg: >-
       The configured forward proxy lock parent must already exist as a trusted,
       canonical, non-symlink directory with safe owner, group, and mode.
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - forward_proxy_transition_scope_internal.required | bool
 
 - name: Acquire the bounded per-host forward proxy transition lock
   ansible.builtin.command:
@@ -92,7 +130,9 @@
   retries: "{{ forward_proxy_lock_timeout }}"
   delay: 1
   until: forward_proxy_lock_acquisition.rc == 0
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - forward_proxy_transition_scope_internal.required | bool
 
 - name: Require the exclusive forward proxy transition lock
   ansible.builtin.assert:
@@ -101,9 +141,12 @@
     fail_msg: >-
       The per-host forward proxy transition lock was not acquired within the
       bounded timeout. Stop without inspecting or changing managed state.
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - forward_proxy_transition_scope_internal.required | bool
 
 - name: Apply the complete forward proxy transition under one host lock
+  when: forward_proxy_transition_scope_internal.required | bool
   block:
     - name: Inspect, transition, activate, roll back, and finalize forward proxy state
       ansible.builtin.include_tasks: transition.yml
