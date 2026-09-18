@@ -335,6 +335,18 @@
           - not (forward_proxy_release_gate_result.release_eligible | bool)
         quiet: true
 
+    - name: Exercise passed JUnit against the authoritative experimental profile
+      ansible.builtin.include_tasks: tasks/release_eligibility.yml
+      vars:
+        forward_proxy_release_gate_junit_passed: "True"
+        forward_proxy_release_gate_profile_disposition: experimental
+
+    - name: Require the experimental profile to remain ineligible for release
+      ansible.builtin.assert:
+        that:
+          - not (forward_proxy_release_gate_result.release_eligible | bool)
+        quiet: true
+
     - name: Exercise a passed JUnit result against a supported profile
       ansible.builtin.include_tasks: tasks/release_eligibility.yml
       vars:

@@ -64,6 +64,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_release_gate_junit_passed | bool", release_eligibility)
         self.assertIn("== 'supported'", release_eligibility)
         self.assertIn("failed JUnit result against a supported profile", verify)
+        self.assertIn("passed JUnit against the authoritative experimental profile", verify)
+        self.assertIn("experimental profile to remain ineligible for release", verify)
         self.assertIn("passed JUnit result against a supported profile", verify)
         self.assertIn('forward_proxy_release_gate_junit_passed: "False"', verify)
         self.assertIn('forward_proxy_release_gate_junit_passed: "True"', verify)
