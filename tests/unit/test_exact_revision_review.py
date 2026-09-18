@@ -472,10 +472,22 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         for name in ("copilot-review.yml", "release-bot-exact-head-review.yml"):
             with self.subTest(workflow=name):
                 workflow = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
-                rerun_job = workflow.split("  request-protected-verifier-reevaluation:", 1)[1]
+                rerun_job_marker = "  request-protected-verifier-reevaluation:"
+                if name == "copilot-review.yml":
+                    rerun_job_marker = "  request-protected-verifier-reevaluation-develop:"
+                rerun_job = workflow.split(rerun_job_marker, 1)[1]
                 self.assertIn("actions: write", rerun_job)
                 if name == "copilot-review.yml":
                     self.assertIn("uses: ./.github/workflows/current-revision-rerun.yml", rerun_job)
+                    self.assertIn(
+                        "uses: lightning-it/ansible-collection-supplementary/.github/workflows/"
+                        "current-revision-rerun.yml@2710c06c4482d4d626b84237db865bbc6504897f",
+                        rerun_job,
+                    )
+                    self.assertIn(
+                        "github.event.pull_request.base.sha == '2710c06c4482d4d626b84237db865bbc6504897f'",
+                        rerun_job,
+                    )
                     self.assertNotIn("current-revision-rerun.yml/dispatches", rerun_job)
                     self.assertNotIn('-f "ref=${BASE_REF}"', rerun_job)
                     self.assertIn("base_ref: ${{ github.event.pull_request.base.ref }}", rerun_job)
@@ -635,7 +647,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("review_is_visible_for_head()", request_job)
         self.assertNotIn("--method DELETE", request_job)
 
-        rerun_job = workflow.split("  request-protected-verifier-reevaluation:", 1)[1]
+        rerun_job = workflow.split("  request-protected-verifier-reevaluation-develop:", 1)[1]
         self.assertIn("pr_number: ${{ github.event.pull_request.number }}", rerun_job)
         self.assertNotIn('-F "inputs[pr_number]=${PR_NUMBER}"', rerun_job)
 

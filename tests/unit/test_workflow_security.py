@@ -368,7 +368,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             "      - name: Publish bound neutral result", 1
         )[0]
         publisher = copilot.split("      - name: Publish bound neutral result", 1)[1].split(
-            "  request-protected-verifier-reevaluation:", 1
+            "  request-protected-verifier-reevaluation-develop:", 1
         )[0]
 
         self.assertIn("id: copilot-review", verifier)
@@ -395,8 +395,17 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertEqual(2, copilot.count('test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"'))
         self.assertEqual(2, copilot.count("and .protected == true"))
 
-        handoff = copilot.split("  request-protected-verifier-reevaluation:", 1)[1]
+        handoff = copilot.split("  request-protected-verifier-reevaluation-develop:", 1)[1]
         self.assertIn("uses: ./.github/workflows/current-revision-rerun.yml", handoff)
+        self.assertIn(
+            "uses: lightning-it/ansible-collection-supplementary/.github/workflows/"
+            "current-revision-rerun.yml@2710c06c4482d4d626b84237db865bbc6504897f",
+            handoff,
+        )
+        self.assertIn(
+            "github.event.pull_request.base.sha == '2710c06c4482d4d626b84237db865bbc6504897f'",
+            handoff,
+        )
         self.assertNotIn("current-revision-rerun.yml/dispatches", handoff)
         self.assertNotIn("ref=${BASE_REF}", handoff)
         for required_input in (

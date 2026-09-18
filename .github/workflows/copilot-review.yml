@@ -1624,16 +1624,42 @@ jobs:
             exit 1
           fi
 
-  request-protected-verifier-reevaluation:
+  request-protected-verifier-reevaluation-develop:
     name: Request protected verifier re-evaluation
     needs: verify-current-revision-policy
-    if: needs.verify-current-revision-policy.result == 'success'
+    if: >-
+      needs.verify-current-revision-policy.result == 'success' &&
+      github.event.pull_request.base.ref == 'develop' &&
+      github.event.pull_request.base.sha == github.workflow_sha
     permissions:
       actions: write
       checks: read
       contents: read
       pull-requests: read
     uses: ./.github/workflows/current-revision-rerun.yml
+    with:
+      base_ref: ${{ github.event.pull_request.base.ref }}
+      pr_number: ${{ github.event.pull_request.number }}
+      expected_base: ${{ github.event.pull_request.base.sha }}
+      expected_head: ${{ github.event.pull_request.head.sha }}
+      producer_run_id: ${{ github.run_id }}
+
+  # Bounded LI-139 bootstrap: PR #1016 has this exact protected main base.
+  # A different base SHA makes this job unreachable instead of following a
+  # moving ref. Remove the bootstrap pin after the protected promotion lands.
+  request-protected-verifier-reevaluation-main-bootstrap:
+    name: Request protected verifier re-evaluation
+    needs: verify-current-revision-policy
+    if: >-
+      needs.verify-current-revision-policy.result == 'success' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.base.sha == '2710c06c4482d4d626b84237db865bbc6504897f'
+    permissions:
+      actions: write
+      checks: read
+      contents: read
+      pull-requests: read
+    uses: lightning-it/ansible-collection-supplementary/.github/workflows/current-revision-rerun.yml@2710c06c4482d4d626b84237db865bbc6504897f
     with:
       base_ref: ${{ github.event.pull_request.base.ref }}
       pr_number: ${{ github.event.pull_request.number }}
