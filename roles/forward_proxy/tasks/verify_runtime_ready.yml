@@ -100,14 +100,28 @@
     argv:
       - /usr/bin/python3
       - -c
-      - >-
-        import socket, sys;
-        connection = socket.create_connection((sys.argv[1], int(sys.argv[2])), timeout=5);
-        connection.sendall(b'GET http://health.invalid/ HTTP/1.1\r\nHost: health.invalid\r\nConnection: close\r\n\r\n');
-        response = connection.recv(8192); connection.close();
-        normalized = response.replace(b'\r\n', b'\n').lower();
-        raise SystemExit(0 if response.startswith(b'HTTP/1.') and
-        (b'\nserver: squid/' in normalized or b'\nx-squid-error:' in normalized) else 1)
+      - |-
+        import socket
+        import sys
+
+        connection = socket.create_connection((sys.argv[1], int(sys.argv[2])), timeout=5)
+        connection.settimeout(5)
+        connection.sendall(
+            b"GET http://health.invalid/ HTTP/1.1\r\n"
+            b"Host: health.invalid\r\nConnection: close\r\n\r\n"
+        )
+        response = bytearray()
+        while b"\r\n\r\n" not in response:
+            chunk = connection.recv(4096)
+            if not chunk:
+                break
+            response.extend(chunk)
+            if len(response) > 65536:
+                raise SystemExit(1)
+        connection.close()
+        normalized = bytes(response).replace(b"\r\n", b"\n").lower()
+        is_squid = b"\nserver: squid/" in normalized or b"\nx-squid-error:" in normalized
+        raise SystemExit(0 if response.startswith(b"HTTP/1.") and is_squid else 1)
       - 127.0.0.1
       - "{{ forward_proxy_port }}"
   register: forward_proxy_protocol_probe

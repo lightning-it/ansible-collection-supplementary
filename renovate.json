@@ -129,7 +129,8 @@
         "/(^|.*/)molecule/forward-proxy-tiny/(?:converge|verify)\\.ya?ml$/"
       ],
       "matchStrings": [
-        "(?<depName>(?:[a-z0-9][a-z0-9.-]*\\.[a-z]{2,})(?::[0-9]+)?/[A-Za-z0-9._/-]+):(?<currentValue>[A-Za-z0-9][A-Za-z0-9._-]*)@(?<currentDigest>sha256:[a-f0-9]{64})"
+        "(?<depName>(?:[a-z0-9][a-z0-9.-]*\\.[a-z]{2,})(?::[0-9]+)?/[A-Za-z0-9._/-]+):(?<currentValue>[A-Za-z0-9][A-Za-z0-9._-]*)@(?<currentDigest>sha256:[a-f0-9]{64})",
+        "'(?<depName>docker\\.io/ubuntu/squid):(?<currentValue>[A-Za-z0-9][A-Za-z0-9._-]*)'\\s*~\\s*'@(?<currentDigest>sha256:[a-f0-9]{64})'"
       ],
       "datasourceTemplate": "docker",
       "packageNameTemplate": "{{{depName}}}",

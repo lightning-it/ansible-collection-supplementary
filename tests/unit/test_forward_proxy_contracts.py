@@ -60,6 +60,8 @@ class ForwardProxyContractTests(unittest.TestCase):
 
         self.assertIn("Require a Squid protocol response", readiness)
         self.assertIn("x-squid-error", readiness)
+        self.assertIn('while b"\\r\\n\\r\\n" not in response', readiness)
+        self.assertIn("len(response) > 65536", readiness)
         self.assertIn("Reinspect the Pod identity after the Squid protocol probe", readiness)
         self.assertIn("Require the same captured runtime after the Squid protocol probe", readiness)
 
