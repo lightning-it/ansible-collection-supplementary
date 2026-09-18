@@ -16,9 +16,24 @@ UID/GID 13, no capabilities, read-only rootfs; host firewall authoritative.
 ## Example Playbook
 
 ```yaml
-- hosts: proxies
-  roles: [lit.supplementary.forward_proxy]
+- name: Run the digest-pinned forward proxy on prepared Podman hosts
+  hosts: proxies
+  become: true
+  vars:
+    # The image from defaults/main.yml must already exist on the host because
+    # the enforced pull policy is Never.
+    forward_proxy_enabled: true
+    forward_proxy_experimental_runtime_acceptance: true
+    forward_proxy_allowed_destination_domains:
+      - .ubuntu.com
+      - registry.example.com
+  roles:
+    - role: lit.supplementary.forward_proxy
 ```
+
+The target must provide rootful Podman and systemd before this role runs. Keep
+the experimental opt-in explicit until protected Wunderbox runtime acceptance
+promotes the role's Tiny profile beyond `experimental`.
 
 ## License
 

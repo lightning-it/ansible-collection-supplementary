@@ -89,6 +89,11 @@ class ChangelogHeadRefTests(unittest.TestCase):
         self.git(repository, "branch", "backsync/release-v3.3.0-to-develop", candidate)
         self.assertEqual("backsync/release-v3.3.0-to-develop", self.resolve(repository))
 
+    def test_exact_local_release_ref_is_recovered(self) -> None:
+        repository, _base, candidate = self.synthetic_repository()
+        self.git(repository, "branch", "release/v3.3.0", candidate)
+        self.assertEqual("release/v3.3.0", self.resolve(repository))
+
     def test_missing_release_ref_remains_detached(self) -> None:
         repository, _base, _candidate = self.synthetic_repository()
         self.assertEqual("HEAD", self.resolve(repository))
@@ -119,6 +124,43 @@ class ChangelogHeadRefTests(unittest.TestCase):
             "Merge pull request #990 from lightning-it/release/v3.3.0"
         )
         self.assertEqual("release/v3.3.0", self.resolve(repository))
+
+    def test_github_backsync_merge_subject_remains_supported(self) -> None:
+        repository, _base, _candidate = self.synthetic_repository(
+            "Merge pull request #991 from lightning-it/backsync/release-v3.3.0-to-develop"
+        )
+        self.assertEqual("backsync/release-v3.3.0-to-develop", self.resolve(repository))
+
+    def test_malformed_github_release_merge_subject_remains_detached(self) -> None:
+        repository, _base, _candidate = self.synthetic_repository(
+            "Merge pull request #992 from lightning-it/release/v3.3"
+        )
+        self.assertEqual("HEAD", self.resolve(repository))
+
+    def test_malformed_github_backsync_merge_subject_remains_detached(self) -> None:
+        repository, _base, _candidate = self.synthetic_repository(
+            "Merge pull request #993 from lightning-it/backsync/release-v3.3.0"
+        )
+        self.assertEqual("HEAD", self.resolve(repository))
+
+    def test_malformed_local_candidate_ref_remains_detached(self) -> None:
+        repository, _base, candidate = self.synthetic_repository()
+        self.git(repository, "branch", "release/v03.3.0", candidate)
+        self.assertEqual("HEAD", self.resolve(repository))
+
+    def test_exact_direct_release_ref_is_accepted(self) -> None:
+        repository, _base, _candidate = self.synthetic_repository()
+        self.assertEqual("release/v3.3.0", self.resolve(repository, "release/v3.3.0"))
+
+    def test_noncanonical_direct_release_ref_is_rejected(self) -> None:
+        repository, _base, _candidate = self.synthetic_repository()
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.resolve(repository, "release/v03.3.0")
+
+    def test_noncanonical_direct_backsync_ref_is_rejected(self) -> None:
+        repository, _base, _candidate = self.synthetic_repository()
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.resolve(repository, "backsync/release-v3.3-to-develop")
 
     def test_attached_head_is_unchanged(self) -> None:
         repository, _base, _candidate = self.synthetic_repository()

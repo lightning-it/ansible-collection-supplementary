@@ -18,6 +18,13 @@
         src: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
       register: forward_proxy_squid_config
 
+    - name: Inspect rendered Squid policy metadata
+      ansible.builtin.stat:
+        path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+        follow: false
+        checksum_algorithm: sha256
+      register: forward_proxy_squid_config_stat
+
     - name: Read rendered Squid Pod manifest
       ansible.builtin.slurp:
         src: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
@@ -28,51 +35,351 @@
         forward_proxy_rendered_policy: "{{ forward_proxy_squid_config.content | b64decode }}"
         forward_proxy_rendered_pod: "{{ forward_proxy_pod_manifest.content | b64decode }}"
 
-    - name: Evaluate the complete rendered proxy security contract
+    - name: Assemble per-contract forward proxy assertion evidence
+      ansible.builtin.set_fact:
+        # Keep every dynamic boolean inside one native expression. Dynamic
+        # scalar values in a YAML mapping become truthy strings on controllers
+        # that disable Jinja native types.
+        forward_proxy_contract_results: >-
+          {{
+            [
+              {
+                'name': 'client-acl',
+                'passed': 'acl lit_clients src 127.0.0.1/32 10.89.0.0/24'
+                  in forward_proxy_rendered_policy
+              },
+              {
+                'name': 'safe-port-acl',
+                'passed': 'acl lit_safe_ports port 80 443'
+                  in forward_proxy_rendered_policy
+              },
+              {
+                'name': 'http-port-acl',
+                'passed': 'acl lit_http_ports port 80'
+                  in forward_proxy_rendered_policy
+              },
+              {
+                'name': 'ssl-port-acl',
+                'passed': 'acl lit_ssl_ports port 443'
+                  in forward_proxy_rendered_policy
+              },
+              {
+                'name': 'connect-method-acl',
+                'passed': 'acl lit_connect method CONNECT'
+                  in forward_proxy_rendered_policy
+              },
+              {
+                'name': 'destination-domain-acl',
+                'passed': 'acl lit_allowed_domains dstdomain -n .ubuntu.com registry.example.com'
+                  in forward_proxy_rendered_policy
+              },
+              {
+                'name': 'deny-unsafe-ports',
+                'passed': 'http_access deny !lit_safe_ports'
+                  in forward_proxy_rendered_policy
+              },
+              {
+                'name': 'deny-connect-non-ssl',
+                'passed': 'http_access deny lit_connect !lit_ssl_ports'
+                  in forward_proxy_rendered_policy
+              },
+              {
+                'name': 'deny-http-non-http-port',
+                'passed': 'http_access deny !lit_connect !lit_http_ports'
+                  in forward_proxy_rendered_policy
+              },
+              {
+                'name': 'allow-client-destinations',
+                'passed': 'http_access allow lit_clients lit_allowed_domains'
+                  in forward_proxy_rendered_policy
+              },
+              {
+                'name': 'terminal-deny',
+                'passed': 'http_access deny all' in forward_proxy_rendered_policy
+              },
+              {
+                'name': 'deny-unsafe-before-allow',
+                'passed': 0 <= forward_proxy_rendered_policy.find(
+                  'http_access deny !lit_safe_ports'
+                ) < forward_proxy_rendered_policy.find(
+                  'http_access allow lit_clients lit_allowed_domains'
+                )
+              },
+              {
+                'name': 'deny-connect-before-allow',
+                'passed': 0 <= forward_proxy_rendered_policy.find(
+                  'http_access deny lit_connect !lit_ssl_ports'
+                ) < forward_proxy_rendered_policy.find(
+                  'http_access allow lit_clients lit_allowed_domains'
+                )
+              },
+              {
+                'name': 'deny-http-before-allow',
+                'passed': 0 <= forward_proxy_rendered_policy.find(
+                  'http_access deny !lit_connect !lit_http_ports'
+                ) < forward_proxy_rendered_policy.find(
+                  'http_access allow lit_clients lit_allowed_domains'
+                )
+              },
+              {
+                'name': 'allow-before-terminal-deny',
+                'passed': 0 <= forward_proxy_rendered_policy.find(
+                  'http_access allow lit_clients lit_allowed_domains'
+                ) < forward_proxy_rendered_policy.find('http_access deny all')
+              },
+              {
+                'name': 'customer-upstream',
+                'passed': 'cache_peer proxy.customer.example parent 8080 0 no-query default'
+                  in forward_proxy_rendered_policy
+              },
+              {
+                'name': 'force-upstream',
+                'passed': 'never_direct allow all' in forward_proxy_rendered_policy
+              },
+              {
+                'name': 'prohibit-direct-route',
+                'passed': 'always_direct allow all' not in forward_proxy_rendered_policy
+              },
+              {
+                'name': 'digest-pinned-image',
+                'passed': (
+                  'docker.io/ubuntu/squid:6.6-24.04_beta@sha256:'
+                  ~ '6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029'
+                ) in forward_proxy_rendered_pod
+              }
+            ]
+          }}
+
+    - name: Initialize managed-file rollback evidence
+      ansible.builtin.set_fact:
+        forward_proxy_rollback_passed: false
+        forward_proxy_rollback_fixture_restored: false
+        forward_proxy_rollback_candidate_content: "# transaction candidate for rollback verification\n"
+
+    - name: Resolve the rollback parent without following a mutation path
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - >-
+            import json, os, sys;
+            print(json.dumps({'realpath': os.path.realpath(sys.argv[1]),
+            'effective_uid': os.geteuid()}))
+          - "{{ forward_proxy_test_root }}/etc/squid"
+      register: forward_proxy_rollback_parent_runtime
+      changed_when: false
+
+    - name: Inspect the rollback parent before the first mutation
+      ansible.builtin.stat:
+        path: "{{ forward_proxy_test_root }}/etc/squid"
+        follow: false
+      register: forward_proxy_rollback_parent
+
+    - name: Require a canonical controller-owned rollback parent
       ansible.builtin.assert:
         that:
-          - "'acl lit_clients src 127.0.0.1/32 10.89.0.0/24' in forward_proxy_rendered_policy"
-          - "'acl lit_safe_ports port 80 443' in forward_proxy_rendered_policy"
-          - "'acl lit_http_ports port 80' in forward_proxy_rendered_policy"
-          - "'acl lit_ssl_ports port 443' in forward_proxy_rendered_policy"
-          - "'acl lit_connect method CONNECT' in forward_proxy_rendered_policy"
           - >-
-            'acl lit_allowed_domains dstdomain -n .ubuntu.com registry.example.com'
-            in forward_proxy_rendered_policy
-          - "'http_access deny !lit_safe_ports' in forward_proxy_rendered_policy"
-          - "'http_access deny lit_connect !lit_ssl_ports' in forward_proxy_rendered_policy"
-          - "'http_access deny !lit_connect !lit_http_ports' in forward_proxy_rendered_policy"
+            (forward_proxy_rollback_parent_runtime.stdout | from_json).realpath
+            == forward_proxy_test_root ~ '/etc/squid'
+          - forward_proxy_rollback_parent.stat.isdir | default(false)
+          - not (forward_proxy_rollback_parent.stat.islnk | default(false))
           - >-
-            'http_access allow lit_clients lit_allowed_domains'
-            in forward_proxy_rendered_policy
-          - "'http_access deny all' in forward_proxy_rendered_policy"
-          - >-
-            forward_proxy_rendered_policy.index('http_access deny !lit_safe_ports')
-            < forward_proxy_rendered_policy.index('http_access allow lit_clients lit_allowed_domains')
-          - >-
-            forward_proxy_rendered_policy.index('http_access deny lit_connect !lit_ssl_ports')
-            < forward_proxy_rendered_policy.index('http_access allow lit_clients lit_allowed_domains')
-          - >-
-            forward_proxy_rendered_policy.index('http_access deny !lit_connect !lit_http_ports')
-            < forward_proxy_rendered_policy.index('http_access allow lit_clients lit_allowed_domains')
-          - >-
-            forward_proxy_rendered_policy.index('http_access allow lit_clients lit_allowed_domains')
-            < forward_proxy_rendered_policy.index('http_access deny all')
-          - >-
-            'cache_peer proxy.customer.example parent 8080 0 no-query default'
-            in forward_proxy_rendered_policy
-          - "'never_direct allow all' in forward_proxy_rendered_policy"
-          - "'always_direct allow all' not in forward_proxy_rendered_policy"
-          - >-
-            'docker.io/ubuntu/squid:6.6-24.04_beta@sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029'
-            in forward_proxy_rendered_pod
+            forward_proxy_rollback_parent.stat.uid | int
+            == (forward_proxy_rollback_parent_runtime.stdout | from_json).effective_uid | int
         quiet: true
-      register: forward_proxy_policy_result
-      ignore_errors: true
 
-    - name: Assemble complete forward proxy assertion evidence
+    - name: Bind the rollback mutation parent identity before writing
       ansible.builtin.set_fact:
-        forward_proxy_failure_count: "{{ 1 if forward_proxy_policy_result.failed else 0 }}"
+        forward_proxy_rollback_parent_identities: >-
+          {{
+            {
+              forward_proxy_test_root ~ '/etc/squid': {
+                'device': forward_proxy_rollback_parent.stat.dev,
+                'inode': forward_proxy_rollback_parent.stat.inode
+              }
+            }
+          }}
+
+    - name: Exercise rollback and preserve the original rendered policy
+      block:
+        - name: Atomically write a bound transaction candidate for rollback verification
+          lit.supplementary.atomic_path:
+            path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+            state: file
+            content: "{{ forward_proxy_rollback_candidate_content }}"
+            owner: "{{ forward_proxy_squid_config_stat.stat.uid }}"
+            group: "{{ forward_proxy_squid_config_stat.stat.gid }}"
+            mode: "{{ forward_proxy_squid_config_stat.stat.mode }}"
+            parent_identities: "{{ forward_proxy_rollback_parent_identities }}"
+            allow_absent: false
+            expected_checksum: "{{ forward_proxy_squid_config_stat.stat.checksum }}"
+
+        - name: Inspect the rollback transaction candidate
+          ansible.builtin.stat:
+            path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+            follow: false
+            checksum_algorithm: sha256
+          register: forward_proxy_rollback_candidate
+
+        - name: Exercise the existing-state managed-file rollback path
+          ansible.builtin.include_role:
+            name: lit.supplementary.forward_proxy
+            tasks_from: restore_managed_file.yml
+          vars:
+            forward_proxy_file_owner: "{{ forward_proxy_rollback_candidate.stat.uid }}"
+            forward_proxy_file_group: "{{ forward_proxy_rollback_candidate.stat.gid }}"
+            forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+            forward_proxy_trusted_parent_identity_map_internal: >-
+              {{ forward_proxy_rollback_parent_identities }}
+            forward_proxy_restore_entry:
+              - content: "{{ forward_proxy_squid_config.content }}"
+                item:
+                  item:
+                    - - "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+                      - "{{ forward_proxy_squid_config_stat.stat.checksum }}"
+                    - "{{ forward_proxy_squid_config_stat.stat.mode }}"
+              - "{{ forward_proxy_squid_config_stat.stat.mode }}"
+              - "{{ forward_proxy_squid_config_stat.stat.checksum }}"
+            forward_proxy_squid_config_transaction_stat:
+              stat:
+                checksum: "{{ forward_proxy_rollback_candidate.stat.checksum }}"
+
+        - name: Read the restored forward proxy policy
+          ansible.builtin.slurp:
+            src: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+          register: forward_proxy_restored_policy
+
+        - name: Require exact rollback of the transaction candidate
+          ansible.builtin.assert:
+            that:
+              - forward_proxy_restored_policy.content == forward_proxy_squid_config.content
+            quiet: true
+
+        - name: Record successful production rollback execution
+          ansible.builtin.set_fact:
+            forward_proxy_rollback_passed: true
+      rescue:
+        - name: Record failed production rollback execution
+          ansible.builtin.set_fact:
+            forward_proxy_rollback_passed: false
+      always:
+        - name: Inspect the rollback fixture before bounded cleanup
+          ansible.builtin.stat:
+            path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+            follow: false
+            checksum_algorithm: sha256
+          register: forward_proxy_rollback_fixture_boundary
+          failed_when: false
+
+        - name: Restore the original policy through the bound atomic path
+          lit.supplementary.atomic_path:
+            path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+            state: file
+            content: "{{ forward_proxy_squid_config.content | b64decode }}"
+            owner: "{{ forward_proxy_squid_config_stat.stat.uid }}"
+            group: "{{ forward_proxy_squid_config_stat.stat.gid }}"
+            mode: "{{ forward_proxy_squid_config_stat.stat.mode }}"
+            parent_identities: "{{ forward_proxy_rollback_parent_identities }}"
+            allow_absent: false
+            expected_checksum: "{{ forward_proxy_rollback_fixture_boundary.stat.checksum }}"
+          register: forward_proxy_rollback_fixture_restore
+          failed_when: false
+          when:
+            - not (forward_proxy_rollback_fixture_boundary.failed | default(true))
+            - forward_proxy_rollback_fixture_boundary.stat.isreg | default(false)
+            - not (forward_proxy_rollback_fixture_boundary.stat.islnk | default(false))
+            - >-
+              forward_proxy_rollback_fixture_boundary.stat.checksum
+              in [
+                forward_proxy_squid_config_stat.stat.checksum,
+                forward_proxy_rollback_candidate_content | hash('sha256')
+              ]
+
+        - name: Inspect the final rollback fixture state
+          ansible.builtin.stat:
+            path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+            follow: false
+            checksum_algorithm: sha256
+          register: forward_proxy_rollback_fixture_final
+          failed_when: false
+
+        - name: Record exact rollback fixture restoration
+          ansible.builtin.set_fact:
+            forward_proxy_rollback_fixture_restored: >-
+              {{
+                not (forward_proxy_rollback_fixture_restore.skipped | default(false))
+                and not (forward_proxy_rollback_fixture_restore.failed | default(true))
+                and not (forward_proxy_rollback_fixture_final.failed | default(true))
+                and (forward_proxy_rollback_fixture_final.stat.isreg | default(false))
+                and not (forward_proxy_rollback_fixture_final.stat.islnk | default(false))
+                and forward_proxy_rollback_fixture_final.stat.checksum
+                  == forward_proxy_squid_config_stat.stat.checksum
+                and forward_proxy_rollback_fixture_final.stat.mode
+                  == forward_proxy_squid_config_stat.stat.mode
+                and forward_proxy_rollback_fixture_final.stat.uid
+                  == forward_proxy_squid_config_stat.stat.uid
+                and forward_proxy_rollback_fixture_final.stat.gid
+                  == forward_proxy_squid_config_stat.stat.gid
+              }}
+
+    - name: Exercise a failed JUnit result against a supported profile
+      ansible.builtin.include_tasks: tasks/release_eligibility.yml
+      vars:
+        # Strings reproduce controllers with Jinja native types disabled.
+        forward_proxy_release_gate_junit_passed: "False"
+        forward_proxy_release_gate_profile_disposition: supported
+
+    - name: Require failed JUnit to remain ineligible for release
+      ansible.builtin.assert:
+        that:
+          - not (forward_proxy_release_gate_result.release_eligible | bool)
+        quiet: true
+
+    - name: Exercise passed JUnit against the authoritative experimental profile
+      ansible.builtin.include_tasks: tasks/release_eligibility.yml
+      vars:
+        forward_proxy_release_gate_junit_passed: "True"
+        forward_proxy_release_gate_profile_disposition: experimental
+
+    - name: Require the experimental profile to remain ineligible for release
+      ansible.builtin.assert:
+        that:
+          - not (forward_proxy_release_gate_result.release_eligible | bool)
+        quiet: true
+
+    - name: Exercise a passed JUnit result against a supported profile
+      ansible.builtin.include_tasks: tasks/release_eligibility.yml
+      vars:
+        forward_proxy_release_gate_junit_passed: "True"
+        forward_proxy_release_gate_profile_disposition: supported
+
+    - name: Require passed JUnit to become eligible for a supported profile
+      ansible.builtin.assert:
+        that:
+          - forward_proxy_release_gate_result.release_eligible | bool
+        quiet: true
+
+    - name: Add rollback execution to forward proxy assertion evidence
+      ansible.builtin.set_fact:
+        forward_proxy_contract_results: >-
+          {{
+            forward_proxy_contract_results
+            + [
+              {
+                'name': 'managed-file-rollback',
+                'passed': forward_proxy_rollback_passed | bool
+              },
+              {
+                'name': 'rollback-fixture-restored',
+                'passed': forward_proxy_rollback_fixture_restored | bool
+              }
+            ]
+          }}
+
+    - name: Derive failed forward proxy contracts after rollback verification
+      ansible.builtin.set_fact:
+        forward_proxy_failed_contracts: >-
+          {{ forward_proxy_contract_results | selectattr('passed', 'equalto', false) | list }}
 
     - name: Create forward proxy JUnit directory
       ansible.builtin.file:
@@ -80,21 +387,23 @@
         state: directory
         mode: "0750"
 
-    - name: Write aggregate forward proxy JUnit result
+    - name: Write final per-contract forward proxy JUnit result
       ansible.builtin.copy:
         dest: "{{ forward_proxy_junit_root }}/forward-proxy-tiny.xml"
         mode: "0640"
         content: |-
           <?xml version="1.0" encoding="UTF-8"?>
-          <testsuite name="forward-proxy-tiny" tests="1"
-            failures="{{ 1 if forward_proxy_failure_count | int > 0 else 0 }}" errors="0" skipped="0">
-            <testcase classname="forward_proxy" name="render-policy-idempotence-cleanup"
-              role="forward_proxy">{% if forward_proxy_failure_count | int > 0 %}
-              <failure message="one or more forward proxy contracts failed"/>{% endif %}
+          <testsuite name="forward-proxy-tiny" tests="{{ forward_proxy_contract_results | length }}"
+            failures="{{ forward_proxy_failed_contracts | length }}" errors="0" skipped="0">
+          {% for contract in forward_proxy_contract_results %}
+            <testcase classname="forward_proxy" name="{{ contract.name }}"
+              role="forward_proxy">{% if not contract.passed %}
+              <failure message="forward proxy contract failed: {{ contract.name }}"/>{% endif %}
             </testcase>
+          {% endfor %}
           </testsuite>
 
     - name: Fail after preserving every forward proxy assertion result
       ansible.builtin.assert:
-        that: ["forward_proxy_failure_count | int == 0"]
+        that: ["forward_proxy_failed_contracts | length == 0"]
         fail_msg: Forward proxy contract failed; JUnit evidence was preserved.

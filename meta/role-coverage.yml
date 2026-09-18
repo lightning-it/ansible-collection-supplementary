@@ -720,9 +720,10 @@ roles:
       - "A prepared rootful Podman and systemd host with governed outbound access"
     known_limitations:
       - >-
-        Tiny renders and validates the exact service contract without starting
-        Podman; live proxy traffic and host-firewall enforcement require the
-        protected Wunderbox acceptance target.
+        Tiny renders and validates the exact service contract and executes the
+        managed-file rollback path without starting Podman; live proxy traffic
+        and host-firewall enforcement require the protected Wunderbox
+        acceptance target.
     deprecation_state: "active"
     scenario_support:
       tiny:

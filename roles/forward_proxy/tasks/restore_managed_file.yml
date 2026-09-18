@@ -1,7 +1,7 @@
 ---
 - name: Reinspect one managed file at its rollback mutation boundary
   ansible.builtin.stat:
-    path: "{{ forward_proxy_restore_entry.0.item.0.0 }}"
+    path: "{{ forward_proxy_restore_entry.0.item.item.0.0 }}"
     follow: false
     checksum_algorithm: sha256
   register: forward_proxy_restore_file_boundary
@@ -18,7 +18,7 @@
           forward_proxy_restore_entry.2,
           (
             forward_proxy_squid_config_transaction_stat.stat.checksum | default('')
-            if forward_proxy_restore_entry.0.item.0.0 == forward_proxy_config_path
+            if forward_proxy_restore_entry.0.item.item.0.0 == forward_proxy_config_path
             else forward_proxy_pod_manifest_transaction_stat.stat.checksum | default('')
           )
         ]
@@ -39,7 +39,7 @@
 - name: Restore one exact previous forward proxy managed file
   lit.supplementary.atomic_path:
     content: "{{ forward_proxy_restore_entry.0.content | b64decode }}"
-    path: "{{ forward_proxy_restore_entry.0.item.0.0 }}"
+    path: "{{ forward_proxy_restore_entry.0.item.item.0.0 }}"
     state: file
     owner: "{{ forward_proxy_file_owner }}"
     group: "{{ forward_proxy_file_group }}"
