@@ -221,6 +221,8 @@ jobs:
           associated_prs="$(
             gh api \
               -H 'Accept: application/vnd.github+json' \
+              --paginate \
+              --slurp \
               "repos/${GITHUB_REPOSITORY}/commits/${SOURCE_SHA}/pulls"
           )"
           matching_prs="$(
@@ -231,7 +233,7 @@ jobs:
               --arg head_ref "$head_ref" \
               --arg merge "$SOURCE_SHA" \
               --arg repo "$GITHUB_REPOSITORY" '[
-                .[]
+                .[][]
                 | select(
                     .merged_at != null
                     and .merge_commit_sha == $merge
@@ -256,6 +258,9 @@ jobs:
             ${{ github.event_name == 'pull_request' &&
             github.event.pull_request.head.repo.full_name ||
             steps.release-push.outputs.head_repository || '' }}
+          GITHUB_BASE_REF: >-
+            ${{ github.event_name == 'push' && github.ref_name ||
+            github.event.pull_request.base.ref || '' }}
           GITHUB_PR_AUTHOR: >-
             ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login ||
             steps.release-push.outputs.author || '' }}

@@ -80,6 +80,10 @@ class ChangelogHeadRefTests(unittest.TestCase):
 
         self.assertIn("Bind a release push to its unique merged Release App PR", workflow)
         self.assertIn('"repos/${GITHUB_REPOSITORY}/commits/${SOURCE_SHA}/pulls"', workflow)
+        self.assertIn("--paginate", workflow)
+        self.assertIn("--slurp", workflow)
+        self.assertIn(".[][]", workflow)
+        self.assertIn("github.event_name == 'push' && github.ref_name", workflow)
         for exact_binding in (
             ".merge_commit_sha == $merge",
             ".base.ref == $base",
