@@ -94,3 +94,102 @@
     state: started
     timeout: "{{ forward_proxy_readiness_timeout }}"
   check_mode: false
+
+- name: Require a Squid protocol response from the configured proxy port
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - >-
+        import socket, sys;
+        connection = socket.create_connection((sys.argv[1], int(sys.argv[2])), timeout=5);
+        connection.sendall(b'GET http://health.invalid/ HTTP/1.1\r\nHost: health.invalid\r\nConnection: close\r\n\r\n');
+        response = connection.recv(8192); connection.close();
+        normalized = response.replace(b'\r\n', b'\n').lower();
+        raise SystemExit(0 if response.startswith(b'HTTP/1.') and
+        (b'\nserver: squid/' in normalized or b'\nx-squid-error:' in normalized) else 1)
+      - 127.0.0.1
+      - "{{ forward_proxy_port }}"
+  register: forward_proxy_protocol_probe
+  changed_when: false
+  failed_when: forward_proxy_protocol_probe.rc != 0
+  check_mode: false
+
+- name: Reinspect the Quadlet identity after the Squid protocol probe
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_quadlet_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_post_probe_quadlet
+
+- name: Reinspect the Pod identity after the Squid protocol probe
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - pod
+      - inspect
+      - --format
+      - >-
+        {{ '{{.Id}}|{{ index .Labels "io.lightning-it.owner" }}' }}
+      - "{{ forward_proxy_unit_name }}"
+  register: forward_proxy_post_probe_pod_identity
+  changed_when: false
+  failed_when: forward_proxy_post_probe_pod_identity.rc != 0
+  check_mode: false
+
+- name: Reinspect the systemd fragment after the Squid protocol probe
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - --system
+      - show
+      - "{{ forward_proxy_unit_name }}.service"
+      - --property=FragmentPath
+      - --value
+  register: forward_proxy_post_probe_unit
+  changed_when: false
+  failed_when: forward_proxy_post_probe_unit.rc != 0
+  check_mode: false
+
+- name: Reinspect the exact managed Pod after the Squid protocol probe
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - pod
+      - ps
+      - --filter
+      - "id={{ forward_proxy_active_runtime_identity_internal.pod_id }}"
+      - --filter
+      - status=running
+      - --no-trunc
+      - --format
+      - "{{ '{{.ID}}' }}"
+  register: forward_proxy_post_probe_running_pod
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Require the same captured runtime after the Squid protocol probe
+  ansible.builtin.assert:
+    that:
+      - >-
+        forward_proxy_active_runtime_identity_internal
+        == {
+          'unit_name': forward_proxy_unit_name,
+          'quadlet_path': forward_proxy_quadlet_path,
+          'quadlet_checksum': forward_proxy_post_probe_quadlet.stat.checksum,
+          'pod_id': (forward_proxy_post_probe_pod_identity.stdout | trim).split('|')[0],
+          'owner_label': (forward_proxy_post_probe_pod_identity.stdout | trim).split('|')[1],
+          'unit_fragment_path': forward_proxy_post_probe_unit.stdout | trim
+        }
+      - forward_proxy_post_probe_quadlet.stat.isreg | default(false)
+      - not forward_proxy_post_probe_quadlet.stat.islnk | default(false)
+      - forward_proxy_post_probe_quadlet.stat.mode == '0644'
+      - forward_proxy_post_probe_quadlet.stat.pw_name | default('') == 'root'
+      - forward_proxy_post_probe_quadlet.stat.gr_name | default('') == 'root'
+      - >-
+        forward_proxy_post_probe_running_pod.stdout_lines
+        == [forward_proxy_active_runtime_identity_internal.pod_id]
+    fail_msg: >-
+      The exact captured forward proxy runtime changed while proving the Squid
+      protocol response. Stop before recording readiness or ownership.

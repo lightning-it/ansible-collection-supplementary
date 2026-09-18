@@ -6,7 +6,10 @@
       - guacamole_deploy_guacd_image is search('@sha256:')
       - guacamole_deploy_postgres_image is search('@sha256:')
       - guacamole_deploy_host_ip | trim | length > 0
-      - guacamole_deploy_port | int > 0
+      - guacamole_deploy_port is integer
+      - guacamole_deploy_port is not boolean
+      - guacamole_deploy_port > 0
+      - guacamole_deploy_port <= 65535
       - guacamole_deploy_breakglass_user is match('^[A-Za-z0-9_.@-]+$')
       - guacamole_deploy_secrets.db_password | default('', true) | length >= 16
       - guacamole_deploy_secrets.breakglass_password | default('', true) | length >= 16

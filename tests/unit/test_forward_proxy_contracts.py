@@ -7,9 +7,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSERTS = ROOT / "roles" / "forward_proxy" / "tasks" / "assert.yml"
+MAIN = ROOT / "roles" / "forward_proxy" / "tasks" / "main.yml"
+READINESS = ROOT / "roles" / "forward_proxy" / "tasks" / "verify_runtime_ready.yml"
 RESTORE = ROOT / "roles" / "forward_proxy" / "tasks" / "restore_managed_file.yml"
 README = ROOT / "roles" / "forward_proxy" / "README.md"
 VERIFY = ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml"
+CONVERGE = ROOT / "molecule" / "forward-proxy-tiny" / "converge.yml"
 CLEANUP = ROOT / "molecule" / "forward-proxy-tiny" / "cleanup.yml"
 RELEASE_ELIGIBILITY = ROOT / "molecule" / "forward-proxy-tiny" / "tasks" / "release_eligibility.yml"
 
@@ -38,6 +41,27 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_experimental_runtime_acceptance: true", readme)
         self.assertIn("forward_proxy_allowed_destination_domains:", readme)
         self.assertIn("pull policy is Never", readme)
+
+    def test_disabled_unowned_invocation_skips_the_lock_boundary(self) -> None:
+        main = MAIN.read_text(encoding="utf-8")
+        converge = CONVERGE.read_text(encoding="utf-8")
+
+        self.assertIn("Inspect forward proxy state before entering the mutation boundary", main)
+        self.assertIn("forward_proxy_transition_scope_internal.required | bool", main)
+        self.assertLess(
+            main.index("Inspect forward proxy state before entering the mutation boundary"),
+            main.index("Inspect the required forward proxy lock parent"),
+        )
+        self.assertIn("Exercise a disabled unowned invocation without a lock parent", converge)
+        self.assertIn("disabled unowned invocation to remain mutation-free", converge)
+
+    def test_readiness_uses_protocol_evidence_and_revalidates_runtime(self) -> None:
+        readiness = READINESS.read_text(encoding="utf-8")
+
+        self.assertIn("Require a Squid protocol response", readiness)
+        self.assertIn("x-squid-error", readiness)
+        self.assertIn("Reinspect the Pod identity after the Squid protocol probe", readiness)
+        self.assertIn("Require the same captured runtime after the Squid protocol probe", readiness)
 
     def test_tiny_evidence_is_per_contract_and_disposition_bound(self) -> None:
         verify = VERIFY.read_text(encoding="utf-8")

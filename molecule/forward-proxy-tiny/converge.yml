@@ -57,3 +57,52 @@
       forward_proxy_pod_manifest_path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
       forward_proxy_state_marker_path: "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
       forward_proxy_quadlet_dir: "{{ forward_proxy_test_root }}/etc/containers/systemd"
+  post_tasks:
+    - name: Exercise a disabled unowned invocation without a lock parent
+      ansible.builtin.include_role:
+        name: lit.supplementary.forward_proxy
+      vars:
+        forward_proxy_enabled: false
+        forward_proxy_manage_runtime: false
+        forward_proxy_file_owner: "{{ forward_proxy_test_uid.stdout }}"
+        forward_proxy_file_group: "{{ forward_proxy_test_gid.stdout }}"
+        forward_proxy_render_root: "{{ forward_proxy_test_root }}"
+        forward_proxy_lock_path: >-
+          {{ forward_proxy_test_root }}/missing-lock-parent/transition.lock
+        forward_proxy_config_path: >-
+          {{ forward_proxy_test_root }}/unowned/etc/squid/squid.conf
+        forward_proxy_pod_manifest_path: >-
+          {{ forward_proxy_test_root }}/unowned/etc/squid/squid-pod.yml
+        forward_proxy_state_marker_path: >-
+          {{ forward_proxy_test_root }}/unowned/var/lib/lit-forward-proxy/managed.json
+        forward_proxy_quadlet_dir: >-
+          {{ forward_proxy_test_root }}/unowned/etc/containers/systemd
+        forward_proxy_trusted_parent_paths:
+          - "{{ forward_proxy_test_root }}"
+          - "{{ forward_proxy_test_root }}/unowned"
+          - "{{ forward_proxy_test_root }}/unowned/etc"
+          - "{{ forward_proxy_test_root }}/unowned/etc/squid"
+          - "{{ forward_proxy_test_root }}/unowned/etc/containers"
+          - "{{ forward_proxy_test_root }}/unowned/etc/containers/systemd"
+          - "{{ forward_proxy_test_root }}/unowned/var"
+          - "{{ forward_proxy_test_root }}/unowned/var/lib"
+          - "{{ forward_proxy_test_root }}/unowned/var/lib/lit-forward-proxy"
+
+    - name: Inspect the disabled invocation lock path
+      ansible.builtin.stat:
+        path: "{{ forward_proxy_test_root }}/missing-lock-parent/transition.lock"
+        follow: false
+      register: forward_proxy_disabled_lock
+
+    - name: Inspect the disabled invocation state marker
+      ansible.builtin.stat:
+        path: "{{ forward_proxy_test_root }}/unowned/var/lib/lit-forward-proxy/managed.json"
+        follow: false
+      register: forward_proxy_disabled_marker
+
+    - name: Require the disabled unowned invocation to remain mutation-free
+      ansible.builtin.assert:
+        that:
+          - not (forward_proxy_disabled_lock.stat.exists | default(false))
+          - not (forward_proxy_disabled_marker.stat.exists | default(false))
+        quiet: true
