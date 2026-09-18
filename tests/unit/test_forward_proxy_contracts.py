@@ -47,11 +47,23 @@ class ForwardProxyContractTests(unittest.TestCase):
         converge = CONVERGE.read_text(encoding="utf-8")
 
         self.assertIn("Inspect forward proxy state before entering the mutation boundary", main)
+        self.assertIn("Inspect a concurrent forward proxy transition without creating a lock", main)
+        self.assertIn("Reinspect forward proxy state after the concurrent-lock observation", main)
         self.assertIn("forward_proxy_transition_scope_internal.required | bool", main)
         self.assertLess(
             main.index("Inspect forward proxy state before entering the mutation boundary"),
+            main.index("Inspect a concurrent forward proxy transition without creating a lock"),
+        )
+        self.assertLess(
+            main.index("Inspect a concurrent forward proxy transition without creating a lock"),
+            main.index("Reinspect forward proxy state after the concurrent-lock observation"),
+        )
+        self.assertLess(
+            main.index("Reinspect forward proxy state after the concurrent-lock observation"),
             main.index("Inspect the required forward proxy lock parent"),
         )
+        self.assertIn("forward_proxy_invocation_lock.stat.exists", main)
+        self.assertIn("forward_proxy_invocation_state_marker_after_lock.stat.exists", main)
         self.assertIn("Exercise a disabled unowned invocation without a lock parent", converge)
         self.assertIn("disabled unowned invocation to remain mutation-free", converge)
 

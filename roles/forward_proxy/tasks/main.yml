@@ -30,7 +30,19 @@
   ansible.builtin.stat:
     path: "{{ forward_proxy_state_marker_path }}"
     follow: false
-  register: forward_proxy_invocation_state_marker
+  register: forward_proxy_invocation_state_marker_before_lock
+
+- name: Inspect a concurrent forward proxy transition without creating a lock
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_lock_path }}"
+    follow: false
+  register: forward_proxy_invocation_lock
+
+- name: Reinspect forward proxy state after the concurrent-lock observation
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_state_marker_path }}"
+    follow: false
+  register: forward_proxy_invocation_state_marker_after_lock
 
 - name: Bind whether this invocation requires a forward proxy transition
   ansible.builtin.set_fact:
@@ -39,7 +51,9 @@
         {
           'required': (
             (forward_proxy_enabled | bool)
-            or (forward_proxy_invocation_state_marker.stat.exists | default(false))
+            or (forward_proxy_invocation_state_marker_before_lock.stat.exists | default(false))
+            or (forward_proxy_invocation_lock.stat.exists | default(false))
+            or (forward_proxy_invocation_state_marker_after_lock.stat.exists | default(false))
           )
         }
       }}
