@@ -57,26 +57,42 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
 
   generated_re="^(CHANGELOG\\.(md|rst)|changelogs/(changelog|\\.plugin-cache)\\.yaml)$"
   is_release_branch=false
+  is_trusted_release_branch=false
   is_release_promotion=false
   head_ref="${GITHUB_HEAD_REF:-$(git rev-parse --abbrev-ref HEAD)}"
   base_ref="${GITHUB_BASE_REF:-}"
+  release_pr_author="${GITHUB_PR_AUTHOR:-${PR_AUTHOR:-}}"
   head_ref="$(bash scripts/resolve-changelog-head-ref.sh "$head_ref")"
 
   if [[ "$head_ref" == release/v* || "$head_ref" == backsync/release-* ]]; then
     is_release_branch=true
+    is_trusted_release_branch=true
+    if [ "${GITHUB_EVENT_NAME:-}" = pull_request ]; then
+      is_trusted_release_branch=false
+      if [ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ] && \
+          [ -n "${GITHUB_REPOSITORY:-}" ] && \
+          [ "$release_pr_author" = "lightning-it-release-automation[bot]" ]; then
+        is_trusted_release_branch=true
+      fi
+    fi
   fi
   if [[ "$head_ref" == develop && "$base_ref" == main ]]; then
     is_release_promotion=true
   fi
 
   if grep -E "$generated_re" <<<"$changed"; then
-    if [ "$is_release_branch" != "true" ] && [ "$is_release_promotion" != "true" ]; then
-      echo "::error::Generated changelog files may only be changed by release/vX.Y.Z or release back-sync PRs."
+    if [ "$is_trusted_release_branch" != "true" ] && [ "$is_release_promotion" != "true" ]; then
+      echo "::error::Generated changelog files require a trusted same-repository Release App release/back-sync PR"
+      echo "::error::or a develop-to-main promotion. A release-shaped branch name alone grants no privilege."
       exit 1
     fi
   fi
 
   if [ "$is_release_branch" = "true" ]; then
+    if [ "$is_trusted_release_branch" != "true" ]; then
+      echo "::error::Release changelog handling requires the same-repository Release App author."
+      exit 1
+    fi
     echo "Release and release back-sync PRs manage generated changelog files."
     exit 0
   fi

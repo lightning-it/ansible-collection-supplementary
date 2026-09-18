@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Reject YAML booleans for the forward proxy listen port, report owned
+    disable transitions in check mode, and require same-repository Release App
+    identity before a release-named pull request receives changelog privileges.
