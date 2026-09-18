@@ -95,18 +95,36 @@
     timeout: "{{ forward_proxy_readiness_timeout }}"
   check_mode: false
 
-- name: Require the Ansible-discovered target Python interpreter for the protocol probe
+- name: Resolve the target Python interpreter for the protocol probe
+  ansible.builtin.set_fact:
+    forward_proxy_probe_interpreter_internal: >-
+      {{
+        (ansible_python_interpreter | string | trim)
+        if (
+          ansible_python_interpreter | default('', true) | string | trim
+        ) not in ['', 'auto', 'auto_silent', 'auto_legacy', 'auto_legacy_silent']
+        else (
+          ansible_facts.discovered_interpreter_python
+          | default('', true)
+          | string
+          | trim
+        )
+      }}
+  changed_when: false
+
+- name: Require a resolved target Python interpreter for the protocol probe
   ansible.builtin.assert:
     that:
-      - ansible_facts.discovered_interpreter_python | default('', true) | trim | length > 0
+      - forward_proxy_probe_interpreter_internal | length > 0
+      - forward_proxy_probe_interpreter_internal is match('^/')
     fail_msg: >-
-      The Squid protocol probe requires the Python interpreter that Ansible
-      discovered on the managed host.
+      The Squid protocol probe requires an absolute explicitly configured or
+      Ansible-discovered Python interpreter on the managed host.
 
 - name: Require a Squid protocol response from the configured proxy port
   ansible.builtin.command:
     argv:
-      - "{{ ansible_facts.discovered_interpreter_python }}"
+      - "{{ forward_proxy_probe_interpreter_internal }}"
       - -c
       - |-
         import socket

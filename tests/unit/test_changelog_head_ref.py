@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -14,6 +15,14 @@ GIT = shutil.which("git")
 BASH = shutil.which("bash")
 if GIT is None or BASH is None:
     raise RuntimeError("git and bash are required for changelog-head-ref tests")
+
+
+def isolated_git_environment() -> dict[str, str]:
+    """Detach temporary repositories from a linked-worktree controller environment."""
+    environment = os.environ.copy()
+    for variable in ("GIT_COMMON_DIR", "GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"):
+        environment.pop(variable, None)
+    return environment
 
 
 class ChangelogHeadRefTests(unittest.TestCase):
@@ -68,10 +77,95 @@ class ChangelogHeadRefTests(unittest.TestCase):
         )
         self.assertIn("GITHUB_PR_AUTHOR: ${{ github.event.pull_request.user.login }}", changelog_workflow)
 
+    def test_generated_changelog_authorization_matrix_is_enforced_behaviorally(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        repository = Path(temporary.name)
+        scripts = repository / "scripts"
+        scripts.mkdir()
+        shutil.copy2(ROOT / "scripts" / "devtools-changelog-check.sh", scripts)
+        shutil.copy2(ROOT / "scripts" / "resolve-changelog-head-ref.sh", scripts)
+        (scripts / "wunder-devtools-ee.sh").write_text(
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            'test "$1" = bash\ntest "$2" = -lc\n'
+            "body=${3//\\/workspace/$PWD}\n"
+            "body=${body//antsibull-changelog lint/true}\n"
+            'exec bash -c "$body"\n',
+            encoding="utf-8",
+        )
+        (repository / "changelogs").mkdir()
+        (repository / "changelogs" / "changelog.yaml").write_text("releases: {}\n", encoding="utf-8")
+        self.git(repository, "init", "--quiet")
+        self.git(repository, "config", "user.name", "LI test")
+        self.git(repository, "config", "user.email", "li-test@invalid")
+        self.git(repository, "add", ".")
+        self.git(repository, "commit", "--quiet", "-m", "base")
+        base = self.git(repository, "rev-parse", "HEAD")
+        (repository / "changelogs" / "changelog.yaml").write_text(
+            "releases:\n  3.3.1:\n    changes: []\n", encoding="utf-8"
+        )
+        self.git(repository, "commit", "--quiet", "-am", "generated changelog")
+        head = self.git(repository, "rev-parse", "HEAD")
+
+        def policy_result(
+            *,
+            head_ref: str,
+            base_ref: str,
+            head_repository: str = "lightning-it/ansible-collection-supplementary",
+            labels: str = "[]",
+        ) -> subprocess.CompletedProcess[str]:
+            environment = isolated_git_environment()
+            environment.update(
+                {
+                    "BASE_SHA": base,
+                    "HEAD_SHA": head,
+                    "GITHUB_EVENT_NAME": "pull_request",
+                    "GITHUB_REPOSITORY": "lightning-it/ansible-collection-supplementary",
+                    "GITHUB_HEAD_REPOSITORY": head_repository,
+                    "GITHUB_HEAD_REF": head_ref,
+                    "GITHUB_BASE_REF": base_ref,
+                    "GITHUB_PR_AUTHOR": "lightning-it-release-automation[bot]",
+                    "LABELS_JSON": labels,
+                    "HOME": str(repository),
+                }
+            )
+            return subprocess.run(  # noqa: S603 - fixed shell and repository-owned script
+                [BASH, "scripts/devtools-changelog-check.sh"],
+                cwd=repository,
+                env=environment,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(0, policy_result(head_ref="release/v3.3.1", base_ref="main").returncode)
+        self.assertEqual(
+            0,
+            policy_result(head_ref="backsync/release-v3.3.1-to-develop", base_ref="develop").returncode,
+        )
+        self.assertNotEqual(0, policy_result(head_ref="release/v3.3.1", base_ref="develop").returncode)
+        self.assertNotEqual(
+            0,
+            policy_result(head_ref="backsync/release-v3.3.1-to-develop", base_ref="main").returncode,
+        )
+        self.assertNotEqual(
+            0,
+            policy_result(head_ref="release/v3.3.1", base_ref="main", head_repository="fork/repository").returncode,
+        )
+        self.assertNotEqual(
+            0,
+            policy_result(head_ref="release/v3.3.1", base_ref="main", head_repository="").returncode,
+        )
+        self.assertNotEqual(
+            0,
+            policy_result(head_ref="release/v3.3.1", base_ref="develop", labels='["skip-changelog"]').returncode,
+        )
+
     def git(self, repository: Path, *arguments: str) -> str:
         result = subprocess.run(  # noqa: S603 - fixed executable and test-owned arguments
             [GIT, *arguments],
             cwd=repository,
+            env=isolated_git_environment(),
             check=True,
             capture_output=True,
             text=True,
@@ -122,6 +216,7 @@ class ChangelogHeadRefTests(unittest.TestCase):
         result = subprocess.run(  # noqa: S603 - fixed executable and test-owned arguments
             [BASH, str(SCRIPT), value],
             cwd=repository,
+            env=isolated_git_environment(),
             check=True,
             capture_output=True,
             text=True,
