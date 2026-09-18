@@ -1630,90 +1630,13 @@ jobs:
     if: needs.verify-current-revision-policy.result == 'success'
     permissions:
       actions: write
+      checks: read
       contents: read
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - name: Dispatch the protected re-evaluation helper from the exact base
-        env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
-          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PRODUCER_RUN_ID: ${{ github.run_id }}
-          REPOSITORY: ${{ github.repository }}
-          TRUSTED_WORKFLOW_REF: ${{ github.workflow_ref }}
-          TRUSTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
-        run: |
-          set -euo pipefail
-          [[ "${BASE_REF}" =~ ^(develop|main)$ ]]
-          [[ "${EXPECTED_BASE}" =~ ^[0-9a-f]{40}$ ]]
-          [[ "${EXPECTED_HEAD}" =~ ^[0-9a-f]{40}$ ]]
-          [[ "${PR_NUMBER}" =~ ^[1-9][0-9]*$ ]]
-          [[ "${PRODUCER_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
-          [[ "${TRUSTED_WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
-          test "${DEFAULT_BRANCH}" = develop
-          test "${TRUSTED_WORKFLOW_REF}" = \
-            "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}"
-          if [ "${BASE_REF}" = develop ]; then
-            test "${TRUSTED_WORKFLOW_SHA}" = "${EXPECTED_BASE}"
-          else
-            test "${BASE_REF}" = main
-            default_branch="$(gh api \
-              "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}")"
-            default_head="$(jq -er \
-              '.commit.sha | select(test("^[0-9a-f]{40}$"))' \
-              <<<"${default_branch}")"
-            jq -e \
-              --arg default_branch "${DEFAULT_BRANCH}" \
-              --arg default_head "${default_head}" '
-                .name == $default_branch
-                and .protected == true
-                and .commit.sha == $default_head
-              ' <<<"${default_branch}" >/dev/null
-            test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"
-
-            exact_base_helper="$(gh api \
-              "repos/${REPOSITORY}/contents/.github/workflows/current-revision-rerun.yml?ref=${EXPECTED_BASE}")"
-            exact_base_helper_sha="$(jq -er \
-              '.sha | select(test("^[0-9a-f]{40}$"))' \
-              <<<"${exact_base_helper}")"
-            exact_base_helper_b64="$(jq -er \
-              '.content | gsub("\\n"; "")' \
-              <<<"${exact_base_helper}")"
-            jq -e '
-              .type == "file"
-              and .encoding == "base64"
-              and .path == ".github/workflows/current-revision-rerun.yml"
-              and .name == "current-revision-rerun.yml"
-              and .size > 0
-            ' <<<"${exact_base_helper}" >/dev/null
-            exact_base_helper_path="$(mktemp \
-              "${RUNNER_TEMP}/current-revision-rerun-${EXPECTED_BASE}.XXXXXX.yml")"
-            trap 'rm -f -- "${exact_base_helper_path}"' EXIT
-            printf '%s' "${exact_base_helper_b64}" | base64 --decode > \
-              "${exact_base_helper_path}"
-            test "$(git hash-object "${exact_base_helper_path}")" = "${exact_base_helper_sha}"
-            grep -Fq 'workflow_dispatch:' "${exact_base_helper_path}"
-            for required_input in \
-              base_ref pr_number expected_base expected_head producer_run_id; do
-              grep -Eq "^[[:space:]]+${required_input}:" \
-                "${exact_base_helper_path}"
-            done
-          fi
-          test "${GITHUB_REF}" = "refs/heads/${BASE_REF}"
-          test "${GITHUB_REF_PROTECTED}" = true
-          live_base="$(gh api \
-            "repos/${REPOSITORY}/branches/${BASE_REF}" --jq .commit.sha)"
-          test "${live_base}" = "${EXPECTED_BASE}"
-          gh api --method POST \
-            "repos/${REPOSITORY}/actions/workflows/current-revision-rerun.yml/dispatches" \
-            -f "ref=${BASE_REF}" \
-            -f "inputs[base_ref]=${BASE_REF}" \
-            -f "inputs[pr_number]=${PR_NUMBER}" \
-            -f "inputs[expected_base]=${EXPECTED_BASE}" \
-            -f "inputs[expected_head]=${EXPECTED_HEAD}" \
-            -f "inputs[producer_run_id]=${PRODUCER_RUN_ID}" >/dev/null
+      pull-requests: read
+    uses: ./.github/workflows/current-revision-rerun.yml
+    with:
+      base_ref: ${{ github.event.pull_request.base.ref }}
+      pr_number: ${{ github.event.pull_request.number }}
+      expected_base: ${{ github.event.pull_request.base.sha }}
+      expected_head: ${{ github.event.pull_request.head.sha }}
+      producer_run_id: ${{ github.run_id }}

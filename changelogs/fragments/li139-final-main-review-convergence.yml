@@ -1,7 +1,7 @@
 ---
 bugfixes:
   - >-
-    Bind main-promotion review dispatch to the exact current protected controller and materialize the verifier helper
-    from the immutable main base before dispatch.
+    Bind main-promotion review to the exact current protected controller and invoke the protected verifier helper
+    from the same immutable workflow revision instead of dispatching through a mutable branch ref.
   - >-
     Preserve fail-closed forward-proxy Tiny JUnit evidence when convergence fails before verification starts.

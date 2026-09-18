@@ -474,6 +474,17 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                 workflow = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
                 rerun_job = workflow.split("  request-protected-verifier-reevaluation:", 1)[1]
                 self.assertIn("actions: write", rerun_job)
+                if name == "copilot-review.yml":
+                    self.assertIn("uses: ./.github/workflows/current-revision-rerun.yml", rerun_job)
+                    self.assertNotIn("current-revision-rerun.yml/dispatches", rerun_job)
+                    self.assertNotIn('-f "ref=${BASE_REF}"', rerun_job)
+                    self.assertIn("base_ref: ${{ github.event.pull_request.base.ref }}", rerun_job)
+                    self.assertIn("pr_number: ${{ github.event.pull_request.number }}", rerun_job)
+                    self.assertIn("expected_base: ${{ github.event.pull_request.base.sha }}", rerun_job)
+                    self.assertIn("expected_head: ${{ github.event.pull_request.head.sha }}", rerun_job)
+                    self.assertIn("producer_run_id: ${{ github.run_id }}", rerun_job)
+                    self.assertNotIn("openai/codex-action@", rerun_job)
+                    continue
                 self.assertIn("current-revision-rerun.yml/dispatches", rerun_job)
                 self.assertIn('-f "ref=${BASE_REF}"', rerun_job)
                 self.assertIn('-f "inputs[base_ref]=${BASE_REF}"', rerun_job)
@@ -483,39 +494,11 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                 self.assertIn('-f "inputs[producer_run_id]=${PRODUCER_RUN_ID}"', rerun_job)
                 legacy_binding = 'test "${GITHUB_WORKFLOW_SHA}" = "${EXPECTED_BASE}"'
                 explicit_binding = 'test "${EXECUTED_WORKFLOW_SHA}" = "${EXPECTED_BASE}"'
-                if name == "copilot-review.yml":
-                    self.assertNotIn(legacy_binding, rerun_job)
-                    self.assertNotIn(explicit_binding, rerun_job)
-                    self.assertIn(
-                        "TRUSTED_WORKFLOW_SHA: ${{ github.workflow_sha }}",
-                        rerun_job,
-                    )
-                    self.assertIn(
-                        "TRUSTED_WORKFLOW_REF: ${{ github.workflow_ref }}",
-                        rerun_job,
-                    )
-                    self.assertIn('if [ "${BASE_REF}" = develop ]; then', rerun_job)
-                    self.assertIn(
-                        'test "${TRUSTED_WORKFLOW_SHA}" = "${EXPECTED_BASE}"',
-                        rerun_job,
-                    )
-                    self.assertIn('test "${BASE_REF}" = main', rerun_job)
-                    self.assertIn(
-                        'test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"',
-                        rerun_job,
-                    )
-                    self.assertIn(
-                        "contents/.github/workflows/current-revision-rerun.yml?ref=${EXPECTED_BASE}",
-                        rerun_job,
-                    )
-                    self.assertIn('git hash-object "${exact_base_helper_path}"', rerun_job)
-                    self.assertIn(".protected == true", rerun_job)
-                else:
-                    self.assertEqual(
-                        1,
-                        rerun_job.count(legacy_binding) + rerun_job.count(explicit_binding),
-                        "the protected release workflow SHA must have exactly one base binding",
-                    )
+                self.assertEqual(
+                    1,
+                    rerun_job.count(legacy_binding) + rerun_job.count(explicit_binding),
+                    "the protected release workflow SHA must have exactly one base binding",
+                )
                 if explicit_binding in rerun_job:
                     self.assertIn(
                         "EXECUTED_WORKFLOW_SHA: ${{ github.workflow_sha }}",
@@ -526,10 +509,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                 self.assertIn('test "${live_base}" = "${EXPECTED_BASE}"', rerun_job)
                 self.assertNotIn('-F "inputs[pr_number]=${PR_NUMBER}"', rerun_job)
                 self.assertNotIn("openai/codex-action@", rerun_job)
-                if name == "copilot-review.yml":
-                    self.assertIn("BASE_REF: ${{ github.event.pull_request.base.ref }}", rerun_job)
-                else:
-                    self.assertIn("BASE_REF: ${{ inputs.base_ref }}", rerun_job)
+                self.assertIn("BASE_REF: ${{ inputs.base_ref }}", rerun_job)
 
     def test_human_current_revision_path_protects_main_and_develop(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")
@@ -602,7 +582,6 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("pull_request_target:", workflow)
         self.assertNotIn("pull_request_review:", workflow)
         self.assertNotIn("\n  workflow_dispatch:", workflow)
-        self.assertIn("grep -Fq 'workflow_dispatch:'", workflow)
         condition = review_job.split("    if: >-", 1)[1].split("    permissions:", 1)[0]
         self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", condition)
         self.assertIn("github.event.pull_request.user.login != 'lightning-it-release-automation[bot]'", condition)
@@ -639,7 +618,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("compare/${TRUSTED_WORKFLOW_SHA}...${default_head}", review_job)
         self.assertIn('test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"', review_job)
         self.assertIn('[[ "${default_head}" =~ ^[0-9a-f]{40}$ ]]', review_job)
-        self.assertGreaterEqual(review_job.count("and .protected == true"), 2)
+        self.assertEqual(1, review_job.count("and .protected == true"))
         self.assertIn('--arg controller_ref "${DEFAULT_BRANCH}"', review_job)
         self.assertEqual(1, request_job.count("EXPECTED_HEAD_REF: ${{ github.event.pull_request.head.ref }}"))
         self.assertIn('--arg branch "${EXPECTED_HEAD_REF}"', request_job)
@@ -657,7 +636,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("--method DELETE", request_job)
 
         rerun_job = workflow.split("  request-protected-verifier-reevaluation:", 1)[1]
-        self.assertIn('-f "inputs[pr_number]=${PR_NUMBER}"', rerun_job)
+        self.assertIn("pr_number: ${{ github.event.pull_request.number }}", rerun_job)
         self.assertNotIn('-F "inputs[pr_number]=${PR_NUMBER}"', rerun_job)
 
     def test_human_producer_verifier_separates_event_head_from_controller_sha(self) -> None:
