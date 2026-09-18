@@ -115,6 +115,15 @@
     - not forward_proxy_manage_runtime | bool
     - not ansible_check_mode
 
+- name: Authorize rollback after the previous runtime removal completed
+  ansible.builtin.set_fact:
+    forward_proxy_transition_initialized_internal: true
+  when:
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
 - name: Revalidate the Squid policy parent chain at the mutation boundary
   ansible.builtin.include_tasks: ensure_directory.yml
   loop: "{{ forward_proxy_trusted_parent_paths }}"
@@ -198,6 +207,13 @@
   when: >-
     not ansible_check_mode
     or forward_proxy_config_path | dirname not in forward_proxy_planned_directories_internal
+
+- name: Authorize rollback after the Squid policy was mutated
+  ansible.builtin.set_fact:
+    forward_proxy_transition_initialized_internal: true
+  when:
+    - not ansible_check_mode
+    - forward_proxy_squid_config_result.changed | default(false) | bool
 
 - name: Bind the rendered Squid policy to this transaction
   ansible.builtin.stat:
@@ -290,6 +306,13 @@
   when: >-
     not ansible_check_mode
     or forward_proxy_pod_manifest_path | dirname not in forward_proxy_planned_directories_internal
+
+- name: Authorize rollback after the Pod manifest was mutated
+  ansible.builtin.set_fact:
+    forward_proxy_transition_initialized_internal: true
+  when:
+    - not ansible_check_mode
+    - forward_proxy_pod_manifest_result.changed | default(false) | bool
 
 - name: Bind the rendered Pod manifest to this transaction
   ansible.builtin.stat:
@@ -397,6 +420,13 @@
     podman_systemd_scope: "{{ forward_proxy_systemd_scope }}"
     podman_systemd_quadlet_dir: "{{ forward_proxy_quadlet_dir }}"
     podman_systemd_enabled: true
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Authorize rollback after the runtime transition completed
+  ansible.builtin.set_fact:
+    forward_proxy_transition_initialized_internal: true
   when:
     - forward_proxy_manage_runtime | bool
     - not ansible_check_mode

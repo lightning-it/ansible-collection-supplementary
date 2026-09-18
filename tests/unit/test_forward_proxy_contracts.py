@@ -10,6 +10,7 @@ ASSERTS = ROOT / "roles" / "forward_proxy" / "tasks" / "assert.yml"
 MAIN = ROOT / "roles" / "forward_proxy" / "tasks" / "main.yml"
 TRANSITION = ROOT / "roles" / "forward_proxy" / "tasks" / "transition.yml"
 ENABLED = ROOT / "roles" / "forward_proxy" / "tasks" / "enabled.yml"
+ENABLED_APPLY = ROOT / "roles" / "forward_proxy" / "tasks" / "enabled_apply.yml"
 READINESS = ROOT / "roles" / "forward_proxy" / "tasks" / "verify_runtime_ready.yml"
 RESTORE = ROOT / "roles" / "forward_proxy" / "tasks" / "restore_managed_file.yml"
 README = ROOT / "roles" / "forward_proxy" / "README.md"
@@ -83,6 +84,7 @@ class ForwardProxyContractTests(unittest.TestCase):
     def test_runtime_image_preflight_precedes_every_enabled_state_mutation(self) -> None:
         transition = TRANSITION.read_text(encoding="utf-8")
         enabled = ENABLED.read_text(encoding="utf-8")
+        enabled_apply = ENABLED_APPLY.read_text(encoding="utf-8")
 
         preflight = "Verify the pinned Squid image before any enabled-state mutation"
         first_directory_mutation = "Create and revalidate every trusted forward proxy parent boundary"
@@ -96,11 +98,22 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertLess(transition.index(preflight), transition.index(first_directory_mutation))
         self.assertLess(transition.index(preflight), transition.index(enabled_transition))
         self.assertNotIn("Verify the pinned Squid image was preloaded", enabled)
-        self.assertIn("forward_proxy_transition_initialized_internal: true", transition)
+        self.assertNotIn("forward_proxy_transition_initialized_internal: true", transition)
+        self.assertEqual(4, enabled_apply.count("forward_proxy_transition_initialized_internal: true"))
         self.assertLess(
-            transition.index("forward_proxy_transition_initialized_internal: true"),
-            transition.index("ansible.builtin.include_tasks: enabled.yml"),
+            enabled_apply.index("Render the Squid policy with an atomic no-follow write"),
+            enabled_apply.index("Authorize rollback after the Squid policy was mutated"),
         )
+        self.assertLess(
+            enabled_apply.index("Render the digest-pinned Squid Pod manifest with an atomic no-follow write"),
+            enabled_apply.index("Authorize rollback after the Pod manifest was mutated"),
+        )
+        self.assertLess(
+            enabled_apply.index("Manage the persistent Squid container service"),
+            enabled_apply.index("Authorize rollback after the runtime transition completed"),
+        )
+        self.assertIn("forward_proxy_squid_config_result.changed | default(false) | bool", enabled_apply)
+        self.assertIn("forward_proxy_pod_manifest_result.changed | default(false) | bool", enabled_apply)
         self.assertEqual(
             2,
             enabled.count("forward_proxy_transition_initialized_internal | default(false) | bool"),
