@@ -1,6 +1,0 @@
----
-bugfixes:
-  - >-
-    Report render-only runtime removal, activation, and restart operations in
-    check mode, and persist a resumable runtime-absent checkpoint before
-    deleting owned forward proxy files.
