@@ -1,8 +1,5 @@
 ---
 bugfixes:
   - >-
-    Convert the documented Guacamole session timeout from minutes to the
-    millisecond value consumed by Guacamole.
-  - >-
     Verify the pinned forward-proxy image before any enabled-state file or
     runtime mutation so a missing preload leaves existing state untouched.
