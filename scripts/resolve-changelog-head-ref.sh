@@ -18,10 +18,16 @@ merge_subject_pattern='^Merge pull request #[0-9]+ from [^/]+/(release/v(0|[1-9]
 # at that exact object.
 if [[ "$head_ref" == HEAD ]]; then
   merge_subject="$(git log -1 --format=%s HEAD)"
-  if [[ "$merge_subject" =~ $merge_subject_pattern ]]; then
-    head_ref="${BASH_REMATCH[1]}"
-  elif read -r -a merge_commit <<<"$(git rev-list --parents -n 1 HEAD)" &&
+  read -r -a merge_commit <<<"$(git rev-list --parents -n 1 HEAD)"
+  if [[ "$merge_subject" =~ $merge_subject_pattern ]] &&
     [ "${#merge_commit[@]}" -eq 3 ] &&
+    [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "${merge_commit[2]}^{tree}")" ]; then
+    # A release/back-sync push is recognized only when GitHub produced a
+    # two-parent merge whose result is exactly the reviewed source tree. The
+    # workflow separately binds this object to the unique merged PR through
+    # the GitHub API before granting Release App identity to changelog policy.
+    head_ref="${BASH_REMATCH[1]}"
+  elif [ "${#merge_commit[@]}" -eq 3 ] &&
     develop_commit="$(git rev-parse --verify refs/remotes/origin/develop 2>/dev/null)" &&
     [ "${merge_commit[2]}" = "$develop_commit" ] &&
     [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "${merge_commit[2]}^{tree}")" ]; then

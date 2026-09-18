@@ -71,11 +71,29 @@ class ChangelogHeadRefTests(unittest.TestCase):
                 self.assertIn(f"${{{variable}:+-e {variable}}}", runner)
         self.assertIn("github.event.pull_request.head.repo.full_name", workflow)
         self.assertIn("github.event.pull_request.user.login", workflow)
-        self.assertIn("github.event_name != 'pull_request' && github.repository || ''", workflow)
+        self.assertIn("steps.release-push.outputs.head_repository || ''", workflow)
+        self.assertIn("steps.release-push.outputs.author || ''", workflow)
         self.assertIn(
             "GITHUB_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}", changelog_workflow
         )
         self.assertIn("GITHUB_PR_AUTHOR: ${{ github.event.pull_request.user.login }}", changelog_workflow)
+
+        self.assertIn("Bind a release push to its unique merged Release App PR", workflow)
+        self.assertIn('"repos/${GITHUB_REPOSITORY}/commits/${SOURCE_SHA}/pulls"', workflow)
+        self.assertIn("--paginate", workflow)
+        self.assertIn("--slurp", workflow)
+        self.assertIn(".[][]", workflow)
+        self.assertIn("github.event_name == 'push' && github.ref_name", workflow)
+        for exact_binding in (
+            ".merge_commit_sha == $merge",
+            ".base.ref == $base",
+            ".head.ref == $head_ref",
+            ".head.sha == $head",
+            ".head.repo.full_name == $repo",
+            ".user.login == $author",
+        ):
+            with self.subTest(exact_binding=exact_binding):
+                self.assertIn(exact_binding, workflow)
 
     def test_generated_changelog_authorization_matrix_is_enforced_behaviorally(self) -> None:
         temporary = tempfile.TemporaryDirectory()
@@ -362,6 +380,31 @@ class ChangelogHeadRefTests(unittest.TestCase):
             "Merge pull request #990 from lightning-it/release/v3.3.0"
         )
         self.assertEqual("release/v3.3.0", self.resolve(repository))
+
+    def test_single_parent_with_github_release_merge_subject_remains_detached(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        repository = Path(temporary.name)
+        self.git(repository, "init", "--quiet")
+        self.git(repository, "config", "user.name", "LI test")
+        self.git(repository, "config", "user.email", "li-test@invalid")
+        (repository / "fixture.txt").write_text("crafted\n", encoding="utf-8")
+        self.git(repository, "add", "fixture.txt")
+        self.git(
+            repository,
+            "commit",
+            "--quiet",
+            "-m",
+            "Merge pull request #990 from lightning-it/release/v3.3.0",
+        )
+        self.assertEqual("HEAD", self.resolve(repository))
+
+    def test_github_release_merge_with_mismatched_tree_remains_detached(self) -> None:
+        repository, _base, _candidate = self.synthetic_repository(
+            "Merge pull request #990 from lightning-it/release/v3.3.0",
+            matching_tree=False,
+        )
+        self.assertEqual("HEAD", self.resolve(repository))
 
     def test_github_backsync_merge_subject_remains_supported(self) -> None:
         repository, _base, _candidate = self.synthetic_repository(

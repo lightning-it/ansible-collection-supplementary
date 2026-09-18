@@ -173,6 +173,9 @@ jobs:
     needs: security-classification
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Checkout exact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
@@ -192,6 +195,59 @@ jobs:
             pre-commit==4.3.0 \
             pytest==9.0.3 \
             PyYAML==6.0.3
+      - name: Bind a release push to its unique merged Release App PR
+        id: release-push
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_REF: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          head_ref="$(bash scripts/resolve-changelog-head-ref.sh HEAD)"
+          case "$head_ref" in
+            release/v*) expected_target=main ;;
+            backsync/release-*-to-develop) expected_target=develop ;;
+            *) exit 0 ;;
+          esac
+          test "$TARGET_REF" = "$expected_target"
+
+          read -r -a merge_commit <<<"$(git rev-list --parents -n 1 "$SOURCE_SHA")"
+          test "${#merge_commit[@]}" -eq 3
+          reviewed_head="${merge_commit[2]}"
+          test "$(git rev-parse "${SOURCE_SHA}^{tree}")" = \
+            "$(git rev-parse "${reviewed_head}^{tree}")"
+
+          associated_prs="$(
+            gh api \
+              -H 'Accept: application/vnd.github+json' \
+              --paginate \
+              --slurp \
+              "repos/${GITHUB_REPOSITORY}/commits/${SOURCE_SHA}/pulls"
+          )"
+          matching_prs="$(
+            jq \
+              --arg author 'lightning-it-release-automation[bot]' \
+              --arg base "$TARGET_REF" \
+              --arg head "$reviewed_head" \
+              --arg head_ref "$head_ref" \
+              --arg merge "$SOURCE_SHA" \
+              --arg repo "$GITHUB_REPOSITORY" '[
+                .[][]
+                | select(
+                    .merged_at != null
+                    and .merge_commit_sha == $merge
+                    and .base.ref == $base
+                    and .head.ref == $head_ref
+                    and .head.sha == $head
+                    and .head.repo.full_name == $repo
+                    and .user.login == $author
+                  )
+              ]' <<<"$associated_prs"
+          )"
+          test "$(jq 'length' <<<"$matching_prs")" -eq 1
+          echo "author=lightning-it-release-automation[bot]" >>"$GITHUB_OUTPUT"
+          echo "head_repository=$GITHUB_REPOSITORY" >>"$GITHUB_OUTPUT"
       - name: Run repository static pre-commit gates
         env:
           BASE_SHA: ${{ env.COMPARE_BASE_SHA }}
@@ -201,9 +257,13 @@ jobs:
           GITHUB_HEAD_REPOSITORY: >-
             ${{ github.event_name == 'pull_request' &&
             github.event.pull_request.head.repo.full_name ||
-            github.event_name != 'pull_request' && github.repository || '' }}
+            steps.release-push.outputs.head_repository || '' }}
+          GITHUB_BASE_REF: >-
+            ${{ github.event_name == 'push' && github.ref_name ||
+            github.event.pull_request.base.ref || '' }}
           GITHUB_PR_AUTHOR: >-
-            ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login || '' }}
+            ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login ||
+            steps.release-push.outputs.author || '' }}
           LABELS_JSON: >-
             ${{ github.event_name == 'pull_request' &&
             toJson(github.event.pull_request.labels.*.name) || '[]' }}

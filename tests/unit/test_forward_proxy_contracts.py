@@ -42,6 +42,14 @@ class ForwardProxyContractTests(unittest.TestCase):
                 self.assertIn(f"{variable} is integer", asserts)
                 self.assertIn(f"{variable} is not boolean", asserts)
 
+    def test_numeric_file_identities_match_the_atomic_module_boundary(self) -> None:
+        asserts = ASSERTS.read_text(encoding="utf-8")
+
+        for variable in ("forward_proxy_file_owner", "forward_proxy_file_group"):
+            with self.subTest(variable=variable):
+                self.assertIn(f"{variable} is not match('^[0-9]+\\Z')", asserts)
+                self.assertIn(f"{variable} | int < 4294967295", asserts)
+
     def test_rollback_uses_the_nested_stat_item_path(self) -> None:
         restore = RESTORE.read_text(encoding="utf-8")
         self.assertEqual(3, restore.count("forward_proxy_restore_entry.0.item.item.0.0"))

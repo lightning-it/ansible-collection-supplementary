@@ -1,5 +1,8 @@
 ---
 bugfixes:
+  - Enforce immutable merged-PR identity for release and back-sync push changelog authorization.
+  - Preserve exact release authorization across paginated PR associations and the offline devtools boundary.
+  - Reject crafted single-parent release merge subjects and numeric proxy identities outside the atomic writer range.
   - >-
     Reject YAML booleans for the forward proxy listen port, report owned
     disable transitions in check mode, and require same-repository Release App
