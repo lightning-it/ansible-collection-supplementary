@@ -1,6 +1,10 @@
 ---
 objects:
   role:
+    forward_proxy:
+      description: Run the standard containerized LIT Squid forward proxy.
+      name: forward_proxy
+      version_added: null
     keycloak_cac:
       description: Reconcile Keycloak configuration through its API
       name: keycloak_cac
@@ -19,10 +23,20 @@ plugins:
   httpapi: {}
   inventory: {}
   lookup: {}
-  module: {}
+  module:
+    atomic_path:
+      description: Mutate one path below an identity-bound parent chain
+      name: atomic_path
+      namespace: ''
+      version_added: 3.3.0
+    atomic_unlink:
+      description: Unlink one exactly identified regular file
+      name: atomic_unlink
+      namespace: ''
+      version_added: 3.3.0
   netconf: {}
   shell: {}
   strategy: {}
   test: {}
   vars: {}
-version: 3.3.0
+version: 3.4.0

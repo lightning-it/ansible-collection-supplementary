@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Verify the pinned forward-proxy image before any enabled-state file or
-    runtime mutation so a missing preload leaves existing state untouched.

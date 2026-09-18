@@ -1,8 +1,0 @@
----
-security_fixes:
-  - >-
-    Add the stable Main promotion merge gate required context. It always
-    materializes for pull requests to main and succeeds only after both exact
-    promotion classification and the selected protected environment
-    authorization succeed, while ordinary promotions retain their human
-    approval environment.
