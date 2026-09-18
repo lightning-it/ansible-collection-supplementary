@@ -361,14 +361,25 @@
     - forward_proxy_previous_state_manifest.runtime_managed | bool
     - forward_proxy_previous_quadlet_stat.stat.exists
 
+- name: Fail closed when runtime-managed Quadlet evidence is missing
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_previous_quadlet_stat.stat.exists
+      - forward_proxy_previous_quadlet_stat.stat.isreg | default(false)
+      - not forward_proxy_previous_quadlet_stat.stat.islnk | default(false)
+    fail_msg: >-
+      A runtime-managed state has lost its checksum-bound Quadlet. Leave the
+      runtime and ownership evidence untouched for operator recovery.
+  when:
+    - not forward_proxy_enabled | bool
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+
 - name: Capture the existing runtime identity before any runtime mutation
   ansible.builtin.include_tasks: capture_existing_runtime_removal.yml
   when:
     - forward_proxy_state_marker.stat.exists
     - forward_proxy_previous_state_manifest.runtime_managed | bool
-    - >-
-      forward_proxy_enabled | bool
-      or forward_proxy_previous_quadlet_stat.stat.exists
     - not ansible_check_mode
 
 - name: Require owned Quadlet evidence before runtime removal
@@ -387,7 +398,6 @@
     - not forward_proxy_enabled | bool
     - forward_proxy_state_marker.stat.exists
     - forward_proxy_previous_state_manifest.runtime_managed | bool
-    - forward_proxy_previous_quadlet_stat.stat.exists
     - not ansible_check_mode
 
 - name: Remove a previously managed forward proxy runtime when disabled
@@ -404,7 +414,6 @@
     - not forward_proxy_enabled | bool
     - forward_proxy_state_marker.stat.exists
     - forward_proxy_previous_state_manifest.runtime_managed | bool
-    - forward_proxy_previous_quadlet_stat.stat.exists
     - not ansible_check_mode
 
 - name: Prove the disabled runtime is absent before deleting owned state

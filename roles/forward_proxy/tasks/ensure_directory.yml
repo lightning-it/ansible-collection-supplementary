@@ -138,6 +138,7 @@
         forward_proxy_planned_directories_internal
         + [forward_proxy_directory_path]
       }}
+  changed_when: true
   when:
     - ansible_check_mode
     - forward_proxy_directory_creation_allowed | bool

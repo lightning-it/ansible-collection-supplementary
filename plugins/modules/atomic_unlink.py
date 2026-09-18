@@ -325,15 +325,19 @@ def main() -> None:
     quarantine_fd = -1
     quarantine_name = ""
     try:
+        checksum = str(module.params["checksum"])
+        if checksum:
+            if not re.fullmatch(r"[0-9a-f]{64}", checksum):
+                module.fail_json(msg="checksum must be one lowercase SHA-256 digest", path=path)
+        elif not module.params["allow_absent"]:
+            module.fail_json(msg="checksum must be one lowercase SHA-256 digest", path=path)
+
         try:
             before = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         except FileNotFoundError:
             if module.params["allow_absent"]:
                 module.exit_json(changed=False, path=path)
             module.fail_json(msg="owned file is absent", path=path)
-
-        if not re.fullmatch(r"[0-9a-f]{64}", str(module.params["checksum"])):
-            module.fail_json(msg="checksum must be one lowercase SHA-256 digest", path=path)
 
         if not stat.S_ISREG(before.st_mode):
             module.fail_json(msg="removal target is not a regular file", path=path)
