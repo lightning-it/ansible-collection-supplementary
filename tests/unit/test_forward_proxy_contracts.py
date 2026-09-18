@@ -27,6 +27,7 @@ class ForwardProxyContractTests(unittest.TestCase):
 
         for variable in (
             "forward_proxy_lock_timeout",
+            "forward_proxy_port",
             "forward_proxy_readiness_timeout",
             "forward_proxy_upstream_port",
         ):
@@ -114,6 +115,17 @@ class ForwardProxyContractTests(unittest.TestCase):
             "or forward_proxy_previous_quadlet_stat.stat.exists",
             transition[capture:revalidate],
         )
+
+    def test_check_mode_reports_the_owned_disable_transition(self) -> None:
+        transition = TRANSITION.read_text(encoding="utf-8")
+
+        planned = transition.index("Report the planned owned forward proxy disable transition in check mode")
+        capture = transition.index("Capture the existing runtime identity before any runtime mutation")
+        section = transition[planned:capture]
+        self.assertIn("changed_when: true", section)
+        self.assertIn("ansible_check_mode", section)
+        self.assertIn("not forward_proxy_enabled | bool", section)
+        self.assertIn("forward_proxy_state_marker.stat.exists", section)
 
     def test_readiness_uses_protocol_evidence_and_revalidates_runtime(self) -> None:
         readiness = READINESS.read_text(encoding="utf-8")

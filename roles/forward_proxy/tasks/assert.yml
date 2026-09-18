@@ -53,6 +53,7 @@
       - forward_proxy_listen_addresses | unique | list | length == forward_proxy_listen_addresses | length
       - "'127.0.0.1' in forward_proxy_listen_addresses"
       - forward_proxy_port is integer
+      - forward_proxy_port is not boolean
       - forward_proxy_port >= 1024
       - forward_proxy_port <= 65535
       - forward_proxy_allowed_clients is sequence

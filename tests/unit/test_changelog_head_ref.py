@@ -33,6 +33,26 @@ class ChangelogHeadRefTests(unittest.TestCase):
             policy,
         )
 
+    def test_release_pr_changelog_policy_requires_same_repo_release_app_identity(self) -> None:
+        policy = (ROOT / "scripts" / "devtools-changelog-check.sh").read_text(encoding="utf-8")
+        runner = (ROOT / "scripts" / "wunder-devtools-ee.sh").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "collection-ci.yml").read_text(encoding="utf-8")
+
+        self.assertIn('[ "${GITHUB_EVENT_NAME:-}" = pull_request ]', policy)
+        self.assertIn('[ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ]', policy)
+        self.assertIn('[ "${GITHUB_PR_AUTHOR:-}" = "lightning-it-release-automation[bot]" ]', policy)
+        self.assertIn("is_trusted_release_branch", policy)
+        for variable in (
+            "GITHUB_EVENT_NAME",
+            "GITHUB_REPOSITORY",
+            "GITHUB_HEAD_REPOSITORY",
+            "GITHUB_PR_AUTHOR",
+        ):
+            with self.subTest(variable=variable):
+                self.assertIn(f"${{{variable}:+-e {variable}}}", runner)
+        self.assertIn("github.event.pull_request.head.repo.full_name", workflow)
+        self.assertIn("github.event.pull_request.user.login", workflow)
+
     def git(self, repository: Path, *arguments: str) -> str:
         result = subprocess.run(  # noqa: S603 - fixed executable and test-owned arguments
             [GIT, *arguments],
