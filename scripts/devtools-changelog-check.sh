@@ -81,7 +81,8 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
 
   if grep -E "$generated_re" <<<"$changed"; then
     if [ "$is_trusted_release_branch" != "true" ] && [ "$is_release_promotion" != "true" ]; then
-      echo "::error::Generated changelog files may only be changed by release/vX.Y.Z or release back-sync PRs."
+      echo "::error::Generated changelog files require a trusted same-repository Release App release/back-sync PR"
+      echo "::error::or a develop-to-main promotion. A release-shaped branch name alone grants no privilege."
       exit 1
     fi
   fi

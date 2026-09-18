@@ -42,6 +42,7 @@ class ChangelogHeadRefTests(unittest.TestCase):
         self.assertIn('[ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ]', policy)
         self.assertIn('[ "${GITHUB_PR_AUTHOR:-}" = "lightning-it-release-automation[bot]" ]', policy)
         self.assertIn("is_trusted_release_branch", policy)
+        self.assertIn("A release-shaped branch name alone grants no privilege.", policy)
         for variable in (
             "GITHUB_EVENT_NAME",
             "GITHUB_REPOSITORY",
