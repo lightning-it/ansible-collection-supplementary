@@ -1,15 +1,4 @@
 ---
-- name: Verify the pinned Squid image was preloaded
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/podman
-      - image
-      - exists
-      - "{{ forward_proxy_image }}"
-  changed_when: false
-  check_mode: false
-  when: forward_proxy_manage_runtime | bool
-
 - name: Apply forward proxy state with first-run rollback
   block:
     - name: Apply the requested forward proxy state

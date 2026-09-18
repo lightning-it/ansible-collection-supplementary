@@ -20,6 +20,19 @@
     fail_msg: "The forward proxy state marker must be a regular non-symlink file."
   when: forward_proxy_state_marker.stat.exists
 
+- name: Verify the pinned Squid image before any enabled-state mutation
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - image
+      - exists
+      - "{{ forward_proxy_image }}"
+  changed_when: false
+  check_mode: false
+  when:
+    - forward_proxy_enabled | bool
+    - forward_proxy_manage_runtime | bool
+
 - name: Initialize the check-mode forward proxy directory plan
   ansible.builtin.set_fact:
     forward_proxy_planned_directories_internal: []
