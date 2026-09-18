@@ -1,10 +1,4 @@
 ---
-- name: Reprove the empty runtime boundary for this unlink mutation
-  ansible.builtin.include_tasks: verify_runtime_absent.yml
-  when:
-    - forward_proxy_reprove_runtime_absence_before_mutation | default(false) | bool
-    - not ansible_check_mode
-
 - name: Revalidate the owned file parent chain at the removal boundary
   ansible.builtin.include_tasks: ensure_directory.yml
   loop: "{{ forward_proxy_trusted_parent_paths }}"
@@ -17,6 +11,12 @@
     or (forward_proxy_removal_path | dirname).startswith(
       forward_proxy_directory_path.rstrip('/') ~ '/'
     )
+
+- name: Reprove the empty runtime boundary for this unlink mutation
+  ansible.builtin.include_tasks: verify_runtime_absent.yml
+  when:
+    - forward_proxy_reprove_runtime_absence_before_mutation | default(false) | bool
+    - not ansible_check_mode
 
 - name: Atomically unlink the exact verified owned file
   lit.supplementary.atomic_unlink:

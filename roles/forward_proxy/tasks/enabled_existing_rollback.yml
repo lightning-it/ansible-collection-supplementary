@@ -286,6 +286,16 @@
     - forward_proxy_previous_state_manifest.runtime_managed | bool
     - not ansible_check_mode
 
+- name: Reprove the empty runtime boundary before restoring the previous Quadlet
+  ansible.builtin.include_tasks: verify_runtime_absent.yml
+  when:
+    - >-
+      forward_proxy_runtime_absence_verified_internal | default(false) | bool
+      or forward_proxy_new_runtime_removal_authorization_internal.authorized
+        | default(false) | bool
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not ansible_check_mode
+
 - name: Restore the previous managed forward proxy Quadlet
   lit.supplementary.atomic_path:
     content: "{{ forward_proxy_previous_quadlet_content.content | b64decode }}"
@@ -342,6 +352,15 @@
       The ownership marker changed outside the previous or failed transaction.
       Leave it untouched for operator recovery.
   when: not ansible_check_mode
+
+- name: Reprove the empty runtime boundary before restoring the ownership marker
+  ansible.builtin.include_tasks: verify_runtime_absent.yml
+  when:
+    - >-
+      forward_proxy_runtime_absence_verified_internal | default(false) | bool
+      or forward_proxy_new_runtime_removal_authorization_internal.authorized
+        | default(false) | bool
+    - not ansible_check_mode
 
 - name: Restore the previous forward proxy ownership marker
   lit.supplementary.atomic_path:

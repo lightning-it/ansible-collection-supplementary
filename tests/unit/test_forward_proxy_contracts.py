@@ -193,34 +193,73 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("'quadlet_checksum': ''", transition[runtime_absent:checkpoint])
 
     def test_rollback_reproves_runtime_absence_at_each_final_file_boundary(self) -> None:
-        existing = ENABLED_EXISTING_ROLLBACK.read_text(encoding="utf-8")
-        first_run = ENABLED_FIRST_RUN_ROLLBACK.read_text(encoding="utf-8")
-        transition = TRANSITION.read_text(encoding="utf-8")
-        restore = RESTORE.read_text(encoding="utf-8")
-        remove = REMOVE.read_text(encoding="utf-8")
+        existing_tasks = yaml.safe_load(ENABLED_EXISTING_ROLLBACK.read_text(encoding="utf-8"))
+        first_run_tasks = yaml.safe_load(ENABLED_FIRST_RUN_ROLLBACK.read_text(encoding="utf-8"))
+        transition_tasks = yaml.safe_load(TRANSITION.read_text(encoding="utf-8"))
+        restore_tasks = yaml.safe_load(RESTORE.read_text(encoding="utf-8"))
+        remove_tasks = yaml.safe_load(REMOVE.read_text(encoding="utf-8"))
 
-        existing_restore = existing.index("Restore previous forward proxy managed files")
-        existing_boundary = existing.index("forward_proxy_reprove_runtime_absence_before_mutation", existing_restore)
-        existing_section = existing[existing_restore : existing_boundary + 500]
-        self.assertIn("forward_proxy_runtime_absence_verified_internal", existing_section)
-        self.assertIn("forward_proxy_new_runtime_removal_authorization_internal.authorized", existing_section)
-        self.assertIn("Reprove the empty runtime boundary for this restore mutation", restore)
-        self.assertIn("verify_runtime_absent.yml", restore)
+        def task(tasks: list[dict[str, object]], name: str) -> dict[str, object]:
+            return next(item for item in tasks if item["name"] == name)
 
-        first_run_unlink = first_run.index("Remove each verified first-run file at its exact mutation boundary")
-        first_run_boundary = first_run.index("forward_proxy_reprove_runtime_absence_before_mutation", first_run_unlink)
-        first_run_section = first_run[first_run_unlink : first_run_boundary + 650]
-        self.assertIn("forward_proxy_runtime_absence_verified_internal", first_run_section)
-        self.assertIn("forward_proxy_new_runtime_removal_authorization_internal.authorized", first_run_section)
-        self.assertIn("Reprove the empty runtime boundary for this unlink mutation", remove)
-        self.assertIn("verify_runtime_absent.yml", remove)
+        existing_restore = task(existing_tasks, "Restore previous forward proxy managed files")
+        existing_guard = str(existing_restore["vars"]["forward_proxy_reprove_runtime_absence_before_mutation"])
+        self.assertIn("forward_proxy_runtime_absence_verified_internal", existing_guard)
+        self.assertIn("forward_proxy_new_runtime_removal_authorization_internal.authorized", existing_guard)
 
-        marker_reproof = transition.index(
-            "Reprove the empty runtime boundary immediately before deleting ownership evidence"
+        first_run_unlink = task(first_run_tasks, "Remove each verified first-run file at its exact mutation boundary")
+        first_run_guard = str(first_run_unlink["vars"]["forward_proxy_reprove_runtime_absence_before_mutation"])
+        self.assertIn("forward_proxy_runtime_absence_verified_internal", first_run_guard)
+        self.assertIn("forward_proxy_new_runtime_removal_authorization_internal.authorized", first_run_guard)
+
+        restore_names = [item["name"] for item in restore_tasks]
+        self.assertLess(
+            restore_names.index("Require one exact transaction or previous file before restoration"),
+            restore_names.index("Reprove the empty runtime boundary for this restore mutation"),
         )
-        marker_unlink = transition.index("Remove the ownership marker at its exact disabled-state mutation boundary")
-        self.assertLess(marker_reproof, marker_unlink)
-        self.assertIn("verify_runtime_absent.yml", transition[marker_reproof:marker_unlink])
+        self.assertLess(
+            restore_names.index("Reprove the empty runtime boundary for this restore mutation"),
+            restore_names.index("Restore one exact previous forward proxy managed file"),
+        )
+        restore_guard = task(restore_tasks, "Reprove the empty runtime boundary for this restore mutation")
+        self.assertEqual("verify_runtime_absent.yml", restore_guard["ansible.builtin.include_tasks"])
+
+        remove_names = [item["name"] for item in remove_tasks]
+        self.assertLess(
+            remove_names.index("Revalidate the owned file parent chain at the removal boundary"),
+            remove_names.index("Reprove the empty runtime boundary for this unlink mutation"),
+        )
+        self.assertLess(
+            remove_names.index("Reprove the empty runtime boundary for this unlink mutation"),
+            remove_names.index("Atomically unlink the exact verified owned file"),
+        )
+        remove_guard = task(remove_tasks, "Reprove the empty runtime boundary for this unlink mutation")
+        self.assertEqual("verify_runtime_absent.yml", remove_guard["ansible.builtin.include_tasks"])
+
+        existing_names = [item["name"] for item in existing_tasks]
+        for proof, mutation in (
+            (
+                "Reprove the empty runtime boundary before restoring the previous Quadlet",
+                "Restore the previous managed forward proxy Quadlet",
+            ),
+            (
+                "Reprove the empty runtime boundary before restoring the ownership marker",
+                "Restore the previous forward proxy ownership marker",
+            ),
+        ):
+            self.assertLess(existing_names.index(proof), existing_names.index(mutation))
+            self.assertEqual("verify_runtime_absent.yml", task(existing_tasks, proof)["ansible.builtin.include_tasks"])
+
+        self.assertNotIn(
+            "Reprove the empty runtime boundary immediately before deleting ownership evidence",
+            [item["name"] for item in transition_tasks],
+        )
+        for name in (
+            "Remove each managed file at its exact disabled-state mutation boundary",
+            "Remove the ownership marker at its exact disabled-state mutation boundary",
+        ):
+            guard = str(task(transition_tasks, name)["vars"]["forward_proxy_reprove_runtime_absence_before_mutation"])
+            self.assertIn("forward_proxy_disabled_checkpoint_manifest_internal is defined", guard)
 
     def test_readiness_uses_protocol_evidence_and_revalidates_runtime(self) -> None:
         readiness = READINESS.read_text(encoding="utf-8")
