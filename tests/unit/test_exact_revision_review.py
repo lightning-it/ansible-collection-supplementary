@@ -483,11 +483,34 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                 self.assertIn('-f "inputs[producer_run_id]=${PRODUCER_RUN_ID}"', rerun_job)
                 legacy_binding = 'test "${GITHUB_WORKFLOW_SHA}" = "${EXPECTED_BASE}"'
                 explicit_binding = 'test "${EXECUTED_WORKFLOW_SHA}" = "${EXPECTED_BASE}"'
-                self.assertEqual(
-                    1,
-                    rerun_job.count(legacy_binding) + rerun_job.count(explicit_binding),
-                    "the protected workflow SHA must have exactly one base binding",
-                )
+                if name == "copilot-review.yml":
+                    self.assertNotIn(legacy_binding, rerun_job)
+                    self.assertNotIn(explicit_binding, rerun_job)
+                    self.assertIn(
+                        "TRUSTED_WORKFLOW_SHA: ${{ github.workflow_sha }}",
+                        rerun_job,
+                    )
+                    self.assertIn(
+                        "TRUSTED_WORKFLOW_REF: ${{ github.workflow_ref }}",
+                        rerun_job,
+                    )
+                    self.assertIn('if [ "${BASE_REF}" = develop ]; then', rerun_job)
+                    self.assertIn(
+                        'test "${TRUSTED_WORKFLOW_SHA}" = "${EXPECTED_BASE}"',
+                        rerun_job,
+                    )
+                    self.assertIn('test "${BASE_REF}" = main', rerun_job)
+                    self.assertIn(
+                        "compare/${TRUSTED_WORKFLOW_SHA}...${default_head}",
+                        rerun_job,
+                    )
+                    self.assertIn(".protected == true", rerun_job)
+                else:
+                    self.assertEqual(
+                        1,
+                        rerun_job.count(legacy_binding) + rerun_job.count(explicit_binding),
+                        "the protected release workflow SHA must have exactly one base binding",
+                    )
                 if explicit_binding in rerun_job:
                     self.assertIn(
                         "EXECUTED_WORKFLOW_SHA: ${{ github.workflow_sha }}",
