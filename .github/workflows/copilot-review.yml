@@ -1658,7 +1658,9 @@ jobs:
       - name: Require the exact protected main base helper
         env:
           EVENT_BASE: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
           PINNED_MAIN_HELPER: 2710c06c4482d4d626b84237db865bbc6504897f
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           [[ "${EVENT_BASE}" =~ ^[0-9a-f]{40}$ ]]
@@ -1667,6 +1669,15 @@ jobs:
             echo "Advance the protected main helper pin through a normal PR to develop before promotion." >&2
             exit 1
           fi
+          live_main="$(gh api "repos/${REPOSITORY}/branches/main")"
+          jq -e \
+            --arg event_base "${EVENT_BASE}" \
+            --arg pinned_main_helper "${PINNED_MAIN_HELPER}" '
+              .name == "main"
+              and .protected == true
+              and .commit.sha == $event_base
+              and .commit.sha == $pinned_main_helper
+            ' <<<"${live_main}" >/dev/null
 
   # Maintained exact-base contract for develop-to-main promotions: advance
   # both SHA literals through a normal protected PR to develop whenever main

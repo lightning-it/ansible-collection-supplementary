@@ -393,26 +393,33 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         self.assertNotIn("controller_ancestry", copilot)
         self.assertEqual(2, copilot.count('test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"'))
-        self.assertEqual(2, copilot.count("and .protected == true"))
+        self.assertEqual(3, copilot.count("and .protected == true"))
 
         handoff = copilot.split("  request-protected-verifier-reevaluation-develop:", 1)[1]
-        self.assertIn("uses: ./.github/workflows/current-revision-rerun.yml", handoff)
+        develop_handoff, main_jobs = handoff.split("  validate-protected-main-helper-pin:", 1)
+        main_guard, main_handoff = main_jobs.split(
+            "  request-protected-verifier-reevaluation-main:",
+            1,
+        )
+        self.assertIn("uses: ./.github/workflows/current-revision-rerun.yml", develop_handoff)
         self.assertIn(
             "uses: lightning-it/ansible-collection-supplementary/.github/workflows/"
             "current-revision-rerun.yml@2710c06c4482d4d626b84237db865bbc6504897f",
-            handoff,
+            main_handoff,
         )
         self.assertIn(
             "github.event.pull_request.base.sha == '2710c06c4482d4d626b84237db865bbc6504897f'",
-            handoff,
+            main_handoff,
         )
-        self.assertIn("validate-protected-main-helper-pin:", handoff)
         self.assertIn(
             "PINNED_MAIN_HELPER: 2710c06c4482d4d626b84237db865bbc6504897f",
-            handoff,
+            main_guard,
         )
-        self.assertIn("needs.validate-protected-main-helper-pin.result == 'success'", handoff)
-        self.assertIn("Advance the protected main helper pin through a normal PR to develop", handoff)
+        self.assertIn('live_main="$(gh api "repos/${REPOSITORY}/branches/main")"', main_guard)
+        self.assertIn("and .protected == true", main_guard)
+        self.assertIn("and .commit.sha == $event_base", main_guard)
+        self.assertIn("needs.validate-protected-main-helper-pin.result == 'success'", main_handoff)
+        self.assertIn("Advance the protected main helper pin through a normal PR to develop", main_guard)
         self.assertNotIn("current-revision-rerun.yml/dispatches", handoff)
         self.assertNotIn("ref=${BASE_REF}", handoff)
         for required_input in (
@@ -422,7 +429,8 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             "expected_head",
             "producer_run_id",
         ):
-            self.assertIn(required_input, handoff)
+            self.assertIn(required_input, develop_handoff)
+            self.assertIn(required_input, main_handoff)
 
     def test_release_app_ancestry_backmerge_uses_deterministic_controller(
         self,

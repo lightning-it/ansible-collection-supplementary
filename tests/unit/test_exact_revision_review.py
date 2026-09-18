@@ -478,33 +478,44 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                 rerun_job = workflow.split(rerun_job_marker, 1)[1]
                 self.assertIn("actions: write", rerun_job)
                 if name == "copilot-review.yml":
-                    self.assertIn("uses: ./.github/workflows/current-revision-rerun.yml", rerun_job)
+                    develop_job, main_jobs = rerun_job.split("  validate-protected-main-helper-pin:", 1)
+                    main_guard, main_job = main_jobs.split(
+                        "  request-protected-verifier-reevaluation-main:",
+                        1,
+                    )
+                    self.assertIn("uses: ./.github/workflows/current-revision-rerun.yml", develop_job)
                     self.assertIn(
                         "uses: lightning-it/ansible-collection-supplementary/.github/workflows/"
                         "current-revision-rerun.yml@2710c06c4482d4d626b84237db865bbc6504897f",
-                        rerun_job,
+                        main_job,
                     )
                     self.assertIn(
                         "github.event.pull_request.base.sha == '2710c06c4482d4d626b84237db865bbc6504897f'",
-                        rerun_job,
+                        main_job,
                     )
-                    self.assertIn("validate-protected-main-helper-pin:", rerun_job)
                     self.assertIn(
                         "PINNED_MAIN_HELPER: 2710c06c4482d4d626b84237db865bbc6504897f",
-                        rerun_job,
+                        main_guard,
                     )
-                    self.assertIn('if [ "${EVENT_BASE}" != "${PINNED_MAIN_HELPER}" ]; then', rerun_job)
+                    self.assertIn('if [ "${EVENT_BASE}" != "${PINNED_MAIN_HELPER}" ]; then', main_guard)
+                    self.assertIn('live_main="$(gh api "repos/${REPOSITORY}/branches/main")"', main_guard)
+                    self.assertIn("and .protected == true", main_guard)
+                    self.assertIn("and .commit.sha == $event_base", main_guard)
                     self.assertIn(
                         "needs.validate-protected-main-helper-pin.result == 'success'",
-                        rerun_job,
+                        main_job,
                     )
                     self.assertNotIn("current-revision-rerun.yml/dispatches", rerun_job)
                     self.assertNotIn('-f "ref=${BASE_REF}"', rerun_job)
-                    self.assertIn("base_ref: ${{ github.event.pull_request.base.ref }}", rerun_job)
-                    self.assertIn("pr_number: ${{ github.event.pull_request.number }}", rerun_job)
-                    self.assertIn("expected_base: ${{ github.event.pull_request.base.sha }}", rerun_job)
-                    self.assertIn("expected_head: ${{ github.event.pull_request.head.sha }}", rerun_job)
-                    self.assertIn("producer_run_id: ${{ github.run_id }}", rerun_job)
+                    for required_input in (
+                        "base_ref: ${{ github.event.pull_request.base.ref }}",
+                        "pr_number: ${{ github.event.pull_request.number }}",
+                        "expected_base: ${{ github.event.pull_request.base.sha }}",
+                        "expected_head: ${{ github.event.pull_request.head.sha }}",
+                        "producer_run_id: ${{ github.run_id }}",
+                    ):
+                        self.assertIn(required_input, develop_job)
+                        self.assertIn(required_input, main_job)
                     self.assertNotIn("openai/codex-action@", rerun_job)
                     continue
                 self.assertIn("current-revision-rerun.yml/dispatches", rerun_job)
@@ -586,7 +597,10 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         request_job = workflow.split("  request-current-revision-review:", 1)[1].split(
             "  verify-current-revision-policy:", 1
         )[0]
-        review_job = workflow.split("  verify-current-revision-policy:", 1)[1]
+        review_job = workflow.split("  verify-current-revision-policy:", 1)[1].split(
+            "  request-protected-verifier-reevaluation-develop:",
+            1,
+        )[0]
         self.assertIn("github.event.pull_request.user.login == 'litroc'", request_job)
         self.assertIn('test "$(jq -r .user.login <<<"${pr}")" = litroc', request_job)
         self.assertNotIn("Contributor-funded review required", request_job)
