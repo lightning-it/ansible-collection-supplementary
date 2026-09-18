@@ -113,6 +113,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("forward_proxy_contract_results", verify)
         self.assertIn("Write provisional fail-closed forward proxy JUnit result", verify)
         self.assertIn("forward proxy Tiny verification did not complete", verify)
+        self.assertIn('errors="1"', verify)
+        self.assertIn('<error message="forward proxy Tiny verification did not complete"/>', verify)
         self.assertLess(
             verify.index("Write provisional fail-closed forward proxy JUnit result"),
             verify.index("Read rendered Squid policy"),
