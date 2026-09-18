@@ -66,6 +66,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         )
         self.assertIn("forward_proxy_invocation_lock.stat.exists", main)
         self.assertIn("forward_proxy_invocation_state_marker_after_lock.stat.exists", main)
+        self.assertIn("forward_proxy_transition_initialized_internal: false", main)
         self.assertIn("Exercise a disabled unowned invocation without a lock parent", converge)
         self.assertIn("disabled unowned invocation to remain mutation-free", converge)
 
@@ -95,12 +96,31 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertLess(transition.index(preflight), transition.index(first_directory_mutation))
         self.assertLess(transition.index(preflight), transition.index(enabled_transition))
         self.assertNotIn("Verify the pinned Squid image was preloaded", enabled)
+        self.assertIn("forward_proxy_transition_initialized_internal: true", transition)
+        self.assertLess(
+            transition.index("forward_proxy_transition_initialized_internal: true"),
+            transition.index("ansible.builtin.include_tasks: enabled.yml"),
+        )
+        self.assertEqual(
+            2,
+            enabled.count("forward_proxy_transition_initialized_internal | default(false) | bool"),
+        )
 
     def test_tiny_evidence_is_per_contract_and_disposition_bound(self) -> None:
         verify = VERIFY.read_text(encoding="utf-8")
         cleanup = CLEANUP.read_text(encoding="utf-8")
         release_eligibility = RELEASE_ELIGIBILITY.read_text(encoding="utf-8")
         self.assertIn("forward_proxy_contract_results", verify)
+        self.assertIn("Write provisional fail-closed forward proxy JUnit result", verify)
+        self.assertIn("forward proxy Tiny verification did not complete", verify)
+        self.assertLess(
+            verify.index("Write provisional fail-closed forward proxy JUnit result"),
+            verify.index("Read rendered Squid policy"),
+        )
+        self.assertLess(
+            verify.index("Read rendered Squid policy"),
+            verify.index("Write final per-contract forward proxy JUnit result"),
+        )
         self.assertIn("Keep every dynamic boolean inside one native expression", verify)
         self.assertIn("{% for contract in forward_proxy_contract_results %}", verify)
         self.assertIn("forward_proxy_failed_contracts", verify)

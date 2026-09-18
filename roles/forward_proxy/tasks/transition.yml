@@ -577,6 +577,11 @@
     - forward_proxy_state_marker.stat.exists
     - not ansible_check_mode
 
+- name: Record completed initialization before the rollback-protected apply boundary
+  ansible.builtin.set_fact:
+    forward_proxy_transition_initialized_internal: true
+  when: forward_proxy_enabled | bool
+
 - name: Apply the enabled forward proxy state
   ansible.builtin.include_tasks: enabled.yml
   when: forward_proxy_enabled | bool

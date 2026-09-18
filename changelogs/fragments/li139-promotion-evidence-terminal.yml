@@ -1,0 +1,8 @@
+---
+bugfixes:
+  - >-
+    Preserve a fail-closed Tiny JUnit artifact even when forward-proxy
+    verification aborts before the final per-contract report is assembled.
+  - >-
+    Bind forward-proxy rollback handlers to an explicit completed transition
+    initialization boundary.
