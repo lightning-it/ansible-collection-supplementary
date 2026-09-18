@@ -43,7 +43,12 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("guacamole_deploy_api_session_timeout_minutes <= 1440", asserts)
         self.assertNotIn("guacamole_deploy_api_session_timeout_minutes | int", asserts)
         self.assertIn("name: API_SESSION_TIMEOUT", pod)
+        self.assertIn(
+            "Apache Guacamole defines API_SESSION_TIMEOUT in minutes",
+            pod,
+        )
         self.assertIn("guacamole_deploy_api_session_timeout_minutes | string | to_json", pod)
+        self.assertNotIn("guacamole_deploy_api_session_timeout_minutes * 60000", pod)
 
     def test_host_port_rejects_yaml_booleans_and_is_bounded(self) -> None:
         asserts = ASSERTS.read_text(encoding="utf-8")

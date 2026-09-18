@@ -8,6 +8,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ASSERTS = ROOT / "roles" / "forward_proxy" / "tasks" / "assert.yml"
 MAIN = ROOT / "roles" / "forward_proxy" / "tasks" / "main.yml"
+TRANSITION = ROOT / "roles" / "forward_proxy" / "tasks" / "transition.yml"
+ENABLED = ROOT / "roles" / "forward_proxy" / "tasks" / "enabled.yml"
 READINESS = ROOT / "roles" / "forward_proxy" / "tasks" / "verify_runtime_ready.yml"
 RESTORE = ROOT / "roles" / "forward_proxy" / "tasks" / "restore_managed_file.yml"
 README = ROOT / "roles" / "forward_proxy" / "README.md"
@@ -76,6 +78,23 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("len(response) > 65536", readiness)
         self.assertIn("Reinspect the Pod identity after the Squid protocol probe", readiness)
         self.assertIn("Require the same captured runtime after the Squid protocol probe", readiness)
+
+    def test_runtime_image_preflight_precedes_every_enabled_state_mutation(self) -> None:
+        transition = TRANSITION.read_text(encoding="utf-8")
+        enabled = ENABLED.read_text(encoding="utf-8")
+
+        preflight = "Verify the pinned Squid image before any enabled-state mutation"
+        first_directory_mutation = "Create and revalidate every trusted forward proxy parent boundary"
+        enabled_transition = "Apply the enabled forward proxy state"
+
+        self.assertIn(preflight, transition)
+        self.assertIn("forward_proxy_enabled | bool", transition)
+        self.assertIn("forward_proxy_manage_runtime | bool", transition)
+        self.assertIn(first_directory_mutation, transition)
+        self.assertIn(enabled_transition, transition)
+        self.assertLess(transition.index(preflight), transition.index(first_directory_mutation))
+        self.assertLess(transition.index(preflight), transition.index(enabled_transition))
+        self.assertNotIn("Verify the pinned Squid image was preloaded", enabled)
 
     def test_tiny_evidence_is_per_contract_and_disposition_bound(self) -> None:
         verify = VERIFY.read_text(encoding="utf-8")

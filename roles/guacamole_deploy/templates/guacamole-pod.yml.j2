@@ -37,6 +37,7 @@ spec:
         - {name: POSTGRESQL_USERNAME, value: {{ guacamole_deploy_db_user | to_json }}}
         - {name: POSTGRESQL_PASSWORD, value: {{ guacamole_deploy_secrets.db_password | to_json }}}
         - {name: REMOTE_IP_VALVE_ENABLED, value: "true"}
+{# Apache Guacamole defines API_SESSION_TIMEOUT in minutes. #}
         - {name: API_SESSION_TIMEOUT, value: {{ guacamole_deploy_api_session_timeout_minutes | string | to_json }}}
 {% if guacamole_deploy_oidc_enabled | bool %}
         - {name: OPENID_ENABLED, value: "true"}
