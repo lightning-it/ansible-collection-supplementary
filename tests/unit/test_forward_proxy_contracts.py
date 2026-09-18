@@ -90,6 +90,8 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn(preflight, transition)
         self.assertIn("forward_proxy_enabled | bool", transition)
         self.assertIn("forward_proxy_manage_runtime | bool", transition)
+        self.assertIn(first_directory_mutation, transition)
+        self.assertIn(enabled_transition, transition)
         self.assertLess(transition.index(preflight), transition.index(first_directory_mutation))
         self.assertLess(transition.index(preflight), transition.index(enabled_transition))
         self.assertNotIn("Verify the pinned Squid image was preloaded", enabled)
