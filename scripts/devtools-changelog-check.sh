@@ -95,15 +95,26 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
           is_trusted_release_branch=false
         fi
         ;;
+      "")
+        # Preserve deterministic local checks outside GitHub Actions.
+        ;;
+      *)
+        is_trusted_release_branch=false
+        ;;
     esac
   fi
   if [[ "$head_ref" == develop && "$base_ref" == main ]]; then
-    if [ "${GITHUB_EVENT_NAME:-}" != pull_request ] || {
-      [ -n "${GITHUB_REPOSITORY:-}" ] &&
-      [ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ]
-    }; then
-      is_release_promotion=true
-    fi
+    case "${GITHUB_EVENT_NAME:-}" in
+      pull_request)
+        if [ -n "${GITHUB_REPOSITORY:-}" ] && \
+            [ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ]; then
+          is_release_promotion=true
+        fi
+        ;;
+      push|"")
+        is_release_promotion=true
+        ;;
+    esac
   fi
 
   if grep -E "$generated_re" <<<"$changed"; then

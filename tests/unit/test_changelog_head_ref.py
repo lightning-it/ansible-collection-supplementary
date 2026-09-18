@@ -174,6 +174,24 @@ class ChangelogHeadRefTests(unittest.TestCase):
             0,
             policy_result(head_ref="develop", base_ref="main", head_repository="").returncode,
         )
+        for unsupported_event in ("workflow_dispatch", "schedule"):
+            with self.subTest(event=unsupported_event):
+                self.assertNotEqual(
+                    0,
+                    policy_result(
+                        head_ref="release/v3.3.1",
+                        base_ref="main",
+                        event_name=unsupported_event,
+                    ).returncode,
+                )
+                self.assertNotEqual(
+                    0,
+                    policy_result(
+                        head_ref="develop",
+                        base_ref="main",
+                        event_name=unsupported_event,
+                    ).returncode,
+                )
 
         candidate_tree = self.git(repository, "rev-parse", f"{head}^{{tree}}")
         release_merge = self.git(

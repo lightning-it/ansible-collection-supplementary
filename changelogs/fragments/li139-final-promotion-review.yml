@@ -10,4 +10,5 @@ bugfixes:
     validation remains redacted. Explicitly configured target Python
     interpreters remain supported, while release, back-sync, and develop-to-main
     promotion privileges are bound to canonical repositories and target branches
-    on both pull-request and post-merge push checks.
+    on both pull-request and post-merge push checks; manual and unknown event
+    types fail closed.
