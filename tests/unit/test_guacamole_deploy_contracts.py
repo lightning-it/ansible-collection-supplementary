@@ -13,6 +13,12 @@ POD = ROOT / "roles" / "guacamole_deploy" / "templates" / "guacamole-pod.yml.j2"
 
 
 class GuacamoleDeployContractTests(unittest.TestCase):
+    def test_connection_contract_validation_redacts_inventory_credentials(self) -> None:
+        asserts = ASSERTS.read_text(encoding="utf-8")
+        connection_contract = asserts.split("- name: Validate declared Guacamole connection contracts", 1)[1]
+
+        self.assertIn("no_log: true", connection_contract)
+
     def test_breakglass_sql_uses_psql_quoted_variables(self) -> None:
         source = TASKS.read_text(encoding="utf-8")
 

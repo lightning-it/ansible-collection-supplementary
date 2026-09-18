@@ -50,11 +50,6 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
     grep -Fxq "$1" <<<"$labels"
   }
 
-  if has_label skip-changelog || has_label documentation || has_label ci || has_label tests; then
-    echo "Changelog fragment requirement skipped by PR label."
-    exit 0
-  fi
-
   generated_re="^(CHANGELOG\\.(md|rst)|changelogs/(changelog|\\.plugin-cache)\\.yaml)$"
   is_release_branch=false
   is_trusted_release_branch=false
@@ -71,7 +66,13 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
       is_trusted_release_branch=false
       if [ "${GITHUB_HEAD_REPOSITORY:-}" = "${GITHUB_REPOSITORY:-}" ] && \
           [ -n "${GITHUB_REPOSITORY:-}" ] && \
-          [ "$release_pr_author" = "lightning-it-release-automation[bot]" ]; then
+          [ "$release_pr_author" = "lightning-it-release-automation[bot]" ] && \
+          { \
+            { [[ "$head_ref" == release/v* ]] && [ "$base_ref" = main ]; \
+            } || \
+            { [[ "$head_ref" == backsync/release-* ]] && [ "$base_ref" = develop ]; \
+            }; \
+          }; then
         is_trusted_release_branch=true
       fi
     fi
@@ -94,6 +95,11 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
       exit 1
     fi
     echo "Release and release back-sync PRs manage generated changelog files."
+    exit 0
+  fi
+
+  if has_label skip-changelog || has_label documentation || has_label ci || has_label tests; then
+    echo "Changelog fragment requirement skipped by PR label."
     exit 0
   fi
 

@@ -45,6 +45,12 @@ class ChangelogHeadRefTests(unittest.TestCase):
         self.assertIn('[ "$release_pr_author" = "lightning-it-release-automation[bot]" ]', policy)
         self.assertIn("is_trusted_release_branch", policy)
         self.assertIn("A release-shaped branch name alone grants no privilege.", policy)
+        self.assertIn('[[ "$head_ref" == release/v* ]] && [ "$base_ref" = main ]', policy)
+        self.assertIn('[[ "$head_ref" == backsync/release-* ]] && [ "$base_ref" = develop ]', policy)
+        self.assertLess(
+            policy.index('if grep -E "$generated_re"'),
+            policy.index("if has_label skip-changelog"),
+        )
         for variable in (
             "GITHUB_EVENT_NAME",
             "GITHUB_REPOSITORY",
@@ -56,6 +62,7 @@ class ChangelogHeadRefTests(unittest.TestCase):
                 self.assertIn(f"${{{variable}:+-e {variable}}}", runner)
         self.assertIn("github.event.pull_request.head.repo.full_name", workflow)
         self.assertIn("github.event.pull_request.user.login", workflow)
+        self.assertIn("github.event_name != 'pull_request' && github.repository || ''", workflow)
         self.assertIn(
             "GITHUB_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}", changelog_workflow
         )

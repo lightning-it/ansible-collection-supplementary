@@ -60,6 +60,8 @@ class ForwardProxyContractTests(unittest.TestCase):
 
     def test_readme_example_is_an_explicit_runnable_opt_in(self) -> None:
         readme = README.read_text(encoding="utf-8")
+        self.assertIn("`lit.foundational` 1.32.0 or newer", readme)
+        self.assertIn("`podman_systemd`", readme)
         self.assertIn("forward_proxy_enabled: true", readme)
         self.assertIn("forward_proxy_experimental_runtime_acceptance: true", readme)
         self.assertIn("forward_proxy_allowed_destination_domains:", readme)
@@ -131,8 +133,13 @@ class ForwardProxyContractTests(unittest.TestCase):
         readiness = READINESS.read_text(encoding="utf-8")
 
         self.assertIn("Require a Squid protocol response", readiness)
+        self.assertIn("Require the Ansible-discovered target Python interpreter", readiness)
+        self.assertIn('"{{ ansible_facts.discovered_interpreter_python }}"', readiness)
+        self.assertNotIn("- /usr/bin/python3", readiness)
         self.assertIn("x-squid-error", readiness)
         self.assertIn('while b"\\r\\n\\r\\n" not in response', readiness)
+        self.assertIn('has_complete_headers = b"\\r\\n\\r\\n" in response', readiness)
+        self.assertIn("if has_complete_headers and response.startswith", readiness)
         self.assertIn("len(response) > 65536", readiness)
         self.assertIn("Reinspect the Pod identity after the Squid protocol probe", readiness)
         self.assertIn("Require the same captured runtime after the Squid protocol probe", readiness)
