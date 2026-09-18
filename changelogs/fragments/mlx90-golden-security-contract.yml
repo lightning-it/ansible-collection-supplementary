@@ -1,0 +1,9 @@
+---
+security_fixes:
+  - >-
+    Bind MLX-90 Security intake and release preparation to duplicate-safe canonical
+    chain identifiers, immutable receipts, and exact automation identities.
+  - >-
+    Route the protected-main Security controller to the intake through an exact
+    App-authenticated workflow dispatch with live installation, allowlist, permission,
+    commit, pull-request, and native merge proof.

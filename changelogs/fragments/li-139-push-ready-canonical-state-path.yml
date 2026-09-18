@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Push-Ready now canonicalizes its private check-state path so protected
+    Exact-Revision tests also work on hosts with symlinked temporary roots.

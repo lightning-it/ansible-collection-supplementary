@@ -20,6 +20,7 @@ guacamole_deploy_oidc_jwks_endpoint: ""
 guacamole_deploy_oidc_issuer: ""
 guacamole_deploy_oidc_client_id: "guacamole"
 guacamole_deploy_oidc_redirect_uri: ""
+guacamole_deploy_api_session_timeout_minutes: 60
 guacamole_deploy_health_url: "http://{{ guacamole_deploy_host_ip }}:{{ guacamole_deploy_port }}/guacamole/"
 guacamole_deploy_api_url: "http://{{ guacamole_deploy_host_ip }}:{{ guacamole_deploy_port }}/guacamole/api"
 guacamole_deploy_connections: []

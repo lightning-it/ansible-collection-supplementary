@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Serialize the protected current-revision verifier re-evaluation PR number
+    as a workflow-dispatch string so GitHub accepts the fail-closed handoff
+    after a successful Exact-Revision Codex review.

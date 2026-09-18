@@ -1,0 +1,8 @@
+---
+security_fixes:
+  - >-
+    Require an explicit false Security classification for normal release
+    execution and an explicit true classification plus the release App
+    identity for MLX-90 Zero-Touch execution. Empty or malformed classifier
+    output now stops before protected environments or release credentials are
+    selected.

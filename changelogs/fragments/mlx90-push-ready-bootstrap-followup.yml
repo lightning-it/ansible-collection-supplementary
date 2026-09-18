@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Harden MLX-90 push readiness with complete collection gates, rootless
+    parity, pinned validators, reviewed pushes, bounded UTF-8 review input,
+    safe containers, and strict local Git checks.

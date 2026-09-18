@@ -1,0 +1,11 @@
+---
+bugfixes:
+  - >-
+    Keep artifact staging, AAP TLS trust, Cloudflare WARP rendering, Vault
+    bootstrap, and Vault Raft restore coverage executable in the
+    capability-minimized rootless light Molecule gate while restricting
+    numeric ownership to explicit, portable, canonical, trailing-slash-free,
+    owner-only unprivileged local test roots whose configured ownership equals
+    the controller's effective non-zero UID and GID, refusing non-local
+    execution before path inspection and symlinked AAP trust targets, while
+    preserving root-owned production defaults.

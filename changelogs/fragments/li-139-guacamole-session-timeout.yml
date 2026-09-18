@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    guacamole_deploy - add a bounded container API inactivity timeout and run
+    role prechecks before any host mutation.

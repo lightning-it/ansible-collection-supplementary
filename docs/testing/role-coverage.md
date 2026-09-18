@@ -6,14 +6,14 @@ Authoritative source: [`meta/role-coverage.yml`](../../meta/role-coverage.yml).
 
 ## Summary
 
-- Roles: 100
-- Root Molecule scenarios: 59
+- Roles: 101
+- Root Molecule scenarios: 60
 - Production roles: 2
-- Experimental roles: 97
+- Experimental roles: 98
 - Deprecated roles: 1
 - Runtime-container application policies: 6
 - Declared-evidence application policies: 5
-- Reviewed not-applicable application policies: 48
+- Reviewed not-applicable application policies: 49
 
 Profile states are dispositions, not inferred test results. Only `supported` profiles backed by real,
 evidence-producing scenarios are release-eligible.
@@ -50,9 +50,10 @@ promotion input only and never satisfy the release-required supported-target mat
 | dhcp_deploy | dhcp | network_service | experimental | — | rhel-9, ubuntu-24.04 | experimental | experimental | experimental | obtain_and_verify_a_real_network_lease | lit.foundational.kubeplay | — | Current scenario is render-only and disables runtime, package, systemd, and validation paths. | dhcp-deploy-basic |
 | forgejo_cac | forgejo | configuration_as_code | experimental | — | rhel-9 | experimental | experimental | experimental | apply_query_reconcile_and_delete_api_objects | — | — | CaC reconciliation and deletion are not proven against a production-supported Forgejo deployment. | forgejo-cac-basic |
 | forgejo_deploy | forgejo | web_application | experimental | — | rhel-9 | experimental | experimental | experimental | browser_and_authenticated_api | postgres_deploy, lit.foundational.kubeplay | — | Production persistence, TLS, restart, and browser/API workflows are not yet proven. | forgejo-deploy-basic |
+| forward_proxy | forward_proxy | network_service | experimental | — | rhel-8, rhel-9, rhel-10, ubuntu-22.04, ubuntu-24.04 | experimental | blocked-external-infrastructure | blocked-external-infrastructure | proxy_allowed_destinations_and_deny_direct_or_disallowed_traffic | lit.foundational.podman_systemd | A prepared rootful Podman and systemd host with governed outbound access | Tiny renders and validates the exact service contract, preserves fail-closed JUnit before contract evaluation, directly exercises the descriptor-safe managed-file restore primitive, and statically checks that enabled-state rescue is authorized only at the first mutation boundary after read-only preflight. Contract tests also bind complete check-mode reporting for runtime removal, activation, and restart, and require a resumable runtime-absent ownership checkpoint before file deletion. Tiny does not inject a live post-runtime-removal unlink failure, drive the full enabled-state rescue, or start Podman; live proxy traffic and host-firewall enforcement require the protected Wunderbox acceptance target. | forward-proxy-tiny |
 | gitlab_runner | gitlab_runner | runner | deprecated | — | — | deprecated | deprecated | deprecated | register_runner_and_execute_a_real_workload | — | GitLab service and runner registration token | Role is intentionally fail-closed and retained only to report its deprecated contract. | gitlab-runner-basic |
 | grafana_deploy | observability | web_application | experimental | — | ubuntu-22.04, ubuntu-24.04, rhel-9 | experimental | experimental | experimental | browser_and_authenticated_api | lit.foundational.kubeplay, lit.foundational.podman_systemd, loki_deploy | — | Current Incus scenario has no browser or authenticated API workflow. | atlas-observability-incus_heavy, wunderbox-monitoring-logging-basic |
-| guacamole_deploy | guacamole | web_application | experimental | — | ubuntu-24.04 | experimental | experimental | experimental | browser_oidc_breakglass_and_rdp_session | lit.foundational.kubeplay | Keycloak OIDC provider, RDP destination reachable through the management VLAN | Goal 07 production acceptance is maintained in the consumer automation repository. | — |
+| guacamole_deploy | guacamole | web_application | experimental | — | ubuntu-24.04 | experimental | experimental | experimental | browser_oidc_breakglass_and_rdp_session | lit.foundational.kubeplay | Keycloak OIDC provider, RDP destination reachable through the management VLAN | Goal 07 production acceptance is maintained in the consumer automation repository., Absolute RDP session duration remains a consumer or backend policy; the role controls the inactive Guacamole web/API session timeout. | — |
 | hetzner_object_storage_cac | hetzner_object_storage | configuration_as_code | experimental | — | ubuntu-24.04, rhel-9 | experimental | blocked-external-service | blocked-external-service | create_query_reconcile_and_remove_protected_s3_objects | amazon.aws, community.aws, community.hashi_vault | Paid Hetzner Object Storage project and protected S3 credentials | Tiny validates the real plan and negative safety contracts without calling the paid external API., Bucket deletion and S3 credential creation are deliberately outside the role. | hetzner-object-storage-tiny |
 | incus_esxi_image | esxi | infrastructure | experimental | — | ubuntu-24.04, rhel-9 | experimental | blocked-external-license | blocked-external-license | import_publish_use_and_cleanup_a_real_image | — | Privately licensed VMware ESXi image artifacts | Current scenario uses a fake Incus CLI and fake artifacts. | incus-esxi-image-basic |
 | incus_nested_esxi | esxi | infrastructure | experimental | — | ubuntu-24.04, rhel-9 | experimental | blocked-external-infrastructure | blocked-external-infrastructure | launch_query_and_destroy_a_real_nested_esxi_vm | — | Nested-virtualization-capable Incus host, Privately licensed VMware ESXi image | No root Molecule scenario exists. | — |
@@ -543,6 +544,22 @@ promotion input only and never satisfy the release-required supported-target mat
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
 - Known limitations: Production persistence, TLS, restart, and browser/API workflows are not yet proven.
 
+### `forward_proxy`
+
+- Purpose/classification: `network_service` in component `forward_proxy`.
+- Maturity/deprecation: `experimental` / `active`.
+- Supported targets: —; candidate targets: rhel-8, rhel-9, rhel-10, ubuntu-22.04, ubuntu-24.04.
+- Profiles: Tiny `experimental`, Heavy `blocked-external-infrastructure`, Application Acceptance `blocked-external-infrastructure`.
+- Acceptance surface: `proxy_allowed_destinations_and_deny_direct_or_disallowed_traffic`.
+- Role dependencies: lit.foundational.podman_systemd; exercised scenario dependencies: —.
+- External dependencies/blockers: A prepared rootful Podman and systemd host with governed outbound access.
+- Required-secret policy: Protected non-production credentials or licensed inputs are required for the declared external dependencies.
+- Local execution: `molecule test -s forward-proxy-tiny`; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
+- Candidate-target execution: no runnable candidate matrix is currently declared.
+- Reports/evidence: JUnit, structured evidence. Failed mandatory runs remain failures or infrastructure errors.
+- Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
+- Known limitations: Tiny renders and validates the exact service contract, preserves fail-closed JUnit before contract evaluation, directly exercises the descriptor-safe managed-file restore primitive, and statically checks that enabled-state rescue is authorized only at the first mutation boundary after read-only preflight. Contract tests also bind complete check-mode reporting for runtime removal, activation, and restart, and require a resumable runtime-absent ownership checkpoint before file deletion. Tiny does not inject a live post-runtime-removal unlink failure, drive the full enabled-state rescue, or start Podman; live proxy traffic and host-firewall enforcement require the protected Wunderbox acceptance target.
+
 ### `gitlab_runner`
 
 - Purpose/classification: `runner` in component `gitlab_runner`.
@@ -589,7 +606,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Candidate-target execution: no runnable candidate matrix is currently declared.
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
-- Known limitations: Goal 07 production acceptance is maintained in the consumer automation repository.
+- Known limitations: Goal 07 production acceptance is maintained in the consumer automation repository., Absolute RDP session duration remains a consumer or backend policy; the role controls the inactive Guacamole web/API session timeout.
 
 ### `hetzner_object_storage_cac`
 
@@ -1753,6 +1770,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | dhcp-deploy-basic | Tiny | experimental | partial | dhcp_deploy | — | not-applicable | — | Scenario exercises controller-side role behavior without deploying an independently versioned application. | False | False | False |
 | forgejo-cac-basic | Tiny | experimental | stub | forgejo_cac | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | forgejo-deploy-basic | Tiny | experimental | stub | forgejo_deploy | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
+| forward-proxy-tiny | Tiny | experimental | partial | forward_proxy | — | not-applicable | — | Scenario renders and reconciles the real service configuration without starting a privileged Podman or systemd runtime. It writes provisional fail-closed JUnit before verification, replaces it with per-contract evidence on completion, and exercises rollback only after explicit transition initialization. It is executed as local pre-merge evidence only and is not part of the protected quality matrix until the Wunderbox runtime acceptance target is available. | True | False | True |
 | gitlab-runner-basic | Tiny | deprecated | deprecation-contract | gitlab_runner | — | not-applicable | — | Scenario enforces a deprecation contract and intentionally does not deploy an independently versioned application. | False | False | False |
 | hetzner-object-storage-tiny | Tiny | experimental | partial | hetzner_object_storage_cac | — | not-applicable | — | Scenario validates the real provider contract and plan path without mutating a paid external service. | False | False | False |
 | incus-esxi-image-basic | Tiny | experimental | partial | incus_esxi_image | — | not-applicable | — | Scenario exercises controller-side role behavior without deploying an independently versioned application. | False | False | False |

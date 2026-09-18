@@ -897,16 +897,24 @@ def minimal_check_environment(state_root: Path) -> dict[str, str]:
     path_value = os.environ.get("PATH")
     if not path_value:
         raise RuntimeError("deterministic checks require PATH")
+    state_root = state_root.resolve(strict=True)
+    state_root.chmod(0o700)
     home = state_root / "home"
     temporary = state_root / "tmp"
+    runner_temporary = state_root / "runner-temp"
     home.mkdir(mode=0o700)
     temporary.mkdir(mode=0o700)
+    runner_temporary.mkdir(mode=0o700)
+    home.chmod(0o700)
+    temporary.chmod(0o700)
+    runner_temporary.chmod(0o700)
     environment = {
         "CI": "1",
         "HOME": str(home),
         "LANG": "C",
         "LC_ALL": "C",
         "PATH": path_value,
+        "RUNNER_TEMP": str(runner_temporary),
         "TMPDIR": str(temporary),
     }
     selected_engine = os.environ.get("WUNDER_CONTAINER_ENGINE")

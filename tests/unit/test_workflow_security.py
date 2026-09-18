@@ -368,7 +368,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             "      - name: Publish bound neutral result", 1
         )[0]
         publisher = copilot.split("      - name: Publish bound neutral result", 1)[1].split(
-            "  request-protected-verifier-reevaluation:", 1
+            "  request-protected-verifier-reevaluation-develop:", 1
         )[0]
 
         self.assertIn("id: copilot-review", verifier)
@@ -388,6 +388,49 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn('test -z "${BOUND_REVIEW_ID}"', publisher)
         self.assertIn('review_id:(if $review_id == "" then null else $review_id end)', publisher)
         self.assertEqual(3, publisher.count("validate_bound_review"))
+
+    def test_main_review_controller_is_exact_and_calls_same_revision_helper(self) -> None:
+        copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
+        self.assertNotIn("controller_ancestry", copilot)
+        self.assertEqual(2, copilot.count('test "${TRUSTED_WORKFLOW_SHA}" = "${default_head}"'))
+        self.assertEqual(3, copilot.count("and .protected == true"))
+
+        handoff = copilot.split("  request-protected-verifier-reevaluation-develop:", 1)[1]
+        develop_handoff, main_jobs = handoff.split("  validate-protected-main-helper-pin:", 1)
+        main_guard, main_handoff = main_jobs.split(
+            "  request-protected-verifier-reevaluation-main:",
+            1,
+        )
+        self.assertIn("uses: ./.github/workflows/current-revision-rerun.yml", develop_handoff)
+        self.assertIn(
+            "uses: lightning-it/ansible-collection-supplementary/.github/workflows/"
+            "current-revision-rerun.yml@2710c06c4482d4d626b84237db865bbc6504897f",
+            main_handoff,
+        )
+        self.assertIn(
+            "github.event.pull_request.base.sha == '2710c06c4482d4d626b84237db865bbc6504897f'",
+            main_handoff,
+        )
+        self.assertIn(
+            "PINNED_MAIN_HELPER: 2710c06c4482d4d626b84237db865bbc6504897f",
+            main_guard,
+        )
+        self.assertIn('live_main="$(gh api "repos/${REPOSITORY}/branches/main")"', main_guard)
+        self.assertIn("and .protected == true", main_guard)
+        self.assertIn("and .commit.sha == $event_base", main_guard)
+        self.assertIn("needs.validate-protected-main-helper-pin.result == 'success'", main_handoff)
+        self.assertIn("Advance the protected main helper pin through a normal PR to develop", main_guard)
+        self.assertNotIn("current-revision-rerun.yml/dispatches", handoff)
+        self.assertNotIn("ref=${BASE_REF}", handoff)
+        for required_input in (
+            "base_ref",
+            "pr_number",
+            "expected_base",
+            "expected_head",
+            "producer_run_id",
+        ):
+            self.assertIn(required_input, develop_handoff)
+            self.assertIn(required_input, main_handoff)
 
     def test_release_app_ancestry_backmerge_uses_deterministic_controller(
         self,
@@ -715,12 +758,26 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
     def test_self_hosted_pr_cells_require_exact_head_and_protected_environment(self) -> None:
         jobs = load_yaml(WORKFLOWS / "collection-ci.yml")["jobs"]
         guard = jobs["tiny-cells"]["if"]
+        tiny_aggregate = jobs["tiny"]
+        tiny_expectation = tiny_aggregate["steps"][0]["env"]["TINY_EXECUTION_EXPECTED"]
         self.assertIn("needs.quality-matrix.outputs.tiny_required == 'true'", guard)
         self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", guard)
         self.assertIn(
             "release/rep60-supplementary-protected-checkpoint-1-v5-successor-",
             guard,
         )
+        self.assertEqual(
+            ["quality-matrix", "tiny-cells", "security-classification"],
+            tiny_aggregate["needs"],
+        )
+        normalized_tiny_expectation = tiny_expectation.strip().removeprefix("${{").removesuffix("}}")
+        self.assertEqual(" ".join(guard.split()), " ".join(normalized_tiny_expectation.split()))
+        self.assertEqual(
+            "${{ needs.security-classification.result }}",
+            tiny_aggregate["steps"][0]["env"]["CLASSIFICATION_RESULT"],
+        )
+        self.assertIn('test "$CLASSIFICATION_RESULT" = success', tiny_aggregate["steps"][0]["run"])
+        self.assertIn('if [ "$TINY_EXECUTION_EXPECTED" = true ]; then', tiny_aggregate["steps"][0]["run"])
         self.assertNotIn("github.event_name == 'schedule'", guard)
         for job_name in ("heavy-cells", "acceptance-cells", "runtime-evidence"):
             protected_main_guard = jobs[job_name]["if"]

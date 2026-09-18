@@ -1,0 +1,603 @@
+---
+- name: Inspect a same-named systemd unit before any first activation writes
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - --system
+      - show
+      - "{{ forward_proxy_unit_name }}.service"
+      - --property=LoadState
+      - --value
+  register: forward_proxy_first_run_systemd_load_state
+  changed_when: false
+  failed_when: forward_proxy_first_run_systemd_load_state.rc != 0
+  check_mode: false
+  when:
+    - forward_proxy_manage_runtime | bool
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
+    - not ansible_check_mode
+
+- name: Inspect a same-named installed unit file before any first activation writes
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - --system
+      - list-unit-files
+      - "{{ forward_proxy_unit_name }}.service"
+      - --no-legend
+      - --no-pager
+  register: forward_proxy_first_run_systemd_unit_files
+  changed_when: false
+  failed_when: forward_proxy_first_run_systemd_unit_files.rc != 0
+  check_mode: false
+  when:
+    - forward_proxy_manage_runtime | bool
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
+    - not ansible_check_mode
+
+- name: Inspect a same-named Podman pod before any first activation writes
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - pod
+      - exists
+      - "{{ forward_proxy_unit_name }}"
+  register: forward_proxy_first_run_pod_state
+  changed_when: false
+  failed_when: forward_proxy_first_run_pod_state.rc not in [0, 1]
+  check_mode: false
+  when:
+    - forward_proxy_manage_runtime | bool
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
+    - not ansible_check_mode
+
+- name: Refuse a foreign same-named runtime before any managed-file write
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_first_run_systemd_load_state.stdout | trim == 'not-found'
+      - forward_proxy_first_run_systemd_unit_files.stdout_lines | length == 0
+      - forward_proxy_first_run_pod_state.rc == 1
+    fail_msg: >-
+      A same-named systemd unit, installed unit file, or Podman pod already
+      exists without this role's ownership marker. Stop before writing files,
+      adopting, restarting, or removing that foreign runtime.
+  when:
+    - forward_proxy_manage_runtime | bool
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
+    - not ansible_check_mode
+
+- name: Revalidate the existing runtime before switching to render-only mode
+  ansible.builtin.include_tasks: revalidate_existing_runtime_removal.yml
+  when:
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Report the planned runtime removal for render-only mode in check mode
+  ansible.builtin.debug:
+    msg: >-
+      The owned forward proxy runtime would be removed while its rendered
+      configuration remains managed by a normal apply.
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+
+- name: Enter the rollback boundary before removing the previous runtime
+  ansible.builtin.set_fact:
+    forward_proxy_transition_initialized_internal: true
+  when:
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Remove the previous runtime when switching to render-only mode
+  ansible.builtin.include_role:
+    name: lit.foundational.podman_systemd
+  vars:
+    podman_systemd_action: absent
+    podman_systemd_unit_name: "{{ forward_proxy_unit_name }}"
+    podman_systemd_description: LIT Squid forward proxy
+    podman_systemd_manifest_path: "{{ forward_proxy_pod_manifest_path }}"
+    podman_systemd_scope: "{{ forward_proxy_systemd_scope }}"
+    podman_systemd_quadlet_dir: "{{ forward_proxy_quadlet_dir }}"
+  when:
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Prove the previous runtime is absent before rendering replacement state
+  ansible.builtin.include_tasks: verify_runtime_absent.yml
+  when:
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Record verified runtime absence for render-only rollback
+  ansible.builtin.set_fact:
+    forward_proxy_runtime_absence_verified_internal: true
+  when:
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Revalidate the Squid policy parent chain at the mutation boundary
+  ansible.builtin.include_tasks: ensure_directory.yml
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  loop_control:
+    loop_var: forward_proxy_directory_path
+  vars:
+    forward_proxy_directory_creation_allowed: false
+  when: >-
+    forward_proxy_directory_path == (forward_proxy_config_path | dirname)
+    or (forward_proxy_config_path | dirname).startswith(
+      forward_proxy_directory_path.rstrip('/') ~ '/'
+    )
+
+- name: Reinspect the Squid policy at the mutation boundary
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_config_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_config_write_boundary
+
+- name: Require the expected Squid policy at the mutation boundary
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          not forward_proxy_state_marker.stat.exists
+          and not forward_proxy_config_write_boundary.stat.exists
+          and not forward_proxy_config_write_boundary.stat.islnk | default(false)
+        )
+        or (
+          forward_proxy_state_marker.stat.exists
+          and forward_proxy_config_write_boundary.stat.isreg | default(false)
+          and not forward_proxy_config_write_boundary.stat.islnk | default(false)
+          and forward_proxy_config_write_boundary.stat.checksum
+            == dict(
+              forward_proxy_previous_state_manifest.managed_paths
+              | zip(forward_proxy_previous_state_manifest.managed_checksums)
+            )[forward_proxy_config_path]
+          and forward_proxy_config_write_boundary.stat.mode
+            == dict(
+              forward_proxy_previous_state_manifest.managed_paths
+              | zip(forward_proxy_previous_state_manifest.managed_modes)
+            )[forward_proxy_config_path]
+          and (
+            forward_proxy_config_write_boundary.stat.pw_name | default('')
+              == forward_proxy_file_owner | string
+            or forward_proxy_config_write_boundary.stat.uid | string
+              == forward_proxy_file_owner | string
+          )
+          and (
+            forward_proxy_config_write_boundary.stat.gr_name | default('')
+              == forward_proxy_file_group | string
+            or forward_proxy_config_write_boundary.stat.gid | string
+              == forward_proxy_file_group | string
+          )
+        )
+    fail_msg: >-
+      The Squid policy changed after inspection. Stop before overwriting a
+      foreign or concurrent write.
+
+- name: Enter the rollback boundary before writing the Squid policy
+  ansible.builtin.set_fact:
+    forward_proxy_transition_initialized_internal: true
+  when:
+    - not ansible_check_mode
+    - not forward_proxy_transition_initialized_internal | default(false) | bool
+
+- name: Render the Squid policy with an atomic no-follow write
+  lit.supplementary.atomic_path:
+    content: "{{ lookup('ansible.builtin.template', 'squid.conf.j2') }}"
+    path: "{{ forward_proxy_config_path }}"
+    state: file
+    owner: "{{ forward_proxy_file_owner }}"
+    group: "{{ forward_proxy_file_group }}"
+    mode: "0644"
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"
+    allow_absent: "{{ not forward_proxy_state_marker.stat.exists }}"
+    expected_checksum: >-
+      {{
+        dict(
+          forward_proxy_previous_state_manifest.managed_paths
+          | zip(forward_proxy_previous_state_manifest.managed_checksums)
+        )[forward_proxy_config_path]
+        if forward_proxy_state_marker.stat.exists
+        else omit
+      }}
+  register: forward_proxy_squid_config_result
+  when: >-
+    not ansible_check_mode
+    or forward_proxy_config_path | dirname not in forward_proxy_planned_directories_internal
+
+- name: Bind the rendered Squid policy to this transaction
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_config_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_squid_config_transaction_stat
+  when: not ansible_check_mode
+
+- name: Revalidate the Pod manifest parent chain at the mutation boundary
+  ansible.builtin.include_tasks: ensure_directory.yml
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  loop_control:
+    loop_var: forward_proxy_directory_path
+  vars:
+    forward_proxy_directory_creation_allowed: false
+  when: >-
+    forward_proxy_directory_path == (forward_proxy_pod_manifest_path | dirname)
+    or (forward_proxy_pod_manifest_path | dirname).startswith(
+      forward_proxy_directory_path.rstrip('/') ~ '/'
+    )
+
+- name: Reinspect the Pod manifest at the mutation boundary
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_pod_manifest_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_manifest_write_boundary
+
+- name: Require the expected Pod manifest at the mutation boundary
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          not forward_proxy_state_marker.stat.exists
+          and not forward_proxy_manifest_write_boundary.stat.exists
+          and not forward_proxy_manifest_write_boundary.stat.islnk | default(false)
+        )
+        or (
+          forward_proxy_state_marker.stat.exists
+          and forward_proxy_manifest_write_boundary.stat.isreg | default(false)
+          and not forward_proxy_manifest_write_boundary.stat.islnk | default(false)
+          and forward_proxy_manifest_write_boundary.stat.checksum
+            == dict(
+              forward_proxy_previous_state_manifest.managed_paths
+              | zip(forward_proxy_previous_state_manifest.managed_checksums)
+            )[forward_proxy_pod_manifest_path]
+          and forward_proxy_manifest_write_boundary.stat.mode
+            == dict(
+              forward_proxy_previous_state_manifest.managed_paths
+              | zip(forward_proxy_previous_state_manifest.managed_modes)
+            )[forward_proxy_pod_manifest_path]
+          and (
+            forward_proxy_manifest_write_boundary.stat.pw_name | default('')
+              == forward_proxy_file_owner | string
+            or forward_proxy_manifest_write_boundary.stat.uid | string
+              == forward_proxy_file_owner | string
+          )
+          and (
+            forward_proxy_manifest_write_boundary.stat.gr_name | default('')
+              == forward_proxy_file_group | string
+            or forward_proxy_manifest_write_boundary.stat.gid | string
+              == forward_proxy_file_group | string
+          )
+        )
+    fail_msg: >-
+      The Pod manifest changed after inspection. Stop before overwriting a
+      foreign or concurrent write.
+
+- name: Render the digest-pinned Squid Pod manifest with an atomic no-follow write
+  lit.supplementary.atomic_path:
+    content: "{{ lookup('ansible.builtin.template', 'squid-pod.yml.j2') }}"
+    path: "{{ forward_proxy_pod_manifest_path }}"
+    state: file
+    owner: "{{ forward_proxy_file_owner }}"
+    group: "{{ forward_proxy_file_group }}"
+    mode: "0640"
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"
+    allow_absent: "{{ not forward_proxy_state_marker.stat.exists }}"
+    expected_checksum: >-
+      {{
+        dict(
+          forward_proxy_previous_state_manifest.managed_paths
+          | zip(forward_proxy_previous_state_manifest.managed_checksums)
+        )[forward_proxy_pod_manifest_path]
+        if forward_proxy_state_marker.stat.exists
+        else omit
+      }}
+  register: forward_proxy_pod_manifest_result
+  when: >-
+    not ansible_check_mode
+    or forward_proxy_pod_manifest_path | dirname not in forward_proxy_planned_directories_internal
+
+- name: Bind the rendered Pod manifest to this transaction
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_pod_manifest_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_pod_manifest_transaction_stat
+  when: not ansible_check_mode
+
+- name: Inspect rendered forward proxy files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    checksum_algorithm: sha256
+  loop: "{{ forward_proxy_managed_paths_internal }}"
+  register: forward_proxy_managed_asset_stats
+  when: not ansible_check_mode
+
+- name: Verify rendered forward proxy files before recording ownership
+  ansible.builtin.assert:
+    that:
+      - item.0.stat.isreg | default(false)
+      - not item.0.stat.islnk | default(false)
+      - item.0.stat.checksum is match('^[a-f0-9]{64}\Z')
+      - item.0.stat.mode == item.1
+      - >-
+        item.0.stat.pw_name | default('') == forward_proxy_file_owner | string
+        or item.0.stat.uid | string == forward_proxy_file_owner | string
+      - >-
+        item.0.stat.gr_name | default('') == forward_proxy_file_group | string
+        or item.0.stat.gid | string == forward_proxy_file_group | string
+    fail_msg: >-
+      Every recorded forward proxy asset must retain the exact regular-file,
+      owner, group, mode, and checksum boundary.
+  loop: >-
+    {{ forward_proxy_managed_asset_stats.results | zip(forward_proxy_managed_modes_internal) | list }}
+  loop_control:
+    label: "{{ item.0.item }}"
+  when: not ansible_check_mode
+
+- name: Record the proven-absent pre-activation runtime boundary
+  ansible.builtin.set_fact:
+    forward_proxy_new_runtime_removal_authorization_internal:
+      authorized: false
+      unit_name: "{{ forward_proxy_unit_name }}"
+      state_marker_path: "{{ forward_proxy_state_marker_path }}"
+      quadlet_path: "{{ forward_proxy_quadlet_path }}"
+      quadlet_checksum: ""
+      pod_id: ""
+      owner_label: ""
+      unit_fragment_path: ""
+  when:
+    - forward_proxy_manage_runtime | bool
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
+    - not ansible_check_mode
+
+- name: Revalidate the Quadlet parent chain at the runtime mutation boundary
+  ansible.builtin.include_tasks: ensure_directory.yml
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  loop_control:
+    loop_var: forward_proxy_directory_path
+  vars:
+    forward_proxy_directory_creation_allowed: false
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+    - >-
+      forward_proxy_directory_path == forward_proxy_quadlet_dir
+      or forward_proxy_quadlet_dir.startswith(
+        forward_proxy_directory_path.rstrip('/') ~ '/'
+      )
+
+- name: Revalidate the existing runtime immediately before an update
+  ansible.builtin.include_tasks: revalidate_existing_runtime_removal.yml
+  when:
+    - forward_proxy_manage_runtime | bool
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not ansible_check_mode
+
+- name: Recheck the empty runtime boundary immediately before first activation
+  ansible.builtin.include_tasks: verify_runtime_absent.yml
+  when:
+    - forward_proxy_manage_runtime | bool
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
+    - not ansible_check_mode
+
+- name: Report the planned runtime activation or restart in check mode
+  ansible.builtin.debug:
+    msg: >-
+      The owned forward proxy runtime would be activated or restarted by a
+      normal apply so that it consumes the rendered policy and Pod manifest.
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - forward_proxy_manage_runtime | bool
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
+      or forward_proxy_config_path | dirname in forward_proxy_planned_directories_internal
+      or forward_proxy_pod_manifest_path | dirname in forward_proxy_planned_directories_internal
+      or forward_proxy_squid_config_result.changed | default(false) | bool
+      or forward_proxy_pod_manifest_result.changed | default(false) | bool
+
+- name: Manage the persistent Squid container service
+  ansible.builtin.include_role:
+    name: lit.foundational.podman_systemd
+  vars:
+    podman_systemd_action: >-
+      {{
+        'restarted'
+        if (forward_proxy_squid_config_result.changed or forward_proxy_pod_manifest_result.changed)
+        else 'present'
+      }}
+    podman_systemd_unit_name: "{{ forward_proxy_unit_name }}"
+    podman_systemd_description: LIT Squid forward proxy
+    podman_systemd_manifest_path: "{{ forward_proxy_pod_manifest_path }}"
+    podman_systemd_scope: "{{ forward_proxy_systemd_scope }}"
+    podman_systemd_quadlet_dir: "{{ forward_proxy_quadlet_dir }}"
+    podman_systemd_enabled: true
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Inspect the managed forward proxy Quadlet
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_quadlet_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_quadlet_stat
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Verify the managed forward proxy Quadlet before recording ownership
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_quadlet_stat.stat.isreg | default(false)
+      - not forward_proxy_quadlet_stat.stat.islnk | default(false)
+      - forward_proxy_quadlet_stat.stat.checksum is match('^[a-f0-9]{64}\Z')
+      - forward_proxy_quadlet_stat.stat.mode == '0644'
+      - forward_proxy_quadlet_stat.stat.pw_name | default('') == 'root'
+      - forward_proxy_quadlet_stat.stat.gr_name | default('') == 'root'
+    fail_msg: >-
+      The managed forward proxy Quadlet must retain the exact root-owned,
+      mode-0644 regular-file boundary.
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Capture exact identity and provenance after every runtime mutation
+  ansible.builtin.include_tasks: capture_active_runtime_identity.yml
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Authorize rollback for the exact newly created runtime identity
+  ansible.builtin.set_fact:
+    forward_proxy_new_runtime_removal_authorization_internal:
+      authorized: true
+      unit_name: "{{ forward_proxy_unit_name }}"
+      state_marker_path: "{{ forward_proxy_state_marker_path }}"
+      quadlet_path: "{{ forward_proxy_quadlet_path }}"
+      quadlet_checksum: "{{ forward_proxy_active_runtime_identity_internal.quadlet_checksum }}"
+      pod_id: "{{ forward_proxy_active_runtime_identity_internal.pod_id }}"
+      owner_label: "{{ forward_proxy_active_runtime_identity_internal.owner_label }}"
+      unit_fragment_path: "{{ forward_proxy_active_runtime_identity_internal.unit_fragment_path }}"
+  when:
+    - forward_proxy_manage_runtime | bool
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
+    - not ansible_check_mode
+
+- name: Prove the managed forward proxy runtime is ready
+  ansible.builtin.include_tasks: verify_runtime_ready.yml
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Prepare the exact forward proxy ownership marker payload
+  ansible.builtin.set_fact:
+    forward_proxy_state_marker_payload_internal: >-
+      {{
+        {
+          'schema': 'lit.supplementary.forward_proxy.managed-state/v4',
+          'owner': 'lit.supplementary.forward_proxy',
+          'unit_name': forward_proxy_unit_name,
+          'runtime_managed': forward_proxy_manage_runtime | bool,
+          'managed_paths': forward_proxy_managed_paths_internal,
+          'managed_checksums': (
+            forward_proxy_managed_asset_stats.results
+            | map(attribute='stat.checksum') | list
+          ),
+          'managed_modes': forward_proxy_managed_modes_internal,
+          'quadlet_path': forward_proxy_quadlet_path,
+          'quadlet_checksum': (
+            forward_proxy_quadlet_stat.stat.checksum
+            if forward_proxy_manage_runtime | bool
+            else ''
+          )
+        } | to_nice_json
+      }}
+  when: not ansible_check_mode
+
+- name: Revalidate the state marker parent chain at the mutation boundary
+  ansible.builtin.include_tasks: ensure_directory.yml
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  loop_control:
+    loop_var: forward_proxy_directory_path
+  vars:
+    forward_proxy_directory_creation_allowed: false
+  when:
+    - not ansible_check_mode
+    - >-
+      forward_proxy_directory_path == (forward_proxy_state_marker_path | dirname)
+      or (forward_proxy_state_marker_path | dirname).startswith(
+        forward_proxy_directory_path.rstrip('/') ~ '/'
+      )
+
+- name: Reinspect the state marker at the final mutation boundary
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_state_marker_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_final_state_marker
+  when: not ansible_check_mode
+
+- name: Refuse a replaced state marker at the final mutation boundary
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          not forward_proxy_state_marker.stat.exists
+          and
+          not forward_proxy_final_state_marker.stat.exists
+          and not forward_proxy_final_state_marker.stat.islnk | default(false)
+        )
+        or (
+          forward_proxy_state_marker.stat.exists
+          and forward_proxy_final_state_marker.stat.isreg | default(false)
+          and not forward_proxy_final_state_marker.stat.islnk | default(false)
+          and forward_proxy_final_state_marker.stat.mode == '0600'
+          and forward_proxy_final_state_marker.stat.checksum
+            == (forward_proxy_state_marker_content.content | b64decode | hash('sha256'))
+          and (
+            forward_proxy_final_state_marker.stat.pw_name | default('')
+              == forward_proxy_file_owner | string
+            or forward_proxy_final_state_marker.stat.uid | string
+              == forward_proxy_file_owner | string
+          )
+          and (
+            forward_proxy_final_state_marker.stat.gr_name | default('')
+              == forward_proxy_file_group | string
+            or forward_proxy_final_state_marker.stat.gid | string
+              == forward_proxy_file_group | string
+          )
+        )
+    fail_msg: >-
+      The state marker boundary changed before ownership could be recorded.
+  when: not ansible_check_mode
+
+- name: Record exact forward proxy file and Quadlet ownership
+  lit.supplementary.atomic_path:
+    content: "{{ forward_proxy_state_marker_payload_internal }}"
+    path: "{{ forward_proxy_state_marker_path }}"
+    state: file
+    owner: "{{ forward_proxy_file_owner }}"
+    group: "{{ forward_proxy_file_group }}"
+    mode: "0600"
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"
+    allow_absent: "{{ not forward_proxy_state_marker.stat.exists }}"
+    expected_checksum: >-
+      {{
+        (forward_proxy_state_marker_content.content | b64decode | hash('sha256'))
+        if forward_proxy_state_marker.stat.exists
+        else omit
+      }}
+  when: not ansible_check_mode

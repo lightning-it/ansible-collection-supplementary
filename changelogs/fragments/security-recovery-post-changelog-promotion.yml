@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Bind the one-time Security receipt recovery to the exact protected
+    post-changelog main and develop bases without weakening the general
+    Security release chain.

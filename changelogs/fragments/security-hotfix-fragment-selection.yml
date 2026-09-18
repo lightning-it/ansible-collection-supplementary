@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Keep later minor-release changelog fragments intact while an immutable
+    intake-bound Security patch release consumes and publication revalidates
+    only its reviewed fragment.

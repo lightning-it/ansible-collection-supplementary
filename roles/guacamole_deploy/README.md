@@ -13,6 +13,10 @@ OIDC is opt-in and requires all issuer, authorization, JWKS, and redirect
 settings. The local break-glass hash is updated only when its Vault-custodied
 password or salt has changed.
 
+`guacamole_deploy_api_session_timeout_minutes` controls the Guacamole web/API
+session inactivity timeout and defaults to the upstream value of 60 minutes.
+Consumer inventory can reduce it without changing the container image.
+
 `guacamole_deploy_connections` is a list of connection contracts containing
 `name`, `protocol`, `parameters`, optional `attributes`, and an optional
 `parent_identifier`. Credentials do not belong in this list; keep them in Vault

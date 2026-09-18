@@ -1,0 +1,51 @@
+---
+forward_proxy_enabled: false
+forward_proxy_manage_runtime: true
+forward_proxy_file_owner: root
+forward_proxy_file_group: root
+forward_proxy_render_root: /tmp
+forward_proxy_lock_path: /run/lock/lit-supplementary-forward-proxy.lock
+forward_proxy_lock_timeout: 30
+forward_proxy_experimental_runtime_acceptance: false
+
+forward_proxy_image: >-
+  docker.io/ubuntu/squid:6.6-24.04_beta@sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029
+forward_proxy_image_pull_policy: Never
+forward_proxy_runtime_uid: 13
+forward_proxy_runtime_gid: 13
+forward_proxy_unit_name: lit-forward-proxy
+forward_proxy_systemd_scope: system
+forward_proxy_quadlet_dir: /etc/containers/systemd
+forward_proxy_readiness_timeout: 30
+
+forward_proxy_listen_addresses:
+  - 127.0.0.1
+forward_proxy_port: 3128
+forward_proxy_allowed_clients:
+  - 127.0.0.1/32
+forward_proxy_allowed_destination_domains: []
+forward_proxy_allowed_destination_ports:
+  - 80
+  - 443
+
+# Squid remains the client-facing proxy and may chain every request to one
+# customer/site proxy. Authentication is deliberately unsupported until a
+# secret-backed interface is implemented.
+forward_proxy_upstream_enabled: false
+forward_proxy_upstream_host: ""
+forward_proxy_upstream_port: 3128
+
+forward_proxy_config_path: /etc/lit-forward-proxy/squid.conf
+forward_proxy_pod_manifest_path: /etc/lit-forward-proxy/squid-pod.yml
+forward_proxy_state_marker_path: /var/lib/lit-forward-proxy/managed.json
+
+# Complete root-anchored parent chains for every managed file and the delegated
+# Quadlet directory. Descendants must follow their parent in declaration order.
+forward_proxy_trusted_parent_paths:
+  - /etc
+  - /etc/lit-forward-proxy
+  - /etc/containers
+  - /etc/containers/systemd
+  - /var
+  - /var/lib
+  - /var/lib/lit-forward-proxy

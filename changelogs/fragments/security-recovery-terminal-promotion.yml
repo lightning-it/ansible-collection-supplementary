@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Bind the final one-time Security receipt recovery controller to the exact
+    protected main and develop bases, allowlisted paths, and canonical diff.

@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "$#" -ne 1 ] || [ -z "$1" ]; then
+  echo "usage: resolve-changelog-head-ref.sh HEAD_REF" >&2
+  exit 2
+fi
+
+head_ref="$1"
+release_ref_pattern='^(release/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)|backsync/release-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-to-develop)$'
+merge_subject_pattern='^Merge pull request #[0-9]+ from [^/]+/(release/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)|backsync/release-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-to-develop)$'
+
+# Push CI checks out the reviewed merge commit in detached-HEAD mode. Recover
+# the reviewed release branch from the GitHub merge subject so the same
+# generated-changelog policy applies before and after the PR merge. Local
+# push-ready uses a deterministic two-parent synthetic integration commit;
+# accept its candidate parent only when exactly one local release ref points
+# at that exact object.
+if [[ "$head_ref" == HEAD ]]; then
+  merge_subject="$(git log -1 --format=%s HEAD)"
+  read -r -a merge_commit <<<"$(git rev-list --parents -n 1 HEAD)"
+  if [[ "$merge_subject" =~ $merge_subject_pattern ]] &&
+    [ "${#merge_commit[@]}" -eq 3 ] &&
+    [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "${merge_commit[2]}^{tree}")" ]; then
+    # A release/back-sync push is recognized only when GitHub produced a
+    # two-parent merge whose result is exactly the reviewed source tree. The
+    # workflow separately binds this object to the unique merged PR through
+    # the GitHub API before granting Release App identity to changelog policy.
+    head_ref="${BASH_REMATCH[1]}"
+  elif [ "${#merge_commit[@]}" -eq 3 ] &&
+    develop_commit="$(git rev-parse --verify refs/remotes/origin/develop 2>/dev/null)" &&
+    [ "${merge_commit[2]}" = "$develop_commit" ] &&
+    [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "${merge_commit[2]}^{tree}")" ]; then
+    # A protected main promotion is a two-parent merge whose result tree and
+    # exact second parent both match the fetched canonical develop ref.
+    head_ref=develop
+  elif [ "$merge_subject" = "Synthetic pull-request integration" ]; then
+    read -r -a integration_commit <<<"$(git rev-list --parents -n 1 HEAD)"
+    if [ "${#integration_commit[@]}" -eq 3 ]; then
+      integration_tree="$(git rev-parse "HEAD^{tree}")"
+      candidate_tree="$(git rev-parse "${integration_commit[2]}^{tree}")"
+      if [ "$integration_tree" = "$candidate_tree" ]; then
+        release_refs=()
+        while IFS= read -r release_ref; do
+          if [[ "$release_ref" =~ $release_ref_pattern ]]; then
+            release_refs+=("$release_ref")
+          fi
+        done < <(
+          git for-each-ref \
+            --format="%(refname:short)" \
+            --points-at "${integration_commit[2]}" \
+            "refs/heads/release/v*" \
+            "refs/heads/backsync/release-*"
+        )
+        if [ "${#release_refs[@]}" -eq 1 ]; then
+          head_ref="${release_refs[0]}"
+        fi
+      fi
+    fi
+  fi
+elif [[ "$head_ref" == release/v* || "$head_ref" == backsync/release-* ]] &&
+  [[ ! "$head_ref" =~ $release_ref_pattern ]]; then
+  echo "invalid non-canonical release head ref: $head_ref" >&2
+  exit 1
+fi
+
+printf "%s\n" "$head_ref"

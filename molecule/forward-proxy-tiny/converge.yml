@@ -1,0 +1,131 @@
+---
+- name: Converge forward proxy service configuration
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    forward_proxy_test_root: >-
+      {{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/forward-proxy-state
+    forward_proxy_render_root: "{{ forward_proxy_test_root | dirname }}"
+    forward_proxy_lock_path: "{{ forward_proxy_test_root }}.lock"
+    forward_proxy_junit_root: >-
+      {{
+        lookup('ansible.builtin.env', 'QUALITY_ARTIFACT_ROOT')
+        | default(forward_proxy_test_root ~ '/artifacts', true)
+      }}/junit
+    forward_proxy_trusted_parent_paths:
+      - "{{ forward_proxy_test_root | dirname }}"
+      - "{{ forward_proxy_test_root }}"
+      - "{{ forward_proxy_test_root }}/etc"
+      - "{{ forward_proxy_test_root }}/etc/containers"
+      - "{{ forward_proxy_test_root }}/etc/containers/systemd"
+      - "{{ forward_proxy_test_root }}/etc/squid"
+      - "{{ forward_proxy_test_root }}/var"
+      - "{{ forward_proxy_test_root }}/var/lib"
+      - "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy"
+  pre_tasks:
+    - name: Create forward proxy JUnit directory before convergence
+      ansible.builtin.file:
+        path: "{{ forward_proxy_junit_root }}"
+        state: directory
+        mode: "0750"
+
+    - name: Write provisional fail-closed forward proxy JUnit result before convergence
+      ansible.builtin.copy:
+        dest: "{{ forward_proxy_junit_root }}/forward-proxy-tiny.xml"
+        mode: "0640"
+        content: |-
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuite name="forward-proxy-tiny" tests="1" failures="0" errors="1" skipped="0">
+            <testcase classname="forward_proxy" name="verification-completed" role="forward_proxy">
+              <error message="forward proxy Tiny convergence or verification did not complete"/>
+            </testcase>
+          </testsuite>
+
+    - name: Remove only the scenario-owned stale forward proxy lock
+      ansible.builtin.file:
+        path: "{{ forward_proxy_lock_path }}"
+        state: absent
+      check_mode: false
+
+    - name: Read rootless test UID
+      ansible.builtin.command: id -u
+      register: forward_proxy_test_uid
+      changed_when: false
+
+    - name: Read rootless test GID
+      ansible.builtin.command: id -g
+      register: forward_proxy_test_gid
+      changed_when: false
+  roles:
+    - role: lit.supplementary.forward_proxy
+      forward_proxy_enabled: true
+      forward_proxy_manage_runtime: false
+      forward_proxy_file_owner: "{{ forward_proxy_test_uid.stdout }}"
+      forward_proxy_file_group: "{{ forward_proxy_test_gid.stdout }}"
+      forward_proxy_listen_addresses:
+        - 127.0.0.1
+        - 10.89.0.1
+      forward_proxy_allowed_clients:
+        - 127.0.0.1/32
+        - 10.89.0.0/24
+      forward_proxy_allowed_destination_domains:
+        - .ubuntu.com
+        - registry.example.com
+      forward_proxy_upstream_enabled: true
+      forward_proxy_upstream_host: proxy.customer.example
+      forward_proxy_upstream_port: 8080
+      forward_proxy_config_path: "{{ forward_proxy_test_root }}/etc/squid/squid.conf"
+      forward_proxy_pod_manifest_path: "{{ forward_proxy_test_root }}/etc/squid/squid-pod.yml"
+      forward_proxy_state_marker_path: "{{ forward_proxy_test_root }}/var/lib/lit-forward-proxy/managed.json"
+      forward_proxy_quadlet_dir: "{{ forward_proxy_test_root }}/etc/containers/systemd"
+  post_tasks:
+    - name: Exercise a disabled unowned invocation without a lock parent
+      ansible.builtin.include_role:
+        name: lit.supplementary.forward_proxy
+      vars:
+        forward_proxy_enabled: false
+        forward_proxy_manage_runtime: false
+        forward_proxy_file_owner: "{{ forward_proxy_test_uid.stdout }}"
+        forward_proxy_file_group: "{{ forward_proxy_test_gid.stdout }}"
+        forward_proxy_render_root: "{{ forward_proxy_test_root }}"
+        forward_proxy_lock_path: >-
+          {{ forward_proxy_test_root }}/missing-lock-parent/transition.lock
+        forward_proxy_config_path: >-
+          {{ forward_proxy_test_root }}/unowned/etc/squid/squid.conf
+        forward_proxy_pod_manifest_path: >-
+          {{ forward_proxy_test_root }}/unowned/etc/squid/squid-pod.yml
+        forward_proxy_state_marker_path: >-
+          {{ forward_proxy_test_root }}/unowned/var/lib/lit-forward-proxy/managed.json
+        forward_proxy_quadlet_dir: >-
+          {{ forward_proxy_test_root }}/unowned/etc/containers/systemd
+        forward_proxy_trusted_parent_paths:
+          - "{{ forward_proxy_test_root }}"
+          - "{{ forward_proxy_test_root }}/unowned"
+          - "{{ forward_proxy_test_root }}/unowned/etc"
+          - "{{ forward_proxy_test_root }}/unowned/etc/squid"
+          - "{{ forward_proxy_test_root }}/unowned/etc/containers"
+          - "{{ forward_proxy_test_root }}/unowned/etc/containers/systemd"
+          - "{{ forward_proxy_test_root }}/unowned/var"
+          - "{{ forward_proxy_test_root }}/unowned/var/lib"
+          - "{{ forward_proxy_test_root }}/unowned/var/lib/lit-forward-proxy"
+
+    - name: Inspect the disabled invocation lock path
+      ansible.builtin.stat:
+        path: "{{ forward_proxy_test_root }}/missing-lock-parent/transition.lock"
+        follow: false
+      register: forward_proxy_disabled_lock
+
+    - name: Inspect the disabled invocation state marker
+      ansible.builtin.stat:
+        path: "{{ forward_proxy_test_root }}/unowned/var/lib/lit-forward-proxy/managed.json"
+        follow: false
+      register: forward_proxy_disabled_marker
+
+    - name: Require the disabled unowned invocation to remain mutation-free
+      ansible.builtin.assert:
+        that:
+          - not (forward_proxy_disabled_lock.stat.exists | default(false))
+          - not (forward_proxy_disabled_marker.stat.exists | default(false))
+        quiet: true

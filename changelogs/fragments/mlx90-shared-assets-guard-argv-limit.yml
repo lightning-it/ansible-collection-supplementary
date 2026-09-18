@@ -1,0 +1,6 @@
+---
+security_fixes:
+  - >-
+    Stream paginated Current-Head check evidence into the trusted Shared Assets
+    auto-merge guard instead of passing it through process arguments, so large
+    protected matrices remain fail-closed without exceeding the host ARG_MAX.

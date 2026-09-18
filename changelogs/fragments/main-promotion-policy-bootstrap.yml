@@ -1,0 +1,8 @@
+---
+security_fixes:
+  - >-
+    Keep the protected main-promotion workflow compatible while the immutable
+    event base still has the preceding verifier interface. The compatibility
+    path accepts only the exact normal develop-to-main promotion and keeps
+    release and Security heads fail-closed until content verification is
+    available from main.

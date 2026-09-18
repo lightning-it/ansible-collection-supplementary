@@ -699,6 +699,44 @@ roles:
         - "forgejo-deploy-basic"
       heavy: []
       application_acceptance: []
+  forward_proxy:
+    component: "forward_proxy"
+    classification: "network_service"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets:
+      - "rhel-8"
+      - "rhel-9"
+      - "rhel-10"
+      - "ubuntu-22.04"
+      - "ubuntu-24.04"
+    tiny: "experimental"
+    heavy: "blocked-external-infrastructure"
+    application_acceptance: "blocked-external-infrastructure"
+    acceptance_surface: "proxy_allowed_destinations_and_deny_direct_or_disallowed_traffic"
+    dependencies:
+      - "lit.foundational.podman_systemd"
+    external_dependencies:
+      - "A prepared rootful Podman and systemd host with governed outbound access"
+    known_limitations:
+      - >-
+        Tiny renders and validates the exact service contract, preserves
+        fail-closed JUnit before contract evaluation, directly exercises the
+        descriptor-safe managed-file restore primitive, and statically checks
+        that enabled-state rescue is authorized only at the first mutation
+        boundary after read-only preflight. Contract tests also bind complete
+        check-mode reporting for runtime removal, activation, and restart, and
+        require a resumable runtime-absent ownership checkpoint before file
+        deletion. Tiny does not inject a live post-runtime-removal unlink
+        failure, drive the full enabled-state rescue, or start Podman; live
+        proxy traffic and host-firewall enforcement require the protected
+        Wunderbox acceptance target.
+    deprecation_state: "active"
+    scenario_support:
+      tiny:
+        - "forward-proxy-tiny"
+      heavy: []
+      application_acceptance: []
   gitlab_runner:
     component: "gitlab_runner"
     classification: "runner"
@@ -765,6 +803,9 @@ roles:
       - "RDP destination reachable through the management VLAN"
     known_limitations:
       - "Goal 07 production acceptance is maintained in the consumer automation repository."
+      - >-
+        Absolute RDP session duration remains a consumer or backend policy;
+        the role controls the inactive Guacamole web/API session timeout.
     deprecation_state: "active"
     scenario_support:
       tiny: []
@@ -2735,6 +2776,26 @@ scenarios:
       reason: >-
         Scenario is a role contract or assertion stub and does not deploy an independently versioned
         application.
+      dependencies: []
+  forward-proxy-tiny:
+    profile: "tiny"
+    state: "experimental"
+    implementation: "partial"
+    roles:
+      - "forward_proxy"
+    junit: true
+    allure: false
+    evidence: true
+    test_application:
+      mode: "not-applicable"
+      reason: >-
+        Scenario renders and reconciles the real service configuration without
+        starting a privileged Podman or systemd runtime. It writes provisional
+        fail-closed JUnit before verification, replaces it with per-contract
+        evidence on completion, and exercises rollback only after explicit
+        transition initialization. It is executed as local pre-merge evidence
+        only and is not part of the protected quality matrix until the
+        Wunderbox runtime acceptance target is available.
       dependencies: []
   gitlab-runner-basic:
     profile: "tiny"

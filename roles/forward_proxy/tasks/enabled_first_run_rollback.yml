@@ -1,0 +1,191 @@
+---
+- name: Revalidate trusted proxy directories before first-run rollback
+  ansible.builtin.include_tasks: ensure_directory.yml
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  loop_control:
+    loop_var: forward_proxy_directory_path
+  vars:
+    forward_proxy_directory_creation_allowed: false
+  when:
+    - >-
+      forward_proxy_directory_path in forward_proxy_managed_directories_internal
+      or (
+        forward_proxy_managed_directories_internal
+        | select(
+            'match',
+            '^' ~ (forward_proxy_directory_path | regex_escape) ~ '/'
+          )
+        | list | length > 0
+      )
+      or (
+        forward_proxy_manage_runtime | bool
+        and (
+          forward_proxy_directory_path == forward_proxy_quadlet_dir
+          or forward_proxy_quadlet_dir.startswith(forward_proxy_directory_path.rstrip('/') ~ '/')
+        )
+      )
+
+- name: Revalidate the exact newly created runtime before first-run rollback
+  ansible.builtin.include_tasks: revalidate_new_runtime_removal.yml
+  when:
+    - forward_proxy_manage_runtime | bool
+    - forward_proxy_new_runtime_removal_authorization_internal.authorized | default(false) | bool
+    - not ansible_check_mode
+
+- name: Prove runtime absence when activation failed before identity capture
+  ansible.builtin.include_tasks: verify_runtime_absent.yml
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not forward_proxy_new_runtime_removal_authorization_internal.authorized | default(false) | bool
+    - not ansible_check_mode
+
+- name: Record safe runtime absence before first-run file rollback
+  ansible.builtin.set_fact:
+    forward_proxy_runtime_absence_verified_internal: true
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not forward_proxy_new_runtime_removal_authorization_internal.authorized | default(false) | bool
+    - not ansible_check_mode
+
+- name: Require rollback authorization or proven absence before touching first-run files
+  ansible.builtin.assert:
+    that:
+      - >-
+        forward_proxy_new_runtime_removal_authorization_internal.authorized | default(false) | bool
+        or forward_proxy_runtime_absence_verified_internal | bool
+    fail_msg: >-
+      Runtime activation failed before its exact removal identity was captured.
+      Runtime absence also could not be proven. Leave runtime and files intact
+      for operator recovery.
+  when:
+    - forward_proxy_manage_runtime | bool
+    - not ansible_check_mode
+
+- name: Remove a partially created forward proxy runtime
+  ansible.builtin.include_role:
+    name: lit.foundational.podman_systemd
+  vars:
+    podman_systemd_action: absent
+    podman_systemd_unit_name: "{{ forward_proxy_unit_name }}"
+    podman_systemd_description: LIT Squid forward proxy
+    podman_systemd_manifest_path: "{{ forward_proxy_pod_manifest_path }}"
+    podman_systemd_scope: "{{ forward_proxy_systemd_scope }}"
+    podman_systemd_quadlet_dir: "{{ forward_proxy_quadlet_dir }}"
+  when:
+    - forward_proxy_manage_runtime | bool
+    - forward_proxy_new_runtime_removal_authorization_internal.authorized | default(false) | bool
+    - not ansible_check_mode
+
+- name: Prove the partial first-run runtime is absent before file rollback
+  ansible.builtin.include_tasks: verify_runtime_absent.yml
+  when:
+    - forward_proxy_manage_runtime | bool
+    - forward_proxy_new_runtime_removal_authorization_internal.authorized | default(false) | bool
+    - not ansible_check_mode
+
+- name: Reinspect first-run rollback targets immediately before deletion
+  ansible.builtin.stat:
+    path: "{{ item.0 }}"
+    follow: false
+    checksum_algorithm: sha256
+  loop: >-
+    {{
+      (forward_proxy_managed_paths_internal | zip(forward_proxy_managed_modes_internal) | list)
+      + ([[forward_proxy_quadlet_path, '0644']] if forward_proxy_manage_runtime | bool else [])
+      + [[forward_proxy_state_marker_path, '0600']]
+    }}
+  register: forward_proxy_first_run_owned_stats
+
+- name: Require exact transaction checksum and ownership before rollback
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          not item.stat.exists
+          and not item.stat.islnk | default(false)
+        )
+        or (
+          item.stat.isreg | default(false)
+          and not item.stat.islnk | default(false)
+          and item.stat.mode == item.item.1
+          and item.stat.checksum
+            == (
+              (
+                forward_proxy_squid_config_transaction_stat.stat.checksum | default('')
+                if item.item.0 == forward_proxy_config_path
+                else forward_proxy_pod_manifest_transaction_stat.stat.checksum | default('')
+              )
+              if item.item.0 in forward_proxy_managed_paths_internal
+              else (
+                forward_proxy_quadlet_stat.stat.checksum | default('')
+                if item.item.0 == forward_proxy_quadlet_path
+                else (
+                  forward_proxy_state_marker_payload_internal | hash('sha256')
+                  if (
+                    item.item.0 == forward_proxy_state_marker_path
+                    and forward_proxy_state_marker_payload_internal is defined
+                  )
+                  else ''
+                )
+              )
+            )
+          and (
+            (
+              item.item.0 == forward_proxy_quadlet_path
+              and item.stat.pw_name | default('') == 'root'
+              and item.stat.gr_name | default('') == 'root'
+            )
+            or (
+              item.item.0 != forward_proxy_quadlet_path
+              and (
+                item.stat.pw_name | default('') == forward_proxy_file_owner | string
+                or item.stat.uid | string == forward_proxy_file_owner | string
+              )
+              and (
+                item.stat.gr_name | default('') == forward_proxy_file_group | string
+                or item.stat.gid | string == forward_proxy_file_group | string
+              )
+            )
+          )
+        )
+    fail_msg: >-
+      A first-run rollback target cannot be bound to the exact transaction
+      checksum and ownership. Leave it untouched for operator recovery.
+  loop: "{{ forward_proxy_first_run_owned_stats.results }}"
+
+- name: Remove each verified first-run file at its exact mutation boundary
+  ansible.builtin.include_tasks: remove_owned_file.yml
+  loop: "{{ forward_proxy_first_run_owned_stats.results }}"
+  loop_control:
+    loop_var: forward_proxy_removal_entry
+  vars:
+    forward_proxy_removal_path: "{{ forward_proxy_removal_entry.item.0 }}"
+    forward_proxy_removal_checksum: "{{ forward_proxy_removal_entry.stat.checksum | default('') }}"
+    forward_proxy_removal_mode: "{{ forward_proxy_removal_entry.item.1 }}"
+    forward_proxy_removal_owner: >-
+      {{ 'root' if forward_proxy_removal_entry.item.0 == forward_proxy_quadlet_path else forward_proxy_file_owner }}
+    forward_proxy_removal_group: >-
+      {{ 'root' if forward_proxy_removal_entry.item.0 == forward_proxy_quadlet_path else forward_proxy_file_group }}
+    forward_proxy_removal_allow_absent: true
+
+- name: Inspect first-run rollback targets
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: >-
+    {{
+      forward_proxy_managed_paths_internal
+      + ([forward_proxy_quadlet_path] if forward_proxy_manage_runtime | bool else [])
+      + [forward_proxy_state_marker_path]
+    }}
+  register: forward_proxy_first_run_rollback_stats
+
+- name: Verify first-run rollback completed
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists
+      - not item.stat.islnk | default(false)
+    fail_msg: >-
+      A partial first-run forward proxy target remains after rollback. Stop for
+      operator recovery without adopting or overwriting it.
+  loop: "{{ forward_proxy_first_run_rollback_stats.results }}"

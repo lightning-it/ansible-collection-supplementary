@@ -1,0 +1,166 @@
+---
+- name: Validate forward proxy configuration
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Reset runtime rollback authorization for this role invocation
+  ansible.builtin.set_fact:
+    forward_proxy_new_runtime_removal_authorization_internal:
+      authorized: false
+      unit_name: ""
+      state_marker_path: ""
+      quadlet_path: ""
+      quadlet_checksum: ""
+      pod_id: ""
+      owner_label: ""
+      unit_fragment_path: ""
+    forward_proxy_active_runtime_identity_internal: {}
+    forward_proxy_runtime_absence_verified_internal: false
+    forward_proxy_transition_initialized_internal: false
+    forward_proxy_existing_runtime_identity_verified_internal: false
+    forward_proxy_existing_runtime_removal_authorization_internal:
+      authorized: false
+      unit_name: ""
+      quadlet_path: ""
+      quadlet_checksum: ""
+      pod_id: ""
+      owner_label: ""
+      unit_fragment_path: ""
+
+- name: Inspect forward proxy state before entering the mutation boundary
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_state_marker_path }}"
+    follow: false
+  register: forward_proxy_invocation_state_marker_before_lock
+
+- name: Inspect a concurrent forward proxy transition without creating a lock
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_lock_path }}"
+    follow: false
+  register: forward_proxy_invocation_lock
+
+- name: Reinspect forward proxy state after the concurrent-lock observation
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_state_marker_path }}"
+    follow: false
+  register: forward_proxy_invocation_state_marker_after_lock
+
+- name: Bind whether this invocation requires a forward proxy transition
+  ansible.builtin.set_fact:
+    forward_proxy_transition_scope_internal: >-
+      {{
+        {
+          'required': (
+            (forward_proxy_enabled | bool)
+            or (forward_proxy_invocation_state_marker_before_lock.stat.exists | default(false))
+            or (forward_proxy_invocation_lock.stat.exists | default(false))
+            or (forward_proxy_invocation_state_marker_after_lock.stat.exists | default(false))
+          )
+        }
+      }}
+
+- name: Inspect the required forward proxy lock parent
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_lock_path | dirname }}"
+    follow: false
+  register: forward_proxy_lock_parent
+  when:
+    - not ansible_check_mode
+    - forward_proxy_transition_scope_internal.required | bool
+
+- name: Resolve the required forward proxy lock parent canonically
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/realpath
+      - "{{ forward_proxy_lock_path | dirname }}"
+  register: forward_proxy_lock_parent_realpath
+  changed_when: false
+  check_mode: false
+  when:
+    - not ansible_check_mode
+    - forward_proxy_transition_scope_internal.required | bool
+
+- name: Require a pre-existing non-symlink forward proxy lock parent
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_lock_parent.stat.isdir | default(false)
+      - not forward_proxy_lock_parent.stat.islnk | default(false)
+      - forward_proxy_lock_parent_realpath.stdout == (forward_proxy_lock_path | dirname)
+      - >-
+        forward_proxy_lock_parent.stat.mode is match('^0[0-7][0145][0145]\Z')
+        or (
+          forward_proxy_lock_path | dirname == '/tmp'
+          and forward_proxy_lock_parent.stat.mode == '1777'
+          and forward_proxy_lock_parent.stat.uid == 0
+          and forward_proxy_lock_parent.stat.gid == 0
+        )
+        or (
+          forward_proxy_lock_path | dirname == '/run/lock'
+          and forward_proxy_lock_parent.stat.mode in ['0775', '1777']
+          and forward_proxy_lock_parent.stat.uid == 0
+          and forward_proxy_lock_parent.stat.gid == 0
+        )
+      - >-
+        forward_proxy_lock_parent.stat.uid == 0
+        or forward_proxy_lock_parent.stat.pw_name | default('')
+          == forward_proxy_file_owner | string
+        or forward_proxy_lock_parent.stat.uid | string
+          == forward_proxy_file_owner | string
+      - >-
+        forward_proxy_lock_parent.stat.gid == 0
+        or forward_proxy_lock_parent.stat.gr_name | default('')
+          == forward_proxy_file_group | string
+        or forward_proxy_lock_parent.stat.gid | string
+          == forward_proxy_file_group | string
+    fail_msg: >-
+      The configured forward proxy lock parent must already exist as a trusted,
+      canonical, non-symlink directory with safe owner, group, and mode.
+  when:
+    - not ansible_check_mode
+    - forward_proxy_transition_scope_internal.required | bool
+
+- name: Acquire the bounded per-host forward proxy transition lock
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mkdir
+      - --mode=0700
+      - "{{ forward_proxy_lock_path }}"
+  register: forward_proxy_lock_acquisition
+  changed_when: false
+  failed_when: false
+  retries: "{{ forward_proxy_lock_timeout }}"
+  delay: 1
+  until: forward_proxy_lock_acquisition.rc == 0
+  when:
+    - not ansible_check_mode
+    - forward_proxy_transition_scope_internal.required | bool
+
+- name: Require the exclusive forward proxy transition lock
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_lock_acquisition.rc == 0
+    fail_msg: >-
+      The per-host forward proxy transition lock was not acquired within the
+      bounded timeout. Stop without inspecting or changing managed state.
+  when:
+    - not ansible_check_mode
+    - forward_proxy_transition_scope_internal.required | bool
+
+- name: Apply the complete forward proxy transition under one host lock
+  when: forward_proxy_transition_scope_internal.required | bool
+  block:
+    - name: Inspect, transition, activate, roll back, and finalize forward proxy state
+      ansible.builtin.include_tasks: transition.yml
+  always:
+    - name: Release the per-host forward proxy transition lock
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/rmdir
+          - --
+          - "{{ forward_proxy_lock_path }}"
+      register: forward_proxy_lock_release
+      changed_when: false
+      failed_when: forward_proxy_lock_release.rc != 0
+      when:
+        - not ansible_check_mode
+        - forward_proxy_lock_acquisition.rc | default(1) == 0

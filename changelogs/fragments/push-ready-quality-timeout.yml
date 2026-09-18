@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Allow the complete fail-closed repository-quality profile up to 3600
+    seconds so its full pre-commit and supplemental rootless Molecule gates can
+    finish without weakening or skipping validation.

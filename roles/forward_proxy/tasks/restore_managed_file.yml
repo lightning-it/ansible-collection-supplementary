@@ -1,0 +1,50 @@
+---
+- name: Reinspect one managed file at its rollback mutation boundary
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_restore_entry.0.item.item.0.0 }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_restore_file_boundary
+
+- name: Require one exact transaction or previous file before restoration
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_restore_file_boundary.stat.isreg | default(false)
+      - not forward_proxy_restore_file_boundary.stat.islnk | default(false)
+      - forward_proxy_restore_file_boundary.stat.mode == forward_proxy_restore_entry.1
+      - >-
+        forward_proxy_restore_file_boundary.stat.checksum
+        in [
+          forward_proxy_restore_entry.2,
+          (
+            forward_proxy_squid_config_transaction_stat.stat.checksum | default('')
+            if forward_proxy_restore_entry.0.item.item.0.0 == forward_proxy_config_path
+            else forward_proxy_pod_manifest_transaction_stat.stat.checksum | default('')
+          )
+        ]
+      - >-
+        forward_proxy_restore_file_boundary.stat.pw_name | default('')
+          == forward_proxy_file_owner | string
+        or forward_proxy_restore_file_boundary.stat.uid | string
+          == forward_proxy_file_owner | string
+      - >-
+        forward_proxy_restore_file_boundary.stat.gr_name | default('')
+          == forward_proxy_file_group | string
+        or forward_proxy_restore_file_boundary.stat.gid | string
+          == forward_proxy_file_group | string
+    fail_msg: >-
+      A managed rollback destination no longer matches the previous or failed
+      transaction checksum. Leave it untouched for operator recovery.
+
+- name: Restore one exact previous forward proxy managed file
+  lit.supplementary.atomic_path:
+    content: "{{ forward_proxy_restore_entry.0.content | b64decode }}"
+    path: "{{ forward_proxy_restore_entry.0.item.item.0.0 }}"
+    state: file
+    owner: "{{ forward_proxy_file_owner }}"
+    group: "{{ forward_proxy_file_group }}"
+    mode: "{{ forward_proxy_restore_entry.1 }}"
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"
+    allow_absent: false
+    expected_checksum: "{{ forward_proxy_restore_file_boundary.stat.checksum }}"
+  no_log: true

@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Treat the deterministic REP-60 main-ancestry record as non-user-visible
+    governance metadata so protected back-sync pull requests do not require a
+    self-referential changelog fragment.

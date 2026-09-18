@@ -1,0 +1,363 @@
+---
+- name: Validate forward proxy interface
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_enabled is boolean
+      - forward_proxy_manage_runtime is boolean
+      - forward_proxy_experimental_runtime_acceptance is boolean
+      - >-
+        not forward_proxy_enabled
+        or not forward_proxy_manage_runtime
+        or forward_proxy_experimental_runtime_acceptance
+      - forward_proxy_file_owner is match('^(?:[a-z_][a-z0-9_-]{0,31}|0|[1-9][0-9]{0,9})\Z')
+      - forward_proxy_file_group is match('^(?:[a-z_][a-z0-9_-]{0,31}|0|[1-9][0-9]{0,9})\Z')
+      - >-
+        forward_proxy_file_owner is not match('^[0-9]+\Z')
+        or forward_proxy_file_owner | int < 4294967295
+      - >-
+        forward_proxy_file_group is not match('^[0-9]+\Z')
+        or forward_proxy_file_group | int < 4294967295
+      - >-
+        forward_proxy_file_owner in ['root', '0']
+        or not forward_proxy_manage_runtime
+      - >-
+        forward_proxy_file_group in ['root', '0']
+        or not forward_proxy_manage_runtime
+      - >-
+        forward_proxy_image
+        is match(
+          '^docker\.io/ubuntu/squid:[A-Za-z0-9][A-Za-z0-9._-]{0,127}'
+          '@sha256:[a-f0-9]{64}\Z'
+        )
+      - forward_proxy_image_pull_policy == 'Never'
+      - forward_proxy_runtime_uid == 13
+      - forward_proxy_runtime_gid == 13
+      - forward_proxy_unit_name is match('^[a-z][a-z0-9-]{1,61}[a-z0-9]\Z')
+      - forward_proxy_systemd_scope == 'system'
+      - forward_proxy_lock_timeout is integer
+      - forward_proxy_lock_timeout is not boolean
+      - forward_proxy_lock_timeout >= 1
+      - forward_proxy_lock_timeout <= 300
+      - >-
+        forward_proxy_lock_path
+        is match('^/[A-Za-z0-9][A-Za-z0-9_.-]*(?:/[A-Za-z0-9][A-Za-z0-9_.-]*)*\.lock\Z')
+      - >-
+        forward_proxy_lock_path.startswith('/run/lock/')
+        or forward_proxy_lock_path.startswith(forward_proxy_render_root.rstrip('/') ~ '/')
+      - >-
+        forward_proxy_file_owner in ['root', '0']
+        or forward_proxy_lock_path.startswith(forward_proxy_render_root.rstrip('/') ~ '/')
+      - forward_proxy_lock_path not in forward_proxy_managed_paths_internal
+      - forward_proxy_lock_path != forward_proxy_state_marker_path
+      - forward_proxy_readiness_timeout is integer
+      - forward_proxy_readiness_timeout is not boolean
+      - forward_proxy_readiness_timeout >= 1
+      - forward_proxy_readiness_timeout <= 300
+      - forward_proxy_listen_addresses is sequence
+      - forward_proxy_listen_addresses is not string
+      - forward_proxy_listen_addresses | length > 0
+      - forward_proxy_listen_addresses | unique | list | length == forward_proxy_listen_addresses | length
+      - "'127.0.0.1' in forward_proxy_listen_addresses"
+      - forward_proxy_port is integer
+      - forward_proxy_port is not boolean
+      - forward_proxy_port >= 1024
+      - forward_proxy_port <= 65535
+      - forward_proxy_allowed_clients is sequence
+      - forward_proxy_allowed_clients is not string
+      - forward_proxy_allowed_clients | length > 0
+      - forward_proxy_allowed_clients | unique | list | length == forward_proxy_allowed_clients | length
+      - "'127.0.0.1/32' in forward_proxy_allowed_clients"
+      - forward_proxy_allowed_destination_domains is sequence
+      - forward_proxy_allowed_destination_domains is not string
+      - not forward_proxy_enabled or forward_proxy_allowed_destination_domains | length > 0
+      - forward_proxy_allowed_destination_ports is sequence
+      - forward_proxy_allowed_destination_ports is not string
+      - forward_proxy_allowed_destination_ports | length > 0
+      - 443 in forward_proxy_allowed_destination_ports
+      - >-
+        forward_proxy_allowed_destination_ports | unique | list | length
+        == forward_proxy_allowed_destination_ports | length
+      - forward_proxy_upstream_enabled is boolean
+      - >-
+        not forward_proxy_upstream_enabled
+        or (
+          forward_proxy_upstream_host | length >= 1
+          and forward_proxy_upstream_host | length <= 253
+          and not forward_proxy_upstream_host.startswith('.')
+          and not forward_proxy_upstream_host.endswith('.')
+        )
+      - forward_proxy_upstream_port is integer
+      - forward_proxy_upstream_port is not boolean
+      - forward_proxy_upstream_port >= 1
+      - forward_proxy_upstream_port <= 65535
+      - forward_proxy_trusted_parent_paths is sequence
+      - forward_proxy_trusted_parent_paths is not string
+      - forward_proxy_trusted_parent_paths | length > 0
+      - >-
+        forward_proxy_trusted_parent_paths | unique | list | length
+        == forward_proxy_trusted_parent_paths | length
+    fail_msg: >-
+      Forward proxy inputs must define a digest-pinned non-root Squid
+      container with explicit clients, destinations, and optional upstream.
+
+- name: Validate upstream hostname labels
+  ansible.builtin.assert:
+    that:
+      - item is match('^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\Z')
+    fail_msg: "The upstream proxy must be an exact DNS name with valid labels."
+  loop: "{{ forward_proxy_upstream_host.split('.') }}"
+  when: forward_proxy_upstream_enabled | bool
+
+- name: Validate forward proxy listen addresses
+  ansible.builtin.assert:
+    that:
+      - >-
+        item is match(
+          '^(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]?|0)'
+          '(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]?|0)){3}\Z'
+        )
+    fail_msg: "Forward proxy listen addresses must be exact IPv4 addresses."
+  loop: "{{ forward_proxy_listen_addresses }}"
+
+- name: Validate forward proxy client networks
+  ansible.builtin.assert:
+    that:
+      - >-
+        item is match(
+          '^(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]?|0)'
+          '(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]?|0)){3}'
+          '/(?:[1-9]|[12][0-9]|3[0-2])\Z'
+        )
+      - >-
+        item == '127.0.0.1/32'
+        or item is match(
+          '^10\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]?|0)\.'
+          '(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]?|0)\.'
+          '(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]?|0)'
+          '/(?:[89]|[12][0-9]|3[0-2])\Z'
+        )
+        or item is match(
+          '^172\.(?:1[6-9]|2[0-9]|3[01])\.'
+          '(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]?|0)\.'
+          '(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]?|0)'
+          '/(?:1[2-9]|2[0-9]|3[0-2])\Z'
+        )
+        or item is match(
+          '^192\.168\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]?|0)\.'
+          '(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]?|0)'
+          '/(?:1[6-9]|2[0-9]|3[0-2])\Z'
+        )
+      - >-
+        (
+          (item.split('/')[0].split('.')[0] | int) * 16777216
+          + (item.split('/')[0].split('.')[1] | int) * 65536
+          + (item.split('/')[0].split('.')[2] | int) * 256
+          + (item.split('/')[0].split('.')[3] | int)
+        ) % (2 ** (32 - (item.split('/')[1] | int))) == 0
+    fail_msg: >-
+      Forward proxy clients must be exact loopback or RFC1918 IPv4 CIDRs;
+      globally routable networks are forbidden.
+  loop: "{{ forward_proxy_allowed_clients }}"
+
+- name: Validate forward proxy destination domains
+  ansible.builtin.assert:
+    that:
+      - item | regex_replace('^\.', '') | length <= 253
+      - >-
+        item is match(
+          '^\.?(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+'
+          '[A-Za-z]{2,63}\Z'
+        )
+    fail_msg: "Forward proxy destinations must be exact DNS names or dotted domain suffixes."
+  loop: "{{ forward_proxy_allowed_destination_domains }}"
+
+- name: Validate forward proxy destination ports
+  ansible.builtin.assert:
+    that:
+      - item is integer
+      - item in [80, 443]
+    fail_msg: "The standard LIT forward proxy permits only HTTP 80 and HTTPS CONNECT 443."
+  loop: "{{ forward_proxy_allowed_destination_ports }}"
+
+- name: Validate managed forward proxy paths
+  ansible.builtin.assert:
+    that:
+      - item is match('^/[A-Za-z0-9_./-]+\Z')
+      - item != '/'
+      - not item.endswith('/')
+      - "'.' not in item.split('/')"
+      - "'..' not in item.split('/')"
+      - "'//' not in item"
+    fail_msg: "Managed forward proxy paths must be exact absolute paths."
+  loop:
+    - "{{ forward_proxy_config_path }}"
+    - "{{ forward_proxy_pod_manifest_path }}"
+    - "{{ forward_proxy_state_marker_path }}"
+    - "{{ forward_proxy_quadlet_dir }}"
+    - "{{ forward_proxy_quadlet_path }}"
+
+- name: Validate the isolated render-only root
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_render_root is match('^/[A-Za-z0-9_./-]+\Z')
+      - forward_proxy_render_root != '/'
+      - not forward_proxy_render_root.endswith('/')
+      - "'.' not in forward_proxy_render_root.split('/')"
+      - "'..' not in forward_proxy_render_root.split('/')"
+      - "'//' not in forward_proxy_render_root"
+    fail_msg: "The render-only root must be one exact, non-root absolute path."
+
+- name: Validate trusted forward proxy directory boundaries
+  ansible.builtin.assert:
+    that:
+      - item is match('^/[A-Za-z0-9_./-]+\Z')
+      - item != '/'
+      - not item.endswith('/')
+      - "'.' not in item.split('/')"
+      - "'..' not in item.split('/')"
+      - "'//' not in item"
+    fail_msg: >-
+      Trusted proxy parent paths must be unique exact absolute paths ordered
+      from an existing canonical anchor toward each managed target.
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+
+- name: Require parent-before-child trusted directory ordering
+  ansible.builtin.assert:
+    that:
+      - >-
+        item | dirname == '/'
+        or ansible_loop.index0 == 0
+        or item | dirname in forward_proxy_trusted_parent_paths[:ansible_loop.index0]
+    fail_msg: >-
+      Every trusted parent that is part of the declared chain must appear
+      before its child, before any directory creation can begin.
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  loop_control:
+    extended: true
+
+- name: Bind internal proxy paths to their canonical derivation
+  ansible.builtin.assert:
+    that:
+      - >-
+        forward_proxy_quadlet_path
+        == forward_proxy_quadlet_dir ~ '/' ~ forward_proxy_unit_name ~ '.kube'
+      - >-
+        forward_proxy_managed_paths_internal
+        == [forward_proxy_config_path, forward_proxy_pod_manifest_path]
+      - forward_proxy_managed_modes_internal == ['0644', '0640']
+      - >-
+        forward_proxy_managed_directories_internal
+        == (
+          forward_proxy_managed_paths_internal + [forward_proxy_state_marker_path]
+        ) | map('dirname') | unique | list
+    fail_msg: >-
+      Internal proxy paths are derived security boundaries and cannot be
+      overridden independently of their validated public inputs.
+
+- name: Require complete trusted parent coverage before side effects
+  ansible.builtin.assert:
+    that:
+      - >-
+        forward_proxy_managed_directories_internal
+        | difference(forward_proxy_trusted_parent_paths) | length == 0
+      - >-
+        not forward_proxy_manage_runtime
+        or forward_proxy_quadlet_dir in forward_proxy_trusted_parent_paths
+    fail_msg: >-
+      Every managed file parent and the active Quadlet directory must be in
+      the explicit canonical parent chain before any directory is created.
+
+- name: Contain non-root render-only output beneath its explicit root
+  ansible.builtin.assert:
+    that:
+      - not forward_proxy_manage_runtime
+      - >-
+        item == forward_proxy_render_root
+        or item.startswith(forward_proxy_render_root.rstrip('/') ~ '/')
+    fail_msg: >-
+      Non-root output is allowed only in render-only mode beneath the exact
+      configured render root.
+  loop: "{{ forward_proxy_managed_paths_internal + [forward_proxy_state_marker_path] }}"
+  when:
+    - forward_proxy_file_owner not in ['root', '0']
+      or forward_proxy_file_group not in ['root', '0']
+
+- name: Isolate every render-only proxy and Quadlet boundary
+  ansible.builtin.assert:
+    that:
+      - >-
+        item == forward_proxy_render_root
+        or item.startswith(forward_proxy_render_root.rstrip('/') ~ '/')
+    fail_msg: >-
+      Render-only mode must isolate every managed path and the derived Quadlet
+      boundary beneath the exact render root so a foreign host runtime cannot
+      consume rendered files.
+  loop: >-
+    {{
+      forward_proxy_managed_paths_internal
+      + [forward_proxy_state_marker_path, forward_proxy_quadlet_dir, forward_proxy_quadlet_path]
+    }}
+  when: not forward_proxy_manage_runtime | bool
+
+- name: Require the exact delegated Quadlet path
+  ansible.builtin.assert:
+    that:
+      - >-
+        forward_proxy_quadlet_path
+        == forward_proxy_quadlet_dir ~ '/' ~ forward_proxy_unit_name ~ '.kube'
+    fail_msg: >-
+      The Quadlet ownership path must be derived from the exact directory and
+      unit name passed to lit.foundational.podman_systemd.
+
+- name: Require distinct managed forward proxy paths
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          forward_proxy_managed_paths_internal
+          + [forward_proxy_state_marker_path, forward_proxy_quadlet_path]
+        ) | unique | list | length
+        == (forward_proxy_managed_paths_internal | length) + 2
+      - >-
+        (
+          forward_proxy_managed_paths_internal
+          + [forward_proxy_state_marker_path, forward_proxy_quadlet_path]
+        )
+        | difference([item])
+        | select('match', '^' ~ (item | regex_escape) ~ '/')
+        | list | length == 0
+      - >-
+        item == forward_proxy_quadlet_path
+        or (
+          item != forward_proxy_quadlet_dir
+          and not item.startswith(forward_proxy_quadlet_dir.rstrip('/') ~ '/')
+          and not forward_proxy_quadlet_dir.startswith(item.rstrip('/') ~ '/')
+        )
+    fail_msg: >-
+      Proxy files must be distinct non-ancestor paths and must not overlap the
+      delegated Quadlet directory boundary.
+  loop: >-
+    {{ forward_proxy_managed_paths_internal + [forward_proxy_state_marker_path, forward_proxy_quadlet_path] }}
+
+- name: Keep the transition lock outside every managed proxy boundary
+  ansible.builtin.assert:
+    that:
+      - item != forward_proxy_lock_path
+      - not item.startswith(forward_proxy_lock_path.rstrip('/') ~ '/')
+      - not forward_proxy_lock_path.startswith(item.rstrip('/') ~ '/')
+    fail_msg: >-
+      The transition lock must be neither an ancestor nor a descendant of any
+      managed file, managed directory, state marker, or delegated Quadlet
+      boundary.
+  loop: >-
+    {{
+      (
+        forward_proxy_managed_paths_internal
+        + forward_proxy_managed_directories_internal
+        + [
+            forward_proxy_state_marker_path,
+            forward_proxy_quadlet_path,
+            forward_proxy_quadlet_dir
+          ]
+      ) | unique | list
+    }}

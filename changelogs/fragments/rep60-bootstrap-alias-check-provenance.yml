@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Publish the temporary REP-60 bootstrap review alias as an unskippable,
+    protected native job for the exact develop-to-main promotion, without a
+    caller-controlled custom check or an artificial rerun-attempt cap.

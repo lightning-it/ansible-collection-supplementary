@@ -1,0 +1,10 @@
+---
+minor_changes:
+  - Add Vault-only secret bundle orchestration for application services.
+  - Add digest-pinned NetBox and Apache Guacamole Podman deployment roles.
+  - Add Vault-backed NetBox Keycloak configuration and inventory-declared Guacamole connection reconciliation.
+  - Add optional mTLS transport settings to the Grafana Alloy Loki client.
+  - Add explicit CA, namespace, and AppRole mount support to NGINX Vault TLS retrieval.
+  - >-
+    Add an explicit NGINX switch for profiles that must reject local
+    certificate files and enforce Vault-only TLS custody.
