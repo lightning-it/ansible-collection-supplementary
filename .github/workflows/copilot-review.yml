@@ -1638,12 +1638,15 @@ jobs:
       - name: Dispatch the protected re-evaluation helper from the exact base
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PRODUCER_RUN_ID: ${{ github.run_id }}
           REPOSITORY: ${{ github.repository }}
+          TRUSTED_WORKFLOW_REF: ${{ github.workflow_ref }}
+          TRUSTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
           [[ "${BASE_REF}" =~ ^(develop|main)$ ]]
@@ -1651,7 +1654,36 @@ jobs:
           [[ "${EXPECTED_HEAD}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${PR_NUMBER}" =~ ^[1-9][0-9]*$ ]]
           [[ "${PRODUCER_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
-          test "${GITHUB_WORKFLOW_SHA}" = "${EXPECTED_BASE}"
+          [[ "${TRUSTED_WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          test "${DEFAULT_BRANCH}" = develop
+          test "${TRUSTED_WORKFLOW_REF}" = \
+            "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}"
+          if [ "${BASE_REF}" = develop ]; then
+            test "${TRUSTED_WORKFLOW_SHA}" = "${EXPECTED_BASE}"
+          else
+            test "${BASE_REF}" = main
+            default_branch="$(gh api \
+              "repos/${REPOSITORY}/branches/${DEFAULT_BRANCH}")"
+            default_head="$(jq -er \
+              '.commit.sha | select(test("^[0-9a-f]{40}$"))' \
+              <<<"${default_branch}")"
+            jq -e \
+              --arg default_branch "${DEFAULT_BRANCH}" \
+              --arg default_head "${default_head}" '
+                .name == $default_branch
+                and .protected == true
+                and .commit.sha == $default_head
+              ' <<<"${default_branch}" >/dev/null
+            controller_ancestry="$(gh api \
+              "repos/${REPOSITORY}/compare/${TRUSTED_WORKFLOW_SHA}...${default_head}" \
+              --jq '[.status, .behind_by, .merge_base_commit.sha] | @tsv')"
+            IFS=$'\t' read -r controller_status controller_behind controller_merge_base \
+              <<<"${controller_ancestry}"
+            test "${controller_status}" = identical \
+              || { test "${controller_status}" = ahead \
+                && test "${controller_behind}" = 0 \
+                && test "${controller_merge_base}" = "${TRUSTED_WORKFLOW_SHA}"; }
+          fi
           test "${GITHUB_REF}" = "refs/heads/${BASE_REF}"
           test "${GITHUB_REF_PROTECTED}" = true
           live_base="$(gh api \
