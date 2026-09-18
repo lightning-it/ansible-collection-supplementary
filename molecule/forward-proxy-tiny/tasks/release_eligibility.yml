@@ -1,0 +1,12 @@
+---
+- name: Derive native forward proxy release eligibility
+  ansible.builtin.set_fact:
+    forward_proxy_release_gate_result: >-
+      {{
+        {
+          'release_eligible': (
+            (forward_proxy_release_gate_junit_passed | bool)
+            and forward_proxy_release_gate_profile_disposition == 'supported'
+          )
+        }
+      }}

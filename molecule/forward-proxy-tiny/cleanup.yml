@@ -60,15 +60,17 @@
             in forward_proxy_role_coverage.allowed_profile_states
         quiet: true
 
-    - name: Derive release eligibility from execution and profile disposition
+    - name: Bind release eligibility inputs from execution and profile disposition
       ansible.builtin.set_fact:
         forward_proxy_profile_disposition: >-
           {{ forward_proxy_role_coverage.roles.forward_proxy.tiny }}
-        forward_proxy_release_eligible: >-
-          {{
-            forward_proxy_junit_passed
-            and forward_proxy_role_coverage.roles.forward_proxy.tiny == 'supported'
-          }}
+
+    - name: Derive release eligibility from the shared native gate
+      ansible.builtin.include_tasks: tasks/release_eligibility.yml
+      vars:
+        forward_proxy_release_gate_junit_passed: "{{ forward_proxy_junit_passed }}"
+        forward_proxy_release_gate_profile_disposition: >-
+          {{ forward_proxy_profile_disposition }}
 
     - name: Create redacted forward proxy evidence directory
       ansible.builtin.file:
@@ -91,8 +93,12 @@
           ansible_version: {{ ansible_version.full | to_json }}
           junit_sha256: {{ forward_proxy_junit_evidence.stat.checksum | to_json }}
           junit_status: {{ forward_proxy_junit_report.status | to_json }}
-          result: {{ ('passed' if forward_proxy_junit_passed else 'failed') | to_json }}
+          result: {{
+            ('passed' if (forward_proxy_junit_passed | bool) else 'failed') | to_json
+          }}
           profile: tiny
           profile_disposition: {{ forward_proxy_profile_disposition | to_json }}
-          release_eligible: {{ forward_proxy_release_eligible | bool | lower }}
+          release_eligible: {{
+            forward_proxy_release_gate_result.release_eligible | bool | lower
+          }}
           redacted: true
