@@ -724,10 +724,13 @@ roles:
         fail-closed JUnit before contract evaluation, directly exercises the
         descriptor-safe managed-file restore primitive, and statically checks
         that enabled-state rescue is authorized only at the first mutation
-        boundary after read-only preflight. It does not drive the full
-        enabled-state rescue or start Podman; live proxy traffic and
-        host-firewall enforcement require the protected Wunderbox acceptance
-        target.
+        boundary after read-only preflight. Contract tests also bind complete
+        check-mode reporting for runtime removal, activation, and restart, and
+        require a resumable runtime-absent ownership checkpoint before file
+        deletion. Tiny does not inject a live post-runtime-removal unlink
+        failure, drive the full enabled-state rescue, or start Podman; live
+        proxy traffic and host-firewall enforcement require the protected
+        Wunderbox acceptance target.
     deprecation_state: "active"
     scenario_support:
       tiny:

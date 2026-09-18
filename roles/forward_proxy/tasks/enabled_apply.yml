@@ -82,6 +82,18 @@
     - not forward_proxy_manage_runtime | bool
     - not ansible_check_mode
 
+- name: Report the planned runtime removal for render-only mode in check mode
+  ansible.builtin.debug:
+    msg: >-
+      The owned forward proxy runtime would be removed while its rendered
+      configuration remains managed by a normal apply.
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not forward_proxy_manage_runtime | bool
+
 - name: Enter the rollback boundary before removing the previous runtime
   ansible.builtin.set_fact:
     forward_proxy_transition_initialized_internal: true
@@ -396,6 +408,23 @@
       not forward_proxy_state_marker.stat.exists
       or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
     - not ansible_check_mode
+
+- name: Report the planned runtime activation or restart in check mode
+  ansible.builtin.debug:
+    msg: >-
+      The owned forward proxy runtime would be activated or restarted by a
+      normal apply so that it consumes the rendered policy and Pod manifest.
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - forward_proxy_manage_runtime | bool
+    - >-
+      not forward_proxy_state_marker.stat.exists
+      or not forward_proxy_previous_state_manifest.runtime_managed | default(false) | bool
+      or forward_proxy_config_path | dirname in forward_proxy_planned_directories_internal
+      or forward_proxy_pod_manifest_path | dirname in forward_proxy_planned_directories_internal
+      or forward_proxy_squid_config_result.changed | default(false) | bool
+      or forward_proxy_pod_manifest_result.changed | default(false) | bool
 
 - name: Manage the persistent Squid container service
   ansible.builtin.include_role:

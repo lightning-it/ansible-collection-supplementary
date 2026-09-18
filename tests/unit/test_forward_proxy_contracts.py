@@ -144,6 +144,51 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertIn("not forward_proxy_enabled | bool", section)
         self.assertIn("forward_proxy_state_marker.stat.exists", section)
 
+    def test_check_mode_reports_render_only_runtime_removal(self) -> None:
+        enabled_apply = ENABLED_APPLY.read_text(encoding="utf-8")
+
+        planned = enabled_apply.index("Report the planned runtime removal for render-only mode in check mode")
+        removal = enabled_apply.index("Remove the previous runtime when switching to render-only mode")
+        section = enabled_apply[planned:removal]
+        self.assertIn("changed_when: true", section)
+        self.assertIn("ansible_check_mode", section)
+        self.assertIn("forward_proxy_previous_state_manifest.runtime_managed | bool", section)
+        self.assertIn("not forward_proxy_manage_runtime | bool", section)
+
+    def test_check_mode_reports_runtime_activation_or_restart(self) -> None:
+        enabled_apply = ENABLED_APPLY.read_text(encoding="utf-8")
+
+        planned = enabled_apply.index("Report the planned runtime activation or restart in check mode")
+        mutation = enabled_apply.index("Manage the persistent Squid container service")
+        section = enabled_apply[planned:mutation]
+        self.assertIn("changed_when: true", section)
+        self.assertIn("ansible_check_mode", section)
+        self.assertIn("not forward_proxy_state_marker.stat.exists", section)
+        self.assertIn("forward_proxy_config_path | dirname in forward_proxy_planned_directories_internal", section)
+        self.assertIn(
+            "forward_proxy_pod_manifest_path | dirname in forward_proxy_planned_directories_internal", section
+        )
+        self.assertIn("forward_proxy_squid_config_result.changed | default(false) | bool", section)
+        self.assertIn("forward_proxy_pod_manifest_result.changed | default(false) | bool", section)
+
+    def test_disabled_runtime_checkpoints_absence_before_file_unlinks(self) -> None:
+        transition = TRANSITION.read_text(encoding="utf-8")
+
+        runtime_absent = transition.index("Prove the disabled runtime is absent before deleting owned state")
+        checkpoint = transition.index("Persist the resumable runtime-absent ownership checkpoint")
+        bind = transition.index("Bind the runtime-absent checkpoint for resumable file deletion")
+        unlink = transition.index("Remove each managed file at its exact disabled-state mutation boundary")
+        self.assertLess(runtime_absent, checkpoint)
+        self.assertLess(checkpoint, bind)
+        self.assertLess(bind, unlink)
+        section = transition[checkpoint:bind]
+        self.assertIn("lit.supplementary.atomic_path", section)
+        self.assertIn("allow_absent: false", section)
+        self.assertIn("expected_checksum", section)
+        self.assertIn("forward_proxy_pre_checkpoint_state_marker.stat.checksum", section)
+        self.assertIn("'runtime_managed': false", transition[runtime_absent:checkpoint])
+        self.assertIn("'quadlet_checksum': ''", transition[runtime_absent:checkpoint])
+
     def test_readiness_uses_protocol_evidence_and_revalidates_runtime(self) -> None:
         readiness = READINESS.read_text(encoding="utf-8")
 

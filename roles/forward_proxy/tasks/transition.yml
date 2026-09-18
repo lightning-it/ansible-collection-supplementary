@@ -435,6 +435,110 @@
     - forward_proxy_previous_state_manifest.runtime_managed | bool
     - not ansible_check_mode
 
+- name: Prepare the resumable runtime-absent ownership checkpoint
+  ansible.builtin.set_fact:
+    forward_proxy_disabled_checkpoint_manifest_internal: >-
+      {{
+        forward_proxy_previous_state_manifest
+        | combine(
+            {
+              'runtime_managed': false,
+              'quadlet_checksum': ''
+            }
+          )
+      }}
+  when:
+    - not forward_proxy_enabled | bool
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not ansible_check_mode
+
+- name: Revalidate the state marker parent chain before the runtime-absent checkpoint
+  ansible.builtin.include_tasks: ensure_directory.yml
+  loop: "{{ forward_proxy_trusted_parent_paths }}"
+  loop_control:
+    loop_var: forward_proxy_directory_path
+  vars:
+    forward_proxy_directory_creation_allowed: false
+  when:
+    - not forward_proxy_enabled | bool
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not ansible_check_mode
+    - >-
+      forward_proxy_directory_path == (forward_proxy_state_marker_path | dirname)
+      or (forward_proxy_state_marker_path | dirname).startswith(
+        forward_proxy_directory_path.rstrip('/') ~ '/'
+      )
+
+- name: Reinspect the ownership marker before the runtime-absent checkpoint
+  ansible.builtin.stat:
+    path: "{{ forward_proxy_state_marker_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: forward_proxy_pre_checkpoint_state_marker
+  when:
+    - not forward_proxy_enabled | bool
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not ansible_check_mode
+
+- name: Revalidate the ownership marker before the runtime-absent checkpoint
+  ansible.builtin.assert:
+    that:
+      - forward_proxy_pre_checkpoint_state_marker.stat.isreg | default(false)
+      - not forward_proxy_pre_checkpoint_state_marker.stat.islnk | default(false)
+      - forward_proxy_pre_checkpoint_state_marker.stat.mode == '0600'
+      - >-
+        forward_proxy_pre_checkpoint_state_marker.stat.checksum
+        == (forward_proxy_state_marker_content.content | b64decode | hash('sha256'))
+    fail_msg: >-
+      The ownership marker changed after runtime removal. Stop before recording
+      a resumable runtime-absent transition checkpoint.
+  when:
+    - not forward_proxy_enabled | bool
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not ansible_check_mode
+
+- name: Persist the resumable runtime-absent ownership checkpoint
+  lit.supplementary.atomic_path:
+    content: "{{ forward_proxy_disabled_checkpoint_manifest_internal | to_nice_json }}"
+    path: "{{ forward_proxy_state_marker_path }}"
+    state: file
+    owner: "{{ forward_proxy_file_owner }}"
+    group: "{{ forward_proxy_file_group }}"
+    mode: "0600"
+    parent_identities: "{{ forward_proxy_trusted_parent_identity_map_internal }}"
+    allow_absent: false
+    expected_checksum: "{{ forward_proxy_pre_checkpoint_state_marker.stat.checksum }}"
+  when:
+    - not forward_proxy_enabled | bool
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not ansible_check_mode
+
+- name: Read back the resumable runtime-absent ownership checkpoint
+  ansible.builtin.slurp:
+    src: "{{ forward_proxy_state_marker_path }}"
+  register: forward_proxy_disabled_checkpoint_content
+  when:
+    - not forward_proxy_enabled | bool
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not ansible_check_mode
+
+- name: Bind the runtime-absent checkpoint for resumable file deletion
+  ansible.builtin.set_fact:
+    forward_proxy_previous_state_manifest: >-
+      {{ forward_proxy_disabled_checkpoint_content.content | b64decode | from_json }}
+    forward_proxy_state_marker_content: "{{ forward_proxy_disabled_checkpoint_content }}"
+  when:
+    - not forward_proxy_enabled | bool
+    - forward_proxy_state_marker.stat.exists
+    - forward_proxy_previous_state_manifest.runtime_managed | bool
+    - not ansible_check_mode
+
 - name: Revalidate managed parent chains before disabled-state deletion
   ansible.builtin.include_tasks: ensure_directory.yml
   loop: "{{ forward_proxy_trusted_parent_paths }}"
