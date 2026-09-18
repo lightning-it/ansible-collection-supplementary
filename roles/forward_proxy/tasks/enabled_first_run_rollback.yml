@@ -153,13 +153,6 @@
       checksum and ownership. Leave it untouched for operator recovery.
   loop: "{{ forward_proxy_first_run_owned_stats.results }}"
 
-- name: Reprove the empty runtime boundary immediately before first-run file rollback
-  ansible.builtin.include_tasks: verify_runtime_absent.yml
-  when:
-    - forward_proxy_manage_runtime | bool
-    - forward_proxy_runtime_absence_verified_internal | default(false) | bool
-    - not ansible_check_mode
-
 - name: Remove each verified first-run file at its exact mutation boundary
   ansible.builtin.include_tasks: remove_owned_file.yml
   loop: "{{ forward_proxy_first_run_owned_stats.results }}"
@@ -174,6 +167,15 @@
     forward_proxy_removal_group: >-
       {{ 'root' if forward_proxy_removal_entry.item.0 == forward_proxy_quadlet_path else forward_proxy_file_group }}
     forward_proxy_removal_allow_absent: true
+    forward_proxy_reprove_runtime_absence_before_mutation: >-
+      {{
+        forward_proxy_manage_runtime | bool
+        and (
+          forward_proxy_runtime_absence_verified_internal | default(false) | bool
+          or forward_proxy_new_runtime_removal_authorization_internal.authorized
+            | default(false) | bool
+        )
+      }}
 
 - name: Inspect first-run rollback targets
   ansible.builtin.stat:

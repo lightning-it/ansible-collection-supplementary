@@ -23,6 +23,7 @@ ENABLED_EXISTING_ROLLBACK = ROOT / "roles" / "forward_proxy" / "tasks" / "enable
 ENABLED_FIRST_RUN_ROLLBACK = ROOT / "roles" / "forward_proxy" / "tasks" / "enabled_first_run_rollback.yml"
 READINESS = ROOT / "roles" / "forward_proxy" / "tasks" / "verify_runtime_ready.yml"
 RESTORE = ROOT / "roles" / "forward_proxy" / "tasks" / "restore_managed_file.yml"
+REMOVE = ROOT / "roles" / "forward_proxy" / "tasks" / "remove_owned_file.yml"
 README = ROOT / "roles" / "forward_proxy" / "README.md"
 VERIFY = ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml"
 CONVERGE = ROOT / "molecule" / "forward-proxy-tiny" / "converge.yml"
@@ -195,20 +196,24 @@ class ForwardProxyContractTests(unittest.TestCase):
         existing = ENABLED_EXISTING_ROLLBACK.read_text(encoding="utf-8")
         first_run = ENABLED_FIRST_RUN_ROLLBACK.read_text(encoding="utf-8")
         transition = TRANSITION.read_text(encoding="utf-8")
+        restore = RESTORE.read_text(encoding="utf-8")
+        remove = REMOVE.read_text(encoding="utf-8")
 
-        existing_reproof = existing.index(
-            "Reprove the empty runtime boundary immediately before existing-state rollback mutation"
-        )
         existing_restore = existing.index("Restore previous forward proxy managed files")
-        self.assertLess(existing_reproof, existing_restore)
-        self.assertIn("verify_runtime_absent.yml", existing[existing_reproof:existing_restore])
+        existing_boundary = existing.index("forward_proxy_reprove_runtime_absence_before_mutation", existing_restore)
+        existing_section = existing[existing_restore : existing_boundary + 500]
+        self.assertIn("forward_proxy_runtime_absence_verified_internal", existing_section)
+        self.assertIn("forward_proxy_new_runtime_removal_authorization_internal.authorized", existing_section)
+        self.assertIn("Reprove the empty runtime boundary for this restore mutation", restore)
+        self.assertIn("verify_runtime_absent.yml", restore)
 
-        first_run_reproof = first_run.index(
-            "Reprove the empty runtime boundary immediately before first-run file rollback"
-        )
         first_run_unlink = first_run.index("Remove each verified first-run file at its exact mutation boundary")
-        self.assertLess(first_run_reproof, first_run_unlink)
-        self.assertIn("verify_runtime_absent.yml", first_run[first_run_reproof:first_run_unlink])
+        first_run_boundary = first_run.index("forward_proxy_reprove_runtime_absence_before_mutation", first_run_unlink)
+        first_run_section = first_run[first_run_unlink : first_run_boundary + 650]
+        self.assertIn("forward_proxy_runtime_absence_verified_internal", first_run_section)
+        self.assertIn("forward_proxy_new_runtime_removal_authorization_internal.authorized", first_run_section)
+        self.assertIn("Reprove the empty runtime boundary for this unlink mutation", remove)
+        self.assertIn("verify_runtime_absent.yml", remove)
 
         marker_reproof = transition.index(
             "Reprove the empty runtime boundary immediately before deleting ownership evidence"

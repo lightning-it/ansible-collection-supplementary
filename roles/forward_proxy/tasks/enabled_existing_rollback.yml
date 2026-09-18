@@ -226,12 +226,6 @@
   loop: "{{ forward_proxy_existing_rollback_target_stats.results | default([]) }}"
   when: not ansible_check_mode
 
-- name: Reprove the empty runtime boundary immediately before existing-state rollback mutation
-  ansible.builtin.include_tasks: verify_runtime_absent.yml
-  when:
-    - forward_proxy_runtime_absence_verified_internal | default(false) | bool
-    - not ansible_check_mode
-
 - name: Restore previous forward proxy managed files
   ansible.builtin.include_tasks: restore_managed_file.yml
   loop: >-
@@ -245,6 +239,13 @@
     }}
   loop_control:
     loop_var: forward_proxy_restore_entry
+  vars:
+    forward_proxy_reprove_runtime_absence_before_mutation: >-
+      {{
+        forward_proxy_runtime_absence_verified_internal | default(false) | bool
+        or forward_proxy_new_runtime_removal_authorization_internal.authorized
+          | default(false) | bool
+      }}
 
 - name: Reinspect the previous Quadlet at its rollback mutation boundary
   ansible.builtin.stat:

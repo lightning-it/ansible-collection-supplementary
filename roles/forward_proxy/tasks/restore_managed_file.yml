@@ -1,4 +1,10 @@
 ---
+- name: Reprove the empty runtime boundary for this restore mutation
+  ansible.builtin.include_tasks: verify_runtime_absent.yml
+  when:
+    - forward_proxy_reprove_runtime_absence_before_mutation | default(false) | bool
+    - not ansible_check_mode
+
 - name: Reinspect one managed file at its rollback mutation boundary
   ansible.builtin.stat:
     path: "{{ forward_proxy_restore_entry.0.item.item.0.0 }}"
