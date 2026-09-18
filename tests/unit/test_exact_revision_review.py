@@ -488,6 +488,16 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                         "github.event.pull_request.base.sha == '2710c06c4482d4d626b84237db865bbc6504897f'",
                         rerun_job,
                     )
+                    self.assertIn("validate-protected-main-helper-pin:", rerun_job)
+                    self.assertIn(
+                        "PINNED_MAIN_HELPER: 2710c06c4482d4d626b84237db865bbc6504897f",
+                        rerun_job,
+                    )
+                    self.assertIn('if [ "${EVENT_BASE}" != "${PINNED_MAIN_HELPER}" ]; then', rerun_job)
+                    self.assertIn(
+                        "needs.validate-protected-main-helper-pin.result == 'success'",
+                        rerun_job,
+                    )
                     self.assertNotIn("current-revision-rerun.yml/dispatches", rerun_job)
                     self.assertNotIn('-f "ref=${BASE_REF}"', rerun_job)
                     self.assertIn("base_ref: ${{ github.event.pull_request.base.ref }}", rerun_job)

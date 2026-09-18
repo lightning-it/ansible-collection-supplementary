@@ -406,6 +406,13 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             "github.event.pull_request.base.sha == '2710c06c4482d4d626b84237db865bbc6504897f'",
             handoff,
         )
+        self.assertIn("validate-protected-main-helper-pin:", handoff)
+        self.assertIn(
+            "PINNED_MAIN_HELPER: 2710c06c4482d4d626b84237db865bbc6504897f",
+            handoff,
+        )
+        self.assertIn("needs.validate-protected-main-helper-pin.result == 'success'", handoff)
+        self.assertIn("Advance the protected main helper pin through a normal PR to develop", handoff)
         self.assertNotIn("current-revision-rerun.yml/dispatches", handoff)
         self.assertNotIn("ref=${BASE_REF}", handoff)
         for required_input in (
