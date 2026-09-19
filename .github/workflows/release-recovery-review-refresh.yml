@@ -117,7 +117,6 @@ jobs:
           expected_body+=$'Required merge method: `merge commit`.'
           recovery_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"
           jq -e \
-            --arg base "$EXPECTED_BASE" \
             --arg body "$expected_body" \
             --arg branch "$source_branch" \
             --arg head "$EXPECTED_HEAD" \
@@ -130,9 +129,10 @@ jobs:
               and .head.ref == $branch
               and .head.sha == $head
               and .base.ref == "develop"
-              and .base.sha == $base
+              and (.base.sha | test("^[0-9a-f]{40}$"))
               and .body == $body
             ' <<<"$recovery_pr" >/dev/null
+          recovery_pr_base="$(jq -er .base.sha <<<"$recovery_pr")"
 
           source_commits="$(gh api --paginate --slurp "repos/${REPOSITORY}/pulls/${SOURCE_PR_NUMBER}/commits")"
           test "$(jq --arg sha "$source_head" '[.[][] | select(.sha == $sha)] | length' <<<"$source_commits")" -eq 1
@@ -155,6 +155,7 @@ jobs:
 
           cursor="$EXPECTED_HEAD"
           recovery_base=""
+          current_recovery_base=""
           hop_count=0
           while [ "$cursor" != "$source_head" ]; do
             hop_count=$((hop_count + 1))
@@ -167,12 +168,19 @@ jobs:
             git merge-base --is-ancestor "$synchronized_base" "$EXPECTED_BASE"
             synchronized_tree="$(git merge-tree --write-tree "$first_parent" "$synchronized_base")"
             test "$(git show -s --format='%T' "$cursor")" = "$synchronized_tree"
+            if [ -z "$current_recovery_base" ]; then
+              current_recovery_base="$synchronized_base"
+            fi
             recovery_base="$synchronized_base"
             cursor="$first_parent"
           done
           if [ -z "$recovery_base" ]; then
-            recovery_base="$EXPECTED_BASE"
+            recovery_base="$recovery_pr_base"
+            current_recovery_base="$recovery_pr_base"
           fi
+          test "$recovery_pr_base" = "$current_recovery_base"
+          git merge-base --is-ancestor "$source_base" "$recovery_base"
+          git merge-base --is-ancestor "$current_recovery_base" "$EXPECTED_BASE"
 
           original_tree="$(git merge-tree --write-tree "$recovery_base" "$source_head")"
           test "$(git cat-file -t "$original_tree")" = tree
@@ -293,6 +301,7 @@ jobs:
 
           {
             echo "branch=$source_branch"
+            echo "recovery_pr_base=$recovery_pr_base"
             echo "source_head=$source_head"
             echo "update_required=$update_required"
             echo "final_tree=$final_tree"
@@ -341,6 +350,7 @@ jobs:
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
           MAIN_SHA: ${{ inputs.main_sha }}
           RECOVERY_BRANCH: ${{ steps.recovery.outputs.branch }}
+          RECOVERY_PR_BASE: ${{ steps.recovery.outputs.recovery_pr_base }}
           RECOVERY_PR_NUMBER: ${{ inputs.recovery_pr }}
           REPOSITORY: ${{ github.repository }}
           SOURCE_HEAD: ${{ steps.recovery.outputs.source_head }}
@@ -377,7 +387,7 @@ jobs:
           expected_body+=$'Required merge method: `merge commit`.'
           live_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"
           jq -e \
-            --arg base "$EXPECTED_BASE" \
+            --arg base "$RECOVERY_PR_BASE" \
             --arg body "$expected_body" \
             --arg branch "$RECOVERY_BRANCH" \
             --arg head "$EXPECTED_HEAD" \

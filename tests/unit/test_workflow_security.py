@@ -1422,6 +1422,21 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             'git merge-base --is-ancestor "$synchronized_base" "$EXPECTED_BASE"',
             refresh,
         )
+        self.assertIn('recovery_pr_base="$(jq -er .base.sha <<<"$recovery_pr")"', refresh)
+        self.assertIn('current_recovery_base="$synchronized_base"', refresh)
+        self.assertIn('recovery_base="$recovery_pr_base"', refresh)
+        self.assertIn('test "$recovery_pr_base" = "$current_recovery_base"', refresh)
+        self.assertIn(
+            'git merge-base --is-ancestor "$current_recovery_base" "$EXPECTED_BASE"',
+            refresh,
+        )
+        self.assertIn('echo "recovery_pr_base=$recovery_pr_base"', refresh)
+        pre_token_proof = refresh.split(
+            "      - name: Prove immutable recovery, ancestry, and next tree before token access",
+            1,
+        )[1].split("      - name: Mint repository-scoped release automation App token", 1)[0]
+        self.assertNotIn('--arg base "$EXPECTED_BASE"', pre_token_proof)
+        self.assertIn('and (.base.sha | test("^[0-9a-f]{40}$"))', pre_token_proof)
         self.assertIn(
             'GH_TOKEN="$GH_TOKEN" git -c credential.helper= \\',
             refresh,
@@ -1457,6 +1472,10 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("SOURCE_HEAD: ${{ steps.recovery.outputs.source_head }}", final_step)
         self.assertIn("SOURCE_PR_NUMBER: ${{ inputs.source_pr }}", final_step)
         self.assertIn(
+            "RECOVERY_PR_BASE: ${{ steps.recovery.outputs.recovery_pr_base }}",
+            final_step,
+        )
+        self.assertIn(
             'protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"',
             final_step,
         )
@@ -1470,6 +1489,14 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("and .body == $body", final_step)
         self.assertEqual(2, final_step.count('test "$protected_main" = "$MAIN_SHA"'))
         self.assertEqual(2, final_step.count("and .body == $body"))
+        self.assertLess(
+            final_step.index('--arg base "$RECOVERY_PR_BASE"'),
+            final_step.index('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"'),
+        )
+        self.assertGreater(
+            final_step.rindex('--arg base "$EXPECTED_BASE"'),
+            final_step.index('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"'),
+        )
         self.assertEqual(
             3,
             final_step.count('live_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"'),
