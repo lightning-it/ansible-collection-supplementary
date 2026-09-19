@@ -1431,13 +1431,27 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             1,
         )[1]
         self.assertIn("MAIN_SHA: ${{ inputs.main_sha }}", final_step)
+        self.assertIn("SOURCE_HEAD: ${{ steps.recovery.outputs.source_head }}", final_step)
+        self.assertIn("SOURCE_PR_NUMBER: ${{ inputs.source_pr }}", final_step)
         self.assertIn(
             'protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"',
             final_step,
         )
         self.assertIn('test "$protected_main" = "$MAIN_SHA"', final_step)
+        self.assertIn('source_pr="$(gh api "repos/${REPOSITORY}/pulls/${SOURCE_PR_NUMBER}")"', final_step)
+        self.assertIn('.state == "closed"', final_step)
+        self.assertIn("and .merged == false", final_step)
+        self.assertIn('and .user.login == "litroc"', final_step)
+        self.assertIn("and .head.sha == $head", final_step)
+        self.assertIn('expected_body="Release-App recovery of the closed source PR', final_step)
+        self.assertIn("and .body == $body", final_step)
+        self.assertEqual(2, final_step.count('test "$protected_main" = "$MAIN_SHA"'))
+        self.assertEqual(2, final_step.count("and .body == $body"))
+        dispatch_offset = final_step.index("gh workflow run release-bot-exact-head-review.yml")
+        self.assertLess(final_step.rindex('test "$protected_main" = "$MAIN_SHA"'), dispatch_offset)
+        self.assertLess(final_step.rindex("and .body == $body"), dispatch_offset)
         self.assertLess(
-            final_step.index('test "$protected_main" = "$MAIN_SHA"'),
+            final_step.index("and .body == $body"),
             final_step.index('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"'),
         )
         self.assertIn('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"', refresh)

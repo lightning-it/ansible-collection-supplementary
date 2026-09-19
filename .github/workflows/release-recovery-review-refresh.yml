@@ -256,6 +256,8 @@ jobs:
           RECOVERY_BRANCH: ${{ steps.recovery.outputs.branch }}
           RECOVERY_PR_NUMBER: ${{ inputs.recovery_pr }}
           REPOSITORY: ${{ github.repository }}
+          SOURCE_HEAD: ${{ steps.recovery.outputs.source_head }}
+          SOURCE_PR_NUMBER: ${{ inputs.source_pr }}
           UPDATE_REQUIRED: ${{ steps.recovery.outputs.update_required }}
         run: |
           set -euo pipefail
@@ -265,9 +267,31 @@ jobs:
           test "$protected_develop" = "$GITHUB_SHA"
           test "$protected_develop" = "$EXPECTED_BASE"
           test "$protected_main" = "$MAIN_SHA"
+
+          source_pr="$(gh api "repos/${REPOSITORY}/pulls/${SOURCE_PR_NUMBER}")"
+          jq -e \
+            --arg branch "$RECOVERY_BRANCH" \
+            --arg head "$SOURCE_HEAD" \
+            --arg repo "$REPOSITORY" '
+              .state == "closed"
+              and .merged == false
+              and .merged_at == null
+              and .user.login == "litroc"
+              and .user.type == "User"
+              and .head.repo.full_name == $repo
+              and .head.ref == $branch
+              and .head.sha == $head
+              and .base.ref == "develop"
+            ' <<<"$source_pr" >/dev/null
+
+          expected_body="Release-App recovery of the closed source PR #${SOURCE_PR_NUMBER}."$'\n\n'
+          expected_body+="The source head is immutable at \`${SOURCE_HEAD}\`; this controller did not create, update, "
+          expected_body+=$'or overwrite the branch. The failed preparation receipt remains historical evidence.\n\n'
+          expected_body+=$'Required merge method: `merge commit`.'
           live_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"
           jq -e \
             --arg base "$EXPECTED_BASE" \
+            --arg body "$expected_body" \
             --arg branch "$RECOVERY_BRANCH" \
             --arg head "$EXPECTED_HEAD" \
             --arg repo "$REPOSITORY" '
@@ -280,6 +304,7 @@ jobs:
               and .head.sha == $head
               and .base.ref == "develop"
               and .base.sha == $base
+              and .body == $body
             ' <<<"$live_pr" >/dev/null
 
           final_head="$EXPECTED_HEAD"
@@ -301,8 +326,30 @@ jobs:
             done
           fi
 
+          protected_develop="$(gh api "repos/${REPOSITORY}/git/ref/heads/develop" --jq .object.sha)"
+          protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          test "$protected_develop" = "$GITHUB_SHA"
+          test "$protected_develop" = "$EXPECTED_BASE"
+          test "$protected_main" = "$MAIN_SHA"
+          source_pr="$(gh api "repos/${REPOSITORY}/pulls/${SOURCE_PR_NUMBER}")"
+          jq -e \
+            --arg branch "$RECOVERY_BRANCH" \
+            --arg head "$SOURCE_HEAD" \
+            --arg repo "$REPOSITORY" '
+              .state == "closed"
+              and .merged == false
+              and .merged_at == null
+              and .user.login == "litroc"
+              and .user.type == "User"
+              and .head.repo.full_name == $repo
+              and .head.ref == $branch
+              and .head.sha == $head
+              and .base.ref == "develop"
+            ' <<<"$source_pr" >/dev/null
+
           jq -e \
             --arg base "$EXPECTED_BASE" \
+            --arg body "$expected_body" \
             --arg branch "$RECOVERY_BRANCH" \
             --arg head "$final_head" \
             --arg repo "$REPOSITORY" '
@@ -314,6 +361,7 @@ jobs:
               and .head.sha == $head
               and .base.ref == "develop"
               and .base.sha == $base
+              and .body == $body
             ' <<<"$live_pr" >/dev/null
 
           if [ "$UPDATE_REQUIRED" = true ]; then
