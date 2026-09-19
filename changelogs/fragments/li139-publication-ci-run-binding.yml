@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Bind publication validation to the exact successful Collection CI run so
-    protected releases can verify their immutable evidence before publishing.
