@@ -1,0 +1,488 @@
+# yamllint disable rule:truthy
+---
+name: Refresh release recovery review
+
+on:
+  workflow_dispatch:
+    inputs:
+      recovery_pr:
+        description: Exact open Release-App recovery PR to finalize.
+        required: true
+      source_pr:
+        description: Exact closed human source PR already bound by the recovery controller.
+        required: true
+      tag:
+        description: Failed stable release tag, for example v1.2.3.
+        required: true
+      expected_base:
+        description: Exact protected develop SHA used by this controller run.
+        required: true
+      expected_head:
+        description: Exact recovery PR head before the optional update-branch mutation.
+        required: true
+      main_sha:
+        description: Exact protected main SHA bound by the original recovery.
+        required: true
+      paths_sha256:
+        description: SHA-256 of the canonical original recovery path manifest.
+        required: true
+      diff_sha256:
+        description: SHA-256 of the canonical original recovery diff.
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: release-recovery-review-refresh-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Update exact App recovery and dispatch protected review
+    if: >-
+      github.ref == 'refs/heads/develop' &&
+      github.ref_protected == true &&
+      github.actor == 'litroc' &&
+      github.triggering_actor == 'litroc'
+    runs-on: ubuntu-latest
+    environment: normal-release-promotion-approval
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout exact protected develop controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prove immutable recovery, ancestry, and next tree before token access
+        id: recovery
+        env:
+          DIFF_SHA256: ${{ inputs.diff_sha256 }}
+          EXPECTED_BASE: ${{ inputs.expected_base }}
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+          GH_TOKEN: ${{ github.token }}
+          MAIN_SHA: ${{ inputs.main_sha }}
+          PATHS_SHA256: ${{ inputs.paths_sha256 }}
+          RECOVERY_PR_NUMBER: ${{ inputs.recovery_pr }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_PR_NUMBER: ${{ inputs.source_pr }}
+        run: |
+          set -euo pipefail
+
+          [[ "$RECOVERY_PR_NUMBER" =~ ^[1-9][0-9]*$ ]]
+          [[ "$SOURCE_PR_NUMBER" =~ ^[1-9][0-9]*$ ]]
+          test "$RECOVERY_PR_NUMBER" != "$SOURCE_PR_NUMBER"
+          [[ "$EXPECTED_BASE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$MAIN_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PATHS_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$DIFF_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+
+          protected_develop="$(gh api "repos/${REPOSITORY}/git/ref/heads/develop" --jq .object.sha)"
+          protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          test "$protected_develop" = "$GITHUB_SHA"
+          test "$protected_develop" = "$EXPECTED_BASE"
+          test "$protected_main" = "$MAIN_SHA"
+
+          source_branch="backsync/release-${RELEASE_TAG}-to-develop"
+          source_pr="$(gh api "repos/${REPOSITORY}/pulls/${SOURCE_PR_NUMBER}")"
+          jq -e \
+            --arg branch "$source_branch" \
+            --arg repo "$REPOSITORY" '
+              .state == "closed"
+              and .merged == false
+              and .merged_at == null
+              and .user.login == "litroc"
+              and .user.type == "User"
+              and .head.repo.full_name == $repo
+              and .head.ref == $branch
+              and (.head.sha | test("^[0-9a-f]{40}$"))
+              and .base.ref == "develop"
+              and (.base.sha | test("^[0-9a-f]{40}$"))
+            ' <<<"$source_pr" >/dev/null
+          source_head="$(jq -er .head.sha <<<"$source_pr")"
+          source_base="$(jq -er .base.sha <<<"$source_pr")"
+
+          expected_body="Release-App recovery of the closed source PR #${SOURCE_PR_NUMBER}."$'\n\n'
+          expected_body+="The source head is immutable at \`${source_head}\`; this controller did not create, update, "
+          expected_body+=$'or overwrite the branch. The failed preparation receipt remains historical evidence.\n\n'
+          expected_body+=$'Required merge method: `merge commit`.'
+          recovery_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"
+          jq -e \
+            --arg body "$expected_body" \
+            --arg branch "$source_branch" \
+            --arg head "$EXPECTED_HEAD" \
+            --arg repo "$REPOSITORY" '
+              .state == "open"
+              and .draft == false
+              and .user.login == "lightning-it-release-automation[bot]"
+              and .user.type == "Bot"
+              and .head.repo.full_name == $repo
+              and .head.ref == $branch
+              and .head.sha == $head
+              and .base.ref == "develop"
+              and (.base.sha | test("^[0-9a-f]{40}$"))
+              and .body == $body
+            ' <<<"$recovery_pr" >/dev/null
+          recovery_pr_base="$(jq -er .base.sha <<<"$recovery_pr")"
+
+          source_commits="$(gh api --paginate --slurp "repos/${REPOSITORY}/pulls/${SOURCE_PR_NUMBER}/commits")"
+          test "$(jq --arg sha "$source_head" '[.[][] | select(.sha == $sha)] | length' <<<"$source_commits")" -eq 1
+
+          authenticated_fetch() {
+            GH_TOKEN="$GH_TOKEN" git -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' fetch "$@"
+          }
+
+          authenticated_fetch --no-tags origin \
+            "refs/heads/develop:refs/remotes/origin/develop" \
+            "refs/heads/main:refs/remotes/origin/main" \
+            "refs/heads/${source_branch}:refs/remotes/origin/recovery-refresh"
+          test "$(git rev-parse origin/develop)" = "$EXPECTED_BASE"
+          test "$(git rev-parse origin/main)" = "$MAIN_SHA"
+          test "$(git rev-parse origin/recovery-refresh)" = "$EXPECTED_HEAD"
+          git cat-file -e "${source_base}^{commit}"
+          git cat-file -e "${source_head}^{commit}"
+          git merge-base --is-ancestor "$source_base" "$source_head"
+
+          cursor="$EXPECTED_HEAD"
+          recovery_base=""
+          current_recovery_base=""
+          hop_count=0
+          while [ "$cursor" != "$source_head" ]; do
+            hop_count=$((hop_count + 1))
+            test "$hop_count" -le 20
+            read -r -a parents <<<"$(git show -s --format='%P' "$cursor")"
+            test "${#parents[@]}" -eq 2
+            first_parent="${parents[0]}"
+            synchronized_base="${parents[1]}"
+            git merge-base --is-ancestor "$source_base" "$synchronized_base"
+            git merge-base --is-ancestor "$synchronized_base" "$EXPECTED_BASE"
+            synchronized_tree="$(git merge-tree --write-tree "$first_parent" "$synchronized_base")"
+            test "$(git show -s --format='%T' "$cursor")" = "$synchronized_tree"
+            if [ -z "$current_recovery_base" ]; then
+              current_recovery_base="$synchronized_base"
+            fi
+            recovery_base="$synchronized_base"
+            cursor="$first_parent"
+          done
+          if [ -z "$recovery_base" ]; then
+            recovery_base="$recovery_pr_base"
+            current_recovery_base="$recovery_pr_base"
+          fi
+          test "$recovery_pr_base" = "$current_recovery_base"
+          git merge-base --is-ancestor "$source_base" "$recovery_base"
+          git merge-base --is-ancestor "$current_recovery_base" "$EXPECTED_BASE"
+
+          original_tree="$(git merge-tree --write-tree "$recovery_base" "$source_head")"
+          test "$(git cat-file -t "$original_tree")" = tree
+          original_manifest="$RUNNER_TEMP/recovery-original-name-status.txt"
+          original_diff="$RUNNER_TEMP/recovery-original.diff"
+          LC_ALL=C git diff --name-status --no-renames --no-color \
+            --no-ext-diff --no-textconv \
+            "${recovery_base}^{tree}" "$original_tree" | LC_ALL=C sort >"$original_manifest"
+          git diff --binary --full-index --no-color --no-ext-diff --no-textconv \
+            --src-prefix=a/ --dst-prefix=b/ \
+            "${recovery_base}^{tree}" "$original_tree" -- >"$original_diff"
+          test -s "$original_manifest"
+          test -s "$original_diff"
+          test "$(sha256sum "$original_manifest" | awk '{print $1}')" = "$PATHS_SHA256"
+          test "$(sha256sum "$original_diff" | awk '{print $1}')" = "$DIFF_SHA256"
+
+          receipt_from_main="$RUNNER_TEMP/recovery-refresh-main-receipt.json"
+          receipt_from_source="$RUNNER_TEMP/recovery-refresh-source-receipt.json"
+          git show "${MAIN_SHA}:changelogs/release-preparation.json" >"$receipt_from_main"
+          git show "${source_head}:changelogs/release-preparation.json" >"$receipt_from_source"
+          cmp --silent "$receipt_from_main" "$receipt_from_source"
+          jq -e \
+            --arg repo "$REPOSITORY" \
+            --arg repository_id "${{ github.event.repository.id }}" \
+            --arg version "${RELEASE_TAG#v}" '
+              .schema_version == 2
+              and .next_version == $version
+              and .repository == $repo
+              and .repository_id == $repository_id
+              and (.base_sha | type == "string" and test("^[0-9a-f]{40}$"))
+              and (.fragments | type == "array" and length > 0)
+              and all(
+                .fragments[];
+                (.path | type == "string"
+                  and test("^[A-Za-z0-9][A-Za-z0-9._-]*\\.ya?ml$"))
+                and (.sha256 | type == "string" and test("^[0-9a-f]{64}$"))
+              )
+              and (([.fragments[].path] | length) == ([.fragments[].path] | unique | length))
+            ' "$receipt_from_source" >/dev/null
+          receipt_base="$(jq -er .base_sha "$receipt_from_source")"
+          git cat-file -e "${receipt_base}^{commit}"
+          git merge-base --is-ancestor "$receipt_base" "$source_base"
+
+          receipt_fragments="$RUNNER_TEMP/recovery-refresh-receipt-fragments.txt"
+          deleted_fragments="$RUNNER_TEMP/recovery-refresh-deleted-fragments.txt"
+          : >"$receipt_fragments"
+          : >"$deleted_fragments"
+          while IFS=$'\t' read -r fragment digest extra; do
+            test -z "${extra:-}"
+            fragment_path="changelogs/fragments/${fragment}"
+            if git cat-file -e "${source_base}:${fragment_path}" 2>/dev/null; then
+              fragment_file="$RUNNER_TEMP/recovery-refresh-fragment-${digest}"
+              git show "${source_base}:${fragment_path}" >"$fragment_file"
+              test "$(sha256sum "$fragment_file" | awk '{print $1}')" = "$digest"
+              printf 'D\t%s\n' "$fragment_path" >>"$receipt_fragments"
+            fi
+          done < <(jq -r '.fragments[] | [.path, .sha256] | @tsv' "$receipt_from_source")
+          LC_ALL=C sort -u -o "$receipt_fragments" "$receipt_fragments"
+          test -s "$receipt_fragments"
+
+          while IFS=$'\t' read -r status path extra; do
+            test -z "${extra:-}"
+            case "$path" in
+              CHANGELOG.rst|changelogs/.plugin-cache.yaml|changelogs/changelog.yaml|galaxy.yml)
+                test "$status" = M
+                ;;
+              changelogs/release-preparation.json)
+                test "$status" = M
+                ;;
+              changelogs/fragments/*/*)
+                echo "::error::Nested release fragment is unauthorized: ${path}"
+                exit 1
+                ;;
+              changelogs/fragments/*.yml|changelogs/fragments/*.yaml)
+                test "$status" = D
+                fragment="${path#changelogs/fragments/}"
+                test "$fragment" = "${fragment##*/}"
+                [[ "$fragment" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$ ]]
+                printf 'D\t%s\n' "$path" >>"$deleted_fragments"
+                ;;
+              plugins/modules/atomic_path.py|plugins/modules/atomic_unlink.py)
+                test "$status" = M
+                ;;
+              tests/unit/test_li139_release_metadata.py)
+                [[ "$status" == A || "$status" == M ]]
+                ;;
+              *)
+                echo "::error::Recovery refresh changes unauthorized path: ${path}"
+                exit 1
+                ;;
+            esac
+          done <"$original_manifest"
+          LC_ALL=C sort -u -o "$deleted_fragments" "$deleted_fragments"
+          cmp --silent "$receipt_fragments" "$deleted_fragments"
+          test "$(git show "${source_head}:galaxy.yml" | sed -n 's/^version:[[:space:]]*//p')" = \
+            "${RELEASE_TAG#v}"
+
+          update_required=true
+          final_tree="$(git show -s --format='%T' "$EXPECTED_HEAD")"
+          if git merge-base --is-ancestor "$EXPECTED_BASE" "$EXPECTED_HEAD"; then
+            update_required=false
+          else
+            final_tree="$(git merge-tree --write-tree "$EXPECTED_HEAD" "$EXPECTED_BASE")"
+          fi
+          test "$(git cat-file -t "$final_tree")" = tree
+
+          final_manifest="$RUNNER_TEMP/recovery-final-name-status.txt"
+          final_diff="$RUNNER_TEMP/recovery-final.diff"
+          LC_ALL=C git diff --name-status --no-renames --no-color \
+            --no-ext-diff --no-textconv \
+            "${EXPECTED_BASE}^{tree}" "$final_tree" | LC_ALL=C sort >"$final_manifest"
+          git diff --binary --full-index --no-color --no-ext-diff --no-textconv \
+            --src-prefix=a/ --dst-prefix=b/ \
+            "${EXPECTED_BASE}^{tree}" "$final_tree" -- >"$final_diff"
+          test "$(sha256sum "$final_manifest" | awk '{print $1}')" = "$PATHS_SHA256"
+          test "$(sha256sum "$final_diff" | awk '{print $1}')" = "$DIFF_SHA256"
+          cmp --silent "$original_manifest" "$final_manifest"
+
+          {
+            echo "branch=$source_branch"
+            echo "recovery_pr_base=$recovery_pr_base"
+            echo "source_head=$source_head"
+            echo "update_required=$update_required"
+            echo "final_tree=$final_tree"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Mint repository-scoped release automation App token
+        id: release-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-actions: write
+          # GitHub requires App callers of update-branch to have write access
+          # to the head repository; the token remains scoped to this one repo.
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Verify exact release App identity and repository scope
+        env:
+          APP_INSTALLATION_ID: ${{ steps.release-app.outputs.installation-id }}
+          APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test "$APP_SLUG" = lightning-it-release-automation
+          test "$APP_INSTALLATION_ID" = 148019054
+          installations="$(gh api --paginate --slurp 'installation/repositories?per_page=100')"
+          jq -e --arg repository "$REPOSITORY" '
+            [.[].repositories[]?] as $repositories
+            | (($repositories | length) == 1
+               and $repositories[0].full_name == $repository)
+          ' <<<"$installations" >/dev/null
+          bot="$(gh api 'users/lightning-it-release-automation%5Bbot%5D')"
+          jq -e '
+            .login == "lightning-it-release-automation[bot]"
+            and .type == "Bot"
+            and (.id | type == "number")
+          ' <<<"$bot" >/dev/null
+
+      - name: Re-prove, update normally, and dispatch exact-head review as Release App
+        env:
+          EXPECTED_BASE: ${{ inputs.expected_base }}
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+          EXPECTED_TREE: ${{ steps.recovery.outputs.final_tree }}
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          MAIN_SHA: ${{ inputs.main_sha }}
+          RECOVERY_BRANCH: ${{ steps.recovery.outputs.branch }}
+          RECOVERY_PR_BASE: ${{ steps.recovery.outputs.recovery_pr_base }}
+          RECOVERY_PR_NUMBER: ${{ inputs.recovery_pr }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_HEAD: ${{ steps.recovery.outputs.source_head }}
+          SOURCE_PR_NUMBER: ${{ inputs.source_pr }}
+          UPDATE_REQUIRED: ${{ steps.recovery.outputs.update_required }}
+        run: |
+          set -euo pipefail
+
+          protected_develop="$(gh api "repos/${REPOSITORY}/git/ref/heads/develop" --jq .object.sha)"
+          protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          test "$protected_develop" = "$GITHUB_SHA"
+          test "$protected_develop" = "$EXPECTED_BASE"
+          test "$protected_main" = "$MAIN_SHA"
+
+          source_pr="$(gh api "repos/${REPOSITORY}/pulls/${SOURCE_PR_NUMBER}")"
+          jq -e \
+            --arg branch "$RECOVERY_BRANCH" \
+            --arg head "$SOURCE_HEAD" \
+            --arg repo "$REPOSITORY" '
+              .state == "closed"
+              and .merged == false
+              and .merged_at == null
+              and .user.login == "litroc"
+              and .user.type == "User"
+              and .head.repo.full_name == $repo
+              and .head.ref == $branch
+              and .head.sha == $head
+              and .base.ref == "develop"
+            ' <<<"$source_pr" >/dev/null
+
+          expected_body="Release-App recovery of the closed source PR #${SOURCE_PR_NUMBER}."$'\n\n'
+          expected_body+="The source head is immutable at \`${SOURCE_HEAD}\`; this controller did not create, update, "
+          expected_body+=$'or overwrite the branch. The failed preparation receipt remains historical evidence.\n\n'
+          expected_body+=$'Required merge method: `merge commit`.'
+          live_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"
+          jq -e \
+            --arg base "$RECOVERY_PR_BASE" \
+            --arg body "$expected_body" \
+            --arg branch "$RECOVERY_BRANCH" \
+            --arg head "$EXPECTED_HEAD" \
+            --arg repo "$REPOSITORY" '
+              .state == "open"
+              and .draft == false
+              and .user.login == "lightning-it-release-automation[bot]"
+              and .user.type == "Bot"
+              and .head.repo.full_name == $repo
+              and .head.ref == $branch
+              and .head.sha == $head
+              and .base.ref == "develop"
+              and .base.sha == $base
+              and .body == $body
+            ' <<<"$live_pr" >/dev/null
+
+          final_head="$EXPECTED_HEAD"
+          if [ "$UPDATE_REQUIRED" = true ]; then
+            gh api --method PUT \
+              "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch" \
+              -f "expected_head_sha=${EXPECTED_HEAD}" >/dev/null
+            for attempt in $(seq 1 30); do
+              live_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"
+              final_head="$(jq -er .head.sha <<<"$live_pr")"
+              if [ "$final_head" != "$EXPECTED_HEAD" ]; then
+                break
+              fi
+              if [ "$attempt" -eq 30 ]; then
+                echo "::error::The normal update-branch mutation did not publish a new head in time."
+                exit 1
+              fi
+              sleep 2
+            done
+          fi
+
+          protected_develop="$(gh api "repos/${REPOSITORY}/git/ref/heads/develop" --jq .object.sha)"
+          protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          test "$protected_develop" = "$GITHUB_SHA"
+          test "$protected_develop" = "$EXPECTED_BASE"
+          test "$protected_main" = "$MAIN_SHA"
+          source_pr="$(gh api "repos/${REPOSITORY}/pulls/${SOURCE_PR_NUMBER}")"
+          jq -e \
+            --arg branch "$RECOVERY_BRANCH" \
+            --arg head "$SOURCE_HEAD" \
+            --arg repo "$REPOSITORY" '
+              .state == "closed"
+              and .merged == false
+              and .merged_at == null
+              and .user.login == "litroc"
+              and .user.type == "User"
+              and .head.repo.full_name == $repo
+              and .head.ref == $branch
+              and .head.sha == $head
+              and .base.ref == "develop"
+            ' <<<"$source_pr" >/dev/null
+
+          live_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"
+          jq -e \
+            --arg base "$EXPECTED_BASE" \
+            --arg body "$expected_body" \
+            --arg branch "$RECOVERY_BRANCH" \
+            --arg head "$final_head" \
+            --arg repo "$REPOSITORY" '
+              .state == "open"
+              and .draft == false
+              and .user.login == "lightning-it-release-automation[bot]"
+              and .head.repo.full_name == $repo
+              and .head.ref == $branch
+              and .head.sha == $head
+              and .base.ref == "develop"
+              and .base.sha == $base
+              and .body == $body
+            ' <<<"$live_pr" >/dev/null
+
+          if [ "$UPDATE_REQUIRED" = true ]; then
+            commit="$(gh api "repos/${REPOSITORY}/git/commits/${final_head}")"
+            jq -e \
+              --arg base "$EXPECTED_BASE" \
+              --arg previous "$EXPECTED_HEAD" \
+              --arg tree "$EXPECTED_TREE" '
+                (.parents | length) == 2
+                and .parents[0].sha == $previous
+                and .parents[1].sha == $base
+                and .tree.sha == $tree
+              ' <<<"$commit" >/dev/null
+          else
+            test "$(git show -s --format='%T' "$final_head")" = "$EXPECTED_TREE"
+          fi
+
+          gh workflow run release-bot-exact-head-review.yml \
+            --repo "$REPOSITORY" \
+            --ref develop \
+            -f "pr_number=${RECOVERY_PR_NUMBER}" \
+            -f base_ref=develop \
+            -f "expected_base=${EXPECTED_BASE}" \
+            -f "expected_head=${final_head}"
