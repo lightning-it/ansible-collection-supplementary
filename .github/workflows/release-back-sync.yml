@@ -682,6 +682,7 @@ jobs:
           {
             echo "branch=$source_branch"
             echo "head=$EXPECTED_HEAD"
+            echo "main=$EXPECTED_MAIN"
           } >>"$GITHUB_OUTPUT"
 
       - name: Mint repository-scoped release automation App token
@@ -724,6 +725,7 @@ jobs:
         env:
           EXPECTED_BASE: ${{ github.sha }}
           EXPECTED_HEAD: ${{ steps.recovery-source.outputs.head }}
+          EXPECTED_MAIN: ${{ steps.recovery-source.outputs.main }}
           GH_TOKEN: ${{ steps.recovery-app.outputs.token }}
           RELEASE_TAG: ${{ inputs.tag }}
           REPOSITORY: ${{ github.repository }}
@@ -733,11 +735,13 @@ jobs:
           set -euo pipefail
 
           protected_develop="$(gh api "repos/${REPOSITORY}/git/ref/heads/develop" --jq .object.sha)"
+          protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
           branch_head="$(
             encoded_ref="$(jq -rn --arg value "heads/${SOURCE_BRANCH}" '$value|@uri')"
             gh api "repos/${REPOSITORY}/git/ref/${encoded_ref}" --jq .object.sha
           )"
           test "$protected_develop" = "$EXPECTED_BASE"
+          test "$protected_main" = "$EXPECTED_MAIN"
           test "$branch_head" = "$EXPECTED_HEAD"
 
           source_pr="$(gh api "repos/${REPOSITORY}/pulls/${SOURCE_PR_NUMBER}")"

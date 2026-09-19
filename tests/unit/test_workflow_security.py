@@ -1316,6 +1316,16 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         recovery_text = back_sync.split("  failed-pre-tag-recovery:", 1)[1]
         self.assertIn('test "$protected_develop" = "$GITHUB_SHA"', recovery_text)
         self.assertIn('test "$protected_main" = "$EXPECTED_MAIN"', recovery_text)
+        self.assertIn('echo "main=$EXPECTED_MAIN"', recovery_text)
+        self.assertIn(
+            "EXPECTED_MAIN: ${{ steps.recovery-source.outputs.main }}",
+            recovery_text,
+        )
+        self.assertEqual(
+            2,
+            recovery_text.count('protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"'),
+        )
+        self.assertEqual(2, recovery_text.count('test "$protected_main" = "$EXPECTED_MAIN"'))
         self.assertIn('select((keys | sort) == ["diff_sha256", "main_sha", "paths_sha256"])', recovery_text)
         self.assertIn('.state == "closed"', recovery_text)
         self.assertIn(".merged == false", recovery_text)
