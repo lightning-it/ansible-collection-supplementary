@@ -137,7 +137,12 @@ jobs:
           source_commits="$(gh api --paginate --slurp "repos/${REPOSITORY}/pulls/${SOURCE_PR_NUMBER}/commits")"
           test "$(jq --arg sha "$source_head" '[.[][] | select(.sha == $sha)] | length' <<<"$source_commits")" -eq 1
 
-          git fetch --no-tags origin \
+          authenticated_fetch() {
+            GH_TOKEN="$GH_TOKEN" git -c credential.helper= \
+              -c 'credential.helper=!gh auth git-credential' fetch "$@"
+          }
+
+          authenticated_fetch --no-tags origin \
             "refs/heads/develop:refs/remotes/origin/develop" \
             "refs/heads/main:refs/remotes/origin/main" \
             "refs/heads/${source_branch}:refs/remotes/origin/recovery-refresh"

@@ -1418,6 +1418,16 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("and .body == $body", refresh)
         self.assertIn('test "$hop_count" -le 20', refresh)
         self.assertIn('synchronized_tree="$(git merge-tree --write-tree', refresh)
+        self.assertIn(
+            'GH_TOKEN="$GH_TOKEN" git -c credential.helper= \\',
+            refresh,
+        )
+        self.assertIn(
+            "-c 'credential.helper=!gh auth git-credential' fetch \"$@\"",
+            refresh,
+        )
+        self.assertIn("authenticated_fetch --no-tags origin \\", refresh)
+        self.assertNotIn("\n          git fetch --no-tags origin \\", refresh)
         self.assertIn('test "$(sha256sum "$original_manifest"', refresh)
         self.assertIn('test "$(sha256sum "$original_diff"', refresh)
         self.assertIn('test "$(sha256sum "$final_manifest"', refresh)
