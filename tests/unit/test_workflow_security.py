@@ -1315,7 +1315,29 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             "changelogs/fragments/*.yml|changelogs/fragments/*.yaml)",
             recovery_text,
         )
+        self.assertIn("changelogs/fragments/*/*)", recovery_text)
+        self.assertIn("Nested release fragment is unauthorized", recovery_text)
+        self.assertIn(
+            'test "$fragment" = "${fragment##*/}"',
+            recovery_text,
+        )
+        self.assertIn(
+            'test("^[A-Za-z0-9][A-Za-z0-9._-]*\\\\.ya?ml$")',
+            recovery_text,
+        )
         self.assertIn('test "$status" = D', recovery_text)
+        self.assertIn(
+            'git cat-file -e "${EXPECTED_BASE}:${fragment_path}"',
+            recovery_text,
+        )
+        self.assertIn(
+            'test "$(sha256sum "$fragment_file"',
+            recovery_text,
+        )
+        self.assertIn(
+            'cmp --silent "$receipt_fragments" "$deleted_fragments"',
+            recovery_text,
+        )
         self.assertIn("plugins/modules/atomic_path.py|plugins/modules/atomic_unlink.py", recovery_text)
         self.assertIn("tests/unit/test_li139_release_metadata.py", recovery_text)
         self.assertIn('cmp --silent "$receipt_from_main" "$receipt_from_head"', recovery_text)
