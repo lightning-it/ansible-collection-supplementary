@@ -505,7 +505,7 @@ jobs:
       github.actor == 'litroc' &&
       github.triggering_actor == 'litroc'
     runs-on: ubuntu-latest
-    environment: ansible-collection-release-prepare
+    environment: normal-release-promotion-approval
     timeout-minutes: 10
     permissions:
       contents: read

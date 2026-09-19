@@ -1311,7 +1311,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("inputs.mode == 'failed-pre-tag-recovery'", normalized_condition)
         self.assertIn("github.actor == 'litroc'", normalized_condition)
         self.assertIn("github.triggering_actor == 'litroc'", normalized_condition)
-        self.assertEqual("ansible-collection-release-prepare", recovery["environment"])
+        self.assertEqual("normal-release-promotion-approval", recovery["environment"])
         self.assertEqual({"contents": "read", "pull-requests": "read"}, recovery["permissions"])
         recovery_text = back_sync.split("  failed-pre-tag-recovery:", 1)[1]
         self.assertIn('test "$protected_develop" = "$GITHUB_SHA"', recovery_text)
