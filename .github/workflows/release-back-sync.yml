@@ -5,20 +5,47 @@ name: Back-sync collection release
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: Published-tag back-sync or exact failed pre-tag recovery.
+        required: true
+        default: published-tag
+        type: choice
+        options:
+          - published-tag
+          - failed-pre-tag-recovery
       tag:
         description: Release tag to back-sync, for example v1.2.3.
         required: true
       release_tag_app_slug:
-        description: Exact GitHub App slug validated by the protected publish job.
-        required: true
+        description: Exact GitHub App slug; required and validated for published-tag only.
+        required: false
+        default: ""
       release_tag_app_id:
-        description: Exact GitHub App ID validated by the protected publish job.
-        required: true
+        description: Exact GitHub App ID; required and validated for published-tag only.
+        required: false
+        default: ""
       release_tag_app_client_id:
-        description: Exact GitHub App client ID validated by the protected publish job.
-        required: true
+        description: Exact GitHub App client ID; required and validated for published-tag only.
+        required: false
+        default: ""
       security_evidence_id:
         description: Exact MLX-90 Evidence ID; release automation only.
+        required: false
+        default: ""
+      recovery_source_pr:
+        description: Closed human source PR for failed-pre-tag-recovery.
+        required: false
+        default: ""
+      recovery_expected_base:
+        description: Exact original develop SHA of the recovery source PR.
+        required: false
+        default: ""
+      recovery_expected_head:
+        description: Exact immutable recovery source head SHA.
+        required: false
+        default: ""
+      recovery_binding_json:
+        description: Exact main SHA plus canonical diff and path-manifest SHA-256 values.
         required: false
         default: ""
 
@@ -33,7 +60,9 @@ concurrency:
 jobs:
   security-classification:
     name: Classify exact back-sync request
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      inputs.mode == 'published-tag'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -79,9 +108,18 @@ jobs:
         id: classify
         env:
           EVIDENCE_ID: ${{ inputs.security_evidence_id || '' }}
+          EXPECTED_TAG_APP_CLIENT_ID: ${{ inputs.release_tag_app_client_id || '' }}
+          EXPECTED_TAG_APP_ID: ${{ inputs.release_tag_app_id || '' }}
+          EXPECTED_TAG_APP_SLUG: ${{ inputs.release_tag_app_slug || '' }}
           TAG_INPUT: ${{ inputs.tag }}
         run: |
           set -euo pipefail
+          [[ "$EXPECTED_TAG_APP_SLUG" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$ ]]
+          [[ "$EXPECTED_TAG_APP_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_TAG_APP_CLIENT_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]
+          test "$EXPECTED_TAG_APP_SLUG" = "lightning-it-release-tag-creator"
+          test "$EXPECTED_TAG_APP_ID" = "4344269"
+          test "$EXPECTED_TAG_APP_CLIENT_ID" = "Iv23liJnnvOQwajan2Mf"
           if ! [[ "$TAG_INPUT" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             echo "::error::A stable semantic v-prefixed release tag is required."
             exit 1
@@ -97,6 +135,7 @@ jobs:
     needs: security-classification
     if: >-
       github.ref == 'refs/heads/main' &&
+      inputs.mode == 'published-tag' &&
       (needs.security-classification.outputs.security-release == 'false' ||
        (needs.security-classification.outputs.security-release == 'true' &&
         github.actor == 'lightning-it-release-automation[bot]'))
@@ -456,3 +495,327 @@ jobs:
               --repo "$REPO" \
               --auto --merge --match-head-commit "$pushed_sha"
           fi
+
+  failed-pre-tag-recovery:
+    name: Open exact failed pre-tag recovery PR
+    if: >-
+      github.ref == 'refs/heads/develop' &&
+      github.ref_protected == true &&
+      inputs.mode == 'failed-pre-tag-recovery' &&
+      github.actor == 'litroc' &&
+      github.triggering_actor == 'litroc'
+    runs-on: ubuntu-latest
+    environment: normal-release-promotion-approval
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout exact protected develop controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify immutable failed release recovery source
+        id: recovery-source
+        env:
+          BINDING_JSON: ${{ inputs.recovery_binding_json }}
+          EXPECTED_BASE: ${{ inputs.recovery_expected_base }}
+          EXPECTED_HEAD: ${{ inputs.recovery_expected_head }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_PR_NUMBER: ${{ inputs.recovery_source_pr }}
+        run: |
+          set -euo pipefail
+
+          [[ "$SOURCE_PR_NUMBER" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_BASE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]]
+          binding="$(jq -cer '
+            select(type == "object")
+            | select((keys | sort) == ["diff_sha256", "main_sha", "paths_sha256"])
+            | select(.main_sha | test("^[0-9a-f]{40}$"))
+            | select(.diff_sha256 | test("^[0-9a-f]{64}$"))
+            | select(.paths_sha256 | test("^[0-9a-f]{64}$"))
+          ' <<<"$BINDING_JSON")"
+          EXPECTED_MAIN="$(jq -r .main_sha <<<"$binding")"
+          EXPECTED_DIFF_SHA256="$(jq -r .diff_sha256 <<<"$binding")"
+          EXPECTED_PATHS_SHA256="$(jq -r .paths_sha256 <<<"$binding")"
+          [[ "$EXPECTED_MAIN" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_DIFF_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_PATHS_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+
+          protected_develop="$(gh api "repos/${REPOSITORY}/git/ref/heads/develop" --jq .object.sha)"
+          protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          test "$protected_develop" = "$GITHUB_SHA"
+          test "$protected_main" = "$EXPECTED_MAIN"
+
+          source_pr="$(gh api "repos/${REPOSITORY}/pulls/${SOURCE_PR_NUMBER}")"
+          source_branch="backsync/release-${RELEASE_TAG}-to-develop"
+          jq -e \
+            --arg branch "$source_branch" \
+            --arg head "$EXPECTED_HEAD" \
+            --arg repo "$REPOSITORY" '
+              .state == "closed"
+              and .merged == false
+              and .merged_at == null
+              and .user.login == "litroc"
+              and .user.type == "User"
+              and .head.repo.full_name == $repo
+              and .head.ref == $branch
+              and .head.sha == $head
+              and .base.ref == "develop"
+            ' <<<"$source_pr" >/dev/null
+
+          git fetch --no-tags origin \
+            "refs/heads/develop:refs/remotes/origin/develop" \
+            "refs/heads/main:refs/remotes/origin/main" \
+            "refs/heads/${source_branch}:refs/remotes/origin/recovery-source"
+          test "$(git rev-parse origin/develop)" = "$GITHUB_SHA"
+          test "$(git rev-parse origin/main)" = "$EXPECTED_MAIN"
+          test "$(git rev-parse origin/recovery-source)" = "$EXPECTED_HEAD"
+          git cat-file -e "${EXPECTED_BASE}^{commit}"
+          git merge-base --is-ancestor "$EXPECTED_BASE" "$EXPECTED_HEAD"
+          test "$(git merge-base "$GITHUB_SHA" "$EXPECTED_HEAD")" = "$EXPECTED_BASE"
+
+          integration_tree="$(git merge-tree --write-tree "$GITHUB_SHA" "$EXPECTED_HEAD")"
+          [[ "$integration_tree" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git cat-file -t "$integration_tree")" = tree
+
+          manifest="$RUNNER_TEMP/failed-release-recovery-name-status.txt"
+          diff_file="$RUNNER_TEMP/failed-release-recovery.diff"
+          LC_ALL=C git diff --name-status --no-renames --no-color \
+            --no-ext-diff --no-textconv \
+            "${GITHUB_SHA}^{tree}" "$integration_tree" | LC_ALL=C sort >"$manifest"
+          git diff --binary --full-index --no-color --no-ext-diff --no-textconv \
+            --src-prefix=a/ --dst-prefix=b/ \
+            "${GITHUB_SHA}^{tree}" "$integration_tree" -- >"$diff_file"
+          test "$(sha256sum "$manifest" | awk '{print $1}')" = "$EXPECTED_PATHS_SHA256"
+          test "$(sha256sum "$diff_file" | awk '{print $1}')" = "$EXPECTED_DIFF_SHA256"
+          test -s "$manifest"
+          test -s "$diff_file"
+
+          receipt_from_main="$RUNNER_TEMP/failed-release-main-receipt.json"
+          receipt_from_head="$RUNNER_TEMP/failed-release-head-receipt.json"
+          git show "${EXPECTED_MAIN}:changelogs/release-preparation.json" >"$receipt_from_main"
+          git show "${EXPECTED_HEAD}:changelogs/release-preparation.json" >"$receipt_from_head"
+          cmp --silent "$receipt_from_main" "$receipt_from_head"
+          jq -e --arg version "${RELEASE_TAG#v}" '
+            .schema_version == 2
+            and .next_version == $version
+            and (.fragments | type == "array" and length > 0)
+            and all(
+              .fragments[];
+              (.path | type == "string"
+                and test("^[A-Za-z0-9][A-Za-z0-9._-]*\\.ya?ml$"))
+              and (.sha256 | type == "string" and test("^[0-9a-f]{64}$"))
+            )
+            and (([.fragments[].path] | length) == ([.fragments[].path] | unique | length))
+          ' "$receipt_from_head" >/dev/null
+
+          receipt_fragments="$RUNNER_TEMP/failed-release-receipt-fragments.txt"
+          deleted_fragments="$RUNNER_TEMP/failed-release-deleted-fragments.txt"
+          : >"$receipt_fragments"
+          : >"$deleted_fragments"
+          while IFS=$'\t' read -r fragment digest extra; do
+            test -z "${extra:-}"
+            fragment_path="changelogs/fragments/${fragment}"
+            if git cat-file -e "${EXPECTED_BASE}:${fragment_path}" 2>/dev/null; then
+              fragment_file="$RUNNER_TEMP/failed-release-fragment-${digest}"
+              git show "${EXPECTED_BASE}:${fragment_path}" >"$fragment_file"
+              test "$(sha256sum "$fragment_file" | awk '{print $1}')" = "$digest"
+              printf 'D\t%s\n' "$fragment_path" >>"$receipt_fragments"
+            fi
+          done < <(jq -r '.fragments[] | [.path, .sha256] | @tsv' "$receipt_from_head")
+          LC_ALL=C sort -u -o "$receipt_fragments" "$receipt_fragments"
+          test -s "$receipt_fragments"
+
+          while IFS=$'\t' read -r status path extra; do
+            test -z "${extra:-}"
+            case "$path" in
+              CHANGELOG.rst|changelogs/.plugin-cache.yaml|changelogs/changelog.yaml|galaxy.yml)
+                test "$status" = M
+                ;;
+              changelogs/release-preparation.json)
+                test "$status" = M
+                ;;
+              changelogs/fragments/*/*)
+                echo "::error::Nested release fragment is unauthorized: ${path}"
+                exit 1
+                ;;
+              changelogs/fragments/*.yml|changelogs/fragments/*.yaml)
+                test "$status" = D
+                fragment="${path#changelogs/fragments/}"
+                test "$fragment" = "${fragment##*/}"
+                [[ "$fragment" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$ ]]
+                printf 'D\t%s\n' "$path" >>"$deleted_fragments"
+                ;;
+              plugins/modules/atomic_path.py|plugins/modules/atomic_unlink.py)
+                test "$status" = M
+                ;;
+              tests/unit/test_li139_release_metadata.py)
+                [[ "$status" == A || "$status" == M ]]
+                ;;
+              *)
+                echo "::error::Failed-release recovery changes unauthorized path: ${path}"
+                exit 1
+                ;;
+            esac
+          done <"$manifest"
+          LC_ALL=C sort -u -o "$deleted_fragments" "$deleted_fragments"
+          cmp --silent "$receipt_fragments" "$deleted_fragments"
+          test "$(git show "${EXPECTED_HEAD}:galaxy.yml" | sed -n 's/^version:[[:space:]]*//p')" = \
+            "${RELEASE_TAG#v}"
+
+          open_sources="$(
+            gh api --method GET "repos/${REPOSITORY}/pulls" \
+              -f state=open \
+              -f base=develop \
+              -f "head=${GITHUB_REPOSITORY_OWNER}:${source_branch}" \
+              -f per_page=100
+          )"
+          test "$(jq 'length' <<<"$open_sources")" -eq 0
+          {
+            echo "branch=$source_branch"
+            echo "head=$EXPECTED_HEAD"
+            echo "main=$EXPECTED_MAIN"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Mint repository-scoped release automation App token
+        id: recovery-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-actions: write
+          permission-contents: read
+          permission-pull-requests: write
+
+      - name: Resolve exact recovery App identity
+        id: recovery-bot
+        env:
+          APP_INSTALLATION_ID: ${{ steps.recovery-app.outputs.installation-id }}
+          APP_SLUG: ${{ steps.recovery-app.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.recovery-app.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test "$APP_SLUG" = lightning-it-release-automation
+          test "$APP_INSTALLATION_ID" = 148019054
+          installations="$(gh api --paginate --slurp 'installation/repositories?per_page=100')"
+          jq -e --arg repository "$REPOSITORY" '
+            [.[].repositories[]?] as $repositories
+            | (($repositories | length) == 1
+               and $repositories[0].full_name == $repository)
+          ' <<<"$installations" >/dev/null
+          bot="$(gh api 'users/lightning-it-release-automation%5Bbot%5D')"
+          jq -e '
+            .login == "lightning-it-release-automation[bot]"
+            and .type == "Bot"
+            and (.id | type == "number")
+          ' <<<"$bot" >/dev/null
+
+      - name: Open exact App-authored recovery PR without changing its branch
+        env:
+          EXPECTED_BASE: ${{ github.sha }}
+          EXPECTED_HEAD: ${{ steps.recovery-source.outputs.head }}
+          EXPECTED_MAIN: ${{ steps.recovery-source.outputs.main }}
+          GH_TOKEN: ${{ steps.recovery-app.outputs.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_BRANCH: ${{ steps.recovery-source.outputs.branch }}
+          SOURCE_PR_NUMBER: ${{ inputs.recovery_source_pr }}
+        run: |
+          set -euo pipefail
+
+          protected_develop="$(gh api "repos/${REPOSITORY}/git/ref/heads/develop" --jq .object.sha)"
+          protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          branch_head="$(
+            encoded_ref="$(jq -rn --arg value "heads/${SOURCE_BRANCH}" '$value|@uri')"
+            gh api "repos/${REPOSITORY}/git/ref/${encoded_ref}" --jq .object.sha
+          )"
+          test "$protected_develop" = "$EXPECTED_BASE"
+          test "$protected_main" = "$EXPECTED_MAIN"
+          test "$branch_head" = "$EXPECTED_HEAD"
+
+          source_pr="$(gh api "repos/${REPOSITORY}/pulls/${SOURCE_PR_NUMBER}")"
+          jq -e --arg head "$EXPECTED_HEAD" '
+            .state == "closed"
+            and .merged == false
+            and .merged_at == null
+            and .user.login == "litroc"
+            and .head.sha == $head
+            and .base.ref == "develop"
+          ' <<<"$source_pr" >/dev/null
+          open_sources="$(
+            gh api --method GET "repos/${REPOSITORY}/pulls" \
+              -f state=open \
+              -f base=develop \
+              -f "head=${GITHUB_REPOSITORY_OWNER}:${SOURCE_BRANCH}" \
+              -f per_page=100
+          )"
+          test "$(jq 'length' <<<"$open_sources")" -eq 0
+
+          title="chore: recover failed ${RELEASE_TAG} metadata on develop"
+          body="Release-App recovery of the closed source PR #${SOURCE_PR_NUMBER}."$'\n\n'
+          body+="The source head is immutable at \`${EXPECTED_HEAD}\`; this controller did not create, update, "
+          body+=$'or overwrite the branch. The failed preparation receipt remains historical evidence.\n\n'
+          body+=$'Required merge method: `merge commit`.'
+          gh pr create \
+            --repo "$REPOSITORY" \
+            --base develop \
+            --head "$SOURCE_BRANCH" \
+            --draft \
+            --title "$title" \
+            --body "$body"
+
+          owned_pulls="$(
+            gh api --method GET "repos/${REPOSITORY}/pulls" \
+              -f state=open \
+              -f base=develop \
+              -f "head=${GITHUB_REPOSITORY_OWNER}:${SOURCE_BRANCH}" \
+              -f per_page=100
+          )"
+          test "$(jq 'length' <<<"$owned_pulls")" -eq 1
+          jq -e \
+            --arg base "$EXPECTED_BASE" \
+            --arg branch "$SOURCE_BRANCH" \
+            --arg head "$EXPECTED_HEAD" \
+            --arg repo "$REPOSITORY" '
+              .[0].state == "open"
+              and .[0].draft == true
+              and .[0].user.login == "lightning-it-release-automation[bot]"
+              and .[0].user.type == "Bot"
+              and .[0].head.repo.full_name == $repo
+              and .[0].head.ref == $branch
+              and .[0].head.sha == $head
+              and .[0].base.ref == "develop"
+              and .[0].base.sha == $base
+            ' <<<"$owned_pulls" >/dev/null
+          recovery_pr="$(jq -er '.[0].number' <<<"$owned_pulls")"
+          gh pr ready "$recovery_pr" --repo "$REPOSITORY"
+
+          ready_pull="$(gh api "repos/${REPOSITORY}/pulls/${recovery_pr}")"
+          jq -e \
+            --arg base "$EXPECTED_BASE" \
+            --arg head "$EXPECTED_HEAD" '
+              .state == "open"
+              and .draft == false
+              and .user.login == "lightning-it-release-automation[bot]"
+              and .head.sha == $head
+              and .base.ref == "develop"
+              and .base.sha == $base
+            ' <<<"$ready_pull" >/dev/null
+          gh workflow run release-bot-exact-head-review.yml \
+            --repo "$REPOSITORY" \
+            --ref develop \
+            -f "pr_number=${recovery_pr}" \
+            -f base_ref=develop \
+            -f "expected_base=${EXPECTED_BASE}" \
+            -f "expected_head=${EXPECTED_HEAD}"
