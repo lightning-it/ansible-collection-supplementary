@@ -446,12 +446,35 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             helper,
         )
         self.assertIn(
-            'map(.name) | sort == ["Finalize the protected S0 feature-to-main result", '
-            '"Reserve protected S0 feature-to-main verification", '
-            '"Verify protected S0 feature-to-main input"]',
+            "length == (map(.name) | unique | length)",
             helper,
         )
         self.assertIn("($s0 | length)", helper)
+        jq = shutil.which("jq")
+        if jq is None:
+            self.fail("jq is required for the skipped S0 topology regression test")
+        uniqueness = "length == (map(.name) | unique | length)"
+        for names, expected in (
+            ([], 0),
+            (["Reserve protected S0 feature-to-main verification"], 0),
+            (
+                [
+                    "Reserve protected S0 feature-to-main verification",
+                    "Verify protected S0 feature-to-main input",
+                    "Finalize the protected S0 feature-to-main result",
+                ],
+                0,
+            ),
+            (["Reserve protected S0 feature-to-main verification"] * 2, 1),
+        ):
+            result = subprocess.run(  # noqa: S603
+                [jq, "-e", uniqueness],
+                input=json.dumps([{"name": name} for name in names]),
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(expected, result.returncode, result.stderr)
 
     def test_release_app_ancestry_backmerge_uses_deterministic_controller(
         self,

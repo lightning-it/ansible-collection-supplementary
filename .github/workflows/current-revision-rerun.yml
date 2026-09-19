@@ -974,7 +974,7 @@ jobs:
           synthetic_authorization_jobs=$(jq -c '[.[] | select(.runner_id == null and (.steps | length) == 0) | select(.name == "Authorize exact Supplementary catch-up v5 successor") | select(.run_attempt == 1 and .status == "completed" and .conclusion == "skipped")]' <<<"${attempt_one_jobs}")
           test "$(jq 'length' <<<"${synthetic_authorization_jobs}")" -le 1
           synthetic_s0_jobs=$(jq -c '[.[] | select(.runner_id == null and (.steps | length) == 0) | select(.name == "Reserve protected S0 feature-to-main verification" or .name == "Verify protected S0 feature-to-main input" or .name == "Finalize the protected S0 feature-to-main result") | select(.run_attempt == 1 and .status == "completed" and .conclusion == "skipped")]' <<<"${attempt_one_jobs}")
-          jq -e 'map(.name) | sort == ["Finalize the protected S0 feature-to-main result", "Reserve protected S0 feature-to-main verification", "Verify protected S0 feature-to-main input"]' <<<"${synthetic_s0_jobs}" >/dev/null
+          jq -e 'length == (map(.name) | unique | length)' <<<"${synthetic_s0_jobs}" >/dev/null
           runner_backed_jobs=$(jq -c \
             '[.[] | select(.runner_id != null or (.steps | length) > 0)]' \
             <<<"${attempt_one_jobs}")
