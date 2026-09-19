@@ -164,6 +164,7 @@ jobs:
             first_parent="${parents[0]}"
             synchronized_base="${parents[1]}"
             git merge-base --is-ancestor "$source_base" "$synchronized_base"
+            git merge-base --is-ancestor "$synchronized_base" "$EXPECTED_BASE"
             synchronized_tree="$(git merge-tree --write-tree "$first_parent" "$synchronized_base")"
             test "$(git show -s --format='%T' "$cursor")" = "$synchronized_tree"
             recovery_base="$synchronized_base"
@@ -187,6 +188,87 @@ jobs:
           test -s "$original_diff"
           test "$(sha256sum "$original_manifest" | awk '{print $1}')" = "$PATHS_SHA256"
           test "$(sha256sum "$original_diff" | awk '{print $1}')" = "$DIFF_SHA256"
+
+          receipt_from_main="$RUNNER_TEMP/recovery-refresh-main-receipt.json"
+          receipt_from_source="$RUNNER_TEMP/recovery-refresh-source-receipt.json"
+          git show "${MAIN_SHA}:changelogs/release-preparation.json" >"$receipt_from_main"
+          git show "${source_head}:changelogs/release-preparation.json" >"$receipt_from_source"
+          cmp --silent "$receipt_from_main" "$receipt_from_source"
+          jq -e \
+            --arg repo "$REPOSITORY" \
+            --arg repository_id "${{ github.event.repository.id }}" \
+            --arg version "${RELEASE_TAG#v}" '
+              .schema_version == 2
+              and .next_version == $version
+              and .repository == $repo
+              and .repository_id == $repository_id
+              and (.base_sha | type == "string" and test("^[0-9a-f]{40}$"))
+              and (.fragments | type == "array" and length > 0)
+              and all(
+                .fragments[];
+                (.path | type == "string"
+                  and test("^[A-Za-z0-9][A-Za-z0-9._-]*\\.ya?ml$"))
+                and (.sha256 | type == "string" and test("^[0-9a-f]{64}$"))
+              )
+              and (([.fragments[].path] | length) == ([.fragments[].path] | unique | length))
+            ' "$receipt_from_source" >/dev/null
+          receipt_base="$(jq -er .base_sha "$receipt_from_source")"
+          git cat-file -e "${receipt_base}^{commit}"
+          git merge-base --is-ancestor "$receipt_base" "$source_base"
+
+          receipt_fragments="$RUNNER_TEMP/recovery-refresh-receipt-fragments.txt"
+          deleted_fragments="$RUNNER_TEMP/recovery-refresh-deleted-fragments.txt"
+          : >"$receipt_fragments"
+          : >"$deleted_fragments"
+          while IFS=$'\t' read -r fragment digest extra; do
+            test -z "${extra:-}"
+            fragment_path="changelogs/fragments/${fragment}"
+            if git cat-file -e "${source_base}:${fragment_path}" 2>/dev/null; then
+              fragment_file="$RUNNER_TEMP/recovery-refresh-fragment-${digest}"
+              git show "${source_base}:${fragment_path}" >"$fragment_file"
+              test "$(sha256sum "$fragment_file" | awk '{print $1}')" = "$digest"
+              printf 'D\t%s\n' "$fragment_path" >>"$receipt_fragments"
+            fi
+          done < <(jq -r '.fragments[] | [.path, .sha256] | @tsv' "$receipt_from_source")
+          LC_ALL=C sort -u -o "$receipt_fragments" "$receipt_fragments"
+          test -s "$receipt_fragments"
+
+          while IFS=$'\t' read -r status path extra; do
+            test -z "${extra:-}"
+            case "$path" in
+              CHANGELOG.rst|changelogs/.plugin-cache.yaml|changelogs/changelog.yaml|galaxy.yml)
+                test "$status" = M
+                ;;
+              changelogs/release-preparation.json)
+                test "$status" = M
+                ;;
+              changelogs/fragments/*/*)
+                echo "::error::Nested release fragment is unauthorized: ${path}"
+                exit 1
+                ;;
+              changelogs/fragments/*.yml|changelogs/fragments/*.yaml)
+                test "$status" = D
+                fragment="${path#changelogs/fragments/}"
+                test "$fragment" = "${fragment##*/}"
+                [[ "$fragment" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$ ]]
+                printf 'D\t%s\n' "$path" >>"$deleted_fragments"
+                ;;
+              plugins/modules/atomic_path.py|plugins/modules/atomic_unlink.py)
+                test "$status" = M
+                ;;
+              tests/unit/test_li139_release_metadata.py)
+                [[ "$status" == A || "$status" == M ]]
+                ;;
+              *)
+                echo "::error::Recovery refresh changes unauthorized path: ${path}"
+                exit 1
+                ;;
+            esac
+          done <"$original_manifest"
+          LC_ALL=C sort -u -o "$deleted_fragments" "$deleted_fragments"
+          cmp --silent "$receipt_fragments" "$deleted_fragments"
+          test "$(git show "${source_head}:galaxy.yml" | sed -n 's/^version:[[:space:]]*//p')" = \
+            "${RELEASE_TAG#v}"
 
           update_required=true
           final_tree="$(git show -s --format='%T' "$EXPECTED_HEAD")"
@@ -352,6 +434,7 @@ jobs:
               and .base.ref == "develop"
             ' <<<"$source_pr" >/dev/null
 
+          live_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"
           jq -e \
             --arg base "$EXPECTED_BASE" \
             --arg body "$expected_body" \

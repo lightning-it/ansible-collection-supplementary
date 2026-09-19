@@ -1419,6 +1419,10 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn('test "$hop_count" -le 20', refresh)
         self.assertIn('synchronized_tree="$(git merge-tree --write-tree', refresh)
         self.assertIn(
+            'git merge-base --is-ancestor "$synchronized_base" "$EXPECTED_BASE"',
+            refresh,
+        )
+        self.assertIn(
             'GH_TOKEN="$GH_TOKEN" git -c credential.helper= \\',
             refresh,
         )
@@ -1432,6 +1436,15 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn('test "$(sha256sum "$original_diff"', refresh)
         self.assertIn('test "$(sha256sum "$final_manifest"', refresh)
         self.assertIn('test "$(sha256sum "$final_diff"', refresh)
+        self.assertIn('cmp --silent "$receipt_from_main" "$receipt_from_source"', refresh)
+        self.assertIn(".repository_id == $repository_id", refresh)
+        self.assertIn('git merge-base --is-ancestor "$receipt_base" "$source_base"', refresh)
+        self.assertIn("plugins/modules/atomic_path.py|plugins/modules/atomic_unlink.py", refresh)
+        self.assertIn('cmp --silent "$receipt_fragments" "$deleted_fragments"', refresh)
+        self.assertLess(
+            refresh.index('receipt_from_main="$RUNNER_TEMP/'),
+            refresh.index("      - name: Mint repository-scoped release automation App token"),
+        )
         self.assertIn("permission-actions: write", refresh)
         self.assertIn("permission-contents: read", refresh)
         self.assertNotIn("permission-contents: write", refresh)
@@ -1457,9 +1470,21 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("and .body == $body", final_step)
         self.assertEqual(2, final_step.count('test "$protected_main" = "$MAIN_SHA"'))
         self.assertEqual(2, final_step.count("and .body == $body"))
+        self.assertEqual(
+            3,
+            final_step.count('live_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"'),
+        )
         dispatch_offset = final_step.index("gh workflow run release-bot-exact-head-review.yml")
         self.assertLess(final_step.rindex('test "$protected_main" = "$MAIN_SHA"'), dispatch_offset)
         self.assertLess(final_step.rindex("and .body == $body"), dispatch_offset)
+        self.assertGreater(
+            final_step.rindex('live_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"'),
+            final_step.rindex('source_pr="$(gh api "repos/${REPOSITORY}/pulls/${SOURCE_PR_NUMBER}")"'),
+        )
+        self.assertLess(
+            final_step.rindex('live_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"'),
+            final_step.rindex("and .body == $body"),
+        )
         self.assertLess(
             final_step.index("and .body == $body"),
             final_step.index('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"'),
