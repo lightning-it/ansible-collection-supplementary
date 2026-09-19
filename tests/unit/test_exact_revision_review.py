@@ -426,6 +426,25 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("synthetic_authorization_jobs=$(jq -c", retry)
         self.assertIn("runner_backed_jobs=$(jq -c", retry)
         self.assertIn(
+            "route_jobs=$(jq -c",
+            retry,
+        )
+        self.assertIn('select(.name == "Route protected current-revision verification")', retry)
+        self.assertIn('test "$(jq \'length\' <<<"${route_jobs}")" -le 1', retry)
+        self.assertIn("legacy_jobs=$(jq -c", retry)
+        self.assertIn('select(.name == "Legacy protected current-revision verifier")', retry)
+        self.assertIn('test "$(jq \'length\' <<<"${legacy_jobs}")" -le 1', retry)
+        self.assertIn('select(.name == "Required current-revision workflow")', retry)
+        self.assertIn('test "$(jq \'length\' <<<"${rerunnable_jobs}")" -eq 1', retry)
+        self.assertIn(
+            '--argjson legacy "${legacy_jobs}" --argjson required "${rerunnable_jobs}" --argjson route "${route_jobs}"',
+            retry,
+        )
+        self.assertIn(
+            "(($legacy | length) + ($required | length) + ($route | length))",
+            retry,
+        )
+        self.assertNotIn(
             'test "$(jq \'length\' <<<"${runner_backed_jobs}")" -eq 1',
             retry,
         )

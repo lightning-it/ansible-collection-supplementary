@@ -977,9 +977,18 @@ jobs:
             <<<"${attempt_one_jobs}")
           test "$(jq 'length' <<<"${attempt_one_jobs}")" -eq \
             "$(jq -n --argjson authorization "${synthetic_authorization_jobs}" --argjson evidence "${synthetic_evidence_jobs}" --argjson runners "${runner_backed_jobs}" '(($authorization | length) + ($evidence | length) + ($runners | length))')"
-          test "$(jq 'length' <<<"${runner_backed_jobs}")" -eq 1
+          route_jobs=$(jq -c \
+            '[.[] | select(.name == "Route protected current-revision verification") | select(.runner_id != null and (.steps | length) > 0) | select(.run_attempt == 1) | select(.status == "completed" and .conclusion == "success")]' \
+            <<<"${runner_backed_jobs}")
+          test "$(jq 'length' <<<"${route_jobs}")" -le 1
+          legacy_jobs=$(jq -c \
+            '[.[] | select(.name == "Legacy protected current-revision verifier") | select(.runner_id != null and (.steps | length) > 0) | select(.run_attempt == 1) | select(.status == "completed" and .conclusion == "failure")]' \
+            <<<"${runner_backed_jobs}")
+          test "$(jq 'length' <<<"${legacy_jobs}")" -le 1
           rerunnable_jobs=$(jq -c '[.[] | select(.name == "Required current-revision workflow") | select(.runner_id != null and (.steps | length) > 0) | select(.run_attempt == 1) | select(.status == "completed" and .conclusion == "failure")]' <<<"${runner_backed_jobs}")
           test "$(jq 'length' <<<"${rerunnable_jobs}")" -eq 1
+          test "$(jq 'length' <<<"${runner_backed_jobs}")" -eq \
+            "$(jq -n --argjson legacy "${legacy_jobs}" --argjson required "${rerunnable_jobs}" --argjson route "${route_jobs}" '(($legacy | length) + ($required | length) + ($route | length))')"
           required_job_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' \
             <<<"${rerunnable_jobs}")"
           revalidate_pr_metadata
