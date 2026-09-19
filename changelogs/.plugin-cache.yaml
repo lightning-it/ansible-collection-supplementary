@@ -28,12 +28,12 @@ plugins:
       description: Mutate one path below an identity-bound parent chain
       name: atomic_path
       namespace: ''
-      version_added: 3.3.0
+      version_added: 3.4.0
     atomic_unlink:
       description: Unlink one exactly identified regular file
       name: atomic_unlink
       namespace: ''
-      version_added: 3.3.0
+      version_added: 3.4.0
   netconf: {}
   shell: {}
   strategy: {}

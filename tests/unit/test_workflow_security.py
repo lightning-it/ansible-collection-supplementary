@@ -432,6 +432,50 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             self.assertIn(required_input, develop_handoff)
             self.assertIn(required_input, main_handoff)
 
+    def test_current_revision_rerun_accepts_only_the_known_skipped_s0_topology(self) -> None:
+        helper = (WORKFLOWS / "current-revision-rerun.yml").read_text(encoding="utf-8")
+        for job_name in (
+            "Reserve protected S0 feature-to-main verification",
+            "Verify protected S0 feature-to-main input",
+            "Finalize the protected S0 feature-to-main result",
+        ):
+            self.assertEqual(1, helper.count(f'.name == "{job_name}"'))
+        self.assertIn("synthetic_s0_jobs=$(jq -c", helper)
+        self.assertIn(
+            '.run_attempt == 1 and .status == "completed" and .conclusion == "skipped"',
+            helper,
+        )
+        self.assertIn(
+            "length == (map(.name) | unique | length)",
+            helper,
+        )
+        self.assertIn("($s0 | length)", helper)
+        jq = shutil.which("jq")
+        if jq is None:
+            self.fail("jq is required for the skipped S0 topology regression test")
+        uniqueness = "length == (map(.name) | unique | length)"
+        for names, expected in (
+            ([], 0),
+            (["Reserve protected S0 feature-to-main verification"], 0),
+            (
+                [
+                    "Reserve protected S0 feature-to-main verification",
+                    "Verify protected S0 feature-to-main input",
+                    "Finalize the protected S0 feature-to-main result",
+                ],
+                0,
+            ),
+            (["Reserve protected S0 feature-to-main verification"] * 2, 1),
+        ):
+            result = subprocess.run(  # noqa: S603
+                [jq, "-e", uniqueness],
+                input=json.dumps([{"name": name} for name in names]),
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(expected, result.returncode, result.stderr)
+
     def test_release_app_ancestry_backmerge_uses_deterministic_controller(
         self,
     ) -> None:
@@ -1272,11 +1316,266 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         )
         self.assertIn('test "$tagger_app_slug" = "$EXPECTED_TAG_APP_SLUG"', back_sync)
         self.assertNotIn("RELEASE_TAG_APP_PRIVATE_KEY", back_sync)
-        self.assertEqual(1, back_sync.count("actions/create-github-app-token@"))
+        self.assertEqual(2, back_sync.count("actions/create-github-app-token@"))
         self.assertNotIn("tagger litreleasebot", back_sync)
         self.assertIn('git merge --no-ff -X ours "$release_sha"', back_sync)
         self.assertIn('test "$tag" = "v${tagged_version}"', back_sync)
         self.assertNotIn("git merge --no-ff -X ours origin/main", back_sync)
+
+        recovery = load_yaml(WORKFLOWS / "release-back-sync.yml")["jobs"]["failed-pre-tag-recovery"]
+        dispatch_inputs = load_yaml(WORKFLOWS / "release-back-sync.yml")[True]["workflow_dispatch"]["inputs"]
+        self.assertLessEqual(len(dispatch_inputs), 10)
+        for published_tag_input in (
+            "release_tag_app_slug",
+            "release_tag_app_id",
+            "release_tag_app_client_id",
+        ):
+            self.assertFalse(dispatch_inputs[published_tag_input]["required"])
+            self.assertEqual("", dispatch_inputs[published_tag_input]["default"])
+        published_tag_classification = back_sync.split("  security-classification:", 1)[1].split("  back-sync:", 1)[0]
+        self.assertIn(
+            "EXPECTED_TAG_APP_SLUG: ${{ inputs.release_tag_app_slug || '' }}",
+            published_tag_classification,
+        )
+        self.assertIn(
+            'test "$EXPECTED_TAG_APP_SLUG" = "lightning-it-release-tag-creator"',
+            published_tag_classification,
+        )
+        self.assertIn(
+            'test "$EXPECTED_TAG_APP_ID" = "4344269"',
+            published_tag_classification,
+        )
+        self.assertIn(
+            'test "$EXPECTED_TAG_APP_CLIENT_ID" = "Iv23liJnnvOQwajan2Mf"',
+            published_tag_classification,
+        )
+        normalized_condition = " ".join(recovery["if"].split())
+        self.assertIn("github.ref == 'refs/heads/develop'", normalized_condition)
+        self.assertIn("github.ref_protected == true", normalized_condition)
+        self.assertIn("inputs.mode == 'failed-pre-tag-recovery'", normalized_condition)
+        self.assertIn("github.actor == 'litroc'", normalized_condition)
+        self.assertIn("github.triggering_actor == 'litroc'", normalized_condition)
+        self.assertEqual("normal-release-promotion-approval", recovery["environment"])
+        self.assertEqual({"contents": "read", "pull-requests": "read"}, recovery["permissions"])
+        recovery_text = back_sync.split("  failed-pre-tag-recovery:", 1)[1]
+        self.assertIn('test "$protected_develop" = "$GITHUB_SHA"', recovery_text)
+        self.assertIn('test "$protected_main" = "$EXPECTED_MAIN"', recovery_text)
+        self.assertIn('echo "main=$EXPECTED_MAIN"', recovery_text)
+        self.assertIn(
+            "EXPECTED_MAIN: ${{ steps.recovery-source.outputs.main }}",
+            recovery_text,
+        )
+        self.assertEqual(
+            2,
+            recovery_text.count('protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"'),
+        )
+        self.assertEqual(2, recovery_text.count('test "$protected_main" = "$EXPECTED_MAIN"'))
+        self.assertIn('select((keys | sort) == ["diff_sha256", "main_sha", "paths_sha256"])', recovery_text)
+        self.assertIn('.state == "closed"', recovery_text)
+        self.assertIn(".merged == false", recovery_text)
+        self.assertIn('.user.login == "litroc"', recovery_text)
+        self.assertIn("and .head.sha == $head", recovery_text)
+        self.assertIn('test "$(git merge-base "$GITHUB_SHA" "$EXPECTED_HEAD")" = "$EXPECTED_BASE"', recovery_text)
+        self.assertIn(
+            'integration_tree="$(git merge-tree --write-tree "$GITHUB_SHA" "$EXPECTED_HEAD")"',
+            recovery_text,
+        )
+        self.assertIn('test "$(git cat-file -t "$integration_tree")" = tree', recovery_text)
+        self.assertIn(
+            "git diff --binary --full-index --no-color --no-ext-diff --no-textconv",
+            recovery_text,
+        )
+        self.assertIn('"${GITHUB_SHA}^{tree}" "$integration_tree" --', recovery_text)
+        self.assertNotIn('"$EXPECTED_BASE" "$EXPECTED_HEAD" -- >"$diff_file"', recovery_text)
+        self.assertIn('test "$(sha256sum "$manifest"', recovery_text)
+        self.assertIn('test "$(sha256sum "$diff_file"', recovery_text)
+        self.assertIn(
+            "changelogs/fragments/*.yml|changelogs/fragments/*.yaml)",
+            recovery_text,
+        )
+        self.assertIn("changelogs/fragments/*/*)", recovery_text)
+        self.assertIn("Nested release fragment is unauthorized", recovery_text)
+        self.assertIn(
+            'test "$fragment" = "${fragment##*/}"',
+            recovery_text,
+        )
+        self.assertIn(
+            'test("^[A-Za-z0-9][A-Za-z0-9._-]*\\\\.ya?ml$")',
+            recovery_text,
+        )
+        self.assertIn('test "$status" = D', recovery_text)
+        self.assertIn(
+            'git cat-file -e "${EXPECTED_BASE}:${fragment_path}"',
+            recovery_text,
+        )
+        self.assertIn(
+            'test "$(sha256sum "$fragment_file"',
+            recovery_text,
+        )
+        self.assertIn(
+            'cmp --silent "$receipt_fragments" "$deleted_fragments"',
+            recovery_text,
+        )
+        self.assertIn("plugins/modules/atomic_path.py|plugins/modules/atomic_unlink.py", recovery_text)
+        self.assertIn("tests/unit/test_li139_release_metadata.py", recovery_text)
+        self.assertIn('cmp --silent "$receipt_from_main" "$receipt_from_head"', recovery_text)
+        self.assertIn("permission-contents: read", recovery_text)
+        self.assertNotIn("permission-contents: write", recovery_text)
+        self.assertIn("gh pr create \\", recovery_text)
+        self.assertIn("--draft \\", recovery_text)
+        self.assertIn('.user.login == "lightning-it-release-automation[bot]"', recovery_text)
+        self.assertIn('gh pr ready "$recovery_pr"', recovery_text)
+        self.assertIn("gh workflow run release-bot-exact-head-review.yml", recovery_text)
+        self.assertNotIn("git push", recovery_text)
+        self.assertNotIn("--force", recovery_text)
+
+        refresh_path = WORKFLOWS / "release-recovery-review-refresh.yml"
+        refresh = refresh_path.read_text(encoding="utf-8")
+        refresh_yaml = load_yaml(refresh_path)
+        refresh_inputs = refresh_yaml[True]["workflow_dispatch"]["inputs"]
+        refresh_job = refresh_yaml["jobs"]["refresh"]
+        self.assertEqual(
+            {
+                "recovery_pr",
+                "source_pr",
+                "tag",
+                "expected_base",
+                "expected_head",
+                "main_sha",
+                "paths_sha256",
+                "diff_sha256",
+            },
+            set(refresh_inputs),
+        )
+        normalized_refresh_condition = " ".join(refresh_job["if"].split())
+        self.assertIn("github.ref == 'refs/heads/develop'", normalized_refresh_condition)
+        self.assertIn("github.ref_protected == true", normalized_refresh_condition)
+        self.assertIn("github.actor == 'litroc'", normalized_refresh_condition)
+        self.assertIn("github.triggering_actor == 'litroc'", normalized_refresh_condition)
+        self.assertEqual("normal-release-promotion-approval", refresh_job["environment"])
+        self.assertEqual({"contents": "read", "pull-requests": "read"}, refresh_job["permissions"])
+        self.assertIn('test "$protected_develop" = "$GITHUB_SHA"', refresh)
+        self.assertIn('test "$protected_develop" = "$EXPECTED_BASE"', refresh)
+        self.assertIn('test "$protected_main" = "$MAIN_SHA"', refresh)
+        self.assertIn('.user.login == "lightning-it-release-automation[bot]"', refresh)
+        self.assertIn('.user.login == "litroc"', refresh)
+        self.assertIn("and .body == $body", refresh)
+        self.assertIn('test "$hop_count" -le 20', refresh)
+        self.assertIn('synchronized_tree="$(git merge-tree --write-tree', refresh)
+        self.assertIn(
+            'git merge-base --is-ancestor "$synchronized_base" "$EXPECTED_BASE"',
+            refresh,
+        )
+        self.assertIn('recovery_pr_base="$(jq -er .base.sha <<<"$recovery_pr")"', refresh)
+        self.assertIn('current_recovery_base="$synchronized_base"', refresh)
+        self.assertIn('recovery_base="$recovery_pr_base"', refresh)
+        self.assertIn('test "$recovery_pr_base" = "$current_recovery_base"', refresh)
+        self.assertIn(
+            'git merge-base --is-ancestor "$current_recovery_base" "$EXPECTED_BASE"',
+            refresh,
+        )
+        self.assertIn('echo "recovery_pr_base=$recovery_pr_base"', refresh)
+        pre_token_proof = refresh.split(
+            "      - name: Prove immutable recovery, ancestry, and next tree before token access",
+            1,
+        )[1].split("      - name: Mint repository-scoped release automation App token", 1)[0]
+        self.assertNotIn('--arg base "$EXPECTED_BASE"', pre_token_proof)
+        self.assertIn('and (.base.sha | test("^[0-9a-f]{40}$"))', pre_token_proof)
+        self.assertIn(
+            'GH_TOKEN="$GH_TOKEN" git -c credential.helper= \\',
+            refresh,
+        )
+        self.assertIn(
+            "-c 'credential.helper=!gh auth git-credential' fetch \"$@\"",
+            refresh,
+        )
+        self.assertIn("authenticated_fetch --no-tags origin \\", refresh)
+        self.assertNotIn("\n          git fetch --no-tags origin \\", refresh)
+        self.assertIn('test "$(sha256sum "$original_manifest"', refresh)
+        self.assertIn('test "$(sha256sum "$original_diff"', refresh)
+        self.assertIn('test "$(sha256sum "$final_manifest"', refresh)
+        self.assertIn('test "$(sha256sum "$final_diff"', refresh)
+        self.assertIn('cmp --silent "$receipt_from_main" "$receipt_from_source"', refresh)
+        self.assertIn(".repository_id == $repository_id", refresh)
+        self.assertIn('git merge-base --is-ancestor "$receipt_base" "$source_base"', refresh)
+        self.assertIn("plugins/modules/atomic_path.py|plugins/modules/atomic_unlink.py", refresh)
+        self.assertIn('cmp --silent "$receipt_fragments" "$deleted_fragments"', refresh)
+        self.assertLess(
+            refresh.index('receipt_from_main="$RUNNER_TEMP/'),
+            refresh.index("      - name: Mint repository-scoped release automation App token"),
+        )
+        self.assertIn("permission-actions: write", refresh)
+        self.assertIn("permission-contents: write", refresh)
+        self.assertNotIn("permission-contents: read", refresh)
+        self.assertIn("GitHub requires App callers of update-branch", refresh)
+        self.assertIn("permission-pull-requests: write", refresh)
+        final_step = refresh.split(
+            "      - name: Re-prove, update normally, and dispatch exact-head review as Release App",
+            1,
+        )[1]
+        self.assertIn("MAIN_SHA: ${{ inputs.main_sha }}", final_step)
+        self.assertIn("SOURCE_HEAD: ${{ steps.recovery.outputs.source_head }}", final_step)
+        self.assertIn("SOURCE_PR_NUMBER: ${{ inputs.source_pr }}", final_step)
+        self.assertIn(
+            "RECOVERY_PR_BASE: ${{ steps.recovery.outputs.recovery_pr_base }}",
+            final_step,
+        )
+        self.assertIn(
+            'protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"',
+            final_step,
+        )
+        self.assertIn('test "$protected_main" = "$MAIN_SHA"', final_step)
+        self.assertIn('source_pr="$(gh api "repos/${REPOSITORY}/pulls/${SOURCE_PR_NUMBER}")"', final_step)
+        self.assertIn('.state == "closed"', final_step)
+        self.assertIn("and .merged == false", final_step)
+        self.assertIn('and .user.login == "litroc"', final_step)
+        self.assertIn("and .head.sha == $head", final_step)
+        self.assertIn('expected_body="Release-App recovery of the closed source PR', final_step)
+        self.assertIn("and .body == $body", final_step)
+        self.assertEqual(2, final_step.count('test "$protected_main" = "$MAIN_SHA"'))
+        self.assertEqual(2, final_step.count("and .body == $body"))
+        self.assertLess(
+            final_step.index('--arg base "$RECOVERY_PR_BASE"'),
+            final_step.index('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"'),
+        )
+        self.assertGreater(
+            final_step.rindex('--arg base "$EXPECTED_BASE"'),
+            final_step.index('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"'),
+        )
+        self.assertEqual(
+            3,
+            final_step.count('live_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"'),
+        )
+        dispatch_offset = final_step.index("gh workflow run release-bot-exact-head-review.yml")
+        self.assertLess(final_step.rindex('test "$protected_main" = "$MAIN_SHA"'), dispatch_offset)
+        self.assertLess(final_step.rindex("and .body == $body"), dispatch_offset)
+        self.assertGreater(
+            final_step.rindex('live_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"'),
+            final_step.rindex('source_pr="$(gh api "repos/${REPOSITORY}/pulls/${SOURCE_PR_NUMBER}")"'),
+        )
+        self.assertLess(
+            final_step.rindex('live_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"'),
+            final_step.rindex("and .body == $body"),
+        )
+        self.assertLess(
+            final_step.index("and .body == $body"),
+            final_step.index('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"'),
+        )
+        self.assertIn('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"', refresh)
+        self.assertIn('-f "expected_head_sha=${EXPECTED_HEAD}"', refresh)
+        self.assertIn("and .parents[0].sha == $previous", refresh)
+        self.assertIn("and .parents[1].sha == $base", refresh)
+        self.assertIn("and .tree.sha == $tree", refresh)
+        self.assertIn("gh workflow run release-bot-exact-head-review.yml", refresh)
+        self.assertLess(
+            refresh.index('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"'),
+            refresh.index("gh workflow run release-bot-exact-head-review.yml"),
+        )
+        self.assertNotIn("git push", refresh)
+        self.assertNotIn("--force", refresh)
+        self.assertNotIn("gh pr merge", refresh)
+        self.assertNotIn("--admin", refresh)
+        self.assertNotIn("--auto", refresh)
 
         self.assertIn(
             '-f release_tag_app_slug="$RELEASE_TAG_APP_SLUG"',

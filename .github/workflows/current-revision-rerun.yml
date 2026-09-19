@@ -966,20 +966,32 @@ jobs:
           attempt_one_jobs=$(jq -c '[.[].jobs[]]' <<<"${attempt_one_jobs_pages}")
           jq -e 'all(.[]; has("runner_id") and (.steps | type) == "array")' <<<"${attempt_one_jobs}" >/dev/null
           # Only API-published neutral checks are admissible without a runner.
-          # The centrally protected immutable v5-successor authorization is
-          # an optional, known skipped job on unrelated repositories/PRs. It
-          # is never review evidence and no other synthetic job is admitted.
+          # The centrally protected immutable v5-successor authorization and
+          # the three protected S0 topology jobs are known skipped jobs on
+          # unrelated repositories/PRs. They are never review evidence and no
+          # other synthetic job is admitted.
           synthetic_evidence_jobs=$(jq -c '[.[] | select(.runner_id == null and (.steps | length) == 0) | select(.name == "Current revision review" or .name == "Protected current-revision verifier")]' <<<"${attempt_one_jobs}")
           synthetic_authorization_jobs=$(jq -c '[.[] | select(.runner_id == null and (.steps | length) == 0) | select(.name == "Authorize exact Supplementary catch-up v5 successor") | select(.run_attempt == 1 and .status == "completed" and .conclusion == "skipped")]' <<<"${attempt_one_jobs}")
           test "$(jq 'length' <<<"${synthetic_authorization_jobs}")" -le 1
+          synthetic_s0_jobs=$(jq -c '[.[] | select(.runner_id == null and (.steps | length) == 0) | select(.name == "Reserve protected S0 feature-to-main verification" or .name == "Verify protected S0 feature-to-main input" or .name == "Finalize the protected S0 feature-to-main result") | select(.run_attempt == 1 and .status == "completed" and .conclusion == "skipped")]' <<<"${attempt_one_jobs}")
+          jq -e 'length == (map(.name) | unique | length)' <<<"${synthetic_s0_jobs}" >/dev/null
           runner_backed_jobs=$(jq -c \
             '[.[] | select(.runner_id != null or (.steps | length) > 0)]' \
             <<<"${attempt_one_jobs}")
           test "$(jq 'length' <<<"${attempt_one_jobs}")" -eq \
-            "$(jq -n --argjson authorization "${synthetic_authorization_jobs}" --argjson evidence "${synthetic_evidence_jobs}" --argjson runners "${runner_backed_jobs}" '(($authorization | length) + ($evidence | length) + ($runners | length))')"
-          test "$(jq 'length' <<<"${runner_backed_jobs}")" -eq 1
+            "$(jq -n --argjson authorization "${synthetic_authorization_jobs}" --argjson evidence "${synthetic_evidence_jobs}" --argjson s0 "${synthetic_s0_jobs}" --argjson runners "${runner_backed_jobs}" '(($authorization | length) + ($evidence | length) + ($s0 | length) + ($runners | length))')"
+          route_jobs=$(jq -c \
+            '[.[] | select(.name == "Route protected current-revision verification") | select(.runner_id != null and (.steps | length) > 0) | select(.run_attempt == 1) | select(.status == "completed" and .conclusion == "success")]' \
+            <<<"${runner_backed_jobs}")
+          test "$(jq 'length' <<<"${route_jobs}")" -le 1
+          legacy_jobs=$(jq -c \
+            '[.[] | select(.name == "Legacy protected current-revision verifier") | select(.runner_id != null and (.steps | length) > 0) | select(.run_attempt == 1) | select(.status == "completed" and .conclusion == "failure")]' \
+            <<<"${runner_backed_jobs}")
+          test "$(jq 'length' <<<"${legacy_jobs}")" -le 1
           rerunnable_jobs=$(jq -c '[.[] | select(.name == "Required current-revision workflow") | select(.runner_id != null and (.steps | length) > 0) | select(.run_attempt == 1) | select(.status == "completed" and .conclusion == "failure")]' <<<"${runner_backed_jobs}")
           test "$(jq 'length' <<<"${rerunnable_jobs}")" -eq 1
+          test "$(jq 'length' <<<"${runner_backed_jobs}")" -eq \
+            "$(jq -n --argjson legacy "${legacy_jobs}" --argjson required "${rerunnable_jobs}" --argjson route "${route_jobs}" '(($legacy | length) + ($required | length) + ($route | length))')"
           required_job_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' \
             <<<"${rerunnable_jobs}")"
           revalidate_pr_metadata
