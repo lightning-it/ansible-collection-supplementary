@@ -724,6 +724,7 @@ jobs:
 
       - name: Validate candidate, MANIFEST, evidence, and repository policy
         env:
+          CI_RUN_ID: ${{ needs.release-validation.outputs.ci-run-id }}
           REQUEST_CREATE_GITHUB_RELEASE: ${{ inputs.create_github_release }}
           REQUEST_PUBLISH_GALAXY: ${{ inputs.publish_galaxy }}
         run: |

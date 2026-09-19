@@ -67,6 +67,8 @@ class SecurityPublicationGoldenPathTests(unittest.TestCase):
         self.assertNotIn("Wait for exact-SHA main Release Validation", self.step_names)
         download = self.steps["Download exact candidate and evidence from validated run"]
         self.assertEqual("${{ needs.release-validation.outputs.ci-run-id }}", download["env"]["CI_RUN_ID"])
+        validate = self.steps["Validate candidate, MANIFEST, evidence, and repository policy"]
+        self.assertEqual("${{ needs.release-validation.outputs.ci-run-id }}", validate["env"]["CI_RUN_ID"])
 
     def test_security_order_is_nexus_then_signed_modulix_then_galaxy(self) -> None:
         nexus = self.step_names.index("Stage exact Security candidate in native Nexus Galaxy v3")
