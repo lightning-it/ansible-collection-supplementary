@@ -1272,11 +1272,118 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         )
         self.assertIn('test "$tagger_app_slug" = "$EXPECTED_TAG_APP_SLUG"', back_sync)
         self.assertNotIn("RELEASE_TAG_APP_PRIVATE_KEY", back_sync)
-        self.assertEqual(1, back_sync.count("actions/create-github-app-token@"))
+        self.assertEqual(2, back_sync.count("actions/create-github-app-token@"))
         self.assertNotIn("tagger litreleasebot", back_sync)
         self.assertIn('git merge --no-ff -X ours "$release_sha"', back_sync)
         self.assertIn('test "$tag" = "v${tagged_version}"', back_sync)
         self.assertNotIn("git merge --no-ff -X ours origin/main", back_sync)
+
+        recovery = load_yaml(WORKFLOWS / "release-back-sync.yml")["jobs"]["failed-pre-tag-recovery"]
+        dispatch_inputs = load_yaml(WORKFLOWS / "release-back-sync.yml")[True]["workflow_dispatch"]["inputs"]
+        self.assertLessEqual(len(dispatch_inputs), 10)
+        for published_tag_input in (
+            "release_tag_app_slug",
+            "release_tag_app_id",
+            "release_tag_app_client_id",
+        ):
+            self.assertFalse(dispatch_inputs[published_tag_input]["required"])
+            self.assertEqual("", dispatch_inputs[published_tag_input]["default"])
+        published_tag_classification = back_sync.split("  security-classification:", 1)[1].split("  back-sync:", 1)[0]
+        self.assertIn(
+            "EXPECTED_TAG_APP_SLUG: ${{ inputs.release_tag_app_slug || '' }}",
+            published_tag_classification,
+        )
+        self.assertIn(
+            'test "$EXPECTED_TAG_APP_SLUG" = "lightning-it-release-tag-creator"',
+            published_tag_classification,
+        )
+        self.assertIn(
+            'test "$EXPECTED_TAG_APP_ID" = "4344269"',
+            published_tag_classification,
+        )
+        self.assertIn(
+            'test "$EXPECTED_TAG_APP_CLIENT_ID" = "Iv23liJnnvOQwajan2Mf"',
+            published_tag_classification,
+        )
+        normalized_condition = " ".join(recovery["if"].split())
+        self.assertIn("github.ref == 'refs/heads/develop'", normalized_condition)
+        self.assertIn("github.ref_protected == true", normalized_condition)
+        self.assertIn("inputs.mode == 'failed-pre-tag-recovery'", normalized_condition)
+        self.assertIn("github.actor == 'litroc'", normalized_condition)
+        self.assertIn("github.triggering_actor == 'litroc'", normalized_condition)
+        self.assertEqual("ansible-collection-release-prepare", recovery["environment"])
+        self.assertEqual({"contents": "read", "pull-requests": "read"}, recovery["permissions"])
+        recovery_text = back_sync.split("  failed-pre-tag-recovery:", 1)[1]
+        self.assertIn('test "$protected_develop" = "$GITHUB_SHA"', recovery_text)
+        self.assertIn('test "$protected_main" = "$EXPECTED_MAIN"', recovery_text)
+        self.assertIn('echo "main=$EXPECTED_MAIN"', recovery_text)
+        self.assertIn(
+            "EXPECTED_MAIN: ${{ steps.recovery-source.outputs.main }}",
+            recovery_text,
+        )
+        self.assertEqual(
+            2,
+            recovery_text.count('protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"'),
+        )
+        self.assertEqual(2, recovery_text.count('test "$protected_main" = "$EXPECTED_MAIN"'))
+        self.assertIn('select((keys | sort) == ["diff_sha256", "main_sha", "paths_sha256"])', recovery_text)
+        self.assertIn('.state == "closed"', recovery_text)
+        self.assertIn(".merged == false", recovery_text)
+        self.assertIn('.user.login == "litroc"', recovery_text)
+        self.assertIn("and .head.sha == $head", recovery_text)
+        self.assertIn('test "$(git merge-base "$GITHUB_SHA" "$EXPECTED_HEAD")" = "$EXPECTED_BASE"', recovery_text)
+        self.assertIn(
+            'integration_tree="$(git merge-tree --write-tree "$GITHUB_SHA" "$EXPECTED_HEAD")"',
+            recovery_text,
+        )
+        self.assertIn('test "$(git cat-file -t "$integration_tree")" = tree', recovery_text)
+        self.assertIn(
+            "git diff --binary --full-index --no-color --no-ext-diff --no-textconv",
+            recovery_text,
+        )
+        self.assertIn('"${GITHUB_SHA}^{tree}" "$integration_tree" --', recovery_text)
+        self.assertNotIn('"$EXPECTED_BASE" "$EXPECTED_HEAD" -- >"$diff_file"', recovery_text)
+        self.assertIn('test "$(sha256sum "$manifest"', recovery_text)
+        self.assertIn('test "$(sha256sum "$diff_file"', recovery_text)
+        self.assertIn(
+            "changelogs/fragments/*.yml|changelogs/fragments/*.yaml)",
+            recovery_text,
+        )
+        self.assertIn("changelogs/fragments/*/*)", recovery_text)
+        self.assertIn("Nested release fragment is unauthorized", recovery_text)
+        self.assertIn(
+            'test "$fragment" = "${fragment##*/}"',
+            recovery_text,
+        )
+        self.assertIn(
+            'test("^[A-Za-z0-9][A-Za-z0-9._-]*\\\\.ya?ml$")',
+            recovery_text,
+        )
+        self.assertIn('test "$status" = D', recovery_text)
+        self.assertIn(
+            'git cat-file -e "${EXPECTED_BASE}:${fragment_path}"',
+            recovery_text,
+        )
+        self.assertIn(
+            'test "$(sha256sum "$fragment_file"',
+            recovery_text,
+        )
+        self.assertIn(
+            'cmp --silent "$receipt_fragments" "$deleted_fragments"',
+            recovery_text,
+        )
+        self.assertIn("plugins/modules/atomic_path.py|plugins/modules/atomic_unlink.py", recovery_text)
+        self.assertIn("tests/unit/test_li139_release_metadata.py", recovery_text)
+        self.assertIn('cmp --silent "$receipt_from_main" "$receipt_from_head"', recovery_text)
+        self.assertIn("permission-contents: read", recovery_text)
+        self.assertNotIn("permission-contents: write", recovery_text)
+        self.assertIn("gh pr create \\", recovery_text)
+        self.assertIn("--draft \\", recovery_text)
+        self.assertIn('.user.login == "lightning-it-release-automation[bot]"', recovery_text)
+        self.assertIn('gh pr ready "$recovery_pr"', recovery_text)
+        self.assertIn("gh workflow run release-bot-exact-head-review.yml", recovery_text)
+        self.assertNotIn("git push", recovery_text)
+        self.assertNotIn("--force", recovery_text)
 
         self.assertIn(
             '-f release_tag_app_slug="$RELEASE_TAG_APP_SLUG"',
