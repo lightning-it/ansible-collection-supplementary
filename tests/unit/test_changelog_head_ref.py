@@ -211,6 +211,33 @@ class ChangelogHeadRefTests(unittest.TestCase):
                     ).returncode,
                 )
 
+        (repository / "changelogs" / "release-preparation.json").write_text(
+            '{"next_version":"3.3.1"}\n', encoding="utf-8"
+        )
+        self.git(repository, "add", "changelogs/release-preparation.json")
+        self.git(repository, "commit", "--quiet", "-m", "correct release preparation receipt")
+        receipt_head = self.git(repository, "rev-parse", "HEAD")
+        self.assertEqual(
+            0,
+            policy_result(
+                head_ref="fix/release-receipt",
+                base_ref="develop",
+                compare_base=head,
+                compare_head=receipt_head,
+            ).returncode,
+        )
+        self.assertEqual(
+            0,
+            policy_result(
+                head_ref="",
+                base_ref="",
+                event_name="push",
+                ref_name="develop",
+                compare_base=head,
+                compare_head=receipt_head,
+            ).returncode,
+        )
+
         candidate_tree = self.git(repository, "rev-parse", f"{head}^{{tree}}")
         release_merge = self.git(
             repository,
