@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Reject YAML booleans at the forward proxy lock, readiness, and upstream
-    port integer boundaries so malformed inputs fail closed.

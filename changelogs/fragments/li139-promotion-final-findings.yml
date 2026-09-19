@@ -1,4 +1,0 @@
----
-bugfixes:
-  - Pin the managed rollback path to decode slurped Squid policy content exactly once.
-  - Compare the checked-out synthetic integration tree when resolving a detached release head.
