@@ -1298,7 +1298,17 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn('.user.login == "litroc"', recovery_text)
         self.assertIn("and .head.sha == $head", recovery_text)
         self.assertIn('test "$(git merge-base "$GITHUB_SHA" "$EXPECTED_HEAD")" = "$EXPECTED_BASE"', recovery_text)
-        self.assertIn("git diff --binary --full-index --no-ext-diff", recovery_text)
+        self.assertIn(
+            'integration_tree="$(git merge-tree --write-tree "$GITHUB_SHA" "$EXPECTED_HEAD")"',
+            recovery_text,
+        )
+        self.assertIn('test "$(git cat-file -t "$integration_tree")" = tree', recovery_text)
+        self.assertIn(
+            "git diff --binary --full-index --no-color --no-ext-diff --no-textconv",
+            recovery_text,
+        )
+        self.assertIn('"${GITHUB_SHA}^{tree}" "$integration_tree" --', recovery_text)
+        self.assertNotIn('"$EXPECTED_BASE" "$EXPECTED_HEAD" -- >"$diff_file"', recovery_text)
         self.assertIn('test "$(sha256sum "$manifest"', recovery_text)
         self.assertIn('test "$(sha256sum "$diff_file"', recovery_text)
         self.assertIn(
