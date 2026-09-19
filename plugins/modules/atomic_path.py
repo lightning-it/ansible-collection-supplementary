@@ -8,7 +8,7 @@
 DOCUMENTATION = r"""
 ---
 module: atomic_path
-version_added: "3.3.0"
+version_added: "3.4.0"
 short_description: Mutate one path below an identity-bound parent chain
 description:
   - Creates one directory or atomically replaces one regular file.

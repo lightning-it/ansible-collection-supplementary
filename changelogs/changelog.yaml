@@ -934,3 +934,95 @@ releases:
       - vault-raft-rootless-light-gate.yml
       - wunderbox-goal07-management-services.yml
     release_date: '2026-09-11'
+  3.4.0:
+    changes:
+      bugfixes:
+        - Bind forward-proxy rollback handlers to the explicit first mutation boundary
+          after read-only preflight, including failures that occur inside a mutating
+          operation.
+        - Bind main-promotion review to the exact protected controller and invoke
+          the verifier helper through mutually exclusive exact-revision reusable calls,
+          with a fail-closed maintained pin that must advance through protected develop
+          before each later main promotion.
+        - Compare the checked-out synthetic integration tree when resolving a detached
+          release head.
+        - Correct the managed-file rollback path and preserve per-contract Tiny evidence
+          with profile-derived release eligibility.
+        - Enforce immutable merged-PR identity for release and back-sync push changelog
+          authorization.
+        - Fail closed before removing ownership evidence when a managed runtime loses
+          its Quadlet.
+        - Keep disabled unowned forward proxy invocations mutation-free, bind Squid
+          readiness to protocol evidence and the revalidated runtime, and reject boolean
+          Guacamole host ports.
+        - Pin the managed rollback path to decode slurped Squid policy content exactly
+          once.
+        - Preserve a fail-closed Tiny JUnit artifact even when forward-proxy verification
+          aborts before the final per-contract report is assembled, without publishing
+          successful test counters for an incomplete run.
+        - Preserve exact release authorization across paginated PR associations and
+          the offline devtools boundary.
+        - Preserve fail-closed forward-proxy Tiny JUnit evidence when convergence
+          fails before verification starts.
+        - Push-Ready now canonicalizes its private check-state path so protected Exact-Revision
+          tests also work on hosts with symlinked temporary roots.
+        - Push-Ready now provides a private per-run RUNNER_TEMP so protected Exact-Revision
+          materializer tests can execute inside the hermetic check environment.
+        - Reject YAML booleans at the forward proxy lock, readiness, and upstream
+          port integer boundaries so malformed inputs fail closed.
+        - Reject YAML booleans for the forward proxy listen port, report owned disable
+          transitions in check mode, and require same-repository Release App identity
+          and the canonical base branch before a release-named pull request receives
+          changelog privileges. Generated changelog authorization now runs before
+          fragment-exemption labels, protocol readiness uses Ansible's configured-or-discovered
+          Python interpreter and complete HTTP headers, and connection validation
+          remains redacted. Explicitly configured target Python interpreters remain
+          supported, while release, back-sync, and develop-to-main promotion privileges
+          are bound to canonical repositories and target branches on both pull-request
+          and post-merge push checks; manual and unknown event types fail closed.
+        - Reject crafted single-parent release merge subjects and numeric proxy identities
+          outside the atomic writer range.
+        - Report planned nested forward-proxy directories as changed in check mode.
+        - Report render-only runtime removal, activation, and restart operations in
+          check mode, and persist a resumable runtime-absent checkpoint before deleting
+          owned forward proxy files.
+        - Restrict detached release and backsync ref recovery to canonical stable
+          semantic-version branch names.
+        - Validate non-empty atomic-unlink checksums before the absent-target fast
+          path.
+        - Verify the pinned forward-proxy image before any enabled-state file or runtime
+          mutation so a missing preload leaves existing state untouched.
+      minor_changes:
+        - Add a descriptor-relative atomic_path module for identity-bound directory
+          creation and regular-file replacement without following parent symlinks.
+        - Add the distribution-neutral lit.supplementary.forward_proxy role for a
+          closed, digest-pinned, hardened Squid Podman service on Ubuntu and Enterprise
+          Linux hosts.
+        - guacamole_deploy - add a bounded container API inactivity timeout and run
+          role prechecks before any host mutation.
+    fragments:
+      - li-139-atomic-path.yml
+      - li-139-forward-proxy-boolean-prechecks.yml
+      - li-139-forward-proxy.yml
+      - li-139-guacamole-session-timeout.yml
+      - li-139-push-ready-canonical-state-path.yml
+      - li-139-push-ready-runner-temp.yml
+      - li139-final-main-review-convergence.yml
+      - li139-final-promotion-review.yml
+      - li139-forward-proxy-runtime-convergence.yml
+      - li139-promotion-evidence-terminal.yml
+      - li139-promotion-final-findings.yml
+      - li139-promotion-review-gaps.yml
+      - li139-promotion-runtime-terminal.yml
+      - li139-terminal-runtime-boundaries.yml
+      - shared-assets-sync-34738379162.yml
+      - shared-assets-sync-34765679169.yml
+      - shared-assets-sync-34778441533.yml
+    modules:
+      - description: Mutate one path below an identity\-bound parent chain.
+        name: atomic_path
+        namespace: ''
+      - description: Unlink one exactly identified regular file.
+        name: atomic_unlink
+        namespace: ''
+    release_date: '2026-09-18'

@@ -6,7 +6,7 @@
 DOCUMENTATION = r"""
 ---
 module: atomic_unlink
-version_added: "3.3.0"
+version_added: "3.4.0"
 short_description: Unlink one exactly identified regular file
 description:
   - Descriptor-binds and verifies one file before quarantined removal.

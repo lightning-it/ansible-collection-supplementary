@@ -1,6 +1,0 @@
----
-bugfixes:
-  - >-
-    Keep disabled unowned forward proxy invocations mutation-free, bind Squid
-    readiness to protocol evidence and the revalidated runtime, and reject
-    boolean Guacamole host ports.
