@@ -220,7 +220,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
           permission-actions: write
-          permission-contents: write
+          permission-contents: read
           permission-pull-requests: write
 
       - name: Verify exact release App identity and repository scope
@@ -252,6 +252,7 @@ jobs:
           EXPECTED_HEAD: ${{ inputs.expected_head }}
           EXPECTED_TREE: ${{ steps.recovery.outputs.final_tree }}
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          MAIN_SHA: ${{ inputs.main_sha }}
           RECOVERY_BRANCH: ${{ steps.recovery.outputs.branch }}
           RECOVERY_PR_NUMBER: ${{ inputs.recovery_pr }}
           REPOSITORY: ${{ github.repository }}
@@ -260,8 +261,10 @@ jobs:
           set -euo pipefail
 
           protected_develop="$(gh api "repos/${REPOSITORY}/git/ref/heads/develop" --jq .object.sha)"
+          protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
           test "$protected_develop" = "$GITHUB_SHA"
           test "$protected_develop" = "$EXPECTED_BASE"
+          test "$protected_main" = "$MAIN_SHA"
           live_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"
           jq -e \
             --arg base "$EXPECTED_BASE" \

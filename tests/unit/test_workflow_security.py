@@ -1423,8 +1423,23 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn('test "$(sha256sum "$final_manifest"', refresh)
         self.assertIn('test "$(sha256sum "$final_diff"', refresh)
         self.assertIn("permission-actions: write", refresh)
-        self.assertIn("permission-contents: write", refresh)
+        self.assertIn("permission-contents: read", refresh)
+        self.assertNotIn("permission-contents: write", refresh)
         self.assertIn("permission-pull-requests: write", refresh)
+        final_step = refresh.split(
+            "      - name: Re-prove, update normally, and dispatch exact-head review as Release App",
+            1,
+        )[1]
+        self.assertIn("MAIN_SHA: ${{ inputs.main_sha }}", final_step)
+        self.assertIn(
+            'protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"',
+            final_step,
+        )
+        self.assertIn('test "$protected_main" = "$MAIN_SHA"', final_step)
+        self.assertLess(
+            final_step.index('test "$protected_main" = "$MAIN_SHA"'),
+            final_step.index('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"'),
+        )
         self.assertIn('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"', refresh)
         self.assertIn('-f "expected_head_sha=${EXPECTED_HEAD}"', refresh)
         self.assertIn("and .parents[0].sha == $previous", refresh)
