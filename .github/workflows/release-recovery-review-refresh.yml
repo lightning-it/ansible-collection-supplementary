@@ -316,7 +316,9 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
           permission-actions: write
-          permission-contents: read
+          # GitHub requires App callers of update-branch to have write access
+          # to the head repository; the token remains scoped to this one repo.
+          permission-contents: write
           permission-pull-requests: write
 
       - name: Verify exact release App identity and repository scope
