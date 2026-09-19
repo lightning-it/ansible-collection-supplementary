@@ -432,6 +432,50 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             self.assertIn(required_input, develop_handoff)
             self.assertIn(required_input, main_handoff)
 
+    def test_current_revision_rerun_accepts_only_the_known_skipped_s0_topology(self) -> None:
+        helper = (WORKFLOWS / "current-revision-rerun.yml").read_text(encoding="utf-8")
+        for job_name in (
+            "Reserve protected S0 feature-to-main verification",
+            "Verify protected S0 feature-to-main input",
+            "Finalize the protected S0 feature-to-main result",
+        ):
+            self.assertEqual(1, helper.count(f'.name == "{job_name}"'))
+        self.assertIn("synthetic_s0_jobs=$(jq -c", helper)
+        self.assertIn(
+            '.run_attempt == 1 and .status == "completed" and .conclusion == "skipped"',
+            helper,
+        )
+        self.assertIn(
+            "length == (map(.name) | unique | length)",
+            helper,
+        )
+        self.assertIn("($s0 | length)", helper)
+        jq = shutil.which("jq")
+        if jq is None:
+            self.fail("jq is required for the skipped S0 topology regression test")
+        uniqueness = "length == (map(.name) | unique | length)"
+        for names, expected in (
+            ([], 0),
+            (["Reserve protected S0 feature-to-main verification"], 0),
+            (
+                [
+                    "Reserve protected S0 feature-to-main verification",
+                    "Verify protected S0 feature-to-main input",
+                    "Finalize the protected S0 feature-to-main result",
+                ],
+                0,
+            ),
+            (["Reserve protected S0 feature-to-main verification"] * 2, 1),
+        ):
+            result = subprocess.run(  # noqa: S603
+                [jq, "-e", uniqueness],
+                input=json.dumps([{"name": name} for name in names]),
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(expected, result.returncode, result.stderr)
+
     def test_release_app_ancestry_backmerge_uses_deterministic_controller(
         self,
     ) -> None:
@@ -1422,6 +1466,21 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             'git merge-base --is-ancestor "$synchronized_base" "$EXPECTED_BASE"',
             refresh,
         )
+        self.assertIn('recovery_pr_base="$(jq -er .base.sha <<<"$recovery_pr")"', refresh)
+        self.assertIn('current_recovery_base="$synchronized_base"', refresh)
+        self.assertIn('recovery_base="$recovery_pr_base"', refresh)
+        self.assertIn('test "$recovery_pr_base" = "$current_recovery_base"', refresh)
+        self.assertIn(
+            'git merge-base --is-ancestor "$current_recovery_base" "$EXPECTED_BASE"',
+            refresh,
+        )
+        self.assertIn('echo "recovery_pr_base=$recovery_pr_base"', refresh)
+        pre_token_proof = refresh.split(
+            "      - name: Prove immutable recovery, ancestry, and next tree before token access",
+            1,
+        )[1].split("      - name: Mint repository-scoped release automation App token", 1)[0]
+        self.assertNotIn('--arg base "$EXPECTED_BASE"', pre_token_proof)
+        self.assertIn('and (.base.sha | test("^[0-9a-f]{40}$"))', pre_token_proof)
         self.assertIn(
             'GH_TOKEN="$GH_TOKEN" git -c credential.helper= \\',
             refresh,
@@ -1457,6 +1516,10 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("SOURCE_HEAD: ${{ steps.recovery.outputs.source_head }}", final_step)
         self.assertIn("SOURCE_PR_NUMBER: ${{ inputs.source_pr }}", final_step)
         self.assertIn(
+            "RECOVERY_PR_BASE: ${{ steps.recovery.outputs.recovery_pr_base }}",
+            final_step,
+        )
+        self.assertIn(
             'protected_main="$(gh api "repos/${REPOSITORY}/git/ref/heads/main" --jq .object.sha)"',
             final_step,
         )
@@ -1470,6 +1533,14 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("and .body == $body", final_step)
         self.assertEqual(2, final_step.count('test "$protected_main" = "$MAIN_SHA"'))
         self.assertEqual(2, final_step.count("and .body == $body"))
+        self.assertLess(
+            final_step.index('--arg base "$RECOVERY_PR_BASE"'),
+            final_step.index('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"'),
+        )
+        self.assertGreater(
+            final_step.rindex('--arg base "$EXPECTED_BASE"'),
+            final_step.index('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"'),
+        )
         self.assertEqual(
             3,
             final_step.count('live_pr="$(gh api "repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}")"'),
