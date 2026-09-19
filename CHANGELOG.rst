@@ -4,6 +4,15 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.4.1
+======
+
+Bugfixes
+--------
+
+- Bind publication validation to the exact successful Collection CI run so protected releases can verify their immutable evidence before publishing.
+- Keep Release-App failed-release recovery pull requests on the normal protected update-branch path while dispatching the Exact-Revision review only after the final App-bound head, base, ancestry, path manifest, and diff are revalidated.
+
 v3.4.0
 ======
 
