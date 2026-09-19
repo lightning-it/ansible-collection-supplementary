@@ -488,8 +488,10 @@ jobs:
     name: Open exact failed pre-tag recovery PR
     if: >-
       github.ref == 'refs/heads/develop' &&
+      github.ref_protected == true &&
       inputs.mode == 'failed-pre-tag-recovery' &&
-      github.actor == 'litroc'
+      github.actor == 'litroc' &&
+      github.triggering_actor == 'litroc'
     runs-on: ubuntu-latest
     environment: ansible-collection-release-prepare
     timeout-minutes: 10
@@ -589,7 +591,7 @@ jobs:
               changelogs/release-preparation.json)
                 test "$status" = M
                 ;;
-              changelogs/fragments/*.yml)
+              changelogs/fragments/*.yml|changelogs/fragments/*.yaml)
                 test "$status" = D
                 ;;
               plugins/modules/atomic_path.py|plugins/modules/atomic_unlink.py)

@@ -1283,8 +1283,10 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertLessEqual(len(dispatch_inputs), 10)
         normalized_condition = " ".join(recovery["if"].split())
         self.assertIn("github.ref == 'refs/heads/develop'", normalized_condition)
+        self.assertIn("github.ref_protected == true", normalized_condition)
         self.assertIn("inputs.mode == 'failed-pre-tag-recovery'", normalized_condition)
         self.assertIn("github.actor == 'litroc'", normalized_condition)
+        self.assertIn("github.triggering_actor == 'litroc'", normalized_condition)
         self.assertEqual("ansible-collection-release-prepare", recovery["environment"])
         self.assertEqual({"contents": "read", "pull-requests": "read"}, recovery["permissions"])
         recovery_text = back_sync.split("  failed-pre-tag-recovery:", 1)[1]
@@ -1299,7 +1301,10 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("git diff --binary --full-index --no-ext-diff", recovery_text)
         self.assertIn('test "$(sha256sum "$manifest"', recovery_text)
         self.assertIn('test "$(sha256sum "$diff_file"', recovery_text)
-        self.assertIn("changelogs/fragments/*.yml)", recovery_text)
+        self.assertIn(
+            "changelogs/fragments/*.yml|changelogs/fragments/*.yaml)",
+            recovery_text,
+        )
         self.assertIn('test "$status" = D', recovery_text)
         self.assertIn("plugins/modules/atomic_path.py|plugins/modules/atomic_unlink.py", recovery_text)
         self.assertIn("tests/unit/test_li139_release_metadata.py", recovery_text)
