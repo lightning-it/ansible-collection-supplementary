@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Treat the canonical release-preparation receipt as non-user-visible
-    provenance during pull-request and protected-branch changelog validation.
