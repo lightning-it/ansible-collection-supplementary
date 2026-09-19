@@ -306,6 +306,11 @@ fi
 SOURCE_ROOT_CONTAINER="${WUNDER_DEVTOOLS_SOURCE_ROOT_CONTAINER:-/sources}"
 mounted_source_root=0
 if [ "$SOURCE_ROOT_POLICY" = enabled ] && [ -d "$SOURCE_ROOT_HOST" ]; then
+  source_root_real="$(cd "$SOURCE_ROOT_HOST" && pwd -P)" \
+    || fail_closed "cannot resolve source-root host path"
+  case "$source_root_real" in
+    *:*) fail_closed "resolved source-root host path contains an unsafe mount delimiter" ;;
+  esac
   case "$SOURCE_ROOT_CONTAINER" in
     /*) ;;
     *) fail_closed "source-root container path must be absolute" ;;
@@ -317,9 +322,15 @@ if [ "$SOURCE_ROOT_POLICY" = enabled ] && [ -d "$SOURCE_ROOT_HOST" ]; then
   esac
   shopt -s nullglob
   for collection_dir in "$SOURCE_ROOT_HOST"/ansible-collection-*; do
+    [ ! -L "$collection_dir" ] \
+      || fail_closed "collection source entry must not be a symbolic link"
     [ -d "$collection_dir" ] || continue
     collection_real="$(cd "$collection_dir" && pwd -P)"
     [ "$collection_real" = "$WORKSPACE_REAL" ] && continue
+    case "$collection_real" in
+      "$source_root_real"/*) ;;
+      *) fail_closed "resolved collection source path escapes the canonical source root" ;;
+    esac
     case "$collection_real" in
       *:*)
         fail_closed "resolved collection source path contains an unsafe mount delimiter"
@@ -475,12 +486,6 @@ fi
   ${REQUIRE_FRAGMENT:+-e REQUIRE_FRAGMENT} \
   ${GITHUB_HEAD_REF:+-e GITHUB_HEAD_REF} \
   ${GITHUB_BASE_REF:+-e GITHUB_BASE_REF} \
-  ${GITHUB_EVENT_NAME:+-e GITHUB_EVENT_NAME} \
-  ${GITHUB_REPOSITORY:+-e GITHUB_REPOSITORY} \
-  ${GITHUB_ACTOR:+-e GITHUB_ACTOR} \
-  ${GITHUB_HEAD_REPOSITORY:+-e GITHUB_HEAD_REPOSITORY} \
-  ${GITHUB_PR_AUTHOR:+-e GITHUB_PR_AUTHOR} \
-  ${PR_AUTHOR:+-e PR_AUTHOR} \
   ${PRE_COMMIT_FROM_REF:+-e PRE_COMMIT_FROM_REF} \
   ${PRE_COMMIT_TO_REF:+-e PRE_COMMIT_TO_REF} \
   ${CHANGELOG_BASE_REF:+-e CHANGELOG_BASE_REF} \

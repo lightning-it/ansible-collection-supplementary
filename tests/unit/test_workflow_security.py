@@ -1752,7 +1752,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn('printf "%s\\n" "prerun: false"', molecule)
         self.assertIn('molecule_ephemeral_root="${HOME}/molecule-ephemeral"', molecule)
         self.assertIn('MOLECULE_EPHEMERAL_DIRECTORY="${molecule_ephemeral_directory}"', molecule)
-        self.assertIn('molecule -c "${offline_base}" test', molecule)
+        self.assertIn('molecule --base-config "${molecule_base_config}" test', molecule)
         self.assertNotIn("docker info", molecule)
         self.assertNotIn("WUNDER_DEVTOOLS_CAP_ADD=CHOWN", molecule)
 
@@ -1953,6 +1953,23 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             },
             profiles["profiles"],
         )
+
+
+    def test_managed_quality_policy_profile_is_offline_read_only_and_unprivileged(self) -> None:
+        profile = (ROOT / "scripts" / "lit-ci-profile.sh").read_text(encoding="utf-8")
+        for control in (
+            "WUNDER_DEVTOOLS_CAP_ADD=",
+            "WUNDER_DEVTOOLS_DOCKER_SOCKET=disabled",
+            "WUNDER_DEVTOOLS_FORWARD_VAGRANT_SSH=disabled",
+            "WUNDER_DEVTOOLS_MOUNT_SOURCE_ROOT=disabled",
+            "WUNDER_DEVTOOLS_NETWORK=none",
+            "WUNDER_DEVTOOLS_PRIVILEGED=0",
+            "WUNDER_DEVTOOLS_ROOTFS_MODE=ro",
+            "WUNDER_DEVTOOLS_RUN_AS_HOST_UID=1",
+            "WUNDER_DEVTOOLS_RUN_AS_ROOT=0",
+            "WUNDER_DEVTOOLS_WORKSPACE_MODE=ro",
+        ):
+            self.assertIn(control, profile)
 
 
 if __name__ == "__main__":
