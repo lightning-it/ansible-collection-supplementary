@@ -1505,8 +1505,9 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             refresh.index("      - name: Mint repository-scoped release automation App token"),
         )
         self.assertIn("permission-actions: write", refresh)
-        self.assertIn("permission-contents: read", refresh)
-        self.assertNotIn("permission-contents: write", refresh)
+        self.assertIn("permission-contents: write", refresh)
+        self.assertNotIn("permission-contents: read", refresh)
+        self.assertIn("GitHub requires App callers of update-branch", refresh)
         self.assertIn("permission-pull-requests: write", refresh)
         final_step = refresh.split(
             "      - name: Re-prove, update normally, and dispatch exact-head review as Release App",
