@@ -1385,6 +1385,62 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertNotIn("git push", recovery_text)
         self.assertNotIn("--force", recovery_text)
 
+        refresh_path = WORKFLOWS / "release-recovery-review-refresh.yml"
+        refresh = refresh_path.read_text(encoding="utf-8")
+        refresh_yaml = load_yaml(refresh_path)
+        refresh_inputs = refresh_yaml[True]["workflow_dispatch"]["inputs"]
+        refresh_job = refresh_yaml["jobs"]["refresh"]
+        self.assertEqual(
+            {
+                "recovery_pr",
+                "source_pr",
+                "tag",
+                "expected_base",
+                "expected_head",
+                "main_sha",
+                "paths_sha256",
+                "diff_sha256",
+            },
+            set(refresh_inputs),
+        )
+        normalized_refresh_condition = " ".join(refresh_job["if"].split())
+        self.assertIn("github.ref == 'refs/heads/develop'", normalized_refresh_condition)
+        self.assertIn("github.ref_protected == true", normalized_refresh_condition)
+        self.assertIn("github.actor == 'litroc'", normalized_refresh_condition)
+        self.assertIn("github.triggering_actor == 'litroc'", normalized_refresh_condition)
+        self.assertEqual("normal-release-promotion-approval", refresh_job["environment"])
+        self.assertEqual({"contents": "read", "pull-requests": "read"}, refresh_job["permissions"])
+        self.assertIn('test "$protected_develop" = "$GITHUB_SHA"', refresh)
+        self.assertIn('test "$protected_develop" = "$EXPECTED_BASE"', refresh)
+        self.assertIn('test "$protected_main" = "$MAIN_SHA"', refresh)
+        self.assertIn('.user.login == "lightning-it-release-automation[bot]"', refresh)
+        self.assertIn('.user.login == "litroc"', refresh)
+        self.assertIn("and .body == $body", refresh)
+        self.assertIn('test "$hop_count" -le 20', refresh)
+        self.assertIn('synchronized_tree="$(git merge-tree --write-tree', refresh)
+        self.assertIn('test "$(sha256sum "$original_manifest"', refresh)
+        self.assertIn('test "$(sha256sum "$original_diff"', refresh)
+        self.assertIn('test "$(sha256sum "$final_manifest"', refresh)
+        self.assertIn('test "$(sha256sum "$final_diff"', refresh)
+        self.assertIn("permission-actions: write", refresh)
+        self.assertIn("permission-contents: write", refresh)
+        self.assertIn("permission-pull-requests: write", refresh)
+        self.assertIn('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"', refresh)
+        self.assertIn('-f "expected_head_sha=${EXPECTED_HEAD}"', refresh)
+        self.assertIn("and .parents[0].sha == $previous", refresh)
+        self.assertIn("and .parents[1].sha == $base", refresh)
+        self.assertIn("and .tree.sha == $tree", refresh)
+        self.assertIn("gh workflow run release-bot-exact-head-review.yml", refresh)
+        self.assertLess(
+            refresh.index('"repos/${REPOSITORY}/pulls/${RECOVERY_PR_NUMBER}/update-branch"'),
+            refresh.index("gh workflow run release-bot-exact-head-review.yml"),
+        )
+        self.assertNotIn("git push", refresh)
+        self.assertNotIn("--force", refresh)
+        self.assertNotIn("gh pr merge", refresh)
+        self.assertNotIn("--admin", refresh)
+        self.assertNotIn("--auto", refresh)
+
         self.assertIn(
             '-f release_tag_app_slug="$RELEASE_TAG_APP_SLUG"',
             publish,
