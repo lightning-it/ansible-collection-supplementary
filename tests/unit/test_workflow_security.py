@@ -432,6 +432,27 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             self.assertIn(required_input, develop_handoff)
             self.assertIn(required_input, main_handoff)
 
+    def test_current_revision_rerun_accepts_only_the_known_skipped_s0_topology(self) -> None:
+        helper = (WORKFLOWS / "current-revision-rerun.yml").read_text(encoding="utf-8")
+        for job_name in (
+            "Reserve protected S0 feature-to-main verification",
+            "Verify protected S0 feature-to-main input",
+            "Finalize the protected S0 feature-to-main result",
+        ):
+            self.assertEqual(1, helper.count(f'.name == "{job_name}"'))
+        self.assertIn("synthetic_s0_jobs=$(jq -c", helper)
+        self.assertIn(
+            '.run_attempt == 1 and .status == "completed" and .conclusion == "skipped"',
+            helper,
+        )
+        self.assertIn(
+            'map(.name) | sort == ["Finalize the protected S0 feature-to-main result", '
+            '"Reserve protected S0 feature-to-main verification", '
+            '"Verify protected S0 feature-to-main input"]',
+            helper,
+        )
+        self.assertIn("($s0 | length)", helper)
+
     def test_release_app_ancestry_backmerge_uses_deterministic_controller(
         self,
     ) -> None:
