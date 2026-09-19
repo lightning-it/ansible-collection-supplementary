@@ -17,14 +17,17 @@ on:
         description: Release tag to back-sync, for example v1.2.3.
         required: true
       release_tag_app_slug:
-        description: Exact GitHub App slug validated by the protected publish job.
-        required: true
+        description: Exact GitHub App slug; required and validated for published-tag only.
+        required: false
+        default: ""
       release_tag_app_id:
-        description: Exact GitHub App ID validated by the protected publish job.
-        required: true
+        description: Exact GitHub App ID; required and validated for published-tag only.
+        required: false
+        default: ""
       release_tag_app_client_id:
-        description: Exact GitHub App client ID validated by the protected publish job.
-        required: true
+        description: Exact GitHub App client ID; required and validated for published-tag only.
+        required: false
+        default: ""
       security_evidence_id:
         description: Exact MLX-90 Evidence ID; release automation only.
         required: false
@@ -105,9 +108,18 @@ jobs:
         id: classify
         env:
           EVIDENCE_ID: ${{ inputs.security_evidence_id || '' }}
+          EXPECTED_TAG_APP_CLIENT_ID: ${{ inputs.release_tag_app_client_id || '' }}
+          EXPECTED_TAG_APP_ID: ${{ inputs.release_tag_app_id || '' }}
+          EXPECTED_TAG_APP_SLUG: ${{ inputs.release_tag_app_slug || '' }}
           TAG_INPUT: ${{ inputs.tag }}
         run: |
           set -euo pipefail
+          [[ "$EXPECTED_TAG_APP_SLUG" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$ ]]
+          [[ "$EXPECTED_TAG_APP_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_TAG_APP_CLIENT_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]
+          test "$EXPECTED_TAG_APP_SLUG" = "lightning-it-release-tag-creator"
+          test "$EXPECTED_TAG_APP_ID" = "4344269"
+          test "$EXPECTED_TAG_APP_CLIENT_ID" = "Iv23liJnnvOQwajan2Mf"
           if ! [[ "$TAG_INPUT" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             echo "::error::A stable semantic v-prefixed release tag is required."
             exit 1

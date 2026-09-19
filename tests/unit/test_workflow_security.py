@@ -1281,6 +1281,30 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         recovery = load_yaml(WORKFLOWS / "release-back-sync.yml")["jobs"]["failed-pre-tag-recovery"]
         dispatch_inputs = load_yaml(WORKFLOWS / "release-back-sync.yml")[True]["workflow_dispatch"]["inputs"]
         self.assertLessEqual(len(dispatch_inputs), 10)
+        for published_tag_input in (
+            "release_tag_app_slug",
+            "release_tag_app_id",
+            "release_tag_app_client_id",
+        ):
+            self.assertFalse(dispatch_inputs[published_tag_input]["required"])
+            self.assertEqual("", dispatch_inputs[published_tag_input]["default"])
+        published_tag_classification = back_sync.split("  security-classification:", 1)[1].split("  back-sync:", 1)[0]
+        self.assertIn(
+            "EXPECTED_TAG_APP_SLUG: ${{ inputs.release_tag_app_slug || '' }}",
+            published_tag_classification,
+        )
+        self.assertIn(
+            'test "$EXPECTED_TAG_APP_SLUG" = "lightning-it-release-tag-creator"',
+            published_tag_classification,
+        )
+        self.assertIn(
+            'test "$EXPECTED_TAG_APP_ID" = "4344269"',
+            published_tag_classification,
+        )
+        self.assertIn(
+            'test "$EXPECTED_TAG_APP_CLIENT_ID" = "Iv23liJnnvOQwajan2Mf"',
+            published_tag_classification,
+        )
         normalized_condition = " ".join(recovery["if"].split())
         self.assertIn("github.ref == 'refs/heads/develop'", normalized_condition)
         self.assertIn("github.ref_protected == true", normalized_condition)
