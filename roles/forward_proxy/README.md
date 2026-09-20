@@ -4,6 +4,12 @@
 
 Rootful Podman, systemd, preloaded image, allowlists, trusted parents and opt-in.
 UID/GID 13, no capabilities, read-only rootfs; host firewall authoritative.
+The pinned Squid image supplies `/bin/bash`; the container liveness probe uses
+its built-in `/dev/tcp` support for an HTTP request and requires no added tool.
+Before any enabled-state mutation, the role executes that pinned image once
+without pulling, with no network, a read-only root filesystem, no capabilities and
+`no-new-privileges`; the apply fails closed unless `/bin/bash` and its `printf`
+builtin are available.
 
 ## Variables
 
