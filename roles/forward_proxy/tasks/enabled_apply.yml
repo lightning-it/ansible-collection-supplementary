@@ -30,7 +30,7 @@
       - --no-pager
   register: forward_proxy_first_run_systemd_unit_files
   changed_when: false
-  failed_when: forward_proxy_first_run_systemd_unit_files.rc != 0
+  failed_when: forward_proxy_first_run_systemd_unit_files.rc not in [0, 1]
   check_mode: false
   when:
     - forward_proxy_manage_runtime | bool

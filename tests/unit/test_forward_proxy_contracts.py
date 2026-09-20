@@ -321,6 +321,15 @@ class ForwardProxyContractTests(unittest.TestCase):
             enabled.count("forward_proxy_transition_initialized_internal | default(false) | bool"),
         )
 
+    def test_first_install_accepts_systemd_no_match_without_weakening_foreign_runtime_guard(self) -> None:
+        enabled_apply = ENABLED_APPLY.read_text(encoding="utf-8")
+        inspect = enabled_apply.index("Inspect a same-named installed unit file before any first activation writes")
+        refuse = enabled_apply.index("Refuse a foreign same-named runtime before any managed-file write")
+        section = enabled_apply[inspect:refuse]
+
+        self.assertIn("failed_when: forward_proxy_first_run_systemd_unit_files.rc not in [0, 1]", section)
+        self.assertIn("forward_proxy_first_run_systemd_unit_files.stdout_lines | length == 0", enabled_apply)
+
     def test_tiny_evidence_is_per_contract_and_disposition_bound(self) -> None:
         converge = CONVERGE.read_text(encoding="utf-8")
         verify = VERIFY.read_text(encoding="utf-8")
