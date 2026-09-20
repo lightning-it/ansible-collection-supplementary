@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.4.3
+======
+
+Bugfixes
+--------
+
+- Accept systemd's documented no-match exit status across first installation, verified removal, and rollback restart boundaries while retaining each empty-result foreign-runtime guard.
+
 v3.4.2
 ======
 
