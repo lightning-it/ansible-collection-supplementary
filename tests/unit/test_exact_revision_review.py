@@ -505,15 +505,15 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                     self.assertIn("uses: ./.github/workflows/current-revision-rerun.yml", develop_job)
                     self.assertIn(
                         "uses: lightning-it/ansible-collection-supplementary/.github/workflows/"
-                        "current-revision-rerun.yml@2710c06c4482d4d626b84237db865bbc6504897f",
+                        "current-revision-rerun.yml@bf0076467d89d3b3c730c2f263bcc988896722ea",
                         main_job,
                     )
                     self.assertIn(
-                        "github.event.pull_request.base.sha == '2710c06c4482d4d626b84237db865bbc6504897f'",
+                        "github.event.pull_request.base.sha == 'bf0076467d89d3b3c730c2f263bcc988896722ea'",
                         main_job,
                     )
                     self.assertIn(
-                        "PINNED_MAIN_HELPER: 2710c06c4482d4d626b84237db865bbc6504897f",
+                        "PINNED_MAIN_HELPER: bf0076467d89d3b3c730c2f263bcc988896722ea",
                         main_guard,
                     )
                     self.assertIn('if [ "${EVENT_BASE}" != "${PINNED_MAIN_HELPER}" ]; then', main_guard)

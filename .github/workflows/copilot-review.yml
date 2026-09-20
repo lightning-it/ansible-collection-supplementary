@@ -1659,7 +1659,7 @@ jobs:
         env:
           EVENT_BASE: ${{ github.event.pull_request.base.sha }}
           GH_TOKEN: ${{ github.token }}
-          PINNED_MAIN_HELPER: 2710c06c4482d4d626b84237db865bbc6504897f
+          PINNED_MAIN_HELPER: bf0076467d89d3b3c730c2f263bcc988896722ea
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -1692,13 +1692,13 @@ jobs:
       needs.verify-current-revision-policy.result == 'success' &&
       needs.validate-protected-main-helper-pin.result == 'success' &&
       github.event.pull_request.base.ref == 'main' &&
-      github.event.pull_request.base.sha == '2710c06c4482d4d626b84237db865bbc6504897f'
+      github.event.pull_request.base.sha == 'bf0076467d89d3b3c730c2f263bcc988896722ea'
     permissions:
       actions: write
       checks: read
       contents: read
       pull-requests: read
-    uses: lightning-it/ansible-collection-supplementary/.github/workflows/current-revision-rerun.yml@2710c06c4482d4d626b84237db865bbc6504897f
+    uses: lightning-it/ansible-collection-supplementary/.github/workflows/current-revision-rerun.yml@bf0076467d89d3b3c730c2f263bcc988896722ea
     with:
       base_ref: ${{ github.event.pull_request.base.ref }}
       pr_number: ${{ github.event.pull_request.number }}
