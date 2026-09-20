@@ -34,11 +34,11 @@
           - -a
       - name: podman-inventory
         argv:
-          - sh
-          - -c
-          - >-
-            format="$(printf '%s' 'e3tqc29uIC59fQ==' | base64 -d)";
-            podman images --all --format "$format"
+          - podman
+          - images
+          - --all
+          - --format
+          - json
       - name: keycloak
         argv:
           - podman

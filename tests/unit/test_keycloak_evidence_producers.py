@@ -110,7 +110,7 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
 
     def test_keycloak_evidence_collects_immutable_image_inventory(self) -> None:
         shared = (ROOT / "molecule" / "shared" / "incus" / "collect-evidence.yml").read_text(encoding="utf-8")
-        self.assertIn("e3tqc29uIC59fQ==", shared)
+        self.assertIn("- podman\n      - images\n      - --all\n      - --format\n      - json", shared)
         self.assertNotIn("{{json", shared)
         self.assertIn("if item.molecule_incus_evidence_command.name == 'podman-inventory'", shared)
         structured_input = (
@@ -122,9 +122,12 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
         self.assertIn("selectattr('rc', 'equalto', 0)", shared)
         self.assertNotIn("Require successful redaction for each available structured inventory stream", shared)
         self.assertIn("molecule_incus_evidence_runtime_inventory_candidates | length > 0", shared)
+        expected_inventory_command = (
+            "- podman\n          - images\n          - --all\n          - --format\n          - json"
+        )
         for scenario in ("keycloak-tiny", "keycloak-heavy", "keycloak-application-acceptance"):
             cleanup = (ROOT / "molecule" / scenario / "cleanup.yml").read_text(encoding="utf-8")
-            self.assertIn("e3tqc29uIC59fQ==", cleanup)
+            self.assertIn(expected_inventory_command, cleanup)
             self.assertNotIn("{{json", cleanup)
             self.assertNotIn("- ps\n          - --all\n          - --format\n          - json", cleanup)
 

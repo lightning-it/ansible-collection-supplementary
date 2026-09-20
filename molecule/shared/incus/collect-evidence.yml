@@ -127,11 +127,11 @@
       - exec
       - "{{ molecule_incus_owned_instance.item.name }}"
       - --
-      - sh
-      - -c
-      - >-
-        format="$(printf '%s' 'e3tqc29uIC59fQ==' | base64 -d)";
-        podman images --all --format "$format"
+      - podman
+      - images
+      - --all
+      - --format
+      - json
   register: molecule_incus_evidence_container_images_raw
   changed_when: false
   failed_when: false

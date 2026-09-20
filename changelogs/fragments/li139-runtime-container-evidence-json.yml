@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Capture Podman image inventories as one JSON document so protected runtime
+    evidence retains immutable container digests instead of failing closed.
