@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Accept systemd's documented no-match exit status across first installation,
+    verified removal, and rollback restart boundaries while retaining each
+    empty-result foreign-runtime guard.
