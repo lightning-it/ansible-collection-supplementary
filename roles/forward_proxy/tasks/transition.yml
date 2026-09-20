@@ -39,6 +39,7 @@
       - /usr/bin/podman
       - run
       - --rm
+      - --pull=never
       - --network=none
       - --read-only
       - --cap-drop=ALL

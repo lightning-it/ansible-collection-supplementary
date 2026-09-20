@@ -58,6 +58,7 @@ class ForwardProxyContractTests(unittest.TestCase):
         self.assertLess(image_exists, bash_capability)
         self.assertLess(bash_capability, first_managed_state_step)
         for required_argument in (
+            "- --pull=never",
             "- --network=none",
             "- --read-only",
             "- --cap-drop=ALL",
