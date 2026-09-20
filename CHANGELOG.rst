@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.4.2
+======
+
+Bugfixes
+--------
+
+- Treat the canonical release-preparation receipt as non-user-visible provenance during pull-request and protected-branch changelog validation.
+
 v3.4.1
 ======
 
