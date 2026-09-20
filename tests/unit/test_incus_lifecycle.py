@@ -312,7 +312,10 @@ class IncusLifecycleTests(unittest.TestCase):
             "Refresh the dependency inventory from the populated Podman evidence stream",
         )
 
-        self.assertEqual(["podman", "images", "--all", "--format", "json"], argv[-5:])
+        self.assertEqual(["sh", "-c"], argv[-3:-1])
+        self.assertIn("e3tqc29uIC59fQ==", argv[-1])
+        self.assertIn('podman images --all --format "$format"', argv[-1])
+        self.assertNotIn("{{json", argv[-1])
         self.assertIn("item.molecule_incus_evidence_command.name == 'podman-inventory'", collection)
         self.assertIn("when: item.rc == 0", collection)
         self.assertNotIn("--format=json", argv)
