@@ -154,7 +154,7 @@
                   and 'exec:' in forward_proxy_rendered_pod
                   and '/bin/bash' in forward_proxy_rendered_pod
                   and (
-                    'exec 3<>/dev/tcp/127.0.0.1:3128'
+                    'exec 3<>/dev/tcp/127.0.0.1/3128'
                     in forward_proxy_rendered_pod
                   )
                   and 'GET http://health.invalid/ HTTP/1.0'
