@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 import yaml
-from jinja2 import Environment, StrictUndefined
+from jinja2 import Environment, StrictUndefined, Template
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSERTS = ROOT / "roles" / "forward_proxy" / "tasks" / "assert.yml"
@@ -322,23 +322,58 @@ class ForwardProxyContractTests(unittest.TestCase):
         )
 
     def test_first_install_accepts_systemd_no_match_without_weakening_foreign_runtime_guard(self) -> None:
+        runtime_absent_path = ROOT / "roles" / "forward_proxy" / "tasks" / "verify_runtime_absent.yml"
+        restart_boundary_path = ROOT / "roles" / "forward_proxy" / "tasks" / "verify_runtime_restart_boundary.yml"
         enabled_apply = ENABLED_APPLY.read_text(encoding="utf-8")
-        runtime_absent = (ROOT / "roles" / "forward_proxy" / "tasks" / "verify_runtime_absent.yml").read_text(
-            encoding="utf-8"
-        )
-        restart_boundary = (
-            ROOT / "roles" / "forward_proxy" / "tasks" / "verify_runtime_restart_boundary.yml"
-        ).read_text(encoding="utf-8")
-        inspect = enabled_apply.index("Inspect a same-named installed unit file before any first activation writes")
-        refuse = enabled_apply.index("Refuse a foreign same-named runtime before any managed-file write")
-        section = enabled_apply[inspect:refuse]
+        runtime_absent = runtime_absent_path.read_text(encoding="utf-8")
+        restart_boundary = restart_boundary_path.read_text(encoding="utf-8")
 
-        self.assertIn("failed_when: forward_proxy_first_run_systemd_unit_files.rc not in [0, 1]", section)
         self.assertIn("forward_proxy_first_run_systemd_unit_files.stdout_lines | length == 0", enabled_apply)
-        self.assertIn("failed_when: forward_proxy_runtime_systemd_unit_files.rc not in [0, 1]", runtime_absent)
         self.assertIn("forward_proxy_runtime_systemd_unit_files.stdout_lines | length == 0", runtime_absent)
-        self.assertIn("failed_when: forward_proxy_restart_boundary_unit_files.rc not in [0, 1]", restart_boundary)
         self.assertIn("forward_proxy_restart_boundary_unit_files.stdout_lines | length == 0", restart_boundary)
+
+        probes = (
+            (
+                ENABLED_APPLY,
+                "Inspect a same-named installed unit file before any first activation writes",
+                "forward_proxy_first_run_systemd_unit_files",
+            ),
+            (
+                runtime_absent_path,
+                "Inspect installed forward proxy systemd unit files",
+                "forward_proxy_runtime_systemd_unit_files",
+            ),
+            (
+                restart_boundary_path,
+                "Reinspect installed unit files before restarting an absent runtime",
+                "forward_proxy_restart_boundary_unit_files",
+            ),
+        )
+        environment = Environment(undefined=StrictUndefined, autoescape=True)
+
+        def is_failure(
+            template: Template,
+            register: str,
+            rc: int,
+            stdout: str = "",
+            stderr: str = "",
+        ) -> bool:
+            result = type("CommandResult", (), {"rc": rc, "stdout": stdout, "stderr": stderr})()
+            return template.render(**{register: result}).strip() == "True"
+
+        for path, task_name, register in probes:
+            with self.subTest(path=path.name):
+                tasks = yaml.safe_load(path.read_text(encoding="utf-8"))
+                task = next(item for item in tasks if item["name"] == task_name)
+                expression = task["failed_when"]
+                template = environment.from_string("{{ " + expression + " }}")
+
+                self.assertFalse(is_failure(template, register, 0))
+                self.assertFalse(is_failure(template, register, 1))
+                self.assertTrue(is_failure(template, register, 1, stderr="Failed to connect to bus"))
+                self.assertTrue(is_failure(template, register, 1, stdout="unexpected diagnostic"))
+                self.assertTrue(is_failure(template, register, 2))
+                self.assertIn(f"{register}.stderr | trim | length > 0", expression)
 
     def test_tiny_evidence_is_per_contract_and_disposition_bound(self) -> None:
         converge = CONVERGE.read_text(encoding="utf-8")

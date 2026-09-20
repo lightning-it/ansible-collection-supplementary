@@ -31,7 +31,15 @@
       - --no-pager
   register: forward_proxy_restart_boundary_unit_files
   changed_when: false
-  failed_when: forward_proxy_restart_boundary_unit_files.rc not in [0, 1]
+  failed_when: >-
+    forward_proxy_restart_boundary_unit_files.rc not in [0, 1]
+    or (
+      forward_proxy_restart_boundary_unit_files.rc == 1
+      and (
+        forward_proxy_restart_boundary_unit_files.stdout | trim | length > 0
+        or forward_proxy_restart_boundary_unit_files.stderr | trim | length > 0
+      )
+    )
   check_mode: false
 
 - name: Reinspect the Podman pod before restarting an absent runtime
