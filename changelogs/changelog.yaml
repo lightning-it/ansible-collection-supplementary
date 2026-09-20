@@ -1055,3 +1055,12 @@ releases:
     fragments:
       - li139-forward-proxy-missing-unit-preflight.yml
     release_date: '2026-09-20'
+  3.4.4:
+    changes:
+      bugfixes:
+        - Replace the forward proxy tcpSocket liveness probe, which Podman translated
+          to the absent nc utility, with a non-root image-native HTTP probe and verify
+          its Bash capability before any enabled-state mutation.
+    fragments:
+      - li139-squid-image-native-liveness.yml
+    release_date: '2026-09-20'
