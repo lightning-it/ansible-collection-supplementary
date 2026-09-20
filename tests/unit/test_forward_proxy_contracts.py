@@ -33,13 +33,45 @@ class ForwardProxyContractTests(unittest.TestCase):
     def test_runtime_liveness_probe_uses_only_pinned_image_primitives(self) -> None:
         pod_template = POD_TEMPLATE.read_text(encoding="utf-8")
 
-        self.assertIn("livenessProbe:\n        exec:\n", pod_template)
-        self.assertIn("- /bin/bash", pod_template)
-        self.assertIn("exec 3<>/dev/tcp/127.0.0.1/{{ forward_proxy_port }}", pod_template)
-        self.assertIn("GET http://health.invalid/ HTTP/1.0", pod_template)
-        self.assertIn('[[ "${status}" == HTTP/* ]]', pod_template)
-        self.assertNotIn("tcpSocket:", pod_template)
-        self.assertNotIn(" nc ", pod_template)
+        liveness_block = pod_template.split("livenessProbe:", maxsplit=1)[1].split("initialDelaySeconds:", maxsplit=1)[
+            0
+        ]
+
+        self.assertIn("exec:", liveness_block)
+        self.assertIn("- /bin/bash", liveness_block)
+        self.assertIn("exec 3<>/dev/tcp/127.0.0.1/{{ forward_proxy_port }}", liveness_block)
+        self.assertIn("GET http://health.invalid/ HTTP/1.0", liveness_block)
+        self.assertIn('[[ "${status}" == HTTP/* ]]', liveness_block)
+        self.assertNotIn("tcpSocket:", liveness_block)
+        self.assertNotIn(" nc ", liveness_block)
+
+    def test_runtime_image_capability_is_verified_before_managed_state_mutation(self) -> None:
+        transition = TRANSITION.read_text(encoding="utf-8")
+
+        image_exists = transition.index("Verify the pinned Squid image before any enabled-state mutation")
+        bash_capability = transition.index(
+            "Validate the pinned Squid image Bash capability before any enabled-state mutation"
+        )
+        first_managed_state_step = transition.index("Initialize the check-mode forward proxy directory plan")
+        capability_block = transition[bash_capability:first_managed_state_step]
+
+        self.assertLess(image_exists, bash_capability)
+        self.assertLess(bash_capability, first_managed_state_step)
+        for required_argument in (
+            "- --pull=never",
+            "- --network=none",
+            "- --read-only",
+            "- --cap-drop=ALL",
+            "- no-new-privileges",
+            "- /bin/bash",
+            "[[ -x /bin/bash && $(type -t printf) == builtin ]]",
+        ):
+            with self.subTest(required_argument=required_argument):
+                self.assertIn(required_argument, capability_block)
+        self.assertIn("changed_when: false", capability_block)
+        self.assertIn("check_mode: false", capability_block)
+        self.assertIn("- forward_proxy_enabled | bool", capability_block)
+        self.assertIn("- forward_proxy_manage_runtime | bool", capability_block)
 
     def test_integer_boundaries_reject_yaml_booleans(self) -> None:
         asserts = ASSERTS.read_text(encoding="utf-8")

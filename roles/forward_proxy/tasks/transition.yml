@@ -33,6 +33,29 @@
     - forward_proxy_enabled | bool
     - forward_proxy_manage_runtime | bool
 
+- name: Validate the pinned Squid image Bash capability before any enabled-state mutation
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - run
+      - --rm
+      - --pull=never
+      - --network=none
+      - --read-only
+      - --cap-drop=ALL
+      - --security-opt
+      - no-new-privileges
+      - --entrypoint
+      - /bin/bash
+      - "{{ forward_proxy_image }}"
+      - -ec
+      - '[[ -x /bin/bash && $(type -t printf) == builtin ]]'
+  changed_when: false
+  check_mode: false
+  when:
+    - forward_proxy_enabled | bool
+    - forward_proxy_manage_runtime | bool
+
 - name: Initialize the check-mode forward proxy directory plan
   ansible.builtin.set_fact:
     forward_proxy_planned_directories_internal: []

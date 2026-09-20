@@ -2,4 +2,5 @@
 bugfixes:
   - >-
     Replace the forward proxy tcpSocket liveness probe, which Podman translated
-    to the absent nc utility, with a non-root image-native HTTP probe.
+    to the absent nc utility, with a non-root image-native HTTP probe and verify
+    its Bash capability before any enabled-state mutation.
