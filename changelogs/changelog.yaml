@@ -1046,3 +1046,12 @@ releases:
     fragments:
       - li139-release-receipt-policy.yml
     release_date: '2026-09-19'
+  3.4.3:
+    changes:
+      bugfixes:
+        - Accept systemd's documented no-match exit status across first installation,
+          verified removal, and rollback restart boundaries while retaining each empty-result
+          foreign-runtime guard.
+    fragments:
+      - li139-forward-proxy-missing-unit-preflight.yml
+    release_date: '2026-09-20'
