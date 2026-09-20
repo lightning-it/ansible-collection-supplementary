@@ -50,9 +50,15 @@ spec:
           drop:
             - ALL
       livenessProbe:
-        tcpSocket:
-          host: 127.0.0.1
-          port: {{ forward_proxy_port }}
+        exec:
+          command:
+            - /bin/bash
+            - -ec
+            - |-
+              exec 3<>/dev/tcp/127.0.0.1/{{ forward_proxy_port }}
+              printf 'GET http://health.invalid/ HTTP/1.0\r\nHost: health.invalid\r\n\r\n' >&3
+              IFS= read -r status <&3
+              [[ "${status}" == HTTP/* ]]
         initialDelaySeconds: 10
         periodSeconds: 30
         timeoutSeconds: 3

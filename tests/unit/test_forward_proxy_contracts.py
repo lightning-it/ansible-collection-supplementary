@@ -20,6 +20,7 @@ ENSURE_DIRECTORY = ROOT / "roles" / "forward_proxy" / "tasks" / "ensure_director
 ENABLED = ROOT / "roles" / "forward_proxy" / "tasks" / "enabled.yml"
 ENABLED_APPLY = ROOT / "roles" / "forward_proxy" / "tasks" / "enabled_apply.yml"
 READINESS = ROOT / "roles" / "forward_proxy" / "tasks" / "verify_runtime_ready.yml"
+POD_TEMPLATE = ROOT / "roles" / "forward_proxy" / "templates" / "squid-pod.yml.j2"
 RESTORE = ROOT / "roles" / "forward_proxy" / "tasks" / "restore_managed_file.yml"
 README = ROOT / "roles" / "forward_proxy" / "README.md"
 VERIFY = ROOT / "molecule" / "forward-proxy-tiny" / "verify.yml"
@@ -29,6 +30,17 @@ RELEASE_ELIGIBILITY = ROOT / "molecule" / "forward-proxy-tiny" / "tasks" / "rele
 
 
 class ForwardProxyContractTests(unittest.TestCase):
+    def test_runtime_liveness_probe_uses_only_pinned_image_primitives(self) -> None:
+        pod_template = POD_TEMPLATE.read_text(encoding="utf-8")
+
+        self.assertIn("livenessProbe:\n        exec:\n", pod_template)
+        self.assertIn("- /bin/bash", pod_template)
+        self.assertIn("exec 3<>/dev/tcp/127.0.0.1/{{ forward_proxy_port }}", pod_template)
+        self.assertIn("GET http://health.invalid/ HTTP/1.0", pod_template)
+        self.assertIn('[[ "${status}" == HTTP/* ]]', pod_template)
+        self.assertNotIn("tcpSocket:", pod_template)
+        self.assertNotIn(" nc ", pod_template)
+
     def test_integer_boundaries_reject_yaml_booleans(self) -> None:
         asserts = ASSERTS.read_text(encoding="utf-8")
 

@@ -146,6 +146,21 @@
                   'docker.io/ubuntu/squid:6.6-24.04_beta'
                   ~ '@sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029'
                 ) in forward_proxy_rendered_pod
+              },
+              {
+                'name': 'image-native-http-liveness',
+                'passed': (
+                  'livenessProbe:' in forward_proxy_rendered_pod
+                  and 'exec:' in forward_proxy_rendered_pod
+                  and '/bin/bash' in forward_proxy_rendered_pod
+                  and (
+                    'exec 3<>/dev/tcp/127.0.0.1/3128'
+                    in forward_proxy_rendered_pod
+                  )
+                  and 'GET http://health.invalid/ HTTP/1.0'
+                    in forward_proxy_rendered_pod
+                  and 'tcpSocket:' not in forward_proxy_rendered_pod
+                )
               }
             ]
           }}
