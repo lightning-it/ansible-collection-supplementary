@@ -26,7 +26,7 @@
       - --no-pager
   register: forward_proxy_runtime_systemd_unit_files
   changed_when: false
-  failed_when: forward_proxy_runtime_systemd_unit_files.rc != 0
+  failed_when: forward_proxy_runtime_systemd_unit_files.rc not in [0, 1]
   check_mode: false
 
 - name: Prove the forward proxy systemd unit was removed

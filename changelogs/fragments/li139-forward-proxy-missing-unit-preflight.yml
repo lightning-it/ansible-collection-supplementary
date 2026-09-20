@@ -1,5 +1,6 @@
 ---
 bugfixes:
   - >-
-    Accept systemd's documented no-match exit status during first forward proxy
-    installation while retaining the empty-result foreign-runtime guard.
+    Accept systemd's documented no-match exit status across first installation,
+    verified removal, and rollback restart boundaries while retaining each
+    empty-result foreign-runtime guard.

@@ -323,12 +323,22 @@ class ForwardProxyContractTests(unittest.TestCase):
 
     def test_first_install_accepts_systemd_no_match_without_weakening_foreign_runtime_guard(self) -> None:
         enabled_apply = ENABLED_APPLY.read_text(encoding="utf-8")
+        runtime_absent = (ROOT / "roles" / "forward_proxy" / "tasks" / "verify_runtime_absent.yml").read_text(
+            encoding="utf-8"
+        )
+        restart_boundary = (
+            ROOT / "roles" / "forward_proxy" / "tasks" / "verify_runtime_restart_boundary.yml"
+        ).read_text(encoding="utf-8")
         inspect = enabled_apply.index("Inspect a same-named installed unit file before any first activation writes")
         refuse = enabled_apply.index("Refuse a foreign same-named runtime before any managed-file write")
         section = enabled_apply[inspect:refuse]
 
         self.assertIn("failed_when: forward_proxy_first_run_systemd_unit_files.rc not in [0, 1]", section)
         self.assertIn("forward_proxy_first_run_systemd_unit_files.stdout_lines | length == 0", enabled_apply)
+        self.assertIn("failed_when: forward_proxy_runtime_systemd_unit_files.rc not in [0, 1]", runtime_absent)
+        self.assertIn("forward_proxy_runtime_systemd_unit_files.stdout_lines | length == 0", runtime_absent)
+        self.assertIn("failed_when: forward_proxy_restart_boundary_unit_files.rc not in [0, 1]", restart_boundary)
+        self.assertIn("forward_proxy_restart_boundary_unit_files.stdout_lines | length == 0", restart_boundary)
 
     def test_tiny_evidence_is_per_contract_and_disposition_bound(self) -> None:
         converge = CONVERGE.read_text(encoding="utf-8")
