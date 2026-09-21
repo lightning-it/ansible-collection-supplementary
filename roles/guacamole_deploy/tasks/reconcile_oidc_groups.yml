@@ -1,0 +1,269 @@
+---
+- name: Reconcile exact role-owned OIDC group authorization
+  ansible.builtin.command:
+    argv:
+      - podman
+      - exec
+      - -i
+      - "{{ guacamole_deploy_pod_name }}-postgres"
+      - psql
+      - --quiet
+      - --tuples-only
+      - --no-align
+      - -v
+      - ON_ERROR_STOP=1
+      - -v
+      - >-
+        oidc_group_contracts_json={{ guacamole_deploy_oidc_group_connections | to_json }}
+      - -U
+      - "{{ guacamole_deploy_db_user }}"
+      - -d
+      - "{{ guacamole_deploy_db_name }}"
+    stdin: |
+      BEGIN;
+      CREATE TEMPORARY TABLE lit_oidc_group_input (
+        group_contracts jsonb NOT NULL
+      ) ON COMMIT DROP;
+      INSERT INTO lit_oidc_group_input (group_contracts)
+      VALUES (:'oidc_group_contracts_json'::jsonb);
+      DO $reconcile$
+      DECLARE
+        group_contracts jsonb;
+        group_contract jsonb;
+        requested_group_name text;
+        connection_names jsonb;
+        managed_entity_id integer;
+        managed_user_group_id integer;
+        affected integer := 0;
+        step_affected integer := 0;
+      BEGIN
+        SELECT input.group_contracts
+        INTO STRICT group_contracts
+        FROM lit_oidc_group_input AS input;
+
+        IF jsonb_typeof(group_contracts) <> 'array' THEN
+          RAISE EXCEPTION 'OIDC group authorization must be a JSON array';
+        END IF;
+        IF EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(group_contracts) AS contract(value)
+          WHERE jsonb_typeof(contract.value) <> 'object'
+            OR jsonb_typeof(contract.value -> 'name') <> 'string'
+            OR length(contract.value ->> 'name') = 0
+            OR jsonb_typeof(contract.value -> 'connection_names') <> 'array'
+            OR jsonb_array_length(contract.value -> 'connection_names') = 0
+        ) THEN
+          RAISE EXCEPTION 'OIDC group authorization contains an invalid contract';
+        END IF;
+        IF EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(group_contracts) AS contract(value)
+          CROSS JOIN LATERAL jsonb_array_elements(
+            contract.value -> 'connection_names'
+          ) AS connection_name(value)
+          WHERE jsonb_typeof(connection_name.value) <> 'string'
+            OR length(connection_name.value #>> '{}') = 0
+        ) THEN
+          RAISE EXCEPTION 'OIDC connection names must be non-empty strings';
+        END IF;
+        IF (
+          SELECT count(*)
+          FROM jsonb_array_elements(group_contracts)
+        ) <> (
+          SELECT count(DISTINCT contract.value ->> 'name')
+          FROM jsonb_array_elements(group_contracts) AS contract(value)
+        ) THEN
+          RAISE EXCEPTION 'OIDC group authorization contains duplicate group names';
+        END IF;
+
+        CREATE TABLE IF NOT EXISTS lit_guacamole_oidc_managed_group (
+          group_name text PRIMARY KEY,
+          entity_id integer UNIQUE NOT NULL
+            REFERENCES guacamole_entity(entity_id) ON DELETE CASCADE
+        );
+        LOCK TABLE lit_guacamole_oidc_managed_group IN SHARE ROW EXCLUSIVE MODE;
+        LOCK TABLE guacamole_entity IN SHARE ROW EXCLUSIVE MODE;
+
+        IF EXISTS (
+          SELECT 1
+          FROM lit_guacamole_oidc_managed_group AS managed
+          LEFT JOIN guacamole_entity AS entity
+            ON entity.entity_id = managed.entity_id
+          LEFT JOIN guacamole_user_group AS user_group
+            ON user_group.entity_id = managed.entity_id
+          WHERE entity.entity_id IS NULL
+            OR entity.name <> managed.group_name
+            OR entity.type <> 'USER_GROUP'
+            OR user_group.user_group_id IS NULL
+        ) THEN
+          RAISE EXCEPTION 'Role-owned Guacamole OIDC group registry is inconsistent';
+        END IF;
+
+        DELETE FROM guacamole_entity AS entity
+        USING lit_guacamole_oidc_managed_group AS managed
+        WHERE entity.entity_id = managed.entity_id
+          AND NOT EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(group_contracts) AS contract(value)
+            WHERE contract.value ->> 'name' = managed.group_name
+          );
+        GET DIAGNOSTICS step_affected = ROW_COUNT;
+        affected := affected + step_affected;
+
+        FOR group_contract IN
+          SELECT contract.value
+          FROM jsonb_array_elements(group_contracts) AS contract(value)
+        LOOP
+          requested_group_name := group_contract ->> 'name';
+          connection_names := group_contract -> 'connection_names';
+          managed_entity_id := NULL;
+          managed_user_group_id := NULL;
+
+          IF (
+            SELECT count(*)
+            FROM jsonb_array_elements_text(connection_names)
+          ) <> (
+            SELECT count(DISTINCT connection_name)
+            FROM jsonb_array_elements_text(connection_names)
+              AS requested(connection_name)
+          ) THEN
+            RAISE EXCEPTION 'OIDC group contains duplicate connection names';
+          END IF;
+
+          IF EXISTS (
+            SELECT requested.connection_name
+            FROM jsonb_array_elements_text(connection_names)
+              AS requested(connection_name)
+            LEFT JOIN guacamole_connection AS connection
+              ON connection.connection_name = requested.connection_name
+            GROUP BY requested.connection_name
+            HAVING count(connection.connection_id) <> 1
+          ) THEN
+            RAISE EXCEPTION
+              'OIDC group references a missing or ambiguous Guacamole connection';
+          END IF;
+
+          SELECT managed.entity_id
+          INTO managed_entity_id
+          FROM lit_guacamole_oidc_managed_group AS managed
+          WHERE managed.group_name = requested_group_name;
+
+          IF managed_entity_id IS NULL THEN
+            IF EXISTS (
+              SELECT 1
+              FROM guacamole_entity AS entity
+              WHERE entity.name = requested_group_name
+                AND entity.type = 'USER_GROUP'
+            ) THEN
+              RAISE EXCEPTION
+                'Refusing to adopt a pre-existing unmanaged Guacamole OIDC group';
+            END IF;
+
+            INSERT INTO guacamole_entity (name, type)
+            VALUES (requested_group_name, 'USER_GROUP')
+            RETURNING entity_id INTO managed_entity_id;
+            GET DIAGNOSTICS step_affected = ROW_COUNT;
+            affected := affected + step_affected;
+
+            INSERT INTO guacamole_user_group (entity_id, disabled)
+            VALUES (managed_entity_id, false)
+            RETURNING user_group_id INTO managed_user_group_id;
+            GET DIAGNOSTICS step_affected = ROW_COUNT;
+            affected := affected + step_affected;
+
+            INSERT INTO lit_guacamole_oidc_managed_group (group_name, entity_id)
+            VALUES (requested_group_name, managed_entity_id);
+            GET DIAGNOSTICS step_affected = ROW_COUNT;
+            affected := affected + step_affected;
+          ELSE
+            SELECT user_group.user_group_id
+            INTO STRICT managed_user_group_id
+            FROM guacamole_user_group AS user_group
+            WHERE user_group.entity_id = managed_entity_id;
+          END IF;
+
+          UPDATE guacamole_user_group AS user_group
+          SET disabled = false
+          WHERE user_group.user_group_id = managed_user_group_id
+            AND user_group.disabled IS DISTINCT FROM false;
+          GET DIAGNOSTICS step_affected = ROW_COUNT;
+          affected := affected + step_affected;
+
+          DELETE FROM guacamole_user_group_member
+          WHERE user_group_id = managed_user_group_id
+            OR member_entity_id = managed_entity_id;
+          GET DIAGNOSTICS step_affected = ROW_COUNT;
+          affected := affected + step_affected;
+
+          DELETE FROM guacamole_system_permission
+          WHERE entity_id = managed_entity_id;
+          GET DIAGNOSTICS step_affected = ROW_COUNT;
+          affected := affected + step_affected;
+
+          DELETE FROM guacamole_user_permission
+          WHERE entity_id = managed_entity_id;
+          GET DIAGNOSTICS step_affected = ROW_COUNT;
+          affected := affected + step_affected;
+
+          DELETE FROM guacamole_user_group_permission
+          WHERE entity_id = managed_entity_id;
+          GET DIAGNOSTICS step_affected = ROW_COUNT;
+          affected := affected + step_affected;
+
+          DELETE FROM guacamole_connection_group_permission
+          WHERE entity_id = managed_entity_id;
+          GET DIAGNOSTICS step_affected = ROW_COUNT;
+          affected := affected + step_affected;
+
+          DELETE FROM guacamole_sharing_profile_permission
+          WHERE entity_id = managed_entity_id;
+          GET DIAGNOSTICS step_affected = ROW_COUNT;
+          affected := affected + step_affected;
+
+          DELETE FROM guacamole_connection_permission AS permission
+          WHERE permission.entity_id = managed_entity_id
+            AND (
+              permission.permission <> 'READ'
+              OR NOT EXISTS (
+                SELECT 1
+                FROM guacamole_connection AS connection
+                WHERE connection.connection_id = permission.connection_id
+                  AND connection.connection_name IN (
+                    SELECT jsonb_array_elements_text(connection_names)
+                  )
+              )
+            );
+          GET DIAGNOSTICS step_affected = ROW_COUNT;
+          affected := affected + step_affected;
+
+          INSERT INTO guacamole_connection_permission (
+            entity_id,
+            connection_id,
+            permission
+          )
+          SELECT managed_entity_id, connection.connection_id, 'READ'
+          FROM guacamole_connection AS connection
+          WHERE connection.connection_name IN (
+            SELECT jsonb_array_elements_text(connection_names)
+          )
+          ON CONFLICT DO NOTHING;
+          GET DIAGNOSTICS step_affected = ROW_COUNT;
+          affected := affected + step_affected;
+        END LOOP;
+
+        UPDATE lit_oidc_group_input
+        SET group_contracts = jsonb_build_object('changed_count', affected);
+      END
+      $reconcile$;
+      SELECT group_contracts ->> 'changed_count'
+      FROM lit_oidc_group_input;
+      COMMIT;
+  register: guacamole_deploy_oidc_group_reconcile
+  changed_when: >-
+    guacamole_deploy_oidc_group_reconcile.stdout_lines
+    | default([])
+    | select('match', '^[1-9][0-9]*$')
+    | list
+    | length
+    > 0
+  no_log: true

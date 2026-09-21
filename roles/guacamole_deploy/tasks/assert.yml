@@ -10,12 +10,40 @@
       - guacamole_deploy_port is not boolean
       - guacamole_deploy_port > 0
       - guacamole_deploy_port <= 65535
+      - guacamole_deploy_network_name is string
+      - guacamole_deploy_network_ipv4 is string
+      - >-
+        (guacamole_deploy_network_name | length == 0)
+        == (guacamole_deploy_network_ipv4 | length == 0)
+      - >-
+        guacamole_deploy_network_name | length == 0
+        or guacamole_deploy_network_name is match('^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$')
+      - >-
+        guacamole_deploy_network_ipv4 | length == 0
+        or guacamole_deploy_network_ipv4
+          is match(
+            '^(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])'
+            ~ '(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}$'
+          )
+      - guacamole_deploy_no_proxy is sequence
+      - guacamole_deploy_no_proxy is not string
+      - guacamole_deploy_no_proxy | unique | list | length == guacamole_deploy_no_proxy | length
+      - guacamole_deploy_no_proxy | select('string') | list | length == guacamole_deploy_no_proxy | length
+      - >-
+        guacamole_deploy_no_proxy
+        | select('match', '^[A-Za-z0-9](?:[A-Za-z0-9_.:-]{0,251}[A-Za-z0-9])?$')
+        | list | length == guacamole_deploy_no_proxy | length
       - guacamole_deploy_breakglass_user is match('^[A-Za-z0-9_.@-]+$')
       - guacamole_deploy_secrets.db_password | default('', true) | length >= 16
       - guacamole_deploy_secrets.breakglass_password | default('', true) | length >= 16
       - guacamole_deploy_secrets.breakglass_salt | default('', true) | length >= 16
       - guacamole_deploy_connections is sequence
       - guacamole_deploy_connections is not string
+      - guacamole_deploy_oidc_group_connections is sequence
+      - guacamole_deploy_oidc_group_connections is not string
+      - >-
+        guacamole_deploy_oidc_group_connections | length == 0
+        or guacamole_deploy_oidc_enabled | bool
       - guacamole_deploy_api_session_timeout_minutes is integer
       - guacamole_deploy_api_session_timeout_minutes is not boolean
       - guacamole_deploy_api_session_timeout_minutes >= 1
@@ -31,7 +59,16 @@
         or guacamole_deploy_oidc_issuer | trim | length > 0
       - >-
         not guacamole_deploy_oidc_enabled | bool
+        or guacamole_deploy_oidc_client_id | trim | length > 0
+      - >-
+        not guacamole_deploy_oidc_enabled | bool
         or guacamole_deploy_oidc_redirect_uri | trim | length > 0
+      - >-
+        not guacamole_deploy_oidc_enabled | bool
+        or guacamole_deploy_oidc_groups_claim_type is string
+      - >-
+        not guacamole_deploy_oidc_enabled | bool
+        or guacamole_deploy_oidc_groups_claim_type | trim | length > 0
     fail_msg: >-
       Guacamole requires immutable images, Vault secrets, a bounded API session
       timeout, and complete OIDC settings.
@@ -55,4 +92,54 @@
   loop: "{{ guacamole_deploy_connections }}"
   loop_control:
     label: "{{ item.name | default('unnamed') }}"
+  no_log: true
+
+- name: Reject duplicate Guacamole connection names
+  ansible.builtin.assert:
+    that:
+      - >-
+        guacamole_deploy_connections | map(attribute='name') | list | unique | length
+        == guacamole_deploy_connections | length
+    fail_msg: Guacamole connection names must be unique.
+    quiet: true
+  no_log: true
+
+- name: Validate declared Guacamole OIDC group authorization contracts
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.name | default(None) is string
+      - item.name | default('', true) is match('^[A-Za-z0-9_.@:-]+$')
+      - item.connection_names | default([]) is sequence
+      - item.connection_names | default([]) is not string
+      - item.connection_names | default([]) | length > 0
+      - >-
+        item.connection_names | default([]) | select('string') | list | length
+        == item.connection_names | default([]) | length
+      - >-
+        item.connection_names | default([]) | unique | length
+        == item.connection_names | default([]) | length
+      - >-
+        item.connection_names
+        | default([])
+        | difference(guacamole_deploy_connections | map(attribute='name') | list)
+        | length
+        == 0
+    fail_msg: >-
+      Every OIDC authorization group requires a safe unique name and a
+      non-empty unique subset of declared Guacamole connection names.
+    quiet: true
+  loop: "{{ guacamole_deploy_oidc_group_connections }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed') }}"
+  no_log: true
+
+- name: Reject duplicate Guacamole OIDC authorization group names
+  ansible.builtin.assert:
+    that:
+      - >-
+        guacamole_deploy_oidc_group_connections | map(attribute='name') | list | unique | length
+        == guacamole_deploy_oidc_group_connections | length
+    fail_msg: Guacamole OIDC authorization group names must be unique.
+    quiet: true
   no_log: true

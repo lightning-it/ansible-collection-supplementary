@@ -9,6 +9,14 @@ guacamole_deploy_postgres_image: >-
   docker.io/library/postgres:16@sha256:c1b3783309b6499c795eed7c20135a1a4d25cae1b575c3d52c6f536129a1b109
 guacamole_deploy_host_ip: "127.0.0.1"
 guacamole_deploy_port: 8082
+# Optional exact attachment to a pre-existing Podman network. Both values must
+# be set together; the empty default retains Podman's normal allocation.
+guacamole_deploy_network_name: ""
+guacamole_deploy_network_ipv4: ""
+# Optional per-container override of Podman's inherited proxy bypass list.
+# This lets server-side OIDC/JWKS traffic use the site forward proxy while
+# preserving only explicitly declared direct destinations such as loopback.
+guacamole_deploy_no_proxy: []
 guacamole_deploy_base_dir: "/srv/guacamole"
 guacamole_deploy_db_name: "guacamole"
 guacamole_deploy_db_user: "guacamole"
@@ -20,6 +28,8 @@ guacamole_deploy_oidc_jwks_endpoint: ""
 guacamole_deploy_oidc_issuer: ""
 guacamole_deploy_oidc_client_id: "guacamole"
 guacamole_deploy_oidc_redirect_uri: ""
+guacamole_deploy_oidc_groups_claim_type: "groups"
+guacamole_deploy_oidc_group_connections: []
 guacamole_deploy_api_session_timeout_minutes: 60
 guacamole_deploy_health_url: "http://{{ guacamole_deploy_host_ip }}:{{ guacamole_deploy_port }}/guacamole/"
 guacamole_deploy_api_url: "http://{{ guacamole_deploy_host_ip }}:{{ guacamole_deploy_port }}/guacamole/api"

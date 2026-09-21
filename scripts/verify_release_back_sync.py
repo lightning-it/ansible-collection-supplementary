@@ -118,6 +118,26 @@ def object_bytes(root: Path, revision: str, path: str) -> bytes | None:
     fail(f"cannot read {revision}:{path}")
 
 
+def stable_version(value: str, label: str) -> tuple[int, int, int]:
+    if SEMVER.fullmatch(value) is None:
+        fail(f"{label} is not a stable semantic version")
+    return cast("tuple[int, int, int]", tuple(int(part) for part in value.split(".")))
+
+
+def collection_version(root: Path, revision: str, label: str) -> tuple[int, int, int]:
+    raw = object_bytes(root, revision, "galaxy.yml")
+    if raw is None:
+        fail(f"{label} galaxy.yml is missing")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise BackSyncError(f"{label} galaxy.yml is not UTF-8") from exc
+    match = re.search(r"(?m)^version:\s*[\"']?([^\s\"']+)", text)
+    if match is None:
+        fail(f"{label} galaxy.yml has no version")
+    return stable_version(match.group(1), f"{label} galaxy.yml version")
+
+
 def require_same_path(root: Path, release_sha: str, head_sha: str, path: str) -> None:
     if object_bytes(root, release_sha, path) != object_bytes(root, head_sha, path):
         fail(f"back-sync/release mismatch: {path}")
@@ -157,11 +177,29 @@ def verify(
     version = tag.removeprefix("v")
     if tag != f"v{version}" or SEMVER.fullmatch(version) is None:
         fail("invalid release tag")
+    if collection_version(root, develop_tip, "develop") > stable_version(version, "release tag"):
+        fail("develop already contains a newer release")
 
     parents = git_text(root, "show", "-s", "--format=%P", head_sha).split()
-    if len(parents) != 2 or parents[1] != release_sha:
+    if len(parents) == 2 and parents[1] == release_sha:
+        develop_base = parents[0]
+    elif len(parents) == 1:
+        develop_base = parents[0]
+        if develop_base != develop_tip:
+            fail("tree-state repair is not based on the exact develop tip")
+        if (
+            subprocess.run(  # noqa: S603 -- exact validated commits.
+                [git_binary(), "merge-base", "--is-ancestor", release_sha, develop_base],
+                cwd=root,
+                check=False,
+                env=git_environment(),
+                timeout=30,
+            ).returncode
+            != 0
+        ):
+            fail("tree-state repair lacks release ancestry")
+    else:
         fail("release parent mismatch")
-    develop_base = parents[0]
     if (
         subprocess.run(  # noqa: S603 -- exact validated commits.
             [git_binary(), "merge-base", "--is-ancestor", develop_base, develop_tip],

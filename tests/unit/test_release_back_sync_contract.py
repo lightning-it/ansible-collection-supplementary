@@ -147,6 +147,35 @@ class ReleaseBackSyncContractTests(unittest.TestCase):
             git(self.root, "commit", "-q", "--amend", "--no-edit")
         return git(self.root, "rev-parse", "HEAD")
 
+    def _make_tree_state_repair(self) -> tuple[str, str]:
+        git(self.root, "switch", "-q", "--detach", self.develop_base)
+        git(
+            self.root,
+            "merge",
+            "-q",
+            "--no-ff",
+            "--strategy=ours",
+            self.release_sha,
+            "-m",
+            "preserve develop tree while recording release ancestry",
+        )
+        develop_tip = git(self.root, "rev-parse", "HEAD")
+        self._app_identity()
+        for path in (
+            f".lit/security-release-intakes/{VERSION}.json",
+            f".lit/security-releases/{VERSION}.json",
+            "CHANGELOG.rst",
+            "changelogs/.plugin-cache.yaml",
+            "changelogs/changelog.yaml",
+            "changelogs/release-preparation.json",
+            "galaxy.yml",
+        ):
+            git(self.root, "checkout", self.release_sha, "--", path)
+        (self.root / "changelogs/fragments/security.yml").unlink()
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", f"chore: sync {TAG} release back to develop")
+        return develop_tip, git(self.root, "rev-parse", "HEAD")
+
     def verify(self, *, head_sha: str | None = None, evidence_id: str = EVIDENCE_ID) -> None:
         MODULE.verify(
             root=self.root,
@@ -160,6 +189,49 @@ class ReleaseBackSyncContractTests(unittest.TestCase):
 
     def test_exact_app_authored_back_sync_is_accepted(self) -> None:
         self.verify()
+
+    def test_app_authored_tree_state_repair_is_accepted_when_release_is_ancestor(self) -> None:
+        develop_tip, repair_head = self._make_tree_state_repair()
+        MODULE.verify(
+            root=self.root,
+            develop_tip=develop_tip,
+            release_sha=self.release_sha,
+            head_sha=repair_head,
+            tag=TAG,
+            security_version=VERSION,
+            evidence_id=EVIDENCE_ID,
+        )
+
+    def test_tree_state_repair_requires_exact_develop_tip(self) -> None:
+        _develop_tip, repair_head = self._make_tree_state_repair()
+        with self.assertRaisesRegex(MODULE.BackSyncError, "exact develop tip"):
+            MODULE.verify(
+                root=self.root,
+                develop_tip=self.develop_base,
+                release_sha=self.release_sha,
+                head_sha=repair_head,
+                tag=TAG,
+                security_version=VERSION,
+                evidence_id=EVIDENCE_ID,
+            )
+
+    def test_tree_state_repair_rejects_rollback_of_newer_develop_release(self) -> None:
+        develop_tip, repair_head = self._make_tree_state_repair()
+        git(self.root, "switch", "-q", "--detach", develop_tip)
+        (self.root / "galaxy.yml").write_text("---\nversion: 3.2.5\n", encoding="utf-8")
+        git(self.root, "add", "galaxy.yml")
+        git(self.root, "commit", "-q", "-m", "newer release state")
+        newer_develop = git(self.root, "rev-parse", "HEAD")
+        with self.assertRaisesRegex(MODULE.BackSyncError, "newer release"):
+            MODULE.verify(
+                root=self.root,
+                develop_tip=newer_develop,
+                release_sha=self.release_sha,
+                head_sha=repair_head,
+                tag=TAG,
+                security_version=VERSION,
+                evidence_id=EVIDENCE_ID,
+            )
 
     def test_non_release_path_is_rejected(self) -> None:
         malicious = self._make_back_sync(extra_path="unexpected.txt")
@@ -184,7 +256,8 @@ class ReleaseBackSyncContractTests(unittest.TestCase):
                 else:
                     path.unlink()
         (self.root / "unrelated.txt").write_text("unrelated\n", encoding="utf-8")
-        git(self.root, "add", "unrelated.txt")
+        (self.root / "galaxy.yml").write_text("---\nversion: 3.2.3\n", encoding="utf-8")
+        git(self.root, "add", "unrelated.txt", "galaxy.yml")
         git(self.root, "commit", "-q", "-m", "unrelated")
         unrelated = git(self.root, "rev-parse", "HEAD")
         with self.assertRaisesRegex(MODULE.BackSyncError, "not an ancestor"):
