@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Re-run the failed current-revision verifier job and its dependent required
-    workflow aggregator after delayed review evidence arrives.

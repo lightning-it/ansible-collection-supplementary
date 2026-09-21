@@ -1,6 +1,0 @@
----
-minor_changes:
-  - >-
-    Reconcile role-owned Guacamole OpenID Connect groups to an exact,
-    least-privilege connection READ set, including revocation when mappings are
-    removed, while the local Vault-custodied break-glass path remains intact.
