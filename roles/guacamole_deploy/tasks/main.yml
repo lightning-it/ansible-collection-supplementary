@@ -170,3 +170,10 @@
     - not ansible_check_mode
     - not guacamole_deploy_skip_runtime | bool
     - guacamole_deploy_connections | length > 0
+
+- name: Reconcile OIDC group connection authorization
+  ansible.builtin.include_tasks: reconcile_oidc_groups.yml
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - not guacamole_deploy_skip_runtime | bool

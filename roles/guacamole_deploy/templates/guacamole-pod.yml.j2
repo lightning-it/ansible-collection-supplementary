@@ -46,6 +46,7 @@ spec:
         - {name: OPENID_ISSUER, value: {{ guacamole_deploy_oidc_issuer | to_json }}}
         - {name: OPENID_CLIENT_ID, value: {{ guacamole_deploy_oidc_client_id | to_json }}}
         - {name: OPENID_REDIRECT_URI, value: {{ guacamole_deploy_oidc_redirect_uri | to_json }}}
+        - {name: OPENID_GROUPS_CLAIM_TYPE, value: {{ guacamole_deploy_oidc_groups_claim_type | to_json }}}
         - {name: EXTENSION_PRIORITY, value: "*, openid"}
 {% endif %}
   volumes:

@@ -10,6 +10,7 @@ TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "main.yml"
 ASSERTS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "assert.yml"
 DEFAULTS = ROOT / "roles" / "guacamole_deploy" / "defaults" / "main.yml"
 POD = ROOT / "roles" / "guacamole_deploy" / "templates" / "guacamole-pod.yml.j2"
+OIDC_GROUP_TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "reconcile_oidc_groups.yml"
 
 
 class GuacamoleDeployContractTests(unittest.TestCase):
@@ -64,6 +65,44 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("guacamole_deploy_port > 0", asserts)
         self.assertIn("guacamole_deploy_port <= 65535", asserts)
         self.assertNotIn("guacamole_deploy_port | int", asserts)
+
+    def test_oidc_group_claim_and_exact_connection_permissions_are_explicit(self) -> None:
+        defaults = DEFAULTS.read_text(encoding="utf-8")
+        asserts = ASSERTS.read_text(encoding="utf-8")
+        pod = POD.read_text(encoding="utf-8")
+        tasks = TASKS.read_text(encoding="utf-8")
+        group_tasks = OIDC_GROUP_TASKS.read_text(encoding="utf-8")
+
+        self.assertIn('guacamole_deploy_oidc_groups_claim_type: "groups"', defaults)
+        self.assertIn("guacamole_deploy_oidc_group_connections: []", defaults)
+        self.assertIn("name: OPENID_GROUPS_CLAIM_TYPE", pod)
+        self.assertIn("Validate declared Guacamole OIDC group authorization contracts", asserts)
+        self.assertIn("difference(guacamole_deploy_connections", asserts)
+        self.assertIn("Reject duplicate Guacamole connection names", asserts)
+        self.assertIn("Reject duplicate Guacamole OIDC authorization group names", asserts)
+        self.assertGreater(
+            asserts.index("Validate declared Guacamole OIDC group authorization contracts"),
+            asserts.index("Validate declared Guacamole connection contracts"),
+        )
+        self.assertIn("include_tasks: reconcile_oidc_groups.yml", tasks)
+        self.assertGreater(
+            tasks.index("include_tasks: reconcile_oidc_groups.yml"),
+            tasks.index("include_tasks: reconcile_connection.yml"),
+        )
+        self.assertIn("guacamole_deploy_oidc_groups_claim_type is string", asserts)
+        self.assertIn("lit_guacamole_oidc_managed_group", group_tasks)
+        self.assertIn("count(connection.connection_id) <> 1", group_tasks)
+        self.assertIn("DELETE FROM guacamole_entity AS entity", group_tasks)
+        self.assertIn("permission.permission <> 'READ'", group_tasks)
+        self.assertIn("SELECT managed_entity_id, connection.connection_id, 'READ'", group_tasks)
+        self.assertIn("user_group.disabled IS DISTINCT FROM false", group_tasks)
+        self.assertIn("DELETE FROM guacamole_system_permission", group_tasks)
+        self.assertIn("DELETE FROM guacamole_user_group_member", group_tasks)
+        self.assertIn("SELECT jsonb_array_elements_text(connection_names)", group_tasks)
+        self.assertIn("CREATE TEMPORARY TABLE lit_oidc_group_input", group_tasks)
+        self.assertNotIn("set_config(", group_tasks)
+        self.assertIn("no_log: true", group_tasks)
+        self.assertNotIn("{{ guacamole_deploy_oidc_group.", group_tasks)
 
 
 if __name__ == "__main__":

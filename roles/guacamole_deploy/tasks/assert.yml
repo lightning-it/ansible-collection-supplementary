@@ -16,6 +16,11 @@
       - guacamole_deploy_secrets.breakglass_salt | default('', true) | length >= 16
       - guacamole_deploy_connections is sequence
       - guacamole_deploy_connections is not string
+      - guacamole_deploy_oidc_group_connections is sequence
+      - guacamole_deploy_oidc_group_connections is not string
+      - >-
+        guacamole_deploy_oidc_group_connections | length == 0
+        or guacamole_deploy_oidc_enabled | bool
       - guacamole_deploy_api_session_timeout_minutes is integer
       - guacamole_deploy_api_session_timeout_minutes is not boolean
       - guacamole_deploy_api_session_timeout_minutes >= 1
@@ -31,7 +36,16 @@
         or guacamole_deploy_oidc_issuer | trim | length > 0
       - >-
         not guacamole_deploy_oidc_enabled | bool
+        or guacamole_deploy_oidc_client_id | trim | length > 0
+      - >-
+        not guacamole_deploy_oidc_enabled | bool
         or guacamole_deploy_oidc_redirect_uri | trim | length > 0
+      - >-
+        not guacamole_deploy_oidc_enabled | bool
+        or guacamole_deploy_oidc_groups_claim_type is string
+      - >-
+        not guacamole_deploy_oidc_enabled | bool
+        or guacamole_deploy_oidc_groups_claim_type | trim | length > 0
     fail_msg: >-
       Guacamole requires immutable images, Vault secrets, a bounded API session
       timeout, and complete OIDC settings.
@@ -55,4 +69,54 @@
   loop: "{{ guacamole_deploy_connections }}"
   loop_control:
     label: "{{ item.name | default('unnamed') }}"
+  no_log: true
+
+- name: Reject duplicate Guacamole connection names
+  ansible.builtin.assert:
+    that:
+      - >-
+        guacamole_deploy_connections | map(attribute='name') | list | unique | length
+        == guacamole_deploy_connections | length
+    fail_msg: Guacamole connection names must be unique.
+    quiet: true
+  no_log: true
+
+- name: Validate declared Guacamole OIDC group authorization contracts
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.name | default(None) is string
+      - item.name | default('', true) is match('^[A-Za-z0-9_.@:-]+$')
+      - item.connection_names | default([]) is sequence
+      - item.connection_names | default([]) is not string
+      - item.connection_names | default([]) | length > 0
+      - >-
+        item.connection_names | default([]) | select('string') | list | length
+        == item.connection_names | default([]) | length
+      - >-
+        item.connection_names | default([]) | unique | length
+        == item.connection_names | default([]) | length
+      - >-
+        item.connection_names
+        | default([])
+        | difference(guacamole_deploy_connections | map(attribute='name') | list)
+        | length
+        == 0
+    fail_msg: >-
+      Every OIDC authorization group requires a safe unique name and a
+      non-empty unique subset of declared Guacamole connection names.
+    quiet: true
+  loop: "{{ guacamole_deploy_oidc_group_connections }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed') }}"
+  no_log: true
+
+- name: Reject duplicate Guacamole OIDC authorization group names
+  ansible.builtin.assert:
+    that:
+      - >-
+        guacamole_deploy_oidc_group_connections | map(attribute='name') | list | unique | length
+        == guacamole_deploy_oidc_group_connections | length
+    fail_msg: Guacamole OIDC authorization group names must be unique.
+    quiet: true
   no_log: true
