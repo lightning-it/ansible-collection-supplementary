@@ -450,9 +450,18 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             'test "$(jq \'length\' <<<"${runner_backed_jobs}")" -eq 1',
             retry,
         )
-        self.assertIn('if [ "$(jq \'length\' <<<"${legacy_jobs}")" -eq 1 ]', retry)
-        self.assertIn('rerunnable_jobs="${legacy_jobs}"', retry)
-        self.assertIn('rerunnable_jobs="${required_jobs}"', retry)
+        topology_selection = retry.split(
+            'if [ "$(jq \'length\' <<<"${legacy_jobs}")" -eq 1 ]; then',
+            1,
+        )[1].split(
+            'test "$(jq \'length\' <<<"${rerunnable_jobs}")" -eq 1',
+            1,
+        )[0]
+        legacy_branch, required_only_branch = topology_selection.split("          else\n", 1)
+        self.assertIn('rerunnable_jobs="${legacy_jobs}"', legacy_branch)
+        self.assertNotIn('rerunnable_jobs="${required_jobs}"', legacy_branch)
+        self.assertIn('rerunnable_jobs="${required_jobs}"', required_only_branch)
+        self.assertNotIn('rerunnable_jobs="${legacy_jobs}"', required_only_branch)
         self.assertIn(
             "repos/${REPOSITORY}/actions/jobs/${rerunnable_job_id}/rerun",
             retry,

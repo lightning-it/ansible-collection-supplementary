@@ -992,9 +992,9 @@ jobs:
           test "$(jq 'length' <<<"${required_jobs}")" -eq 1
           test "$(jq 'length' <<<"${runner_backed_jobs}")" -eq \
             "$(jq -n --argjson legacy "${legacy_jobs}" --argjson required "${required_jobs}" --argjson route "${route_jobs}" '(($legacy | length) + ($required | length) + ($route | length))')"
-          # Re-run the failed Legacy verifier when this topology exposes it.
-          # GitHub then re-runs its dependent Required workflow aggregator. If
-          # only the legacy one-job topology exists, re-run that final job.
+          # Re-run the failed Legacy verifier when this topology exposes it;
+          # GitHub then re-runs its dependent Required workflow aggregator.
+          # In the required-only topology, re-run the Required job directly.
           if [ "$(jq 'length' <<<"${legacy_jobs}")" -eq 1 ]; then
             rerunnable_jobs="${legacy_jobs}"
           else
