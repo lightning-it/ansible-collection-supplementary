@@ -804,6 +804,9 @@ roles:
     known_limitations:
       - "Goal 07 production acceptance is maintained in the consumer automation repository."
       - >-
+        OIDC groups receive only explicitly declared connection READ permissions;
+        the role never grants system administration or connection mutation rights.
+      - >-
         Absolute RDP session duration remains a consumer or backend policy;
         the role controls the inactive Guacamole web/API session timeout.
     deprecation_state: "active"
