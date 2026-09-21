@@ -42,6 +42,9 @@
         or guacamole_deploy_oidc_redirect_uri | trim | length > 0
       - >-
         not guacamole_deploy_oidc_enabled | bool
+        or guacamole_deploy_oidc_groups_claim_type is string
+      - >-
+        not guacamole_deploy_oidc_enabled | bool
         or guacamole_deploy_oidc_groups_claim_type | trim | length > 0
     fail_msg: >-
       Guacamole requires immutable images, Vault secrets, a bounded API session

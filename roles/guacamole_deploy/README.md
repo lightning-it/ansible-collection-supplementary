@@ -22,11 +22,12 @@ All defaults are defined in `defaults/main.yml`.
 - `guacamole_deploy_oidc_groups_claim_type` explicitly selects the token claim
   that carries group names and defaults to `groups`.
 - `guacamole_deploy_oidc_group_connections` maps an exact OIDC group name to a
-  non-empty list of declared connection names. The role creates the matching
-  database-backed Guacamole group and reconciles only its `READ` permissions.
-  Undeclared and non-`READ` connection permissions for that managed group are
-  removed. Non-connection permissions are outside this contract and are never
-  granted by the role.
+  non-empty list of declared connection names. The role exclusively owns groups
+  it creates for this contract and refuses to adopt a pre-existing same-name
+  group. It removes undeclared role-owned groups and reconciles each retained
+  group to only the requested connection `READ` permissions: group nesting,
+  membership, system privileges, and permissions on users, groups, connection
+  groups, or sharing profiles are removed.
 - `guacamole_deploy_api_session_timeout_minutes` bounds web/API inactivity to
   between 1 and 1440 minutes and defaults to 60.
 

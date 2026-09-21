@@ -10,7 +10,7 @@ TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "main.yml"
 ASSERTS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "assert.yml"
 DEFAULTS = ROOT / "roles" / "guacamole_deploy" / "defaults" / "main.yml"
 POD = ROOT / "roles" / "guacamole_deploy" / "templates" / "guacamole-pod.yml.j2"
-OIDC_GROUP_TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "reconcile_oidc_group.yml"
+OIDC_GROUP_TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "reconcile_oidc_groups.yml"
 
 
 class GuacamoleDeployContractTests(unittest.TestCase):
@@ -84,23 +84,25 @@ class GuacamoleDeployContractTests(unittest.TestCase):
             asserts.index("Validate declared Guacamole OIDC group authorization contracts"),
             asserts.index("Validate declared Guacamole connection contracts"),
         )
-        self.assertIn("include_tasks: reconcile_oidc_group.yml", tasks)
+        self.assertIn("include_tasks: reconcile_oidc_groups.yml", tasks)
         self.assertGreater(
-            tasks.index("include_tasks: reconcile_oidc_group.yml"),
+            tasks.index("include_tasks: reconcile_oidc_groups.yml"),
             tasks.index("include_tasks: reconcile_connection.yml"),
         )
-        self.assertIn("name = group_name AND type = 'USER_GROUP'", group_tasks)
+        self.assertIn("guacamole_deploy_oidc_groups_claim_type is string", asserts)
+        self.assertIn("lit_guacamole_oidc_managed_group", group_tasks)
+        self.assertIn("count(connection.connection_id) <> 1", group_tasks)
+        self.assertIn("DELETE FROM guacamole_entity AS entity", group_tasks)
         self.assertIn("permission.permission <> 'READ'", group_tasks)
-        self.assertIn("SELECT entity.entity_id, connection.connection_id, 'READ'", group_tasks)
+        self.assertIn("SELECT managed_entity_id, connection.connection_id, 'READ'", group_tasks)
         self.assertIn("user_group.disabled IS DISTINCT FROM false", group_tasks)
-        self.assertIn("SELECT count(*)", group_tasks)
+        self.assertIn("DELETE FROM guacamole_system_permission", group_tasks)
+        self.assertIn("DELETE FROM guacamole_user_group_member", group_tasks)
         self.assertIn("SELECT jsonb_array_elements_text(connection_names)", group_tasks)
         self.assertIn("CREATE TEMPORARY TABLE lit_oidc_group_input", group_tasks)
-        self.assertIn("INTO STRICT group_name, connection_names", group_tasks)
-        self.assertIn("ON CONFLICT DO NOTHING", group_tasks)
         self.assertNotIn("set_config(", group_tasks)
         self.assertIn("no_log: true", group_tasks)
-        self.assertNotIn("{{ guacamole_deploy_oidc_group.name }}'", group_tasks)
+        self.assertNotIn("{{ guacamole_deploy_oidc_group.", group_tasks)
 
 
 if __name__ == "__main__":
