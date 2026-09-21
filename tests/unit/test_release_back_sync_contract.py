@@ -215,6 +215,24 @@ class ReleaseBackSyncContractTests(unittest.TestCase):
                 evidence_id=EVIDENCE_ID,
             )
 
+    def test_tree_state_repair_rejects_rollback_of_newer_develop_release(self) -> None:
+        develop_tip, repair_head = self._make_tree_state_repair()
+        git(self.root, "switch", "-q", "--detach", develop_tip)
+        (self.root / "galaxy.yml").write_text("---\nversion: 3.2.5\n", encoding="utf-8")
+        git(self.root, "add", "galaxy.yml")
+        git(self.root, "commit", "-q", "-m", "newer release state")
+        newer_develop = git(self.root, "rev-parse", "HEAD")
+        with self.assertRaisesRegex(MODULE.BackSyncError, "newer release"):
+            MODULE.verify(
+                root=self.root,
+                develop_tip=newer_develop,
+                release_sha=self.release_sha,
+                head_sha=repair_head,
+                tag=TAG,
+                security_version=VERSION,
+                evidence_id=EVIDENCE_ID,
+            )
+
     def test_non_release_path_is_rejected(self) -> None:
         malicious = self._make_back_sync(extra_path="unexpected.txt")
         with self.assertRaisesRegex(MODULE.BackSyncError, "non-release path"):
@@ -238,7 +256,8 @@ class ReleaseBackSyncContractTests(unittest.TestCase):
                 else:
                     path.unlink()
         (self.root / "unrelated.txt").write_text("unrelated\n", encoding="utf-8")
-        git(self.root, "add", "unrelated.txt")
+        (self.root / "galaxy.yml").write_text("---\nversion: 3.2.3\n", encoding="utf-8")
+        git(self.root, "add", "unrelated.txt", "galaxy.yml")
         git(self.root, "commit", "-q", "-m", "unrelated")
         unrelated = git(self.root, "rev-parse", "HEAD")
         with self.assertRaisesRegex(MODULE.BackSyncError, "not an ancestor"):

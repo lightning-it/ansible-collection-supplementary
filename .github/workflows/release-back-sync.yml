@@ -312,6 +312,34 @@ jobs:
             test -z "$SECURITY_EVIDENCE_ID"
           fi
 
+          develop_galaxy="$RUNNER_TEMP/release-back-sync-develop-galaxy.yml"
+          git show origin/develop:galaxy.yml > "$develop_galaxy"
+          develop_version_order="$(
+            TAGGED_VERSION="$tagged_version" DEVELOP_GALAXY="$develop_galaxy" python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          stable = re.compile(r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$")
+          tagged = os.environ["TAGGED_VERSION"]
+          text = Path(os.environ["DEVELOP_GALAXY"]).read_text(encoding="utf-8")
+          match = re.search(r"(?m)^version:\s*[\"']?([^\s\"']+)", text)
+          develop = match.group(1) if match else ""
+          if stable.fullmatch(tagged) is None or stable.fullmatch(develop) is None:
+              raise SystemExit("tagged and develop versions must be stable semantic versions")
+          tagged_parts = tuple(int(part) for part in tagged.split("."))
+          develop_parts = tuple(int(part) for part in develop.split("."))
+          if develop_parts > tagged_parts:
+              print(f"newer:{develop}")
+          else:
+              print("eligible")
+          PY
+          )"
+          if [[ "$develop_version_order" == newer:* ]]; then
+            echo "develop already contains v${develop_version_order#newer:}; ignoring stale ${tag}."
+            exit 0
+          fi
+
           branch="backsync/release-${tag}-to-develop"
           branch_ref="refs/heads/${branch}"
           remote_branch_sha="$(
