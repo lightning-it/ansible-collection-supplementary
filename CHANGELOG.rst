@@ -4,6 +4,20 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.5.0
+======
+
+Minor Changes
+-------------
+
+- Let ``guacamole_deploy`` opt into an exact pre-existing Podman network and IPv4 address and an explicit container proxy-bypass list, without creating a network or widening direct egress by default.
+- Reconcile role-owned Guacamole OpenID Connect groups to an exact, least-privilege connection READ set, including revocation when mappings are removed, while the local Vault-custodied break-glass path remains intact.
+
+Bugfixes
+--------
+
+- Re-run the failed current-revision verifier job and its dependent required workflow aggregator after delayed review evidence arrives.
+
 v3.4.4
 ======
 

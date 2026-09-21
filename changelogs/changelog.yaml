@@ -1064,3 +1064,20 @@ releases:
     fragments:
       - li139-squid-image-native-liveness.yml
     release_date: '2026-09-20'
+  3.5.0:
+    changes:
+      bugfixes:
+        - Re-run the failed current-revision verifier job and its dependent required
+          workflow aggregator after delayed review evidence arrives.
+      minor_changes:
+        - Let ``guacamole_deploy`` opt into an exact pre-existing Podman network and
+          IPv4 address and an explicit container proxy-bypass list, without creating
+          a network or widening direct egress by default.
+        - Reconcile role-owned Guacamole OpenID Connect groups to an exact, least-privilege
+          connection READ set, including revocation when mappings are removed, while
+          the local Vault-custodied break-glass path remains intact.
+    fragments:
+      - li139-guacamole-oidc-group-authorization.yml
+      - li139-guacamole-static-network-proxy-boundary.yml
+      - li139-required-workflow-dependent-rerun.yml
+    release_date: '2026-09-21'
