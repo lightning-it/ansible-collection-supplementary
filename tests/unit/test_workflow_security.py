@@ -1319,6 +1319,16 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertEqual(2, back_sync.count("actions/create-github-app-token@"))
         self.assertNotIn("tagger litreleasebot", back_sync)
         self.assertIn('git merge --no-ff -X ours "$release_sha"', back_sync)
+        self.assertIn("release_is_ancestor=false", back_sync)
+        self.assertIn('if [ "$release_is_ancestor" = true ]; then', back_sync)
+        self.assertIn(
+            "develop already contains the exact tagged release state; back-sync not needed.",
+            back_sync,
+        )
+        self.assertNotIn(
+            "develop already contains the tagged release; release back-sync not needed.",
+            back_sync,
+        )
         self.assertIn('test "$tag" = "v${tagged_version}"', back_sync)
         self.assertNotIn("git merge --no-ff -X ours origin/main", back_sync)
 

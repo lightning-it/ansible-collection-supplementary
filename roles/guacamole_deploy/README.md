@@ -17,6 +17,13 @@ All defaults are defined in `defaults/main.yml`.
 
 - `guacamole_deploy_connections` declares credential-free RDP, SSH, or VNC
   connections.
+- `guacamole_deploy_network_name` and `guacamole_deploy_network_ipv4` optionally
+  bind the pod to one pre-existing Podman network and one exact IPv4 address.
+  They must be set together; the role does not create or modify the network.
+- `guacamole_deploy_no_proxy` optionally replaces the inherited container proxy
+  bypass list with exact direct destinations. This permits server-side OIDC/JWKS
+  requests to traverse the site forward proxy even when a broader host bypass
+  suffix exists. The empty default leaves inherited behavior unchanged.
 - `guacamole_deploy_oidc_enabled` enables the OpenID Connect extension and
   requires issuer, authorization, JWKS, client, and redirect settings.
 - `guacamole_deploy_oidc_groups_claim_type` explicitly selects the token claim
@@ -54,6 +61,9 @@ PostgreSQL and OpenID Connect extensions shipped by the pinned Guacamole image.
         guacamole_deploy_oidc_jwks_endpoint: https://idp.example.com/certs
         guacamole_deploy_oidc_issuer: https://idp.example.com
         guacamole_deploy_oidc_redirect_uri: https://guacamole.example.com/guacamole/
+        guacamole_deploy_network_name: podman-default-kube-network
+        guacamole_deploy_network_ipv4: 10.89.0.20
+        guacamole_deploy_no_proxy: [localhost, 127.0.0.1]
         guacamole_deploy_connections:
           - name: Workbench
             protocol: rdp

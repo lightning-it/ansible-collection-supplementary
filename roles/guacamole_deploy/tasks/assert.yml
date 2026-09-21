@@ -10,6 +10,29 @@
       - guacamole_deploy_port is not boolean
       - guacamole_deploy_port > 0
       - guacamole_deploy_port <= 65535
+      - guacamole_deploy_network_name is string
+      - guacamole_deploy_network_ipv4 is string
+      - >-
+        (guacamole_deploy_network_name | length == 0)
+        == (guacamole_deploy_network_ipv4 | length == 0)
+      - >-
+        guacamole_deploy_network_name | length == 0
+        or guacamole_deploy_network_name is match('^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$')
+      - >-
+        guacamole_deploy_network_ipv4 | length == 0
+        or guacamole_deploy_network_ipv4
+          is match(
+            '^(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])'
+            ~ '(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}$'
+          )
+      - guacamole_deploy_no_proxy is sequence
+      - guacamole_deploy_no_proxy is not string
+      - guacamole_deploy_no_proxy | unique | list | length == guacamole_deploy_no_proxy | length
+      - guacamole_deploy_no_proxy | select('string') | list | length == guacamole_deploy_no_proxy | length
+      - >-
+        guacamole_deploy_no_proxy
+        | select('match', '^[A-Za-z0-9](?:[A-Za-z0-9_.:-]{0,251}[A-Za-z0-9])?$')
+        | list | length == guacamole_deploy_no_proxy | length
       - guacamole_deploy_breakglass_user is match('^[A-Za-z0-9_.@-]+$')
       - guacamole_deploy_secrets.db_password | default('', true) | length >= 16
       - guacamole_deploy_secrets.breakglass_password | default('', true) | length >= 16
