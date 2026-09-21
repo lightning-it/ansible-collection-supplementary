@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.4.4
+======
+
+Bugfixes
+--------
+
+- Replace the forward proxy tcpSocket liveness probe, which Podman translated to the absent nc utility, with a non-root image-native HTTP probe and verify its Bash capability before any enabled-state mutation.
+
 v3.4.3
 ======
 
