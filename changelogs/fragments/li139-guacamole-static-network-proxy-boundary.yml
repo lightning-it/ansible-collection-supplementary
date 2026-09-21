@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    Let ``guacamole_deploy`` opt into an exact pre-existing Podman network and
+    IPv4 address and an explicit container proxy-bypass list, without creating
+    a network or widening direct egress by default.

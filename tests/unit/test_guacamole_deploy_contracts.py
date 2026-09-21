@@ -10,6 +10,7 @@ TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "main.yml"
 ASSERTS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "assert.yml"
 DEFAULTS = ROOT / "roles" / "guacamole_deploy" / "defaults" / "main.yml"
 POD = ROOT / "roles" / "guacamole_deploy" / "templates" / "guacamole-pod.yml.j2"
+SERVICE = ROOT / "roles" / "guacamole_deploy" / "templates" / "guacamole.service.j2"
 OIDC_GROUP_TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "reconcile_oidc_groups.yml"
 
 
@@ -65,6 +66,23 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("guacamole_deploy_port > 0", asserts)
         self.assertIn("guacamole_deploy_port <= 65535", asserts)
         self.assertNotIn("guacamole_deploy_port | int", asserts)
+
+    def test_static_network_and_proxy_bypass_are_exact_and_default_off(self) -> None:
+        defaults = DEFAULTS.read_text(encoding="utf-8")
+        asserts = ASSERTS.read_text(encoding="utf-8")
+        pod = POD.read_text(encoding="utf-8")
+        service = SERVICE.read_text(encoding="utf-8")
+
+        self.assertIn('guacamole_deploy_network_name: ""', defaults)
+        self.assertIn('guacamole_deploy_network_ipv4: ""', defaults)
+        self.assertIn("guacamole_deploy_no_proxy: []", defaults)
+        self.assertIn("(guacamole_deploy_network_name | length == 0)", asserts)
+        self.assertIn("== (guacamole_deploy_network_ipv4 | length == 0)", asserts)
+        self.assertIn("guacamole_deploy_no_proxy | unique", asserts)
+        self.assertIn("--network {{ guacamole_deploy_network_name }}:ip={{ guacamole_deploy_network_ipv4 }}", service)
+        self.assertIn("name: no_proxy", pod)
+        self.assertIn("name: NO_PROXY", pod)
+        self.assertIn("guacamole_deploy_no_proxy | join(',') | to_json", pod)
 
     def test_oidc_group_claim_and_exact_connection_permissions_are_explicit(self) -> None:
         defaults = DEFAULTS.read_text(encoding="utf-8")
