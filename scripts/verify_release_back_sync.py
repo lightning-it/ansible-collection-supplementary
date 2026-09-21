@@ -159,9 +159,25 @@ def verify(
         fail("invalid release tag")
 
     parents = git_text(root, "show", "-s", "--format=%P", head_sha).split()
-    if len(parents) != 2 or parents[1] != release_sha:
+    if len(parents) == 2 and parents[1] == release_sha:
+        develop_base = parents[0]
+    elif len(parents) == 1:
+        develop_base = parents[0]
+        if develop_base != develop_tip:
+            fail("tree-state repair is not based on the exact develop tip")
+        if (
+            subprocess.run(  # noqa: S603 -- exact validated commits.
+                [git_binary(), "merge-base", "--is-ancestor", release_sha, develop_base],
+                cwd=root,
+                check=False,
+                env=git_environment(),
+                timeout=30,
+            ).returncode
+            != 0
+        ):
+            fail("tree-state repair lacks release ancestry")
+    else:
         fail("release parent mismatch")
-    develop_base = parents[0]
     if (
         subprocess.run(  # noqa: S603 -- exact validated commits.
             [git_binary(), "merge-base", "--is-ancestor", develop_base, develop_tip],

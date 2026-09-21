@@ -312,11 +312,6 @@ jobs:
             test -z "$SECURITY_EVIDENCE_ID"
           fi
 
-          if git merge-base --is-ancestor "$release_sha" origin/develop; then
-            echo "develop already contains the tagged release; release back-sync not needed."
-            exit 0
-          fi
-
           branch="backsync/release-${tag}-to-develop"
           branch_ref="refs/heads/${branch}"
           remote_branch_sha="$(
@@ -342,10 +337,6 @@ jobs:
             body+=$'`; human actions in the successful path: `0`.'
           fi
 
-          git switch -C "$branch" origin/develop
-          git merge --no-ff -X ours "$release_sha" \
-            -m "chore: sync ${tag} release back to develop"
-
           release_paths=(
             CHANGELOG.rst
             changelogs/.plugin-cache.yaml
@@ -360,6 +351,18 @@ jobs:
             git cat-file -e "${release_sha}:${security_receipt}"
             release_paths+=("$security_metadata" "$security_receipt")
           fi
+
+          release_is_ancestor=false
+          if git merge-base --is-ancestor "$release_sha" origin/develop; then
+            release_is_ancestor=true
+          fi
+
+          git switch -C "$branch" origin/develop
+          if [ "$release_is_ancestor" = false ]; then
+            git merge --no-ff -X ours "$release_sha" \
+              -m "chore: sync ${tag} release back to develop"
+          fi
+
           for path in "${release_paths[@]}"; do
             if git cat-file -e "${release_sha}:${path}" 2>/dev/null; then
               git checkout "$release_sha" -- "$path"
@@ -369,12 +372,21 @@ jobs:
           done
 
           release_base="$(git rev-parse "${release_sha}^1")"
-          git diff --name-only --diff-filter=D \
-            "$release_base" "$release_sha" -- changelogs/fragments/ \
-            | xargs -r rm -f
+          while IFS= read -r -d '' released_fragment; do
+            rm -f -- "$released_fragment"
+          done < <(
+            git diff --name-only -z --diff-filter=D \
+              "$release_base" "$release_sha" -- changelogs/fragments/
+          )
 
           git add -A -- "${release_paths[@]}" changelogs/fragments/
-          if ! git diff --cached --quiet; then
+          if [ "$release_is_ancestor" = true ]; then
+            if git diff --cached --quiet; then
+              echo "develop already contains the exact tagged release state; back-sync not needed."
+              exit 0
+            fi
+            git commit -m "chore: sync ${tag} release back to develop"
+          elif ! git diff --cached --quiet; then
             git commit --amend --no-edit
           fi
 
