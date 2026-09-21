@@ -988,15 +988,24 @@ jobs:
             '[.[] | select(.name == "Legacy protected current-revision verifier") | select(.runner_id != null and (.steps | length) > 0) | select(.run_attempt == 1) | select(.status == "completed" and .conclusion == "failure")]' \
             <<<"${runner_backed_jobs}")
           test "$(jq 'length' <<<"${legacy_jobs}")" -le 1
-          rerunnable_jobs=$(jq -c '[.[] | select(.name == "Required current-revision workflow") | select(.runner_id != null and (.steps | length) > 0) | select(.run_attempt == 1) | select(.status == "completed" and .conclusion == "failure")]' <<<"${runner_backed_jobs}")
-          test "$(jq 'length' <<<"${rerunnable_jobs}")" -eq 1
+          required_jobs=$(jq -c '[.[] | select(.name == "Required current-revision workflow") | select(.runner_id != null and (.steps | length) > 0) | select(.run_attempt == 1) | select(.status == "completed" and .conclusion == "failure")]' <<<"${runner_backed_jobs}")
+          test "$(jq 'length' <<<"${required_jobs}")" -eq 1
           test "$(jq 'length' <<<"${runner_backed_jobs}")" -eq \
-            "$(jq -n --argjson legacy "${legacy_jobs}" --argjson required "${rerunnable_jobs}" --argjson route "${route_jobs}" '(($legacy | length) + ($required | length) + ($route | length))')"
-          required_job_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' \
+            "$(jq -n --argjson legacy "${legacy_jobs}" --argjson required "${required_jobs}" --argjson route "${route_jobs}" '(($legacy | length) + ($required | length) + ($route | length))')"
+          # Re-run the failed Legacy verifier when this topology exposes it.
+          # GitHub then re-runs its dependent Required workflow aggregator. If
+          # only the legacy one-job topology exists, re-run that final job.
+          if [ "$(jq 'length' <<<"${legacy_jobs}")" -eq 1 ]; then
+            rerunnable_jobs="${legacy_jobs}"
+          else
+            rerunnable_jobs="${required_jobs}"
+          fi
+          test "$(jq 'length' <<<"${rerunnable_jobs}")" -eq 1
+          rerunnable_job_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' \
             <<<"${rerunnable_jobs}")"
           revalidate_pr_metadata
           if ! gh api --method POST \
-              "repos/${REPOSITORY}/actions/jobs/${required_job_id}/rerun" >/dev/null; then
+              "repos/${REPOSITORY}/actions/jobs/${rerunnable_job_id}/rerun" >/dev/null; then
             # GitHub can accept the verifier-job rerun and still close the client request
             # with a non-success response when another service-side request
             # wins the same transition. Accept that outcome only after the
@@ -1004,10 +1013,10 @@ jobs:
             run="$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}")"
             observed_attempt="$(jq -er '.run_attempt | select(type == "number" and . >= 1)' <<<"${run}")"
             if [ "${observed_attempt}" -ne 2 ]; then
-              echo "Required verifier job rerun failed without exactly one materialized second attempt." >&2
+              echo "Protected verifier job rerun failed without exactly one materialized second attempt." >&2
               exit 1
             fi
-            echo "A concurrent service-side request already materialized the required verifier job rerun."
+            echo "A concurrent service-side request already materialized the protected verifier job rerun."
           fi
           # Waiting here creates a circular dependency.
           revalidate_pr_metadata

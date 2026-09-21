@@ -434,10 +434,12 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("legacy_jobs=$(jq -c", retry)
         self.assertIn('select(.name == "Legacy protected current-revision verifier")', retry)
         self.assertIn('test "$(jq \'length\' <<<"${legacy_jobs}")" -le 1', retry)
+        self.assertIn("required_jobs=$(jq -c", retry)
         self.assertIn('select(.name == "Required current-revision workflow")', retry)
+        self.assertIn('test "$(jq \'length\' <<<"${required_jobs}")" -eq 1', retry)
         self.assertIn('test "$(jq \'length\' <<<"${rerunnable_jobs}")" -eq 1', retry)
         self.assertIn(
-            '--argjson legacy "${legacy_jobs}" --argjson required "${rerunnable_jobs}" --argjson route "${route_jobs}"',
+            '--argjson legacy "${legacy_jobs}" --argjson required "${required_jobs}" --argjson route "${route_jobs}"',
             retry,
         )
         self.assertIn(
@@ -448,8 +450,11 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             'test "$(jq \'length\' <<<"${runner_backed_jobs}")" -eq 1',
             retry,
         )
+        self.assertIn('if [ "$(jq \'length\' <<<"${legacy_jobs}")" -eq 1 ]', retry)
+        self.assertIn('rerunnable_jobs="${legacy_jobs}"', retry)
+        self.assertIn('rerunnable_jobs="${required_jobs}"', retry)
         self.assertIn(
-            "repos/${REPOSITORY}/actions/jobs/${required_job_id}/rerun",
+            "repos/${REPOSITORY}/actions/jobs/${rerunnable_job_id}/rerun",
             retry,
         )
         self.assertNotIn(
