@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
-import subprocess
+import contextlib
+import io
 import unittest
 from pathlib import Path
 from typing import Any
@@ -40,186 +40,37 @@ def task_named(tasks: list[dict[str, Any]], name: str) -> dict[str, Any]:
 
 
 class IncusLifecycleTests(unittest.TestCase):
-    def test_parallel_pruning_accepts_only_an_already_deleted_target(self) -> None:
-        delete_error = subprocess.CalledProcessError(1, ["incus"])
-        with mock.patch.object(
-            prune_stale_incus_resources,
-            "incus",
-            side_effect=(delete_error, "[]"),
-        ):
-            prune_stale_incus_resources.delete_if_present(
-                "stale-instance",
-                "delete",
-                "--force",
-                "stale-instance",
-                list_kind="instance",
-            )
-
-        with mock.patch.object(
-            prune_stale_incus_resources,
-            "incus",
-            side_effect=(delete_error, "[]"),
-        ):
-            prune_stale_incus_resources.delete_if_present(
-                "lit000000000001",
-                "network",
-                "delete",
-                "lit000000000001",
-                list_kind="network",
-            )
-
-        with (
-            mock.patch.object(
-                prune_stale_incus_resources,
-                "incus",
-                side_effect=(delete_error, '[{"name": "lit000000000001"}]'),
-            ),
-            self.assertRaises(subprocess.CalledProcessError),
-        ):
-            prune_stale_incus_resources.delete_if_present(
-                "lit000000000001",
-                "network",
-                "delete",
-                "lit000000000001",
-                list_kind="network",
-            )
-
-        with (
-            mock.patch.object(
-                prune_stale_incus_resources,
-                "incus",
-                side_effect=(delete_error, '[{"name": "stale-instance"}]'),
-            ),
-            self.assertRaises(subprocess.CalledProcessError),
-        ):
-            prune_stale_incus_resources.delete_if_present(
-                "stale-instance",
-                "delete",
-                "--force",
-                "stale-instance",
-                list_kind="instance",
-            )
-
-    def test_parallel_pruning_skips_a_network_that_became_owned_or_used(self) -> None:
-        delete_error = subprocess.CalledProcessError(1, ["incus"])
-        stale_config = {
-            prune_stale_incus_resources.REPOSITORY_KEY: "lightning-it/example",
-            prune_stale_incus_resources.RUN_ID_KEY: "41",
-            prune_stale_incus_resources.OWNER_KEY: "old-cell",
-        }
-        raced_networks = (
-            [{"name": "lit000000000001", "config": stale_config, "used_by": ["/1.0/instances/new"]}],
-            [
-                {
-                    "name": "lit000000000001",
-                    "config": {**stale_config, prune_stale_incus_resources.RUN_ID_KEY: "42"},
-                    "used_by": [],
-                }
-            ],
-        )
-        for current in raced_networks:
+    def test_legacy_pruner_never_accesses_incus_for_any_run_order(self) -> None:
+        # A newer run must not kill an older run; an attempt shares its run ID.
+        for run_id in ("41", "42", "35703209227"):
             with (
-                self.subTest(current=current),
-                mock.patch.object(
-                    prune_stale_incus_resources,
-                    "incus",
-                    side_effect=(delete_error, json.dumps(current)),
-                ),
+                self.subTest(run_id=run_id),
+                mock.patch("sys.argv", ["pruner", "--repository", "lightning-it/example", "--current-run-id", run_id]),
+                mock.patch("subprocess.run") as execute,
+                mock.patch("subprocess.Popen") as spawn,
+                contextlib.redirect_stdout(io.StringIO()) as output,
             ):
-                prune_stale_incus_resources.delete_if_present(
-                    "lit000000000001",
-                    "network",
-                    "delete",
-                    "lit000000000001",
-                    list_kind="network",
-                    repository="lightning-it/example",
-                    current_run_id="42",
-                )
+                self.assertEqual(0, prune_stale_incus_resources.main())
+                self.assertIn("Cross-run Incus pruning disabled", output.getvalue())
+                execute.assert_not_called()
+                spawn.assert_not_called()
 
-    def test_parallel_pruning_accepts_an_already_absent_network_device(self) -> None:
-        delete_error = subprocess.CalledProcessError(
-            1,
-            ["incus", "network", "delete", "lit000000000001"],
-            stderr=(
-                "Error: Failed to run: ip link delete dev lit000000000001: "
-                'exit status 1 (Cannot find device "lit000000000001")'
-            ),
-        )
-        with mock.patch.object(
-            prune_stale_incus_resources,
-            "incus",
-            side_effect=delete_error,
+    def test_legacy_pruner_retains_input_validation_without_mutation(self) -> None:
+        for repository, run_id in (
+            ("bad/owner/name", "42"),
+            ("lightning-it/example", "0"),
+            ("lightning-it/example", "bad"),
         ):
-            prune_stale_incus_resources.delete_if_present(
-                "lit000000000001",
-                "network",
-                "delete",
-                "lit000000000001",
-                list_kind="network",
-            )
-
-    def test_parallel_pruning_rejects_other_network_delete_failures(self) -> None:
-        delete_error = subprocess.CalledProcessError(
-            1,
-            ["incus", "network", "delete", "lit000000000001"],
-            stderr="Error: network is still in use",
-        )
-        with (
-            mock.patch.object(
-                prune_stale_incus_resources,
-                "incus",
-                side_effect=(delete_error, '[{"name": "lit000000000001"}]'),
-            ),
-            self.assertRaises(subprocess.CalledProcessError),
-        ):
-            prune_stale_incus_resources.delete_if_present(
-                "lit000000000001",
-                "network",
-                "delete",
-                "lit000000000001",
-                list_kind="network",
-            )
-
-    def test_parallel_pruning_skips_an_instance_that_changed_ownership(self) -> None:
-        delete_error = subprocess.CalledProcessError(1, ["incus"])
-        current = [
-            {
-                "name": "stale-instance",
-                "config": {
-                    prune_stale_incus_resources.REPOSITORY_KEY: "lightning-it/example",
-                    prune_stale_incus_resources.RUN_ID_KEY: "42",
-                    prune_stale_incus_resources.OWNER_KEY: "new-cell",
-                },
-            }
-        ]
-        with mock.patch.object(
-            prune_stale_incus_resources,
-            "incus",
-            side_effect=(delete_error, json.dumps(current)),
-        ):
-            prune_stale_incus_resources.delete_if_present(
-                "stale-instance",
-                "delete",
-                "--force",
-                "stale-instance",
-                list_kind="instance",
-                repository="lightning-it/example",
-                current_run_id="42",
-            )
-
-    def test_pruning_rejects_an_unknown_resource_kind_before_deletion(self) -> None:
-        with (
-            mock.patch.object(prune_stale_incus_resources, "incus") as incus,
-            self.assertRaisesRegex(ValueError, "unsupported Incus resource kind"),
-        ):
-            prune_stale_incus_resources.delete_if_present(
-                "stale-instance",
-                "delete",
-                "--force",
-                "stale-instance",
-                list_kind="unsupported",
-            )
-        incus.assert_not_called()
+            with (
+                self.subTest(repository=repository, run_id=run_id),
+                mock.patch("sys.argv", ["pruner", "--repository", repository, "--current-run-id", run_id]),
+                mock.patch("subprocess.run") as execute,
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                with self.assertRaises(SystemExit) as failure:
+                    prune_stale_incus_resources.main()
+                self.assertEqual(2, failure.exception.code)
+                execute.assert_not_called()
 
     def test_nested_containers_use_isolated_idmaps(self) -> None:
         for molecule_file in sorted((ROOT / "molecule").glob("*/molecule.yml")):
@@ -420,32 +271,11 @@ class IncusLifecycleTests(unittest.TestCase):
         self.assertIn("runtime-collections.tar.gz", action)
         self.assertIn("missing declared runtime collections", action)
 
-    def test_quality_action_prunes_only_superseded_exact_owned_resources(
-        self,
-    ) -> None:
+    def test_quality_action_does_not_prune_other_runs(self) -> None:
         action = (ROOT / ".github" / "actions" / "run-quality-profile" / "action.yml").read_text(encoding="utf-8")
-
-        self.assertIn("scripts/prune_stale_incus_resources.py", action)
-        self.assertIn("command -v incus", action)
-        self.assertLess(
-            action.index("command -v incus"),
-            action.index("scripts/prune_stale_incus_resources.py"),
-        )
-        self.assertLess(
-            action.index("scripts/prune_stale_incus_resources.py"),
-            action.index("molecule test"),
-        )
-
-        helper = (ROOT / "scripts" / "prune_stale_incus_resources.py").read_text(encoding="utf-8")
-        self.assertIn("int(run_id) < int(current_run_id)", helper)
-        self.assertIn("config.get(REPOSITORY_KEY) == repository", helper)
-        self.assertIn("bool(config.get(OWNER_KEY))", helper)
-        self.assertIn("or used_by", helper)
-        self.assertIn('shutil.which("incus")', helper)
-        self.assertIn("except (FileNotFoundError, subprocess.CalledProcessError):", helper)
-        self.assertIn("def delete_if_present(", helper)
-        self.assertIn('list_kind="instance"', helper)
-        self.assertIn('list_kind="network"', helper)
+        self.assertNotIn("scripts/prune_stale_incus_resources.py", action)
+        self.assertIn('molecule cleanup -s "$QUALITY_SCENARIO"', action)
+        self.assertIn('molecule destroy -s "$QUALITY_SCENARIO"', action)
 
         cleanup = (SHARED / "cleanup.yml").read_text(encoding="utf-8")
         network_show = cleanup.split(
