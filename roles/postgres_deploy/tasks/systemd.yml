@@ -13,11 +13,27 @@
       register: postgres_deploy_systemd_name
       changed_when: false
 
-    - name: Install Podman kube systemd template
+    - name: Inspect the effective PostgreSQL kube unit before installing a fallback
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - --property=LoadState
+          - --value
+          - "podman-kube@{{ postgres_deploy_systemd_name.stdout }}.service"
+      register: postgres_deploy_systemd_load_state
+      changed_when: false
+      failed_when: >-
+        postgres_deploy_systemd_load_state.rc != 0 or
+        postgres_deploy_systemd_load_state.stdout | trim not in ['loaded', 'not-found']
+
+    - name: Install Podman kube systemd template only when no unit exists
       ansible.builtin.template:
         src: podman-kube@.service.j2
         dest: /etc/systemd/system/podman-kube@.service
         mode: '0644'
+        force: false
+      when: postgres_deploy_systemd_load_state.stdout | trim == 'not-found'
 
     - name: Ensure podman-kube drop-in directory exists
       ansible.builtin.file:

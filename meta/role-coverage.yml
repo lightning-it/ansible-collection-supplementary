@@ -1637,6 +1637,7 @@ roles:
     external_dependencies: []
     known_limitations:
       - "Root scenario is a syntax stub; Keycloak exercises deployment only indirectly."
+      - "Systemd fallback branches have isolated Ansible regression coverage, not full service lifecycle acceptance."
     deprecation_state: "active"
     scenario_support:
       tiny:

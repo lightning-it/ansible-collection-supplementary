@@ -10,6 +10,14 @@ None.
 
 See `roles/postgres_deploy/defaults/main.yml`.
 
+With systemd management enabled, an existing effective Podman kube unit is
+preserved, including a distribution-provided template shared by other services.
+The role installs its fallback template only when systemd reports `not-found`;
+it never replaces an existing local template. Masked, erroneous, or unreadable
+unit states stop deployment rather than replacing the administrator's policy.
+Only the selected PostgreSQL unit is enabled or restarted. Existing overrides
+from older deployments are not automatically removed or migrated.
+
 Key variables:
 - `postgres_deploy_image`
 - `postgres_deploy_pod_manifest_path`

@@ -88,7 +88,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | postgres | postgres | orchestrator | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | real_client_transaction_permissions_persistence_and_restore | postgres_preflight, postgres_deploy, postgres_config, postgres_validate, postgres_ops, postgres_backup_restore, postgres_upgrade, postgres_destroy | — | Orchestrator is not directly exercised. | — |
 | postgres_backup_restore | postgres | backup_component | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | create_backup_modify_state_restore_and_verify | — | — | Keycloak Heavy proves exact restoration of an isolated probe table, not whole-database disaster recovery. | — |
 | postgres_config | postgres | configuration_as_code | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | apply_query_reconcile_and_delete_configuration | — | — | Implementation only sets and reports override facts. | — |
-| postgres_deploy | postgres | database | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | real_client_transaction_permissions_persistence_and_restore | lit.foundational.kubeplay | — | Root scenario is a syntax stub; Keycloak exercises deployment only indirectly. | postgres-deploy-basic |
+| postgres_deploy | postgres | database | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | real_client_transaction_permissions_persistence_and_restore | lit.foundational.kubeplay | — | Root scenario is a syntax stub; Keycloak exercises deployment only indirectly., Systemd fallback branches have isolated Ansible regression coverage, not full service lifecycle acceptance. | postgres-deploy-basic |
 | postgres_destroy | postgres | infrastructure | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | safe_teardown_and_absence | lit.foundational.kubeplay | — | No direct scenario coverage. | — |
 | postgres_ops | postgres | infrastructure | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | restart_recovery_and_query | — | — | No direct scenario coverage. | — |
 | postgres_preflight | postgres | validator | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | not-applicable | parent_component_validation | — | — | No direct scenario coverage. | — |
@@ -1166,7 +1166,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Candidate-target execution: no runnable candidate matrix is currently declared.
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
-- Known limitations: Root scenario is a syntax stub; Keycloak exercises deployment only indirectly.
+- Known limitations: Root scenario is a syntax stub; Keycloak exercises deployment only indirectly., Systemd fallback branches have isolated Ansible regression coverage, not full service lifecycle acceptance.
 
 ### `postgres_destroy`
 
