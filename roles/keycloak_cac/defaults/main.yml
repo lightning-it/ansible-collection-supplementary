@@ -21,6 +21,10 @@ keycloak_cac_users: []
 keycloak_cac_groups: []
 keycloak_cac_roles: []
 keycloak_cac_user_role_mappings: []
+keycloak_cac_authentication_flows: []
+keycloak_cac_identity_providers: []
+keycloak_cac_required_actions: []
+keycloak_cac_realm_flow_bindings: []
 
 # Optional Samba AD/LDAPS user federation provider.
 keycloak_cac_samba_ldap_enabled: false

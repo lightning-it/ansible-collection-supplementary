@@ -804,6 +804,9 @@ roles:
     known_limitations:
       - "Goal 07 production acceptance is maintained in the consumer automation repository."
       - >-
+        OIDC username-claim selection has offline assertion and rendering tests;
+        identity migration, cross-tier isolation and revocation require consumer acceptance.
+      - >-
         OIDC groups receive only explicitly declared connection READ permissions;
         the role never grants system administration or connection mutation rights.
       - >-
@@ -958,6 +961,9 @@ roles:
       - "community.general"
     external_dependencies: []
     known_limitations:
+      - >-
+        New flow, provider, required-action and deferred-binding catalogs
+        need real API lifecycle and broker login evidence.
       - "Current scenarios do not prove deletion reconciliation for every managed object type."
       - "RHEL 9 and RHEL 10 remain candidate targets until the complete exact-commit matrix passes on approved images."
     deprecation_state: "active"

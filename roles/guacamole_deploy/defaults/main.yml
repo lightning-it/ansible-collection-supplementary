@@ -28,6 +28,8 @@ guacamole_deploy_oidc_jwks_endpoint: ""
 guacamole_deploy_oidc_issuer: ""
 guacamole_deploy_oidc_client_id: "guacamole"
 guacamole_deploy_oidc_redirect_uri: ""
+# Preserve upstream identity mapping unless the consumer explicitly migrates it.
+guacamole_deploy_oidc_username_claim_type: "email"
 guacamole_deploy_oidc_groups_claim_type: "groups"
 guacamole_deploy_oidc_group_connections: []
 guacamole_deploy_api_session_timeout_minutes: 60
