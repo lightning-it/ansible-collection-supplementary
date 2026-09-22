@@ -12,7 +12,7 @@
           'connection_timeout': keycloak_cac_request_timeout
         })
     }}
-  loop: "{{ keycloak_cac_realms }}"
+  loop: "{{ keycloak_cac_realm_reconciliation_catalog | default(keycloak_cac_realms) }}"
   loop_control:
     loop_var: keycloak_cac_realm_definition
     label: "{{ keycloak_cac_realm_definition.realm | default('unnamed') }}"

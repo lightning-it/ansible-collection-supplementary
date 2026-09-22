@@ -56,6 +56,26 @@ argument_specs:
         type: list
         elements: dict
         no_log: true
+      keycloak_cac_authentication_flows:
+        description: Authentication flow module definitions with explicit realm and alias.
+        type: list
+        elements: dict
+        no_log: true
+      keycloak_cac_identity_providers:
+        description: Identity provider module definitions with explicit realm and alias.
+        type: list
+        elements: dict
+        no_log: true
+      keycloak_cac_required_actions:
+        description: Required-action module definitions with explicit realm targets.
+        type: list
+        elements: dict
+        no_log: true
+      keycloak_cac_realm_flow_bindings:
+        description: Browser flow bindings for declared realms, applied after authentication flows exist.
+        type: list
+        elements: dict
+        no_log: true
       keycloak_cac_samba_ldap_enabled:
         description: Whether the Samba Active Directory LDAPS provider is reconciled.
         type: bool

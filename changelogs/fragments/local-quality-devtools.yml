@@ -1,0 +1,7 @@
+---
+bugfixes:
+  - >-
+    Run repository-local Python and Markdown pre-commit validators in the
+    centrally pinned Devtools image with private temporary state, rather than
+    host interpreters and independently installed tools. Preserve hook coverage
+    and failure handling; use the tool versions shipped in the pinned image.

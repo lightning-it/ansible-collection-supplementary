@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    guacamole_deploy - expose OIDC username-claim selection while preserving the
+    upstream Guacamole 1.6.0 email default; consumers can explicitly select sub
+    with a fixed issuer.

@@ -23,6 +23,57 @@ Key variables:
 - `keycloak_cac_samba_ldap_enabled`
 - `keycloak_cac_samba_ldap_provider`
 - `keycloak_cac_ldap_providers`
+- `keycloak_cac_authentication_flows`
+- `keycloak_cac_identity_providers`
+- `keycloak_cac_required_actions`
+- `keycloak_cac_realm_flow_bindings`
+
+### Identity brokering (optional)
+
+All broker catalogs default to empty lists. Flow/provider entries use the object parameters of
+`community.general.keycloak_authentication` and
+`community.general.keycloak_identity_provider`, respectively. Each entry must
+specify a nonempty `realm` and `alias`; identity providers never implicitly
+target `master`. Use canonical option names shown in the module documentation,
+not aliases. API authentication and transport options belong to the role, not
+individual entries. Unknown top-level options are rejected before API access.
+
+Tasksets reconcile authentication flows before identity providers, so a
+provider can reference a flow created in the same invocation. Realm creation
+precedes both. Deletion reverses that dependency: remove referring providers
+in one invocation before removing their flows in another. The catalog is not
+an authoritative purge: omitted objects are not deleted.
+
+`keycloak_cac_required_actions` accepts the `realm`, `state` and
+`required_actions` parameters of `community.general.keycloak_authentication_required_actions`.
+This permits consumers to disable application-initiated linking explicitly;
+it does not by itself disable other account-linking routes.
+
+`keycloak_cac_realm_flow_bindings` contains only `realm` and `browser_flow`.
+Each realm must appear once as present in `keycloak_cac_realms`. Bindings run
+after flows, providers and required actions, reusing the existing realm
+plan/reconciliation path. Do not set a not-yet-created browser flow in the
+initial realm definition. Removing a binding does not restore a default flow.
+Keep consumers disabled until the entire configuration is reconciled and
+verified; task ordering is not an atomic activation transaction.
+
+Avoid `force: true` for normal flow reconciliation: the underlying module
+deletes and recreates an existing flow, so this is not idempotent and referring
+providers must be handled first. In the pinned module, check mode can return
+before comparing executions of an existing flow; a zero-change check-mode
+result is not proof that the actual flow matches the requested executions.
+
+The role does not choose an upstream IdP, create tier identities, or enforce
+an environment-specific tier model. Consumers must define and test first-login
+flows, account-link restrictions, session freshness, issuer/subject mapping,
+entitlements and revocation before enabling access. Catalogs and API tasks
+suppress secret-bearing output. Obtain any credentials from a protected secret
+source; do not put them in plaintext inventory.
+
+The new catalogs require real Keycloak apply/query/idempotency and login
+acceptance evidence before production use; local contract tests alone are not
+that evidence. Existing component profile coverage does not yet prove these
+new brokering paths.
 
 ## Samba LDAPS user federation
 
@@ -80,3 +131,6 @@ Lightning IT
   [`docs/testing/keycloak.md`](../../docs/testing/keycloak.md).
 - Limitations: the current suite does not claim complete deletion reconciliation
   for every supported Keycloak object type.
+  Authentication-flow, identity-provider, required-action, and deferred-binding
+  catalogs have real Tiny create, update, idempotency, and API-readback coverage;
+  a complete upstream broker login and consumer acceptance remain unproven.

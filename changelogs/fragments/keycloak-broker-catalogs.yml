@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - keycloak_cac - add empty-by-default authentication flow and identity provider catalogs with explicit realm targets.
+  - keycloak_cac - reject per-object API credential and transport overrides in the new broker catalogs.
+  - keycloak_cac - add optional required-action reconciliation and deferred browser-flow bindings for declared realms.

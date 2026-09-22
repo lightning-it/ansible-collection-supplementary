@@ -110,38 +110,29 @@ repos:
       # -------------------------------------------------------------------
       - id: role-coverage-policy
         name: role coverage, generated matrix, and AGENTS policy
-        language: python
-        entry: python scripts/validate-role-coverage.py check
-        additional_dependencies:
-          - PyYAML==6.0.3
+        language: system
+        entry: bash scripts/devtools-local-quality.sh python3 scripts/validate-role-coverage.py check
         pass_filenames: false
         always_run: true
 
       - id: shipped-source-dependencies
         name: shipped source dependency completeness and immutability
-        language: python
-        entry: python scripts/source_dependencies.py
-        additional_dependencies:
-          - PyYAML==6.0.3
+        language: system
+        entry: bash scripts/devtools-local-quality.sh python3 scripts/source_dependencies.py
         pass_filenames: false
         always_run: true
 
       - id: repository-quality
         name: canonical repository quality policy
-        language: python
-        entry: python scripts/lit-repository-quality.py
-        additional_dependencies:
-          - PyYAML==6.0.3
+        language: system
+        entry: bash scripts/devtools-local-quality.sh python3 scripts/lit-repository-quality.py
         pass_filenames: false
         always_run: true
 
       - id: role-quality-python-tests
         name: role quality Python unit tests
-        language: python
-        entry: python -m unittest discover -s tests -p test_*.py
-        additional_dependencies:
-          - PyYAML==6.0.3
-          - Jinja2==3.1.6
+        language: system
+        entry: bash scripts/devtools-local-quality.sh python3 -m unittest discover -s tests -p test_*.py
         pass_filenames: false
         files: >-
           (?x)^(scripts/.*\.py|molecule/shared/incus/helpers/.*\.py|tests/.*\.py|
@@ -150,10 +141,8 @@ repos:
 
       - id: role-quality-ruff
         name: role quality Python lint
-        language: python
-        entry: ruff check
-        additional_dependencies:
-          - ruff==0.15.21
+        language: system
+        entry: bash scripts/devtools-local-quality.sh ruff check
         types: [python]
         files: >-
           (?x)^(scripts/(enrich-cyclonedx-sbom|keycloak-evidence|lit-push-ready|lit-repository-quality|lit-trust-root-base-verifier|materialize-exact-revision-review|quality_cell_identity|quality_evidence|source_dependencies|validate-embedded-code|validate-role-coverage)\.py|
@@ -161,10 +150,8 @@ repos:
 
       - id: role-quality-ruff-format
         name: role quality Python format
-        language: python
-        entry: ruff format --check
-        additional_dependencies:
-          - ruff==0.15.21
+        language: system
+        entry: bash scripts/devtools-local-quality.sh ruff format --check
         types: [python]
         files: >-
           (?x)^(scripts/(enrich-cyclonedx-sbom|keycloak-evidence|lit-push-ready|lit-repository-quality|lit-trust-root-base-verifier|materialize-exact-revision-review|quality_cell_identity|quality_evidence|source_dependencies|validate-embedded-code|validate-role-coverage)\.py|
@@ -172,12 +159,8 @@ repos:
 
       - id: role-quality-mypy
         name: role quality Python type checking
-        language: python
-        language_version: python3
-        entry: mypy
-        additional_dependencies:
-          - mypy==2.3.0
-          - types-PyYAML==6.0.12.20260518
+        language: system
+        entry: bash scripts/devtools-local-quality.sh mypy
         pass_filenames: false
         files: >-
           ^(scripts/.*\.py|molecule/shared/incus/helpers/.*\.py|
@@ -200,7 +183,7 @@ repos:
       - id: markdownlint
         name: Markdown lint
         language: system
-        entry: npx --yes markdownlint-cli2@0.23.0
+        entry: bash scripts/devtools-local-quality.sh markdownlint-cli2
         require_serial: true
         types: [markdown]
 

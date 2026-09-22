@@ -59,9 +59,32 @@ class PushReadyEngineTests(unittest.TestCase):
         trusted_paths = set(ENGINE["TRUSTED_CHECK_POLICY_PATHS"])
 
         self.assertIn(".pre-commit-config.yaml", trusted_paths)
+        self.assertIn("scripts/devtools-local-quality.sh", trusted_paths)
         self.assertIn("scripts/lit-repository-quality.py", trusted_paths)
         self.assertIn("scripts/lit-trust-root-base-verifier.py", trusted_paths)
         self.assertIn("scripts/validate-embedded-code.py", trusted_paths)
+
+    def test_local_quality_dispatcher_changes_require_trust_root_review(self) -> None:
+        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)
+        policy = ENGINE["require_trusted_check_policy"]
+        dispatcher = "scripts/devtools-local-quality.sh"
+        for base_entry, head_entry in (("old", "new"), ("", "new"), ("old", "")):
+            with self.subTest(base=base_entry, head=head_entry):
+
+                def entries(commit: str, path: str, base: str = base_entry, head: str = head_entry) -> str:
+                    if path == dispatcher:
+                        return base if commit == change.base_tip else head
+                    return "stable"
+
+                with (
+                    mock.patch.dict(policy.__globals__, {"git_tree_entry": entries}),
+                    self.assertRaisesRegex(
+                        RuntimeError, r"policy differs from base: scripts/devtools-local-quality\.sh"
+                    ),
+                ):
+                    policy(change)
+        with mock.patch.dict(policy.__globals__, {"git_tree_entry": lambda _commit, _path: "stable"}):
+            policy(change)
 
     def test_policy_gate_precedes_checks(self) -> None:
         change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "", (), {}, "c" * 64)

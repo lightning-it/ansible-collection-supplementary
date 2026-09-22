@@ -115,6 +115,7 @@ TRUSTED_CHECK_POLICY_PATHS = (
     ".lit/push-ready.json",
     SECRET_FIXTURE_MANIFEST_PATH,
     "scripts/lit-ci-profile.sh",
+    "scripts/devtools-local-quality.sh",
     "default/scripts/lit-push-ready.py",
     "default/scripts/wunder-devtools-ee.sh",
     "default/scripts/wunder-container-run.sh",
