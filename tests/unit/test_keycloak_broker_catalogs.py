@@ -244,6 +244,30 @@ class KeycloakBrokerCatalogTests(unittest.TestCase):
                     success=False,
                 )
 
+    def test_binding_rejects_duplicate_binding_realms(self) -> None:
+        self.precheck(
+            {
+                "keycloak_cac_realms": [{"realm": "example"}],
+                "keycloak_cac_realm_flow_bindings": [
+                    {"realm": "example", "browser_flow": "upstream-only"},
+                    {"realm": "example", "browser_flow": "fallback-browser"},
+                ],
+            },
+            success=False,
+        )
+
+    def test_binding_realm_uniqueness_is_case_sensitive(self) -> None:
+        self.precheck(
+            {
+                "keycloak_cac_realms": [{"realm": "Tier"}, {"realm": "tier"}],
+                "keycloak_cac_realm_flow_bindings": [
+                    {"realm": "Tier", "browser_flow": "upper-browser"},
+                    {"realm": "tier", "browser_flow": "lower-browser"},
+                ],
+            },
+            success=True,
+        )
+
     def test_required_actions_reject_missing_state_or_wrong_action_list(self) -> None:
         for definition in (
             {"realm": "example", "required_actions": []},

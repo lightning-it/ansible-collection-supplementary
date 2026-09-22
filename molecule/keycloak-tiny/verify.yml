@@ -27,6 +27,104 @@
       register: keycloak_tiny_discovery
       changed_when: false
 
+    - name: Request a Keycloak administration token
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/realms/master/protocol/openid-connect/token
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: admin-cli
+          username: admin
+          password: "{{ keycloak_tiny_admin_password }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_tiny_admin_token
+      changed_when: false
+      no_log: true
+
+    - name: Read managed Keycloak realm state
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/admin/realms/keycloak-test
+        headers:
+          Authorization: "Bearer {{ keycloak_tiny_admin_token.json.access_token }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_tiny_realm_state
+      changed_when: false
+      no_log: true
+
+    - name: Read managed Keycloak authentication flows
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/admin/realms/keycloak-test/authentication/flows
+        headers:
+          Authorization: "Bearer {{ keycloak_tiny_admin_token.json.access_token }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_tiny_flows
+      changed_when: false
+      no_log: true
+
+    - name: Read managed browser-flow executions
+      ansible.builtin.uri:
+        url: >-
+          http://127.0.0.1:18080/admin/realms/keycloak-test/authentication/flows/keycloak-test-browser/executions
+        headers:
+          Authorization: "Bearer {{ keycloak_tiny_admin_token.json.access_token }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_tiny_flow_executions
+      changed_when: false
+      no_log: true
+
+    - name: Read managed Keycloak identity provider
+      ansible.builtin.uri:
+        url: >-
+          http://127.0.0.1:18080/admin/realms/keycloak-test/identity-provider/instances/keycloak-test-upstream
+        headers:
+          Authorization: "Bearer {{ keycloak_tiny_admin_token.json.access_token }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_tiny_identity_provider
+      changed_when: false
+      no_log: true
+
+    - name: Read managed Keycloak required actions
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/admin/realms/keycloak-test/authentication/required-actions
+        headers:
+          Authorization: "Bearer {{ keycloak_tiny_admin_token.json.access_token }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_tiny_required_actions
+      changed_when: false
+      no_log: true
+
+    - name: Assert real broker-catalog lifecycle state
+      ansible.builtin.assert:
+        that:
+          - keycloak_tiny_realm_state.json.browserFlow == 'keycloak-test-browser'
+          - >-
+            keycloak_tiny_flows.json
+            | selectattr('alias', 'equalto', 'keycloak-test-browser')
+            | list | length == 1
+          - >-
+            keycloak_tiny_flow_executions.json
+            | selectattr('providerId', 'defined')
+            | selectattr('providerId', 'equalto', 'auth-cookie')
+            | selectattr('requirement', 'equalto', 'ALTERNATIVE')
+            | list | length == 1
+          - keycloak_tiny_identity_provider.json.alias == 'keycloak-test-upstream'
+          - keycloak_tiny_identity_provider.json.providerId == 'oidc'
+          - keycloak_tiny_identity_provider.json.displayName == 'Keycloak Tiny disabled upstream'
+          - not keycloak_tiny_identity_provider.json.enabled | bool
+          - >-
+            keycloak_tiny_required_actions.json
+            | selectattr('alias', 'equalto', 'VERIFY_EMAIL')
+            | selectattr('enabled', 'equalto', false)
+            | list | length == 1
+      no_log: true
+
     - name: Request a viewer token
       ansible.builtin.uri:
         url: http://127.0.0.1:18080/realms/keycloak-test/protocol/openid-connect/token
@@ -115,11 +213,15 @@
         mode: "0640"
         content: |-
           <?xml version="1.0" encoding="UTF-8"?>
-          <testsuite name="keycloak-tiny" tests="6" failures="0" errors="0" skipped="0">
+          <testsuite name="keycloak-tiny" tests="10" failures="0" errors="0" skipped="0">
             <testcase classname="keycloak.health" name="readiness" role="keycloak_deploy"/>
             <testcase classname="keycloak.health" name="liveness" role="keycloak_deploy"/>
             <testcase classname="keycloak.oidc" name="discovery" role="keycloak_cac"/>
             <testcase classname="keycloak.oidc" name="viewer-token" role="keycloak_cac"/>
+            <testcase classname="keycloak.cac" name="authentication-flow-lifecycle" role="keycloak_cac"/>
+            <testcase classname="keycloak.cac" name="identity-provider-lifecycle" role="keycloak_cac"/>
+            <testcase classname="keycloak.cac" name="required-action-lifecycle" role="keycloak_cac"/>
+            <testcase classname="keycloak.cac" name="deferred-browser-binding" role="keycloak_cac"/>
             <testcase classname="keycloak.runtime" name="version" role="keycloak_deploy"/>
             <testcase classname="keycloak.security" name="manifest-permissions" role="keycloak_deploy"/>
           </testsuite>

@@ -29,8 +29,10 @@ All defaults are defined in `defaults/main.yml`.
 - `guacamole_deploy_oidc_groups_claim_type` explicitly selects the token claim
   that carries group names and defaults to `groups`.
 - `guacamole_deploy_oidc_username_claim_type` selects the username claim and
-  preserves the upstream default `email`. New installations can select `sub`
-  with one fixed, verified issuer to avoid email-based identity collisions.
+  preserves the upstream Guacamole 1.6.0 default `email` (as defined by
+  `ConfigurationService.DEFAULT_USERNAME_CLAIM_TYPE`). New installations can
+  explicitly select `sub` with one fixed, verified issuer to avoid email-based
+  identity collisions.
   Changing this claim or the issuer on an existing deployment is an identity
   migration: inventory existing database identities and permissions first.
   This setting does not assign connection access or administrative privileges,

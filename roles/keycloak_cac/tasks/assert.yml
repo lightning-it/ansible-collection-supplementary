@@ -126,6 +126,17 @@
   no_log: true
   tags: always
 
+- name: Validate unique deferred browser-flow binding realms
+  ansible.builtin.assert:
+    that:
+      - >-
+        keycloak_cac_realm_flow_bindings
+        | map(attribute='realm') | list | unique(case_sensitive=true) | length
+        == keycloak_cac_realm_flow_bindings | length
+    fail_msg: Each realm may appear only once in keycloak_cac_realm_flow_bindings.
+  no_log: true
+  tags: always
+
 - name: Validate Keycloak CaC API inputs when apply is enabled
   ansible.builtin.assert:
     that:

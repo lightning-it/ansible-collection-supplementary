@@ -962,8 +962,8 @@ roles:
     external_dependencies: []
     known_limitations:
       - >-
-        New flow, provider, required-action and deferred-binding catalogs
-        need real API lifecycle and broker login evidence.
+        Tiny exercises real flow, provider, required-action and deferred-binding
+        API lifecycle and idempotency; a complete upstream broker login remains unproven.
       - "Current scenarios do not prove deletion reconciliation for every managed object type."
       - "RHEL 9 and RHEL 10 remain candidate targets until the complete exact-commit matrix passes on approved images."
     deprecation_state: "active"

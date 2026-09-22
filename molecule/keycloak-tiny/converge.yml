@@ -51,6 +51,40 @@
         enabled: true
         registration_allowed: false
         state: present
+    keycloak_cac_authentication_flows:
+      - realm: keycloak-test
+        alias: keycloak-test-browser
+        description: Keycloak Tiny managed browser flow
+        copyFrom: browser
+        authenticationExecutions:
+          - providerId: auth-cookie
+            requirement: ALTERNATIVE
+        state: present
+    keycloak_cac_identity_providers:
+      - realm: keycloak-test
+        alias: keycloak-test-upstream
+        display_name: Keycloak Tiny disabled upstream
+        enabled: false
+        trust_email: false
+        provider_id: oidc
+        config:
+          issuer: https://idp.example.invalid
+          authorizationUrl: https://idp.example.invalid/authorize
+          tokenUrl: https://idp.example.invalid/token
+          userInfoUrl: https://idp.example.invalid/userinfo
+          clientAuthMethod: client_secret_post
+          clientId: keycloak-tiny
+        state: present
+    keycloak_cac_required_actions:
+      - realm: keycloak-test
+        state: present
+        required_actions:
+          - alias: VERIFY_EMAIL
+            enabled: false
+            defaultAction: false
+    keycloak_cac_realm_flow_bindings:
+      - realm: keycloak-test
+        browser_flow: keycloak-test-browser
     keycloak_cac_clients:
       - realm: keycloak-test
         client_id: keycloak-test-client
@@ -113,6 +147,63 @@
           Set KEYCLOAK_TEST_DB_PASSWORD and KEYCLOAK_TEST_ADMIN_PASSWORD to
           ephemeral values of at least 16 characters.
       no_log: true
-  roles:
-    - role: lit.supplementary.keycloak_deploy
-    - role: lit.supplementary.keycloak_cac
+  tasks:
+    - name: Deploy the real Keycloak Tiny runtime
+      ansible.builtin.include_role:
+        name: lit.supplementary.keycloak_deploy
+
+    - name: Inspect one-time broker lifecycle seed
+      ansible.builtin.stat:
+        path: /srv/keycloak-tiny/.broker-lifecycle-seeded
+      register: keycloak_tiny_broker_lifecycle_seed
+
+    - name: Create deliberately stale broker lifecycle state
+      ansible.builtin.include_role:
+        name: lit.supplementary.keycloak_cac
+      vars:
+        keycloak_cac_authentication_flows:
+          - realm: keycloak-test
+            alias: keycloak-test-browser
+            description: Keycloak Tiny stale browser flow
+            copyFrom: browser
+            authenticationExecutions:
+              - providerId: auth-cookie
+                requirement: DISABLED
+            state: present
+        keycloak_cac_identity_providers:
+          - realm: keycloak-test
+            alias: keycloak-test-upstream
+            display_name: Keycloak Tiny stale upstream
+            enabled: true
+            trust_email: false
+            provider_id: oidc
+            config:
+              issuer: https://idp.example.invalid
+              authorizationUrl: https://idp.example.invalid/authorize
+              tokenUrl: https://idp.example.invalid/token
+              userInfoUrl: https://idp.example.invalid/userinfo
+              clientAuthMethod: client_secret_post
+              clientId: keycloak-tiny
+            state: present
+        keycloak_cac_required_actions:
+          - realm: keycloak-test
+            state: present
+            required_actions:
+              - alias: VERIFY_EMAIL
+                enabled: true
+                defaultAction: false
+        keycloak_cac_realm_flow_bindings:
+          - realm: keycloak-test
+            browser_flow: browser
+      when: not keycloak_tiny_broker_lifecycle_seed.stat.exists
+
+    - name: Record successful one-time broker lifecycle seed
+      ansible.builtin.file:
+        path: /srv/keycloak-tiny/.broker-lifecycle-seeded
+        state: touch
+        mode: "0600"
+      when: not keycloak_tiny_broker_lifecycle_seed.stat.exists
+
+    - name: Reconcile final Keycloak Tiny state and real broker drift
+      ansible.builtin.include_role:
+        name: lit.supplementary.keycloak_cac
