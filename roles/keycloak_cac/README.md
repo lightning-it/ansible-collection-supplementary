@@ -131,5 +131,6 @@ Lightning IT
   [`docs/testing/keycloak.md`](../../docs/testing/keycloak.md).
 - Limitations: the current suite does not claim complete deletion reconciliation
   for every supported Keycloak object type.
-  Authentication-flow and identity-provider catalogs have local contract
-  coverage only until their real API lifecycle and broker login tests pass.
+  Authentication-flow, identity-provider, required-action, and deferred-binding
+  catalogs have real Tiny create, update, idempotency, and API-readback coverage;
+  a complete upstream broker login and consumer acceptance remain unproven.
