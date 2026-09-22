@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.5.1
+======
+
+Bugfixes
+--------
+
+- postgres_deploy - Preserve existing Podman kube systemd units and install the fallback template only for a missing unit.
+
 v3.5.0
 ======
 

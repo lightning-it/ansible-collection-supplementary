@@ -1081,3 +1081,11 @@ releases:
       - li139-guacamole-static-network-proxy-boundary.yml
       - li139-required-workflow-dependent-rerun.yml
     release_date: '2026-09-21'
+  3.5.1:
+    changes:
+      bugfixes:
+        - postgres_deploy - Preserve existing Podman kube systemd units and install
+          the fallback template only for a missing unit.
+    fragments:
+      - postgres-preserve-existing-systemd.yml
+    release_date: '2026-09-22'
