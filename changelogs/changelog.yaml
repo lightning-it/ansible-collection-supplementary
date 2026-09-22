@@ -1081,3 +1081,15 @@ releases:
       - li139-guacamole-static-network-proxy-boundary.yml
       - li139-required-workflow-dependent-rerun.yml
     release_date: '2026-09-21'
+  3.5.1:
+    changes:
+      bugfixes:
+        - Preserve concurrent Incus tests by retiring startup cleanup based solely
+          on older run IDs; retain exact-owner scenario teardown and a non-mutating
+          compatibility CLI for pinned validation callers.
+        - postgres_deploy - Preserve existing Podman kube systemd units and install
+          the fallback template only for a missing unit.
+    fragments:
+      - incus-preserve-concurrent-runs.yml
+      - postgres-preserve-existing-systemd.yml
+    release_date: '2026-09-22'
