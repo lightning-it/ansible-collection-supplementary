@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    postgres_deploy - Preserve existing Podman kube systemd units and install
-    the fallback template only for a missing unit.
