@@ -37,6 +37,7 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=300,
+                check=False,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             return
@@ -100,7 +101,9 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
                     LANG="C.UTF-8",
                 )
                 args = [str(ansible), "-i", "localhost,", "-c", "local", str(playbook)]
-                result = subprocess.run(args, env=env, capture_output=True, text=True, timeout=45)  # noqa: S603
+                result = subprocess.run(  # noqa: S603
+                    args, env=env, capture_output=True, text=True, timeout=45, check=False
+                )
                 self.assertIn("TASK [" + probe["name"] + "]", result.stdout, result.stdout + result.stderr)
                 self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
                 self.assertEqual(destination.exists(), existing or creates)
@@ -108,7 +111,9 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
                     self.assertEqual(destination.read_text(), original)
                 elif creates:
                     self.assertEqual(destination.read_text(), (ROLE / "templates/podman-kube@.service.j2").read_text())
-                    repeated = subprocess.run(args, env=env, capture_output=True, text=True, timeout=45)  # noqa: S603
+                    repeated = subprocess.run(  # noqa: S603
+                        args, env=env, capture_output=True, text=True, timeout=45, check=False
+                    )
                     self.assertEqual(repeated.returncode, 0, repeated.stdout + repeated.stderr)
                     self.assertIn("changed=0", repeated.stdout)
 
