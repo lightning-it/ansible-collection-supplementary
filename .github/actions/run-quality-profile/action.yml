@@ -202,9 +202,8 @@ runs:
         command -v openssl
         command -v python3
 
-        python3 scripts/prune_stale_incus_resources.py \
-          --repository "$GITHUB_REPOSITORY" \
-          --current-run-id "$GITHUB_RUN_ID"
+        # Other runs may still be active, even when their run IDs are smaller.
+        # Only this scenario's exact-owner teardown may delete test resources.
 
         incus version
 

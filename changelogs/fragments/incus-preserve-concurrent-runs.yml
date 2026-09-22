@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Preserve concurrent Incus tests by retiring startup cleanup based solely on
+    older run IDs; retain exact-owner scenario teardown and a non-mutating
+    compatibility CLI for pinned validation callers.

@@ -44,3 +44,12 @@ matching owner labels. Never perform unfiltered stale-resource cleanup on a
 shared runner. Candidate/install/package paths include repository, workflow run,
 and attempt identity so persistent hosts cannot reuse another run's files. See
 [the shared Incus guide](incus.md).
+
+Starting a matrix cell does not prune resources from older run IDs: older does
+not mean terminal, and concurrent release/main/PR jobs may share the Incus host.
+The legacy `prune_stale_incus_resources.py` CLI remains a non-mutating
+compatibility entry point for pinned validation callers. Normal scenario
+evidence capture and exact-owner teardown remain mandatory and unchanged.
+Resources left by interrupted jobs are retained; reclaim them only through a
+separately verified owner/terminal-attempt inventory. No automatic cross-run
+garbage collector or broader deletion permission is introduced by this change.
