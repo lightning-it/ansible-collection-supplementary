@@ -23,7 +23,7 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
             # Ansible execution in the same pinned offline EE as role gates.
             result = subprocess.run(  # noqa: S603
                 [
-                    "bash",
+                    "/bin/bash",
                     str(ROOT / "scripts/wunder-devtools-ee.sh"),
                     "env",
                     "LC_ALL=C.UTF-8",
