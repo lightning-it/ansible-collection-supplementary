@@ -1,0 +1,6 @@
+---
+- name: Bind browser flows after flow and provider reconciliation
+  ansible.builtin.include_tasks: cac_11_realms.yml
+  vars:
+    keycloak_cac_realm_reconciliation_catalog: "{{ keycloak_cac_realm_flow_bindings }}"
+  when: keycloak_cac_realm_flow_bindings | length > 0

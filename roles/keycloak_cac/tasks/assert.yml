@@ -17,11 +17,124 @@
       - keycloak_cac_roles is not string
       - keycloak_cac_user_role_mappings is sequence
       - keycloak_cac_user_role_mappings is not string
+      - keycloak_cac_authentication_flows is sequence
+      - keycloak_cac_authentication_flows is not string
+      - keycloak_cac_authentication_flows is not mapping
+      - keycloak_cac_identity_providers is sequence
+      - keycloak_cac_identity_providers is not string
+      - keycloak_cac_identity_providers is not mapping
+      - keycloak_cac_required_actions is sequence
+      - keycloak_cac_required_actions is not string
+      - keycloak_cac_required_actions is not mapping
+      - keycloak_cac_realm_flow_bindings is sequence
+      - keycloak_cac_realm_flow_bindings is not string
+      - keycloak_cac_realm_flow_bindings is not mapping
       - keycloak_cac_samba_ldap_enabled is boolean
       - keycloak_cac_samba_ldap_provider is mapping
       - keycloak_cac_ldap_providers is sequence
       - keycloak_cac_ldap_providers is not string
     fail_msg: "Keycloak CaC variables are missing or invalid."
+  tags: always
+
+- name: Validate explicit authentication flow targets and object-only options
+  ansible.builtin.assert:
+    that:
+      - keycloak_cac_flow_definition is mapping
+      - keycloak_cac_flow_definition.realm is defined and keycloak_cac_flow_definition.realm is string
+      - keycloak_cac_flow_definition.realm | trim | length > 0
+      - keycloak_cac_flow_definition.alias is defined and keycloak_cac_flow_definition.alias is string
+      - keycloak_cac_flow_definition.alias | trim | length > 0
+      - >-
+        keycloak_cac_flow_definition.keys() | difference([
+          'realm', 'alias', 'description', 'providerId', 'copyFrom',
+          'authenticationExecutions', 'state', 'force'
+        ]) | length == 0
+    fail_msg: Authentication flows require explicit realm/alias and object options only, never API credentials.
+  loop: "{{ keycloak_cac_authentication_flows }}"
+  loop_control:
+    loop_var: keycloak_cac_flow_definition
+  no_log: true
+  tags: always
+
+- name: Validate explicit identity provider targets and object-only options
+  ansible.builtin.assert:
+    that:
+      - keycloak_cac_provider_definition is mapping
+      - keycloak_cac_provider_definition.realm is defined and keycloak_cac_provider_definition.realm is string
+      - keycloak_cac_provider_definition.realm | trim | length > 0
+      - keycloak_cac_provider_definition.alias is defined and keycloak_cac_provider_definition.alias is string
+      - keycloak_cac_provider_definition.alias | trim | length > 0
+      - >-
+        keycloak_cac_provider_definition.keys() | difference([
+          'realm', 'alias', 'state', 'display_name', 'enabled', 'store_token',
+          'add_read_token_role_on_create', 'trust_email', 'link_only',
+          'first_broker_login_flow_alias', 'post_broker_login_flow_alias',
+          'authenticate_by_default', 'provider_id', 'config', 'mappers'
+        ]) | length == 0
+    fail_msg: Identity providers require explicit realm/alias and object options only, never API credentials.
+  loop: "{{ keycloak_cac_identity_providers }}"
+  loop_control:
+    loop_var: keycloak_cac_provider_definition
+  no_log: true
+  tags: always
+
+- name: Validate explicit required-action targets and object-only options
+  ansible.builtin.assert:
+    that:
+      - keycloak_cac_action_definition is mapping
+      - keycloak_cac_action_definition.realm is defined and keycloak_cac_action_definition.realm is string
+      - keycloak_cac_action_definition.realm | trim | length > 0
+      - keycloak_cac_action_definition.state | default('') in ['present', 'absent']
+      - keycloak_cac_action_definition.required_actions is defined
+      - keycloak_cac_action_definition.required_actions is sequence
+      - keycloak_cac_action_definition.required_actions is not string
+      - keycloak_cac_action_definition.required_actions is not mapping
+      - >-
+        keycloak_cac_action_definition.keys() | difference([
+          'realm', 'state', 'required_actions'
+        ]) | length == 0
+    fail_msg: Required actions require an explicit realm, state and action list, never API credentials.
+  loop: "{{ keycloak_cac_required_actions }}"
+  loop_control:
+    loop_var: keycloak_cac_action_definition
+  no_log: true
+  tags: always
+
+- name: Validate explicit deferred browser-flow bindings
+  ansible.builtin.assert:
+    that:
+      - keycloak_cac_binding_definition is mapping
+      - keycloak_cac_binding_definition.realm is defined and keycloak_cac_binding_definition.realm is string
+      - keycloak_cac_binding_definition.realm | trim | length > 0
+      - >-
+        keycloak_cac_binding_definition.browser_flow is defined
+        and keycloak_cac_binding_definition.browser_flow is string
+      - keycloak_cac_binding_definition.browser_flow | trim | length > 0
+      - keycloak_cac_binding_definition.keys() | difference(['realm', 'browser_flow']) | length == 0
+      - >-
+        keycloak_cac_realms | selectattr('realm', 'defined')
+        | selectattr('realm', 'equalto', keycloak_cac_binding_definition.realm)
+        | list | length == 1
+      - >-
+        (keycloak_cac_realms | selectattr('realm', 'defined')
+        | selectattr('realm', 'equalto', keycloak_cac_binding_definition.realm)
+        | first).state | default('present') == 'present'
+    fail_msg: Browser-flow bindings require one declared present realm and an explicit browser flow, no other options.
+  loop: "{{ keycloak_cac_realm_flow_bindings }}"
+  loop_control:
+    loop_var: keycloak_cac_binding_definition
+  no_log: true
+  tags: always
+
+- name: Validate unique deferred browser-flow binding realms
+  ansible.builtin.assert:
+    that:
+      - >-
+        keycloak_cac_realm_flow_bindings
+        | map(attribute='realm') | list | unique(case_sensitive=true) | length
+        == keycloak_cac_realm_flow_bindings | length
+    fail_msg: Each realm may appear only once in keycloak_cac_realm_flow_bindings.
+  no_log: true
   tags: always
 
 - name: Validate Keycloak CaC API inputs when apply is enabled
