@@ -18,6 +18,28 @@ ROLE = ROOT / "roles" / "postgres_deploy"
 
 class PostgresSystemdPreservationTests(unittest.TestCase):
     def test_systemd_discovery_and_fallback(self) -> None:
+        if not (Path("/run/.containerenv").exists() or Path("/.dockerenv").exists()):
+            # The ordinary pre-commit unit hook is host-side. Keep actual
+            # Ansible execution in the same pinned offline EE as role gates.
+            result = subprocess.run(  # noqa: S603
+                [
+                    "bash",
+                    str(ROOT / "scripts/wunder-devtools-ee.sh"),
+                    "env",
+                    "LC_ALL=C.UTF-8",
+                    "LANG=C.UTF-8",
+                    "python3",
+                    "/workspace/tests/unit/test_postgres_systemd_preservation.py",
+                    "-v",
+                ],
+                cwd=ROOT,
+                env=dict(os.environ, WUNDER_DEVTOOLS_RUN_AS_HOST_UID="1"),
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            return
         ansible = shutil.which("ansible-playbook")
         self.assertIsNotNone(ansible, "Run this regression in the pinned Devtools EE")
         block = yaml.safe_load((ROLE / "tasks/systemd.yml").read_text())[0]["block"]
@@ -74,6 +96,8 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
                     ANSIBLE_LOCAL_TEMP=str(directory / "tmp"),
                     ANSIBLE_NOCOLOR="1",
                     ANSIBLE_STDOUT_CALLBACK="default",
+                    LC_ALL="C.UTF-8",
+                    LANG="C.UTF-8",
                 )
                 args = [str(ansible), "-i", "localhost,", "-c", "local", str(playbook)]
                 result = subprocess.run(args, env=env, capture_output=True, text=True, timeout=45)  # noqa: S603
