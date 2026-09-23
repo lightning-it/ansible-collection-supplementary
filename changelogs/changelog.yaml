@@ -1093,3 +1093,25 @@ releases:
       - incus-preserve-concurrent-runs.yml
       - postgres-preserve-existing-systemd.yml
     release_date: '2026-09-22'
+  3.6.0:
+    changes:
+      bugfixes:
+        - Run repository-local Python and Markdown pre-commit validators in the centrally
+          pinned Devtools image with private temporary state, rather than host interpreters
+          and independently installed tools. Preserve hook coverage and failure handling;
+          use the tool versions shipped in the pinned image.
+      minor_changes:
+        - guacamole_deploy - expose OIDC username-claim selection while preserving
+          the upstream Guacamole 1.6.0 email default; consumers can explicitly select
+          sub with a fixed issuer.
+        - keycloak_cac - add empty-by-default authentication flow and identity provider
+          catalogs with explicit realm targets.
+        - keycloak_cac - add optional required-action reconciliation and deferred
+          browser-flow bindings for declared realms.
+        - keycloak_cac - reject per-object API credential and transport overrides
+          in the new broker catalogs.
+    fragments:
+      - guacamole-oidc-username-claim.yml
+      - keycloak-broker-catalogs.yml
+      - local-quality-devtools.yml
+    release_date: '2026-09-23'
