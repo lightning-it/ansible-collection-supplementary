@@ -4,6 +4,22 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.6.0
+======
+
+Minor Changes
+-------------
+
+- guacamole_deploy - expose OIDC username-claim selection while preserving the upstream Guacamole 1.6.0 email default; consumers can explicitly select sub with a fixed issuer.
+- keycloak_cac - add empty-by-default authentication flow and identity provider catalogs with explicit realm targets.
+- keycloak_cac - add optional required-action reconciliation and deferred browser-flow bindings for declared realms.
+- keycloak_cac - reject per-object API credential and transport overrides in the new broker catalogs.
+
+Bugfixes
+--------
+
+- Run repository-local Python and Markdown pre-commit validators in the centrally pinned Devtools image with private temporary state, rather than host interpreters and independently installed tools. Preserve hook coverage and failure handling; use the tool versions shipped in the pinned image.
+
 v3.5.1
 ======
 
