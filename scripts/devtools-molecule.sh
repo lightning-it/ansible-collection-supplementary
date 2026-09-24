@@ -236,12 +236,12 @@ PY
     exit 0
   fi
 
-  offline_base="${HOME}/molecule-offline-base.yml"
+  molecule_base_config="${HOME}/molecule-offline-base.yml"
   molecule_ephemeral_root="${HOME}/molecule-ephemeral"
   umask 077
   mkdir -p "${molecule_ephemeral_root}"
   chmod 0700 "${molecule_ephemeral_root}"
-  printf "%s\n" "prerun: false" >"${offline_base}"
+  printf "%s\n" "prerun: false" >"${molecule_base_config}"
   echo "Running Molecule scenarios: ${scenarios[*]}"
 
   for scen in "${scenarios[@]}"; do
@@ -250,6 +250,6 @@ PY
     chmod 0700 "${molecule_ephemeral_directory}"
     echo ">>> molecule test -s ${scen}"
     MOLECULE_EPHEMERAL_DIRECTORY="${molecule_ephemeral_directory}" \
-      molecule -c "${offline_base}" test -s "${scen}"
+      molecule --base-config "${molecule_base_config}" test -s "${scen}"
   done
 '

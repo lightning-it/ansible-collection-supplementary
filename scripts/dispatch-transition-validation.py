@@ -13,9 +13,11 @@ from pathlib import PurePath
 REPOSITORY_RE = re.compile(r"lightning-it/ansible-collection-[a-z0-9-]+\Z")
 SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST_RE = re.compile(r"[0-9a-f]{64}\Z")
-VERSION_RE = re.compile(
-    r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\Z"
+VERSION_CORE_RE = re.compile(
+    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z"
 )
+VERSION_IDENTIFIER_RE = re.compile(r"[0-9A-Za-z-]+\Z")
+VERSION_NUMERIC_IDENTIFIER_RE = re.compile(r"[0-9]+\Z")
 REF_RE = re.compile(r"[0-9A-Za-z][0-9A-Za-z._/-]*\Z")
 ARTIFACT_RE = re.compile(
     r"[a-z0-9_]+-[a-z0-9_]+-[0-9A-Za-z.-]+\.tar\.gz\Z"
@@ -32,6 +34,29 @@ def validated(value: str, pattern: re.Pattern[str], label: str) -> str:
     return value
 
 
+def validated_version(value: str) -> str:
+    """Validate the supported SemVer subset without backtracking."""
+    core, separator, prerelease = value.partition("-")
+    if not VERSION_CORE_RE.fullmatch(core):
+        raise SystemExit(f"invalid version: {value!r}")
+    if not separator:
+        return value
+
+    identifiers = prerelease.split(".")
+    if not identifiers or any(
+        not VERSION_IDENTIFIER_RE.fullmatch(identifier) for identifier in identifiers
+    ):
+        raise SystemExit(f"invalid version: {value!r}")
+    if any(
+        VERSION_NUMERIC_IDENTIFIER_RE.fullmatch(identifier)
+        and len(identifier) > 1
+        and identifier.startswith("0")
+        for identifier in identifiers
+    ):
+        raise SystemExit(f"invalid version: {value!r}")
+    return value
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-repository", required=True)
@@ -44,7 +69,7 @@ def main() -> int:
 
     repository = validated(args.source_repository, REPOSITORY_RE, "source repository")
     source_sha = validated(args.source_sha, SHA_RE, "source SHA")
-    version = validated(args.version, VERSION_RE, "version")
+    version = validated_version(args.version)
     artifact_name = validated(args.artifact_name, ARTIFACT_RE, "artifact name")
     artifact_sha256 = validated(args.artifact_sha256, DIGEST_RE, "artifact SHA-256")
     controller_ref = validated(args.ref, REF_RE, "controller ref")
