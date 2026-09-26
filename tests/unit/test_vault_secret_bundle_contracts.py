@@ -31,6 +31,27 @@ class VaultSecretBundleContractTests(unittest.TestCase):
         )
         self.assertIs(write_task.get("run_once"), True)
 
+    def test_approle_mount_uses_supported_module_parameter(self) -> None:
+        tasks = yaml.safe_load(TASKS.read_text(encoding="utf-8"))
+
+        module_names = (
+            "community.hashi_vault.vault_kv2_get",
+            "community.hashi_vault.vault_kv2_write",
+        )
+        for module_name in module_names:
+            task = next(task for task in tasks if module_name in task)
+            options = task[module_name]
+            with self.subTest(module=module_name):
+                self.assertEqual(
+                    task["vars"]["ansible_python_interpreter"],
+                    "{{ ansible_playbook_python }}",
+                )
+                self.assertEqual(
+                    options["mount_point"],
+                    "{{ vault_secret_bundle_auth_mount_point }}",
+                )
+                self.assertNotIn("auth_mount_point", options)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -36,6 +36,8 @@
 - name: Read the existing secret bundle before generation
   delegate_to: localhost
   become: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
   community.hashi_vault.vault_kv2_get:
     url: "{{ vault_secret_bundle_address }}"
     engine_mount_point: "{{ vault_secret_bundle_kv_mount }}"
@@ -43,7 +45,7 @@
     validate_certs: "{{ vault_secret_bundle_validate_certs }}"
     ca_cert: "{{ vault_secret_bundle_ca_cert if (vault_secret_bundle_ca_cert | trim | length > 0) else omit }}"
     namespace: "{{ vault_secret_bundle_namespace if (vault_secret_bundle_namespace | trim | length > 0) else omit }}"
-    auth_mount_point: "{{ vault_secret_bundle_auth_mount_point }}"
+    mount_point: "{{ vault_secret_bundle_auth_mount_point }}"
     auth_method: "{{ 'token' if (vault_secret_bundle_token | trim | length > 0) else 'approle' }}"
     token: "{{ vault_secret_bundle_token if (vault_secret_bundle_token | trim | length > 0) else omit }}"
     role_id: "{{ vault_secret_bundle_role_id if (vault_secret_bundle_token | trim | length == 0) else omit }}"
@@ -106,6 +108,8 @@
 - name: Persist the complete secret bundle in Vault
   delegate_to: localhost
   become: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
   community.hashi_vault.vault_kv2_write:
     url: "{{ vault_secret_bundle_address }}"
     engine_mount_point: "{{ vault_secret_bundle_kv_mount }}"
@@ -113,7 +117,7 @@
     validate_certs: "{{ vault_secret_bundle_validate_certs }}"
     ca_cert: "{{ vault_secret_bundle_ca_cert if (vault_secret_bundle_ca_cert | trim | length > 0) else omit }}"
     namespace: "{{ vault_secret_bundle_namespace if (vault_secret_bundle_namespace | trim | length > 0) else omit }}"
-    auth_mount_point: "{{ vault_secret_bundle_auth_mount_point }}"
+    mount_point: "{{ vault_secret_bundle_auth_mount_point }}"
     auth_method: "{{ 'token' if (vault_secret_bundle_token | trim | length > 0) else 'approle' }}"
     token: "{{ vault_secret_bundle_token if (vault_secret_bundle_token | trim | length > 0) else omit }}"
     role_id: "{{ vault_secret_bundle_role_id if (vault_secret_bundle_token | trim | length == 0) else omit }}"
