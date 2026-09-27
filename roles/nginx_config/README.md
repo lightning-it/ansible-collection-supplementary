@@ -86,7 +86,7 @@ None.
               - "proxy_set_header Host vault.prd.dmz.corp.l-it.io"
               - "proxy_set_header X-Real-IP $remote_addr"
               - "proxy_set_header X-Forwarded-For $remote_addr"
-              - "proxy_set_header X-Forwarded-Host $host"
+              - "proxy_set_header X-Forwarded-Host $server_name"
               - "proxy_set_header X-Forwarded-Port $server_port"
               - "proxy_set_header X-Forwarded-Proto $scheme"
               - 'proxy_set_header X-Forwarded-Prefix ""'
