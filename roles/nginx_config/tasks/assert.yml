@@ -48,11 +48,41 @@
       - nginx_config_vault_cert_common_name | default('', true) | trim | length > 0
       - nginx_config_vault_cert_alt_names is sequence
       - nginx_config_vault_cert_alt_names is not string
+      - nginx_config_waf_enabled is boolean
+      - nginx_config_waf_server_directives is sequence
+      - nginx_config_waf_server_directives is not string
+      - nginx_config_waf_location_directives is sequence
+      - nginx_config_waf_location_directives is not string
       - nginx_config_proxy_default_directives is sequence
       - nginx_config_proxy_default_directives is not string
       - nginx_config_test is boolean
     fail_msg: "nginx_config variables are missing or invalid."
     quiet: true
+  tags: always
+
+- name: Ensure enabled WAF policy contains server and location controls
+  ansible.builtin.assert:
+    that:
+      - nginx_config_waf_server_directives | length > 0
+      - nginx_config_waf_location_directives | length > 0
+      - >-
+        nginx_config_waf_server_directives
+        | select('string')
+        | reject('equalto', '')
+        | list
+        | length == nginx_config_waf_server_directives | length
+      - >-
+        nginx_config_waf_location_directives
+        | select('string')
+        | reject('equalto', '')
+        | list
+        | length == nginx_config_waf_location_directives | length
+    fail_msg: >-
+      nginx_config_waf_enabled=true requires non-empty string directives for
+      both the TLS server boundary and every proxied location.
+    quiet: true
+  when:
+    - nginx_config_waf_enabled | bool
   tags: always
 
 - name: Ensure Vault PKI issue inputs are present when enabled

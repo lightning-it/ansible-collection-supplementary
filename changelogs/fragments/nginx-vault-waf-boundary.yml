@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    Make HashiCorp Vault the fail-closed default TLS source of record for
+    nginx_config and add an opt-in NGINX-native policy-WAF boundary for TLS
+    proxy vhosts.

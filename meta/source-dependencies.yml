@@ -145,7 +145,7 @@ collections:
     requirement: "5.10.0"
     source: "galaxy.yml"
   - name: "lit.foundational"
-    requirement: ">=1.32.0"
+    requirement: ">=1.35.0"
     source: "galaxy.yml"
   - name: "lit.rhel"
     requirement: ">=1.17.1"

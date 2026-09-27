@@ -18,6 +18,11 @@
       - postgres_deploy_host_network is boolean
       - postgres_deploy_install_packages is boolean
       - postgres_deploy_manage_systemd is boolean
+      - postgres_deploy_systemd_unit_name | default('', true) | trim | length > 0
+      - postgres_deploy_systemd_description | default('', true) | trim | length > 0
+      - postgres_deploy_systemd_scope in ['system', 'user']
+      - postgres_deploy_quadlet_dir | default('', true) | trim | length > 0
+      - postgres_deploy_systemd_enabled is boolean
       - postgres_deploy_skip_runtime is boolean
       - postgres_deploy_skip_deploy is boolean
       - postgres_deploy_generate_password is boolean

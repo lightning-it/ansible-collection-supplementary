@@ -20,6 +20,9 @@
       - keycloak_deploy_db_name | default('', true) | trim | length > 0
       - keycloak_deploy_db_user | default('', true) | trim | length > 0
       - keycloak_deploy_db_host | default('', true) | trim | length > 0
+      - >-
+        keycloak_deploy_host_network | bool or
+        keycloak_deploy_db_host | trim not in ['127.0.0.1', '::1', 'localhost']
       - keycloak_deploy_db_wait_host | default('', true) | trim | length > 0
       - keycloak_deploy_db_port | int > 0
       - keycloak_deploy_postgres_port | int > 0
@@ -42,6 +45,11 @@
       - keycloak_deploy_extra_start_args is not string
       - keycloak_deploy_install_packages is boolean
       - keycloak_deploy_manage_systemd is boolean
+      - keycloak_deploy_systemd_unit_name | default('', true) | trim | length > 0
+      - keycloak_deploy_systemd_description | default('', true) | trim | length > 0
+      - keycloak_deploy_systemd_scope in ['system', 'user']
+      - keycloak_deploy_quadlet_dir | default('', true) | trim | length > 0
+      - keycloak_deploy_systemd_enabled is boolean
       - keycloak_deploy_skip_runtime is boolean
       - keycloak_deploy_skip_deploy is boolean
       - keycloak_deploy_generate_secrets is boolean

@@ -122,6 +122,143 @@ class KeycloakRoleContractTests(unittest.TestCase):
             f"CN={expected_cn},CN=Users,DC=keycloak,DC=test",
         )
 
+    def test_managed_postgres_bridge_uses_container_dns_and_host_probe(self) -> None:
+        defaults = self._role_defaults("keycloak_deploy")
+        environment = Environment(autoescape=False)  # noqa: S701
+        environment.filters["bool"] = bool
+        db_host = environment.from_string(str(defaults["keycloak_deploy_db_host"]))
+        wait_host = environment.from_string(str(defaults["keycloak_deploy_db_wait_host"]))
+        context = {
+            "keycloak_deploy_manage_postgres": True,
+            "keycloak_deploy_host_network": False,
+            "keycloak_deploy_postgres_host_network": False,
+            "keycloak_deploy_postgres_pod_name": "keycloak-postgres",
+            "keycloak_deploy_postgres_container_name": "postgres",
+            "keycloak_deploy_postgres_host_ip": "127.0.0.1",
+        }
+
+        self.assertEqual(db_host.render(**context).strip(), "keycloak-postgres")
+        self.assertEqual(wait_host.render(**context).strip(), "127.0.0.1")
+
+    def test_external_database_keeps_explicit_endpoint(self) -> None:
+        defaults = self._role_defaults("keycloak_deploy")
+        environment = Environment(autoescape=False)  # noqa: S701
+        environment.filters["bool"] = bool
+        db_host = environment.from_string(str(defaults["keycloak_deploy_db_host"]))
+        wait_host = environment.from_string(str(defaults["keycloak_deploy_db_wait_host"]))
+        context = {
+            "keycloak_deploy_manage_postgres": False,
+            "keycloak_deploy_host_network": False,
+            "keycloak_deploy_postgres_host_network": False,
+            "keycloak_deploy_postgres_pod_name": "unused",
+            "keycloak_deploy_postgres_container_name": "unused",
+            "keycloak_deploy_postgres_host_ip": "db.example.invalid",
+            "keycloak_deploy_db_host": "db.example.invalid",
+        }
+
+        self.assertEqual(db_host.render(**context).strip(), "db.example.invalid")
+        self.assertEqual(wait_host.render(**context).strip(), "db.example.invalid")
+
+    def test_postgres_manifest_with_password_is_owner_only(self) -> None:
+        tasks_path = ROOT / "roles" / "postgres_deploy" / "tasks" / "deploy_pod.yml"
+        tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
+        render_task = next(task for task in tasks if task.get("name") == "Render PostgreSQL Pod manifest")
+
+        self.assertEqual(render_task["ansible.builtin.template"]["mode"], "0600")
+
+        template_path = ROOT / "roles" / "postgres_deploy" / "templates" / "postgres-pod.yml.j2"
+        self.assertIn("POSTGRES_PASSWORD", template_path.read_text(encoding="utf-8"))
+
+    def test_keycloak_lifecycle_has_one_controller_and_verifies_runtime(self) -> None:
+        pod_tasks_path = ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy_pod.yml"
+        pod_tasks = yaml.safe_load(pod_tasks_path.read_text(encoding="utf-8"))
+        pod_task_map = {task["name"]: task for task in pod_tasks}
+
+        recreate = pod_task_map["Recreate Keycloak pod from the desired manifest"]
+        self.assertEqual(recreate["vars"]["kubeplay_action"], "recreate")
+        self.assertNotIn("block", recreate)
+        self.assertNotIn("rescue", recreate)
+        self.assertIn(
+            "not keycloak_deploy_manage_systemd | bool",
+            recreate["when"],
+        )
+
+        systemd_path = ROOT / "roles" / "keycloak_deploy" / "tasks" / "systemd.yml"
+        systemd_tasks = yaml.safe_load(systemd_path.read_text(encoding="utf-8"))
+        systemd_block = systemd_tasks[0]["block"]
+        quadlet = next(task for task in systemd_block if task["name"] == "Manage the native Keycloak Quadlet service")
+        self.assertEqual(
+            quadlet["ansible.builtin.include_role"]["name"],
+            "lit.foundational.podman_systemd",
+        )
+        self.assertIn("restarted", quadlet["vars"]["podman_systemd_action"])
+        self.assertEqual(
+            quadlet["vars"]["podman_systemd_manifest_path"],
+            "{{ keycloak_deploy_pod_manifest_path }}",
+        )
+        self.assertEqual(
+            quadlet["vars"]["podman_systemd_quadlet_dir"],
+            "{{ keycloak_deploy_quadlet_dir }}",
+        )
+        stage_index = next(
+            index
+            for index, task in enumerate(systemd_block)
+            if task["name"] == "Stage the native Keycloak Quadlet before legacy shutdown"
+        )
+        legacy_stop = next(
+            task
+            for task in systemd_block
+            if task["name"] == "Stop and disable the exact legacy Keycloak unit before Quadlet takeover"
+        )
+        legacy_stop_index = systemd_block.index(legacy_stop)
+        self.assertLess(stage_index, legacy_stop_index)
+        self.assertEqual(legacy_stop["ansible.builtin.systemd"]["state"], "stopped")
+        self.assertIs(legacy_stop["ansible.builtin.systemd"]["enabled"], False)
+
+        deploy_path = ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy.yml"
+        deploy_tasks = yaml.safe_load(deploy_path.read_text(encoding="utf-8"))
+        runtime_block = deploy_tasks[2]["block"]
+        runtime_map = {task["name"]: task for task in runtime_block}
+        inspect = runtime_map["Inspect the effective Keycloak environment"]
+        self.assertIs(inspect["no_log"], True)
+        self.assertEqual(
+            inspect["ansible.builtin.command"]["argv"][:3],
+            ["podman", "container", "inspect"],
+        )
+
+        verify = runtime_map["Require the desired database endpoint in the active Keycloak pod"]
+        self.assertIs(verify["no_log"], True)
+        assertions = verify["ansible.builtin.assert"]["that"]
+        self.assertTrue(any("KC_DB_URL_HOST=" in assertion for assertion in assertions))
+
+        source = pod_tasks_path.read_text(encoding="utf-8")
+        self.assertNotIn("Ignore kubeplay remove failure", source)
+        self.assertNotIn("Ignore kubeplay run failure", source)
+
+    def test_postgres_lifecycle_has_one_controller(self) -> None:
+        tasks_path = ROOT / "roles" / "postgres_deploy" / "tasks" / "deploy_pod.yml"
+        tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
+        task_map = {task["name"]: task for task in tasks}
+        recreate = task_map["Recreate PostgreSQL pod directly from the desired manifest"]
+        self.assertEqual(recreate["vars"]["kubeplay_action"], "recreate")
+        self.assertIn("not postgres_deploy_manage_systemd | bool", recreate["when"])
+        source = tasks_path.read_text(encoding="utf-8")
+        self.assertNotIn("Ignore kubeplay remove failure", source)
+        self.assertNotIn("Ignore kubeplay run failure", source)
+
+        systemd_path = ROOT / "roles" / "postgres_deploy" / "tasks" / "systemd.yml"
+        systemd_tasks = yaml.safe_load(systemd_path.read_text(encoding="utf-8"))
+        systemd_block = systemd_tasks[0]["block"]
+        quadlet = next(task for task in systemd_block if task["name"] == "Manage the native PostgreSQL Quadlet service")
+        self.assertEqual(
+            quadlet["ansible.builtin.include_role"]["name"],
+            "lit.foundational.podman_systemd",
+        )
+        self.assertEqual(
+            quadlet["vars"]["podman_systemd_manifest_path"],
+            "{{ postgres_deploy_pod_manifest_path }}",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

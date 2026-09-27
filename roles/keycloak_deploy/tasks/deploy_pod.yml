@@ -364,6 +364,9 @@
     postgres_deploy_store_generated_password: false
     postgres_deploy_install_packages: "{{ keycloak_deploy_install_packages }}"
     postgres_deploy_manage_systemd: "{{ keycloak_deploy_manage_systemd }}"
+    postgres_deploy_systemd_scope: "{{ keycloak_deploy_systemd_scope }}"
+    postgres_deploy_quadlet_dir: "{{ keycloak_deploy_quadlet_dir }}"
+    postgres_deploy_systemd_enabled: "{{ keycloak_deploy_systemd_enabled }}"
     postgres_deploy_skip_runtime: "{{ keycloak_deploy_skip_runtime }}"
     postgres_deploy_skip_deploy: "{{ keycloak_deploy_skip_deploy }}"
   when: keycloak_deploy_manage_postgres | bool
@@ -431,64 +434,20 @@
   tags:
     - deployment
 
-- name: Recreate keycloak pod (kubeplay)
+- name: Recreate Keycloak pod from the desired manifest
+  ansible.builtin.include_role:
+    name: lit.foundational.kubeplay
+  vars:
+    kubeplay_apps: []
+    kubeplay_action: recreate
+    kubeplay_pod_name: "{{ keycloak_deploy_pod_name }}"
+    kubeplay_pod_manifest_path: "{{ keycloak_deploy_pod_manifest_path }}"
+    kubeplay_app_name: keycloak_recreate
   when:
-    - keycloak_deploy_kubeplay_remove | default(false)
+    - >-
+      keycloak_deploy_kubeplay_remove | default(false) or
+      keycloak_deploy_kubeplay_run | default(false)
     - not keycloak_deploy_skip_runtime | bool
-  tags:
-    - deployment
-  block:
-    - name: Run kubeplay remove (best effort)
-      ansible.builtin.include_role:
-        name: lit.foundational.kubeplay
-      vars:
-        kubeplay_apps: []
-        kubeplay_action: remove
-        kubeplay_pod_name: "{{ keycloak_deploy_pod_name }}"
-        kubeplay_app_name: keycloak_remove
-  rescue:
-    - name: Ignore kubeplay remove failure
-      ansible.builtin.debug:
-        msg: "Skipping kubeplay remove failure."
-
-- name: Run keycloak pod (kubeplay)
-  when:
-    - keycloak_deploy_kubeplay_run | default(false)
-    - not keycloak_deploy_skip_runtime | bool
-  tags:
-    - deployment
-  block:
-    - name: Run kubeplay run (best effort)
-      ansible.builtin.include_role:
-        name: lit.foundational.kubeplay
-      vars:
-        kubeplay_apps: []
-        kubeplay_action: run
-        kubeplay_pod_name: "{{ keycloak_deploy_pod_name }}"
-        kubeplay_pod_manifest_path: "{{ keycloak_deploy_pod_manifest_path }}"
-        kubeplay_app_name: keycloak_run
-  rescue:
-    - name: Ignore kubeplay run failure
-      ansible.builtin.debug:
-        msg: "Skipping kubeplay run failure."
-
-- name: Check Keycloak pod after kubeplay run
-  ansible.builtin.command: "podman pod exists {{ keycloak_deploy_pod_name }}"
-  register: keycloak_deploy_pod_exists_after_kubeplay
-  changed_when: false
-  failed_when: false
-  when:
-    - keycloak_deploy_kubeplay_run | default(false)
-    - not keycloak_deploy_skip_runtime | bool
-  tags:
-    - deployment
-
-- name: Run Keycloak pod directly when kubeplay did not start it
-  ansible.builtin.command: "podman kube play {{ keycloak_deploy_pod_manifest_path }}"
-  changed_when: true
-  when:
-    - keycloak_deploy_kubeplay_run | default(false)
-    - not keycloak_deploy_skip_runtime | bool
-    - keycloak_deploy_pod_exists_after_kubeplay.rc | default(1) != 0
+    - not keycloak_deploy_manage_systemd | bool
   tags:
     - deployment
