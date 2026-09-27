@@ -16,16 +16,30 @@
     follow: false
   register: guacamole_deploy_legacy_unit_stat
 
+- name: Refuse an unsafe legacy Guacamole unit path before reading
+  ansible.builtin.assert:
+    that:
+      - not (guacamole_deploy_legacy_unit_stat.stat.islnk | default(false) | bool)
+      - guacamole_deploy_legacy_unit_stat.stat.isreg | default(false) | bool
+    fail_msg: >-
+      The exact Guacamole service path exists but is not a regular file.
+      Refusing to follow or replace it.
+    quiet: true
+  when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+
 - name: Read the exact legacy Guacamole unit before takeover
   ansible.builtin.slurp:
     src: "{{ guacamole_deploy_legacy_systemd_unit_path }}"
   register: guacamole_deploy_legacy_unit_raw
-  when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+  no_log: true
+  when:
+    - guacamole_deploy_legacy_unit_stat.stat.exists | bool
+    - not (guacamole_deploy_legacy_unit_stat.stat.islnk | default(false) | bool)
+    - guacamole_deploy_legacy_unit_stat.stat.isreg | default(false) | bool
 
 - name: Refuse to replace an unknown Guacamole systemd unit
   ansible.builtin.assert:
     that:
-      - not (guacamole_deploy_legacy_unit_stat.stat.islnk | default(false) | bool)
       - >-
         'Description=Apache Guacamole Podman application pod'
         in (guacamole_deploy_legacy_unit_raw.content | b64decode)
@@ -53,6 +67,13 @@
     podman_systemd_quadlet_dir: "{{ guacamole_deploy_quadlet_dir }}"
     podman_systemd_enabled: false
     podman_systemd_networks: "{{ guacamole_deploy_quadlet_networks }}"
+  when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+
+- name: Stop and disable the exact legacy Guacamole unit before removal
+  ansible.builtin.systemd_service:
+    name: "{{ guacamole_deploy_legacy_systemd_unit_path | basename }}"
+    state: stopped
+    enabled: false
   when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
 
 - name: Remove the verified legacy Guacamole systemd unit
