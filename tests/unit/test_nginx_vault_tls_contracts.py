@@ -34,6 +34,10 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             template.index("item.proxy_directives"),
         )
         self.assertEqual(template.count("nginx_config_waf_location_directives"), 3)
+        self.assertIn(
+            "directive not in (item.extra_directives | default([]))",
+            template,
+        )
 
     def test_required_forwarded_headers_follow_consumer_directives(self) -> None:
         defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))

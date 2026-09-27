@@ -18,7 +18,9 @@ server {
 
 {% if nginx_config_waf_enabled | bool %}
 {% for directive in nginx_config_waf_server_directives %}
+{% if directive not in (item.extra_directives | default([])) %}
   {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endif %}
 {% endfor %}
 {% endif %}
 
