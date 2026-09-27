@@ -73,6 +73,7 @@ server {
 {% endif %}
 {% for directive in item.proxy_directives | default(nginx_config_proxy_default_directives) %}
 {% set _directive = directive | trim %}
+{% if directive not in nginx_config_proxy_required_directives %}
 {% if _directive | length > 0 %}
 {% set _needs_semicolon = not (
   _directive.endswith(';')
@@ -82,12 +83,11 @@ server {
 ) %}
     {{ _directive }}{{ ';' if _needs_semicolon else '' }}
 {% endif %}
+{% endif %}
 {% endfor %}
-{% if item.proxy_directives is defined %}
 {% for directive in nginx_config_proxy_required_directives %}
     {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
 {% endfor %}
-{% endif %}
     proxy_pass {{ item.upstream_url }};
   }
 {% else %}

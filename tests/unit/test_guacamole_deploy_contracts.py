@@ -96,8 +96,26 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertFalse(LEGACY_SERVICE.exists())
         self.assertIn("include_tasks: systemd.yml", tasks)
         self.assertIn("name: lit.foundational.podman_systemd", systemd_tasks)
+        self.assertLess(
+            systemd_tasks.index("Refuse an unsafe legacy Guacamole unit path before reading"),
+            systemd_tasks.index("Read the exact legacy Guacamole unit before takeover"),
+        )
+        self.assertIn("guacamole_deploy_legacy_unit_stat.stat.isreg", systemd_tasks)
+        self.assertIn("no_log: true", systemd_tasks)
         self.assertIn("Refuse to replace an unknown Guacamole systemd unit", systemd_tasks)
         self.assertIn("not (guacamole_deploy_legacy_unit_stat.stat.islnk", systemd_tasks)
+        self.assertIn(
+            "Stop and disable the exact legacy Guacamole unit before removal",
+            systemd_tasks,
+        )
+        self.assertIn(
+            'name: "{{ guacamole_deploy_legacy_systemd_unit_path | basename }}"',
+            systemd_tasks,
+        )
+        self.assertLess(
+            systemd_tasks.index("Stop and disable the exact legacy Guacamole unit before removal"),
+            systemd_tasks.index("Remove the verified legacy Guacamole systemd unit"),
+        )
         self.assertNotIn("podman kube play", tasks)
         self.assertNotIn("podman kube down", tasks)
         self.assertIn(

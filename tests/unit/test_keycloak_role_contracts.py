@@ -252,7 +252,11 @@ class KeycloakRoleContractTests(unittest.TestCase):
         self.assertIn("keycloak_deploy_proxy_trusted_addresses | join(',')", template)
 
         nginx_defaults = self._role_defaults("nginx_config")
-        directives = nginx_defaults["nginx_config_proxy_default_directives"]
+        self.assertEqual(
+            nginx_defaults["nginx_config_proxy_default_directives"],
+            ["proxy_http_version 1.1"],
+        )
+        directives = nginx_defaults["nginx_config_proxy_required_directives"]
         self.assertIn("proxy_set_header X-Forwarded-For $remote_addr", directives)
         self.assertIn("proxy_set_header X-Forwarded-Host $host", directives)
         self.assertIn("proxy_set_header X-Forwarded-Port $server_port", directives)
