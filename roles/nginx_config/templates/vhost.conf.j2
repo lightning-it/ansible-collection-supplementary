@@ -40,6 +40,11 @@ server {
 {% if item.locations is defined and item.locations | length > 0 %}
 {% for location in item.locations %}
   location {{ location.path | default('/') }} {
+{% if nginx_config_waf_enabled | bool %}
+{% for directive in nginx_config_waf_location_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endfor %}
+{% endif %}
 {% for directive in location.directives | default([]) %}
 {% set _directive = directive | trim %}
 {% if _directive | length > 0 %}
@@ -51,6 +56,9 @@ server {
 ) %}
     {{ _directive }}{{ ';' if _needs_semicolon else '' }}
 {% endif %}
+{% endfor %}
+{% for directive in nginx_config_proxy_required_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
 {% endfor %}
   }
 {% endfor %}
@@ -73,6 +81,11 @@ server {
     {{ _directive }}{{ ';' if _needs_semicolon else '' }}
 {% endif %}
 {% endfor %}
+{% if item.proxy_directives is defined %}
+{% for directive in nginx_config_proxy_required_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endfor %}
+{% endif %}
     proxy_pass {{ item.upstream_url }};
   }
 {% else %}
@@ -110,6 +123,11 @@ server {
 {% if item.locations is defined and item.locations | length > 0 %}
 {% for location in item.locations %}
   location {{ location.path | default('/') }} {
+{% if nginx_config_waf_enabled | bool %}
+{% for directive in nginx_config_waf_location_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endfor %}
+{% endif %}
 {% for directive in location.directives | default([]) %}
 {% set _directive = directive | trim %}
 {% if _directive | length > 0 %}
@@ -121,6 +139,9 @@ server {
 ) %}
     {{ _directive }}{{ ';' if _needs_semicolon else '' }}
 {% endif %}
+{% endfor %}
+{% for directive in nginx_config_proxy_required_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
 {% endfor %}
   }
 {% endfor %}
@@ -137,6 +158,9 @@ server {
 ) %}
     {{ _directive }}{{ ';' if _needs_semicolon else '' }}
 {% endif %}
+{% endfor %}
+{% for directive in nginx_config_proxy_required_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
 {% endfor %}
     proxy_pass {{ item.upstream_url }};
   }

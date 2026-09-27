@@ -46,6 +46,7 @@
         podman_systemd_scope: "{{ postgres_deploy_systemd_scope }}"
         podman_systemd_quadlet_dir: "{{ postgres_deploy_quadlet_dir }}"
         podman_systemd_enabled: false
+        podman_systemd_networks: "{{ postgres_deploy_networks }}"
       when: >-
         postgres_deploy_legacy_systemd_active.stdout | trim == 'active'
         or postgres_deploy_legacy_systemd_enabled.stdout | trim
@@ -83,3 +84,4 @@
         podman_systemd_scope: "{{ postgres_deploy_systemd_scope }}"
         podman_systemd_quadlet_dir: "{{ postgres_deploy_quadlet_dir }}"
         podman_systemd_enabled: "{{ postgres_deploy_systemd_enabled }}"
+        podman_systemd_networks: "{{ postgres_deploy_networks }}"

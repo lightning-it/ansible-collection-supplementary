@@ -243,6 +243,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
         defaults = self._role_defaults("keycloak_deploy")
         self.assertEqual(defaults["keycloak_deploy_proxy_trusted_addresses"], [])
         self.assertEqual(defaults["keycloak_deploy_networks"], [])
+        self.assertIn("keycloak_deploy_networks", defaults["keycloak_deploy_postgres_networks"])
 
         template = (ROOT / "roles" / "keycloak_deploy" / "templates" / "keycloak-pod.yml.j2").read_text(
             encoding="utf-8"
@@ -285,6 +286,21 @@ class KeycloakRoleContractTests(unittest.TestCase):
         self.assertEqual(
             quadlet["vars"]["podman_systemd_manifest_path"],
             "{{ postgres_deploy_pod_manifest_path }}",
+        )
+        self.assertEqual(
+            quadlet["vars"]["podman_systemd_networks"],
+            "{{ postgres_deploy_networks }}",
+        )
+
+        keycloak_tasks = yaml.safe_load(
+            (ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy_pod.yml").read_text(encoding="utf-8")
+        )
+        managed_postgres = next(
+            task for task in keycloak_tasks if task["name"] == "Deploy dedicated PostgreSQL service for Keycloak"
+        )
+        self.assertEqual(
+            managed_postgres["vars"]["postgres_deploy_networks"],
+            "{{ keycloak_deploy_postgres_networks }}",
         )
 
 
