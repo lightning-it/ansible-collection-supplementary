@@ -49,6 +49,13 @@ must be declared in `nginx_deploy_http_extra_directives`. This baseline uses
 NGINX-native controls; signature inspection such as OWASP CRS requires a
 separately reviewed ModSecurity/Coraza integration.
 
+The default reverse-proxy contract overwrites `Host`, `X-Real-IP`, and every
+Keycloak-relevant `X-Forwarded-*` identity header from NGINX-owned connection
+state. It strips `Forwarded`, `X-Original-Forwarded-For`, and
+`X-Forwarded-Prefix` so an Internet client cannot inject a second trusted
+identity chain. Custom `proxy_directives` replace the defaults and therefore
+must preserve the same overwrite-and-strip contract.
+
 When `nginx_config_vault_issue_missing: false`, Vault KV must already contain a
 certificate/private-key pair, a CA chain, and matching common-name and
 alternative-name metadata. Local host files do not satisfy that stored-identity
@@ -78,8 +85,13 @@ None.
             proxy_directives:
               - "proxy_set_header Host vault.prd.dmz.corp.l-it.io"
               - "proxy_set_header X-Real-IP $remote_addr"
-              - "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for"
-              - "proxy_set_header X-Forwarded-Proto https"
+              - "proxy_set_header X-Forwarded-For $remote_addr"
+              - "proxy_set_header X-Forwarded-Host $host"
+              - "proxy_set_header X-Forwarded-Port $server_port"
+              - "proxy_set_header X-Forwarded-Proto $scheme"
+              - 'proxy_set_header X-Forwarded-Prefix ""'
+              - 'proxy_set_header X-Original-Forwarded-For ""'
+              - 'proxy_set_header Forwarded ""'
               - "proxy_http_version 1.1"
               - "proxy_ssl_server_name on"
               - "proxy_ssl_name vault.prd.dmz.corp.l-it.io"

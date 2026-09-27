@@ -46,6 +46,7 @@
         podman_systemd_scope: "{{ keycloak_deploy_systemd_scope }}"
         podman_systemd_quadlet_dir: "{{ keycloak_deploy_quadlet_dir }}"
         podman_systemd_enabled: false
+        podman_systemd_networks: "{{ keycloak_deploy_networks }}"
       when: >-
         keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
         or keycloak_deploy_legacy_systemd_enabled.stdout | trim
@@ -83,6 +84,7 @@
         podman_systemd_scope: "{{ keycloak_deploy_systemd_scope }}"
         podman_systemd_quadlet_dir: "{{ keycloak_deploy_quadlet_dir }}"
         podman_systemd_enabled: "{{ keycloak_deploy_systemd_enabled }}"
+        podman_systemd_networks: "{{ keycloak_deploy_networks }}"
 
     - name: Wait until Keycloak health endpoint is reachable
       ansible.builtin.uri:

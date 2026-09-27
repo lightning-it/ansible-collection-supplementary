@@ -61,6 +61,10 @@ argument_specs:
       keycloak_deploy_host_network:
         description: Run the Keycloak pod in the host network namespace.
         type: bool
+      keycloak_deploy_networks:
+        description: Native Quadlet network entries used by the persistent Keycloak pod.
+        type: list
+        elements: str
       keycloak_deploy_postgres_host_ip:
         description: Host address on which the dedicated PostgreSQL port is published.
         type: str
@@ -120,6 +124,14 @@ argument_specs:
       keycloak_deploy_proxy_headers:
         description: Optional Keycloak proxy-header handling mode.
         type: str
+        choices:
+          - ""
+          - forwarded
+          - xforwarded
+      keycloak_deploy_proxy_trusted_addresses:
+        description: Exact proxy IP addresses or CIDRs trusted to supply proxy headers.
+        type: list
+        elements: str
       keycloak_deploy_http_relative_path:
         description: Optional relative path under which Keycloak serves HTTP requests.
         type: str

@@ -36,6 +36,11 @@ keycloak_deploy_host_ip: >-
       | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
   }}
 keycloak_deploy_host_network: false
+# Native Quadlet network entries. An empty list preserves Podman's default
+# kube network; production edge deployments should pin the exact private
+# network and, where required, the pod address (for example
+# `private-access:ip=10.89.0.11`).
+keycloak_deploy_networks: []
 keycloak_deploy_postgres_host_ip: >-
   {{
     postgres_deploy_host_ip
@@ -86,6 +91,7 @@ keycloak_deploy_env_extra: {}
 keycloak_deploy_extra_start_args: []
 keycloak_deploy_hostname: ""
 keycloak_deploy_proxy_headers: ""
+keycloak_deploy_proxy_trusted_addresses: []
 keycloak_deploy_http_relative_path: ""
 
 # Database config
