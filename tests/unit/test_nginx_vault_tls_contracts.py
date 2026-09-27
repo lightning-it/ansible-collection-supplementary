@@ -45,9 +45,15 @@ class NginxVaultTlsContractTests(unittest.TestCase):
 
         boundary = defaults["nginx_config_proxy_required_directives"]
         self.assertIn("proxy_set_header X-Forwarded-For $remote_addr", boundary)
+        self.assertIn("proxy_set_header X-Forwarded-Host $server_name", boundary)
         self.assertIn('proxy_set_header Forwarded ""', boundary)
         self.assertNotIn("$proxy_add_x_forwarded_for", "\n".join(boundary))
-        self.assertEqual(template.count("nginx_config_proxy_required_directives"), 5)
+        self.assertEqual(
+            template.count("{% for directive in nginx_config_proxy_required_directives %}"),
+            4,
+        )
+        assertions = (ROOT / "roles" / "nginx_config" / "tasks" / "assert.yml").read_text(encoding="utf-8")
+        self.assertIn("nginx_config_proxy_required_directives == [", assertions)
         custom_proxy = template.index("item.proxy_directives | default(nginx_config_proxy_default_directives)")
         required_after_custom = template.index("nginx_config_proxy_required_directives", custom_proxy)
         self.assertGreater(required_after_custom, custom_proxy)

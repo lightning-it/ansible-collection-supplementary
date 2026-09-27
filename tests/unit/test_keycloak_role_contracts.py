@@ -242,6 +242,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
     def test_edge_proxy_contract_restricts_forwarded_identity(self) -> None:
         defaults = self._role_defaults("keycloak_deploy")
         self.assertEqual(defaults["keycloak_deploy_proxy_trusted_addresses"], [])
+        self.assertEqual(defaults["keycloak_deploy_host_ip"], "127.0.0.1")
         self.assertEqual(defaults["keycloak_deploy_networks"], [])
         self.assertIn("keycloak_deploy_networks", defaults["keycloak_deploy_postgres_networks"])
 
@@ -258,7 +259,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
         )
         directives = nginx_defaults["nginx_config_proxy_required_directives"]
         self.assertIn("proxy_set_header X-Forwarded-For $remote_addr", directives)
-        self.assertIn("proxy_set_header X-Forwarded-Host $host", directives)
+        self.assertIn("proxy_set_header X-Forwarded-Host $server_name", directives)
         self.assertIn("proxy_set_header X-Forwarded-Port $server_port", directives)
         self.assertIn("proxy_set_header X-Forwarded-Proto $scheme", directives)
         self.assertIn('proxy_set_header Forwarded ""', directives)
