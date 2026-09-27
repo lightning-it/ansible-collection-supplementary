@@ -200,6 +200,10 @@ class KeycloakRoleContractTests(unittest.TestCase):
             quadlet["vars"]["podman_systemd_quadlet_dir"],
             "{{ keycloak_deploy_quadlet_dir }}",
         )
+        self.assertEqual(
+            quadlet["vars"]["podman_systemd_networks"],
+            "{{ keycloak_deploy_networks }}",
+        )
         stage_index = next(
             index
             for index, task in enumerate(systemd_block)
@@ -234,6 +238,30 @@ class KeycloakRoleContractTests(unittest.TestCase):
         source = pod_tasks_path.read_text(encoding="utf-8")
         self.assertNotIn("Ignore kubeplay remove failure", source)
         self.assertNotIn("Ignore kubeplay run failure", source)
+
+    def test_edge_proxy_contract_restricts_forwarded_identity(self) -> None:
+        defaults = self._role_defaults("keycloak_deploy")
+        self.assertEqual(defaults["keycloak_deploy_proxy_trusted_addresses"], [])
+        self.assertEqual(defaults["keycloak_deploy_networks"], [])
+
+        template = (ROOT / "roles" / "keycloak_deploy" / "templates" / "keycloak-pod.yml.j2").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("KC_PROXY_TRUSTED_ADDRESSES", template)
+        self.assertIn("keycloak_deploy_proxy_trusted_addresses | join(',')", template)
+
+        nginx_defaults = self._role_defaults("nginx_config")
+        directives = nginx_defaults["nginx_config_proxy_default_directives"]
+        self.assertIn("proxy_set_header X-Forwarded-For $remote_addr", directives)
+        self.assertIn("proxy_set_header X-Forwarded-Host $host", directives)
+        self.assertIn("proxy_set_header X-Forwarded-Port $server_port", directives)
+        self.assertIn("proxy_set_header X-Forwarded-Proto $scheme", directives)
+        self.assertIn('proxy_set_header Forwarded ""', directives)
+        self.assertIn('proxy_set_header X-Original-Forwarded-For ""', directives)
+        self.assertNotIn(
+            "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for",
+            directives,
+        )
 
     def test_postgres_lifecycle_has_one_controller(self) -> None:
         tasks_path = ROOT / "roles" / "postgres_deploy" / "tasks" / "deploy_pod.yml"

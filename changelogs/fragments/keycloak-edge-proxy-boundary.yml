@@ -1,0 +1,6 @@
+---
+security_fixes:
+  - >-
+    Restrict Keycloak proxy-header trust to explicit proxy addresses, support
+    pinned native Quadlet networks for Keycloak, and overwrite or strip
+    client-controlled forwarded identity headers at the NGINX boundary.
