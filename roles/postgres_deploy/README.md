@@ -28,6 +28,7 @@ Key variables:
 - `postgres_deploy_host_data_dir`
 - `postgres_deploy_port`
 - `postgres_deploy_host_ip`
+- `postgres_deploy_networks`
 - `postgres_deploy_db_name`
 - `postgres_deploy_db_user`
 - `postgres_deploy_db_password`

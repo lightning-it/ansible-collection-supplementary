@@ -43,6 +43,19 @@
       - >-
         keycloak_deploy_networks | map('trim') | reject('equalto', '') | list | length
         == keycloak_deploy_networks | length
+      - keycloak_deploy_postgres_networks is sequence
+      - keycloak_deploy_postgres_networks is not string
+      - >-
+        keycloak_deploy_postgres_networks | select('string') | list | length
+        == keycloak_deploy_postgres_networks | length
+      - >-
+        keycloak_deploy_postgres_networks | map('trim') | reject('equalto', '') | list | length
+        == keycloak_deploy_postgres_networks | length
+      - >-
+        not keycloak_deploy_manage_postgres | bool
+        or keycloak_deploy_postgres_host_network | bool
+        or keycloak_deploy_networks | length == 0
+        or keycloak_deploy_postgres_networks | length > 0
       - keycloak_deploy_postgres_host_ip | default('', true) | trim | length > 0
       - keycloak_deploy_postgres_host_network is boolean
       - keycloak_deploy_admin_user | default('', true) | trim | length > 0

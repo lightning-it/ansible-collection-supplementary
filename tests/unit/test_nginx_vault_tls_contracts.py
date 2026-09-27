@@ -33,6 +33,20 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             template.index("nginx_config_waf_location_directives"),
             template.index("item.proxy_directives"),
         )
+        self.assertEqual(template.count("nginx_config_waf_location_directives"), 3)
+
+    def test_required_forwarded_headers_follow_consumer_directives(self) -> None:
+        defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
+        template = (ROOT / "roles" / "nginx_config" / "templates" / "vhost.conf.j2").read_text(encoding="utf-8")
+
+        boundary = defaults["nginx_config_proxy_required_directives"]
+        self.assertIn("proxy_set_header X-Forwarded-For $remote_addr", boundary)
+        self.assertIn('proxy_set_header Forwarded ""', boundary)
+        self.assertNotIn("$proxy_add_x_forwarded_for", "\n".join(boundary))
+        self.assertEqual(template.count("nginx_config_proxy_required_directives"), 4)
+        custom_proxy = template.index("item.proxy_directives | default(nginx_config_proxy_default_directives)")
+        required_after_custom = template.index("nginx_config_proxy_required_directives", custom_proxy)
+        self.assertGreater(required_after_custom, custom_proxy)
 
     def test_pki_inputs_are_required_only_when_issuance_is_enabled(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))

@@ -100,8 +100,14 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("not (guacamole_deploy_legacy_unit_stat.stat.islnk", systemd_tasks)
         self.assertNotIn("podman kube play", tasks)
         self.assertNotIn("podman kube down", tasks)
+        self.assertIn(
+            "guacamole_deploy_legacy_systemd_unit_path: >-\n  /etc/systemd/system/guacamole.service",
+            DEFAULTS.read_text(encoding="utf-8"),
+        )
 
-    def test_oidc_group_claim_and_exact_connection_permissions_are_explicit(self) -> None:
+    def test_oidc_group_claim_and_exact_connection_permissions_are_explicit(
+        self,
+    ) -> None:
         defaults = DEFAULTS.read_text(encoding="utf-8")
         asserts = ASSERTS.read_text(encoding="utf-8")
         pod = POD.read_text(encoding="utf-8")

@@ -19,6 +19,7 @@ Key variables:
 - `keycloak_deploy_port`
 - `keycloak_deploy_host_ip`
 - `keycloak_deploy_networks`
+- `keycloak_deploy_postgres_networks`
 - `keycloak_deploy_manage_postgres`
 - `keycloak_deploy_postgres_image`
 - `keycloak_deploy_postgres_pod_name`
@@ -45,6 +46,10 @@ address as trusted.
 When this role manages PostgreSQL and both pods use the Podman bridge network,
 `keycloak_deploy_db_host` defaults to the PostgreSQL pod name, which Podman
 publishes as a DNS alias on the shared bridge network.
+`keycloak_deploy_postgres_networks` defaults to the same named networks after
+removing Keycloak-specific options such as its fixed IP, so both pods share the
+private DNS domain without reusing an address. An explicit override can pin a
+separate PostgreSQL address on those same networks.
 The controller-side readiness probe remains bound to
 `keycloak_deploy_postgres_host_ip`. A bridge-networked Keycloak container must
 never use its own loopback address as the database endpoint.

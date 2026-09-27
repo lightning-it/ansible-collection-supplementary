@@ -65,6 +65,12 @@ argument_specs:
         description: Native Quadlet network entries used by the persistent Keycloak pod.
         type: list
         elements: str
+      keycloak_deploy_postgres_networks:
+        description: >-
+          Native Quadlet network entries used by managed PostgreSQL; defaults
+          to the Keycloak networks without per-container options.
+        type: list
+        elements: str
       keycloak_deploy_postgres_host_ip:
         description: Host address on which the dedicated PostgreSQL port is published.
         type: str

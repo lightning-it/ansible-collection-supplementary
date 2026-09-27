@@ -16,6 +16,14 @@
       - postgres_deploy_container_port | int > 0
       - postgres_deploy_host_ip | default('', true) | trim | length > 0
       - postgres_deploy_host_network is boolean
+      - postgres_deploy_networks is sequence
+      - postgres_deploy_networks is not string
+      - >-
+        postgres_deploy_networks | select('string') | list | length
+        == postgres_deploy_networks | length
+      - >-
+        postgres_deploy_networks | map('trim') | reject('equalto', '') | list | length
+        == postgres_deploy_networks | length
       - postgres_deploy_install_packages is boolean
       - postgres_deploy_manage_systemd is boolean
       - postgres_deploy_systemd_unit_name | default('', true) | trim | length > 0

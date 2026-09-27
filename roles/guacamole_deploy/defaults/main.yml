@@ -47,7 +47,7 @@ guacamole_deploy_systemd_scope: system
 guacamole_deploy_quadlet_dir: /etc/containers/systemd
 guacamole_deploy_systemd_enabled: true
 guacamole_deploy_legacy_systemd_unit_path: >-
-  /etc/systemd/system/{{ guacamole_deploy_systemd_unit_name }}.service
+  /etc/systemd/system/guacamole.service
 guacamole_deploy_quadlet_networks: >-
   {{
     [
