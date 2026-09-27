@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v3.6.1
+======
+
+Bugfixes
+--------
+
+- Pass the supported ``mount_point`` option to ``community.hashi_vault`` KV modules so custom AppRole mounts authenticate correctly, and bind delegated controller calls to the execution environment's Python runtime so the pinned ``hvac`` dependency is available.
+
 v3.6.0
 ======
 
