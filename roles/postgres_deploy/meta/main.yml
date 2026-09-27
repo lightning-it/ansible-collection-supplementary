@@ -3,7 +3,7 @@ galaxy_info:
   role_name: postgres_deploy
   namespace: lit
   author: Lightning IT
-  description: Deploy PostgreSQL as a Podman pod.
+  description: Deploy PostgreSQL from a kube manifest through Podman Quadlet.
   company: Lightning IT
   license: MIT
   min_ansible_version: "2.18"
@@ -16,6 +16,7 @@ galaxy_info:
     - postgres
     - postgresql
     - podman
+    - quadlet
     - database
 
 dependencies: []

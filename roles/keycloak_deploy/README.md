@@ -32,6 +32,23 @@ Key variables:
 - `keycloak_deploy_generate_secrets`
 - `keycloak_deploy_manage_systemd`
 
+When this role manages PostgreSQL and both pods use the Podman bridge network,
+`keycloak_deploy_db_host` defaults to the PostgreSQL pod name, which Podman
+publishes as a DNS alias on the shared bridge network.
+The controller-side readiness probe remains bound to
+`keycloak_deploy_postgres_host_ip`. A bridge-networked Keycloak container must
+never use its own loopback address as the database endpoint.
+
+Exactly one lifecycle controller owns a Keycloak pod. The container
+configuration is rendered as Kubernetes YAML. With systemd management enabled,
+the role hands that manifest to a native `.kube` Quadlet managed through
+`lit.foundational.podman_systemd`; it never starts the active pod directly.
+Without systemd management, the role uses one fail-closed kubeplay recreation.
+Both paths read back the non-secret database-host entry from the active
+container and reject a stale pod before health acceptance. An exact legacy
+`podman-kube@<escaped-manifest>.service` instance is stopped and disabled once
+before native Quadlet takeover.
+
 ## Dependencies
 
 Runtime composition uses `lit.supplementary.postgres_deploy` when PostgreSQL is

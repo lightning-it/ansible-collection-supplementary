@@ -260,5 +260,20 @@ argument_specs:
         description: Internal handler flag requesting execution of the rendered Podman kube workload.
         type: bool
       keycloak_deploy_systemd_unit_name:
-        description: Systemd unit name used to manage the Keycloak Podman kube workload.
+        description: Base name of the native Quadlet-generated Keycloak systemd service.
         type: str
+      keycloak_deploy_systemd_description:
+        description: Description written to the native Keycloak Quadlet unit.
+        type: str
+      keycloak_deploy_systemd_scope:
+        description: Systemd scope used by the native Keycloak Quadlet unit.
+        type: str
+        choices:
+          - system
+          - user
+      keycloak_deploy_quadlet_dir:
+        description: Directory containing the native Keycloak .kube Quadlet unit.
+        type: path
+      keycloak_deploy_systemd_enabled:
+        description: Whether the native Quadlet-generated Keycloak service is enabled.
+        type: bool

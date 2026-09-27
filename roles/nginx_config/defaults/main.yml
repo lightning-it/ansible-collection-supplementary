@@ -26,9 +26,10 @@ nginx_config_vault_kv_path: "{{ inventory_hostname }}/nginx/certificate"
 nginx_config_vault_pki_path: "{{ vault_config_vault_pki_path | default('', true) }}"
 nginx_config_vault_pki_role: "{{ vault_config_vault_pki_role | default('', true) }}"
 nginx_config_vault_issue_missing: true
-# Compatibility default for existing consumers. Security profiles that require
-# Vault-only custody must set this to false explicitly.
-nginx_config_vault_allow_local_fallback: true
+# Vault is the source of record whenever tls_source=vault. Consumers that need
+# a file migration must select tls_source=file explicitly; an existing host key
+# must never silently replace missing Vault custody.
+nginx_config_vault_allow_local_fallback: false
 nginx_config_vault_token: "{{ vault_token | default('', true) }}"
 nginx_config_vault_role_id: "{{ ansible_hashi_vault_role_id | default('', true) }}"
 nginx_config_vault_secret_id: "{{ ansible_hashi_vault_secret_id | default('', true) }}"
@@ -52,6 +53,9 @@ nginx_config_proxy_default_directives:
   - "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for"
   - "proxy_set_header X-Forwarded-Proto https"
   - "proxy_http_version 1.1"
+nginx_config_waf_enabled: false
+nginx_config_waf_server_directives: []
+nginx_config_waf_location_directives: []
 nginx_config_enabled_values: ['enabled', 'true', 'yes', 'on', '1', 'y']
 nginx_config_vhost_service_key_map: {}
 nginx_config_vhosts_effective_raw: >-

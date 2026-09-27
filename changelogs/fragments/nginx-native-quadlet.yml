@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    Migrated the persistent Nginx lifecycle from the legacy podman-kube@ unit
+    to a native Quadlet .kube unit while retaining direct kubeplay only for an
+    explicit non-systemd mode.

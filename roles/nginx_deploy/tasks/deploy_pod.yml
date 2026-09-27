@@ -196,46 +196,23 @@
   tags:
     - deployment
 
-- name: Recreate nginx pod (kubeplay)
+- name: Recreate Nginx pod from the desired manifest
+  ansible.builtin.include_role:
+    name: lit.foundational.kubeplay
+  vars:
+    kubeplay_apps: []
+    kubeplay_action: recreate
+    kubeplay_pod_name: "{{ nginx_deploy_pod_name }}"
+    kubeplay_pod_manifest_path: "{{ nginx_deploy_pod_manifest_path }}"
+    kubeplay_app_name: nginx_recreate
   when:
-    - nginx_deploy_kubeplay_remove | default(false)
+    - >-
+      nginx_deploy_kubeplay_remove | default(false) or
+      nginx_deploy_kubeplay_run | default(false)
     - not nginx_deploy_skip_runtime | bool
+    - not nginx_deploy_manage_systemd | bool
   tags:
     - deployment
-  block:
-    - name: Run kubeplay remove (best effort)
-      ansible.builtin.include_role:
-        name: lit.foundational.kubeplay
-      vars:
-        kubeplay_apps: []
-        kubeplay_action: remove
-        kubeplay_pod_name: "{{ nginx_deploy_pod_name }}"
-        kubeplay_app_name: nginx_remove
-  rescue:
-    - name: Ignore kubeplay remove failure
-      ansible.builtin.debug:
-        msg: "Skipping kubeplay remove failure."
-
-- name: Run nginx pod (kubeplay)
-  when:
-    - nginx_deploy_kubeplay_run | default(false)
-    - not nginx_deploy_skip_runtime | bool
-  tags:
-    - deployment
-  block:
-    - name: Run kubeplay run (best effort)
-      ansible.builtin.include_role:
-        name: lit.foundational.kubeplay
-      vars:
-        kubeplay_apps: []
-        kubeplay_action: run
-        kubeplay_pod_name: "{{ nginx_deploy_pod_name }}"
-        kubeplay_pod_manifest_path: "{{ nginx_deploy_pod_manifest_path }}"
-        kubeplay_app_name: nginx_run
-  rescue:
-    - name: Ignore kubeplay run failure
-      ansible.builtin.debug:
-        msg: "Skipping kubeplay run failure."
 
 - name: Check nginx container exists
   ansible.builtin.command:

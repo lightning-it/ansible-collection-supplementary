@@ -30,28 +30,10 @@
     group: root
     mode: "0600"
   no_log: true
-  notify: Restart Guacamole
+  register: guacamole_deploy_manifest_render
 
-- name: Install Guacamole systemd unit
-  ansible.builtin.template:
-    src: guacamole.service.j2
-    dest: /etc/systemd/system/guacamole.service
-    owner: root
-    group: root
-    mode: "0644"
-  notify: Restart Guacamole
-  when: guacamole_deploy_manage_systemd | bool
-
-- name: Apply pending Guacamole runtime changes
-  ansible.builtin.meta: flush_handlers
-  when: not ansible_check_mode and not guacamole_deploy_skip_runtime | bool
-
-- name: Ensure Guacamole is enabled and started
-  ansible.builtin.systemd:
-    name: guacamole.service
-    enabled: true
-    state: started
-    daemon_reload: true
+- name: Manage Guacamole through native Podman Quadlet
+  ansible.builtin.include_tasks: systemd.yml
   when:
     - guacamole_deploy_manage_systemd | bool
     - not ansible_check_mode

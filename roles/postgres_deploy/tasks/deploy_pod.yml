@@ -295,7 +295,7 @@
   ansible.builtin.template:
     src: postgres-pod.yml.j2
     dest: "{{ postgres_deploy_pod_manifest_path }}"
-    mode: '0644'
+    mode: '0600'
   notify:
     - Recreate postgres pod
     - Run postgres pod
@@ -307,64 +307,20 @@
   tags:
     - deployment
 
-- name: Recreate postgres pod (kubeplay)
+- name: Recreate PostgreSQL pod directly from the desired manifest
+  ansible.builtin.include_role:
+    name: lit.foundational.kubeplay
+  vars:
+    kubeplay_apps: []
+    kubeplay_action: recreate
+    kubeplay_pod_name: "{{ postgres_deploy_pod_name }}"
+    kubeplay_pod_manifest_path: "{{ postgres_deploy_pod_manifest_path }}"
+    kubeplay_app_name: postgres_recreate
   when:
-    - postgres_deploy_kubeplay_remove | default(false)
+    - >-
+      postgres_deploy_kubeplay_remove | default(false) or
+      postgres_deploy_kubeplay_run | default(false)
     - not postgres_deploy_skip_runtime | bool
-  tags:
-    - deployment
-  block:
-    - name: Run kubeplay remove (best effort)
-      ansible.builtin.include_role:
-        name: lit.foundational.kubeplay
-      vars:
-        kubeplay_apps: []
-        kubeplay_action: remove
-        kubeplay_pod_name: "{{ postgres_deploy_pod_name }}"
-        kubeplay_app_name: postgres_remove
-  rescue:
-    - name: Ignore kubeplay remove failure
-      ansible.builtin.debug:
-        msg: "Skipping kubeplay remove failure."
-
-- name: Run postgres pod (kubeplay)
-  when:
-    - postgres_deploy_kubeplay_run | default(false)
-    - not postgres_deploy_skip_runtime | bool
-  tags:
-    - deployment
-  block:
-    - name: Run kubeplay run (best effort)
-      ansible.builtin.include_role:
-        name: lit.foundational.kubeplay
-      vars:
-        kubeplay_apps: []
-        kubeplay_action: run
-        kubeplay_pod_name: "{{ postgres_deploy_pod_name }}"
-        kubeplay_pod_manifest_path: "{{ postgres_deploy_pod_manifest_path }}"
-        kubeplay_app_name: postgres_run
-  rescue:
-    - name: Ignore kubeplay run failure
-      ansible.builtin.debug:
-        msg: "Skipping kubeplay run failure."
-
-- name: Check PostgreSQL pod after kubeplay run
-  ansible.builtin.command: "podman pod exists {{ postgres_deploy_pod_name }}"
-  register: postgres_deploy_pod_exists_after_kubeplay
-  changed_when: false
-  failed_when: false
-  when:
-    - postgres_deploy_kubeplay_run | default(false)
-    - not postgres_deploy_skip_runtime | bool
-  tags:
-    - deployment
-
-- name: Run PostgreSQL pod directly when kubeplay did not start it
-  ansible.builtin.command: "podman kube play {{ postgres_deploy_pod_manifest_path }}"
-  changed_when: true
-  when:
-    - postgres_deploy_kubeplay_run | default(false)
-    - not postgres_deploy_skip_runtime | bool
-    - postgres_deploy_pod_exists_after_kubeplay.rc | default(1) != 0
+    - not postgres_deploy_manage_systemd | bool
   tags:
     - deployment

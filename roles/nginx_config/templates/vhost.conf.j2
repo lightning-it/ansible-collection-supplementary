@@ -16,6 +16,12 @@ server {
   ssl_certificate {{ item.tls_certificate | default(nginx_config_tls_certificate) }};
   ssl_certificate_key {{ item.tls_certificate_key | default(nginx_config_tls_certificate_key) }};
 
+{% if nginx_config_waf_enabled | bool %}
+{% for directive in nginx_config_waf_server_directives %}
+  {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endfor %}
+{% endif %}
+
 {% if item.extra_directives is defined and item.extra_directives | length > 0 %}
 {% for directive in item.extra_directives %}
 {% set _directive = directive | trim %}
@@ -50,6 +56,11 @@ server {
 {% endfor %}
 {% elif item.upstream_url is defined and item.upstream_url | length > 0 %}
   location / {
+{% if nginx_config_waf_enabled | bool %}
+{% for directive in nginx_config_waf_location_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endfor %}
+{% endif %}
 {% for directive in item.proxy_directives | default(nginx_config_proxy_default_directives) %}
 {% set _directive = directive | trim %}
 {% if _directive | length > 0 %}

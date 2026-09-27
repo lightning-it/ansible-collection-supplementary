@@ -1,29 +1,89 @@
 ---
-- name: Manage Nginx systemd unit
+- name: Manage Nginx native Quadlet service
   when:
     - nginx_deploy_manage_systemd | bool
     - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
   tags:
     - systemd
   block:
-    - name: Escape kube play manifest path
+    - name: Resolve the exact legacy Podman kube unit identity
       ansible.builtin.command:
-        cmd: "systemd-escape {{ nginx_deploy_pod_manifest_path }}"
-      register: nginx_deploy_systemd_name
+        argv:
+          - systemd-escape
+          - "{{ nginx_deploy_pod_manifest_path }}"
+      register: nginx_deploy_legacy_systemd_name
       changed_when: false
 
-    - name: Ensure podman-kube drop-in directory exists
-      ansible.builtin.file:
-        path: "/etc/systemd/system/podman-kube@{{ nginx_deploy_systemd_name.stdout }}.service.d"
-        state: directory
-        mode: '0755'
+    - name: Inspect the exact legacy Nginx unit activity
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "podman-kube@{{ nginx_deploy_legacy_systemd_name.stdout }}.service"
+      register: nginx_deploy_legacy_systemd_active
+      changed_when: false
+      failed_when: false
 
-    - name: Enable and start Podman kube systemd unit
+    - name: Inspect the exact legacy Nginx unit enablement
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-enabled
+          - "podman-kube@{{ nginx_deploy_legacy_systemd_name.stdout }}.service"
+      register: nginx_deploy_legacy_systemd_enabled
+      changed_when: false
+      failed_when: false
+
+    - name: Stage the native Nginx Quadlet before legacy shutdown
+      ansible.builtin.include_role:
+        name: lit.foundational.podman_systemd
+      vars:
+        podman_systemd_action: stopped
+        podman_systemd_unit_name: "{{ nginx_deploy_systemd_unit_name }}"
+        podman_systemd_description: "{{ nginx_deploy_systemd_description }}"
+        podman_systemd_manifest_path: "{{ nginx_deploy_pod_manifest_path }}"
+        podman_systemd_scope: "{{ nginx_deploy_systemd_scope }}"
+        podman_systemd_quadlet_dir: "{{ nginx_deploy_quadlet_dir }}"
+        podman_systemd_enabled: false
+        podman_systemd_networks: "{{ nginx_deploy_networks }}"
+      when: >-
+        nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
+        or nginx_deploy_legacy_systemd_enabled.stdout | trim
+        in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
+
+    - name: Stop and disable the exact legacy Nginx unit before Quadlet takeover
       ansible.builtin.systemd:
-        name: "podman-kube@{{ nginx_deploy_systemd_name.stdout }}.service"
-        enabled: true
-        state: started
-        daemon_reload: true
+        name: "podman-kube@{{ nginx_deploy_legacy_systemd_name.stdout }}.service"
+        state: stopped
+        enabled: false
+      when: >-
+        nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
+        or nginx_deploy_legacy_systemd_enabled.stdout | trim
+        in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
+
+    - name: Manage the native Nginx Quadlet service
+      ansible.builtin.include_role:
+        name: lit.foundational.podman_systemd
+      vars:
+        podman_systemd_action: >-
+          {{
+            'restarted'
+            if (
+              nginx_deploy_kubeplay_remove | default(false) | bool
+              or nginx_deploy_kubeplay_run | default(false) | bool
+              or nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
+              or nginx_deploy_legacy_systemd_enabled.stdout | trim
+                in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
+            )
+            else 'present'
+          }}
+        podman_systemd_unit_name: "{{ nginx_deploy_systemd_unit_name }}"
+        podman_systemd_description: "{{ nginx_deploy_systemd_description }}"
+        podman_systemd_manifest_path: "{{ nginx_deploy_pod_manifest_path }}"
+        podman_systemd_scope: "{{ nginx_deploy_systemd_scope }}"
+        podman_systemd_quadlet_dir: "{{ nginx_deploy_quadlet_dir }}"
+        podman_systemd_enabled: "{{ nginx_deploy_systemd_enabled }}"
+        podman_systemd_networks: "{{ nginx_deploy_networks }}"
 
     - name: Wait until Nginx is reachable
       ansible.builtin.uri:
