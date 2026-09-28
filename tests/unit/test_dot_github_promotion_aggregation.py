@@ -216,6 +216,30 @@ class SequencedPromotionClient:
         raise AssertionError(f"unexpected path: {path}")
 
 
+class SequencedPromotionInventoryClient:
+    """Expose a newer exact aggregate after an earlier terminal result."""
+
+    api_url = "https://api.github.com"
+
+    def __init__(
+        self,
+        inventories: list[dict[str, Any]],
+        runs: dict[int, dict[str, Any]],
+    ) -> None:
+        self.inventories = inventories
+        self.runs = runs
+
+    def get(self, path: str) -> Any:
+        if path.endswith("&filter=all&per_page=100"):
+            if len(self.inventories) > 1:
+                return deepcopy(self.inventories.pop(0))
+            return deepcopy(self.inventories[0])
+        if "/actions/runs/" in path:
+            run_id = int(path.rsplit("/", 1)[1])
+            return deepcopy(self.runs[run_id])
+        raise AssertionError(f"unexpected path: {path}")
+
+
 class PromotionShapeTests(unittest.TestCase):
     def test_classifies_only_the_release_app_develop_to_main_identity(self) -> None:
         self.assertTrue(MODULE.is_aggregated_promotion(promotion_pr()))
@@ -389,6 +413,35 @@ class PromotionSelectionTests(unittest.TestCase):
                 attempts=1,
                 sleep=lambda _: None,
             )
+
+    def test_waits_for_a_newer_result_after_an_earlier_terminal_failure(self) -> None:
+        failed_check = promotion_check(run_id=100, job_id=200, conclusion="failure")
+        success_check = promotion_check(run_id=101, job_id=201)
+        client = SequencedPromotionInventoryClient(
+            [
+                self.inventory(failed_check),
+                self.inventory(failed_check, success_check),
+            ],
+            {
+                100: promotion_run(run_id=100, conclusion="failure"),
+                101: promotion_run(run_id=101),
+            },
+        )
+        sleeps: list[float] = []
+
+        check, run, job_id = MODULE.wait_for_aggregated_promotion(
+            client,
+            PR_NUMBER,
+            BASE,
+            HEAD,
+            attempts=2,
+            sleep=sleeps.append,
+        )
+
+        self.assertEqual(201, check["id"])
+        self.assertEqual(101, run["id"])
+        self.assertEqual(201, job_id)
+        self.assertEqual([10], sleeps)
 
     def test_waits_when_the_successful_check_precedes_run_completion(self) -> None:
         check = promotion_check()
