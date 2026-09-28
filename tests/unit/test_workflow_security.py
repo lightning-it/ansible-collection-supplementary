@@ -432,13 +432,17 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             self.assertIn(required_input, develop_handoff)
             self.assertIn(required_input, main_handoff)
 
-    def test_current_revision_rerun_accepts_only_the_known_skipped_s0_topology(self) -> None:
+    def test_current_revision_rerun_accepts_only_known_skipped_topology(self) -> None:
         helper = (WORKFLOWS / "current-revision-rerun.yml").read_text(encoding="utf-8")
-        promotion_job = "Verify aggregated develop-to-main promotion evidence"
-        self.assertEqual(1, helper.count(f'.name == "{promotion_job}"'))
-        self.assertIn("synthetic_promotion_aggregate_jobs=$(jq -c", helper)
+        promotion_jobs = (
+            "Authorize exact Supplementary catch-up v5 successor",
+            "Verify aggregated develop-to-main promotion evidence",
+        )
+        for job_name in promotion_jobs:
+            self.assertEqual(1, helper.count(f'.name == "{job_name}"'))
+        self.assertIn("synthetic_promotion_topology_jobs=$(jq -c", helper)
         self.assertIn(
-            'test "$(jq \'length\' <<<"${synthetic_promotion_aggregate_jobs}")" -le 1',
+            'test "$(jq \'length\' <<<"${synthetic_promotion_topology_jobs}")" -le 2',
             helper,
         )
         self.assertIn("($promotion | length)", helper)
@@ -460,7 +464,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("($s0 | length)", helper)
         jq = shutil.which("jq")
         if jq is None:
-            self.fail("jq is required for the skipped S0 topology regression test")
+            self.fail("jq is required for the skipped topology regression test")
         uniqueness = "length == (map(.name) | unique | length)"
         for names, expected in (
             ([], 0),
@@ -484,10 +488,54 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             )
             self.assertEqual(expected, result.returncode, result.stderr)
 
-        for count, expected in ((0, 0), (1, 0), (2, 1)):
+        promotion_filter_match = re.search(
+            r"synthetic_promotion_topology_jobs=\$\(jq -c '([^']+)' <<<",
+            helper,
+        )
+        self.assertIsNotNone(promotion_filter_match)
+        promotion_filter = promotion_filter_match.group(1)  # type: ignore[union-attr]
+        accepted = {
+            "runner_id": None,
+            "steps": [],
+            "name": promotion_jobs[1],
+            "run_attempt": 1,
+            "status": "completed",
+            "conclusion": "skipped",
+        }
+        rejected_variants = (
+            {**accepted, "name": "Unknown synthetic job"},
+            {**accepted, "runner_id": 123},
+            {**accepted, "steps": [{"name": "runner-backed"}]},
+            {**accepted, "run_attempt": 2},
+            {**accepted, "status": "in_progress"},
+            {**accepted, "conclusion": "success"},
+        )
+        for candidate, expected_length in (
+            (accepted, 1),
+            ({**accepted, "name": promotion_jobs[0]}, 1),
+            *((candidate, 0) for candidate in rejected_variants),
+        ):
             result = subprocess.run(  # noqa: S603
-                [jq, "-e", "length <= 1"],
-                input=json.dumps([{"name": promotion_job}] * count),
+                [jq, "-c", promotion_filter],
+                input=json.dumps([candidate]),
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(expected_length, len(json.loads(result.stdout)))
+
+        topology_guard = "length <= 2 and length == (map(.name) | unique | length)"
+        for names, expected in (
+            ([], 0),
+            ([promotion_jobs[0]], 0),
+            ([promotion_jobs[1]], 0),
+            ([promotion_jobs[0], promotion_jobs[1]], 0),
+            ([promotion_jobs[0], promotion_jobs[0]], 1),
+            ([promotion_jobs[0], promotion_jobs[1], promotion_jobs[0]], 1),
+        ):
+            result = subprocess.run(  # noqa: S603
+                [jq, "-e", topology_guard],
+                input=json.dumps([{"name": name} for name in names]),
                 check=False,
                 capture_output=True,
                 text=True,
