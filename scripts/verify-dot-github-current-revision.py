@@ -308,7 +308,9 @@ def matching_aggregated_promotion_checks(
             str(check.get("details_url", ""))
         )
         if details_match is None:
-            continue
+            raise VerificationError(
+                "aggregated promotion check details URL is not exactly bound"
+            )
         run_id = int(details_match.group("run_id"))
         job_id = int(details_match.group("job_id"))
         run = require_mapping(

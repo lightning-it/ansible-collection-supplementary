@@ -179,8 +179,8 @@ class PromotionSelectionTests(unittest.TestCase):
                 "&filter=all&per_page=100"
             ): self.inventory(*checks)
         }
-        for check, run in checks_and_runs:
-            run_id = check["details_url"].split("/runs/")[1].split("/job/")[0]
+        for _check, run in checks_and_runs:
+            run_id = run["id"]
             payloads[f"repos/{MODULE.TARGET_REPOSITORY}/actions/runs/{run_id}"] = run
         return MappingClient(payloads)
 
@@ -265,6 +265,28 @@ class PromotionSelectionTests(unittest.TestCase):
         with self.assertRaisesRegex(
             MODULE.VerificationError,
             "latest aggregated promotion association is not exactly bound",
+        ):
+            MODULE.wait_for_aggregated_promotion(
+                client,
+                PR_NUMBER,
+                BASE,
+                HEAD,
+                attempts=1,
+                sleep=lambda _: None,
+            )
+
+    def test_rejects_malformed_same_head_url_instead_of_reusing_success(self) -> None:
+        older_check = promotion_check(run_id=100, job_id=200)
+        newer_check = promotion_check(run_id=101, job_id=201)
+        newer_check["details_url"] = f"https://github.com/{MODULE.TARGET_REPOSITORY}/checks/201"
+        client = self.client_for(
+            (older_check, promotion_run(run_id=100)),
+            (newer_check, promotion_run(run_id=101)),
+        )
+
+        with self.assertRaisesRegex(
+            MODULE.VerificationError,
+            "aggregated promotion check details URL is not exactly bound",
         ):
             MODULE.wait_for_aggregated_promotion(
                 client,
