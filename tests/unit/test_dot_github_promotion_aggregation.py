@@ -146,7 +146,7 @@ class SequencedPromotionClient:
 
 
 class PromotionShapeTests(unittest.TestCase):
-    def test_recognizes_only_the_release_app_develop_to_main_shape(self) -> None:
+    def test_classifies_only_the_release_app_develop_to_main_identity(self) -> None:
         self.assertTrue(MODULE.is_aggregated_promotion(promotion_pr()))
 
         wrong_author = promotion_pr()
@@ -156,6 +156,17 @@ class PromotionShapeTests(unittest.TestCase):
         wrong_head = promotion_pr()
         wrong_head["head"]["ref"] = "feature"
         self.assertFalse(MODULE.is_aggregated_promotion(wrong_head))
+
+    def test_rejects_a_malformed_promotion_title_without_legacy_fallback(self) -> None:
+        malformed = promotion_pr()
+        malformed["title"] = "chore(release): altered title"
+
+        self.assertTrue(MODULE.is_aggregated_promotion(malformed))
+        with self.assertRaisesRegex(
+            MODULE.VerificationError,
+            "promotion pull request title is not exactly bound",
+        ):
+            MODULE.validate_aggregated_promotion_shape(malformed)
 
     def test_requires_one_exact_pull_request_association(self) -> None:
         run = promotion_run()
