@@ -23,9 +23,17 @@ TARGET_VERIFIER_PATH = (
     ".github/workflows/supplementary-current-revision-required.yml"
 )
 TARGET_VERIFIER_NAME = "Required current-revision workflow"
+PROMOTION_VERIFIER_NAME = "Verify aggregated develop-to-main promotion evidence"
 RESERVATION_NAME = "Protected current-revision verifier"
+RELEASE_APP_LOGIN = "lightning-it-release-automation[bot]"
+RELEASE_APP_ID = 307565056
+PROMOTION_TITLE = "chore(release): promote develop to main"
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 POSITIVE_INTEGER_PATTERN = re.compile(r"^[1-9][0-9]*$")
+TARGET_JOB_URL_PATTERN = re.compile(
+    r"^https://github\.com/lightning-it/\.github/actions/runs/"
+    r"(?P<run_id>[1-9][0-9]*)/job/(?P<job_id>[1-9][0-9]*)$"
+)
 RESERVATION_PATTERN = re.compile(
     r"^rep60-required-workflow:v3:(?P<run_id>[1-9][0-9]*):"
     r"(?P<pr_number>[1-9][0-9]*):(?P<base>[0-9a-f]{40}):"
@@ -212,6 +220,294 @@ def validate_live_pr(
     if not isinstance(author, str) or not author:
         raise VerificationError("pull request author is missing")
     return pr
+
+
+def is_aggregated_promotion(pr: Mapping[str, Any]) -> bool:
+    """Return whether the live PR is the exact protected promotion shape."""
+
+    base = require_mapping(pr.get("base"), "pull request base")
+    head = require_mapping(pr.get("head"), "pull request head")
+    author = require_mapping(pr.get("user"), "pull request author")
+    return (
+        base.get("ref") == "main"
+        and head.get("ref") == "develop"
+        and author.get("login") == RELEASE_APP_LOGIN
+        and author.get("id") == RELEASE_APP_ID
+        and author.get("type") == "Bot"
+        and pr.get("title") == PROMOTION_TITLE
+    )
+
+
+def exact_promotion_run_association(
+    run: Mapping[str, Any],
+    pr_number: int,
+    event_base: str,
+    event_head: str,
+) -> bool:
+    """Recognize only the exact native run association for this promotion."""
+
+    pulls = run.get("pull_requests")
+    if not isinstance(pulls, list) or len(pulls) != 1:
+        return False
+    association = pulls[0]
+    if not isinstance(association, dict):
+        return False
+    base = association.get("base")
+    head = association.get("head")
+    if not isinstance(base, dict) or not isinstance(head, dict):
+        return False
+    base_repo = base.get("repo")
+    head_repo = head.get("repo")
+    if not isinstance(base_repo, dict) or not isinstance(head_repo, dict):
+        return False
+    return (
+        association.get("number") == pr_number
+        and base.get("ref") == "main"
+        and base.get("sha") == event_base
+        and base_repo.get("name") == ".github"
+        and base_repo.get("url")
+        == f"https://api.github.com/repos/{TARGET_REPOSITORY}"
+        and head.get("ref") == "develop"
+        and head.get("sha") == event_head
+        and head_repo.get("name") == ".github"
+        and head_repo.get("url")
+        == f"https://api.github.com/repos/{TARGET_REPOSITORY}"
+    )
+
+
+def matching_aggregated_promotion_checks(
+    client: GitHubClient,
+    pr_number: int,
+    event_base: str,
+    event_head: str,
+) -> list[tuple[Mapping[str, Any], Mapping[str, Any], int]]:
+    """Return native promotion results bound to the exact PR revision."""
+
+    encoded_name = urllib.parse.quote(TARGET_VERIFIER_NAME, safe="")
+    payload = require_mapping(
+        client.get(
+            f"repos/{TARGET_REPOSITORY}/commits/{event_head}/check-runs"
+            f"?check_name={encoded_name}&filter=all&per_page=100"
+        ),
+        "aggregated promotion check inventory",
+    )
+    checks = require_list(payload.get("check_runs"), "aggregated promotion checks")
+    total_count = payload.get("total_count")
+    if not isinstance(total_count, int) or total_count != len(checks) or total_count > 100:
+        raise VerificationError("aggregated promotion check inventory is incomplete")
+
+    matches: list[tuple[Mapping[str, Any], Mapping[str, Any], int]] = []
+    seen_runs: set[int] = set()
+    for raw_check in checks:
+        check = require_mapping(raw_check, "aggregated promotion check")
+        if check.get("name") != TARGET_VERIFIER_NAME:
+            continue
+        if check.get("head_sha") != event_head:
+            continue
+        details_match = TARGET_JOB_URL_PATTERN.fullmatch(
+            str(check.get("details_url", ""))
+        )
+        if details_match is None:
+            raise VerificationError(
+                "aggregated promotion check details URL is not exactly bound"
+            )
+        run_id = int(details_match.group("run_id"))
+        job_id = int(details_match.group("job_id"))
+        run = require_mapping(
+            client.get(f"repos/{TARGET_REPOSITORY}/actions/runs/{run_id}"),
+            "aggregated promotion run",
+        )
+        if run_id in seen_runs:
+            raise VerificationError("aggregated promotion evidence is ambiguous")
+        seen_runs.add(run_id)
+        matches.append((check, run, job_id))
+    matches.sort(key=lambda evidence: int(evidence[1].get("id", 0)))
+    return matches
+
+
+def wait_for_aggregated_promotion(
+    client: GitHubClient,
+    pr_number: int,
+    event_base: str,
+    event_head: str,
+    *,
+    attempts: int,
+    sleep: Callable[[float], None],
+) -> tuple[Mapping[str, Any], Mapping[str, Any], int]:
+    """Wait only for the newest exact native promotion result."""
+
+    for attempt in range(1, attempts + 1):
+        matches = matching_aggregated_promotion_checks(
+            client, pr_number, event_base, event_head
+        )
+        if matches:
+            evidence = matches[-1]
+            check, run, _job_id = evidence
+            if not exact_promotion_run_association(
+                run, pr_number, event_base, event_head
+            ):
+                raise VerificationError(
+                    "latest aggregated promotion association is not exactly bound"
+                )
+            check_status = check.get("status")
+            run_status = run.get("status")
+            if check_status == "completed" and run_status == "completed":
+                if (
+                    check.get("conclusion") != "success"
+                    or run.get("conclusion") != "success"
+                ):
+                    raise VerificationError(
+                        "latest aggregated promotion evidence failed"
+                    )
+                return evidence
+            if check_status == "completed" and check.get("conclusion") != "success":
+                raise VerificationError("latest aggregated promotion evidence failed")
+            if run_status == "completed" and run.get("conclusion") != "success":
+                raise VerificationError("latest aggregated promotion evidence failed")
+            if check_status != "completed" and check_status not in NONTERMINAL_RUN_STATUSES:
+                raise VerificationError(
+                    "aggregated promotion evidence status is invalid"
+                )
+            if run_status != "completed" and run_status not in NONTERMINAL_RUN_STATUSES:
+                raise VerificationError(
+                    "aggregated promotion evidence status is invalid"
+                )
+        if attempt < attempts:
+            sleep(10)
+    raise VerificationError("aggregated promotion evidence did not become successful")
+
+
+def validate_aggregated_promotion(
+    client: GitHubClient,
+    evidence: tuple[Mapping[str, Any], Mapping[str, Any], int],
+    pr: Mapping[str, Any],
+    pr_number: int,
+    event_base: str,
+    event_head: str,
+    server_url: str,
+) -> None:
+    """Validate the native aggregate, its producing run, and final job."""
+
+    check, run, job_id = evidence
+    check_id = check.get("id")
+    if not isinstance(check_id, int) or check_id <= 0 or check_id != job_id:
+        raise VerificationError("aggregated promotion check ID is invalid")
+    require_equal(check.get("name"), TARGET_VERIFIER_NAME, "promotion check name")
+    require_equal(check.get("head_sha"), event_head, "promotion check head")
+    require_equal(check.get("status"), "completed", "promotion check status")
+    require_equal(check.get("conclusion"), "success", "promotion check conclusion")
+    app = require_mapping(check.get("app"), "promotion check App")
+    require_equal(app.get("id"), 15368, "promotion check App ID")
+    require_equal(app.get("slug"), "github-actions", "promotion check App")
+
+    run_id = run.get("id")
+    if not isinstance(run_id, int) or run_id <= 0:
+        raise VerificationError("aggregated promotion run ID is invalid")
+    require_equal(
+        check.get("details_url"),
+        f"{server_url}/{TARGET_REPOSITORY}/actions/runs/{run_id}/job/{job_id}",
+        "promotion check details URL",
+    )
+    require_equal(run.get("event"), "pull_request_target", "promotion run event")
+    require_equal(run.get("path"), TARGET_VERIFIER_PATH, "promotion run path")
+    require_equal(run.get("status"), "completed", "promotion run status")
+    require_equal(run.get("conclusion"), "success", "promotion run conclusion")
+    require_equal(run.get("head_sha"), event_head, "promotion run head")
+    require_equal(run.get("head_branch"), "develop", "promotion run head branch")
+    require_equal(run.get("run_attempt"), 1, "promotion run attempt")
+    author = require_mapping(pr.get("user"), "pull request author").get("login")
+    require_equal(
+        require_mapping(run.get("actor"), "promotion actor").get("login"),
+        author,
+        "promotion actor",
+    )
+    require_equal(
+        require_mapping(
+            run.get("triggering_actor"), "promotion triggering actor"
+        ).get("login"),
+        author,
+        "promotion triggering actor",
+    )
+    allowed_titles = {
+        f"Protected current revision PR #{pr_number} {action} {event_head}"
+        for action in PRODUCER_ACTIONS
+    }
+    if run.get("display_title") not in allowed_titles:
+        raise VerificationError("promotion run title is not exactly bound")
+    require_equal(
+        run.get("html_url"),
+        f"{server_url}/{TARGET_REPOSITORY}/actions/runs/{run_id}",
+        "promotion run URL",
+    )
+    if not exact_promotion_run_association(run, pr_number, event_base, event_head):
+        raise VerificationError("promotion run association drifted")
+
+    workflow_id = run.get("workflow_id")
+    if not isinstance(workflow_id, int) or workflow_id <= 0:
+        raise VerificationError("promotion workflow ID is invalid")
+    workflow_paths = {
+        f"repos/{TARGET_REPOSITORY}/actions/workflows/{workflow_id}",
+        f"repos/{TARGET_REPOSITORY}/actions/required_workflows/{workflow_id}",
+    }
+    workflow_url = str(run.get("workflow_url", ""))
+    matching_workflow_paths = {
+        path
+        for path in workflow_paths
+        if workflow_url == f"{client.api_url}/{path}"
+    }
+    if len(matching_workflow_paths) != 1:
+        raise VerificationError("promotion workflow URL is not exactly bound")
+    workflow_path = matching_workflow_paths.pop()
+    workflow = require_mapping(
+        client.get(workflow_path),
+        "promotion workflow",
+    )
+    require_equal(workflow.get("id"), workflow_id, "promotion workflow ID")
+    require_equal(workflow.get("path"), TARGET_VERIFIER_PATH, "promotion workflow path")
+    require_equal(workflow.get("state"), "active", "promotion workflow state")
+
+    jobs_payload = require_mapping(
+        client.get(
+            f"repos/{TARGET_REPOSITORY}/actions/runs/{run_id}"
+            "/attempts/1/jobs?per_page=100"
+        ),
+        "promotion jobs",
+    )
+    jobs = require_list(jobs_payload.get("jobs"), "promotion jobs")
+    total_count = jobs_payload.get("total_count")
+    if not isinstance(total_count, int) or total_count != len(jobs) or total_count > 100:
+        raise VerificationError("promotion job inventory is incomplete")
+    final_jobs = [
+        require_mapping(job, "promotion job")
+        for job in jobs
+        if isinstance(job, dict) and job.get("id") == job_id
+    ]
+    if len(final_jobs) != 1:
+        raise VerificationError("promotion final job is missing or ambiguous")
+    final_job = final_jobs[0]
+    require_equal(final_job.get("name"), TARGET_VERIFIER_NAME, "promotion job name")
+    require_equal(final_job.get("head_sha"), event_head, "promotion job head")
+    require_equal(final_job.get("run_attempt"), 1, "promotion job attempt")
+    require_equal(final_job.get("status"), "completed", "promotion job status")
+    require_equal(final_job.get("conclusion"), "success", "promotion job conclusion")
+
+    # The repository-local producer emits this internal aggregate before its
+    # final required result. Binding both jobs prevents the final check from
+    # masking a skipped or failed promotion-evidence validation.
+    aggregate_jobs = [
+        require_mapping(job, "promotion aggregate job")
+        for job in jobs
+        if isinstance(job, dict) and job.get("name") == PROMOTION_VERIFIER_NAME
+    ]
+    if len(aggregate_jobs) != 1:
+        raise VerificationError("promotion aggregate job is missing or ambiguous")
+    aggregate_job = aggregate_jobs[0]
+    require_equal(aggregate_job.get("head_sha"), event_head, "aggregate job head")
+    require_equal(aggregate_job.get("run_attempt"), 1, "aggregate job attempt")
+    require_equal(aggregate_job.get("status"), "completed", "aggregate job status")
+    require_equal(
+        aggregate_job.get("conclusion"), "success", "aggregate job conclusion"
+    )
 
 
 def matching_reservations(
@@ -439,6 +735,46 @@ def verify(
 
     validate_source(client, workflow_ref, workflow_sha)
     pr = validate_live_pr(client, pr_number, event_base, event_head)
+    if is_aggregated_promotion(pr):
+        evidence = wait_for_aggregated_promotion(
+            client,
+            pr_number,
+            event_base,
+            event_head,
+            attempts=attempts,
+            sleep=sleep,
+        )
+        validate_aggregated_promotion(
+            client,
+            evidence,
+            pr,
+            pr_number,
+            event_base,
+            event_head,
+            server_url,
+        )
+        # Re-read every mutable binding and ensure the selected native result
+        # remains the newest exact evidence at the final mutation boundary.
+        validate_source(client, workflow_ref, workflow_sha)
+        final_pr = validate_live_pr(client, pr_number, event_base, event_head)
+        if not is_aggregated_promotion(final_pr):
+            raise VerificationError("protected promotion shape drifted")
+        final_matches = matching_aggregated_promotion_checks(
+            client, pr_number, event_base, event_head
+        )
+        if not final_matches or final_matches[-1] != evidence:
+            raise VerificationError("aggregated promotion evidence drifted after validation")
+        validate_aggregated_promotion(
+            client,
+            final_matches[-1],
+            final_pr,
+            pr_number,
+            event_base,
+            event_head,
+            server_url,
+        )
+        return
+
     check = wait_for_reservation(
         client,
         pr_number,
