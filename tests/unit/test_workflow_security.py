@@ -434,6 +434,14 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
 
     def test_current_revision_rerun_accepts_only_the_known_skipped_s0_topology(self) -> None:
         helper = (WORKFLOWS / "current-revision-rerun.yml").read_text(encoding="utf-8")
+        promotion_job = "Verify aggregated develop-to-main promotion evidence"
+        self.assertEqual(1, helper.count(f'.name == "{promotion_job}"'))
+        self.assertIn("synthetic_promotion_aggregate_jobs=$(jq -c", helper)
+        self.assertIn(
+            'test "$(jq \'length\' <<<"${synthetic_promotion_aggregate_jobs}")" -le 1',
+            helper,
+        )
+        self.assertIn("($promotion | length)", helper)
         for job_name in (
             "Reserve protected S0 feature-to-main verification",
             "Verify protected S0 feature-to-main input",
@@ -470,6 +478,16 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             result = subprocess.run(  # noqa: S603
                 [jq, "-e", uniqueness],
                 input=json.dumps([{"name": name} for name in names]),
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(expected, result.returncode, result.stderr)
+
+        for count, expected in ((0, 0), (1, 0), (2, 1)):
+            result = subprocess.run(  # noqa: S603
+                [jq, "-e", "length <= 1"],
+                input=json.dumps([{"name": promotion_job}] * count),
                 check=False,
                 capture_output=True,
                 text=True,
