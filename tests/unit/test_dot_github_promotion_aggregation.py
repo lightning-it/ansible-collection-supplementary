@@ -168,6 +168,66 @@ class PromotionShapeTests(unittest.TestCase):
         ):
             MODULE.validate_aggregated_promotion_shape(malformed)
 
+    def test_verify_rejects_malformed_promotion_before_reservation_lookup(self) -> None:
+        workflow_sha = "c" * 40
+        malformed = promotion_pr()
+        malformed["title"] = "chore(release): altered title"
+        client = MappingClient(
+            {
+                f"repos/{MODULE.SOURCE_REPOSITORY}": {
+                    "full_name": MODULE.SOURCE_REPOSITORY,
+                    "visibility": "public",
+                    "archived": False,
+                    "disabled": False,
+                },
+                f"repos/{MODULE.SOURCE_REPOSITORY}/branches/main": {
+                    "name": "main",
+                    "protected": True,
+                    "commit": {"sha": workflow_sha},
+                },
+                f"repos/{MODULE.SOURCE_REPOSITORY}/compare/{workflow_sha}...{workflow_sha}": {
+                    "base_commit": {"sha": workflow_sha},
+                    "merge_base_commit": {"sha": workflow_sha},
+                    "status": "identical",
+                    "ahead_by": 0,
+                    "behind_by": 0,
+                },
+                (f"repos/{MODULE.SOURCE_REPOSITORY}/contents/{MODULE.SOURCE_WORKFLOW_PATH}?ref={workflow_sha}"): {
+                    "type": "file",
+                    "sha": "d" * 40,
+                },
+                (
+                    f"repos/{MODULE.SOURCE_REPOSITORY}/contents/"
+                    f"scripts/verify-dot-github-current-revision.py?ref={workflow_sha}"
+                ): {"type": "file", "sha": "e" * 40},
+                f"repos/{MODULE.TARGET_REPOSITORY}": {
+                    "full_name": MODULE.TARGET_REPOSITORY,
+                    "default_branch": "develop",
+                    "archived": False,
+                    "disabled": False,
+                },
+                f"repos/{MODULE.TARGET_REPOSITORY}/pulls/{PR_NUMBER}": malformed,
+            }
+        )
+        environment = {
+            "REPOSITORY": MODULE.TARGET_REPOSITORY,
+            "EVENT_ACTION": "opened",
+            "EVENT_BASE": BASE,
+            "EVENT_HEAD": HEAD,
+            "PR_NUMBER": str(PR_NUMBER),
+            "GITHUB_SERVER_URL": "https://github.com",
+            "WORKFLOW_REF": MODULE.SOURCE_WORKFLOW_REF,
+            "WORKFLOW_SHA": workflow_sha,
+        }
+
+        with self.assertRaisesRegex(
+            MODULE.VerificationError,
+            "promotion pull request title is not exactly bound",
+        ):
+            MODULE.verify(client, environment, attempts=1, sleep=lambda _: None)
+
+        self.assertFalse(any("/check-runs" in path for path in client.paths))
+
     def test_requires_one_exact_pull_request_association(self) -> None:
         run = promotion_run()
         self.assertTrue(MODULE.exact_promotion_run_association(run, PR_NUMBER, BASE, HEAD))
