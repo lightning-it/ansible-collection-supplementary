@@ -117,6 +117,25 @@ class MappingClient:
         return deepcopy(self.payloads[path])
 
 
+class SequencedPromotionClient:
+    """Keep the check stable while its exact producing run converges."""
+
+    api_url = "https://api.github.com"
+
+    def __init__(self, check: dict[str, Any], runs: list[dict[str, Any]]) -> None:
+        self.check = check
+        self.runs = runs
+
+    def get(self, path: str) -> Any:
+        if path.endswith("&filter=all&per_page=100"):
+            return {"total_count": 1, "check_runs": [deepcopy(self.check)]}
+        if "/actions/runs/" in path:
+            if len(self.runs) > 1:
+                return deepcopy(self.runs.pop(0))
+            return deepcopy(self.runs[0])
+        raise AssertionError(f"unexpected path: {path}")
+
+
 class PromotionShapeTests(unittest.TestCase):
     def test_recognizes_only_the_release_app_develop_to_main_shape(self) -> None:
         self.assertTrue(MODULE.is_aggregated_promotion(promotion_pr()))
@@ -200,6 +219,29 @@ class PromotionSelectionTests(unittest.TestCase):
                 attempts=1,
                 sleep=lambda _: None,
             )
+
+    def test_waits_when_the_successful_check_precedes_run_completion(self) -> None:
+        check = promotion_check()
+        client = SequencedPromotionClient(
+            check,
+            [
+                promotion_run(status="in_progress", conclusion=""),
+                promotion_run(),
+            ],
+        )
+        sleeps: list[float] = []
+
+        result = MODULE.wait_for_aggregated_promotion(
+            client,
+            PR_NUMBER,
+            BASE,
+            HEAD,
+            attempts=2,
+            sleep=sleeps.append,
+        )
+
+        self.assertEqual(JOB_ID, result[0]["id"])
+        self.assertEqual([10], sleeps)
 
     def test_ignores_a_successful_run_associated_with_another_pr(self) -> None:
         check = promotion_check()
