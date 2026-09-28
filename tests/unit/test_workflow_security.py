@@ -524,7 +524,12 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             )
             self.assertEqual(expected_length, len(json.loads(result.stdout)))
 
-        topology_guard = "length <= 2 and length == (map(.name) | unique | length)"
+        topology_guard_match = re.search(
+            r"jq -e '([^']+)' <<<\"\$\{synthetic_promotion_topology_jobs\}\" >/dev/null",
+            helper,
+        )
+        self.assertIsNotNone(topology_guard_match)
+        topology_guard = topology_guard_match.group(1)  # type: ignore[union-attr]
         for names, expected in (
             ([], 0),
             ([promotion_jobs[0]], 0),
