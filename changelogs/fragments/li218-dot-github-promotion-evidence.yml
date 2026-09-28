@@ -1,0 +1,8 @@
+---
+bugfixes:
+  - >-
+    Accept the newest successful, exact native develop-to-main promotion
+    aggregate for the protected .github cross-repository gate while retaining
+    the legacy reservation contract for every non-promotion pull request. Classify
+    Release-App promotion identity before validating mutable title metadata so
+    malformed promotion-shaped requests fail closed instead of falling back.
