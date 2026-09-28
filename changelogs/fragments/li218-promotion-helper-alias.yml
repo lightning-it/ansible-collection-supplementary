@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Accept the bounded LI-218 promotion-helper migration alias in the protected
+    .github cross-repository verifier while retaining exact-one aggregate-job
+    enforcement.
