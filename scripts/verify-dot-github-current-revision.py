@@ -361,14 +361,22 @@ def wait_for_aggregated_promotion(
                     check.get("conclusion") != "success"
                     or run.get("conclusion") != "success"
                 ):
+                    if attempt == attempts:
+                        raise VerificationError(
+                            "latest aggregated promotion evidence failed"
+                        )
+                else:
+                    return evidence
+            elif check_status == "completed" and check.get("conclusion") != "success":
+                if attempt == attempts:
                     raise VerificationError(
                         "latest aggregated promotion evidence failed"
                     )
-                return evidence
-            if check_status == "completed" and check.get("conclusion") != "success":
-                raise VerificationError("latest aggregated promotion evidence failed")
-            if run_status == "completed" and run.get("conclusion") != "success":
-                raise VerificationError("latest aggregated promotion evidence failed")
+            elif run_status == "completed" and run.get("conclusion") != "success":
+                if attempt == attempts:
+                    raise VerificationError(
+                        "latest aggregated promotion evidence failed"
+                    )
             if check_status != "completed" and check_status not in NONTERMINAL_RUN_STATUSES:
                 raise VerificationError(
                     "aggregated promotion evidence status is invalid"
