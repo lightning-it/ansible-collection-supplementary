@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Recognize the exact skipped canonical promotion-aggregate job in the bounded current-revision
+    re-evaluator topology while rejecting duplicates and unknown synthetic jobs.
