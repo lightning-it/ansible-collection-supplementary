@@ -516,7 +516,9 @@ def validate_aggregated_promotion(
     aggregate_jobs = [
         require_mapping(job, "promotion aggregate job")
         for job in jobs
-        if isinstance(job, dict) and job.get("name") in PROMOTION_VERIFIER_NAMES
+        if isinstance(job, dict)
+        and isinstance(job.get("name"), str)
+        and job.get("name") in PROMOTION_VERIFIER_NAMES
     ]
     if len(aggregate_jobs) != 1:
         raise VerificationError("promotion aggregate job is missing or ambiguous")

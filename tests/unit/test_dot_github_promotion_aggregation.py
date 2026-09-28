@@ -517,7 +517,7 @@ class PromotionValidationTests(unittest.TestCase):
         self,
         *,
         include_aggregate: bool = True,
-        aggregate_name: str = MODULE.PROMOTION_VERIFIER_NAME,
+        aggregate_name: object = MODULE.PROMOTION_VERIFIER_NAME,
         additional_aggregate_name: str | None = None,
         required_workflow: bool = False,
     ) -> MappingClient:
@@ -616,6 +616,21 @@ class PromotionValidationTests(unittest.TestCase):
                 self.client(
                     additional_aggregate_name=(MODULE.PROMOTION_VERIFIER_MIGRATION_ALIAS),
                 ),
+                (promotion_check(), promotion_run(), JOB_ID),
+                promotion_pr(),
+                PR_NUMBER,
+                BASE,
+                HEAD,
+                "https://github.com",
+            )
+
+    def test_rejects_a_non_string_aggregate_name_as_missing(self) -> None:
+        with self.assertRaisesRegex(
+            MODULE.VerificationError,
+            "promotion aggregate job is missing or ambiguous",
+        ):
+            MODULE.validate_aggregated_promotion(
+                self.client(aggregate_name=[MODULE.PROMOTION_VERIFIER_NAME]),
                 (promotion_check(), promotion_run(), JOB_ID),
                 promotion_pr(),
                 PR_NUMBER,
