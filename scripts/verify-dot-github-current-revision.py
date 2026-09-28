@@ -24,6 +24,12 @@ TARGET_VERIFIER_PATH = (
 )
 TARGET_VERIFIER_NAME = "Required current-revision workflow"
 PROMOTION_VERIFIER_NAME = "Verify aggregated develop-to-main promotion evidence"
+PROMOTION_VERIFIER_MIGRATION_ALIAS = (
+    "Authorize exact Supplementary catch-up v5 successor"
+)
+PROMOTION_VERIFIER_NAMES = frozenset(
+    {PROMOTION_VERIFIER_NAME, PROMOTION_VERIFIER_MIGRATION_ALIAS}
+)
 RESERVATION_NAME = "Protected current-revision verifier"
 RELEASE_APP_LOGIN = "lightning-it-release-automation[bot]"
 RELEASE_APP_ID = 307565056
@@ -510,7 +516,7 @@ def validate_aggregated_promotion(
     aggregate_jobs = [
         require_mapping(job, "promotion aggregate job")
         for job in jobs
-        if isinstance(job, dict) and job.get("name") == PROMOTION_VERIFIER_NAME
+        if isinstance(job, dict) and job.get("name") in PROMOTION_VERIFIER_NAMES
     ]
     if len(aggregate_jobs) != 1:
         raise VerificationError("promotion aggregate job is missing or ambiguous")

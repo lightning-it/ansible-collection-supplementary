@@ -517,6 +517,8 @@ class PromotionValidationTests(unittest.TestCase):
         self,
         *,
         include_aggregate: bool = True,
+        aggregate_name: str = MODULE.PROMOTION_VERIFIER_NAME,
+        additional_aggregate_name: str | None = None,
         required_workflow: bool = False,
     ) -> MappingClient:
         jobs = [
@@ -533,7 +535,18 @@ class PromotionValidationTests(unittest.TestCase):
             jobs.append(
                 {
                     "id": JOB_ID - 1,
-                    "name": MODULE.PROMOTION_VERIFIER_NAME,
+                    "name": aggregate_name,
+                    "head_sha": HEAD,
+                    "run_attempt": 1,
+                    "status": "completed",
+                    "conclusion": "success",
+                }
+            )
+        if additional_aggregate_name is not None:
+            jobs.append(
+                {
+                    "id": JOB_ID - 2,
+                    "name": additional_aggregate_name,
                     "head_sha": HEAD,
                     "run_attempt": 1,
                     "status": "completed",
@@ -580,6 +593,36 @@ class PromotionValidationTests(unittest.TestCase):
             HEAD,
             "https://github.com",
         )
+
+    def test_accepts_the_bounded_migration_alias(self) -> None:
+        MODULE.validate_aggregated_promotion(
+            self.client(
+                aggregate_name=MODULE.PROMOTION_VERIFIER_MIGRATION_ALIAS,
+            ),
+            (promotion_check(), promotion_run(), JOB_ID),
+            promotion_pr(),
+            PR_NUMBER,
+            BASE,
+            HEAD,
+            "https://github.com",
+        )
+
+    def test_rejects_canonical_name_and_migration_alias_together(self) -> None:
+        with self.assertRaisesRegex(
+            MODULE.VerificationError,
+            "promotion aggregate job is missing or ambiguous",
+        ):
+            MODULE.validate_aggregated_promotion(
+                self.client(
+                    additional_aggregate_name=(MODULE.PROMOTION_VERIFIER_MIGRATION_ALIAS),
+                ),
+                (promotion_check(), promotion_run(), JOB_ID),
+                promotion_pr(),
+                PR_NUMBER,
+                BASE,
+                HEAD,
+                "https://github.com",
+            )
 
     def test_rejects_a_drifted_complete_evidence_tuple(self) -> None:
         original = (promotion_check(), promotion_run(), JOB_ID)
