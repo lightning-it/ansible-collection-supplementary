@@ -112,6 +112,60 @@ def promotion_check(
     }
 
 
+def verification_environment(workflow_sha: str) -> dict[str, str]:
+    return {
+        "REPOSITORY": MODULE.TARGET_REPOSITORY,
+        "EVENT_ACTION": "opened",
+        "EVENT_BASE": BASE,
+        "EVENT_HEAD": HEAD,
+        "PR_NUMBER": str(PR_NUMBER),
+        "GITHUB_SERVER_URL": "https://github.com",
+        "WORKFLOW_REF": MODULE.SOURCE_WORKFLOW_REF,
+        "WORKFLOW_SHA": workflow_sha,
+    }
+
+
+def base_verification_payloads(
+    workflow_sha: str,
+    live_pr: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        f"repos/{MODULE.SOURCE_REPOSITORY}": {
+            "full_name": MODULE.SOURCE_REPOSITORY,
+            "visibility": "public",
+            "archived": False,
+            "disabled": False,
+        },
+        f"repos/{MODULE.SOURCE_REPOSITORY}/branches/main": {
+            "name": "main",
+            "protected": True,
+            "commit": {"sha": workflow_sha},
+        },
+        f"repos/{MODULE.SOURCE_REPOSITORY}/compare/{workflow_sha}...{workflow_sha}": {
+            "base_commit": {"sha": workflow_sha},
+            "merge_base_commit": {"sha": workflow_sha},
+            "status": "identical",
+            "ahead_by": 0,
+            "behind_by": 0,
+        },
+        (f"repos/{MODULE.SOURCE_REPOSITORY}/contents/{MODULE.SOURCE_WORKFLOW_PATH}?ref={workflow_sha}"): {
+            "type": "file",
+            "sha": "d" * 40,
+        },
+        (
+            f"repos/{MODULE.SOURCE_REPOSITORY}/contents/"
+            f"scripts/verify-dot-github-current-revision.py?ref={workflow_sha}"
+        ): {"type": "file", "sha": "e" * 40},
+        f"repos/{MODULE.TARGET_REPOSITORY}": {
+            "full_name": MODULE.TARGET_REPOSITORY,
+            "default_branch": "develop",
+            "archived": False,
+            "disabled": False,
+        },
+        f"repos/{MODULE.TARGET_REPOSITORY}/pulls/{PR_NUMBER}": live_pr,
+    }
+
+
 class MappingClient:
     """Serve immutable REST fixtures by exact path."""
 
@@ -124,6 +178,23 @@ class MappingClient:
     def get(self, path: str) -> Any:
         self.paths.append(path)
         return deepcopy(self.payloads[path])
+
+
+class SequencedLivePrClient(MappingClient):
+    """Return mutable live-PR snapshots while keeping every other fixture fixed."""
+
+    def __init__(self, payloads: dict[str, Any], live_prs: list[dict[str, Any]]) -> None:
+        super().__init__(payloads)
+        self.live_prs = live_prs
+
+    def get(self, path: str) -> Any:
+        pr_path = f"repos/{MODULE.TARGET_REPOSITORY}/pulls/{PR_NUMBER}"
+        if path == pr_path:
+            self.paths.append(path)
+            if len(self.live_prs) > 1:
+                return deepcopy(self.live_prs.pop(0))
+            return deepcopy(self.live_prs[0])
+        return super().get(path)
 
 
 class SequencedPromotionClient:
@@ -146,7 +217,7 @@ class SequencedPromotionClient:
 
 
 class PromotionShapeTests(unittest.TestCase):
-    def test_recognizes_only_the_release_app_develop_to_main_shape(self) -> None:
+    def test_classifies_only_the_release_app_develop_to_main_identity(self) -> None:
         self.assertTrue(MODULE.is_aggregated_promotion(promotion_pr()))
 
         wrong_author = promotion_pr()
@@ -156,6 +227,96 @@ class PromotionShapeTests(unittest.TestCase):
         wrong_head = promotion_pr()
         wrong_head["head"]["ref"] = "feature"
         self.assertFalse(MODULE.is_aggregated_promotion(wrong_head))
+
+    def test_rejects_a_malformed_promotion_title_without_legacy_fallback(self) -> None:
+        malformed = promotion_pr()
+        malformed["title"] = "chore(release): altered title"
+
+        self.assertTrue(MODULE.is_aggregated_promotion(malformed))
+        with self.assertRaisesRegex(
+            MODULE.VerificationError,
+            "promotion pull request title is not exactly bound",
+        ):
+            MODULE.validate_aggregated_promotion_shape(malformed)
+
+    def test_verify_rejects_malformed_promotion_before_reservation_lookup(self) -> None:
+        workflow_sha = "c" * 40
+        malformed = promotion_pr()
+        malformed["title"] = "chore(release): altered title"
+        client = MappingClient(base_verification_payloads(workflow_sha, malformed))
+
+        with self.assertRaisesRegex(
+            MODULE.VerificationError,
+            "promotion pull request title is not exactly bound",
+        ):
+            MODULE.verify(
+                client,
+                verification_environment(workflow_sha),
+                attempts=1,
+                sleep=lambda _: None,
+            )
+
+        self.assertFalse(any("/check-runs" in path for path in client.paths))
+
+    def test_verify_rejects_promotion_title_drift_at_final_reread(self) -> None:
+        workflow_sha = "c" * 40
+        drifted = promotion_pr()
+        drifted["title"] = "chore(release): altered title"
+        payloads = base_verification_payloads(workflow_sha, promotion_pr())
+        del payloads[f"repos/{MODULE.TARGET_REPOSITORY}/pulls/{PR_NUMBER}"]
+        payloads.update(
+            {
+                (
+                    f"repos/{MODULE.TARGET_REPOSITORY}/commits/{HEAD}/check-runs"
+                    f"?check_name=Required%20current-revision%20workflow"
+                    "&filter=all&per_page=100"
+                ): {"total_count": 1, "check_runs": [promotion_check()]},
+                f"repos/{MODULE.TARGET_REPOSITORY}/actions/runs/{RUN_ID}": promotion_run(),
+                f"repos/{MODULE.TARGET_REPOSITORY}/actions/workflows/{WORKFLOW_ID}": {
+                    "id": WORKFLOW_ID,
+                    "path": MODULE.TARGET_VERIFIER_PATH,
+                    "state": "active",
+                },
+                (f"repos/{MODULE.TARGET_REPOSITORY}/actions/runs/{RUN_ID}/attempts/1/jobs?per_page=100"): {
+                    "total_count": 2,
+                    "jobs": [
+                        {
+                            "id": JOB_ID,
+                            "name": MODULE.TARGET_VERIFIER_NAME,
+                            "head_sha": HEAD,
+                            "run_attempt": 1,
+                            "status": "completed",
+                            "conclusion": "success",
+                        },
+                        {
+                            "id": JOB_ID - 1,
+                            "name": MODULE.PROMOTION_VERIFIER_NAME,
+                            "head_sha": HEAD,
+                            "run_attempt": 1,
+                            "status": "completed",
+                            "conclusion": "success",
+                        },
+                    ],
+                },
+            }
+        )
+        client = SequencedLivePrClient(payloads, [promotion_pr(), drifted])
+
+        with self.assertRaisesRegex(
+            MODULE.VerificationError,
+            "promotion pull request title is not exactly bound",
+        ):
+            MODULE.verify(
+                client,
+                verification_environment(workflow_sha),
+                attempts=1,
+                sleep=lambda _: None,
+            )
+
+        self.assertEqual(
+            2,
+            client.paths.count(f"repos/{MODULE.TARGET_REPOSITORY}/pulls/{PR_NUMBER}"),
+        )
 
     def test_requires_one_exact_pull_request_association(self) -> None:
         run = promotion_run()

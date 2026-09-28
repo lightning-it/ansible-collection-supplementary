@@ -223,7 +223,7 @@ def validate_live_pr(
 
 
 def is_aggregated_promotion(pr: Mapping[str, Any]) -> bool:
-    """Return whether the live PR is the exact protected promotion shape."""
+    """Return whether immutable identity places the PR in promotion scope."""
 
     base = require_mapping(pr.get("base"), "pull request base")
     head = require_mapping(pr.get("head"), "pull request head")
@@ -234,8 +234,13 @@ def is_aggregated_promotion(pr: Mapping[str, Any]) -> bool:
         and author.get("login") == RELEASE_APP_LOGIN
         and author.get("id") == RELEASE_APP_ID
         and author.get("type") == "Bot"
-        and pr.get("title") == PROMOTION_TITLE
     )
+
+
+def validate_aggregated_promotion_shape(pr: Mapping[str, Any]) -> None:
+    """Fail closed when a promotion-scoped PR has mutable-shape drift."""
+
+    require_equal(pr.get("title"), PROMOTION_TITLE, "promotion pull request title")
 
 
 def exact_promotion_run_association(
@@ -736,6 +741,7 @@ def verify(
     validate_source(client, workflow_ref, workflow_sha)
     pr = validate_live_pr(client, pr_number, event_base, event_head)
     if is_aggregated_promotion(pr):
+        validate_aggregated_promotion_shape(pr)
         evidence = wait_for_aggregated_promotion(
             client,
             pr_number,
@@ -759,6 +765,7 @@ def verify(
         final_pr = validate_live_pr(client, pr_number, event_base, event_head)
         if not is_aggregated_promotion(final_pr):
             raise VerificationError("protected promotion shape drifted")
+        validate_aggregated_promotion_shape(final_pr)
         final_matches = matching_aggregated_promotion_checks(
             client, pr_number, event_base, event_head
         )
