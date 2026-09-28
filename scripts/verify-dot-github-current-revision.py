@@ -315,10 +315,6 @@ def matching_aggregated_promotion_checks(
             client.get(f"repos/{TARGET_REPOSITORY}/actions/runs/{run_id}"),
             "aggregated promotion run",
         )
-        if not exact_promotion_run_association(
-            run, pr_number, event_base, event_head
-        ):
-            continue
         if run_id in seen_runs:
             raise VerificationError("aggregated promotion evidence is ambiguous")
         seen_runs.add(run_id)
@@ -345,6 +341,12 @@ def wait_for_aggregated_promotion(
         if matches:
             evidence = matches[-1]
             check, run, _job_id = evidence
+            if not exact_promotion_run_association(
+                run, pr_number, event_base, event_head
+            ):
+                raise VerificationError(
+                    "latest aggregated promotion association is not exactly bound"
+                )
             check_status = check.get("status")
             run_status = run.get("status")
             if check_status == "completed" and run_status == "completed":
@@ -441,13 +443,21 @@ def validate_aggregated_promotion(
     workflow_id = run.get("workflow_id")
     if not isinstance(workflow_id, int) or workflow_id <= 0:
         raise VerificationError("promotion workflow ID is invalid")
-    require_equal(
-        run.get("workflow_url"),
-        f"{client.api_url}/repos/{TARGET_REPOSITORY}/actions/workflows/{workflow_id}",
-        "promotion workflow URL",
-    )
+    workflow_paths = {
+        f"repos/{TARGET_REPOSITORY}/actions/workflows/{workflow_id}",
+        f"repos/{TARGET_REPOSITORY}/actions/required_workflows/{workflow_id}",
+    }
+    workflow_url = str(run.get("workflow_url", ""))
+    matching_workflow_paths = {
+        path
+        for path in workflow_paths
+        if workflow_url == f"{client.api_url}/{path}"
+    }
+    if len(matching_workflow_paths) != 1:
+        raise VerificationError("promotion workflow URL is not exactly bound")
+    workflow_path = matching_workflow_paths.pop()
     workflow = require_mapping(
-        client.get(f"repos/{TARGET_REPOSITORY}/actions/workflows/{workflow_id}"),
+        client.get(workflow_path),
         "promotion workflow",
     )
     require_equal(workflow.get("id"), workflow_id, "promotion workflow ID")
@@ -479,6 +489,9 @@ def validate_aggregated_promotion(
     require_equal(final_job.get("status"), "completed", "promotion job status")
     require_equal(final_job.get("conclusion"), "success", "promotion job conclusion")
 
+    # The repository-local producer emits this internal aggregate before its
+    # final required result. Binding both jobs prevents the final check from
+    # masking a skipped or failed promotion-evidence validation.
     aggregate_jobs = [
         require_mapping(job, "promotion aggregate job")
         for job in jobs
@@ -747,8 +760,17 @@ def verify(
         final_matches = matching_aggregated_promotion_checks(
             client, pr_number, event_base, event_head
         )
-        if not final_matches or final_matches[-1][0].get("id") != evidence[0].get("id"):
+        if not final_matches or final_matches[-1] != evidence:
             raise VerificationError("aggregated promotion evidence drifted after validation")
+        validate_aggregated_promotion(
+            client,
+            final_matches[-1],
+            final_pr,
+            pr_number,
+            event_base,
+            event_head,
+            server_url,
+        )
         return
 
     check = wait_for_reservation(

@@ -64,7 +64,14 @@ def association() -> dict[str, Any]:
     }
 
 
-def promotion_run(*, run_id: int = RUN_ID, status: str = "completed", conclusion: str = "success") -> dict[str, Any]:
+def promotion_run(
+    *,
+    run_id: int = RUN_ID,
+    status: str = "completed",
+    conclusion: str = "success",
+    required_workflow: bool = False,
+) -> dict[str, Any]:
+    workflow_kind = "required_workflows" if required_workflow else "workflows"
     return {
         "id": run_id,
         "event": "pull_request_target",
@@ -79,7 +86,9 @@ def promotion_run(*, run_id: int = RUN_ID, status: str = "completed", conclusion
         "display_title": f"Protected current revision PR #{PR_NUMBER} edited {HEAD}",
         "html_url": f"https://github.com/{MODULE.TARGET_REPOSITORY}/actions/runs/{run_id}",
         "workflow_id": WORKFLOW_ID,
-        "workflow_url": (f"https://api.github.com/repos/{MODULE.TARGET_REPOSITORY}/actions/workflows/{WORKFLOW_ID}"),
+        "workflow_url": (
+            f"https://api.github.com/repos/{MODULE.TARGET_REPOSITORY}/actions/{workflow_kind}/{WORKFLOW_ID}"
+        ),
         "pull_requests": [association()],
     }
 
@@ -243,15 +252,19 @@ class PromotionSelectionTests(unittest.TestCase):
         self.assertEqual(JOB_ID, result[0]["id"])
         self.assertEqual([10], sleeps)
 
-    def test_ignores_a_successful_run_associated_with_another_pr(self) -> None:
-        check = promotion_check()
-        run = promotion_run()
-        run["pull_requests"][0]["number"] = PR_NUMBER + 1
-        client = self.client_for((check, run))
+    def test_rejects_newer_mismatched_association_instead_of_reusing_success(self) -> None:
+        older_check = promotion_check(run_id=100, job_id=200)
+        newer_check = promotion_check(run_id=101, job_id=201)
+        newer_run = promotion_run(run_id=101)
+        newer_run["pull_requests"][0]["number"] = PR_NUMBER + 1
+        client = self.client_for(
+            (older_check, promotion_run(run_id=100)),
+            (newer_check, newer_run),
+        )
 
         with self.assertRaisesRegex(
             MODULE.VerificationError,
-            "aggregated promotion evidence did not become successful",
+            "latest aggregated promotion association is not exactly bound",
         ):
             MODULE.wait_for_aggregated_promotion(
                 client,
@@ -264,7 +277,12 @@ class PromotionSelectionTests(unittest.TestCase):
 
 
 class PromotionValidationTests(unittest.TestCase):
-    def client(self, *, include_aggregate: bool = True) -> MappingClient:
+    def client(
+        self,
+        *,
+        include_aggregate: bool = True,
+        required_workflow: bool = False,
+    ) -> MappingClient:
         jobs = [
             {
                 "id": JOB_ID,
@@ -286,9 +304,10 @@ class PromotionValidationTests(unittest.TestCase):
                     "conclusion": "success",
                 }
             )
+        workflow_kind = "required_workflows" if required_workflow else "workflows"
         return MappingClient(
             {
-                f"repos/{MODULE.TARGET_REPOSITORY}/actions/workflows/{WORKFLOW_ID}": {
+                f"repos/{MODULE.TARGET_REPOSITORY}/actions/{workflow_kind}/{WORKFLOW_ID}": {
                     "id": WORKFLOW_ID,
                     "path": MODULE.TARGET_VERIFIER_PATH,
                     "state": "active",
@@ -310,6 +329,42 @@ class PromotionValidationTests(unittest.TestCase):
             HEAD,
             "https://github.com",
         )
+
+    def test_accepts_the_exact_required_workflow_endpoint(self) -> None:
+        MODULE.validate_aggregated_promotion(
+            self.client(required_workflow=True),
+            (
+                promotion_check(),
+                promotion_run(required_workflow=True),
+                JOB_ID,
+            ),
+            promotion_pr(),
+            PR_NUMBER,
+            BASE,
+            HEAD,
+            "https://github.com",
+        )
+
+    def test_rejects_a_drifted_complete_evidence_tuple(self) -> None:
+        original = (promotion_check(), promotion_run(), JOB_ID)
+        drifted_check = promotion_check()
+        drifted_check["conclusion"] = "failure"
+        drifted = (drifted_check, promotion_run(), JOB_ID)
+
+        self.assertNotEqual(original, drifted)
+        with self.assertRaisesRegex(
+            MODULE.VerificationError,
+            "promotion check conclusion is not exactly bound",
+        ):
+            MODULE.validate_aggregated_promotion(
+                self.client(),
+                drifted,
+                promotion_pr(),
+                PR_NUMBER,
+                BASE,
+                HEAD,
+                "https://github.com",
+            )
 
     def test_rejects_success_without_the_aggregate_job(self) -> None:
         with self.assertRaisesRegex(
