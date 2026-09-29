@@ -142,6 +142,8 @@ class TrustRootBaseVerifierTests(unittest.TestCase):
         self.assertIn("http.proxy=", command)
         self.assertIn("https.proxy=", command)
         self.assertIn("core.hooksPath=/dev/null", command)
+        self.assertIn(f"safe.directory={VERIFIER.ROOT}", command)
+        self.assertNotIn("safe.directory=*", command)
         self.assertIn(VERIFIER.PUBLIC_ORIGIN, command)
         self.assertEqual(
             {

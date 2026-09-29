@@ -263,6 +263,7 @@ def refresh_public_base() -> None:
             "--no-tags",
             PUBLIC_ORIGIN,
             "refs/heads/develop:refs/remotes/origin/develop",
+            safe_directory=ROOT,
         ),
         cwd=ROOT,
         env=isolated_git_environment(),
