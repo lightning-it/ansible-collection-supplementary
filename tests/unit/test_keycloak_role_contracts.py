@@ -272,6 +272,10 @@ class KeycloakRoleContractTests(unittest.TestCase):
         )
         self.assertIn("KC_PROXY_TRUSTED_ADDRESSES", template)
         self.assertIn("keycloak_deploy_proxy_trusted_addresses | join(',')", template)
+        assertions = (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
+        self.assertIn("keycloak_deploy_postgres_container_port | int <= 65535", assertions)
+        for key in ("KC_(DB|PROXY|HEALTH|HOSTNAME|HTTP)", "KEYCLOAK_ADMIN"):
+            self.assertIn(key, assertions)
 
         nginx_defaults = self._role_defaults("nginx_config")
         self.assertEqual(

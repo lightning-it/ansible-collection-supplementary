@@ -27,6 +27,7 @@
       - keycloak_deploy_db_port | int > 0
       - keycloak_deploy_postgres_port | int > 0
       - keycloak_deploy_postgres_container_port | int > 0
+      - keycloak_deploy_postgres_container_port | int <= 65535
       - keycloak_deploy_db_wait_port | int > 0
       - keycloak_deploy_postgres_wait_timeout | int > 0
       - keycloak_deploy_postgres_wait_delay | int >= 0
@@ -126,6 +127,10 @@
       - keycloak_deploy_generated_db_password_length | int >= 16
       - keycloak_deploy_generated_admin_password_length | int >= 16
       - keycloak_deploy_env_extra is mapping
+      - >-
+        keycloak_deploy_env_extra.keys()
+        | select('match', '^(KC_(DB|PROXY|HEALTH|HOSTNAME|HTTP)|KEYCLOAK_ADMIN)')
+        | list | length == 0
     fail_msg: "Keycloak deploy variables are missing or invalid."
   tags: always
 

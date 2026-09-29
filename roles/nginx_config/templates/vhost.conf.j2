@@ -59,7 +59,7 @@ server {
 {% if nginx_config_waf_enabled | bool %}
 {% for directive in nginx_config_waf_location_directives %}
 {% set _directive = directive | trim %}
-{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') %}
+{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') and not (_directive | lower).startswith('include') %}
 {% if _single_statement %}
     {{ _directive }}{{ '' if _directive.endswith(';') else ';' }}
 {% endif %}
@@ -67,7 +67,7 @@ server {
 {% endif %}
 {% for directive in location.directives | default([]) %}
 {% set _directive = directive | trim %}
-{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') %}
+{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') and not (_directive | lower).startswith('include') %}
 {% set _directive_tokens = _directive.split() %}
 {% set _reserved_proxy_header = (
   _directive_tokens | length >= 2
@@ -95,7 +95,7 @@ server {
 {% if nginx_config_waf_enabled | bool %}
 {% for directive in nginx_config_waf_location_directives %}
 {% set _directive = directive | trim %}
-{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') %}
+{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') and not (_directive | lower).startswith('include') %}
 {% if _single_statement %}
     {{ _directive }}{{ '' if _directive.endswith(';') else ';' }}
 {% endif %}
@@ -103,7 +103,7 @@ server {
 {% endif %}
 {% for directive in item.proxy_directives | default(nginx_config_proxy_default_directives) %}
 {% set _directive = directive | trim %}
-{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') %}
+{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') and not (_directive | lower).startswith('include') %}
 {% set _directive_tokens = _directive.split() %}
 {% set _reserved_proxy_header = (
   _directive_tokens | length >= 2
@@ -164,7 +164,7 @@ server {
 {% if nginx_config_waf_enabled | bool %}
 {% for directive in nginx_config_waf_location_directives %}
 {% set _directive = directive | trim %}
-{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') %}
+{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') and not (_directive | lower).startswith('include') %}
 {% if _single_statement %}
     {{ _directive }}{{ '' if _directive.endswith(';') else ';' }}
 {% endif %}
@@ -172,7 +172,7 @@ server {
 {% endif %}
 {% for directive in location.directives | default([]) %}
 {% set _directive = directive | trim %}
-{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') %}
+{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') and not (_directive | lower).startswith('include') %}
 {% set _directive_tokens = _directive.split() %}
 {% set _reserved_proxy_header = (
   _directive_tokens | length >= 2
@@ -199,7 +199,7 @@ server {
   location / {
 {% for directive in item.proxy_directives | default([]) %}
 {% set _directive = directive | trim %}
-{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') %}
+{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') and not (_directive | lower).startswith('include') %}
 {% set _directive_tokens = _directive.split() %}
 {% set _reserved_proxy_header = (
   _directive_tokens | length >= 2

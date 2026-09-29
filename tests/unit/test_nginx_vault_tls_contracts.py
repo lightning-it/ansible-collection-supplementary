@@ -101,6 +101,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                             "proxy_set_header\tX-Forwarded-For $http_x_forwarded_for",
                             'proxy_set_header "X-Forwarded-For" $http_x_forwarded_for',
                             "proxy_set_header 'X-Forwarded-Proto' $http_x_forwarded_proto",
+                            "include /etc/nginx/bypass.conf",
                             "proxy_pass http://keycloak",
                         ],
                     }
@@ -113,6 +114,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                 "proxy_directives": [
                     "proxy_http_version 1.1; proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto",
                     "proxy_set_header Forwarded $http_forwarded",
+                    "InClUdE\t/etc/nginx/bypass.conf",
                     "proxy_http_version 1.1",
                 ],
             },
@@ -124,6 +126,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                 self.assertNotIn("$http_x_forwarded_for", rendered)
                 self.assertNotIn("$http_x_forwarded_proto", rendered)
                 self.assertNotIn("$http_forwarded", rendered)
+                self.assertNotIn("bypass.conf", rendered)
                 self.assertEqual(rendered.count("proxy_set_header X-Forwarded-For $remote_addr;"), 1)
                 self.assertEqual(rendered.count('proxy_set_header Forwarded "";'), 1)
                 expected_port = 18443 if item["force_https"] else 18080
@@ -133,6 +136,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         self.assertEqual(source.count("| replace(\"'\", '')) in _reserved_proxy_headers"), 4)
         self.assertEqual(source.count("_single_statement and not _reserved_proxy_header"), 4)
         self.assertEqual(source.count("';' not in _directive.rstrip(';')"), 7)
+        self.assertEqual(source.count("startswith('include')"), 7)
 
     def test_waf_location_directives_cannot_override_proxy_identity(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
@@ -150,7 +154,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             for item in tasks
             if item.get("name") == "Ensure enabled WAF policy contains server and location controls"
         )
-        self.assertTrue(any("^[^\\r\\n;{}]*(;)?$" in item for item in server_task["ansible.builtin.assert"]["that"]))
+        self.assertTrue(any("(?i:include)" in item for item in server_task["ansible.builtin.assert"]["that"]))
         block_task = next(
             item for item in tasks if item.get("name") == "Reject block-form vhost extra directives when WAF is enabled"
         )
@@ -158,7 +162,9 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             block_task["loop"],
             "{{ nginx_config_vhosts_effective | subelements('extra_directives', skip_missing=True) }}",
         )
-        self.assertIn("item.1 is match('^[^{}]*$')", block_task["ansible.builtin.assert"]["that"])
+        self.assertTrue(
+            any("include" in item and "[^{}]*" in item for item in block_task["ansible.builtin.assert"]["that"])
+        )
         self.assertIn("nginx_config_waf_enabled | bool", block_task["when"])
         for header in (
             "host",
@@ -175,7 +181,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                 self.assertIn(header, assertion)
         self.assertEqual(task["loop"], "{{ nginx_config_waf_location_directives }}")
         self.assertIn("nginx_config_waf_enabled | bool", task["when"])
-        self.assertTrue(any("^[^\\r\\n;{}]*(;)?$" in item for item in task["ansible.builtin.assert"]["that"]))
+        self.assertTrue(any("(?i:include)" in item for item in task["ansible.builtin.assert"]["that"]))
 
     def test_proxy_directive_prechecks_reject_multiple_statements(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
@@ -190,7 +196,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         for task in selected:
             with self.subTest(task=task["name"]):
                 assertions = task["ansible.builtin.assert"]["that"]
-                self.assertTrue(any("^[^\\r\\n;{}]*(;)?$" in item for item in assertions))
+                self.assertTrue(any("(?i:include)" in item for item in assertions))
 
     def test_pki_inputs_are_required_only_when_issuance_is_enabled(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
