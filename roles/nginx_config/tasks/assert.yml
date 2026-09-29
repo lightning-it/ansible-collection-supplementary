@@ -91,7 +91,7 @@
         | length == nginx_config_waf_server_directives | length
       - >-
         nginx_config_waf_server_directives
-        | reject('match', '^[^\r\n;]*(;)?$')
+        | reject('match', '^[^\r\n;{}]*(;)?$')
         | list | length == 0
       - >-
         nginx_config_waf_location_directives
@@ -119,7 +119,7 @@
           ~ 'x-forwarded-proto|x-forwarded-prefix|x-original-forwarded-for|forwarded)'
           ~ '[\"'']?[ \t]+'
         )
-      - item | trim is match('^[^\r\n;]*(;)?$')
+      - item | trim is match('^[^\r\n;{}]*(;)?$')
     fail_msg: >-
       WAF location directives must not set reserved proxy identity headers.
       Those headers are owned exclusively by nginx_config_proxy_required_directives.
@@ -136,7 +136,7 @@
     that:
       - item is string
       - item | trim | length > 0
-      - item | trim is match('^[^\r\n;]*(;)?$')
+      - item | trim is match('^[^\r\n;{}]*(;)?$')
     fail_msg: >-
       Proxy directives must contain exactly one NGINX statement and must not
       contain embedded newlines or additional semicolons.
@@ -155,7 +155,7 @@
         == item.proxy_directives | default([]) | length
       - >-
         item.proxy_directives | default([])
-        | reject('match', '^[^\r\n;]*(;)?$') | list | length == 0
+        | reject('match', '^[^\r\n;{}]*(;)?$') | list | length == 0
     fail_msg: >-
       Vhost proxy directives must each contain exactly one NGINX statement
       and must not contain embedded newlines or additional semicolons.
@@ -174,7 +174,7 @@
         == item.1.directives | default([]) | length
       - >-
         item.1.directives | default([])
-        | reject('match', '^[^\r\n;]*(;)?$') | list | length == 0
+        | reject('match', '^[^\r\n;{}]*(;)?$') | list | length == 0
     fail_msg: >-
       Location proxy directives must each contain exactly one NGINX statement
       and must not contain embedded newlines or additional semicolons.
@@ -200,6 +200,23 @@
     - nginx_config_has_force_https_vhosts | bool
     - nginx_config_tls_source == 'vault'
     - nginx_config_vault_issue_missing | bool
+  tags: always
+
+- name: Reject block-form vhost extra directives when WAF is enabled
+  ansible.builtin.assert:
+    that:
+      - item.1 is string
+      - item.1 is match('^[^{}]*$')
+    fail_msg: >-
+      WAF-enabled vhost extra directives must not contain NGINX block
+      delimiters. Custom location blocks would bypass the generated proxy
+      location safeguards and required forwarded-header boundary.
+    quiet: true
+  loop: "{{ nginx_config_vhosts_effective | subelements('extra_directives', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.name | default('') }}"
+  when:
+    - nginx_config_waf_enabled | bool
   tags: always
 
 - name: Ensure Vault TLS inputs are present when source=vault
@@ -249,12 +266,6 @@
         item.extra_directives | default([])
         | select('string') | list | length
         == item.extra_directives | default([]) | length
-      - >-
-        not (nginx_config_waf_enabled | bool)
-        or (
-          item.extra_directives | default([])
-          | reject('match', '^[^{}]*$') | list | length == 0
-        )
       - (item.force_https | default(false) | bool) or (item.listen_port | default(nginx_deploy_listen_port) | int > 0)
       - >-
         item.proxy_external_port is not defined

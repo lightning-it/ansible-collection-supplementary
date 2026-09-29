@@ -150,8 +150,16 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             for item in tasks
             if item.get("name") == "Ensure enabled WAF policy contains server and location controls"
         )
-        self.assertTrue(any("^[^\\r\\n;]*(;)?$" in item for item in server_task["ansible.builtin.assert"]["that"]))
-        self.assertIn("reject('match', '^[^{}]*$')", ASSERTS.read_text(encoding="utf-8"))
+        self.assertTrue(any("^[^\\r\\n;{}]*(;)?$" in item for item in server_task["ansible.builtin.assert"]["that"]))
+        block_task = next(
+            item for item in tasks if item.get("name") == "Reject block-form vhost extra directives when WAF is enabled"
+        )
+        self.assertEqual(
+            block_task["loop"],
+            "{{ nginx_config_vhosts_effective | subelements('extra_directives', skip_missing=True) }}",
+        )
+        self.assertIn("item.1 is match('^[^{}]*$')", block_task["ansible.builtin.assert"]["that"])
+        self.assertIn("nginx_config_waf_enabled | bool", block_task["when"])
         for header in (
             "host",
             "x-real-ip",
@@ -167,7 +175,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                 self.assertIn(header, assertion)
         self.assertEqual(task["loop"], "{{ nginx_config_waf_location_directives }}")
         self.assertIn("nginx_config_waf_enabled | bool", task["when"])
-        self.assertTrue(any("^[^\\r\\n;]*(;)?$" in item for item in task["ansible.builtin.assert"]["that"]))
+        self.assertTrue(any("^[^\\r\\n;{}]*(;)?$" in item for item in task["ansible.builtin.assert"]["that"]))
 
     def test_proxy_directive_prechecks_reject_multiple_statements(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
@@ -182,7 +190,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         for task in selected:
             with self.subTest(task=task["name"]):
                 assertions = task["ansible.builtin.assert"]["that"]
-                self.assertTrue(any("^[^\\r\\n;]*(;)?$" in item for item in assertions))
+                self.assertTrue(any("^[^\\r\\n;{}]*(;)?$" in item for item in assertions))
 
     def test_pki_inputs_are_required_only_when_issuance_is_enabled(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
