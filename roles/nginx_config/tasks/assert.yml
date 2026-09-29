@@ -80,12 +80,14 @@
       - >-
         nginx_config_waf_server_directives
         | select('string')
+        | map('trim')
         | reject('equalto', '')
         | list
         | length == nginx_config_waf_server_directives | length
       - >-
         nginx_config_waf_location_directives
         | select('string')
+        | map('trim')
         | reject('equalto', '')
         | list
         | length == nginx_config_waf_location_directives | length

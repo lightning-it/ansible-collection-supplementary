@@ -52,8 +52,11 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             template.count("{% for directive in nginx_config_proxy_required_directives %}"),
             4,
         )
-        assertions = (ROOT / "roles" / "nginx_config" / "tasks" / "assert.yml").read_text(encoding="utf-8")
+        assertions = (
+            ROOT / "roles" / "nginx_config" / "tasks" / "assert.yml"
+        ).read_text(encoding="utf-8")
         self.assertIn("nginx_config_proxy_required_directives == [", assertions)
+        self.assertGreaterEqual(assertions.count("| map('trim')"), 2)
         custom_proxy = template.index("item.proxy_directives | default(nginx_config_proxy_default_directives)")
         required_after_custom = template.index("nginx_config_proxy_required_directives", custom_proxy)
         self.assertGreater(required_after_custom, custom_proxy)
