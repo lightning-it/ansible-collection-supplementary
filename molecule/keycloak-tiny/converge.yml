@@ -52,6 +52,7 @@
     nginx_deploy_host_ip: 127.0.0.1
     nginx_deploy_host_port: 18081
     nginx_deploy_tls_host_port: 18443
+    nginx_deploy_manage_default_site: false
     nginx_deploy_networks:
       - keycloak-tiny-access.network:ip=10.89.40.4
     nginx_config_tls_source: selfsigned
