@@ -62,7 +62,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | keycloak_cac | keycloak | configuration_as_code | production | ubuntu-24.04 | rhel-9, rhel-10 | supported | supported | supported | apply_query_and_idempotently_reconcile_api_objects | keycloak_deploy, community.general | — | Tiny exercises real flow, provider, required-action and deferred-binding API lifecycle and idempotency; a complete upstream broker login remains unproven., Current scenarios do not prove deletion reconciliation for every managed object type., RHEL 9 and RHEL 10 remain candidate targets until the complete exact-commit matrix passes on approved images. | keycloak-application-acceptance, keycloak-heavy, keycloak-tiny |
 | keycloak_config | keycloak | configuration_as_code | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | apply_query_and_reconcile_runtime_configuration | keycloak_deploy | — | No direct scenario coverage. | — |
 | keycloak_deploy | keycloak | web_application | production | ubuntu-24.04 | rhel-9, rhel-10 | supported | supported | supported | browser_and_authenticated_oidc_api | postgres_deploy, lit.foundational.kubeplay, lit.foundational.podman_systemd | — | Heavy scopes its destructive PostgreSQL restore drill to an isolated probe table; whole-database disaster recovery is not claimed., No supported-version upgrade path is currently claimed by this deployment role., Heavy proves LDAP CA and hostname validation with an independent client; Keycloak JVM truststore enforcement is not separately claimed., RHEL 9 and RHEL 10 remain candidate targets until the complete exact-commit matrix passes on approved images. | keycloak-application-acceptance, keycloak-heavy, keycloak-tiny |
-| keycloak_destroy | keycloak | infrastructure | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | safe_teardown_and_absence | lit.foundational.kubeplay | — | No direct scenario coverage. | — |
+| keycloak_destroy | keycloak | infrastructure | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | safe_teardown_and_absence | lit.foundational.kubeplay, lit.foundational.podman_systemd | — | No direct scenario coverage. | — |
 | keycloak_ops | keycloak | infrastructure | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | restart_recovery_and_health | — | — | Canonical Heavy restarts the container directly rather than through this role. | — |
 | keycloak_preflight | keycloak | validator | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | not-applicable | parent_component_validation | — | — | No direct scenario coverage. | — |
 | keycloak_upgrade | keycloak | infrastructure | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | supported_upgrade_and_post_upgrade_workflow | keycloak_backup_restore, keycloak_deploy, keycloak_validate | — | No direct scenario coverage. | — |
@@ -89,7 +89,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | postgres_backup_restore | postgres | backup_component | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | create_backup_modify_state_restore_and_verify | — | — | Keycloak Heavy proves exact restoration of an isolated probe table, not whole-database disaster recovery. | — |
 | postgres_config | postgres | configuration_as_code | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | apply_query_reconcile_and_delete_configuration | — | — | Implementation only sets and reports override facts. | — |
 | postgres_deploy | postgres | database | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | real_client_transaction_permissions_persistence_and_restore | lit.foundational.kubeplay, lit.foundational.podman_systemd | — | Root scenario is a syntax stub; Keycloak exercises deployment only indirectly., Native Quadlet lifecycle is covered indirectly by the Keycloak Heavy scenario. | postgres-deploy-basic |
-| postgres_destroy | postgres | infrastructure | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | safe_teardown_and_absence | lit.foundational.kubeplay | — | No direct scenario coverage. | — |
+| postgres_destroy | postgres | infrastructure | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | safe_teardown_and_absence | lit.foundational.kubeplay, lit.foundational.podman_systemd | — | No direct scenario coverage. | — |
 | postgres_ops | postgres | infrastructure | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | restart_recovery_and_query | — | — | No direct scenario coverage. | — |
 | postgres_preflight | postgres | validator | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | not-applicable | parent_component_validation | — | — | No direct scenario coverage. | — |
 | postgres_upgrade | postgres | infrastructure | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | supported_upgrade_and_post_upgrade_query | postgres_backup_restore, postgres_deploy, postgres_validate | — | No direct scenario coverage. | — |
@@ -743,7 +743,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Supported targets: —; candidate targets: ubuntu-24.04, rhel-9, rhel-10.
 - Profiles: Tiny `experimental`, Heavy `experimental`, Application Acceptance `experimental`.
 - Acceptance surface: `safe_teardown_and_absence`.
-- Role dependencies: lit.foundational.kubeplay; exercised scenario dependencies: —.
+- Role dependencies: lit.foundational.kubeplay, lit.foundational.podman_systemd; exercised scenario dependencies: —.
 - External dependencies/blockers: —.
 - Required-secret policy: Use ephemeral test credentials and protected runtime secret providers; never commit secret values.
 - Local execution: —; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
@@ -1175,7 +1175,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Supported targets: —; candidate targets: rhel-9, ubuntu-22.04, ubuntu-24.04.
 - Profiles: Tiny `experimental`, Heavy `experimental`, Application Acceptance `experimental`.
 - Acceptance surface: `safe_teardown_and_absence`.
-- Role dependencies: lit.foundational.kubeplay; exercised scenario dependencies: —.
+- Role dependencies: lit.foundational.kubeplay, lit.foundational.podman_systemd; exercised scenario dependencies: —.
 - External dependencies/blockers: —.
 - Required-secret policy: Use ephemeral test credentials and protected runtime secret providers; never commit secret values.
 - Local execution: —; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
