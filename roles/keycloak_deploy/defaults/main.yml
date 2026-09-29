@@ -35,10 +35,7 @@ keycloak_deploy_management_port: 9000
 # network so the reverse proxy can reach it without exposing a public port.
 keycloak_deploy_host_ip: "127.0.0.1"
 keycloak_deploy_host_network: false
-# Native Quadlet network entries. An empty list preserves Podman's default
-# kube network; production edge deployments should pin the exact private
-# network and, where required, the pod address (for example
-# `private-access:ip=10.89.0.11`).
+# Native Quadlet networks; production should pin the private network/address.
 keycloak_deploy_networks: []
 keycloak_deploy_postgres_networks: >-
   {{ keycloak_deploy_networks | map('regex_replace', ':.*$', '') | list }}
@@ -101,7 +98,7 @@ keycloak_deploy_db_name: "keycloak"
 keycloak_deploy_db_user: "keycloak"
 keycloak_deploy_db_host: >-
   {{
-    keycloak_deploy_postgres_pod_name
+    keycloak_deploy_postgres_pod_name ~ '-' ~ keycloak_deploy_postgres_container_name
     if (
       keycloak_deploy_manage_postgres | bool
       and not (keycloak_deploy_host_network | bool)

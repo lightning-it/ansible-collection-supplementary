@@ -252,7 +252,7 @@
       ansible.builtin.assert:
         that:
           - >-
-            'KC_DB_URL_HOST=keycloak-tiny-postgres'
+            'KC_DB_URL_HOST=keycloak-tiny-postgres-postgres'
             in (keycloak_tiny_environment.stdout | from_json)
       no_log: true
 
@@ -286,7 +286,7 @@
           - keycloak-tiny-keycloak
           - getent
           - hosts
-          - keycloak-tiny-postgres
+          - keycloak-tiny-postgres-postgres
       register: keycloak_tiny_postgres_dns
       changed_when: false
 
