@@ -1,7 +1,7 @@
 ---
 bugfixes:
   - >-
-    Use the stable PostgreSQL pod DNS alias and private container port while
+    Use the explicit PostgreSQL private endpoint and container port while
     retaining the published host endpoint for controller readiness.
   - >-
     Restrict the generated PostgreSQL Pod manifest to its owner because the

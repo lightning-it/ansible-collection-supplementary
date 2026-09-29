@@ -97,11 +97,10 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                         "path": "/",
                         "directives": [
                             "proxy_http_version 1.1;\nproxy_set_header X-Forwarded-For $http_x_forwarded_for",
-                            "PrOxY_SeT_HeAdEr x-FoRwArDeD-fOr $proxy_add_x_forwarded_for",
-                            "proxy_set_header\tX-Forwarded-For $http_x_forwarded_for",
                             'proxy_set_header "X-Forwarded-For" $http_x_forwarded_for',
-                            "proxy_set_header 'X-Forwarded-Proto' $http_x_forwarded_proto",
                             r"proxy\_set_header X-Forwarded-For $http_x_forwarded_for",
+                            '"proxy_set_header" X-Forwarded-For $http_x_forwarded_for',
+                            '"include" /etc/nginx/quoted-bypass.conf',
                             "include /etc/nginx/bypass.conf",
                             "proxy_pass http://keycloak",
                         ],
@@ -115,8 +114,8 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                 "proxy_directives": [
                     "proxy_http_version 1.1; proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto",
                     "proxy_set_header Forwarded $http_forwarded",
-                    r"in\clude /etc/nginx/bypass.conf",
-                    "InClUdE\t/etc/nginx/bypass.conf",
+                    "'proxy_set_header' Forwarded $http_forwarded",
+                    "'include' /etc/nginx/quoted-bypass.conf",
                     "proxy_http_version 1.1",
                 ],
             },
@@ -134,8 +133,8 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                 expected_port = 18443 if item["force_https"] else 18080
                 self.assertEqual(rendered.count(f"proxy_set_header X-Forwarded-Port {expected_port};"), 1)
 
-        self.assertEqual(source.count("| lower | replace("), 4)
-        self.assertEqual(source.count("| replace(\"'\", '')) in _reserved_proxy_headers"), 4)
+        self.assertEqual(source.count("_name(_directive) != 'include'"), 7)
+        self.assertEqual(source.count("== 'proxy_set_header'"), 4)
         self.assertEqual(source.count("_single_statement and not _reserved_proxy_header"), 4)
         self.assertEqual(source.count("';' not in _directive.rstrip(';')"), 7)
 

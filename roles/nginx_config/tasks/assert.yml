@@ -91,7 +91,7 @@
         | length == nginx_config_waf_server_directives | length
       - >-
         nginx_config_waf_server_directives
-        | reject('match', '^(?![ \t]*(?i:include)(?:[ \t]|$))[^\\\r\n;{}]*(;)?$')
+        | reject('match', '^(?![ \t]*["'']?(?i:include)["'']?(?:[ \t]|$))[^\\\r\n;{}]*(;)?$')
         | list | length == 0
       - >-
         nginx_config_waf_location_directives
@@ -114,12 +114,12 @@
       - >-
         item | trim | lower
         is not match(
-          '^proxy_set_header[ \t]+[\"'']?'
+          '^[\"'']?proxy_set_header[\"'']?[ \t]+[\"'']?'
           ~ '(host|x-real-ip|x-forwarded-for|x-forwarded-host|x-forwarded-port|'
           ~ 'x-forwarded-proto|x-forwarded-prefix|x-original-forwarded-for|forwarded)'
           ~ '[\"'']?[ \t]+'
         )
-      - item | trim is match('^(?!(?i:include)(?:[ \t]|$))[^\\\r\n;{}]*(;)?$')
+      - item | trim is match('^(?!["'']?(?i:include)["'']?(?:[ \t]|$))[^\\\r\n;{}]*(;)?$')
     fail_msg: >-
       WAF location directives must not set reserved proxy identity headers.
       Those headers are owned exclusively by nginx_config_proxy_required_directives.
@@ -136,7 +136,7 @@
     that:
       - item is string
       - item | trim | length > 0
-      - item | trim is match('^(?!(?i:include)(?:[ \t]|$))[^\\\r\n;{}]*(;)?$')
+      - item | trim is match('^(?!["'']?(?i:include)["'']?(?:[ \t]|$))[^\\\r\n;{}]*(;)?$')
     fail_msg: >-
       Proxy directives must contain exactly one NGINX statement and must not
       contain embedded newlines or additional semicolons.
@@ -155,7 +155,7 @@
         == item.proxy_directives | default([]) | length
       - >-
         item.proxy_directives | default([])
-        | reject('match', '^(?![ \t]*(?i:include)(?:[ \t]|$))[^\\\r\n;{}]*(;)?$') | list | length == 0
+        | reject('match', '^(?![ \t]*["'']?(?i:include)["'']?(?:[ \t]|$))[^\\\r\n;{}]*(;)?$') | list | length == 0
     fail_msg: >-
       Vhost proxy directives must each contain exactly one NGINX statement
       and must not contain embedded newlines or additional semicolons.
@@ -174,7 +174,7 @@
         == item.1.directives | default([]) | length
       - >-
         item.1.directives | default([])
-        | reject('match', '^(?![ \t]*(?i:include)(?:[ \t]|$))[^\\\r\n;{}]*(;)?$') | list | length == 0
+        | reject('match', '^(?![ \t]*["'']?(?i:include)["'']?(?:[ \t]|$))[^\\\r\n;{}]*(;)?$') | list | length == 0
     fail_msg: >-
       Location proxy directives must each contain exactly one NGINX statement
       and must not contain embedded newlines or additional semicolons.
@@ -206,7 +206,7 @@
   ansible.builtin.assert:
     that:
       - item.1 is string
-      - item.1 is match('(?ims)^(?!.*(?:^|\n)[ \t]*include(?:[ \t]|$))[^{}\\]*$')
+      - item.1 is match('(?ims)^(?!.*(?:^|\n)[ \t]*["'']?include["'']?(?:[ \t]|$))[^{}\\]*$')
     fail_msg: >-
       WAF-enabled vhost extra directives must not contain NGINX block
       delimiters. Custom location blocks would bypass the generated proxy
