@@ -147,7 +147,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
         }
 
         expected = {
-            "keycloak_deploy_db_host": "keycloak-postgres-postgres",
+            "keycloak_deploy_db_host": "keycloak-postgres",
             "keycloak_deploy_db_port": "5432",
             "keycloak_deploy_db_wait_host": "127.0.0.1",
             "keycloak_deploy_db_wait_port": "15432",
@@ -157,7 +157,8 @@ class KeycloakRoleContractTests(unittest.TestCase):
 
         tiny = (ROOT / "molecule" / "keycloak-tiny" / "converge.yml").read_text(encoding="utf-8")
         verify = (ROOT / "molecule" / "keycloak-tiny" / "verify.yml").read_text(encoding="utf-8")
-        self.assertIn("KC_DB_URL_HOST=keycloak-tiny-postgres-postgres", verify)
+        self.assertIn("KC_DB_URL_HOST=keycloak-tiny-postgres", verify)
+        self.assertIn("alias=keycloak-tiny-postgres", tiny)
         self.assertNotIn("keycloak_deploy_db_host:", tiny)
 
     def test_external_database_keeps_explicit_endpoint(self) -> None:

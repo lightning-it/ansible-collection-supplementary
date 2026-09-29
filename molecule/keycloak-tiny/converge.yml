@@ -21,9 +21,9 @@
     keycloak_deploy_host_network: false
     keycloak_deploy_postgres_host_network: false
     keycloak_deploy_networks:
-      - keycloak-tiny-access.network:ip=10.89.40.2
+      - keycloak-tiny-access.network:ip=10.89.40.2,alias=keycloak-tiny
     keycloak_deploy_postgres_networks:
-      - keycloak-tiny-access.network:ip=10.89.40.3
+      - keycloak-tiny-access.network:ip=10.89.40.3,alias=keycloak-tiny-postgres
     keycloak_deploy_db_port: 5432
     keycloak_deploy_db_wait_host: 127.0.0.1
     keycloak_deploy_db_wait_port: 5432

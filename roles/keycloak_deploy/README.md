@@ -47,8 +47,8 @@ to an explicitly pinned private Quadlet network, and list only the NGINX pod
 address as trusted.
 
 When this role manages PostgreSQL and both pods use the Podman bridge network,
-`keycloak_deploy_db_host` defaults to Podman's stable
-`<postgres-pod-name>-<container-name>` DNS name.
+`keycloak_deploy_db_host` defaults to `<postgres-pod-name>`; the PostgreSQL
+network entry must register that explicit Podman `alias=`.
 The private endpoint uses `keycloak_deploy_postgres_container_port`; readiness
 uses the published `keycloak_deploy_postgres_port`.
 `keycloak_deploy_postgres_networks` defaults to the same named networks after
