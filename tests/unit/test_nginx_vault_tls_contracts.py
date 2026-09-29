@@ -120,6 +120,32 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         self.assertEqual(source.count("| lower | replace("), 4)
         self.assertEqual(source.count("| replace(\"'\", '')) in _reserved_proxy_headers"), 4)
 
+    def test_waf_location_directives_cannot_override_proxy_identity(self) -> None:
+        tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
+        task = next(
+            item
+            for item in tasks
+            if item.get("name") == "Reject reserved proxy identity headers in WAF location directives"
+        )
+        assertion = task["ansible.builtin.assert"]["that"][0]
+
+        self.assertIn("item | trim | lower", assertion)
+        for header in (
+            "host",
+            "x-real-ip",
+            "x-forwarded-for",
+            "x-forwarded-host",
+            "x-forwarded-port",
+            "x-forwarded-proto",
+            "x-forwarded-prefix",
+            "x-original-forwarded-for",
+            "forwarded",
+        ):
+            with self.subTest(header=header):
+                self.assertIn(header, assertion)
+        self.assertEqual(task["loop"], "{{ nginx_config_waf_location_directives }}")
+        self.assertIn("nginx_config_waf_enabled | bool", task["when"])
+
     def test_pki_inputs_are_required_only_when_issuance_is_enabled(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
         task = next(

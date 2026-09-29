@@ -5,6 +5,8 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "main.yml"
 ASSERTS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "assert.yml"
@@ -138,6 +140,34 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn(
             "guacamole_deploy_legacy_systemd_unit_path: >-\n  /etc/systemd/system/guacamole.service",
             DEFAULTS.read_text(encoding="utf-8"),
+        )
+
+    def test_legacy_takeover_requires_the_exact_ordered_unit_contract(self) -> None:
+        tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
+        task_map = {task["name"]: task for task in tasks}
+        normalize = task_map["Normalize the role-owned legacy Guacamole unit contract"]
+        validate = task_map["Refuse to replace an unknown Guacamole systemd unit"]
+        expected = normalize["ansible.builtin.set_fact"]["guacamole_deploy_legacy_unit_expected_lines"]
+        actual_expression = normalize["ansible.builtin.set_fact"]["guacamole_deploy_legacy_unit_actual_lines"]
+
+        self.assertIn("reject('match', '^#')", actual_expression)
+        self.assertEqual(expected[0], "[Unit]")
+        self.assertEqual(expected[-1], "WantedBy=multi-user.target")
+        self.assertEqual(sum(line.startswith("ExecStart=") for line in expected), 1)
+        self.assertEqual(sum(line.startswith("ExecStop=") for line in expected), 1)
+        self.assertIn("--network {{ guacamole_deploy_network_name }}:ip=", "\n".join(expected))
+        self.assertEqual(
+            validate["ansible.builtin.assert"]["that"],
+            ["guacamole_deploy_legacy_unit_actual_lines == guacamole_deploy_legacy_unit_expected_lines"],
+        )
+        self.assertLess(tasks.index(normalize), tasks.index(validate))
+        self.assertLess(
+            tasks.index(validate),
+            next(
+                index
+                for index, task in enumerate(tasks)
+                if task["name"] == "Stop and disable the exact legacy Guacamole unit before removal"
+            ),
         )
 
     def test_oidc_group_claim_and_exact_connection_permissions_are_explicit(

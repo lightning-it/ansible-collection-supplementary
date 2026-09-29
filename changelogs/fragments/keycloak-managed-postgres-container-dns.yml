@@ -1,10 +1,10 @@
 ---
 bugfixes:
   - >-
-    Address managed PostgreSQL by its Podman pod-name DNS alias when Keycloak
-    and PostgreSQL use separate pods on the same explicitly selected private
-    Quadlet network, while keeping the host-side readiness probe on the
-    explicitly published host address.
+    Address managed PostgreSQL by its actual Podman kube container DNS name
+    when Keycloak and PostgreSQL use separate pods on the same explicitly
+    selected private Quadlet network, while keeping the host-side readiness
+    probe on the explicitly published host address.
   - >-
     Restrict the generated PostgreSQL Pod manifest to its owner because the
     runtime manifest contains the effective database password.

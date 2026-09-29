@@ -99,6 +99,28 @@
     - nginx_config_waf_enabled | bool
   tags: always
 
+- name: Reject reserved proxy identity headers in WAF location directives
+  ansible.builtin.assert:
+    that:
+      - >-
+        item | trim | lower
+        is not match(
+          '^proxy_set_header[ ]+[\"'']?'
+          ~ '(host|x-real-ip|x-forwarded-for|x-forwarded-host|x-forwarded-port|'
+          ~ 'x-forwarded-proto|x-forwarded-prefix|x-original-forwarded-for|forwarded)'
+          ~ '[\"'']?[ ]+'
+        )
+    fail_msg: >-
+      WAF location directives must not set reserved proxy identity headers.
+      Those headers are owned exclusively by nginx_config_proxy_required_directives.
+    quiet: true
+  loop: "{{ nginx_config_waf_location_directives }}"
+  loop_control:
+    label: "{{ item | regex_replace('[\r\n].*$', '') }}"
+  when:
+    - nginx_config_waf_enabled | bool
+  tags: always
+
 - name: Ensure Vault PKI issue inputs are present when enabled
   ansible.builtin.assert:
     that:
