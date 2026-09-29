@@ -88,6 +88,10 @@
         | list
         | length == nginx_config_waf_server_directives | length
       - >-
+        nginx_config_waf_server_directives
+        | reject('match', '^[^\r\n;]*(;)?$')
+        | list | length == 0
+      - >-
         nginx_config_waf_location_directives
         | select('string')
         | map('trim')
@@ -240,6 +244,15 @@
       - item.name | default('', true) | trim | length > 0
       - item.server_name | default('_', true) | trim | length > 0
       - (item.force_https | default(false) | bool) or (item.listen_port | default(nginx_deploy_listen_port) | int > 0)
+      - >-
+        item.proxy_external_port is not defined
+        or item.proxy_external_port | string is match('^[0-9]+$')
+      - >-
+        item.proxy_external_port is not defined
+        or (
+          item.proxy_external_port | int > 0
+          and item.proxy_external_port | int <= 65535
+        )
       - >-
         (not (item.force_https | default(false) | bool))
         or (item.upstream_url | default('', true) | trim | length > 0)

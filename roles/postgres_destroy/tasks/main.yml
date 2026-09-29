@@ -10,22 +10,6 @@
   tags:
     - destroy
 
-- name: Remove PostgreSQL persistent Quadlet service
-  ansible.builtin.include_role:
-    name: lit.foundational.podman_systemd
-  vars:
-    podman_systemd_action: absent
-    podman_systemd_unit_name: "{{ postgres_destroy_systemd_unit_name }}"
-    podman_systemd_description: "{{ postgres_destroy_systemd_description }}"
-    podman_systemd_manifest_path: "{{ postgres_destroy_pod_manifest_path }}"
-    podman_systemd_scope: "{{ postgres_destroy_systemd_scope }}"
-    podman_systemd_quadlet_dir: "{{ postgres_destroy_quadlet_dir }}"
-  when:
-    - postgres_destroy_execute | bool
-    - postgres_destroy_remove_systemd | bool
-  tags:
-    - destroy
-
 - name: Remove PostgreSQL pod with kubeplay
   ansible.builtin.include_role:
     name: lit.foundational.kubeplay

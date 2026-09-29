@@ -13,6 +13,7 @@
       - guacamole_deploy_network_name is string
       - guacamole_deploy_network_ipv4 is string
       - guacamole_deploy_manage_systemd is boolean
+      - guacamole_deploy_manage_systemd | bool or guacamole_deploy_skip_runtime | bool
       - guacamole_deploy_systemd_unit_name | trim | length > 0
       - guacamole_deploy_systemd_description | trim | length > 0
       - guacamole_deploy_systemd_scope in ['system', 'user']

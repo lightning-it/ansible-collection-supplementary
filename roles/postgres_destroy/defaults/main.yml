@@ -1,13 +1,6 @@
 ---
 postgres_destroy_execute: false
-postgres_destroy_remove_systemd: true
 postgres_destroy_pod_name: "{{ postgres_deploy_pod_name | default('postgres', true) }}"
-postgres_destroy_systemd_unit_name: >-
-  {{ postgres_deploy_systemd_unit_name | default(postgres_destroy_pod_name ~ '-pod', true) }}
-postgres_destroy_systemd_description: >-
-  {{ postgres_deploy_systemd_description | default('PostgreSQL Podman application pod', true) }}
-postgres_destroy_systemd_scope: "{{ postgres_deploy_systemd_scope | default('system', true) }}"
-postgres_destroy_quadlet_dir: "{{ postgres_deploy_quadlet_dir | default('/etc/containers/systemd', true) }}"
 postgres_destroy_pod_manifest_path: >-
   {{
     postgres_deploy_pod_manifest_path

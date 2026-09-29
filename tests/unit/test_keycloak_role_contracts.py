@@ -392,38 +392,6 @@ class KeycloakRoleContractTests(unittest.TestCase):
             "{{ keycloak_deploy_postgres_networks }}",
         )
 
-    def test_destroy_removes_quadlet_before_runtime_and_data(self) -> None:
-        for role, service_name, manifest_name in (
-            ("keycloak_destroy", "Keycloak", "keycloak"),
-            ("postgres_destroy", "PostgreSQL", "postgres"),
-        ):
-            with self.subTest(role=role):
-                tasks = yaml.safe_load((ROOT / "roles" / role / "tasks" / "main.yml").read_text(encoding="utf-8"))
-                task_map = {task["name"]: task for task in tasks}
-                quadlet = task_map[f"Remove {service_name} persistent Quadlet service"]
-                kubeplay = task_map[f"Remove {service_name} pod with kubeplay"]
-                manifest = task_map[f"Remove {service_name} pod manifest"]
-                defaults = self._role_defaults(role)
-                assertions = "\n".join(
-                    yaml.safe_load((ROOT / "roles" / role / "tasks" / "assert.yml").read_text(encoding="utf-8"))[0][
-                        "ansible.builtin.assert"
-                    ]["that"]
-                )
-
-                self.assertIs(defaults[f"{role}_remove_systemd"], True)
-                self.assertIn(f"{role}_pod_name ~ '-pod'", defaults[f"{role}_systemd_unit_name"])
-                self.assertEqual(
-                    quadlet["ansible.builtin.include_role"]["name"],
-                    "lit.foundational.podman_systemd",
-                )
-                self.assertEqual(quadlet["vars"]["podman_systemd_action"], "absent")
-                self.assertIn(f"{role}_remove_systemd | bool", quadlet["when"])
-                self.assertLess(tasks.index(quadlet), tasks.index(kubeplay))
-                self.assertLess(tasks.index(quadlet), tasks.index(manifest))
-                self.assertIn(f"{role}_systemd_unit_name", assertions)
-                self.assertIn(f"{role}_quadlet_dir", assertions)
-                self.assertIn(manifest_name, defaults[f"{role}_pod_manifest_path"])
-
 
 if __name__ == "__main__":
     unittest.main()

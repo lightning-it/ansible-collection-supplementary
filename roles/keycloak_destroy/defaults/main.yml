@@ -2,14 +2,7 @@
 keycloak_destroy_execute: false
 keycloak_destroy_remove_data: false
 keycloak_destroy_remove_secrets: false
-keycloak_destroy_remove_systemd: true
 keycloak_destroy_pod_name: "{{ keycloak_deploy_pod_name | default('keycloak', true) }}"
-keycloak_destroy_systemd_unit_name: >-
-  {{ keycloak_deploy_systemd_unit_name | default(keycloak_destroy_pod_name ~ '-pod', true) }}
-keycloak_destroy_systemd_description: >-
-  {{ keycloak_deploy_systemd_description | default('Keycloak Podman application pod', true) }}
-keycloak_destroy_systemd_scope: "{{ keycloak_deploy_systemd_scope | default('system', true) }}"
-keycloak_destroy_quadlet_dir: "{{ keycloak_deploy_quadlet_dir | default('/etc/containers/systemd', true) }}"
 keycloak_destroy_pod_manifest_path: >-
   {{
     keycloak_deploy_pod_manifest_path

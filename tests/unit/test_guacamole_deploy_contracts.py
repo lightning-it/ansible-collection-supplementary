@@ -117,6 +117,10 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertEqual(defaults["guacamole_deploy_systemd_unit_name"], "{{ guacamole_deploy_pod_name }}-pod")
         self.assertIn("include_tasks: systemd.yml", tasks)
         self.assertIn("name: lit.foundational.podman_systemd", systemd_tasks)
+        self.assertIn(
+            "guacamole_deploy_manage_systemd | bool or guacamole_deploy_skip_runtime | bool",
+            ASSERTS.read_text(encoding="utf-8"),
+        )
         self.assertLess(
             systemd_tasks.index("Refuse an unsafe legacy Guacamole unit path before reading"),
             systemd_tasks.index("Read the exact legacy Guacamole unit before takeover"),

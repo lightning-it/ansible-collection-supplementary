@@ -62,6 +62,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         required_after_custom = template.index("nginx_config_proxy_required_directives", custom_proxy)
         self.assertGreater(required_after_custom, custom_proxy)
         self.assertNotIn("{% if item.proxy_directives is defined %}", template)
+        self.assertIn("item.proxy_external_port | string is match('^[0-9]+$')", assertions)
 
     def test_consumer_cannot_reintroduce_reserved_proxy_headers(self) -> None:
         defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
@@ -142,6 +143,12 @@ class NginxVaultTlsContractTests(unittest.TestCase):
 
         self.assertIn("item | trim | lower", assertion)
         self.assertIn("[ \\t]+", assertion)
+        server_task = next(
+            item
+            for item in tasks
+            if item.get("name") == "Ensure enabled WAF policy contains server and location controls"
+        )
+        self.assertTrue(any("^[^\\r\\n;]*(;)?$" in item for item in server_task["ansible.builtin.assert"]["that"]))
         for header in (
             "host",
             "x-real-ip",
