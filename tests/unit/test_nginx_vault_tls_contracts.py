@@ -199,6 +199,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
 
         systemd_path = ROOT / "roles" / "nginx_deploy" / "tasks" / "systemd.yml"
         systemd_tasks = yaml.safe_load(systemd_path.read_text(encoding="utf-8"))
+        self.assertIn("not ansible_check_mode", systemd_tasks[0]["when"])
         systemd_block = systemd_tasks[0]["block"]
         quadlet = next(task for task in systemd_block if task["name"] == "Manage the native Nginx Quadlet service")
         self.assertEqual(

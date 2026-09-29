@@ -553,7 +553,7 @@
         argv:
           - systemctl
           - is-enabled
-          - keycloak-heavy.service
+          - keycloak-heavy-pod.service
       register: keycloak_heavy_systemd_enabled
       changed_when: false
 
@@ -562,13 +562,13 @@
         argv:
           - systemctl
           - is-active
-          - keycloak-heavy.service
+          - keycloak-heavy-pod.service
       register: keycloak_heavy_systemd_active
       changed_when: false
 
     - name: Verify the native Keycloak Quadlet exists
       ansible.builtin.stat:
-        path: /etc/containers/systemd/keycloak-heavy.kube
+        path: /etc/containers/systemd/keycloak-heavy-pod.kube
         follow: false
       register: keycloak_heavy_quadlet
 
@@ -583,7 +583,7 @@
 
     - name: Restart Keycloak through its native Quadlet lifecycle
       ansible.builtin.systemd_service:
-        name: keycloak-heavy.service
+        name: keycloak-heavy-pod.service
         state: restarted
 
     - name: Verify restart recovery and database persistence

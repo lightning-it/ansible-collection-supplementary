@@ -325,6 +325,11 @@ class KeycloakRoleContractTests(unittest.TestCase):
                 defaults = self._role_defaults(role)
                 self.assertEqual(defaults[f"{role}_systemd_unit_name"], unit_name)
 
+        heavy_verify = (ROOT / "molecule" / "keycloak-heavy" / "verify.yml").read_text(encoding="utf-8")
+        self.assertNotIn("keycloak-heavy.service", heavy_verify)
+        self.assertEqual(heavy_verify.count("keycloak-heavy-pod.service"), 3)
+        self.assertIn("/etc/containers/systemd/keycloak-heavy-pod.kube", heavy_verify)
+
     def test_systemd_management_fails_closed_without_systemd_facts(self) -> None:
         for role in ("keycloak_deploy", "nginx_deploy", "postgres_deploy"):
             with self.subTest(role=role):
