@@ -175,6 +175,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
         render_task = next(task for task in tasks if task.get("name") == "Render PostgreSQL Pod manifest")
 
         self.assertEqual(render_task["ansible.builtin.template"]["mode"], "0600")
+        self.assertIs(render_task["no_log"], True)
 
         template_path = ROOT / "roles" / "postgres_deploy" / "templates" / "postgres-pod.yml.j2"
         self.assertIn("POSTGRES_PASSWORD", template_path.read_text(encoding="utf-8"))
@@ -348,6 +349,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
     def test_managed_bridge_database_requires_a_shared_normalized_network(self) -> None:
         assertions = (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
 
+        self.assertIn("not (keycloak_deploy_host_network | bool)", assertions)
         self.assertGreaterEqual(assertions.count("map('regex_replace', ':.*$', '')"), 2)
         self.assertIn("| intersect(", assertions)
         self.assertIn("keycloak_deploy_networks | length == 0", assertions)
@@ -391,6 +393,11 @@ class KeycloakRoleContractTests(unittest.TestCase):
             managed_postgres["vars"]["postgres_deploy_networks"],
             "{{ keycloak_deploy_postgres_networks }}",
         )
+
+    def test_quadlet_destroy_fails_closed_until_li220(self) -> None:
+        for role, deploy_role in (("keycloak_destroy", "keycloak_deploy"), ("postgres_destroy", "postgres_deploy")):
+            assertions = (ROOT / "roles" / role / "tasks" / "assert.yml").read_text(encoding="utf-8")
+            self.assertIn(f"not ({deploy_role}_manage_systemd | default(true) | bool)", assertions)
 
 
 if __name__ == "__main__":

@@ -85,6 +85,8 @@
       - >-
         keycloak_deploy_proxy_headers | trim | length == 0
         or (
+          not (keycloak_deploy_host_network | bool)
+          and
           keycloak_deploy_host_ip | trim in ['127.0.0.1', '::1']
           and keycloak_deploy_networks | length > 0
         )

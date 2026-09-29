@@ -11,5 +11,8 @@
       - keycloak_destroy_data_paths is not string
       - keycloak_destroy_secret_paths is sequence
       - keycloak_destroy_secret_paths is not string
+      - >-
+        not (keycloak_destroy_execute | bool)
+        or not (keycloak_deploy_manage_systemd | default(true) | bool)
     fail_msg: "Keycloak destroy variables are missing or invalid."
   tags: always

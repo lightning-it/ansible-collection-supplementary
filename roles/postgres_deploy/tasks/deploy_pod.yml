@@ -296,6 +296,7 @@
     src: postgres-pod.yml.j2
     dest: "{{ postgres_deploy_pod_manifest_path }}"
     mode: '0600'
+  no_log: true
   notify:
     - Recreate postgres pod
     - Run postgres pod

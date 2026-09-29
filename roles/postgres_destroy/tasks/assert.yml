@@ -11,5 +11,8 @@
       - postgres_destroy_data_paths is not string
       - postgres_destroy_secret_paths is sequence
       - postgres_destroy_secret_paths is not string
+      - >-
+        not (postgres_destroy_execute | bool)
+        or not (postgres_deploy_manage_systemd | default(true) | bool)
     fail_msg: "PostgreSQL destroy variables are missing or invalid."
   tags: always
