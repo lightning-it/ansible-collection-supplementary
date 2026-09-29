@@ -384,8 +384,9 @@ def check_embedded_code(markdown_paths: list[str] | None = None) -> None:
             raise AssertionError("git is required for embedded-code validation")
         environment = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
         environment.update({"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull})
+        git_read = [git, "-c", f"safe.directory={ROOT}"]
         configured = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
-            [git, "config", "--local", "--no-includes", "--null", "--name-only", "--list"],
+            [*git_read, "config", "--local", "--no-includes", "--null", "--name-only", "--list"],
             cwd=ROOT,
             env=environment,
             text=True,
@@ -405,7 +406,7 @@ def check_embedded_code(markdown_paths: list[str] | None = None) -> None:
             details = configured.stderr.strip() or ", ".join(sorted(unsafe))
             raise AssertionError("unsafe local Git configuration: " + details)
         merge_base = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
-            [git, "merge-base", "refs/remotes/origin/develop", "HEAD"],
+            [*git_read, "merge-base", "refs/remotes/origin/develop", "HEAD"],
             cwd=ROOT,
             env=environment,
             text=True,
@@ -417,7 +418,7 @@ def check_embedded_code(markdown_paths: list[str] | None = None) -> None:
         changed_paths: set[str] = set()
         for scope in ((f"{merge_base}...HEAD",), ("--cached",), ()):
             result = subprocess.run(  # noqa: S603 -- resolved executable and fixed argv.
-                [git, "diff", "--name-only", "--diff-filter=ACMR", "-z", *scope, "--"],
+                [*git_read, "diff", "--name-only", "--diff-filter=ACMR", "-z", *scope, "--"],
                 cwd=ROOT,
                 env=environment,
                 text=True,

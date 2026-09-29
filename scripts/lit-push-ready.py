@@ -2629,7 +2629,9 @@ def local_container_environment(environment: dict[str, str], engine: str) -> dic
         configured_host = os.environ.get("DOCKER_HOST")
         if configured_host and not configured_host.startswith("unix://"):
             raise RuntimeError("remote DOCKER_HOST is forbidden")
-        candidates = (configured_host, str(Path.home() / ".docker" / "run" / "docker.sock"), "/var/run/docker.sock")
+        configured_home = os.environ.get("HOME")
+        user_socket = str(Path(configured_home) / ".docker" / "run" / "docker.sock") if configured_home else None
+        candidates = (configured_host, user_socket, "/var/run/docker.sock")
         for value in candidates:
             if value and (socket_path := existing_unix_socket(value)):
                 result["DOCKER_HOST"] = f"unix://{socket_path}"

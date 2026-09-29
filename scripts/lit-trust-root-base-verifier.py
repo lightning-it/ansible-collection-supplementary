@@ -45,9 +45,9 @@ if not git_binary:
 GIT_BINARY: str = git_binary
 
 
-def git_command(*args: str) -> list[str]:
+def git_command(*args: str, safe_directory: Path | None = None) -> list[str]:
     """Build a Git command that neutralizes credential, proxy, and hook config."""
-    return [
+    command = [
         GIT_BINARY,
         "-c",
         "credential.helper=",
@@ -61,13 +61,44 @@ def git_command(*args: str) -> list[str]:
         "https.proxy=",
         "-c",
         "core.hooksPath=/dev/null",
-        *args,
     ]
+    if safe_directory is not None:
+        command.extend(["-c", f"safe.directory={safe_directory}"])
+    return [*command, *args]
+
+
+def repository_candidate() -> Path:
+    """Resolve the nearest non-symlink Git worktree without trusting Git config."""
+    try:
+        current = Path.cwd().resolve(strict=True)
+    except OSError as exc:
+        raise RuntimeError("authorized repository root is unavailable") from exc
+    for candidate in (current, *current.parents):
+        marker = candidate / ".git"
+        try:
+            details = marker.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise RuntimeError("authorized repository root is unavailable") from exc
+        if stat.S_ISLNK(details.st_mode):
+            raise RuntimeError("authorized repository metadata must not be a symlink")
+        if not (stat.S_ISDIR(details.st_mode) or stat.S_ISREG(details.st_mode)):
+            raise RuntimeError("authorized repository metadata is invalid")
+        return candidate
+    raise RuntimeError("authorized repository root is unavailable")
 
 
 def discover_repository_root() -> Path:
+    candidate = repository_candidate()
     result = subprocess.run(  # noqa: S603
-        git_command("rev-parse", "--show-toplevel"),
+        git_command(
+            "-C",
+            str(candidate),
+            "rev-parse",
+            "--show-toplevel",
+            safe_directory=candidate,
+        ),
         env=isolated_git_environment(),
         check=False,
         capture_output=True,
@@ -87,6 +118,8 @@ def discover_repository_root() -> Path:
         raise RuntimeError("authorized repository root is unavailable") from exc
     if not resolved.is_dir():
         raise RuntimeError("authorized repository root is not a directory")
+    if resolved != candidate:
+        raise RuntimeError("authorized repository root changed during discovery")
     return resolved
 
 
@@ -114,7 +147,7 @@ SAFE_LOCAL_BRANCH_CONFIG = re.compile(r"branch\..+\.(?:merge|remote)\Z")
 
 def run_git(*args: str, input_bytes: bytes | None = None) -> bytes:
     result = subprocess.run(  # noqa: S603
-        git_command(*args),
+        git_command(*args, safe_directory=ROOT),
         cwd=ROOT,
         env=isolated_git_environment(),
         input=input_bytes,
@@ -188,7 +221,7 @@ def require_unchanged_base(expected: str) -> None:
 
 def public_git_output(*args: str) -> str:
     result = subprocess.run(  # noqa: S603
-        git_command(*args),
+        git_command(*args, safe_directory=ROOT),
         cwd=ROOT,
         env=isolated_git_environment(),
         stdout=subprocess.PIPE,

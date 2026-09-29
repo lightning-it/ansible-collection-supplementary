@@ -294,6 +294,7 @@ class PushReadyEngineTests(unittest.TestCase):
                     "COPILOT_GITHUB_TOKEN": "secret",
                 }
                 command = ENGINE["copilot_container_command"](environment, ROOT)
+            self.assertNotIn("HOME", probe.call_args_list[0].kwargs["env"])
             self.assertEqual(host, probe.call_args_list[0].kwargs["env"]["DOCKER_HOST"])
             self.assertEqual(runtime, probe.call_args_list[1].kwargs["env"]["XDG_RUNTIME_DIR"])
             for call in probe.call_args_list:
