@@ -396,8 +396,12 @@ class KeycloakRoleContractTests(unittest.TestCase):
 
     def test_quadlet_destroy_fails_closed_until_li220(self) -> None:
         for role, deploy_role in (("keycloak_destroy", "keycloak_deploy"), ("postgres_destroy", "postgres_deploy")):
+            defaults = self._role_defaults(role)
             assertions = (ROOT / "roles" / role / "tasks" / "assert.yml").read_text(encoding="utf-8")
-            self.assertIn(f"not ({deploy_role}_manage_systemd | default(true) | bool)", assertions)
+            self.assertEqual(
+                defaults[f"{role}_manage_systemd"], f"{{{{ {deploy_role}_manage_systemd | default(true) }}}}"
+            )
+            self.assertIn(f"not ({role}_manage_systemd | bool)", assertions)
 
 
 if __name__ == "__main__":

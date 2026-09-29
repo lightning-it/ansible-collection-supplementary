@@ -5,6 +5,7 @@
       - keycloak_destroy_execute is boolean
       - keycloak_destroy_remove_data is boolean
       - keycloak_destroy_remove_secrets is boolean
+      - keycloak_destroy_manage_systemd is boolean
       - keycloak_destroy_pod_name | default('', true) | trim | length > 0
       - keycloak_destroy_pod_manifest_path | default('', true) | trim | length > 0
       - keycloak_destroy_data_paths is sequence
@@ -13,6 +14,6 @@
       - keycloak_destroy_secret_paths is not string
       - >-
         not (keycloak_destroy_execute | bool)
-        or not (keycloak_deploy_manage_systemd | default(true) | bool)
+        or not (keycloak_destroy_manage_systemd | bool)
     fail_msg: "Keycloak destroy variables are missing or invalid."
   tags: always

@@ -55,8 +55,10 @@
       - nginx_config_waf_location_directives is not string
       - nginx_config_proxy_default_directives is sequence
       - nginx_config_proxy_default_directives is not string
+      - nginx_config_proxy_http_external_port | string is match('^[0-9]+$')
       - nginx_config_proxy_http_external_port | int > 0
       - nginx_config_proxy_http_external_port | int <= 65535
+      - nginx_config_proxy_tls_external_port | string is match('^[0-9]+$')
       - nginx_config_proxy_tls_external_port | int > 0
       - nginx_config_proxy_tls_external_port | int <= 65535
       - >-
@@ -243,6 +245,16 @@
     that:
       - item.name | default('', true) | trim | length > 0
       - item.server_name | default('_', true) | trim | length > 0
+      - >-
+        item.extra_directives | default([])
+        | select('string') | list | length
+        == item.extra_directives | default([]) | length
+      - >-
+        not (nginx_config_waf_enabled | bool)
+        or (
+          item.extra_directives | default([])
+          | reject('match', '^[^{}]*$') | list | length == 0
+        )
       - (item.force_https | default(false) | bool) or (item.listen_port | default(nginx_deploy_listen_port) | int > 0)
       - >-
         item.proxy_external_port is not defined

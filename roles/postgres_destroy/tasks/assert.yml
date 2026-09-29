@@ -3,6 +3,7 @@
   ansible.builtin.assert:
     that:
       - postgres_destroy_execute is boolean
+      - postgres_destroy_manage_systemd is boolean
       - postgres_destroy_pod_name | default('', true) | trim | length > 0
       - postgres_destroy_pod_manifest_path | default('', true) | trim | length > 0
       - postgres_destroy_remove_data is boolean
@@ -13,6 +14,6 @@
       - postgres_destroy_secret_paths is not string
       - >-
         not (postgres_destroy_execute | bool)
-        or not (postgres_deploy_manage_systemd | default(true) | bool)
+        or not (postgres_destroy_manage_systemd | bool)
     fail_msg: "PostgreSQL destroy variables are missing or invalid."
   tags: always

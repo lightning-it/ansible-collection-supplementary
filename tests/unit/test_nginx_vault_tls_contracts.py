@@ -43,11 +43,14 @@ class NginxVaultTlsContractTests(unittest.TestCase):
     def test_required_forwarded_headers_follow_consumer_directives(self) -> None:
         defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
         template = (ROOT / "roles" / "nginx_config" / "templates" / "vhost.conf.j2").read_text(encoding="utf-8")
+        assertions = (ROOT / "roles" / "nginx_config" / "tasks" / "assert.yml").read_text(encoding="utf-8")
 
         boundary = defaults["nginx_config_proxy_required_directives"]
         self.assertIn("proxy_set_header X-Forwarded-For $remote_addr", boundary)
         self.assertIn("proxy_set_header X-Forwarded-Host $server_name", boundary)
         self.assertFalse(any("X-Forwarded-Port" in directive for directive in boundary))
+        self.assertIn("nginx_config_proxy_http_external_port | string is match('^[0-9]+$')", assertions)
+        self.assertIn("nginx_config_proxy_tls_external_port | string is match('^[0-9]+$')", assertions)
         self.assertIn('proxy_set_header Forwarded ""', boundary)
         self.assertNotIn("$proxy_add_x_forwarded_for", "\n".join(boundary))
         self.assertEqual(
@@ -55,7 +58,6 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             4,
         )
         self.assertEqual(template.count("proxy_set_header X-Forwarded-Port {{ _proxy_external_port }};"), 4)
-        assertions = (ROOT / "roles" / "nginx_config" / "tasks" / "assert.yml").read_text(encoding="utf-8")
         self.assertIn("nginx_config_proxy_required_directives == [", assertions)
         self.assertGreaterEqual(assertions.count("| map('trim')"), 2)
         custom_proxy = template.index("item.proxy_directives | default(nginx_config_proxy_default_directives)")
@@ -149,6 +151,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             if item.get("name") == "Ensure enabled WAF policy contains server and location controls"
         )
         self.assertTrue(any("^[^\\r\\n;]*(;)?$" in item for item in server_task["ansible.builtin.assert"]["that"]))
+        self.assertIn("reject('match', '^[^{}]*$')", ASSERTS.read_text(encoding="utf-8"))
         for header in (
             "host",
             "x-real-ip",
