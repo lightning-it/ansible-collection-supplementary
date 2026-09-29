@@ -227,6 +227,10 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             for index, task in enumerate(systemd_block)
             if task["name"] == "Refuse unknown legacy Nginx lifecycle states"
         )
+        lifecycle_assertions = systemd_block[validation_index]["ansible.builtin.assert"]["that"]
+        lifecycle_contract = "\n".join(str(item) for item in lifecycle_assertions)
+        for transient in ("activating", "reloading", "deactivating"):
+            self.assertNotIn(transient, lifecycle_contract)
         legacy_stop_index = next(
             index
             for index, task in enumerate(systemd_block)

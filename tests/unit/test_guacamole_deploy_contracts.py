@@ -89,7 +89,14 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("name: no_proxy", pod)
         self.assertIn("name: NO_PROXY", pod)
         self.assertIn("name: HTTPS_PROXY", pod)
+        self.assertIn("name: JAVA_TOOL_OPTIONS", pod)
+        self.assertIn("-Dhttp.proxyHost=", pod)
+        self.assertIn("-Dhttp.proxyPort=", pod)
+        self.assertIn("-Dhttps.proxyHost=", pod)
+        self.assertIn("-Dhttps.proxyPort=", pod)
+        self.assertIn("-Dhttp.nonProxyHosts=", pod)
         self.assertIn("guacamole_deploy_proxy_url | to_json", pod)
+        self.assertIn("':[1-9][0-9]{0,4}\\\\Z'", asserts)
         self.assertIn("regex_replace('^.*:([0-9]+)$', '\\\\1')", asserts)
         self.assertIn(") <= 65535", asserts)
         self.assertIn("guacamole_deploy_no_proxy | join(',') | to_json", pod)
@@ -97,6 +104,7 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertNotIn("http_proxy", non_application_containers)
         self.assertNotIn("HTTP_PROXY", non_application_containers)
         self.assertNotIn("HTTPS_PROXY", non_application_containers)
+        self.assertNotIn("JAVA_TOOL_OPTIONS", non_application_containers)
 
     def test_persistent_lifecycle_uses_only_native_quadlet(self) -> None:
         tasks = TASKS.read_text(encoding="utf-8")

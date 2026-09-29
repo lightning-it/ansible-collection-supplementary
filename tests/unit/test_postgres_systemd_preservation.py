@@ -65,6 +65,9 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
             ("inactive", 3, "enabled-runtime", 0, ["stage", "stop"], "restarted"),
             ("unknown", 4, "not-found", 1, [], "present"),
             ("failed", 3, "masked", 1, [], "present"),
+            ("activating", 0, "enabled", 0, [], "rejected"),
+            ("reloading", 0, "enabled", 0, [], "rejected"),
+            ("deactivating", 3, "enabled", 0, [], "rejected"),
             ("error", 1, "error", 1, [], "rejected"),
         )
         for active_state, active_rc, enabled_state, enabled_rc, events, action in cases:

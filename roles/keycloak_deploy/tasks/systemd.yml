@@ -41,7 +41,7 @@
           - keycloak_deploy_legacy_systemd_active.rc in [0, 1, 3, 4]
           - >-
             keycloak_deploy_legacy_systemd_active.stdout | trim
-            in ['active', 'reloading', 'activating', 'deactivating', 'inactive', 'failed', 'unknown']
+            in ['active', 'inactive', 'failed', 'unknown']
           - keycloak_deploy_legacy_systemd_enabled.rc in [0, 1, 3, 4]
           - >-
             keycloak_deploy_legacy_systemd_enabled.stdout | trim

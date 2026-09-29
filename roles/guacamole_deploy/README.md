@@ -22,12 +22,15 @@ All defaults are defined in `defaults/main.yml`.
   They must be set together; the role renders them as native Quadlet
   `Network=<name>:ip=<address>` and does not create or modify the network.
 - `guacamole_deploy_proxy_url` injects one credential-free RFC1918 HTTP proxy
-  URL only into the Guacamole application container; PostgreSQL and guacd do
-  not inherit it.
+  URL only into the Guacamole application container. It renders both conventional
+  proxy environment variables and JVM `http[s].proxyHost`/`proxyPort` properties,
+  so the Java OIDC extension routes JWKS requests through the proxy. PostgreSQL
+  and guacd do not inherit it.
 - `guacamole_deploy_no_proxy` declares the exact direct destinations for the
-  Guacamole application container. This permits server-side OIDC/JWKS requests
-  to traverse the site forward proxy even when a broader host bypass suffix
-  exists. The empty default leaves inherited behavior unchanged.
+  Guacamole application container. Entries are also rendered into the JVM
+  `http.nonProxyHosts` property. This permits server-side OIDC/JWKS requests to
+  traverse the site forward proxy even when a broader host bypass suffix exists.
+  The empty default leaves inherited behavior unchanged.
 - `guacamole_deploy_oidc_enabled` enables the OpenID Connect extension and
   requires issuer, authorization, JWKS, client, and redirect settings.
 - `guacamole_deploy_oidc_groups_claim_type` explicitly selects the token claim
