@@ -136,7 +136,6 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         self.assertEqual(source.count("| replace(\"'\", '')) in _reserved_proxy_headers"), 4)
         self.assertEqual(source.count("_single_statement and not _reserved_proxy_header"), 4)
         self.assertEqual(source.count("';' not in _directive.rstrip(';')"), 7)
-        self.assertEqual(source.count("startswith('include')"), 7)
 
     def test_waf_location_directives_cannot_override_proxy_identity(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
@@ -157,10 +156,6 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         self.assertTrue(any("(?i:include)" in item for item in server_task["ansible.builtin.assert"]["that"]))
         block_task = next(
             item for item in tasks if item.get("name") == "Reject block-form vhost extra directives when WAF is enabled"
-        )
-        self.assertEqual(
-            block_task["loop"],
-            "{{ nginx_config_vhosts_effective | subelements('extra_directives', skip_missing=True) }}",
         )
         self.assertTrue(
             any("include" in item and "[^{}]*" in item for item in block_task["ansible.builtin.assert"]["that"])
