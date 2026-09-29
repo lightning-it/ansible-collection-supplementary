@@ -200,13 +200,13 @@
       ansible.builtin.include_role:
         name: lit.supplementary.keycloak_deploy
 
+    - name: Stage the isolated Keycloak Tiny NGINX edge configuration
+      ansible.builtin.include_role:
+        name: lit.supplementary.nginx_config
+
     - name: Deploy the isolated Keycloak Tiny NGINX edge
       ansible.builtin.include_role:
         name: lit.supplementary.nginx_deploy
-
-    - name: Configure the isolated Keycloak Tiny NGINX edge
-      ansible.builtin.include_role:
-        name: lit.supplementary.nginx_config
 
     - name: Inspect one-time broker lifecycle seed
       ansible.builtin.stat:
