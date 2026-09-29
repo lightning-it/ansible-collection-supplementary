@@ -52,9 +52,8 @@ separately reviewed ModSecurity/Coraza integration.
 The default reverse-proxy contract overwrites `Host`, `X-Real-IP`, and every
 Keycloak-relevant `X-Forwarded-*` identity header from NGINX-owned connection
 state. It strips `Forwarded`, `X-Original-Forwarded-For`, and
-`X-Forwarded-Prefix` so an Internet client cannot inject a second trusted
-identity chain. Custom `proxy_directives` replace the defaults and therefore
-must preserve the same overwrite-and-strip contract.
+`X-Forwarded-Prefix`; `X-Forwarded-Port` uses the trusted external port rather
+than NGINX's listener. Custom directives cannot weaken this boundary.
 
 When `nginx_config_vault_issue_missing: false`, Vault KV must already contain a
 certificate/private-key pair, a CA chain, and matching common-name and
@@ -87,7 +86,7 @@ None.
               - "proxy_set_header X-Real-IP $remote_addr"
               - "proxy_set_header X-Forwarded-For $remote_addr"
               - "proxy_set_header X-Forwarded-Host $server_name"
-              - "proxy_set_header X-Forwarded-Port $server_port"
+              - "proxy_set_header X-Forwarded-Port 443"
               - "proxy_set_header X-Forwarded-Proto $scheme"
               - 'proxy_set_header X-Forwarded-Prefix ""'
               - 'proxy_set_header X-Original-Forwarded-For ""'

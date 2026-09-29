@@ -1,7 +1,6 @@
 ---
-minor_changes:
+breaking_changes:
   - >-
-    Move Guacamole persistent lifecycle from a custom podman-kube systemd
-    wrapper to native Quadlet with validated static network attachment and a
-    fail-closed takeover of the historical role-owned `guacamole.service`
-    independent of the new Quadlet unit name.
+    Replace the legacy Guacamole wrapper with a collision-resistant
+    `<pod-name>-pod.service` Quadlet and fail-closed `guacamole.service`
+    takeover.

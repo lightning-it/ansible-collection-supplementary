@@ -101,7 +101,7 @@ keycloak_deploy_db_name: "keycloak"
 keycloak_deploy_db_user: "keycloak"
 keycloak_deploy_db_host: >-
   {{
-    keycloak_deploy_postgres_pod_name ~ '-' ~ keycloak_deploy_postgres_container_name
+    keycloak_deploy_postgres_pod_name
     if (
       keycloak_deploy_manage_postgres | bool
       and not (keycloak_deploy_host_network | bool)

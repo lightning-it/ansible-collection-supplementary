@@ -49,6 +49,7 @@ nginx_config_vault_auth_method: >-
   {{ 'token' if (nginx_config_vault_use_token | bool) else 'approle' }}
 nginx_config_proxy_default_directives:
   - "proxy_http_version 1.1"
+nginx_config_proxy_external_port: "{{ nginx_deploy_tls_host_port | default(nginx_config_tls_listen_port) }}"
 # These directives are a non-overridable edge-security boundary. The vhost
 # template emits them after every consumer-supplied proxy directive list so a
 # client-provided forwarding chain can never become authoritative.
@@ -57,7 +58,7 @@ nginx_config_proxy_required_directives:
   - "proxy_set_header X-Real-IP $remote_addr"
   - "proxy_set_header X-Forwarded-For $remote_addr"
   - "proxy_set_header X-Forwarded-Host $server_name"
-  - "proxy_set_header X-Forwarded-Port $server_port"
+  - "proxy_set_header X-Forwarded-Port {{ nginx_config_proxy_external_port }}"
   - "proxy_set_header X-Forwarded-Proto $scheme"
   - 'proxy_set_header X-Forwarded-Prefix ""'
   - 'proxy_set_header X-Original-Forwarded-For ""'

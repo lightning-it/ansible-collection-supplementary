@@ -111,8 +111,10 @@ class GuacamoleDeployContractTests(unittest.TestCase):
     def test_persistent_lifecycle_uses_only_native_quadlet(self) -> None:
         tasks = TASKS.read_text(encoding="utf-8")
         systemd_tasks = SYSTEMD_TASKS.read_text(encoding="utf-8")
+        defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
 
         self.assertFalse(LEGACY_SERVICE.exists())
+        self.assertEqual(defaults["guacamole_deploy_systemd_unit_name"], "{{ guacamole_deploy_pod_name }}-pod")
         self.assertIn("include_tasks: systemd.yml", tasks)
         self.assertIn("name: lit.foundational.podman_systemd", systemd_tasks)
         self.assertLess(

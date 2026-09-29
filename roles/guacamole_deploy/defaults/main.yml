@@ -42,7 +42,7 @@ guacamole_deploy_validate_certs: true
 guacamole_deploy_install_packages: true
 guacamole_deploy_manage_systemd: true
 guacamole_deploy_skip_runtime: false
-guacamole_deploy_systemd_unit_name: "{{ guacamole_deploy_pod_name }}"
+guacamole_deploy_systemd_unit_name: "{{ guacamole_deploy_pod_name }}-pod"
 guacamole_deploy_systemd_description: "Apache Guacamole container service"
 guacamole_deploy_systemd_scope: system
 guacamole_deploy_quadlet_dir: /etc/containers/systemd

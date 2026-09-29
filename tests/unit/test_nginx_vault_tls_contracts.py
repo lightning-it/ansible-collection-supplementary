@@ -47,6 +47,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         boundary = defaults["nginx_config_proxy_required_directives"]
         self.assertIn("proxy_set_header X-Forwarded-For $remote_addr", boundary)
         self.assertIn("proxy_set_header X-Forwarded-Host $server_name", boundary)
+        self.assertIn("proxy_set_header X-Forwarded-Port {{ nginx_config_proxy_external_port }}", boundary)
         self.assertIn('proxy_set_header Forwarded ""', boundary)
         self.assertNotIn("$proxy_add_x_forwarded_for", "\n".join(boundary))
         self.assertEqual(

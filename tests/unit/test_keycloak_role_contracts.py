@@ -124,7 +124,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
             f"CN={expected_cn},CN=Users,DC=keycloak,DC=test",
         )
 
-    def test_managed_postgres_bridge_uses_container_dns_and_host_probe(self) -> None:
+    def test_managed_postgres_bridge_uses_pod_dns_alias_and_host_probe(self) -> None:
         defaults = self._role_defaults("keycloak_deploy")
         environment = Environment(autoescape=False)  # noqa: S701
         environment.filters["bool"] = bool
@@ -139,12 +139,12 @@ class KeycloakRoleContractTests(unittest.TestCase):
             "keycloak_deploy_postgres_host_ip": "127.0.0.1",
         }
 
-        self.assertEqual(db_host.render(**context).strip(), "keycloak-postgres-postgres")
+        self.assertEqual(db_host.render(**context).strip(), "keycloak-postgres")
         self.assertEqual(wait_host.render(**context).strip(), "127.0.0.1")
 
         tiny = (ROOT / "molecule" / "keycloak-tiny" / "converge.yml").read_text(encoding="utf-8")
         verify = (ROOT / "molecule" / "keycloak-tiny" / "verify.yml").read_text(encoding="utf-8")
-        self.assertIn("keycloak-tiny-postgres-postgres", verify)
+        self.assertIn("KC_DB_URL_HOST=keycloak-tiny-postgres", verify)
         self.assertNotIn("keycloak_deploy_db_host:", tiny)
 
     def test_external_database_keeps_explicit_endpoint(self) -> None:
@@ -277,7 +277,6 @@ class KeycloakRoleContractTests(unittest.TestCase):
         directives = nginx_defaults["nginx_config_proxy_required_directives"]
         self.assertIn("proxy_set_header X-Forwarded-For $remote_addr", directives)
         self.assertIn("proxy_set_header X-Forwarded-Host $server_name", directives)
-        self.assertIn("proxy_set_header X-Forwarded-Port $server_port", directives)
         self.assertIn("proxy_set_header X-Forwarded-Proto $scheme", directives)
         self.assertIn('proxy_set_header Forwarded ""', directives)
         self.assertIn('proxy_set_header X-Original-Forwarded-For ""', directives)
