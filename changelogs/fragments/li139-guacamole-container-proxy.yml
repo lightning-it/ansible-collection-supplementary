@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    guacamole_deploy - Add an explicit credential-free RFC1918 forward-proxy
+    URL for only the Guacamole application container, keeping PostgreSQL and
+    guacd outside the Internet egress capability.

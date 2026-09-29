@@ -16,6 +16,7 @@ guacamole_deploy_network_ipv4: ""
 # Optional per-container override of Podman's inherited proxy bypass list.
 # This lets server-side OIDC/JWKS traffic use the site forward proxy while
 # preserving only explicitly declared direct destinations such as loopback.
+guacamole_deploy_proxy_url: ""
 guacamole_deploy_no_proxy: []
 guacamole_deploy_base_dir: "/srv/guacamole"
 guacamole_deploy_db_name: "guacamole"

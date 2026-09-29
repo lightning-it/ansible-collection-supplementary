@@ -77,6 +77,7 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn('guacamole_deploy_network_name: ""', defaults)
         self.assertIn('guacamole_deploy_network_ipv4: ""', defaults)
         self.assertIn("guacamole_deploy_no_proxy: []", defaults)
+        self.assertIn('guacamole_deploy_proxy_url: ""', defaults)
         self.assertIn("(guacamole_deploy_network_name | length == 0)", asserts)
         self.assertIn("== (guacamole_deploy_network_ipv4 | length == 0)", asserts)
         self.assertIn("guacamole_deploy_no_proxy | unique", asserts)
@@ -87,7 +88,13 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         )
         self.assertIn("name: no_proxy", pod)
         self.assertIn("name: NO_PROXY", pod)
+        self.assertIn("name: HTTPS_PROXY", pod)
+        self.assertIn("guacamole_deploy_proxy_url | to_json", pod)
         self.assertIn("guacamole_deploy_no_proxy | join(',') | to_json", pod)
+        non_application_containers = pod.split("    - name: guacamole", 1)[0]
+        self.assertNotIn("http_proxy", non_application_containers)
+        self.assertNotIn("HTTP_PROXY", non_application_containers)
+        self.assertNotIn("HTTPS_PROXY", non_application_containers)
 
     def test_persistent_lifecycle_uses_only_native_quadlet(self) -> None:
         tasks = TASKS.read_text(encoding="utf-8")

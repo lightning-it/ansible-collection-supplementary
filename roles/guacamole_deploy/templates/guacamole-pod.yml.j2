@@ -39,6 +39,12 @@ spec:
         - {name: REMOTE_IP_VALVE_ENABLED, value: "true"}
 {# Apache Guacamole defines API_SESSION_TIMEOUT in minutes. #}
         - {name: API_SESSION_TIMEOUT, value: {{ guacamole_deploy_api_session_timeout_minutes | string | to_json }}}
+{% if guacamole_deploy_proxy_url | length > 0 %}
+        - {name: http_proxy, value: {{ guacamole_deploy_proxy_url | to_json }}}
+        - {name: HTTP_PROXY, value: {{ guacamole_deploy_proxy_url | to_json }}}
+        - {name: https_proxy, value: {{ guacamole_deploy_proxy_url | to_json }}}
+        - {name: HTTPS_PROXY, value: {{ guacamole_deploy_proxy_url | to_json }}}
+{% endif %}
 {% if guacamole_deploy_no_proxy | length > 0 %}
         - {name: no_proxy, value: {{ guacamole_deploy_no_proxy | join(',') | to_json }}}
         - {name: NO_PROXY, value: {{ guacamole_deploy_no_proxy | join(',') | to_json }}}
