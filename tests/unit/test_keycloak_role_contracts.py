@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -278,6 +280,58 @@ class KeycloakRoleContractTests(unittest.TestCase):
             "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for",
             directives,
         )
+
+    def test_proxy_trust_addresses_are_validated_with_stdlib_ipaddress(self) -> None:
+        tasks = yaml.safe_load(
+            (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
+        )
+        validation = next(task for task in tasks if task["name"] == "Validate trusted Keycloak proxy address syntax")
+
+        command = validation["ansible.builtin.command"]["argv"]
+        self.assertIn("ipaddress.ip_network(sys.argv[1], strict=False)", command[2])
+        self.assertEqual(command[3], "{{ item }}")
+        self.assertEqual(validation["loop"], "{{ keycloak_deploy_proxy_trusted_addresses }}")
+        self.assertIs(validation["check_mode"], False)
+        self.assertIs(validation["changed_when"], False)
+
+        for address in ("10.89.10.2", "10.89.10.0/29", "2001:db8::2", "2001:db8::/64"):
+            with self.subTest(valid_address=address):
+                result = subprocess.run(  # noqa: S603 - isolated Devtools regression of the exact role argv
+                    [sys.executable, "-c", command[2], address],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+        for address in ("nginx", "10.89.10.999", "2001:db8::zz", "10.89.10.0/99"):
+            with self.subTest(invalid_address=address):
+                result = subprocess.run(  # noqa: S603 - isolated Devtools regression of the exact role argv
+                    [sys.executable, "-c", command[2], address],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+
+    def test_container_quadlets_use_collision_resistant_unit_names(self) -> None:
+        expected = {
+            "keycloak_deploy": "{{ keycloak_deploy_pod_name }}-pod",
+            "nginx_deploy": "{{ nginx_deploy_pod_name }}-pod",
+            "postgres_deploy": "{{ postgres_deploy_pod_name }}-pod",
+        }
+        for role, unit_name in expected.items():
+            with self.subTest(role=role):
+                defaults = self._role_defaults(role)
+                self.assertEqual(defaults[f"{role}_systemd_unit_name"], unit_name)
+
+    def test_systemd_management_fails_closed_without_systemd_facts(self) -> None:
+        for role in ("keycloak_deploy", "nginx_deploy", "postgres_deploy"):
+            with self.subTest(role=role):
+                assertions = (ROOT / "roles" / role / "tasks" / "assert.yml").read_text(encoding="utf-8")
+                self.assertIn(f"not {role}_manage_systemd | bool", assertions)
+                self.assertIn("ansible_facts.get('service_mgr', '')", assertions)
+                self.assertIn(") == 'systemd'", assertions)
 
     def test_managed_bridge_database_requires_a_shared_normalized_network(self) -> None:
         assertions = (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")

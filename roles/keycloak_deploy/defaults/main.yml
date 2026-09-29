@@ -167,7 +167,7 @@ keycloak_deploy_kubeplay_remove: false
 keycloak_deploy_kubeplay_run: false
 
 # Systemd
-keycloak_deploy_systemd_unit_name: "{{ keycloak_deploy_pod_name }}"
+keycloak_deploy_systemd_unit_name: "{{ keycloak_deploy_pod_name }}-pod"
 keycloak_deploy_systemd_description: "Keycloak container service"
 keycloak_deploy_systemd_scope: system
 keycloak_deploy_quadlet_dir: /etc/containers/systemd

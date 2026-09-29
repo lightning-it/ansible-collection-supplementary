@@ -86,7 +86,7 @@ nginx_deploy_validate_certs: true
 # Deployment control
 nginx_deploy_manage_service: true
 nginx_deploy_manage_systemd: "{{ nginx_deploy_manage_service }}"
-nginx_deploy_systemd_unit_name: "{{ nginx_deploy_pod_name }}"
+nginx_deploy_systemd_unit_name: "{{ nginx_deploy_pod_name }}-pod"
 nginx_deploy_systemd_description: "Nginx container service"
 nginx_deploy_systemd_scope: system
 nginx_deploy_quadlet_dir: /etc/containers/systemd

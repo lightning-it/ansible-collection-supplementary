@@ -90,6 +90,8 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                         "path": "/",
                         "directives": [
                             "PrOxY_SeT_HeAdEr x-FoRwArDeD-fOr $proxy_add_x_forwarded_for",
+                            'proxy_set_header "X-Forwarded-For" $http_x_forwarded_for',
+                            "proxy_set_header 'X-Forwarded-Proto' $http_x_forwarded_proto",
                             "proxy_pass http://keycloak",
                         ],
                     }
@@ -109,11 +111,14 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             with self.subTest(server=item["server_name"]):
                 rendered = template.render(item=item, **common)
                 self.assertNotIn("$proxy_add_x_forwarded_for", rendered)
+                self.assertNotIn("$http_x_forwarded_for", rendered)
+                self.assertNotIn("$http_x_forwarded_proto", rendered)
                 self.assertNotIn("$http_forwarded", rendered)
                 self.assertEqual(rendered.count("proxy_set_header X-Forwarded-For $remote_addr;"), 1)
                 self.assertEqual(rendered.count('proxy_set_header Forwarded "";'), 1)
 
-        self.assertEqual(source.count("and (_directive_tokens[1] | lower) in _reserved_proxy_headers"), 4)
+        self.assertEqual(source.count("| lower | replace("), 4)
+        self.assertEqual(source.count("| replace(\"'\", '')) in _reserved_proxy_headers"), 4)
 
     def test_pki_inputs_are_required_only_when_issuance_is_enabled(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))

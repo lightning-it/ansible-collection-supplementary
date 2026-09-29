@@ -104,6 +104,12 @@
         == keycloak_deploy_proxy_trusted_addresses | length
       - keycloak_deploy_install_packages is boolean
       - keycloak_deploy_manage_systemd is boolean
+      - >-
+        not keycloak_deploy_manage_systemd | bool
+        or (
+          ansible_service_mgr
+          | default(ansible_facts.get('service_mgr', ''), true)
+        ) == 'systemd'
       - keycloak_deploy_systemd_unit_name | default('', true) | trim | length > 0
       - keycloak_deploy_systemd_description | default('', true) | trim | length > 0
       - keycloak_deploy_systemd_scope in ['system', 'user']
@@ -118,4 +124,18 @@
       - keycloak_deploy_generated_admin_password_length | int >= 16
       - keycloak_deploy_env_extra is mapping
     fail_msg: "Keycloak deploy variables are missing or invalid."
+  tags: always
+
+- name: Validate trusted Keycloak proxy address syntax
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_facts.get('python', {}).get('executable', '/usr/bin/python3') }}"
+      - -c
+      - "import ipaddress, sys; ipaddress.ip_network(sys.argv[1], strict=False)"
+      - "{{ item }}"
+  loop: "{{ keycloak_deploy_proxy_trusted_addresses }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: false
+  check_mode: false
   tags: always

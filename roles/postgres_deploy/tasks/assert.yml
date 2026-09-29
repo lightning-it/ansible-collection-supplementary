@@ -26,6 +26,12 @@
         == postgres_deploy_networks | length
       - postgres_deploy_install_packages is boolean
       - postgres_deploy_manage_systemd is boolean
+      - >-
+        not postgres_deploy_manage_systemd | bool
+        or (
+          ansible_service_mgr
+          | default(ansible_facts.get('service_mgr', ''), true)
+        ) == 'systemd'
       - postgres_deploy_systemd_unit_name | default('', true) | trim | length > 0
       - postgres_deploy_systemd_description | default('', true) | trim | length > 0
       - postgres_deploy_systemd_scope in ['system', 'user']

@@ -34,6 +34,9 @@ Key variables:
 Set `nginx_deploy_networks` to the private application network when NGINX is
 the exclusive ingress and reaches backends through Podman DNS names. Persistent
 start, stop, restart and removal remain owned by the native Quadlet unit.
+The default native unit is `<pod-name>-pod.service`, avoiding collisions with
+an administrator-managed `nginx.service`. Enabling systemd management without
+a detected systemd service manager fails during prechecks.
 
 ## Dependencies
 

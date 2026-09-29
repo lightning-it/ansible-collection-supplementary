@@ -18,6 +18,9 @@ Without systemd management, the role uses one fail-closed kubeplay recreation.
 An exact legacy `podman-kube@<escaped-manifest>.service` instance is stopped and
 disabled once before native Quadlet takeover. A shared legacy template is not
 removed because other services may still depend on it.
+The default native unit is `<pod-name>-pod.service`, avoiding collisions with
+an administrator-managed `postgres.service`. Enabling systemd management
+without a detected systemd service manager fails during prechecks.
 
 The generated Pod manifest is restricted to the owner (`0600`) because it
 contains the effective PostgreSQL password required by the container runtime.

@@ -37,7 +37,8 @@ Key variables:
 - `keycloak_deploy_proxy_trusted_addresses`
 
 When proxy headers are enabled, `keycloak_deploy_proxy_trusted_addresses` is
-mandatory and is rendered as `KC_PROXY_TRUSTED_ADDRESSES`. This prevents a
+mandatory, every entry must be a valid IPv4/IPv6 address or CIDR, and the list
+is rendered as `KC_PROXY_TRUSTED_ADDRESSES`. This prevents a
 non-proxy peer from forging client, scheme, host, or port identity. Edge TLS
 deployments should publish Keycloak only on loopback, attach NGINX and Keycloak
 to an explicitly pinned private Quadlet network, and list only the NGINX pod
@@ -63,6 +64,9 @@ Both paths read back the non-secret database-host entry from the active
 container and reject a stale pod before health acceptance. An exact legacy
 `podman-kube@<escaped-manifest>.service` instance is stopped and disabled once
 before native Quadlet takeover.
+The default native unit is named `<pod-name>-pod.service` so it cannot collide
+with an administrator-managed `keycloak.service`. Enabling systemd management
+without a detected systemd service manager fails during prechecks.
 
 ## Dependencies
 

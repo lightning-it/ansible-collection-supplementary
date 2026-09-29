@@ -64,7 +64,7 @@ server {
 {% set _reserved_proxy_header = (
   _directive_tokens | length >= 2
   and (_directive_tokens[0] | lower) == 'proxy_set_header'
-  and (_directive_tokens[1] | lower) in _reserved_proxy_headers
+  and (_directive_tokens[1] | lower | replace('"', '') | replace("'", '')) in _reserved_proxy_headers
 ) %}
 {% if _directive | length > 0 and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
@@ -94,7 +94,7 @@ server {
 {% set _reserved_proxy_header = (
   _directive_tokens | length >= 2
   and (_directive_tokens[0] | lower) == 'proxy_set_header'
-  and (_directive_tokens[1] | lower) in _reserved_proxy_headers
+  and (_directive_tokens[1] | lower | replace('"', '') | replace("'", '')) in _reserved_proxy_headers
 ) %}
 {% if _directive | length > 0 and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
@@ -157,7 +157,7 @@ server {
 {% set _reserved_proxy_header = (
   _directive_tokens | length >= 2
   and (_directive_tokens[0] | lower) == 'proxy_set_header'
-  and (_directive_tokens[1] | lower) in _reserved_proxy_headers
+  and (_directive_tokens[1] | lower | replace('"', '') | replace("'", '')) in _reserved_proxy_headers
 ) %}
 {% if _directive | length > 0 and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
@@ -182,7 +182,7 @@ server {
 {% set _reserved_proxy_header = (
   _directive_tokens | length >= 2
   and (_directive_tokens[0] | lower) == 'proxy_set_header'
-  and (_directive_tokens[1] | lower) in _reserved_proxy_headers
+  and (_directive_tokens[1] | lower | replace('"', '') | replace("'", '')) in _reserved_proxy_headers
 ) %}
 {% if _directive | length > 0 and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
