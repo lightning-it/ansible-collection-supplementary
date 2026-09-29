@@ -26,6 +26,8 @@ Key variables:
 - `keycloak_deploy_postgres_pod_manifest_path`
 - `keycloak_deploy_db_host`
 - `keycloak_deploy_db_port`
+- `keycloak_deploy_postgres_port`
+- `keycloak_deploy_postgres_container_port`
 - `keycloak_deploy_db_name`
 - `keycloak_deploy_db_user`
 - `keycloak_deploy_db_password`
@@ -47,6 +49,8 @@ address as trusted.
 When this role manages PostgreSQL and both pods use the Podman bridge network,
 `keycloak_deploy_db_host` defaults to Podman's stable `<postgres-pod-name>` DNS
 alias; the runtime container name is not a cross-pod discovery contract.
+The private endpoint uses `keycloak_deploy_postgres_container_port`; readiness
+uses the published `keycloak_deploy_postgres_port`.
 `keycloak_deploy_postgres_networks` defaults to the same named networks after
 removing Keycloak-specific options such as its fixed IP, so both pods share the
 private DNS domain without reusing an address. An explicit override can pin a

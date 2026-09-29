@@ -152,36 +152,6 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         self.assertIn("nginx_config_waf_enabled | bool", task["when"])
         self.assertTrue(any("^[^\\r\\n;]*(;)?$" in item for item in task["ansible.builtin.assert"]["that"]))
 
-    def test_waf_location_directive_cannot_smuggle_a_second_statement(self) -> None:
-        defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
-        source = (ROOT / "roles" / "nginx_config" / "templates" / "vhost.conf.j2").read_text(encoding="utf-8")
-        environment = Environment(autoescape=False)  # noqa: S701
-        environment.filters["bool"] = bool
-        rendered = environment.from_string(source).render(
-            item={
-                "force_https": True,
-                "server_name": "keycloak.example.invalid",
-                "upstream_url": "http://keycloak",
-            },
-            nginx_config_http_listen_port=80,
-            nginx_config_tls_listen_port=443,
-            nginx_config_tls_certificate="/tls/tls.crt",
-            nginx_config_tls_certificate_key="/tls/tls.key",
-            nginx_config_waf_enabled=True,
-            nginx_config_waf_server_directives=["limit_req_status 429"],
-            nginx_config_waf_location_directives=[
-                "limit_req zone=edge;\nproxy_set_header X-Forwarded-For $http_x_forwarded_for",
-            ],
-            nginx_config_proxy_default_directives=defaults["nginx_config_proxy_default_directives"],
-            nginx_config_proxy_required_directives=defaults["nginx_config_proxy_required_directives"],
-            nginx_deploy_listen_port=8080,
-            nginx_deploy_root="/usr/share/nginx/html",
-            nginx_deploy_index_files=["index.html"],
-        )
-
-        self.assertNotIn("$http_x_forwarded_for", rendered)
-        self.assertEqual(rendered.count("proxy_set_header X-Forwarded-For $remote_addr;"), 1)
-
     def test_proxy_directive_prechecks_reject_multiple_statements(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
         names = {

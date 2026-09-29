@@ -20,6 +20,11 @@ class KeycloakRoleContractTests(unittest.TestCase):
         self.assertIsInstance(loaded, dict)
         return loaded
 
+    def _render_default(self, defaults: dict[str, object], name: str, context: dict[str, object]) -> str:
+        environment = Environment(autoescape=False)  # noqa: S701
+        environment.filters["bool"] = bool
+        return environment.from_string(str(defaults[name])).render(**context).strip()
+
     def _role_options(self, role: str) -> dict[str, dict[str, object]]:
         path = ROOT / "roles" / role / "meta" / "argument_specs.yml"
         loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -126,21 +131,24 @@ class KeycloakRoleContractTests(unittest.TestCase):
 
     def test_managed_postgres_bridge_uses_pod_dns_alias_and_host_probe(self) -> None:
         defaults = self._role_defaults("keycloak_deploy")
-        environment = Environment(autoescape=False)  # noqa: S701
-        environment.filters["bool"] = bool
-        db_host = environment.from_string(str(defaults["keycloak_deploy_db_host"]))
-        wait_host = environment.from_string(str(defaults["keycloak_deploy_db_wait_host"]))
         context = {
             "keycloak_deploy_manage_postgres": True,
             "keycloak_deploy_host_network": False,
             "keycloak_deploy_postgres_host_network": False,
             "keycloak_deploy_postgres_pod_name": "keycloak-postgres",
-            "keycloak_deploy_postgres_container_name": "postgres",
             "keycloak_deploy_postgres_host_ip": "127.0.0.1",
+            "keycloak_deploy_postgres_container_port": 5432,
+            "keycloak_deploy_postgres_port": 15432,
         }
 
-        self.assertEqual(db_host.render(**context).strip(), "keycloak-postgres")
-        self.assertEqual(wait_host.render(**context).strip(), "127.0.0.1")
+        expected = {
+            "keycloak_deploy_db_host": "keycloak-postgres",
+            "keycloak_deploy_db_port": "5432",
+            "keycloak_deploy_db_wait_host": "127.0.0.1",
+            "keycloak_deploy_db_wait_port": "15432",
+        }
+        for name, value in expected.items():
+            self.assertEqual(self._render_default(defaults, name, context), value)
 
         tiny = (ROOT / "molecule" / "keycloak-tiny" / "converge.yml").read_text(encoding="utf-8")
         verify = (ROOT / "molecule" / "keycloak-tiny" / "verify.yml").read_text(encoding="utf-8")
@@ -149,22 +157,17 @@ class KeycloakRoleContractTests(unittest.TestCase):
 
     def test_external_database_keeps_explicit_endpoint(self) -> None:
         defaults = self._role_defaults("keycloak_deploy")
-        environment = Environment(autoescape=False)  # noqa: S701
-        environment.filters["bool"] = bool
-        db_host = environment.from_string(str(defaults["keycloak_deploy_db_host"]))
-        wait_host = environment.from_string(str(defaults["keycloak_deploy_db_wait_host"]))
         context = {
             "keycloak_deploy_manage_postgres": False,
             "keycloak_deploy_host_network": False,
             "keycloak_deploy_postgres_host_network": False,
             "keycloak_deploy_postgres_pod_name": "unused",
-            "keycloak_deploy_postgres_container_name": "unused",
             "keycloak_deploy_postgres_host_ip": "db.example.invalid",
             "keycloak_deploy_db_host": "db.example.invalid",
         }
 
-        self.assertEqual(db_host.render(**context).strip(), "db.example.invalid")
-        self.assertEqual(wait_host.render(**context).strip(), "db.example.invalid")
+        self.assertEqual(self._render_default(defaults, "keycloak_deploy_db_host", context), "db.example.invalid")
+        self.assertEqual(self._render_default(defaults, "keycloak_deploy_db_wait_host", context), "db.example.invalid")
 
     def test_postgres_manifest_with_password_is_owner_only(self) -> None:
         tasks_path = ROOT / "roles" / "postgres_deploy" / "tasks" / "deploy_pod.yml"

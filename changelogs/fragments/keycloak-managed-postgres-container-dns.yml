@@ -1,8 +1,8 @@
 ---
 bugfixes:
   - >-
-    Use the stable PostgreSQL pod DNS alias across the private Quadlet network
-    while retaining the published host address for controller readiness.
+    Use the stable PostgreSQL pod DNS alias and private container port while
+    retaining the published host endpoint for controller readiness.
   - >-
     Restrict the generated PostgreSQL Pod manifest to its owner because the
     runtime manifest contains the effective database password.

@@ -26,6 +26,7 @@
       - keycloak_deploy_db_wait_host | default('', true) | trim | length > 0
       - keycloak_deploy_db_port | int > 0
       - keycloak_deploy_postgres_port | int > 0
+      - keycloak_deploy_postgres_container_port | int > 0
       - keycloak_deploy_db_wait_port | int > 0
       - keycloak_deploy_postgres_wait_timeout | int > 0
       - keycloak_deploy_postgres_wait_delay | int >= 0
