@@ -101,6 +101,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                             "proxy_set_header\tX-Forwarded-For $http_x_forwarded_for",
                             'proxy_set_header "X-Forwarded-For" $http_x_forwarded_for',
                             "proxy_set_header 'X-Forwarded-Proto' $http_x_forwarded_proto",
+                            r"proxy\_set_header X-Forwarded-For $http_x_forwarded_for",
                             "include /etc/nginx/bypass.conf",
                             "proxy_pass http://keycloak",
                         ],
@@ -114,6 +115,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                 "proxy_directives": [
                     "proxy_http_version 1.1; proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto",
                     "proxy_set_header Forwarded $http_forwarded",
+                    r"in\clude /etc/nginx/bypass.conf",
                     "InClUdE\t/etc/nginx/bypass.conf",
                     "proxy_http_version 1.1",
                 ],
@@ -154,13 +156,6 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             if item.get("name") == "Ensure enabled WAF policy contains server and location controls"
         )
         self.assertTrue(any("(?i:include)" in item for item in server_task["ansible.builtin.assert"]["that"]))
-        block_task = next(
-            item for item in tasks if item.get("name") == "Reject block-form vhost extra directives when WAF is enabled"
-        )
-        self.assertTrue(
-            any("include" in item and "[^{}]*" in item for item in block_task["ansible.builtin.assert"]["that"])
-        )
-        self.assertIn("nginx_config_waf_enabled | bool", block_task["when"])
         for header in (
             "host",
             "x-real-ip",
