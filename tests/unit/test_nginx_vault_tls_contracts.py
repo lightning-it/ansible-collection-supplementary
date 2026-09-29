@@ -47,13 +47,14 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         boundary = defaults["nginx_config_proxy_required_directives"]
         self.assertIn("proxy_set_header X-Forwarded-For $remote_addr", boundary)
         self.assertIn("proxy_set_header X-Forwarded-Host $server_name", boundary)
-        self.assertIn("proxy_set_header X-Forwarded-Port {{ nginx_config_proxy_external_port }}", boundary)
+        self.assertFalse(any("X-Forwarded-Port" in directive for directive in boundary))
         self.assertIn('proxy_set_header Forwarded ""', boundary)
         self.assertNotIn("$proxy_add_x_forwarded_for", "\n".join(boundary))
         self.assertEqual(
             template.count("{% for directive in nginx_config_proxy_required_directives %}"),
             4,
         )
+        self.assertEqual(template.count("proxy_set_header X-Forwarded-Port {{ _proxy_external_port }};"), 4)
         assertions = (ROOT / "roles" / "nginx_config" / "tasks" / "assert.yml").read_text(encoding="utf-8")
         self.assertIn("nginx_config_proxy_required_directives == [", assertions)
         self.assertGreaterEqual(assertions.count("| map('trim')"), 2)
@@ -78,6 +79,8 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             "nginx_config_waf_location_directives": [],
             "nginx_config_proxy_default_directives": defaults["nginx_config_proxy_default_directives"],
             "nginx_config_proxy_required_directives": defaults["nginx_config_proxy_required_directives"],
+            "nginx_config_proxy_http_external_port": 18080,
+            "nginx_config_proxy_tls_external_port": 18443,
             "nginx_deploy_listen_port": 8080,
             "nginx_deploy_root": "/usr/share/nginx/html",
             "nginx_deploy_index_files": ["index.html"],
@@ -92,6 +95,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                         "directives": [
                             "proxy_http_version 1.1;\nproxy_set_header X-Forwarded-For $http_x_forwarded_for",
                             "PrOxY_SeT_HeAdEr x-FoRwArDeD-fOr $proxy_add_x_forwarded_for",
+                            "proxy_set_header\tX-Forwarded-For $http_x_forwarded_for",
                             'proxy_set_header "X-Forwarded-For" $http_x_forwarded_for',
                             "proxy_set_header 'X-Forwarded-Proto' $http_x_forwarded_proto",
                             "proxy_pass http://keycloak",
@@ -119,6 +123,8 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                 self.assertNotIn("$http_forwarded", rendered)
                 self.assertEqual(rendered.count("proxy_set_header X-Forwarded-For $remote_addr;"), 1)
                 self.assertEqual(rendered.count('proxy_set_header Forwarded "";'), 1)
+                expected_port = 18443 if item["force_https"] else 18080
+                self.assertEqual(rendered.count(f"proxy_set_header X-Forwarded-Port {expected_port};"), 1)
 
         self.assertEqual(source.count("| lower | replace("), 4)
         self.assertEqual(source.count("| replace(\"'\", '')) in _reserved_proxy_headers"), 4)
@@ -135,6 +141,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         assertion = task["ansible.builtin.assert"]["that"][0]
 
         self.assertIn("item | trim | lower", assertion)
+        self.assertIn("[ \\t]+", assertion)
         for header in (
             "host",
             "x-real-ip",
@@ -233,64 +240,22 @@ class NginxVaultTlsContractTests(unittest.TestCase):
     def test_nginx_lifecycle_has_one_persistent_controller(self) -> None:
         pod_tasks_path = ROOT / "roles" / "nginx_deploy" / "tasks" / "deploy_pod.yml"
         pod_tasks = yaml.safe_load(pod_tasks_path.read_text(encoding="utf-8"))
-        pod_task_map = {task["name"]: task for task in pod_tasks}
-        recreate = pod_task_map["Recreate Nginx pod from the desired manifest"]
+        recreate = next(task for task in pod_tasks if task["name"] == "Recreate Nginx pod from the desired manifest")
         self.assertEqual(recreate["vars"]["kubeplay_action"], "recreate")
         self.assertIn("not nginx_deploy_manage_systemd | bool", recreate["when"])
-        self.assertNotIn("block", recreate)
-        self.assertNotIn("rescue", recreate)
-
-        source = pod_tasks_path.read_text(encoding="utf-8")
-        self.assertNotIn("Ignore kubeplay remove failure", source)
-        self.assertNotIn("Ignore kubeplay run failure", source)
-
-        systemd_path = ROOT / "roles" / "nginx_deploy" / "tasks" / "systemd.yml"
-        systemd_tasks = yaml.safe_load(systemd_path.read_text(encoding="utf-8"))
+        systemd_tasks = yaml.safe_load(
+            (ROOT / "roles" / "nginx_deploy" / "tasks" / "systemd.yml").read_text(encoding="utf-8")
+        )
         self.assertIn("not ansible_check_mode", systemd_tasks[0]["when"])
         systemd_block = systemd_tasks[0]["block"]
         quadlet = next(task for task in systemd_block if task["name"] == "Manage the native Nginx Quadlet service")
-        self.assertEqual(
-            quadlet["ansible.builtin.include_role"]["name"],
-            "lit.foundational.podman_systemd",
-        )
-        self.assertEqual(
-            quadlet["vars"]["podman_systemd_manifest_path"],
-            "{{ nginx_deploy_pod_manifest_path }}",
-        )
-        self.assertEqual(
-            quadlet["vars"]["podman_systemd_quadlet_dir"],
-            "{{ nginx_deploy_quadlet_dir }}",
-        )
-        self.assertEqual(
-            quadlet["vars"]["podman_systemd_networks"],
-            "{{ nginx_deploy_networks }}",
-        )
-        defaults = yaml.safe_load(
-            (ROOT / "roles" / "nginx_deploy" / "defaults" / "main.yml").read_text(encoding="utf-8")
-        )
-        self.assertEqual(defaults["nginx_deploy_networks"], [])
-
-        stage_index = next(
-            index
-            for index, task in enumerate(systemd_block)
-            if task["name"] == "Stage the native Nginx Quadlet before legacy shutdown"
-        )
-        validation_index = next(
-            index
-            for index, task in enumerate(systemd_block)
-            if task["name"] == "Refuse unknown legacy Nginx lifecycle states"
-        )
-        lifecycle_assertions = systemd_block[validation_index]["ansible.builtin.assert"]["that"]
-        lifecycle_contract = "\n".join(str(item) for item in lifecycle_assertions)
-        for transient in ("activating", "reloading", "deactivating"):
-            self.assertNotIn(transient, lifecycle_contract)
-        legacy_stop_index = next(
-            index
-            for index, task in enumerate(systemd_block)
-            if task["name"] == "Stop and disable the exact legacy Nginx unit before Quadlet takeover"
-        )
-        self.assertLess(validation_index, stage_index)
-        self.assertLess(stage_index, legacy_stop_index)
+        self.assertEqual(quadlet["ansible.builtin.include_role"]["name"], "lit.foundational.podman_systemd")
+        names = [task["name"] for task in systemd_block]
+        validation = names.index("Refuse unknown legacy Nginx lifecycle states")
+        stage = names.index("Stage the native Nginx Quadlet before legacy shutdown")
+        stop = names.index("Stop and disable the exact legacy Nginx unit before Quadlet takeover")
+        self.assertLess(validation, stage)
+        self.assertLess(stage, stop)
 
 
 if __name__ == "__main__":

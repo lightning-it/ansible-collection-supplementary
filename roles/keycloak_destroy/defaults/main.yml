@@ -5,7 +5,7 @@ keycloak_destroy_remove_secrets: false
 keycloak_destroy_remove_systemd: true
 keycloak_destroy_pod_name: "{{ keycloak_deploy_pod_name | default('keycloak', true) }}"
 keycloak_destroy_systemd_unit_name: >-
-  {{ keycloak_deploy_systemd_unit_name | default('keycloak-pod', true) }}
+  {{ keycloak_deploy_systemd_unit_name | default(keycloak_destroy_pod_name ~ '-pod', true) }}
 keycloak_destroy_systemd_description: >-
   {{ keycloak_deploy_systemd_description | default('Keycloak Podman application pod', true) }}
 keycloak_destroy_systemd_scope: "{{ keycloak_deploy_systemd_scope | default('system', true) }}"

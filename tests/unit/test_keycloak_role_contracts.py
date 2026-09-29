@@ -411,6 +411,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
                 )
 
                 self.assertIs(defaults[f"{role}_remove_systemd"], True)
+                self.assertIn(f"{role}_pod_name ~ '-pod'", defaults[f"{role}_systemd_unit_name"])
                 self.assertEqual(
                     quadlet["ansible.builtin.include_role"]["name"],
                     "lit.foundational.podman_systemd",

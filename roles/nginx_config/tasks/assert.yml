@@ -55,15 +55,16 @@
       - nginx_config_waf_location_directives is not string
       - nginx_config_proxy_default_directives is sequence
       - nginx_config_proxy_default_directives is not string
-      - nginx_config_proxy_external_port | int > 0
-      - nginx_config_proxy_external_port | int <= 65535
+      - nginx_config_proxy_http_external_port | int > 0
+      - nginx_config_proxy_http_external_port | int <= 65535
+      - nginx_config_proxy_tls_external_port | int > 0
+      - nginx_config_proxy_tls_external_port | int <= 65535
       - >-
         nginx_config_proxy_required_directives == [
           'proxy_set_header Host $server_name',
           'proxy_set_header X-Real-IP $remote_addr',
           'proxy_set_header X-Forwarded-For $remote_addr',
           'proxy_set_header X-Forwarded-Host $server_name',
-          'proxy_set_header X-Forwarded-Port ' ~ (nginx_config_proxy_external_port | string),
           'proxy_set_header X-Forwarded-Proto $scheme',
           'proxy_set_header X-Forwarded-Prefix ""',
           'proxy_set_header X-Original-Forwarded-For ""',
@@ -107,10 +108,10 @@
       - >-
         item | trim | lower
         is not match(
-          '^proxy_set_header[ ]+[\"'']?'
+          '^proxy_set_header[ \t]+[\"'']?'
           ~ '(host|x-real-ip|x-forwarded-for|x-forwarded-host|x-forwarded-port|'
           ~ 'x-forwarded-proto|x-forwarded-prefix|x-original-forwarded-for|forwarded)'
-          ~ '[\"'']?[ ]+'
+          ~ '[\"'']?[ \t]+'
         )
       - item | trim is match('^[^\r\n;]*(;)?$')
     fail_msg: >-

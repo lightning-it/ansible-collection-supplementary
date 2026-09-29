@@ -1,5 +1,8 @@
 {% set _force_https = item.force_https | default(false) | bool %}
 {% set _server_name = item.server_name | default('_') %}
+{% set _proxy_external_port = item.proxy_external_port | default(
+  nginx_config_proxy_tls_external_port if _force_https else nginx_config_proxy_http_external_port
+) %}
 {% set _reserved_proxy_headers = [
   'host',
   'x-real-ip',
@@ -84,6 +87,7 @@ server {
 {% for directive in nginx_config_proxy_required_directives %}
     {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
 {% endfor %}
+    proxy_set_header X-Forwarded-Port {{ _proxy_external_port }};
   }
 {% endfor %}
 {% elif item.upstream_url is defined and item.upstream_url | length > 0 %}
@@ -119,6 +123,7 @@ server {
 {% for directive in nginx_config_proxy_required_directives %}
     {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
 {% endfor %}
+    proxy_set_header X-Forwarded-Port {{ _proxy_external_port }};
     proxy_pass {{ item.upstream_url }};
   }
 {% else %}
@@ -187,6 +192,7 @@ server {
 {% for directive in nginx_config_proxy_required_directives %}
     {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
 {% endfor %}
+    proxy_set_header X-Forwarded-Port {{ _proxy_external_port }};
   }
 {% endfor %}
 {% elif item.upstream_url is defined and item.upstream_url | length > 0 %}
@@ -213,6 +219,7 @@ server {
 {% for directive in nginx_config_proxy_required_directives %}
     {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
 {% endfor %}
+    proxy_set_header X-Forwarded-Port {{ _proxy_external_port }};
     proxy_pass {{ item.upstream_url }};
   }
 {% endif %}

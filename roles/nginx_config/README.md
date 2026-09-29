@@ -30,6 +30,8 @@ Key variables:
 - `nginx_config_vault_pki_role`
 - `nginx_config_vault_issue_missing` (default: `true`; issue and persist missing or mismatched material through Vault PKI)
 - `nginx_config_vault_allow_local_fallback` (default: `false`; an explicit migration-only escape hatch)
+- `nginx_config_proxy_http_external_port`
+- `nginx_config_proxy_tls_external_port`
 - `nginx_config_waf_enabled` (default: `false`)
 - `nginx_config_waf_server_directives`
 - `nginx_config_waf_location_directives`
@@ -52,8 +54,8 @@ separately reviewed ModSecurity/Coraza integration.
 The default reverse-proxy contract overwrites `Host`, `X-Real-IP`, and every
 Keycloak-relevant `X-Forwarded-*` identity header from NGINX-owned connection
 state. It strips `Forwarded`, `X-Original-Forwarded-For`, and
-`X-Forwarded-Prefix`; `X-Forwarded-Port` uses the trusted external port rather
-than NGINX's listener. Custom directives cannot weaken this boundary.
+`X-Forwarded-Prefix`; `X-Forwarded-Port` uses the trusted HTTP or TLS external
+port for the current vhost. Custom directives cannot weaken this boundary.
 
 When `nginx_config_vault_issue_missing: false`, Vault KV must already contain a
 certificate/private-key pair, a CA chain, and matching common-name and
