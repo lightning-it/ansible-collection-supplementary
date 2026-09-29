@@ -129,7 +129,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
             f"CN={expected_cn},CN=Users,DC=keycloak,DC=test",
         )
 
-    def test_managed_postgres_bridge_uses_pod_dns_alias_and_host_probe(self) -> None:
+    def test_managed_postgres_bridge_requires_private_endpoint_and_host_probe(self) -> None:
         defaults = self._role_defaults("keycloak_deploy")
         self.assertEqual(
             (defaults["keycloak_deploy_postgres_port"], defaults["keycloak_deploy_postgres_container_port"]),
@@ -147,7 +147,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
         }
 
         expected = {
-            "keycloak_deploy_db_host": "keycloak-postgres",
+            "keycloak_deploy_db_host": "",
             "keycloak_deploy_db_port": "5432",
             "keycloak_deploy_db_wait_host": "127.0.0.1",
             "keycloak_deploy_db_wait_port": "15432",
@@ -157,9 +157,8 @@ class KeycloakRoleContractTests(unittest.TestCase):
 
         tiny = (ROOT / "molecule" / "keycloak-tiny" / "converge.yml").read_text(encoding="utf-8")
         verify = (ROOT / "molecule" / "keycloak-tiny" / "verify.yml").read_text(encoding="utf-8")
-        self.assertIn("KC_DB_URL_HOST=keycloak-tiny-postgres", verify)
-        self.assertIn("alias=keycloak-tiny-postgres", tiny)
-        self.assertNotIn("keycloak_deploy_db_host:", tiny)
+        self.assertIn("KC_DB_URL_HOST=10.89.40.3", verify)
+        self.assertIn("keycloak_deploy_db_host: 10.89.40.3", tiny)
 
     def test_external_database_keeps_explicit_endpoint(self) -> None:
         defaults = self._role_defaults("keycloak_deploy")
