@@ -34,14 +34,18 @@ class TrustRootBaseVerifierTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
+            (root / ".git").mkdir()
             completed = SimpleNamespace(returncode=0, stdout=f"{root}\n", stderr="")
             with (
                 mock.patch.object(VERIFIER.subprocess, "run", return_value=completed) as run,
                 mock.patch.dict(VERIFIER.os.environ, token_environment, clear=True),
+                contextlib.chdir(root),
             ):
                 self.assertEqual(root, VERIFIER.discover_repository_root())
         command = run.call_args.args[0]
         self.assertEqual(("rev-parse", "--show-toplevel"), tuple(command[-2:]))
+        self.assertIn(f"safe.directory={root}", command)
+        self.assertNotIn("safe.directory=*", command)
         self.assertEqual(VERIFIER.isolated_git_environment(), run.call_args.kwargs["env"])
         self.assertEqual(
             {"GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_TERMINAL_PROMPT", "LC_ALL", "PATH"},
@@ -74,6 +78,8 @@ class TrustRootBaseVerifierTests(unittest.TestCase):
         self.assertIn("http.proxy=", command)
         self.assertIn("https.proxy=", command)
         self.assertIn("core.hooksPath=/dev/null", command)
+        self.assertIn(f"safe.directory={VERIFIER.ROOT}", command)
+        self.assertNotIn("safe.directory=*", command)
         self.assertEqual(VERIFIER.isolated_git_environment(), environment)
         self.assertEqual(
             {"GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_TERMINAL_PROMPT", "LC_ALL", "PATH"},
@@ -136,6 +142,8 @@ class TrustRootBaseVerifierTests(unittest.TestCase):
         self.assertIn("http.proxy=", command)
         self.assertIn("https.proxy=", command)
         self.assertIn("core.hooksPath=/dev/null", command)
+        self.assertIn(f"safe.directory={VERIFIER.ROOT}", command)
+        self.assertNotIn("safe.directory=*", command)
         self.assertIn(VERIFIER.PUBLIC_ORIGIN, command)
         self.assertEqual(
             {
