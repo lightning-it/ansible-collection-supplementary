@@ -203,6 +203,8 @@
     - name: Stage the isolated Keycloak Tiny NGINX edge configuration
       ansible.builtin.include_role:
         name: lit.supplementary.nginx_config
+      vars:
+        nginx_config_test: false
 
     - name: Deploy the isolated Keycloak Tiny NGINX edge
       ansible.builtin.include_role:
