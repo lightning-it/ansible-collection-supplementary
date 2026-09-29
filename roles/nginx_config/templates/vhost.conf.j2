@@ -55,18 +55,23 @@ server {
   location {{ location.path | default('/') }} {
 {% if nginx_config_waf_enabled | bool %}
 {% for directive in nginx_config_waf_location_directives %}
-    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% set _directive = directive | trim %}
+{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') %}
+{% if _single_statement %}
+    {{ _directive }}{{ '' if _directive.endswith(';') else ';' }}
+{% endif %}
 {% endfor %}
 {% endif %}
 {% for directive in location.directives | default([]) %}
 {% set _directive = directive | trim %}
+{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') %}
 {% set _directive_tokens = _directive.split() %}
 {% set _reserved_proxy_header = (
   _directive_tokens | length >= 2
   and (_directive_tokens[0] | lower) == 'proxy_set_header'
   and (_directive_tokens[1] | lower | replace('"', '') | replace("'", '')) in _reserved_proxy_headers
 ) %}
-{% if _directive | length > 0 and not _reserved_proxy_header %}
+{% if _directive | length > 0 and _single_statement and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
   _directive.endswith(';')
   or _directive.endswith('{')
@@ -85,18 +90,23 @@ server {
   location / {
 {% if nginx_config_waf_enabled | bool %}
 {% for directive in nginx_config_waf_location_directives %}
-    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% set _directive = directive | trim %}
+{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') %}
+{% if _single_statement %}
+    {{ _directive }}{{ '' if _directive.endswith(';') else ';' }}
+{% endif %}
 {% endfor %}
 {% endif %}
 {% for directive in item.proxy_directives | default(nginx_config_proxy_default_directives) %}
 {% set _directive = directive | trim %}
+{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') %}
 {% set _directive_tokens = _directive.split() %}
 {% set _reserved_proxy_header = (
   _directive_tokens | length >= 2
   and (_directive_tokens[0] | lower) == 'proxy_set_header'
   and (_directive_tokens[1] | lower | replace('"', '') | replace("'", '')) in _reserved_proxy_headers
 ) %}
-{% if _directive | length > 0 and not _reserved_proxy_header %}
+{% if _directive | length > 0 and _single_statement and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
   _directive.endswith(';')
   or _directive.endswith('{')
@@ -148,18 +158,23 @@ server {
   location {{ location.path | default('/') }} {
 {% if nginx_config_waf_enabled | bool %}
 {% for directive in nginx_config_waf_location_directives %}
-    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% set _directive = directive | trim %}
+{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') %}
+{% if _single_statement %}
+    {{ _directive }}{{ '' if _directive.endswith(';') else ';' }}
+{% endif %}
 {% endfor %}
 {% endif %}
 {% for directive in location.directives | default([]) %}
 {% set _directive = directive | trim %}
+{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') %}
 {% set _directive_tokens = _directive.split() %}
 {% set _reserved_proxy_header = (
   _directive_tokens | length >= 2
   and (_directive_tokens[0] | lower) == 'proxy_set_header'
   and (_directive_tokens[1] | lower | replace('"', '') | replace("'", '')) in _reserved_proxy_headers
 ) %}
-{% if _directive | length > 0 and not _reserved_proxy_header %}
+{% if _directive | length > 0 and _single_statement and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
   _directive.endswith(';')
   or _directive.endswith('{')
@@ -178,13 +193,14 @@ server {
   location / {
 {% for directive in item.proxy_directives | default([]) %}
 {% set _directive = directive | trim %}
+{% set _single_statement = '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') %}
 {% set _directive_tokens = _directive.split() %}
 {% set _reserved_proxy_header = (
   _directive_tokens | length >= 2
   and (_directive_tokens[0] | lower) == 'proxy_set_header'
   and (_directive_tokens[1] | lower | replace('"', '') | replace("'", '')) in _reserved_proxy_headers
 ) %}
-{% if _directive | length > 0 and not _reserved_proxy_header %}
+{% if _directive | length > 0 and _single_statement and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
   _directive.endswith(';')
   or _directive.endswith('{')

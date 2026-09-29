@@ -89,6 +89,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                     {
                         "path": "/",
                         "directives": [
+                            "proxy_http_version 1.1;\nproxy_set_header X-Forwarded-For $http_x_forwarded_for",
                             "PrOxY_SeT_HeAdEr x-FoRwArDeD-fOr $proxy_add_x_forwarded_for",
                             'proxy_set_header "X-Forwarded-For" $http_x_forwarded_for',
                             "proxy_set_header 'X-Forwarded-Proto' $http_x_forwarded_proto",
@@ -102,6 +103,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                 "server_name": "guacamole.example.invalid",
                 "upstream_url": "http://guacamole",
                 "proxy_directives": [
+                    "proxy_http_version 1.1; proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto",
                     "proxy_set_header Forwarded $http_forwarded",
                     "proxy_http_version 1.1",
                 ],
@@ -119,6 +121,8 @@ class NginxVaultTlsContractTests(unittest.TestCase):
 
         self.assertEqual(source.count("| lower | replace("), 4)
         self.assertEqual(source.count("| replace(\"'\", '')) in _reserved_proxy_headers"), 4)
+        self.assertEqual(source.count("_single_statement and not _reserved_proxy_header"), 4)
+        self.assertEqual(source.count("';' not in _directive.rstrip(';')"), 7)
 
     def test_waf_location_directives_cannot_override_proxy_identity(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
@@ -145,6 +149,52 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                 self.assertIn(header, assertion)
         self.assertEqual(task["loop"], "{{ nginx_config_waf_location_directives }}")
         self.assertIn("nginx_config_waf_enabled | bool", task["when"])
+        self.assertTrue(any("^[^\\r\\n;]*(;)?$" in item for item in task["ansible.builtin.assert"]["that"]))
+
+    def test_waf_location_directive_cannot_smuggle_a_second_statement(self) -> None:
+        defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
+        source = (ROOT / "roles" / "nginx_config" / "templates" / "vhost.conf.j2").read_text(encoding="utf-8")
+        environment = Environment(autoescape=False)  # noqa: S701
+        environment.filters["bool"] = bool
+        rendered = environment.from_string(source).render(
+            item={
+                "force_https": True,
+                "server_name": "keycloak.example.invalid",
+                "upstream_url": "http://keycloak",
+            },
+            nginx_config_http_listen_port=80,
+            nginx_config_tls_listen_port=443,
+            nginx_config_tls_certificate="/tls/tls.crt",
+            nginx_config_tls_certificate_key="/tls/tls.key",
+            nginx_config_waf_enabled=True,
+            nginx_config_waf_server_directives=["limit_req_status 429"],
+            nginx_config_waf_location_directives=[
+                "limit_req zone=edge;\nproxy_set_header X-Forwarded-For $http_x_forwarded_for",
+            ],
+            nginx_config_proxy_default_directives=defaults["nginx_config_proxy_default_directives"],
+            nginx_config_proxy_required_directives=defaults["nginx_config_proxy_required_directives"],
+            nginx_deploy_listen_port=8080,
+            nginx_deploy_root="/usr/share/nginx/html",
+            nginx_deploy_index_files=["index.html"],
+        )
+
+        self.assertNotIn("$http_x_forwarded_for", rendered)
+        self.assertEqual(rendered.count("proxy_set_header X-Forwarded-For $remote_addr;"), 1)
+
+    def test_proxy_directive_prechecks_reject_multiple_statements(self) -> None:
+        tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
+        names = {
+            "Reject multi-statement default proxy directives",
+            "Reject multi-statement vhost proxy directives",
+            "Reject multi-statement location proxy directives",
+        }
+        selected = [item for item in tasks if item.get("name") in names]
+
+        self.assertEqual({item["name"] for item in selected}, names)
+        for task in selected:
+            with self.subTest(task=task["name"]):
+                assertions = task["ansible.builtin.assert"]["that"]
+                self.assertTrue(any("^[^\\r\\n;]*(;)?$" in item for item in assertions))
 
     def test_pki_inputs_are_required_only_when_issuance_is_enabled(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))

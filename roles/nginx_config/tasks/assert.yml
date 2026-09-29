@@ -110,6 +110,7 @@
           ~ 'x-forwarded-proto|x-forwarded-prefix|x-original-forwarded-for|forwarded)'
           ~ '[\"'']?[ ]+'
         )
+      - item | trim is match('^[^\r\n;]*(;)?$')
     fail_msg: >-
       WAF location directives must not set reserved proxy identity headers.
       Those headers are owned exclusively by nginx_config_proxy_required_directives.
@@ -119,6 +120,60 @@
     label: "{{ item | regex_replace('[\r\n].*$', '') }}"
   when:
     - nginx_config_waf_enabled | bool
+  tags: always
+
+- name: Reject multi-statement default proxy directives
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item | trim | length > 0
+      - item | trim is match('^[^\r\n;]*(;)?$')
+    fail_msg: >-
+      Proxy directives must contain exactly one NGINX statement and must not
+      contain embedded newlines or additional semicolons.
+    quiet: true
+  loop: "{{ nginx_config_proxy_default_directives }}"
+  loop_control:
+    label: "{{ item | string | regex_replace('[\r\n].*$', '') }}"
+  tags: always
+
+- name: Reject multi-statement vhost proxy directives
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.proxy_directives | default([])
+        | select('string') | list | length
+        == item.proxy_directives | default([]) | length
+      - >-
+        item.proxy_directives | default([])
+        | reject('match', '^[^\r\n;]*(;)?$') | list | length == 0
+    fail_msg: >-
+      Vhost proxy directives must each contain exactly one NGINX statement
+      and must not contain embedded newlines or additional semicolons.
+    quiet: true
+  loop: "{{ nginx_config_vhosts_effective }}"
+  loop_control:
+    label: "{{ item.name | default('') }}"
+  tags: always
+
+- name: Reject multi-statement location proxy directives
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.1.directives | default([])
+        | select('string') | list | length
+        == item.1.directives | default([]) | length
+      - >-
+        item.1.directives | default([])
+        | reject('match', '^[^\r\n;]*(;)?$') | list | length == 0
+    fail_msg: >-
+      Location proxy directives must each contain exactly one NGINX statement
+      and must not contain embedded newlines or additional semicolons.
+    quiet: true
+  loop: "{{ nginx_config_vhosts_effective | subelements('locations', skip_missing=True) }}"
+  loop_control:
+    label: >-
+      {{ item.0.name | default('') }}:{{ item.1.path | default('/') }}
   tags: always
 
 - name: Ensure Vault PKI issue inputs are present when enabled
