@@ -209,12 +209,18 @@ class KeycloakRoleContractTests(unittest.TestCase):
             for index, task in enumerate(systemd_block)
             if task["name"] == "Stage the native Keycloak Quadlet before legacy shutdown"
         )
+        validation_index = next(
+            index
+            for index, task in enumerate(systemd_block)
+            if task["name"] == "Refuse unknown legacy Keycloak lifecycle states"
+        )
         legacy_stop = next(
             task
             for task in systemd_block
             if task["name"] == "Stop and disable the exact legacy Keycloak unit before Quadlet takeover"
         )
         legacy_stop_index = systemd_block.index(legacy_stop)
+        self.assertLess(validation_index, stage_index)
         self.assertLess(stage_index, legacy_stop_index)
         self.assertEqual(legacy_stop["ansible.builtin.systemd"]["state"], "stopped")
         self.assertIs(legacy_stop["ansible.builtin.systemd"]["enabled"], False)
@@ -268,6 +274,14 @@ class KeycloakRoleContractTests(unittest.TestCase):
             "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for",
             directives,
         )
+
+    def test_managed_bridge_database_requires_a_shared_normalized_network(self) -> None:
+        assertions = (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
+
+        self.assertGreaterEqual(assertions.count("map('regex_replace', ':.*$', '')"), 2)
+        self.assertIn("| intersect(", assertions)
+        self.assertIn("keycloak_deploy_networks | length == 0", assertions)
+        self.assertIn("keycloak_deploy_postgres_networks | length == 0", assertions)
 
     def test_postgres_lifecycle_has_one_controller(self) -> None:
         tasks_path = ROOT / "roles" / "postgres_deploy" / "tasks" / "deploy_pod.yml"

@@ -90,6 +90,8 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("name: NO_PROXY", pod)
         self.assertIn("name: HTTPS_PROXY", pod)
         self.assertIn("guacamole_deploy_proxy_url | to_json", pod)
+        self.assertIn("regex_replace('^.*:([0-9]+)$', '\\\\1')", asserts)
+        self.assertIn(") <= 65535", asserts)
         self.assertIn("guacamole_deploy_no_proxy | join(',') | to_json", pod)
         non_application_containers = pod.split("    - name: guacamole", 1)[0]
         self.assertNotIn("http_proxy", non_application_containers)

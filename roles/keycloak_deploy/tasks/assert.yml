@@ -54,8 +54,24 @@
       - >-
         not keycloak_deploy_manage_postgres | bool
         or keycloak_deploy_postgres_host_network | bool
-        or keycloak_deploy_networks | length == 0
-        or keycloak_deploy_postgres_networks | length > 0
+        or keycloak_deploy_host_network | bool
+        or (
+          (
+            keycloak_deploy_networks | length == 0
+            and keycloak_deploy_postgres_networks | length == 0
+          )
+          or (
+            keycloak_deploy_networks
+            | map('regex_replace', ':.*$', '')
+            | list
+            | intersect(
+                keycloak_deploy_postgres_networks
+                | map('regex_replace', ':.*$', '')
+                | list
+              )
+            | length > 0
+          )
+        )
       - keycloak_deploy_postgres_host_ip | default('', true) | trim | length > 0
       - keycloak_deploy_postgres_host_network is boolean
       - keycloak_deploy_admin_user | default('', true) | trim | length > 0

@@ -1,5 +1,16 @@
 {% set _force_https = item.force_https | default(false) | bool %}
 {% set _server_name = item.server_name | default('_') %}
+{% set _reserved_proxy_headers = [
+  'host',
+  'x-real-ip',
+  'x-forwarded-for',
+  'x-forwarded-host',
+  'x-forwarded-port',
+  'x-forwarded-proto',
+  'x-forwarded-prefix',
+  'x-original-forwarded-for',
+  'forwarded'
+] %}
 
 {% if _force_https %}
 server {
@@ -49,7 +60,13 @@ server {
 {% endif %}
 {% for directive in location.directives | default([]) %}
 {% set _directive = directive | trim %}
-{% if _directive | length > 0 %}
+{% set _directive_tokens = _directive.split() %}
+{% set _reserved_proxy_header = (
+  _directive_tokens | length >= 2
+  and (_directive_tokens[0] | lower) == 'proxy_set_header'
+  and (_directive_tokens[1] | lower) in _reserved_proxy_headers
+) %}
+{% if _directive | length > 0 and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
   _directive.endswith(';')
   or _directive.endswith('{')
@@ -73,8 +90,13 @@ server {
 {% endif %}
 {% for directive in item.proxy_directives | default(nginx_config_proxy_default_directives) %}
 {% set _directive = directive | trim %}
-{% if directive not in nginx_config_proxy_required_directives %}
-{% if _directive | length > 0 %}
+{% set _directive_tokens = _directive.split() %}
+{% set _reserved_proxy_header = (
+  _directive_tokens | length >= 2
+  and (_directive_tokens[0] | lower) == 'proxy_set_header'
+  and (_directive_tokens[1] | lower) in _reserved_proxy_headers
+) %}
+{% if _directive | length > 0 and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
   _directive.endswith(';')
   or _directive.endswith('{')
@@ -82,7 +104,6 @@ server {
   or _directive.startswith('#')
 ) %}
     {{ _directive }}{{ ';' if _needs_semicolon else '' }}
-{% endif %}
 {% endif %}
 {% endfor %}
 {% for directive in nginx_config_proxy_required_directives %}
@@ -132,7 +153,13 @@ server {
 {% endif %}
 {% for directive in location.directives | default([]) %}
 {% set _directive = directive | trim %}
-{% if _directive | length > 0 %}
+{% set _directive_tokens = _directive.split() %}
+{% set _reserved_proxy_header = (
+  _directive_tokens | length >= 2
+  and (_directive_tokens[0] | lower) == 'proxy_set_header'
+  and (_directive_tokens[1] | lower) in _reserved_proxy_headers
+) %}
+{% if _directive | length > 0 and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
   _directive.endswith(';')
   or _directive.endswith('{')
@@ -151,7 +178,13 @@ server {
   location / {
 {% for directive in item.proxy_directives | default([]) %}
 {% set _directive = directive | trim %}
-{% if _directive | length > 0 %}
+{% set _directive_tokens = _directive.split() %}
+{% set _reserved_proxy_header = (
+  _directive_tokens | length >= 2
+  and (_directive_tokens[0] | lower) == 'proxy_set_header'
+  and (_directive_tokens[1] | lower) in _reserved_proxy_headers
+) %}
+{% if _directive | length > 0 and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
   _directive.endswith(';')
   or _directive.endswith('{')

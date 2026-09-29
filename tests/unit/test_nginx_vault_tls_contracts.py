@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 import yaml
+from jinja2 import Environment
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULTS = ROOT / "roles" / "nginx_config" / "defaults" / "main.yml"
@@ -59,6 +60,60 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         required_after_custom = template.index("nginx_config_proxy_required_directives", custom_proxy)
         self.assertGreater(required_after_custom, custom_proxy)
         self.assertNotIn("{% if item.proxy_directives is defined %}", template)
+
+    def test_consumer_cannot_reintroduce_reserved_proxy_headers(self) -> None:
+        defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
+        source = (ROOT / "roles" / "nginx_config" / "templates" / "vhost.conf.j2").read_text(encoding="utf-8")
+        environment = Environment(autoescape=False)  # noqa: S701
+        environment.filters["bool"] = bool
+        template = environment.from_string(source)
+        common = {
+            "nginx_config_http_listen_port": 80,
+            "nginx_config_tls_listen_port": 443,
+            "nginx_config_tls_certificate": "/tls/tls.crt",
+            "nginx_config_tls_certificate_key": "/tls/tls.key",
+            "nginx_config_waf_enabled": False,
+            "nginx_config_waf_server_directives": [],
+            "nginx_config_waf_location_directives": [],
+            "nginx_config_proxy_default_directives": defaults["nginx_config_proxy_default_directives"],
+            "nginx_config_proxy_required_directives": defaults["nginx_config_proxy_required_directives"],
+            "nginx_deploy_listen_port": 8080,
+            "nginx_deploy_root": "/usr/share/nginx/html",
+            "nginx_deploy_index_files": ["index.html"],
+        }
+        attempts = (
+            {
+                "force_https": True,
+                "server_name": "keycloak.example.invalid",
+                "locations": [
+                    {
+                        "path": "/",
+                        "directives": [
+                            "PrOxY_SeT_HeAdEr x-FoRwArDeD-fOr $proxy_add_x_forwarded_for",
+                            "proxy_pass http://keycloak",
+                        ],
+                    }
+                ],
+            },
+            {
+                "force_https": False,
+                "server_name": "guacamole.example.invalid",
+                "upstream_url": "http://guacamole",
+                "proxy_directives": [
+                    "proxy_set_header Forwarded $http_forwarded",
+                    "proxy_http_version 1.1",
+                ],
+            },
+        )
+        for item in attempts:
+            with self.subTest(server=item["server_name"]):
+                rendered = template.render(item=item, **common)
+                self.assertNotIn("$proxy_add_x_forwarded_for", rendered)
+                self.assertNotIn("$http_forwarded", rendered)
+                self.assertEqual(rendered.count("proxy_set_header X-Forwarded-For $remote_addr;"), 1)
+                self.assertEqual(rendered.count('proxy_set_header Forwarded "";'), 1)
+
+        self.assertEqual(source.count("and (_directive_tokens[1] | lower) in _reserved_proxy_headers"), 4)
 
     def test_pki_inputs_are_required_only_when_issuance_is_enabled(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
@@ -167,11 +222,17 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             for index, task in enumerate(systemd_block)
             if task["name"] == "Stage the native Nginx Quadlet before legacy shutdown"
         )
+        validation_index = next(
+            index
+            for index, task in enumerate(systemd_block)
+            if task["name"] == "Refuse unknown legacy Nginx lifecycle states"
+        )
         legacy_stop_index = next(
             index
             for index, task in enumerate(systemd_block)
             if task["name"] == "Stop and disable the exact legacy Nginx unit before Quadlet takeover"
         )
+        self.assertLess(validation_index, stage_index)
         self.assertLess(stage_index, legacy_stop_index)
 
 

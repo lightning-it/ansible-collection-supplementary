@@ -10,7 +10,7 @@
       quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
     keycloak_deploy_start_command: start
     keycloak_deploy_manage_postgres: true
-    keycloak_deploy_manage_systemd: false
+    keycloak_deploy_manage_systemd: true
     keycloak_deploy_install_packages: true
     keycloak_deploy_generate_secrets: false
     keycloak_deploy_store_generated_secrets: false
@@ -20,6 +20,10 @@
     keycloak_deploy_postgres_host_ip: 127.0.0.1
     keycloak_deploy_host_network: false
     keycloak_deploy_postgres_host_network: false
+    keycloak_deploy_networks:
+      - keycloak-tiny-access.network:ip=10.89.40.2
+    keycloak_deploy_postgres_networks:
+      - keycloak-tiny-access.network:ip=10.89.40.3
     keycloak_deploy_db_port: 5432
     keycloak_deploy_db_wait_host: 127.0.0.1
     keycloak_deploy_db_wait_port: 5432
@@ -146,6 +150,33 @@
           Set KEYCLOAK_TEST_DB_PASSWORD and KEYCLOAK_TEST_ADMIN_PASSWORD to
           ephemeral values of at least 16 characters.
       no_log: true
+
+    - name: Ensure the Tiny Quadlet network directory exists
+      ansible.builtin.file:
+        path: /etc/containers/systemd
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the explicit Tiny Quadlet network
+      ansible.builtin.copy:
+        dest: /etc/containers/systemd/keycloak-tiny-access.network
+        owner: root
+        group: root
+        mode: "0644"
+        content: |-
+          [Unit]
+          Description=Keycloak Tiny isolated acceptance network
+
+          [Network]
+          NetworkName=keycloak-tiny-access
+          Subnet=10.89.40.0/29
+          Gateway=10.89.40.1
+
+    - name: Reload systemd for the Tiny Quadlet network
+      ansible.builtin.systemd_service:
+        daemon_reload: true
   tasks:
     - name: Deploy the real Keycloak Tiny runtime
       ansible.builtin.include_role:

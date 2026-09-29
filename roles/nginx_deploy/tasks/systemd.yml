@@ -34,6 +34,26 @@
       changed_when: false
       failed_when: false
 
+    - name: Refuse unknown legacy Nginx lifecycle states
+      ansible.builtin.assert:
+        that:
+          - nginx_deploy_legacy_systemd_active.rc in [0, 1, 3, 4]
+          - >-
+            nginx_deploy_legacy_systemd_active.stdout | trim
+            in ['active', 'reloading', 'activating', 'deactivating', 'inactive', 'failed', 'unknown']
+          - nginx_deploy_legacy_systemd_enabled.rc in [0, 1, 3, 4]
+          - >-
+            nginx_deploy_legacy_systemd_enabled.stdout | trim
+            in [
+              'enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias',
+              'disabled', 'static', 'indirect', 'generated', 'transient',
+              'masked', 'masked-runtime', 'not-found'
+            ]
+        fail_msg: >-
+          Unable to prove the exact legacy Nginx unit lifecycle state;
+          refusing Quadlet takeover.
+        quiet: true
+
     - name: Stage the native Nginx Quadlet before legacy shutdown
       ansible.builtin.include_role:
         name: lit.foundational.podman_systemd

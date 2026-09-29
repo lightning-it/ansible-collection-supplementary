@@ -46,12 +46,14 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
         task_map = {task["name"]: task for task in block}
         active = task_map["Inspect the exact legacy PostgreSQL unit activity"]
         enabled = task_map["Inspect the exact legacy PostgreSQL unit enablement"]
+        validate = task_map["Refuse unknown legacy PostgreSQL lifecycle states"]
         stage = task_map["Stage the native PostgreSQL Quadlet before legacy shutdown"]
         stop = task_map["Stop and disable the exact legacy PostgreSQL unit before Quadlet takeover"]
         manage = task_map["Manage the native PostgreSQL Quadlet service"]
 
         self.assertEqual(active["ansible.builtin.command"]["argv"][:2], ["systemctl", "is-active"])
         self.assertEqual(enabled["ansible.builtin.command"]["argv"][:2], ["systemctl", "is-enabled"])
+        self.assertLess(block.index(validate), block.index(stage))
         self.assertLess(block.index(stage), block.index(stop))
         self.assertLess(block.index(stop), block.index(manage))
         self.assertEqual(manage["vars"]["podman_systemd_networks"], "{{ postgres_deploy_networks }}")
@@ -63,7 +65,7 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
             ("inactive", 3, "enabled-runtime", 0, ["stage", "stop"], "restarted"),
             ("unknown", 4, "not-found", 1, [], "present"),
             ("failed", 3, "masked", 1, [], "present"),
-            ("error", 1, "error", 1, [], "present"),
+            ("error", 1, "error", 1, [], "rejected"),
         )
         for active_state, active_rc, enabled_state, enabled_rc, events, action in cases:
             with self.subTest(active=active_state, enabled=enabled_state), tempfile.TemporaryDirectory() as tmp:
@@ -83,6 +85,7 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
                 executable = [copy.deepcopy(active), copy.deepcopy(enabled)]
                 for task in executable:
                     task["ansible.builtin.command"]["argv"][0] = str(fixture)
+                executable.append(copy.deepcopy(validate))
                 for source, event in ((stage, "stage"), (stop, "stop")):
                     task = {
                         "name": source["name"],
@@ -150,6 +153,12 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
                     timeout=45,
                     check=False,
                 )
+                if action == "rejected":
+                    self.assertNotEqual(first.returncode, 0, first.stdout + first.stderr)
+                    self.assertFalse(event_log.exists())
+                    self.assertFalse(action_file.exists())
+                    continue
+
                 self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
                 observed_events = event_log.read_text(encoding="utf-8").splitlines() if event_log.exists() else []
                 self.assertEqual(observed_events, events)
