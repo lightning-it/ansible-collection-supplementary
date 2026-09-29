@@ -131,6 +131,10 @@ class KeycloakRoleContractTests(unittest.TestCase):
 
     def test_managed_postgres_bridge_uses_pod_dns_alias_and_host_probe(self) -> None:
         defaults = self._role_defaults("keycloak_deploy")
+        self.assertEqual(
+            (defaults["keycloak_deploy_postgres_port"], defaults["keycloak_deploy_postgres_container_port"]),
+            (5432, 5432),
+        )
         context = {
             "keycloak_deploy_manage_postgres": True,
             "keycloak_deploy_host_network": False,

@@ -109,8 +109,8 @@ keycloak_deploy_db_host: >-
     )
     else keycloak_deploy_postgres_host_ip
   }}
-keycloak_deploy_postgres_port: "{{ postgres_deploy_port | default(5432) }}"
-keycloak_deploy_postgres_container_port: "{{ postgres_deploy_container_port | default(5432) }}"
+keycloak_deploy_postgres_port: 5432
+keycloak_deploy_postgres_container_port: 5432
 keycloak_deploy_db_port: >-
   {{
     (
