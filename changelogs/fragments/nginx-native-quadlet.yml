@@ -1,0 +1,5 @@
+---
+breaking_changes:
+  - >-
+    Replace the legacy Nginx podman-kube@ unit with the collision-resistant
+    `<pod-name>-pod.service` Quadlet; direct kubeplay requires non-systemd mode.
