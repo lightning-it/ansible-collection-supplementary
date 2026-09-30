@@ -2,7 +2,6 @@
 - name: Manage Nginx native Quadlet service
   when:
     - nginx_deploy_manage_systemd | bool
-    - (ansible_service_mgr | default(ansible_facts.service_mgr | default(''))) == 'systemd'
     - not ansible_check_mode
   tags:
     - systemd

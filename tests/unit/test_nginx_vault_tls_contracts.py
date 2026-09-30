@@ -189,6 +189,11 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                 if task["name"] != "Reject multi-statement default proxy directives":
                     self.assertTrue(any("is sequence" in item for item in assertions))
                     self.assertTrue(any("is not string" in item for item in assertions))
+        vhost = next(item for item in tasks if item.get("name") == "Ensure nginx vhost definitions are valid")
+        vhost_assertions = vhost["ansible.builtin.assert"]["that"]
+        self.assertTrue(any("extra_directives" in item and "is not string" in item for item in vhost_assertions))
+        boundary = next(item for item in tasks if item.get("name") == "Reject block-form proxy-vhost extra directives")
+        self.assertNotIn("nginx_config_waf_enabled", boundary["when"])
 
     def test_pki_inputs_are_required_only_when_issuance_is_enabled(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))

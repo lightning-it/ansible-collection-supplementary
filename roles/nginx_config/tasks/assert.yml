@@ -206,13 +206,13 @@
     - nginx_config_vault_issue_missing | bool
   tags: always
 
-- name: Reject block-form vhost extra directives when WAF is enabled
+- name: Reject block-form proxy-vhost extra directives
   ansible.builtin.assert:
     that:
       - item.1 is string
       - item.1 is match('(?ims)^(?!.*(?:^|\n)[ \t]*["'']?include["'']?(?:[ \t]|$))[^{}\\]*$')
     fail_msg: >-
-      WAF-enabled vhost extra directives must not contain NGINX block
+      Proxy-vhost extra directives must not contain NGINX block
       delimiters. Custom location blocks would bypass the generated proxy
       location safeguards and required forwarded-header boundary.
     quiet: true
@@ -220,7 +220,9 @@
   loop_control:
     label: "{{ item.0.name | default('') }}"
   when:
-    - nginx_config_waf_enabled | bool
+    - >-
+      item.0.upstream_url | default('', true) | trim | length > 0
+      or item.0.locations | default([]) | length > 0
   tags: always
 
 - name: Ensure Vault TLS inputs are present when source=vault
@@ -266,6 +268,8 @@
     that:
       - item.name | default('', true) | trim | length > 0
       - item.server_name | default('_', true) | trim | length > 0
+      - (item.extra_directives | default([])) is sequence
+      - (item.extra_directives | default([])) is not string
       - >-
         item.extra_directives | default([])
         | select('string') | list | length
