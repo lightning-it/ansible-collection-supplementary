@@ -175,8 +175,26 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         self.assertEqual(source.count("';' not in _directive.rstrip(';')"), 7)
 
     def test_upstream_url_precheck_blocks_proxy_pass_injection(self) -> None:
-        assertions = ASSERTS.read_text(encoding="utf-8")
-        self.assertIn("item.upstream_url is match('^https?://[^\\\\s;{}]+$')", assertions)
+        name = "Ensure nginx vhost definitions are valid"
+        base = {
+            "name": "edge",
+            "server_name": "edge.example.invalid",
+            "force_https": True,
+            "extra_directives": [],
+        }
+        for upstream, success in (
+            ("http://keycloak:8080", True),
+            ("https://10.89.40.2:8443/realms/lit-access?x=1", True),
+            ("http://backend#comment", False),
+            ('http://backend"quoted', False),
+            ("http://backend\\", False),
+            ("http://backend;proxy_pass", False),
+        ):
+            result = self._run_assert_tasks(
+                {name},
+                {"nginx_config_vhosts_effective": [{**base, "upstream_url": upstream}], "nginx_deploy_listen_port": 80},
+            )
+            self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
 
     def test_waf_location_directives_cannot_override_proxy_identity(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
@@ -382,8 +400,18 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         rescue = {task["name"]: task for task in cutover["rescue"]}
         cleanup = rescue["Remove the failed native Nginx Quadlet runtime"]
         self.assertEqual(cleanup["vars"]["podman_systemd_action"], "absent")
+        self.assertIn("== 'not-found'", cleanup["when"])
+        preserve = rescue["Restore the pre-existing native Nginx service state after failure"]
+        self.assertIn("!= 'not-found'", preserve["when"])
         self.assertIn("Restore the exact legacy Nginx unit after failed takeover", rescue)
         self.assertIn("Report failed native Nginx takeover after rollback", rescue)
+
+        update_guard = next(
+            task
+            for task in systemd_block
+            if task["name"] == "Refuse non-transactional updates of an existing native Nginx unit"
+        )
+        self.assertIn("nginx_deploy_kubeplay_run", update_guard["ansible.builtin.assert"]["that"][0])
 
         lifecycle_assertions = systemd_block[validation]["ansible.builtin.assert"]["that"]
         collision_condition = systemd_block[collision]["failed_when"]
@@ -393,12 +421,18 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             ((3, "inactive", 0, "active", 0), (True, False)),
             ((3, "inactive", 3, "inactive", 0), (True, True)),
             ((3, "inactive", 2, "activating", 1), (False, False)),
+            ((3, "inactive", 3, "inactive", 1, "linked"), (False, False)),
         )
-        for (legacy_rc, legacy, native_rc, native, pod_rc), expected in cases:
+        for values, expected in cases:
+            legacy_rc, legacy, native_rc, native, pod_rc, *enablement = values
             variables = {
                 "nginx_deploy_legacy_systemd_active": {"rc": legacy_rc, "stdout": legacy},
-                "nginx_deploy_legacy_systemd_enabled": {"rc": 1, "stdout": "disabled"},
+                "nginx_deploy_legacy_systemd_enabled": {"rc": 1, "stdout": enablement[0] if enablement else "disabled"},
                 "nginx_deploy_native_systemd_active": {"rc": native_rc, "stdout": native},
+                "nginx_deploy_native_systemd_enabled": {
+                    "rc": 0 if native == "active" else 1,
+                    "stdout": "enabled" if native == "active" else "not-found",
+                },
                 "nginx_deploy_existing_pod": {"rc": pod_rc},
             }
             valid = all(self._evaluate(check, variables) for check in lifecycle_assertions)

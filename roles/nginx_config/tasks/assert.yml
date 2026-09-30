@@ -359,7 +359,11 @@
         or item.upstream_url | length == 0
         or (
           item.upstream_url is string
-          and item.upstream_url is match('^https?://[^\\s;{}]+$')
+          and item.upstream_url is match(
+            '^https?://(?:[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?|'
+            ~ '\\[[0-9A-Fa-f:.]+\\])(?::[1-9][0-9]{0,4})?'
+            ~ '(?:/[A-Za-z0-9._~!$&()*+,=:@%/?-]*)?$'
+          )
         )
     fail_msg: >-
       Each nginx vhost entry must define valid name/server_name and HTTPS proxy

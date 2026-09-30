@@ -37,10 +37,13 @@ start, stop, restart and removal remain owned by the native Quadlet unit.
 The default native unit is `<pod-name>-pod.service`, avoiding collisions with
 an administrator-managed `nginx.service`. Enabling systemd management without
 a detected systemd service manager fails during prechecks.
+Changes that would restart an already existing native Quadlet fail closed until
+transactional manifest backup and restore support is available.
 
 ## Dependencies
 
-None.
+- `lit.foundational.kubeplay`
+- `lit.foundational.podman_systemd`
 
 ## Example Playbook
 
