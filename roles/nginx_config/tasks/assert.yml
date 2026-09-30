@@ -290,7 +290,17 @@
       - >-
         (not (item.force_https | default(false) | bool))
         or (item.upstream_url | default('', true) | trim | length > 0)
-    fail_msg: "Each nginx vhost entry must define valid name/server_name and HTTPS proxy inputs when force_https=true."
+      - >-
+        item.upstream_url is not defined
+        or item.upstream_url | length == 0
+        or (
+          item.upstream_url is string
+          and item.upstream_url is match('^https?://[^\\s;{}]+$')
+        )
+    fail_msg: >-
+      Each nginx vhost entry must define valid name/server_name and HTTPS proxy
+      inputs when force_https=true. A proxy upstream must be one HTTP(S) target
+      without whitespace, control characters, semicolons, or braces.
     quiet: true
   loop: "{{ nginx_config_vhosts_effective }}"
   loop_control:

@@ -142,6 +142,10 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         self.assertEqual(source.count("_single_statement and not _reserved_proxy_header"), 4)
         self.assertEqual(source.count("';' not in _directive.rstrip(';')"), 7)
 
+    def test_upstream_url_precheck_blocks_proxy_pass_injection(self) -> None:
+        assertions = ASSERTS.read_text(encoding="utf-8")
+        self.assertIn("item.upstream_url is match('^https?://[^\\\\s;{}]+$')", assertions)
+
     def test_waf_location_directives_cannot_override_proxy_identity(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
         task = next(

@@ -6,29 +6,47 @@ import unittest
 from pathlib import Path
 
 import yaml
+from ansible.parsing.dataloader import DataLoader
+from ansible.playbook.conditional import Conditional
+from ansible.template import Templar
 
 ROOT = Path(__file__).resolve().parents[2]
 ROLE = ROOT / "roles" / "postgres_deploy"
 
 
 class PostgresSystemdPreservationTests(unittest.TestCase):
-    def test_quadlet_takeover_fails_closed_for_unmanaged_pods(self) -> None:
-        block = yaml.safe_load((ROLE / "tasks/systemd.yml").read_text(encoding="utf-8"))[0]["block"]
-        tasks = {task["name"]: task for task in block}
-        validation = tasks["Refuse unknown PostgreSQL lifecycle states"]
-        collision = tasks["Refuse unmanaged PostgreSQL pod; remove it first"]
-        stage = tasks["Stage the native PostgreSQL Quadlet before legacy shutdown"]
-        stop = tasks["Stop and disable the exact legacy PostgreSQL unit before Quadlet takeover"]
-        manage = tasks["Manage the native PostgreSQL Quadlet service"]
+    @staticmethod
+    def _evaluate(condition: str, variables: dict) -> bool:
+        loader = DataLoader()
+        conditional = Conditional(loader=loader)
+        conditional.when = [condition]
+        return conditional.evaluate_conditional(Templar(loader=loader, variables=variables), variables)
 
-        self.assertEqual(collision["ansible.builtin.command"]["argv"][:3], ["podman", "pod", "exists"])
-        self.assertIn("postgres_deploy_native_systemd_active", collision["failed_when"])
-        self.assertLess(block.index(validation), block.index(collision))
-        self.assertLess(block.index(collision), block.index(stage))
-        self.assertLess(block.index(stage), block.index(stop))
-        self.assertLess(block.index(stop), block.index(manage))
-        self.assertEqual(manage["vars"]["podman_systemd_networks"], "{{ postgres_deploy_networks }}")
+    def test_real_lifecycle_tasks_cover_accepted_and_rejected_states(self) -> None:
+        block = yaml.safe_load((ROLE / "tasks/systemd.yml").read_text(encoding="utf-8"))[0]["block"]
+        validation = block[4]["ansible.builtin.assert"]["that"]
+        collision = block[5]["failed_when"]
+        self.assertEqual(block[5]["ansible.builtin.command"]["argv"][:3], ["podman", "pod", "exists"])
+        self.assertIn("postgres_deploy_native_systemd_active", collision)
         self.assertFalse((ROLE / "templates/podman-kube@.service.j2").exists())
+        cases = (
+            ((3, "inactive", 3, "inactive", 1), (True, False)),
+            ((0, "active", 3, "inactive", 0), (True, False)),
+            ((3, "inactive", 0, "active", 0), (True, False)),
+            ((3, "inactive", 3, "inactive", 0), (True, True)),
+            ((3, "inactive", 2, "activating", 1), (False, False)),
+            ((3, "inactive", 3, "inactive", 7), (True, True)),
+        )
+        for (legacy_rc, legacy, native_rc, native, pod_rc), expected in cases:
+            variables = {
+                "postgres_deploy_legacy_systemd_active": {"rc": legacy_rc, "stdout": legacy},
+                "postgres_deploy_legacy_systemd_enabled": {"rc": 1, "stdout": "disabled"},
+                "postgres_deploy_native_systemd_active": {"rc": native_rc, "stdout": native},
+                "postgres_deploy_existing_pod": {"rc": pod_rc},
+            }
+            valid = all(self._evaluate(check, variables) for check in validation)
+            actual = (valid, self._evaluate(collision, variables))
+            self.assertEqual(actual, expected)
 
 
 if __name__ == "__main__":

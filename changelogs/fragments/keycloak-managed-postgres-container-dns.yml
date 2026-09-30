@@ -11,3 +11,7 @@ breaking_changes:
     Replace legacy Keycloak and PostgreSQL units with collision-resistant
     `<pod-name>-pod.service` Quadlets. Direct kubeplay remains available only
     in explicit non-systemd mode.
+  - >-
+    Reject `keycloak_destroy_execute=true` and `postgres_destroy_execute=true`
+    for systemd-managed deployments until native Quadlet teardown is supported;
+    keep destructive teardown disabled or use a reviewed non-systemd lifecycle.
