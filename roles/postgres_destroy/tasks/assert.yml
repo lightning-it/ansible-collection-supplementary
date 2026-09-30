@@ -15,5 +15,7 @@
       - >-
         not (postgres_destroy_execute | bool)
         or not (postgres_destroy_manage_systemd | bool)
-    fail_msg: "PostgreSQL destroy variables are missing or invalid."
+    fail_msg: >-
+      PostgreSQL destroy inputs are invalid, or execute=true requested the
+      currently unsupported Quadlet teardown path.
   tags: always

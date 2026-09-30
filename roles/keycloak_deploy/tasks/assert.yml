@@ -28,6 +28,9 @@
       - keycloak_deploy_postgres_port | int > 0
       - keycloak_deploy_postgres_container_port | int > 0
       - keycloak_deploy_postgres_container_port | int <= 65535
+      - >-
+        not keycloak_deploy_manage_postgres | bool
+        or keycloak_deploy_postgres_container_port | int == 5432
       - keycloak_deploy_db_wait_port | int > 0
       - keycloak_deploy_postgres_wait_timeout | int > 0
       - keycloak_deploy_postgres_wait_delay | int >= 0
@@ -147,8 +150,11 @@
       - -c
       - >-
         import ipaddress,json,sys; host=ipaddress.ip_address(sys.argv[1]);
-        sys.exit(not(host.is_private and any(f':ip={host},' in spec+',' for spec in json.loads(sys.argv[2]))))
+        keycloak={spec.split(':',1)[0] for spec in json.loads(sys.argv[2])};
+        postgres=json.loads(sys.argv[3]); sys.exit(not(host.is_private and any(spec.split(':',1)[0]
+        in keycloak and f':ip={host},' in spec+',' for spec in postgres)))
       - "{{ keycloak_deploy_db_host }}"
+      - "{{ keycloak_deploy_networks | to_json }}"
       - "{{ keycloak_deploy_postgres_networks | to_json }}"
   changed_when: false
   check_mode: false

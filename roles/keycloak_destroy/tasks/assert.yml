@@ -15,5 +15,7 @@
       - >-
         not (keycloak_destroy_execute | bool)
         or not (keycloak_destroy_manage_systemd | bool)
-    fail_msg: "Keycloak destroy variables are missing or invalid."
+    fail_msg: >-
+      Keycloak destroy inputs are invalid, or execute=true requested the
+      currently unsupported Quadlet teardown path.
   tags: always

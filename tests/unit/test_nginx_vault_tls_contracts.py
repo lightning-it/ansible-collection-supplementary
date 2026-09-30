@@ -98,9 +98,11 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                         "directives": [
                             "proxy_http_version 1.1;\nproxy_set_header X-Forwarded-For $http_x_forwarded_for",
                             'proxy_set_header "X-Forwarded-For" $http_x_forwarded_for',
+                            'proxy"_set_header" X-"Forwarded-For" $http_x_forwarded_for',
                             r"proxy\_set_header X-Forwarded-For $http_x_forwarded_for",
                             '"proxy_set_header" X-Forwarded-For $http_x_forwarded_for',
                             '"include" /etc/nginx/quoted-bypass.conf',
+                            'in"clude" /etc/nginx/fragmented-bypass.conf',
                             "include /etc/nginx/bypass.conf",
                             "proxy_pass http://keycloak",
                         ],
@@ -115,7 +117,9 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                     "proxy_http_version 1.1; proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto",
                     "proxy_set_header Forwarded $http_forwarded",
                     "'proxy_set_header' Forwarded $http_forwarded",
+                    'proxy"_set_header" For"warded" $http_forwarded',
                     "'include' /etc/nginx/quoted-bypass.conf",
+                    'in"clude" /etc/nginx/fragmented-bypass.conf',
                     "proxy_http_version 1.1",
                 ],
             },
@@ -154,7 +158,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             for item in tasks
             if item.get("name") == "Ensure enabled WAF policy contains server and location controls"
         )
-        self.assertTrue(any("(?i:include)" in item for item in server_task["ansible.builtin.assert"]["that"]))
+        self.assertTrue(any("include(?:" in item for item in server_task["ansible.builtin.assert"]["that"]))
         for header in (
             "host",
             "x-real-ip",
@@ -170,7 +174,8 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                 self.assertIn(header, assertion)
         self.assertEqual(task["loop"], "{{ nginx_config_waf_location_directives }}")
         self.assertIn("nginx_config_waf_enabled | bool", task["when"])
-        self.assertTrue(any("(?i:include)" in item for item in task["ansible.builtin.assert"]["that"]))
+        self.assertTrue(any("include(?:" in item for item in task["ansible.builtin.assert"]["that"]))
+        self.assertTrue(any("\\S*[\"'']" in item for item in task["ansible.builtin.assert"]["that"]))
 
     def test_proxy_directive_prechecks_reject_multiple_statements(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
@@ -185,7 +190,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         for task in selected:
             with self.subTest(task=task["name"]):
                 assertions = task["ansible.builtin.assert"]["that"]
-                self.assertTrue(any("(?i:include)" in item for item in assertions))
+                self.assertTrue(any("include(?:" in item for item in assertions))
                 if task["name"] != "Reject multi-statement default proxy directives":
                     self.assertTrue(any("is sequence" in item for item in assertions))
                     self.assertTrue(any("is not string" in item for item in assertions))

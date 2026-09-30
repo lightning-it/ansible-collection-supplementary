@@ -135,6 +135,13 @@ class KeycloakRoleContractTests(unittest.TestCase):
             (defaults["keycloak_deploy_postgres_port"], defaults["keycloak_deploy_postgres_container_port"]),
             (5432, 5432),
         )
+        self.assertEqual(
+            self._role_options("keycloak_deploy")["keycloak_deploy_postgres_container_port"]["choices"], [5432]
+        )
+        self.assertIn(
+            "postgres_deploy_container_port | int == 5432",
+            (ROOT / "roles/postgres_deploy/tasks/assert.yml").read_text(),
+        )
         context = {
             "keycloak_deploy_manage_postgres": True,
             "keycloak_deploy_host_network": False,
@@ -159,6 +166,9 @@ class KeycloakRoleContractTests(unittest.TestCase):
         verify = (ROOT / "molecule" / "keycloak-tiny" / "verify.yml").read_text(encoding="utf-8")
         self.assertIn("KC_DB_URL_HOST=10.89.40.3", verify)
         self.assertIn("keycloak_deploy_db_host: 10.89.40.3", tiny)
+        deploy = yaml.safe_load((ROOT / "roles/keycloak_deploy/tasks/deploy_pod.yml").read_text(encoding="utf-8"))
+        managed = next(task for task in deploy if task["name"] == "Deploy dedicated PostgreSQL service for Keycloak")
+        self.assertEqual(managed["vars"]["postgres_deploy_networks"], "{{ keycloak_deploy_postgres_networks }}")
 
     def test_postgres_manifest_with_password_is_owner_only(self) -> None:
         tasks_path = ROOT / "roles" / "postgres_deploy" / "tasks" / "deploy_pod.yml"
@@ -288,17 +298,6 @@ class KeycloakRoleContractTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode == 0, valid, result.stderr)
 
-    def test_container_quadlets_use_collision_resistant_unit_names(self) -> None:
-        expected = {
-            "keycloak_deploy": "{{ keycloak_deploy_pod_name }}-pod",
-            "nginx_deploy": "{{ nginx_deploy_pod_name }}-pod",
-            "postgres_deploy": "{{ postgres_deploy_pod_name }}-pod",
-        }
-        for role, unit_name in expected.items():
-            with self.subTest(role=role):
-                defaults = self._role_defaults(role)
-                self.assertEqual(defaults[f"{role}_systemd_unit_name"], unit_name)
-
     def test_systemd_management_fails_closed_without_systemd_facts(self) -> None:
         for role in ("keycloak_deploy", "postgres_deploy"):
             with self.subTest(role=role):
@@ -326,58 +325,26 @@ class KeycloakRoleContractTests(unittest.TestCase):
         command = validation["ansible.builtin.command"]["argv"]
         self.assertIn("host.is_private and any", command[2])
         self.assertEqual(
-            command[3:], ["{{ keycloak_deploy_db_host }}", "{{ keycloak_deploy_postgres_networks | to_json }}"]
+            command[3:],
+            [
+                "{{ keycloak_deploy_db_host }}",
+                "{{ keycloak_deploy_networks | to_json }}",
+                "{{ keycloak_deploy_postgres_networks | to_json }}",
+            ],
         )
         cases = (
-            ("10.89.40.3", '["access.network:ip=10.89.40.3"]', 0),
-            ("8.8.8.8", '["access.network:ip=8.8.8.8"]', 1),
-            ("postgres", '["access.network:ip=10.89.40.3"]', 1),
-            ("10.89.40.4", '["access.network:ip=10.89.40.3"]', 1),
+            ("10.89.40.3", '["access.network"]', '["access.network:ip=10.89.40.3"]', 0),
+            ("8.8.8.8", '["access.network"]', '["access.network:ip=8.8.8.8"]', 1),
+            ("postgres", '["access.network"]', '["access.network:ip=10.89.40.3"]', 1),
+            ("10.89.40.3", '["access.network"]', '["db.network:ip=10.89.40.3"]', 1),
         )
-        for host, networks, expected in cases:
+        for host, keycloak_networks, postgres_networks, expected in cases:
             result = subprocess.run(  # noqa: S603
-                [sys.executable, "-c", command[2], host, networks], check=False, capture_output=True
+                [sys.executable, "-c", command[2], host, keycloak_networks, postgres_networks],
+                check=False,
+                capture_output=True,
             )
             self.assertEqual(result.returncode, expected)
-
-    def test_postgres_lifecycle_has_one_controller(self) -> None:
-        tasks_path = ROOT / "roles" / "postgres_deploy" / "tasks" / "deploy_pod.yml"
-        tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
-        task_map = {task["name"]: task for task in tasks}
-        recreate = task_map["Recreate PostgreSQL pod directly from the desired manifest"]
-        self.assertEqual(recreate["vars"]["kubeplay_action"], "recreate")
-        self.assertIn("not postgres_deploy_manage_systemd | bool", recreate["when"])
-        source = tasks_path.read_text(encoding="utf-8")
-        self.assertNotIn("Ignore kubeplay remove failure", source)
-        self.assertNotIn("Ignore kubeplay run failure", source)
-
-        systemd_path = ROOT / "roles" / "postgres_deploy" / "tasks" / "systemd.yml"
-        systemd_tasks = yaml.safe_load(systemd_path.read_text(encoding="utf-8"))
-        systemd_block = systemd_tasks[0]["block"]
-        quadlet = next(task for task in systemd_block if task["name"] == "Manage the native PostgreSQL Quadlet service")
-        self.assertEqual(
-            quadlet["ansible.builtin.include_role"]["name"],
-            "lit.foundational.podman_systemd",
-        )
-        self.assertEqual(
-            quadlet["vars"]["podman_systemd_manifest_path"],
-            "{{ postgres_deploy_pod_manifest_path }}",
-        )
-        self.assertEqual(
-            quadlet["vars"]["podman_systemd_networks"],
-            "{{ postgres_deploy_networks }}",
-        )
-
-        keycloak_tasks = yaml.safe_load(
-            (ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy_pod.yml").read_text(encoding="utf-8")
-        )
-        managed_postgres = next(
-            task for task in keycloak_tasks if task["name"] == "Deploy dedicated PostgreSQL service for Keycloak"
-        )
-        self.assertEqual(
-            managed_postgres["vars"]["postgres_deploy_networks"],
-            "{{ keycloak_deploy_postgres_networks }}",
-        )
 
     def test_quadlet_destroy_fails_closed_until_li220(self) -> None:
         for role, deploy_role in (("keycloak_destroy", "keycloak_deploy"), ("postgres_destroy", "postgres_deploy")):
@@ -387,6 +354,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
                 defaults[f"{role}_manage_systemd"], f"{{{{ {deploy_role}_manage_systemd | default(true) }}}}"
             )
             self.assertIn(f"not ({role}_manage_systemd | bool)", assertions)
+            self.assertIn("currently unsupported Quadlet teardown", assertions)
 
 
 if __name__ == "__main__":

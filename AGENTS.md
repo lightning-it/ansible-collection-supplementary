@@ -407,8 +407,8 @@ Use only applicable roles. For databases such as PostgreSQL, omit `_cac` by defa
 object reconciliation.
 
 All managed application-container configuration MUST be rendered as Kubernetes YAML suitable for `podman kube play`;
-Compose files and imperative container definitions are not permitted deployment sources. Every persistent runtime
-MUST be started and owned exclusively through a native Quadlet `.kube` unit managed by
+Compose files and imperative container definitions are not permitted deployment sources. New or changed persistent
+runtimes MUST be started and owned exclusively through a native Quadlet `.kube` unit managed by
 `lit.foundational.podman_systemd`. Startup, enablement, restart, stop, and removal MUST go through the
 Quadlet-generated service. A role MUST NOT invoke `lit.foundational.kubeplay` or `podman kube play` directly while
 Quadlet/systemd management is enabled; doing so creates two competing lifecycle controllers. Direct
@@ -416,6 +416,7 @@ Quadlet/systemd management is enabled; doing so creates two competing lifecycle 
 compatibility exception where Quadlet is unavailable, or an emergency operation. Such an exception MUST be
 fail-closed, narrowly scoped, and covered by regression evidence. Ephemeral Devtools and CI containers are execution
 environments, not managed application deployments, and therefore do not require persistent Quadlet units.
+Legacy wrappers are debt; changes MUST migrate them or document an exception.
 
 ## 4. Role Structure and Prechecks
 

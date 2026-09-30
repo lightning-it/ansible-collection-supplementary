@@ -167,6 +167,8 @@ argument_specs:
       keycloak_deploy_postgres_container_port:
         description: Container port used by the dedicated PostgreSQL service.
         type: int
+        choices:
+          - 5432
       keycloak_deploy_db_wait_port:
         description: PostgreSQL port used by the pre-start availability check.
         type: int
