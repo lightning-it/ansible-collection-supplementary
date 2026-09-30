@@ -277,8 +277,9 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         quadlet = next(task for task in systemd_block if task["name"] == "Manage the native Nginx Quadlet service")
         self.assertEqual(quadlet["ansible.builtin.include_role"]["name"], "lit.foundational.podman_systemd")
         names = [task["name"] for task in systemd_block]
-        validation = names.index("Refuse unknown legacy Nginx lifecycle states")
-        collision = names.index("Refuse unmanaged Nginx pod; remove it in non-systemd mode first")
+        validation = names.index("Refuse unknown Nginx lifecycle states")
+        collision = names.index("Refuse unmanaged Nginx pod; remove it first")
+        self.assertIn("nginx_deploy_native_systemd_active", systemd_block[collision]["failed_when"])
         stage = names.index("Stage the native Nginx Quadlet before legacy shutdown")
         stop = names.index("Stop and disable the exact legacy Nginx unit before Quadlet takeover")
         self.assertLess(validation, stage)

@@ -224,13 +224,14 @@ class KeycloakRoleContractTests(unittest.TestCase):
         validation_index = next(
             index
             for index, task in enumerate(systemd_block)
-            if task["name"] == "Refuse unknown legacy Keycloak lifecycle states"
+            if task["name"] == "Refuse unknown Keycloak lifecycle states"
         )
         collision_index = next(
             index for index, task in enumerate(systemd_block) if "Refuse unmanaged Keycloak" in task["name"]
         )
         collision = systemd_block[collision_index]
         self.assertEqual(collision["ansible.builtin.command"]["argv"][:3], ["podman", "pod", "exists"])
+        self.assertIn("keycloak_deploy_native_systemd_active", collision["failed_when"])
         lifecycle_assertions = systemd_block[validation_index]["ansible.builtin.assert"]["that"]
         lifecycle_contract = "\n".join(str(item) for item in lifecycle_assertions)
         for transient in ("activating", "reloading", "deactivating"):

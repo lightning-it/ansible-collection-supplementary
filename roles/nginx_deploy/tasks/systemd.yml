@@ -34,7 +34,17 @@
       changed_when: false
       failed_when: false
 
-    - name: Refuse unknown legacy Nginx lifecycle states
+    - name: Inspect the exact native Nginx unit activity
+      ansible.builtin.command:
+        argv: >-
+          {{ ['systemctl']
+             + (['--user'] if nginx_deploy_systemd_scope == 'user' else [])
+             + ['is-active', nginx_deploy_systemd_unit_name ~ '.service'] }}
+      register: nginx_deploy_native_systemd_active
+      changed_when: false
+      failed_when: false
+
+    - name: Refuse unknown Nginx lifecycle states
       ansible.builtin.assert:
         that:
           - nginx_deploy_legacy_systemd_active.rc in [0, 1, 3, 4]
@@ -49,12 +59,16 @@
               'disabled', 'static', 'indirect', 'generated', 'transient',
               'masked', 'masked-runtime', 'not-found'
             ]
+          - nginx_deploy_native_systemd_active.rc in [0, 3, 4]
+          - >-
+            nginx_deploy_native_systemd_active.stdout | trim
+            in ['active', 'inactive', 'failed', 'unknown']
         fail_msg: >-
-          Unable to prove the exact legacy Nginx unit lifecycle state;
+          Unable to prove the exact Nginx legacy/native lifecycle state;
           refusing Quadlet takeover.
         quiet: true
 
-    - name: Refuse unmanaged Nginx pod; remove it in non-systemd mode first
+    - name: Refuse unmanaged Nginx pod; remove it first
       ansible.builtin.command:
         argv: [podman, pod, exists, "{{ nginx_deploy_pod_name }}"]
       register: nginx_deploy_existing_pod
@@ -62,7 +76,8 @@
       failed_when: >-
         nginx_deploy_existing_pod.rc not in [0, 1]
         or (nginx_deploy_existing_pod.rc == 0
-        and nginx_deploy_legacy_systemd_active.stdout | trim != 'active')
+        and nginx_deploy_legacy_systemd_active.stdout | trim != 'active'
+        and nginx_deploy_native_systemd_active.stdout | trim != 'active')
 
     - name: Stage the native Nginx Quadlet before legacy shutdown
       ansible.builtin.include_role:

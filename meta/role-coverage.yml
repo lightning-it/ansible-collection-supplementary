@@ -1053,6 +1053,7 @@ roles:
     external_dependencies: []
     known_limitations:
       - "No direct scenario coverage."
+      - "Quadlet teardown is unsupported."
     deprecation_state: "active"
     scenario_support:
       tiny: []
@@ -1674,6 +1675,7 @@ roles:
     external_dependencies: []
     known_limitations:
       - "No direct scenario coverage."
+      - "Quadlet teardown is unsupported."
     deprecation_state: "active"
     scenario_support:
       tiny: []
