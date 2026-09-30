@@ -15,7 +15,12 @@
       - nginx_deploy_manage_systemd is boolean
       - >-
         not (nginx_deploy_manage_systemd | bool)
-        or nginx_deploy_systemd_unit_name | default('', true) | trim | length > 0
+        or (
+          nginx_deploy_systemd_unit_name is string
+          and nginx_deploy_systemd_unit_name | length <= 240
+          and nginx_deploy_systemd_unit_name
+          is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+        )
       - >-
         not (nginx_deploy_manage_systemd | bool)
         or nginx_deploy_systemd_description | default('', true) | trim | length > 0

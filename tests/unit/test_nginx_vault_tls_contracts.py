@@ -472,7 +472,7 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         rescue = {task["name"]: task for task in cutover["rescue"]}
         cleanup = rescue["Remove the failed native Nginx Quadlet runtime"]
         self.assertEqual(cleanup["vars"]["podman_systemd_action"], "absent")
-        self.assertIn("== 'not-found'", cleanup["when"])
+        self.assertIn("native_quadlet_file.stat.exists", cleanup["when"])
         preserve = rescue["Restore the pre-existing native Nginx service state after failure"]
         self.assertIn("!= 'not-found'", preserve["when"])
         self.assertIn("Restore the exact legacy Nginx unit after failed takeover", rescue)
@@ -504,6 +504,8 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         self.assertIn("['inactive', 'failed']", quadlet["when"])
 
         drift_guard = systemd_block[drift]
+        self.assertIn("native_quadlet_file.stat.exists", drift_guard["when"])
+        self.assertIn("!= 'not-found'", drift_guard["when"])
         drift_assertions = drift_guard["ansible.builtin.assert"]["that"]
         desired_lines = [
             "[Unit]",
@@ -532,6 +534,12 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         self.assertTrue(all(self._evaluate(check, variables) for check in drift_assertions))
         drifted = {**variables, "nginx_deploy_networks": ["unexpected-network"]}
         self.assertFalse(all(self._evaluate(check, drifted) for check in drift_assertions))
+
+        file_exists_unit_not_found = {
+            **variables,
+            "nginx_deploy_native_systemd_enabled": {"stdout": "not-found"},
+        }
+        self.assertTrue(self._evaluate(drift_guard["when"], file_exists_unit_not_found))
 
         lifecycle_assertions = systemd_block[validation]["ansible.builtin.assert"]["that"]
         collision_condition = systemd_block[collision]["failed_when"]
@@ -563,6 +571,37 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         )[0]["ansible.builtin.assert"]["that"]
         self.assertEqual(sum("not (nginx_deploy_manage_systemd | bool)" in item for item in deploy_asserts), 5)
         self.assertTrue(any("nginx_deploy_systemd_scope == 'system'" in item for item in deploy_asserts))
+        unit_assertion = next(item for item in deploy_asserts if "nginx_deploy_systemd_unit_name is string" in item)
+        for unit_name, valid in (
+            ("nginx", True),
+            ("nginx-edge_1", True),
+            ("../other", False),
+            ("nested/unit", False),
+            ("nginx\nother", False),
+            (".hidden", False),
+        ):
+            with self.subTest(unit_name=unit_name):
+                self.assertEqual(
+                    self._evaluate(
+                        unit_assertion,
+                        {"nginx_deploy_manage_systemd": True, "nginx_deploy_systemd_unit_name": unit_name},
+                    ),
+                    valid,
+                )
+
+    def test_foundational_dependency_floor_supports_quadlet_networks(self) -> None:
+        galaxy = yaml.safe_load((ROOT / "galaxy.yml").read_text(encoding="utf-8"))
+        source_dependencies = yaml.safe_load(
+            (ROOT / "meta" / "source-dependencies.yml").read_text(encoding="utf-8")
+        )
+        source_requirement = next(
+            item["requirement"]
+            for item in source_dependencies["collections"]
+            if item["name"] == "lit.foundational"
+        )
+
+        self.assertEqual(galaxy["dependencies"]["lit.foundational"], ">=1.35.0")
+        self.assertEqual(source_requirement, ">=1.35.0")
 
 
 if __name__ == "__main__":

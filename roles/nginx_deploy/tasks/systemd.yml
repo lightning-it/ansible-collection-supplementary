@@ -83,14 +83,12 @@
         path: "{{ nginx_deploy_quadlet_dir }}/{{ nginx_deploy_systemd_unit_name }}.kube"
         follow: false
       register: nginx_deploy_native_quadlet_file
-      when: nginx_deploy_native_systemd_enabled.stdout | trim != 'not-found'
 
     - name: Read the desired native Nginx Quadlet file
       ansible.builtin.slurp:
         path: "{{ nginx_deploy_quadlet_dir }}/{{ nginx_deploy_systemd_unit_name }}.kube"
       register: nginx_deploy_native_quadlet_read
       when:
-        - nginx_deploy_native_systemd_enabled.stdout | trim != 'not-found'
         - nginx_deploy_native_quadlet_file.stat.exists | default(false)
         - nginx_deploy_native_quadlet_file.stat.isreg | default(false)
         - not (nginx_deploy_native_quadlet_file.stat.islnk | default(false))
@@ -138,7 +136,9 @@
           requested description, manifest, networks, directory, or enablement.
           Refusing an unprotected in-place update; use a transactional migration.
         quiet: true
-      when: nginx_deploy_native_systemd_enabled.stdout | trim != 'not-found'
+      when: >-
+        nginx_deploy_native_quadlet_file.stat.exists | default(false)
+        or nginx_deploy_native_systemd_enabled.stdout | trim != 'not-found'
 
     - name: Refuse unmanaged Nginx pod; remove it first
       ansible.builtin.command:
@@ -248,7 +248,7 @@
             podman_systemd_quadlet_dir: "{{ nginx_deploy_quadlet_dir }}"
             podman_systemd_enabled: false
             podman_systemd_networks: "{{ nginx_deploy_networks }}"
-          when: nginx_deploy_native_systemd_enabled.stdout | trim == 'not-found'
+          when: not (nginx_deploy_native_quadlet_file.stat.exists | default(false))
 
         - name: Restore the pre-existing native Nginx service state after failure
           ansible.builtin.systemd:
