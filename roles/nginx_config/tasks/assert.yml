@@ -149,6 +149,8 @@
 - name: Reject multi-statement vhost proxy directives
   ansible.builtin.assert:
     that:
+      - (item.proxy_directives | default([])) is sequence
+      - (item.proxy_directives | default([])) is not string
       - >-
         item.proxy_directives | default([])
         | select('string') | list | length
@@ -168,6 +170,8 @@
 - name: Reject multi-statement location proxy directives
   ansible.builtin.assert:
     that:
+      - (item.1.directives | default([])) is sequence
+      - (item.1.directives | default([])) is not string
       - >-
         item.1.directives | default([])
         | select('string') | list | length

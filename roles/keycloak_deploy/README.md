@@ -46,29 +46,17 @@ deployments should publish Keycloak only on loopback, attach NGINX and Keycloak
 to an explicitly pinned private Quadlet network, and list only the NGINX pod
 address as trusted.
 
-When this role manages PostgreSQL and both pods use the Podman bridge network,
-`keycloak_deploy_db_host` must be the explicit private PostgreSQL address;
-automatic cross-pod DNS identity is rejected.
-The private endpoint uses `keycloak_deploy_postgres_container_port`; readiness
-uses the published `keycloak_deploy_postgres_port`.
-`keycloak_deploy_postgres_networks` defaults to the same named networks without
-reusing Keycloak-specific options such as its fixed IP.
-The controller-side readiness probe remains bound to
-`keycloak_deploy_postgres_host_ip`. A bridge-networked Keycloak container must
-never use its own loopback address as the database endpoint.
+Managed bridge-networked PostgreSQL requires an explicit private
+`keycloak_deploy_db_host` and uses `keycloak_deploy_postgres_container_port`;
+readiness uses the published host endpoint. PostgreSQL inherits only the names
+of Keycloak networks, not fixed-IP options. Cross-pod DNS and Keycloak's own
+loopback are rejected as database endpoints.
 
-Exactly one lifecycle controller owns a Keycloak pod. The container
-configuration is rendered as Kubernetes YAML. With systemd management enabled,
-the role hands that manifest to a native `.kube` Quadlet managed through
-`lit.foundational.podman_systemd`; it never starts the active pod directly.
-Without systemd management, the role uses one fail-closed kubeplay recreation.
-Both paths read back the non-secret database-host entry from the active
-container and reject a stale pod before health acceptance. An exact legacy
-`podman-kube@<escaped-manifest>.service` instance is stopped and disabled once
-before native Quadlet takeover.
-The default native unit is named `<pod-name>-pod.service` so it cannot collide
-with an administrator-managed `keycloak.service`. Enabling systemd management
-without a detected systemd service manager fails during prechecks.
+Exactly one lifecycle controller owns the pod: native `.kube` Quadlet through
+`lit.foundational.podman_systemd`, or explicit fail-closed direct kubeplay.
+Both verify the active database endpoint before health acceptance. Quadlet
+takeover disables only the exact legacy unit; its `<pod-name>-pod.service` name
+avoids `keycloak.service` collisions. Missing systemd fails prechecks.
 
 ## Dependencies
 
@@ -86,6 +74,12 @@ the collection.
     - role: lit.supplementary.keycloak_deploy
       vars:
         keycloak_deploy_manage_postgres: true
+        keycloak_deploy_manage_systemd: true
+        keycloak_deploy_networks:
+          - keycloak-access.network:ip=10.89.40.2
+        keycloak_deploy_postgres_networks:
+          - keycloak-access.network:ip=10.89.40.3
+        keycloak_deploy_db_host: 10.89.40.3
         keycloak_deploy_admin_user: admin
         keycloak_deploy_generate_secrets: false
         keycloak_deploy_admin_password: "{{ vault_keycloak_admin_password }}"

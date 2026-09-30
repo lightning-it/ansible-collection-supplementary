@@ -186,6 +186,9 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             with self.subTest(task=task["name"]):
                 assertions = task["ansible.builtin.assert"]["that"]
                 self.assertTrue(any("(?i:include)" in item for item in assertions))
+                if task["name"] != "Reject multi-statement default proxy directives":
+                    self.assertTrue(any("is sequence" in item for item in assertions))
+                    self.assertTrue(any("is not string" in item for item in assertions))
 
     def test_pki_inputs_are_required_only_when_issuance_is_enabled(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))

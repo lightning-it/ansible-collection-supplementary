@@ -6,8 +6,8 @@ security_fixes:
     client-controlled forwarded identity headers at the NGINX boundary.
 breaking_changes:
   - >-
-    Change the default Keycloak host bind address from all interfaces to
-    127.0.0.1. Deployments that intentionally expose Keycloak without the
+    Change the default Keycloak host bind address from the detected primary
+    IPv4 address to 127.0.0.1. Deployments that intentionally expose Keycloak without the
     supported NGINX edge must explicitly set keycloak_deploy_host_ip to a
     reviewed non-loopback address and provide equivalent firewall and trusted
     proxy protections before upgrading.

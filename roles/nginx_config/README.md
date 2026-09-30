@@ -44,12 +44,10 @@ not accepted as a fallback by default. A migration that intentionally imports
 existing host files must opt in explicitly and must not be used as proof of
 Vault custody.
 
-`nginx_config_waf_enabled` turns the reverse proxy into an explicit policy-WAF
-boundary by applying the supplied server controls and location controls to
-every generated TLS proxy vhost. Rate/connection zones used by those controls
-must be declared in `nginx_deploy_http_extra_directives`. This baseline uses
-NGINX-native controls; signature inspection such as OWASP CRS requires a
-separately reviewed ModSecurity/Coraza integration.
+`nginx_config_waf_enabled` applies supplied server and location controls to
+every TLS proxy vhost. Declare their rate/connection zones in
+`nginx_deploy_http_extra_directives`. Signature inspection requires a separate
+reviewed ModSecurity/Coraza integration.
 
 The default reverse-proxy contract overwrites `Host`, `X-Real-IP`, and every
 Keycloak-relevant `X-Forwarded-*` identity header from NGINX-owned connection
@@ -84,15 +82,6 @@ None.
             server_name: vault.prd.dmz.corp.l-it.io
             upstream_url: https://vault:8200
             proxy_directives:
-              - "proxy_set_header Host vault.prd.dmz.corp.l-it.io"
-              - "proxy_set_header X-Real-IP $remote_addr"
-              - "proxy_set_header X-Forwarded-For $remote_addr"
-              - "proxy_set_header X-Forwarded-Host $server_name"
-              - "proxy_set_header X-Forwarded-Port 443"
-              - "proxy_set_header X-Forwarded-Proto $scheme"
-              - 'proxy_set_header X-Forwarded-Prefix ""'
-              - 'proxy_set_header X-Original-Forwarded-For ""'
-              - 'proxy_set_header Forwarded ""'
               - "proxy_http_version 1.1"
               - "proxy_ssl_server_name on"
               - "proxy_ssl_name vault.prd.dmz.corp.l-it.io"

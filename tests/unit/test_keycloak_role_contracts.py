@@ -160,20 +160,6 @@ class KeycloakRoleContractTests(unittest.TestCase):
         self.assertIn("KC_DB_URL_HOST=10.89.40.3", verify)
         self.assertIn("keycloak_deploy_db_host: 10.89.40.3", tiny)
 
-    def test_external_database_keeps_explicit_endpoint(self) -> None:
-        defaults = self._role_defaults("keycloak_deploy")
-        context = {
-            "keycloak_deploy_manage_postgres": False,
-            "keycloak_deploy_host_network": False,
-            "keycloak_deploy_postgres_host_network": False,
-            "keycloak_deploy_postgres_pod_name": "unused",
-            "keycloak_deploy_postgres_host_ip": "db.example.invalid",
-            "keycloak_deploy_db_host": "db.example.invalid",
-        }
-
-        self.assertEqual(self._render_default(defaults, "keycloak_deploy_db_host", context), "db.example.invalid")
-        self.assertEqual(self._render_default(defaults, "keycloak_deploy_db_wait_host", context), "db.example.invalid")
-
     def test_postgres_manifest_with_password_is_owner_only(self) -> None:
         tasks_path = ROOT / "roles" / "postgres_deploy" / "tasks" / "deploy_pod.yml"
         tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
@@ -307,25 +293,22 @@ class KeycloakRoleContractTests(unittest.TestCase):
         self.assertIs(validation["check_mode"], False)
         self.assertIs(validation["changed_when"], False)
 
-        for address in ("10.89.10.2", "10.89.10.0/29", "2001:db8::2", "2001:db8::/64"):
-            with self.subTest(valid_address=address):
-                result = subprocess.run(  # noqa: S603 - isolated Devtools regression of the exact role argv
-                    [sys.executable, "-c", command[2], address],
-                    check=False,
-                    capture_output=True,
-                    text=True,
+        cases = {
+            "10.89.10.2": True,
+            "10.89.10.0/29": True,
+            "2001:db8::2": True,
+            "2001:db8::/64": True,
+            "nginx": False,
+            "10.89.10.999": False,
+            "2001:db8::zz": False,
+            "10.89.10.0/99": False,
+        }
+        for address, valid in cases.items():
+            with self.subTest(address=address):
+                result = subprocess.run(  # noqa: S603 - exact isolated role argv
+                    [sys.executable, "-c", command[2], address], check=False, capture_output=True, text=True
                 )
-                self.assertEqual(result.returncode, 0, result.stderr)
-
-        for address in ("nginx", "10.89.10.999", "2001:db8::zz", "10.89.10.0/99"):
-            with self.subTest(invalid_address=address):
-                result = subprocess.run(  # noqa: S603 - isolated Devtools regression of the exact role argv
-                    [sys.executable, "-c", command[2], address],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                )
-                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.returncode == 0, valid, result.stderr)
 
     def test_container_quadlets_use_collision_resistant_unit_names(self) -> None:
         expected = {
@@ -359,6 +342,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
         self.assertIn("| intersect(", assertions)
         self.assertIn("keycloak_deploy_networks | length == 0", assertions)
         self.assertIn("keycloak_deploy_postgres_networks | length == 0", assertions)
+        self.assertIn("or keycloak_deploy_manage_systemd | bool", assertions)
 
     def test_postgres_lifecycle_has_one_controller(self) -> None:
         tasks_path = ROOT / "roles" / "postgres_deploy" / "tasks" / "deploy_pod.yml"

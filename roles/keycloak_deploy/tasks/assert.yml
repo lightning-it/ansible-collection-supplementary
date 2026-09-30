@@ -85,6 +85,9 @@
       - keycloak_deploy_proxy_headers in ['', 'forwarded', 'xforwarded']
       - >-
         keycloak_deploy_proxy_headers | trim | length == 0
+        or keycloak_deploy_manage_systemd | bool
+      - >-
+        keycloak_deploy_proxy_headers | trim | length == 0
         or (
           not (keycloak_deploy_host_network | bool)
           and

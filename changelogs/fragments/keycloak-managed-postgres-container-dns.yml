@@ -1,12 +1,12 @@
 ---
 bugfixes:
   - >-
-    Use the explicit PostgreSQL private endpoint and container port while
-    retaining the published host endpoint for controller readiness.
-  - >-
     Restrict the generated PostgreSQL Pod manifest to its owner because the
     runtime manifest contains the effective database password.
 breaking_changes:
+  - >-
+    Require an explicit PostgreSQL private endpoint and container port for
+    bridge-networked Keycloak while retaining the host endpoint for readiness.
   - >-
     Replace legacy Keycloak and PostgreSQL units with collision-resistant
     `<pod-name>-pod.service` Quadlets. Direct kubeplay remains available only
