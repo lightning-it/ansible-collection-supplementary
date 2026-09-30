@@ -184,7 +184,10 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         }
         for upstream, success in (
             ("http://keycloak:8080", True),
+            ("http://keycloak:65535", True),
             ("https://10.89.40.2:8443/realms/lit-access?x=1", True),
+            ("http://keycloak:65536", False),
+            ("http://keycloak:99999", False),
             ("http://backend#comment", False),
             ('http://backend"quoted', False),
             ("http://backend\\", False),
@@ -279,11 +282,39 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                     }
                 ]
             },
+            {
+                "nginx_config_vhosts_effective": [
+                    {
+                        **policy["nginx_config_vhosts_effective"][0],
+                        "locations": [{"directives": ["modsecurity off"]}],
+                    }
+                ]
+            },
         )
         for override in invalid:
             with self.subTest(override=override):
                 result = self._run_assert_tasks(names, {**policy, **override})
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_location_paths_are_literal_absolute_uri_prefixes(self) -> None:
+        name = "Reject unsafe Nginx location paths"
+        base = {"name": "edge", "locations": []}
+        for path, success in (
+            ("/", True),
+            ("/realms/lit-access", True),
+            ("/oauth2/callback%20safe", True),
+            ("", False),
+            ("relative", False),
+            ("~ ^/admin", False),
+            ("/safe\nlocation /bypass", False),
+            ("/safe{", False),
+            ('/safe"quoted', False),
+        ):
+            result = self._run_assert_tasks(
+                {name},
+                {"nginx_config_vhosts_effective": [{**base, "locations": [{"path": path}]}]},
+            )
+            self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
 
     def test_proxy_directive_prechecks_reject_multiple_statements(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
@@ -412,6 +443,24 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             if task["name"] == "Refuse non-transactional updates of an existing native Nginx unit"
         )
         self.assertIn("nginx_deploy_kubeplay_run", update_guard["ansible.builtin.assert"]["that"][0])
+        update_condition = update_guard["ansible.builtin.assert"]["that"][0]
+        for native, remove, run, allowed in (
+            ("active", False, False, True),
+            ("inactive", False, False, True),
+            ("failed", False, False, True),
+            ("inactive", True, False, False),
+            ("failed", False, True, False),
+        ):
+            variables = {
+                "nginx_deploy_native_systemd_enabled": {"stdout": "generated"},
+                "nginx_deploy_native_systemd_active": {"stdout": native},
+                "nginx_deploy_kubeplay_remove": remove,
+                "nginx_deploy_kubeplay_run": run,
+            }
+            with self.subTest(native=native, remove=remove, run=run):
+                self.assertEqual(self._evaluate(update_condition, variables), allowed)
+
+        self.assertIn("['inactive', 'failed']", quadlet["when"])
 
         lifecycle_assertions = systemd_block[validation]["ansible.builtin.assert"]["that"]
         collision_condition = systemd_block[collision]["failed_when"]

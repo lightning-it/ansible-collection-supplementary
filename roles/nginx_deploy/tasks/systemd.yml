@@ -95,7 +95,8 @@
           - >-
             nginx_deploy_native_systemd_enabled.stdout | trim == 'not-found'
             or (
-              nginx_deploy_native_systemd_active.stdout | trim == 'active'
+              nginx_deploy_native_systemd_active.stdout | trim
+              in ['active', 'inactive', 'failed']
               and
               not (nginx_deploy_kubeplay_remove | default(false) | bool)
               and not (nginx_deploy_kubeplay_run | default(false) | bool)
@@ -157,6 +158,7 @@
             podman_systemd_networks: "{{ nginx_deploy_networks }}"
           when: >-
             nginx_deploy_native_systemd_enabled.stdout | trim == 'not-found'
+            or nginx_deploy_native_systemd_active.stdout | trim in ['inactive', 'failed']
             or nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
             or nginx_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
 
