@@ -246,6 +246,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
         self.assertIs(verify["no_log"], True)
         assertions = verify["ansible.builtin.assert"]["that"]
         self.assertTrue(any("KC_DB_URL_HOST=" in assertion for assertion in assertions))
+        self.assertTrue(any("KC_DB_URL_PORT=" in assertion for assertion in assertions))
 
         source = pod_tasks_path.read_text(encoding="utf-8")
         self.assertNotIn("Ignore kubeplay remove failure", source)
@@ -327,12 +328,16 @@ class KeycloakRoleContractTests(unittest.TestCase):
         self.assertIn("/etc/containers/systemd/keycloak-heavy-pod.kube", heavy_verify)
 
     def test_systemd_management_fails_closed_without_systemd_facts(self) -> None:
-        for role in ("keycloak_deploy", "nginx_deploy", "postgres_deploy"):
+        for role in ("keycloak_deploy", "postgres_deploy"):
             with self.subTest(role=role):
                 assertions = (ROOT / "roles" / role / "tasks" / "assert.yml").read_text(encoding="utf-8")
                 self.assertIn(f"not {role}_manage_systemd | bool", assertions)
                 self.assertIn("ansible_facts.get('service_mgr', '')", assertions)
                 self.assertIn(") == 'systemd'", assertions)
+        nginx_assert = (ROOT / "roles/nginx_deploy/tasks/assert.yml").read_text(encoding="utf-8")
+        nginx_systemd = (ROOT / "roles/nginx_deploy/tasks/systemd.yml").read_text(encoding="utf-8")
+        self.assertNotIn("ansible_facts.get('service_mgr', '')", nginx_assert)
+        self.assertIn("ansible_facts.service_mgr", nginx_systemd)
 
     def test_managed_bridge_database_requires_a_shared_normalized_network(self) -> None:
         assertions = (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
@@ -343,6 +348,25 @@ class KeycloakRoleContractTests(unittest.TestCase):
         self.assertIn("keycloak_deploy_networks | length == 0", assertions)
         self.assertIn("keycloak_deploy_postgres_networks | length == 0", assertions)
         self.assertIn("or keycloak_deploy_manage_systemd | bool", assertions)
+
+        tasks = yaml.safe_load(assertions)
+        validation = next(task for task in tasks if task["name"] == "Validate the managed private PostgreSQL endpoint")
+        command = validation["ansible.builtin.command"]["argv"]
+        self.assertIn("host.is_private and any", command[2])
+        self.assertEqual(
+            command[3:], ["{{ keycloak_deploy_db_host }}", "{{ keycloak_deploy_postgres_networks | to_json }}"]
+        )
+        cases = (
+            ("10.89.40.3", '["access.network:ip=10.89.40.3"]', 0),
+            ("8.8.8.8", '["access.network:ip=8.8.8.8"]', 1),
+            ("postgres", '["access.network:ip=10.89.40.3"]', 1),
+            ("10.89.40.4", '["access.network:ip=10.89.40.3"]', 1),
+        )
+        for host, networks, expected in cases:
+            result = subprocess.run(  # noqa: S603
+                [sys.executable, "-c", command[2], host, networks], check=False, capture_output=True
+            )
+            self.assertEqual(result.returncode, expected)
 
     def test_postgres_lifecycle_has_one_controller(self) -> None:
         tasks_path = ROOT / "roles" / "postgres_deploy" / "tasks" / "deploy_pod.yml"

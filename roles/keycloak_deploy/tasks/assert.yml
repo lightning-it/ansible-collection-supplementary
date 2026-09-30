@@ -140,6 +140,24 @@
     fail_msg: "Keycloak deploy variables are missing or invalid."
   tags: always
 
+- name: Validate the managed private PostgreSQL endpoint
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_facts.get('python', {}).get('executable', '/usr/bin/python3') }}"
+      - -c
+      - >-
+        import ipaddress,json,sys; host=ipaddress.ip_address(sys.argv[1]);
+        sys.exit(not(host.is_private and any(f':ip={host},' in spec+',' for spec in json.loads(sys.argv[2]))))
+      - "{{ keycloak_deploy_db_host }}"
+      - "{{ keycloak_deploy_postgres_networks | to_json }}"
+  changed_when: false
+  check_mode: false
+  when:
+    - keycloak_deploy_manage_postgres | bool
+    - not keycloak_deploy_host_network | bool
+    - not keycloak_deploy_postgres_host_network | bool
+  tags: always
+
 - name: Validate trusted Keycloak proxy address syntax
   ansible.builtin.command:
     argv:

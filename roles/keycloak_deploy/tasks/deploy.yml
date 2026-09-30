@@ -56,6 +56,9 @@
           - >-
             ('KC_DB_URL_HOST=' ~ keycloak_deploy_db_host)
             in (keycloak_deploy_runtime_environment.stdout | from_json)
+          - >-
+            ('KC_DB_URL_PORT=' ~ keycloak_deploy_db_port | string)
+            in (keycloak_deploy_runtime_environment.stdout | from_json)
         fail_msg: >-
           The active Keycloak pod did not consume the desired database endpoint.
         quiet: true

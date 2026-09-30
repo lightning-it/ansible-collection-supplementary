@@ -18,16 +18,12 @@ Key variables:
 - `keycloak_deploy_host_data_dir`
 - `keycloak_deploy_port`
 - `keycloak_deploy_host_ip`
-- `keycloak_deploy_networks`
-- `keycloak_deploy_postgres_networks`
 - `keycloak_deploy_manage_postgres`
 - `keycloak_deploy_postgres_image`
 - `keycloak_deploy_postgres_pod_name`
 - `keycloak_deploy_postgres_pod_manifest_path`
 - `keycloak_deploy_db_host`
 - `keycloak_deploy_db_port`
-- `keycloak_deploy_postgres_port`
-- `keycloak_deploy_postgres_container_port`
 - `keycloak_deploy_db_name`
 - `keycloak_deploy_db_user`
 - `keycloak_deploy_db_password`
@@ -35,22 +31,14 @@ Key variables:
 - `keycloak_deploy_admin_password`
 - `keycloak_deploy_generate_secrets`
 - `keycloak_deploy_manage_systemd`
-- `keycloak_deploy_proxy_headers`
-- `keycloak_deploy_proxy_trusted_addresses`
+Proxy headers require valid `keycloak_deploy_proxy_trusted_addresses`, rendered
+as `KC_PROXY_TRUSTED_ADDRESSES`. Edge TLS keeps Keycloak on host loopback,
+attaches NGINX and Keycloak to a pinned private Quadlet network, and trusts only
+the NGINX pod address.
 
-When proxy headers are enabled, `keycloak_deploy_proxy_trusted_addresses` is
-mandatory, every entry must be a valid IPv4/IPv6 address or CIDR, and the list
-is rendered as `KC_PROXY_TRUSTED_ADDRESSES`. This prevents a
-non-proxy peer from forging client, scheme, host, or port identity. Edge TLS
-deployments should publish Keycloak only on loopback, attach NGINX and Keycloak
-to an explicitly pinned private Quadlet network, and list only the NGINX pod
-address as trusted.
-
-Managed bridge-networked PostgreSQL requires an explicit private
-`keycloak_deploy_db_host` and uses `keycloak_deploy_postgres_container_port`;
-readiness uses the published host endpoint. PostgreSQL inherits only the names
-of Keycloak networks, not fixed-IP options. Cross-pod DNS and Keycloak's own
-loopback are rejected as database endpoints.
+Managed bridge PostgreSQL requires a private `keycloak_deploy_db_host` matching
+its pinned network IP; readiness uses the published host endpoint. DNS and
+Keycloak loopback are rejected.
 
 Exactly one lifecycle controller owns the pod: native `.kube` Quadlet through
 `lit.foundational.podman_systemd`, or explicit fail-closed direct kubeplay.

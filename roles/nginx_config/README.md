@@ -44,16 +44,13 @@ not accepted as a fallback by default. A migration that intentionally imports
 existing host files must opt in explicitly and must not be used as proof of
 Vault custody.
 
-`nginx_config_waf_enabled` applies supplied server and location controls to
-every TLS proxy vhost. Declare their rate/connection zones in
-`nginx_deploy_http_extra_directives`. Signature inspection requires a separate
-reviewed ModSecurity/Coraza integration.
+`nginx_config_waf_enabled` applies supplied controls to every TLS proxy vhost;
+signature inspection requires a separately reviewed integration.
 
-The default reverse-proxy contract overwrites `Host`, `X-Real-IP`, and every
-Keycloak-relevant `X-Forwarded-*` identity header from NGINX-owned connection
-state. It strips `Forwarded`, `X-Original-Forwarded-For`, and
-`X-Forwarded-Prefix`; `X-Forwarded-Port` uses the trusted HTTP or TLS external
-port for the current vhost. Custom directives cannot weaken this boundary.
+The proxy contract overwrites `Host`, `X-Real-IP`, and Keycloak-relevant
+`X-Forwarded-*` identity from NGINX connection state, strips untrusted forwarding
+chains, and derives `X-Forwarded-Port` from the vhost. Custom directives cannot
+weaken this boundary.
 
 When `nginx_config_vault_issue_missing: false`, Vault KV must already contain a
 certificate/private-key pair, a CA chain, and matching common-name and
