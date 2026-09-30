@@ -91,7 +91,7 @@
         | length == nginx_config_waf_server_directives | length
       - >-
         nginx_config_waf_server_directives
-        | reject('match', '(?i)^(?![ \t]*include(?:[ \t]|$))[ \t]*[a-z_][a-z0-9_]*(?:[ \t]+[^\\\r\n;{}]*)?;?$')
+        | reject('match', '(?i)^(?![ \t]*include(?:[ \t]|$))[ \t]*[a-z_][a-z0-9_]*(?:[ \t]+[^#\\\r\n;{}]*)?;?$')
         | list | length == 0
       - >-
         nginx_config_waf_location_directives
@@ -120,7 +120,7 @@
           ~ '(?:[ \t]|$)'
         )
       - item | trim is not match('(?i)^proxy_set_header[ \t]+\S*["'']')
-      - item | trim is match('(?i)^(?!include(?:[ \t]|$))[a-z_][a-z0-9_]*(?:[ \t]+[^\\\r\n;{}]*)?;?$')
+      - item | trim is match('(?i)^(?!include(?:[ \t]|$))[a-z_][a-z0-9_]*(?:[ \t]+[^#\\\r\n;{}]*)?;?$')
     fail_msg: >-
       WAF location directives must not set reserved proxy identity headers.
       Those headers are owned exclusively by nginx_config_proxy_required_directives.
@@ -137,7 +137,7 @@
     that:
       - item is string
       - item | trim | length > 0
-      - item | trim is match('(?i)^(?!include(?:[ \t]|$))[a-z_][a-z0-9_]*(?:[ \t]+[^\\\r\n;{}]*)?;?$')
+      - item | trim is match('(?i)^(?!include(?:[ \t]|$))[a-z_][a-z0-9_]*(?:[ \t]+[^#\\\r\n;{}]*)?;?$')
     fail_msg: >-
       Proxy directives must contain exactly one NGINX statement and must not
       contain embedded newlines or additional semicolons.
@@ -158,7 +158,7 @@
         == item.proxy_directives | default([]) | length
       - >-
         item.proxy_directives | default([])
-        | reject('match', '(?i)^(?![ \t]*include(?:[ \t]|$))[ \t]*[a-z_][a-z0-9_]*(?:[ \t]+[^\\\r\n;{}]*)?;?$')
+        | reject('match', '(?i)^(?![ \t]*include(?:[ \t]|$))[ \t]*[a-z_][a-z0-9_]*(?:[ \t]+[^#\\\r\n;{}]*)?;?$')
         | list | length == 0
     fail_msg: >-
       Vhost proxy directives must each contain exactly one NGINX statement
@@ -180,7 +180,7 @@
         == item.1.directives | default([]) | length
       - >-
         item.1.directives | default([])
-        | reject('match', '(?i)^(?![ \t]*include(?:[ \t]|$))[ \t]*[a-z_][a-z0-9_]*(?:[ \t]+[^\\\r\n;{}]*)?;?$')
+        | reject('match', '(?i)^(?![ \t]*include(?:[ \t]|$))[ \t]*[a-z_][a-z0-9_]*(?:[ \t]+[^#\\\r\n;{}]*)?;?$')
         | list | length == 0
     fail_msg: >-
       Location proxy directives must each contain exactly one NGINX statement
@@ -213,7 +213,7 @@
   ansible.builtin.assert:
     that:
       - item.1 is string
-      - item.1 | trim is match('(?i)^(?!include(?:[ \t]|$))[a-z_][a-z0-9_]*(?:[ \t]+[^\\\r\n;{}]*)?;?$')
+      - item.1 | trim is match('(?i)^(?!include(?:[ \t]|$))[a-z_][a-z0-9_]*(?:[ \t]+[^#\\\r\n;{}]*)?;?$')
     fail_msg: >-
       Proxy-vhost extra directives must not contain NGINX block
       delimiters. Custom location blocks would bypass the generated proxy
@@ -226,6 +226,70 @@
     - >-
       item.0.upstream_url | default('', true) | trim | length > 0
       or item.0.locations | default([]) | length > 0
+  tags: always
+
+- name: Reject consumer overrides of WAF server controls
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.1 | trim | lower | regex_replace('[ \t].*$', '')
+        not in (
+          nginx_config_waf_server_directives
+          | map('trim') | map('lower')
+          | map('regex_replace', '[ \t].*$', '') | list
+        )
+    fail_msg: "Proxy-vhost extra directives must not override mandatory WAF server controls."
+    quiet: true
+  loop: "{{ nginx_config_vhosts_effective | subelements('extra_directives', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.name | default('') }}"
+  when:
+    - nginx_config_waf_enabled | bool
+    - item.0.force_https | default(false) | bool
+  tags: always
+
+- name: Reject consumer overrides of WAF location controls
+  ansible.builtin.assert:
+    that:
+      - >-
+        item | trim | lower | regex_replace('[ \t].*$', '')
+        not in (
+          nginx_config_waf_location_directives
+          | map('trim') | map('lower')
+          | map('regex_replace', '[ \t].*$', '') | list
+        )
+    fail_msg: "Consumer proxy directives must not override mandatory WAF location controls."
+    quiet: true
+  loop: >-
+    {{
+      nginx_config_vhosts_effective
+      | map(attribute='proxy_directives', default=[])
+      | flatten
+    }}
+  when: nginx_config_waf_enabled | bool
+  tags: always
+
+- name: Reject location overrides of WAF location controls
+  ansible.builtin.assert:
+    that:
+      - >-
+        item | trim | lower | regex_replace('[ \t].*$', '')
+        not in (
+          nginx_config_waf_location_directives
+          | map('trim') | map('lower')
+          | map('regex_replace', '[ \t].*$', '') | list
+        )
+    fail_msg: "Location directives must not override mandatory WAF location controls."
+    quiet: true
+  loop: >-
+    {{
+      nginx_config_vhosts_effective
+      | subelements('locations', skip_missing=True)
+      | map('last')
+      | map(attribute='directives', default=[])
+      | flatten
+    }}
+  when: nginx_config_waf_enabled | bool
   tags: always
 
 - name: Ensure Vault TLS inputs are present when source=vault

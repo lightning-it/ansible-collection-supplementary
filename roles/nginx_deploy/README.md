@@ -25,7 +25,7 @@ Key variables:
 - `nginx_deploy_manage_default_site`
 - `nginx_deploy_manage_systemd`
 - `nginx_deploy_systemd_unit_name`
-- `nginx_deploy_systemd_scope`
+- `nginx_deploy_systemd_scope` (currently `system` only; `user` is rejected)
 - `nginx_deploy_quadlet_dir`
 - `nginx_deploy_systemd_enabled`
 - `nginx_deploy_selinux_relabel`

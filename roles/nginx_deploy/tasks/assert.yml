@@ -13,11 +13,21 @@
       - nginx_deploy_host_root | length > 0
       - nginx_deploy_health_url_effective | length > 0
       - nginx_deploy_manage_systemd is boolean
-      - nginx_deploy_systemd_unit_name | default('', true) | trim | length > 0
-      - nginx_deploy_systemd_description | default('', true) | trim | length > 0
-      - nginx_deploy_systemd_scope in ['system', 'user']
-      - nginx_deploy_quadlet_dir | default('', true) | trim | length > 0
-      - nginx_deploy_systemd_enabled is boolean
+      - >-
+        not (nginx_deploy_manage_systemd | bool)
+        or nginx_deploy_systemd_unit_name | default('', true) | trim | length > 0
+      - >-
+        not (nginx_deploy_manage_systemd | bool)
+        or nginx_deploy_systemd_description | default('', true) | trim | length > 0
+      - >-
+        not (nginx_deploy_manage_systemd | bool)
+        or nginx_deploy_systemd_scope == 'system'
+      - >-
+        not (nginx_deploy_manage_systemd | bool)
+        or nginx_deploy_quadlet_dir | default('', true) | trim | length > 0
+      - >-
+        not (nginx_deploy_manage_systemd | bool)
+        or nginx_deploy_systemd_enabled is boolean
       - nginx_deploy_skip_runtime is boolean
       - nginx_deploy_skip_config is boolean
       - nginx_deploy_skip_deploy is boolean

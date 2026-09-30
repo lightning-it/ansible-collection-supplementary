@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
 import yaml
+from ansible.parsing.dataloader import DataLoader
+from ansible.playbook.conditional import Conditional
+from ansible.template import Templar
 from jinja2 import Environment
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,6 +22,31 @@ TASKS = ROOT / "roles" / "nginx_config" / "tasks" / "main.yml"
 
 
 class NginxVaultTlsContractTests(unittest.TestCase):
+    @staticmethod
+    def _evaluate(condition: str, variables: dict) -> bool:
+        loader = DataLoader()
+        conditional = Conditional(loader=loader)
+        conditional.when = [condition]
+        return conditional.evaluate_conditional(Templar(loader=loader, variables=variables), variables)
+
+    def _run_assert_tasks(self, names: set[str], variables: dict) -> subprocess.CompletedProcess[str]:
+        tasks = [task for task in yaml.safe_load(ASSERTS.read_text(encoding="utf-8")) if task.get("name") in names]
+        play = [{"hosts": "localhost", "gather_facts": False, "vars": variables, "tasks": tasks}]
+        with tempfile.TemporaryDirectory(prefix="nginx-contract-") as temporary:
+            root = Path(temporary)
+            playbook = root / "assert.yml"
+            playbook.write_text(yaml.safe_dump(play), encoding="utf-8")
+            executable = shutil.which("ansible-playbook")
+            self.assertIsNotNone(executable, "Pinned Devtools Ansible is required")
+            return subprocess.run(  # noqa: S603 - fixed executable and generated offline fixture
+                [executable, "-i", "localhost,", "-c", "local", str(playbook)],
+                env={**os.environ, "ANSIBLE_NOCOLOR": "1", "ANSIBLE_LOCAL_TEMP": str(root / "ansible")},
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+            )
+
     def test_local_tls_fallback_has_explicit_compatibility_switch(self) -> None:
         defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
 
@@ -180,6 +212,60 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         self.assertIn("nginx_config_waf_enabled | bool", task["when"])
         self.assertTrue(any("include(?:" in item for item in task["ansible.builtin.assert"]["that"]))
         self.assertTrue(any("\\S*[\"'']" in item for item in task["ansible.builtin.assert"]["that"]))
+        self.assertIn("#", next(check for check in task["ansible.builtin.assert"]["that"] if "include(?:" in check))
+        override_tasks = {item["name"] for item in tasks if "overrides of WAF" in item.get("name", "")}
+        self.assertEqual(
+            override_tasks,
+            {
+                "Reject consumer overrides of WAF server controls",
+                "Reject consumer overrides of WAF location controls",
+                "Reject location overrides of WAF location controls",
+            },
+        )
+
+    def test_real_waf_prechecks_reject_comments_and_semantic_overrides(self) -> None:
+        policy = {
+            "nginx_config_waf_enabled": True,
+            "nginx_config_waf_server_directives": ["modsecurity on"],
+            "nginx_config_waf_location_directives": ["modsecurity_rules 'SecRuleEngine On'"],
+            "nginx_config_vhosts_effective": [
+                {
+                    "name": "edge",
+                    "force_https": True,
+                    "extra_directives": ["client_max_body_size 1m"],
+                    "proxy_directives": ["proxy_http_version 1.1"],
+                    "locations": [{"directives": ["proxy_buffering off"]}],
+                }
+            ],
+        }
+        names = {
+            "Ensure enabled WAF policy contains server and location controls",
+            "Reject consumer overrides of WAF server controls",
+            "Reject consumer overrides of WAF location controls",
+            "Reject location overrides of WAF location controls",
+        }
+        result = self._run_assert_tasks(names, policy)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        invalid = (
+            {"nginx_config_waf_server_directives": ["modsecurity on # policy"]},
+            {
+                "nginx_config_vhosts_effective": [
+                    {**policy["nginx_config_vhosts_effective"][0], "extra_directives": ["modsecurity off"]}
+                ]
+            },
+            {
+                "nginx_config_vhosts_effective": [
+                    {
+                        **policy["nginx_config_vhosts_effective"][0],
+                        "proxy_directives": ["modsecurity_rules 'SecRuleEngine Off'"],
+                    }
+                ]
+            },
+        )
+        for override in invalid:
+            with self.subTest(override=override):
+                result = self._run_assert_tasks(names, {**policy, **override})
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_proxy_directive_prechecks_reject_multiple_statements(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
@@ -278,18 +364,51 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         )
         self.assertIn("not ansible_check_mode", systemd_tasks[0]["when"])
         systemd_block = systemd_tasks[0]["block"]
-        quadlet = next(task for task in systemd_block if task["name"] == "Manage the native Nginx Quadlet service")
+        cutover = next(
+            task for task in systemd_block if task["name"] == "Cut over to native Nginx Quadlet with rollback"
+        )
+        quadlet = next(task for task in cutover["block"] if task["name"] == "Manage the native Nginx Quadlet service")
         self.assertEqual(quadlet["ansible.builtin.include_role"]["name"], "lit.foundational.podman_systemd")
         names = [task["name"] for task in systemd_block]
         validation = names.index("Refuse unknown Nginx lifecycle states")
         collision = names.index("Refuse unmanaged Nginx pod; remove it first")
         self.assertIn("nginx_deploy_native_systemd_active", systemd_block[collision]["failed_when"])
         stage = names.index("Stage the native Nginx Quadlet before legacy shutdown")
-        stop = names.index("Stop and disable the exact legacy Nginx unit before Quadlet takeover")
+        takeover = names.index("Cut over to native Nginx Quadlet with rollback")
         self.assertLess(validation, stage)
         self.assertLess(validation, collision)
         self.assertLess(collision, stage)
-        self.assertLess(stage, stop)
+        self.assertLess(stage, takeover)
+        rescue = {task["name"]: task for task in cutover["rescue"]}
+        cleanup = rescue["Remove the failed native Nginx Quadlet runtime"]
+        self.assertEqual(cleanup["vars"]["podman_systemd_action"], "absent")
+        self.assertIn("Restore the exact legacy Nginx unit after failed takeover", rescue)
+        self.assertIn("Report failed native Nginx takeover after rollback", rescue)
+
+        lifecycle_assertions = systemd_block[validation]["ansible.builtin.assert"]["that"]
+        collision_condition = systemd_block[collision]["failed_when"]
+        cases = (
+            ((3, "inactive", 3, "inactive", 1), (True, False)),
+            ((0, "active", 3, "inactive", 0), (True, False)),
+            ((3, "inactive", 0, "active", 0), (True, False)),
+            ((3, "inactive", 3, "inactive", 0), (True, True)),
+            ((3, "inactive", 2, "activating", 1), (False, False)),
+        )
+        for (legacy_rc, legacy, native_rc, native, pod_rc), expected in cases:
+            variables = {
+                "nginx_deploy_legacy_systemd_active": {"rc": legacy_rc, "stdout": legacy},
+                "nginx_deploy_legacy_systemd_enabled": {"rc": 1, "stdout": "disabled"},
+                "nginx_deploy_native_systemd_active": {"rc": native_rc, "stdout": native},
+                "nginx_deploy_existing_pod": {"rc": pod_rc},
+            }
+            valid = all(self._evaluate(check, variables) for check in lifecycle_assertions)
+            self.assertEqual((valid, self._evaluate(collision_condition, variables)), expected)
+
+        deploy_asserts = yaml.safe_load(
+            (ROOT / "roles" / "nginx_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
+        )[0]["ansible.builtin.assert"]["that"]
+        self.assertEqual(sum("not (nginx_deploy_manage_systemd | bool)" in item for item in deploy_asserts), 5)
+        self.assertTrue(any("nginx_deploy_systemd_scope == 'system'" in item for item in deploy_asserts))
 
 
 if __name__ == "__main__":

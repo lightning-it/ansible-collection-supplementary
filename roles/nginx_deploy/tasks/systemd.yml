@@ -36,10 +36,10 @@
 
     - name: Inspect the exact native Nginx unit activity
       ansible.builtin.command:
-        argv: >-
-          {{ ['systemctl']
-             + (['--user'] if nginx_deploy_systemd_scope == 'user' else [])
-             + ['is-active', nginx_deploy_systemd_unit_name ~ '.service'] }}
+        argv:
+          - systemctl
+          - is-active
+          - "{{ nginx_deploy_systemd_unit_name }}.service"
       register: nginx_deploy_native_systemd_active
       changed_when: false
       failed_when: false
@@ -96,48 +96,84 @@
         or nginx_deploy_legacy_systemd_enabled.stdout | trim
         in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
 
-    - name: Stop and disable the exact legacy Nginx unit before Quadlet takeover
-      ansible.builtin.systemd:
-        name: "podman-kube@{{ nginx_deploy_legacy_systemd_name.stdout }}.service"
-        state: stopped
-        enabled: false
-      when: >-
-        nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
-        or nginx_deploy_legacy_systemd_enabled.stdout | trim
-        in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
+    - name: Cut over to native Nginx Quadlet with rollback
+      block:
+        - name: Stop and disable the exact legacy Nginx unit before Quadlet takeover
+          ansible.builtin.systemd:
+            name: "podman-kube@{{ nginx_deploy_legacy_systemd_name.stdout }}.service"
+            state: stopped
+            enabled: false
+          when: >-
+            nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
+            or nginx_deploy_legacy_systemd_enabled.stdout | trim
+            in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
 
-    - name: Manage the native Nginx Quadlet service
-      ansible.builtin.include_role:
-        name: lit.foundational.podman_systemd
-      vars:
-        podman_systemd_action: >-
-          {{
-            'restarted'
-            if (
-              nginx_deploy_kubeplay_remove | default(false) | bool
-              or nginx_deploy_kubeplay_run | default(false) | bool
-              or nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
-              or nginx_deploy_legacy_systemd_enabled.stdout | trim
+        - name: Manage the native Nginx Quadlet service
+          ansible.builtin.include_role:
+            name: lit.foundational.podman_systemd
+          vars:
+            podman_systemd_action: >-
+              {{
+                'restarted'
+                if (
+                  nginx_deploy_kubeplay_remove | default(false) | bool
+                  or nginx_deploy_kubeplay_run | default(false) | bool
+                  or nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
+                  or nginx_deploy_legacy_systemd_enabled.stdout | trim
+                    in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
+                )
+                else 'present'
+              }}
+            podman_systemd_unit_name: "{{ nginx_deploy_systemd_unit_name }}"
+            podman_systemd_description: "{{ nginx_deploy_systemd_description }}"
+            podman_systemd_manifest_path: "{{ nginx_deploy_pod_manifest_path }}"
+            podman_systemd_scope: "{{ nginx_deploy_systemd_scope }}"
+            podman_systemd_quadlet_dir: "{{ nginx_deploy_quadlet_dir }}"
+            podman_systemd_enabled: "{{ nginx_deploy_systemd_enabled }}"
+            podman_systemd_networks: "{{ nginx_deploy_networks }}"
+
+        - name: Wait until Nginx is reachable
+          ansible.builtin.uri:
+            url: "{{ nginx_deploy_health_url_effective }}"
+            method: GET
+            validate_certs: "{{ nginx_deploy_validate_certs }}"
+          register: nginx_deploy_health
+          until: nginx_deploy_health.status == 200
+          retries: 30
+          delay: 5
+          changed_when: false
+          failed_when: nginx_deploy_health is failed or nginx_deploy_health.status != 200
+      rescue:
+        - name: Remove the failed native Nginx Quadlet runtime
+          ansible.builtin.include_role:
+            name: lit.foundational.podman_systemd
+          vars:
+            podman_systemd_action: absent
+            podman_systemd_unit_name: "{{ nginx_deploy_systemd_unit_name }}"
+            podman_systemd_description: "{{ nginx_deploy_systemd_description }}"
+            podman_systemd_manifest_path: "{{ nginx_deploy_pod_manifest_path }}"
+            podman_systemd_scope: "{{ nginx_deploy_systemd_scope }}"
+            podman_systemd_quadlet_dir: "{{ nginx_deploy_quadlet_dir }}"
+            podman_systemd_enabled: false
+            podman_systemd_networks: "{{ nginx_deploy_networks }}"
+
+        - name: Restore the exact legacy Nginx unit after failed takeover
+          ansible.builtin.systemd:
+            name: "podman-kube@{{ nginx_deploy_legacy_systemd_name.stdout }}.service"
+            state: >-
+              {{ 'started' if nginx_deploy_legacy_systemd_active.stdout | trim == 'active' else 'stopped' }}
+            enabled: >-
+              {{
+                nginx_deploy_legacy_systemd_enabled.stdout | trim
                 in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
-            )
-            else 'present'
-          }}
-        podman_systemd_unit_name: "{{ nginx_deploy_systemd_unit_name }}"
-        podman_systemd_description: "{{ nginx_deploy_systemd_description }}"
-        podman_systemd_manifest_path: "{{ nginx_deploy_pod_manifest_path }}"
-        podman_systemd_scope: "{{ nginx_deploy_systemd_scope }}"
-        podman_systemd_quadlet_dir: "{{ nginx_deploy_quadlet_dir }}"
-        podman_systemd_enabled: "{{ nginx_deploy_systemd_enabled }}"
-        podman_systemd_networks: "{{ nginx_deploy_networks }}"
+              }}
+          when: >-
+            nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
+            or nginx_deploy_legacy_systemd_enabled.stdout | trim
+            in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
 
-    - name: Wait until Nginx is reachable
-      ansible.builtin.uri:
-        url: "{{ nginx_deploy_health_url_effective }}"
-        method: GET
-        validate_certs: "{{ nginx_deploy_validate_certs }}"
-      register: nginx_deploy_health
-      until: nginx_deploy_health.status == 200
-      retries: 30
-      delay: 5
-      changed_when: false
-      failed_when: nginx_deploy_health is failed or nginx_deploy_health.status != 200
+        - name: Report failed native Nginx takeover after rollback
+          ansible.builtin.fail:
+            msg: >-
+              Native Nginx Quadlet takeover failed. The failed native runtime
+              was removed and the exact legacy unit was restored when present.
