@@ -1,4 +1,4 @@
-"""Execute the real discovery/fallback tasks with an isolated systemctl fixture."""
+"""Execute PostgreSQL legacy-to-Quadlet transition predicates in isolation."""
 
 from __future__ import annotations
 
@@ -17,10 +17,8 @@ ROLE = ROOT / "roles" / "postgres_deploy"
 
 
 class PostgresSystemdPreservationTests(unittest.TestCase):
-    def test_systemd_discovery_and_fallback(self) -> None:
+    def test_native_quadlet_replaces_only_the_exact_legacy_instance(self) -> None:
         if not (Path("/run/.containerenv").exists() or Path("/.dockerenv").exists()):
-            # The ordinary pre-commit unit hook is host-side. Keep actual
-            # Ansible execution in the same pinned offline EE as role gates.
             result = subprocess.run(  # noqa: S603
                 [
                     "/bin/bash",
@@ -41,41 +39,78 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             return
+
         ansible = shutil.which("ansible-playbook")
         self.assertIsNotNone(ansible, "Run this regression in the pinned Devtools EE")
-        block = yaml.safe_load((ROLE / "tasks/systemd.yml").read_text())[0]["block"]
-        probe = next(task for task in block if task.get("register") == "postgres_deploy_systemd_load_state")
-        install = next(task for task in block if "ansible.builtin.template" in task)
-        self.assertEqual(
-            probe["ansible.builtin.command"]["argv"][:4], ["systemctl", "show", "--property=LoadState", "--value"]
-        )
-        self.assertIs(probe["changed_when"], False)
-        self.assertIs(install["ansible.builtin.template"]["force"], False)
+        block = yaml.safe_load((ROLE / "tasks/systemd.yml").read_text(encoding="utf-8"))[0]["block"]
+        task_map = {task["name"]: task for task in block}
+        active = task_map["Inspect the exact legacy PostgreSQL unit activity"]
+        enabled = task_map["Inspect the exact legacy PostgreSQL unit enablement"]
+        stage = task_map["Stage the native PostgreSQL Quadlet before legacy shutdown"]
+        stop = task_map["Stop and disable the exact legacy PostgreSQL unit before Quadlet takeover"]
+        manage = task_map["Manage the native PostgreSQL Quadlet service"]
+
+        self.assertEqual(active["ansible.builtin.command"]["argv"][:2], ["systemctl", "is-active"])
+        self.assertEqual(enabled["ansible.builtin.command"]["argv"][:2], ["systemctl", "is-enabled"])
+        self.assertLess(block.index(stage), block.index(stop))
+        self.assertLess(block.index(stop), block.index(manage))
+        self.assertEqual(manage["vars"]["podman_systemd_networks"], "{{ postgres_deploy_networks }}")
+        self.assertFalse((ROLE / "templates/podman-kube@.service.j2").exists())
+
         cases = (
-            ("loaded", 0, False, True, False),
-            ("loaded", 0, True, True, False),
-            ("not-found", 0, False, True, True),
-            ("not-found", 0, True, True, False),
-            ("masked", 0, False, False, False),
-            ("error", 0, False, False, False),
-            ("", 0, False, False, False),
-            ("loaded\nnot-found", 0, False, False, False),
-            ("not-found", 1, False, False, False),
+            ("active", 0, "enabled", 0, ["stage", "stop"], "restarted"),
+            ("inactive", 3, "disabled", 1, [], "present"),
+            ("inactive", 3, "enabled-runtime", 0, ["stage", "stop"], "restarted"),
+            ("unknown", 4, "not-found", 1, [], "present"),
+            ("failed", 3, "masked", 1, [], "present"),
+            ("error", 1, "error", 1, [], "present"),
         )
-        for state, rc, existing, success, creates in cases:
-            with self.subTest(state=state, rc=rc, existing=existing), tempfile.TemporaryDirectory() as tmp:
+        for active_state, active_rc, enabled_state, enabled_rc, events, action in cases:
+            with self.subTest(active=active_state, enabled=enabled_state), tempfile.TemporaryDirectory() as tmp:
                 directory = Path(tmp)
                 fixture = directory / "systemctl"
-                fixture.write_text(f"#!/bin/sh\nprintf '%s\\n' '{state}'\nexit {rc}\n")
+                fixture.write_text(
+                    "#!/bin/sh\n"
+                    f"if [ \"$1\" = is-active ]; then printf '%s\\n' '{active_state}'; exit {active_rc}; fi\n"
+                    f"if [ \"$1\" = is-enabled ]; then printf '%s\\n' '{enabled_state}'; exit {enabled_rc}; fi\n"
+                    "exit 2\n",
+                    encoding="utf-8",
+                )
                 fixture.chmod(0o700)
-                destination = directory / "podman-kube@.service"
-                original = "administrator-owned unit\n"
-                if existing:
-                    destination.write_text(original)
-                tasks = copy.deepcopy([probe, install])
-                tasks[0]["ansible.builtin.command"]["argv"][0] = str(fixture)
-                tasks[1]["ansible.builtin.template"]["src"] = str(ROLE / "templates/podman-kube@.service.j2")
-                tasks[1]["ansible.builtin.template"]["dest"] = str(destination)
+                event_log = directory / "events"
+                action_file = directory / "action"
+
+                executable = [copy.deepcopy(active), copy.deepcopy(enabled)]
+                for task in executable:
+                    task["ansible.builtin.command"]["argv"][0] = str(fixture)
+                for source, event in ((stage, "stage"), (stop, "stop")):
+                    task = {
+                        "name": source["name"],
+                        "ansible.builtin.lineinfile": {
+                            "path": str(event_log),
+                            "line": event,
+                            "create": True,
+                        },
+                        "when": source["when"],
+                    }
+                    executable.append(task)
+                executable.extend(
+                    [
+                        {
+                            "name": manage["name"],
+                            "ansible.builtin.set_fact": {"observed_action": manage["vars"]["podman_systemd_action"]},
+                            "changed_when": False,
+                        },
+                        {
+                            "name": "Persist observed Quadlet action",
+                            "ansible.builtin.copy": {
+                                "dest": str(action_file),
+                                "content": "{{ observed_action }}\n",
+                                "mode": "0600",
+                            },
+                        },
+                    ]
+                )
                 playbook = directory / "probe.yml"
                 playbook.write_text(
                     yaml.safe_dump(
@@ -83,14 +118,20 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
                             {
                                 "hosts": "localhost",
                                 "gather_facts": False,
-                                "vars": {"postgres_deploy_systemd_name": {"stdout": "example"}},
-                                "tasks": tasks,
+                                "vars": {
+                                    "postgres_deploy_kubeplay_run": False,
+                                    "postgres_deploy_kubeplay_remove": False,
+                                    "postgres_deploy_legacy_systemd_name": {"stdout": "example"},
+                                },
+                                "tasks": executable,
                             }
-                        ]
-                    )
+                        ],
+                        sort_keys=False,
+                    ),
+                    encoding="utf-8",
                 )
                 config = directory / "ansible.cfg"
-                config.write_text("[defaults]\nretry_files_enabled = False\n")
+                config.write_text("[defaults]\nretry_files_enabled = False\n", encoding="utf-8")
                 env = dict(
                     os.environ,
                     ANSIBLE_CONFIG=str(config),
@@ -101,21 +142,31 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
                     LANG="C.UTF-8",
                 )
                 args = [str(ansible), "-i", "localhost,", "-c", "local", str(playbook)]
-                result = subprocess.run(  # noqa: S603
-                    args, env=env, capture_output=True, text=True, timeout=45, check=False
+                first = subprocess.run(  # noqa: S603
+                    args,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=45,
+                    check=False,
                 )
-                self.assertIn("TASK [" + probe["name"] + "]", result.stdout, result.stdout + result.stderr)
-                self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
-                self.assertEqual(destination.exists(), existing or creates)
-                if existing:
-                    self.assertEqual(destination.read_text(), original)
-                elif creates:
-                    self.assertEqual(destination.read_text(), (ROLE / "templates/podman-kube@.service.j2").read_text())
-                    repeated = subprocess.run(  # noqa: S603
-                        args, env=env, capture_output=True, text=True, timeout=45, check=False
-                    )
-                    self.assertEqual(repeated.returncode, 0, repeated.stdout + repeated.stderr)
-                    self.assertIn("changed=0", repeated.stdout)
+                self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+                observed_events = event_log.read_text(encoding="utf-8").splitlines() if event_log.exists() else []
+                self.assertEqual(observed_events, events)
+                self.assertEqual(action_file.read_text(encoding="utf-8").strip(), action)
+
+                second = subprocess.run(  # noqa: S603
+                    args,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=45,
+                    check=False,
+                )
+                self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+                self.assertIn("changed=0", second.stdout)
+                observed_events = event_log.read_text(encoding="utf-8").splitlines() if event_log.exists() else []
+                self.assertEqual(observed_events, events)
 
 
 if __name__ == "__main__":

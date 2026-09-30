@@ -20,6 +20,9 @@
       - keycloak_deploy_db_name | default('', true) | trim | length > 0
       - keycloak_deploy_db_user | default('', true) | trim | length > 0
       - keycloak_deploy_db_host | default('', true) | trim | length > 0
+      - >-
+        keycloak_deploy_host_network | bool or
+        keycloak_deploy_db_host | trim not in ['127.0.0.1', '::1', 'localhost']
       - keycloak_deploy_db_wait_host | default('', true) | trim | length > 0
       - keycloak_deploy_db_port | int > 0
       - keycloak_deploy_postgres_port | int > 0
@@ -32,6 +35,27 @@
       - keycloak_deploy_management_port | int != keycloak_deploy_port | int
       - keycloak_deploy_host_ip | default('', true) | trim | length > 0
       - keycloak_deploy_host_network is boolean
+      - keycloak_deploy_networks is sequence
+      - keycloak_deploy_networks is not string
+      - >-
+        keycloak_deploy_networks | select('string') | list | length
+        == keycloak_deploy_networks | length
+      - >-
+        keycloak_deploy_networks | map('trim') | reject('equalto', '') | list | length
+        == keycloak_deploy_networks | length
+      - keycloak_deploy_postgres_networks is sequence
+      - keycloak_deploy_postgres_networks is not string
+      - >-
+        keycloak_deploy_postgres_networks | select('string') | list | length
+        == keycloak_deploy_postgres_networks | length
+      - >-
+        keycloak_deploy_postgres_networks | map('trim') | reject('equalto', '') | list | length
+        == keycloak_deploy_postgres_networks | length
+      - >-
+        not keycloak_deploy_manage_postgres | bool
+        or keycloak_deploy_postgres_host_network | bool
+        or keycloak_deploy_networks | length == 0
+        or keycloak_deploy_postgres_networks | length > 0
       - keycloak_deploy_postgres_host_ip | default('', true) | trim | length > 0
       - keycloak_deploy_postgres_host_network is boolean
       - keycloak_deploy_admin_user | default('', true) | trim | length > 0
@@ -40,8 +64,35 @@
       - keycloak_deploy_run_user_gid | default('', true) | trim | length > 0
       - keycloak_deploy_extra_start_args is sequence
       - keycloak_deploy_extra_start_args is not string
+      - keycloak_deploy_proxy_headers in ['', 'forwarded', 'xforwarded']
+      - >-
+        keycloak_deploy_proxy_headers | trim | length == 0
+        or (
+          keycloak_deploy_host_ip | trim in ['127.0.0.1', '::1']
+          and keycloak_deploy_networks | length > 0
+        )
+      - keycloak_deploy_proxy_trusted_addresses is sequence
+      - keycloak_deploy_proxy_trusted_addresses is not string
+      - >-
+        keycloak_deploy_proxy_trusted_addresses | select('string') | list | length
+        == keycloak_deploy_proxy_trusted_addresses | length
+      - >-
+        keycloak_deploy_proxy_headers | trim | length == 0 or
+        keycloak_deploy_proxy_trusted_addresses | length > 0
+      - >-
+        keycloak_deploy_proxy_trusted_addresses
+        | map('trim')
+        | reject('equalto', '')
+        | list
+        | length
+        == keycloak_deploy_proxy_trusted_addresses | length
       - keycloak_deploy_install_packages is boolean
       - keycloak_deploy_manage_systemd is boolean
+      - keycloak_deploy_systemd_unit_name | default('', true) | trim | length > 0
+      - keycloak_deploy_systemd_description | default('', true) | trim | length > 0
+      - keycloak_deploy_systemd_scope in ['system', 'user']
+      - keycloak_deploy_quadlet_dir | default('', true) | trim | length > 0
+      - keycloak_deploy_systemd_enabled is boolean
       - keycloak_deploy_skip_runtime is boolean
       - keycloak_deploy_skip_deploy is boolean
       - keycloak_deploy_generate_secrets is boolean

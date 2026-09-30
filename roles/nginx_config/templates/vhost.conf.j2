@@ -16,6 +16,14 @@ server {
   ssl_certificate {{ item.tls_certificate | default(nginx_config_tls_certificate) }};
   ssl_certificate_key {{ item.tls_certificate_key | default(nginx_config_tls_certificate_key) }};
 
+{% if nginx_config_waf_enabled | bool %}
+{% for directive in nginx_config_waf_server_directives %}
+{% if directive not in (item.extra_directives | default([])) %}
+  {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endif %}
+{% endfor %}
+{% endif %}
+
 {% if item.extra_directives is defined and item.extra_directives | length > 0 %}
 {% for directive in item.extra_directives %}
 {% set _directive = directive | trim %}
@@ -34,6 +42,11 @@ server {
 {% if item.locations is defined and item.locations | length > 0 %}
 {% for location in item.locations %}
   location {{ location.path | default('/') }} {
+{% if nginx_config_waf_enabled | bool %}
+{% for directive in nginx_config_waf_location_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endfor %}
+{% endif %}
 {% for directive in location.directives | default([]) %}
 {% set _directive = directive | trim %}
 {% if _directive | length > 0 %}
@@ -46,12 +59,21 @@ server {
     {{ _directive }}{{ ';' if _needs_semicolon else '' }}
 {% endif %}
 {% endfor %}
+{% for directive in nginx_config_proxy_required_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endfor %}
   }
 {% endfor %}
 {% elif item.upstream_url is defined and item.upstream_url | length > 0 %}
   location / {
+{% if nginx_config_waf_enabled | bool %}
+{% for directive in nginx_config_waf_location_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endfor %}
+{% endif %}
 {% for directive in item.proxy_directives | default(nginx_config_proxy_default_directives) %}
 {% set _directive = directive | trim %}
+{% if directive not in nginx_config_proxy_required_directives %}
 {% if _directive | length > 0 %}
 {% set _needs_semicolon = not (
   _directive.endswith(';')
@@ -61,6 +83,10 @@ server {
 ) %}
     {{ _directive }}{{ ';' if _needs_semicolon else '' }}
 {% endif %}
+{% endif %}
+{% endfor %}
+{% for directive in nginx_config_proxy_required_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
 {% endfor %}
     proxy_pass {{ item.upstream_url }};
   }
@@ -99,6 +125,11 @@ server {
 {% if item.locations is defined and item.locations | length > 0 %}
 {% for location in item.locations %}
   location {{ location.path | default('/') }} {
+{% if nginx_config_waf_enabled | bool %}
+{% for directive in nginx_config_waf_location_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endfor %}
+{% endif %}
 {% for directive in location.directives | default([]) %}
 {% set _directive = directive | trim %}
 {% if _directive | length > 0 %}
@@ -110,6 +141,9 @@ server {
 ) %}
     {{ _directive }}{{ ';' if _needs_semicolon else '' }}
 {% endif %}
+{% endfor %}
+{% for directive in nginx_config_proxy_required_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
 {% endfor %}
   }
 {% endfor %}
@@ -126,6 +160,9 @@ server {
 ) %}
     {{ _directive }}{{ ';' if _needs_semicolon else '' }}
 {% endif %}
+{% endfor %}
+{% for directive in nginx_config_proxy_required_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
 {% endfor %}
     proxy_pass {{ item.upstream_url }};
   }

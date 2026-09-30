@@ -1,0 +1,105 @@
+---
+- name: Require systemd for persistent Guacamole lifecycle management
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ansible_service_mgr | default(ansible_facts.service_mgr | default('')))
+        == 'systemd'
+    fail_msg: >-
+      Persistent Guacamole deployments require native Quadlet under systemd.
+      Render-only operation must set guacamole_deploy_skip_runtime=true.
+    quiet: true
+
+- name: Inspect the exact legacy Guacamole unit path
+  ansible.builtin.stat:
+    path: "{{ guacamole_deploy_legacy_systemd_unit_path }}"
+    follow: false
+  register: guacamole_deploy_legacy_unit_stat
+
+- name: Refuse an unsafe legacy Guacamole unit path before reading
+  ansible.builtin.assert:
+    that:
+      - not (guacamole_deploy_legacy_unit_stat.stat.islnk | default(false) | bool)
+      - guacamole_deploy_legacy_unit_stat.stat.isreg | default(false) | bool
+    fail_msg: >-
+      The exact Guacamole service path exists but is not a regular file.
+      Refusing to follow or replace it.
+    quiet: true
+  when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+
+- name: Read the exact legacy Guacamole unit before takeover
+  ansible.builtin.slurp:
+    src: "{{ guacamole_deploy_legacy_systemd_unit_path }}"
+  register: guacamole_deploy_legacy_unit_raw
+  no_log: true
+  when:
+    - guacamole_deploy_legacy_unit_stat.stat.exists | bool
+    - not (guacamole_deploy_legacy_unit_stat.stat.islnk | default(false) | bool)
+    - guacamole_deploy_legacy_unit_stat.stat.isreg | default(false) | bool
+
+- name: Refuse to replace an unknown Guacamole systemd unit
+  ansible.builtin.assert:
+    that:
+      - >-
+        'Description=Apache Guacamole Podman application pod'
+        in (guacamole_deploy_legacy_unit_raw.content | b64decode)
+      - >-
+        'ExecStart=/usr/bin/podman kube play'
+        in (guacamole_deploy_legacy_unit_raw.content | b64decode)
+      - >-
+        guacamole_deploy_manifest_path
+        in (guacamole_deploy_legacy_unit_raw.content | b64decode)
+    fail_msg: >-
+      The exact Guacamole service path exists but is not the role-owned legacy
+      podman-kube wrapper. Refusing destructive takeover.
+    quiet: true
+  when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+
+- name: Stage native Guacamole Quadlet before legacy shutdown
+  ansible.builtin.include_role:
+    name: lit.foundational.podman_systemd
+  vars:
+    podman_systemd_action: stopped
+    podman_systemd_unit_name: "{{ guacamole_deploy_systemd_unit_name }}"
+    podman_systemd_description: "{{ guacamole_deploy_systemd_description }}"
+    podman_systemd_manifest_path: "{{ guacamole_deploy_manifest_path }}"
+    podman_systemd_scope: "{{ guacamole_deploy_systemd_scope }}"
+    podman_systemd_quadlet_dir: "{{ guacamole_deploy_quadlet_dir }}"
+    podman_systemd_enabled: false
+    podman_systemd_networks: "{{ guacamole_deploy_quadlet_networks }}"
+  when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+
+- name: Stop and disable the exact legacy Guacamole unit before removal
+  ansible.builtin.systemd_service:
+    name: "{{ guacamole_deploy_legacy_systemd_unit_path | basename }}"
+    state: stopped
+    enabled: false
+  when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+
+- name: Remove the verified legacy Guacamole systemd unit
+  ansible.builtin.file:
+    path: "{{ guacamole_deploy_legacy_systemd_unit_path }}"
+    state: absent
+  register: guacamole_deploy_legacy_unit_remove
+  when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+
+- name: Manage native Guacamole Quadlet service
+  ansible.builtin.include_role:
+    name: lit.foundational.podman_systemd
+  vars:
+    podman_systemd_action: >-
+      {{
+        'restarted'
+        if (
+          guacamole_deploy_manifest_render.changed | default(false) | bool
+          or guacamole_deploy_legacy_unit_remove.changed | default(false) | bool
+        )
+        else 'present'
+      }}
+    podman_systemd_unit_name: "{{ guacamole_deploy_systemd_unit_name }}"
+    podman_systemd_description: "{{ guacamole_deploy_systemd_description }}"
+    podman_systemd_manifest_path: "{{ guacamole_deploy_manifest_path }}"
+    podman_systemd_scope: "{{ guacamole_deploy_systemd_scope }}"
+    podman_systemd_quadlet_dir: "{{ guacamole_deploy_quadlet_dir }}"
+    podman_systemd_enabled: "{{ guacamole_deploy_systemd_enabled }}"
+    podman_systemd_networks: "{{ guacamole_deploy_quadlet_networks }}"

@@ -19,7 +19,8 @@ All defaults are defined in `defaults/main.yml`.
   connections.
 - `guacamole_deploy_network_name` and `guacamole_deploy_network_ipv4` optionally
   bind the pod to one pre-existing Podman network and one exact IPv4 address.
-  They must be set together; the role does not create or modify the network.
+  They must be set together; the role renders them as native Quadlet
+  `Network=<name>:ip=<address>` and does not create or modify the network.
 - `guacamole_deploy_no_proxy` optionally replaces the inherited container proxy
   bypass list with exact direct destinations. This permits server-side OIDC/JWKS
   requests to traverse the site forward proxy even when a broader host bypass
@@ -49,6 +50,12 @@ All defaults are defined in `defaults/main.yml`.
 
 Credentials must not be placed in connection or group contracts. The local
 break-glass hash changes only when its Vault-custodied password or salt changes.
+
+The pod definition is Kubernetes YAML and its persistent lifecycle is managed
+only through `lit.foundational.podman_systemd` and a native `.kube` Quadlet.
+The role can take over its exact historical `guacamole.service` wrapper, but
+fails closed instead of deleting an unknown or symlinked unit at that path.
+It never invokes `podman kube play` directly.
 
 ## Dependencies
 

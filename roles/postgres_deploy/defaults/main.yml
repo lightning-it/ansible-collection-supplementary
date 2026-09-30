@@ -26,6 +26,7 @@ postgres_deploy_host_ip: >-
       | default(ansible_all_ipv4_addresses[0] | default('127.0.0.1'))
   }}
 postgres_deploy_host_network: false
+postgres_deploy_networks: []
 
 # Database config
 postgres_deploy_db_name: "postgres"
@@ -73,9 +74,8 @@ postgres_deploy_kubeplay_remove: false
 postgres_deploy_kubeplay_run: false
 
 # Systemd
-postgres_deploy_systemd_unit_name: >-
-  {{
-    'podman-kube@'
-    ~ (postgres_deploy_pod_manifest_path | basename | regex_replace('\\.ya?ml$', ''))
-    ~ '.service'
-  }}
+postgres_deploy_systemd_unit_name: "{{ postgres_deploy_pod_name }}"
+postgres_deploy_systemd_description: "PostgreSQL container service"
+postgres_deploy_systemd_scope: system
+postgres_deploy_quadlet_dir: /etc/containers/systemd
+postgres_deploy_systemd_enabled: true

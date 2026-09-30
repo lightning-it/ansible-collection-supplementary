@@ -7,54 +7,81 @@
   tags:
     - systemd
   block:
-    - name: Escape kube play manifest path
+    - name: Resolve the exact legacy PostgreSQL unit identity
       ansible.builtin.command:
-        cmd: "systemd-escape {{ postgres_deploy_pod_manifest_path }}"
-      register: postgres_deploy_systemd_name
+        argv:
+          - systemd-escape
+          - "{{ postgres_deploy_pod_manifest_path }}"
+      register: postgres_deploy_legacy_systemd_name
       changed_when: false
 
-    - name: Inspect the effective PostgreSQL kube unit before installing a fallback
+    - name: Inspect the exact legacy PostgreSQL unit activity
       ansible.builtin.command:
         argv:
           - systemctl
-          - show
-          - --property=LoadState
-          - --value
-          - "podman-kube@{{ postgres_deploy_systemd_name.stdout }}.service"
-      register: postgres_deploy_systemd_load_state
+          - is-active
+          - "podman-kube@{{ postgres_deploy_legacy_systemd_name.stdout }}.service"
+      register: postgres_deploy_legacy_systemd_active
       changed_when: false
-      failed_when: >-
-        postgres_deploy_systemd_load_state.rc != 0 or
-        postgres_deploy_systemd_load_state.stdout | trim not in ['loaded', 'not-found']
+      failed_when: false
 
-    - name: Install Podman kube systemd template only when no unit exists
-      ansible.builtin.template:
-        src: podman-kube@.service.j2
-        dest: /etc/systemd/system/podman-kube@.service
-        mode: '0644'
-        force: false
-      when: postgres_deploy_systemd_load_state.stdout | trim == 'not-found'
-
-    - name: Ensure podman-kube drop-in directory exists
-      ansible.builtin.file:
-        path: "/etc/systemd/system/podman-kube@{{ postgres_deploy_systemd_name.stdout }}.service.d"
-        state: directory
-        mode: '0755'
-
-    - name: Determine PostgreSQL kube unit state
-      ansible.builtin.set_fact:
-        postgres_deploy_systemd_state: >-
-          {{
-            (
-              postgres_deploy_kubeplay_run | default(false)
-              or postgres_deploy_kubeplay_remove | default(false)
-            ) | ternary('restarted', 'started')
-          }}
+    - name: Inspect the exact legacy PostgreSQL unit enablement
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-enabled
+          - "podman-kube@{{ postgres_deploy_legacy_systemd_name.stdout }}.service"
+      register: postgres_deploy_legacy_systemd_enabled
       changed_when: false
+      failed_when: false
 
-    - name: Enable and start Podman kube systemd unit
+    - name: Stage the native PostgreSQL Quadlet before legacy shutdown
+      ansible.builtin.include_role:
+        name: lit.foundational.podman_systemd
+      vars:
+        podman_systemd_action: stopped
+        podman_systemd_unit_name: "{{ postgres_deploy_systemd_unit_name }}"
+        podman_systemd_description: "{{ postgres_deploy_systemd_description }}"
+        podman_systemd_manifest_path: "{{ postgres_deploy_pod_manifest_path }}"
+        podman_systemd_scope: "{{ postgres_deploy_systemd_scope }}"
+        podman_systemd_quadlet_dir: "{{ postgres_deploy_quadlet_dir }}"
+        podman_systemd_enabled: false
+        podman_systemd_networks: "{{ postgres_deploy_networks }}"
+      when: >-
+        postgres_deploy_legacy_systemd_active.stdout | trim == 'active'
+        or postgres_deploy_legacy_systemd_enabled.stdout | trim
+        in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
+
+    - name: Stop and disable the exact legacy PostgreSQL unit before Quadlet takeover
       ansible.builtin.systemd:
-        name: "podman-kube@{{ postgres_deploy_systemd_name.stdout }}.service"
-        enabled: true
-        state: "{{ postgres_deploy_systemd_state }}"
-        daemon_reload: true
+        name: "podman-kube@{{ postgres_deploy_legacy_systemd_name.stdout }}.service"
+        state: stopped
+        enabled: false
+      when: >-
+        postgres_deploy_legacy_systemd_active.stdout | trim == 'active'
+        or postgres_deploy_legacy_systemd_enabled.stdout | trim
+        in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
+
+    - name: Manage the native PostgreSQL Quadlet service
+      ansible.builtin.include_role:
+        name: lit.foundational.podman_systemd
+      vars:
+        podman_systemd_action: >-
+          {{
+            'restarted'
+            if (
+              postgres_deploy_kubeplay_run | default(false) | bool
+              or postgres_deploy_kubeplay_remove | default(false) | bool
+              or postgres_deploy_legacy_systemd_active.stdout | trim == 'active'
+              or postgres_deploy_legacy_systemd_enabled.stdout | trim
+                in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
+            )
+            else 'present'
+          }}
+        podman_systemd_unit_name: "{{ postgres_deploy_systemd_unit_name }}"
+        podman_systemd_description: "{{ postgres_deploy_systemd_description }}"
+        podman_systemd_manifest_path: "{{ postgres_deploy_pod_manifest_path }}"
+        podman_systemd_scope: "{{ postgres_deploy_systemd_scope }}"
+        podman_systemd_quadlet_dir: "{{ postgres_deploy_quadlet_dir }}"
+        podman_systemd_enabled: "{{ postgres_deploy_systemd_enabled }}"
+        podman_systemd_networks: "{{ postgres_deploy_networks }}"

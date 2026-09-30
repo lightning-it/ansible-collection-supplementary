@@ -29,16 +29,32 @@ Key variables:
 - `nginx_config_vault_pki_path`
 - `nginx_config_vault_pki_role`
 - `nginx_config_vault_issue_missing` (default: `true`; issue and persist missing or mismatched material through Vault PKI)
-- `nginx_config_vault_allow_local_fallback` (compatibility default: `true`; set to `false` for Vault-only custody)
+- `nginx_config_vault_allow_local_fallback` (default: `false`; an explicit migration-only escape hatch)
+- `nginx_config_waf_enabled` (default: `false`)
+- `nginx_config_waf_server_directives`
+- `nginx_config_waf_location_directives`
 - `nginx_config_remove_default`
 
 With `nginx_config_tls_source: vault`, certificate material is read from Vault
 KV or issued through Vault PKI and then persisted to Vault KV. Private keys are
-written to the managed host with mode `0600`. Set
-`nginx_config_vault_allow_local_fallback: false` in security profiles that must
-reject local certificate/key files as a source of record. The compatibility
-default remains enabled for existing consumers and must not be relied upon as
-proof of Vault-only custody.
+written to the managed host with mode `0600`. Local certificate/key files are
+not accepted as a fallback by default. A migration that intentionally imports
+existing host files must opt in explicitly and must not be used as proof of
+Vault custody.
+
+`nginx_config_waf_enabled` turns the reverse proxy into an explicit policy-WAF
+boundary by applying the supplied server controls and location controls to
+every generated TLS proxy vhost. Rate/connection zones used by those controls
+must be declared in `nginx_deploy_http_extra_directives`. This baseline uses
+NGINX-native controls; signature inspection such as OWASP CRS requires a
+separately reviewed ModSecurity/Coraza integration.
+
+The default reverse-proxy contract overwrites `Host`, `X-Real-IP`, and every
+Keycloak-relevant `X-Forwarded-*` identity header from NGINX-owned connection
+state. It strips `Forwarded`, `X-Original-Forwarded-For`, and
+`X-Forwarded-Prefix` so an Internet client cannot inject a second trusted
+identity chain. Custom `proxy_directives` replace the defaults and therefore
+must preserve the same overwrite-and-strip contract.
 
 When `nginx_config_vault_issue_missing: false`, Vault KV must already contain a
 certificate/private-key pair, a CA chain, and matching common-name and
@@ -69,8 +85,13 @@ None.
             proxy_directives:
               - "proxy_set_header Host vault.prd.dmz.corp.l-it.io"
               - "proxy_set_header X-Real-IP $remote_addr"
-              - "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for"
-              - "proxy_set_header X-Forwarded-Proto https"
+              - "proxy_set_header X-Forwarded-For $remote_addr"
+              - "proxy_set_header X-Forwarded-Host $server_name"
+              - "proxy_set_header X-Forwarded-Port $server_port"
+              - "proxy_set_header X-Forwarded-Proto $scheme"
+              - 'proxy_set_header X-Forwarded-Prefix ""'
+              - 'proxy_set_header X-Original-Forwarded-For ""'
+              - 'proxy_set_header Forwarded ""'
               - "proxy_http_version 1.1"
               - "proxy_ssl_server_name on"
               - "proxy_ssl_name vault.prd.dmz.corp.l-it.io"

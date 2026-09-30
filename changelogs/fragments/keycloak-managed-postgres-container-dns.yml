@@ -1,0 +1,16 @@
+---
+bugfixes:
+  - >-
+    Address managed PostgreSQL by its Podman pod-name DNS alias when Keycloak
+    and PostgreSQL use separate pods on the same explicitly selected private
+    Quadlet network, while keeping the host-side readiness probe on the
+    explicitly published host address.
+  - >-
+    Restrict the generated PostgreSQL Pod manifest to its owner because the
+    runtime manifest contains the effective database password.
+  - >-
+    Enforce one pod lifecycle controller: render Kubernetes YAML and manage the
+    persistent Keycloak and PostgreSQL runtimes through native `.kube` Quadlet
+    units, while retaining one fail-closed kubeplay path only when systemd is
+    explicitly disabled. Verify the effective non-secret database host before
+    health acceptance.

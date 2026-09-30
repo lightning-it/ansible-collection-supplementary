@@ -7,44 +7,84 @@
   tags:
     - systemd
   block:
-    - name: Escape kube play manifest path
+    - name: Resolve the exact legacy Podman kube unit identity
       ansible.builtin.command:
-        cmd: "systemd-escape {{ keycloak_deploy_pod_manifest_path }}"
-      register: keycloak_deploy_systemd_name
+        argv:
+          - systemd-escape
+          - "{{ keycloak_deploy_pod_manifest_path }}"
+      register: keycloak_deploy_legacy_systemd_name
       changed_when: false
 
-    - name: Ensure podman-kube drop-in directory exists
-      ansible.builtin.file:
-        path: "/etc/systemd/system/podman-kube@{{ keycloak_deploy_systemd_name.stdout }}.service.d"
-        state: directory
-        mode: '0755'
-
-    - name: Inspect the Podman kube systemd unit before takeover
+    - name: Inspect the exact legacy Keycloak unit activity
       ansible.builtin.command:
         argv:
           - systemctl
           - is-active
-          - "podman-kube@{{ keycloak_deploy_systemd_name.stdout }}.service"
-      register: keycloak_deploy_systemd_active_before
+          - "podman-kube@{{ keycloak_deploy_legacy_systemd_name.stdout }}.service"
+      register: keycloak_deploy_legacy_systemd_active
       changed_when: false
       failed_when: false
 
-    - name: Stop the directly started pod before systemd takeover
+    - name: Inspect the exact legacy Keycloak unit enablement
       ansible.builtin.command:
         argv:
-          - podman
-          - kube
-          - down
-          - "{{ keycloak_deploy_pod_manifest_path }}"
-      when: keycloak_deploy_systemd_active_before.stdout | trim != 'active'
-      changed_when: true
+          - systemctl
+          - is-enabled
+          - "podman-kube@{{ keycloak_deploy_legacy_systemd_name.stdout }}.service"
+      register: keycloak_deploy_legacy_systemd_enabled
+      changed_when: false
+      failed_when: false
 
-    - name: Enable and start Podman kube systemd unit
+    - name: Stage the native Keycloak Quadlet before legacy shutdown
+      ansible.builtin.include_role:
+        name: lit.foundational.podman_systemd
+      vars:
+        podman_systemd_action: stopped
+        podman_systemd_unit_name: "{{ keycloak_deploy_systemd_unit_name }}"
+        podman_systemd_description: "{{ keycloak_deploy_systemd_description }}"
+        podman_systemd_manifest_path: "{{ keycloak_deploy_pod_manifest_path }}"
+        podman_systemd_scope: "{{ keycloak_deploy_systemd_scope }}"
+        podman_systemd_quadlet_dir: "{{ keycloak_deploy_quadlet_dir }}"
+        podman_systemd_enabled: false
+        podman_systemd_networks: "{{ keycloak_deploy_networks }}"
+      when: >-
+        keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
+        or keycloak_deploy_legacy_systemd_enabled.stdout | trim
+        in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
+
+    - name: Stop and disable the exact legacy Keycloak unit before Quadlet takeover
       ansible.builtin.systemd:
-        name: "podman-kube@{{ keycloak_deploy_systemd_name.stdout }}.service"
-        enabled: true
-        state: started
-        daemon_reload: true
+        name: "podman-kube@{{ keycloak_deploy_legacy_systemd_name.stdout }}.service"
+        state: stopped
+        enabled: false
+      when: >-
+        keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
+        or keycloak_deploy_legacy_systemd_enabled.stdout | trim
+        in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
+
+    - name: Manage the native Keycloak Quadlet service
+      ansible.builtin.include_role:
+        name: lit.foundational.podman_systemd
+      vars:
+        podman_systemd_action: >-
+          {{
+            'restarted'
+            if (
+              keycloak_deploy_kubeplay_remove | default(false) | bool
+              or keycloak_deploy_kubeplay_run | default(false) | bool
+              or keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
+              or keycloak_deploy_legacy_systemd_enabled.stdout | trim
+                in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
+            )
+            else 'present'
+          }}
+        podman_systemd_unit_name: "{{ keycloak_deploy_systemd_unit_name }}"
+        podman_systemd_description: "{{ keycloak_deploy_systemd_description }}"
+        podman_systemd_manifest_path: "{{ keycloak_deploy_pod_manifest_path }}"
+        podman_systemd_scope: "{{ keycloak_deploy_systemd_scope }}"
+        podman_systemd_quadlet_dir: "{{ keycloak_deploy_quadlet_dir }}"
+        podman_systemd_enabled: "{{ keycloak_deploy_systemd_enabled }}"
+        podman_systemd_networks: "{{ keycloak_deploy_networks }}"
 
     - name: Wait until Keycloak health endpoint is reachable
       ansible.builtin.uri:
