@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import os
 import shutil
 import subprocess
@@ -339,6 +340,43 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         boundary = next(item for item in tasks if item.get("name") == "Reject block-form proxy-vhost extra directives")
         self.assertNotIn("nginx_config_waf_enabled", boundary["when"])
 
+    def test_real_proxy_prechecks_reject_reserved_identity_headers(self) -> None:
+        valid = "proxy_http_version 1.1"
+        invalid = (
+            "proxy_set_header X-Forwarded-For $http_x_forwarded_for",
+            'proxy_set_header "Forwarded" $http_forwarded',
+            'proxy_set_header X-Forwarded-Proto" $http_x_forwarded_proto',
+            'proxy"_set_header" X-Forwarded-Host $http_host',
+        )
+        cases = (
+            (
+                "Reject multi-statement default proxy directives",
+                lambda directive: {"nginx_config_proxy_default_directives": [directive]},
+            ),
+            (
+                "Reject multi-statement vhost proxy directives",
+                lambda directive: {
+                    "nginx_config_vhosts_effective": [{"name": "edge", "proxy_directives": [directive]}]
+                },
+            ),
+            (
+                "Reject multi-statement location proxy directives",
+                lambda directive: {
+                    "nginx_config_vhosts_effective": [
+                        {"name": "edge", "locations": [{"path": "/", "directives": [directive]}]}
+                    ]
+                },
+            ),
+        )
+        for name, variables in cases:
+            with self.subTest(task=name, directive=valid):
+                result = self._run_assert_tasks({name}, variables(valid))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            for directive in invalid:
+                with self.subTest(task=name, directive=directive):
+                    result = self._run_assert_tasks({name}, variables(directive))
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_pki_inputs_are_required_only_when_issuance_is_enabled(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
         task = next(
@@ -421,11 +459,14 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         names = [task["name"] for task in systemd_block]
         validation = names.index("Refuse unknown Nginx lifecycle states")
         collision = names.index("Refuse unmanaged Nginx pod; remove it first")
+        drift = names.index("Refuse unproven drift in an existing native Nginx Quadlet")
         self.assertIn("nginx_deploy_native_systemd_active", systemd_block[collision]["failed_when"])
         stage = names.index("Stage the native Nginx Quadlet before legacy shutdown")
         takeover = names.index("Cut over to native Nginx Quadlet with rollback")
         self.assertLess(validation, stage)
         self.assertLess(validation, collision)
+        self.assertLess(validation, drift)
+        self.assertLess(drift, collision)
         self.assertLess(collision, stage)
         self.assertLess(stage, takeover)
         rescue = {task["name"]: task for task in cutover["rescue"]}
@@ -461,6 +502,36 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                 self.assertEqual(self._evaluate(update_condition, variables), allowed)
 
         self.assertIn("['inactive', 'failed']", quadlet["when"])
+
+        drift_guard = systemd_block[drift]
+        drift_assertions = drift_guard["ansible.builtin.assert"]["that"]
+        desired_lines = [
+            "[Unit]",
+            "Description=Nginx container service",
+            "After=network-online.target",
+            "Wants=network-online.target",
+            "",
+            "[Kube]",
+            "Yaml=/srv/nginx/nginx-pod.yml",
+            "Network=lit-private",
+            "",
+            "[Install]",
+            "WantedBy=multi-user.target",
+        ]
+        variables = {
+            "nginx_deploy_native_quadlet_file": {"stat": {"exists": True, "isreg": True, "islnk": False}},
+            "nginx_deploy_native_quadlet_read": {
+                "content": base64.b64encode(("\n".join(desired_lines) + "\n").encode()).decode()
+            },
+            "nginx_deploy_systemd_description": "Nginx container service",
+            "nginx_deploy_pod_manifest_path": "/srv/nginx/nginx-pod.yml",
+            "nginx_deploy_networks": ["lit-private"],
+            "nginx_deploy_systemd_enabled": True,
+            "nginx_deploy_native_systemd_enabled": {"stdout": "generated"},
+        }
+        self.assertTrue(all(self._evaluate(check, variables) for check in drift_assertions))
+        drifted = {**variables, "nginx_deploy_networks": ["unexpected-network"]}
+        self.assertFalse(all(self._evaluate(check, drifted) for check in drift_assertions))
 
         lifecycle_assertions = systemd_block[validation]["ansible.builtin.assert"]["that"]
         collision_condition = systemd_block[collision]["failed_when"]

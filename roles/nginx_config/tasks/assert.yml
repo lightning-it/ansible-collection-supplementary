@@ -138,6 +138,15 @@
       - item is string
       - item | trim | length > 0
       - item | trim is match('(?i)^(?!include(?:[ \t]|$))[a-z_][a-z0-9_]*(?:[ \t]+[^#\\\r\n;{}]*)?;?$')
+      - >-
+        item | trim | lower
+        is not match(
+          '(?i)^proxy_set_header[ \t]+["'']?'
+          ~ '(host|x-real-ip|x-forwarded-for|x-forwarded-host|x-forwarded-port|'
+          ~ 'x-forwarded-proto|x-forwarded-prefix|x-original-forwarded-for|forwarded)'
+          ~ '["'']?(?:[ \t]|$)'
+        )
+      - item | trim is not match('(?i)^proxy_set_header[ \t]+\S*["'']')
     fail_msg: >-
       Proxy directives must contain exactly one NGINX statement and must not
       contain embedded newlines or additional semicolons.
@@ -160,6 +169,18 @@
         item.proxy_directives | default([])
         | reject('match', '(?i)^(?![ \t]*include(?:[ \t]|$))[ \t]*[a-z_][a-z0-9_]*(?:[ \t]+[^#\\\r\n;{}]*)?;?$')
         | list | length == 0
+      - >-
+        item.proxy_directives | default([])
+        | reject('match',
+          '(?i)^proxy_set_header[ \t]+["'']?'
+          ~ '(host|x-real-ip|x-forwarded-for|x-forwarded-host|x-forwarded-port|'
+          ~ 'x-forwarded-proto|x-forwarded-prefix|x-original-forwarded-for|forwarded)'
+          ~ '["'']?(?:[ \t]|$)')
+        | list | length == item.proxy_directives | default([]) | length
+      - >-
+        item.proxy_directives | default([])
+        | select('match', '(?i)^proxy_set_header[ \t]+\S*["'']')
+        | list | length == 0
     fail_msg: >-
       Vhost proxy directives must each contain exactly one NGINX statement
       and must not contain embedded newlines or additional semicolons.
@@ -181,6 +202,18 @@
       - >-
         item.1.directives | default([])
         | reject('match', '(?i)^(?![ \t]*include(?:[ \t]|$))[ \t]*[a-z_][a-z0-9_]*(?:[ \t]+[^#\\\r\n;{}]*)?;?$')
+        | list | length == 0
+      - >-
+        item.1.directives | default([])
+        | reject('match',
+          '(?i)^proxy_set_header[ \t]+["'']?'
+          ~ '(host|x-real-ip|x-forwarded-for|x-forwarded-host|x-forwarded-port|'
+          ~ 'x-forwarded-proto|x-forwarded-prefix|x-original-forwarded-for|forwarded)'
+          ~ '["'']?(?:[ \t]|$)')
+        | list | length == item.1.directives | default([]) | length
+      - >-
+        item.1.directives | default([])
+        | select('match', '(?i)^proxy_set_header[ \t]+\S*["'']')
         | list | length == 0
     fail_msg: >-
       Location proxy directives must each contain exactly one NGINX statement

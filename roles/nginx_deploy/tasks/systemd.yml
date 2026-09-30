@@ -78,6 +78,68 @@
           refusing Quadlet takeover.
         quiet: true
 
+    - name: Inspect the desired native Nginx Quadlet file
+      ansible.builtin.stat:
+        path: "{{ nginx_deploy_quadlet_dir }}/{{ nginx_deploy_systemd_unit_name }}.kube"
+        follow: false
+      register: nginx_deploy_native_quadlet_file
+      when: nginx_deploy_native_systemd_enabled.stdout | trim != 'not-found'
+
+    - name: Read the desired native Nginx Quadlet file
+      ansible.builtin.slurp:
+        path: "{{ nginx_deploy_quadlet_dir }}/{{ nginx_deploy_systemd_unit_name }}.kube"
+      register: nginx_deploy_native_quadlet_read
+      when:
+        - nginx_deploy_native_systemd_enabled.stdout | trim != 'not-found'
+        - nginx_deploy_native_quadlet_file.stat.exists | default(false)
+        - nginx_deploy_native_quadlet_file.stat.isreg | default(false)
+        - not (nginx_deploy_native_quadlet_file.stat.islnk | default(false))
+
+    - name: Refuse unproven drift in an existing native Nginx Quadlet
+      ansible.builtin.assert:
+        that:
+          - nginx_deploy_native_quadlet_file.stat.exists | default(false)
+          - nginx_deploy_native_quadlet_file.stat.isreg | default(false)
+          - not (nginx_deploy_native_quadlet_file.stat.islnk | default(false))
+          - nginx_deploy_native_quadlet_read.content | default('') | length > 0
+          - >-
+            (
+              nginx_deploy_native_quadlet_read.content
+              | default('') | b64decode
+            ).splitlines()
+            | reject('equalto', '') | list
+            == (
+              [
+                '[Unit]',
+                'Description=' ~ nginx_deploy_systemd_description,
+                'After=network-online.target',
+                'Wants=network-online.target',
+                '[Kube]',
+                'Yaml=' ~ nginx_deploy_pod_manifest_path
+              ]
+              + (
+                nginx_deploy_networks
+                | map('regex_replace', '^(.*)$', 'Network=\\1') | list
+              )
+              + ['[Install]', 'WantedBy=multi-user.target']
+            )
+          - >-
+            (
+              nginx_deploy_systemd_enabled | bool
+              and nginx_deploy_native_systemd_enabled.stdout | trim
+              in ['enabled', 'generated']
+            )
+            or (
+              not (nginx_deploy_systemd_enabled | bool)
+              and nginx_deploy_native_systemd_enabled.stdout | trim == 'disabled'
+            )
+        fail_msg: >-
+          The existing native Nginx Quadlet cannot be proven identical to the
+          requested description, manifest, networks, directory, or enablement.
+          Refusing an unprotected in-place update; use a transactional migration.
+        quiet: true
+      when: nginx_deploy_native_systemd_enabled.stdout | trim != 'not-found'
+
     - name: Refuse unmanaged Nginx pod; remove it first
       ansible.builtin.command:
         argv: [podman, pod, exists, "{{ nginx_deploy_pod_name }}"]
