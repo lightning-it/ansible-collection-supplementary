@@ -1050,7 +1050,6 @@ roles:
     acceptance_surface: "safe_teardown_and_absence"
     dependencies:
       - "lit.foundational.kubeplay"
-      - "lit.foundational.podman_systemd"
     external_dependencies: []
     known_limitations:
       - "No direct scenario coverage."
@@ -1672,7 +1671,6 @@ roles:
     acceptance_surface: "safe_teardown_and_absence"
     dependencies:
       - "lit.foundational.kubeplay"
-      - "lit.foundational.podman_systemd"
     external_dependencies: []
     known_limitations:
       - "No direct scenario coverage."

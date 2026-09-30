@@ -278,9 +278,12 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         self.assertEqual(quadlet["ansible.builtin.include_role"]["name"], "lit.foundational.podman_systemd")
         names = [task["name"] for task in systemd_block]
         validation = names.index("Refuse unknown legacy Nginx lifecycle states")
+        collision = names.index("Refuse unmanaged Nginx pod; remove it in non-systemd mode first")
         stage = names.index("Stage the native Nginx Quadlet before legacy shutdown")
         stop = names.index("Stop and disable the exact legacy Nginx unit before Quadlet takeover")
         self.assertLess(validation, stage)
+        self.assertLess(validation, collision)
+        self.assertLess(collision, stage)
         self.assertLess(stage, stop)
 
 

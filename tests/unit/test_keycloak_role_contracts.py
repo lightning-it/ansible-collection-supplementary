@@ -138,6 +138,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
         self.assertEqual(
             self._role_options("keycloak_deploy")["keycloak_deploy_postgres_container_port"]["choices"], [5432]
         )
+        self.assertIn("else keycloak_deploy_db_port", defaults["keycloak_deploy_db_wait_port"])
         self.assertIn(
             "postgres_deploy_container_port | int == 5432",
             (ROOT / "roles/postgres_deploy/tasks/assert.yml").read_text(),
@@ -161,6 +162,8 @@ class KeycloakRoleContractTests(unittest.TestCase):
         }
         for name, value in expected.items():
             self.assertEqual(self._render_default(defaults, name, context), value)
+        external = dict(context, keycloak_deploy_manage_postgres=False, keycloak_deploy_db_port=6543)
+        self.assertEqual(self._render_default(defaults, "keycloak_deploy_db_wait_port", external), "6543")
 
         tiny = (ROOT / "molecule" / "keycloak-tiny" / "converge.yml").read_text(encoding="utf-8")
         verify = (ROOT / "molecule" / "keycloak-tiny" / "verify.yml").read_text(encoding="utf-8")
@@ -223,6 +226,11 @@ class KeycloakRoleContractTests(unittest.TestCase):
             for index, task in enumerate(systemd_block)
             if task["name"] == "Refuse unknown legacy Keycloak lifecycle states"
         )
+        collision_index = next(
+            index for index, task in enumerate(systemd_block) if "Refuse unmanaged Keycloak" in task["name"]
+        )
+        collision = systemd_block[collision_index]
+        self.assertEqual(collision["ansible.builtin.command"]["argv"][:3], ["podman", "pod", "exists"])
         lifecycle_assertions = systemd_block[validation_index]["ansible.builtin.assert"]["that"]
         lifecycle_contract = "\n".join(str(item) for item in lifecycle_assertions)
         for transient in ("activating", "reloading", "deactivating"):
@@ -234,6 +242,8 @@ class KeycloakRoleContractTests(unittest.TestCase):
         )
         legacy_stop_index = systemd_block.index(legacy_stop)
         self.assertLess(validation_index, stage_index)
+        self.assertLess(validation_index, collision_index)
+        self.assertLess(collision_index, stage_index)
         self.assertLess(stage_index, legacy_stop_index)
         self.assertEqual(legacy_stop["ansible.builtin.systemd"]["state"], "stopped")
         self.assertIs(legacy_stop["ansible.builtin.systemd"]["enabled"], False)
@@ -303,6 +313,8 @@ class KeycloakRoleContractTests(unittest.TestCase):
             with self.subTest(role=role):
                 assertions = (ROOT / "roles" / role / "tasks" / "assert.yml").read_text(encoding="utf-8")
                 self.assertIn(f"not {role}_manage_systemd | bool", assertions)
+                self.assertIn(f"{role}_skip_runtime | bool", assertions)
+                self.assertIn(f"{role}_skip_deploy | bool", assertions)
                 self.assertIn("ansible_facts.get('service_mgr', '')", assertions)
                 self.assertIn(") == 'systemd'", assertions)
         nginx_assert = (ROOT / "roles/nginx_deploy/tasks/assert.yml").read_text(encoding="utf-8")

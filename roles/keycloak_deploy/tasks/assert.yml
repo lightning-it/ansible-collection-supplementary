@@ -116,6 +116,8 @@
       - keycloak_deploy_manage_systemd is boolean
       - >-
         not keycloak_deploy_manage_systemd | bool
+        or keycloak_deploy_skip_runtime | bool
+        or keycloak_deploy_skip_deploy | bool
         or (
           ansible_service_mgr
           | default(ansible_facts.get('service_mgr', ''), true)

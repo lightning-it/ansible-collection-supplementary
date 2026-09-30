@@ -55,6 +55,16 @@
           refusing Quadlet takeover.
         quiet: true
 
+    - name: Refuse unmanaged PostgreSQL pod; remove it in non-systemd mode first
+      ansible.builtin.command:
+        argv: [podman, pod, exists, "{{ postgres_deploy_pod_name }}"]
+      register: postgres_deploy_existing_pod
+      changed_when: false
+      failed_when: >-
+        postgres_deploy_existing_pod.rc not in [0, 1]
+        or (postgres_deploy_existing_pod.rc == 0
+        and postgres_deploy_legacy_systemd_active.stdout | trim != 'active')
+
     - name: Stage the native PostgreSQL Quadlet before legacy shutdown
       ansible.builtin.include_role:
         name: lit.foundational.podman_systemd

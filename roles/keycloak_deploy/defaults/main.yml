@@ -129,9 +129,13 @@ keycloak_deploy_db_wait_host: >-
   }}
 keycloak_deploy_db_wait_port: >-
   {{
-    keycloak_deploy_postgres_container_port
-    if (keycloak_deploy_postgres_host_network | bool)
-    else keycloak_deploy_postgres_port
+    (
+      keycloak_deploy_postgres_container_port
+      if (keycloak_deploy_postgres_host_network | bool)
+      else keycloak_deploy_postgres_port
+    )
+    if (keycloak_deploy_manage_postgres | bool)
+    else keycloak_deploy_db_port
   }}
 keycloak_deploy_postgres_wait_timeout: 120
 keycloak_deploy_postgres_wait_delay: 0

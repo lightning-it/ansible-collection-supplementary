@@ -55,6 +55,16 @@
           refusing Quadlet takeover.
         quiet: true
 
+    - name: Refuse unmanaged Keycloak pod; remove it in non-systemd mode first
+      ansible.builtin.command:
+        argv: [podman, pod, exists, "{{ keycloak_deploy_pod_name }}"]
+      register: keycloak_deploy_existing_pod
+      changed_when: false
+      failed_when: >-
+        keycloak_deploy_existing_pod.rc not in [0, 1]
+        or (keycloak_deploy_existing_pod.rc == 0
+        and keycloak_deploy_legacy_systemd_active.stdout | trim != 'active')
+
     - name: Stage the native Keycloak Quadlet before legacy shutdown
       ansible.builtin.include_role:
         name: lit.foundational.podman_systemd
