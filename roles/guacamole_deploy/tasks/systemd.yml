@@ -69,6 +69,18 @@
   changed_when: false
   failed_when: false
 
+- name: Resolve loaded legacy Guacamole unit drop-ins
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - --property=DropInPaths
+      - --value
+      - "{{ guacamole_deploy_legacy_systemd_unit_path | basename }}"
+  register: guacamole_deploy_legacy_drop_in_paths
+  changed_when: false
+  failed_when: false
+
 - name: Inspect the exact native Guacamole unit activity
   ansible.builtin.command:
     argv: >-
@@ -98,6 +110,18 @@
       - --property=FragmentPath
       - --value
   register: guacamole_deploy_native_fragment_path
+  changed_when: false
+  failed_when: false
+
+- name: Resolve loaded native Guacamole unit drop-ins
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - "{{ guacamole_deploy_systemd_unit_name }}.service"
+      - --property=DropInPaths
+      - --value
+  register: guacamole_deploy_native_drop_in_paths
   changed_when: false
   failed_when: false
 
@@ -170,6 +194,8 @@
       - guacamole_deploy_native_quadlet_file.stat.pw_name | default('') == 'root'
       - guacamole_deploy_native_quadlet_file.stat.gr_name | default('') == 'root'
       - guacamole_deploy_native_quadlet_read.content | default('') | length > 0
+      - guacamole_deploy_native_drop_in_paths.rc == 0
+      - guacamole_deploy_native_drop_in_paths.stdout | trim == ''
       - >-
         (
           guacamole_deploy_native_systemd_active.stdout | trim == 'unknown'
@@ -241,6 +267,8 @@
   ansible.builtin.assert:
     that:
       - guacamole_deploy_legacy_fragment_path.rc == 0
+      - guacamole_deploy_legacy_drop_in_paths.rc == 0
+      - guacamole_deploy_legacy_drop_in_paths.stdout | trim == ''
       - >-
         guacamole_deploy_legacy_fragment_path.stdout | trim
         in ['', guacamole_deploy_legacy_systemd_unit_path]
@@ -290,7 +318,7 @@
   ansible.builtin.set_fact:
     guacamole_deploy_legacy_unit_actual_lines: >-
       {{
-        (guacamole_deploy_legacy_unit_raw.content | b64decode).split('\n')
+        (guacamole_deploy_legacy_unit_raw.content | b64decode).splitlines()
         | map('trim')
         | reject('equalto', '')
         | reject('match', '^#')
@@ -353,12 +381,14 @@
         podman_systemd_quadlet_dir: "{{ guacamole_deploy_quadlet_dir }}"
         podman_systemd_enabled: false
         podman_systemd_networks: "{{ guacamole_deploy_quadlet_networks }}"
+      when: not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
 
     - name: Reinspect the staged native Guacamole Quadlet
       ansible.builtin.stat:
         path: "{{ guacamole_deploy_quadlet_dir }}/{{ guacamole_deploy_systemd_unit_name }}.kube"
         follow: false
       register: guacamole_deploy_staged_quadlet_file
+      when: not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
 
     - name: Resolve the staged native Guacamole unit fragment
       ansible.builtin.command:
@@ -371,6 +401,20 @@
       register: guacamole_deploy_staged_fragment_path
       changed_when: false
       failed_when: false
+      when: not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
+
+    - name: Resolve staged native Guacamole unit drop-ins
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - "{{ guacamole_deploy_systemd_unit_name }}.service"
+          - --property=DropInPaths
+          - --value
+      register: guacamole_deploy_staged_drop_in_paths
+      changed_when: false
+      failed_when: false
+      when: not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
 
     - name: Require the staged native Guacamole Quadlet provenance boundary
       ansible.builtin.assert:
@@ -381,6 +425,8 @@
           - guacamole_deploy_staged_quadlet_file.stat.pw_name | default('') == 'root'
           - guacamole_deploy_staged_quadlet_file.stat.gr_name | default('') == 'root'
           - guacamole_deploy_staged_fragment_path.rc == 0
+          - guacamole_deploy_staged_drop_in_paths.rc == 0
+          - guacamole_deploy_staged_drop_in_paths.stdout | trim == ''
           - >-
             guacamole_deploy_staged_fragment_path.stdout | trim
             is match(
@@ -393,6 +439,7 @@
           Quadlet with the expected generated systemd fragment; refusing
           lifecycle mutation.
         quiet: true
+      when: not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
 
     - name: Stop and disable the exact legacy Guacamole unit before removal
       ansible.builtin.systemd_service:

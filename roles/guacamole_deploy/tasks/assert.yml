@@ -128,7 +128,8 @@
         or guacamole_deploy_oidc_groups_claim_type | trim | length > 0
     fail_msg: >-
       Guacamole requires immutable images, Vault secrets, a bounded API session
-      timeout, a credential-free RFC1918 HTTP proxy URL, and complete OIDC settings.
+      timeout, an optional credential-free RFC1918 HTTP proxy URL when proxying
+      is enabled, and complete OIDC settings.
   no_log: true
 
 - name: Validate declared Guacamole connection contracts

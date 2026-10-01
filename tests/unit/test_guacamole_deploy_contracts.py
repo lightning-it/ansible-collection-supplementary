@@ -12,6 +12,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+ROLE = ROOT / "roles" / "guacamole_deploy"
 TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "main.yml"
 ASSERTS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "assert.yml"
 DEFAULTS = ROOT / "roles" / "guacamole_deploy" / "defaults" / "main.yml"
@@ -160,14 +161,17 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("no_log: true", systemd_tasks)
         self.assertIn("Refuse to replace an unknown Guacamole systemd unit", systemd_tasks)
         self.assertIn("Resolve the loaded legacy Guacamole unit fragment", systemd_tasks)
+        self.assertIn("Resolve loaded legacy Guacamole unit drop-ins", systemd_tasks)
         self.assertIn("Refuse a legacy Guacamole unit loaded from an unexpected fragment", systemd_tasks)
         self.assertIn("--property=FragmentPath", systemd_tasks)
+        self.assertIn("--property=DropInPaths", systemd_tasks)
         self.assertIn("Refuse unproven drift in an existing native Guacamole Quadlet", systemd_tasks)
         self.assertIn("guacamole_deploy_native_quadlet_file.stat.isreg", systemd_tasks)
         self.assertIn("not (guacamole_deploy_native_quadlet_file.stat.islnk", systemd_tasks)
         self.assertIn("guacamole_deploy_native_quadlet_file.stat.mode | default('') == '0644'", systemd_tasks)
         self.assertIn("guacamole_deploy_native_quadlet_file.stat.pw_name | default('') == 'root'", systemd_tasks)
         self.assertIn("Resolve the loaded native Guacamole unit fragment", systemd_tasks)
+        self.assertIn("Resolve loaded native Guacamole unit drop-ins", systemd_tasks)
         self.assertIn("^/run/systemd/generator", systemd_tasks)
         self.assertIn("guacamole_deploy_native_systemd_active.stdout | trim in ['active', 'failed']", systemd_tasks)
         self.assertNotIn("guacamole_deploy_native_systemd_active.stdout | trim != 'unknown'", systemd_tasks)
@@ -178,6 +182,7 @@ class GuacamoleDeployContractTests(unittest.TestCase):
             systemd_tasks,
         )
         self.assertIn("Require the staged native Guacamole Quadlet provenance boundary", systemd_tasks)
+        self.assertIn("Resolve staged native Guacamole unit drop-ins", systemd_tasks)
         self.assertIn(
             'name: "{{ guacamole_deploy_legacy_systemd_unit_path | basename }}"',
             systemd_tasks,
@@ -222,6 +227,320 @@ class GuacamoleDeployContractTests(unittest.TestCase):
             "guacamole_deploy_legacy_systemd_unit_path: >-\n  /etc/systemd/system/guacamole.service",
             DEFAULTS.read_text(encoding="utf-8"),
         )
+
+    def test_drop_ins_are_rejected_and_staging_skips_verified_native_units(self) -> None:
+        tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
+        task_map = {task["name"]: task for task in tasks}
+        native_contract = "\n".join(
+            task_map["Refuse unproven drift in an existing native Guacamole Quadlet"]["ansible.builtin.assert"]["that"]
+        )
+        legacy_contract = "\n".join(
+            task_map["Refuse a legacy Guacamole unit loaded from an unexpected fragment"]["ansible.builtin.assert"][
+                "that"
+            ]
+        )
+        transaction = task_map["Cut over to native Guacamole Quadlet with rollback"]
+        transaction_map = {task["name"]: task for task in transaction["block"]}
+        staged_contract = "\n".join(
+            transaction_map["Require the staged native Guacamole Quadlet provenance boundary"][
+                "ansible.builtin.assert"
+            ]["that"]
+        )
+        staging_condition = "not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))"
+
+        self.assertIn("guacamole_deploy_native_drop_in_paths.stdout | trim == ''", native_contract)
+        self.assertIn("guacamole_deploy_legacy_drop_in_paths.stdout | trim == ''", legacy_contract)
+        self.assertIn("guacamole_deploy_staged_drop_in_paths.stdout | trim == ''", staged_contract)
+        for name in (
+            "Stage native Guacamole Quadlet before lifecycle mutation",
+            "Reinspect the staged native Guacamole Quadlet",
+            "Resolve the staged native Guacamole unit fragment",
+            "Resolve staged native Guacamole unit drop-ins",
+            "Require the staged native Guacamole Quadlet provenance boundary",
+        ):
+            self.assertEqual(transaction_map[name]["when"], staging_condition)
+
+    def test_failed_readiness_executes_exact_manifest_and_service_rollback(self) -> None:
+        executable = shutil.which("ansible-playbook")
+        self.assertIsNotNone(executable, "Pinned Devtools Ansible is required")
+
+        with tempfile.TemporaryDirectory(prefix="guacamole-rollback-") as temporary:
+            root = Path(temporary)
+            collection = root / "collections/ansible_collections/lit/supplementary"
+            fixture_role = collection / "roles/guacamole_deploy"
+            fixture_role.parent.mkdir(parents=True)
+            shutil.copytree(ROLE, fixture_role)
+            fixture_foundational_tasks = (
+                root / "collections/ansible_collections/lit/foundational/roles/podman_systemd/tasks"
+            )
+            fixture_foundational_tasks.mkdir(parents=True)
+            (fixture_foundational_tasks / "main.yml").write_text(
+                """---
+- name: Ensure fixture Quadlet directory exists
+  ansible.builtin.file:
+    path: "{{ podman_systemd_quadlet_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Materialize fixture Quadlet
+  ansible.builtin.copy:
+    dest: "{{ podman_systemd_quadlet_dir }}/{{ podman_systemd_unit_name }}.kube"
+    content: |
+      [Unit]
+      Description={{ podman_systemd_description }}
+      After=network-online.target
+      Wants=network-online.target
+      [Kube]
+      Yaml={{ podman_systemd_manifest_path }}
+      [Install]
+      WantedBy=multi-user.target
+    mode: '0644'
+  when: podman_systemd_action != 'absent'
+
+- name: Apply fixture service action
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - >-
+        {{
+          'restart'
+          if podman_systemd_action == 'restarted'
+          else ('stop' if podman_systemd_action == 'stopped' else 'start')
+        }}
+      - "{{ podman_systemd_unit_name }}.service"
+  changed_when: true
+  when: podman_systemd_action != 'absent'
+
+- name: Apply fixture enabled state
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - "{{ 'enable' if podman_systemd_enabled | bool else 'disable' }}"
+      - "{{ podman_systemd_unit_name }}.service"
+  changed_when: true
+  when: podman_systemd_action != 'absent'
+
+- name: Stop fixture service before removal
+  ansible.builtin.command:
+    argv: [systemctl, stop, "{{ podman_systemd_unit_name }}.service"]
+  changed_when: true
+  when: podman_systemd_action == 'absent'
+
+- name: Remove fixture Quadlet
+  ansible.builtin.file:
+    path: "{{ podman_systemd_quadlet_dir }}/{{ podman_systemd_unit_name }}.kube"
+    state: absent
+  when: podman_systemd_action == 'absent'
+""",
+                encoding="utf-8",
+            )
+            fixture_systemd = fixture_role / "tasks/systemd.yml"
+            production_systemd = fixture_systemd.read_text(encoding="utf-8")
+            privileged_render = """        owner: root
+        group: root
+        mode: "0600"
+"""
+            self.assertEqual(production_systemd.count(privileged_render), 1)
+            fixture_systemd.write_text(
+                production_systemd.replace(
+                    privileged_render,
+                    f"""        owner: {os.geteuid()}
+        group: {os.getegid()}
+        mode: "0600"
+""",
+                    1,
+                )
+                .replace(
+                    "guacamole_deploy_staged_quadlet_file.stat.pw_name | default('') == 'root'",
+                    f"guacamole_deploy_staged_quadlet_file.stat.uid | int == {os.geteuid()}",
+                )
+                .replace(
+                    "guacamole_deploy_staged_quadlet_file.stat.gr_name | default('') == 'root'",
+                    f"guacamole_deploy_staged_quadlet_file.stat.gid | int == {os.getegid()}",
+                )
+                .replace("      retries: 40\n      delay: 5\n", "      retries: 1\n      delay: 0\n", 1),
+                encoding="utf-8",
+            )
+
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            state = root / "systemd-state"
+            state.mkdir()
+            log = root / "systemctl.log"
+            manifest = root / "guacamole.yml"
+            original = b"original-guacamole-manifest\nwith-exact-bytes\n"
+            manifest.write_bytes(original)
+            manifest.chmod(0o640)
+            quadlet_dir = root / "quadlets"
+            quadlet_dir.mkdir()
+            legacy_unit = root / "guacamole.service"
+            legacy_unit.write_text(
+                "\n".join(
+                    (
+                        "[Unit]",
+                        "Description=Apache Guacamole Podman application pod",
+                        "Wants=network-online.target",
+                        "After=network-online.target",
+                        "[Service]",
+                        "Type=oneshot",
+                        "RemainAfterExit=yes",
+                        f"ExecStartPre=-/usr/bin/podman kube down {manifest}",
+                        f"ExecStart=/usr/bin/podman kube play {manifest}",
+                        f"ExecStop=/usr/bin/podman kube down {manifest}",
+                        "TimeoutStartSec=300",
+                        "TimeoutStopSec=120",
+                        "[Install]",
+                        "WantedBy=multi-user.target",
+                        "",
+                    )
+                ),
+                encoding="utf-8",
+            )
+            legacy_unit.chmod(0o644)
+            native_quadlet = quadlet_dir / "guacamole-pod.kube"
+
+            systemctl = fake_bin / "systemctl"
+            systemctl.write_text(
+                """#!/bin/sh
+set -eu
+printf '%s\\n' "$*" >> "$FAKE_SYSTEMCTL_LOG"
+all="$*"
+case "$all" in
+  *--property=DropInPaths*) printf '\\n'; exit 0 ;;
+  *--property=FragmentPath*)
+    case "$all" in
+      *guacamole-pod.service*)
+        if [ -f "$FAKE_NATIVE_QUADLET" ]; then
+          printf '%s\\n' /run/systemd/generator/guacamole-pod.service
+        else
+          printf '\\n'
+        fi
+        ;;
+      *guacamole.service*) printf '%s\\n' "$FAKE_LEGACY_UNIT" ;;
+    esac
+    exit 0
+    ;;
+esac
+command_name="${1:-}"
+shift || true
+unit="${1:-}"
+safe_unit=$(printf '%s' "$unit" | tr '/@.' '___')
+active_file="$FAKE_SYSTEMD_STATE/$safe_unit.active"
+enabled_file="$FAKE_SYSTEMD_STATE/$safe_unit.enabled"
+case "$unit" in
+  guacamole.service) default_active=active; default_enabled=enabled ;;
+  *) default_active=unknown; default_enabled=not-found ;;
+esac
+active=$(cat "$active_file" 2>/dev/null || printf '%s' "$default_active")
+enabled=$(cat "$enabled_file" 2>/dev/null || printf '%s' "$default_enabled")
+case "$command_name" in
+  show)
+    printf 'LoadState=loaded\\nActiveState=%s\\nSubState=%s\\nUnitFileState=%s\\n' \
+      "$active" "$active" "$enabled"
+    ;;
+  is-active)
+    printf '%s\\n' "$active"
+    test "$active" = active && exit 0
+    test "$active" = unknown && exit 4
+    exit 3
+    ;;
+  is-enabled)
+    printf '%s\\n' "$enabled"
+    test "$enabled" = enabled && exit 0
+    test "$enabled" = not-found && exit 1
+    exit 1
+    ;;
+  enable) printf enabled > "$enabled_file" ;;
+  disable) printf disabled > "$enabled_file" ;;
+  start|restart) printf active > "$active_file" ;;
+  stop) printf inactive > "$active_file" ;;
+  daemon-reload) ;;
+  list-unit-files) printf '%s %s\\n' "$unit" "$enabled" ;;
+esac
+""",
+                encoding="utf-8",
+            )
+            systemctl.chmod(0o755)
+            podman = fake_bin / "podman"
+            podman.write_text(
+                '#!/bin/sh\n[ "${1:-} ${2:-}" = "pod exists" ] && exit 1\nexit 0\n',
+                encoding="utf-8",
+            )
+            podman.chmod(0o755)
+
+            playbook = root / "rollback.yml"
+            playbook.write_text(
+                yaml.safe_dump(
+                    [
+                        {
+                            "hosts": "localhost",
+                            "gather_facts": False,
+                            "vars": {
+                                "ansible_service_mgr": "systemd",
+                                "guacamole_deploy_manifest_path": str(manifest),
+                                "guacamole_deploy_quadlet_dir": str(quadlet_dir),
+                                "guacamole_deploy_legacy_systemd_unit_path": str(legacy_unit),
+                                "guacamole_deploy_health_url": "http://127.0.0.1:9/guacamole/",
+                                "guacamole_deploy_secrets": {"db_password": "OFFLINE_TEST_ONLY"},
+                            },
+                            "tasks": [
+                                {
+                                    "name": "Execute the real Guacamole systemd transaction",
+                                    "ansible.builtin.include_role": {
+                                        "name": "lit.supplementary.guacamole_deploy",
+                                        "tasks_from": "systemd",
+                                    },
+                                }
+                            ],
+                        }
+                    ],
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            config = root / "ansible.cfg"
+            config.write_text("[defaults]\nstdout_callback=default\n", encoding="utf-8")
+            environment = {
+                **os.environ,
+                "ANSIBLE_CONFIG": str(config),
+                "ANSIBLE_COLLECTIONS_PATH": f"{root / 'collections'}:/usr/share/ansible/collections",
+                "ANSIBLE_LOCAL_TEMP": str(root / "ansible-tmp"),
+                "ANSIBLE_NOCOLOR": "1",
+                "FAKE_SYSTEMCTL_LOG": str(log),
+                "FAKE_SYSTEMD_STATE": str(state),
+                "FAKE_LEGACY_UNIT": str(legacy_unit),
+                "FAKE_NATIVE_QUADLET": str(native_quadlet),
+                "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            }
+            result = subprocess.run(  # noqa: S603
+                [executable, "-i", "localhost,", "-c", "local", str(playbook)],
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+            )
+
+            output = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, output)
+            self.assertIn("Native Guacamole Quadlet takeover failed", output)
+            self.assertEqual(manifest.read_bytes(), original)
+            self.assertEqual(manifest.stat().st_mode & 0o777, 0o640)
+            self.assertTrue(legacy_unit.exists())
+            self.assertFalse(native_quadlet.exists())
+            service_log = log.read_text(encoding="utf-8")
+            evidence = f"{output}\nSYSTEMCTL LOG:\n{service_log}"
+            self.assertIn("stop guacamole.service", service_log, evidence)
+            self.assertIn("disable guacamole.service", service_log, evidence)
+            self.assertIn("restart guacamole-pod.service", service_log, evidence)
+            self.assertIn("stop guacamole-pod.service", service_log, evidence)
+            self.assertIn("enable guacamole.service", service_log, evidence)
+            self.assertIn("start guacamole.service", service_log, evidence)
+            legacy_state = "guacamole_service"
+            native_state = "guacamole-pod_service"
+            self.assertEqual((state / f"{legacy_state}.active").read_text(encoding="utf-8"), "active")
+            self.assertEqual((state / f"{legacy_state}.enabled").read_text(encoding="utf-8"), "enabled")
+            self.assertEqual((state / f"{native_state}.active").read_text(encoding="utf-8"), "inactive")
 
     def test_existing_manifest_and_quadlet_use_executable_slurp_contract(self) -> None:
         tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
@@ -396,6 +715,7 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         expected = normalize["ansible.builtin.set_fact"]["guacamole_deploy_legacy_unit_expected_lines"]
         actual_expression = normalize["ansible.builtin.set_fact"]["guacamole_deploy_legacy_unit_actual_lines"]
 
+        self.assertIn("splitlines()", actual_expression)
         self.assertIn("reject('match', '^#')", actual_expression)
         self.assertEqual(expected[0], "[Unit]")
         self.assertEqual(expected[-1], "WantedBy=multi-user.target")
