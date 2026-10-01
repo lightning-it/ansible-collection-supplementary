@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -198,6 +202,74 @@ class GuacamoleDeployContractTests(unittest.TestCase):
             "guacamole_deploy_legacy_systemd_unit_path: >-\n  /etc/systemd/system/guacamole.service",
             DEFAULTS.read_text(encoding="utf-8"),
         )
+
+    def test_existing_manifest_and_quadlet_use_executable_slurp_contract(self) -> None:
+        tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
+        task_map = {task["name"]: task for task in tasks}
+        executable = shutil.which("ansible-playbook")
+        self.assertIsNotNone(executable, "Pinned Devtools Ansible is required")
+
+        with tempfile.TemporaryDirectory(prefix="guacamole-slurp-") as temporary:
+            temporary_path = Path(temporary)
+            manifest = temporary_path / "guacamole-pod.yml"
+            quadlet = temporary_path / "guacamole-pod.kube"
+            manifest.write_text("kind: Pod\n", encoding="utf-8")
+            quadlet.write_text("[Kube]\nYaml=/tmp/guacamole-pod.yml\n", encoding="utf-8")
+            selected_tasks = []
+            for name in (
+                "Capture the exact pre-transaction Guacamole Pod manifest",
+                "Read the desired native Guacamole Quadlet file",
+            ):
+                action = task_map[name]["ansible.builtin.slurp"]
+                self.assertEqual(set(action), {"src"})
+                selected_tasks.append({"name": name, "ansible.builtin.slurp": action})
+
+            play = [
+                {
+                    "hosts": "localhost",
+                    "gather_facts": False,
+                    "vars": {
+                        "guacamole_deploy_manifest_path": str(manifest),
+                        "guacamole_deploy_quadlet_dir": str(temporary_path),
+                        "guacamole_deploy_systemd_unit_name": "guacamole-pod",
+                    },
+                    "tasks": selected_tasks,
+                }
+            ]
+            playbook = temporary_path / "slurp.yml"
+            playbook.write_text(yaml.safe_dump(play), encoding="utf-8")
+            config = temporary_path / "ansible.cfg"
+            config.write_text(
+                f"[defaults]\nremote_tmp={temporary_path / 'remote'}\n",
+                encoding="utf-8",
+            )
+            result = subprocess.run(  # noqa: S603
+                [executable, "-i", "localhost,", "-c", "local", str(playbook)],
+                env={
+                    **os.environ,
+                    "ANSIBLE_CONFIG": str(config),
+                    "ANSIBLE_NOCOLOR": "1",
+                    "ANSIBLE_STDOUT_CALLBACK": "default",
+                    "ANSIBLE_LOCAL_TEMP": str(temporary_path / "ansible"),
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_takeover_rejects_unrestorable_failed_and_unknown_states(self) -> None:
+        tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
+        task_map = {task["name"]: task for task in tasks}
+        lifecycle_assertions = task_map["Refuse unknown Guacamole lifecycle states"]["ansible.builtin.assert"]["that"]
+        contract = "\n".join(lifecycle_assertions)
+
+        self.assertIn("guacamole_deploy_legacy_unit_stat.stat.exists", contract)
+        self.assertIn("in ['active', 'inactive']", contract)
+        self.assertIn("in ['enabled', 'disabled']", contract)
+        self.assertIn("guacamole_deploy_native_systemd_active.stdout | trim != 'failed'", contract)
 
     def test_legacy_takeover_requires_the_exact_ordered_unit_contract(self) -> None:
         tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))

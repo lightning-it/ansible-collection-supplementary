@@ -30,7 +30,8 @@ All defaults are defined in `defaults/main.yml`.
   Guacamole application container. Entries are also rendered into the JVM
   `http.nonProxyHosts` property. This permits server-side OIDC/JWKS requests to
   traverse the site forward proxy even when a broader host bypass suffix exists.
-  The empty default leaves inherited behavior unchanged.
+  The empty default explicitly clears inherited `no_proxy` and `NO_PROXY`
+  values so host-level bypasses cannot silently enter the application container.
 - `guacamole_deploy_oidc_enabled` enables the OpenID Connect extension and
   requires issuer, authorization, JWKS, client, and redirect settings.
 - `guacamole_deploy_oidc_groups_claim_type` explicitly selects the token claim

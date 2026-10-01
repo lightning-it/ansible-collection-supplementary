@@ -42,7 +42,7 @@
 
 - name: Capture the exact pre-transaction Guacamole Pod manifest
   ansible.builtin.slurp:
-    path: "{{ guacamole_deploy_manifest_path }}"
+    src: "{{ guacamole_deploy_manifest_path }}"
   register: guacamole_deploy_original_manifest_read
   no_log: true
   when: guacamole_deploy_original_manifest_file.stat.exists | default(false)
@@ -89,6 +89,12 @@
   changed_when: false
   failed_when: false
 
+- name: Inspect the exact legacy Guacamole unit path
+  ansible.builtin.stat:
+    path: "{{ guacamole_deploy_legacy_systemd_unit_path }}"
+    follow: false
+  register: guacamole_deploy_legacy_unit_stat
+
 - name: Refuse unknown Guacamole lifecycle states
   ansible.builtin.assert:
     that:
@@ -96,14 +102,23 @@
       - >-
         guacamole_deploy_legacy_systemd_active.stdout | trim
         in ['active', 'inactive', 'failed', 'unknown']
+      - >-
+        not (guacamole_deploy_legacy_unit_stat.stat.exists | default(false))
+        or guacamole_deploy_legacy_systemd_active.stdout | trim
+        in ['active', 'inactive']
       - guacamole_deploy_legacy_systemd_enabled.rc in [0, 1, 3, 4]
       - >-
         guacamole_deploy_legacy_systemd_enabled.stdout | trim
         in ['enabled', 'disabled', 'not-found']
+      - >-
+        not (guacamole_deploy_legacy_unit_stat.stat.exists | default(false))
+        or guacamole_deploy_legacy_systemd_enabled.stdout | trim
+        in ['enabled', 'disabled']
       - guacamole_deploy_native_systemd_active.rc in [0, 3, 4]
       - >-
         guacamole_deploy_native_systemd_active.stdout | trim
         in ['active', 'inactive', 'failed', 'unknown']
+      - guacamole_deploy_native_systemd_active.stdout | trim != 'failed'
       - guacamole_deploy_native_systemd_enabled.rc in [0, 1, 3, 4]
       - >-
         guacamole_deploy_native_systemd_enabled.stdout | trim
@@ -126,7 +141,7 @@
 
 - name: Read the desired native Guacamole Quadlet file
   ansible.builtin.slurp:
-    path: "{{ guacamole_deploy_quadlet_dir }}/{{ guacamole_deploy_systemd_unit_name }}.kube"
+    src: "{{ guacamole_deploy_quadlet_dir }}/{{ guacamole_deploy_systemd_unit_name }}.kube"
   register: guacamole_deploy_native_quadlet_read
   when:
     - guacamole_deploy_native_quadlet_file.stat.exists | default(false)
@@ -191,12 +206,6 @@
     or (guacamole_deploy_existing_pod.rc == 0
     and guacamole_deploy_legacy_systemd_active.stdout | trim != 'active'
     and guacamole_deploy_native_systemd_active.stdout | trim != 'active')
-
-- name: Inspect the exact legacy Guacamole unit path
-  ansible.builtin.stat:
-    path: "{{ guacamole_deploy_legacy_systemd_unit_path }}"
-    follow: false
-  register: guacamole_deploy_legacy_unit_stat
 
 - name: Refuse a legacy Guacamole unit loaded from an unexpected fragment
   ansible.builtin.assert:
