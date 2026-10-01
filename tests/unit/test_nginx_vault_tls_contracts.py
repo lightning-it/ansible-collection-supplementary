@@ -591,13 +591,9 @@ class NginxVaultTlsContractTests(unittest.TestCase):
 
     def test_foundational_dependency_floor_supports_quadlet_networks(self) -> None:
         galaxy = yaml.safe_load((ROOT / "galaxy.yml").read_text(encoding="utf-8"))
-        source_dependencies = yaml.safe_load(
-            (ROOT / "meta" / "source-dependencies.yml").read_text(encoding="utf-8")
-        )
+        source_dependencies = yaml.safe_load((ROOT / "meta" / "source-dependencies.yml").read_text(encoding="utf-8"))
         source_requirement = next(
-            item["requirement"]
-            for item in source_dependencies["collections"]
-            if item["name"] == "lit.foundational"
+            item["requirement"] for item in source_dependencies["collections"] if item["name"] == "lit.foundational"
         )
 
         self.assertEqual(galaxy["dependencies"]["lit.foundational"], ">=1.35.0")
