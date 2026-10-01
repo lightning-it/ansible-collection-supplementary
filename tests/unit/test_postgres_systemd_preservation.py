@@ -65,6 +65,9 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
         pod_tasks = yaml.safe_load((ROLE / "tasks/deploy_pod.yml").read_text(encoding="utf-8"))
         manifest_render = next(task for task in pod_tasks if task["name"].startswith("Render PostgreSQL Pod manifest"))
         self.assertIn("not postgres_deploy_manage_systemd", manifest_render["when"])
+        self.assertEqual(manifest_render["ansible.builtin.template"]["owner"], "root")
+        self.assertEqual(manifest_render["ansible.builtin.template"]["group"], "root")
+        self.assertEqual(manifest_render["ansible.builtin.template"]["mode"], "0600")
 
     def test_failed_readiness_executes_exact_manifest_and_service_rollback(self) -> None:
         executable = shutil.which("ansible-playbook")

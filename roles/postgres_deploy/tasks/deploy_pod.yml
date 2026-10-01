@@ -295,6 +295,8 @@
   ansible.builtin.template:
     src: postgres-pod.yml.j2
     dest: "{{ postgres_deploy_pod_manifest_path }}"
+    owner: root
+    group: root
     mode: '0600'
   no_log: true
   notify:
