@@ -526,6 +526,11 @@
         guacamole_deploy_native_quiescence_failure_message: ""
         guacamole_deploy_legacy_restore_failure_message: ""
         guacamole_deploy_native_quiescence_proven: false
+        guacamole_deploy_native_cleanup_proven: >-
+          {{ guacamole_deploy_native_quadlet_file.stat.exists | default(false) }}
+        guacamole_deploy_manifest_restoration_proven: false
+        guacamole_deploy_native_quadlet_restoration_proven: >-
+          {{ not (guacamole_deploy_native_quadlet_file.stat.exists | default(false)) }}
 
     - name: Attempt failed native Guacamole cleanup without blocking restoration
       block:
@@ -543,13 +548,79 @@
             podman_systemd_networks: "{{ guacamole_deploy_quadlet_networks }}"
           when: not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
 
+        - name: Record proven transaction-created native Guacamole cleanup
+          ansible.builtin.set_fact:
+            guacamole_deploy_native_cleanup_proven: true
+          when: not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
+
       rescue:
         - name: Capture failed native Guacamole cleanup
           ansible.builtin.set_fact:
             guacamole_deploy_cleanup_failure_message: >-
               {{ ansible_failed_result.msg | default('unknown cleanup failure') }}
 
+    - name: Prove failed native Guacamole quiescence before file restoration
+      block:
+        - name: Inspect native Guacamole activity before rollback quiescence
+          ansible.builtin.command:
+            argv: >-
+              {{ ['systemctl']
+                 + (['--user'] if guacamole_deploy_systemd_scope == 'user' else [])
+                 + ['is-active', guacamole_deploy_systemd_unit_name ~ '.service'] }}
+          register: guacamole_deploy_native_activity_before_rollback
+          changed_when: false
+          failed_when: false
+
+        - name: Stop the exact failed native Guacamole unit before file restoration
+          ansible.builtin.systemd:
+            name: "{{ guacamole_deploy_systemd_unit_name }}.service"
+            state: stopped
+            scope: "{{ guacamole_deploy_systemd_scope }}"
+          when: >-
+            guacamole_deploy_native_activity_before_rollback.stdout | trim
+            in ['active', 'failed']
+
+        - name: Inspect native Guacamole activity after rollback stop
+          ansible.builtin.command:
+            argv: >-
+              {{ ['systemctl']
+                 + (['--user'] if guacamole_deploy_systemd_scope == 'user' else [])
+                 + ['is-active', guacamole_deploy_systemd_unit_name ~ '.service'] }}
+          register: guacamole_deploy_native_activity_after_cleanup
+          changed_when: false
+          failed_when: false
+
+        - name: Inspect native Guacamole pod after rollback stop
+          ansible.builtin.command:
+            argv: [podman, pod, exists, "{{ guacamole_deploy_pod_name }}"]
+          register: guacamole_deploy_native_pod_after_cleanup
+          changed_when: false
+          failed_when: guacamole_deploy_native_pod_after_cleanup.rc not in [0, 1]
+
+        - name: Require native Guacamole service and pod absence before file restoration
+          ansible.builtin.assert:
+            that:
+              - guacamole_deploy_native_activity_after_cleanup.rc in [3, 4]
+              - >-
+                guacamole_deploy_native_activity_after_cleanup.stdout | trim
+                in ['inactive', 'failed', 'unknown']
+              - guacamole_deploy_native_pod_after_cleanup.rc == 1
+            fail_msg: >-
+              The failed native Guacamole controller or pod is not proven
+              quiescent; refusing file restoration or controller restart.
+            quiet: true
+
+        - name: Record proven native Guacamole quiescence before file restoration
+          ansible.builtin.set_fact:
+            guacamole_deploy_native_quiescence_proven: true
+      rescue:
+        - name: Capture unproven native Guacamole quiescence
+          ansible.builtin.set_fact:
+            guacamole_deploy_native_quiescence_failure_message: >-
+              {{ ansible_failed_result.msg | default('native controller or pod quiescence is unproven') }}
+
     - name: Attempt exact Guacamole Pod manifest restoration
+      when: guacamole_deploy_native_quiescence_proven | bool
       block:
         - name: Restore the exact pre-transaction Guacamole Pod manifest
           ansible.builtin.copy:
@@ -566,6 +637,10 @@
             path: "{{ guacamole_deploy_manifest_path }}"
             state: absent
           when: not (guacamole_deploy_original_manifest_file.stat.exists | default(false))
+
+        - name: Record proven Guacamole Pod manifest restoration
+          ansible.builtin.set_fact:
+            guacamole_deploy_manifest_restoration_proven: true
       rescue:
         - name: Capture failed Guacamole Pod manifest restoration
           ansible.builtin.set_fact:
@@ -573,7 +648,9 @@
               {{ ansible_failed_result.msg | default('unknown manifest restoration failure') }}
 
     - name: Attempt exact pre-existing native Guacamole Quadlet restoration
-      when: guacamole_deploy_native_quadlet_file.stat.exists | default(false)
+      when:
+        - guacamole_deploy_native_quiescence_proven | bool
+        - guacamole_deploy_native_quadlet_file.stat.exists | default(false)
       block:
         - name: Restore exact pre-transaction native Guacamole Quadlet
           ansible.builtin.copy:
@@ -588,6 +665,10 @@
           ansible.builtin.systemd:
             daemon_reload: true
             scope: "{{ guacamole_deploy_systemd_scope }}"
+
+        - name: Record proven native Guacamole Quadlet restoration
+          ansible.builtin.set_fact:
+            guacamole_deploy_native_quadlet_restoration_proven: true
       rescue:
         - name: Capture failed native Guacamole Quadlet restoration
           ansible.builtin.set_fact:
@@ -595,6 +676,11 @@
               {{ ansible_failed_result.msg | default('unknown native Quadlet restoration failure') }}
 
     - name: Attempt pre-existing native Guacamole service-state restoration
+      when:
+        - guacamole_deploy_native_quiescence_proven | bool
+        - guacamole_deploy_native_cleanup_proven | bool
+        - guacamole_deploy_manifest_restoration_proven | bool
+        - guacamole_deploy_native_quadlet_restoration_proven | bool
       block:
         - name: Restore enabled or disabled native Guacamole service state after failure
           ansible.builtin.systemd:
@@ -641,47 +727,12 @@
             guacamole_deploy_native_restore_failure_message: >-
               {{ ansible_failed_result.msg | default('unknown native restoration failure') }}
 
-    - name: Prove the failed native Guacamole controller is inactive
-      when: >-
-        (
-          guacamole_deploy_legacy_unit_stat.stat.exists | bool
-          and guacamole_deploy_legacy_systemd_active.stdout | trim == 'active'
-        )
-        or not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
-      block:
-        - name: Inspect native Guacamole activity after failed cleanup
-          ansible.builtin.command:
-            argv: >-
-              {{ ['systemctl']
-                 + (['--user'] if guacamole_deploy_systemd_scope == 'user' else [])
-                 + ['is-active', guacamole_deploy_systemd_unit_name ~ '.service'] }}
-          register: guacamole_deploy_native_activity_after_cleanup
-          changed_when: false
-          failed_when: false
-
-        - name: Require native Guacamole inactivity before legacy restoration
-          ansible.builtin.assert:
-            that:
-              - guacamole_deploy_native_activity_after_cleanup.rc in [3, 4]
-              - >-
-                guacamole_deploy_native_activity_after_cleanup.stdout | trim
-                in ['inactive', 'failed', 'unknown']
-            fail_msg: >-
-              The failed native Guacamole controller is not proven inactive;
-              refusing to complete rollback or start the legacy controller in
-              parallel.
-            quiet: true
-
-        - name: Record proven native Guacamole inactivity
-          ansible.builtin.set_fact:
-            guacamole_deploy_native_quiescence_proven: true
-      rescue:
-        - name: Capture unproven native Guacamole inactivity
-          ansible.builtin.set_fact:
-            guacamole_deploy_native_quiescence_failure_message: >-
-              {{ ansible_failed_result.msg | default('native controller inactivity is unproven') }}
-
     - name: Attempt exact legacy Guacamole restoration after failed takeover
+      when:
+        - guacamole_deploy_native_quiescence_proven | bool
+        - guacamole_deploy_native_cleanup_proven | bool
+        - guacamole_deploy_manifest_restoration_proven | bool
+        - guacamole_deploy_native_quadlet_restoration_proven | bool
       block:
         - name: Restore the exact legacy Guacamole unit file
           ansible.builtin.copy:
@@ -703,9 +754,6 @@
             daemon_reload: true
           when:
             - guacamole_deploy_legacy_unit_stat.stat.exists | bool
-            - >-
-              guacamole_deploy_legacy_systemd_active.stdout | trim != 'active'
-              or guacamole_deploy_native_quiescence_proven | bool
       rescue:
         - name: Capture failed legacy Guacamole restoration
           ansible.builtin.set_fact:

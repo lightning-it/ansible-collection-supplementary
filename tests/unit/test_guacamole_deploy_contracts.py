@@ -299,7 +299,10 @@ class GuacamoleDeployContractTests(unittest.TestCase):
             systemd_tasks.index("Remove the verified legacy Guacamole systemd unit"),
         )
         self.assertIn("Attempt exact legacy Guacamole restoration after failed takeover", systemd_tasks)
-        self.assertIn("Require native Guacamole inactivity before legacy restoration", systemd_tasks)
+        self.assertIn(
+            "Require native Guacamole service and pod absence before file restoration",
+            systemd_tasks,
+        )
         self.assertIn("guacamole_deploy_legacy_unit_raw.content | b64decode", systemd_tasks)
         self.assertIn("Restore the exact pre-transaction Guacamole Pod manifest", systemd_tasks)
         self.assertIn("Remove a transaction-created Guacamole Pod manifest", systemd_tasks)
@@ -377,10 +380,48 @@ class GuacamoleDeployContractTests(unittest.TestCase):
             for task in transaction["rescue"]
             if task["name"] == "Attempt pre-existing native Guacamole service-state restoration"
         )
+        restoration_gates = {
+            "guacamole_deploy_native_quiescence_proven | bool",
+            "guacamole_deploy_native_cleanup_proven | bool",
+            "guacamole_deploy_manifest_restoration_proven | bool",
+            "guacamole_deploy_native_quadlet_restoration_proven | bool",
+        }
+        self.assertEqual(set(native_restoration["when"]), restoration_gates)
         for task in native_restoration["block"]:
             state = task["ansible.builtin.systemd"]["state"]
             self.assertIn("'started'", state)
             self.assertIn("guacamole_deploy_manifest_render.changed", state)
+
+        rescue_map = {task["name"]: task for task in transaction["rescue"]}
+        quiescence = rescue_map["Prove failed native Guacamole quiescence before file restoration"]
+        quiescence_map = {task["name"]: task for task in quiescence["block"]}
+        pod_probe = quiescence_map["Inspect native Guacamole pod after rollback stop"]
+        self.assertEqual(
+            pod_probe["ansible.builtin.command"]["argv"],
+            ["podman", "pod", "exists", "{{ guacamole_deploy_pod_name }}"],
+        )
+        quiescence_contract = "\n".join(
+            quiescence_map["Require native Guacamole service and pod absence before file restoration"][
+                "ansible.builtin.assert"
+            ]["that"]
+        )
+        self.assertIn("guacamole_deploy_native_pod_after_cleanup.rc == 1", quiescence_contract)
+
+        manifest_restoration = rescue_map["Attempt exact Guacamole Pod manifest restoration"]
+        self.assertEqual(
+            manifest_restoration["when"],
+            "guacamole_deploy_native_quiescence_proven | bool",
+        )
+        self.assertEqual(
+            manifest_restoration["block"][-1]["ansible.builtin.set_fact"][
+                "guacamole_deploy_manifest_restoration_proven"
+            ],
+            True,
+        )
+        quadlet_restoration = rescue_map["Attempt exact pre-existing native Guacamole Quadlet restoration"]
+        self.assertIn("guacamole_deploy_native_quiescence_proven | bool", quadlet_restoration["when"])
+        legacy_restoration = rescue_map["Attempt exact legacy Guacamole restoration after failed takeover"]
+        self.assertEqual(set(legacy_restoration["when"]), restoration_gates)
 
     def test_post_removal_reload_failure_executes_exact_manifest_and_service_rollback(self) -> None:
         executable = shutil.which("ansible-playbook")
@@ -740,6 +781,64 @@ esac
             self.assertEqual((state / f"{legacy_state}.enabled").read_text(encoding="utf-8"), "enabled")
             self.assertEqual((state / f"{native_state}.active").read_text(encoding="utf-8"), "inactive")
 
+            manifest_restoration_anchor = """      block:
+        - name: Restore the exact pre-transaction Guacamole Pod manifest
+"""
+            fixture_with_restore_failure = fixture_systemd.read_text(encoding="utf-8")
+            self.assertEqual(fixture_with_restore_failure.count(manifest_restoration_anchor), 1)
+            fixture_systemd.write_text(
+                fixture_with_restore_failure.replace(
+                    manifest_restoration_anchor,
+                    """      block:
+        - name: Inject Guacamole manifest restoration failure
+          ansible.builtin.fail:
+            msg: injected manifest restoration failure
+
+        - name: Restore the exact pre-transaction Guacamole Pod manifest
+""",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            manifest.write_bytes(original)
+            manifest.chmod(0o640)
+            legacy_unit.write_bytes(legacy_original)
+            legacy_unit.chmod(0o644)
+            native_quadlet.write_bytes(native_original)
+            native_quadlet.chmod(0o644)
+            (state / f"{legacy_state}.active").write_text("active", encoding="utf-8")
+            (state / f"{legacy_state}.enabled").write_text("enabled", encoding="utf-8")
+            (state / f"{native_state}.active").write_text("inactive", encoding="utf-8")
+            (state / f"{native_state}.enabled").write_text("generated", encoding="utf-8")
+            log.unlink(missing_ok=True)
+
+            restore_failure_result = subprocess.run(  # noqa: S603
+                [executable, "-i", "localhost,", "-c", "local", str(playbook)],
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+            )
+            restore_failure_output = restore_failure_result.stdout + restore_failure_result.stderr
+            self.assertNotEqual(restore_failure_result.returncode, 0, restore_failure_output)
+            self.assertIn("injected manifest restoration failure", restore_failure_output)
+            self.assertIn("Manifest restoration failure", restore_failure_output)
+            self.assertNotEqual(manifest.read_bytes(), original)
+            restore_failure_log = log.read_text(encoding="utf-8")
+            restore_failure_evidence = f"{restore_failure_output}\nSYSTEMCTL LOG:\n{restore_failure_log}"
+            self.assertEqual(restore_failure_log.count("restart guacamole-pod.service"), 1)
+            self.assertIn("stop guacamole-pod.service", restore_failure_log, restore_failure_evidence)
+            self.assertNotIn("start guacamole.service", restore_failure_log, restore_failure_evidence)
+            self.assertEqual(
+                (state / f"{legacy_state}.active").read_text(encoding="utf-8"),
+                "inactive",
+            )
+            self.assertEqual(
+                (state / f"{native_state}.active").read_text(encoding="utf-8"),
+                "inactive",
+            )
+
     def test_existing_manifest_and_quadlet_use_executable_slurp_contract(self) -> None:
         tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
         task_map = {task["name"]: task for task in tasks}
@@ -810,7 +909,7 @@ esac
         self.assertIn("guacamole_deploy_systemd_scope == 'system'", ASSERTS.read_text(encoding="utf-8"))
         self.assertIn("guacamole_deploy_quadlet_dir == '/etc/containers/systemd'", ASSERTS.read_text(encoding="utf-8"))
 
-    def test_no_legacy_rollback_proves_transaction_created_native_is_inactive(self) -> None:
+    def test_no_legacy_rollback_fails_closed_when_native_quiescence_is_unproven(self) -> None:
         tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
         transaction = next(
             task for task in tasks if task["name"] == "Cut over to native Guacamole Quadlet with rollback"
@@ -818,11 +917,18 @@ esac
         proof = next(
             task
             for task in transaction["rescue"]
-            if task["name"] == "Prove the failed native Guacamole controller is inactive"
+            if task["name"] == "Prove failed native Guacamole quiescence before file restoration"
         )
-        condition = str(proof["when"])
-        self.assertIn("guacamole_deploy_legacy_systemd_active", condition)
-        self.assertIn("guacamole_deploy_native_quadlet_file", condition)
+        proof_tasks = {task["name"]: task for task in proof["block"]}
+        self.assertIn("Inspect native Guacamole pod after rollback stop", proof_tasks)
+        self.assertIn(
+            "guacamole_deploy_native_pod_after_cleanup.rc == 1",
+            "\n".join(
+                proof_tasks["Require native Guacamole service and pod absence before file restoration"][
+                    "ansible.builtin.assert"
+                ]["that"]
+            ),
+        )
 
         executable = shutil.which("ansible-playbook")
         self.assertIsNotNone(executable, "Pinned Devtools Ansible is required")
@@ -849,6 +955,7 @@ esac
                                 "guacamole_deploy_native_quadlet_file": {"stat": {"exists": False}},
                                 "guacamole_deploy_systemd_scope": "system",
                                 "guacamole_deploy_systemd_unit_name": "guacamole-pod",
+                                "guacamole_deploy_pod_name": "guacamole-pod",
                             },
                             "tasks": [
                                 proof,
@@ -887,7 +994,7 @@ esac
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_legacy_file_restoration_does_not_require_native_quiescence(self) -> None:
+    def test_legacy_controller_restoration_requires_complete_safe_rollback(self) -> None:
         tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
         transaction = next(
             task for task in tasks if task["name"] == "Cut over to native Guacamole Quadlet with rollback"
@@ -899,11 +1006,22 @@ esac
         )
         restore_file, restore_state = restoration["block"]
         self.assertEqual(
+            set(restoration["when"]),
+            {
+                "guacamole_deploy_native_quiescence_proven | bool",
+                "guacamole_deploy_native_cleanup_proven | bool",
+                "guacamole_deploy_manifest_restoration_proven | bool",
+                "guacamole_deploy_native_quadlet_restoration_proven | bool",
+            },
+        )
+        self.assertEqual(
             restore_file["when"],
             "guacamole_deploy_legacy_unit_stat.stat.exists | bool",
         )
-        self.assertIn("guacamole_deploy_native_quiescence_proven", "\n".join(restore_state["when"]))
-        self.assertIn("!= 'active'", "\n".join(restore_state["when"]))
+        self.assertEqual(
+            restore_state["when"],
+            ["guacamole_deploy_legacy_unit_stat.stat.exists | bool"],
+        )
 
     def test_legacy_takeover_requires_the_exact_ordered_unit_contract(self) -> None:
         tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
