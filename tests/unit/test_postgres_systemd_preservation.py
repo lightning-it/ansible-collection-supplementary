@@ -31,13 +31,24 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
         for unsupported in ("activating", "static", "indirect", "transient", "linked"):
             self.assertNotIn(unsupported, lifecycle_contract)
         self.assertIn("postgres_deploy_legacy_systemd_active.stdout | trim != 'failed'", validation)
+        self.assertIn("postgres_deploy_native_systemd_active.stdout | trim != 'failed'", validation)
         ownership = task_map["Refuse unproven drift in an existing native PostgreSQL Quadlet"]
         ownership_contract = "\n".join(str(item) for item in ownership["ansible.builtin.assert"]["that"])
-        for contract in ("isreg", "islnk", "Description=", "Yaml=", "native_systemd_enabled"):
+        for contract in (
+            "isreg",
+            "islnk",
+            "mode",
+            "pw_name",
+            "Description=",
+            "Yaml=",
+            "native_systemd_enabled",
+            "/run/systemd/generator",
+        ):
             self.assertIn(contract, ownership_contract)
         transaction = task_map["Cut over to native PostgreSQL Quadlet with rollback"]
         self.assertEqual(transaction["block"][0]["name"], "Render the transactional PostgreSQL Pod manifest")
         transaction_names = [task["name"] for task in transaction["block"]]
+        self.assertIn("Require the staged native PostgreSQL Quadlet provenance boundary", transaction_names)
         self.assertLess(
             transaction_names.index("Manage the native PostgreSQL Quadlet service"),
             transaction_names.index("Wait for PostgreSQL readiness before committing native takeover"),
@@ -136,6 +147,14 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
             mode: '0600'
 """,
                     1,
+                )
+                .replace(
+                    "postgres_deploy_staged_quadlet_file.stat.pw_name | default('') == 'root'",
+                    f"postgres_deploy_staged_quadlet_file.stat.uid | int == {os.geteuid()}",
+                )
+                .replace(
+                    "postgres_deploy_staged_quadlet_file.stat.gr_name | default('') == 'root'",
+                    f"postgres_deploy_staged_quadlet_file.stat.gid | int == {os.getegid()}",
                 ),
                 encoding="utf-8",
             )
@@ -177,8 +196,11 @@ active=$(cat "$active_file" 2>/dev/null || printf '%s' "$default_active")
 enabled=$(cat "$enabled_file" 2>/dev/null || printf '%s' "$default_enabled")
 case "$command_name" in
   show)
-    printf 'LoadState=loaded\\nActiveState=%s\\nSubState=%s\\nUnitFileState=%s\\n' \
-      "$active" "$active" "$enabled"
+    case "$*" in
+      *--property=FragmentPath*) printf '/run/systemd/generator/%s\\n' "$unit" ;;
+      *) printf 'LoadState=loaded\\nActiveState=%s\\nSubState=%s\\nUnitFileState=%s\\n' \
+           "$active" "$active" "$enabled" ;;
+    esac
     ;;
   is-active)
     printf '%s\\n' "$active"

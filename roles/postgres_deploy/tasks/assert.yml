@@ -24,6 +24,14 @@
       - >-
         postgres_deploy_networks | map('trim') | reject('equalto', '') | list | length
         == postgres_deploy_networks | length
+      - >-
+        postgres_deploy_networks
+        | select(
+            'match',
+            '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}'
+            ~ '(?::ip=[0-9]{1,3}(?:[.][0-9]{1,3}){3})?$'
+          )
+        | list | length == postgres_deploy_networks | length
       - postgres_deploy_install_packages is boolean
       - postgres_deploy_manage_systemd is boolean
       - >-
@@ -53,7 +61,8 @@
       - >-
         not (postgres_deploy_manage_systemd | bool)
         or postgres_deploy_systemd_scope == 'system'
-      - postgres_deploy_quadlet_dir | default('', true) | trim | length > 0
+      - postgres_deploy_quadlet_dir is string
+      - postgres_deploy_quadlet_dir == '/etc/containers/systemd'
       - postgres_deploy_systemd_enabled is boolean
       - not postgres_deploy_manage_systemd | bool or postgres_deploy_systemd_enabled | bool
       - postgres_deploy_readiness_retries is integer
@@ -70,4 +79,21 @@
       - postgres_deploy_store_generated_password is boolean
       - postgres_deploy_generated_password_length | int >= 16
     fail_msg: "PostgreSQL deploy variables are missing or invalid."
+  tags: always
+
+- name: Validate static IPv4 addresses in PostgreSQL Quadlet network entries
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_facts.get('python', {}).get('executable', '/usr/bin/python3') }}"
+      - -c
+      - >-
+        import ipaddress,sys; address=ipaddress.ip_address(sys.argv[1]);
+        sys.exit(0 if address.version == 4 else 1)
+      - "{{ item.split(':ip=', 1)[1] }}"
+  loop: "{{ postgres_deploy_networks }}"
+  loop_control:
+    label: "{{ item.split(':ip=', 1)[0] }}"
+  changed_when: false
+  check_mode: false
+  when: "':ip=' in item"
   tags: always

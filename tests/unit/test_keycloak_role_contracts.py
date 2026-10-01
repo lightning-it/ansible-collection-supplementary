@@ -168,7 +168,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
             "keycloak_deploy_networks",
         ):
             self.assertIn(contract, str(quadlet["vars"]))
-        stage = transaction_map["Stage the native Keycloak Quadlet before legacy shutdown"]
+        stage = transaction_map["Stage the native Keycloak Quadlet before lifecycle mutation"]
         names = [task["name"] for task in systemd_block]
         validation_index = names.index("Refuse unknown Keycloak lifecycle states")
         collision_index = next(index for index, name in enumerate(names) if "Refuse unmanaged Keycloak" in name)
@@ -177,8 +177,18 @@ class KeycloakRoleContractTests(unittest.TestCase):
         self.assertIn("keycloak_deploy_native_systemd_active", collision["failed_when"])
         ownership = systemd_map["Refuse unproven drift in an existing native Keycloak Quadlet"]
         ownership_contract = "\n".join(str(item) for item in ownership["ansible.builtin.assert"]["that"])
-        for contract in ("isreg", "islnk", "Description=", "Yaml=", "native_systemd_enabled"):
+        for contract in (
+            "isreg",
+            "islnk",
+            "mode",
+            "pw_name",
+            "Description=",
+            "Yaml=",
+            "native_systemd_enabled",
+            "/run/systemd/generator",
+        ):
             self.assertIn(contract, ownership_contract)
+        self.assertIn("Require the staged native Keycloak Quadlet provenance boundary", transaction_map)
         lifecycle_contract = str(systemd_block[validation_index]["ansible.builtin.assert"]["that"])
         for unsupported in ("activating", "reloading", "deactivating", "static", "indirect", "transient", "linked"):
             self.assertNotIn(unsupported, lifecycle_contract)
@@ -318,7 +328,16 @@ class KeycloakRoleContractTests(unittest.TestCase):
             mode: '0600'
 """,
                     1,
-                ).replace(
+                )
+                .replace(
+                    "keycloak_deploy_staged_quadlet_file.stat.pw_name | default('') == 'root'",
+                    f"keycloak_deploy_staged_quadlet_file.stat.uid | int == {os.geteuid()}",
+                )
+                .replace(
+                    "keycloak_deploy_staged_quadlet_file.stat.gr_name | default('') == 'root'",
+                    f"keycloak_deploy_staged_quadlet_file.stat.gid | int == {os.getegid()}",
+                )
+                .replace(
                     "          retries: 30\n          delay: 5",
                     "          retries: 1\n          delay: 0",
                     2,
@@ -367,8 +386,11 @@ active=$(cat "$active_file" 2>/dev/null || printf '%s' "$default_active")
 enabled=$(cat "$enabled_file" 2>/dev/null || printf '%s' "$default_enabled")
 case "$command_name" in
   show)
-    printf 'LoadState=loaded\nActiveState=%s\nSubState=%s\nUnitFileState=%s\n' \
-      "$active" "$active" "$enabled"
+    case "$*" in
+      *--property=FragmentPath*) printf '/run/systemd/generator/%s\n' "$unit" ;;
+      *) printf 'LoadState=loaded\nActiveState=%s\nSubState=%s\nUnitFileState=%s\n' \
+           "$active" "$active" "$enabled" ;;
+    esac
     ;;
   is-active)
     printf '%s\n' "$active"
@@ -517,9 +539,24 @@ exit 0
                 self.assertIn(f"'\\n' not in {prefix}_systemd_description", contract)
                 self.assertIn(f"'\\r' not in {prefix}_systemd_description", contract)
                 self.assertIn(f"{prefix}_systemd_scope == 'system'", contract)
+                self.assertIn(f"{prefix}_quadlet_dir == '/etc/containers/systemd'", contract)
 
         keycloak_options = self._role_options("keycloak_deploy")
         self.assertEqual(keycloak_options["keycloak_deploy_systemd_scope"]["choices"], ["system"])
+
+    def test_quadlet_networks_use_exact_grammar_and_ipv4_validation(self) -> None:
+        for role, variable in (
+            ("keycloak_deploy", "keycloak_deploy_networks"),
+            ("postgres_deploy", "postgres_deploy_networks"),
+        ):
+            tasks = yaml.safe_load((ROOT / "roles" / role / "tasks" / "assert.yml").read_text(encoding="utf-8"))
+            core = "\n".join(tasks[0]["ansible.builtin.assert"]["that"])
+            validator = next(task for task in tasks if "static IPv4 addresses" in task["name"])
+            with self.subTest(role=role):
+                self.assertIn(variable, core)
+                self.assertIn("(?::ip=[0-9]{1,3}", core)
+                self.assertIn("ipaddress.ip_address", validator["ansible.builtin.command"]["argv"][2])
+                self.assertEqual(validator["when"], "':ip=' in item")
 
     def test_managed_bridge_database_requires_a_shared_normalized_network(self) -> None:
         assertions = (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
