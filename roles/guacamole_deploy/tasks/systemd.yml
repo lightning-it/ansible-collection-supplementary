@@ -497,6 +497,7 @@
           {{ ansible_failed_result.msg | default('unknown takeover failure') }}
         guacamole_deploy_cleanup_failure_message: ""
         guacamole_deploy_manifest_restore_failure_message: ""
+        guacamole_deploy_native_quadlet_restore_failure_message: ""
         guacamole_deploy_native_restore_failure_message: ""
         guacamole_deploy_native_quiescence_failure_message: ""
         guacamole_deploy_legacy_restore_failure_message: ""
@@ -546,6 +547,28 @@
           ansible.builtin.set_fact:
             guacamole_deploy_manifest_restore_failure_message: >-
               {{ ansible_failed_result.msg | default('unknown manifest restoration failure') }}
+
+    - name: Attempt exact pre-existing native Guacamole Quadlet restoration
+      when: guacamole_deploy_native_quadlet_file.stat.exists | default(false)
+      block:
+        - name: Restore exact pre-transaction native Guacamole Quadlet
+          ansible.builtin.copy:
+            dest: "{{ guacamole_deploy_quadlet_dir }}/{{ guacamole_deploy_systemd_unit_name }}.kube"
+            content: "{{ guacamole_deploy_native_quadlet_read.content | b64decode }}"
+            owner: "{{ guacamole_deploy_native_quadlet_file.stat.uid }}"
+            group: "{{ guacamole_deploy_native_quadlet_file.stat.gid }}"
+            mode: "{{ guacamole_deploy_native_quadlet_file.stat.mode }}"
+          no_log: true
+
+        - name: Reload systemd after exact native Guacamole Quadlet restoration
+          ansible.builtin.systemd:
+            daemon_reload: true
+            scope: "{{ guacamole_deploy_systemd_scope }}"
+      rescue:
+        - name: Capture failed native Guacamole Quadlet restoration
+          ansible.builtin.set_fact:
+            guacamole_deploy_native_quadlet_restore_failure_message: >-
+              {{ ansible_failed_result.msg | default('unknown native Quadlet restoration failure') }}
 
     - name: Attempt pre-existing native Guacamole service-state restoration
       block:
@@ -674,6 +697,8 @@
           {{ guacamole_deploy_cleanup_failure_message | default('') | default('none', true) }}.
           Manifest restoration failure:
           {{ guacamole_deploy_manifest_restore_failure_message | default('') | default('none', true) }}.
+          Native Quadlet restoration failure:
+          {{ guacamole_deploy_native_quadlet_restore_failure_message | default('') | default('none', true) }}.
           Native restoration failure:
           {{ guacamole_deploy_native_restore_failure_message | default('') | default('none', true) }}.
           Native quiescence failure:

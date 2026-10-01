@@ -23,10 +23,16 @@
       - guacamole_deploy_systemd_description | trim | length > 0
       - "'\\n' not in guacamole_deploy_systemd_description"
       - "'\\r' not in guacamole_deploy_systemd_description"
+      - guacamole_deploy_manifest_path is string
+      - guacamole_deploy_manifest_path | trim == guacamole_deploy_manifest_path
+      - guacamole_deploy_manifest_path is match('^/[A-Za-z0-9_./-]+\\.ya?ml\\Z')
+      - "'\\n' not in guacamole_deploy_manifest_path"
+      - "'\\r' not in guacamole_deploy_manifest_path"
       - guacamole_deploy_systemd_scope == 'system'
       - guacamole_deploy_quadlet_dir is string
       - guacamole_deploy_quadlet_dir == '/etc/containers/systemd'
       - guacamole_deploy_systemd_enabled is boolean
+      - guacamole_deploy_systemd_enabled | bool
       - guacamole_deploy_legacy_systemd_unit_path is string
       - guacamole_deploy_legacy_systemd_unit_path == '/etc/systemd/system/guacamole.service'
       - guacamole_deploy_quadlet_networks is sequence
@@ -128,7 +134,8 @@
         or guacamole_deploy_oidc_groups_claim_type | trim | length > 0
     fail_msg: >-
       Guacamole requires immutable images, Vault secrets, a bounded API session
-      timeout, an optional credential-free RFC1918 HTTP proxy URL when proxying
+      timeout, a safe absolute single-line manifest path, an enabled persistent
+      Quadlet, an optional credential-free RFC1918 HTTP proxy URL when proxying
       is enabled, and complete OIDC settings.
   no_log: true
 

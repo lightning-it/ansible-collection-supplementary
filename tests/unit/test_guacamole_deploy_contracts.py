@@ -94,6 +94,7 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         for value in (
             "guacamole_deploy_systemd_unit_name",
             "guacamole_deploy_systemd_description",
+            "guacamole_deploy_manifest_path",
             "guacamole_deploy_quadlet_dir",
             "guacamole_deploy_legacy_systemd_unit_path",
         ):
@@ -101,6 +102,73 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("^[A-Za-z0-9][A-Za-z0-9_.-]*$", contract)
         self.assertIn("'\\n' not in guacamole_deploy_systemd_description", contract)
         self.assertIn("'\\r' not in guacamole_deploy_systemd_description", contract)
+        self.assertIn("guacamole_deploy_manifest_path is match('^/", contract)
+        self.assertIn("'\\n' not in guacamole_deploy_manifest_path", contract)
+        self.assertIn("'\\r' not in guacamole_deploy_manifest_path", contract)
+        self.assertIn("guacamole_deploy_systemd_enabled | bool", contract)
+
+    def test_quadlet_interface_executably_rejects_manifest_injection_and_disabled_state(self) -> None:
+        executable = shutil.which("ansible-playbook")
+        self.assertIsNotNone(executable, "Pinned Devtools Ansible is required")
+
+        with tempfile.TemporaryDirectory(prefix="guacamole-interface-") as temporary:
+            root = Path(temporary)
+            fixture_role = root / "collections/ansible_collections/lit/supplementary/roles/guacamole_deploy"
+            fixture_role.parent.mkdir(parents=True)
+            shutil.copytree(ROLE, fixture_role)
+            config = root / "ansible.cfg"
+            config.write_text("[defaults]\nstdout_callback=default\n", encoding="utf-8")
+            cases = (
+                {"guacamole_deploy_manifest_path": "/srv/guacamole.yml\n[Install]"},
+                {"guacamole_deploy_manifest_path": "/srv/guacamole.yml\rNetwork=host"},
+                {"guacamole_deploy_systemd_enabled": False},
+            )
+            for index, overrides in enumerate(cases):
+                playbook = root / f"reject-{index}.yml"
+                playbook.write_text(
+                    yaml.safe_dump(
+                        [
+                            {
+                                "hosts": "localhost",
+                                "gather_facts": False,
+                                "vars": {
+                                    "guacamole_deploy_secrets": {
+                                        "db_password": "offline-test-db-password",
+                                        "breakglass_password": "offline-test-breakglass-password",
+                                        "breakglass_salt": "offline-test-breakglass-salt",
+                                    },
+                                    **overrides,
+                                },
+                                "tasks": [
+                                    {
+                                        "name": "Execute the real Guacamole interface assertions",
+                                        "ansible.builtin.include_role": {
+                                            "name": "lit.supplementary.guacamole_deploy",
+                                            "tasks_from": "assert",
+                                        },
+                                    }
+                                ],
+                            }
+                        ],
+                        sort_keys=False,
+                    ),
+                    encoding="utf-8",
+                )
+                result = subprocess.run(  # noqa: S603
+                    [executable, "-i", "localhost,", "-c", "local", str(playbook)],
+                    env={
+                        **os.environ,
+                        "ANSIBLE_CONFIG": str(config),
+                        "ANSIBLE_COLLECTIONS_PATH": f"{root / 'collections'}:/usr/share/ansible/collections",
+                        "ANSIBLE_LOCAL_TEMP": str(root / "ansible-tmp"),
+                        "ANSIBLE_NOCOLOR": "1",
+                    },
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=60,
+                )
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_static_network_and_proxy_bypass_are_exact_and_default_off(self) -> None:
         defaults = DEFAULTS.read_text(encoding="utf-8")
@@ -379,6 +447,14 @@ class GuacamoleDeployContractTests(unittest.TestCase):
                     "guacamole_deploy_staged_quadlet_file.stat.gr_name | default('') == 'root'",
                     f"guacamole_deploy_staged_quadlet_file.stat.gid | int == {os.getegid()}",
                 )
+                .replace(
+                    "guacamole_deploy_native_quadlet_file.stat.pw_name | default('') == 'root'",
+                    f"guacamole_deploy_native_quadlet_file.stat.uid | int == {os.geteuid()}",
+                )
+                .replace(
+                    "guacamole_deploy_native_quadlet_file.stat.gr_name | default('') == 'root'",
+                    f"guacamole_deploy_native_quadlet_file.stat.gid | int == {os.getegid()}",
+                )
                 .replace("      retries: 40\n      delay: 5\n", "      retries: 1\n      delay: 0\n", 1),
                 encoding="utf-8",
             )
@@ -420,6 +496,19 @@ class GuacamoleDeployContractTests(unittest.TestCase):
             legacy_unit.chmod(0o644)
             legacy_original = legacy_unit.read_bytes()
             native_quadlet = quadlet_dir / "guacamole-pod.kube"
+            native_original = (
+                "[Unit]\n"
+                "Description=Apache Guacamole container service\n"
+                "After=network-online.target\n"
+                "Wants=network-online.target\n\n"
+                "[Kube]\n"
+                f"Yaml={manifest}\n\n"
+                "[Install]\n"
+                "WantedBy=multi-user.target\n\n"
+            ).encode()
+            native_quadlet.write_bytes(native_original)
+            native_quadlet.chmod(0o644)
+            reload_failure_used = root / "reload-failure-used"
 
             systemctl = fake_bin / "systemctl"
             systemctl.write_text(
@@ -451,6 +540,7 @@ active_file="$FAKE_SYSTEMD_STATE/$safe_unit.active"
 enabled_file="$FAKE_SYSTEMD_STATE/$safe_unit.enabled"
 case "$unit" in
   guacamole.service) default_active=active; default_enabled=enabled ;;
+  guacamole-pod.service) default_active=inactive; default_enabled=generated ;;
   *) default_active=unknown; default_enabled=not-found ;;
 esac
 active=$(cat "$active_file" 2>/dev/null || printf '%s' "$default_active")
@@ -477,7 +567,8 @@ case "$command_name" in
   start|restart) printf active > "$active_file" ;;
   stop) printf inactive > "$active_file" ;;
   daemon-reload)
-    if [ ! -e "$FAKE_LEGACY_UNIT" ]; then
+    if [ ! -e "$FAKE_LEGACY_UNIT" ] && [ ! -e "$FAKE_RELOAD_FAILURE_USED" ]; then
+      : > "$FAKE_RELOAD_FAILURE_USED"
       exit 42
     fi
     ;;
@@ -541,6 +632,7 @@ esac
                 "FAKE_SYSTEMD_STATE": str(state),
                 "FAKE_LEGACY_UNIT": str(legacy_unit),
                 "FAKE_NATIVE_QUADLET": str(native_quadlet),
+                "FAKE_RELOAD_FAILURE_USED": str(reload_failure_used),
                 "PATH": f"{fake_bin}:{os.environ['PATH']}",
             }
             try:
@@ -565,7 +657,9 @@ esac
             self.assertTrue(legacy_unit.exists())
             self.assertEqual(legacy_unit.read_bytes(), legacy_original)
             self.assertEqual(legacy_unit.stat().st_mode & 0o777, 0o644)
-            self.assertFalse(native_quadlet.exists())
+            self.assertTrue(native_quadlet.exists())
+            self.assertEqual(native_quadlet.read_bytes(), native_original)
+            self.assertEqual(native_quadlet.stat().st_mode & 0o777, 0o644)
             service_log = log.read_text(encoding="utf-8")
             evidence = f"{output}\nSYSTEMCTL LOG:\n{service_log}"
             self.assertIn("stop guacamole.service", service_log, evidence)
