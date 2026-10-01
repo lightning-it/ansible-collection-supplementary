@@ -89,6 +89,18 @@
   changed_when: false
   failed_when: false
 
+- name: Resolve the loaded native Guacamole unit fragment
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - "{{ guacamole_deploy_systemd_unit_name }}.service"
+      - --property=FragmentPath
+      - --value
+  register: guacamole_deploy_native_fragment_path
+  changed_when: false
+  failed_when: false
+
 - name: Inspect the exact legacy Guacamole unit path
   ansible.builtin.stat:
     path: "{{ guacamole_deploy_legacy_systemd_unit_path }}"
@@ -154,7 +166,25 @@
       - guacamole_deploy_native_quadlet_file.stat.exists | default(false)
       - guacamole_deploy_native_quadlet_file.stat.isreg | default(false)
       - not (guacamole_deploy_native_quadlet_file.stat.islnk | default(false))
+      - guacamole_deploy_native_quadlet_file.stat.mode | default('') == '0644'
+      - guacamole_deploy_native_quadlet_file.stat.pw_name | default('') == 'root'
+      - guacamole_deploy_native_quadlet_file.stat.gr_name | default('') == 'root'
       - guacamole_deploy_native_quadlet_read.content | default('') | length > 0
+      - >-
+        (
+          guacamole_deploy_native_systemd_active.stdout | trim == 'unknown'
+          and guacamole_deploy_native_systemd_enabled.stdout | trim == 'not-found'
+          and guacamole_deploy_native_fragment_path.stdout | trim == ''
+        )
+        or (
+          guacamole_deploy_native_fragment_path.rc == 0
+          and guacamole_deploy_native_fragment_path.stdout | trim
+          is match(
+            '^/run/systemd/generator(?:\\.early|\\.late)?/'
+            ~ (guacamole_deploy_systemd_unit_name | regex_escape)
+            ~ '\\.service\\Z'
+          )
+        )
       - >-
         (
           guacamole_deploy_native_quadlet_read.content
@@ -311,7 +341,7 @@
       no_log: true
       register: guacamole_deploy_manifest_render
 
-    - name: Stage native Guacamole Quadlet before legacy shutdown
+    - name: Stage native Guacamole Quadlet before lifecycle mutation
       ansible.builtin.include_role:
         name: lit.foundational.podman_systemd
       vars:
@@ -323,7 +353,46 @@
         podman_systemd_quadlet_dir: "{{ guacamole_deploy_quadlet_dir }}"
         podman_systemd_enabled: false
         podman_systemd_networks: "{{ guacamole_deploy_quadlet_networks }}"
-      when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+
+    - name: Reinspect the staged native Guacamole Quadlet
+      ansible.builtin.stat:
+        path: "{{ guacamole_deploy_quadlet_dir }}/{{ guacamole_deploy_systemd_unit_name }}.kube"
+        follow: false
+      register: guacamole_deploy_staged_quadlet_file
+
+    - name: Resolve the staged native Guacamole unit fragment
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - "{{ guacamole_deploy_systemd_unit_name }}.service"
+          - --property=FragmentPath
+          - --value
+      register: guacamole_deploy_staged_fragment_path
+      changed_when: false
+      failed_when: false
+
+    - name: Require the staged native Guacamole Quadlet provenance boundary
+      ansible.builtin.assert:
+        that:
+          - guacamole_deploy_staged_quadlet_file.stat.isreg | default(false)
+          - not (guacamole_deploy_staged_quadlet_file.stat.islnk | default(false))
+          - guacamole_deploy_staged_quadlet_file.stat.mode | default('') == '0644'
+          - guacamole_deploy_staged_quadlet_file.stat.pw_name | default('') == 'root'
+          - guacamole_deploy_staged_quadlet_file.stat.gr_name | default('') == 'root'
+          - guacamole_deploy_staged_fragment_path.rc == 0
+          - >-
+            guacamole_deploy_staged_fragment_path.stdout | trim
+            is match(
+              '^/run/systemd/generator(?:\\.early|\\.late)?/'
+              ~ (guacamole_deploy_systemd_unit_name | regex_escape)
+              ~ '\\.service\\Z'
+            )
+        fail_msg: >-
+          The staged Guacamole controller is not a root-owned mode-0644
+          Quadlet with the expected generated systemd fragment; refusing
+          lifecycle mutation.
+        quiet: true
 
     - name: Stop and disable the exact legacy Guacamole unit before removal
       ansible.builtin.systemd_service:

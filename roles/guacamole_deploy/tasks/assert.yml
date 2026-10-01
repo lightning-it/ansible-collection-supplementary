@@ -23,12 +23,12 @@
       - guacamole_deploy_systemd_description | trim | length > 0
       - "'\\n' not in guacamole_deploy_systemd_description"
       - "'\\r' not in guacamole_deploy_systemd_description"
-      - guacamole_deploy_systemd_scope in ['system', 'user']
+      - guacamole_deploy_systemd_scope == 'system'
       - guacamole_deploy_quadlet_dir is string
-      - guacamole_deploy_quadlet_dir | trim | length > 0
+      - guacamole_deploy_quadlet_dir == '/etc/containers/systemd'
       - guacamole_deploy_systemd_enabled is boolean
       - guacamole_deploy_legacy_systemd_unit_path is string
-      - guacamole_deploy_legacy_systemd_unit_path | trim | length > 0
+      - guacamole_deploy_legacy_systemd_unit_path == '/etc/systemd/system/guacamole.service'
       - guacamole_deploy_quadlet_networks is sequence
       - guacamole_deploy_quadlet_networks is not string
       - >-

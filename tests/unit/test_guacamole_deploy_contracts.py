@@ -165,14 +165,19 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("Refuse unproven drift in an existing native Guacamole Quadlet", systemd_tasks)
         self.assertIn("guacamole_deploy_native_quadlet_file.stat.isreg", systemd_tasks)
         self.assertIn("not (guacamole_deploy_native_quadlet_file.stat.islnk", systemd_tasks)
+        self.assertIn("guacamole_deploy_native_quadlet_file.stat.mode | default('') == '0644'", systemd_tasks)
+        self.assertIn("guacamole_deploy_native_quadlet_file.stat.pw_name | default('') == 'root'", systemd_tasks)
+        self.assertIn("Resolve the loaded native Guacamole unit fragment", systemd_tasks)
+        self.assertIn("^/run/systemd/generator", systemd_tasks)
         self.assertIn("guacamole_deploy_native_systemd_active.stdout | trim in ['active', 'failed']", systemd_tasks)
         self.assertNotIn("guacamole_deploy_native_systemd_active.stdout | trim != 'unknown'", systemd_tasks)
         self.assertIn("Refuse unmanaged Guacamole pod; remove it first", systemd_tasks)
         self.assertIn("not (guacamole_deploy_legacy_unit_stat.stat.islnk", systemd_tasks)
         self.assertIn(
-            "Stop and disable the exact legacy Guacamole unit before removal",
+            "Stage native Guacamole Quadlet before lifecycle mutation",
             systemd_tasks,
         )
+        self.assertIn("Require the staged native Guacamole Quadlet provenance boundary", systemd_tasks)
         self.assertIn(
             'name: "{{ guacamole_deploy_legacy_systemd_unit_path | basename }}"',
             systemd_tasks,
@@ -285,6 +290,8 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("in ['active', 'inactive']", contract)
         self.assertIn("in ['enabled', 'disabled']", contract)
         self.assertIn("guacamole_deploy_native_systemd_active.stdout | trim != 'failed'", contract)
+        self.assertIn("guacamole_deploy_systemd_scope == 'system'", ASSERTS.read_text(encoding="utf-8"))
+        self.assertIn("guacamole_deploy_quadlet_dir == '/etc/containers/systemd'", ASSERTS.read_text(encoding="utf-8"))
 
     def test_no_legacy_rollback_proves_transaction_created_native_is_inactive(self) -> None:
         tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
