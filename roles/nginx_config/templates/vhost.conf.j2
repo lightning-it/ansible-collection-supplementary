@@ -162,15 +162,6 @@ server {
 {% if item.locations is defined and item.locations | length > 0 %}
 {% for location in item.locations %}
   location {{ location.path | default('/') }} {
-{% if nginx_config_waf_enabled | bool %}
-{% for directive in nginx_config_waf_location_directives %}
-{% set _directive = directive | trim %}
-{% set _single_statement = '\\' not in _directive and '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') and _name(_directive) != 'include' %}
-{% if _single_statement %}
-    {{ _directive }}{{ '' if _directive.endswith(';') else ';' }}
-{% endif %}
-{% endfor %}
-{% endif %}
 {% for directive in location.directives | default([]) %}
 {% set _directive = directive | trim %}
 {% set _single_statement = '\\' not in _directive and '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') and _name(_directive) != 'include' %}
