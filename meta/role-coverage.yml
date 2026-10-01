@@ -797,7 +797,7 @@ roles:
     application_acceptance: "experimental"
     acceptance_surface: "browser_oidc_breakglass_and_rdp_session"
     dependencies:
-      - "lit.foundational.kubeplay"
+      - "lit.foundational.podman_systemd"
     external_dependencies:
       - "Keycloak OIDC provider"
       - "RDP destination reachable through the management VLAN"
@@ -812,6 +812,9 @@ roles:
       - >-
         Absolute RDP session duration remains a consumer or backend policy;
         the role controls the inactive Guacamole web/API session timeout.
+      - >-
+        Persistent lifecycle uses native Quadlet; the role no longer executes
+        podman kube play directly.
     deprecation_state: "active"
     scenario_support:
       tiny: []
@@ -1160,7 +1163,6 @@ roles:
     acceptance_surface: "generate_transport_ingest_and_query_logs"
     dependencies:
       - "lit.foundational.kubeplay"
-      - "lit.foundational.podman_systemd"
     external_dependencies: []
     known_limitations:
       - "Current Incus scenario verifies service and port state only."
@@ -1641,6 +1643,7 @@ roles:
     acceptance_surface: "real_client_transaction_permissions_persistence_and_restore"
     dependencies:
       - "lit.foundational.kubeplay"
+      - "lit.foundational.podman_systemd"
     external_dependencies: []
     known_limitations:
       - "Root scenario is a syntax stub; Keycloak exercises deployment only indirectly."

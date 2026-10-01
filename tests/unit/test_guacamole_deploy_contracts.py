@@ -5,12 +5,16 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "main.yml"
 ASSERTS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "assert.yml"
 DEFAULTS = ROOT / "roles" / "guacamole_deploy" / "defaults" / "main.yml"
 POD = ROOT / "roles" / "guacamole_deploy" / "templates" / "guacamole-pod.yml.j2"
-SERVICE = ROOT / "roles" / "guacamole_deploy" / "templates" / "guacamole.service.j2"
+SYSTEMD_TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "systemd.yml"
+HANDLERS = ROOT / "roles" / "guacamole_deploy" / "handlers" / "main.yml"
+LEGACY_SERVICE = ROOT / "roles" / "guacamole_deploy" / "templates" / "guacamole.service.j2"
 OIDC_GROUP_TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "reconcile_oidc_groups.yml"
 
 
@@ -71,20 +75,144 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         defaults = DEFAULTS.read_text(encoding="utf-8")
         asserts = ASSERTS.read_text(encoding="utf-8")
         pod = POD.read_text(encoding="utf-8")
-        service = SERVICE.read_text(encoding="utf-8")
+        systemd_tasks = SYSTEMD_TASKS.read_text(encoding="utf-8")
 
         self.assertIn('guacamole_deploy_network_name: ""', defaults)
         self.assertIn('guacamole_deploy_network_ipv4: ""', defaults)
         self.assertIn("guacamole_deploy_no_proxy: []", defaults)
+        self.assertIn('guacamole_deploy_proxy_url: ""', defaults)
         self.assertIn("(guacamole_deploy_network_name | length == 0)", asserts)
         self.assertIn("== (guacamole_deploy_network_ipv4 | length == 0)", asserts)
         self.assertIn("guacamole_deploy_no_proxy | unique", asserts)
-        self.assertIn("--network {{ guacamole_deploy_network_name }}:ip={{ guacamole_deploy_network_ipv4 }}", service)
+        self.assertIn("guacamole_deploy_quadlet_networks", defaults)
+        self.assertIn(
+            'podman_systemd_networks: "{{ guacamole_deploy_quadlet_networks }}"',
+            systemd_tasks,
+        )
         self.assertIn("name: no_proxy", pod)
         self.assertIn("name: NO_PROXY", pod)
+        self.assertIn("name: HTTPS_PROXY", pod)
+        self.assertIn("name: JAVA_TOOL_OPTIONS", pod)
+        self.assertIn("-Dhttp.proxyHost=", pod)
+        self.assertIn("-Dhttp.proxyPort=", pod)
+        self.assertIn("-Dhttps.proxyHost=", pod)
+        self.assertIn("-Dhttps.proxyPort=", pod)
+        self.assertIn("-Dhttp.nonProxyHosts=", pod)
+        self.assertIn("guacamole_deploy_proxy_url | to_json", pod)
+        self.assertIn("':[1-9][0-9]{0,4}\\\\Z'", asserts)
+        self.assertIn("regex_replace('^.*:([0-9]+)$', '\\\\1')", asserts)
+        self.assertIn(") <= 65535", asserts)
         self.assertIn("guacamole_deploy_no_proxy | join(',') | to_json", pod)
+        non_application_containers = pod.split("    - name: guacamole", 1)[0]
+        self.assertNotIn("http_proxy", non_application_containers)
+        self.assertNotIn("HTTP_PROXY", non_application_containers)
+        self.assertNotIn("HTTPS_PROXY", non_application_containers)
+        self.assertNotIn("JAVA_TOOL_OPTIONS", non_application_containers)
 
-    def test_oidc_group_claim_and_exact_connection_permissions_are_explicit(self) -> None:
+    def test_persistent_lifecycle_uses_only_native_quadlet(self) -> None:
+        tasks = TASKS.read_text(encoding="utf-8")
+        systemd_tasks = SYSTEMD_TASKS.read_text(encoding="utf-8")
+        handlers = HANDLERS.read_text(encoding="utf-8")
+        defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
+
+        self.assertFalse(LEGACY_SERVICE.exists())
+        self.assertEqual(defaults["guacamole_deploy_systemd_unit_name"], "{{ guacamole_deploy_pod_name }}-pod")
+        self.assertIn("include_tasks: systemd.yml", tasks)
+        self.assertIn("name: lit.foundational.podman_systemd", systemd_tasks)
+        self.assertIn(
+            "guacamole_deploy_manage_systemd | bool or guacamole_deploy_skip_runtime | bool",
+            ASSERTS.read_text(encoding="utf-8"),
+        )
+        self.assertLess(
+            systemd_tasks.index("Refuse an unsafe legacy Guacamole unit path before reading"),
+            systemd_tasks.index("Read the exact legacy Guacamole unit before takeover"),
+        )
+        self.assertIn("guacamole_deploy_legacy_unit_stat.stat.isreg", systemd_tasks)
+        self.assertIn("no_log: true", systemd_tasks)
+        self.assertIn("Refuse to replace an unknown Guacamole systemd unit", systemd_tasks)
+        self.assertIn("Resolve the loaded legacy Guacamole unit fragment", systemd_tasks)
+        self.assertIn("Refuse a legacy Guacamole unit loaded from an unexpected fragment", systemd_tasks)
+        self.assertIn("--property=FragmentPath", systemd_tasks)
+        self.assertIn("Refuse unproven drift in an existing native Guacamole Quadlet", systemd_tasks)
+        self.assertIn("guacamole_deploy_native_quadlet_file.stat.isreg", systemd_tasks)
+        self.assertIn("not (guacamole_deploy_native_quadlet_file.stat.islnk", systemd_tasks)
+        self.assertIn("guacamole_deploy_native_systemd_active.stdout | trim in ['active', 'failed']", systemd_tasks)
+        self.assertNotIn("guacamole_deploy_native_systemd_active.stdout | trim != 'unknown'", systemd_tasks)
+        self.assertIn("Refuse unmanaged Guacamole pod; remove it first", systemd_tasks)
+        self.assertIn("not (guacamole_deploy_legacy_unit_stat.stat.islnk", systemd_tasks)
+        self.assertIn(
+            "Stop and disable the exact legacy Guacamole unit before removal",
+            systemd_tasks,
+        )
+        self.assertIn(
+            'name: "{{ guacamole_deploy_legacy_systemd_unit_path | basename }}"',
+            systemd_tasks,
+        )
+        self.assertLess(
+            systemd_tasks.index("Stop and disable the exact legacy Guacamole unit before removal"),
+            systemd_tasks.index("Remove the verified legacy Guacamole systemd unit"),
+        )
+        self.assertLess(
+            systemd_tasks.index("Wait for Guacamole readiness before committing legacy removal"),
+            systemd_tasks.index("Remove the verified legacy Guacamole systemd unit"),
+        )
+        self.assertIn("Attempt exact legacy Guacamole restoration after failed takeover", systemd_tasks)
+        self.assertIn("Require native Guacamole inactivity before legacy restoration", systemd_tasks)
+        self.assertIn("guacamole_deploy_legacy_unit_raw.content | b64decode", systemd_tasks)
+        self.assertIn("Restore the exact pre-transaction Guacamole Pod manifest", systemd_tasks)
+        self.assertIn("Remove a transaction-created Guacamole Pod manifest", systemd_tasks)
+        self.assertIn("Restore generated native Guacamole service state after failure", systemd_tasks)
+        self.assertLess(
+            systemd_tasks.index("Restore the exact pre-transaction Guacamole Pod manifest"),
+            systemd_tasks.index("Restore generated native Guacamole service state after failure"),
+        )
+        self.assertIn("Capture the exact pre-transaction Guacamole Pod manifest", systemd_tasks)
+        self.assertIn("Render the transactional Guacamole Pod manifest", systemd_tasks)
+        self.assertIn("guacamole_deploy_legacy_unit_stat.stat.exists | bool", systemd_tasks)
+        self.assertIn("Reload systemd after verified legacy Guacamole unit removal", handlers)
+        self.assertIn("notify: Reload systemd after verified legacy Guacamole unit removal", systemd_tasks)
+        self.assertLess(
+            systemd_tasks.index("Remove the verified legacy Guacamole systemd unit"),
+            systemd_tasks.index("Flush systemd reload after verified legacy Guacamole unit removal"),
+        )
+        self.assertNotIn("- name: Wait for Guacamole readiness\n", tasks)
+        self.assertNotIn("podman kube play", tasks)
+        self.assertNotIn("podman kube down", tasks)
+        self.assertIn(
+            "guacamole_deploy_legacy_systemd_unit_path: >-\n  /etc/systemd/system/guacamole.service",
+            DEFAULTS.read_text(encoding="utf-8"),
+        )
+
+    def test_legacy_takeover_requires_the_exact_ordered_unit_contract(self) -> None:
+        tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
+        task_map = {task["name"]: task for task in tasks}
+        normalize = task_map["Normalize the role-owned legacy Guacamole unit contract"]
+        validate = task_map["Refuse to replace an unknown Guacamole systemd unit"]
+        expected = normalize["ansible.builtin.set_fact"]["guacamole_deploy_legacy_unit_expected_lines"]
+        actual_expression = normalize["ansible.builtin.set_fact"]["guacamole_deploy_legacy_unit_actual_lines"]
+
+        self.assertIn("reject('match', '^#')", actual_expression)
+        self.assertEqual(expected[0], "[Unit]")
+        self.assertEqual(expected[-1], "WantedBy=multi-user.target")
+        self.assertEqual(sum(line.startswith("ExecStart=") for line in expected), 1)
+        self.assertEqual(sum(line.startswith("ExecStop=") for line in expected), 1)
+        self.assertIn("--network {{ guacamole_deploy_network_name }}:ip=", "\n".join(expected))
+        self.assertEqual(
+            validate["ansible.builtin.assert"]["that"],
+            ["guacamole_deploy_legacy_unit_actual_lines == guacamole_deploy_legacy_unit_expected_lines"],
+        )
+        transaction = task_map["Cut over to native Guacamole Quadlet with rollback"]
+        transaction_names = [task["name"] for task in transaction["block"]]
+        self.assertLess(tasks.index(normalize), tasks.index(validate))
+        self.assertLess(tasks.index(validate), tasks.index(transaction))
+        self.assertIn(
+            "Stop and disable the exact legacy Guacamole unit before removal",
+            transaction_names,
+        )
+
+    def test_oidc_group_claim_and_exact_connection_permissions_are_explicit(
+        self,
+    ) -> None:
         defaults = DEFAULTS.read_text(encoding="utf-8")
         asserts = ASSERTS.read_text(encoding="utf-8")
         pod = POD.read_text(encoding="utf-8")
