@@ -10,8 +10,9 @@ security_fixes:
     service or pod.
   - >-
     Make Keycloak and PostgreSQL legacy-to-Quadlet cutover transactional by
-    quiescing failed native controllers and restoring the exact prior service
-    state before reporting a deployment failure.
+    capturing the Pod manifest before rendering, quiescing failed native
+    controllers, and restoring the exact prior manifest and service state,
+    including generated units, before reporting a deployment failure.
 breaking_changes:
   - >-
     Require an explicit PostgreSQL private endpoint and container port for

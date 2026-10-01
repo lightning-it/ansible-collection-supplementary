@@ -324,6 +324,7 @@
           {{ ansible_failed_result.msg | default('unknown takeover failure') }}
         guacamole_deploy_cleanup_failure_message: ""
         guacamole_deploy_manifest_restore_failure_message: ""
+        guacamole_deploy_native_restore_failure_message: ""
         guacamole_deploy_native_quiescence_failure_message: ""
         guacamole_deploy_legacy_restore_failure_message: ""
         guacamole_deploy_native_quiescence_proven: false
@@ -344,15 +345,6 @@
             podman_systemd_networks: "{{ guacamole_deploy_quadlet_networks }}"
           when: not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
 
-        - name: Restore pre-existing native Guacamole service state after failure
-          ansible.builtin.systemd:
-            name: "{{ guacamole_deploy_systemd_unit_name }}.service"
-            state: >-
-              {{ 'started' if guacamole_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
-            enabled: >-
-              {{ guacamole_deploy_native_systemd_enabled.stdout | trim == 'enabled' }}
-            scope: "{{ guacamole_deploy_systemd_scope }}"
-          when: guacamole_deploy_native_systemd_enabled.stdout | trim in ['enabled', 'disabled']
       rescue:
         - name: Capture failed native Guacamole cleanup
           ansible.builtin.set_fact:
@@ -381,6 +373,31 @@
           ansible.builtin.set_fact:
             guacamole_deploy_manifest_restore_failure_message: >-
               {{ ansible_failed_result.msg | default('unknown manifest restoration failure') }}
+
+    - name: Attempt pre-existing native Guacamole service-state restoration
+      block:
+        - name: Restore enabled or disabled native Guacamole service state after failure
+          ansible.builtin.systemd:
+            name: "{{ guacamole_deploy_systemd_unit_name }}.service"
+            state: >-
+              {{ 'started' if guacamole_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+            enabled: >-
+              {{ guacamole_deploy_native_systemd_enabled.stdout | trim == 'enabled' }}
+            scope: "{{ guacamole_deploy_systemd_scope }}"
+          when: guacamole_deploy_native_systemd_enabled.stdout | trim in ['enabled', 'disabled']
+
+        - name: Restore generated native Guacamole service state after failure
+          ansible.builtin.systemd:
+            name: "{{ guacamole_deploy_systemd_unit_name }}.service"
+            state: >-
+              {{ 'started' if guacamole_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+            scope: "{{ guacamole_deploy_systemd_scope }}"
+          when: guacamole_deploy_native_systemd_enabled.stdout | trim == 'generated'
+      rescue:
+        - name: Capture failed pre-existing native Guacamole restoration
+          ansible.builtin.set_fact:
+            guacamole_deploy_native_restore_failure_message: >-
+              {{ ansible_failed_result.msg | default('unknown native restoration failure') }}
 
     - name: Prove the failed native Guacamole controller is inactive
       when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
@@ -456,6 +473,8 @@
           {{ guacamole_deploy_cleanup_failure_message | default('') | default('none', true) }}.
           Manifest restoration failure:
           {{ guacamole_deploy_manifest_restore_failure_message | default('') | default('none', true) }}.
+          Native restoration failure:
+          {{ guacamole_deploy_native_restore_failure_message | default('') | default('none', true) }}.
           Native quiescence failure:
           {{ guacamole_deploy_native_quiescence_failure_message | default('') | default('none', true) }}.
           Legacy restoration failure:

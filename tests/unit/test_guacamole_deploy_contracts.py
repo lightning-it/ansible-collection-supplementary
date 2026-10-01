@@ -159,6 +159,11 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("guacamole_deploy_legacy_unit_raw.content | b64decode", systemd_tasks)
         self.assertIn("Restore the exact pre-transaction Guacamole Pod manifest", systemd_tasks)
         self.assertIn("Remove a transaction-created Guacamole Pod manifest", systemd_tasks)
+        self.assertIn("Restore generated native Guacamole service state after failure", systemd_tasks)
+        self.assertLess(
+            systemd_tasks.index("Restore the exact pre-transaction Guacamole Pod manifest"),
+            systemd_tasks.index("Restore generated native Guacamole service state after failure"),
+        )
         self.assertIn("Capture the exact pre-transaction Guacamole Pod manifest", tasks)
         self.assertNotIn("- name: Wait for Guacamole readiness\n", tasks)
         self.assertNotIn("podman kube play", tasks)

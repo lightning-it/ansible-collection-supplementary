@@ -417,7 +417,7 @@
   tags:
     - deployment
 
-- name: Render Keycloak Pod manifest
+- name: Render Keycloak Pod manifest for explicit non-systemd mode
   ansible.builtin.template:
     src: keycloak-pod.yml.j2
     dest: "{{ keycloak_deploy_pod_manifest_path }}"
@@ -428,6 +428,7 @@
   notify:
     - Recreate keycloak pod
     - Run keycloak pod
+  when: not keycloak_deploy_manage_systemd | bool
   tags:
     - deployment
 

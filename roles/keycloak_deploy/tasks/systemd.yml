@@ -70,6 +70,33 @@
         - keycloak_deploy_native_quadlet_file.stat.isreg | default(false)
         - not (keycloak_deploy_native_quadlet_file.stat.islnk | default(false))
 
+    - name: Inspect the pre-transaction Keycloak Pod manifest
+      ansible.builtin.stat:
+        path: "{{ keycloak_deploy_pod_manifest_path }}"
+        follow: false
+      register: keycloak_deploy_original_manifest_file
+
+    - name: Refuse an unsafe Keycloak Pod manifest before rendering
+      ansible.builtin.assert:
+        that:
+          - not (keycloak_deploy_original_manifest_file.stat.islnk | default(false))
+          - keycloak_deploy_original_manifest_file.stat.isreg | default(false)
+        fail_msg: >-
+          The Keycloak Pod manifest exists but is not a regular file. Refusing
+          to follow or replace it during transactional Quadlet cutover.
+        quiet: true
+      when: keycloak_deploy_original_manifest_file.stat.exists | default(false)
+
+    - name: Read the pre-transaction Keycloak Pod manifest
+      ansible.builtin.slurp:
+        src: "{{ keycloak_deploy_pod_manifest_path }}"
+      register: keycloak_deploy_original_manifest_read
+      no_log: true
+      when:
+        - keycloak_deploy_original_manifest_file.stat.exists | default(false)
+        - keycloak_deploy_original_manifest_file.stat.isreg | default(false)
+        - not (keycloak_deploy_original_manifest_file.stat.islnk | default(false))
+
     - name: Refuse unknown Keycloak lifecycle states
       ansible.builtin.assert:
         that:
@@ -160,6 +187,16 @@
 
     - name: Cut over to native Keycloak Quadlet with rollback
       block:
+        - name: Render the transactional Keycloak Pod manifest
+          ansible.builtin.template:
+            src: keycloak-pod.yml.j2
+            dest: "{{ keycloak_deploy_pod_manifest_path }}"
+            owner: root
+            group: root
+            mode: '0600'
+          register: keycloak_deploy_manifest_render
+          no_log: true
+
         - name: Stage the native Keycloak Quadlet before legacy shutdown
           ansible.builtin.include_role:
             name: lit.foundational.podman_systemd
@@ -193,7 +230,8 @@
               {{
                 'restarted'
                 if (
-                  keycloak_deploy_kubeplay_remove | default(false) | bool
+                  keycloak_deploy_manifest_render.changed | default(false) | bool
+                  or keycloak_deploy_kubeplay_remove | default(false) | bool
                   or keycloak_deploy_kubeplay_run | default(false) | bool
                   or keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
                   or keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
@@ -237,6 +275,8 @@
             keycloak_deploy_takeover_failure_message: >-
               {{ ansible_failed_result.msg | default('unknown takeover failure') }}
             keycloak_deploy_cleanup_failure_message: ""
+            keycloak_deploy_manifest_restore_failure_message: ""
+            keycloak_deploy_native_restore_failure_message: ""
             keycloak_deploy_native_quiescence_failure_message: ""
             keycloak_deploy_legacy_restore_failure_message: ""
             keycloak_deploy_native_quiescence_proven: false
@@ -257,7 +297,38 @@
                 podman_systemd_networks: "{{ keycloak_deploy_networks }}"
               when: not (keycloak_deploy_native_quadlet_file.stat.exists | default(false))
 
-            - name: Restore pre-existing native Keycloak service state after failure
+          rescue:
+            - name: Capture failed native Keycloak cleanup
+              ansible.builtin.set_fact:
+                keycloak_deploy_cleanup_failure_message: >-
+                  {{ ansible_failed_result.msg | default('unknown cleanup failure') }}
+
+        - name: Attempt exact Keycloak Pod manifest restoration
+          block:
+            - name: Restore the exact pre-transaction Keycloak Pod manifest
+              ansible.builtin.copy:
+                dest: "{{ keycloak_deploy_pod_manifest_path }}"
+                content: "{{ keycloak_deploy_original_manifest_read.content | b64decode }}"
+                owner: "{{ keycloak_deploy_original_manifest_file.stat.uid }}"
+                group: "{{ keycloak_deploy_original_manifest_file.stat.gid }}"
+                mode: "{{ keycloak_deploy_original_manifest_file.stat.mode }}"
+              no_log: true
+              when: keycloak_deploy_original_manifest_file.stat.exists | default(false)
+
+            - name: Remove a transaction-created Keycloak Pod manifest
+              ansible.builtin.file:
+                path: "{{ keycloak_deploy_pod_manifest_path }}"
+                state: absent
+              when: not (keycloak_deploy_original_manifest_file.stat.exists | default(false))
+          rescue:
+            - name: Capture failed Keycloak Pod manifest restoration
+              ansible.builtin.set_fact:
+                keycloak_deploy_manifest_restore_failure_message: >-
+                  {{ ansible_failed_result.msg | default('unknown manifest restoration failure') }}
+
+        - name: Attempt pre-existing native Keycloak service-state restoration
+          block:
+            - name: Restore enabled or disabled native Keycloak service state after failure
               ansible.builtin.systemd:
                 name: "{{ keycloak_deploy_systemd_unit_name }}.service"
                 state: >-
@@ -266,11 +337,19 @@
                   {{ keycloak_deploy_native_systemd_enabled.stdout | trim == 'enabled' }}
                 scope: "{{ keycloak_deploy_systemd_scope }}"
               when: keycloak_deploy_native_systemd_enabled.stdout | trim in ['enabled', 'disabled']
+
+            - name: Restore generated native Keycloak service state after failure
+              ansible.builtin.systemd:
+                name: "{{ keycloak_deploy_systemd_unit_name }}.service"
+                state: >-
+                  {{ 'started' if keycloak_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+                scope: "{{ keycloak_deploy_systemd_scope }}"
+              when: keycloak_deploy_native_systemd_enabled.stdout | trim == 'generated'
           rescue:
-            - name: Capture failed native Keycloak cleanup
+            - name: Capture failed pre-existing native Keycloak restoration
               ansible.builtin.set_fact:
-                keycloak_deploy_cleanup_failure_message: >-
-                  {{ ansible_failed_result.msg | default('unknown cleanup failure') }}
+                keycloak_deploy_native_restore_failure_message: >-
+                  {{ ansible_failed_result.msg | default('unknown native restoration failure') }}
 
         - name: Prove the failed native Keycloak controller is inactive
           when: >-
@@ -335,6 +414,10 @@
               {{ keycloak_deploy_takeover_failure_message }}.
               Cleanup failure:
               {{ keycloak_deploy_cleanup_failure_message | default('') | default('none', true) }}.
+              Manifest restoration failure:
+              {{ keycloak_deploy_manifest_restore_failure_message | default('') | default('none', true) }}.
+              Native restoration failure:
+              {{ keycloak_deploy_native_restore_failure_message | default('') | default('none', true) }}.
               Native quiescence failure:
               {{ keycloak_deploy_native_quiescence_failure_message | default('') | default('none', true) }}.
               Legacy restoration failure:

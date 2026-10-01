@@ -291,7 +291,7 @@
   tags:
     - deployment
 
-- name: Render PostgreSQL Pod manifest
+- name: Render PostgreSQL Pod manifest for explicit non-systemd mode
   ansible.builtin.template:
     src: postgres-pod.yml.j2
     dest: "{{ postgres_deploy_pod_manifest_path }}"
@@ -300,6 +300,7 @@
   notify:
     - Recreate postgres pod
     - Run postgres pod
+  when: not postgres_deploy_manage_systemd | bool
   tags:
     - deployment
 

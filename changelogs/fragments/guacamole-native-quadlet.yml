@@ -11,4 +11,5 @@ security_fixes:
     if native startup or readiness fails.
   - >-
     Validate the loaded legacy systemd fragment and restore the exact
-    pre-transaction Pod manifest before restarting the legacy controller.
+    pre-transaction Pod manifest before restoring the exact prior native or
+    legacy controller state, including generated native units.

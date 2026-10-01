@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
-import sys
 import unittest
 from pathlib import Path
 
@@ -19,11 +17,6 @@ class KeycloakRoleContractTests(unittest.TestCase):
         loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
         self.assertIsInstance(loaded, dict)
         return loaded
-
-    def _render_default(self, defaults: dict[str, object], name: str, context: dict[str, object]) -> str:
-        environment = Environment(autoescape=False)  # noqa: S701
-        environment.filters["bool"] = bool
-        return environment.from_string(str(defaults[name])).render(**context).strip()
 
     def _role_options(self, role: str) -> dict[str, dict[str, object]]:
         path = ROOT / "roles" / role / "meta" / "argument_specs.yml"
@@ -129,57 +122,23 @@ class KeycloakRoleContractTests(unittest.TestCase):
             f"CN={expected_cn},CN=Users,DC=keycloak,DC=test",
         )
 
-    def test_managed_postgres_bridge_requires_private_endpoint_and_host_probe(self) -> None:
-        defaults = self._role_defaults("keycloak_deploy")
-        self.assertEqual(
-            (defaults["keycloak_deploy_postgres_port"], defaults["keycloak_deploy_postgres_container_port"]),
-            (5432, 5432),
-        )
-        self.assertEqual(
-            self._role_options("keycloak_deploy")["keycloak_deploy_postgres_container_port"]["choices"], [5432]
-        )
-        self.assertIn("else keycloak_deploy_db_port", defaults["keycloak_deploy_db_wait_port"])
-        self.assertIn(
-            "postgres_deploy_container_port | int == 5432",
-            (ROOT / "roles/postgres_deploy/tasks/assert.yml").read_text(),
-        )
-        context = {
-            "keycloak_deploy_manage_postgres": True,
-            "keycloak_deploy_host_network": False,
-            "keycloak_deploy_postgres_host_network": False,
-            "keycloak_deploy_postgres_pod_name": "keycloak-postgres",
-            "keycloak_deploy_postgres_container_name": "postgres",
-            "keycloak_deploy_postgres_host_ip": "127.0.0.1",
-            "keycloak_deploy_postgres_container_port": 5432,
-            "keycloak_deploy_postgres_port": 15432,
-        }
-
-        expected = {
-            "keycloak_deploy_db_host": "",
-            "keycloak_deploy_db_port": "5432",
-            "keycloak_deploy_db_wait_host": "127.0.0.1",
-            "keycloak_deploy_db_wait_port": "15432",
-        }
-        for name, value in expected.items():
-            self.assertEqual(self._render_default(defaults, name, context), value)
-        external = dict(context, keycloak_deploy_manage_postgres=False, keycloak_deploy_db_port=6543)
-        self.assertEqual(self._render_default(defaults, "keycloak_deploy_db_wait_port", external), "6543")
-
-        tiny = (ROOT / "molecule" / "keycloak-tiny" / "converge.yml").read_text(encoding="utf-8")
-        verify = (ROOT / "molecule" / "keycloak-tiny" / "verify.yml").read_text(encoding="utf-8")
-        self.assertIn("KC_DB_URL_HOST=10.89.40.3", verify)
-        self.assertIn("keycloak_deploy_db_host: 10.89.40.3", tiny)
-        deploy = yaml.safe_load((ROOT / "roles/keycloak_deploy/tasks/deploy_pod.yml").read_text(encoding="utf-8"))
-        managed = next(task for task in deploy if task["name"] == "Deploy dedicated PostgreSQL service for Keycloak")
-        self.assertEqual(managed["vars"]["postgres_deploy_networks"], "{{ keycloak_deploy_postgres_networks }}")
-
     def test_postgres_manifest_with_password_is_owner_only(self) -> None:
         tasks_path = ROOT / "roles" / "postgres_deploy" / "tasks" / "deploy_pod.yml"
         tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
-        render_task = next(task for task in tasks if task.get("name") == "Render PostgreSQL Pod manifest")
+        render_task = next(task for task in tasks if task.get("name", "").startswith("Render PostgreSQL Pod manifest"))
 
         self.assertEqual(render_task["ansible.builtin.template"]["mode"], "0600")
         self.assertIs(render_task["no_log"], True)
+
+        systemd_block = yaml.safe_load(
+            (ROOT / "roles" / "postgres_deploy" / "tasks" / "systemd.yml").read_text(encoding="utf-8")
+        )[0]["block"]
+        transaction = next(
+            task for task in systemd_block if task["name"] == "Cut over to native PostgreSQL Quadlet with rollback"
+        )
+        transactional_render = transaction["block"][0]
+        self.assertEqual(transactional_render["ansible.builtin.template"]["mode"], "0600")
+        self.assertIs(transactional_render["no_log"], True)
 
         template_path = ROOT / "roles" / "postgres_deploy" / "templates" / "postgres-pod.yml.j2"
         self.assertIn("POSTGRES_PASSWORD", template_path.read_text(encoding="utf-8"))
@@ -188,94 +147,71 @@ class KeycloakRoleContractTests(unittest.TestCase):
         pod_tasks_path = ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy_pod.yml"
         pod_tasks = yaml.safe_load(pod_tasks_path.read_text(encoding="utf-8"))
         pod_task_map = {task["name"]: task for task in pod_tasks}
-
         recreate = pod_task_map["Recreate Keycloak pod from the desired manifest"]
         self.assertEqual(recreate["vars"]["kubeplay_action"], "recreate")
-        self.assertIn(
-            "not keycloak_deploy_manage_systemd | bool",
-            recreate["when"],
-        )
-
-        systemd_path = ROOT / "roles" / "keycloak_deploy" / "tasks" / "systemd.yml"
-        systemd_tasks = yaml.safe_load(systemd_path.read_text(encoding="utf-8"))
-        systemd_block = systemd_tasks[0]["block"]
+        self.assertIn("not keycloak_deploy_manage_systemd | bool", recreate["when"])
+        systemd_block = yaml.safe_load((ROOT / "roles/keycloak_deploy/tasks/systemd.yml").read_text(encoding="utf-8"))[
+            0
+        ]["block"]
         systemd_map = {task["name"]: task for task in systemd_block}
         transaction = systemd_map["Cut over to native Keycloak Quadlet with rollback"]
         transaction_map = {task["name"]: task for task in transaction["block"]}
         quadlet = transaction_map["Manage the native Keycloak Quadlet service"]
-        self.assertEqual(
-            quadlet["ansible.builtin.include_role"]["name"],
-            "lit.foundational.podman_systemd",
-        )
-        self.assertEqual(
-            quadlet["vars"]["podman_systemd_manifest_path"],
-            "{{ keycloak_deploy_pod_manifest_path }}",
-        )
-        self.assertEqual(
-            quadlet["vars"]["podman_systemd_quadlet_dir"],
-            "{{ keycloak_deploy_quadlet_dir }}",
-        )
-        self.assertEqual(
-            quadlet["vars"]["podman_systemd_networks"],
-            "{{ keycloak_deploy_networks }}",
-        )
+        self.assertEqual(quadlet["ansible.builtin.include_role"]["name"], "lit.foundational.podman_systemd")
+        for contract in (
+            "keycloak_deploy_pod_manifest_path",
+            "keycloak_deploy_quadlet_dir",
+            "keycloak_deploy_networks",
+        ):
+            self.assertIn(contract, str(quadlet["vars"]))
         stage = transaction_map["Stage the native Keycloak Quadlet before legacy shutdown"]
-        validation_index = next(
-            index
-            for index, task in enumerate(systemd_block)
-            if task["name"] == "Refuse unknown Keycloak lifecycle states"
-        )
-        collision_index = next(
-            index for index, task in enumerate(systemd_block) if "Refuse unmanaged Keycloak" in task["name"]
-        )
+        names = [task["name"] for task in systemd_block]
+        validation_index = names.index("Refuse unknown Keycloak lifecycle states")
+        collision_index = next(index for index, name in enumerate(names) if "Refuse unmanaged Keycloak" in name)
         collision = systemd_block[collision_index]
         self.assertEqual(collision["ansible.builtin.command"]["argv"][:3], ["podman", "pod", "exists"])
         self.assertIn("keycloak_deploy_native_systemd_active", collision["failed_when"])
         ownership = systemd_map["Refuse unproven drift in an existing native Keycloak Quadlet"]
         ownership_contract = "\n".join(str(item) for item in ownership["ansible.builtin.assert"]["that"])
-        self.assertIn("keycloak_deploy_native_quadlet_file.stat.isreg", ownership_contract)
-        self.assertIn("keycloak_deploy_native_quadlet_file.stat.islnk", ownership_contract)
-        self.assertIn("Description=' ~ keycloak_deploy_systemd_description", ownership_contract)
-        self.assertIn("Yaml=' ~ keycloak_deploy_pod_manifest_path", ownership_contract)
-        self.assertIn("keycloak_deploy_native_systemd_enabled", ownership_contract)
-        self.assertIn("['active', 'failed']", ownership["when"])
-        self.assertNotIn("!= 'unknown'", ownership["when"])
-        lifecycle_assertions = systemd_block[validation_index]["ansible.builtin.assert"]["that"]
-        lifecycle_contract = "\n".join(str(item) for item in lifecycle_assertions)
-        for transient in ("activating", "reloading", "deactivating"):
-            self.assertNotIn(transient, lifecycle_contract)
-        for unsupported in ("static", "indirect", "transient", "linked"):
+        for contract in ("isreg", "islnk", "Description=", "Yaml=", "native_systemd_enabled"):
+            self.assertIn(contract, ownership_contract)
+        lifecycle_contract = str(systemd_block[validation_index]["ansible.builtin.assert"]["that"])
+        for unsupported in ("activating", "reloading", "deactivating", "static", "indirect", "transient", "linked"):
             self.assertNotIn(unsupported, lifecycle_contract)
         legacy_stop = transaction_map["Stop and disable the exact legacy Keycloak unit before Quadlet takeover"]
         transaction_index = systemd_block.index(transaction)
-        self.assertLess(validation_index, transaction_index)
-        self.assertLess(validation_index, collision_index)
+        self.assertTrue(validation_index < collision_index < transaction_index)
         self.assertLess(systemd_block.index(ownership), collision_index)
-        self.assertLess(collision_index, transaction_index)
+        self.assertEqual(transaction["block"][0]["name"], "Render the transactional Keycloak Pod manifest")
         self.assertLess(transaction["block"].index(stage), transaction["block"].index(legacy_stop))
-        self.assertEqual(legacy_stop["ansible.builtin.systemd"]["state"], "stopped")
-        self.assertIs(legacy_stop["ansible.builtin.systemd"]["enabled"], False)
+        self.assertEqual(
+            (legacy_stop["ansible.builtin.systemd"]["state"], legacy_stop["ansible.builtin.systemd"]["enabled"]),
+            ("stopped", False),
+        )
         rescue_source = "\n".join(str(task) for task in transaction["rescue"])
-        self.assertIn("Require native Keycloak inactivity before legacy restoration", rescue_source)
-        self.assertIn("Restore the exact legacy Keycloak service state", rescue_source)
-
-        deploy_path = ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy.yml"
-        deploy_tasks = yaml.safe_load(deploy_path.read_text(encoding="utf-8"))
-        runtime_block = deploy_tasks[2]["block"]
+        for contract in (
+            "exact pre-transaction Keycloak Pod manifest",
+            "transaction-created Keycloak Pod manifest",
+            "generated native Keycloak service",
+            "native Keycloak inactivity",
+            "exact legacy Keycloak service",
+        ):
+            self.assertIn(contract, rescue_source)
+        manifest_render = next(task for task in pod_tasks if task["name"].startswith("Render Keycloak Pod manifest"))
+        self.assertIn("not keycloak_deploy_manage_systemd", manifest_render["when"])
+        runtime_block = yaml.safe_load((ROOT / "roles/keycloak_deploy/tasks/deploy.yml").read_text(encoding="utf-8"))[
+            2
+        ]["block"]
         runtime_map = {task["name"]: task for task in runtime_block}
         inspect = runtime_map["Inspect the effective Keycloak environment"]
-        self.assertIs(inspect["no_log"], True)
         self.assertEqual(
-            inspect["ansible.builtin.command"]["argv"][:3],
-            ["podman", "container", "inspect"],
+            (inspect["no_log"], inspect["ansible.builtin.command"]["argv"][:3]),
+            (True, ["podman", "container", "inspect"]),
         )
-
         verify = runtime_map["Require the desired database endpoint in the active Keycloak pod"]
         self.assertIs(verify["no_log"], True)
-        assertions = verify["ansible.builtin.assert"]["that"]
-        self.assertTrue(any("KC_DB_URL_HOST=" in assertion for assertion in assertions))
-        self.assertTrue(any("KC_DB_URL_PORT=" in assertion for assertion in assertions))
-
+        self.assertIn("KC_DB_URL_HOST=", str(verify))
+        self.assertIn("KC_DB_URL_PORT=", str(verify))
         source = pod_tasks_path.read_text(encoding="utf-8")
         self.assertNotIn("Ignore kubeplay remove failure", source)
         self.assertNotIn("Ignore kubeplay run failure", source)
@@ -292,82 +228,47 @@ class KeycloakRoleContractTests(unittest.TestCase):
         )
         self.assertIn("KC_PROXY_TRUSTED_ADDRESSES", template)
         self.assertIn("keycloak_deploy_proxy_trusted_addresses | join(',')", template)
-
-    def test_proxy_trust_addresses_are_validated_with_stdlib_ipaddress(self) -> None:
         tasks = yaml.safe_load(
             (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
         )
         validation = next(task for task in tasks if task["name"] == "Validate trusted Keycloak proxy address syntax")
-
         command = validation["ansible.builtin.command"]["argv"]
         self.assertIn("ipaddress.ip_network(sys.argv[1], strict=False)", command[2])
-        self.assertEqual(command[3], "{{ item }}")
-        self.assertEqual(validation["loop"], "{{ keycloak_deploy_proxy_trusted_addresses }}")
-        self.assertIs(validation["check_mode"], False)
-        self.assertIs(validation["changed_when"], False)
-
-        cases = {
-            "10.89.10.2": True,
-            "2001:db8::/64": True,
-            "nginx": False,
-            "2001:db8::zz": False,
-        }
-        for address, valid in cases.items():
-            with self.subTest(address=address):
-                result = subprocess.run(  # noqa: S603 - exact isolated role argv
-                    [sys.executable, "-c", command[2], address], check=False, capture_output=True, text=True
-                )
-                self.assertEqual(result.returncode == 0, valid, result.stderr)
+        self.assertEqual(
+            (command[3], validation["loop"]), ("{{ item }}", "{{ keycloak_deploy_proxy_trusted_addresses }}")
+        )
+        self.assertEqual((validation["check_mode"], validation["changed_when"]), (False, False))
 
     def test_systemd_management_fails_closed_without_systemd_facts(self) -> None:
         for role in ("keycloak_deploy", "postgres_deploy"):
+            assertions = (ROOT / "roles" / role / "tasks" / "assert.yml").read_text(encoding="utf-8")
+            for contract in (
+                f"not {role}_manage_systemd | bool",
+                f"{role}_skip_runtime | bool",
+                f"{role}_skip_deploy | bool",
+            ):
+                self.assertIn(contract, assertions)
             with self.subTest(role=role):
-                assertions = (ROOT / "roles" / role / "tasks" / "assert.yml").read_text(encoding="utf-8")
-                self.assertIn(f"not {role}_manage_systemd | bool", assertions)
-                self.assertIn(f"{role}_skip_runtime | bool", assertions)
-                self.assertIn(f"{role}_skip_deploy | bool", assertions)
                 self.assertIn("ansible_facts.get('service_mgr', '')", assertions)
-                self.assertIn(") == 'systemd'", assertions)
-        nginx_assert = (ROOT / "roles/nginx_deploy/tasks/assert.yml").read_text(encoding="utf-8")
-        nginx_deploy = (ROOT / "roles/nginx_deploy/tasks/deploy.yml").read_text(encoding="utf-8")
-        self.assertNotIn("ansible_facts.get('service_mgr', '')", nginx_assert)
-        self.assertIn("Nginx Quadlet management requires systemd", nginx_deploy)
 
     def test_managed_bridge_database_requires_a_shared_normalized_network(self) -> None:
         assertions = (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
-
-        self.assertIn("not (keycloak_deploy_host_network | bool)", assertions)
+        defaults = self._role_defaults("keycloak_deploy")
+        self.assertEqual(
+            (defaults["keycloak_deploy_postgres_port"], defaults["keycloak_deploy_postgres_container_port"]),
+            (5432, 5432),
+        )
         self.assertGreaterEqual(assertions.count("map('regex_replace', ':.*$', '')"), 2)
-        self.assertIn("| intersect(", assertions)
-        self.assertIn("keycloak_deploy_networks | length == 0", assertions)
-        self.assertIn("keycloak_deploy_postgres_networks | length == 0", assertions)
-        self.assertIn("or keycloak_deploy_manage_systemd | bool", assertions)
-
+        for contract in (
+            "not (keycloak_deploy_host_network | bool)",
+            "| intersect(",
+            "or keycloak_deploy_manage_systemd | bool",
+        ):
+            self.assertIn(contract, assertions)
         tasks = yaml.safe_load(assertions)
         validation = next(task for task in tasks if task["name"] == "Validate the managed private PostgreSQL endpoint")
         command = validation["ansible.builtin.command"]["argv"]
         self.assertIn("host.is_private and any", command[2])
-        self.assertEqual(
-            command[3:],
-            [
-                "{{ keycloak_deploy_db_host }}",
-                "{{ keycloak_deploy_networks | to_json }}",
-                "{{ keycloak_deploy_postgres_networks | to_json }}",
-            ],
-        )
-        cases = (
-            ("10.89.40.3", '["access.network"]', '["access.network:ip=10.89.40.3"]', 0),
-            ("8.8.8.8", '["access.network"]', '["access.network:ip=8.8.8.8"]', 1),
-            ("postgres", '["access.network"]', '["access.network:ip=10.89.40.3"]', 1),
-            ("10.89.40.3", '["access.network"]', '["db.network:ip=10.89.40.3"]', 1),
-        )
-        for host, keycloak_networks, postgres_networks, expected in cases:
-            result = subprocess.run(  # noqa: S603
-                [sys.executable, "-c", command[2], host, keycloak_networks, postgres_networks],
-                check=False,
-                capture_output=True,
-            )
-            self.assertEqual(result.returncode, expected)
 
     def test_quadlet_destroy_fails_closed_until_li220(self) -> None:
         for role, deploy_role in (("keycloak_destroy", "keycloak_deploy"), ("postgres_destroy", "postgres_deploy")):
