@@ -188,6 +188,7 @@
   notify:
     - Recreate nginx pod
     - Run nginx pod
+  when: not nginx_deploy_manage_systemd | bool
   tags:
     - deployment
 

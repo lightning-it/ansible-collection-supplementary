@@ -547,6 +547,16 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             )
             self.assertEqual(expected, result.returncode, result.stderr)
 
+    def test_current_revision_rerun_discovers_required_workflow_by_exact_head(self) -> None:
+        helper = (WORKFLOWS / "current-revision-rerun.yml").read_text(encoding="utf-8")
+
+        self.assertIn(
+            "actions/runs?head_sha=${EXPECTED_HEAD}&per_page=100",
+            helper,
+        )
+        self.assertNotIn("actions/runs?event=pull_request_target", helper)
+        self.assertIn('select(.event == "pull_request_target")', helper)
+
     def test_release_app_ancestry_backmerge_uses_deterministic_controller(
         self,
     ) -> None:
