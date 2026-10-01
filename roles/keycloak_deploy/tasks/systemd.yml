@@ -144,7 +144,10 @@
             in ['enabled', 'disabled', 'generated', 'not-found']
           - >-
             not (
-              keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
+              (
+                keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
+                or keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+              )
               and keycloak_deploy_native_systemd_active.stdout | trim == 'active'
             )
         fail_msg: >-

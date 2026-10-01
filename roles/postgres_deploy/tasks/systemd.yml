@@ -145,7 +145,10 @@
             in ['enabled', 'disabled', 'generated', 'not-found']
           - >-
             not (
-              postgres_deploy_legacy_systemd_active.stdout | trim == 'active'
+              (
+                postgres_deploy_legacy_systemd_active.stdout | trim == 'active'
+                or postgres_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+              )
               and postgres_deploy_native_systemd_active.stdout | trim == 'active'
             )
         fail_msg: >-

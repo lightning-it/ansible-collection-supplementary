@@ -330,6 +330,19 @@ class KeycloakRoleContractTests(unittest.TestCase):
         self.assertEqual(output.count("skipping: [localhost]"), 2, output)
         self.assertNotIn("mutating Quadlet staging was executed", output)
 
+    def test_mixed_legacy_enablement_and_active_native_state_is_rejected(self) -> None:
+        for role, task_name in (
+            ("keycloak_deploy", "Refuse unknown Keycloak lifecycle states"),
+            ("postgres_deploy", "Refuse unknown PostgreSQL lifecycle states"),
+        ):
+            block = yaml.safe_load((ROOT / f"roles/{role}/tasks/systemd.yml").read_text(encoding="utf-8"))[0]["block"]
+            contract = "\n".join(
+                next(task for task in block if task["name"] == task_name)["ansible.builtin.assert"]["that"]
+            )
+            with self.subTest(role=role):
+                self.assertIn(f"{role}_legacy_systemd_enabled.stdout | trim == 'enabled'", contract)
+                self.assertIn(f"{role}_native_systemd_active.stdout | trim == 'active'", contract)
+
     def test_failed_fresh_keycloak_cleanup_detects_a_running_native_pod(self) -> None:
         executable = shutil.which("ansible-playbook")
         self.assertIsNotNone(executable, "Pinned Devtools Ansible is required")
@@ -595,6 +608,10 @@ exit 0
         tasks = yaml.safe_load(
             (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
         )
+        core_contract = "\n".join(tasks[0]["ansible.builtin.assert"]["that"])
+        self.assertIn("keycloak_deploy_extra_start_args | select('string')", core_contract)
+        for protected_option in ("db", "proxy", "hostname", "http", "health-enabled", "bootstrap-admin"):
+            self.assertIn(protected_option, core_contract)
         validation = next(task for task in tasks if task["name"] == "Validate trusted Keycloak proxy address syntax")
         command = validation["ansible.builtin.command"]["argv"]
         self.assertIn("ipaddress.ip_network(sys.argv[1], strict=False)", command[2])

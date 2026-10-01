@@ -101,6 +101,17 @@
       - keycloak_deploy_run_user_gid | default('', true) | trim | length > 0
       - keycloak_deploy_extra_start_args is sequence
       - keycloak_deploy_extra_start_args is not string
+      - >-
+        keycloak_deploy_extra_start_args | select('string') | list | length
+        == keycloak_deploy_extra_start_args | length
+      - >-
+        keycloak_deploy_extra_start_args
+        | select(
+            'match',
+            '^--(?:db(?:$|[-=])|proxy(?:$|[-=])|hostname(?:$|[-=])'
+            ~ '|http(?:$|[-=])|health-enabled(?:$|=)|bootstrap-admin-)'
+          )
+        | list | length == 0
       - keycloak_deploy_proxy_headers in ['', 'forwarded', 'xforwarded']
       - >-
         keycloak_deploy_proxy_headers | trim | length == 0
