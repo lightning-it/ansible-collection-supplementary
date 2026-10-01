@@ -166,7 +166,13 @@
           - keycloak_deploy_native_quadlet_file.stat.gr_name | default('') == 'root'
           - keycloak_deploy_native_quadlet_read.content | default('') | length > 0
           - keycloak_deploy_native_drop_in_paths.rc == 0
-          - keycloak_deploy_native_drop_in_paths.stdout | trim == ''
+          - >-
+            keycloak_deploy_native_drop_in_paths.stdout.split()
+            | reject(
+              'match',
+              '^/(?:usr/)?lib/systemd/system/service\.d/[A-Za-z0-9_.@-]+\.conf\Z'
+            )
+            | list | length == 0
           - >-
             (
               keycloak_deploy_native_systemd_active.stdout | trim == 'unknown'
@@ -177,9 +183,9 @@
               keycloak_deploy_native_fragment_path.rc == 0
               and keycloak_deploy_native_fragment_path.stdout | trim
               is match(
-                '^/run/systemd/generator(?:\\.early|\\.late)?/'
+                '^/run/systemd/generator(?:\.early|\.late)?/'
                 ~ (keycloak_deploy_systemd_unit_name | regex_escape)
-                ~ '\\.service\\Z'
+                ~ '\.service\Z'
               )
             )
           - >-
@@ -236,16 +242,6 @@
 
     - name: Cut over to native Keycloak Quadlet with rollback
       block:
-        - name: Render the transactional Keycloak Pod manifest
-          ansible.builtin.template:
-            src: keycloak-pod.yml.j2
-            dest: "{{ keycloak_deploy_pod_manifest_path }}"
-            owner: root
-            group: root
-            mode: '0600'
-          register: keycloak_deploy_manifest_render
-          no_log: true
-
         - name: Stage the native Keycloak Quadlet before lifecycle mutation
           ansible.builtin.include_role:
             name: lit.foundational.podman_systemd
@@ -303,13 +299,19 @@
               - keycloak_deploy_staged_quadlet_file.stat.gr_name | default('') == 'root'
               - keycloak_deploy_staged_fragment_path.rc == 0
               - keycloak_deploy_staged_drop_in_paths.rc == 0
-              - keycloak_deploy_staged_drop_in_paths.stdout | trim == ''
+              - >-
+                keycloak_deploy_staged_drop_in_paths.stdout.split()
+                | reject(
+                  'match',
+                  '^/(?:usr/)?lib/systemd/system/service\.d/[A-Za-z0-9_.@-]+\.conf\Z'
+                )
+                | list | length == 0
               - >-
                 keycloak_deploy_staged_fragment_path.stdout | trim
                 is match(
-                  '^/run/systemd/generator(?:\\.early|\\.late)?/'
+                  '^/run/systemd/generator(?:\.early|\.late)?/'
                   ~ (keycloak_deploy_systemd_unit_name | regex_escape)
-                  ~ '\\.service\\Z'
+                  ~ '\.service\Z'
                 )
             fail_msg: >-
               The staged Keycloak controller is not a root-owned mode-0644
@@ -326,6 +328,23 @@
           when: >-
             keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
             or keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+
+        - name: Stop the exact active native Keycloak unit before manifest replacement
+          ansible.builtin.systemd:
+            name: "{{ keycloak_deploy_systemd_unit_name }}.service"
+            state: stopped
+            scope: "{{ keycloak_deploy_systemd_scope }}"
+          when: keycloak_deploy_native_systemd_active.stdout | trim == 'active'
+
+        - name: Render the transactional Keycloak Pod manifest
+          ansible.builtin.template:
+            src: keycloak-pod.yml.j2
+            dest: "{{ keycloak_deploy_pod_manifest_path }}"
+            owner: root
+            group: root
+            mode: '0600'
+          register: keycloak_deploy_manifest_render
+          no_log: true
 
         - name: Manage the native Keycloak Quadlet service
           ansible.builtin.include_role:

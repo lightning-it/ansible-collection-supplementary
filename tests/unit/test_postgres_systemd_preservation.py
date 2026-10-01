@@ -40,6 +40,7 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
             "mode",
             "pw_name",
             "native_drop_in_paths",
+            "service\\.d",
             "Description=",
             "Yaml=",
             "native_systemd_enabled",
@@ -47,7 +48,6 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
         ):
             self.assertIn(contract, ownership_contract)
         transaction = task_map["Cut over to native PostgreSQL Quadlet with rollback"]
-        self.assertEqual(transaction["block"][0]["name"], "Render the transactional PostgreSQL Pod manifest")
         transaction_map = {task["name"]: task for task in transaction["block"]}
         transaction_names = [task["name"] for task in transaction["block"]]
         self.assertIn("Require the staged native PostgreSQL Quadlet provenance boundary", transaction_names)
@@ -60,8 +60,25 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
             "Require the staged native PostgreSQL Quadlet provenance boundary",
         ):
             self.assertEqual(transaction_map[name]["when"], staging_condition)
+        staged_provenance = "\n".join(
+            transaction_map["Require the staged native PostgreSQL Quadlet provenance boundary"][
+                "ansible.builtin.assert"
+            ]["that"]
+        )
+        self.assertIn("service\\.d", staged_provenance)
+        legacy_stop = "Stop and disable the exact legacy PostgreSQL unit before Quadlet takeover"
+        native_stop = "Stop the exact active native PostgreSQL unit before manifest replacement"
+        render = "Render the transactional PostgreSQL Pod manifest"
+        manage = "Manage the native PostgreSQL Quadlet service"
+        self.assertLess(transaction_names.index(legacy_stop), transaction_names.index(render))
+        self.assertLess(transaction_names.index(native_stop), transaction_names.index(render))
+        self.assertLess(transaction_names.index(render), transaction_names.index(manage))
+        self.assertEqual(
+            transaction_map[native_stop]["when"],
+            "postgres_deploy_native_systemd_active.stdout | trim == 'active'",
+        )
         self.assertLess(
-            transaction_names.index("Manage the native PostgreSQL Quadlet service"),
+            transaction_names.index(manage),
             transaction_names.index("Wait for PostgreSQL readiness before committing native takeover"),
         )
         rescue_source = "\n".join(str(task) for task in transaction["rescue"])

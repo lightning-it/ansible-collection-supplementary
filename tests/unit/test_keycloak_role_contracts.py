@@ -140,7 +140,9 @@ class KeycloakRoleContractTests(unittest.TestCase):
         transaction = next(
             task for task in systemd_block if task["name"] == "Cut over to native PostgreSQL Quadlet with rollback"
         )
-        transactional_render = transaction["block"][0]
+        transactional_render = next(
+            task for task in transaction["block"] if task["name"] == "Render the transactional PostgreSQL Pod manifest"
+        )
         self.assertEqual(transactional_render["ansible.builtin.template"]["mode"], "0600")
         self.assertIs(transactional_render["no_log"], True)
 
@@ -183,6 +185,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
             "mode",
             "pw_name",
             "native_drop_in_paths",
+            "service\\.d",
             "Description=",
             "Yaml=",
             "native_systemd_enabled",
@@ -203,11 +206,28 @@ class KeycloakRoleContractTests(unittest.TestCase):
         for unsupported in ("activating", "reloading", "deactivating", "static", "indirect", "transient", "linked"):
             self.assertNotIn(unsupported, lifecycle_contract)
         legacy_stop = transaction_map["Stop and disable the exact legacy Keycloak unit before Quadlet takeover"]
+        native_stop = transaction_map["Stop the exact active native Keycloak unit before manifest replacement"]
+        manifest_render = transaction_map["Render the transactional Keycloak Pod manifest"]
+        manage = transaction_map["Manage the native Keycloak Quadlet service"]
         transaction_index = systemd_block.index(transaction)
         self.assertTrue(validation_index < collision_index < transaction_index)
         self.assertLess(systemd_block.index(ownership), collision_index)
-        self.assertEqual(transaction["block"][0]["name"], "Render the transactional Keycloak Pod manifest")
         self.assertLess(transaction["block"].index(stage), transaction["block"].index(legacy_stop))
+        self.assertLess(transaction["block"].index(legacy_stop), transaction["block"].index(manifest_render))
+        self.assertLess(transaction["block"].index(native_stop), transaction["block"].index(manifest_render))
+        self.assertLess(transaction["block"].index(manifest_render), transaction["block"].index(manage))
+        self.assertEqual(
+            native_stop["when"],
+            "keycloak_deploy_native_systemd_active.stdout | trim == 'active'",
+        )
+        self.assertIn(
+            "service\\.d",
+            "\n".join(
+                transaction_map["Require the staged native Keycloak Quadlet provenance boundary"][
+                    "ansible.builtin.assert"
+                ]["that"]
+            ),
+        )
         self.assertEqual(
             (legacy_stop["ansible.builtin.systemd"]["state"], legacy_stop["ansible.builtin.systemd"]["enabled"]),
             ("stopped", False),

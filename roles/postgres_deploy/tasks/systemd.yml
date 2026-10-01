@@ -167,7 +167,13 @@
           - postgres_deploy_native_quadlet_file.stat.gr_name | default('') == 'root'
           - postgres_deploy_native_quadlet_read.content | default('') | length > 0
           - postgres_deploy_native_drop_in_paths.rc == 0
-          - postgres_deploy_native_drop_in_paths.stdout | trim == ''
+          - >-
+            postgres_deploy_native_drop_in_paths.stdout.split()
+            | reject(
+              'match',
+              '^/(?:usr/)?lib/systemd/system/service\.d/[A-Za-z0-9_.@-]+\.conf\Z'
+            )
+            | list | length == 0
           - >-
             (
               postgres_deploy_native_systemd_active.stdout | trim == 'unknown'
@@ -178,9 +184,9 @@
               postgres_deploy_native_fragment_path.rc == 0
               and postgres_deploy_native_fragment_path.stdout | trim
               is match(
-                '^/run/systemd/generator(?:\\.early|\\.late)?/'
+                '^/run/systemd/generator(?:\.early|\.late)?/'
                 ~ (postgres_deploy_systemd_unit_name | regex_escape)
-                ~ '\\.service\\Z'
+                ~ '\.service\Z'
               )
             )
           - >-
@@ -237,16 +243,6 @@
 
     - name: Cut over to native PostgreSQL Quadlet with rollback
       block:
-        - name: Render the transactional PostgreSQL Pod manifest
-          ansible.builtin.template:
-            src: postgres-pod.yml.j2
-            dest: "{{ postgres_deploy_pod_manifest_path }}"
-            owner: root
-            group: root
-            mode: '0600'
-          register: postgres_deploy_manifest_render
-          no_log: true
-
         - name: Stage the native PostgreSQL Quadlet before lifecycle mutation
           ansible.builtin.include_role:
             name: lit.foundational.podman_systemd
@@ -304,13 +300,19 @@
               - postgres_deploy_staged_quadlet_file.stat.gr_name | default('') == 'root'
               - postgres_deploy_staged_fragment_path.rc == 0
               - postgres_deploy_staged_drop_in_paths.rc == 0
-              - postgres_deploy_staged_drop_in_paths.stdout | trim == ''
+              - >-
+                postgres_deploy_staged_drop_in_paths.stdout.split()
+                | reject(
+                  'match',
+                  '^/(?:usr/)?lib/systemd/system/service\.d/[A-Za-z0-9_.@-]+\.conf\Z'
+                )
+                | list | length == 0
               - >-
                 postgres_deploy_staged_fragment_path.stdout | trim
                 is match(
-                  '^/run/systemd/generator(?:\\.early|\\.late)?/'
+                  '^/run/systemd/generator(?:\.early|\.late)?/'
                   ~ (postgres_deploy_systemd_unit_name | regex_escape)
-                  ~ '\\.service\\Z'
+                  ~ '\.service\Z'
                 )
             fail_msg: >-
               The staged PostgreSQL controller is not a root-owned mode-0644
@@ -327,6 +329,23 @@
           when: >-
             postgres_deploy_legacy_systemd_active.stdout | trim == 'active'
             or postgres_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+
+        - name: Stop the exact active native PostgreSQL unit before manifest replacement
+          ansible.builtin.systemd:
+            name: "{{ postgres_deploy_systemd_unit_name }}.service"
+            state: stopped
+            scope: "{{ postgres_deploy_systemd_scope }}"
+          when: postgres_deploy_native_systemd_active.stdout | trim == 'active'
+
+        - name: Render the transactional PostgreSQL Pod manifest
+          ansible.builtin.template:
+            src: postgres-pod.yml.j2
+            dest: "{{ postgres_deploy_pod_manifest_path }}"
+            owner: root
+            group: root
+            mode: '0600'
+          register: postgres_deploy_manifest_render
+          no_log: true
 
         - name: Manage the native PostgreSQL Quadlet service
           ansible.builtin.include_role:
