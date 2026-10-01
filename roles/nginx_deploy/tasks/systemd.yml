@@ -250,12 +250,23 @@
             podman_systemd_networks: "{{ nginx_deploy_networks }}"
           when: not (nginx_deploy_native_quadlet_file.stat.exists | default(false))
 
-        - name: Restore the pre-existing native Nginx service state after failure
+        - name: Restore pre-existing enabled or disabled native Nginx service state after failure
           ansible.builtin.systemd:
             name: "{{ nginx_deploy_systemd_unit_name }}.service"
             state: >-
               {{ 'started' if nginx_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
-          when: nginx_deploy_native_systemd_enabled.stdout | trim != 'not-found'
+            enabled: >-
+              {{ nginx_deploy_native_systemd_enabled.stdout | trim == 'enabled' }}
+            scope: "{{ nginx_deploy_systemd_scope }}"
+          when: nginx_deploy_native_systemd_enabled.stdout | trim in ['enabled', 'disabled']
+
+        - name: Restore pre-existing generated native Nginx service state after failure
+          ansible.builtin.systemd:
+            name: "{{ nginx_deploy_systemd_unit_name }}.service"
+            state: >-
+              {{ 'started' if nginx_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+            scope: "{{ nginx_deploy_systemd_scope }}"
+          when: nginx_deploy_native_systemd_enabled.stdout | trim == 'generated'
 
         - name: Restore the exact legacy Nginx unit after failed takeover
           ansible.builtin.systemd:

@@ -67,11 +67,65 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             template.index("nginx_config_waf_location_directives"),
             template.index("item.proxy_directives"),
         )
-        self.assertEqual(template.count("nginx_config_waf_location_directives"), 3)
+        self.assertEqual(template.count("nginx_config_waf_location_directives"), 2)
         self.assertIn(
             "directive not in (item.extra_directives | default([]))",
             template,
         )
+
+    def test_waf_controls_are_limited_to_tls_proxy_vhosts(self) -> None:
+        defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
+        source = (ROOT / "roles" / "nginx_config" / "templates" / "vhost.conf.j2").read_text(encoding="utf-8")
+        environment = Environment(autoescape=False)  # noqa: S701
+        environment.filters["bool"] = bool
+        template = environment.from_string(source)
+        common = {
+            "nginx_config_http_listen_port": 80,
+            "nginx_config_tls_listen_port": 443,
+            "nginx_config_tls_certificate": "/tls/tls.crt",
+            "nginx_config_tls_certificate_key": "/tls/tls.key",
+            "nginx_config_waf_enabled": True,
+            "nginx_config_waf_server_directives": ["modsecurity on"],
+            "nginx_config_waf_location_directives": ["modsecurity_rules 'SecRuleEngine On'"],
+            "nginx_config_proxy_default_directives": defaults["nginx_config_proxy_default_directives"],
+            "nginx_config_proxy_required_directives": defaults["nginx_config_proxy_required_directives"],
+            "nginx_config_proxy_http_external_port": 80,
+            "nginx_config_proxy_tls_external_port": 443,
+            "nginx_deploy_listen_port": 80,
+            "nginx_deploy_root": "/usr/share/nginx/html",
+            "nginx_deploy_index_files": ["index.html"],
+        }
+
+        tls = template.render(
+            item={"force_https": True, "server_name": "tls.invalid", "upstream_url": "http://backend"},
+            **common,
+        )
+        http = template.render(
+            item={"force_https": False, "server_name": "http.invalid", "upstream_url": "http://backend"},
+            **common,
+        )
+        http_locations = template.render(
+            item={
+                "force_https": False,
+                "server_name": "http-locations.invalid",
+                "locations": [{"path": "/", "directives": ["proxy_pass http://backend"]}],
+            },
+            **common,
+        )
+
+        self.assertIn("modsecurity on;", tls)
+        self.assertIn("modsecurity_rules 'SecRuleEngine On';", tls)
+        self.assertNotIn("modsecurity", http)
+        self.assertNotIn("modsecurity", http_locations)
+
+    def test_shipped_playbooks_do_not_override_reserved_proxy_headers(self) -> None:
+        for relative in ("playbooks/wunderbox.yml", "playbooks/wunderbox_vault.yml"):
+            source = (ROOT / relative).read_text(encoding="utf-8")
+            with self.subTest(playbook=relative):
+                self.assertNotRegex(
+                    source,
+                    r"(?i)proxy_set_header\s+(host|x-real-ip|x-forwarded-for|x-forwarded-proto)\b",
+                )
 
     def test_required_forwarded_headers_follow_consumer_directives(self) -> None:
         defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
@@ -170,10 +224,10 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                 expected_port = 18443 if item["force_https"] else 18080
                 self.assertEqual(rendered.count(f"proxy_set_header X-Forwarded-Port {expected_port};"), 1)
 
-        self.assertEqual(source.count("_name(_directive) != 'include'"), 7)
+        self.assertEqual(source.count("_name(_directive) != 'include'"), 6)
         self.assertEqual(source.count("== 'proxy_set_header'"), 4)
         self.assertEqual(source.count("_single_statement and not _reserved_proxy_header"), 4)
-        self.assertEqual(source.count("';' not in _directive.rstrip(';')"), 7)
+        self.assertEqual(source.count("';' not in _directive.rstrip(';')"), 6)
 
     def test_upstream_url_precheck_blocks_proxy_pass_injection(self) -> None:
         name = "Ensure nginx vhost definitions are valid"
@@ -473,8 +527,20 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         cleanup = rescue["Remove the failed native Nginx Quadlet runtime"]
         self.assertEqual(cleanup["vars"]["podman_systemd_action"], "absent")
         self.assertIn("native_quadlet_file.stat.exists", cleanup["when"])
-        preserve = rescue["Restore the pre-existing native Nginx service state after failure"]
-        self.assertIn("!= 'not-found'", preserve["when"])
+        restore_enablement = rescue["Restore pre-existing enabled or disabled native Nginx service state after failure"]
+        self.assertIn("['enabled', 'disabled']", restore_enablement["when"])
+        self.assertIn("== 'enabled'", restore_enablement["ansible.builtin.systemd"]["enabled"])
+        self.assertEqual(
+            restore_enablement["ansible.builtin.systemd"]["scope"],
+            "{{ nginx_deploy_systemd_scope }}",
+        )
+        restore_generated = rescue["Restore pre-existing generated native Nginx service state after failure"]
+        self.assertIn("== 'generated'", restore_generated["when"])
+        self.assertNotIn("enabled", restore_generated["ansible.builtin.systemd"])
+        self.assertEqual(
+            restore_generated["ansible.builtin.systemd"]["scope"],
+            "{{ nginx_deploy_systemd_scope }}",
+        )
         self.assertIn("Restore the exact legacy Nginx unit after failed takeover", rescue)
         self.assertIn("Report failed native Nginx takeover after rollback", rescue)
 
