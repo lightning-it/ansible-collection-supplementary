@@ -34,10 +34,15 @@
         or (
           guacamole_deploy_original_manifest_file.stat.isreg | default(false)
           and not (guacamole_deploy_original_manifest_file.stat.islnk | default(false))
+          and guacamole_deploy_original_manifest_file.stat.uid | default(-1) | int == 0
+          and guacamole_deploy_original_manifest_file.stat.gid | default(-1) | int == 0
+          and guacamole_deploy_original_manifest_file.stat.mode | default('')
+          is match('^0[0-7][0145][0145]\\Z')
         )
     fail_msg: >-
-      The Guacamole Pod manifest must be absent or a regular non-symlink file
-      before a transactional Quadlet update.
+      The Guacamole Pod manifest must be absent or a root-owned, root-grouped
+      regular non-symlink file without group or world write permission before
+      a transactional Quadlet update.
     quiet: true
 
 - name: Capture the exact pre-transaction Guacamole Pod manifest

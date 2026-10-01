@@ -310,6 +310,9 @@ class GuacamoleDeployContractTests(unittest.TestCase):
             systemd_tasks.index("Restore generated native Guacamole service state after failure"),
         )
         self.assertIn("Capture the exact pre-transaction Guacamole Pod manifest", systemd_tasks)
+        self.assertIn("guacamole_deploy_original_manifest_file.stat.uid | default(-1) | int == 0", systemd_tasks)
+        self.assertIn("guacamole_deploy_original_manifest_file.stat.gid | default(-1) | int == 0", systemd_tasks)
+        self.assertIn("is match('^0[0-7][0145][0145]\\\\Z')", systemd_tasks)
         self.assertIn("Render the transactional Guacamole Pod manifest", systemd_tasks)
         self.assertIn("guacamole_deploy_legacy_unit_stat.stat.exists | bool", systemd_tasks)
         self.assertNotIn("flush_handlers", systemd_tasks)
@@ -537,6 +540,14 @@ class GuacamoleDeployContractTests(unittest.TestCase):
                 .replace(
                     "guacamole_deploy_legacy_unit_stat.stat.gr_name | default('') == 'root'",
                     f"guacamole_deploy_legacy_unit_stat.stat.gid | int == {os.getegid()}",
+                )
+                .replace(
+                    "guacamole_deploy_original_manifest_file.stat.uid | default(-1) | int == 0",
+                    f"guacamole_deploy_original_manifest_file.stat.uid | int == {os.geteuid()}",
+                )
+                .replace(
+                    "guacamole_deploy_original_manifest_file.stat.gid | default(-1) | int == 0",
+                    f"guacamole_deploy_original_manifest_file.stat.gid | int == {os.getegid()}",
                 )
                 .replace("      retries: 40\n      delay: 5\n", "      retries: 1\n      delay: 0\n", 1),
                 encoding="utf-8",
@@ -839,6 +850,76 @@ esac
                 (state / f"{native_state}.active").read_text(encoding="utf-8"),
                 "inactive",
             )
+
+    def test_manifest_safety_contract_executably_rejects_unsafe_owner_and_mode(self) -> None:
+        tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
+        task_map = {task["name"]: task for task in tasks}
+        manifest_safety = task_map["Refuse an unsafe pre-transaction Guacamole Pod manifest"]
+        executable = shutil.which("ansible-playbook")
+        self.assertIsNotNone(executable, "Pinned Devtools Ansible is required")
+
+        cases = (
+            (
+                "safe-root-manifest",
+                {"exists": True, "isreg": True, "islnk": False, "uid": 0, "gid": 0, "mode": "0640"},
+                True,
+            ),
+            (
+                "non-root-manifest",
+                {"exists": True, "isreg": True, "islnk": False, "uid": 1000, "gid": 0, "mode": "0640"},
+                False,
+            ),
+            (
+                "group-writable-manifest",
+                {"exists": True, "isreg": True, "islnk": False, "uid": 0, "gid": 0, "mode": "0660"},
+                False,
+            ),
+            (
+                "world-writable-manifest",
+                {"exists": True, "isreg": True, "islnk": False, "uid": 0, "gid": 0, "mode": "0642"},
+                False,
+            ),
+        )
+        with tempfile.TemporaryDirectory(prefix="guacamole-manifest-safety-") as temporary:
+            temporary_path = Path(temporary)
+            config = temporary_path / "ansible.cfg"
+            config.write_text("[defaults]\nstdout_callback=default\n", encoding="utf-8")
+            for name, stat, should_succeed in cases:
+                playbook = temporary_path / f"{name}.yml"
+                playbook.write_text(
+                    yaml.safe_dump(
+                        [
+                            {
+                                "hosts": "localhost",
+                                "gather_facts": False,
+                                "vars": {"guacamole_deploy_original_manifest_file": {"stat": stat}},
+                                "tasks": [manifest_safety],
+                            }
+                        ],
+                        sort_keys=False,
+                    ),
+                    encoding="utf-8",
+                )
+                result = subprocess.run(  # noqa: S603
+                    [executable, "-i", "localhost,", "-c", "local", str(playbook)],
+                    env={
+                        **os.environ,
+                        "ANSIBLE_CONFIG": str(config),
+                        "ANSIBLE_NOCOLOR": "1",
+                        "ANSIBLE_STDOUT_CALLBACK": "default",
+                        "ANSIBLE_LOCAL_TEMP": str(temporary_path / "ansible"),
+                    },
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=60,
+                )
+                evidence = result.stdout + result.stderr
+                if should_succeed:
+                    self.assertEqual(result.returncode, 0, evidence)
+                else:
+                    self.assertNotEqual(result.returncode, 0, evidence)
+                    self.assertIn("without group or world write permission", evidence)
 
     def test_existing_manifest_and_quadlet_use_executable_slurp_contract(self) -> None:
         tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
