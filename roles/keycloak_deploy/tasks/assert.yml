@@ -115,6 +115,11 @@
       - keycloak_deploy_install_packages is boolean
       - keycloak_deploy_manage_systemd is boolean
       - >-
+        not keycloak_deploy_manage_postgres | bool
+        or keycloak_deploy_host_network | bool
+        or keycloak_deploy_postgres_host_network | bool
+        or keycloak_deploy_manage_systemd | bool
+      - >-
         not keycloak_deploy_manage_systemd | bool
         or keycloak_deploy_skip_runtime | bool
         or keycloak_deploy_skip_deploy | bool

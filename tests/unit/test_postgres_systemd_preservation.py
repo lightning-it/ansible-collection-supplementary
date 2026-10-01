@@ -64,6 +64,62 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
             fixture_role = collection / "roles/postgres_deploy"
             fixture_role.parent.mkdir(parents=True)
             shutil.copytree(ROLE, fixture_role)
+            fixture_foundational_tasks = (
+                root / "collections/ansible_collections/lit/foundational/roles/podman_systemd/tasks"
+            )
+            fixture_foundational_tasks.mkdir(parents=True)
+            (fixture_foundational_tasks / "main.yml").write_text(
+                """---
+- name: Ensure fixture Quadlet directory exists
+  ansible.builtin.file:
+    path: "{{ podman_systemd_quadlet_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Materialize fixture Quadlet
+  ansible.builtin.copy:
+    dest: "{{ podman_systemd_quadlet_dir }}/{{ podman_systemd_unit_name }}.kube"
+    content: "[Kube]\nYaml={{ podman_systemd_manifest_path }}\n"
+    mode: '0644'
+  when: podman_systemd_action != 'absent'
+
+- name: Apply fixture service action
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - >-
+        {{
+          'restart'
+          if podman_systemd_action == 'restarted'
+          else ('stop' if podman_systemd_action == 'stopped' else 'start')
+        }}
+      - "{{ podman_systemd_unit_name }}.service"
+  changed_when: true
+  when: podman_systemd_action != 'absent'
+
+- name: Apply fixture enabled state
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - "{{ 'enable' if podman_systemd_enabled | bool else 'disable' }}"
+      - "{{ podman_systemd_unit_name }}.service"
+  changed_when: true
+  when: podman_systemd_action != 'absent'
+
+- name: Stop fixture service before removal
+  ansible.builtin.command:
+    argv: [systemctl, stop, "{{ podman_systemd_unit_name }}.service"]
+  changed_when: true
+  when: podman_systemd_action == 'absent'
+
+- name: Remove fixture Quadlet
+  ansible.builtin.file:
+    path: "{{ podman_systemd_quadlet_dir }}/{{ podman_systemd_unit_name }}.kube"
+    state: absent
+  when: podman_systemd_action == 'absent'
+""",
+                encoding="utf-8",
+            )
             fixture_systemd = fixture_role / "tasks/systemd.yml"
             production_systemd = fixture_systemd.read_text(encoding="utf-8")
             privileged_render = """            owner: root
@@ -239,6 +295,27 @@ exit 0
             self.assertIn("stop postgres-pod.service", service_log, evidence)
             self.assertIn("enable podman-kube@etc-podman-pods-postgres.yml.service", service_log, evidence)
             self.assertIn("start podman-kube@etc-podman-pods-postgres.yml.service", service_log, evidence)
+            legacy_state = "podman-kube_etc-podman-pods-postgres_yml_service"
+            native_state = "postgres-pod_service"
+            self.assertEqual((state / f"{legacy_state}.active").read_text(encoding="utf-8"), "active")
+            self.assertEqual((state / f"{legacy_state}.enabled").read_text(encoding="utf-8"), "enabled")
+            self.assertEqual((state / f"{native_state}.active").read_text(encoding="utf-8"), "inactive")
+
+    def test_active_native_rollback_restarts_the_restored_manifest(self) -> None:
+        tasks = yaml.safe_load((ROLE / "tasks/systemd.yml").read_text(encoding="utf-8"))[0]["block"]
+        transaction = next(
+            task for task in tasks if task["name"] == "Cut over to native PostgreSQL Quadlet with rollback"
+        )
+        restoration = next(
+            task
+            for task in transaction["rescue"]
+            if task["name"] == "Attempt pre-existing native PostgreSQL service-state restoration"
+        )
+        for task in restoration["block"]:
+            state_expression = task["ansible.builtin.systemd"]["state"]
+            self.assertIn("'restarted'", state_expression)
+            self.assertIn("'active'", state_expression)
+            self.assertIn("'stopped'", state_expression)
 
 
 if __name__ == "__main__":

@@ -330,7 +330,7 @@
               ansible.builtin.systemd:
                 name: "{{ postgres_deploy_systemd_unit_name }}.service"
                 state: >-
-                  {{ 'started' if postgres_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+                  {{ 'restarted' if postgres_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
                 enabled: >-
                   {{ postgres_deploy_native_systemd_enabled.stdout | trim == 'enabled' }}
                 scope: "{{ postgres_deploy_systemd_scope }}"
@@ -340,7 +340,7 @@
               ansible.builtin.systemd:
                 name: "{{ postgres_deploy_systemd_unit_name }}.service"
                 state: >-
-                  {{ 'started' if postgres_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+                  {{ 'restarted' if postgres_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
                 scope: "{{ postgres_deploy_systemd_scope }}"
               when: postgres_deploy_native_systemd_enabled.stdout | trim == 'generated'
           rescue:

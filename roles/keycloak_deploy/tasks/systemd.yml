@@ -360,7 +360,7 @@
               ansible.builtin.systemd:
                 name: "{{ keycloak_deploy_systemd_unit_name }}.service"
                 state: >-
-                  {{ 'started' if keycloak_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+                  {{ 'restarted' if keycloak_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
                 enabled: >-
                   {{ keycloak_deploy_native_systemd_enabled.stdout | trim == 'enabled' }}
                 scope: "{{ keycloak_deploy_systemd_scope }}"
@@ -370,7 +370,7 @@
               ansible.builtin.systemd:
                 name: "{{ keycloak_deploy_systemd_unit_name }}.service"
                 state: >-
-                  {{ 'started' if keycloak_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+                  {{ 'restarted' if keycloak_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
                 scope: "{{ keycloak_deploy_systemd_scope }}"
               when: keycloak_deploy_native_systemd_enabled.stdout | trim == 'generated'
           rescue:

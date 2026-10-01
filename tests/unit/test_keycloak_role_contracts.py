@@ -197,6 +197,16 @@ class KeycloakRoleContractTests(unittest.TestCase):
             "exact legacy Keycloak service",
         ):
             self.assertIn(contract, rescue_source)
+        native_restoration = next(
+            task
+            for task in transaction["rescue"]
+            if task["name"] == "Attempt pre-existing native Keycloak service-state restoration"
+        )
+        for task in native_restoration["block"]:
+            state_expression = task["ansible.builtin.systemd"]["state"]
+            self.assertIn("'restarted'", state_expression)
+            self.assertIn("'active'", state_expression)
+            self.assertIn("'stopped'", state_expression)
         self.assertIn("Inspect the transactional Keycloak database endpoint", str(transaction["block"]))
         self.assertIn(
             "Require the desired database endpoint before committing Keycloak takeover",
@@ -275,6 +285,31 @@ class KeycloakRoleContractTests(unittest.TestCase):
         validation = next(task for task in tasks if task["name"] == "Validate the managed private PostgreSQL endpoint")
         command = validation["ansible.builtin.command"]["argv"]
         self.assertIn("host.is_private and any", command[2])
+
+    def test_managed_bridge_database_requires_native_quadlet_network_handoff(self) -> None:
+        tasks = yaml.safe_load(
+            (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
+        )
+        core = tasks[0]["ansible.builtin.assert"]["that"]
+        contract = next(
+            item
+            for item in core
+            if isinstance(item, str)
+            and "not keycloak_deploy_manage_postgres" in item
+            and "keycloak_deploy_manage_systemd" in item
+        )
+        self.assertIn("keycloak_deploy_host_network", contract)
+        self.assertIn("keycloak_deploy_postgres_host_network", contract)
+
+    def test_managed_postgres_quadlet_is_always_enabled(self) -> None:
+        tasks = yaml.safe_load(
+            (ROOT / "roles" / "postgres_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
+        )
+        core = tasks[0]["ansible.builtin.assert"]["that"]
+        self.assertIn(
+            "not postgres_deploy_manage_systemd | bool or postgres_deploy_systemd_enabled | bool",
+            core,
+        )
 
     def test_quadlet_destroy_fails_closed_until_li220(self) -> None:
         for role, deploy_role in (("keycloak_destroy", "keycloak_deploy"), ("postgres_destroy", "postgres_deploy")):
