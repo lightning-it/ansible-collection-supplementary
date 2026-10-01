@@ -81,7 +81,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | netbox_deploy | netbox | web_application | experimental | — | ubuntu-24.04 | experimental | experimental | experimental | browser_oidc_authenticated_api_backup_and_restore | lit.foundational.kubeplay | Keycloak OIDC provider | Goal 07 production acceptance is maintained in the consumer automation repository. | — |
 | nexus | nexus | web_application | experimental | — | rhel-9 | experimental | experimental | experimental | browser_and_authenticated_repository_api | lit.foundational.kubeplay | HashiCorp Vault when Vault PKI integration is enabled | Current root scenario is a syntax stub; README calls the role a template. | nexus-basic |
 | nginx_config | nginx | configuration_as_code | experimental | — | rhel-9 | experimental | experimental | experimental | apply_reconcile_and_verify_http | nginx_deploy | — | Current root scenario is a syntax stub. | nginx-config-basic |
-| nginx_deploy | nginx | web_service | experimental | — | rhel-9 | experimental | experimental | experimental | real_http_and_tls_workflow | lit.foundational.kubeplay | — | Current root scenario is a syntax stub. | nginx-deploy-basic |
+| nginx_deploy | nginx | web_service | experimental | — | rhel-9 | experimental | experimental | experimental | real_http_and_tls_workflow | lit.foundational.kubeplay, lit.foundational.podman_systemd | — | Current root scenario is a syntax stub. | nginx-deploy-basic |
 | nginx_ops | nginx | infrastructure | experimental | — | rhel-9 | experimental | experimental | experimental | restart_reload_and_verify_http | nginx_deploy, nginx_validate, lit.foundational.kubeplay | — | Current root scenario is a syntax stub. | nginx-ops-basic |
 | nginx_validate | nginx | validator | experimental | — | rhel-9 | experimental | experimental | not-applicable | parent_component_validation | nginx_deploy | — | Current root scenario is a syntax stub. | nginx-validate-basic |
 | openvpn | openvpn | network_service | experimental | — | rhel-9 | experimental | experimental | experimental | establish_tunnel_and_transfer_allowed_and_denied_traffic | — | — | Current scenario is a syntax stub; retained operational notes are unvalidated. | openvpn-basic |
@@ -1047,7 +1047,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Supported targets: —; candidate targets: rhel-9.
 - Profiles: Tiny `experimental`, Heavy `experimental`, Application Acceptance `experimental`.
 - Acceptance surface: `real_http_and_tls_workflow`.
-- Role dependencies: lit.foundational.kubeplay; exercised scenario dependencies: —.
+- Role dependencies: lit.foundational.kubeplay, lit.foundational.podman_systemd; exercised scenario dependencies: —.
 - External dependencies/blockers: —.
 - Required-secret policy: Use ephemeral test credentials and protected runtime secret providers; never commit secret values.
 - Local execution: `molecule test -s nginx-deploy-basic`; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.

@@ -1,5 +1,20 @@
 {% set _force_https = item.force_https | default(false) | bool %}
 {% set _server_name = item.server_name | default('_') %}
+{% set _proxy_external_port = item.proxy_external_port | default(
+  nginx_config_proxy_tls_external_port if _force_https else nginx_config_proxy_http_external_port
+) %}
+{% set _reserved_proxy_headers = [
+  'host',
+  'x-real-ip',
+  'x-forwarded-for',
+  'x-forwarded-host',
+  'x-forwarded-port',
+  'x-forwarded-proto',
+  'x-forwarded-prefix',
+  'x-original-forwarded-for',
+  'forwarded'
+] %}
+{% macro _name(value) -%}{{ value.split()[0] | default('') | lower | replace('"', '') | replace("'", '') }}{%- endmacro %}
 
 {% if _force_https %}
 server {
@@ -15,6 +30,14 @@ server {
 
   ssl_certificate {{ item.tls_certificate | default(nginx_config_tls_certificate) }};
   ssl_certificate_key {{ item.tls_certificate_key | default(nginx_config_tls_certificate_key) }};
+
+{% if nginx_config_waf_enabled | bool %}
+{% for directive in nginx_config_waf_server_directives %}
+{% if directive not in (item.extra_directives | default([])) %}
+  {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endif %}
+{% endfor %}
+{% endif %}
 
 {% if item.extra_directives is defined and item.extra_directives | length > 0 %}
 {% for directive in item.extra_directives %}
@@ -34,9 +57,25 @@ server {
 {% if item.locations is defined and item.locations | length > 0 %}
 {% for location in item.locations %}
   location {{ location.path | default('/') }} {
+{% if nginx_config_waf_enabled | bool %}
+{% for directive in nginx_config_waf_location_directives %}
+{% set _directive = directive | trim %}
+{% set _single_statement = '\\' not in _directive and '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') and _name(_directive) != 'include' %}
+{% if _single_statement %}
+    {{ _directive }}{{ '' if _directive.endswith(';') else ';' }}
+{% endif %}
+{% endfor %}
+{% endif %}
 {% for directive in location.directives | default([]) %}
 {% set _directive = directive | trim %}
-{% if _directive | length > 0 %}
+{% set _single_statement = '\\' not in _directive and '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') and _name(_directive) != 'include' %}
+{% set _directive_tokens = _directive.split() %}
+{% set _reserved_proxy_header = (
+  _directive_tokens | length >= 2
+  and _name(_directive_tokens[0]) == 'proxy_set_header'
+  and (_directive_tokens[1] | lower | replace('"', '') | replace("'", '')) in _reserved_proxy_headers
+) %}
+{% if _directive | length > 0 and _single_statement and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
   _directive.endswith(';')
   or _directive.endswith('{')
@@ -46,13 +85,33 @@ server {
     {{ _directive }}{{ ';' if _needs_semicolon else '' }}
 {% endif %}
 {% endfor %}
+{% for directive in nginx_config_proxy_required_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endfor %}
+    proxy_set_header X-Forwarded-Port {{ _proxy_external_port }};
   }
 {% endfor %}
 {% elif item.upstream_url is defined and item.upstream_url | length > 0 %}
   location / {
+{% if nginx_config_waf_enabled | bool %}
+{% for directive in nginx_config_waf_location_directives %}
+{% set _directive = directive | trim %}
+{% set _single_statement = '\\' not in _directive and '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') and _name(_directive) != 'include' %}
+{% if _single_statement %}
+    {{ _directive }}{{ '' if _directive.endswith(';') else ';' }}
+{% endif %}
+{% endfor %}
+{% endif %}
 {% for directive in item.proxy_directives | default(nginx_config_proxy_default_directives) %}
 {% set _directive = directive | trim %}
-{% if _directive | length > 0 %}
+{% set _single_statement = '\\' not in _directive and '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') and _name(_directive) != 'include' %}
+{% set _directive_tokens = _directive.split() %}
+{% set _reserved_proxy_header = (
+  _directive_tokens | length >= 2
+  and _name(_directive_tokens[0]) == 'proxy_set_header'
+  and (_directive_tokens[1] | lower | replace('"', '') | replace("'", '')) in _reserved_proxy_headers
+) %}
+{% if _directive | length > 0 and _single_statement and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
   _directive.endswith(';')
   or _directive.endswith('{')
@@ -62,6 +121,10 @@ server {
     {{ _directive }}{{ ';' if _needs_semicolon else '' }}
 {% endif %}
 {% endfor %}
+{% for directive in nginx_config_proxy_required_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endfor %}
+    proxy_set_header X-Forwarded-Port {{ _proxy_external_port }};
     proxy_pass {{ item.upstream_url }};
   }
 {% else %}
@@ -101,7 +164,14 @@ server {
   location {{ location.path | default('/') }} {
 {% for directive in location.directives | default([]) %}
 {% set _directive = directive | trim %}
-{% if _directive | length > 0 %}
+{% set _single_statement = '\\' not in _directive and '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') and _name(_directive) != 'include' %}
+{% set _directive_tokens = _directive.split() %}
+{% set _reserved_proxy_header = (
+  _directive_tokens | length >= 2
+  and _name(_directive_tokens[0]) == 'proxy_set_header'
+  and (_directive_tokens[1] | lower | replace('"', '') | replace("'", '')) in _reserved_proxy_headers
+) %}
+{% if _directive | length > 0 and _single_statement and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
   _directive.endswith(';')
   or _directive.endswith('{')
@@ -111,13 +181,24 @@ server {
     {{ _directive }}{{ ';' if _needs_semicolon else '' }}
 {% endif %}
 {% endfor %}
+{% for directive in nginx_config_proxy_required_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endfor %}
+    proxy_set_header X-Forwarded-Port {{ _proxy_external_port }};
   }
 {% endfor %}
 {% elif item.upstream_url is defined and item.upstream_url | length > 0 %}
   location / {
 {% for directive in item.proxy_directives | default([]) %}
 {% set _directive = directive | trim %}
-{% if _directive | length > 0 %}
+{% set _single_statement = '\\' not in _directive and '\n' not in _directive and '\r' not in _directive and ';' not in _directive.rstrip(';') and _name(_directive) != 'include' %}
+{% set _directive_tokens = _directive.split() %}
+{% set _reserved_proxy_header = (
+  _directive_tokens | length >= 2
+  and _name(_directive_tokens[0]) == 'proxy_set_header'
+  and (_directive_tokens[1] | lower | replace('"', '') | replace("'", '')) in _reserved_proxy_headers
+) %}
+{% if _directive | length > 0 and _single_statement and not _reserved_proxy_header %}
 {% set _needs_semicolon = not (
   _directive.endswith(';')
   or _directive.endswith('{')
@@ -127,6 +208,10 @@ server {
     {{ _directive }}{{ ';' if _needs_semicolon else '' }}
 {% endif %}
 {% endfor %}
+{% for directive in nginx_config_proxy_required_directives %}
+    {{ directive | trim }}{{ '' if (directive | trim).endswith(';') else ';' }}
+{% endfor %}
+    proxy_set_header X-Forwarded-Port {{ _proxy_external_port }};
     proxy_pass {{ item.upstream_url }};
   }
 {% endif %}

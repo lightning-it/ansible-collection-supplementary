@@ -17,7 +17,7 @@ builtin are available.
 
 ## Dependencies
 
-`lit.foundational` 1.32.0 or newer, specifically its `podman_systemd`
+`lit.foundational` 1.35.0 or newer, specifically its `podman_systemd`
 role. The authoritative collection constraint remains in `galaxy.yml`.
 
 ## Example Playbook

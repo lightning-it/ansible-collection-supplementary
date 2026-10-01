@@ -1475,6 +1475,7 @@ roles:
     acceptance_surface: "real_http_and_tls_workflow"
     dependencies:
       - "lit.foundational.kubeplay"
+      - "lit.foundational.podman_systemd"
     external_dependencies: []
     known_limitations:
       - "Current root scenario is a syntax stub."

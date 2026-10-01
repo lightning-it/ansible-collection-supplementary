@@ -3,6 +3,18 @@
   ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
   when: ansible_os_family in ['RedHat', 'Debian']
 
+- name: Require systemd for managed Nginx Quadlet runtime
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ansible_service_mgr | default(ansible_facts.service_mgr | default('')))
+        == 'systemd'
+    fail_msg: "Nginx Quadlet management requires systemd service-manager facts."
+  when:
+    - nginx_deploy_manage_systemd | bool
+    - not nginx_deploy_skip_runtime | bool
+    - not nginx_deploy_skip_deploy | bool
+
 - name: Deploy Nginx runtime
   when:
     - not nginx_deploy_skip_runtime | bool

@@ -756,8 +756,6 @@
     -subj /CN={{ nginx_config_tls_common_name }}
   args:
     creates: "{{ nginx_config_tls_certificate_host_path }}"
-  register: nginx_config_tls_self_signed_create
-  changed_when: nginx_config_tls_self_signed_create.rc == 0
   when:
     - not nginx_deploy_skip_config | bool
     - nginx_config_has_force_https_vhosts | bool
