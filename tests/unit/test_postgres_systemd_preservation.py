@@ -68,15 +68,17 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
         self.assertIn("service\\.d", staged_provenance)
         legacy_stop = "Stop and disable the exact legacy PostgreSQL unit before Quadlet takeover"
         native_stop = "Stop the exact active native PostgreSQL unit before manifest replacement"
+        preview = "Preview transactional PostgreSQL Pod manifest drift"
         render = "Render the transactional PostgreSQL Pod manifest"
         manage = "Manage the native PostgreSQL Quadlet service"
         self.assertLess(transaction_names.index(legacy_stop), transaction_names.index(render))
+        self.assertLess(transaction_names.index(preview), transaction_names.index(native_stop))
         self.assertLess(transaction_names.index(native_stop), transaction_names.index(render))
         self.assertLess(transaction_names.index(render), transaction_names.index(manage))
-        self.assertEqual(
-            transaction_map[native_stop]["when"],
-            "postgres_deploy_native_systemd_active.stdout | trim == 'active'",
-        )
+        self.assertEqual((transaction_map[preview]["check_mode"], transaction_map[preview]["diff"]), (True, False))
+        self.assertIs(transaction_map[preview]["no_log"], True)
+        self.assertIn("postgres_deploy_manifest_preview.changed", "\n".join(transaction_map[native_stop]["when"]))
+        self.assertIn("/run/systemd/system/service\\.d/zzz-lxc-service\\.conf", ownership_contract)
         self.assertLess(
             transaction_names.index(manage),
             transaction_names.index("Wait for PostgreSQL readiness before committing native takeover"),
@@ -170,7 +172,7 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
             group: root
             mode: '0600'
 """
-            self.assertEqual(production_systemd.count(privileged_render), 1)
+            self.assertEqual(production_systemd.count(privileged_render), 2)
             fixture_systemd.write_text(
                 production_systemd.replace(
                     privileged_render,
@@ -178,7 +180,6 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
             group: {os.getegid()}
             mode: '0600'
 """,
-                    1,
                 )
                 .replace(
                     "postgres_deploy_staged_quadlet_file.stat.pw_name | default('') == 'root'",

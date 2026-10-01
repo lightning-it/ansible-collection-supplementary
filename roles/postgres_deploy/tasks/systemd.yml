@@ -171,7 +171,8 @@
             postgres_deploy_native_drop_in_paths.stdout.split()
             | reject(
               'match',
-              '^/(?:usr/)?lib/systemd/system/service\.d/[A-Za-z0-9_.@-]+\.conf\Z'
+              '^(?:/(?:usr/)?lib/systemd/system/service\.d/[A-Za-z0-9_.@-]+\.conf'
+              ~ '|/run/systemd/system/service\.d/zzz-lxc-service\.conf)\Z'
             )
             | list | length == 0
           - >-
@@ -304,7 +305,8 @@
                 postgres_deploy_staged_drop_in_paths.stdout.split()
                 | reject(
                   'match',
-                  '^/(?:usr/)?lib/systemd/system/service\.d/[A-Za-z0-9_.@-]+\.conf\Z'
+                  '^(?:/(?:usr/)?lib/systemd/system/service\.d/[A-Za-z0-9_.@-]+\.conf'
+                  ~ '|/run/systemd/system/service\.d/zzz-lxc-service\.conf)\Z'
                 )
                 | list | length == 0
               - >-
@@ -321,6 +323,18 @@
             quiet: true
           when: not (postgres_deploy_native_quadlet_file.stat.exists | default(false))
 
+        - name: Preview transactional PostgreSQL Pod manifest drift
+          ansible.builtin.template:
+            src: postgres-pod.yml.j2
+            dest: "{{ postgres_deploy_pod_manifest_path }}"
+            owner: root
+            group: root
+            mode: '0600'
+          check_mode: true
+          diff: false
+          register: postgres_deploy_manifest_preview
+          no_log: true
+
         - name: Stop and disable the exact legacy PostgreSQL unit before Quadlet takeover
           ansible.builtin.systemd:
             name: "podman-kube@{{ postgres_deploy_legacy_systemd_name.stdout }}.service"
@@ -335,7 +349,9 @@
             name: "{{ postgres_deploy_systemd_unit_name }}.service"
             state: stopped
             scope: "{{ postgres_deploy_systemd_scope }}"
-          when: postgres_deploy_native_systemd_active.stdout | trim == 'active'
+          when:
+            - postgres_deploy_native_systemd_active.stdout | trim == 'active'
+            - postgres_deploy_manifest_preview.changed | default(false) | bool
 
         - name: Render the transactional PostgreSQL Pod manifest
           ansible.builtin.template:

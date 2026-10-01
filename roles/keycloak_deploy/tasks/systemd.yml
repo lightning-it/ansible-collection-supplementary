@@ -170,7 +170,8 @@
             keycloak_deploy_native_drop_in_paths.stdout.split()
             | reject(
               'match',
-              '^/(?:usr/)?lib/systemd/system/service\.d/[A-Za-z0-9_.@-]+\.conf\Z'
+              '^(?:/(?:usr/)?lib/systemd/system/service\.d/[A-Za-z0-9_.@-]+\.conf'
+              ~ '|/run/systemd/system/service\.d/zzz-lxc-service\.conf)\Z'
             )
             | list | length == 0
           - >-
@@ -303,7 +304,8 @@
                 keycloak_deploy_staged_drop_in_paths.stdout.split()
                 | reject(
                   'match',
-                  '^/(?:usr/)?lib/systemd/system/service\.d/[A-Za-z0-9_.@-]+\.conf\Z'
+                  '^(?:/(?:usr/)?lib/systemd/system/service\.d/[A-Za-z0-9_.@-]+\.conf'
+                  ~ '|/run/systemd/system/service\.d/zzz-lxc-service\.conf)\Z'
                 )
                 | list | length == 0
               - >-
@@ -320,6 +322,18 @@
             quiet: true
           when: not (keycloak_deploy_native_quadlet_file.stat.exists | default(false))
 
+        - name: Preview transactional Keycloak Pod manifest drift
+          ansible.builtin.template:
+            src: keycloak-pod.yml.j2
+            dest: "{{ keycloak_deploy_pod_manifest_path }}"
+            owner: root
+            group: root
+            mode: '0600'
+          check_mode: true
+          diff: false
+          register: keycloak_deploy_manifest_preview
+          no_log: true
+
         - name: Stop and disable the exact legacy Keycloak unit before Quadlet takeover
           ansible.builtin.systemd:
             name: "podman-kube@{{ keycloak_deploy_legacy_systemd_name.stdout }}.service"
@@ -334,7 +348,9 @@
             name: "{{ keycloak_deploy_systemd_unit_name }}.service"
             state: stopped
             scope: "{{ keycloak_deploy_systemd_scope }}"
-          when: keycloak_deploy_native_systemd_active.stdout | trim == 'active'
+          when:
+            - keycloak_deploy_native_systemd_active.stdout | trim == 'active'
+            - keycloak_deploy_manifest_preview.changed | default(false) | bool
 
         - name: Render the transactional Keycloak Pod manifest
           ansible.builtin.template:

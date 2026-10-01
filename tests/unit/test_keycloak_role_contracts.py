@@ -207,19 +207,20 @@ class KeycloakRoleContractTests(unittest.TestCase):
             self.assertNotIn(unsupported, lifecycle_contract)
         legacy_stop = transaction_map["Stop and disable the exact legacy Keycloak unit before Quadlet takeover"]
         native_stop = transaction_map["Stop the exact active native Keycloak unit before manifest replacement"]
+        manifest_preview = transaction_map["Preview transactional Keycloak Pod manifest drift"]
         manifest_render = transaction_map["Render the transactional Keycloak Pod manifest"]
         manage = transaction_map["Manage the native Keycloak Quadlet service"]
         transaction_index = systemd_block.index(transaction)
         self.assertTrue(validation_index < collision_index < transaction_index)
         self.assertLess(systemd_block.index(ownership), collision_index)
         self.assertLess(transaction["block"].index(stage), transaction["block"].index(legacy_stop))
+        self.assertLess(transaction["block"].index(manifest_preview), transaction["block"].index(native_stop))
         self.assertLess(transaction["block"].index(legacy_stop), transaction["block"].index(manifest_render))
         self.assertLess(transaction["block"].index(native_stop), transaction["block"].index(manifest_render))
         self.assertLess(transaction["block"].index(manifest_render), transaction["block"].index(manage))
-        self.assertEqual(
-            native_stop["when"],
-            "keycloak_deploy_native_systemd_active.stdout | trim == 'active'",
-        )
+        self.assertEqual((manifest_preview["check_mode"], manifest_preview["diff"]), (True, False))
+        self.assertIs(manifest_preview["no_log"], True)
+        self.assertIn("keycloak_deploy_manifest_preview.changed", "\n".join(native_stop["when"]))
         self.assertIn(
             "service\\.d",
             "\n".join(
@@ -228,6 +229,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
                 ]["that"]
             ),
         )
+        self.assertIn("/run/systemd/system/service\\.d/zzz-lxc-service\\.conf", ownership_contract)
         self.assertEqual(
             (legacy_stop["ansible.builtin.systemd"]["state"], legacy_stop["ansible.builtin.systemd"]["enabled"]),
             ("stopped", False),
@@ -437,7 +439,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
             group: root
             mode: '0600'
 """
-            self.assertEqual(production_systemd.count(privileged_render), 1)
+            self.assertEqual(production_systemd.count(privileged_render), 2)
             fixture_systemd.write_text(
                 production_systemd.replace(
                     privileged_render,
@@ -445,7 +447,6 @@ class KeycloakRoleContractTests(unittest.TestCase):
             group: {os.getegid()}
             mode: '0600'
 """,
-                    1,
                 )
                 .replace(
                     "keycloak_deploy_staged_quadlet_file.stat.pw_name | default('') == 'root'",
