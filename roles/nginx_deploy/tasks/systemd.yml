@@ -93,6 +93,40 @@
         - nginx_deploy_native_quadlet_file.stat.isreg | default(false)
         - not (nginx_deploy_native_quadlet_file.stat.islnk | default(false))
 
+    - name: Inspect the pre-transaction Nginx Pod manifest
+      ansible.builtin.stat:
+        path: "{{ nginx_deploy_pod_manifest_path }}"
+        follow: false
+      register: nginx_deploy_original_manifest_file
+
+    - name: Refuse an unsafe pre-transaction Nginx Pod manifest
+      ansible.builtin.assert:
+        that:
+          - >-
+            not (nginx_deploy_original_manifest_file.stat.exists | default(false))
+            or (
+              nginx_deploy_original_manifest_file.stat.isreg | default(false)
+              and not (nginx_deploy_original_manifest_file.stat.islnk | default(false))
+            )
+        fail_msg: >-
+          The Nginx Pod manifest must be absent or a regular non-symlink file
+          before a transactional Quadlet update.
+        quiet: true
+
+    - name: Capture the exact pre-transaction Nginx Pod manifest
+      ansible.builtin.slurp:
+        path: "{{ nginx_deploy_pod_manifest_path }}"
+      register: nginx_deploy_original_manifest_read
+      when: nginx_deploy_original_manifest_file.stat.exists | default(false)
+
+    - name: Probe the desired Nginx Pod manifest without mutation
+      ansible.builtin.template:
+        src: nginx-pod.yml.j2
+        dest: "{{ nginx_deploy_pod_manifest_path }}"
+        mode: '0644'
+      check_mode: true
+      register: nginx_deploy_manifest_probe
+
     - name: Refuse unproven drift in an existing native Nginx Quadlet
       ansible.builtin.assert:
         that:
@@ -160,8 +194,7 @@
               nginx_deploy_native_systemd_active.stdout | trim
               in ['active', 'inactive', 'failed']
               and
-              not (nginx_deploy_kubeplay_remove | default(false) | bool)
-              and not (nginx_deploy_kubeplay_run | default(false) | bool)
+              not (nginx_deploy_manifest_probe.changed | default(false) | bool)
             )
         fail_msg: >-
           Updating an existing native Nginx Quadlet requires transactional
@@ -169,24 +202,31 @@
           pre-existing runtime.
         quiet: true
 
-    - name: Stage the native Nginx Quadlet before legacy shutdown
-      ansible.builtin.include_role:
-        name: lit.foundational.podman_systemd
-      vars:
-        podman_systemd_action: stopped
-        podman_systemd_unit_name: "{{ nginx_deploy_systemd_unit_name }}"
-        podman_systemd_description: "{{ nginx_deploy_systemd_description }}"
-        podman_systemd_manifest_path: "{{ nginx_deploy_pod_manifest_path }}"
-        podman_systemd_scope: "{{ nginx_deploy_systemd_scope }}"
-        podman_systemd_quadlet_dir: "{{ nginx_deploy_quadlet_dir }}"
-        podman_systemd_enabled: false
-        podman_systemd_networks: "{{ nginx_deploy_networks }}"
-      when: >-
-        nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
-        or nginx_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
-
     - name: Cut over to native Nginx Quadlet with rollback
       block:
+        - name: Render the desired Nginx Pod manifest transactionally
+          ansible.builtin.template:
+            src: nginx-pod.yml.j2
+            dest: "{{ nginx_deploy_pod_manifest_path }}"
+            mode: '0644'
+          register: nginx_deploy_manifest_render
+
+        - name: Stage the native Nginx Quadlet before legacy shutdown
+          ansible.builtin.include_role:
+            name: lit.foundational.podman_systemd
+          vars:
+            podman_systemd_action: stopped
+            podman_systemd_unit_name: "{{ nginx_deploy_systemd_unit_name }}"
+            podman_systemd_description: "{{ nginx_deploy_systemd_description }}"
+            podman_systemd_manifest_path: "{{ nginx_deploy_pod_manifest_path }}"
+            podman_systemd_scope: "{{ nginx_deploy_systemd_scope }}"
+            podman_systemd_quadlet_dir: "{{ nginx_deploy_quadlet_dir }}"
+            podman_systemd_enabled: false
+            podman_systemd_networks: "{{ nginx_deploy_networks }}"
+          when: >-
+            nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
+            or nginx_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+
         - name: Stop and disable the exact legacy Nginx unit before Quadlet takeover
           ansible.builtin.systemd:
             name: "podman-kube@{{ nginx_deploy_legacy_systemd_name.stdout }}.service"
@@ -204,8 +244,7 @@
               {{
                 'restarted'
                 if (
-                  nginx_deploy_kubeplay_remove | default(false) | bool
-                  or nginx_deploy_kubeplay_run | default(false) | bool
+                  nginx_deploy_manifest_render.changed | default(false) | bool
                   or nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
                   or nginx_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
                 )
@@ -241,6 +280,7 @@
             nginx_deploy_takeover_failure_message: >-
               {{ ansible_failed_result.msg | default('unknown takeover failure') }}
             nginx_deploy_cleanup_failure_message: ""
+            nginx_deploy_manifest_restore_failure_message: ""
             nginx_deploy_native_restore_failure_message: ""
             nginx_deploy_legacy_restore_failure_message: ""
 
@@ -264,6 +304,28 @@
               ansible.builtin.set_fact:
                 nginx_deploy_cleanup_failure_message: >-
                   {{ ansible_failed_result.msg | default('unknown cleanup failure') }}
+
+        - name: Attempt exact Nginx Pod manifest restoration
+          block:
+            - name: Restore the exact pre-transaction Nginx Pod manifest
+              ansible.builtin.copy:
+                dest: "{{ nginx_deploy_pod_manifest_path }}"
+                content: "{{ nginx_deploy_original_manifest_read.content | b64decode }}"
+                owner: "{{ nginx_deploy_original_manifest_file.stat.uid }}"
+                group: "{{ nginx_deploy_original_manifest_file.stat.gid }}"
+                mode: "{{ nginx_deploy_original_manifest_file.stat.mode }}"
+              when: nginx_deploy_original_manifest_file.stat.exists | default(false)
+
+            - name: Remove a transaction-created Nginx Pod manifest
+              ansible.builtin.file:
+                path: "{{ nginx_deploy_pod_manifest_path }}"
+                state: absent
+              when: not (nginx_deploy_original_manifest_file.stat.exists | default(false))
+          rescue:
+            - name: Capture failed Nginx Pod manifest restoration
+              ansible.builtin.set_fact:
+                nginx_deploy_manifest_restore_failure_message: >-
+                  {{ ansible_failed_result.msg | default('unknown manifest restoration failure') }}
 
         - name: Attempt pre-existing native Nginx restoration without blocking legacy restoration
           block:
@@ -315,6 +377,8 @@
               {{ nginx_deploy_takeover_failure_message }}.
               Cleanup failure:
               {{ nginx_deploy_cleanup_failure_message | default('') | default('none', true) }}.
+              Manifest restoration failure:
+              {{ nginx_deploy_manifest_restore_failure_message | default('') | default('none', true) }}.
               Native restoration failure:
               {{ nginx_deploy_native_restore_failure_message | default('') | default('none', true) }}.
               Legacy restoration failure:

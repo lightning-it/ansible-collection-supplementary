@@ -345,6 +345,30 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                     }
                 ]
             },
+            {
+                "nginx_config_vhosts_effective": [
+                    {
+                        **policy["nginx_config_vhosts_effective"][0],
+                        "extra_directives": ["modsecurity_rules_file /tmp/disabled.conf"],
+                    }
+                ]
+            },
+            {
+                "nginx_config_vhosts_effective": [
+                    {
+                        **policy["nginx_config_vhosts_effective"][0],
+                        "proxy_directives": ["modsecurity_transaction_id $request_id"],
+                    }
+                ]
+            },
+            {
+                "nginx_config_vhosts_effective": [
+                    {
+                        **policy["nginx_config_vhosts_effective"][0],
+                        "locations": [{"directives": ["modsecurity_rules_remote key https://waf.invalid"]}],
+                    }
+                ]
+            },
         )
         for override in invalid:
             with self.subTest(override=override):
@@ -497,6 +521,8 @@ class NginxVaultTlsContractTests(unittest.TestCase):
     def test_nginx_lifecycle_has_one_persistent_controller(self) -> None:
         pod_tasks_path = ROOT / "roles" / "nginx_deploy" / "tasks" / "deploy_pod.yml"
         pod_tasks = yaml.safe_load(pod_tasks_path.read_text(encoding="utf-8"))
+        render = next(task for task in pod_tasks if task["name"] == "Render Nginx Pod manifest")
+        self.assertEqual(render["when"], "not nginx_deploy_manage_systemd | bool")
         recreate = next(task for task in pod_tasks if task["name"] == "Recreate Nginx pod from the desired manifest")
         self.assertEqual(recreate["vars"]["kubeplay_action"], "recreate")
         self.assertIn("not nginx_deploy_manage_systemd | bool", recreate["when"])
@@ -512,17 +538,24 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         self.assertEqual(quadlet["ansible.builtin.include_role"]["name"], "lit.foundational.podman_systemd")
         names = [task["name"] for task in systemd_block]
         validation = names.index("Refuse unknown Nginx lifecycle states")
+        manifest_inspection = names.index("Inspect the pre-transaction Nginx Pod manifest")
+        manifest_probe = names.index("Probe the desired Nginx Pod manifest without mutation")
         collision = names.index("Refuse unmanaged Nginx pod; remove it first")
         drift = names.index("Refuse unproven drift in an existing native Nginx Quadlet")
         self.assertIn("nginx_deploy_native_systemd_active", systemd_block[collision]["failed_when"])
-        stage = names.index("Stage the native Nginx Quadlet before legacy shutdown")
         takeover = names.index("Cut over to native Nginx Quadlet with rollback")
-        self.assertLess(validation, stage)
+        cutover_names = [task["name"] for task in cutover["block"]]
+        render_transaction = cutover_names.index("Render the desired Nginx Pod manifest transactionally")
+        stage = cutover_names.index("Stage the native Nginx Quadlet before legacy shutdown")
+        legacy_shutdown = cutover_names.index("Stop and disable the exact legacy Nginx unit before Quadlet takeover")
         self.assertLess(validation, collision)
         self.assertLess(validation, drift)
+        self.assertLess(validation, manifest_inspection)
+        self.assertLess(manifest_inspection, manifest_probe)
         self.assertLess(drift, collision)
-        self.assertLess(collision, stage)
-        self.assertLess(stage, takeover)
+        self.assertLess(collision, takeover)
+        self.assertLess(render_transaction, stage)
+        self.assertLess(stage, legacy_shutdown)
         rescue = {task["name"]: task for task in cutover["rescue"]}
         self.assertIn("Capture the original native Nginx takeover failure", rescue)
         cleanup_guard = rescue["Attempt failed native Nginx cleanup without blocking restoration"]
@@ -532,6 +565,20 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         self.assertEqual(
             cleanup_guard["rescue"][0]["name"],
             "Capture failed native Nginx cleanup",
+        )
+        manifest_restore_guard = rescue["Attempt exact Nginx Pod manifest restoration"]
+        manifest_restore = manifest_restore_guard["block"][0]["ansible.builtin.copy"]
+        self.assertIn("original_manifest_read.content | b64decode", manifest_restore["content"])
+        self.assertIn("original_manifest_file.stat.uid", manifest_restore["owner"])
+        self.assertIn("original_manifest_file.stat.gid", manifest_restore["group"])
+        self.assertIn("original_manifest_file.stat.mode", manifest_restore["mode"])
+        self.assertEqual(
+            manifest_restore_guard["block"][1]["name"],
+            "Remove a transaction-created Nginx Pod manifest",
+        )
+        self.assertEqual(
+            manifest_restore_guard["rescue"][0]["name"],
+            "Capture failed Nginx Pod manifest restoration",
         )
         native_restore_guard = rescue[
             "Attempt pre-existing native Nginx restoration without blocking legacy restoration"
@@ -573,22 +620,21 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             for task in systemd_block
             if task["name"] == "Refuse non-transactional updates of an existing native Nginx unit"
         )
-        self.assertIn("nginx_deploy_kubeplay_run", update_guard["ansible.builtin.assert"]["that"][0])
+        self.assertIn("nginx_deploy_manifest_probe.changed", update_guard["ansible.builtin.assert"]["that"][0])
         update_condition = update_guard["ansible.builtin.assert"]["that"][0]
-        for native, remove, run, allowed in (
-            ("active", False, False, True),
-            ("inactive", False, False, True),
-            ("failed", False, False, True),
-            ("inactive", True, False, False),
-            ("failed", False, True, False),
+        for native, changed, allowed in (
+            ("active", False, True),
+            ("inactive", False, True),
+            ("failed", False, True),
+            ("inactive", True, False),
+            ("failed", True, False),
         ):
             variables = {
                 "nginx_deploy_native_systemd_enabled": {"stdout": "generated"},
                 "nginx_deploy_native_systemd_active": {"stdout": native},
-                "nginx_deploy_kubeplay_remove": remove,
-                "nginx_deploy_kubeplay_run": run,
+                "nginx_deploy_manifest_probe": {"changed": changed},
             }
-            with self.subTest(native=native, remove=remove, run=run):
+            with self.subTest(native=native, changed=changed):
                 self.assertEqual(self._evaluate(update_condition, variables), allowed)
 
         self.assertIn("['inactive', 'failed']", quadlet["when"])

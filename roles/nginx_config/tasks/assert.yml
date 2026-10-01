@@ -283,6 +283,9 @@
   ansible.builtin.assert:
     that:
       - >-
+        item.1 | trim | lower
+        is not match('^modsecurity(?:_|[ \t]|$)')
+      - >-
         item.1 | trim | lower | regex_replace('[ \t].*$', '')
         not in (
           nginx_config_waf_server_directives
@@ -302,6 +305,9 @@
 - name: Reject consumer overrides of WAF location controls
   ansible.builtin.assert:
     that:
+      - >-
+        item | trim | lower
+        is not match('^modsecurity(?:_|[ \t]|$)')
       - >-
         item | trim | lower | regex_replace('[ \t].*$', '')
         not in (
@@ -326,6 +332,9 @@
 - name: Reject location overrides of WAF location controls
   ansible.builtin.assert:
     that:
+      - >-
+        item | trim | lower
+        is not match('^modsecurity(?:_|[ \t]|$)')
       - >-
         item | trim | lower | regex_replace('[ \t].*$', '')
         not in (
