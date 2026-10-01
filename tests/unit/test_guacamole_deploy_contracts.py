@@ -356,9 +356,7 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertTrue(manifest_preview["check_mode"])
         self.assertFalse(manifest_preview["diff"])
         self.assertTrue(manifest_preview["no_log"])
-        native_stop = transaction_map[
-            "Stop the exact active native Guacamole unit before manifest replacement"
-        ]
+        native_stop = transaction_map["Stop the exact active native Guacamole unit before manifest replacement"]
         self.assertIn(
             "guacamole_deploy_manifest_preview.changed | default(false) | bool",
             native_stop["when"],
