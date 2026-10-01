@@ -67,6 +67,18 @@
       changed_when: false
       failed_when: false
 
+    - name: Resolve loaded native PostgreSQL unit drop-ins
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - "{{ postgres_deploy_systemd_unit_name }}.service"
+          - --property=DropInPaths
+          - --value
+      register: postgres_deploy_native_drop_in_paths
+      changed_when: false
+      failed_when: false
+
     - name: Inspect the desired native PostgreSQL Quadlet file
       ansible.builtin.stat:
         path: "{{ postgres_deploy_quadlet_dir }}/{{ postgres_deploy_systemd_unit_name }}.kube"
@@ -151,6 +163,8 @@
           - postgres_deploy_native_quadlet_file.stat.pw_name | default('') == 'root'
           - postgres_deploy_native_quadlet_file.stat.gr_name | default('') == 'root'
           - postgres_deploy_native_quadlet_read.content | default('') | length > 0
+          - postgres_deploy_native_drop_in_paths.rc == 0
+          - postgres_deploy_native_drop_in_paths.stdout | trim == ''
           - >-
             (
               postgres_deploy_native_systemd_active.stdout | trim == 'unknown'
@@ -242,12 +256,14 @@
             podman_systemd_quadlet_dir: "{{ postgres_deploy_quadlet_dir }}"
             podman_systemd_enabled: false
             podman_systemd_networks: "{{ postgres_deploy_networks }}"
+          when: not (postgres_deploy_native_quadlet_file.stat.exists | default(false))
 
         - name: Reinspect the staged native PostgreSQL Quadlet
           ansible.builtin.stat:
             path: "{{ postgres_deploy_quadlet_dir }}/{{ postgres_deploy_systemd_unit_name }}.kube"
             follow: false
           register: postgres_deploy_staged_quadlet_file
+          when: not (postgres_deploy_native_quadlet_file.stat.exists | default(false))
 
         - name: Resolve the staged native PostgreSQL unit fragment
           ansible.builtin.command:
@@ -260,6 +276,20 @@
           register: postgres_deploy_staged_fragment_path
           changed_when: false
           failed_when: false
+          when: not (postgres_deploy_native_quadlet_file.stat.exists | default(false))
+
+        - name: Resolve staged native PostgreSQL unit drop-ins
+          ansible.builtin.command:
+            argv:
+              - systemctl
+              - show
+              - "{{ postgres_deploy_systemd_unit_name }}.service"
+              - --property=DropInPaths
+              - --value
+          register: postgres_deploy_staged_drop_in_paths
+          changed_when: false
+          failed_when: false
+          when: not (postgres_deploy_native_quadlet_file.stat.exists | default(false))
 
         - name: Require the staged native PostgreSQL Quadlet provenance boundary
           ansible.builtin.assert:
@@ -270,6 +300,8 @@
               - postgres_deploy_staged_quadlet_file.stat.pw_name | default('') == 'root'
               - postgres_deploy_staged_quadlet_file.stat.gr_name | default('') == 'root'
               - postgres_deploy_staged_fragment_path.rc == 0
+              - postgres_deploy_staged_drop_in_paths.rc == 0
+              - postgres_deploy_staged_drop_in_paths.stdout | trim == ''
               - >-
                 postgres_deploy_staged_fragment_path.stdout | trim
                 is match(
@@ -282,6 +314,7 @@
               Quadlet with the expected generated systemd fragment; refusing
               lifecycle mutation.
             quiet: true
+          when: not (postgres_deploy_native_quadlet_file.stat.exists | default(false))
 
         - name: Stop and disable the exact legacy PostgreSQL unit before Quadlet takeover
           ansible.builtin.systemd:

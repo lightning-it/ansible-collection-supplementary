@@ -39,6 +39,7 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
             "islnk",
             "mode",
             "pw_name",
+            "native_drop_in_paths",
             "Description=",
             "Yaml=",
             "native_systemd_enabled",
@@ -47,8 +48,18 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
             self.assertIn(contract, ownership_contract)
         transaction = task_map["Cut over to native PostgreSQL Quadlet with rollback"]
         self.assertEqual(transaction["block"][0]["name"], "Render the transactional PostgreSQL Pod manifest")
+        transaction_map = {task["name"]: task for task in transaction["block"]}
         transaction_names = [task["name"] for task in transaction["block"]]
         self.assertIn("Require the staged native PostgreSQL Quadlet provenance boundary", transaction_names)
+        staging_condition = "not (postgres_deploy_native_quadlet_file.stat.exists | default(false))"
+        for name in (
+            "Stage the native PostgreSQL Quadlet before lifecycle mutation",
+            "Reinspect the staged native PostgreSQL Quadlet",
+            "Resolve the staged native PostgreSQL unit fragment",
+            "Resolve staged native PostgreSQL unit drop-ins",
+            "Require the staged native PostgreSQL Quadlet provenance boundary",
+        ):
+            self.assertEqual(transaction_map[name]["when"], staging_condition)
         self.assertLess(
             transaction_names.index("Manage the native PostgreSQL Quadlet service"),
             transaction_names.index("Wait for PostgreSQL readiness before committing native takeover"),
@@ -200,6 +211,7 @@ enabled=$(cat "$enabled_file" 2>/dev/null || printf '%s' "$default_enabled")
 case "$command_name" in
   show)
     case "$*" in
+      *--property=DropInPaths*) printf '\n' ;;
       *--property=FragmentPath*) printf '/run/systemd/generator/%s\\n' "$unit" ;;
       *) printf 'LoadState=loaded\\nActiveState=%s\\nSubState=%s\\nUnitFileState=%s\\n' \
            "$active" "$active" "$enabled" ;;

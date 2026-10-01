@@ -182,6 +182,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
             "islnk",
             "mode",
             "pw_name",
+            "native_drop_in_paths",
             "Description=",
             "Yaml=",
             "native_systemd_enabled",
@@ -189,6 +190,15 @@ class KeycloakRoleContractTests(unittest.TestCase):
         ):
             self.assertIn(contract, ownership_contract)
         self.assertIn("Require the staged native Keycloak Quadlet provenance boundary", transaction_map)
+        staging_condition = "not (keycloak_deploy_native_quadlet_file.stat.exists | default(false))"
+        for name in (
+            "Stage the native Keycloak Quadlet before lifecycle mutation",
+            "Reinspect the staged native Keycloak Quadlet",
+            "Resolve the staged native Keycloak unit fragment",
+            "Resolve staged native Keycloak unit drop-ins",
+            "Require the staged native Keycloak Quadlet provenance boundary",
+        ):
+            self.assertEqual(transaction_map[name]["when"], staging_condition)
         lifecycle_contract = str(systemd_block[validation_index]["ansible.builtin.assert"]["that"])
         for unsupported in ("activating", "reloading", "deactivating", "static", "indirect", "transient", "linked"):
             self.assertNotIn(unsupported, lifecycle_contract)
@@ -245,6 +255,80 @@ class KeycloakRoleContractTests(unittest.TestCase):
         source = pod_tasks_path.read_text(encoding="utf-8")
         self.assertNotIn("Ignore kubeplay remove failure", source)
         self.assertNotIn("Ignore kubeplay run failure", source)
+
+    def test_existing_native_quadlets_skip_mutating_staging(self) -> None:
+        executable = shutil.which("ansible-playbook")
+        self.assertIsNotNone(executable, "Pinned Devtools Ansible is required")
+        selected_tasks = []
+        existing_vars: dict[str, object] = {}
+        cases = (
+            (
+                "keycloak_deploy",
+                "Cut over to native Keycloak Quadlet with rollback",
+                "Stage the native Keycloak Quadlet before lifecycle mutation",
+                "keycloak_deploy_native_quadlet_file",
+            ),
+            (
+                "postgres_deploy",
+                "Cut over to native PostgreSQL Quadlet with rollback",
+                "Stage the native PostgreSQL Quadlet before lifecycle mutation",
+                "postgres_deploy_native_quadlet_file",
+            ),
+        )
+        for role, transaction_name, stage_name, fact_name in cases:
+            block = yaml.safe_load((ROOT / f"roles/{role}/tasks/systemd.yml").read_text(encoding="utf-8"))[0]["block"]
+            transaction = next(task for task in block if task["name"] == transaction_name)
+            selected_tasks.append(next(task for task in transaction["block"] if task["name"] == stage_name))
+            existing_vars[fact_name] = {"stat": {"exists": True}}
+
+        with tempfile.TemporaryDirectory(prefix="native-steady-state-") as temporary:
+            root = Path(temporary)
+            fixture_tasks = root / "collections/ansible_collections/lit/foundational/roles/podman_systemd/tasks"
+            fixture_tasks.mkdir(parents=True)
+            (fixture_tasks / "main.yml").write_text(
+                """---
+- name: Reject mutating staging during a verified native steady-state run
+  ansible.builtin.fail:
+    msg: mutating Quadlet staging was executed
+""",
+                encoding="utf-8",
+            )
+            playbook = root / "steady-state.yml"
+            playbook.write_text(
+                yaml.safe_dump(
+                    [
+                        {
+                            "hosts": "localhost",
+                            "gather_facts": False,
+                            "vars": existing_vars,
+                            "tasks": selected_tasks,
+                        }
+                    ],
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            config = root / "ansible.cfg"
+            config.write_text("[defaults]\nstdout_callback=default\n", encoding="utf-8")
+            result = subprocess.run(  # noqa: S603
+                [executable, "-i", "localhost,", "-c", "local", str(playbook)],
+                env={
+                    **os.environ,
+                    "ANSIBLE_CONFIG": str(config),
+                    "ANSIBLE_COLLECTIONS_PATH": str(root / "collections"),
+                    "ANSIBLE_LOCAL_TEMP": str(root / "ansible-tmp"),
+                    "ANSIBLE_NOCOLOR": "1",
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+            )
+
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, output)
+        self.assertEqual(output.count("skipping: [localhost]"), 2, output)
+        self.assertNotIn("mutating Quadlet staging was executed", output)
 
     def test_failed_keycloak_readiness_executes_exact_rollback(self) -> None:
         executable = shutil.which("ansible-playbook")
@@ -387,6 +471,7 @@ enabled=$(cat "$enabled_file" 2>/dev/null || printf '%s' "$default_enabled")
 case "$command_name" in
   show)
     case "$*" in
+      *--property=DropInPaths*) printf '\n' ;;
       *--property=FragmentPath*) printf '/run/systemd/generator/%s\n' "$unit" ;;
       *) printf 'LoadState=loaded\nActiveState=%s\nSubState=%s\nUnitFileState=%s\n' \
            "$active" "$active" "$enabled" ;;

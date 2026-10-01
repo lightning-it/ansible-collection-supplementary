@@ -67,6 +67,18 @@
       changed_when: false
       failed_when: false
 
+    - name: Resolve loaded native Keycloak unit drop-ins
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - "{{ keycloak_deploy_systemd_unit_name }}.service"
+          - --property=DropInPaths
+          - --value
+      register: keycloak_deploy_native_drop_in_paths
+      changed_when: false
+      failed_when: false
+
     - name: Inspect the desired native Keycloak Quadlet file
       ansible.builtin.stat:
         path: "{{ keycloak_deploy_quadlet_dir }}/{{ keycloak_deploy_systemd_unit_name }}.kube"
@@ -150,6 +162,8 @@
           - keycloak_deploy_native_quadlet_file.stat.pw_name | default('') == 'root'
           - keycloak_deploy_native_quadlet_file.stat.gr_name | default('') == 'root'
           - keycloak_deploy_native_quadlet_read.content | default('') | length > 0
+          - keycloak_deploy_native_drop_in_paths.rc == 0
+          - keycloak_deploy_native_drop_in_paths.stdout | trim == ''
           - >-
             (
               keycloak_deploy_native_systemd_active.stdout | trim == 'unknown'
@@ -241,12 +255,14 @@
             podman_systemd_quadlet_dir: "{{ keycloak_deploy_quadlet_dir }}"
             podman_systemd_enabled: false
             podman_systemd_networks: "{{ keycloak_deploy_networks }}"
+          when: not (keycloak_deploy_native_quadlet_file.stat.exists | default(false))
 
         - name: Reinspect the staged native Keycloak Quadlet
           ansible.builtin.stat:
             path: "{{ keycloak_deploy_quadlet_dir }}/{{ keycloak_deploy_systemd_unit_name }}.kube"
             follow: false
           register: keycloak_deploy_staged_quadlet_file
+          when: not (keycloak_deploy_native_quadlet_file.stat.exists | default(false))
 
         - name: Resolve the staged native Keycloak unit fragment
           ansible.builtin.command:
@@ -259,6 +275,20 @@
           register: keycloak_deploy_staged_fragment_path
           changed_when: false
           failed_when: false
+          when: not (keycloak_deploy_native_quadlet_file.stat.exists | default(false))
+
+        - name: Resolve staged native Keycloak unit drop-ins
+          ansible.builtin.command:
+            argv:
+              - systemctl
+              - show
+              - "{{ keycloak_deploy_systemd_unit_name }}.service"
+              - --property=DropInPaths
+              - --value
+          register: keycloak_deploy_staged_drop_in_paths
+          changed_when: false
+          failed_when: false
+          when: not (keycloak_deploy_native_quadlet_file.stat.exists | default(false))
 
         - name: Require the staged native Keycloak Quadlet provenance boundary
           ansible.builtin.assert:
@@ -269,6 +299,8 @@
               - keycloak_deploy_staged_quadlet_file.stat.pw_name | default('') == 'root'
               - keycloak_deploy_staged_quadlet_file.stat.gr_name | default('') == 'root'
               - keycloak_deploy_staged_fragment_path.rc == 0
+              - keycloak_deploy_staged_drop_in_paths.rc == 0
+              - keycloak_deploy_staged_drop_in_paths.stdout | trim == ''
               - >-
                 keycloak_deploy_staged_fragment_path.stdout | trim
                 is match(
@@ -281,6 +313,7 @@
               Quadlet with the expected generated systemd fragment; refusing
               lifecycle mutation.
             quiet: true
+          when: not (keycloak_deploy_native_quadlet_file.stat.exists | default(false))
 
         - name: Stop and disable the exact legacy Keycloak unit before Quadlet takeover
           ansible.builtin.systemd:
